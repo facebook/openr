@@ -1,0 +1,777 @@
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#include <syslog.h>
+#include <regex>
+#include <stdexcept>
+
+#include <fbzmq/async/StopEventLoopSignalHandler.h>
+#include <fbzmq/service/monitor/ZmqMonitorClient.h>
+#include <fbzmq/zmq/Zmq.h>
+#include <folly/FileUtil.h>
+#include <folly/Format.h>
+#include <folly/IPAddress.h>
+#include <folly/Memory.h>
+#include <folly/Optional.h>
+#include <folly/init/Init.h>
+#include <folly/system/ThreadName.h>
+#include <glog/logging.h>
+#include <sodium.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
+
+#include <openr/allocators/PrefixAllocator.h>
+#include <openr/common/Constants.h>
+#include <openr/common/Util.h>
+#include <openr/config-store/PersistentStore.h>
+#include <openr/decision/Decision.h>
+#include <openr/fib/Fib.h>
+#include <openr/health-checker/HealthChecker.h>
+#include <openr/kvstore/KvStore.h>
+#include <openr/kvstore/KvStoreClient.h>
+#include <openr/link-monitor/LinkMonitor.h>
+#include <openr/platform/NetlinkFibHandler.h>
+#include <openr/platform/NetlinkSystemHandler.h>
+#include <openr/platform/PlatformPublisher.h>
+#include <openr/prefix-manager/PrefixManager.h>
+#include <openr/prefix-manager/PrefixManagerClient.h>
+#include <openr/spark/Spark.h>
+
+DEFINE_int32(
+    kvstore_pub_port,
+    60001,
+    "KvStore publisher port for emitting realtime key-value deltas");
+DEFINE_int32(kvstore_rep_port, 60002, "The port KvStore replier listens on");
+DEFINE_int32(
+    decision_pub_port,
+    60003,
+    "Decision publisher port for emitting realtime route-db updates");
+DEFINE_int32(decision_rep_port, 60004, "The port Decision replier listens on");
+DEFINE_int32(
+    link_monitor_pub_port, 60005, "The port link monitor publishes on");
+DEFINE_int32(
+    link_monitor_cmd_port,
+    60006,
+    "The port link monitor listens for commands on ");
+DEFINE_int32(monitor_pub_port, 60007, "The port monitor publishes on");
+DEFINE_int32(monitor_rep_port, 60008, "The port monitor replies on");
+DEFINE_int32(fib_rep_port, 60009, "The port fib replier listens on");
+DEFINE_int32(
+    health_checker_port,
+    60010,
+    "The port health checker sends and recvs udp pings on");
+DEFINE_int32(
+    prefix_manager_cmd_port,
+    60011,
+    "The port prefix manager receives commands on");
+DEFINE_int32(
+    health_checker_rep_port,
+    60012,
+    "The port Health Checker replier listens on");
+DEFINE_int32(
+    system_agent_port,
+    60099,
+    "Switch agent thrift service port for Platform programming.");
+DEFINE_int32(
+    fib_agent_port,
+    60100, // NOTE 100 is on purpose
+    "Switch agent thrift service port for FIB programming.");
+DEFINE_int32(
+    spark_mcast_port,
+    6666,
+    "Spark UDP multicast port for sending spark-hello messages.");
+DEFINE_string(
+    platform_pub_url,
+    "ipc:///tmp/platform-pub-url",
+    "Publisher URL for interface/address notifications");
+DEFINE_string(
+    domain,
+    "terragraph",
+    "Domain name associated with this OpenR. No adjacencies will be formed "
+    "to OpenR of other domains.");
+DEFINE_string(
+    chdir, "/tmp", "Change current directory to this after loading config");
+DEFINE_string(listen_addr, "*", "The IP address to bind to");
+DEFINE_string(
+    config_store_filepath,
+    "/tmp/aq_persistent_config_store.bin",
+    "File name where to persist OpenR's internal state across restarts");
+DEFINE_string(
+    node_name,
+    "node1",
+    "The name of current node (also serves as originator id");
+DEFINE_bool(
+    dryrun, true, "Run the process in dryrun mode. No FIB programming!");
+DEFINE_string(iface, "lo", "The iface to configure with the prefix");
+DEFINE_string(
+    prefix, "", "The prefix and loopback IP separated by comma for this node");
+DEFINE_string(
+    seed_prefix,
+    "",
+    "The seed prefix all subprefixes are to be allocated from. If empty, "
+    "it will be injected later together with allocated prefix length");
+DEFINE_bool(enable_prefix_alloc, false, "Enable automatic prefix allocation");
+DEFINE_int32(alloc_prefix_len, 128, "Allocated prefix length");
+DEFINE_bool(
+    set_loopback_address,
+    false,
+    "Set the IP addresses from supplied prefix param to loopback (/128)");
+DEFINE_bool(
+    override_loopback_global_addresses,
+    false,
+    "If enabled then all global addresses assigned on loopback will be flushed "
+    "whenever OpenR elects new prefix for node. Only effective when prefix "
+    "allocator is turned on and set_loopback_address is also turned on");
+DEFINE_string(
+    ifname_prefix,
+    "terra,nic1,nic2",
+    "A comma separated list of strings. Linux interface names with a prefix "
+    "matching at least one will be used for neighbor discovery, provided the "
+    "interface is not excluded by the flag ifname_regex_exclude");
+DEFINE_string(
+    ifname_regex_include,
+    "",
+    "A comma separated list of extended POSIX regular expressions. Linux "
+    "interface names containing a match (case insensitive) to at least one of "
+    "these and not excluded by the flag ifname_regex_exclude will be used for "
+    "neighbor discovery");
+DEFINE_string(
+    ifname_regex_exclude,
+    "",
+    "A comma separated list of extended POSIX regular expressions. Linux "
+    "interface names containing a match (case insensitive) to at least one of "
+    "these will not be used for neighbor discovery");
+DEFINE_string(
+    redistribute_ifnames,
+    "",
+    "The interface names who's prefixes we want to advertise");
+DEFINE_bool(enable_auth, false, "Enable known keys authentication in Spark");
+DEFINE_string(known_keys_file_path, "/tmp/known_keys.json", "Known keys file");
+DEFINE_string(
+    cert_file_path,
+    "/tmp/cert_node_1.json",
+    "my certificate file containing private & public key pair");
+DEFINE_bool(enable_encryption, false, "Encrypt traffic between AQ instances");
+DEFINE_bool(
+    use_rtt_metric,
+    true,
+    "Use dynamically learned RTT for interface metric values.");
+DEFINE_bool(
+    enable_full_mesh_reduction,
+    false,
+    "mesh reduction on full mesh topology to avoid duplicate flooding");
+DEFINE_bool(
+    enable_v4,
+    false,
+    "Enable v4 in OpenR for exchanging and programming v4 routes. Works only"
+    "when Switch FIB Agent is used for FIB programming. No NSS/Linux.");
+DEFINE_int32(
+    spark_hold_time_s,
+    18,
+    "How long (in seconds) to keep neighbor adjacency without receiving any"
+    "hello packets.");
+DEFINE_int32(
+    spark_keepalive_time_s,
+    2,
+    "Keep-alive message interval (in seconds) for spark hello message"
+    "exchanges. At most 2 hello message exchanges are required for graceful"
+    "restart.");
+DEFINE_int32(
+    spark_fastinit_keepalive_time_ms,
+    100,
+    "Fast initial keep alive time (in milliseconds)");
+DEFINE_int32(
+    health_checker_ping_interval_s,
+    10,
+    "Time interval (in seconds) to send health check pings to other nodes in"
+    "the network.");
+DEFINE_bool(
+    enable_health_checker,
+    false,
+    "If set, will send pings to other nodes in network at interval specified by"
+    "health_checker_ping_interval flag");
+DEFINE_int32(
+    health_check_option,
+    static_cast<uint32_t>(
+        openr::thrift::HealthCheckOption::PingNeighborOfNeighbor),
+    "Health check scenarios, default set as ping neighbor of neighbor");
+DEFINE_int32(
+    health_check_pct, 50, "Health check pct % of nodes in entire topology");
+DEFINE_bool(
+    enable_spark_signature,
+    false,
+    "Enable the spark packet signature. Disabling It can save you some "
+    "CPU cycles");
+DEFINE_bool(
+    enable_netlink_fib_handler,
+    false,
+    "If set, netlink fib handler will be started for route programming.");
+DEFINE_bool(
+    enable_netlink_system_handler,
+    true,
+    "If set, netlink system handler will be started");
+DEFINE_int32(
+    ip_tos,
+    openr::Constants::kIpTos,
+    "Mark control plane traffic with specified IP-TOS value. Set this to 0 "
+    "if you don't want to mark packets.");
+DEFINE_int32(
+    zmq_context_threads,
+    1,
+    "Number of ZMQ Context thread to use for IO processing.");
+DEFINE_int32(
+    link_flap_initial_backoff_ms,
+    1000,
+    "initial backoff to dampen link flaps (in seconds)");
+DEFINE_int32(
+    link_flap_max_backoff_ms,
+    60000,
+    "max backoff to dampen link flaps (in seconds)");
+DEFINE_bool(
+    enable_perf_measurement,
+    true,
+    "Enable performance measurement in network.");
+DEFINE_int32(
+    decision_debounce_min_ms,
+    10,
+    "Fast reaction time to update decision spf upon receiving adj db update "
+    "(in milliseconds)");
+DEFINE_int32(
+    decision_debounce_max_ms,
+    250,
+    "Decision debounce time to update spf in frequent adj db update "
+    "(in milliseconds)");
+
+using namespace fbzmq;
+using namespace openr;
+
+using namespace folly::gen;
+
+using apache::thrift::CompactSerializer;
+using apache::thrift::FRAGILE;
+
+namespace {
+//
+// Local constants
+//
+
+// the URL for the spark server
+const SparkReportUrl kSparkReportUrl{"inproc://spark_server_report"};
+
+// the URL for the spark server
+const SparkCmdUrl kSparkCmdUrl{"inproc://spark_server_cmd"};
+
+// the URL Prefix for the ConfigStore module
+const std::string kConfigStoreUrlPrefix{"ipc:///tmp/config_store_cmd"};
+
+const PrefixManagerLocalCmdUrl kPrefixManagerLocalCmdUrl{
+    "inproc://prefix_manager_cmd_local"};
+
+} // namespace
+
+int
+main(int argc, char** argv) {
+  // Initialize syslog
+  // We log all messages upto INFO level.
+  // LOG_CONS => Log to console on error
+  // LOG_PID => Log PID along with each message
+  // LOG_NODELAY => Connect immediately
+  setlogmask(LOG_UPTO(LOG_INFO));
+  openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
+  syslog(LOG_NOTICE, "Starting OpenR daemon.");
+
+  // Initialize all params
+  folly::init(&argc, &argv);
+
+  // start signal handler before any thread
+  ZmqEventLoop mainEventLoop;
+  StopEventLoopSignalHandler handler(&mainEventLoop);
+  handler.registerSignalHandler(SIGINT);
+  handler.registerSignalHandler(SIGQUIT);
+  handler.registerSignalHandler(SIGTERM);
+
+  // init sodium security library
+  if (::sodium_init() == -1) {
+    LOG(ERROR) << "Failed initializing sodium";
+    return 1;
+  }
+
+  // Sanity checks on Segment Routing labels
+  const int32_t maxLabel = Constants::kMaxSrLabel;
+  CHECK(Constants::kSrGlobalRange.first > 0);
+  CHECK(Constants::kSrGlobalRange.second < maxLabel);
+  CHECK(Constants::kSrLocalRange.first > 0);
+  CHECK(Constants::kSrLocalRange.second < maxLabel);
+  CHECK(Constants::kSrGlobalRange.first < Constants::kSrGlobalRange.second);
+  CHECK(Constants::kSrLocalRange.first < Constants::kSrLocalRange.second);
+
+  // Local and Global range must be exclusive of each other
+  CHECK(
+      (Constants::kSrGlobalRange.second < Constants::kSrLocalRange.first) ||
+      (Constants::kSrGlobalRange.first > Constants::kSrLocalRange.second))
+      << "Overlapping global/local segment routing label space.";
+
+  // Prepare IP-TOS value from flag and do sanity checks
+  folly::Optional<int> maybeIpTos;
+  if (FLAGS_ip_tos != 0) {
+    CHECK_LE(0, FLAGS_ip_tos) << "ip_tos must be greater than 0";
+    CHECK_GE(256, FLAGS_ip_tos) << "ip_tos must be less than 256";
+    maybeIpTos = FLAGS_ip_tos;
+  }
+
+  std::vector<std::thread> allThreads{};
+
+  // change directory after the config has been loaded
+  ::chdir(FLAGS_chdir.c_str());
+
+  // Set up the zmq context for this process.
+  Context context;
+
+  // Pad node_name after kConfigStoreUrlPrefix to differentiate nodes within a
+  // same host in emulator.
+  const PersistentStoreUrl kConfigStoreUrl{
+      folly::sformat("{}_{}", kConfigStoreUrlPrefix, FLAGS_node_name)};
+
+  // Hack to assign different thread name to ZMQ threads for brevity. Bind
+  // starts zmq ctx and reaper threads
+  folly::setThreadName("zmq_ctx_reaper");
+  {
+    Socket<ZMQ_REP, ZMQ_SERVER> tmpSock(context);
+    tmpSock.bind(SocketUrl{"ipc://*"}).value();
+  }
+  folly::setThreadName("openr");
+
+  // Start NetlinkFibHandler if specified
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
+  if (FLAGS_enable_netlink_fib_handler) {
+    netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>();
+    auto fibThriftThread = std::thread([&netlinkFibServer, &mainEventLoop]() {
+      folly::setThreadName("FibService");
+      auto fibHandler = std::make_shared<NetlinkFibHandler>(&mainEventLoop);
+      netlinkFibServer->setNWorkerThreads(1);
+      netlinkFibServer->setNPoolThreads(1);
+      netlinkFibServer->setPort(FLAGS_fib_agent_port);
+      netlinkFibServer->setInterface(fibHandler);
+
+      LOG(INFO) << "Starting NetlinkFib server...";
+      netlinkFibServer->serve();
+      LOG(INFO) << "NetlinkFib server got stopped.";
+    });
+    allThreads.emplace_back(std::move(fibThriftThread));
+  }
+
+  // Start NetlinkSystemHandler if specified
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
+  if (FLAGS_enable_netlink_system_handler) {
+    netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>();
+    auto systemThriftThread =
+        std::thread([&netlinkSystemServer, &context, &mainEventLoop]() {
+          folly::setThreadName("SystemService");
+          auto systemHandler = std::make_unique<NetlinkSystemHandler>(
+              context,
+              PlatformPublisherUrl{FLAGS_platform_pub_url},
+              &mainEventLoop);
+          netlinkSystemServer->setNWorkerThreads(1);
+          netlinkSystemServer->setNPoolThreads(1);
+          netlinkSystemServer->setPort(FLAGS_system_agent_port);
+          netlinkSystemServer->setInterface(std::move(systemHandler));
+
+          LOG(INFO) << "Starting NetlinkSystem server...";
+          netlinkSystemServer->serve();
+          LOG(INFO) << "NetlinkSystem server got stopped.";
+        });
+    allThreads.emplace_back(std::move(systemThriftThread));
+  }
+
+  folly::Optional<KeyPair> keyPair;
+  if (FLAGS_enable_auth) {
+    auto jsonSerializer = apache::thrift::SimpleJSONSerializer();
+    keyPair = loadKeyPairFromFile(FLAGS_cert_file_path, jsonSerializer);
+  } else {
+    keyPair = util::genKeyPair();
+  }
+
+  const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
+  const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{"inproc://kvstore_cmd_local"};
+  const MonitorSubmitUrl monitorSubmitUrl{
+      folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
+
+  // Start config-store URL
+  PersistentStore configStore(
+      FLAGS_config_store_filepath, kConfigStoreUrl, context);
+  std::thread configStoreThread([&configStore]() noexcept {
+    LOG(INFO) << "Starting ConfigStore thread...";
+    folly::setThreadName("ConfigStore");
+    configStore.run();
+    LOG(INFO) << "ConfigStore thread got stopped.";
+  });
+  configStore.waitUntilRunning();
+  allThreads.emplace_back(std::move(configStoreThread));
+
+  // Start monitor Module
+  // for each log message it receives, we want to add the openr domain
+  fbzmq::LogSample sampleToMerge;
+  sampleToMerge.addString("domain", FLAGS_domain);
+  ZmqMonitor monitor(
+      MonitorSubmitUrl{folly::sformat(
+          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_monitor_rep_port)},
+      MonitorPubUrl{folly::sformat(
+          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_monitor_pub_port)},
+      context,
+      sampleToMerge);
+  std::thread monitorThread([&monitor]() noexcept {
+    LOG(INFO) << "Starting ZmqMonitor thread...";
+    folly::setThreadName("ZmqMonitor");
+    monitor.run();
+    LOG(INFO) << "ZmqMonitor thread got stopped.";
+  });
+  monitor.waitUntilRunning();
+  allThreads.emplace_back(std::move(monitorThread));
+
+  // Start KVStore
+  KvStore store(
+      context,
+      FLAGS_node_name,
+      kvStoreLocalPubUrl,
+      KvStoreGlobalPubUrl{folly::sformat(
+          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_pub_port)},
+      kvStoreLocalCmdUrl,
+      KvStoreGlobalCmdUrl{folly::sformat(
+          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
+      monitorSubmitUrl,
+      maybeIpTos,
+      FLAGS_enable_encryption ? keyPair : folly::none,
+      Constants::kStoreSyncInterval,
+      Constants::kMonitorSubmitInterval,
+      std::unordered_map<std::string, openr::thrift::PeerSpec>{});
+  std::thread kvStoreThread([&store]() noexcept {
+    LOG(INFO) << "Starting KvStore thread...";
+    folly::setThreadName("KvStore");
+    store.run();
+    LOG(INFO) << "KvStore thread got stopped.";
+  });
+  store.waitUntilRunning();
+  allThreads.emplace_back(std::move(kvStoreThread));
+
+  // start prefix manager
+  PrefixManager prefixManager(
+      FLAGS_node_name,
+      PrefixManagerGlobalCmdUrl{
+          folly::sformat("tcp://*:{}", FLAGS_prefix_manager_cmd_port)},
+      kPrefixManagerLocalCmdUrl,
+      kConfigStoreUrl,
+      kvStoreLocalCmdUrl,
+      kvStoreLocalPubUrl,
+      FLAGS_enable_encryption ? keyPair : folly::none,
+      PrefixDbMarker{Constants::kPrefixDbMarker},
+      FLAGS_enable_perf_measurement,
+      context);
+
+  allThreads.emplace_back(std::thread([&prefixManager]() noexcept {
+    LOG(INFO) << "Starting the PrefixManager thread...";
+    folly::setThreadName("PrefixManager");
+    prefixManager.run();
+    LOG(INFO) << "PrefixManager thread got stopped.";
+  }));
+  prefixManager.waitUntilRunning();
+
+  // Prefix Allocator to automatically allocate prefixes for nodes
+  std::unique_ptr<PrefixAllocator> prefixAllocator;
+  if (FLAGS_enable_prefix_alloc) {
+    // start prefix allocator
+    folly::Optional<folly::CIDRNetwork> seedPrefix;
+    if (!FLAGS_seed_prefix.empty()) {
+      seedPrefix.emplace(folly::IPAddress::createNetwork(FLAGS_seed_prefix));
+    }
+    prefixAllocator = std::make_unique<PrefixAllocator>(
+        FLAGS_node_name,
+        kvStoreLocalCmdUrl,
+        kvStoreLocalPubUrl,
+        kPrefixManagerLocalCmdUrl,
+        monitorSubmitUrl,
+        AllocPrefixMarker{Constants::kPrefixAllocMarker},
+        seedPrefix,
+        FLAGS_alloc_prefix_len,
+        FLAGS_set_loopback_address,
+        FLAGS_override_loopback_global_addresses,
+        FLAGS_iface,
+        Constants::kPrefixAllocatorSyncInterval,
+        kConfigStoreUrl,
+        context);
+    // Spawn a PrefixAllocator thread
+    allThreads.emplace_back(std::thread([&prefixAllocator]() noexcept {
+      LOG(INFO) << "Starting PrefixAllocator thread ...";
+      folly::setThreadName("PrefixAllocator");
+      prefixAllocator->run();
+      LOG(INFO) << "PrefixAllocator thread got stopped.";
+    }));
+    prefixAllocator->waitUntilRunning();
+  }
+
+  //
+  // Start the spark service. For now, use random key-pair
+  //
+  KnownKeysStore knownKeysStore(FLAGS_known_keys_file_path);
+
+  Spark spark(
+      FLAGS_domain, // My domain
+      FLAGS_node_name, // myNodeName
+      static_cast<uint16_t>(FLAGS_spark_mcast_port),
+      std::chrono::seconds(FLAGS_spark_hold_time_s),
+      std::chrono::seconds(FLAGS_spark_keepalive_time_s),
+      std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
+      maybeIpTos,
+      keyPair.value(),
+      FLAGS_enable_auth ? &knownKeysStore : nullptr,
+      FLAGS_enable_v4,
+      FLAGS_enable_spark_signature,
+      kSparkReportUrl,
+      kSparkCmdUrl,
+      monitorSubmitUrl,
+      KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
+      KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
+      context);
+
+  std::thread sparkThread([&spark]() noexcept {
+    LOG(INFO) << "Starting the spark thread...";
+    folly::setThreadName("Spark");
+    spark.run();
+    LOG(INFO) << "Spark thread got stopped.";
+  });
+  spark.waitUntilRunning();
+  allThreads.emplace_back(std::move(sparkThread));
+
+  // Static list of prefixes to announce into the network as long as OpenR is
+  // running.
+  std::vector<openr::thrift::IpPrefix> networks;
+  try {
+    std::vector<std::string> prefixes;
+    folly::split(",", FLAGS_prefix, prefixes, true /* ignore empty */);
+    for (auto const& prefix : prefixes) {
+      // Perform some sanity checks before announcing the list of prefixes
+      auto network = folly::IPAddress::createNetwork(prefix);
+      if (network.first.isLoopback()) {
+        LOG(FATAL) << "Default loopback addresses can't be announced "
+                   << prefix;
+      }
+      if (network.first.isLinkLocal()) {
+        LOG(FATAL) << "Link local addresses can't be announced " << prefix;
+      }
+      if (network.first.isMulticast()) {
+        LOG(FATAL) << "Multicast addresses can't be annouced " << prefix;
+      }
+      networks.emplace_back(toIpPrefix(network));
+    }
+  } catch (std::exception const& err) {
+    LOG(ERROR) << "Invalid Prefix string specified. Expeted comma separated "
+               << "list of IP/CIDR format, got '" << FLAGS_prefix << "'";
+    return -1;
+  }
+
+  std::vector<std::string> redistIfNamesVec;
+  folly::split(
+      ",",
+      FLAGS_redistribute_ifnames,
+      redistIfNamesVec,
+      true /* ignore empty */);
+  std::set<std::string> redistIfNames(
+      redistIfNamesVec.begin(), redistIfNamesVec.end());
+
+  //
+  // Construct the regular expressions to match interface names against
+  //
+  std::vector<std::string> regexIncludeStrings;
+  folly::split(",", FLAGS_ifname_regex_include, regexIncludeStrings);
+  std::vector<std::regex> includeRegexList;
+  auto const regexOpts = std::regex_constants::extended |
+      std::regex_constants::icase | std::regex_constants::optimize;
+
+  for (auto& regexStr : regexIncludeStrings) {
+    includeRegexList.emplace_back(regexStr, regexOpts);
+  }
+  // add prefixes
+  std::vector<std::string> ifNamePrefixes;
+  folly::split(",", FLAGS_ifname_prefix, ifNamePrefixes);
+  for (auto& prefix : ifNamePrefixes) {
+    includeRegexList.emplace_back(prefix + ".*", regexOpts);
+  }
+
+  std::vector<std::string> regexExcludeStrings;
+  folly::split(",", FLAGS_ifname_regex_exclude, regexExcludeStrings);
+  std::vector<std::regex> excludeRegexList;
+  for (auto& regexStr : regexExcludeStrings) {
+    excludeRegexList.emplace_back(regexStr, regexOpts);
+  }
+
+  // Create link monitor instance.
+  LinkMonitor linkMonitor(
+      context,
+      FLAGS_node_name,
+      FLAGS_system_agent_port,
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl},
+      includeRegexList,
+      excludeRegexList,
+      redistIfNames,
+      networks,
+      FLAGS_use_rtt_metric,
+      FLAGS_enable_full_mesh_reduction,
+      FLAGS_enable_perf_measurement,
+      FLAGS_enable_v4,
+      AdjacencyDbMarker{Constants::kAdjDbMarker},
+      InterfaceDbMarker{Constants::kInterfaceDbMarker},
+      SparkCmdUrl{kSparkCmdUrl},
+      SparkReportUrl{kSparkReportUrl},
+      monitorSubmitUrl,
+      kConfigStoreUrl,
+      kPrefixManagerLocalCmdUrl,
+      PlatformPublisherUrl{FLAGS_platform_pub_url},
+      LinkMonitorGlobalPubUrl{
+          folly::sformat("tcp://*:{}", FLAGS_link_monitor_pub_port)},
+      LinkMonitorGlobalCmdUrl{
+          folly::sformat("tcp://*:{}", FLAGS_link_monitor_cmd_port)},
+      std::chrono::seconds(2 * FLAGS_spark_keepalive_time_s),
+      std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
+      std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms));
+
+  // start link monitor thread
+  std::thread linkMonitorThread([&linkMonitor]() noexcept {
+    LOG(INFO) << "Starting LinkMonitor thread...";
+    folly::setThreadName("LinkMonitor");
+    linkMonitor.run();
+    LOG(INFO) << "LinkMonitor thread got stopped.";
+  });
+  linkMonitor.waitUntilRunning();
+  allThreads.emplace_back(std::move(linkMonitorThread));
+
+  // Wait for the above two threads to start and run before running
+  // SPF in Decision module.  This is to make sure the Decision module
+  // receives itself as one of the nodes before running the spf.
+
+  // Start Decision Module
+  Decision decision(
+      FLAGS_node_name,
+      FLAGS_enable_v4,
+      AdjacencyDbMarker{Constants::kAdjDbMarker},
+      PrefixDbMarker{Constants::kPrefixDbMarker},
+      std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
+      std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
+      kvStoreLocalCmdUrl,
+      kvStoreLocalPubUrl,
+      DecisionCmdUrl{folly::sformat(
+          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_rep_port)},
+      DecisionPubUrl{folly::sformat(
+          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_pub_port)},
+      monitorSubmitUrl,
+      context);
+  std::thread decisionThread([&decision]() noexcept {
+    LOG(INFO) << "Starting Decision thread...";
+    folly::setThreadName("Decision");
+    decision.run();
+    LOG(INFO) << "Decision thread got stopped.";
+  });
+  decision.waitUntilRunning();
+  allThreads.emplace_back(std::move(decisionThread));
+
+  // Define and start Fib Module
+  Fib fib(
+      FLAGS_node_name,
+      FLAGS_fib_agent_port,
+      FLAGS_dryrun,
+      std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
+      DecisionPubUrl{folly::sformat("tcp://[::1]:{}", FLAGS_decision_pub_port)},
+      DecisionCmdUrl{folly::sformat("tcp://[::1]:{}", FLAGS_decision_rep_port)},
+      FibCmdUrl{
+          folly::sformat("tcp://{}:{}", FLAGS_listen_addr, FLAGS_fib_rep_port)},
+      LinkMonitorGlobalPubUrl{
+          folly::sformat("tcp://[::1]:{}", FLAGS_link_monitor_pub_port)},
+      monitorSubmitUrl,
+      context);
+
+  // Spawn a FIB thread
+  allThreads.emplace_back(std::thread([&fib]() noexcept {
+    LOG(INFO) << "Starting FIB thread ...";
+    folly::setThreadName("Fib");
+    fib.run();
+    LOG(INFO) << "FIB thread got stopped.";
+  }));
+  fib.waitUntilRunning();
+
+  // Define and start HealthChecker
+  std::unique_ptr<HealthChecker> healthChecker{nullptr};
+  if (FLAGS_enable_health_checker) {
+    healthChecker = std::make_unique<HealthChecker>(
+        FLAGS_node_name,
+        openr::thrift::HealthCheckOption(FLAGS_health_check_option),
+        FLAGS_health_check_pct,
+        static_cast<uint16_t>(FLAGS_health_checker_port),
+        std::chrono::seconds(FLAGS_health_checker_ping_interval_s),
+        AdjacencyDbMarker{Constants::kAdjDbMarker},
+        PrefixDbMarker{Constants::kPrefixDbMarker},
+        kvStoreLocalCmdUrl,
+        kvStoreLocalPubUrl,
+        HealthCheckerCmdUrl{
+            folly::sformat("tcp://[::1]:{}", FLAGS_health_checker_rep_port)},
+        monitorSubmitUrl,
+        context);
+    // Spawn a HealthChecker thread
+    allThreads.emplace_back(std::thread([&healthChecker]() noexcept {
+      LOG(INFO) << "Starting HealthChecker thread ...";
+      folly::setThreadName("HealthChecker");
+      healthChecker->run();
+      LOG(INFO) << "HealthChecker thread got stopped.";
+    }));
+    healthChecker->waitUntilRunning();
+  }
+
+  LOG(INFO) << "Starting main event loop...";
+  mainEventLoop.run();
+  LOG(INFO) << "Main event loop got stopped";
+
+  // Stop all threads (in reverse order of their creation)
+  if (healthChecker) {
+    healthChecker->stop();
+    healthChecker->waitUntilStopped();
+  }
+  fib.stop();
+  fib.waitUntilStopped();
+  decision.stop();
+  decision.waitUntilStopped();
+  linkMonitor.stop();
+  linkMonitor.waitUntilStopped();
+  spark.stop();
+  spark.waitUntilStopped();
+  if (prefixAllocator) {
+    prefixAllocator->stop();
+    prefixAllocator->waitUntilStopped();
+  }
+  prefixManager.stop();
+  prefixManager.waitUntilStopped();
+  store.stop();
+  store.waitUntilStopped();
+  monitor.stop();
+  monitor.waitUntilStopped();
+  configStore.stop();
+  configStore.waitUntilStopped();
+  if (netlinkFibServer) {
+    netlinkFibServer->stop();
+  }
+  if (netlinkSystemServer) {
+    netlinkSystemServer->stop();
+  }
+
+  // Wait for all threads to finish
+  for (auto& t : allThreads) {
+    t.join();
+  }
+
+  // Close syslog connection (this is optional)
+  syslog(LOG_NOTICE, "Stopping OpenR daemon.");
+  closelog();
+
+  return 0;
+}

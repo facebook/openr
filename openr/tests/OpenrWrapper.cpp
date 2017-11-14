@@ -1,0 +1,543 @@
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#include "OpenrWrapper.h"
+
+#include <folly/MapUtil.h>
+
+namespace openr {
+
+template <class Serializer>
+OpenrWrapper<Serializer>::OpenrWrapper(
+    fbzmq::Context& context,
+    std::string nodeId,
+    bool v4Enabled,
+    std::chrono::seconds kvStoreDbSyncInterval,
+    std::chrono::seconds kvStoreMonitorSubmitInterval,
+    std::chrono::milliseconds sparkHoldTime,
+    std::chrono::milliseconds sparkKeepAliveTime,
+    std::chrono::milliseconds sparkFastInitKeepAliveTime,
+    bool enableFullMeshReduction,
+    std::chrono::seconds linkMonitorAdjHoldTime,
+    std::chrono::milliseconds linkFlapInitialBackoff,
+    std::chrono::milliseconds linkFlapMaxBackoff,
+    std::chrono::seconds fibColdStartDuration,
+    std::shared_ptr<IoProvider> ioProvider)
+    : context_(context),
+      nodeId_(nodeId),
+      ioProvider_(std::move(ioProvider)),
+      configStoreUrl_(folly::sformat("inproc://{}-store-url", nodeId_)),
+      monitorSubmitUrl_(folly::sformat("inproc://{}-monitor-submit", nodeId_)),
+      monitorPubUrl_(folly::sformat("inproc://{}-monitor-pub", nodeId_)),
+      kvStoreLocalCmdUrl_(folly::sformat("inproc://{}-kvstore-cmd", nodeId_)),
+      kvStoreLocalPubUrl_(folly::sformat("inproc://{}-kvstore-pub", nodeId_)),
+      kvStoreGlobalCmdUrl_(
+          folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
+      kvStoreGlobalPubUrl_(
+          folly::sformat("inproc://{}-kvstore-pub-global", nodeId_)),
+      prefixManagerLocalCmdUrl_(
+          folly::sformat("inproc://{}-prefix_manager_cmd_local", nodeId_)),
+      prefixManagerGlobalCmdUrl_(
+          folly::sformat("inproc://{}-prefix_manager_cmd_global", nodeId_)),
+      sparkCmdUrl_(folly::sformat("inproc://{}-spark-cmd", nodeId_)),
+      sparkReportUrl_(folly::sformat("inproc://{}-spark-report", nodeId_)),
+      platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
+      linkMonitorGlobalCmdUrl_(
+          folly::sformat("inproc://{}-linkmonitor-cmd", nodeId_)),
+      linkMonitorGlobalPubUrl_(
+          folly::sformat("inproc://{}-linkmonitor-pub", nodeId_)),
+      decisionCmdUrl_(folly::sformat("inproc://{}-decision-cmd", nodeId_)),
+      decisionPubUrl_(folly::sformat("inproc://{}-decision-pub", nodeId_)),
+      fibCmdUrl_(folly::sformat("inproc://{}-fib-cmd", nodeId_)),
+      kvStoreReqSock_(context),
+      sparkReqSock_(context),
+      fibReqSock_(context),
+      platformPubSock_(context) {
+  // LM ifName
+  std::string ifName = "vethLMTest_" + nodeId_;
+
+  // create config-store
+  configStore_ = std::make_unique<PersistentStore>(
+      folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_),
+      PersistentStoreUrl{configStoreUrl_},
+      context_);
+
+  // create zmq monitor
+  monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      MonitorPubUrl{monitorPubUrl_},
+      context_);
+
+  //
+  // create kvstore
+  //
+  auto keyPair = fbzmq::util::genKeyPair();
+
+  // kvstore global pub/cmd socket
+  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> kvStoreGlobalPubSock(
+      context_,
+      fbzmq::IdentityString{
+          folly::sformat(Constants::kGlobalPubIdTemplate, nodeId)},
+      keyPair);
+
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> kvStoreGlobalCmdSock(
+      context_,
+      fbzmq::IdentityString{
+          folly::sformat(Constants::kGlobalCmdIdTemplate, nodeId)},
+      keyPair);
+
+  kvStoreGlobalPubSock.bind(fbzmq::SocketUrl{kvStoreGlobalPubUrl_}).value();
+  kvStoreGlobalCmdSock.bind(fbzmq::SocketUrl{kvStoreGlobalCmdUrl_}).value();
+
+  kvStore_ = std::make_unique<KvStore>(
+      context_,
+      nodeId_,
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      KvStoreGlobalPubUrl{kvStoreGlobalPubUrl_},
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      folly::none /* ip-tos */,
+      keyPair,
+      kvStoreDbSyncInterval,
+      kvStoreMonitorSubmitInterval,
+      std::unordered_map<std::string, thrift::PeerSpec>{},
+      std::move(kvStoreGlobalPubSock),
+      std::move(kvStoreGlobalCmdSock));
+
+  // kvstore client socket
+  kvStoreReqSock_.connect(fbzmq::SocketUrl{kvStoreLocalCmdUrl_}).value();
+
+  // kvstore client
+  kvStoreClient_ = std::make_unique<KvStoreClient>(
+      context_,
+      &eventLoop_,
+      nodeId_,
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_});
+
+  // Subscribe our own prefixDb
+  kvStoreClient_->subscribeKey(
+      folly::sformat("prefix:{}", nodeId_),
+      [&](const std::string& /* key */, const thrift::Value& value) noexcept {
+        // Parse PrefixDb
+        auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            value.value.value(), serializer_);
+
+        SYNCHRONIZED(ipPrefix_) {
+          bool received = false;
+
+          for (auto& prefix : prefixDb.prefixEntries) {
+            if (prefix.type == thrift::PrefixType::PREFIX_ALLOCATOR) {
+              received = true;
+              ipPrefix_ = prefix.prefix;
+              break;
+            }
+          }
+          if (!received) {
+            ipPrefix_ = folly::none;
+          }
+        }
+      });
+
+  //
+  // create spark
+  //
+  spark_ = std::make_unique<Spark>(
+      "terragraph", // domain name
+      nodeId_, // node name
+      static_cast<uint16_t>(6666), // multicast port
+      sparkHoldTime, // hold time ms
+      sparkKeepAliveTime, // keep alive ms
+      sparkFastInitKeepAliveTime, // fastInitKeepAliveTime ms
+      folly::none, // ip-tos
+      keyPair,
+      nullptr, // known keys store
+      v4Enabled, // enable v4
+      true, // enable packet signature
+      SparkReportUrl{sparkReportUrl_},
+      SparkCmdUrl{sparkCmdUrl_},
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      KvStorePubPort{0}, // these port numbers won't be used
+      KvStoreCmdPort{0},
+      context_);
+
+  // spark client socket
+  sparkReqSock_.connect(fbzmq::SocketUrl{sparkCmdUrl_}).value();
+
+  //
+  // create link monitor
+  //
+  std::vector<thrift::IpPrefix> networks;
+  networks.emplace_back(toIpPrefix(folly::IPAddress::createNetwork("::/0")));
+  linkMonitor_ = std::make_unique<LinkMonitor>(
+      context_,
+      nodeId_,
+      static_cast<int32_t>(60099), // platfrom pub port
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      std::vector<std::regex>{std::regex{ifName + ".*",
+                                         std::regex_constants::extended |
+                                             std::regex_constants::icase |
+                                             std::regex_constants::optimize}},
+      std::vector<std::regex>{},
+      std::set<std::string>{}, // redistribute interface names
+      networks,
+      false, /* use rtt metric */
+      enableFullMeshReduction, /* enable full mesh reduction */
+      false /* enable perf measurement */,
+      false /* enable v4 */,
+      AdjacencyDbMarker{"adj:"},
+      InterfaceDbMarker{"intf:"},
+      SparkCmdUrl{sparkCmdUrl_},
+      SparkReportUrl{sparkReportUrl_},
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      PersistentStoreUrl{configStoreUrl_},
+      PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_},
+      PlatformPublisherUrl{platformPubUrl_},
+      LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
+      LinkMonitorGlobalCmdUrl{linkMonitorGlobalCmdUrl_},
+      linkMonitorAdjHoldTime,
+      linkFlapInitialBackoff,
+      linkFlapMaxBackoff);
+
+  //
+  // create decision
+  //
+  decision_ = std::make_unique<Decision>(
+      nodeId_,
+      v4Enabled, // enable v4
+      AdjacencyDbMarker{"adj:"},
+      PrefixDbMarker{"prefix:"},
+      std::chrono::milliseconds(10),
+      std::chrono::milliseconds(250),
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      DecisionCmdUrl{decisionCmdUrl_},
+      DecisionPubUrl{decisionPubUrl_},
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      context_);
+
+  //
+  // create FIB
+  //
+  fib_ = std::make_unique<Fib>(
+      nodeId_,
+      static_cast<int32_t>(60100), // fib agent port
+      true, // dry run mode
+      fibColdStartDuration,
+      DecisionPubUrl{decisionPubUrl_},
+      DecisionCmdUrl{decisionCmdUrl_},
+      FibCmdUrl{fibCmdUrl_},
+      LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      context_);
+
+  // FIB client socket
+  fibReqSock_.connect(fbzmq::SocketUrl{fibCmdUrl_}).value();
+}
+
+template <class Serializer>
+void
+OpenrWrapper<Serializer>::run() {
+  // start config-store thread
+  std::thread configStoreThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " ConfigStore running.";
+    configStore_->run();
+    VLOG(1) << nodeId_ << " ConfigStore stopped.";
+  });
+  configStore_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(configStoreThread));
+
+  // start monitor thread
+  std::thread monitorThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " Monitor running.";
+    monitor_->run();
+    VLOG(1) << nodeId_ << " Monitor stopped.";
+  });
+  monitor_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(monitorThread));
+
+  // start kvstore thread
+  std::thread kvStoreThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " KvStore running.";
+    kvStore_->run();
+    VLOG(1) << nodeId_ << " KvStore stopped.";
+  });
+  kvStore_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(kvStoreThread));
+
+  // start prefix manager
+  prefixManager_ = std::make_unique<PrefixManager>(
+      nodeId_,
+      PrefixManagerGlobalCmdUrl{prefixManagerGlobalCmdUrl_},
+      PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_},
+      PersistentStoreUrl{configStoreUrl_},
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      folly::none,
+      PrefixDbMarker{"prefix:"},
+      false /* prefix-mananger perf measurement */,
+      context_);
+
+  prefixManagerClient_ = std::make_unique<PrefixManagerClient>(
+      PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_}, context_);
+
+  try {
+    // bind out publisher socket
+    VLOG(2) << "Platform Publisher: Binding pub url '" << platformPubUrl_
+            << "'";
+    platformPubSock_.bind(fbzmq::SocketUrl{platformPubUrl_}).value();
+  } catch (std::exception const& e) {
+    LOG(FATAL) << "Platform Publisher: could not bind to '" << platformPubUrl_
+               << "'" << folly::exceptionStr(e);
+  }
+
+  eventLoop_.scheduleTimeout(std::chrono::milliseconds(100), [this]() {
+    auto link = thrift::LinkEntry(
+        apache::thrift::FRAGILE, "vethLMTest_" + nodeId_, 5, true, 1);
+
+    thrift::PlatformEvent msgLink;
+    msgLink.eventType = thrift::PlatformEventType::LINK_EVENT;
+    msgLink.eventData = fbzmq::util::writeThriftObjStr(link, serializer_);
+
+    // send header of event in the first 2 byte
+    platformPubSock_.sendMore(
+        fbzmq::Message::from(static_cast<uint16_t>(msgLink.eventType)).value());
+    const auto sendNeighEntryLink =
+        platformPubSock_.sendThriftObj(msgLink, serializer_);
+    if (sendNeighEntryLink.hasError()) {
+      LOG(ERROR) << "Error in sending PlatformEventType Entry, event Type: "
+                 << folly::get_default(
+                        thrift::_PlatformEventType_VALUES_TO_NAMES,
+                        msgLink.eventType,
+                        "UNKNOWN");
+    }
+  });
+
+  /*****
+    auto address = thrift::AddrEntry(
+        apache::thrift::FRAGILE,
+        "vethLMTest_" + nodeId_,
+        toIpPrefix(ipMasks[0]),
+        true);
+
+    thrift::PlatformEvent msgAddr;
+    msgAddr.eventType = thrift::PlatformEventType::ADDRESS_EVENT;
+    msgAddr.eventData = fbzmq::util::writeThriftObjStr(address, serializer_);
+
+    // send header of event in the first 2 byte
+    platformPubSock_.sendMore(
+        fbzmq::Message::from(static_cast<uint16_t>(msgAddr.eventType)).value());
+    const auto sendNeighEntryAddr =
+        platformPubSock_.sendThriftObj(msgAddr, serializer_);
+    if (sendNeighEntryAddr.hasError()) {
+      LOG(ERROR) << "Error in sending PlatformEventType Entry, event Type: "
+                 << folly::get_default(
+                        thrift::_PlatformEventType_VALUES_TO_NAMES,
+                        msgAddr.eventType,
+                        "UNKNOWN");
+    }
+  ******/
+
+  folly::Optional<folly::CIDRNetwork> seedPrefix;
+  seedPrefix.emplace(folly::IPAddress::createNetwork("fc00:cafe:babe::/62"));
+
+  prefixAllocator_ = std::make_unique<PrefixAllocator>(
+      nodeId_,
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_},
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      AllocPrefixMarker{"allocprefix:"}, // alloc_prefix_marker
+      seedPrefix,
+      static_cast<uint32_t>(64), // alloc_prefix_len
+      false /* set loopback addr */,
+      false /* override global address */,
+      "" /* loopback interface name */,
+      Constants::kPrefixAllocatorSyncInterval,
+      PersistentStoreUrl{configStoreUrl_},
+      context_);
+
+  // Spawn a PrefixManager thread
+  std::thread prefixManagerThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " PrefixManager running.";
+    prefixManager_->run();
+    VLOG(1) << nodeId_ << " PrefixManager stopped.";
+  });
+  prefixManager_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(prefixManagerThread));
+
+  // Spawn a PrefixAllocator thread
+  std::thread prefixAllocatorThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " PrefixAllocator running.";
+    prefixAllocator_->run();
+    VLOG(1) << nodeId_ << " PrefixAllocator stopped.";
+  });
+  prefixAllocator_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(prefixAllocatorThread));
+
+  // start spark thread
+  std::thread sparkThread([this]() {
+    VLOG(1) << nodeId_ << " Spark running.";
+    spark_->setIoProvider(ioProvider_);
+    spark_->run();
+    VLOG(1) << nodeId_ << " Spark stopped.";
+  });
+  spark_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(sparkThread));
+
+  // start link monitor
+  std::thread linkMonitorThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " LinkMonitor running.";
+    linkMonitor_->setAsMockMode();
+    linkMonitor_->run();
+    VLOG(1) << nodeId_ << " LinkMonitor stopped.";
+  });
+  linkMonitor_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(linkMonitorThread));
+
+  // start decision
+  std::thread decisionThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " Decision running.";
+    decision_->run();
+    VLOG(1) << nodeId_ << " Decision stopped.";
+  });
+  decision_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(decisionThread));
+
+  // start fib
+  std::thread fibThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " FIB running.";
+    fib_->run();
+    VLOG(1) << nodeId_ << " FIB stopped.";
+  });
+  fib_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(fibThread));
+
+  // start eventLoop_
+  allThreads_.emplace_back([&]() {
+    VLOG(1) << nodeId_ << " Starting eventLoop_";
+    eventLoop_.run();
+    VLOG(1) << nodeId_ << " Stopping eventLoop_";
+  });
+}
+
+template <class Serializer>
+void
+OpenrWrapper<Serializer>::stop() {
+  // stop all modules in reverse order
+  eventLoop_.stop();
+  eventLoop_.waitUntilStopped();
+  fib_->stop();
+  fib_->waitUntilStopped();
+  decision_->stop();
+  decision_->waitUntilStopped();
+  linkMonitor_->stop();
+  linkMonitor_->waitUntilStopped();
+  spark_->stop();
+  spark_->waitUntilStopped();
+  prefixAllocator_->stop();
+  prefixAllocator_->waitUntilStopped();
+  prefixManager_->stop();
+  prefixManager_->waitUntilStopped();
+  kvStore_->stop();
+  kvStore_->waitUntilStopped();
+  monitor_->stop();
+  monitor_->waitUntilStopped();
+  configStore_->stop();
+  configStore_->waitUntilStopped();
+
+  // wait for all threads to finish
+  for (auto& t : allThreads_) {
+    t.join();
+  }
+
+  LOG(INFO) << nodeId_ << " OpenR stopped";
+}
+
+template <class Serializer>
+folly::Optional<thrift::IpPrefix>
+OpenrWrapper<Serializer>::getIpPrefix() {
+  return ipPrefix_.copy();
+}
+
+template <class Serializer>
+bool
+OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
+  return kvStoreClient_->getKey(key).hasValue();
+}
+
+template <class Serializer>
+folly::Expected<std::unordered_map<std::string, thrift::PeerSpec>, fbzmq::Error>
+OpenrWrapper<Serializer>::getKvStorePeers() {
+  return kvStoreClient_->getPeers();
+}
+
+template <class Serializer>
+std::unordered_map<std::string /* key */, thrift::Value>
+OpenrWrapper<Serializer>::kvStoreDumpAll(std::string const& prefix) {
+  // Prepare request
+  thrift::Request request;
+  request.cmd = thrift::Command::KEY_DUMP;
+  request.keyDumpParams.prefix = prefix;
+  // Make ZMQ call and wait for response
+  kvStoreReqSock_.sendThriftObj(request, serializer_).value();
+  auto reply =
+      kvStoreReqSock_.recvThriftObj<thrift::Publication>(serializer_).value();
+
+  // Return the result
+  return reply.keyVals;
+}
+
+template <class Serializer>
+bool
+OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
+    const std::vector<InterfaceEntry>& interfaceEntries) {
+  thrift::InterfaceDatabase ifDb(
+      apache::thrift::FRAGILE, nodeId_, {}, thrift::PerfEvents());
+  ifDb.perfEvents = folly::none;
+
+  for (const auto& interface : interfaceEntries) {
+    ifDb.interfaces.emplace(
+        interface.ifName,
+        thrift::InterfaceInfo(
+            apache::thrift::FRAGILE,
+            true,
+            interface.ifIndex,
+            {toBinaryAddress(interface.v4Addr)},
+            {toBinaryAddress(interface.v6LinkLocalAddr)}));
+  }
+
+  sparkReqSock_.sendThriftObj(ifDb, serializer_).value();
+  auto cmdResult =
+      sparkReqSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(serializer_)
+          .value();
+
+  return cmdResult.isSuccess;
+}
+
+template <class Serializer>
+thrift::RouteDatabase
+OpenrWrapper<Serializer>::fibDumpRouteDatabase() {
+  // create a request
+  thrift::FibRequest request;
+  request.cmd = thrift::FibCommand::ROUTE_DB_GET;
+
+  fibReqSock_.sendThriftObj(request, serializer_).value();
+  auto routeDb =
+      fibReqSock_.recvThriftObj<thrift::RouteDatabase>(serializer_).value();
+
+  return routeDb;
+}
+
+// define template instance for some common serializers
+template class OpenrWrapper<apache::thrift::CompactSerializer>;
+template class OpenrWrapper<apache::thrift::BinarySerializer>;
+template class OpenrWrapper<apache::thrift::SimpleJSONSerializer>;
+
+} // namespace openr
