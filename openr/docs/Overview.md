@@ -147,6 +147,30 @@ all supported configuration options
 Neighbor discovery protocol of OpenR .... More simpler and extensible version
 of well documented `bfd` protocol.
 
+### Roadmap
+---
+
+Open/R is evolving rapidly and we expect to add several features in coming time
+to handle network routing requirements. Initial list of features we have on our
+mind is
+- Encryption and authentication for control plane communication
+- Segment Routing
+- Emulation - Testing framework
+- Weighted ECMP routing
+
+
+### Releases
+---
+
+Things move fast at Facebook which means our internal release cycle for new
+rollout of OpenR is in order of weeks. You will see weekly tags (`2017-11-15`)
+in repository and we aim to maintain backward compatibility with 3 months in
+past. Prefer to pull latest code and upgrade it into your network more
+frequently to leverage latest features.
+
+In future our release plan might change and we might tag some stable releases,
+but until then we will just have weekly tags.
+
 ### Extra Readings
 ---
 - [0MQ Internal Architecture](http://zeromq.org/whitepapers:architecture)
