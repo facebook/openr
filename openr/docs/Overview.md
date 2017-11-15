@@ -137,6 +137,11 @@ codebase.
 
 Managing prefix information in KvStore.
 
+#### [`Runbook.md`](Runbook.md)
+
+Documentation explaining in detail how to run and configure OpenR along with
+all supported configuration options
+
 #### [`Spark.md`](Spark.md)
 
 Neighbor discovery protocol of OpenR .... More simpler and extensible version
