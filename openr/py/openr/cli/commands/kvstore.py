@@ -37,6 +37,12 @@ def print_publication_delta(title, pub_update, sprint_db=""):
                             "\n\n{}".format(sprint_db) if sprint_db else "")]]))
 
 
+def print_timestamp():
+    print(
+        'Timestamp: {}'.format(
+            datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]))
+
+
 class KvStoreCmd(object):
     def __init__(self, cli_opts):
         ''' initialize the Kvsotre client '''
@@ -506,43 +512,50 @@ class SnoopCmd(KvStoreCmd):
                 global_dbs.interfaces.pop(key.split(':')[1], None)
 
         if rows:
+            print_timestamp()
             print(printing.render_vertical_table(rows))
 
     def print_delta(self, msg, regex, pattern, ttl, delta, global_dbs):
-            for (key, value) in msg.keyVals.items():
-                if not key.startswith(regex) and not pattern.match(key):
-                    continue
-                if value.value is None:
-                    if ttl:
-                        print_publication_delta(
-                            "Key: {}, ttl update".format(key),
-                            "ttl: {}, ttlVersion: {}".format(value.ttl,
-                                                             value.ttlVersion))
-                    continue
 
-                if key.startswith(Consts.ADJ_DB_MARKER):
-                    self.print_adj_delta(key, value, delta,
-                                         global_dbs.adjs,
-                                         global_dbs.publications)
-                    continue
-
-                if key.startswith(Consts.PREFIX_DB_MARKER):
-                    self.print_prefix_delta(key, value, delta,
-                                            global_dbs.prefixes,
-                                            global_dbs.publications)
-                    continue
-
-                if key.startswith(Consts.INTERFACE_DB_MARKER):
-                    self.print_interface_delta(key, value, delta,
-                                               global_dbs.interfaces,
-                                               global_dbs.publications)
-                    continue
-
-                if delta:
+        for (key, value) in msg.keyVals.items():
+            if not key.startswith(regex) and not pattern.match(key):
+                continue
+            if value.value is None:
+                if ttl:
+                    print_timestamp()
                     print_publication_delta(
-                        "Key: {} update".format(key),
-                        utils.sprint_pub_update(global_dbs.publications,
-                                                key, value))
+                        "Key: {}, ttl update".format(key),
+                        "ttl: {}, ttlVersion: {}".format(value.ttl,
+                                                         value.ttlVersion))
+                continue
+
+            if key.startswith(Consts.ADJ_DB_MARKER):
+                print_timestamp()
+                self.print_adj_delta(key, value, delta,
+                                     global_dbs.adjs,
+                                     global_dbs.publications)
+                continue
+
+            if key.startswith(Consts.PREFIX_DB_MARKER):
+                print_timestamp()
+                self.print_prefix_delta(key, value, delta,
+                                        global_dbs.prefixes,
+                                        global_dbs.publications)
+                continue
+
+            if key.startswith(Consts.INTERFACE_DB_MARKER):
+                print_timestamp()
+                self.print_interface_delta(key, value, delta,
+                                           global_dbs.interfaces,
+                                           global_dbs.publications)
+                continue
+
+            if delta:
+                print_timestamp()
+                print_publication_delta(
+                    "Key: {} update".format(key),
+                    utils.sprint_pub_update(global_dbs.publications,
+                                            key, value))
 
     def print_prefix_delta(self, key, value, delta, global_prefix_db,
                            global_publication_db):
