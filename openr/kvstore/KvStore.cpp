@@ -1128,6 +1128,18 @@ KvStore::countdownTtl() {
   globalPubSock_.sendOne(msg);
 }
 
+int
+KvStore::getPrefixCount() {
+  int count = 0;
+  for (auto const& kv : kvStore_) {
+    auto const& key = kv.first;
+    if (key.find("prefix::") == 0) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 void
 KvStore::submitCounters() {
   VLOG(2) << "Submitting counters ... ";
@@ -1138,6 +1150,7 @@ KvStore::submitCounters() {
   // Add some more flat counters
   counters["kvstore.num_keys"] = kvStore_.size();
   counters["kvstore.num_peers"] = peers_.size();
+  counters["kvstore.num_prefixes"] = getPrefixCount();
   counters["kvstore.pending_full_sync"] = peersToSyncWith_.size();
 
   // Prepare for submitting counters

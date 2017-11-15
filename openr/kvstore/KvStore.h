@@ -157,6 +157,9 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // periodically count down and purge expired keys if any
   void countdownTtl();
 
+  // count number of prefixes in kvstore
+  int getPrefixCount();
+
   // Extracts the counters and submit them to monitor
   void submitCounters();
 

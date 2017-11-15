@@ -21,6 +21,8 @@
 
 namespace openr {
 
+const int kConvergenceMax{2000};
+
 Fib::Fib(
     std::string myNodeName,
     int32_t thriftPort,
@@ -532,8 +534,12 @@ Fib::logPerfEvents() {
     LOG(INFO) << "  " << str;
   }
   // Add information to counters
-  tData_.addStatValue(
-      "fib.convergence_time_ms", totalDuration.count(), fbzmq::AVG);
+  // kConvergenceMax is used to gate unreasonable convergence time due to
+  // device time out-of-sync etc.
+  if (totalDuration.count() < kConvergenceMax) {
+    tData_.addStatValue(
+        "fib.convergence_time_ms", totalDuration.count(), fbzmq::AVG);
+  }
 
   // Log via zmq monitor
   fbzmq::LogSample sample{};
