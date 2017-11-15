@@ -12,6 +12,12 @@ other networks as well including WAN network (Express Backbone).
 Please refer to [`openr/docs/Overview.md`](openr/docs/Overview.md) to get
 starting with OpenR.
 
+### Library Examples
+---
+
+Please refer to the [`examples`](examples) directory to see some useful ways to
+leverage the openr and fbzmq libraries to build software to run with OpenR.
+
 ### Resources
 ---
 
@@ -131,4 +137,3 @@ to run your emulation.
 ---
 
 OpenR is MIT licensed.
-
