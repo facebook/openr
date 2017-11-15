@@ -1,14 +1,14 @@
 `Breeze`
 --------
 
-`Breeze` is a `python-click` based CLI tool to peek into routing daemon state.
-It allows you to inspect
+`Breeze` is a `python-click` based CLI tool to peek into OpenR's state.
+It allows you to inspect:
 
 - Link state database
 - Advertised prefix database
 - Links discovered by OpenR
 - Neighbors
-- Computed routes along with Loop Free Alternates
+- Computed routes along with Loop-Free Alternates
 - Programmed routes in FIB
 - Set/Unset overload bit for node and links or custom metrics on links
 - Add/Del/Modify keys in KvStore
@@ -17,28 +17,27 @@ It allows you to inspect
 ### How it Works
 ---
 
-All OpenR modules exposes various ZMQ APIs to access their internal state over
-TCP transport. Open/R has [python based
+All OpenR modules expose various ZMQ APIs to access their internal state over
+TCP transport. OpenR has [python based
 clients](https://github.com/facebook/openr/tree/master/openr/py/openr/clients)
-for each of their module which  Breeze leverages it to talk to OpenR, retrieve
-information and display it on CLI
+for each module which  Breeze leverages to talk to OpenR, retrieve
+information, and display it
 
 ### How to use it
 ---
 
 Breeze is very intuitive to use. Just do `--help` at any stage to see options,
-arguments and subcommands. Later sections covers in details about each
+arguments, and subcommands. Later sections cover about each
 command in detail.
 
-To get `auto-completion` in terminal, simply copy `eval
-"$(_BREEZE_COMPLETE=source breeze)"` to your `~/.bashrc`, and then do `source
-~/.bashrc` to refresh the terminal to apply.
+To get auto-completion in your bash shell, simply copy `eval
+"$(_BREEZE_COMPLETE=source breeze)"` to your `~/.bashrc`.
 
 ```
--bash-4.2# breeze
+$ breeze
 Usage: breeze [OPTIONS] COMMAND [ARGS]...
 
-  Command line tools for Open/R.
+  Command line tools for OpenR.
 
 Options:
   -H, --host TEXT               Host to connect to (default = localhost)
@@ -63,11 +62,10 @@ Commands:
 ---
 
 #### Nodes
-You can identify all nodes in a network based on content of KvStore. Following
-API can help you identify that.
+You can identify all nodes in a network based on the content of KvStore.
 
 ```
--bash-4.2# breeze kvstore nodes
+$ breeze kvstore nodes
 
 Node     V6-Loopback            V4-Loopback
 -------  ---------------------  --------------
@@ -78,10 +76,11 @@ Node     V6-Loopback            V4-Loopback
 ```
 
 #### Prefix/Adjacency Database
-Adjacency database is a global link-state information modeled as `Node ->
-List<Neighbors>` and Prefix database represents list of prefixes announced from
-each node. Every node has the same content in it's KvStore by virtue of
-functions of Open/R (so you can query same information from any node)
+Each node announces to the KvStore an Adjacency database, modeled as a list of
+neighbors, and a Prefix database, the list of prefixes announced from that node.
+Since every node has the same content in its KvStore (you can think of it as an
+eventually consistent distributed database), each node has global knowledge of
+the network.
 
 By default `prefixes` and `adj` KvStore commands will show information for local
 node only unless specified with `--nodes=all` or `--nodes=<node1>,<node2>`.
@@ -91,7 +90,7 @@ node only unless specified with `--nodes=all` or `--nodes=<node1>,<node2>`.
 // See prefixes of a current node (node1)
 //
 
--bash-4.2# breeze kvstore prefixes
+$ breeze kvstore prefixes
 
 > node1's prefixes
 da00:cafe:babe:f6:f70b::/80
@@ -102,7 +101,7 @@ fc00:cafe:babe::1/128
 // See adjacencies of node3
 //
 
--bash-4.2# breeze kvstore adj --nodes=node3
+$ breeze kvstore adj --nodes=node3
 
 > node3's adjacencies, version: 4, Node Label: 43049, Overloaded?: False
 Neighbor    Local Interface    Remote Interface      Metric    Weight    Adj Label  NextHop-v4    NextHop-v6                 Uptime
@@ -113,7 +112,7 @@ node1       if_3_1_0           if_1_3_0                   1         1        500
 // See adjacencies of all nodes in a network
 //
 
--bash-4.2# breeze kvstore adj --nodes=all
+$ breeze kvstore adj --nodes=all
 ...
 ```
 
@@ -122,9 +121,9 @@ node1       if_3_1_0           if_1_3_0                   1         1        500
 More fun with KvStore. Read-write operations on replicated datastore via breeze
 CLI.
 
-- List keys in KvStore. Print all keys along with TTL information of them.
+- List keys in KvStore. Print all keys along with their TTL information.
 ```
--bash-4.2# breeze kvstore keys --ttl
+$ breeze kvstore keys --ttl
 
 Key                   OriginatorId      Version  TTL (HH:MM:SS)      TTL Version
 --------------------  --------------  ---------  ----------------  -------------
@@ -152,7 +151,7 @@ prefix:node4          node4                   4  0:05:00                       5
 
 - List specific key-values
 ```
--bash-4.2# breeze kvstore keyvals nodeLabel:1 intf:node4
+$ breeze kvstore keyvals nodeLabel:1 intf:node4
 
 > intf:node4 ---
 00000000: 18 05 6E 6F 64 65 34 1B  02 8C 08 69 66 5F 34 5F  ..node4....if_4_
@@ -172,7 +171,7 @@ prefix:node4          node4                   4  0:05:00                       5
 - Add some custom key
 ```
 // Set key with 60 seconds validity
--bash-4.2# breeze kvstore set-key test-key test-value --version=1 --ttl=60
+$ breeze kvstore set-key test-key test-value --version=1 --ttl=60
 Success: Set key test-key with version 1 and ttl 60000 successfully in KvStore.
 This does not guarantee that value is updated in KvStore as old value can be
 persisted back
@@ -180,69 +179,70 @@ persisted back
 
 - Get the key we just set
 ```
--bash-4.2# breeze kvstore keys --prefix=test-key --ttl
+$ breeze kvstore keys --prefix=test-key --ttl
 
 Key       OriginatorId      Version  TTL (HH:MM:SS)      TTL Version
 --------  --------------  ---------  ----------------  -------------
 test-key  breeze                  1  0:01:00                       1
 
--bash-4.2# breeze kvstore keyvals test-key
+$ breeze kvstore keyvals test-key
 
 > test-key --- test-value
 ```
 
-- Override the old value with new one with higher version
+- Override the old value with a new one with a higher version
 ```
--bash-4.2# breeze kvstore set-key test-key test-value --version=2 --ttl=60
+$ breeze kvstore set-key test-key test-value --version=2 --ttl=60
 Success: Set key test-key with version 1 and ttl 60000 successfully in KvStore.
 This does not guarantee that value is updated in KvStore as old value can be
 persisted back
 
--bash-4.2# breeze kvstore keyvals test-key
+$ breeze kvstore keyvals test-key
 
 > test-key --- new-test-value
 ```
 
-- Erase Erase key from KvStore. It is performed by setting ttl of key to zero.
+- Erase key from KvStore. It is performed by setting TTL of the key to zero.
 
-> NOTE: You shouldn't try to erase keys originated by Open/R
+> NOTE: You shouldn't try to erase keys originated by OpenR
 
-> NOTE: Erase is only happened on all nodes reachable from current node. Any old
-node disconnected from momentarily from network might bring back the key you
-Just erased.
+> NOTE: Erase only happens on all nodes reachable from the current node. Any
+node momentarily disconnected from the network might bring back the key you just
+erased.
 
 ```
--bash-4.2# breeze kvstore erase-key test-key
+$ breeze kvstore erase-key test-key
 Success: key test-key will be erased soon from all KvStores.
 ```
 
 #### KvStore Compare
-Get the delta between contents of two KvStores. By default the command will
-compare each pair of nodes in the network. Output nothing if kvstores are synced
-between nodes. There should be no difference if nodes are part of same network.
+Get the delta between contents of two KvStores. By default, the command will
+compare each pair of nodes in the network. It will output nothing if the
+kvstores are synced between nodes. There should be no difference if nodes are
+part of the same network.
 
 ```
--bash-4.2# breeze kvstore kv-compare --nodes='fc00:cafe:babe::3'
+$ breeze kvstore kv-compare --nodes='fc00:cafe:babe::3'
 dumped kv from fc00:cafe:babe::3
 ```
 
 #### KvStore Signature
 Returns a signature of the contents of the KV store for comparison with other
-nodes.  In case of mismatch, use `kv-compare` to analyze differences.
+nodes.  In case of a mismatch, use `kv-compare` to analyze differences.
 
 ```
--bash-4.2# breeze kvstore kv-signature
+$ breeze kvstore kv-signature
 sha256: d0bd6722917451be2f56a9b1e720ecffeb7e45f9c0e842d62dc90c1d047d870f
 ```
 
 #### Peers
-KvStore on a node is connected to all other KvStores of immediate neighbors. All
-updates are flooded via PUB/SUB channels between these stores and they guarantee
-eventual consistency of data on all nodes. This command shows information about
-KvStore peers and connection configs used for connecting.
+The KvStore of a node is connected to the KvStores of all immediate neighbors.
+All updates are flooded via PUB/SUB channels between these stores and they
+guarantee eventual consistency of data on all nodes. This command shows
+information about a node's KvStore peers and details of the connections.
 
 ```
--bash-4.2# breeze kvstore peers
+$ breeze kvstore peers
 
 > node2
 cmd via tcp://[fe80::e0fd:b7ff:fe23:e73f%if_1_2_0]:60002
@@ -260,7 +260,7 @@ Live snooping on KV-store updates in the network.
 
 
 ```
-[has@devbig522 openr] breeze -H 2401:db00:2120:20ed:feed::1 kvstore snoop
+$ breeze -H 2401:db00:2120:20ed:feed::1 kvstore snoop
 
 > Key: test-key update
 version:         -->  1
@@ -278,10 +278,10 @@ version:  1  -->  2
 
 #### Visualize topology
 Generates an image file with a visualization of the topology. Use `scp` to copy
-it to local machine to open the image file.
+it to your local machine to open the image file.
 
 ```
--bash-4.2# breeze kvstore topology
+$ breeze kvstore topology
 Saving topology to file => /tmp/openr-topology.png
 ```
 
@@ -292,14 +292,14 @@ Saving topology to file => /tmp/openr-topology.png
 Dump the link-state and prefixes databases from Decision module.
 
 ```
--bash-4.2# breeze decision adj
+$ breeze decision adj
 
 > node1's adjacencies, version: N/A, Node Label: 41983, Overloaded?: False
 Neighbor    Local Interface    Remote Interface      Metric    Weight    Adj Label  NextHop-v4    NextHop-v6                 Uptime
 node2       if_1_2_0           if_2_1_0                   1         1        50006  172.16.0.1    fe80::e0fd:b7ff:fe23:e73f  1h37m
 node3       if_1_3_0           if_3_1_0                   1         1        50007  172.16.0.3    fe80::ecf4:d3ff:fef1:4cb6  1h37m
 
--bash-4.2# breeze decision prefixes
+$ breeze decision prefixes
 
 > node1's prefixes
 fc00:cafe:babe::1/128
@@ -314,7 +314,7 @@ link-state information in Decision module. Flag the paths that are actually
 programmed into Fib module with `*`.
 
 ```
--bash-4.2# breeze decision path --src=node1 --dst=node4
+$ breeze decision path --src=node1 --dst=node4
 2 paths are found.
 
   Hop  NextHop Node    Interface      Metric  NextHop-v6
@@ -331,7 +331,7 @@ programmed into Fib module with `*`.
 Request the computed routing table
 
 ```
--bash-4.2# breeze decision routes
+$ breeze decision routes
 
 > 192.168.0.2/32
 via 172.16.0.1@if_1_2_0 metric 1
@@ -368,7 +368,7 @@ via fe80::ecf4:d3ff:fef1:4cb6@if_1_3_0 metric 2
 Check all prefix & adj dbs in Decision against that in KvStore.
 
 ```
--bash-4.2# breeze decision validate
+$ breeze decision validate
 Decision is in sync with KvStore if nothing shows up
 ```
 
@@ -376,12 +376,12 @@ Decision is in sync with KvStore if nothing shows up
 ---
 
 #### links
-OpenR discovers local interfaces of a node (based on specified prefix string)
-and monitors their status via asynchronous netlink APIs. It also performs
-neighbor discovery on learned links.
+OpenR discovers local interfaces of a node (based on specified regular
+expressions) and monitors their status via asynchronous Netlink APIs. It also
+performs neighbor discovery on learned links.
 
 ```
--bash-4.2# breeze lm links
+$ breeze lm links
 
 Interface    Status    Overloaded    Metric Override    ifIndex    Addresses
 -----------  --------  ------------  -----------------  ---------  -------------------------
@@ -396,24 +396,24 @@ if_1_3_0     Up                                         7          172.16.0.2
 Set/unset custom metric value for a link.
 
 - Set custom link metric on one link and drain another link
-> NOTE: Setting link overload will make link completely unusable for routing.
-However setting a high value as link metric will make link less preferred to
-use mimicking hard-drain and soft-drain behavior respectively.
+> NOTE: Setting link overload will make link completely unusable for routing
+while setting a high value as the link metric will make the link less
+preferable, mimicking hard-drain and soft-drain behavior respectively.
 
 ```
--bash-4.2# breeze lm set-link-metric if_1_2_0 5
+$ breeze lm set-link-metric if_1_2_0 5
 
 Are you sure to set override metric for interface if_1_2_0 ? [yn] y
 Successfully set override metric for the interface.
 
--bash-4.2# breeze lm set-link-overload aq_1_3_0
+$ breeze lm set-link-overload aq_1_3_0
 
 Are you sure to set overload bit for interface aq_1_3_0 ? [yn] y
 ```
 
 - List links
 ```
--bash-4.2# breeze lm links
+$ breeze lm links
 
 Interface    Status    Overloaded    Metric Override    ifIndex    Addresses
 -----------  --------  ------------  -----------------  ---------  -------------------------
@@ -426,12 +426,12 @@ if_1_3_0     Up        True                             7          172.16.0.2
 - Undo changes with unset operation
 
 ```
--bash-4.2# breeze lm unset-link-metric if_1_2_0
+$ breeze lm unset-link-metric if_1_2_0
 
 Are you sure to unset override metric for interface if_1_2_0 ? [yn] y
 Successfully unset override metric for the interface.
 
--bash-4.2# breeze lm unset-link-overload if_1_3_0
+$ breeze lm unset-link-overload if_1_3_0
 
 Successfully unset overload status of the interface.
 ```
@@ -443,15 +443,15 @@ not use the node for transit traffic.
 
 - Set node overload
 ```
--bash-4.2# breeze lm set-node-overload
+$ breeze lm set-node-overload
 
 Are you sure to set overload bit for node node1 ? [yn] y
 Successfully set overload bit..
 ```
 
-- See that it is reflected in it's adjacency DB
+- See that it is reflected in its adjacency DB
 ```
--bash-4.2# breeze kvstore adj
+$ breeze kvstore adj
 
 > node1's adjacencies, version: 10, Node Label: 41983, Overloaded?: True
 Neighbor    Local Interface    Remote Interface      Metric    Weight    Adj Label  NextHop-v4    NextHop-v6                 Uptime
@@ -461,7 +461,7 @@ node3       if_1_3_0           if_3_1_0                   1         1        500
 
 - Unset node overload
 ```
--bash-4.2# breeze lm unset-node-overload
+$ breeze lm unset-node-overload
 
 Are you sure to unset overload bit for node node1 ? [yn] y
 Successfully unset overload bit..
@@ -470,13 +470,13 @@ Successfully unset overload bit..
 ### PrefixManager Commands
 
 PrefixManager exposes APIs to list, advertise and withdraw prefixes into the
-network for current node.
+network for the current node.
 
 #### view
-List currently advertised prefixes from this node
+List this node's currently advertised prefixes
 
 ```
--bash-4.2# breeze prefixmgr view
+$ breeze prefixmgr view
 
 Type              Prefix
 ----------------  ---------------------------
@@ -487,22 +487,22 @@ PREFIX_ALLOCATOR  da00:cafe:babe:f6:f70b::/80
 
 #### advertise/withdraw
 
-- Advertise the prefix from this node.
+- Advertise a prefix from this node.
 
 ```
--bash-4.2# breeze prefixmgr advertise face:b00c::/64
+$ breeze prefixmgr advertise face:b00c::/64
 Advertised face:b00c::/64
 ```
 
-- Sync routes with new list of routes for given type (BREEZE here)
+- Sync routes with new list of routes of a given type (BREEZE here)
 ```
--bash-4.2# breeze prefixmgr sync face:b00c::/80
+$ breeze prefixmgr sync face:b00c::/80
 Synced 1 prefixes with type BREEZE
 ```
 
 - List current node's prefix database
 ```
--bash-4.2# breeze prefixmgr view
+$ breeze prefixmgr view
 
 Type              Prefix
 ----------------  ---------------------------
@@ -514,12 +514,12 @@ PREFIX_ALLOCATOR  da00:cafe:babe:f6:f70b::/80
 
 - Withdraw advertised routes
 ```
--bash-4.2# breeze prefixmgr withdraw face:b00c::/80
+$ breeze prefixmgr withdraw face:b00c::/80
 Withdrew face:b00c::/80
 ```
 
-> NOTE: You can use different prefix-type while advertising/syncing routes with
-`--prefix-type` option
+> NOTE: You can use different a prefix-type while advertising/syncing routes
+with the `--prefix-type` option
 
 ### Config Commands
 ---
@@ -531,7 +531,7 @@ update it.
 
 - Dump link monitor config.
 ```
--bash-4.2# breeze config link-monitor
+$ breeze config link-monitor
 == Link monitor parameters stored ==
 
 > isOverloaded: Yes
@@ -546,7 +546,7 @@ update it.
 
 - Dump prefix allocation config.
 ```
--bash-4.2# breeze config prefix-allocator
+$ breeze config prefix-allocator
 
 == Prefix Allocator parameters stored  ==
 
@@ -559,7 +559,7 @@ update it.
 
 - Dump prefix manager config.
 ```
--bash-4.2# breeze config prefix-manager
+$ breeze config prefix-manager
 
 == Prefix Manager parameters stored  ==
 
@@ -572,7 +572,7 @@ da00:cafe:babe:94:4634::/80
 
 - Erase a config key.
 ```
--bash-4.2# breeze config erase prefix-manager-config
+$ breeze config erase prefix-manager-config
 Key erased
 
 ```
@@ -580,7 +580,7 @@ Key erased
 
 - Store a config key.
 ```
--bash-4.2# breeze config store prefix-allocator-config /tmp/config
+$ breeze config store prefix-allocator-config /tmp/config
 Key stored
 ```
 
@@ -588,11 +588,11 @@ Key stored
 ---
 
 #### counters
-Fetch and display Open/R counters. You can programmatically fetch these counters
-periodically via Monitor client and export it for monitoring purpose.
+Fetch and display OpenR counters. You can programmatically fetch these counters
+periodically via Monitor client and export them for monitoring purposes.
 
 ```
--bash-4.2# breeze monitor counters --prefix decision
+$ breeze monitor counters --prefix decision
 
 decision.adj_db_update.count.0 : 16.0
 decision.adj_db_update.count.3600 : 7.0
@@ -619,19 +619,19 @@ decision.spf_runs.count.600 : 0.0
 ### FIB Commands
 ---
 
-FIB is the only platform specific part of Open/R. FIB-Agent runs as a separate
-service on node which is primarily responsible for managing routing tables on
-Node. Breeze also exposes commands to interact with FIB-Agent.
+FIB is the only platform-specific part of OpenR. FibAgent runs as a separate
+service on the node which is primarily responsible for managing the routing
+tables on the node. Breeze also exposes commands to interact with FibAgent.
 
 #### List/Add/Delete route via breeze!
 > NOTE: You don't need to do this but they are just for fun!
 
-This command only shows how to `add/del` routes. You can as well use `sync`
-command to replace existing routing entries with newly specified routes.
+This command only shows how to `add/del` routes. You can instead use the `sync`
+command to replace all existing routing entries with newly specified routes.
 
 - List routes
 ```
-[has@devbig164 ~] breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib list
 
 == leb01.labdca1's FIB routes ==
 
@@ -645,12 +645,12 @@ via fe80::21c:73ff:fe3c:e50c@Port-Channel1201
 - Add new route
 ```  
 // add route
-[has@devbig164 ~] breeze -H leb01.labdca1 fib add '192.168.0.0/32' '1.3.4.5@Port-Channel1201'
+$ breeze -H leb01.labdca1 fib add '192.168.0.0/32' '1.3.4.5@Port-Channel1201'
 192.168.0.0 32
 Added 1 routes.
 
 // list routes
-[has@devbig164 ~] breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib list
 
 == leb01.labdca1's FIB routes ==
 
@@ -667,12 +667,12 @@ via fe80::21c:73ff:fe3c:e50c@Port-Channel1201
 - Delete existing routes
 ```
 // delete routes
-[has@devbig164 ~] breeze -H leb01.labdca1 fib del '192.168.0.0/32'
+$ breeze -H leb01.labdca1 fib del '192.168.0.0/32'
 192.168.0.0 32
 Deleted 1 routes.
 
 // list routes
-[has@devbig164 ~] breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib list
 
 == leb01.labdca1's FIB routes ==
 
@@ -688,7 +688,7 @@ You can use sync API to synchronize routing table with fresh routing table
 entries.
 
 ```
-[has@devbig164 ~] breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib list
 
 == leb01.labdca1's FIB routes ==
 
@@ -699,9 +699,9 @@ via 10.254.112.129@Port-Channel1201
 via fe80::21c:73ff:fe3c:e50c@Port-Channel1201
 
 
-[has@devbig164 ~] breeze -H leb01.labdca1 fib sync '' ''
+$ breeze -H leb01.labdca1 fib sync '' ''
 Reprogrammed FIB with 0 routes.
-[has@devbig164 ~] breeze -H leb01.labdca1 fib list
+$ breeze -H leb01.labdca1 fib list
 
 == leb01.labdca1's FIB routes ==
 
@@ -709,20 +709,20 @@ Reprogrammed FIB with 0 routes.
 
 #### `linux` for platforms where we use Linux routing
 
-One can then use `linux` FIB specific commands, most useful being "validate"
+One can then use `linux`  specific commands, the most useful being "validate"
 which validates if the system (kernel routing table) has all the routes that
-Open/R intended to program.  In case of a mismatch, the discrepancies will be
+OpenR intended to program.  In case of a mismatch, the discrepancies will be
 reported to aid debugging.
 
 ```
-[yzdou@devvm28910.prn1 /tmp/aq_3] breeze fib validate-linux
+$ breeze fib validate-linux
 PASS
 Fib and Kernel routing table match
 ```
 
 An example of reporting discrepancy
 ```
-[yzdou@devvm28910.prn1 /tmp/aq_3] breeze fib validate-linux
+$ breeze fib validate-linux
 FAIL
 Fib and Kernel routing table do not match
 Routes in kernel but not in Fib

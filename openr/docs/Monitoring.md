@@ -1,65 +1,65 @@
 `Monitoring`
 ------------
 
-Each module internally generates it's own list of counters using `ThreadData`
+Each module internally generates its own list of counters using the `ThreadData`
 library (which has supports for stats like SUM/RATE/COUNT over various
-durations). These counters are periodically submitted to `ZmqMonitor` store
-(singleton) which in turn publishes them on it's `PUB` channel. Monitoring agent
-on the node or remote note can connect to `ZmqMonitor` and pull off the counters
+durations). These counters are periodically submitted to the `ZmqMonitor` store
+(singleton) which in turn publishes them on it's `PUB` channel. A Monitoring
+agent on the node or remotely can connect to `ZmqMonitor` and query the counters
 to perform monitoring on the top of these counters or build interactive
 dashboards.
 
-Further each module logs important events like `IFACE_UP` or `NEIGHBOR_DOWN`
+Further, each module logs important events like `IFACE_UP` or `NEIGHBOR_DOWN`
 in a structured fashion via ZmqMonitor which can be logged to data stores
-like `Druid` to do realtime monitoring of log events across the fleet.
+like `Druid` to do real-time monitoring of log events across the fleet.
 
 
 ### Understanding Counters
 ---
 
-Counters are exported as key-value pairs where key is string and value is 64 bit
-integers. Keys represent either a plain counter like number of neighbors or
-statistic like number of SPF computation in last one minute. Stats are encoded
-with following method
+Counters are exported as key-value pairs where the key is string and value is a
+64-bit integer. Keys represent either a plain counter like a number of neighbors
+or statistic like the number of SPF computations in last one minute. Stats are
+encoded with the following method:
 
 `<module-name>.<counter-name>.<stat-type>.<seconds>`
 
 For e.g.
-- `kvstore.received_key_vals.sum.60` represents number of key-value updates
+- `kvstore.received_key_vals.sum.60` represents number of key-value updates that
   happened in past one minute
 - `decision.spf_runs.count.3600` represents number of SPF runs in last one hour
-- `decision.spf.multipath_ms.avg.0` represent average execution time across all
-  SPF calculations
+- `decision.spf.multipath_ms.avg.0` represents the average execution time across
+  all SPF calculations
 
 
 ### Important Counters to Monitor
 ---
 
-Here are some important counters to monitor for production system and alert
+Here are some important counters to monitor for a production system and alert
 engineers quickly if something goes wrong. `breeze monitor counters` will list
-you lot of other counters as well, most names are self explanatory.
+a lot of other counters as well. Most names are self-explanatory.
 
 #### KvStore Counters
 - `kvstore.num_keys` => This counter shouldn't exceed a certain threshold and
-  must have some max limit for a given network. If number of keys keep
-  increasing in KvStore that means system will soon run out of memory
-- `kvstore.peers` => Usually every node in a network must have atleast one peer
-- `kvstore.pending_full_sync` => Pending full sync request to neighbor, this
+  must have some max limit for a given network. If the number of keys keeps
+  increasing in KvStore that means the system will soon run out of memory
+- `kvstore.peers` => Usually every node in a network must have at least one peer
+- `kvstore.pending_full_sync` => Pending full sync request to a neighbor, this
   counter should be 0 most of time
 
 #### Spark Counters
-- `spark.num_tracked_interfaces` => Indicates number of interfaces learned by
+- `spark.num_tracked_interfaces` => Indicates the number of interfaces learned by
   OpenR
 - `spark.num_adjacent_neighbors` must match with `spark.num_tracked_neighbors`
-  as eventually adjacency must form between all connected nodes in domain
+  as eventually adjacency must form between all connected nodes in the domain
 
 #### Decision Counters
 
-- `decision.adj_db_update.count.60` shouldn't exceed certain threshold. Higher
-  number indicates instable network
-- `decision.prefix_db_update.count.60` shouldn't exceed certain threshold.
-  Higher number indicates lot of churn in route advertisement
-- `decision.spf_runs.count.60` higher number indicates lot of network churn
+- `decision.adj_db_update.count.60` shouldn't exceed a certain threshold. A higher
+  number indicates an instable network
+- `decision.prefix_db_update.count.60` shouldn't exceed a certain threshold.
+  Higher number indicates a lot of churn in route advertisement
+- `decision.spf_runs.count.60` a higher number indicates a lot of network churn
   (corresponds to adj_db_update).
 
 #### Fib Counters
@@ -71,9 +71,9 @@ you lot of other counters as well, most names are self explanatory.
 
 #### Link Monitor Counters
 
-- `link_monitor.advertise_adjacencies.sum.60` => higher number indicates lot of
+- `link_monitor.advertise_adjacencies.sum.60` => higher number indicates a lot of
   adjacency flapping
-- `link_monitor.advertise_links.sum.60` => higher number indicates lot of link
+- `link_monitor.advertise_links.sum.60` => higher number indicates a lot of link
   flapping on system
 
 ### Log Events

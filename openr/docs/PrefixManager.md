@@ -20,20 +20,21 @@ Responsible for writing the current PrefixDatabase to disk, and picking it up
 after restarts.
 
 #### Cmd Socket
-Supports following commands
-- `ADD_PREFIXES` => Adds list of prefixes provided as argument
-- `WITHDRAW_PREFIXES` => Withdraws list of prefixes provided as argument
-- `WITHDRAW_PREFIXES_BY_TYPE` => Withdraws prefixes of type provided as argument
-- `SYNC_PREFIXES_BY_TYPE` => Withdraws all current prefixes of type and adds
-                             list of prefixes provided
+Supports the following commands
+- `ADD_PREFIXES` => Adds the list of prefixes provided as an argument
+- `WITHDRAW_PREFIXES` => Withdraws the list of prefixes provided as an argument
+- `WITHDRAW_PREFIXES_BY_TYPE` => Withdraws prefixes of the type provided as an
+                                 argument
+- `SYNC_PREFIXES_BY_TYPE` => Withdraws all current prefixes of the type provided
+                             and adds the list of prefixes provided
 - `GET_ALL_PREFIXES` => Returns all prefixes currently being advertised
-- `GET_PREFIXES_BY_TYPE` => Returns all prefixes of type currently being
-                            advertised
+- `GET_PREFIXES_BY_TYPE` => Returns all prefixes of the type provided currently
+                            being advertised
 
 ### Implementation
 ---
 
-`PrefixManager` module is quite simple. It stores the list of prefixes to be
+The `PrefixManager` module is quite simple. It stores the list of prefixes to be
 advertised by the node, listens on a ROUTER socket for commands that modify this
 list, and updates the PrefixDatabase advertised in `kvStore` and persisted on
 disk when the list changes.
@@ -41,8 +42,9 @@ disk when the list changes.
 ### Interacting with PrefixManager
 ---
 
-For c++, we provide a simple `PrefixManagerClient` which implements a simple api
+For c++, we provide a simple `PrefixManagerClient` which implements an API
 for modifying the prefix list advertised from the node.
 
 Additionally, you can add and remove prefixes from the `breeze` cli. See
-[docs/Breeze.md](https://github.com/facebook/openr/blob/master/openr/docs/Breeze.md) for more details
+[docs/Breeze.md](https://github.com/facebook/openr/blob/master/openr/docs/Breeze.md)
+for more details
