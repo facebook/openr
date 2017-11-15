@@ -14,6 +14,15 @@ export DESTDIR=""
 mkdir -p "$BUILD_DIR/deps"
 cd "$BUILD_DIR/deps"
 
+find_github_hash() {
+  if [[ $# -eq 1 ]]; then
+    rev_file="github_hashes/$1-rev.txt"
+    if [[ -f "$rev_file" ]]; then
+      head -1 "$rev_file" | awk '{ print $3 }'
+    fi
+  fi
+}
+
 install_zstd() {
   pushd .
   if [[ ! -e "zstd" ]]; then
@@ -44,8 +53,11 @@ install_wangle() {
   if [[ ! -e "wangle" ]]; then
     git clone https://github.com/facebook/wangle
   fi
+  rev=$(find_github_hash facebook/wangle)
   cd wangle/wangle
-  git checkout v2017.10.23.00
+  if [[ ! -z "$rev" ]]; then
+    git checkout "$rev"
+  fi
   cmake \
     -DFOLLY_INCLUDE_DIR=$DESTDIR/usr/local/include \
     -DFOLLY_LIBRARY=$DESTDIR/usr/local/lib \
@@ -89,8 +101,11 @@ install_folly() {
   if [[ ! -e "folly" ]]; then
     git clone https://github.com/facebook/folly
   fi
+  rev=$(find_github_hash facebook/folly)
   cd folly/folly
-  git checkout v2017.10.23.00
+  if [[ ! -z "$rev" ]]; then
+    git checkout "$rev"
+  fi
   autoreconf -ivf
   ./configure LIBS="-lpthread"
   make
@@ -101,15 +116,14 @@ install_folly() {
 
 install_fbthrift() {
   pushd .
-  #if [[ ! -z "$PYTHONPATH" ]]; then
-  #  export PYTHONPATH=""
-  #fi
-  #export PYTHONPATH="$DESTDIR/usr/local/lib/python2.7/dist-packages:$BUILD_DIR/deps/fbthrift/thrift/compiler/py/usr/local/lib/python2.7/dist-packages:$PYTHONPATH"
   if [[ ! -e "fbthrift" ]]; then
     git clone https://github.com/facebook/fbthrift
   fi
+  rev=$(find_github_hash facebook/fbthrift)
   cd fbthrift/build
-  git checkout v2017.10.23.00
+  if [[ ! -z "$rev" ]]; then
+    git checkout "$rev"
+  fi
   cmake -DBUILD_SHARED_LIBS=ON ..
   make
   make install
@@ -124,8 +138,11 @@ install_fbzmq() {
   if [[ ! -e "fbzmq" ]]; then
     git clone https://github.com/facebook/fbzmq.git
   fi
+  rev=$(find_github_hash facebook/fbzmq)
   cd fbzmq/fbzmq/build
-  git checkout v2017.10.23.00
+  if [[ ! -z "$rev" ]]; then
+    git checkout "$rev"
+  fi
   cmake \
     -DCMAKE_CXX_FLAGS="-Wno-sign-compare -Wno-unused-parameter" \
     -DBUILD_SHARED_LIBS=OFF \
