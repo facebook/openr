@@ -19,7 +19,6 @@ import socket
 import sys
 import zmq
 
-from collections import deque
 from itertools import product
 from openr.clients.kvstore_client import KvStoreClient
 from openr.clients.lm_client import LMClient
@@ -176,18 +175,18 @@ def sprint_prefixes_db_full(prefix_db, loopback_only=False):
         :return [str]: the array of prefix strings
     '''
 
-    prefix_strs = deque()
-
-    for prefix_entry in prefix_db.prefixEntries:
+    prefix_strs = []
+    sorted_entries = sorted(sorted(prefix_db.prefixEntries,
+                                   key=lambda x: x.prefix.prefixLength),
+                            key=lambda x: x.prefix.prefixAddress.addr)
+    for prefix_entry in sorted_entries:
         if loopback_only and \
            prefix_entry.type is not lsdb_types.PrefixType.LOOPBACK:
             continue
-        if len(prefix_entry.prefix.prefixAddress.addr) == 4:
-            prefix_strs.append(sprint_prefix(prefix_entry.prefix))
-        else:
-            prefix_strs.appendleft(sprint_prefix(prefix_entry.prefix))
+        prefix_strs.append([sprint_prefix(prefix_entry.prefix),
+                            sprint_prefix_type(prefix_entry.type)])
 
-    return list(prefix_strs)
+    return printing.render_horizontal_table(prefix_strs, ['Prefix', 'Type'])
 
 
 def ip_str_to_addr(addr_str):
@@ -232,11 +231,8 @@ def print_prefixes_table(resp, nodes, iter_func):
             prefix_db = deserialize_thrift_object(prefix_db.value,
                                                   lsdb_types.PrefixDatabase)
 
-        prefix_strs = sprint_prefixes_db_full(prefix_db)
-
-        row = ["{}'s prefixes".format(prefix_db.thisNodeName)]
-        row.extend(prefix_strs)
-        rows.append(row)
+        rows.append(["{}'s prefixes".format(prefix_db.thisNodeName),
+                     sprint_prefixes_db_full(prefix_db)])
 
     rows = []
     iter_func(rows, resp, nodes, _parse_prefixes)
@@ -479,7 +475,7 @@ def print_adjs_table(adjs_map, enable_color):
                      'NextHop-v6', 'Uptime']
 
     output = []
-    for node, val in adjs_map.items():
+    for node, val in sorted(adjs_map.items()):
         # report overloaded status in color
         is_overloaded = val['overloaded']
         # report overloaded status in color
@@ -494,7 +490,7 @@ def print_adjs_table(adjs_map, enable_color):
 
         # horizontal adj table for a node
         rows = []
-        for adj in val['adjacencies']:
+        for adj in sorted(val['adjacencies'], key=lambda adj: adj['otherNodeName']):
             overload_status = click.style('Overloaded', fg='red')
             metric = (overload_status if enable_color else
                       'OVERLOADED') if adj['isOverloaded'] else adj['metric']
@@ -600,14 +596,16 @@ def interface_dbs_to_dict(publication, nodes, iter_func):
     return intf_dbs_map
 
 
-def sprint_interface_table(intf_db):
+def sprint_interface_table(intf_db, print_all):
     '''
     @param intf_db: InterfaceDatabase.bunch
     '''
 
     columns = ['Interface', 'Status', 'ifIndex', 'Addresses']
     rows = []
-    for intf_name, intf in intf_db.interfaces.items():
+    for intf_name, intf in sorted(intf_db.interfaces.items()):
+        if not (intf.isUp or print_all):
+            continue
         status = 'UP' if intf.isUp else 'DOWN'
         rows.append([intf_name, status, intf.ifIndex, ''])
 
@@ -622,15 +620,15 @@ def sprint_interface_table(intf_db):
     return printing.render_horizontal_table(rows, columns, None)
 
 
-def print_interfaces_table(intf_map):
+def print_interfaces_table(intf_map, print_all):
     '''
     @param intf_db: map<node-name, InterfaceDatabase.bunch>
     '''
 
     lines = []
-    for intf_db in intf_map.values():
+    for intf_db in sorted(intf_map.values(), key=lambda x: x.thisNodeName):
         lines.append('> {}\'s interfaces'.format(intf_db.thisNodeName))
-        lines.append(sprint_interface_table(intf_db))
+        lines.append(sprint_interface_table(intf_db, print_all))
         lines.append('')
     lines.pop()
     print('\n'.join(lines))

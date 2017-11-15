@@ -144,8 +144,8 @@ class KeyValsCmd(KvStoreCmd):
             Consts.ADJ_DB_MARKER: lsdb_types.AdjacencyDatabase
         }
 
-        prefix_type = key.split(':')[0]
-        if prefix_type in options:
+        prefix_type = key.split(':')[0] + ":"
+        if prefix_type in options.keys():
             return deserialize_thrift_object(value.value, options[prefix_type])
         else:
             return None
@@ -159,18 +159,18 @@ class KeyValsCmd(KvStoreCmd):
         rows = []
 
         for key, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
-            deserialized_obj = self.deserialize_kvstore_publication(key, value)
-            if not deserialized_obj:
+            val = self.deserialize_kvstore_publication(key, value)
+            if not val:
                 if all(isinstance(c, str) and c in string.printable
                        for c in value.value):
-                    rows.append(["{} --- {}".format(key, value.value)])
+                    val = value.value
                 else:
-                    rows.append(
-                        ["{} --- \n{}".format(key,
-                                              hexdump.hexdump(value.value,
-                                                              'return'))])
-            else:
-                rows.append(["{} --- \n{}".format(key, deserialized_obj)])
+                    val = hexdump.hexdump(value.value, 'return')
+
+            rows.append(["key: {}\n  version: {}\n  originatorId: {}\n  "
+                         "ttl: {}\n  ttlVersion: {}\n  value:\n    {}".format(
+                            key, value.version, value.originatorId, value.ttl,
+                            value.ttlVersion, val)])
 
         caption = "Dump key-value pairs in KvStore"
         print(printing.render_vertical_table(rows, caption=caption))
@@ -207,7 +207,6 @@ class NodesCmd(KvStoreCmd):
         if any(len(row) > 2 for row in rows):
             label.append('V4-Loopback')
 
-        print()
         print(printing.render_horizontal_table(rows, label))
 
 
@@ -223,7 +222,7 @@ class AdjCmd(KvStoreCmd):
 
 
 class InterfacesCmd(KvStoreCmd):
-    def run(self, nodes, json):
+    def run(self, nodes, json, print_all):
         publication = self.client.dump_all_with_prefix(
             Consts.INTERFACE_DB_MARKER)
         intfs_map = utils.interface_dbs_to_dict(publication, nodes,
@@ -231,7 +230,7 @@ class InterfacesCmd(KvStoreCmd):
         if json:
             print(json.dumps(intfs_map, sort_keys=True, indent=4))
         else:
-            utils.print_interfaces_table(intfs_map)
+            utils.print_interfaces_table(intfs_map, print_all)
 
 
 class KvCompareCmd(KvStoreCmd):

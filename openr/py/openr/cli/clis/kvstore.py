@@ -164,12 +164,14 @@ class InterfacesCli(object):
                        'host\'s interfaces. Get interfaces for all nodes if '
                        '\'all\' is give.')
     @click.option('--json/--no-json', default=False, help='Dump in JSON format')
+    @click.option('--all/--no-all', default=False,
+                  help='Show all links including ones without addresses')
     @click.pass_obj
-    def interfaces(cli_opts, nodes, json):  # noqa: B902
+    def interfaces(cli_opts, nodes, json, all):  # noqa: B902
         ''' dump interface information '''
 
         nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
-        kvstore.InterfacesCmd(cli_opts).run(nodes, json)
+        kvstore.InterfacesCmd(cli_opts).run(nodes, json, all)
 
 
 class KvCompareCli(object):
