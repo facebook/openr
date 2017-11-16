@@ -409,7 +409,8 @@ KvStore::mergeKeyValues(
       }
       // update hash if it's not there
       if (not kvStoreIt->second.hash.hasValue()) {
-        kvStoreIt->second.hash = value.hash;
+        kvStoreIt->second.hash = generateHash(
+            value.version, value.originatorId, value.value);
       }
     } else if (updateTtlNeeded) {
       //
@@ -845,7 +846,7 @@ KvStore::processRequest(
     updateTtlCountdownQueue(thriftPub);
 
     // publish the updated key-values to the peers
-    if (!keyVals.empty()) {
+    if (!thriftPub.keyVals.empty()) {
       VLOG(3) << "Publishing KV update to the peers after SET command";
       auto const msg =
           fbzmq::Message::fromThriftObj(thriftPub, serializer_).value();

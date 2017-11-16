@@ -11,7 +11,7 @@ from __future__ import unicode_literals
 from __future__ import division
 
 from openr.KvStore import ttypes as kv_store_types
-from openr.utils import socket, consts
+from openr.utils import consts, serializer, socket
 
 from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 import zmq
@@ -65,8 +65,16 @@ class KvStoreClient():
             req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
             self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
-            return self._kv_store_cmd_socket.recv_thrift_obj(
-                kv_store_types.Publication)
+            resp = self._kv_store_cmd_socket.recv()
+            if resp == 'ERR':
+                # KvStore doesn't support HASH_DUMP API yet. Use full dump
+                # API instead
+                return self.dump_all_with_prefix(prefix)
+            else:
+                return serializer.deserialize_thrift_object(
+                    resp,
+                    kv_store_types.Publication,
+                    self._kv_store_cmd_socket.proto_factory)
 
     def dump_peers(self):
         '''  dump the entries of kvstore whose key matches the given prefix
