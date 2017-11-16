@@ -51,7 +51,7 @@ This should work on all Linux based platforms without any issues.
 
 At the top level of this repo are the `build` and `openr` directories. Under the
 former is a tool, `fbcode_builder`, that contains scripts for generating a
-docker context to build the project. Under the `openr` directory exists the
+docker context to build the project. The `openr` directory contains the
 source for the project.
 
 #### Build using Docker
@@ -83,7 +83,7 @@ C++ binaries as well as python tools. Please modify the script as needed for
 your platform. Also, note that some library dependencies require a newer version
 than provided by the default package manager on the system and hence we are
 compiling them from source instead of installing via the package manager. Please
-see the script for those instances and the required version.
+see the script for those instances and the required versions.
 
 > `libnl` also requires custom patch, included herewith, for correct handling
 of add/remove multicast routes.
@@ -105,8 +105,8 @@ If you make any changes you can run `cmake ../openr` and `make` from the build
 directory to build openr with your changes.
 
 #### Installing
-`openr` builds a static and dynamic library and the install step installs the
-library as well all header files to `/usr/local/lib/` and `/usr/local/include/`
+`openr` builds both static and dynamic libraries and the install step installs
+libraries and all header files to `/usr/local/lib/` and `/usr/local/include/`
 (under openr subdirectory) along with python modules in `site-packages`.
 Note: the `build_openr.sh` script will run this step for you.
 
