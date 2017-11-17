@@ -223,8 +223,9 @@ class SetKeyCli(object):
     def set_key(cli_opts, key, value, originator, version, ttl):  # noqa: B902
         ''' Set a custom key into KvStore '''
 
-        ttl_ms = ttl * 1000
-        kvstore.SetKeyCmd(cli_opts).run(key, value, originator, version, ttl_ms)
+        if ttl != Consts.CONST_TTL_INF:
+            ttl = ttl * 1000
+        kvstore.SetKeyCmd(cli_opts).run(key, value, originator, version, ttl)
 
 
 class KvSignatureCli(object):

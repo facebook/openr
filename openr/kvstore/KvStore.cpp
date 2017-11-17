@@ -314,6 +314,12 @@ KvStore::mergeKeyValues(
     int64_t myVersion{0};
     int64_t newVersion = value.version;
 
+    // Check if TTL is valid. It must be infinite or positive number
+    // Skip if invalid!
+    if (value.ttl != Constants::kTtlInfinity && value.ttl <= 0) {
+      continue;
+    }
+
     // if key exist, compare values first
     // if they are the same, no need to propagate changes
     auto kvStoreIt = kvStore.find(key);

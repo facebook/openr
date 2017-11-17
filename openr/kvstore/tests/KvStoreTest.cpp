@@ -431,6 +431,16 @@ TEST(KvStore, mergeKeyValuesTest) {
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(deltaPub.keyVals.size(), 0);
   }
+
+  // bogus ttl value (see it should get ignored)
+  {
+    std::unordered_map<std::string, thrift::Value> emptyStore;
+    newKvIt->second = thriftValue;
+    newKvIt->second.ttl = -100;
+    auto deltaPub = KvStore::mergeKeyValues(emptyStore, newStore);
+    EXPECT_EQ(deltaPub.keyVals.size(), 0);
+    EXPECT_EQ(emptyStore.size(), 0);
+  }
 }
 
 //
