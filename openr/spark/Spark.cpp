@@ -441,30 +441,30 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
   mcastFd_ = fd;
 
   if (fd < 0) {
-    throw std::runtime_error(folly::sformat(
-        "Failed creating UDP socket: {}", folly::errnoStr(errno)));
+    LOG(FATAL) << "Failed creating Spark UDP socket. Error: "
+               << folly::errnoStr(errno);
   }
 
   // make socket non-blocking
   if (ioProvider_->fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
-    throw std::runtime_error(folly::sformat(
-        "Failed making the socket non-blocking: {}", folly::errnoStr(errno)));
+    LOG(FATAL) << "Failed making the socket non-blocking. Error: "
+               << folly::errnoStr(errno);
   }
 
   // make v6 only
   int v6Only = 1;
   if (ioProvider_->setsockopt(
           fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6Only, sizeof(v6Only)) != 0) {
-    throw std::runtime_error(folly::sformat(
-        "Failed making the socket v6 only: {}", folly::errnoStr(errno)));
+    LOG(FATAL) << "Failed making the socket v6 only. Error: "
+               << folly::errnoStr(errno);
   }
 
   // not really needed, but helps us use same port with other listeners, if any
   int reuseAddr = 1;
   if (ioProvider_->setsockopt(
           fd, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, sizeof(reuseAddr)) != 0) {
-    throw std::runtime_error(folly::sformat(
-        "Failed making the socket reuse addr: {}", folly::errnoStr(errno)));
+    LOG(FATAL) << "Failed making the socket reuse addr. Error: "
+               << folly::errnoStr(errno);
   }
 
   // request additional packet info, e.g. input iface index and sender address
@@ -475,8 +475,8 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
           IPV6_RECVPKTINFO,
           &recvPktInfo,
           sizeof(recvPktInfo)) == -1) {
-    throw std::runtime_error(folly::sformat(
-        "Failed enabling PKTINFO option: {}", folly::errnoStr(errno)));
+    LOG(FATAL) << "Failed enabling PKTINFO option. Error: "
+               << folly::errnoStr(errno);
   }
 
   // Set ip-tos
@@ -484,8 +484,8 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
     const int ipTos = *maybeIpTos;
     if (ioProvider_->setsockopt(
             fd, IPPROTO_IPV6, IPV6_TCLASS, &ipTos, sizeof(int)) != 0) {
-      throw std::runtime_error(folly::sformat(
-          "Failed setting ip-tos value on socket: {}", folly::errnoStr(errno)));
+      LOG(FATAL) << "Failed setting ip-tos value on socket. Error: "
+                 << folly::errnoStr(errno);
     }
   }
 
@@ -503,8 +503,8 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
     sockaddr* saddr = reinterpret_cast<sockaddr*>(&addrStorage);
 
     if (ioProvider_->bind(fd, saddr, mcastSockAddr.getActualSize()) != 0) {
-      throw std::runtime_error(folly::sformat(
-          "Failed binding the socket: {}", folly::errnoStr(errno)));
+      LOG(FATAL) << "Failed binding the socket. Error: "
+                 << folly::errnoStr(errno);
     }
   }
 
@@ -512,8 +512,8 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
   int ttl = kSparkHopLimit;
   if (ioProvider_->setsockopt(
           fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &ttl, sizeof(ttl)) != 0) {
-    throw std::runtime_error(folly::sformat(
-        "Failed setting TTL on socket: {}", folly::errnoStr(errno)));
+    LOG(FATAL) << "Failed setting TTL on socket. Error: "
+               << folly::errnoStr(errno);
   }
 
   // allow reporting the packet TTL to user space
@@ -524,16 +524,16 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
           IPV6_RECVHOPLIMIT,
           &recvHopLimit,
           sizeof(recvHopLimit)) != 0) {
-    throw std::runtime_error(folly::sformat(
-        "Failed enabling TTL receive on socket: {}", folly::errnoStr(errno)));
+    LOG(FATAL) << "Failed enabling TTL receive on socket. Error: "
+               << folly::errnoStr(errno);
   }
 
   // disable looping packets to ourselves
   const int loop = 0;
   if (ioProvider_->setsockopt(
           fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop)) != 0) {
-    throw std::runtime_error(folly::sformat(
-        "Failed disabling looping on socket: {}", folly::errnoStr(errno)));
+    LOG(FATAL) << "Failed disabling looping on socket. Error: "
+               << folly::errnoStr(errno);
   }
 
   // enable timestamping for this socket

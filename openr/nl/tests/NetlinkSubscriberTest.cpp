@@ -87,6 +87,9 @@ class NetlinkSubscriberFixture : public testing::Test {
 
   void
   SetUp() override {
+    // cleanup old interfaces in any
+    std::system(folly::sformat("ip link del {}", kVethNameX).c_str());
+
     // Not handling errors here ...
     link_ = rtnl_link_veth_alloc();
     socket_ = nl_socket_alloc();
@@ -166,9 +169,12 @@ class MyNetlinkHandler final : public NetlinkSubscriber::Handler {
             << neighborEntry.destination.str() << " -> "
             << neighborEntry.linkAddress.toString()
             << (neighborEntry.isReachable ? " : Reachable" : " : Unreachable");
+
+    // Ignore entries on unknown interfaces
     if (neighborEntry.ifName.find(ifNamePrefix) == std::string::npos) {
       return;
     }
+
     auto neighborKey = std::make_pair(
         std::move(neighborEntry.ifName), std::move(neighborEntry.destination));
     if (neighborEntry.isReachable) {
@@ -303,25 +309,7 @@ TEST_F(NetlinkSubscriberFixture, LinkFlapTest) {
   EXPECT_EQ(1, links.at(kVethNameX).networks.size());
   EXPECT_EQ(1, links.at(kVethNameY).networks.size());
 
-  // Verify no neighbor entries for our test links
-  // Links were never up
-  for (const auto& kv : neighbors) {
-    if ((std::get<0>(kv.first) == kVethNameX) ||
-        (std::get<0>(kv.first) == kVethNameY)) {
-      const auto& ip = std::get<1>(kv.first);
-      EXPECT_TRUE(ip.isV6());
-      // Mask the prefix to ff00::/8 for mcast and check
-      const auto ipStr = folly::sformat("{}/8", ip.str());
-      EXPECT_EQ(
-          folly::IPAddress::createNetwork("ff00::/8"),
-          folly::IPAddress::createNetwork(ipStr));
-    }
-  }
-
-  // Now verify our events
-  // No neighbor events
-  ASSERT_TRUE(myHandler.neighbors.empty());
-  ASSERT_EQ(0, myHandler.neighborEventCount);
+  // Now verify our events we received via callback
 
   // >= 2 link events and both links are up
   // (veths report link down and then up)
