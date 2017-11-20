@@ -239,16 +239,19 @@ def print_prefixes_table(resp, nodes, iter_func):
     print(printing.render_vertical_table(rows))
 
 
-def thrift_to_dict(thrift_inst, update_func):
+def thrift_to_dict(thrift_inst, update_func=None):
     ''' convert thrift instance into a dict in strings
 
         :param thrift_inst: a thrift instance
+        :param update_func: transformation function to update dict value of
+                            thrift object. It is optional.
 
         :return dict: dict with attributes as key, value in strings
     '''
 
     gen_dict = copy.copy(thrift_inst).__dict__
-    update_func(gen_dict, thrift_inst)
+    if update_func is not None:
+        update_func(gen_dict, thrift_inst)
 
     return gen_dict
 

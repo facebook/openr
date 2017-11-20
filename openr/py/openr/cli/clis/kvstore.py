@@ -107,14 +107,16 @@ class PrefixesCli(object):
 class KeysCli(object):
 
     @click.command()
+    @click.option('--json/--no-json', default=False,
+                  help='Dump in JSON format')
     @click.option('--prefix', default='', help='string to filter keys')
     @click.option('--ttl/--no-ttl', default=False,
                   help='Show ttl value and version as well')
     @click.pass_obj
-    def keys(cli_opts, prefix, ttl):  # noqa: B902
+    def keys(cli_opts, json, prefix, ttl):  # noqa: B902
         ''' dump all available keys '''
 
-        kvstore.KeysCmd(cli_opts).run(prefix, ttl)
+        kvstore.KeysCmd(cli_opts).run(json, prefix, ttl)
 
 
 class KeyValsCli(object):

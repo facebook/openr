@@ -66,7 +66,7 @@ class KvStoreClient():
             self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
             resp = self._kv_store_cmd_socket.recv()
-            if resp == 'ERR':
+            if len(resp) == 3 and resp == 'ERR':
                 # KvStore doesn't support HASH_DUMP API yet. Use full dump
                 # API instead
                 return self.dump_all_with_prefix(prefix)

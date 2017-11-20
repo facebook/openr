@@ -14,6 +14,7 @@ import bunch
 import datetime
 import hashlib
 import hexdump
+import json
 import re
 import string
 import sys
@@ -100,16 +101,28 @@ class PrefixesCmd(KvStoreCmd):
 
 
 class KeysCmd(KvStoreCmd):
-    def run(self, prefix, ttl):
+    def run(self, json, prefix, ttl):
         resp = self.client.dump_key_with_prefix(prefix)
-        self.print_kvstore_keys(resp, ttl)
+        self.print_kvstore_keys(resp, ttl, json)
 
-    def print_kvstore_keys(self, resp, ttl):
+    def print_kvstore_keys(self, resp, ttl, json_out):
         ''' print keys from raw publication from KvStore
 
             :param resp kv_store_types.Publication: pub from kv store
             :param ttl bool: Show ttl value and version if True
         '''
+
+        # Force set value to None
+        for value in resp.keyVals.values():
+            value.value = None
+
+        # Export in json format if enabled
+        if json_out:
+            keys = {}
+            for k, v in resp.keyVals.items():
+                keys[k] = utils.thrift_to_dict(v)
+            print(json.dumps(keys, sort_keys=True, indent=4))
+            return
 
         rows = []
         for key, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
