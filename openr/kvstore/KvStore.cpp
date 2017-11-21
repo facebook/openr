@@ -1140,7 +1140,7 @@ KvStore::getPrefixCount() {
   int count = 0;
   for (auto const& kv : kvStore_) {
     auto const& key = kv.first;
-    if (key.find("prefix::") == 0) {
+    if (key.find("prefix:") == 0) {
       ++count;
     }
   }
