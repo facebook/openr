@@ -36,7 +36,7 @@ class PeekCmd(HealthCheckerCmd):
         for name, node in resp.nodeInfo.items():
             rows.append([
                 name,
-                utils.sprint_addr(node.ipAddress),
+                utils.sprint_addr(node.ipAddress.addr),
                 node.lastValSent,
                 node.lastAckFromNode,
                 node.lastAckToNode

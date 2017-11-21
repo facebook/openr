@@ -714,8 +714,8 @@ main(int argc, char** argv) {
         PrefixDbMarker{Constants::kPrefixDbMarker},
         kvStoreLocalCmdUrl,
         kvStoreLocalPubUrl,
-        HealthCheckerCmdUrl{
-            folly::sformat("tcp://[::1]:{}", FLAGS_health_checker_rep_port)},
+        HealthCheckerCmdUrl{folly::sformat(
+          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_health_checker_rep_port)},
         monitorSubmitUrl,
         context);
     // Spawn a HealthChecker thread
