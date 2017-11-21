@@ -59,6 +59,18 @@ def yesno(question):
             return False
 
 
+def json_dumps(data):
+    '''
+    Gives consistent formatting for JSON dumps for our CLI
+
+    :param data: python dictionary object
+
+    :return: json encoded string
+    '''
+
+    return json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False)
+
+
 def time_since(timestamp):
     '''
     :param timestamp: in seconds since unix time
@@ -281,7 +293,7 @@ def print_prefixes_json(resp, nodes, iter_func):
 
     prefixes_map = {}
     iter_func(prefixes_map, resp, nodes, _parse_prefixes)
-    print(json.dumps(prefixes_map, sort_keys=True, indent=4))
+    print(json_dumps(prefixes_map))
 
 
 def update_global_adj_db(global_adj_db, adj_db):
@@ -464,7 +476,8 @@ def print_adjs_json(adjs_map):
 
         :param adjacencies as list of dict
     '''
-    print(json.dumps(adjs_map, sort_keys=True, indent=4))
+
+    print(json_dumps(adjs_map))
 
 
 def print_adjs_table(adjs_map, enable_color):
@@ -684,7 +697,8 @@ def route_db_to_dict(route_db):
 
 
 def print_routes_json(route_db_dict):
-    print(json.dumps(route_db_dict, sort_keys=True, indent=4))
+
+    print(json_dumps(route_db_dict))
 
 
 def find_adj_list_deltas(old_adj_list, new_adj_list):

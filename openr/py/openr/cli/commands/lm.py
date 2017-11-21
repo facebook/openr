@@ -15,7 +15,6 @@ from openr.cli.utils import utils
 from openr.utils import printing
 
 import click
-import json
 import sys
 
 
@@ -118,7 +117,7 @@ class LMLinksCmd(LMCmd):
     def print_links_json(self, links):
 
         links_dict = {links.thisNodeName: self.links_to_dict(links)}
-        print(json.dumps(links_dict, sort_keys=True, indent=4))
+        print(utils.json_dumps(links_dict))
 
     @staticmethod
     def print_links_table(interfaces, caption=None):

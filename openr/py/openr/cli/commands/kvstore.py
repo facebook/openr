@@ -14,7 +14,6 @@ import bunch
 import datetime
 import hashlib
 import hexdump
-import json
 import re
 import string
 import sys
@@ -118,10 +117,10 @@ class KeysCmd(KvStoreCmd):
 
         # Export in json format if enabled
         if json_fmt:
-            keys = {}
+            data = {}
             for k, v in resp.keyVals.items():
-                keys[k] = utils.thrift_to_dict(v)
-            print(json.dumps(keys, sort_keys=True, indent=4))
+                data[k] = utils.thrift_to_dict(v)
+            print(utils.json_dumps(data))
             return
 
         rows = []
@@ -172,11 +171,10 @@ class KeyValsCmd(KvStoreCmd):
 
         # Export in json format if enabled
         if json_fmt:
-            keys = {}
+            data = {}
             for k, v in resp.keyVals.items():
-                keys[k] = utils.thrift_to_dict(v)
-            print(
-                json.dumps(keys, sort_keys=True, indent=4, ensure_ascii=False))
+                data[k] = utils.thrift_to_dict(v)
+            print(utils.json_dumps(data))
             return
 
         rows = []
@@ -252,7 +250,7 @@ class InterfacesCmd(KvStoreCmd):
         intfs_map = utils.interface_dbs_to_dict(publication, nodes,
                                                 self.iter_publication)
         if json:
-            print(json.dumps(intfs_map, sort_keys=True, indent=4))
+            print(utils.json_dumps(intfs_map))
         else:
             utils.print_interfaces_table(intfs_map, print_all)
 
