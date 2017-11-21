@@ -101,11 +101,11 @@ class PrefixesCmd(KvStoreCmd):
 
 
 class KeysCmd(KvStoreCmd):
-    def run(self, json, prefix, ttl):
+    def run(self, json_fmt, prefix, ttl):
         resp = self.client.dump_key_with_prefix(prefix)
-        self.print_kvstore_keys(resp, ttl, json)
+        self.print_kvstore_keys(resp, ttl, json_fmt)
 
-    def print_kvstore_keys(self, resp, ttl, json_out):
+    def print_kvstore_keys(self, resp, ttl, json_fmt):
         ''' print keys from raw publication from KvStore
 
             :param resp kv_store_types.Publication: pub from kv store
@@ -117,7 +117,7 @@ class KeysCmd(KvStoreCmd):
             value.value = None
 
         # Export in json format if enabled
-        if json_out:
+        if json_fmt:
             keys = {}
             for k, v in resp.keyVals.items():
                 keys[k] = utils.thrift_to_dict(v)
@@ -145,16 +145,17 @@ class KeysCmd(KvStoreCmd):
 
 
 class KeyValsCmd(KvStoreCmd):
-    def run(self, keys):
+    def run(self, keys, json_fmt):
         resp = self.client.get_keys(keys)
-        self.print_kvstore_values(resp)
+        self.print_kvstore_values(resp, json_fmt)
 
     def deserialize_kvstore_publication(self, key, value):
         ''' classify kvstore prefix and return the corresponding deserialized obj '''
 
         options = {
             Consts.PREFIX_DB_MARKER: lsdb_types.PrefixDatabase,
-            Consts.ADJ_DB_MARKER: lsdb_types.AdjacencyDatabase
+            Consts.ADJ_DB_MARKER: lsdb_types.AdjacencyDatabase,
+            Consts.INTERFACE_DB_MARKER: lsdb_types.InterfaceDatabase,
         }
 
         prefix_type = key.split(':')[0] + ":"
@@ -163,11 +164,20 @@ class KeyValsCmd(KvStoreCmd):
         else:
             return None
 
-    def print_kvstore_values(self, resp):
+    def print_kvstore_values(self, resp, json_fmt):
         ''' print values from raw publication from KvStore
 
             :param resp kv_store_types.Publication: pub from kv store
         '''
+
+        # Export in json format if enabled
+        if json_fmt:
+            keys = {}
+            for k, v in resp.keyVals.items():
+                keys[k] = utils.thrift_to_dict(v)
+            print(
+                json.dumps(keys, sort_keys=True, indent=4, ensure_ascii=False))
+            return
 
         rows = []
 
@@ -180,10 +190,11 @@ class KeyValsCmd(KvStoreCmd):
                 else:
                     val = hexdump.hexdump(value.value, 'return')
 
+            ttl = 'INF' if value.ttl == Consts.CONST_TTL_INF else value.ttl
             rows.append(["key: {}\n  version: {}\n  originatorId: {}\n  "
-                         "ttl: {}\n  ttlVersion: {}\n  value:\n    {}".format(
-                            key, value.version, value.originatorId, value.ttl,
-                            value.ttlVersion, val)])
+                         "ttl: {}\n  ttlVersion: {}\n  value:\n    {}"
+                         .format(key, value.version, value.originatorId, ttl,
+                                 value.ttlVersion, val)])
 
         caption = "Dump key-value pairs in KvStore"
         print(printing.render_vertical_table(rows, caption=caption))

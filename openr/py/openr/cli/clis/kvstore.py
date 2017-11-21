@@ -122,12 +122,14 @@ class KeysCli(object):
 class KeyValsCli(object):
 
     @click.command()
-    @click.argument('keys', nargs=-1)
+    @click.argument('keys', nargs=-1, required=True)
+    @click.option('--json/--no-json', default=False,
+                  help='Dump in JSON format')
     @click.pass_obj
-    def keyvals(cli_opts, keys):  # noqa: B902
+    def keyvals(cli_opts, keys, json):  # noqa: B902
         ''' get values of input keys '''
 
-        kvstore.KeyValsCmd(cli_opts).run(keys)
+        kvstore.KeyValsCmd(cli_opts).run(keys, json)
 
 
 class NodesCli(object):

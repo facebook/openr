@@ -773,8 +773,9 @@ def sprint_pub_update(global_publication_db, key, value):
     if old_originator_id != value.originatorId:
         rows.append(["originatorId:", old_originator_id, "-->",
                     value.originatorId])
+    ttl = 'INF' if value.ttl == Consts.CONST_TTL_INF else value.ttl
     rows.append(["ttlVersion:", "", "-->", value.ttlVersion])
-    rows.append(["ttl:", "", "-->", value.ttl])
+    rows.append(["ttl:", "", "-->", ttl])
     global_publication_db[key] = (value.version, value.originatorId)
     return printing.render_horizontal_table(rows, tablefmt="plain") if rows else ""
 
