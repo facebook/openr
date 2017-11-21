@@ -238,4 +238,11 @@ NetlinkFibHandler::future_getKernelRouteTable() {
       });
 }
 
+void
+NetlinkFibHandler::getCounters(std::map<std::string, int64_t>& counters) {
+  LOG(INFO) << "Get counters requested";
+  auto routes = netlinkSocket_->getUnicastRoutes().get();
+  counters["fibagent.num_of_routes"] = routes.size();
+}
+
 } // namespace openr
