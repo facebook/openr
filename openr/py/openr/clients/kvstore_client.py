@@ -57,24 +57,24 @@ class KvStoreClient():
             kv_store_types.Publication)
 
     def dump_key_with_prefix(self, prefix=""):
-            '''  dump the hashes of kvstore whose key matches the given prefix
-                 if prefix is an empty string, the full KV hash is dumped
-            '''
+        '''  dump the hashes of kvstore whose key matches the given prefix
+             if prefix is an empty string, the full KV hash is dumped
+        '''
 
-            req_msg = kv_store_types.Request(kv_store_types.Command.HASH_DUMP)
-            req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
-            self._kv_store_cmd_socket.send_thrift_obj(req_msg)
+        req_msg = kv_store_types.Request(kv_store_types.Command.HASH_DUMP)
+        req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
+        self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
-            resp = self._kv_store_cmd_socket.recv()
-            if len(resp) == 3 and resp == 'ERR':
-                # KvStore doesn't support HASH_DUMP API yet. Use full dump
-                # API instead
-                return self.dump_all_with_prefix(prefix)
-            else:
-                return serializer.deserialize_thrift_object(
-                    resp,
-                    kv_store_types.Publication,
-                    self._kv_store_cmd_socket.proto_factory)
+        resp = self._kv_store_cmd_socket.recv()
+        if len(resp) == 3 and resp == str('ERR'):
+            # KvStore doesn't support HASH_DUMP API yet. Use full dump
+            # API instead
+            return self.dump_all_with_prefix(prefix)
+        else:
+            return serializer.deserialize_thrift_object(
+                resp,
+                kv_store_types.Publication,
+                self._kv_store_cmd_socket.proto_factory)
 
     def dump_peers(self):
         '''  dump the entries of kvstore whose key matches the given prefix
