@@ -54,11 +54,6 @@ former is a tool, `fbcode_builder`, that contains scripts for generating a
 docker context to build the project. The `openr` directory contains the
 source for the project.
 
-#### Build using Docker
-
-On a docker enabled machine, from the top level of this repo simply run:
-`./build/fbcode_builder/travis_docker_build.sh`
-
 #### Dependencies
 
 If docker is not a good option for you, you can install these dependencies for
@@ -87,6 +82,10 @@ see the script for those instances and the required versions.
 
 > `libnl` also requires custom patch, included herewith, for correct handling
 of add/remove multicast routes.
+
+#### Build using Docker
+
+Learn more [here.](https://github.com/facebook/openr/blob/master/build/fbcode_builder/README.md)
 
 #### Build Steps
 
