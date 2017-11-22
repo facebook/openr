@@ -17,24 +17,33 @@ import specs.fbthrift as fbthrift
 import specs.folly as folly
 import specs.fbzmq as fbzmq
 
-from shell_quoting import ShellQuoted
+from shell_quoting import path_join, ShellQuoted
 
 
 def fbcode_builder_spec(builder):
     builder.add_option('thom311/libnl:git_hash', 'libnl3_2_25')
-    builder.add_option(
-        'thom311/libnl:git_patch',
-        'openr/build/fix-route-obj-attr-list.patch'
-    )
+    maybe_curl_patch = []
+    patch = path_join(
+        builder.option('projects_dir'),
+        '../shipit_projects/openr/build/fix-route-obj-attr-list.patch')
+
+    if not builder.has_option('shipit_project_dir'):
+        maybe_curl_patch = [builder.run(ShellQuoted(
+            'curl -O https://raw.githubusercontent.com/facebook/openr/master/'
+            'build/fix-route-obj-attr-list.patch'))]
+        patch = 'fix-route-obj-attr-list.patch'
+    libnl_build_commands = maybe_curl_patch + [
+        builder.run(ShellQuoted('git apply {p}').format(p=patch)),
+        builder.run(ShellQuoted('./autogen.sh')),
+        builder.configure(),
+        builder.make_and_install()]
+
     return {
         'depends_on': [folly, fbthrift, fbzmq],
         'steps': [
             builder.github_project_workdir('thom311/libnl', '.'),
-            builder.step('Build and install thom311/libnl', [
-                builder.run(ShellQuoted('./autogen.sh')),
-                builder.configure(),
-                builder.make_and_install(),
-            ]),
+            builder.step('Build and install thom311/libnl', libnl_build_commands),
+
             builder.fb_github_project_workdir('openr/openr/build', 'facebook'),
             builder.step('Build and install openr/openr/build', [
                 builder.cmake_configure('openr/openr/build'),
