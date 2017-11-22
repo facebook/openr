@@ -227,6 +227,10 @@ def set_unset_link_metric(client, override, interface, metric):
     links = client.dump_links()
     print()
 
+    if interface not in links.interfaceDetails:
+        print('No such interface: {}'.format(interface))
+        return
+
     def intf_override(links, interface):
         if interface in links.interfaceDetails:
             return links.interfaceDetails[interface].metricOverride

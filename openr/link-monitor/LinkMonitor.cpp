@@ -1178,8 +1178,9 @@ LinkMonitor::processCommand() {
     break;
 
   case thrift::LinkMonitorCommand::SET_LINK_OVERLOAD:
-    if (req.interfaceName.empty()) {
-      LOG(ERROR) << "Got link-overload request with empty interface name.";
+    if (0 == interfaceDb_.count(req.interfaceName)) {
+      LOG(ERROR) << "SET_LINK_OVERLOAD requested for unknown interface: "
+                 << req.interfaceName;
       break;
     }
     if (config_.overloadedLinks.count(req.interfaceName)) {
@@ -1202,8 +1203,9 @@ LinkMonitor::processCommand() {
     break;
 
   case thrift::LinkMonitorCommand::SET_LINK_METRIC:
-    if (req.interfaceName.empty()) {
-      LOG(ERROR) << "Got link-overload request with empty interface name.";
+    if (0 == interfaceDb_.count(req.interfaceName)) {
+      LOG(ERROR) << "SET_LINK_METRIC requested for unknown interface: "
+                 << req.interfaceName;
       break;
     }
     if (req.interfaceMetric < 1) {
