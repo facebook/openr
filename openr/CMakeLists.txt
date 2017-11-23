@@ -23,6 +23,8 @@ find_library(FBZMQ fbzmq)
 find_library(DOUBLE-CONVERSION double-conversion)
 find_library(SODIUM sodium)
 find_library(ZSTD zstd)
+find_library(NL3 nl-3)
+find_library(NLROUTE3 nl-route-3)
 
 find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
 
@@ -309,8 +311,8 @@ target_link_libraries(openrlib
   ${SODIUM}
   -lboost_system
   -lpthread
-  -lnl-route-3
-  -lnl-3
+  ${NLROUTE3}
+  ${NL3}
   -lcrypto
 )
 
@@ -346,8 +348,8 @@ target_link_libraries(openr
   ${SODIUM}
   -lboost_system
   -lpthread
-  -lnl-route-3
-  -lnl-3
+  ${NLROUTE3}
+  ${NL3}
   -lcrypto
 )
 
@@ -384,8 +386,8 @@ target_link_libraries(platform_linux
   ${ZMQ}
   -lboost_system
   -lpthread
-  -lnl-route-3
-  -lnl-3
+  ${NLROUTE3}
+  ${NL3}
 )
 
 install(TARGETS
@@ -513,8 +515,8 @@ if(BUILD_TESTS)
     ${GFLAGS}
     ${FOLLY}
     -lpthread
-    -lnl-route-3
-    -lnl-3
+    ${NLROUTE3}
+    ${NL3}
   )
 
   install(TARGETS
@@ -537,8 +539,8 @@ if(BUILD_TESTS)
     ${GFLAGS}
     ${FOLLY}
     -lpthread
-    -lnl-route-3
-    -lnl-3
+    ${NLROUTE3}
+    ${NL3}
   )
 
   install(TARGETS
@@ -561,8 +563,8 @@ if(BUILD_TESTS)
     ${GFLAGS}
     ${FOLLY}
     -lpthread
-    -lnl-route-3
-    -lnl-3
+    ${NLROUTE3}
+    ${NL3}
   )
 
   install(TARGETS
@@ -598,8 +600,8 @@ if(BUILD_TESTS)
     ${GMOCK_MAIN}
     -lboost_system
     -lpthread
-    -lnl-route-3
-    -lnl-3
+    ${NLROUTE3}
+    ${NL3}
     -lcrypto
   )
 
