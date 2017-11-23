@@ -32,7 +32,8 @@ find_path(THRIFT_COMPILER_INCLUDE thrift/templates)
 set(THRIFT_TEMPLATES ${THRIFT_COMPILER_INCLUDE}/thrift/templates)
 include(${THRIFT_COMPILER_INCLUDE}/thrift/ThriftLibrary.cmake)
 
-set(THRIFT_DIR ${CMAKE_BINARY_DIR}/thrift-out/openr/if)
+set(THRIFT_PREFIX "openr/if")
+set(THRIFT_DIR ${CMAKE_BINARY_DIR}/thrift-out/${THRIFT_PREFIX})
 file(MAKE_DIRECTORY ${THRIFT_DIR})
 
 include_directories(${CMAKE_BINARY_DIR}/thrift-out)
@@ -44,6 +45,7 @@ thrift_object(
   "optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -59,6 +61,7 @@ thrift_object(
   "optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 thrift_object(
@@ -68,6 +71,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 thrift_object(
@@ -77,6 +81,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -91,6 +96,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 thrift_object(
@@ -100,6 +106,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -115,6 +122,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 thrift_object(
@@ -124,6 +132,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -138,6 +147,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -152,6 +162,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -166,6 +177,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -180,6 +192,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -194,6 +207,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
@@ -208,6 +222,7 @@ thrift_object(
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
   "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
 )
 
 add_dependencies(
