@@ -235,6 +235,23 @@ def ip_str_to_prefix(prefix_str):
         prefixLength=int(ip_len_str))
 
 
+def alloc_prefix_to_loopback_ip_str(prefix):
+    '''
+    :param prefix: IpPrefix representing an allocation prefix (CIDR network)
+
+    :returns: Loopback IP corresponding to allocation prefix
+    :rtype: string
+    '''
+
+    ip_addr = prefix.prefixAddress.addr
+    print(ip_addr)
+    if prefix.prefixLength != 128:
+        ip_addr = ip_addr[:-1] + chr(ord(ip_addr[-1]) | 1)
+    print(ip_addr)
+    return sprint_addr(ip_addr)
+
+
+
 def print_prefixes_table(resp, nodes, iter_func):
     ''' print prefixes '''
 
@@ -941,6 +958,6 @@ def dump_node_kvs(node, kv_rep_port):
     try:
         kv = client.dump_all_with_prefix()
     except zmq.error.Again:
-        print('cannot connect to {}\' kvstore'.format(node))
+        print('cannot connect to {}\'s kvstore'.format(node))
         return None
     return kv

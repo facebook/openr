@@ -75,19 +75,40 @@ class KvStoreCmd(object):
 
             parse_func(container, value)
 
-    def get_node_list(self):
-        ''' get the set of all nodes in the network '''
+    def get_node_to_ips(self):
+        ''' get the dict of all nodes to their IP in the network '''
 
-        def _parse_nodes(node_set, value):
+        def _parse_nodes(node_dict, value):
             prefix_db = deserialize_thrift_object(
                 value.value, lsdb_types.PrefixDatabase)
-            node_set.add(prefix_db.thisNodeName)
+            node_dict[prefix_db.thisNodeName] = self.get_node_ip(prefix_db)
 
-        node_set = set()
+        node_dict = {}
         resp = self.client.dump_all_with_prefix(Consts.PREFIX_DB_MARKER)
-        self.iter_publication(node_set, resp, ['all'], _parse_nodes)
+        self.iter_publication(node_dict, resp, ['all'], _parse_nodes)
 
-        return node_set
+        return node_dict
+
+    def get_node_ip(self, prefix_db):
+        '''
+        get routable IP address of node from it's prefix database
+        :return: string representation of Node's IP addresss. Returns None if
+                 no IP found.
+        '''
+
+        # First look for LOOPBACK prefix
+        for prefix_entry in prefix_db.prefixEntries:
+            if prefix_entry.type == lsdb_types.PrefixType.LOOPBACK:
+                return utils.sprint_addr(prefix_entry.prefix.prefixAddress.addr)
+
+        # Next look for PREFIX_ALLOCATOR prefix if any
+        for prefix_entry in prefix_db.prefixEntries:
+            if prefix_entry.type == lsdb_types.PrefixType.PREFIX_ALLOCATOR:
+                return utils.alloc_prefix_to_loopback_ip_str(
+                    prefix_entry.prefix)
+
+        # Else return None
+        return None
 
 
 class PrefixesCmd(KvStoreCmd):
@@ -257,28 +278,29 @@ class InterfacesCmd(KvStoreCmd):
 
 class KvCompareCmd(KvStoreCmd):
     def run(self, nodes):
+        all_nodes_to_ips = self.get_node_to_ips()
         if nodes:
             nodes = set(nodes.strip().split(','))
             if 'all' in nodes:
-                nodes = self.get_node_list()
+                nodes = all_nodes_to_ips.keys()
             host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
             if host_id in nodes:
                 nodes.remove(host_id)
 
             our_kvs = self.client.dump_all_with_prefix().keyVals
-            kv_dict = self.dump_nodes_kvs(nodes)
+            kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips)
             for node in kv_dict:
                 self.compare(our_kvs, kv_dict[node], host_id, node)
 
         else:
-            nodes = self.get_node_list()
-            kv_dict = self.dump_nodes_kvs(nodes)
+            nodes = all_nodes_to_ips.keys()
+            kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips)
             for our_node, other_node in combinations(kv_dict.keys(), 2):
                 self.compare(kv_dict[our_node], kv_dict[other_node],
                              our_node, other_node)
 
     def compare(self, our_kvs, other_kvs, our_node, other_node):
-        ''' print kv delta'''
+        ''' print kv delta '''
 
         print(printing.caption_fmt(
               'kv-compare between {} and {}'.format(our_node, other_node)))
@@ -337,12 +359,13 @@ class KvCompareCmd(KvStoreCmd):
         print(printing.render_vertical_table([[
             "key: {} only in {} kv store".format(key, node)]]))
 
-    def dump_nodes_kvs(self, nodes):
+    def dump_nodes_kvs(self, nodes, all_nodes_to_ips):
         ''' get the kvs of a set of nodes '''
 
         kv_dict = {}
         for node in nodes:
-            kv = utils.dump_node_kvs(node, self.kv_rep_port)
+            node_ip = all_nodes_to_ips.get(node, node)
+            kv = utils.dump_node_kvs(node_ip, self.kv_rep_port)
             if kv is not None:
                 kv_dict[node] = kv.keyVals
                 print('dumped kv from {}'.format(node))
@@ -452,7 +475,7 @@ class TopologyCmd(KvStoreCmd):
             sys.exit(1)
 
         publication = self.client.dump_all_with_prefix(Consts.ADJ_DB_MARKER)
-        nodes = self.get_node_list() if not node else [node]
+        nodes = self.get_node_to_ips().keys() if not node else [node]
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, bidir,
                                          self.iter_publication)
         G = nx.Graph()

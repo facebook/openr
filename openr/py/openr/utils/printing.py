@@ -17,7 +17,7 @@ def caption_fmt(caption):
     ''' Format a caption '''
 
     if caption:
-        caption = '\n== {}  ==\n'.format(caption)
+        return '\n== {}  ==\n'.format(caption)
     return ''
 
 
