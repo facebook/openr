@@ -86,7 +86,7 @@ class TestPrefixMgrClient(unittest.TestCase):
                 zmq.Context(), "tcp://localhost:5000")
 
             resp = prefix_mgr_client_inst.add_prefix(
-                '2620:0:1cff:dead:bef1:ffff:ffff:4/128')
+                ['2620:0:1cff:dead:bef1:ffff:ffff:4/128'], 'LOOPBACK')
             self.assertTrue(resp.success)
 
             resp = prefix_mgr_client_inst.view_prefix()
@@ -97,7 +97,7 @@ class TestPrefixMgrClient(unittest.TestCase):
             self.assertTrue(prefix_entry4 in resp.prefixes)
 
             resp = prefix_mgr_client_inst.withdraw_prefix(
-                '2620:0:1cff:dead:bef1:ffff:ffff:4/128')
+                ['2620:0:1cff:dead:bef1:ffff:ffff:4/128'])
             self.assertTrue(resp.success)
 
             resp = prefix_mgr_client_inst.view_prefix()
@@ -105,7 +105,7 @@ class TestPrefixMgrClient(unittest.TestCase):
             self.assertFalse(prefix_entry4 in resp.prefixes)
 
             resp = prefix_mgr_client_inst.withdraw_prefix(
-                '2620:0:1cff:dead:bef1:ffff:ffff:5/128')
+                ['2620:0:1cff:dead:bef1:ffff:ffff:5/128'])
             self.assertFalse(resp.success)
 
         p = Process(target=_prefix_mgr_server)
