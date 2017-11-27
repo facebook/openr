@@ -41,11 +41,11 @@ class ConfigContext(object):
 class ConfigCli(object):
     def __init__(self):
         self.config.add_command(ConfigPrefixAllocatorCli().config_prefix_allocator,
-                                name='prefix-allocator')
+                                name='prefix-allocator-config')
         self.config.add_command(ConfigLinkMonitorCli().config_link_monitor,
-                                name='link-monitor')
+                                name='link-monitor-config')
         self.config.add_command(ConfigPrefixManagerCli().config_prefix_manager,
-                                name='prefix-manager')
+                                name='prefix-manager-config')
         self.config.add_command(ConfigEraseCli().config_erase, name='erase')
         self.config.add_command(ConfigStoreCli().config_store, name='store')
 
@@ -118,9 +118,9 @@ class ConfigStoreCli(object):
 
     @click.command()
     @click.argument('key')
-    @click.argument('file')
+    @click.argument('value')
     @click.pass_obj
-    def config_store(cli_opts, key, file):  # noqa: B902
+    def config_store(cli_opts, key, value):  # noqa: B902
         ''' Store a config key '''
 
-        config.ConfigStoreCmd(cli_opts).run(key, file)
+        config.ConfigStoreCmd(cli_opts).run(key, value)

@@ -105,11 +105,9 @@ class ConfigPrefixManagerCmd(ConfigCmd):
         self.print_config(prefix_mgr_config)
 
     def print_config(self, prefix_mgr_config):
-        prefix_strs = utils.sprint_prefixes_db_full(prefix_mgr_config)
-
-        caption = 'Prefix Manager parameters stored'
-        print(printing.render_horizontal_table(
-            [['\n'.join(prefix_strs)]], caption=caption, tablefmt='plain'))
+        print()
+        print(utils.sprint_prefixes_db_full(prefix_mgr_config))
+        print()
 
 
 class ConfigEraseCmd(ConfigCmd):
@@ -123,9 +121,7 @@ class ConfigEraseCmd(ConfigCmd):
 
 
 class ConfigStoreCmd(ConfigCmd):
-    def run(self, key, file):
-        with open(file, 'r') as f:
-            value = f.read()
+    def run(self, key, value):
         success = self.client.store(key, value)
         if success:
             print("Key stored\n")
