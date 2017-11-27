@@ -13,21 +13,17 @@ from __future__ import division
 import click
 import zmq
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
-from thrift.protocol.TJSONProtocol import TJSONProtocolFactory
-
 from openr.cli.commands import lm
 from openr.utils.consts import Consts
 
 
 class LMContext(object):
-    def __init__(self, verbose, zmq_ctx, host, timeout, lm_cmd_port, json,
+    def __init__(self, verbose, zmq_ctx, host, timeout, lm_cmd_port,
                  enable_color):
         '''
             :param zmq_ctx: the ZMQ context to create zmq sockets
             :param host string: the openr router host
             :param lm_cmd_port int: the link monitor module port
-            :param json bool: whether to use JSON proto or Compact for thrift
             :param enable_color bool: whether to turn on coloring display
         '''
 
@@ -36,11 +32,8 @@ class LMContext(object):
         self.timeout = timeout
         self.zmq_ctx = zmq_ctx
         self.enable_color = enable_color
-
         self.lm_cmd_port = lm_cmd_port
-
-        self.proto_factory = (TJSONProtocolFactory if json
-                              else TCompactProtocolFactory)
+        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class LMCli(object):
@@ -64,11 +57,10 @@ class LMCli(object):
     @click.group()
     @click.option('--lm_cmd_port', default=Consts.LINK_MONITOR_CMD_PORT,
                   help='Link Monitor port')
-    @click.option('--json/--no-json', default=False, help='Use JSON serializer')
     @click.option('--verbose/--no-verbose', default=False,
                   help='Print verbose information')
     @click.pass_context
-    def lm(ctx, lm_cmd_port, json, verbose):  # noqa: B902
+    def lm(ctx, lm_cmd_port, verbose):  # noqa: B902
         ''' CLI tool to peek into Link Monitor module. '''
 
         ctx.obj = LMContext(
@@ -76,7 +68,6 @@ class LMCli(object):
             ctx.obj.hostname,
             ctx.obj.timeout,
             ctx.obj.ports_config.get('lm_cmd_port', None) or lm_cmd_port,
-            json,
             ctx.obj.enable_color)
 
 

@@ -13,9 +13,6 @@ from __future__ import division
 import click
 import zmq
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
-from thrift.protocol.TJSONProtocol import TJSONProtocolFactory
-
 from openr.cli.commands import kvstore
 from openr.utils.consts import Consts
 from openr.cli.utils.utils import parse_nodes
@@ -23,13 +20,11 @@ from openr.cli.utils.utils import parse_nodes
 
 class KvStoreContext(object):
     def __init__(self, verbose, zmq_ctx, host, timeout,
-                 kv_rep_port, kv_pub_port, lm_cmd_port,
-                 json, enable_color):
+                 kv_rep_port, kv_pub_port, lm_cmd_port, enable_color):
         '''
             :param zmq_ctx: the ZMQ context to create zmq sockets
             :param host string: the openr router host
             :param kv_rep_port int: the kv-store port
-            :param json bool: whether to use JSON proto or Compact for thrift
             :param enable_color bool: whether to turn on coloring display
         '''
 
@@ -43,8 +38,7 @@ class KvStoreContext(object):
         self.kv_pub_port = kv_pub_port
         self.lm_cmd_port = lm_cmd_port
 
-        self.proto_factory = (TJSONProtocolFactory if json
-                              else TCompactProtocolFactory)
+        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class KvStoreCli(object):
@@ -68,12 +62,10 @@ class KvStoreCli(object):
                   help='KV store rep port')
     @click.option('--kv_pub_port', default=Consts.KVSTORE_PUB_PORT,
                   help='KV store pub port')
-    @click.option('--json/--no-json', default=False,
-                  help='Use JSON serializer')
     @click.option('--verbose/--no-verbose', default=False,
                   help='Print verbose information')
     @click.pass_context
-    def kvstore(ctx, kv_rep_port, kv_pub_port, json, verbose):  # noqa: B902
+    def kvstore(ctx, kv_rep_port, kv_pub_port, verbose):  # noqa: B902
         ''' CLI tool to peek into KvStore module. '''
 
         ctx.obj = KvStoreContext(
@@ -84,7 +76,6 @@ class KvStoreCli(object):
             ctx.obj.ports_config.get('kv_pub_port', None) or kv_pub_port,
             ctx.obj.ports_config.get('lm_cmd_port', None) or
             Consts.LINK_MONITOR_CMD_PORT,
-            json,
             ctx.obj.enable_color)
 
 

@@ -13,9 +13,6 @@ from __future__ import division
 import click
 import zmq
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
-from thrift.protocol.TJSONProtocol import TJSONProtocolFactory
-
 from openr.cli.commands import fib
 from openr.Platform import ttypes as platform_types
 from openr.utils.consts import Consts
@@ -24,12 +21,11 @@ from openr.utils.consts import Consts
 class FibContext(object):
     def __init__(self, verbose, zmq_ctx, host, timeout, fib_rep_port,
                  fib_agent_port, lm_cmd_port, decision_rep_port, client_id,
-                 json, enable_color):
+                 enable_color):
         '''
             :param zmq_ctx: the ZMQ context to create zmq sockets
             :param host string: the openr router host
             :param fib_rep_port int: the fib module port
-            :param json bool: whether to use JSON proto or Compact for thrift
             :param enable_color bool: whether to turn on coloring display
         '''
 
@@ -38,16 +34,12 @@ class FibContext(object):
         self.timeout = timeout
         self.zmq_ctx = zmq_ctx
         self.enable_color = enable_color
-
         self.fib_rep_port = fib_rep_port
         self.fib_agent_port = fib_agent_port
         self.lm_cmd_port = lm_cmd_port
         self.decision_rep_port = decision_rep_port
-
         self.client_id = client_id
-
-        self.proto_factory = (TJSONProtocolFactory if json
-                              else TCompactProtocolFactory)
+        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class FibCli(object):
@@ -70,12 +62,11 @@ class FibCli(object):
                   help='Fib thrift server port')
     @click.option('--client-id', default=platform_types.FibClient.OPENR,
                   help='FIB Client ID')
-    @click.option('--json/--no-json', default=False,
-                  help='Use JSON serializer')
     @click.option('--verbose/--no-verbose', default=False,
                   help='Print verbose information')
     @click.pass_context
-    def fib(ctx, fib_rep_port, fib_agent_port, client_id, json, verbose):  # noqa: B902
+    def fib(ctx, fib_rep_port, fib_agent_port,  # noqa: B902
+            client_id, verbose):
         ''' CLI tool to peek into Fib module. '''
 
         ctx.obj = FibContext(
@@ -89,7 +80,6 @@ class FibCli(object):
             ctx.obj.ports_config.get('decision_rep_port', None) or
             Consts.DECISION_REP_PORT,
             client_id,
-            json,
             ctx.obj.enable_color)
 
 

@@ -13,32 +13,25 @@ from __future__ import division
 import click
 import zmq
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
-from thrift.protocol.TJSONProtocol import TJSONProtocolFactory
-
 from openr.cli.commands import health_checker
 from openr.utils.consts import Consts
 
 
 class HealthCheckerContext(object):
     def __init__(self, verbose, zmq_ctx, host, timeout,
-                 health_checker_cmd_port, json):
+                 health_checker_cmd_port):
         '''
             :param zmq_ctx: the ZMQ context to create zmq sockets
             :param host string: the openr router host
             :param health_checker_cmd_port int: the health checker rep port
-            :para json bool: whether to use JSON proto or Compact for thrift
         '''
 
         self.verbose = verbose
         self.host = host
         self.timeout = timeout
         self.zmq_ctx = zmq_ctx
-
         self.health_checker_cmd_port = health_checker_cmd_port
-
-        self.proto_factory = (TJSONProtocolFactory if json
-                              else TCompactProtocolFactory)
+        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class HealthCheckerCli(object):
@@ -48,12 +41,10 @@ class HealthCheckerCli(object):
     @click.group()
     @click.option('--health_checker_cmd_port', default=Consts.HEALTH_CHECKER_CMD_PORT,
                   help='Health Checker port')
-    @click.option('--json/--no-json', default=False,
-                  help='Use JSON serializer')
     @click.option('--verbose/--no-verbose', default=False,
                   help='Print verbose information')
     @click.pass_context
-    def healthchecker(ctx, health_checker_cmd_port, json, verbose):  # noqa: B902
+    def healthchecker(ctx, health_checker_cmd_port, verbose):  # noqa: B902
         ''' CLI tool to peek into Health Checker module. '''
 
         ctx.obj = HealthCheckerContext(
@@ -61,8 +52,7 @@ class HealthCheckerCli(object):
             ctx.obj.hostname,
             ctx.obj.timeout,
             ctx.obj.ports_config.get('health_checker_cmd_port', None) or
-            health_checker_cmd_port,
-            json)
+            health_checker_cmd_port)
 
 
 class PeekCli(object):

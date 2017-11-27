@@ -11,15 +11,14 @@ from __future__ import unicode_literals
 from __future__ import division
 
 from openr.KvStore import ttypes as kv_store_types
-from openr.utils import socket
+from openr.utils import socket, consts
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 import zmq
 
 
 class KvStoreSubscriber():
     def __init__(self, zmq_ctx, kv_store_pub_url,
-                 proto_factory=TCompactProtocolFactory):
+                 proto_factory=consts.Consts.PROTO_FACTORY):
 
         # timeout set as -1 for indefinite blocking
         self._kv_store_sub_socket = socket.Socket(zmq_ctx, zmq.SUB, -1,

@@ -13,13 +13,12 @@ from __future__ import division
 from openr.KvStore import ttypes as kv_store_types
 from openr.utils import consts, serializer, socket
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 import zmq
 
 
 class KvStoreClient():
     def __init__(self, zmq_ctx, kv_store_cmd_url, timeout=consts.Consts.TIMEOUT_MS,
-                 proto_factory=TCompactProtocolFactory):
+                 proto_factory=consts.Consts.PROTO_FACTORY):
         self._kv_store_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout,
                                                   proto_factory)
         self._kv_store_cmd_socket.connect(kv_store_cmd_url)

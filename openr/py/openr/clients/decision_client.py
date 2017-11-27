@@ -13,13 +13,12 @@ from __future__ import division
 from openr.Decision import ttypes as decision_types
 from openr.utils import socket, consts
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 import zmq
 
 
 class DecisionClient():
     def __init__(self, zmq_ctx, decision_cmd_url, timeout=consts.Consts.TIMEOUT_MS,
-                 proto_factory=TCompactProtocolFactory):
+                 proto_factory=consts.Consts.PROTO_FACTORY):
         self._decision_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout,
                                                   proto_factory)
         self._decision_cmd_socket.connect(decision_cmd_url)

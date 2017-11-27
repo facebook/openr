@@ -13,21 +13,17 @@ from __future__ import division
 import click
 import zmq
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
-from thrift.protocol.TJSONProtocol import TJSONProtocolFactory
-
 from openr.cli.commands import prefix_mgr
 from openr.utils.consts import Consts
 
 
 class PrefixMgrContext(object):
     def __init__(self, verbose, zmq_ctx, host, timeout,
-                 prefix_mgr_cmd_port, json):
+                 prefix_mgr_cmd_port):
         '''
             :param zmq_ctx: the ZMQ context to create zmq sockets
             :param host string: the openr router host
             :param kv_rep_port int: the kv-store port
-            :para json bool: whether to use JSON proto or Compact for thrift
         '''
 
         self.verbose = verbose
@@ -37,8 +33,7 @@ class PrefixMgrContext(object):
 
         self.prefix_mgr_cmd_port = prefix_mgr_cmd_port
 
-        self.proto_factory = (TJSONProtocolFactory if json
-                              else TCompactProtocolFactory)
+        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class PrefixMgrCli(object):
@@ -51,12 +46,10 @@ class PrefixMgrCli(object):
     @click.group()
     @click.option('--prefix_mgr_cmd_port', default=Consts.PREFIX_MGR_CMD_PORT,
                   help='Prefix Manager port')
-    @click.option('--json/--no-json', default=False,
-                  help='Use JSON serializer')
     @click.option('--verbose/--no-verbose', default=False,
                   help='Print verbose information')
     @click.pass_context
-    def prefixmgr(ctx, prefix_mgr_cmd_port, json, verbose):  # noqa: B902
+    def prefixmgr(ctx, prefix_mgr_cmd_port, verbose):  # noqa: B902
         ''' CLI tool to peek into Prefix Manager module. '''
 
         ctx.obj = PrefixMgrContext(
@@ -64,8 +57,7 @@ class PrefixMgrCli(object):
             ctx.obj.hostname,
             ctx.obj.timeout,
             ctx.obj.ports_config.get('prefix_mgr_cmd_port', None) or
-            prefix_mgr_cmd_port,
-            json)
+            prefix_mgr_cmd_port)
 
 
 class WithdrawCli(object):

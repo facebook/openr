@@ -11,10 +11,11 @@ from __future__ import unicode_literals
 from __future__ import division
 
 from thrift.util import Serializer
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
+
+from openr.utils.consts import Consts
 
 
-def serialize_thrift_object(thrift_obj, proto_factory=TCompactProtocolFactory):
+def serialize_thrift_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
     ''' Serialize thrift data to binary blob
 
         :param thrift_obj: the thrift object
@@ -27,7 +28,7 @@ def serialize_thrift_object(thrift_obj, proto_factory=TCompactProtocolFactory):
 
 
 def deserialize_thrift_object(raw_data, thrift_type,
-                              proto_factory=TCompactProtocolFactory):
+                              proto_factory=Consts.PROTO_FACTORY):
     ''' Deserialize thrift data from binary blob
 
         :param raw_data string: the serialized thrift payload

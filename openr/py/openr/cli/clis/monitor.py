@@ -13,20 +13,16 @@ from __future__ import division
 import click
 import zmq
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
-from thrift.protocol.TJSONProtocol import TJSONProtocolFactory
-
 from openr.cli.commands import monitor
 from openr.utils.consts import Consts
 
 
 class MonitorContext(object):
     def __init__(self, verbose, zmq_ctx, host, timeout,
-                 monitor_rep_port, lm_cmd_port, json):
+                 monitor_rep_port, lm_cmd_port):
         '''
             :param zmq_ctx: the ZMQ context to create zmq sockets
             :param host string: the openr router host
-            :para json bool: whether to use JSON proto or Compact for thrift
         '''
 
         self.verbose = verbose
@@ -37,8 +33,7 @@ class MonitorContext(object):
         self.monitor_rep_port = monitor_rep_port
         self.lm_cmd_port = lm_cmd_port
 
-        self.proto_factory = (TJSONProtocolFactory if json
-                              else TCompactProtocolFactory)
+        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class MonitorCli(object):
@@ -48,12 +43,10 @@ class MonitorCli(object):
     @click.group()
     @click.option('--monitor_rep_port', default=Consts.MONITOR_REP_PORT,
                   help='Monitor rep port')
-    @click.option('--json/--no-json', default=False,
-                  help='Use JSON serializer')
     @click.option('--verbose/--no-verbose', default=False,
                   help='Print verbose information')
     @click.pass_context
-    def monitor(ctx, monitor_rep_port, json, verbose):  # noqa: B902
+    def monitor(ctx, monitor_rep_port, verbose):  # noqa: B902
         ''' CLI tool to peek into Monitor module. '''
 
         ctx.obj = MonitorContext(
@@ -62,8 +55,7 @@ class MonitorCli(object):
             ctx.obj.timeout,
             ctx.obj.ports_config.get('monitor_rep_port', None) or monitor_rep_port,
             ctx.obj.ports_config.get('lm_cmd_port', None) or
-            Consts.LINK_MONITOR_CMD_PORT,
-            json)
+            Consts.LINK_MONITOR_CMD_PORT)
 
 
 class CountersCli(object):

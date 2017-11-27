@@ -13,29 +13,22 @@ from __future__ import division
 import click
 import zmq
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
-from thrift.protocol.TJSONProtocol import TJSONProtocolFactory
-
 from openr.cli.commands import config
 from openr.utils.consts import Consts
 from openr.cli.utils import utils
 
 
 class ConfigContext(object):
-    def __init__(self, verbose, zmq_ctx, timeout, config_store_url, json):
+    def __init__(self, verbose, zmq_ctx, timeout, config_store_url):
         '''
             :param zmq_ctx: the ZMQ context to create zmq sockets
-            :para json bool: whether to use JSON proto or Compact for thrift
         '''
 
         self.verbose = verbose
         self.timeout = timeout
         self.zmq_ctx = zmq_ctx
-
         self.config_store_url = config_store_url
-
-        self.proto_factory = (TJSONProtocolFactory if json
-                              else TCompactProtocolFactory)
+        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class ConfigCli(object):
@@ -51,12 +44,10 @@ class ConfigCli(object):
 
     @click.group()
     @click.option('--config_store_url', default=None, help='Config Store IPC URL')
-    @click.option('--json/--no-json', default=False,
-                  help='Use JSON serializer')
     @click.option('--verbose/--no-verbose', default=False,
                   help='Print verbose information')
     @click.pass_context
-    def config(ctx, config_store_url, json, verbose):  # noqa: B902
+    def config(ctx, config_store_url, verbose):  # noqa: B902
         ''' CLI tool to peek into Config Store module. '''
 
         config_store_url = config_store_url or "{}_{}".format(
@@ -66,11 +57,11 @@ class ConfigCli(object):
                 ctx.obj.ports_config.get('lm_cmd_port', None) or
                 Consts.LINK_MONITOR_CMD_PORT))
 
+        override_url = ctx.obj.ports_config.get('config_store_url', None)
         ctx.obj = ConfigContext(
             verbose, zmq.Context(),
             ctx.obj.timeout,
-            ctx.obj.ports_config.get('config_store_url', None) or config_store_url,
-            json)
+            override_url or config_store_url)
 
 
 class ConfigPrefixAllocatorCli(object):

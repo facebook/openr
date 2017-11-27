@@ -15,13 +15,12 @@ from openr.Lsdb import ttypes as lsdb_types
 from openr.utils import socket, consts
 from openr.cli.utils.utils import ip_str_to_prefix
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 import zmq
 
 
 class PrefixMgrClient():
     def __init__(self, zmq_ctx, prefix_mgr_cmd_url, timeout=consts.Consts.TIMEOUT_MS,
-                 proto_factory=TCompactProtocolFactory):
+                 proto_factory=consts.Consts.PROTO_FACTORY):
         self._prefix_mgr_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout,
                                                     proto_factory)
         self._prefix_mgr_cmd_socket.connect(prefix_mgr_cmd_url)

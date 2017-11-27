@@ -10,6 +10,8 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
+from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
+
 
 class Consts(object):
     TIMEOUT_MS = 5000
@@ -34,3 +36,6 @@ class Consts(object):
     PREFIX_ALLOC_KEY = 'prefix-allocator-config'
     LINK_MONITOR_KEY = 'link-monitor-config'
     PREFIX_MGR_KEY = 'prefix-manager-config'
+
+    # Default serializer/deserializer for communication with OpenR
+    PROTO_FACTORY = TCompactProtocolFactory

@@ -13,13 +13,12 @@ from __future__ import division
 from openr.LinkMonitor import ttypes as lm_types
 from openr.utils import socket, consts
 
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 import zmq
 
 
 class LMClient():
     def __init__(self, zmq_ctx, lm_cmd_url, timeout=consts.Consts.TIMEOUT_MS,
-                 proto_factory=TCompactProtocolFactory):
+                 proto_factory=consts.Consts.PROTO_FACTORY):
         self._lm_cmd_socket = socket.Socket(zmq_ctx, zmq.DEALER, timeout, proto_factory)
         self._lm_cmd_socket.connect(lm_cmd_url)
 
