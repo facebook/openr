@@ -56,6 +56,7 @@ install_wangle() {
   rev=$(find_github_hash facebook/wangle)
   cd wangle/wangle
   if [[ ! -z "$rev" ]]; then
+    git fetch origin
     git checkout "$rev"
   fi
   cmake \
@@ -74,6 +75,7 @@ install_libzmq() {
     git clone https://github.com/zeromq/libzmq
   fi
   cd libzmq
+  git fetch origin
   git checkout v4.2.2
   ./autogen.sh
   ./configure
@@ -104,6 +106,7 @@ install_folly() {
   rev=$(find_github_hash facebook/folly)
   cd folly/folly
   if [[ ! -z "$rev" ]]; then
+    git fetch origin
     git checkout "$rev"
   fi
   autoreconf -ivf
@@ -122,6 +125,7 @@ install_fbthrift() {
   rev=$(find_github_hash facebook/fbthrift)
   cd fbthrift/build
   if [[ ! -z "$rev" ]]; then
+    git fetch origin
     git checkout "$rev"
   fi
   cmake -DBUILD_SHARED_LIBS=ON ..
@@ -141,6 +145,7 @@ install_fbzmq() {
   rev=$(find_github_hash facebook/fbzmq)
   cd fbzmq/fbzmq/build
   if [[ ! -z "$rev" ]]; then
+    git fetch origin
     git checkout "$rev"
   fi
   cmake \
@@ -164,6 +169,7 @@ install_glog() {
     git clone https://github.com/google/glog
   fi
   cd glog
+  git fetch origin
   git checkout v0.3.5
   set -eu && autoreconf -i
   ./configure
@@ -179,6 +185,7 @@ install_gflags() {
     git clone https://github.com/gflags/gflags
   fi
   cd gflags
+  git fetch origin
   git checkout v2.2.0
   if [[ ! -e "mybuild" ]]; then
     mkdir mybuild
@@ -197,6 +204,7 @@ install_gtest() {
     git clone https://github.com/google/googletest
   fi
   cd googletest
+  git fetch origin
   git checkout release-1.8.0
   cd googletest
   cmake .
@@ -216,6 +224,7 @@ install_libnl() {
   if [[ ! -e "libnl" ]]; then
     git clone https://github.com/thom311/libnl
     cd libnl
+    git fetch origin
     git checkout libnl3_2_25
     git apply ../../fix-route-obj-attr-list.patch
     cd ..
