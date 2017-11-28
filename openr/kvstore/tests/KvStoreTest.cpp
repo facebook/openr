@@ -983,6 +983,76 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll("0"));
 }
 
+/**
+ * Start single testable store, and set key values.
+ * Try to request for KEY_DUMP with a few keyValHashes.
+ * We only supposed to see a dump of those keyVals on which either key is not
+ * present in provided keyValHashes or hash differs.
+ */
+TEST_F(KvStoreTestFixture, DumpDifference) {
+  LOG(INFO) << "Starting store under test";
+
+  // set up the store that we'll be testing
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto myNodeId = "test-node";
+  auto myStore = createKvStore(myNodeId, emptyPeers);
+  myStore->run();
+
+  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
+  std::unordered_map<std::string, thrift::Value> peerKeyVals;
+  std::unordered_map<std::string, thrift::Value> diffKeyVals;
+  for (int i = 0; i < 3; ++i) {
+    auto key = folly::sformat("test-key-{}", i);
+    thrift::Value thriftVal(
+        apache::thrift::FRAGILE,
+        1 /* version */,
+        "gotham_city" /* originatorId */,
+        folly::sformat("test-value-{}", myStore->nodeId),
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        0 /* hash */);
+
+    // Submit the key-value to myStore
+    myStore->setKey(key, thriftVal);
+    // Update hash
+    thriftVal.hash = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+
+    // Store keyVals
+    expectedKeyVals[key] = thriftVal;
+    if (i == 0) {
+      peerKeyVals[key] = thriftVal;
+    } else {
+      diffKeyVals[key] = thriftVal;
+    }
+  }
+
+  EXPECT_EQ(expectedKeyVals, myStore->dumpAll());
+  // Request for KEY_DUMP with keyVals of test-value-0 provided
+  // myStore is supposed to send back a dump with keyVals of test-value-1 and
+  // test-value-2
+  EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+
+  // provide another keyValHashes item from peer with same key but different
+  // hash
+  auto key = "test-key-1";
+  thrift::Value thriftVal(
+      apache::thrift::FRAGILE,
+      2 /* version */,
+      "gotham_city" /* originatorId */,
+      "why-so-serious" /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  // Update hash
+  thriftVal.hash =
+      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  peerKeyVals[key] = thriftVal;
+  // myStore is still supposed to provide 2 items of keyVals because
+  // test-key-1 has different hash and test-key-2 is missing
+  EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

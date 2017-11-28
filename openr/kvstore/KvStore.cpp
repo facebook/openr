@@ -16,6 +16,9 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 
+using namespace std::chrono_literals;
+using namespace std::chrono;
+
 namespace openr {
 
 KvStore::KvStore(
@@ -571,6 +574,33 @@ KvStore::dumpHashWithPrefix(std::string const& prefix) const {
   return thriftPub;
 }
 
+// dump the keys on which hashes differ from given keyVals
+thrift::Publication
+KvStore::dumpDifference(
+  std::unordered_map<std::string, thrift::Value> const& keyValHashes) const {
+    thrift::Publication thriftPub;
+    for (const auto& kv : kvStore_) {
+      auto const& key = kv.first;
+      auto const& value = kv.second;
+
+      // if key doesn't exist, add it in Publication response to provide
+      // keyVals for peers to process sync
+      auto kvStoreIt = keyValHashes.find(key);
+      if (kvStoreIt == keyValHashes.end()) {
+        thriftPub.keyVals.emplace(key, value);
+        continue;
+      }
+      if (kvStoreIt->second.hash != value.hash ||
+        kvStoreIt->second.version != value.version ||
+        kvStoreIt->second.originatorId != value.originatorId) {
+          // check for version and originatorId as 2nd check just in case if
+          // hash happens to be colliding
+          thriftPub.keyVals.emplace(key, value);
+      }
+    }
+    return thriftPub;
+}
+
 // add new peers to subscribe to
 void
 KvStore::addPeers(
@@ -731,9 +761,12 @@ KvStore::requestFullSyncFromPeers() {
 
     thrift::Request dumpRequest;
     dumpRequest.cmd = thrift::Command::KEY_DUMP;
-
+    dumpRequest.keyDumpParams.keyValHashes =
+      std::move(dumpHashWithPrefix("").keyVals);
     VLOG(1) << "Sending full sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
+    latestSentPeerSync_.emplace(
+      peerCmdSocketId, std::chrono::steady_clock::now());
 
     auto const ret = peerSyncSock_.sendMultiple(
         fbzmq::Message::from(peerCmdSocketId).value(),
@@ -889,10 +922,20 @@ KvStore::processRequest(
     break;
   }
   case thrift::Command::KEY_DUMP: {
-    VLOG(3) << "Dump all keys requested";
+    if (thriftReq.keyDumpParams.keyValHashes.hasValue()) {
+      VLOG(3) << "Dump keys requested along with "
+              << thriftReq.keyDumpParams.keyValHashes.value().size()
+              << " keyValHashes item(s) provided from peer";
+    } else {
+      VLOG(3) << "Dump all keys requested";
+    }
+
     tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
 
-    const auto thriftPub = dumpAllWithPrefix(thriftReq.keyDumpParams.prefix);
+    const auto thriftPub =
+        (thriftReq.keyDumpParams.keyValHashes.hasValue())
+        ? dumpDifference(thriftReq.keyDumpParams.keyValHashes.value())
+        : dumpAllWithPrefix(thriftReq.keyDumpParams.prefix);
     const auto retPub = cmdSock.sendOne(
         fbzmq::Message::fromThriftObj(thriftPub, serializer_).value());
     if (retPub.hasError()) {
@@ -993,6 +1036,20 @@ KvStore::processSyncResponse() noexcept {
     globalPubSock_.sendOne(msg);
   } else {
     VLOG(3) << "No new values to publish to clients/peers...";
+  }
+
+  if (latestSentPeerSync_.count(requestId)) {
+    tData_.addStatValue(
+        folly::sformat("kvstore.sync_time_{}", requestId),
+        duration_cast<milliseconds>(
+            steady_clock::now() - latestSentPeerSync_.at(requestId)).count(),
+        fbzmq::AVG);
+    VLOG(1) << "It takes "
+            << duration_cast<milliseconds>(
+                   steady_clock::now() - latestSentPeerSync_.at(requestId))
+                   .count()
+            << " ms to fully synced with " << requestId;
+    latestSentPeerSync_.erase(requestId);
   }
 }
 
@@ -1140,7 +1197,7 @@ KvStore::getPrefixCount() {
   int count = 0;
   for (auto const& kv : kvStore_) {
     auto const& key = kv.first;
-    if (key.find("prefix:") == 0) {
+    if (key.find(Constants::kPrefixDbMarker) == 0) {
       ++count;
     }
   }

@@ -125,6 +125,10 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // if prefix is the empty sting, the full hash store is dumped
   thrift::Publication dumpHashWithPrefix(std::string const& prefix) const;
 
+  // dump the keys on which hashes differ from given keyVals
+  thrift::Publication dumpDifference(
+      std::unordered_map<std::string, thrift::Value> const& keyValHash) const;
+
   // add new peers to sync with
   void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
 
@@ -249,6 +253,14 @@ class KvStore final : public fbzmq::ZmqEventLoop {
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+
+  // Map of latest peer sync up request send to each peer
+  // this is used to measure full-dump sync time between this node and each of
+  // its peers
+  std::unordered_map<
+      std::string,
+      std::chrono::time_point<std::chrono::steady_clock>>
+      latestSentPeerSync_;
 };
 
 } // namespace openr

@@ -71,8 +71,13 @@ struct KeyGetParams {
 }
 
 // parameters for the KEY_DUMP command
+// if request includes keyValHashes information from peer, only respsond with
+// keyVals on which hash differs
+// if keyValHashes is not specified, respond with flooding element to signal of
+// DB change
 struct KeyDumpParams {
   1: string prefix
+  2: optional KeyVals keyValHashes
 }
 
 // Peer's publication and command socket URLs
@@ -114,8 +119,6 @@ struct Request {
 //
 // Responses
 //
-
-// flooding element to signal of DB change
 // this is also used to respond to GET requests
 struct Publication {
   // NOTE: the numbering is on purpose, maintaining

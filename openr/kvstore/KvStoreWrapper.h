@@ -76,6 +76,12 @@ class KvStoreWrapper {
       std::string const& prefix = "");
 
   /**
+   * API to get key vals on which hash differs from provided keyValHashes.
+   */
+  std::unordered_map<std::string /* key */, thrift::Value> syncKeyVals(
+      thrift::KeyVals const& keyValHashes);
+
+  /**
    * API to listen for a publication on PUB socket. This blocks until a
    * publication is received on the socket from KvStore.
    */

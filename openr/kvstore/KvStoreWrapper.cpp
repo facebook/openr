@@ -218,6 +218,27 @@ KvStoreWrapper::dumpHashes(std::string const& prefix) {
   return publication.keyVals;
 }
 
+std::unordered_map<std::string /* key */, thrift::Value>
+KvStoreWrapper::syncKeyVals(thrift::KeyVals const& keyValHashes) {
+  // Prepare request
+  thrift::Request request;
+  request.cmd = thrift::Command::KEY_DUMP;
+  request.keyDumpParams.keyValHashes = keyValHashes;
+
+  // Make ZMQ call and wait for response
+  reqSock_.sendThriftObj(request, serializer_);
+  auto maybeMsg = reqSock_.recvThriftObj<thrift::Publication>(serializer_);
+  if (maybeMsg.hasError()) {
+    throw std::runtime_error(folly::sformat(
+        "dumAll recv response failed: {}", maybeMsg.error().errString));
+  }
+  auto publication = maybeMsg.value();
+
+  // Return the result
+  return publication.keyVals;
+}
+
+
 thrift::Publication
 KvStoreWrapper::recvPublication(std::chrono::milliseconds timeout) {
   auto maybeMsg =
