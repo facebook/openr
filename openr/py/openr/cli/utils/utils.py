@@ -902,10 +902,10 @@ def sprint_interface_db_delta(new_intf_db, old_intf_db):
 
     for intf_name in added_intfs:
         lines.append('INTERFACE_ADDED: {}\n'.format(intf_name))
-        intf = new_intfs.interfaces[intf_name]
+        intf = new_intf_db.interfaces[intf_name]
         rows = []
         for k in sorted(intf.keys()):
-            rows.append([k, intf.get(k), intf.get(k)])
+            rows.append([k, "", "-->", intf.get(k)])
         lines.append(printing.render_horizontal_table(rows, tablefmt='plain'))
 
     for intf_name in removed_intfs:

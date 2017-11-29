@@ -406,9 +406,10 @@ class EraseKeyCmd(KvStoreCmd):
         # Get and modify the key
         val = publication.keyVals.get(key)
         val.value = None
-        val.ttl = 0           # set new ttl to 0
+        val.ttl = 1           # set new ttl to 0
         val.ttlVersion += 1   # bump up ttl version
 
+        print(publication.keyVals)
         response = self.client.set_key(publication.keyVals)
         if response != 'OK':
             print('Error: failed to set ttl to 0')
