@@ -17,14 +17,15 @@ import zmq
 
 
 class KvStoreSubscriber():
-    def __init__(self, zmq_ctx, kv_store_pub_url,
+    def __init__(self, zmq_ctx, kv_store_pub_url, timeout=-1,
                  proto_factory=consts.Consts.PROTO_FACTORY):
 
         # timeout set as -1 for indefinite blocking
-        self._kv_store_sub_socket = socket.Socket(zmq_ctx, zmq.SUB, -1,
+        self._kv_store_sub_socket = socket.Socket(zmq_ctx, zmq.SUB, timeout,
                                                   proto_factory)
         self._kv_store_sub_socket.connect(kv_store_pub_url)
         self._kv_store_sub_socket.set_sock_opt(zmq.SUBSCRIBE, b"")
 
     def listen(self):
-        return self._kv_store_sub_socket.recv_thrift_obj(kv_store_types.Publication)
+        return self._kv_store_sub_socket.recv_thrift_obj(
+            kv_store_types.Publication)

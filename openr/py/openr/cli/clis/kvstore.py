@@ -267,10 +267,12 @@ class SnoopCli(object):
                   help='Print ttl updates')
     @click.option('--regex', default='',
                   help='Snoop on keys matching filter')
+    @click.option('--duration', default=0,
+                  help='How long to snoop for. Default is infinite')
     @click.pass_obj
-    def snoop(cli_opts, delta, ttl, regex):  # noqa: B902
+    def snoop(cli_opts, delta, ttl, regex, duration):  # noqa: B902
         ''' Snoop on KV-store updates in the network. We are primarily
             looking at the adj/prefix announcements.
         '''
 
-        kvstore.SnoopCmd(cli_opts).run(delta, ttl, regex)
+        kvstore.SnoopCmd(cli_opts).run(delta, ttl, regex, duration)

@@ -17,6 +17,7 @@ import hexdump
 import re
 import string
 import sys
+import time
 import zmq
 
 from itertools import combinations
@@ -526,19 +527,29 @@ class TopologyCmd(KvStoreCmd):
 
 
 class SnoopCmd(KvStoreCmd):
-    def run(self, delta, ttl, regex):
+    def run(self, delta, ttl, regex, duration):
 
         global_dbs = self.get_snapshot(delta)
         pattern = re.compile(regex)
 
         pub_client = kvstore_subscriber.KvStoreSubscriber(
-            zmq.Context(), "tcp://[{}]:{}".format(self.host, self.kv_pub_port))
+            zmq.Context(),
+            "tcp://[{}]:{}".format(self.host, self.kv_pub_port),
+            timeout=1000)
 
+        start_time = time.time()
         while True:
+            # End loop if it is time!
+            if duration > 0 and time.time() - start_time > duration:
+                break
+
             # we do not want to timeout. keep listening for a change
-            msg = pub_client.listen()
-            self.print_expired_keys(msg, regex, pattern, global_dbs)
-            self.print_delta(msg, regex, pattern, ttl, delta, global_dbs)
+            try:
+                msg = pub_client.listen()
+                self.print_expired_keys(msg, regex, pattern, global_dbs)
+                self.print_delta(msg, regex, pattern, ttl, delta, global_dbs)
+            except zmq.error.Again:
+                pass
 
     def print_expired_keys(self, msg, regex, pattern, global_dbs):
         rows = []
