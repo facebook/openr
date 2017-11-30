@@ -22,6 +22,9 @@ from shell_quoting import path_join, ShellQuoted
 
 def fbcode_builder_spec(builder):
     builder.add_option('thom311/libnl:git_hash', 'libnl3_2_25')
+    builder.add_option(
+        'openr/openr/build:cmake_defines', {'ADD_ROOT_TESTS': 'OFF'}
+    )
     maybe_curl_patch = []
     patch = path_join(
         builder.option('projects_dir'),
@@ -56,7 +59,7 @@ def fbcode_builder_spec(builder):
             ]),
             builder.step('Run openr tests', [
                 builder.run(
-                    ShellQuoted('sudo CTEST_OUTPUT_ON_FAILURE=TRUE make test')
+                    ShellQuoted('CTEST_OUTPUT_ON_FAILURE=TRUE make test')
                 ),
             ]),
         ],
