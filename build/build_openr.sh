@@ -254,7 +254,7 @@ install_openr() {
   pip install cffi
   pip install future
   python setup.py build
-  sudo python setup.py install
+  python setup.py install
   cd "$BUILD_DIR"
   make test
   popd
