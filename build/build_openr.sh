@@ -256,7 +256,7 @@ install_openr() {
   python setup.py build
   python setup.py install
   cd "$BUILD_DIR"
-  make test
+  #make test
   popd
 }
 
