@@ -264,7 +264,7 @@ install_openr() {
 # Install required tools and libraries via package managers
 #
 
-apt-get install libdouble-conversion-dev \
+apt-get install -y libdouble-conversion-dev \
   libssl-dev \
   cmake \
   make \
