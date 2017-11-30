@@ -3,6 +3,8 @@
 `OpenR: Open Routing`
 ---------------------
 
+[![Build Status](https://travis-ci.org/facebook/openr.svg?branch=master)](https://travis-ci.org/facebook/openr)
+
 Open Routing, OpenR, is Facebook's internally designed and developed routing
 protocol/platform. Originally built for performing routing on the `Terragraph`
 network, its awesome design and flexibility have led to its adoption in
