@@ -1217,6 +1217,9 @@ KvStore::submitCounters() {
   counters["kvstore.num_prefixes"] = getPrefixCount();
   counters["kvstore.pending_full_sync"] = peersToSyncWith_.size();
 
+  // Aliveness report counters
+  counters["kvstore.aliveness"] = 1;
+
   // Prepare for submitting counters
   fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counters);
 

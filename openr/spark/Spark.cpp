@@ -1467,6 +1467,9 @@ Spark::submitCounters() {
   counters["spark.my_seq_num"] = mySeqNum_;
   counters["spark.pending_timers"] = getNumPendingTimeouts();
 
+  // Aliveness report counters
+  counters["spark.aliveness"] = 1;
+
   // Prepare for submitting counters
   fbzmq::CounterMap submittingCounters;
   for (const auto& kv : counters) {

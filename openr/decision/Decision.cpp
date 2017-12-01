@@ -1120,8 +1120,9 @@ Decision::submitCounters() {
   VLOG(2) << "Submitting counters...";
 
   // Prepare for submitting counters
-  fbzmq::CounterMap submittingCounters =
-      prepareSubmitCounters(spfSolver_->getCounters());
+  auto counter = spfSolver_->getCounters();
+  counter["decision.aliveness"] = 1;
+  fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counter);
 
   zmqMonitorClient_->setCounters(submittingCounters);
 }
