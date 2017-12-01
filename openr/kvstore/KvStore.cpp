@@ -526,8 +526,6 @@ thrift::Publication
 KvStore::getKeyVals(std::vector<std::string> const& keys) {
   thrift::Publication thriftPub;
 
-  DCHECK(!keys.empty()) << "getKeyVals with empty key vector";
-
   for (auto const& key : keys) {
     // if requested key if found, respond with version and value
     auto it = kvStore_.find(key);
@@ -563,7 +561,7 @@ KvStore::dumpHashWithPrefix(std::string const& prefix) const {
     if (kv.first.compare(0, prefix.length(), prefix) != 0) {
       continue;
     }
-    CHECK(kv.second.hash.hasValue());
+    DCHECK(kv.second.hash.hasValue());
     auto& value = thriftPub.keyVals[kv.first];
     value.version = kv.second.version;
     value.originatorId = kv.second.originatorId;
@@ -860,12 +858,7 @@ KvStore::processRequest(
     VLOG(3) << "Set key requested";
     tData_.addStatValue("kvstore.cmd_key_set", 1, fbzmq::COUNT);
 
-    // to catch the issues in unittests
-    DCHECK(!thriftReq.keySetParams.keyVals.empty());
-    DCHECK(thriftReq.keyGetParams.keys.empty());
-
-    if (thriftReq.keySetParams.keyVals.empty() ||
-        !thriftReq.keyGetParams.keys.empty()) {
+    if (thriftReq.keySetParams.keyVals.empty()) {
       LOG(ERROR) << "Malformed set request, ignoring";
       cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse).value());
       return;
@@ -902,19 +895,6 @@ KvStore::processRequest(
   case thrift::Command::KEY_GET: {
     VLOG(3) << "Get key-values requested";
     tData_.addStatValue("kvstore.cmd_key_get", 1, fbzmq::COUNT);
-
-    // to catch the issues in unittests
-    DCHECK(!thriftReq.keyGetParams.keys.empty());
-    DCHECK(thriftReq.keySetParams.keyVals.empty());
-
-    if (thriftReq.keyGetParams.keys.empty() ||
-        !thriftReq.keySetParams.keyVals.empty()) {
-      LOG(ERROR) << "Malformed GET request, ignoring";
-      cmdSock.sendOne(
-          fbzmq::Message::fromThriftObj(thrift::Publication{}, serializer_)
-              .value());
-      return;
-    }
 
     const auto thriftPub = getKeyVals(thriftReq.keyGetParams.keys);
     cmdSock.sendOne(
