@@ -218,7 +218,7 @@ class NodesCmd(KvStoreCmd):
 
             marker = '* ' if prefix_db.thisNodeName == host_id else '> '
             row = ["{}{}".format(marker, prefix_db.thisNodeName)]
-            row.extend(prefix_strs)
+            row.extend(map(lambda l: l.split()[0], prefix_strs.splitlines()[2:]))
             rows.append(row)
 
         rows = []
