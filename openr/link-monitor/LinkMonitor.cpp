@@ -1344,6 +1344,9 @@ LinkMonitor::submitCounters() {
     counters["link_monitor.metric." + adj.otherNodeName] = adj.metric;
   }
 
+  // Aliveness report counters
+  counters["link_monitor.aliveness"] = 1;
+
   // Prepare for submitting counters
   fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counters);
 
