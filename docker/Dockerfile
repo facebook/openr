@@ -8,5 +8,5 @@ RUN cd /root/openr/build/ && ./build_openr.sh && ./build_openr.sh && cd /root &&
 
 COPY run_openr.sh /usr/sbin/run_openr.sh
 
-CMD /usr/sbin/run_openr.sh 
+CMD /usr/sbin/run_openr.sh >/var/log/openr.log 2>&1  
 
