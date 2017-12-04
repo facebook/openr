@@ -218,7 +218,9 @@ class NodesCmd(KvStoreCmd):
 
             marker = '* ' if prefix_db.thisNodeName == host_id else '> '
             row = ["{}{}".format(marker, prefix_db.thisNodeName)]
-            row.extend(map(lambda l: l.split()[0], prefix_strs.splitlines()[2:]))
+            loopback_prefixes = [p.prefix for p in prefix_db.prefixEntries \
+                     if p.type == lsdb_types.PrefixType.LOOPBACK]
+            row.extend([utils.sprint_prefix(p) for p in loopback_prefixes])
             rows.append(row)
 
         rows = []
