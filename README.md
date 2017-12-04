@@ -37,6 +37,11 @@ The Developer Guide outlines best practices for code contribution and testing.
 Any single change should be well tested for regressions and version
 compatibility.
 
+### Code of Conduct
+---
+
+The code of conduct is described in [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+
 ### Requirements
 ---
 
