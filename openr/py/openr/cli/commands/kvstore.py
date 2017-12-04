@@ -235,12 +235,11 @@ class NodesCmd(KvStoreCmd):
         def _parse_nodes(rows, value):
             prefix_db = deserialize_thrift_object(value.value,
                                                   lsdb_types.PrefixDatabase)
-
-            prefix_strs = utils.sprint_prefixes_db_full(prefix_db, True)
-
             marker = '* ' if prefix_db.thisNodeName == host_id else '> '
             row = ["{}{}".format(marker, prefix_db.thisNodeName)]
-            row.extend(prefix_strs)
+            loopback_prefixes = [p.prefix for p in prefix_db.prefixEntries \
+                     if p.type == lsdb_types.PrefixType.LOOPBACK]
+            row.extend([utils.sprint_prefix(p) for p in loopback_prefixes])
             rows.append(row)
 
         rows = []
