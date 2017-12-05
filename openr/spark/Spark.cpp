@@ -1479,7 +1479,9 @@ Spark::submitCounters() {
             apache::thrift::FRAGILE,
             kv.second /* value */,
             fbzmq::thrift::CounterValueType::COUNTER,
-            0 /* timestamp - not used */
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count() /* current timestamp */
             ));
   }
 
