@@ -471,8 +471,12 @@ class TopologyCmd(KvStoreCmd):
         try:
             import matplotlib.pyplot as plt
             import networkx as nx
-        except Exception:
-            print("matplotlib and networkx needed for drawing. Skipping")
+        except ImportError:
+            print('Drawing topology requires `matplotlib` and `networkx` '
+                  'libraries. You can install them with following command and '
+                  'retry. \n'
+                  '  pip install matplotlib\n'
+                  '  pip install networkx')
             sys.exit(1)
 
         publication = self.client.dump_all_with_prefix(Consts.ADJ_DB_MARKER)
