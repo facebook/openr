@@ -19,76 +19,39 @@
 # on the node
 #
 
+#
+# For more info on openr's options please refer to the openr/docs/Runbook.md
+#
+
 # OpenR binary path or command name present on bin paths
 OPENR=openr
 
-# Domain. Nodes will not form adjacencies to other nodes with different domain.
-# One node can be part of only one domain. Useful when want to run OpenR on
-# adjacent nodes but don't want to form adjacencies with them.
-DOMAIN=openr
-
-# List of comma separated list of prefixes to announce
-# e.g. "face:cafe::1/128,face:b00c::/64"
-PREFIXES=""
-
-# Used to assign elected address if prefix allocator is enabled
-LOOPBACK_IFACE="lo"
-
-# Announce all global addresses of interfaces into the network
-REDISTRIBUTE_IFACES="lo1"
-
-# dryrun => Do not program routes in dryrun mode
-DRYRUN=false
-
-# Enable RTT metric on links. RTTs are computed dynamically and then used as
-# cost for links. If disabled then hop count will be used as a cost of path
-ENABLE_RTT_METRIC=true
-
-# Enable v4
-ENABLE_V4=false
-
-# Enable health-checker
-ENABLE_HEALTH_CHECKER=false
-HEALTH_CHECKER_PING_INTERVAL_S=3
-
-# Interface prefixes to perform neighbor discovery on. All interfaces whose
-# names start with these are used for neighbor discovery
-IFACE_PREFIXES="terra,nic1,nic2"
-
-# Logging verbosity
-VERBOSITY=1
-
-# PrefixAllocator parameter
-ENABLE_PREFIX_ALLOC=false # Enable automatic election of prefixes for nodes
-SEED_PREFIX=""            # Master prefix to allocate subprefixes of nodes
-ALLOC_PREFIX_LEN=128      # Length of allocated prefix
-SET_LOOPBACK_ADDR=false   # Assign choosen prefix for node on loopback
-                          # with prefix length as /128 (and address being first
-                          # in elected network block
-OVERRIDE_LOOPBACK_ADDR=false # Overrides other existing loopback addresses on
-                             # loopback interface
-
-# Spark Configuration
-# How long to keep adjacency without hearing hello from neighbor
-SPARK_HOLD_TIME_S=30
-# How often to send hello packeks to neighbors
-SPARK_KEEPALIVE_TIME_S=3
-# How fast to perform initial neighbor discovery
-SPARK_FASTINIT_KEEPALIVE_TIME_MS=100
-
-# Enable in build Fib service handler
-ENABLE_NETLINK_FIB_HANDLER=false
-FIB_HANDLER_PORT=60100
-
-# Enable in built System service handler
-ENABLE_NETLINK_SYSTEM_HANDLER=true
-
-# set decision debounce time
-DECISION_DEBOUNCE_MIN_MS=10
+ALLOC_PREFIX_LEN=128
+CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
 DECISION_DEBOUNCE_MAX_MS=250
-
-# enable performance measurements
+DECISION_DEBOUNCE_MIN_MS=10
+DOMAIN=openr
+DRYRUN=false
+ENABLE_HEALTH_CHECKER=false
+ENABLE_NETLINK_FIB_HANDLER=false
+ENABLE_NETLINK_SYSTEM_HANDLER=true
 ENABLE_PERF_MEASUREMENT=true
+ENABLE_PREFIX_ALLOC=false
+ENABLE_RTT_METRIC=true
+ENABLE_V4=false
+FIB_HANDLER_PORT=60100
+HEALTH_CHECKER_PING_INTERVAL_S=3
+IFACE_PREFIXES="terra,nic1,nic2"
+LOOPBACK_IFACE="lo"
+OVERRIDE_LOOPBACK_ADDR=false
+PREFIXES=""
+REDISTRIBUTE_IFACES="lo1"
+SEED_PREFIX=""
+SET_LOOPBACK_ADDR=false
+SPARK_FASTINIT_KEEPALIVE_TIME_MS=100
+SPARK_HOLD_TIME_S=30
+SPARK_KEEPALIVE_TIME_S=3
+VERBOSITY=1
 
 #
 # Load custom configuration if any!
@@ -116,34 +79,35 @@ fi
 #
 
 exec ${OPENR} \
+  --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
   --chdir=/tmp \
+  --config_store_filepath=${CONFIG_STORE_FILEPATH} \
+  --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \
+  --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
   --domain=${DOMAIN} \
   --dryrun=${DRYRUN} \
-  --prefix="${PREFIXES}" \
-  --node_name="${HOSTNAME}" \
-  --iface=${LOOPBACK_IFACE} \
-  --redistribute_ifnames=${REDISTRIBUTE_IFACES} \
-  --use_rtt_metric=${ENABLE_RTT_METRIC} \
-  --enable_v4=${ENABLE_V4} \
   --enable_health_checker=${ENABLE_HEALTH_CHECKER} \
-  --health_checker_ping_interval_s=${HEALTH_CHECKER_PING_INTERVAL_S} \
-  --ifname_prefix=${IFACE_PREFIXES} \
-  --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
-  --seed_prefix=${SEED_PREFIX} \
-  --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
-  --set_loopback_address=${SET_LOOPBACK_ADDR} \
-  --override_loopback_global_addresses=${OVERRIDE_LOOPBACK_ADDR} \
-  --spark_hold_time_s=${SPARK_HOLD_TIME_S} \
-  --spark_keepalive_time_s=${SPARK_KEEPALIVE_TIME_S} \
-  --spark_fastinit_keepalive_time_ms=${SPARK_FASTINIT_KEEPALIVE_TIME_MS} \
   --enable_netlink_fib_handler=${ENABLE_NETLINK_FIB_HANDLER} \
   --enable_netlink_system_handler=${ENABLE_NETLINK_SYSTEM_HANDLER} \
-  --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
-  --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
-  --logtostderr \
+  --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
+  --enable_v4=${ENABLE_V4} \
+  --fib_agent_port=${FIB_HANDLER_PORT}
+  --health_checker_ping_interval_s=${HEALTH_CHECKER_PING_INTERVAL_S} \
+  --iface=${LOOPBACK_IFACE} \
+  --ifname_prefix=${IFACE_PREFIXES} \
+  --node_name="${HOSTNAME}" \
+  --override_loopback_global_addresses=${OVERRIDE_LOOPBACK_ADDR} \
+  --prefix="${PREFIXES}" \
+  --redistribute_ifnames=${REDISTRIBUTE_IFACES} \
+  --seed_prefix=${SEED_PREFIX} \
+  --set_loopback_address=${SET_LOOPBACK_ADDR} \
+  --spark_fastinit_keepalive_time_ms=${SPARK_FASTINIT_KEEPALIVE_TIME_MS} \
+  --spark_hold_time_s=${SPARK_HOLD_TIME_S} \
+  --spark_keepalive_time_s=${SPARK_KEEPALIVE_TIME_S} \
+  --use_rtt_metric=${ENABLE_RTT_METRIC} \
   --logbufsecs=0 \
+  --logtostderr \
   --max_log_size=1 \
   --v=${VERBOSITY} \
-  --fib_agent_port=${FIB_HANDLER_PORT} \
   "$@"
