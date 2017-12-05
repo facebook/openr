@@ -92,7 +92,7 @@ exec ${OPENR} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
   --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
   --enable_v4=${ENABLE_V4} \
-  --fib_agent_port=${FIB_HANDLER_PORT}
+  --fib_agent_port=${FIB_HANDLER_PORT} \
   --health_checker_ping_interval_s=${HEALTH_CHECKER_PING_INTERVAL_S} \
   --iface=${LOOPBACK_IFACE} \
   --ifname_prefix=${IFACE_PREFIXES} \
