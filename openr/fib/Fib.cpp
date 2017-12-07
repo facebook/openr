@@ -21,8 +21,6 @@
 
 namespace openr {
 
-const int kConvergenceMax{2000};
-
 Fib::Fib(
     std::string myNodeName,
     int32_t thriftPort,
@@ -513,22 +511,42 @@ Fib::logEvent(const std::string& event) {
 
 void
 Fib::logPerfEvents() {
-  if (!maybePerfEvents_) {
+  if (!maybePerfEvents_ or !maybePerfEvents_->events.size()) {
+    LOG(ERROR) << "Received null or empty perf events to log!";
     return;
+  }
+
+  // Ignore bad perf event sample if creation time of first event is
+  // less than creation time of our recently logged perf events.
+  if (recentPerfEventCreateTs_ >= maybePerfEvents_->events[0].unixTs) {
+    LOG(WARNING) << "Ignoring perf event with old create timestamp "
+                 << maybePerfEvents_->events[0].unixTs << ", expected > "
+                 << recentPerfEventCreateTs_;
+    return;
+  } else {
+    recentPerfEventCreateTs_ = maybePerfEvents_->events[0].unixTs;
   }
 
   // Add latest event information (this function is meant to be called after
   // routeDb has synced)
   addPerfEvent(*maybePerfEvents_, myNodeName_, "OPENR_FIB_ROUTES_PROGRAMMED");
 
-  // Update local perfDb_
+  // Ignore perf events with very off total duration
+  auto totalDuration = getTotalPerfEventsDuration(*maybePerfEvents_);
+  if (totalDuration.count() < 0 or
+      totalDuration > Constants::kConvergenceMaxDuration) {
+    LOG(WARNING) << "Ignoring perf event with bad total duration "
+                 << totalDuration.count() << "ms.";
+    return;
+  }
+
+  // Add new entry to perf DB and purge extra entries
+  perfDb_.push_back(*maybePerfEvents_);
   while (perfDb_.size() >= Constants::kPerfBufferSize) {
     perfDb_.pop_front();
   }
-  perfDb_.push_back(*maybePerfEvents_);
 
   // Log event
-  auto totalDuration = getTotalPerfEventsDuration(*maybePerfEvents_);
   auto eventStrs = sprintPerfEvents(*maybePerfEvents_);
   maybePerfEvents_ = folly::none;
   LOG(INFO) << "OpenR convergence performance. "
@@ -536,13 +554,10 @@ Fib::logPerfEvents() {
   for (auto& str : eventStrs) {
     LOG(INFO) << "  " << str;
   }
-  // Add information to counters
-  // kConvergenceMax is used to gate unreasonable convergence time due to
-  // device time out-of-sync etc.
-  if (totalDuration.count() < kConvergenceMax) {
-    tData_.addStatValue(
-        "fib.convergence_time_ms", totalDuration.count(), fbzmq::AVG);
-  }
+
+  // Export convergence duration counter
+  tData_.addStatValue(
+      "fib.convergence_time_ms", totalDuration.count(), fbzmq::AVG);
 
   // Log via zmq monitor
   fbzmq::LogSample sample{};

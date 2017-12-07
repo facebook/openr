@@ -135,6 +135,9 @@ class Fib final : public fbzmq::ZmqEventLoop {
   std::unordered_map<thrift::IpPrefix, std::vector<thrift::Path>> routeDb_;
   std::deque<thrift::PerfEvents> perfDb_;
 
+  // Create timestamp of recently logged perf event
+  int64_t recentPerfEventCreateTs_{0};
+
   // Interface status map
   std::unordered_map<std::string /* ifName*/, bool /* isUp */>
       interfaceStatusDb_;

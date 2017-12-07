@@ -178,6 +178,7 @@ class Constants {
 
   // buffer size to keep latest perf log
   static const uint16_t kPerfBufferSize;
+  static const std::chrono::seconds kConvergenceMaxDuration;
 };
 
 } // namespace openr

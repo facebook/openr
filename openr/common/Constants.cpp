@@ -129,5 +129,6 @@ const int64_t Constants::kDefaultAdjWeight{1};
 
 // buffer size to keep latest perf log
 const uint16_t Constants::kPerfBufferSize{10};
+const std::chrono::seconds Constants::kConvergenceMaxDuration{3s};
 
 } // namespace openr
