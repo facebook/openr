@@ -30,6 +30,7 @@ namespace openr {
 namespace {
 
 const uint8_t kAqRouteProtoId = 99;
+const std::chrono::seconds kRoutesHoldTimeout{30};
 
 // convert a routeDb into thrift exportable route spec
 std::vector<thrift::UnicastRoute>
@@ -82,7 +83,25 @@ NetlinkFibHandler::NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop)
           std::make_unique<NetlinkRouteSocket>(zmqEventLoop, kAqRouteProtoId)),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
-                     .count()) {}
+                     .count()) {
+  keepAliveCheckTimer_ = fbzmq::ZmqTimeout::make(zmqEventLoop, [&]() noexcept {
+    auto now = std::chrono::steady_clock::now();
+    if (now - recentKeepAliveTs_ > kRoutesHoldTimeout) {
+      LOG(ERROR) << "Open/R health check: FAIL. Expiring routes!";
+      auto emptyRoutes = std::make_unique<std::vector<thrift::UnicastRoute>>();
+      auto ret = future_syncFib(0 /* clientId */, std::move(emptyRoutes));
+      ret.then([]() {
+        LOG(INFO) << "Expired routes on health check failure!";
+      });
+    } else {
+      LOG(INFO) << "Open/R health check: PASS";
+    }
+  });
+  zmqEventLoop->runInEventLoop([&]() {
+    const bool isPeriodic = true;
+    keepAliveCheckTimer_->scheduleTimeout(kRoutesHoldTimeout, isPeriodic);
+  });
+}
 
 folly::Future<folly::Unit>
 NetlinkFibHandler::future_addUnicastRoute(
@@ -196,11 +215,14 @@ NetlinkFibHandler::future_syncFib(
 folly::Future<int64_t>
 NetlinkFibHandler::future_periodicKeepAlive(int16_t /* clientId */) {
   VLOG(3) << "Received KeepAlive from OpenR";
+  recentKeepAliveTs_ = std::chrono::steady_clock::now();
   return folly::makeFuture(keepAliveId_++);
 }
 
 int64_t
 NetlinkFibHandler::aliveSince() {
+  VLOG(3) << "Received KeepAlive from OpenR";
+  recentKeepAliveTs_ = std::chrono::steady_clock::now();
   return startTime_;
 }
 

@@ -7,11 +7,13 @@
 
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
+#include <fbzmq/async/ZmqTimeout.h>
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 
@@ -74,6 +76,12 @@ class NetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
 
   // Time when service started, in number of seconds, since epoch
   const int64_t startTime_{0};
+
+  // Recent timepoint of aliveSince
+  std::chrono::steady_clock::time_point recentKeepAliveTs_;
+
+  // ZmqTimeout timer to check for openr aliveness
+  std::unique_ptr<fbzmq::ZmqTimeout> keepAliveCheckTimer_;
 };
 
 } // namespace openr

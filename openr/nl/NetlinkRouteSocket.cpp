@@ -237,7 +237,7 @@ NetlinkRouteSocket::NetlinkRouteSocket(
     nl_cache_free(linkCache_);
   };
 
-  evl_->runInEventLoop([this]() mutable {
+  evl_->runImmediatelyOrInEventLoop([this]() mutable {
     doUpdateRouteCache();
     unicastRouteDb_ = doGetUnicastRoutes();
   });
@@ -309,7 +309,7 @@ NetlinkRouteSocket::addUnicastRoute(
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runInEventLoop(
+  evl_->runImmediatelyOrInEventLoop(
       [this, promise = std::move(promise), prefix, nextHops]() mutable {
         try {
           auto search = unicastRouteDb_.find(prefix);
@@ -342,7 +342,7 @@ NetlinkRouteSocket::addMulticastRoute(
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runInEventLoop(
+  evl_->runImmediatelyOrInEventLoop(
       [this, promise = std::move(promise), prefix, ifName]() mutable {
         try {
           doAddMulticastRoute(prefix, ifName);
@@ -368,7 +368,8 @@ NetlinkRouteSocket::deleteUnicastRoute(const folly::CIDRNetwork& prefix) {
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runInEventLoop([this, promise = std::move(promise), prefix]() mutable {
+  evl_->runImmediatelyOrInEventLoop(
+    [this, promise = std::move(promise), prefix]() mutable {
     try {
       if (unicastRouteDb_.count(prefix) == 0) {
         LOG(ERROR) << "Trying to delete non-existing prefix "
@@ -403,7 +404,7 @@ NetlinkRouteSocket::deleteMulticastRoute(
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runInEventLoop(
+  evl_->runImmediatelyOrInEventLoop(
       [this, promise = std::move(promise), prefix, ifName]() mutable {
         try {
           doDeleteMulticastRoute(prefix, ifName);
@@ -430,7 +431,8 @@ NetlinkRouteSocket::getUnicastRoutes() const {
   folly::Promise<UnicastRoutes> promise;
   auto future = promise.getFuture();
 
-  evl_->runInEventLoop([this, promise = std::move(promise)]() mutable {
+  evl_->runImmediatelyOrInEventLoop(
+    [this, promise = std::move(promise)]() mutable {
     try {
       promise.setValue(unicastRouteDb_);
     } catch (NetlinkException const& ex) {
@@ -451,7 +453,8 @@ NetlinkRouteSocket::getKernelUnicastRoutes() {
   folly::Promise<UnicastRoutes> promise;
   auto future = promise.getFuture();
 
-  evl_->runInEventLoop([this, promise = std::move(promise)]() mutable {
+  evl_->runImmediatelyOrInEventLoop(
+    [this, promise = std::move(promise)]() mutable {
     try {
       doUpdateRouteCache();
       unicastRouteDb_ = doGetUnicastRoutes();
@@ -473,7 +476,7 @@ NetlinkRouteSocket::syncRoutes(UnicastRoutes newRouteDb) {
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runInEventLoop(
+  evl_->runImmediatelyOrInEventLoop(
       [this, promise = std::move(promise), newRouteDb]() mutable {
         try {
           doSyncRoutes(newRouteDb);
