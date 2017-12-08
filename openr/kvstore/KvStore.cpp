@@ -700,8 +700,9 @@ KvStore::addPeers(
     }
   }
 
-  // Request immediate full sync from peers after adding peers
-  requestFullSyncFromPeers();
+  // Request full sync from peers after adding peers in kInitialBackoff. Trying
+  // immediately leads to failure as TCP sockets might not have been setup yet.
+  fullSyncTimer_->scheduleTimeout(Constants::kInitialBackoff);
 }
 
 // delete some peers we are subscribed to
@@ -777,6 +778,7 @@ KvStore::requestFullSyncFromPeers() {
               << " using id " << peerCmdSocketId << " (will try again). "
               << ret.error();
       expBackoff.reportError(); // Apply exponential backoff
+      timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       ++it;
     } else {
       // Remove the iterator
@@ -788,7 +790,8 @@ KvStore::requestFullSyncFromPeers() {
   // there
   // are still some peers to sync with.
   if (not peersToSyncWith_.empty()) {
-    VLOG(5) << peersToSyncWith_.size() << " peers still require sync.";
+    LOG(WARNING) << peersToSyncWith_.size() << " peers still require sync."
+                 << "Scheduling retry after " << timeout.count() << "ms.";
     // schedule next timeout
     fullSyncTimer_->scheduleTimeout(timeout);
   }
