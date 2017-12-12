@@ -58,13 +58,13 @@ const std::string pubKey = fbzmq::util::genKeyPair().publicKey;
 const auto peerSpec_2_1 = thrift::PeerSpec(
     FRAGILE,
     "tcp://[fe80::2%iface_2_1]:10001",
-    "tcp://[fe80::2%iface_2_1]:20002",
+    "tcp://[fe80::2%iface_2_1]:10002",
     pubKey);
 
 const auto peerSpec_2_2 = thrift::PeerSpec(
     FRAGILE,
     "tcp://[fe80::2%iface_2_2]:10001",
-    "tcp://[fe80::2%iface_2_2]:20002",
+    "tcp://[fe80::2%iface_2_2]:10002",
     pubKey);
 
 const auto nb2 = thrift::SparkNeighbor(
@@ -470,6 +470,17 @@ class LinkMonitorTestFixture : public ::testing::Test {
         return;
       }
     }
+  }
+
+  // kvstore shall reveive cmd to add/del peers
+  void checkPeerDump(std::string const& nodeName, thrift::PeerSpec peerSpec) {
+    auto const peers = kvStoreWrapper->getPeers();
+    EXPECT_EQ(peers.count(nodeName), 1);
+    if (!peers.count(nodeName)) {
+      return;
+    }
+    EXPECT_EQ(peers.at(nodeName).pubUrl, peerSpec.pubUrl);
+    EXPECT_EQ(peers.at(nodeName).cmdUrl, peerSpec.cmdUrl);
   }
 
   void
@@ -1055,6 +1066,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   }
 
   checkNextAdjPub("adj:node-1");
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
 
   // neighbor up on another interface
   {
@@ -1068,6 +1083,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   }
 
   checkNextAdjPub("adj:node-1");
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
 
   // neighbor down
   {
@@ -1081,6 +1100,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   }
 
   checkNextAdjPub("adj:node-1");
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_2.otherNodeName, peerSpec_2_2);
 }
 
 TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
