@@ -37,11 +37,11 @@ const uint32_t kValueStrSize = 64;
 // max packet inter-arrival time (can't be chrono)
 const uint32_t kReqTimeoutMs = 4000;
 // interval for periodic syncs
-const chrono::seconds kSyncInterval(1);
+const std::chrono::seconds kSyncInterval(1);
 // maximum timeout for single request for sync
-const chrono::milliseconds kSyncReqTimeout(1000);
+const std::chrono::milliseconds kSyncReqTimeout(1000);
 // maximum timeout waiting for all peers to respond to sync request
-const chrono::milliseconds kSyncMaxWaitTime(1000);
+const std::chrono::milliseconds kSyncMaxWaitTime(1000);
 
 const std::chrono::milliseconds kTtl{100};
 } // namespace

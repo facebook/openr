@@ -31,7 +31,7 @@ using namespace std::chrono_literals;
 DEFINE_int32(seed_prefix_len, 125, "length of seed prefix");
 
 // interval for periodic syncs
-const chrono::milliseconds kSyncInterval(10);
+const std::chrono::milliseconds kSyncInterval(10);
 
 // key marker for allocating prefix
 const AllocPrefixMarker kAllocPrefixMarker{"allocprefix:"};
