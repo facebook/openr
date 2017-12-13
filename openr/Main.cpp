@@ -40,6 +40,7 @@
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
+#include <openr/servicelayer/vrf.h>
 
 DEFINE_int32(
     kvstore_pub_port,
@@ -386,6 +387,42 @@ main(int argc, char** argv) {
         });
     allThreads.emplace_back(std::move(systemThriftThread));
   }
+
+
+  AsyncNotifChannel asynchandler(grpc::CreateChannel(
+                            "14.1.1.20:57777", grpc::InsecureChannelCredentials()));
+
+  // Acquire the lock
+  std::unique_lock<std::mutex> mlock(m_mutex);
+
+  // Spawn reader thread that maintains our Notification Channel
+  LOG(INFO) << "Starting Init thread for Service Layer to IOS-XR";
+  auto slInitThread = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, &asynchandler);
+  allThreads.emplace_back(std::move(slInitThread));
+
+  service_layer::SLInitMsg init_msg;
+  init_msg.set_majorver(service_layer::SL_MAJOR_VERSION);
+  init_msg.set_minorver(service_layer::SL_MINOR_VERSION);
+  init_msg.set_subver(service_layer::SL_SUB_VERSION);
+
+
+  asynchandler.SendInitMsg(init_msg);  
+
+  //Wait on the mutex lock
+  while (!m_InitSuccess) {
+      m_condVar.wait(mlock);
+  }
+
+  SLVrf vrfhandler(grpc::CreateChannel(
+                          "14.1.1.20:57777", grpc::InsecureChannelCredentials()));
+
+  // Create a new SLVrfRegMsg batch
+  vrfhandler.vrfRegMsgAdd("default", 99, 500);
+
+  // Register the SLVrfRegMsg batch for v4 and v6
+  vrfhandler.registerVrf(AF_INET);
+  vrfhandler.registerVrf(AF_INET6);
+
 
   folly::Optional<KeyPair> keyPair;
   if (FLAGS_enable_auth) {

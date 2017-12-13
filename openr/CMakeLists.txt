@@ -3,7 +3,7 @@ project(openr)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-variable")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
 
 include_directories(${CMAKE_SOURCE_DIR}/..)
@@ -260,6 +260,19 @@ add_library(openrlib
   nl/NetlinkIfSocket.cpp
   nl/NetlinkRouteSocket.cpp
   nl/NetlinkSubscriber.cpp
+  servicelayer/vrf.cpp
+  servicelayer/sl_route_ipv6.grpc.pb.cpp
+  servicelayer/sl_version.pb.cpp
+  servicelayer/sl_route_ipv4.pb.cpp
+  servicelayer/sl_common_types.grpc.pb.cpp
+  servicelayer/sl_global.pb.cpp
+  servicelayer/sl_common_types.pb.cpp
+  servicelayer/sl_route_ipv4.grpc.pb.cpp
+  servicelayer/sl_global.grpc.pb.cpp
+  servicelayer/sl_version.grpc.pb.cpp
+  servicelayer/sl_route_common.pb.cpp
+  servicelayer/sl_route_common.grpc.pb.cpp
+  servicelayer/sl_route_ipv6.pb.cpp
   platform/NetlinkFibHandler.cpp
   platform/NetlinkSystemHandler.cpp
   platform/PlatformPublisher.cpp
@@ -314,6 +327,12 @@ target_link_libraries(openrlib
   ${NLROUTE3}
   ${NL3}
   -lcrypto
+  -L/usr/local/include/grpc++
+  -lgrpc++
+  -L/usr/local/lib 
+  -lgrpc++_unsecure 
+  -lgrpc 
+  -lprotobuf 
 )
 
 install(TARGETS
@@ -456,6 +475,24 @@ install(FILES
   nl/NetlinkIfSocket.h
   nl/NetlinkRouteSocket.h
   DESTINATION include/openr/nl
+)
+
+
+install(FILES
+  servicelayer/vrf.h
+  servicelayer/sl_route_ipv6.pb.h
+  servicelayer/sl_common_types.pb.h
+  servicelayer/sl_route_common.pb.h
+  servicelayer/sl_route_common.grpc.pb.h
+  servicelayer/sl_global.pb.h
+  servicelayer/sl_global.grpc.pb.h
+  servicelayer/sl_version.pb.h
+  servicelayer/sl_route_ipv4.grpc.pb.h
+  servicelayer/sl_version.grpc.pb.h
+  servicelayer/sl_route_ipv4.pb.h
+  servicelayer/sl_common_types.grpc.pb.h
+  servicelayer/sl_route_ipv6.grpc.pb.h
+  DESTINATION include/openr/servicelayer
 )
 
 install(FILES

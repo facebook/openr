@@ -29,7 +29,7 @@ DOMAIN=openr
 
 # List of comma separated list of prefixes to announce
 # e.g. "face:cafe::1/128,face:b00c::/64"
-PREFIXES=""
+PREFIXES="face:cafe::10/128,face:b00c::10/128"
 
 # Used to assign elected address if prefix allocator is enabled
 LOOPBACK_IFACE="lo"
@@ -45,15 +45,15 @@ DRYRUN=false
 ENABLE_RTT_METRIC=true
 
 # Enable v4
-ENABLE_V4=false
+ENABLE_V4=true
 
 # Enable health-checker
-ENABLE_HEALTH_CHECKER=false
+ENABLE_HEALTH_CHECKER=true
 HEALTH_CHECKER_PING_INTERVAL_S=3
 
 # Interface prefixes to perform neighbor discovery on. All interfaces whose
 # names start with these are used for neighbor discovery
-IFACE_PREFIXES="terra,nic1,nic2"
+IFACE_PREFIXES="enp"
 
 # Logging verbosity
 VERBOSITY=1
@@ -77,7 +77,7 @@ SPARK_KEEPALIVE_TIME_S=3
 SPARK_FASTINIT_KEEPALIVE_TIME_MS=100
 
 # Enable in build Fib service handler
-ENABLE_NETLINK_FIB_HANDLER=false
+ENABLE_NETLINK_FIB_HANDLER=true
 FIB_HANDLER_PORT=60100
 
 # Enable in built System service handler
