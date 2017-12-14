@@ -391,7 +391,6 @@ main(int argc, char** argv) {
 
   AsyncNotifChannel asynchandler(grpc::CreateChannel(
                             "14.1.1.20:57777", grpc::InsecureChannelCredentials()));
-
   // Acquire the lock
   std::unique_lock<std::mutex> mlock(m_mutex);
 
@@ -803,6 +802,16 @@ main(int argc, char** argv) {
   if (netlinkSystemServer) {
     netlinkSystemServer->stop();
   }
+
+  // Unregister all the vrfs that were registered against IOS-XR SL earlier
+  vrfhandler.vrf_msg.clear_vrfregmsgs();
+  vrfhandler.vrfRegMsgAdd("default");  
+  vrfhandler.unregisterVrf(AF_INET);
+  vrfhandler.unregisterVrf(AF_INET6);
+
+  LOG(INFO) << "Now shutting down asynchandler";
+  // Shutdown the async Init Channel for IOS-XR SL to automatically stop the thread
+  asynchandler.Shutdown();
 
   // Wait for all threads to finish
   for (auto& t : allThreads) {

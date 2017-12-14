@@ -128,8 +128,9 @@ private:
     // gRPC runtime.
     grpc::CompletionQueue cq_;
 
+
     // Used as an indicator to exit completion queue thread upon queue shutdown.
-    bool tearDown = false;
+    bool tear_down = false;
 
 
     class ResponseHandler {
@@ -154,13 +155,15 @@ private:
         // Storage for the status of the RPC upon completion.
         grpc::Status status;
 
-        //std::unique_ptr<ClientAsyncResponseReader<HelloReply>> response_reader;
         std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::service_layer::SLGlobalNotif>> response_reader;
 
         void HandleResponse(bool responseStatus, grpc::CompletionQueue* pcq_) override;
         
     };
 
+    // Shared ptr pointing to the underlying dynamically allocated AsyncClientCall Object
+    // Used to shutdown the Init Channel properly.
+    AsyncClientCall* async_client_call_ptr_;
 };
 
 }

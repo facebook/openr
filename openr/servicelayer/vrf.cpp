@@ -3,14 +3,6 @@
 #include <folly/IPAddress.h>
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
-#include <folly/Format.h>
-#include <folly/MapUtil.h>
-#include <folly/Memory.h>
-#include <folly/Range.h>
-#include <folly/ScopeGuard.h>
-#include <folly/String.h>
-#include <folly/gen/Base.h>
-#include <folly/gen/Core.h>
 #include <google/protobuf/text_format.h>
 
 using grpc::ClientContext;
@@ -433,6 +425,10 @@ void AsyncNotifChannel::SendInitMsg(const service_layer::SLInitMsg init_msg) {
     // Call object to store rpc data
     AsyncClientCall* call = new AsyncClientCall;
 
+    // Store the allocated address in a shared ptr private member to help shutdown
+    // the channel later
+    async_client_call_ptr_ = call;
+
     // Because we are using the asynchronous API, we need to
     // hold on to the "call" instance in order to get updates on the ongoing RPC.
 
@@ -442,7 +438,7 @@ void AsyncNotifChannel::SendInitMsg(const service_layer::SLInitMsg init_msg) {
 }
 
 void AsyncNotifChannel::Shutdown() {
-     cq_.Shutdown(); 
+    tear_down = true; 
 }
 
 // Loop while listening for completed responses.
@@ -457,7 +453,7 @@ void AsyncNotifChannel::AsyncCompleteRpc() {
         std::chrono::system_clock::now() + std::chrono::seconds(timeout);
 
  
-    while (!tearDown) {
+    while (!tear_down) {
         auto nextStatus = cq_.AsyncNext(&got_tag, &ok, deadline);
         // The tag is the memory location of the call object
         ResponseHandler* responseHandler = static_cast<ResponseHandler*>(got_tag);
@@ -466,12 +462,18 @@ void AsyncNotifChannel::AsyncCompleteRpc() {
         case grpc::CompletionQueue::GOT_EVENT:
              // Verify that the request was completed successfully. Note that "ok"
              // corresponds solely to the request for updates introduced by Finish().
-             responseHandler->HandleResponse(ok, &cq_);
+
+             if (tear_down) {
+                 std::cout << "Asynchronous client shutdown requested, let's clean up"  << std::endl;
+                 responseHandler->HandleResponse(false, &cq_);       
+             } else {
+                 responseHandler->HandleResponse(ok, &cq_);
+             }
              break;
         case grpc::CompletionQueue::SHUTDOWN:
              std::cout << "Shutdown event received for completion queue, shutdown the thread" << std::endl;
              delete responseHandler;
-             tearDown = true;
+             tear_down = true;
              break;
         case grpc::CompletionQueue::TIMEOUT:
              break;
