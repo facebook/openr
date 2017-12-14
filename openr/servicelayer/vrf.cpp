@@ -1,4 +1,17 @@
 #include <openr/servicelayer/vrf.h>
+#include <arpa/inet.h>
+#include <folly/IPAddress.h>
+#include <folly/IPAddressV4.h>
+#include <folly/IPAddressV6.h>
+#include <folly/Format.h>
+#include <folly/MapUtil.h>
+#include <folly/Memory.h>
+#include <folly/Range.h>
+#include <folly/ScopeGuard.h>
+#include <folly/String.h>
+#include <folly/gen/Base.h>
+#include <folly/gen/Core.h>
+#include <google/protobuf/text_format.h>
 
 using grpc::ClientContext;
 using grpc::ClientReader;
@@ -10,11 +23,208 @@ using service_layer::SLInitMsg;
 using service_layer::SLVersion;
 using service_layer::SLGlobal;
 
+
 namespace openr {
 
 std::mutex m_mutex;
 std::condition_variable m_condVar;
 bool m_InitSuccess;
+std::shared_ptr<grpc::Channel> route_channel;
+
+RShuttle::RShuttle(std::shared_ptr<grpc::Channel> Channel)
+    : channel(Channel) {} 
+service_layer::SLRoutev4* 
+    RShuttle::routev4Add(service_layer::SLObjectOp routeOp,
+                         std::string vrfName)
+{
+    routev4_msg.set_vrfname(vrfName);
+
+    // Convert ADD to UPDATE automatically, it will solve all the 
+    // conditions - add or update.
+
+    if (routeOp == service_layer::SL_OBJOP_ADD) {
+        routeOp = service_layer::SL_OBJOP_UPDATE;
+    }
+
+    routev4_msg.set_oper(routeOp);
+    return routev4_msg.add_routes();
+}
+
+void RShuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
+                          uint32_t prefix,
+                          uint32_t prefixLen,
+                          uint32_t adminDistance)
+{
+    routev4Ptr->set_prefix(prefix);
+    routev4Ptr->set_prefixlen(prefixLen);
+    routev4Ptr->mutable_routecommon()->set_admindistance(adminDistance);
+}
+
+void RShuttle::routev4PathAdd(service_layer::SLRoutev4* routev4Ptr,
+                              uint32_t nextHopAddress,
+                              std::string nextHopIf)
+{
+    
+    auto routev4PathPtr = routev4Ptr->add_pathlist();
+    routev4PathPtr->mutable_nexthopaddress()->set_v4address(nextHopAddress);
+    routev4PathPtr->mutable_nexthopinterface()->set_name(nextHopIf);
+}
+
+void RShuttle::routev4Op(unsigned int timeout)
+{
+
+    auto stub_ = service_layer::SLRoutev4Oper::NewStub(channel); 
+
+    // Context for the client. It could be used to convey extra information to
+    // the server and/or tweak certain RPC behaviors.
+    grpc::ClientContext context;
+
+    // Storage for the status of the RPC upon completion.
+    grpc::Status status;
+
+    // Set timeout for RPC
+    std::chrono::system_clock::time_point deadline =
+        std::chrono::system_clock::now() + std::chrono::seconds(timeout);
+
+    context.set_deadline(deadline);
+
+    //Issue the RPC         
+    std::string s;
+
+    if (google::protobuf::TextFormat::PrintToString(routev4_msg, &s)) {
+      std::cout << "Your message: " << s;
+    } else {
+      std::cerr << "Message not valid (partial content: "
+                << routev4_msg.ShortDebugString() << ")\n";
+    }
+
+    status = stub_->SLRoutev4Op(&context, routev4_msg, &routev4_msg_resp);
+
+    if (status.ok()) {
+        std::cout << "RPC call was successful, checking response..." << std::endl;
+
+
+        if (routev4_msg_resp.statussummary().status() ==
+               service_layer::SLErrorStatus_SLErrno_SL_SUCCESS) {
+
+            std::cout << "IPv4 Route Operation:"<< route_op << " Successful" << std::endl;
+        } else {
+            std::cout << "Error code for IPv4 Route Operation:" << route_op << " is 0x" << std::hex << routev4_msg_resp.statussummary().status() << std::endl;
+
+            // Print Partial failures within the batch if applicable
+            if (routev4_msg_resp.statussummary().status() ==
+                    service_layer::SLErrorStatus_SLErrno_SL_SOME_ERR) {
+                for (int result = 0; result < routev4_msg_resp.results_size(); result++) {
+                      auto slerr_status = static_cast<int>(routev4_msg_resp.results(result).errstatus().status());
+                      std::cout << "Error code for prefix: " << routev4_msg_resp.results(result).prefix() << " prefixlen: " << routev4_msg_resp.results(result).prefixlen()<<" is 0x"<< std::hex << slerr_status << std::endl;
+                }
+            }
+        }
+    } else {
+        std::cout << "RPC failed, error code is " << status.error_code() << std::endl;
+    }
+}
+
+
+
+service_layer::SLRoutev6*
+    RShuttle::routev6Add(service_layer::SLObjectOp routeOp,
+                         std::string vrfName)
+{
+    routev6_msg.set_vrfname(vrfName);
+
+    // Convert ADD to UPDATE automatically, it will solve all the 
+    // conditions - add or update.
+
+    if (routeOp == service_layer::SL_OBJOP_ADD) {
+        routeOp = service_layer::SL_OBJOP_UPDATE;
+    }
+
+    routev6_msg.set_oper(routeOp);
+    return routev6_msg.add_routes();
+}
+
+void RShuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
+                          std::string prefix,
+                          uint32_t prefixLen,
+                          uint32_t adminDistance)
+{
+    routev6Ptr->set_prefix(prefix);
+    routev6Ptr->set_prefixlen(prefixLen);
+    routev6Ptr->mutable_routecommon()->set_admindistance(adminDistance);
+}
+
+void RShuttle::routev6PathAdd(service_layer::SLRoutev6* routev6Ptr,
+                              std::string nextHopAddress,
+                              std::string nextHopIf)
+{
+
+    auto routev6PathPtr = routev6Ptr->add_pathlist();
+    routev6PathPtr->mutable_nexthopaddress()->set_v6address(nextHopAddress);
+    routev6PathPtr->mutable_nexthopinterface()->set_name(nextHopIf);
+}
+
+void RShuttle::routev6Op(unsigned int timeout)
+{
+
+    auto stub_ = service_layer::SLRoutev6Oper::NewStub(channel);
+
+    // Context for the client. It could be used to convey extra information to
+    // the server and/or tweak certain RPC behaviors.
+    grpc::ClientContext context;
+
+    // Storage for the status of the RPC upon completion.
+    grpc::Status status;
+
+    // Set timeout for RPC
+    std::chrono::system_clock::time_point deadline =
+        std::chrono::system_clock::now() + std::chrono::seconds(timeout);
+
+    context.set_deadline(deadline);
+
+
+    //Issue the RPC         
+    std::string s;
+
+    if (google::protobuf::TextFormat::PrintToString(routev6_msg, &s)) {
+      std::cout << "Your message: " << s;
+    } else {
+      std::cerr << "Message not valid (partial content: "
+                << routev4_msg.ShortDebugString() << ")\n";
+    }
+
+    //Issue the RPC         
+
+    status = stub_->SLRoutev6Op(&context, routev6_msg, &routev6_msg_resp);
+
+    if (status.ok()) {
+        std::cout << "RPC call was successful, checking response..." << std::endl;
+
+
+        if (routev6_msg_resp.statussummary().status() ==
+               service_layer::SLErrorStatus_SLErrno_SL_SUCCESS) {
+
+            std::cout << "IPv6 Route Operation:"<< route_op << " Successful" << std::endl;
+        } else {
+            std::cout << "Error code for IPv6 Route Operation:" << route_op << " is 0x" << std::hex << routev6_msg_resp.statussummary().status() << std::endl;
+
+            // Print Partial failures within the batch if applicable
+            if (routev6_msg_resp.statussummary().status() ==
+                    service_layer::SLErrorStatus_SLErrno_SL_SOME_ERR) {
+                for (int result = 0; result < routev6_msg_resp.results_size(); result++) {
+                      auto slerr_status = static_cast<int>(routev6_msg_resp.results(result).errstatus().status());
+                      std::cout << "Error code for prefix: " << routev6_msg_resp.results(result).prefix() << " prefixlen: " << routev6_msg_resp.results(result).prefixlen()<<" is 0x"<< std::hex << slerr_status << std::endl;
+
+                }
+            }
+        }
+    } else {
+        std::cout << "RPC failed, error code is " << status.error_code() << std::endl;
+    }
+}
+
+
+
 
 SLVrf::SLVrf(std::shared_ptr<grpc::Channel> Channel)
     : channel(Channel) {}
@@ -329,64 +539,4 @@ void AsyncNotifChannel::AsyncClientCall::HandleResponse(bool responseStatus, grp
     }
 } 
 
-
-/*int main(int argc, char** argv) {
-    AsyncNotifChannel asynchandler(grpc::CreateChannel(
-                              "14.1.1.20:57777", grpc::InsecureChannelCredentials()));
-
-    // Acquire the lock
-    std::unique_lock<std::mutex> mlock(m_mutex);
-
-    // Spawn reader thread that maintains our Notification Channel
-    std::thread thread_ = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, &asynchandler);
-
-
-    service_layer::SLInitMsg init_msg;
-    init_msg.set_majorver(service_layer::SL_MAJOR_VERSION);
-    init_msg.set_minorver(service_layer::SL_MINOR_VERSION);
-    init_msg.set_subver(service_layer::SL_SUB_VERSION);
-
-
-    asynchandler.SendInitMsg(init_msg);  
-
-    // Wait on the mutex lock
-    while (!m_InitSuccess) {
-        m_condVar.wait(mlock);
-    }
-
-    SLVrf vrfhandler(grpc::CreateChannel(
-                              "14.1.1.20:57777", grpc::InsecureChannelCredentials()));
-
-    // Create a new SLVrfRegMsg batch
-    vrfhandler.vrfRegMsgAdd("test123", 10, 500);
-    vrfhandler.vrfRegMsgAdd("test1", 12, 500);
-    vrfhandler.vrfRegMsgAdd("test2", 13, 500);
-    vrfhandler.vrfRegMsgAdd("test3", 14, 500);
-    vrfhandler.vrfRegMsgAdd("test4", 15, 500);
-    vrfhandler.vrfRegMsgAdd("test5", 16, 500);
-    vrfhandler.vrfRegMsgAdd("test6", 17, 500);
-
-    // Register the SLVrfRegMsg batch for v4 and v6
-    vrfhandler.registerVrf(AF_INET);
-    vrfhandler.registerVrf(AF_INET6);
-
-
-    // Clean up the SLVrfRegMsg batch to start again
-    vrfhandler.vrf_msg.clear_vrfregmsgs();
-
-    // Creating a fresh SLVrfRegMsg batch
-    vrfhandler.vrfRegMsgAdd("test", 10, 500);
-    vrfhandler.vrfRegMsgAdd("test1", 12, 500);
-    vrfhandler.vrfRegMsgAdd("test2", 13, 500);
-
-    // Unregister the SLVrfRegMsg batch this time
-    vrfhandler.unregisterVrf(AF_INET);
-    vrfhandler.unregisterVrf(AF_INET6);
-
-
-    std::cout << "Press control-c to quit" << std::endl << std::endl;
-    thread_.join();
-
-    return 0;
-}*/
 }

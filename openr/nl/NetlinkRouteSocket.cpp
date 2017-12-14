@@ -19,6 +19,8 @@
 #include <folly/String.h>
 #include <folly/gen/Base.h>
 #include <folly/gen/Core.h>
+#include <openr/servicelayer/vrf.h>
+
 
 using folly::gen::as;
 using folly::gen::from;
@@ -27,6 +29,7 @@ using folly::gen::mapped;
 namespace {
 const int kIpAddrBufSize = 128;
 const uint32_t kAqRouteTableId = RT_TABLE_MAIN;
+const uint8_t kAqRouteProtoId = 99;
 
 // iproute2 protocol IDs in the kernel are a shared resource
 // Various well known and custom protocols use it
@@ -509,11 +512,28 @@ NetlinkRouteSocket::doAddUnicastRouteV4(
     const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
   CHECK(prefix.first.isV4());
 
+  LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
+
+
+  auto rshuttle = RShuttle(route_channel);
+  auto routev4_ptr = rshuttle.routev4Add(service_layer::SL_OBJOP_ADD, "default");
+
+
+  rshuttle.routev4Set(routev4_ptr, folly::IPAddressV4::toLongHBO(prefix.first.str()) , folly::to<uint8_t>(prefix.second), kAqRouteProtoId);
+
+
   // Create new set of nexthops to be programmed. Existing + New ones
   auto newNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
   for (auto const& nextHop : nextHops) {
     CHECK(nextHop.second.isV4());
+    LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << std::get<0>(nextHop).c_str();
     newNextHops.insert(nextHop);
+    // Create a path list
+
+    rshuttle.routev4PathAdd(routev4_ptr, folly::IPAddressV4::toLongHBO(std::get<1>(nextHop).str()), "GigabitEthernet0/0/0/0");
+    rshuttle.routev4Op();
+
+
   }
 
   auto route = buildUnicastRoute(prefix, newNextHops);

@@ -416,6 +416,9 @@ main(int argc, char** argv) {
   SLVrf vrfhandler(grpc::CreateChannel(
                           "14.1.1.20:57777", grpc::InsecureChannelCredentials()));
 
+  // Store for later usage
+  route_channel = vrfhandler.channel;
+
   // Create a new SLVrfRegMsg batch
   vrfhandler.vrfRegMsgAdd("default", 99, 500);
 
