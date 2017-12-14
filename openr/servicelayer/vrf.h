@@ -92,6 +92,8 @@ public:
     service_layer::SLVrfRegMsg vrf_msg;
     service_layer::SLVrfRegMsgRsp vrf_msg_resp;
 
+    void vrfRegMsgAdd(std::string vrfName);
+
     void vrfRegMsgAdd(std::string vrfName,
                       unsigned int adminDistance,
                       unsigned int vrfPurgeIntervalSeconds);
@@ -114,6 +116,8 @@ public:
     void SendInitMsg(const service_layer::SLInitMsg init_msg);
 
     void AsyncCompleteRpc();
+
+    void Shutdown();
 
 private:
     // Out of the passed in Channel comes the stub, stored here, our view of the

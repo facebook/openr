@@ -229,7 +229,20 @@ void RShuttle::routev6Op(unsigned int timeout)
 SLVrf::SLVrf(std::shared_ptr<grpc::Channel> Channel)
     : channel(Channel) {}
 
+// Overloaded variant of vrfRegMsgAdd with adminDistance and Purgeinterval, suitable
+// Suitable for VRF UNREGISTER and REGISTER operations
 
+void SLVrf::vrfRegMsgAdd(std::string vrfName) {
+
+    // Get a pointer to a new vrf_reg entry in vrf_msg
+    service_layer::SLVrfReg* vrf_reg = vrf_msg.add_vrfregmsgs();
+
+    // Populate the new vrf_reg entry
+    vrf_reg->set_vrfname(vrfName);
+}
+
+// Overloaded variant of vrfRegMsgAdd with adminDistance and Purgeinterval, suitable
+// for VRF REGISTER
 
 void SLVrf::vrfRegMsgAdd(std::string vrfName,
                          unsigned int adminDistance,
@@ -287,10 +300,10 @@ void SLVrf::unregisterVrf(unsigned int addrFamily) {
 
     switch(addrFamily) {
     case AF_INET:
-        std::cout << "IPv6 VRF Operation" << std::endl;
+        std::cout << "IPv4 VRF Operation" << std::endl;
 
         vrf_op = service_layer::SL_REGOP_UNREGISTER;
-        vrfOpv6();
+        vrfOpv4();
             
         break;
 
@@ -388,7 +401,7 @@ void SLVrf::vrfOpv6() {
     status = stub_->SLRoutev6VrfRegOp(&context, vrf_msg, &vrf_msg_resp);
 
     if (status.ok()) {
-        std::cout << "RPC call was successful, checking response...";
+        std::cout << "RPC call was successful, checking response..." << std::endl;
         if (vrf_msg_resp.statussummary().status() ==
                service_layer::SLErrorStatus_SLErrno_SL_SUCCESS) {
             std::cout << "IPv6 Vrf Operation: "<< vrf_op << " successful" << std::endl;
@@ -426,6 +439,10 @@ void AsyncNotifChannel::SendInitMsg(const service_layer::SLInitMsg init_msg) {
     //std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::service_layer::SLGlobalNotif>> response_reader;
 
     call->response_reader = stub_->AsyncSLGlobalInitNotif(&call->context, init_msg, &cq_, (void *)call);
+}
+
+void AsyncNotifChannel::Shutdown() {
+     cq_.Shutdown(); 
 }
 
 // Loop while listening for completed responses.
