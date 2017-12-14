@@ -526,7 +526,7 @@ NetlinkRouteSocket::doAddUnicastRouteV4(
   auto newNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
   for (auto const& nextHop : nextHops) {
     CHECK(nextHop.second.isV4());
-    LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << std::get<0>(nextHop).c_str();
+    LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
     newNextHops.insert(nextHop);
     // Create a path list
 
