@@ -438,7 +438,7 @@ void AsyncNotifChannel::SendInitMsg(const service_layer::SLInitMsg init_msg) {
 }
 
 void AsyncNotifChannel::Shutdown() {
-    tear_down = true; 
+   tear_down = true; 
 }
 
 // Loop while listening for completed responses.

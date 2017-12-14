@@ -40,6 +40,12 @@ REDISTRIBUTE_IFACES="lo1"
 # dryrun => Do not program routes in dryrun mode
 DRYRUN=false
 
+# IOS-XR IP address for Service Layer Access
+IOSXR_SLAPI_IP="127.0.0.1"
+
+# IOS-XR gRPC port for Service Layer Access
+IOSXR_SLAPI_PORT="57777"
+
 # Enable RTT metric on links. RTTs are computed dynamically and then used as
 # cost for links. If disabled then hop count will be used as a cost of path
 ENABLE_RTT_METRIC=true
@@ -53,7 +59,7 @@ HEALTH_CHECKER_PING_INTERVAL_S=3
 
 # Interface prefixes to perform neighbor discovery on. All interfaces whose
 # names start with these are used for neighbor discovery
-IFACE_PREFIXES="enp"
+IFACE_PREFIXES="Gi,enp"
 
 # Logging verbosity
 VERBOSITY=1
@@ -145,5 +151,7 @@ exec ${OPENR} \
   --logbufsecs=0 \
   --max_log_size=1 \
   --v=${VERBOSITY} \
-  --fib_agent_port=${FIB_HANDLER_PORT} \
+  --iosxr_slapi_port=${IOSXR_SLAPI_PORT} \
+  --iosxr_slapi_ip=${IOSXR_SLAPI_IP} \
+  --fib_agent_port=${FIB_HANDLER_PORT}
   "$@"

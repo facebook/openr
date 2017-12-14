@@ -530,7 +530,24 @@ NetlinkRouteSocket::doAddUnicastRouteV4(
     newNextHops.insert(nextHop);
     // Create a path list
 
-    rshuttle.routev4PathAdd(routev4_ptr, folly::IPAddressV4::toLongHBO(std::get<1>(nextHop).str()), "GigabitEthernet0/0/0/0");
+    std::string xr_lnx_if = std::get<0>(nextHop).c_str();
+    std::string xr_if;
+ 
+    if (xr_lnx_if == "Gi0_0_0_0") {
+        xr_if = "GigabitEthernet0/0/0/0";
+    } else if (xr_lnx_if == "Gi0_0_0_1") {
+        xr_if = "GigabitEthernet0/0/0/1";
+    } else if (xr_lnx_if == "Gi0_0_0_2") {
+        xr_if = "GigabitEthernet0/0/0/2";
+    } else if (xr_lnx_if == "enp0s8") {
+        xr_if = "GigabitEthernet0/0/0/0";
+    } else if (xr_lnx_if == "enp0s9") {
+        xr_if = "GigabitEthernet0/0/0/1";
+    } else if (xr_lnx_if == "enp0s10") {
+        xr_if = "GigabitEthernet0/0/0/2";
+    }
+
+    rshuttle.routev4PathAdd(routev4_ptr, folly::IPAddressV4::toLongHBO(std::get<1>(nextHop).str()), xr_if);
     rshuttle.routev4Op();
 
 

@@ -246,6 +246,15 @@ DEFINE_int32(
     250,
     "Decision debounce time to update spf in frequent adj db update "
     "(in milliseconds)");
+DEFINE_string(
+    iosxr_slapi_ip,
+    "127.0.0.1",
+    "IP address of SL-API gRPC server running in IOS-XR for RIB programming");
+DEFINE_string(
+    iosxr_slapi_port,
+    "57777",
+    "gRPC TCP port for IOS-XR SL-API");
+
 
 using namespace fbzmq;
 using namespace openr;
@@ -284,6 +293,9 @@ main(int argc, char** argv) {
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   syslog(LOG_NOTICE, "Starting OpenR daemon.");
+
+  for(int i = 0; i < argc; ++i)
+        std::cout << argv[i] << '\n';
 
   // Initialize all params
   folly::init(&argc, &argv);
@@ -390,7 +402,8 @@ main(int argc, char** argv) {
 
 
   AsyncNotifChannel asynchandler(grpc::CreateChannel(
-                            "14.1.1.20:57777", grpc::InsecureChannelCredentials()));
+                            folly::sformat(
+          "{}:{}", FLAGS_iosxr_slapi_ip, FLAGS_iosxr_slapi_port), grpc::InsecureChannelCredentials()));
   // Acquire the lock
   std::unique_lock<std::mutex> mlock(m_mutex);
 
@@ -413,7 +426,8 @@ main(int argc, char** argv) {
   }
 
   SLVrf vrfhandler(grpc::CreateChannel(
-                          "14.1.1.20:57777", grpc::InsecureChannelCredentials()));
+                   folly::sformat(
+          "{}:{}", FLAGS_iosxr_slapi_ip, FLAGS_iosxr_slapi_port), grpc::InsecureChannelCredentials()));
 
   // Store for later usage
   route_channel = vrfhandler.channel;
