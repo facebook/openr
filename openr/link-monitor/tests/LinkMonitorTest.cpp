@@ -435,7 +435,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
   checkNextAdjPub(std::string const& key) {
     CHECK(!expectedAdjDbs.empty());
 
-    VLOG(1) << "***** Expecting Adjacency DB *****";
     printAdjDb(expectedAdjDbs.front());
 
     while (true) {
@@ -453,7 +452,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
       auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
           value->value.value(), serializer);
-      LOG(INFO) << "******* Received *******";
       printAdjDb(adjDb);
 
       // we can not know what the nodeLabel will be
@@ -486,7 +484,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
   void
   checkNextIntfPub(
       std::string const& key, thrift::InterfaceDatabase const& expectedIntfDb) {
-    VLOG(1) << "***** Expecting Interface DB *****";
     printIntfDb(expectedIntfDb);
 
     while (true) {
@@ -1149,8 +1146,8 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       PersistentStoreUrl{kConfigStoreUrl},
       PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
       PlatformPublisherUrl{"inproc://platform-pub-url"},
-      LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url"},
-      LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url"},
+      LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
+      LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url2"},
       std::chrono::seconds(1),
       // link flap backoffs, set high backoffs for this test
       std::chrono::milliseconds(1500),
