@@ -56,15 +56,21 @@ VERBOSITY=1
 #
 # Load custom configuration if any!
 #
-
 OPENR_CONFIG="/etc/sysconfig/openr"
-source ${OPENR_CONFIG}
-if [ $? -eq 0 ]; then
+if [ ! -z "$1" ]; then
+  if [ "$1" = "--help" ]; then
+    echo "USAGE: run_openr.sh [config_file_path]"
+    echo "If config_file_path is not provided, we will source the one at /etc/sysconfig/openr"
+    exit 1
+  fi
+  OPENR_CONFIG=$1
+fi
+
+if source "${OPENR_CONFIG}"; then
   echo "Using OpenR config parameters from ${OPENR_CONFIG}"
 else
   echo "Configuration not found at ${OPENR_CONFIG}. Using default configuration"
 fi
-
 #
 # Some sanity checks before we start OpenR
 #
