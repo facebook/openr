@@ -57,13 +57,20 @@ VERBOSITY=1
 # Load custom configuration if any!
 #
 OPENR_CONFIG="/etc/sysconfig/openr"
+OPENR_ARGS="$*"
 if [ ! -z "$1" ]; then
   if [ "$1" = "--help" ]; then
-    echo "USAGE: run_openr.sh [config_file_path]"
-    echo "If config_file_path is not provided, we will source the one at /etc/sysconfig/openr"
+    echo "USAGE: run_openr.sh [config_file_path] [openr_flags]"
+    echo "If config_file_path is not provided, we will source the one at \
+/etc/sysconfig/openr"
+    echo "If openr_flags are provided, they will be passed along to openr and \
+override any passed by this script"
     exit 1
   fi
-  OPENR_CONFIG=$1
+  if [ -f "$1" ]; then
+    OPENR_CONFIG=$1
+    OPENR_ARGS="${*:2}"
+  fi
 fi
 
 if source "${OPENR_CONFIG}"; then
@@ -116,4 +123,4 @@ exec ${OPENR} \
   --logtostderr \
   --max_log_size=1 \
   --v=${VERBOSITY} \
-  "$@"
+  "${OPENR_ARGS}"

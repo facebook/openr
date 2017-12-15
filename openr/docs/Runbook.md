@@ -58,6 +58,14 @@ Run OpenR
 $ run_openr.sh
 ```
 
+You can also pass in a custom configuration file and override/add openr flags:
+```
+$ run_openr.sh --help
+USAGE: run_openr.sh [config_file_path] [openr_flags]
+If config_file_path is not provided, we will source the one at /etc/sysconfig/openr
+If openr_flags are provided, they will be passed along to openr and override any passed by this script
+```
+
 ### Running as a Daemon
 ---
 
