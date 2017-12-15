@@ -155,6 +155,7 @@ Fib::prepare() noexcept {
         serializer_, Constants::kReadTimeout);
     if (maybeThriftObj.hasError()) {
       LOG(ERROR) << "Error processing Fib Request: " << maybeThriftObj.error();
+      fibRep_.sendOne(fbzmq::Message::from(Constants::kErrorResponse).value());
       return;
     }
 
