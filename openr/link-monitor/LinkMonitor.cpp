@@ -128,12 +128,14 @@ LinkMonitor::LinkMonitor(
       // mutable states
       flapInitialBackoff_(flapInitialBackoff),
       flapMaxBackoff_(flapMaxBackoff),
-      linkMonitorPubSock_(zmqContext),
+      linkMonitorPubSock_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       linkMonitorCmdSock_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       sparkCmdSock_(zmqContext),
       sparkReportSock_(zmqContext),
-      nlEventSub_(zmqContext),
+      nlEventSub_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(kMinIfSyncBackOff, kMaxIfSyncBackOff) {
   // Create throttled adjacency advertiser
   advertiseMyAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
@@ -1147,7 +1149,7 @@ LinkMonitor::processCommand() {
   // read actual request
   const auto maybeReq =
       linkMonitorCmdSock_.recvThriftObj<thrift::LinkMonitorRequest>(
-          serializer_, Constants::kReadTimeout);
+          serializer_);
   if (maybeReq.hasError()) {
     LOG(ERROR) << "Error receiving LinkMonitorRequest: " << maybeReq.error();
     return;
@@ -1261,8 +1263,12 @@ LinkMonitor::processCommand() {
         folly::gen::as<
             std::unordered_map<std::string, thrift::InterfaceDetails>>();
 
-    linkMonitorCmdSock_.sendMore(clientIdMessage);
-    linkMonitorCmdSock_.sendThriftObj(reply, serializer_);
+    auto ret = linkMonitorCmdSock_.sendMultiple(
+        clientIdMessage,
+        fbzmq::Message::fromThriftObj(reply, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending response. " << ret.error();
+    }
     break;
   }
 

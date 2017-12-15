@@ -39,7 +39,8 @@ HealthChecker::HealthChecker(
       pingInterval_(pingInterval),
       adjacencyDbMarker_(adjacencyDbMarker),
       prefixDbMarker_(prefixDbMarker),
-      repSock_{zmqContext} {
+      repSock_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
   // Sanity check on healthCheckPct validation
   if (healthCheckPct_ > 100) {
     LOG(FATAL) << "Invalid healthCheckPct value: " << healthCheckPct_
@@ -369,7 +370,7 @@ HealthChecker::processMessage() {
 void
 HealthChecker::processRequest() {
   auto maybeThriftReq = repSock_.recvThriftObj<thrift::HealthCheckerRequest>(
-      serializer_, Constants::kReadTimeout);
+      serializer_);
   if (maybeThriftReq.hasError()) {
     LOG(ERROR) << "HealthChecker: Error processing request on REP socket: "
                << maybeThriftReq.error();

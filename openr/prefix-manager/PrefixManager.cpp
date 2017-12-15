@@ -35,8 +35,10 @@ PrefixManager::PrefixManager(
     bool enablePerfMeasurement,
     fbzmq::Context& zmqContext)
     : nodeId_{nodeId},
-      globalCmdSock_{zmqContext, folly::none, keyPair},
-      localCmdSock_{zmqContext},
+      globalCmdSock_(
+          zmqContext, folly::none, keyPair, fbzmq::NonblockingFlag{true}),
+      localCmdSock_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       configStoreClient_{persistentStoreUrl, zmqContext},
       prefixDbMarker_{prefixDbMarker},
       enablePerfMeasurement_{enablePerfMeasurement},
@@ -188,8 +190,13 @@ PrefixManager::processRequest(
   }
   }
 
-  cmdSock.sendMultipleMore(requestIdMsg, delimMsg);
-  cmdSock.sendThriftObj(response, serializer_);
+  auto sndRet = cmdSock.sendMultiple(
+      requestIdMsg,
+      delimMsg,
+      fbzmq::Message::fromThriftObj(response, serializer_).value());
+  if (sndRet.hasError()) {
+    LOG(ERROR) << "Error sending response. " << sndRet.error();
+  }
 }
 
 // helpers for modifying our Prefix Db

@@ -29,7 +29,8 @@ PlatformPublisher::PlatformPublisher(
     fbzmq::Context& context, const PlatformPublisherUrl& platformPubUrl)
     : platformPubUrl_(platformPubUrl) {
   // Initialize ZMQ sockets
-  platformPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(context);
+  platformPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
+      context, folly::none, folly::none, fbzmq::NonblockingFlag{true});
   VLOG(2) << "Platform Publisher: Binding pub url '" << platformPubUrl_ << "'";
   const auto platformPub =
       platformPubSock_.bind(fbzmq::SocketUrl{platformPubUrl_});

@@ -52,20 +52,24 @@ KvStore::KvStore(
       peers_(std::move(peers)),
       // initialize zmq sockets
       localPubSock_{zmqContext},
-      peerSubSock_{zmqContext,
-                   fbzmq::IdentityString{folly::sformat(
-                       Constants::kGlobalSubIdTemplate, nodeId_)},
-                   keyPair},
-      localCmdSock_{zmqContext,
-                    fbzmq::IdentityString{folly::sformat(
-                        Constants::kLocalCmdIdTemplate, nodeId_)},
-                    keyPair,
-                    fbzmq::NonblockingFlag{true}},
-      peerSyncSock_{zmqContext,
-                    fbzmq::IdentityString{folly::sformat(
-                        Constants::kPeerSyncIdTemplate, nodeId_)},
-                    keyPair,
-                    fbzmq::NonblockingFlag{true}} {
+      peerSubSock_(
+          zmqContext,
+          fbzmq::IdentityString{folly::sformat(
+              Constants::kGlobalSubIdTemplate, nodeId_)},
+          keyPair,
+          fbzmq::NonblockingFlag{true}),
+      localCmdSock_(
+          zmqContext,
+          fbzmq::IdentityString{folly::sformat(
+              Constants::kLocalCmdIdTemplate, nodeId_)},
+          keyPair,
+          fbzmq::NonblockingFlag{true}),
+      peerSyncSock_(
+          zmqContext,
+          fbzmq::IdentityString{folly::sformat(
+              Constants::kPeerSyncIdTemplate, nodeId_)},
+          keyPair,
+          fbzmq::NonblockingFlag{true}) {
   CHECK(not nodeId_.empty());
   CHECK(not localPubUrl_.empty());
   CHECK(not globalPubUrl_.empty());

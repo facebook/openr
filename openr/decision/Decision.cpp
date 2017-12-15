@@ -852,9 +852,12 @@ Decision::Decision(
       storePubUrl_(storePubUrl),
       decisionCmdUrl_(decisionCmdUrl),
       decisionPubUrl_(decisionPubUrl),
-      storeSub_(zmqContext),
-      decisionRep_(zmqContext),
-      decisionPub_(zmqContext) {
+      storeSub_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
+      decisionRep_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
+      decisionPub_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
   processPendingUpdatesTimer_ = fbzmq::ZmqTimeout::make(
       this, [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(enableV4);
@@ -916,7 +919,7 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
         VLOG(3) << "Decision: publication received...";
 
         auto maybeThriftPub = storeSub_.recvThriftObj<thrift::Publication>(
-            serializer_, Constants::kReadTimeout);
+            serializer_);
         if (maybeThriftPub.hasError()) {
           LOG(ERROR) << "Error processing KvStore publication: "
                      << maybeThriftPub.error();
@@ -949,7 +952,7 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
 void
 Decision::processRequest() {
   auto maybeThriftReq = decisionRep_.recvThriftObj<thrift::DecisionRequest>(
-      serializer_, Constants::kReadTimeout);
+      serializer_);
   if (maybeThriftReq.hasError()) {
     LOG(ERROR) << "Decision: Error processing request on REP socket: "
                << maybeThriftReq.error();
