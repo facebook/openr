@@ -53,7 +53,6 @@ class Fib final : public fbzmq::ZmqEventLoop {
       bool dryrun,
       std::chrono::seconds coldStartDuration,
       const DecisionPubUrl& decisionPubUrl,
-      const DecisionCmdUrl& decisionCmdUrl,
       const FibCmdUrl& fibRepUrl,
       const LinkMonitorGlobalPubUrl& linkMonPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
@@ -153,13 +152,11 @@ class Fib final : public fbzmq::ZmqEventLoop {
 
   // ZMQ sockets for communication with Decision and LinkMonitor modules
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> decisionSub_;
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> decisionReq_;
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> fibRep_;
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> linkMonSub_;
 
   // ZMQ socket urls
   const std::string decisionPubUrl_;
-  const std::string decisionRepUrl_;
   const std::string fibRepUrl_;
   const std::string linkMonPubUrl_;
 

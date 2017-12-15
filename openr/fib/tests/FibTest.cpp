@@ -96,7 +96,6 @@ class FibTestFixture : public ::testing::Test {
         false, /* dryrun */
         std::chrono::seconds(2),
         DecisionPubUrl{"inproc://decision-pub"},
-        DecisionCmdUrl{"inproc://decision-cmd"},
         FibCmdUrl{"inproc://fib-cmd"},
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},

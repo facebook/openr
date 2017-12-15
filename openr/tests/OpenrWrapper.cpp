@@ -231,7 +231,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       true, // dry run mode
       fibColdStartDuration,
       DecisionPubUrl{decisionPubUrl_},
-      DecisionCmdUrl{decisionCmdUrl_},
       FibCmdUrl{fibCmdUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},

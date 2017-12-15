@@ -684,7 +684,6 @@ main(int argc, char** argv) {
       FLAGS_dryrun,
       std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
       DecisionPubUrl{folly::sformat("tcp://[::1]:{}", FLAGS_decision_pub_port)},
-      DecisionCmdUrl{folly::sformat("tcp://[::1]:{}", FLAGS_decision_rep_port)},
       FibCmdUrl{
           folly::sformat("tcp://{}:{}", FLAGS_listen_addr, FLAGS_fib_rep_port)},
       LinkMonitorGlobalPubUrl{

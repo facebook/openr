@@ -27,7 +27,6 @@ Fib::Fib(
     bool dryrun,
     std::chrono::seconds coldStartDuration,
     const DecisionPubUrl& decisionPubUrl,
-    const DecisionCmdUrl& decisionRepUrl,
     const FibCmdUrl& fibRepUrl,
     const LinkMonitorGlobalPubUrl& linkMonPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
@@ -35,12 +34,13 @@ Fib::Fib(
     : myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),
-      decisionSub_(zmqContext),
-      decisionReq_(zmqContext),
-      fibRep_(zmqContext),
-      linkMonSub_(zmqContext),
+      decisionSub_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
+      fibRep_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
+      linkMonSub_(
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       decisionPubUrl_(std::move(decisionPubUrl)),
-      decisionRepUrl_(std::move(decisionRepUrl)),
       fibRepUrl_(std::move(fibRepUrl)),
       linkMonPubUrl_(std::move(linkMonPubUrl)),
       expBackoff_(
@@ -96,14 +96,6 @@ Fib::prepare() noexcept {
     LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
                << ""
                << " " << decisionSubOpt.error();
-  }
-
-  VLOG(2) << "Fib: Connecting to decision module '" << decisionRepUrl_ << "'";
-  const auto reqConnect =
-      decisionReq_.connect(fbzmq::SocketUrl{decisionRepUrl_});
-  if (reqConnect.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << decisionRepUrl_ << "' "
-               << reqConnect.error();
   }
 
   VLOG(2) << "Fib: Binding to rep url '" << fibRepUrl_ << "'";
