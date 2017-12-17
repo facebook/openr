@@ -268,6 +268,7 @@ add_library(openrlib
   spark/IoProvider.cpp
   spark/SparkWrapper.cpp
   spark/Spark.cpp
+  watchdog/Watchdog.cpp
   $<TARGET_OBJECTS:AllocPrefix-cpp2-obj>
   $<TARGET_OBJECTS:Decision-cpp2-obj>
   $<TARGET_OBJECTS:Fib-cpp2-obj>
@@ -476,6 +477,11 @@ install(FILES
   spark/SparkWrapper.h
   spark/Spark.h
   DESTINATION include/openr/spark
+)
+
+install(FILES
+  watchdog/Watchdog.h
+  DESTINATION include/openr/watchdog
 )
 
 install(FILES

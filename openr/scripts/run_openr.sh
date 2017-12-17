@@ -39,6 +39,7 @@ ENABLE_PERF_MEASUREMENT=true
 ENABLE_PREFIX_ALLOC=false
 ENABLE_RTT_METRIC=true
 ENABLE_V4=false
+ENABLE_WATCHDOG=true
 FIB_HANDLER_PORT=60100
 HEALTH_CHECKER_PING_INTERVAL_S=3
 IFACE_PREFIXES="terra,nic1,nic2"
@@ -119,6 +120,7 @@ exec ${OPENR} \
   --spark_hold_time_s=${SPARK_HOLD_TIME_S} \
   --spark_keepalive_time_s=${SPARK_KEEPALIVE_TIME_S} \
   --use_rtt_metric=${ENABLE_RTT_METRIC} \
+  --enable_watchdog=${ENABLE_WATCHDOG} \
   --logbufsecs=0 \
   --logtostderr \
   --max_log_size=1 \

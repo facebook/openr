@@ -40,6 +40,7 @@
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
+#include <openr/watchdog/Watchdog.h>
 
 DEFINE_int32(
     kvstore_pub_port,
@@ -245,6 +246,13 @@ DEFINE_int32(
     250,
     "Decision debounce time to update spf in frequent adj db update "
     "(in milliseconds)");
+DEFINE_bool(
+    enable_watchdog,
+    true,
+    "Enable watchdog thread to periodically check aliveness counters from each "
+    "openr thread, if unhealthy thread is detected, force crash openr");
+DEFINE_int32(watchdog_interval_s, 20, "Watchdog thread healthcheck interval");
+DEFINE_int32(watchdog_threshold_s, 300, "Watchdog thread aliveness threshold");
 
 using namespace fbzmq;
 using namespace openr;
@@ -344,6 +352,24 @@ main(int argc, char** argv) {
     tmpSock.bind(SocketUrl{"ipc://*"}).value();
   }
   folly::setThreadName("openr");
+
+  // Watchdog thread to monitor thread aliveness
+  std::unique_ptr<Watchdog> watchdog{nullptr};
+  if (FLAGS_enable_watchdog) {
+    watchdog = std::make_unique<Watchdog>(
+      FLAGS_node_name,
+      std::chrono::seconds(FLAGS_watchdog_interval_s),
+      std::chrono::seconds(FLAGS_watchdog_threshold_s));
+
+    // Spawn a watchdog thread
+    allThreads.emplace_back(std::thread([&watchdog]() noexcept {
+      LOG(INFO) << "Starting Watchdog thread ...";
+      folly::setThreadName("Watchdog");
+      watchdog->run();
+      LOG(INFO) << "Watchdog thread got stopped.";
+    }));
+    watchdog->waitUntilRunning();
+  }
 
   // Start NetlinkFibHandler if specified
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
@@ -456,6 +482,7 @@ main(int argc, char** argv) {
   });
   store.waitUntilRunning();
   allThreads.emplace_back(std::move(kvStoreThread));
+  watchdog->addEvl(&store, "KvStore");
 
   // start prefix manager
   PrefixManager prefixManager(
@@ -477,6 +504,7 @@ main(int argc, char** argv) {
     prefixManager.run();
     LOG(INFO) << "PrefixManager thread got stopped.";
   }));
+  watchdog->addEvl(&prefixManager, "PrefixManager");
   prefixManager.waitUntilRunning();
 
   // Prefix Allocator to automatically allocate prefixes for nodes
@@ -509,6 +537,7 @@ main(int argc, char** argv) {
       prefixAllocator->run();
       LOG(INFO) << "PrefixAllocator thread got stopped.";
     }));
+    watchdog->addEvl(prefixAllocator.get(), "PrefixAllocator");
     prefixAllocator->waitUntilRunning();
   }
 
@@ -544,6 +573,7 @@ main(int argc, char** argv) {
   });
   spark.waitUntilRunning();
   allThreads.emplace_back(std::move(sparkThread));
+  watchdog->addEvl(&spark, "Spark");
 
   // Static list of prefixes to announce into the network as long as OpenR is
   // running.
@@ -647,6 +677,7 @@ main(int argc, char** argv) {
   });
   linkMonitor.waitUntilRunning();
   allThreads.emplace_back(std::move(linkMonitorThread));
+  watchdog->addEvl(&linkMonitor, "LinkMonitor");
 
   // Wait for the above two threads to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module
@@ -676,6 +707,7 @@ main(int argc, char** argv) {
   });
   decision.waitUntilRunning();
   allThreads.emplace_back(std::move(decisionThread));
+  watchdog->addEvl(&decision, "Decision");
 
   // Define and start Fib Module
   Fib fib(
@@ -699,6 +731,7 @@ main(int argc, char** argv) {
     LOG(INFO) << "FIB thread got stopped.";
   }));
   fib.waitUntilRunning();
+  watchdog->addEvl(&fib, "Fib");
 
   // Define and start HealthChecker
   std::unique_ptr<HealthChecker> healthChecker{nullptr};
@@ -725,6 +758,7 @@ main(int argc, char** argv) {
       LOG(INFO) << "HealthChecker thread got stopped.";
     }));
     healthChecker->waitUntilRunning();
+    watchdog->addEvl(healthChecker.get(), "HealthChecker");
   }
 
   LOG(INFO) << "Starting main event loop...";
@@ -761,6 +795,10 @@ main(int argc, char** argv) {
   }
   if (netlinkSystemServer) {
     netlinkSystemServer->stop();
+  }
+  if (watchdog) {
+    watchdog->stop();
+    watchdog->waitUntilStopped();
   }
 
   // Wait for all threads to finish
