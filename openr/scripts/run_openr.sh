@@ -125,4 +125,4 @@ exec ${OPENR} \
   --logtostderr \
   --max_log_size=1 \
   --v=${VERBOSITY} \
-  "${OPENR_ARGS}"
+  ${OPENR_ARGS}
