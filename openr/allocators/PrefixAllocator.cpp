@@ -198,7 +198,7 @@ PrefixAllocator::getMyPrefixIndexFromKvStore() {
 }
 
 folly::Optional<uint32_t>
-PrefixAllocator::loadPrefixFromDisk() const {
+PrefixAllocator::loadPrefixFromDisk() {
   CHECK(seedPrefix_) << "Seed prefix is not set";
   auto maybeThriftAllocPrefix =
       configStoreClient_.loadThriftObj<thrift::AllocPrefix>(kConfigKey);

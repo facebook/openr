@@ -21,11 +21,17 @@ PersistentStore::PersistentStore(
     const PersistentStoreUrl& socketUrl,
     fbzmq::Context& context)
     : storageFilePath_(storageFilePath),
-      repSocket_(context),
+      repSocket_(
+          context, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       saveDbTimerBackoff_(100ms, 5s) {
   // Bind rep socket
-  VLOG(3) << "PersistentStore: Binding server socket.";
-  repSocket_.bind(fbzmq::SocketUrl(socketUrl));
+  VLOG(3) << "PersistentStore: Binding server socket on url "
+          << static_cast<std::string>(socketUrl);
+  auto bindRet = repSocket_.bind(fbzmq::SocketUrl(socketUrl));
+  if (bindRet.hasError()) {
+    LOG(FATAL) << "Error binding socket url "
+               << static_cast<std::string>(socketUrl);
+  }
 
   eventLoop_.addSocket(
       fbzmq::RawZmqSocketPtr{*repSocket_},
@@ -71,14 +77,19 @@ PersistentStore::stop() {
 
 void
 PersistentStore::processRequest() {
+  thrift::StoreResponse response;
   auto request = repSocket_.recvThriftObj<thrift::StoreRequest>(serializer_);
   if (request.hasError()) {
     LOG(ERROR) << "Error while reading request " << request.error();
+    response.success = false;
+    auto ret = repSocket_.sendThriftObj(response, serializer_);
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error while sending response " << ret.error();
+    }
     return;
   }
 
   // Generate response
-  thrift::StoreResponse response;
   response.key = request->key;
   switch (request->requestType) {
   case thrift::StoreRequestType::STORE: {
@@ -106,7 +117,10 @@ PersistentStore::processRequest() {
   }
 
   // Send response
-  repSocket_.sendThriftObj(response, serializer_);
+  auto ret = repSocket_.sendThriftObj(response, serializer_);
+  if (ret.hasError()) {
+    LOG(ERROR) << "Error while sending response " << ret.error();
+  }
 
   // Schedule database save
   if (response.success and not saveDbTimer_->isScheduled()) {

@@ -29,7 +29,7 @@ class PersistentStoreClient {
 
   template <typename ThriftType>
   folly::Expected<bool, fbzmq::Error>
-  storeThriftObj(std::string const& key, ThriftType const& value) const
+  storeThriftObj(std::string const& key, ThriftType const& value)
       noexcept {
     auto msg = fbzmq::Message::fromThriftObj(value, serializer_);
     return storeInternal(
@@ -40,7 +40,7 @@ class PersistentStoreClient {
 
   template <typename ThriftType>
   folly::Expected<ThriftType, fbzmq::Error>
-  loadThriftObj(std::string const& key) const noexcept {
+  loadThriftObj(std::string const& key) noexcept {
     auto data = loadInternal(key);
     if (data.hasValue()) {
       auto thriftObj = fbzmq::Message::from(*data);
@@ -104,12 +104,18 @@ class PersistentStoreClient {
   // Internal implementation of load/store
   //
   folly::Expected<bool, fbzmq::Error> storeInternal(
-      std::string const& key, std::string const& data) const noexcept;
+      std::string const& key, std::string const& data) noexcept;
   folly::Expected<std::string, fbzmq::Error> loadInternal(
-      std::string const& key) const noexcept;
+      std::string const& key) noexcept;
+
+  // Internal method to create socket lazily and perform send/recv
+  folly::Expected<thrift::StoreResponse, fbzmq::Error> requestReply(
+      thrift::StoreRequest const& request) noexcept;
 
   // Socket for communicating with storage module
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSocket_;
+  fbzmq::Context& context_;
+  const PersistentStoreUrl reqSocketUrl_;
+  std::unique_ptr<fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>> reqSocket_;
 
   // ThriftSerializer for send/recv of thrift objects over reqSocket_
   apache::thrift::CompactSerializer serializer_;

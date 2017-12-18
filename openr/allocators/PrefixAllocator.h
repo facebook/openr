@@ -80,7 +80,7 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
   void initMyPrefix();
 
   // load prefix from disk
-  folly::Optional<uint32_t> loadPrefixFromDisk() const;
+  folly::Optional<uint32_t> loadPrefixFromDisk();
 
   // save newly elected prefix to disk
   void savePrefixToDisk(folly::Optional<uint32_t> prefixIndex);
