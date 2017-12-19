@@ -137,33 +137,40 @@ class PathCmd(DecisionCmd):
         ''' create a map from interface to node '''
 
         def _parse(if2node, adj_db):
+            nexthop_dict = if2node[adj_db.thisNodeName]
             for adj in adj_db.adjacencies:
-                if2node[adj_db.thisNodeName][adj.ifName] = adj.otherNodeName
+                nh6_addr = utils.sprint_addr(adj.nextHopV6.addr)
+                nh4_addr = utils.sprint_addr(adj.nextHopV4.addr)
+                nexthop_dict[(adj.ifName, nh6_addr)] = adj.otherNodeName
+                nexthop_dict[(adj.ifName, nh4_addr)] = adj.otherNodeName
 
         if2node = defaultdict(dict)
         self.iter_dbs(if2node, adj_dbs, ["all"], _parse)
         return if2node
 
-    def get_lpm_routes(self, route_db, dst_addr):
+    def get_lpm_route(self, route_db, dst_addr):
         ''' find the routes to the longest prefix matches of dst. '''
 
-        max_prefix_len = 0
-        lpm_routes = []
+        max_prefix_len = -1
+        lpm_route = None
         for route in route_db.routes:
             if IPNetwork(utils.sprint_prefix(route.prefix)).Contains(
                     IPAddress(dst_addr)):
                 next_hop_prefix_len = route.prefix.prefixLength
                 if next_hop_prefix_len == max_prefix_len:
-                    lpm_routes.append(route)
+                    raise Exception('Duplicate prefix found in routing table {}'
+                                    .format(utils.sprint_prefix(route.prefix)))
                 elif next_hop_prefix_len > max_prefix_len:
-                    lpm_routes = [route]
+                    lpm_route = route
                     max_prefix_len = next_hop_prefix_len
 
-        return lpm_routes
+        return lpm_route
 
     def get_lpm_len_from_node(self, node, dst_addr, prefix_dbs):
-        ''' return the longest prefix match of dst_addr in node's advertising
-        prefix pool '''
+        '''
+        return the longest prefix match of dst_addr in node's
+        advertising prefix pool
+        '''
 
         cur_lpm_len = 0
         for cur_prefix in self.get_node_prefixes(prefix_dbs, node):
@@ -181,9 +188,8 @@ class PathCmd(DecisionCmd):
         next_hop_nodes = []
         is_initialized = fib_routes[route_db.thisNodeName]
 
-        for lpm_route in self.get_lpm_routes(route_db, dst_addr):
-            if lpm_route.prefix.prefixLength <= cur_lpm_len:
-                continue
+        lpm_route = self.get_lpm_route(route_db, dst_addr)
+        if lpm_route and lpm_route.prefix.prefixLength >= cur_lpm_len:
             if in_fib and not is_initialized:
                 fib_routes[route_db.thisNodeName].extend(
                     self.get_fib_path(
@@ -192,11 +198,18 @@ class PathCmd(DecisionCmd):
                         self.fib_agent_port,
                         self.timeout))
 
-            for path in lpm_route.paths:
+            min_cost = min([p.metric for p in lpm_route.paths])
+            for path in [p for p in lpm_route.paths if p.metric == min_cost]:
                 if len(path.nextHop.addr) == 16:
-                    next_hop_node_name = if2node[route_db.thisNodeName][path.ifName]
-                    next_hop_nodes.append([next_hop_node_name, path.ifName, path.metric,
-                                           utils.sprint_addr(path.nextHop.addr)])
+                    nh_addr = utils.sprint_addr(path.nextHop.addr)
+                    next_hop_node_name = \
+                        if2node[route_db.thisNodeName][(path.ifName, nh_addr)]
+                    next_hop_nodes.append([
+                        next_hop_node_name,
+                        path.ifName,
+                        path.metric,
+                        nh_addr,
+                    ])
 
         return next_hop_nodes
 
@@ -244,9 +257,13 @@ class PathCmd(DecisionCmd):
                 return
 
             cur_lpm_len = self.get_lpm_len_from_node(cur, dst_addr, prefix_dbs)
-            next_hop_nodes = self.get_nexthop_nodes(client.get_route_db(cur),
-                                                    dst_addr, cur_lpm_len, if2node,
-                                                    fib_routes, in_fib)
+            next_hop_nodes = self.get_nexthop_nodes(
+                client.get_route_db(cur),
+                dst_addr,
+                cur_lpm_len,
+                if2node,
+                fib_routes,
+                in_fib)
 
             if len(next_hop_nodes) == 0:
                 if hop != 1:
