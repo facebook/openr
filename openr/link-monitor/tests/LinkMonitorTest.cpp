@@ -1602,8 +1602,6 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   mockNlHandler->sendLinkEvent("loopback", 101, true);
   mockNlHandler->sendAddrEvent("loopback", "fe80::1/128", true);
   mockNlHandler->sendAddrEvent("loopback", "fe80::2/64", true);
-  mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958::/64", true);
-  mockNlHandler->sendAddrEvent("loopback", "10.192.240.0/24", true);
 
   // push some valid loopback addresses
   mockNlHandler->sendAddrEvent("loopback", "10.127.240.1/32", true);

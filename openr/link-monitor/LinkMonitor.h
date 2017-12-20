@@ -212,6 +212,9 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // Sumbmits the counter/stats to monitor
   void submitCounters();
 
+  // helper to check if ifName has a prefix match in redistIfNames_
+  bool checkRedistIfNamePrefix(const std::string& ifName);
+
   // submit events to monitor
   void logEvent(
       const std::string& event,

@@ -997,7 +997,7 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
   const std::string& ifName = addrEntry.ifName;
 
   // Add address if it is supposed to be announced
-  if (redistIfNames_.count(ifName)) {
+  if (checkRedistIfNamePrefix(ifName)) {
     addDelRedistAddr(ifName, addrEntry.isValid, addrEntry.ipPrefix);
   }
 
@@ -1064,7 +1064,7 @@ LinkMonitor::syncInterfaces() {
     const std::string& ifName = link.ifName;
 
     // Add address if it is supposed to be announced
-    if (redistIfNames_.count(ifName)) {
+    if (checkRedistIfNamePrefix(ifName)) {
       if (!link.isUp and redistAddrs_.erase(ifName)) {
         advertiseRedistAddrs();
       } else {
@@ -1283,20 +1283,19 @@ void
 LinkMonitor::addDelRedistAddr(
     const std::string& ifName, bool isValid, const thrift::IpPrefix& prefix) {
   bool isUpdated = false;
-
+  // NOTE: this will mask the address.
+  auto const ipNetwork = toIPNetwork(prefix);
+  auto const ip = ipNetwork.first;
   // Ignore irrelevant ip addresses.
-  // NOTE: we only want to announce addresses not networks of an interface (
-  // hence prefixLength check)
-  auto const ip = toIPAddress(prefix.prefixAddress);
   if (ip.isLoopback() || ip.isLinkLocal() || ip.isMulticast() ||
-      (ip.isV4() && !enableV4_) ||
-      static_cast<uint8_t>(prefix.prefixLength) != ip.bitCount()) {
+      (ip.isV4() && !enableV4_)) {
     return;
   }
 
+  auto const prefixToInsert = toIpPrefix(ipNetwork);
   // If address is invalid then try to remove from list if it exists
   if (!isValid and redistAddrs_.count(ifName)) {
-    isUpdated |= redistAddrs_.at(ifName).erase(prefix) > 0;
+    isUpdated |= redistAddrs_.at(ifName).erase(prefixToInsert) > 0;
     if (!redistAddrs_.at(ifName).size()) {
       redistAddrs_.erase(ifName);
     }
@@ -1304,7 +1303,7 @@ LinkMonitor::addDelRedistAddr(
 
   // If address is valid then add it to list if it doesn't exists
   if (isValid) {
-    isUpdated = redistAddrs_[ifName].insert(prefix).second;
+    isUpdated = redistAddrs_[ifName].insert(prefixToInsert).second;
   }
 
   // Advertise updates if there is any change
@@ -1400,6 +1399,16 @@ LinkMonitor::InterfaceEntry::getInterfaceInfo() const {
           folly::gen::as<std::vector>(),
       folly::gen::from(v6LinkLocalAddrs_) | folly::gen::map(toBinaryAddress) |
           folly::gen::as<std::vector>());
+}
+
+bool
+LinkMonitor::checkRedistIfNamePrefix(const std::string& ifName) {
+  for (const auto& ifaceStr : redistIfNames_) {
+    if (0 == ifName.find(ifaceStr)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void
