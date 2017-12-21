@@ -1365,7 +1365,7 @@ LinkMonitor::logLinkEvent(const std::string& event, const std::string& iface) {
   sample.addString("event", event);
   sample.addString("entity", "LinkMonitor");
   sample.addString("node_name", nodeId_);
-  sample.addString("iface", iface);
+  sample.addString("interface", iface);
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
