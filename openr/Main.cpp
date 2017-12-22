@@ -253,6 +253,10 @@ DEFINE_bool(
     "openr thread, if unhealthy thread is detected, force crash openr");
 DEFINE_int32(watchdog_interval_s, 20, "Watchdog thread healthcheck interval");
 DEFINE_int32(watchdog_threshold_s, 300, "Watchdog thread aliveness threshold");
+DEFINE_bool(
+    advertise_interface_db,
+    false,
+    "Flag to optionally advertise interface-DB information in KvStore.");
 
 using namespace fbzmq;
 using namespace openr;
@@ -652,6 +656,7 @@ main(int argc, char** argv) {
       FLAGS_enable_full_mesh_reduction,
       FLAGS_enable_perf_measurement,
       FLAGS_enable_v4,
+      FLAGS_advertise_interface_db,
       AdjacencyDbMarker{Constants::kAdjDbMarker},
       InterfaceDbMarker{Constants::kInterfaceDbMarker},
       SparkCmdUrl{kSparkCmdUrl},

@@ -80,6 +80,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       bool enablePerfMeasurement,
       // is v4 enabled or not
       bool enableV4,
+      // enable interface db
+      bool advertiseInterfaceDb,
       // KvStore's adjacency object's key prefix
       AdjacencyDbMarker adjacencyDbMarker,
       InterfaceDbMarker interfaceDbMarker,
@@ -255,6 +257,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   const bool enablePerfMeasurement_{false};
   // is v4 enabled in OpenR or not
   const bool enableV4_{false};
+  // advertise interface DB or not
+  const bool advertiseInterfaceDb_{false};
   // used to match the adjacency database keys
   const std::string adjacencyDbMarker_;
   // used to encode interface database key names

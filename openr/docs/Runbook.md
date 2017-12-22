@@ -120,6 +120,16 @@ Network.
 DOMAIN=cluster10.dc3
 ```
 
+#### ADVERTISE_INTERFACE_DB
+
+Boolean argument to enable/disable interface database advertisement into the
+network. Disabled by default. Other applications can learn explicit interface
+status of whole network via KvStore bus.
+
+```
+ADVERTISE_INTERFACE_DB=false
+```
+
 #### PREFIXES
 
 Static list of comma separate prefixes to announce from the current node. Can't

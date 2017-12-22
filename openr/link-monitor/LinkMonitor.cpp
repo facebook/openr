@@ -90,6 +90,7 @@ LinkMonitor::LinkMonitor(
     bool enableFullMeshReduction,
     bool enablePerfMeasurement,
     bool enableV4,
+    bool advertiseInterfaceDb,
     AdjacencyDbMarker adjacencyDbMarker,
     InterfaceDbMarker interfaceDbMarker,
     SparkCmdUrl sparkCmdUrl,
@@ -118,6 +119,7 @@ LinkMonitor::LinkMonitor(
       enableFullMeshReduction_(enableFullMeshReduction),
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(enableV4),
+      advertiseInterfaceDb_(advertiseInterfaceDb),
       adjacencyDbMarker_(adjacencyDbMarker),
       interfaceDbMarker_(interfaceDbMarker),
       sparkCmdUrl_(sparkCmdUrl),
@@ -827,6 +829,11 @@ LinkMonitor::createInterfaceDatabase() {
 
 void
 LinkMonitor::sendInterfaceDatabase() {
+  // Return immediately if we are not configured to advertise interface db
+  if (not advertiseInterfaceDb_) {
+    return;
+  }
+
   const auto ifDb = createInterfaceDatabase();
 
   // advertise interface database, prompting FIB to take immediate action

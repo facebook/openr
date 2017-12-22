@@ -191,6 +191,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       enableFullMeshReduction, /* enable full mesh reduction */
       false /* enable perf measurement */,
       false /* enable v4 */,
+      true /* advertise interface db */,
       AdjacencyDbMarker{"adj:"},
       InterfaceDbMarker{"intf:"},
       SparkCmdUrl{sparkCmdUrl_},
