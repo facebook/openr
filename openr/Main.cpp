@@ -265,6 +265,10 @@ using namespace folly::gen;
 
 using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
+using apache::thrift::concurrency::ThreadManager;
+
+// Disable background jemalloc background thread => new jemalloc-5 feature
+const char* malloc_conf = "background_thread:false";
 
 namespace {
 //
@@ -375,16 +379,30 @@ main(int argc, char** argv) {
     watchdog->waitUntilRunning();
   }
 
+  // Create ThreadManager for thrift services
+  std::shared_ptr<ThreadManager> thriftThreadMgr;
+  if (FLAGS_enable_netlink_fib_handler or FLAGS_enable_netlink_system_handler) {
+    thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
+        2 /* num of threads */,
+        false /* task stats */);
+    thriftThreadMgr->setNamePrefix("ThriftCpuPool");
+    thriftThreadMgr->start();
+  }
+
   // Start NetlinkFibHandler if specified
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
   if (FLAGS_enable_netlink_fib_handler) {
-    netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>();
+    CHECK(thriftThreadMgr);
+    netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>(
+        "disabled" /* sasl policy */, false /* insecure-loopback */);
+    netlinkFibServer->setThreadManager(thriftThreadMgr);
+    netlinkFibServer->setNumIOWorkerThreads(1);
+    netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
+    netlinkFibServer->setPort(FLAGS_fib_agent_port);
+
     auto fibThriftThread = std::thread([&netlinkFibServer, &mainEventLoop]() {
       folly::setThreadName("FibService");
       auto fibHandler = std::make_shared<NetlinkFibHandler>(&mainEventLoop);
-      netlinkFibServer->setNWorkerThreads(1);
-      netlinkFibServer->setNPoolThreads(1);
-      netlinkFibServer->setPort(FLAGS_fib_agent_port);
       netlinkFibServer->setInterface(fibHandler);
 
       LOG(INFO) << "Starting NetlinkFib server...";
@@ -397,7 +415,14 @@ main(int argc, char** argv) {
   // Start NetlinkSystemHandler if specified
   std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
   if (FLAGS_enable_netlink_system_handler) {
-    netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>();
+    CHECK(thriftThreadMgr);
+    netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>(
+        "disabled" /* sasl policy */, false /* insecure-loopback */);
+    netlinkSystemServer->setThreadManager(thriftThreadMgr);
+    netlinkSystemServer->setNumIOWorkerThreads(1);
+    netlinkSystemServer->setCpp2WorkerThreadName("SystemTWorker");
+    netlinkSystemServer->setPort(FLAGS_system_agent_port);
+
     auto systemThriftThread =
         std::thread([&netlinkSystemServer, &context, &mainEventLoop]() {
           folly::setThreadName("SystemService");
@@ -405,9 +430,6 @@ main(int argc, char** argv) {
               context,
               PlatformPublisherUrl{FLAGS_platform_pub_url},
               &mainEventLoop);
-          netlinkSystemServer->setNWorkerThreads(1);
-          netlinkSystemServer->setNPoolThreads(1);
-          netlinkSystemServer->setPort(FLAGS_system_agent_port);
           netlinkSystemServer->setInterface(std::move(systemHandler));
 
           LOG(INFO) << "Starting NetlinkSystem server...";
@@ -800,6 +822,9 @@ main(int argc, char** argv) {
   }
   if (netlinkSystemServer) {
     netlinkSystemServer->stop();
+  }
+  if (thriftThreadMgr) {
+    thriftThreadMgr->stop();
   }
   if (watchdog) {
     watchdog->stop();
