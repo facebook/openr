@@ -86,13 +86,15 @@ class FibCli(object):
 class FibRoutesCli(object):
 
     @click.command()
+    @click.option('--prefixes', '-p', default='', multiple=True,
+                  help='Get route for specific IPs or Prefixes.')
     @click.option('--json/--no-json', default=False,
                   help='Dump in JSON format')
     @click.pass_obj
-    def routes(cli_opts, json):  # noqa: B902
+    def routes(cli_opts, prefixes, json):  # noqa: B902
         ''' Request routing table of the current host '''
 
-        fib.FibRoutesCmd(cli_opts).run(json)
+        fib.FibRoutesCmd(cli_opts).run(prefixes, json)
 
 
 class FibCountersCli(object):
@@ -108,11 +110,13 @@ class FibCountersCli(object):
 class FibListRoutesCli(object):
 
     @click.command()
+    @click.option('--prefixes', '-p', default='', multiple=True,
+                  help='Get route for specific IPs or Prefixes.')
     @click.pass_obj
-    def list_routes(cli_opts):  # noqa: B902
+    def list_routes(cli_opts, prefixes):  # noqa: B902
         ''' Get and print all the routes on fib agent '''
 
-        fib.FibListRoutesCmd(cli_opts).run()
+        fib.FibListRoutesCmd(cli_opts).run(prefixes)
 
 
 class FibAddRoutesCli(object):
@@ -163,11 +167,13 @@ class FibValidateRoutesCli(object):
 class FibListRoutesLinuxCli(object):
 
     @click.command()
+    @click.option('--prefixes', '-p', default='', multiple=True,
+                  help='Get route for specific IPs or Prefixes.')
     @click.pass_obj
-    def list_routes_linux(cli_opts):  # noqa: B902
+    def list_routes_linux(cli_opts, prefixes):  # noqa: B902
         ''' List routes from linux kernel routing table '''
 
-        fib.FibListRoutesLinuxCmd(cli_opts).run()
+        fib.FibListRoutesLinuxCmd(cli_opts).run(prefixes)
 
 
 class FibValidateRoutesLinuxCli(object):

@@ -93,14 +93,16 @@ class DecisionRoutesCli(object):
     @click.option('--nodes', default='',
                   help='Get routes for a list of nodes. Default will get '
                        'host\'s routes. Get routes for all nodes if \'all\' is given.')
+    @click.option('--prefixes', '-p', default='', multiple=True,
+                  help='Get route for specific IPs or Prefixes.')
     @click.option('--json/--no-json', default=False,
                   help='Dump in JSON format')
     @click.pass_obj
-    def routes(cli_opts, nodes, json):  # noqa: B902
+    def routes(cli_opts, nodes, prefixes, json):  # noqa: B902
         ''' Request the routing table from Decision module '''
 
         nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
-        decision.DecisionRoutesCmd(cli_opts).run(nodes, json)
+        decision.DecisionRoutesCmd(cli_opts).run(nodes, prefixes, json)
 
 
 class DecisionPrefixesCli(object):

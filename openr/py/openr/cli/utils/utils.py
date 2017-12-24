@@ -14,6 +14,7 @@ import bunch
 import click
 import copy
 import datetime
+import ipaddr
 import json
 import socket
 import sys
@@ -98,6 +99,19 @@ def time_since(timestamp):
     else:
         fmt = "{minutes}m{seconds}s"
     return fmt.format(**d)
+
+
+def contain_any_prefix(prefix, ip_networks):
+    '''
+    Utility function to check if prefix contain any of the prefixes/ips
+
+    :returns: True if prefix contains any of the ip_networks else False
+    '''
+
+    if ip_networks is None:
+        return True
+    prefix = ipaddr.IPNetwork(prefix)
+    return any([prefix.Contains(net) for net in ip_networks])
 
 
 def get_fib_agent_client(host, port, timeout_ms,
@@ -667,12 +681,19 @@ def print_interfaces_table(intf_map, print_all):
     print('\n'.join(lines))
 
 
-def print_routes_table(route_db):
+def print_routes_table(route_db, prefixes=None):
     ''' print the the routes from Decision/Fib module '''
+
+    networks = None
+    if prefixes:
+        networks = [ipaddr.IPNetwork(p) for p in prefixes]
 
     route_strs = []
     for route in sorted(route_db.routes, key=lambda x: x.prefix.prefixAddress.addr):
         prefix_str = sprint_prefix(route.prefix)
+        if not contain_any_prefix(prefix_str, networks):
+            continue
+
         paths_str = '\n'.join(["via {}@{} metric {}".format(
             sprint_addr(path.nextHop.addr),
             path.ifName, path.metric) for path in route.paths])
@@ -713,7 +734,20 @@ def route_db_to_dict(route_db):
     return {'routes': map(route_to_dict, route_db.routes)}
 
 
-def print_routes_json(route_db_dict):
+def print_routes_json(route_db_dict, prefixes=None):
+
+    networks = None
+    if prefixes:
+        networks = [ipaddr.IPNetwork(p) for p in prefixes]
+
+    # Filter out all routes based on prefixes!
+    for routes in route_db_dict.values():
+        filtered_routes = []
+        for route in routes["routes"]:
+            if not contain_any_prefix(route["prefix"], networks):
+                continue
+            filtered_routes.append(route)
+        routes["routes"] = filtered_routes
 
     print(json_dumps(route_db_dict))
 

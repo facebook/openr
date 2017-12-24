@@ -10,9 +10,10 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
+import click
+import ipaddr
 import sys
 import zmq
-import click
 
 from openr.clients import fib_client
 from openr.clients import decision_client
@@ -166,11 +167,18 @@ def ip_nexthop_to_str(nh):
                            nh.ifName)
 
 
-def print_routes(caption, routes):
+def print_routes(caption, routes, prefixes=None):
+
+    networks = None
+    if prefixes:
+        networks = [ipaddr.IPNetwork(p) for p in prefixes]
 
     route_strs = []
     for route in routes:
         dest = utils.sprint_prefix(route.dest)
+        if not utils.contain_any_prefix(dest, networks):
+            continue
+
         paths_str = '\n'.join(["via {}".format(ip_nexthop_to_str(nh))
                                for nh in route.nexthops])
         route_strs.append((dest, paths_str))
@@ -235,13 +243,13 @@ class FibLinuxAgentCmd(object):
 
 
 class FibRoutesCmd(FibCmd):
-    def run(self, json):
+    def run(self, prefixes, json):
         route_db = self.client.get_route_db()
         if json:
             route_db_dict = {route_db.thisNodeName: utils.route_db_to_dict(route_db)}
-            utils.print_routes_json(route_db_dict)
+            utils.print_routes_json(route_db_dict, prefixes)
         else:
-            utils.print_routes_table(route_db)
+            utils.print_routes_table(route_db, prefixes)
 
 
 class FibCountersCmd(FibAgentCmd):
@@ -267,7 +275,7 @@ class FibCountersCmd(FibAgentCmd):
 
 
 class FibListRoutesCmd(FibAgentCmd):
-    def run(self):
+    def run(self, prefixes):
         try:
             routes = self.client.getRouteTableByClient(self.client.client_id)
         except Exception as e:
@@ -278,7 +286,7 @@ class FibListRoutesCmd(FibAgentCmd):
         host_id = utils.get_connected_node_name(self.client.host, self.lm_cmd_port)
         caption = '{}\'s FIB routes by client {}'.format(host_id,
                                                          self.client.client_id)
-        print_routes(caption, routes)
+        print_routes(caption, routes, prefixes)
 
 
 class FibAddRoutesCmd(FibAgentCmd):
@@ -365,7 +373,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
 
 
 class FibListRoutesLinuxCmd(FibLinuxAgentCmd):
-    def run(self):
+    def run(self, prefixes):
         try:
             routes = self.client.getKernelRouteTable()
         except Exception as e:
@@ -375,7 +383,7 @@ class FibListRoutesLinuxCmd(FibLinuxAgentCmd):
 
         host_id = utils.get_connected_node_name(self.client.host, self.lm_cmd_port)
         caption = '{}\'s kernel routes'.format(host_id)
-        print_routes(caption, routes)
+        print_routes(caption, routes, prefixes)
 
 
 class FibValidateRoutesLinuxCmd():
