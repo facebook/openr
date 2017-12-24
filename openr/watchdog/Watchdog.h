@@ -59,6 +59,8 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
   // thread healthcheck threshold
   const std::chrono::seconds healthCheckThreshold_;
 
+  // boolean to indicate previous failure
+  bool previousStatus_{true};
 };
 
 } // namespace openr

@@ -20,7 +20,8 @@ Watchdog::Watchdog(
     std::chrono::seconds healthCheckThreshold)
     : myNodeName_(myNodeName),
       healthCheckInterval_(healthCheckInterval),
-      healthCheckThreshold_(healthCheckThreshold){
+      healthCheckThreshold_(healthCheckThreshold),
+      previousStatus_(true) {
 
   // Schedule periodic timer for checking thread health
   watchdogTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
@@ -53,32 +54,47 @@ Watchdog::updateCounters() {
 
   auto const& now = std::chrono::duration_cast<std::chrono::seconds>(
       std::chrono::system_clock::now().time_since_epoch());
+  std::vector<std::string> stuckThreads;
   for (auto const& it : allEvls_) {
     auto const& name = it.second;
     auto const& lastTs = it.first->getTimestamp();
-    VLOG(2) << "Thread name " << name
-              << ", "
-              << (now - lastTs).count()
-              << " seconds ever since last thread activity";
+    VLOG(4) << "Thread " << name << ", " << (now - lastTs).count()
+            << " seconds ever since last thread activity";
 
     if (now - lastTs > healthCheckThreshold_) {
       // fire a crash right now
-      VLOG(1) << name << ": Dead thread detected!";
-      fireCrash(name);
+      LOG(WARNING) << "Watchdog: " << name << " thread detected to be dead";
+      stuckThreads.emplace_back(name);
     }
   }
+
+  if (stuckThreads.size() and previousStatus_) {
+    LOG(WARNING) << "Watchdog: Waiting for one more round before crashing";
+  }
+
+  if (stuckThreads.size() and !previousStatus_) {
+    LOG(WARNING) << "Watchdog: Found stuck threads in consecutive runs";
+    fireCrash(folly::join(", ", stuckThreads));
+  }
+
+  if (!stuckThreads.size() and !previousStatus_) {
+    LOG(INFO) << "Watchdog: Threads seems to have recovered";
+  }
+
+  previousStatus_ = stuckThreads.size() == 0;
 }
 
 void
-Watchdog::fireCrash(const std::string& thread) {
-  VLOG(1) << "***** Unhealthy Openr Thread Detected, Force Crashing... *****";
+Watchdog::fireCrash(const std::string& threads) {
+  LOG(WARNING)
+    << "***** Unhealthy Openr Thread Detected, Force Crashing... *****";
   syslog(
       LOG_ALERT,
       "%s",
       folly::sformat(
-          "OpenR DeadThreadDetector: Thread {} on {} is detected dead. \
-           Triggering crash.", thread, myNodeName_).c_str());
-
+          "OpenR DeadThreadDetector: Thread {} on {} is detected dead. "
+          "Triggering crash.", threads, myNodeName_).c_str());
+  // hell ya!
   abort();
 }
 
