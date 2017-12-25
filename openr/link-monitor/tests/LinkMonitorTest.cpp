@@ -55,6 +55,11 @@ namespace {
 // we need the right key length for some checks in zmqSocket
 const std::string pubKey = fbzmq::util::genKeyPair().publicKey;
 
+const auto regexOpts =
+  std::regex_constants::extended |
+  std::regex_constants::icase |
+  std::regex_constants::optimize;
+
 const auto peerSpec_2_1 = thrift::PeerSpec(
     FRAGILE,
     "tcp://[fe80::2%iface_2_1]:10001",
@@ -253,16 +258,12 @@ class LinkMonitorTestFixture : public ::testing::Test {
         port, /* thrift service port */
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        std::vector<std::regex>{std::regex{kTestVethNamePrefix + ".*",
-                                           std::regex_constants::extended |
-                                               std::regex_constants::icase |
-                                               std::regex_constants::optimize},
-                                std::regex{"iface.*",
-                                           std::regex_constants::extended |
-                                               std::regex_constants::icase |
-                                               std::regex_constants::optimize}},
+        std::vector<std::regex>{
+          std::regex{kTestVethNamePrefix + ".*", regexOpts},
+          std::regex{"iface.*", regexOpts}},
         std::vector<std::regex>{},
-        std::set<std::string>{"loopback"}, // redistribute interface name
+        std::vector<std::regex>{
+          std::regex{"loopback", regexOpts}}, // redistribute interface name
         std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
         false /* useRttMetric */,
         false /* enable full mesh reduction */,
@@ -909,13 +910,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         port, // platform pub port
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        std::vector<std::regex>{std::regex{kTestVethNamePrefix + ".*",
-                                           std::regex_constants::extended |
-                                               std::regex_constants::icase |
-                                               std::regex_constants::optimize}},
+        std::vector<std::regex>{
+          std::regex{kTestVethNamePrefix + ".*", regexOpts}},
         std::vector<std::regex>{},
-        std::set<std::string>(), // redistribute interface names
-        std::vector<thrift::IpPrefix>(), // static prefixes
+        std::vector<std::regex>{}, // redistribute interface names
+        std::vector<thrift::IpPrefix>{}, // static prefixes
         false /* useRttMetric */,
         false /* enable full mesh reduction */,
         false /* enable perf measurement */,
@@ -1123,18 +1122,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       std::vector<std::regex>{
-        std::regex{
-          kTestVethNamePrefix + ".*",
-          std::regex_constants::extended |
-          std::regex_constants::icase |
-          std::regex_constants::optimize},
-        std::regex{
-          "iface.*",
-          std::regex_constants::extended |
-          std::regex_constants::icase |
-          std::regex_constants::optimize}},
+        std::regex{kTestVethNamePrefix + ".*", regexOpts},
+        std::regex{"iface.*", regexOpts}},
       std::vector<std::regex>{},
-      std::set<std::string>{"loopback"}, // redistribute interface name
+      std::vector<std::regex>{
+        std::regex{"loopback", regexOpts}}, // redistribute interface name
       std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
       false /* useRttMetric */,
       false /* enable full mesh reduction */,
@@ -1504,12 +1496,10 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         0, // platform pub port
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        std::vector<std::regex>{std::regex{kTestVethNamePrefix + ".*",
-                                           std::regex_constants::extended |
-                                               std::regex_constants::icase |
-                                               std::regex_constants::optimize}},
+        std::vector<std::regex>{
+          std::regex{kTestVethNamePrefix + ".*", regexOpts}},
         std::vector<std::regex>{},
-        std::set<std::string>(),
+        std::vector<std::regex>{},
         std::vector<thrift::IpPrefix>(),
         false /* useRttMetric */,
         false /* enable full mesh reduction */,

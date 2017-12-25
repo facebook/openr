@@ -185,7 +185,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
                                              std::regex_constants::icase |
                                              std::regex_constants::optimize}},
       std::vector<std::regex>{},
-      std::set<std::string>{}, // redistribute interface names
+      std::vector<std::regex>{}, // redistribute interface names
       networks,
       false, /* use rtt metric */
       enableFullMeshReduction, /* enable full mesh reduction */

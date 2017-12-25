@@ -149,7 +149,7 @@ DEFINE_string(
 DEFINE_string(
     redistribute_ifnames,
     "",
-    "The interface names who's prefixes we want to advertise");
+    "The interface names or regex who's prefixes we want to advertise");
 DEFINE_bool(enable_auth, false, "Enable known keys authentication in Spark");
 DEFINE_string(known_keys_file_path, "/tmp/known_keys.json", "Known keys file");
 DEFINE_string(
@@ -628,20 +628,13 @@ main(int argc, char** argv) {
     return -1;
   }
 
-  std::vector<std::string> redistIfNamesVec;
-  folly::split(
-      ",",
-      FLAGS_redistribute_ifnames,
-      redistIfNamesVec,
-      true /* ignore empty */);
-  std::set<std::string> redistIfNames(
-      redistIfNamesVec.begin(), redistIfNamesVec.end());
 
   //
   // Construct the regular expressions to match interface names against
   //
+
   std::vector<std::string> regexIncludeStrings;
-  folly::split(",", FLAGS_ifname_regex_include, regexIncludeStrings);
+  folly::split(",", FLAGS_ifname_regex_include, regexIncludeStrings, true);
   std::vector<std::regex> includeRegexList;
   auto const regexOpts = std::regex_constants::extended |
       std::regex_constants::icase | std::regex_constants::optimize;
@@ -651,16 +644,23 @@ main(int argc, char** argv) {
   }
   // add prefixes
   std::vector<std::string> ifNamePrefixes;
-  folly::split(",", FLAGS_ifname_prefix, ifNamePrefixes);
+  folly::split(",", FLAGS_ifname_prefix, ifNamePrefixes, true);
   for (auto& prefix : ifNamePrefixes) {
     includeRegexList.emplace_back(prefix + ".*", regexOpts);
   }
 
   std::vector<std::string> regexExcludeStrings;
-  folly::split(",", FLAGS_ifname_regex_exclude, regexExcludeStrings);
+  folly::split(",", FLAGS_ifname_regex_exclude, regexExcludeStrings, true);
   std::vector<std::regex> excludeRegexList;
   for (auto& regexStr : regexExcludeStrings) {
     excludeRegexList.emplace_back(regexStr, regexOpts);
+  }
+
+  std::vector<std::string> redistStringList;
+  folly::split(",", FLAGS_redistribute_ifnames, redistStringList, true);
+  std::vector<std::regex> redistRegexList;
+  for (auto const& regexStr : redistStringList) {
+    redistRegexList.emplace_back(regexStr, regexOpts);
   }
 
   // Create link monitor instance.
@@ -672,7 +672,7 @@ main(int argc, char** argv) {
       KvStoreLocalPubUrl{kvStoreLocalPubUrl},
       includeRegexList,
       excludeRegexList,
-      redistIfNames,
+      redistRegexList,
       networks,
       FLAGS_use_rtt_metric,
       FLAGS_enable_full_mesh_reduction,

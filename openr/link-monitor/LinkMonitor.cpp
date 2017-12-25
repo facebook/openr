@@ -84,7 +84,7 @@ LinkMonitor::LinkMonitor(
     KvStoreLocalPubUrl kvStoreLocalPubUrl,
     std::vector<std::regex> const& includeRegexList,
     std::vector<std::regex> const& excludeRegexList,
-    std::set<std::string> const& redistIfNames,
+    std::vector<std::regex> const& redistRegexList,
     std::vector<thrift::IpPrefix> const& staticPrefixes,
     bool useRttMetric,
     bool enableFullMeshReduction,
@@ -113,7 +113,7 @@ LinkMonitor::LinkMonitor(
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
       includeRegexList_(includeRegexList),
       excludeRegexList_(excludeRegexList),
-      redistIfNames_(redistIfNames),
+      redistRegexList_(redistRegexList),
       staticPrefixes_(staticPrefixes),
       useRttMetric_(useRttMetric),
       enableFullMeshReduction_(enableFullMeshReduction),
@@ -1004,7 +1004,7 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
   const std::string& ifName = addrEntry.ifName;
 
   // Add address if it is supposed to be announced
-  if (checkRedistIfNamePrefix(ifName)) {
+  if (checkRedistIfNameRegex(ifName)) {
     addDelRedistAddr(ifName, addrEntry.isValid, addrEntry.ipPrefix);
   }
 
@@ -1071,7 +1071,7 @@ LinkMonitor::syncInterfaces() {
     const std::string& ifName = link.ifName;
 
     // Add address if it is supposed to be announced
-    if (checkRedistIfNamePrefix(ifName)) {
+    if (checkRedistIfNameRegex(ifName)) {
       if (!link.isUp and redistAddrs_.erase(ifName)) {
         advertiseRedistAddrs();
       } else {
@@ -1409,9 +1409,9 @@ LinkMonitor::InterfaceEntry::getInterfaceInfo() const {
 }
 
 bool
-LinkMonitor::checkRedistIfNamePrefix(const std::string& ifName) {
-  for (const auto& ifaceStr : redistIfNames_) {
-    if (0 == ifName.find(ifaceStr)) {
+LinkMonitor::checkRedistIfNameRegex(const std::string& ifName) {
+  for (const auto& regex : redistRegexList_) {
+    if (std::regex_match(ifName, regex)) {
       return true;
     }
   }

@@ -68,7 +68,7 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       // interface names to exclude
       std::vector<std::regex> const& excludeRegexList,
       // interface names to advertise their addresses
-      std::set<std::string> const& redistIfNames,
+      std::vector<std::regex> const& redistRegexList,
       // static list of prefixes to announce
       std::vector<thrift::IpPrefix> const& staticPrefixes,
       // measure and use RTT of adjacencies for link
@@ -215,7 +215,7 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   void submitCounters();
 
   // helper to check if ifName has a prefix match in redistIfNames_
-  bool checkRedistIfNamePrefix(const std::string& ifName);
+  bool checkRedistIfNameRegex(const std::string& ifName);
 
   // submit events to monitor
   void logEvent(
@@ -245,8 +245,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   const std::vector<std::regex> includeRegexList_;
   // the interface names that match we can't run on
   const std::vector<std::regex> excludeRegexList_;
-  // the interface names for advertising their global addresses
-  const std::set<std::string> redistIfNames_;
+  // the interface names regex for advertising their global addresses
+  const std::vector<std::regex> redistRegexList_;
   // static list of prefixes to announce
   const std::vector<thrift::IpPrefix> staticPrefixes_;
   // Use spark measured RTT to neighbor as link metric
