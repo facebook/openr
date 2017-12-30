@@ -19,7 +19,7 @@
 #include <folly/String.h>
 #include <folly/gen/Base.h>
 #include <folly/gen/Core.h>
-#include <openr/servicelayer/vrf.h>
+#include <openr/iosxrsl/ServiceLayerRoute.h>
 
 
 using folly::gen::as;
@@ -515,11 +515,10 @@ NetlinkRouteSocket::doAddUnicastRouteV4(
   LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
 
 
-  auto rshuttle = RShuttle(route_channel);
-  auto routev4_ptr = rshuttle.routev4Add(service_layer::SL_OBJOP_ADD, "default");
+  auto routev4_ptr = route_shuttle->routev4Add("default");
 
 
-  rshuttle.routev4Set(routev4_ptr, folly::IPAddressV4::toLongHBO(prefix.first.str()) , folly::to<uint8_t>(prefix.second), kAqRouteProtoId);
+  route_shuttle->routev4Set(routev4_ptr, route_shuttle->IPv4ToLong(prefix.first.str().c_str()) , folly::to<uint8_t>(prefix.second), kAqRouteProtoId);
 
 
   // Create new set of nexthops to be programmed. Existing + New ones
@@ -547,8 +546,8 @@ NetlinkRouteSocket::doAddUnicastRouteV4(
         xr_if = "GigabitEthernet0/0/0/2";
     }
 
-    rshuttle.routev4PathAdd(routev4_ptr, folly::IPAddressV4::toLongHBO(std::get<1>(nextHop).str()), xr_if);
-    rshuttle.routev4Op();
+    route_shuttle->routev4PathAdd(routev4_ptr, route_shuttle->IPv4ToLong(std::get<1>(nextHop).str().c_str()), xr_if);
+    route_shuttle->routev4Op(service_layer::SL_OBJOP_ADD);
 
 
   }
@@ -569,6 +568,46 @@ NetlinkRouteSocket::doAddUnicastRouteV6(
   CHECK(prefix.first.isV6());
   for (auto const& nextHop : nextHops) {
     CHECK(nextHop.second.isV6());
+  }
+
+  LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
+
+
+  auto routev6_ptr = route_shuttle->routev6Add("default");
+
+
+  route_shuttle->routev6Set(routev6_ptr, route_shuttle->IPv6ToByteArrayString(prefix.first.str().c_str()) , folly::to<uint8_t>(prefix.second), kAqRouteProtoId);
+
+
+  // Create new set of nexthops to be programmed. Existing + New ones
+  auto newNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
+  for (auto const& nextHop : nextHops) {
+    CHECK(nextHop.second.isV6());
+    LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
+    newNextHops.insert(nextHop);
+    // Create a path list
+
+    std::string xr_lnx_if = std::get<0>(nextHop).c_str();
+    std::string xr_if;
+
+    if (xr_lnx_if == "Gi0_0_0_0") {
+        xr_if = "GigabitEthernet0/0/0/0";
+    } else if (xr_lnx_if == "Gi0_0_0_1") {
+        xr_if = "GigabitEthernet0/0/0/1";
+    } else if (xr_lnx_if == "Gi0_0_0_2") {
+        xr_if = "GigabitEthernet0/0/0/2";
+    } else if (xr_lnx_if == "enp0s8") {
+        xr_if = "GigabitEthernet0/0/0/0";
+    } else if (xr_lnx_if == "enp0s9") {
+        xr_if = "GigabitEthernet0/0/0/1";
+    } else if (xr_lnx_if == "enp0s10") {
+        xr_if = "GigabitEthernet0/0/0/2";
+    }
+
+    route_shuttle->routev6PathAdd(routev6_ptr, route_shuttle->IPv6ToByteArrayString(std::get<1>(nextHop).str().c_str()), xr_if);
+    route_shuttle->routev6Op(service_layer::SL_OBJOP_ADD);
+
+
   }
 
   auto route = buildUnicastRoute(prefix, nextHops);

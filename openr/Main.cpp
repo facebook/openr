@@ -40,7 +40,7 @@
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
-#include <openr/servicelayer/vrf.h>
+#include <openr/iosxrsl/ServiceLayerRoute.h>
 
 DEFINE_int32(
     kvstore_pub_port,
@@ -405,7 +405,7 @@ main(int argc, char** argv) {
                             folly::sformat(
           "{}:{}", FLAGS_iosxr_slapi_ip, FLAGS_iosxr_slapi_port), grpc::InsecureChannelCredentials()));
   // Acquire the lock
-  std::unique_lock<std::mutex> mlock(m_mutex);
+  std::unique_lock<std::mutex> init_lock(init_mutex);
 
   // Spawn reader thread that maintains our Notification Channel
   LOG(INFO) << "Starting Init thread for Service Layer to IOS-XR";
@@ -421,16 +421,18 @@ main(int argc, char** argv) {
   asynchandler.SendInitMsg(init_msg);  
 
   //Wait on the mutex lock
-  while (!m_InitSuccess) {
-      m_condVar.wait(mlock);
+  while (!init_success) {
+      init_condVar.wait(init_lock);
   }
 
   SLVrf vrfhandler(grpc::CreateChannel(
                    folly::sformat(
           "{}:{}", FLAGS_iosxr_slapi_ip, FLAGS_iosxr_slapi_port), grpc::InsecureChannelCredentials()));
 
+  auto route_channel = vrfhandler.channel;
+
   // Store for later usage
-  route_channel = vrfhandler.channel;
+  route_shuttle = new RShuttle(route_channel);
 
   // Create a new SLVrfRegMsg batch
   vrfhandler.vrfRegMsgAdd("default", 99, 500);
@@ -816,6 +818,9 @@ main(int argc, char** argv) {
   if (netlinkSystemServer) {
     netlinkSystemServer->stop();
   }
+
+  // Delete the dynamically allocated route shuttle object
+  delete route_shuttle;
 
   // Unregister all the vrfs that were registered against IOS-XR SL earlier
   vrfhandler.vrf_msg.clear_vrfregmsgs();
