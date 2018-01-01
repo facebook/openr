@@ -3,10 +3,11 @@
 #include <stdint.h>
 #include <thread>
 #include <condition_variable>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <sys/socket.h>
+#include <glog/logging.h>
+#include <arpa/inet.h>
 
 #include <grpc++/grpc++.h>
 #include <iosxrsl/sl_global.grpc.pb.h>

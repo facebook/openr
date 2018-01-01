@@ -1,7 +1,5 @@
-#include <openr/iosxrsl/ServiceLayerAsyncInit.h>
-#include <arpa/inet.h>
+#include <openr/iosxrsl/ServiceLayerAsyncInit.h> 
 #include <google/protobuf/text_format.h>
-#include <csignal>
 
 using grpc::ClientContext;
 using grpc::ClientReader;
@@ -13,11 +11,13 @@ using service_layer::SLInitMsg;
 using service_layer::SLVersion;
 using service_layer::SLGlobal;
 
+
 namespace openr {
 
 std::mutex init_mutex;
 std::condition_variable init_condVar;
 bool init_success;
+
 
 AsyncNotifChannel::AsyncNotifChannel(std::shared_ptr<grpc::Channel> channel)
         : stub_(service_layer::SLGlobal::NewStub(channel)) {}
@@ -25,19 +25,20 @@ AsyncNotifChannel::AsyncNotifChannel(std::shared_ptr<grpc::Channel> channel)
 
 // Assembles the client's payload and sends it to the server.
 
-void AsyncNotifChannel::SendInitMsg(const service_layer::SLInitMsg init_msg) {
-
+void 
+AsyncNotifChannel::SendInitMsg(const service_layer::SLInitMsg init_msg)
+{
     std::string s;
 
     if (google::protobuf::TextFormat::PrintToString(init_msg, &s)) {
-        std::cout << "\n\n###########################\n" ;
-        std::cout << "Transmitted message: IOSXR-SL INIT " << s;
-        std::cout << "###########################\n\n\n" ;
+        VLOG(2) << "###########################" ;
+        VLOG(2) << "Transmitted message: IOSXR-SL INIT " << s;
+        VLOG(2) << "###########################" ;
     } else {
-        std::cerr << "\n\n###########################\n" ;
-        std::cerr << "Message not valid (partial content: "
-                  << init_msg.ShortDebugString() << ")\n\n\n";
-        std::cerr << "###########################\n" ;
+        VLOG(2) << "###########################" ;
+        VLOG(2) << "Message not valid (partial content: "
+                  << init_msg.ShortDebugString() << ")";
+        VLOG(2) << "###########################" ;
     }
 
     // Typically when using the asynchronous API, we hold on to the 
@@ -48,8 +49,9 @@ void AsyncNotifChannel::SendInitMsg(const service_layer::SLInitMsg init_msg) {
     call.response_reader = stub_->AsyncSLGlobalInitNotif(&call.context, init_msg, &cq_, (void *)&call);
 }
 
-void AsyncNotifChannel::Shutdown() {
-
+void 
+AsyncNotifChannel::Shutdown() 
+{
     tear_down = true;
 
     std::unique_lock<std::mutex> channel_lock(channel_mutex);
@@ -60,10 +62,14 @@ void AsyncNotifChannel::Shutdown() {
 }
 
 
-void AsyncNotifChannel::Cleanup() {
+void 
+AsyncNotifChannel::Cleanup() 
+{
+    void* got_tag;
+    bool ok = false;
 
-    std::cout << "Asynchronous client shutdown requested\n"
-              << "Let's clean up!\n";
+    VLOG(1) << "Asynchronous client shutdown requested"
+            << "Let's clean up!";
 
     // Finish the Async session
     call.HandleResponse(false, &cq_);
@@ -71,7 +77,7 @@ void AsyncNotifChannel::Cleanup() {
     // Shutdown the completion queue
     call.HandleResponse(false, &cq_);
 
-    std::cout << "Notifying channel close\n";
+    VLOG(1) << "Notifying channel close";
     channel_closed = true;
     // Notify the condition variable;
     channel_condVar.notify_one();
@@ -80,7 +86,9 @@ void AsyncNotifChannel::Cleanup() {
 
 // Loop while listening for completed responses.
 // Prints out the response from the server.
-void AsyncNotifChannel::AsyncCompleteRpc() {
+void 
+AsyncNotifChannel::AsyncCompleteRpc() 
+{
     void* got_tag;
     bool ok = false;
     // Storage for the status of the RPC upon completion.
@@ -106,7 +114,7 @@ void AsyncNotifChannel::AsyncCompleteRpc() {
              call.HandleResponse(ok, &cq_);
              break;
         case grpc::CompletionQueue::SHUTDOWN:
-             std::cout << "Shutdown event received for completion queue" << std::endl;
+             VLOG(1) << "Shutdown event received for completion queue";
              channel_closed = true;
              // Notify the condition variable;
              channel_condVar.notify_one();
@@ -126,7 +134,10 @@ void AsyncNotifChannel::AsyncCompleteRpc() {
 
 AsyncNotifChannel::AsyncClientCall::AsyncClientCall(): callStatus_(CREATE) {}
 
-void AsyncNotifChannel::AsyncClientCall::HandleResponse(bool responseStatus, grpc::CompletionQueue* pcq_) {
+void 
+AsyncNotifChannel::AsyncClientCall::HandleResponse(bool responseStatus, 
+                                                   grpc::CompletionQueue* pcq_)
+{
     //The First completion queue entry indicates session creation and shouldn't be processed - Check?
     switch (callStatus_) {
     case CREATE:
@@ -151,8 +162,8 @@ void AsyncNotifChannel::AsyncClientCall::HandleResponse(bool responseStatus, grp
                        service_layer::SLErrorStatus_SLErrno_SL_INIT_STATE_READY) ||
                    (slerrstatus == 
                        service_layer::SLErrorStatus_SLErrno_SL_INIT_STATE_CLEAR)) {
-                    std::cout << "Server returned " << std::endl; 
-                    std::cout << "Successfully Initialized, connection Established!" << std::endl;
+                    VLOG(1) << "IOS-XR gRPC Server returned "; 
+                    VLOG(1) << "Successfully Initialized, connection Established!";
                             
                     // Lock the mutex before notifying using the conditional variable
                     std::lock_guard<std::mutex> guard(init_mutex);
@@ -164,18 +175,18 @@ void AsyncNotifChannel::AsyncClientCall::HandleResponse(bool responseStatus, grp
                     init_condVar.notify_one();
 
                 } else {
-                    std::cout << "client init error code " << slerrstatus << std::endl;
+                    LOG(ERROR) << "Client init error code " << slerrstatus ;
                 }
             } else if (eventtype == static_cast<int>(service_layer::SL_GLOBAL_EVENT_TYPE_HEARTBEAT)) {
-                std::cout << "Received Heartbeat" << std::endl; 
+                VLOG(1) << "Received Heartbeat"; 
             } else if (eventtype == static_cast<int>(service_layer::SL_GLOBAL_EVENT_TYPE_ERROR)) {
                 if (slerrstatus == service_layer::SLErrorStatus_SLErrno_SL_NOTIF_TERM) {
-                    std::cerr << "Received notice to terminate. Client Takeover?" << std::endl;
+                    LOG(ERROR) << "Received notice to terminate. Client Takeover?";
                 } else {
-                    std::cerr << "Error Not Handled " << slerrstatus << std::endl;
+                    LOG(ERROR) << "Error Not Handled " << slerrstatus;
                 } 
             } else {
-                std::cout << "client init unrecognized response " << eventtype << std::endl;
+                LOG(ERROR) << "client init unrecognized response " << eventtype;
             }
         } else {
             response_reader->Finish(&status, (void*)this);
@@ -184,14 +195,16 @@ void AsyncNotifChannel::AsyncClientCall::HandleResponse(bool responseStatus, grp
         break;
     case FINISH:
         if (status.ok()) {
-            std::cout << "Server Response Completed: " << this << " CallData: " << this << std::endl;
+            VLOG(1) << "Server Response Completed: "  
+                    << this << " CallData: " 
+                    << this;
         }
         else {
-            std::cerr << "RPC failed" << std::endl;
+            LOG(ERROR) << "RPC failed";
         }
-        std::cout << "Shutting down the completion queue" << std::endl;
+        VLOG(1) << "Shutting down the completion queue";
         pcq_->Shutdown();
     }
-} 
-
 }
+
+} 
