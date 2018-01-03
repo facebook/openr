@@ -9,7 +9,8 @@
 
 namespace openr {
 
-extern std::shared_ptr<grpc::Channel> route_channel;
+class SLVrf;
+extern SLVrf* vrfhandler;
 
 class RShuttle {
 public:
@@ -60,14 +61,14 @@ public:
 
     void insertAddBatchV4(std::string vrfName,
                           std::string prefix,
-                          uint32_t prefixLen,
+                          uint8_t prefixLen,
                           uint32_t adminDistance,
                           std::string nextHopAddress,
                           std::string nextHopIf);
 
     void insertDeleteBatchV4(std::string vrfName,
                              std::string prefix,
-                             uint32_t prefixLen);
+                             uint8_t prefixLen);
 
     
     void clearBatchV4();

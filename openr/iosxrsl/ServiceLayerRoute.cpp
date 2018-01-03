@@ -14,7 +14,8 @@ using service_layer::SLGlobal;
 
 namespace openr {
 
-std::shared_ptr<grpc::Channel> route_channel;
+class SLVrf;
+SLVrf* vrfhandler;
 
 uint32_t 
 RShuttle::ipv4ToLong(const char* address)
@@ -223,7 +224,7 @@ RShuttle::routev4Op(service_layer::SLObjectOp routeOp,
 void 
 RShuttle::insertAddBatchV4(std::string vrfName,
                            std::string prefix,
-                           uint32_t prefixLen,
+                           uint8_t prefixLen,
                            uint32_t adminDistance,
                            std::string nextHopAddress,
                            std::string nextHopIf)
@@ -260,7 +261,7 @@ RShuttle::insertAddBatchV4(std::string vrfName,
 void 
 RShuttle::insertDeleteBatchV4(std::string vrfName,
                               std::string prefix,
-                              uint32_t prefixLen)
+                              uint8_t prefixLen)
 {
 
     // Obtain pointer to a new route object within route batch
@@ -450,7 +451,6 @@ RShuttle::routev6Op(service_layer::SLObjectOp routeOp,
     
     route_op = routeOp;
     routev6_msg.set_oper(route_op);
-
 
     auto stub_ = service_layer::SLRoutev6Oper::NewStub(channel);
 
@@ -775,6 +775,7 @@ SLVrf::registerVrf(unsigned int addrFamily)
 
     default:
         LOG(ERROR) << "Invalid Address family, skipping..";
+        return false;
         break;
     }
 
@@ -797,6 +798,7 @@ SLVrf::unregisterVrf(unsigned int addrFamily)
 
     default:
         LOG(ERROR) << "Invalid Address family, skipping..";
+        return false;
         break;
     }
 }

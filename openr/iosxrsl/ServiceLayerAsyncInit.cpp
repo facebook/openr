@@ -65,9 +65,6 @@ AsyncNotifChannel::Shutdown()
 void 
 AsyncNotifChannel::Cleanup() 
 {
-    void* got_tag;
-    bool ok = false;
-
     VLOG(1) << "Asynchronous client shutdown requested"
             << "Let's clean up!";
 

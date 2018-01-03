@@ -425,21 +425,16 @@ main(int argc, char** argv) {
       init_condVar.wait(init_lock);
   }
 
-  SLVrf vrfhandler(grpc::CreateChannel(
+  vrfhandler = new SLVrf(grpc::CreateChannel(
                    folly::sformat(
           "{}:{}", FLAGS_iosxr_slapi_ip, FLAGS_iosxr_slapi_port), grpc::InsecureChannelCredentials()));
 
-  auto route_channel = vrfhandler.channel;
-
-  // Store for later usage
-  route_shuttle = new RShuttle(route_channel);
-
   // Create a new SLVrfRegMsg batch
-  vrfhandler.vrfRegMsgAdd("default", 99, 500);
+  vrfhandler->vrfRegMsgAdd("default", 99, 500);
 
   // Register the SLVrfRegMsg batch for v4 and v6
-  vrfhandler.registerVrf(AF_INET);
-  vrfhandler.registerVrf(AF_INET6);
+  vrfhandler->registerVrf(AF_INET);
+  vrfhandler->registerVrf(AF_INET6);
 
 
   folly::Optional<KeyPair> keyPair;
@@ -819,14 +814,16 @@ main(int argc, char** argv) {
     netlinkSystemServer->stop();
   }
 
-  // Delete the dynamically allocated route shuttle object
-  delete route_shuttle;
-
   // Unregister all the vrfs that were registered against IOS-XR SL earlier
-  vrfhandler.vrf_msg.clear_vrfregmsgs();
-  vrfhandler.vrfRegMsgAdd("default");  
-  vrfhandler.unregisterVrf(AF_INET);
-  vrfhandler.unregisterVrf(AF_INET6);
+  vrfhandler->vrf_msg.clear_vrfregmsgs();
+  vrfhandler->vrfRegMsgAdd("default");  
+  vrfhandler->unregisterVrf(AF_INET);
+  vrfhandler->unregisterVrf(AF_INET6);
+
+  // Delete the dynamically allocated vrf handler
+
+  delete vrfhandler;
+
 
   LOG(INFO) << "Now shutting down asynchandler";
   // Shutdown the async Init Channel for IOS-XR SL to automatically stop the thread
