@@ -64,6 +64,7 @@ Fib::Fib(
     try {
       keepAliveCheck();
     } catch (const std::exception& e) {
+      tData_.addStatValue("fib.thrift.failure.keepalive", 1, fbzmq::COUNT);
       client_.reset();
       LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
                  << folly::exceptionStr(e);
@@ -329,6 +330,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     client_->sync_addUnicastRoutes(kFibId_, affectedRoutes);
     logPerfEvents();
   } catch (const std::exception& e) {
+    tData_.addStatValue("fib.thrift.failure.add_del_route", 1, fbzmq::COUNT);
     client_.reset();
     syncRouteDbDebounced(); // Schedule future full sync of route DB
     LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
@@ -407,7 +409,7 @@ Fib::syncRouteDb() {
     logPerfEvents();
     return true;
   } catch (std::exception const& e) {
-    tData_.addStatValue("fib.sync_fib_failure", 1, fbzmq::COUNT);
+    tData_.addStatValue("fib.thrift.failure.sync_fib", 1, fbzmq::COUNT);
     LOG(ERROR) << "Failed to sync routeDb with switch FIB agent. Error: "
                << folly::exceptionStr(e);
     client_.reset();
