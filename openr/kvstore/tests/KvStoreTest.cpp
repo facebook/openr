@@ -38,7 +38,7 @@ const std::chrono::seconds kDbSyncInterval(1);
 const std::chrono::seconds kMonitorSubmitInterval(3600);
 
 // TTL in ms
-const int64_t kTtlMs = 100;
+const int64_t kTtlMs = 1000;
 
 // Timeout for recieving publication from KvStore. This spans the maximum
 // duration it can take to propogate an update through KvStores
@@ -203,6 +203,9 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
         for (const auto kv : dump) {
           EXPECT_TRUE(kv.second.hash.value() != 0);
           EXPECT_TRUE(hashDump.count(kv.first) != 0);
+          if (!hashDump.count(kv.first)) {
+            continue;
+          }
           EXPECT_EQ(kv.second.hash.value(), hashDump.at(kv.first).hash.value());
         }
 
