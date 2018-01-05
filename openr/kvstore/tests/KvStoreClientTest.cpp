@@ -43,7 +43,7 @@ const std::chrono::milliseconds kSyncReqTimeout(1000);
 // maximum timeout waiting for all peers to respond to sync request
 const std::chrono::milliseconds kSyncMaxWaitTime(1000);
 
-const std::chrono::milliseconds kTtl{100};
+const std::chrono::milliseconds kTtl{1000};
 } // namespace
 
 //
@@ -641,9 +641,9 @@ TEST(KvStoreClient, SubscribeApiTest) {
     client2->persistKey("test_key2", "test_value2-client2");
   });
 
-  // Schedule timeout for terminating the even loop
+  // Schedule timeout for terminating the event loop
   evl.scheduleTimeout(
-      std::chrono::milliseconds(10), [&]() noexcept { evl.stop(); });
+      std::chrono::milliseconds(1000), [&]() noexcept { evl.stop(); });
 
   // Start the event loop
   std::thread evlThread([&]() {

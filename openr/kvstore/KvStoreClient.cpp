@@ -712,7 +712,6 @@ KvStoreClient::advertiseTtlUpdates() {
     }
 
     // Apply backoff
-    VLOG(2) << "Advertising ttl update for key: " << key;
     backoff.reportError();
     timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
@@ -729,6 +728,11 @@ KvStoreClient::advertiseTtlUpdates() {
     thriftValue.ttlVersion++;
     // Set in keyVals which is going to be advertised to the kvStore.
     DCHECK(not thriftValue.value);
+
+    VLOG(2) << "Advertising ttl update for key: " << key
+            << ", version: " << thriftValue.version
+            << ", ttlVersion: " << thriftValue.ttlVersion;
+
     keyVals.emplace(key, thriftValue);
   }
 

@@ -1152,7 +1152,7 @@ KvStore::countdownTtl() {
         it->second.ttlVersion == top.ttlVersion) {
       expiredKeys.push_back(top.key);
       kvStore_.erase(it);
-      VLOG(1) << "Delete expired key: " << top.key;
+      LOG(WARNING) << "Delete expired key: " << top.key;
       logKvEvent("KEY_EXPIRE", top.key);
     }
     ttlCountdownQueue_.pop();
