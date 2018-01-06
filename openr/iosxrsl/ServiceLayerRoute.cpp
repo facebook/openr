@@ -1,4 +1,4 @@
-#include <openr/iosxrsl/ServiceLayerRoute.h> 
+#include "ServiceLayerRoute.h"
 #include <google/protobuf/text_format.h>
 
 using grpc::ClientContext;
@@ -14,8 +14,7 @@ using service_layer::SLGlobal;
 
 namespace openr {
 
-class SLVrf;
-SLVrf* vrfhandler;
+RShuttle* route_shuttle;
 
 uint32_t 
 RShuttle::ipv4ToLong(const char* address)
@@ -86,6 +85,26 @@ RShuttle::RShuttle(std::shared_ptr<grpc::Channel> Channel)
     : channel(Channel) {} 
 
 
+void 
+RShuttle::setVrfV4(std::string vrfName)
+{
+    routev4_msg.set_vrfname(vrfName);
+}
+
+// Overloaded routev4Add to be used if vrfname is already set
+
+service_layer::SLRoutev4*
+RShuttle::routev4Add()
+{
+    if (routev4_msg.vrfname().empty()) {
+        LOG(ERROR) << "vrfname is empty, please set vrf "
+                   << "before manipulating routes";
+        return 0;
+    } else {
+        return routev4_msg.add_routes();
+    }
+}
+
 service_layer::SLRoutev4* 
 RShuttle::routev4Add(std::string vrfName)
 {
@@ -99,7 +118,7 @@ RShuttle::routev4Add(std::string vrfName)
 void 
 RShuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
                      uint32_t prefix,
-                     uint32_t prefixLen)
+                     uint8_t prefixLen)
 {   
     routev4Ptr->set_prefix(prefix);
     routev4Ptr->set_prefixlen(prefixLen);
@@ -113,7 +132,7 @@ RShuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
 void 
 RShuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
                      uint32_t prefix,
-                     uint32_t prefixLen,
+                     uint8_t prefixLen,
                      uint32_t adminDistance)
 {
     routev4Ptr->set_prefix(prefix);
@@ -221,9 +240,8 @@ RShuttle::routev4Op(service_layer::SLObjectOp routeOp,
     return true;
 }
 
-void 
-RShuttle::insertAddBatchV4(std::string vrfName,
-                           std::string prefix,
+bool 
+RShuttle::insertAddBatchV4(std::string prefix,
                            uint8_t prefixLen,
                            uint32_t adminDistance,
                            std::string nextHopAddress,
@@ -236,8 +254,13 @@ RShuttle::insertAddBatchV4(std::string vrfName,
     if (this->prefix_map_v4.find(address) == this->prefix_map_v4.end()) {
 
         // Obtain pointer to a new route object within route batch
-        auto routev4_ptr = this->routev4Add(vrfName);
-        
+        auto routev4_ptr = this->routev4Add();
+       
+        if (!routev4_ptr) {
+            LOG(ERROR) << "Failed to create new route object";
+            return false;
+        }
+
         // Set up the new v4 route object
         this->routev4Set(routev4_ptr, 
                          ipv4ToLong(prefix.c_str()),
@@ -255,23 +278,223 @@ RShuttle::insertAddBatchV4(std::string vrfName,
                              ipv4ToLong(nextHopAddress.c_str()),
                              nextHopIf);  
     }
+
+    return true;
 }
 
 
-void 
-RShuttle::insertDeleteBatchV4(std::string vrfName,
-                              std::string prefix,
+bool 
+RShuttle::insertDeleteBatchV4(std::string prefix,
                               uint8_t prefixLen)
 {
 
     // Obtain pointer to a new route object within route batch
-    auto routev4_ptr = this->routev4Add(vrfName);
-    
+    auto routev4_ptr = this->routev4Add();
+
+    if (!routev4_ptr) {
+        LOG(ERROR) << "Failed to create new route object";
+        return false;
+    }
+ 
     // Set up the new v4 route object 
     this->routev4Set(routev4_ptr, 
                      ipv4ToLong(prefix.c_str()),
                      prefixLen);
+
+    return true;
 }
+
+// overloaded updateBatchV4 with no admin_distance parameter
+bool
+RShuttle::insertUpdateBatchV4(std::string prefix,
+                              uint8_t prefixLen,
+                              std::string nextHopAddress,
+                              std::string nextHopIf,
+                              RShuttle::PathUpdateAction action)
+{
+
+    service_layer::SLRoutev4 routev4;
+    if (this->routev4_msg.vrfname().empty()) {
+        LOG(ERROR) << "Route batch vrf not set, aborting route update...";
+        return false;
+    } else {
+        bool response = this->getPrefixPathsV4(routev4,
+                                               this->routev4_msg.vrfname(),
+                                               prefix,
+                                               prefixLen);
+        if (response) {
+            VLOG(2) << "Prefix exists in RIB, updating the batch before push.. "
+                    << this->longToIpv4(routev4.prefix());
+
+            // Use the existing admin distance from the route in RIB
+            uint32_t admin_distance = routev4.routecommon().admindistance();
+            if (this->insertUpdateBatchV4(prefix,
+                                          prefixLen,
+                                          admin_distance,
+                                          nextHopAddress,
+                                          nextHopIf,
+                                          action)) {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            LOG(ERROR) << "Prefix not found, cannot obtain Admin Distance..";
+            return false;            
+        }
+    }
+}
+
+
+bool
+RShuttle::insertUpdateBatchV4(std::string prefix,
+                              uint8_t prefixLen,
+                              uint32_t adminDistance,
+                              std::string nextHopAddress,
+                              std::string nextHopIf,
+                              RShuttle::PathUpdateAction action)
+{
+
+    bool path_found = false;
+    service_layer::SLRoutev4 routev4;
+    // check if the prefix exists, and if it does fetch the current 
+    // route in RIB
+
+    if (this->routev4_msg.vrfname().empty()) {
+        LOG(ERROR) << "Route batch vrf not set, aborting route update...";
+        return false;
+    } else {
+        bool response = this->getPrefixPathsV4(routev4,
+                                               this->routev4_msg.vrfname(),
+                                               prefix,
+                                               prefixLen);
+        if (response) {
+            VLOG(2) << "Prefix exists in RIB, updating the batch before push.. " 
+                    << this->longToIpv4(routev4.prefix());
+
+            for(int path_cnt=0; path_cnt < routev4.pathlist_size(); path_cnt++) {
+                VLOG(3) << "NextHop Interface: "
+                        << routev4.pathlist(path_cnt).nexthopinterface().name();
+
+                VLOG(3) << "NextHop Address "
+                        << this->longToIpv4(routev4.pathlist(path_cnt).nexthopaddress().v4address());
+                
+                auto path_nexthop_ip_long = routev4.pathlist(path_cnt).nexthopaddress().v4address();
+                auto path_nexthop_ip_str = this->longToIpv4(path_nexthop_ip_long);
+                auto path_nexthop_if = routev4.pathlist(path_cnt).nexthopinterface().name();
+
+                if (action == RSHUTTLE_PATH_DELETE) {
+                    VLOG(2) << "path_nexthop_ip_str: " << path_nexthop_ip_str << "\n"
+                            << "path_nexthop_if: " << path_nexthop_if << "\n"
+                            << "nextHopAddress: " << nextHopAddress << "\n"
+                            << "nextHopIf: " << nextHopIf << "\n";
+
+                    if (path_nexthop_ip_str == nextHopAddress &&
+                        path_nexthop_if == nextHopIf) {
+                        path_found = true; 
+                        continue;
+                    }
+                }
+  
+                // Add the existing paths to a route batch again.
+                bool batch_add_resp = insertAddBatchV4(prefix,
+                                                       prefixLen,
+                                                       adminDistance,
+                                                       path_nexthop_ip_str, 
+                                                       path_nexthop_if);
+
+                if (!batch_add_resp) {
+                    LOG(ERROR) << "Route insertion into ADD batch unsuccessful \n"
+                               << prefix<< "\n"
+                               << prefixLen << "\n"
+                               << path_nexthop_ip_str << "\n"
+                               << path_nexthop_if << "\n";
+                    return false;
+                }
+            } 
+
+            switch(action) {
+            case RSHUTTLE_PATH_ADD:
+                {
+                    // Finish off the batch with the new nexthop passed in
+                    bool batch_add_resp = insertAddBatchV4(prefix,
+                                                           prefixLen,
+                                                           adminDistance,
+                                                           nextHopAddress,
+                                                           nextHopIf);
+
+                    if (!batch_add_resp) {
+                        LOG(ERROR) << "Route insertion into ADD batch unsuccessful \n"
+                                   << prefix<< "\n"
+                                   << prefixLen << "\n"
+                                   << nextHopAddress << "\n"
+                                   << nextHopIf << "\n";
+                        return false;
+                    }
+                    VLOG(1) << "Path "
+                            << "\n  Prefix: " << prefix << "/" << prefixLen
+                            << "\n  NextHop Address: " << nextHopAddress
+                            << "\n  NextHop Interface: " << nextHopIf
+                            << "\nAdded to batch!";
+                    return true;
+                }
+            case RSHUTTLE_PATH_DELETE:
+                {
+                    if (!path_found) {
+                        LOG(ERROR) << "Path not found for delete operation";
+                        return false;
+                    } else { 
+                        VLOG(1) << "Path "
+                                << "\n  Prefix: " << prefix << "/" << prefixLen
+                                << "\n  NextHop Address: " << nextHopAddress
+                                << "\n  NextHop Interface: " << nextHopIf
+                                << "\nDeleted from batch!";
+                        return true;
+                    }
+                } 
+            default:
+                LOG(ERROR) << "Invalid Path operation";
+                return false;
+            }
+        } else {
+            switch(action) {
+            case RSHUTTLE_PATH_ADD:
+                {
+                    VLOG(2) << "Prefix not in RIB, inserting Path into a new Add Batch";
+                    bool batch_add_resp = insertAddBatchV4(prefix,
+                                                           prefixLen,
+                                                           adminDistance,
+                                                           nextHopAddress,
+                                                           nextHopIf);
+                    if (!batch_add_resp) {
+                        LOG(ERROR) << "Route insertion into ADD batch unsuccessful \n"
+                                   << prefix<< "\n"
+                                   << prefixLen << "\n"
+                                   << nextHopAddress << "\n"
+                                   << nextHopIf << "\n";
+                        return false;
+                    }
+
+                    VLOG(1) << "Path "
+                            << "\n  Prefix: " << prefix << "/" << prefixLen
+                            << "\n  NextHop Address: " << nextHopAddress
+                            << "\n  NextHop Interface: " << nextHopIf
+                            << "\nAdded!";
+                    return true;  
+                }
+            case RSHUTTLE_PATH_DELETE:
+                {
+                    LOG(ERROR) << "Prefix not found, cannot Delete Path..";
+                    return false;
+                }
+            default:
+                LOG(ERROR) << "Invalid Path operation";
+                return false;
+            }
+        }
+    }
+}
+
 
 void 
 RShuttle::clearBatchV4()
@@ -281,14 +504,14 @@ RShuttle::clearBatchV4()
 }
 
 
-// Returns true if the prefix exists in Application RIB and route
+// Returns true if the prefix exists in Application RIB and route&
 // gets populated with all the route attributes like Nexthop, adminDistance etc.
 
 bool 
 RShuttle::getPrefixPathsV4(service_layer::SLRoutev4& route,
                            std::string vrfName,
                            std::string prefix,
-                           uint32_t prefixLen,
+                           uint8_t prefixLen,
                            unsigned int timeout)
 {
    
@@ -391,6 +614,77 @@ RShuttle::getPrefixPathsV4(service_layer::SLRoutev4& route,
     }
 }
 
+bool
+RShuttle::addPrefixPathV4(std::string prefix,
+                          uint8_t prefixLen,
+                          std::string nextHopAddress,
+                          std::string nextHopIf)
+{
+    // Create a new update batch and push to RIB
+    bool 
+    batch_update_resp = insertUpdateBatchV4(prefix,
+                                            prefixLen, 
+                                            nextHopAddress, 
+                                            nextHopIf,
+                                            RSHUTTLE_PATH_ADD);
+    if (!batch_update_resp) {
+        LOG(ERROR) << "Failed to create an update batch";
+    } else {
+        if (this->routev4Op(service_layer::SL_OBJOP_UPDATE)) {
+            return true; 
+        }
+    }
+    return false;
+}
+
+bool
+RShuttle::deletePrefixPathV4(std::string prefix,
+                             uint8_t prefixLen,
+                             std::string nextHopAddress,
+                             std::string nextHopIf)
+{
+    // Create a delete batch and push Delete event to RIB
+    bool 
+    batch_update_resp = insertUpdateBatchV4(prefix,
+                                            prefixLen,     
+                                            nextHopAddress,     
+                                            nextHopIf,
+                                            RSHUTTLE_PATH_DELETE);
+
+    if (!batch_update_resp) {
+        LOG(ERROR) << "Failed to create an update batch";
+    } else {
+        if (this->routev4Op(service_layer::SL_OBJOP_UPDATE)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+// V6 methods
+
+void
+RShuttle::setVrfV6(std::string vrfName)
+{
+    routev6_msg.set_vrfname(vrfName);
+}
+
+// Overloaded routev6Add to be used if vrfname is already set
+
+service_layer::SLRoutev6*
+RShuttle::routev6Add()
+{
+    if (routev6_msg.vrfname().empty()) {
+        LOG(ERROR) << "vrfname is empty, please set vrf " 
+                   << "before manipulating v6 routes";
+        return 0;
+    } else {
+        return routev6_msg.add_routes();
+    }
+}
+
+
 service_layer::SLRoutev6*
   RShuttle::routev6Add(std::string vrfName)
 {
@@ -405,7 +699,7 @@ service_layer::SLRoutev6*
 void 
 RShuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
                      std::string prefix,
-                     uint32_t prefixLen)
+                     uint8_t prefixLen)
 {
     routev6Ptr->set_prefix(prefix);
     routev6Ptr->set_prefixlen(prefixLen);
@@ -418,7 +712,7 @@ RShuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
 void 
 RShuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
                      std::string prefix,
-                     uint32_t prefixLen,
+                     uint8_t prefixLen,
                      uint32_t adminDistance)
 {
     routev6Ptr->set_prefix(prefix);
@@ -528,21 +822,25 @@ RShuttle::routev6Op(service_layer::SLObjectOp routeOp,
 }
 
 
-void 
-RShuttle::insertAddBatchV6(std::string vrfName,
-                           std::string prefix,
-                           uint32_t prefixLen,
+bool 
+RShuttle::insertAddBatchV6(std::string prefix,
+                           uint8_t prefixLen,
                            uint32_t adminDistance,
                            std::string nextHopAddress,
                            std::string nextHopIf)
-{   
+{
     auto address = prefix + "/" + std::to_string(prefixLen);
     auto map_index = this->routev6_msg.routes_size();
 
     if (this->prefix_map_v6.find(address) == this->prefix_map_v6.end()) {
         
         // Obtain pointer to a new route object within route batch
-        auto routev6_ptr = this->routev6Add(vrfName);
+        auto routev6_ptr = this->routev6Add();
+
+        if (!routev6_ptr) {
+            LOG(ERROR) << "Failed to create new route object";
+            return false;
+        }
 
         // Set up the new v6 route object
         this->routev6Set(routev6_ptr, 
@@ -562,23 +860,216 @@ RShuttle::insertAddBatchV6(std::string vrfName,
                              nextHopIf);
     }
 
+    return true;
 }
 
 
-void 
-RShuttle::insertDeleteBatchV6(std::string vrfName,
-                              std::string prefix,
-                              uint32_t prefixLen)
+bool
+RShuttle::insertDeleteBatchV6(std::string prefix,
+                              uint8_t prefixLen)
 {   
     
     // Obtain pointer to a new route object within route batch
-    auto routev6_ptr = this->routev6Add(vrfName);
+    auto routev6_ptr = this->routev6Add();
+
+    if (!routev6_ptr) {
+        LOG(ERROR) << "Failed to create new route object";
+        return false;
+    }
     
     // Set up the new v6 route object 
     this->routev6Set(routev6_ptr, 
                      ipv6ToByteArrayString(prefix.c_str()),
                      prefixLen);
+    
+    return true;
 }
+
+
+// overloaded updateBatchV6 with no admin_distance parameter
+bool
+RShuttle::insertUpdateBatchV6(std::string prefix,
+                              uint8_t prefixLen,
+                              std::string nextHopAddress,
+                              std::string nextHopIf,
+                              RShuttle::PathUpdateAction action)
+{
+    service_layer::SLRoutev6 routev6; 
+    if (this->routev6_msg.vrfname().empty()) {
+        LOG(ERROR) << "Route batch vrf not set, aborting route update...";
+        return false;
+    } else { 
+        bool response = this->getPrefixPathsV6(routev6,
+                                               this->routev6_msg.vrfname(),
+                                               prefix,
+                                               prefixLen);
+        if (response) {
+            VLOG(2) << "Prefix exists in RIB, updating the batch before push.. "
+                    << this->ByteArrayStringtoIpv6(routev6.prefix());
+            
+            // Use the existing admin distance from the route in RIB
+            uint32_t admin_distance = routev6.routecommon().admindistance();
+            if (this->insertUpdateBatchV6(prefix,
+                                          prefixLen,
+                                          admin_distance,
+                                          nextHopAddress,
+                                          nextHopIf,
+                                          action)) {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            LOG(ERROR) << "Prefix not found, cannot obtain Admin Distance..";
+            return false;        
+        }
+    }
+}
+
+
+bool
+RShuttle::insertUpdateBatchV6(std::string prefix,
+                              uint8_t prefixLen,
+                              uint32_t adminDistance,
+                              std::string nextHopAddress,
+                              std::string nextHopIf,
+                              RShuttle::PathUpdateAction action)
+{
+    bool path_found = false;
+    service_layer::SLRoutev6 routev6;
+    // check if the prefix exists, and if it does fetch the current 
+    // route in RIB
+
+    if (this->routev6_msg.vrfname().empty()) {
+        LOG(ERROR) << "Route batch vrf not set, aborting route update...";
+        return false;
+    } else {
+        bool response = this->getPrefixPathsV6(routev6,
+                                               this->routev6_msg.vrfname(),
+                                               prefix,
+                                               prefixLen);
+        if (response) {
+            VLOG(2) << "Prefix exists in RIB, updating the batch before push.. "
+                    << this->ByteArrayStringtoIpv6(routev6.prefix());
+            for(int path_cnt=0; path_cnt < routev6.pathlist_size(); path_cnt++) {
+                VLOG(3) << "NextHop Interface: "
+                        << routev6.pathlist(path_cnt).nexthopinterface().name();
+
+                VLOG(3) << "NextHop Address "
+                        << this->ByteArrayStringtoIpv6(routev6.pathlist(path_cnt).nexthopaddress().v6address());
+
+                auto path_nexthop_ip_long = routev6.pathlist(path_cnt).nexthopaddress().v6address();
+                auto path_nexthop_ip_str = this->ByteArrayStringtoIpv6(path_nexthop_ip_long);
+                auto path_nexthop_if = routev6.pathlist(path_cnt).nexthopinterface().name();
+
+                if (action == RSHUTTLE_PATH_DELETE) {
+                    if (path_nexthop_ip_str == nextHopAddress &&
+                        path_nexthop_if == nextHopIf) {
+                        path_found = true;
+                        continue;
+                    }
+                }
+
+                // Add the existing paths to a route batch again.
+                bool batch_add_resp = insertAddBatchV6(prefix,
+                                                       prefixLen,
+                                                       adminDistance,
+                                                       path_nexthop_ip_str,
+                                                       path_nexthop_if);
+
+                if (!batch_add_resp) {
+                    LOG(ERROR) << "Route insertion into ADD batch unsuccessful \n"
+                               << prefix<< "\n"
+                               << prefixLen << "\n"
+                               << path_nexthop_ip_str << "\n"
+                               << path_nexthop_if << "\n";
+                    return false;
+                }
+            }
+
+            switch(action) {
+            case RSHUTTLE_PATH_ADD:
+                {
+                    // Finish off the batch with the new nexthop passed in
+                    bool batch_add_resp = insertAddBatchV6(prefix,
+                                                           prefixLen,
+                                                           adminDistance,
+                                                           nextHopAddress,
+                                                           nextHopIf);
+
+                    if (!batch_add_resp) {
+                        LOG(ERROR) << "Route insertion into ADD batch unsuccessful \n"
+                                   << prefix<< "\n"
+                                   << prefixLen << "\n"
+                                   << nextHopAddress << "\n"
+                                   << nextHopIf << "\n";
+                        return false;
+                    }
+
+                    VLOG(1) << "Path "
+                            << "\n  Prefix: " << prefix << "/" << prefixLen
+                            << "\n  NextHop Address: " << nextHopAddress
+                            << "\n  NextHop Interface: " << nextHopIf
+                            << "\nAdded to batch!";
+                    return true;
+                }
+            case RSHUTTLE_PATH_DELETE:
+                {
+                    if (!path_found) {
+                        LOG(ERROR) << "Path not found for delete operation";
+                        return false;
+                    } else {
+                        VLOG(1) << "Path "
+                                << "\n  Prefix: " << prefix << "/" << prefixLen
+                                << "\n  NextHop Address: " << nextHopAddress
+                                << "\n  NextHop Interface: " << nextHopIf
+                                << "\nDeleted from batch!";
+                        return true;
+                    }
+                }
+            default:
+                LOG(ERROR) << "Invalid Path operation";
+                return false;
+            }
+        } else {
+            switch(action) {
+            case RSHUTTLE_PATH_ADD:
+                {
+                    VLOG(2) << "Prefix not in RIB, inserting Path into a new Add Batch";
+                    bool batch_add_resp = insertAddBatchV6(prefix,
+                                                           prefixLen,
+                                                           adminDistance,
+                                                           nextHopAddress,
+                                                           nextHopIf);
+
+                    if (!batch_add_resp) {
+                        LOG(ERROR) << "Route insertion into ADD batch unsuccessful \n"
+                                   << prefix<< "\n"
+                                   << prefixLen << "\n"
+                                   << nextHopAddress << "\n"
+                                   << nextHopIf << "\n";
+                        return false;
+                    }
+                    VLOG(1) << "Path "
+                            << "\n  Prefix: " << prefix << "/" << prefixLen
+                            << "\n  NextHop Address: " << nextHopAddress
+                            << "\n  NextHop Interface: " << nextHopIf
+                            << "\nAdded!";
+                    return true;
+                }
+            case RSHUTTLE_PATH_DELETE:
+                {
+                    LOG(ERROR) << "Prefix not found, cannot Delete Path..";
+                    return false;
+                }
+            default:
+                LOG(ERROR) << "Invalid Path operation";
+                return false;
+            }
+        }
+    }
+}
+
 
 void 
 RShuttle::clearBatchV6()
@@ -594,7 +1085,7 @@ bool
 RShuttle::getPrefixPathsV6(service_layer::SLRoutev6& route,
                            std::string vrfName,
                            std::string prefix,
-                           uint32_t prefixLen,
+                           uint8_t prefixLen,
                            unsigned int timeout)
 {
 
@@ -695,6 +1186,54 @@ RShuttle::getPrefixPathsV6(service_layer::SLRoutev6& route,
         LOG(ERROR) << "RPC failed, error code is " << status.error_code();
         return false;
     }
+}
+
+bool
+RShuttle::addPrefixPathV6(std::string prefix,
+                          uint8_t prefixLen,
+                          std::string nextHopAddress,
+                          std::string nextHopIf)
+{
+    // Create a new update batch and push to RIB
+    bool 
+    batch_update_resp = insertUpdateBatchV6(prefix,
+                                            prefixLen,
+                                            nextHopAddress,
+                                            nextHopIf,
+                                            RSHUTTLE_PATH_ADD);
+    if (!batch_update_resp) {
+        LOG(ERROR) << "Failed to create an update batch";
+    } else {
+        if (this->routev6Op(service_layer::SL_OBJOP_UPDATE)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+bool
+RShuttle::deletePrefixPathV6(std::string prefix,
+                             uint8_t prefixLen,
+                             std::string nextHopAddress,
+                             std::string nextHopIf)
+{
+    // Create a delete batch and push Delete event to RIB
+    bool
+    batch_update_resp = insertUpdateBatchV6(prefix,
+                                            prefixLen,
+                                            nextHopAddress,
+                                            nextHopIf,
+                                            RSHUTTLE_PATH_DELETE);
+
+    if (!batch_update_resp) {
+        LOG(ERROR) << "Failed to create an update batch";
+    } else {
+        if (this->routev6Op(service_layer::SL_OBJOP_UPDATE)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 

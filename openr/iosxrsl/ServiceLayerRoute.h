@@ -1,6 +1,6 @@
 #pragma once
 
-#include <openr/iosxrsl/ServiceLayerAsyncInit.h>
+#include "ServiceLayerAsyncInit.h"
 #include <iosxrsl/sl_route_common.pb.h>
 #include <iosxrsl/sl_route_ipv4.grpc.pb.h>
 #include <iosxrsl/sl_route_ipv6.grpc.pb.h>
@@ -9,12 +9,17 @@
 
 namespace openr {
 
-class SLVrf;
-extern SLVrf* vrfhandler;
-
+class RShuttle;
+extern RShuttle* route_shuttle;
 class RShuttle {
 public:
     explicit RShuttle(std::shared_ptr<grpc::Channel> Channel);
+
+    enum PathUpdateAction
+    {
+        RSHUTTLE_PATH_ADD,
+        RSHUTTLE_PATH_DELETE,
+    };
 
     std::shared_ptr<grpc::Channel> channel;
     service_layer::SLObjectOp route_op;
@@ -36,17 +41,23 @@ public:
 
     // IPv4 methods
 
+    void setVrfV4(std::string vrfName);
+
+
+    service_layer::SLRoutev4*
+    routev4Add();
+
     service_layer::SLRoutev4*
     routev4Add(std::string vrfName);
 
 
     void routev4Set(service_layer::SLRoutev4* routev4Ptr,
                     uint32_t prefix,
-                    uint32_t prefixLen);
+                    uint8_t prefixLen);
 
     void routev4Set(service_layer::SLRoutev4* routev4Ptr,
                     uint32_t prefix,
-                    uint32_t prefixLen,
+                    uint8_t prefixLen,
                     uint32_t adminDistance); 
 
 
@@ -59,18 +70,29 @@ public:
                    unsigned int timeout=10);
 
 
-    void insertAddBatchV4(std::string vrfName,
-                          std::string prefix,
+    bool insertAddBatchV4(std::string prefix,
                           uint8_t prefixLen,
                           uint32_t adminDistance,
                           std::string nextHopAddress,
                           std::string nextHopIf);
 
-    void insertDeleteBatchV4(std::string vrfName,
-                             std::string prefix,
+    bool insertDeleteBatchV4(std::string prefix,
                              uint8_t prefixLen);
 
-    
+
+    bool insertUpdateBatchV4(std::string prefix,
+                             uint8_t prefixLen,
+                             std::string nextHopAddress,
+                             std::string nextHopIf,
+                             PathUpdateAction action);
+
+    bool insertUpdateBatchV4(std::string prefix,
+                             uint8_t prefixLen,
+                             uint32_t adminDistance,
+                             std::string nextHopAddress,
+                             std::string nextHopIf,
+                             PathUpdateAction action);    
+
     void clearBatchV4();
 
 
@@ -80,23 +102,39 @@ public:
     bool getPrefixPathsV4(service_layer::SLRoutev4& route,
                           std::string vrfName,
                           std::string prefix,
-                          uint32_t prefixLen,
+                          uint8_t prefixLen,
                           unsigned int timeout=10);
 
+    bool addPrefixPathV4(std::string prefix,
+                         uint8_t prefixLen,
+                         std::string nextHopAddress,
+                         std::string nextHopIf);
+
+    bool deletePrefixPathV4(std::string prefix,
+                            uint8_t prefixLen,
+                            std::string nextHopAddress,
+                            std::string nextHopIf);
 
     // IPv6 methods
+
+    void setVrfV6(std::string vrfName);
+
+
+    service_layer::SLRoutev6*
+    routev6Add();
+
     service_layer::SLRoutev6*
     routev6Add(std::string vrfName);
  
 
     void routev6Set(service_layer::SLRoutev6* routev6Ptr,
                     std::string prefix,
-                    uint32_t prefixLen);
+                    uint8_t prefixLen);
 
 
     void routev6Set(service_layer::SLRoutev6* routev6Ptr,
                     std::string prefix,
-                    uint32_t prefixLen,
+                    uint8_t prefixLen,
                     uint32_t adminDistance);
 
     void routev6PathAdd(service_layer::SLRoutev6* routev6Ptr,
@@ -107,16 +145,27 @@ public:
     bool routev6Op(service_layer::SLObjectOp routeOp,
                    unsigned int timeout=10);
 
-    void insertAddBatchV6(std::string vrfName,
-                          std::string prefix,
-                          uint32_t prefixLen,
+    bool insertAddBatchV6(std::string prefix,
+                          uint8_t prefixLen,
                           uint32_t adminDistance,
                           std::string nextHopAddress,
                           std::string nextHopIf);
 
-    void insertDeleteBatchV6(std::string vrfName,
-                             std::string prefix,
-                             uint32_t prefixLen);
+    bool insertDeleteBatchV6(std::string prefix,
+                             uint8_t prefixLen);
+
+    bool insertUpdateBatchV6(std::string prefix,
+                             uint8_t prefixLen,
+                             std::string nextHopAddress,
+                             std::string nextHopIf,
+                             PathUpdateAction action);
+
+    bool insertUpdateBatchV6(std::string prefix,
+                             uint8_t prefixLen,
+                             uint32_t adminDistance,
+                             std::string nextHopAddress,
+                             std::string nextHopIf,
+                             PathUpdateAction action); 
 
 
     void clearBatchV6();
@@ -126,10 +175,18 @@ public:
     bool getPrefixPathsV6(service_layer::SLRoutev6& route,
                           std::string vrfName,
                           std::string prefix,
-                          uint32_t prefixLen,
+                          uint8_t prefixLen,
                           unsigned int timeout=10);
 
+    bool addPrefixPathV6(std::string prefix,
+                         uint8_t prefixLen,
+                         std::string nextHopAddress,
+                         std::string nextHopIf);
 
+    bool deletePrefixPathV6(std::string prefix,
+                            uint8_t prefixLen,
+                            std::string nextHopAddress,
+                            std::string nextHopIf);
 };
 
 
