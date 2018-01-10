@@ -829,10 +829,6 @@ LinkMonitor::createInterfaceDatabase() {
 
 void
 LinkMonitor::sendInterfaceDatabase() {
-  // Return immediately if we are not configured to advertise interface db
-  if (not advertiseInterfaceDb_) {
-    return;
-  }
 
   const auto ifDb = createInterfaceDatabase();
 
@@ -854,6 +850,11 @@ LinkMonitor::sendInterfaceDatabase() {
       sparkCmdSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(serializer_);
   if (result.hasError()) {
     LOG(ERROR) << "Failed updating interface to Spark " << result.error();
+  }
+
+  // Return immediately if we are not configured to advertise interface db
+  if (not advertiseInterfaceDb_) {
+    return;
   }
 
   // advertise link database in KvStore
