@@ -237,6 +237,12 @@ KvStore::KvStore(
       LOG(FATAL) << "Error setting ZMQ_TOS to " << ipTos << " "
                  << peerSyncTos.error();
     }
+    const auto peerSubTos =
+        peerSubSock_.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
+    if (peerSubTos.hasError()) {
+      LOG(FATAL) << "Error setting ZMQ_TOS to " << ipTos << " "
+                 << peerSubTos.error();
+    }
   }
 
   //

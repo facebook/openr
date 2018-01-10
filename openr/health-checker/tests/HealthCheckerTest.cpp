@@ -47,6 +47,7 @@ class HealthCheckerTestFixture : public ::testing::Test {
         uint32_t{50}, /* health check pct */
         uint16_t{0}, // make sure it binds to some open port
         std::chrono::seconds{2},
+        folly::none, /* maybeIpTos */
         AdjacencyDbMarker{"adj:"},
         PrefixDbMarker{"prefix:"},
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},

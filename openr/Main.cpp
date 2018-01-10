@@ -769,6 +769,7 @@ main(int argc, char** argv) {
         FLAGS_health_check_pct,
         static_cast<uint16_t>(FLAGS_health_checker_port),
         std::chrono::seconds(FLAGS_health_checker_ping_interval_s),
+        maybeIpTos,
         AdjacencyDbMarker{Constants::kAdjDbMarker},
         PrefixDbMarker{Constants::kPrefixDbMarker},
         kvStoreLocalCmdUrl,

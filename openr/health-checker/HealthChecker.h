@@ -40,6 +40,7 @@ class HealthChecker final : public fbzmq::ZmqEventLoop {
       uint32_t healthCheckPct,
       uint16_t udpPingPort,
       std::chrono::seconds pingInterval,
+      folly::Optional<int> maybeIpTos,
       const AdjacencyDbMarker& adjacencyDbMarker,
       const PrefixDbMarker& prefixDbMarker,
       const KvStoreLocalCmdUrl& storeCmdUrl,
@@ -56,7 +57,7 @@ class HealthChecker final : public fbzmq::ZmqEventLoop {
 
  private:
   // prepare sockets and timeouts
-  void prepare() noexcept;
+  void prepare(folly::Optional<int> maybeIpTos) noexcept;
 
   // called periodically to send pings to nodesToPing_
   void pingNodes();

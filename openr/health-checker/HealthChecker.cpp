@@ -25,6 +25,7 @@ HealthChecker::HealthChecker(
     uint32_t healthCheckPct,
     uint16_t udpPingPort,
     std::chrono::seconds pingInterval,
+    folly::Optional<int> maybeIpTos,
     const AdjacencyDbMarker& adjacencyDbMarker,
     const PrefixDbMarker& prefixDbMarker,
     const KvStoreLocalCmdUrl& storeCmdUrl,
@@ -59,11 +60,13 @@ HealthChecker::HealthChecker(
   }
 
   // Initialize sockets in event loop
-  scheduleTimeout(std::chrono::seconds(0), [this]() noexcept { prepare(); });
+  scheduleTimeout(
+      std::chrono::seconds(0),
+      [this, maybeIpTos]() noexcept { prepare(maybeIpTos); });
 }
 
 void
-HealthChecker::prepare() noexcept {
+HealthChecker::prepare(folly::Optional<int> maybeIpTos) noexcept {
   // get a dump from kvStore and set callback to process all future publications
 
   const auto adjMap = kvStoreClient_->dumpAllWithPrefix(adjacencyDbMarker_);
@@ -97,6 +100,16 @@ HealthChecker::prepare() noexcept {
       0) {
     LOG(FATAL) << "Failed making the socket v6 only: "
                << folly::errnoStr(errno);
+  }
+  // Set ip-tos
+  if (maybeIpTos) {
+    const int ipTos = *maybeIpTos;
+    if (::setsockopt(
+            pingSocketFd_, IPPROTO_IPV6, IPV6_TCLASS,
+            &ipTos, sizeof(int)) != 0) {
+      LOG(FATAL) << "Failed setting ip-tos value on socket. Error: "
+                 << folly::errnoStr(errno);
+    }
   }
   const auto pingSockAddr =
       folly::SocketAddress(folly::IPAddress("::"), udpPingPort_);
