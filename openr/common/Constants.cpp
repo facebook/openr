@@ -51,7 +51,7 @@ const std::string Constants::kPlatformHost{"::1"};
 
 // Timeout values for thrift TCP connection with switch agent
 const std::chrono::milliseconds Constants::kPlatformConnTimeout{100};
-const std::chrono::milliseconds Constants::kPlatformProcTimeout{1000};
+const std::chrono::milliseconds Constants::kPlatformProcTimeout{10000};
 
 // Required percentage change in measured RTT for announcing new RTT
 const double Constants::kRttChangeThreashold{10.0};
