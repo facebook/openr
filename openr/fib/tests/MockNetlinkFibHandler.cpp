@@ -86,6 +86,9 @@ MockNetlinkFibHandler::addUnicastRoutes(
       unicastRouteDb_.emplace(prefix, newNextHops);
     }
   }
+  SYNCHRONIZED(countAddRoutes_) {
+    countAddRoutes_++;
+  }
 }
 
 void
@@ -99,6 +102,9 @@ MockNetlinkFibHandler::deleteUnicastRoutes(
 
       unicastRouteDb_.erase(myPrefix);
     }
+  }
+  SYNCHRONIZED(countDelRoutes_) {
+    countDelRoutes_++;
   }
 }
 
@@ -178,6 +184,25 @@ MockNetlinkFibHandler::getFibSyncCount() {
   return res;
 }
 
+int64_t
+MockNetlinkFibHandler::getAddRoutesCount() {
+  int64_t res = 0;
+  SYNCHRONIZED(countAddRoutes_) {
+    res = countAddRoutes_;
+  }
+  return res;
+}
+
+int64_t
+MockNetlinkFibHandler::getDelRoutesCount() {
+  int64_t res = 0;
+  SYNCHRONIZED(countDelRoutes_) {
+    res = countDelRoutes_;
+  }
+  return res;
+}
+
+
 void
 MockNetlinkFibHandler::stop() {
   SYNCHRONIZED(unicastRouteDb_) {
@@ -185,6 +210,12 @@ MockNetlinkFibHandler::stop() {
   }
   SYNCHRONIZED(countSync_) {
     countSync_ = 0;
+  }
+  SYNCHRONIZED(countAddRoutes_) {
+    countAddRoutes_ = 0;
+  }
+  SYNCHRONIZED(countDelRoutes_) {
+    countDelRoutes_ = 0;
   }
 }
 
@@ -202,6 +233,12 @@ MockNetlinkFibHandler::restart() {
   }
   SYNCHRONIZED(countSync_) {
     countSync_ = 0;
+  }
+  SYNCHRONIZED(countAddRoutes_) {
+    countAddRoutes_ = 0;
+  }
+  SYNCHRONIZED(countDelRoutes_) {
+    countDelRoutes_ = 0;
   }
 }
 } // namespace openr

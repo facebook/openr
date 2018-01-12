@@ -165,26 +165,30 @@ TEST_F(FibTestFixture, processRouteDb) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
+
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
 
   // Update routes
-  countSync = mockFibHandler->getFibSyncCount();
+  int64_t countAdd = mockFibHandler->getAddRoutesCount();
   routeDb.routes.emplace_back(
       thrift::Route(FRAGILE, prefix3, {path1_3_1, path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
   // syncFib debounce
-  while (mockFibHandler->getFibSyncCount() <= countSync) {
+  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
-
+  EXPECT_GT(mockFibHandler->getAddRoutesCount(), countAdd);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
 }
 
-TEST_F(FibTestFixture, failedRouteAdd) {
+TEST_F(FibTestFixture, basicAddAndDelete) {
   // Make sure fib starts with clean route database
   std::vector<thrift::UnicastRoute> routes;
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -201,16 +205,45 @@ TEST_F(FibTestFixture, failedRouteAdd) {
       thrift::Route(FRAGILE, prefix3, {path1_3_1, path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
-  // Force to remove route from fib agent to mimic route programming failure
-  mockFibHandler->deleteUnicastRoute(
-      kFibId, std::make_unique<thrift::IpPrefix>(prefix3));
-
   // syncFib debounce
   while (mockFibHandler->getFibSyncCount() <= countSync) {
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 2);
+
+  int64_t countAdd = mockFibHandler->getAddRoutesCount();
+  int64_t countDel = mockFibHandler->getDelRoutesCount();
+  EXPECT_EQ(countAdd, 0);
+  EXPECT_EQ(countDel, 0);
+
+  // delete one route
+  routeDb.routes.pop_back();
+  decisionPub.sendThriftObj(routeDb, serializer).value();
+  while (mockFibHandler->getDelRoutesCount() <= countDel) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+  countDel = mockFibHandler->getDelRoutesCount();
+  EXPECT_EQ(countAdd, 0);
+  EXPECT_EQ(countDel, 1);
+
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 1);
+  EXPECT_EQ(routes.front().dest, prefix1);
+  // add back that route
+  routeDb.routes.emplace_back(
+      thrift::Route(FRAGILE, prefix3, {path1_3_1, path1_3_2}));
+  decisionPub.sendThriftObj(routeDb, serializer).value();
+  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+  countAdd = mockFibHandler->getAddRoutesCount();
+  EXPECT_EQ(countAdd, 1);
+  EXPECT_EQ(countDel, 1);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
 }

@@ -76,6 +76,8 @@ class MockNetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
       int16_t clientId) override;
 
   int64_t getFibSyncCount();
+  int64_t getAddRoutesCount();
+  int64_t getDelRoutesCount();
 
   void stop();
 
@@ -90,6 +92,9 @@ class MockNetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
 
   // Number of times Fib syncs with this agent
   folly::Synchronized<int64_t> countSync_{0};
+
+  folly::Synchronized<int64_t> countAddRoutes_{0};
+  folly::Synchronized<int64_t> countDelRoutes_{0};
 };
 
 } // namespace openr

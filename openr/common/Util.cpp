@@ -34,6 +34,40 @@ hash<openr::thrift::IpPrefix>::operator()(
 
 namespace openr {
 
+// need operator< for creating std::set of these thrift types. we need ordered
+// set for set algebra. thrift declares but does not define these for us.
+
+bool
+thrift::BinaryAddress::operator<(const thrift::BinaryAddress& other) const {
+  if (addr != other.addr) {
+    return addr < other.addr;
+  }
+  if (ifName != other.ifName) {
+    return ifName < other.ifName;
+  }
+  return port < other.port;
+}
+
+bool
+thrift::IpPrefix::operator<(const thrift::IpPrefix& other) const {
+  if (prefixAddress != other.prefixAddress) {
+    return prefixAddress < other.prefixAddress;
+  }
+  return prefixLength < other.prefixLength;
+}
+
+bool
+thrift::UnicastRoute::operator<(const thrift::UnicastRoute& other) const {
+  if (dest != other.dest) {
+    return dest < other.dest;
+  }
+  auto myNhs = nexthops;
+  auto otherNhs = other.nexthops;
+  std::sort(myNhs.begin(), myNhs.end());
+  std::sort(otherNhs.begin(), otherNhs.end());
+  return myNhs < otherNhs;
+}
+
 int
 executeShellCommand(const std::string& command) {
   int ret = system(command.c_str());
