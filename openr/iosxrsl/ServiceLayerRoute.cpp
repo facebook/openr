@@ -14,10 +14,10 @@ using service_layer::SLGlobal;
 
 namespace openr {
 
-RShuttle* route_shuttle;
+IosxrslRshuttle* iosxr_rshuttle;
 
 uint32_t 
-RShuttle::ipv4ToLong(const char* address)
+IosxrslRshuttle::ipv4ToLong(const char* address)
 {
     struct sockaddr_in sa;
     if (inet_pton(AF_INET, address, &(sa.sin_addr)) != 1) {
@@ -29,7 +29,7 @@ RShuttle::ipv4ToLong(const char* address)
 }
 
 std::string 
-RShuttle::longToIpv4(uint32_t nlprefix)
+IosxrslRshuttle::longToIpv4(uint32_t nlprefix)
 {
     struct sockaddr_in sa;
     char str[INET_ADDRSTRLEN];
@@ -49,7 +49,7 @@ RShuttle::longToIpv4(uint32_t nlprefix)
 
 
 std::string 
-RShuttle::ipv6ToByteArrayString(const char* address)
+IosxrslRshuttle::ipv6ToByteArrayString(const char* address)
 {
     struct in6_addr ipv6data;
     if (inet_pton(AF_INET6, address, &ipv6data) != 1 ) {
@@ -64,7 +64,7 @@ RShuttle::ipv6ToByteArrayString(const char* address)
 
 
 std::string 
-RShuttle::ByteArrayStringtoIpv6(std::string ipv6ByteArray)
+IosxrslRshuttle::ByteArrayStringtoIpv6(std::string ipv6ByteArray)
 {
 
     struct in6_addr ipv6data;
@@ -81,12 +81,12 @@ RShuttle::ByteArrayStringtoIpv6(std::string ipv6ByteArray)
     }
 }
 
-RShuttle::RShuttle(std::shared_ptr<grpc::Channel> Channel)
+IosxrslRshuttle::IosxrslRshuttle(std::shared_ptr<grpc::Channel> Channel)
     : channel(Channel) {} 
 
 
 void 
-RShuttle::setVrfV4(std::string vrfName)
+IosxrslRshuttle::setVrfV4(std::string vrfName)
 {
     routev4_msg.set_vrfname(vrfName);
 }
@@ -94,7 +94,7 @@ RShuttle::setVrfV4(std::string vrfName)
 // Overloaded routev4Add to be used if vrfname is already set
 
 service_layer::SLRoutev4*
-RShuttle::routev4Add()
+IosxrslRshuttle::routev4Add()
 {
     if (routev4_msg.vrfname().empty()) {
         LOG(ERROR) << "vrfname is empty, please set vrf "
@@ -106,7 +106,7 @@ RShuttle::routev4Add()
 }
 
 service_layer::SLRoutev4* 
-RShuttle::routev4Add(std::string vrfName)
+IosxrslRshuttle::routev4Add(std::string vrfName)
 {
     routev4_msg.set_vrfname(vrfName);
     return routev4_msg.add_routes();
@@ -116,7 +116,7 @@ RShuttle::routev4Add(std::string vrfName)
 // Used for DELETE Operation
 
 void 
-RShuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
+IosxrslRshuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
                      uint32_t prefix,
                      uint8_t prefixLen)
 {   
@@ -130,7 +130,7 @@ RShuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
 
 
 void 
-RShuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
+IosxrslRshuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
                      uint32_t prefix,
                      uint8_t prefixLen,
                      uint32_t adminDistance)
@@ -142,7 +142,7 @@ RShuttle::routev4Set(service_layer::SLRoutev4* routev4Ptr,
 
 
 void 
-RShuttle::routev4PathAdd(service_layer::SLRoutev4* routev4Ptr,
+IosxrslRshuttle::routev4PathAdd(service_layer::SLRoutev4* routev4Ptr,
                          uint32_t nextHopAddress,
                          std::string nextHopIf)
 {
@@ -153,7 +153,7 @@ RShuttle::routev4PathAdd(service_layer::SLRoutev4* routev4Ptr,
 }
 
 bool 
-RShuttle::routev4Op(service_layer::SLObjectOp routeOp,
+IosxrslRshuttle::routev4Op(service_layer::SLObjectOp routeOp,
                     unsigned int timeout)
 {
 
@@ -241,7 +241,7 @@ RShuttle::routev4Op(service_layer::SLObjectOp routeOp,
 }
 
 bool 
-RShuttle::insertAddBatchV4(std::string prefix,
+IosxrslRshuttle::insertAddBatchV4(std::string prefix,
                            uint8_t prefixLen,
                            uint32_t adminDistance,
                            std::string nextHopAddress,
@@ -284,7 +284,7 @@ RShuttle::insertAddBatchV4(std::string prefix,
 
 
 bool 
-RShuttle::insertDeleteBatchV4(std::string prefix,
+IosxrslRshuttle::insertDeleteBatchV4(std::string prefix,
                               uint8_t prefixLen)
 {
 
@@ -306,11 +306,11 @@ RShuttle::insertDeleteBatchV4(std::string prefix,
 
 // overloaded updateBatchV4 with no admin_distance parameter
 bool
-RShuttle::insertUpdateBatchV4(std::string prefix,
+IosxrslRshuttle::insertUpdateBatchV4(std::string prefix,
                               uint8_t prefixLen,
                               std::string nextHopAddress,
                               std::string nextHopIf,
-                              RShuttle::PathUpdateAction action)
+                              IosxrslRshuttle::PathUpdateAction action)
 {
 
     service_layer::SLRoutev4 routev4;
@@ -347,12 +347,12 @@ RShuttle::insertUpdateBatchV4(std::string prefix,
 
 
 bool
-RShuttle::insertUpdateBatchV4(std::string prefix,
+IosxrslRshuttle::insertUpdateBatchV4(std::string prefix,
                               uint8_t prefixLen,
                               uint32_t adminDistance,
                               std::string nextHopAddress,
                               std::string nextHopIf,
-                              RShuttle::PathUpdateAction action)
+                              IosxrslRshuttle::PathUpdateAction action)
 {
 
     bool path_found = false;
@@ -383,7 +383,7 @@ RShuttle::insertUpdateBatchV4(std::string prefix,
                 auto path_nexthop_ip_str = this->longToIpv4(path_nexthop_ip_long);
                 auto path_nexthop_if = routev4.pathlist(path_cnt).nexthopinterface().name();
 
-                if (action == RSHUTTLE_PATH_DELETE) {
+                if (action == IOSXRSL_RSHUTTLE_PATH_DELETE) {
                     VLOG(2) << "path_nexthop_ip_str: " << path_nexthop_ip_str << "\n"
                             << "path_nexthop_if: " << path_nexthop_if << "\n"
                             << "nextHopAddress: " << nextHopAddress << "\n"
@@ -414,7 +414,7 @@ RShuttle::insertUpdateBatchV4(std::string prefix,
             } 
 
             switch(action) {
-            case RSHUTTLE_PATH_ADD:
+            case IOSXRSL_RSHUTTLE_PATH_ADD:
                 {
                     // Finish off the batch with the new nexthop passed in
                     bool batch_add_resp = insertAddBatchV4(prefix,
@@ -438,7 +438,7 @@ RShuttle::insertUpdateBatchV4(std::string prefix,
                             << "\nAdded to batch!";
                     return true;
                 }
-            case RSHUTTLE_PATH_DELETE:
+            case IOSXRSL_RSHUTTLE_PATH_DELETE:
                 {
                     if (!path_found) {
                         LOG(ERROR) << "Path not found for delete operation";
@@ -458,7 +458,7 @@ RShuttle::insertUpdateBatchV4(std::string prefix,
             }
         } else {
             switch(action) {
-            case RSHUTTLE_PATH_ADD:
+            case IOSXRSL_RSHUTTLE_PATH_ADD:
                 {
                     VLOG(2) << "Prefix not in RIB, inserting Path into a new Add Batch";
                     bool batch_add_resp = insertAddBatchV4(prefix,
@@ -482,7 +482,7 @@ RShuttle::insertUpdateBatchV4(std::string prefix,
                             << "\nAdded!";
                     return true;  
                 }
-            case RSHUTTLE_PATH_DELETE:
+            case IOSXRSL_RSHUTTLE_PATH_DELETE:
                 {
                     LOG(ERROR) << "Prefix not found, cannot Delete Path..";
                     return false;
@@ -497,7 +497,7 @@ RShuttle::insertUpdateBatchV4(std::string prefix,
 
 
 void 
-RShuttle::clearBatchV4()
+IosxrslRshuttle::clearBatchV4()
 {
    routev4_msg.clear_routes(); 
    prefix_map_v4.clear();
@@ -508,7 +508,7 @@ RShuttle::clearBatchV4()
 // gets populated with all the route attributes like Nexthop, adminDistance etc.
 
 bool 
-RShuttle::getPrefixPathsV4(service_layer::SLRoutev4& route,
+IosxrslRshuttle::getPrefixPathsV4(service_layer::SLRoutev4& route,
                            std::string vrfName,
                            std::string prefix,
                            uint8_t prefixLen,
@@ -615,7 +615,7 @@ RShuttle::getPrefixPathsV4(service_layer::SLRoutev4& route,
 }
 
 bool
-RShuttle::addPrefixPathV4(std::string prefix,
+IosxrslRshuttle::addPrefixPathV4(std::string prefix,
                           uint8_t prefixLen,
                           std::string nextHopAddress,
                           std::string nextHopIf)
@@ -626,7 +626,7 @@ RShuttle::addPrefixPathV4(std::string prefix,
                                             prefixLen, 
                                             nextHopAddress, 
                                             nextHopIf,
-                                            RSHUTTLE_PATH_ADD);
+                                            IOSXRSL_RSHUTTLE_PATH_ADD);
     if (!batch_update_resp) {
         LOG(ERROR) << "Failed to create an update batch";
     } else {
@@ -638,7 +638,7 @@ RShuttle::addPrefixPathV4(std::string prefix,
 }
 
 bool
-RShuttle::deletePrefixPathV4(std::string prefix,
+IosxrslRshuttle::deletePrefixPathV4(std::string prefix,
                              uint8_t prefixLen,
                              std::string nextHopAddress,
                              std::string nextHopIf)
@@ -649,7 +649,7 @@ RShuttle::deletePrefixPathV4(std::string prefix,
                                             prefixLen,     
                                             nextHopAddress,     
                                             nextHopIf,
-                                            RSHUTTLE_PATH_DELETE);
+                                            IOSXRSL_RSHUTTLE_PATH_DELETE);
 
     if (!batch_update_resp) {
         LOG(ERROR) << "Failed to create an update batch";
@@ -665,7 +665,7 @@ RShuttle::deletePrefixPathV4(std::string prefix,
 // V6 methods
 
 void
-RShuttle::setVrfV6(std::string vrfName)
+IosxrslRshuttle::setVrfV6(std::string vrfName)
 {
     routev6_msg.set_vrfname(vrfName);
 }
@@ -673,7 +673,7 @@ RShuttle::setVrfV6(std::string vrfName)
 // Overloaded routev6Add to be used if vrfname is already set
 
 service_layer::SLRoutev6*
-RShuttle::routev6Add()
+IosxrslRshuttle::routev6Add()
 {
     if (routev6_msg.vrfname().empty()) {
         LOG(ERROR) << "vrfname is empty, please set vrf " 
@@ -686,7 +686,7 @@ RShuttle::routev6Add()
 
 
 service_layer::SLRoutev6*
-  RShuttle::routev6Add(std::string vrfName)
+  IosxrslRshuttle::routev6Add(std::string vrfName)
 {
     routev6_msg.set_vrfname(vrfName);
     return routev6_msg.add_routes();
@@ -697,7 +697,7 @@ service_layer::SLRoutev6*
 // Used for DELETE Operation
 
 void 
-RShuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
+IosxrslRshuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
                      std::string prefix,
                      uint8_t prefixLen)
 {
@@ -710,7 +710,7 @@ RShuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
 // Used for ADD or UPDATE Operation
 
 void 
-RShuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
+IosxrslRshuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
                      std::string prefix,
                      uint8_t prefixLen,
                      uint32_t adminDistance)
@@ -721,7 +721,7 @@ RShuttle::routev6Set(service_layer::SLRoutev6* routev6Ptr,
 }
 
 void 
-RShuttle::routev6PathAdd(service_layer::SLRoutev6* routev6Ptr,
+IosxrslRshuttle::routev6PathAdd(service_layer::SLRoutev6* routev6Ptr,
                          std::string nextHopAddress,
                          std::string nextHopIf)
 {
@@ -732,7 +732,7 @@ RShuttle::routev6PathAdd(service_layer::SLRoutev6* routev6Ptr,
 }
 
 bool 
-RShuttle::routev6Op(service_layer::SLObjectOp routeOp,
+IosxrslRshuttle::routev6Op(service_layer::SLObjectOp routeOp,
                     unsigned int timeout)
 {                      
 
@@ -823,7 +823,7 @@ RShuttle::routev6Op(service_layer::SLObjectOp routeOp,
 
 
 bool 
-RShuttle::insertAddBatchV6(std::string prefix,
+IosxrslRshuttle::insertAddBatchV6(std::string prefix,
                            uint8_t prefixLen,
                            uint32_t adminDistance,
                            std::string nextHopAddress,
@@ -865,7 +865,7 @@ RShuttle::insertAddBatchV6(std::string prefix,
 
 
 bool
-RShuttle::insertDeleteBatchV6(std::string prefix,
+IosxrslRshuttle::insertDeleteBatchV6(std::string prefix,
                               uint8_t prefixLen)
 {   
     
@@ -888,11 +888,11 @@ RShuttle::insertDeleteBatchV6(std::string prefix,
 
 // overloaded updateBatchV6 with no admin_distance parameter
 bool
-RShuttle::insertUpdateBatchV6(std::string prefix,
+IosxrslRshuttle::insertUpdateBatchV6(std::string prefix,
                               uint8_t prefixLen,
                               std::string nextHopAddress,
                               std::string nextHopIf,
-                              RShuttle::PathUpdateAction action)
+                              IosxrslRshuttle::PathUpdateAction action)
 {
     service_layer::SLRoutev6 routev6; 
     if (this->routev6_msg.vrfname().empty()) {
@@ -928,12 +928,12 @@ RShuttle::insertUpdateBatchV6(std::string prefix,
 
 
 bool
-RShuttle::insertUpdateBatchV6(std::string prefix,
+IosxrslRshuttle::insertUpdateBatchV6(std::string prefix,
                               uint8_t prefixLen,
                               uint32_t adminDistance,
                               std::string nextHopAddress,
                               std::string nextHopIf,
-                              RShuttle::PathUpdateAction action)
+                              IosxrslRshuttle::PathUpdateAction action)
 {
     bool path_found = false;
     service_layer::SLRoutev6 routev6;
@@ -962,7 +962,7 @@ RShuttle::insertUpdateBatchV6(std::string prefix,
                 auto path_nexthop_ip_str = this->ByteArrayStringtoIpv6(path_nexthop_ip_long);
                 auto path_nexthop_if = routev6.pathlist(path_cnt).nexthopinterface().name();
 
-                if (action == RSHUTTLE_PATH_DELETE) {
+                if (action == IOSXRSL_RSHUTTLE_PATH_DELETE) {
                     if (path_nexthop_ip_str == nextHopAddress &&
                         path_nexthop_if == nextHopIf) {
                         path_found = true;
@@ -988,7 +988,7 @@ RShuttle::insertUpdateBatchV6(std::string prefix,
             }
 
             switch(action) {
-            case RSHUTTLE_PATH_ADD:
+            case IOSXRSL_RSHUTTLE_PATH_ADD:
                 {
                     // Finish off the batch with the new nexthop passed in
                     bool batch_add_resp = insertAddBatchV6(prefix,
@@ -1013,7 +1013,7 @@ RShuttle::insertUpdateBatchV6(std::string prefix,
                             << "\nAdded to batch!";
                     return true;
                 }
-            case RSHUTTLE_PATH_DELETE:
+            case IOSXRSL_RSHUTTLE_PATH_DELETE:
                 {
                     if (!path_found) {
                         LOG(ERROR) << "Path not found for delete operation";
@@ -1033,7 +1033,7 @@ RShuttle::insertUpdateBatchV6(std::string prefix,
             }
         } else {
             switch(action) {
-            case RSHUTTLE_PATH_ADD:
+            case IOSXRSL_RSHUTTLE_PATH_ADD:
                 {
                     VLOG(2) << "Prefix not in RIB, inserting Path into a new Add Batch";
                     bool batch_add_resp = insertAddBatchV6(prefix,
@@ -1057,7 +1057,7 @@ RShuttle::insertUpdateBatchV6(std::string prefix,
                             << "\nAdded!";
                     return true;
                 }
-            case RSHUTTLE_PATH_DELETE:
+            case IOSXRSL_RSHUTTLE_PATH_DELETE:
                 {
                     LOG(ERROR) << "Prefix not found, cannot Delete Path..";
                     return false;
@@ -1072,7 +1072,7 @@ RShuttle::insertUpdateBatchV6(std::string prefix,
 
 
 void 
-RShuttle::clearBatchV6()
+IosxrslRshuttle::clearBatchV6()
 {
    routev6_msg.clear_routes();
    prefix_map_v6.clear();
@@ -1082,7 +1082,7 @@ RShuttle::clearBatchV6()
 // gets populated with all the route attributes like Nexthop, adminDistance etc.
 
 bool 
-RShuttle::getPrefixPathsV6(service_layer::SLRoutev6& route,
+IosxrslRshuttle::getPrefixPathsV6(service_layer::SLRoutev6& route,
                            std::string vrfName,
                            std::string prefix,
                            uint8_t prefixLen,
@@ -1189,7 +1189,7 @@ RShuttle::getPrefixPathsV6(service_layer::SLRoutev6& route,
 }
 
 bool
-RShuttle::addPrefixPathV6(std::string prefix,
+IosxrslRshuttle::addPrefixPathV6(std::string prefix,
                           uint8_t prefixLen,
                           std::string nextHopAddress,
                           std::string nextHopIf)
@@ -1200,7 +1200,7 @@ RShuttle::addPrefixPathV6(std::string prefix,
                                             prefixLen,
                                             nextHopAddress,
                                             nextHopIf,
-                                            RSHUTTLE_PATH_ADD);
+                                            IOSXRSL_RSHUTTLE_PATH_ADD);
     if (!batch_update_resp) {
         LOG(ERROR) << "Failed to create an update batch";
     } else {
@@ -1213,7 +1213,7 @@ RShuttle::addPrefixPathV6(std::string prefix,
 
 
 bool
-RShuttle::deletePrefixPathV6(std::string prefix,
+IosxrslRshuttle::deletePrefixPathV6(std::string prefix,
                              uint8_t prefixLen,
                              std::string nextHopAddress,
                              std::string nextHopIf)
@@ -1224,7 +1224,7 @@ RShuttle::deletePrefixPathV6(std::string prefix,
                                             prefixLen,
                                             nextHopAddress,
                                             nextHopIf,
-                                            RSHUTTLE_PATH_DELETE);
+                                            IOSXRSL_RSHUTTLE_PATH_DELETE);
 
     if (!batch_update_resp) {
         LOG(ERROR) << "Failed to create an update batch";
@@ -1237,14 +1237,14 @@ RShuttle::deletePrefixPathV6(std::string prefix,
 }
 
 
-SLVrf::SLVrf(std::shared_ptr<grpc::Channel> Channel)
+IosxrslVrf::IosxrslVrf(std::shared_ptr<grpc::Channel> Channel)
     : channel(Channel) {}
 
 // Overloaded variant of vrfRegMsgAdd without adminDistance and Purgeinterval
 // Suitable for VRF UNREGISTER and REGISTER operations
 
 void 
-SLVrf::vrfRegMsgAdd(std::string vrfName)
+IosxrslVrf::vrfRegMsgAdd(std::string vrfName)
 {
 
     // Get a pointer to a new vrf_reg entry in vrf_msg
@@ -1258,7 +1258,7 @@ SLVrf::vrfRegMsgAdd(std::string vrfName)
 // Suitable for VRF REGISTER
 
 void 
-SLVrf::vrfRegMsgAdd(std::string vrfName,
+IosxrslVrf::vrfRegMsgAdd(std::string vrfName,
                     unsigned int adminDistance,
                     unsigned int vrfPurgeIntervalSeconds)
 {
@@ -1273,7 +1273,7 @@ SLVrf::vrfRegMsgAdd(std::string vrfName,
 
 
 bool 
-SLVrf::registerVrf(unsigned int addrFamily)
+IosxrslVrf::registerVrf(unsigned int addrFamily)
 {
     // Send an RPC for VRF registrations
 
@@ -1293,7 +1293,6 @@ SLVrf::registerVrf(unsigned int addrFamily)
             return false;
         } 
         break;
-
     case AF_INET6:
         // Issue VRF Register RPC
         if (vrfOpv6(service_layer::SL_REGOP_REGISTER)) {
@@ -1308,10 +1307,7 @@ SLVrf::registerVrf(unsigned int addrFamily)
             LOG(ERROR) << "Failed to send Register RPC";
             return false;
         }
-
-
         break;            
-
     default:
         LOG(ERROR) << "Invalid Address family, skipping..";
         return false;
@@ -1321,20 +1317,16 @@ SLVrf::registerVrf(unsigned int addrFamily)
 }
 
 bool 
-SLVrf::unregisterVrf(unsigned int addrFamily)
+IosxrslVrf::unregisterVrf(unsigned int addrFamily)
 {
-
     //  When done with the VRFs, RPC Delete Registration
-
     switch(addrFamily) {
     case AF_INET:
         return vrfOpv4(service_layer::SL_REGOP_UNREGISTER);
         break;
-
     case AF_INET6:
         return vrfOpv6(service_layer::SL_REGOP_UNREGISTER);
         break;
-
     default:
         LOG(ERROR) << "Invalid Address family, skipping..";
         return false;
@@ -1343,7 +1335,7 @@ SLVrf::unregisterVrf(unsigned int addrFamily)
 }
 
 bool 
-SLVrf::vrfOpv4(service_layer::SLRegOp vrfOp)
+IosxrslVrf::vrfOpv4(service_layer::SLRegOp vrfOp)
 {
     // Set up the RouteV4Oper Stub
     auto stub_ = service_layer::SLRoutev4Oper::NewStub(channel);
@@ -1421,7 +1413,7 @@ SLVrf::vrfOpv4(service_layer::SLRegOp vrfOp)
 }
                     
 bool 
-SLVrf::vrfOpv6(service_layer::SLRegOp vrfOp)
+IosxrslVrf::vrfOpv6(service_layer::SLRegOp vrfOp)
 {
     // Set up the RouteV4Oper Stub
     auto stub_ = service_layer::SLRoutev6Oper::NewStub(channel);

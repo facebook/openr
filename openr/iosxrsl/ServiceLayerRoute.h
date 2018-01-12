@@ -9,16 +9,14 @@
 
 namespace openr {
 
-class RShuttle;
-extern RShuttle* route_shuttle;
-class RShuttle {
+class IosxrslRshuttle {
 public:
-    explicit RShuttle(std::shared_ptr<grpc::Channel> Channel);
+    explicit IosxrslRshuttle(std::shared_ptr<grpc::Channel> Channel);
 
     enum PathUpdateAction
     {
-        RSHUTTLE_PATH_ADD,
-        RSHUTTLE_PATH_DELETE,
+        IOSXRSL_RSHUTTLE_PATH_ADD,
+        IOSXRSL_RSHUTTLE_PATH_DELETE,
     };
 
     std::shared_ptr<grpc::Channel> channel;
@@ -190,9 +188,9 @@ public:
 };
 
 
-class SLVrf {
+class IosxrslVrf {
 public:
-    explicit SLVrf(std::shared_ptr<grpc::Channel> Channel);
+    explicit IosxrslVrf(std::shared_ptr<grpc::Channel> Channel);
 
     std::shared_ptr<grpc::Channel> channel;
     service_layer::SLVrfRegMsg vrf_msg;
