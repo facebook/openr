@@ -154,11 +154,11 @@ install_fbzmq() {
     -DCMAKE_EXE_LINKER_FLAGS="-static" \
     -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
     -DBUILD_TESTS=OFF \
-    ..
+    ../fbzmq/
   make
   make install
   ldconfig
-  cd ../py
+  cd ../fbzmq/py
   python setup.py install
   popd
 }
