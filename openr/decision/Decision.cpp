@@ -1139,7 +1139,7 @@ Decision::Decision(
     const DecisionPubUrl& decisionPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : expBackoff_(debounceMinDur, debounceMaxDur),
+    : processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       myNodeName_(myNodeName),
       adjacencyDbMarker_(adjacencyDbMarker),
       prefixDbMarker_(prefixDbMarker),
@@ -1153,8 +1153,8 @@ Decision::Decision(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       decisionPub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
-  processPendingAdjUpdatesTimer_ = fbzmq::ZmqTimeout::make(
-      this, [this]() noexcept { processPendingAdjUpdates(); });
+  processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
+      this, [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(enableV4);
 
   zmqMonitorClient_ =
@@ -1221,20 +1221,19 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
           return;
         }
 
-        // Apply publication and compute routes with exponential
-        // backoff timer if needed
-        auto const& processPublicationResult =
-            processPublication(maybeThriftPub.value());
-        if (processPublicationResult.adjChanged) {
-          if (!expBackoff_.atMaxBackoff()) {
-            expBackoff_.reportError();
-            processPendingAdjUpdatesTimer_->scheduleTimeout(
-                expBackoff_.getTimeRemainingUntilRetry());
+        // Apply publication and update stored update status
+        auto const& res = processPublication(maybeThriftPub.value());
+        processUpdatesStatus_.adjChanged |= res.adjChanged;
+        processUpdatesStatus_.prefixesChanged |= res.prefixesChanged;
+        // compute routes with exponential backoff timer if needed
+        if (res.adjChanged || res.prefixesChanged) {
+          if (!processUpdatesBackoff_.atMaxBackoff()) {
+            processUpdatesBackoff_.reportError();
+            processUpdatesTimer_->scheduleTimeout(
+                processUpdatesBackoff_.getTimeRemainingUntilRetry());
           } else {
-            CHECK(processPendingAdjUpdatesTimer_->isScheduled());
+            CHECK(processUpdatesTimer_->isScheduled());
           }
-        } else if (processPublicationResult.prefixesChanged) {
-          processPendingPrefixUpdates();
         }
       });
 
@@ -1467,6 +1466,22 @@ Decision::logDebounceEvent(
 }
 
 void
+Decision::processPendingUpdates() {
+  if (processUpdatesStatus_.adjChanged) {
+    processPendingAdjUpdates();
+  } else if (processUpdatesStatus_.prefixesChanged) {
+    processPendingPrefixUpdates();
+  }
+
+  // reset update status
+  processUpdatesStatus_.adjChanged = false;
+  processUpdatesStatus_.prefixesChanged = false;
+
+  // update decision debounce flag
+  processUpdatesBackoff_.reportSuccess();
+}
+
+void
 Decision::processPendingAdjUpdates() {
   VLOG(1) << "Decision: processing " << pendingAdjUpdates_.getCount()
           << " accumulated adjacency updates.";
@@ -1505,19 +1520,10 @@ Decision::processPendingAdjUpdates() {
   if (sendRc.hasError()) {
     LOG(ERROR) << "Error publishing new routing table: " << sendRc.error();
   }
-
-  // update decision debounce flag
-  expBackoff_.reportSuccess();
 }
 
 void
 Decision::processPendingPrefixUpdates() {
-  if (processPendingAdjUpdatesTimer_->isScheduled()) {
-    LOG(INFO) << "Decision: spf recalculation scheduled, skipping prefixes "
-              << "update this time";
-    return;
-  }
-
   auto maybePerfEvents = pendingPrefixUpdates_.getPerfEvents();
   pendingPrefixUpdates_.clear();
 

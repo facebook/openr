@@ -68,6 +68,8 @@ const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto addr2 = toIpPrefix("::ffff:10.2.2.2/128");
 const auto addr3 = toIpPrefix("::ffff:10.3.3.3/128");
 const auto addr4 = toIpPrefix("::ffff:10.4.4.4/128");
+const auto addr5 = toIpPrefix("::ffff:10.4.4.5/128");
+const auto addr6 = toIpPrefix("::ffff:10.4.4.6/128");
 const auto addr1V4 = toIpPrefix("10.1.1.1/32");
 const auto addr2V4 = toIpPrefix("10.2.2.2/32");
 const auto addr3V4 = toIpPrefix("10.3.3.3/32");
@@ -90,8 +92,9 @@ const auto prefixDb3V4 =
 const auto prefixDb4V4 =
     createPrefixDb("4", {{FRAGILE, addr4V4, thrift::PrefixType::LOOPBACK, {}}});
 
-// timeout to wait until spf finished
-const std::chrono::milliseconds spfTimeout{250};
+// timeout to wait until decision debounce
+// (i.e. spf recalculation, route rebuild) finished
+const std::chrono::milliseconds debounceTimeout{250};
 
 using NextHop = pair<string /* ifname */, folly::IPAddress /* nexthop ip */>;
 // Note: use unordered_set bcoz paths in a route can be in arbitrary order
@@ -1503,14 +1506,16 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
+  EXPECT_EQ(0, counters["decision.route_build_requests.count.0"]);
   replyInitialSyncReq(publication);
 
   /* sleep override */
   // wait for SPF to finish
-  std::this_thread::sleep_for(spfTimeout / 2);
+  std::this_thread::sleep_for(debounceTimeout / 2);
   // validate SPF after initial sync, no rebouncing here
   counters = decision->getCounters();
   EXPECT_EQ(1, counters["decision.paths_build_requests.count.0"]);
+  EXPECT_EQ(1, counters["decision.route_build_requests.count.0"]);
 
   //
   // publish the link state info to KvStore via the KvStore pub socket
@@ -1532,31 +1537,105 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // we simulate adding a new router R4
 
   // Some tricks here; we need to bump the time-stamp on router 3's data, so
-  // it can override existing; for router 4 we publish new key-value
+  // it can override existing;
 
   publication = thrift::Publication(
       FRAGILE,
       {{"adj:4", createAdjValue("4", 1, {adj43})},
-       {"adj:3", createAdjValue("3", 5, {adj32, adj34})},
-       {"prefix:4", createPrefixValue("4", 1, {addr4})}},
+       {"adj:3", createAdjValue("3", 5, {adj32, adj34})}},
       {});
 
   publishRouteDb(publication);
 
   /* sleep override */
   // wait long enough for SPF to finish if it is called and short enoughs
-  // before deboucing timer spfTimeout expires
-  std::this_thread::sleep_for(spfTimeout / 20);
+  // before deboucing timer debounceTimeout expires
+  std::this_thread::sleep_for(debounceTimeout / 20);
   // validate SPF: shall not have run here
   counters = decision->getCounters();
   EXPECT_EQ(1, counters["decision.paths_build_requests.count.0"]);
+  EXPECT_EQ(1, counters["decision.route_build_requests.count.0"]);
 
   /* sleep override */
   // wait for debouncing to kick in
-  std::this_thread::sleep_for(spfTimeout);
+  std::this_thread::sleep_for(debounceTimeout);
   // validate SPF
   counters = decision->getCounters();
   EXPECT_EQ(2, counters["decision.paths_build_requests.count.0"]);
+  EXPECT_EQ(2, counters["decision.route_build_requests.count.0"]);
+
+  //
+  // Only publish prefix updates
+  //
+  publication = thrift::Publication(
+      FRAGILE,
+      {{"prefix:4", createPrefixValue("4", 1, {addr4})}},
+      {});
+  publishRouteDb(publication);
+
+  /* sleep override */
+  // wait for route rebuilding to finish
+  std::this_thread::sleep_for(debounceTimeout / 2);
+  counters = decision->getCounters();
+  EXPECT_EQ(2, counters["decision.paths_build_requests.count.0"]);
+  EXPECT_EQ(3, counters["decision.route_build_requests.count.0"]);
+
+  //
+  // publish adj updates right after prefix updates
+  // Decision is supposed to only trigger spf recalculation
+
+  // Some tricks here; we need to bump the time-stamp on router 4's data, so
+  // it can override existing;
+  publication = thrift::Publication(
+      FRAGILE,
+      {{"prefix:4", createPrefixValue("4", 2, {addr4, addr5})}},
+      {});
+  publishRouteDb(publication);
+
+  publication = thrift::Publication(
+      FRAGILE,
+      {{"adj:2", createAdjValue("2", 5, {adj21})}},
+      {});
+  publishRouteDb(publication);
+
+  /* sleep override */
+  // wait for SPF to finish
+  std::this_thread::sleep_for(debounceTimeout);
+  counters = decision->getCounters();
+  EXPECT_EQ(3, counters["decision.paths_build_requests.count.0"]);
+  EXPECT_EQ(4, counters["decision.route_build_requests.count.0"]);
+
+  //
+  // publish multiple prefix updates in a row
+  // Decision is supposed to process prefix update only once
+
+  // Some tricks here; we need to bump the time-stamp on router 4's data, so
+  // it can override existing;
+  publication = thrift::Publication(
+      FRAGILE,
+      {{"prefix:4", createPrefixValue("4", 5, {addr4})}},
+      {});
+  publishRouteDb(publication);
+
+  publication = thrift::Publication(
+      FRAGILE,
+      {{"prefix:4", createPrefixValue("4", 7, {addr4, addr6})}},
+      {});
+  publishRouteDb(publication);
+
+  publication = thrift::Publication(
+      FRAGILE,
+      {{"prefix:4", createPrefixValue("4", 8, {addr4, addr5, addr6})}},
+      {});
+  publishRouteDb(publication);
+
+  /* sleep override */
+  // wait for route rebuilding to finish
+  std::this_thread::sleep_for(debounceTimeout);
+  counters = decision->getCounters();
+  EXPECT_EQ(3, counters["decision.paths_build_requests.count.0"]);
+  // only 1 request shall be processed
+  EXPECT_EQ(5, counters["decision.route_build_requests.count.0"]);
 }
 
 //
@@ -1584,7 +1663,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * spfTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeout);
 
   // make sure the counter did not increment
   counters = decision->getCounters();
@@ -1616,7 +1695,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * spfTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeout);
 
   // make sure counter is incremented
   counters = decision->getCounters();
@@ -1627,7 +1706,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * spfTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeout);
 
   // make sure counter is not incremented
   counters = decision->getCounters();
@@ -1736,7 +1815,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * spfTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeout);
 
   // Query new information
   // validate routers
@@ -1815,7 +1894,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * spfTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeout);
 
   // Query new information
   // validate routers
@@ -1871,7 +1950,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * spfTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeout);
 
   // Query new information
   // validate routers
@@ -1964,7 +2043,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   while (true) {
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start);
-    if (diff > (3 * spfTimeout)) {
+    if (diff > (3 * debounceTimeout)) {
       LOG(INFO) << "Hammered decision with " << totalSent
                 << " updates. Stopping";
       break;

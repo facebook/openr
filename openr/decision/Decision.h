@@ -205,17 +205,34 @@ class Decision : public fbzmq::ZmqEventLoop {
   /**
    * Process received publication and populate the pendingAdjUpdates_
    * attributes which can be applied later on after a debounce timeout.
-   * returns `true` if SPF computation needs to be triggered
    */
   detail::DecisionPendingUpdates pendingAdjUpdates_;
-  std::unique_ptr<fbzmq::ZmqTimeout> processPendingAdjUpdatesTimer_;
-  ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
 
   /**
    * Process received publication and populate the pendingPrefixUpdates_
    * attributes upon receiving prefix update publication
    */
   detail::DecisionPendingUpdates pendingPrefixUpdates_;
+
+  /**
+   * Timer to schedule pending update processing
+   * Refer to processUpdatesStatus_ to decide whether spf recalculation or
+   * just route rebuilding is needed.
+   * Apply exponential backoff timeout to avoid churn
+   */
+  std::unique_ptr<fbzmq::ZmqTimeout> processUpdatesTimer_;
+  ExponentialBackoff<std::chrono::milliseconds> processUpdatesBackoff_;
+
+  // store update to-do status
+  ProcessPublicationResult processUpdatesStatus_;
+
+  /**
+   * Caller function of processPendingAdjUpdates and processPendingPrefixUpdates
+   * Check current processUpdatesStatus_ to decide which sub function to call
+   * to further process pending updates
+   * Reset timer and status afterwards.
+   */
+  void processPendingUpdates();
 
   /**
    * Function to process pending adjacency publications.
