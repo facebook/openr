@@ -21,7 +21,7 @@ getEnvVar(std::string const & key)
 
 
 IosxrslVrf* vrfhandler_signum;
-std::unique_ptr<IosxrslRshuttle> rshuttle_signum;
+std::unique_ptr<IosxrslRoute> route_signum;
 AsyncNotifChannel* asynchandler_signum;
 bool sighandle_initiated = false;
 
@@ -51,72 +51,122 @@ signalHandler(int signum)
 }
 
 
-void routeplay(std::unique_ptr<IosxrslRshuttle> & iosxrsl_rshuttle) {
+void routeplay(std::unique_ptr<IosxrslRoute> & iosxrsl_route) {
 
-    iosxrsl_rshuttle->setVrfV4("default");
+    iosxrsl_route->setVrfV4("default");
     // Insert routes - prefix, prefixlen, admindistance, nexthopaddress, nexthopif one by one
-    iosxrsl_rshuttle->insertAddBatchV4("20.0.1.0", 24, 120, "14.1.1.10","GigabitEthernet0/0/0/0");
-    iosxrsl_rshuttle->insertAddBatchV4("20.0.1.0", 24, 120, "15.1.1.10","GigabitEthernet0/0/0/1");
-    iosxrsl_rshuttle->insertAddBatchV4("23.0.1.0", 24, 120, "14.1.1.10","GigabitEthernet0/0/0/0");
-    iosxrsl_rshuttle->insertAddBatchV4("23.0.1.0", 24, 120, "15.1.1.10","GigabitEthernet0/0/0/1");
-    iosxrsl_rshuttle->insertAddBatchV4("30.0.1.0", 24, 120, "14.1.1.10","GigabitEthernet0/0/0/0");
+    iosxrsl_route->insertAddBatchV4("20.0.1.0", 24, 120, "14.1.1.10","GigabitEthernet0/0/0/0");
+    iosxrsl_route->insertAddBatchV4("20.0.1.0", 24, 120, "15.1.1.10","GigabitEthernet0/0/0/1");
+    iosxrsl_route->insertAddBatchV4("23.0.1.0", 24, 120, "14.1.1.10","GigabitEthernet0/0/0/0");
+    iosxrsl_route->insertAddBatchV4("23.0.1.0", 24, 120, "15.1.1.10","GigabitEthernet0/0/0/1");
+    iosxrsl_route->insertAddBatchV4("30.0.1.0", 24, 120, "14.1.1.10","GigabitEthernet0/0/0/0");
 
     // Push route batch into the IOS-XR RIB
-    iosxrsl_rshuttle->routev4Op(service_layer::SL_OBJOP_UPDATE);
+    iosxrsl_route->routev4Op(service_layer::SL_OBJOP_UPDATE);
 
     service_layer::SLRoutev4 routev4;
-    bool response = iosxrsl_rshuttle->getPrefixPathsV4(routev4,"default", "23.0.1.0", 24);
+    bool response = iosxrsl_route->getPrefixPathsV4(routev4,"default", "23.0.1.0", 24);
 
-    LOG(INFO) << "Prefix " << iosxrsl_rshuttle->longToIpv4(routev4.prefix());
+    LOG(INFO) << "Prefix " << iosxrsl_route->longToIpv4(routev4.prefix());
     for(int path_cnt=0; path_cnt < routev4.pathlist_size(); path_cnt++) {
         LOG(INFO) << "NextHop Interface: "
                   << routev4.pathlist(path_cnt).nexthopinterface().name();
 
         LOG(INFO) << "NextHop Address "
-                  << iosxrsl_rshuttle->longToIpv4(routev4.pathlist(path_cnt).nexthopaddress().v4address());
+                  << iosxrsl_route->longToIpv4(routev4.pathlist(path_cnt).nexthopaddress().v4address());
     }
 
 
-    iosxrsl_rshuttle->addPrefixPathV4("30.0.1.0", 24, "15.1.1.10", "GigabitEthernet0/0/0/1");
-    iosxrsl_rshuttle->addPrefixPathV4("30.0.1.0", 24, "16.1.1.10", "GigabitEthernet0/0/0/2");
+    iosxrsl_route->addPrefixPathV4("30.0.1.0", 24, "15.1.1.10", "GigabitEthernet0/0/0/1");
+    iosxrsl_route->addPrefixPathV4("30.0.1.0", 24, "16.1.1.10", "GigabitEthernet0/0/0/2");
 
-    iosxrsl_rshuttle->deletePrefixPathV4("30.0.1.0", 24,"15.1.1.10", "GigabitEthernet0/0/0/1");
+    iosxrsl_route->deletePrefixPathV4("30.0.1.0", 24,"15.1.1.10", "GigabitEthernet0/0/0/1");
 
-    iosxrsl_rshuttle->setVrfV6("default");
+    iosxrsl_route->setVrfV6("default");
     // Create a v6 route batch, same principle as v4
-    iosxrsl_rshuttle->insertAddBatchV6("2002:aa::0", 64, 120, "2002:ae::3", "GigabitEthernet0/0/0/0");
-    iosxrsl_rshuttle->insertAddBatchV6("2003:aa::0", 64, 120, "2002:ae::4", "GigabitEthernet0/0/0/1");
+    iosxrsl_route->insertAddBatchV6("2002:aa::0", 64, 120, "2002:ae::3", "GigabitEthernet0/0/0/0");
+    iosxrsl_route->insertAddBatchV6("2003:aa::0", 64, 120, "2002:ae::4", "GigabitEthernet0/0/0/1");
 
-    iosxrsl_rshuttle->insertAddBatchV6("face:b00c::", 64, 120, "fe80::a00:27ff:feb5:793c", "GigabitEthernet0/0/0/1");
+    iosxrsl_route->insertAddBatchV6("face:b00c::", 64, 120, "fe80::a00:27ff:feb5:793c", "GigabitEthernet0/0/0/1");
 
     // Push route batch into the IOS-XR RIB
-    iosxrsl_rshuttle->routev6Op(service_layer::SL_OBJOP_ADD);
+    iosxrsl_route->routev6Op(service_layer::SL_OBJOP_ADD);
 
     service_layer::SLRoutev6 routev6;
-    response = iosxrsl_rshuttle->getPrefixPathsV6(routev6,"default", "2002:aa::0", 64);
+    response = iosxrsl_route->getPrefixPathsV6(routev6,"default", "2002:aa::0", 64);
 
-    LOG(INFO) << "Prefix " << iosxrsl_rshuttle->ByteArrayStringtoIpv6(routev6.prefix());
+    LOG(INFO) << "Prefix " << iosxrsl_route->ByteArrayStringtoIpv6(routev6.prefix());
     int path_cnt=0;
     for(int path_cnt=0; path_cnt < routev6.pathlist_size(); path_cnt++) {
         LOG(INFO) << "NextHop Interface: "
                   << routev6.pathlist(path_cnt).nexthopinterface().name();
 
         LOG(INFO) << "NextHop Address "
-                  << iosxrsl_rshuttle->ByteArrayStringtoIpv6(routev6.pathlist(path_cnt).nexthopaddress().v6address());
+                  << iosxrsl_route->ByteArrayStringtoIpv6(routev6.pathlist(path_cnt).nexthopaddress().v6address());
     }
 
 
     // Let's create a delete route batch for v4 
-    iosxrsl_rshuttle->insertDeleteBatchV4("20.0.1.0", 24);
-    iosxrsl_rshuttle->insertDeleteBatchV4("23.0.1.0", 24);
+    iosxrsl_route->insertDeleteBatchV4("20.0.1.0", 24);
+    iosxrsl_route->insertDeleteBatchV4("23.0.1.0", 24);
 
     // Push route batch into the IOS-XR RIB
-    iosxrsl_rshuttle->routev4Op(service_layer::SL_OBJOP_DELETE);
+    iosxrsl_route->routev4Op(service_layer::SL_OBJOP_DELETE);
 
 }
 int main(int argc, char** argv) {
 
+    std::string ifname = "Hg0_0_1_0";
 
+
+    enum IfNameTypes
+    {
+        GIG,
+        TEN_GIG,
+        FORTY_GIG,
+        TWENTY_FIVE_GIG,
+        HUNDRED_GIG,
+        MGMT
+    };
+
+    std::map<std::string, IfNameTypes>
+    iosxrLnxIfname = {{"Gi",GIG}, {"Tg", TEN_GIG},
+                      {"Fg",FORTY_GIG}, {"Tf", TWENTY_FIVE_GIG},
+                      {"Hg",HUNDRED_GIG}, {"Mg", MGMT}};
+
+
+    auto ifnamePrefix = "";
+    
+    switch (iosxrLnxIfname[ifname.substr(0,2)]) {
+    case GIG:
+        ifnamePrefix = "GigabitEthernet";
+        break;
+    case TEN_GIG:
+        ifnamePrefix = "TenGigE";
+        break;
+    case FORTY_GIG:
+        ifnamePrefix = "FortyGigE";
+        break;
+    case TWENTY_FIVE_GIG:
+        ifnamePrefix = "TwentyFiveGigE";
+        break;
+    case HUNDRED_GIG:
+        ifnamePrefix = "HundredGigE";
+        break;
+    case MGMT:
+        ifnamePrefix = "MgmtEth";
+        break;
+    default:
+        LOG(ERROR) << "Invalid Interface " << ifname;
+    }
+
+    std::replace(ifname.begin(),
+                 ifname.end(),
+                 '_','/');
+
+    auto result = ifnamePrefix + ifname.substr(2);
+
+   
     auto server_ip = getEnvVar("SERVER_IP");
     auto server_port = getEnvVar("SERVER_PORT");
 
@@ -172,15 +222,15 @@ int main(int argc, char** argv) {
     vrfhandler.registerVrf(AF_INET);
     vrfhandler.registerVrf(AF_INET6);
 
-    std::unique_ptr<IosxrslRshuttle> iosxrsl_rshuttle;
+    std::unique_ptr<IosxrslRoute> iosxrsl_route;
 
  
-    iosxrsl_rshuttle = std::make_unique<IosxrslRshuttle>(channel);
-    routeplay(iosxrsl_rshuttle);
+    iosxrsl_route = std::make_unique<IosxrslRoute>(channel);
+    routeplay(iosxrsl_route);
 
     asynchandler_signum = &asynchandler;
     vrfhandler_signum = &vrfhandler;
-    rshuttle_signum = std::move(iosxrsl_rshuttle);
+    route_signum = std::move(iosxrsl_route);
 
     signal(SIGINT, signalHandler);  
     LOG(INFO) << "Press control-c to quit";
@@ -188,4 +238,3 @@ int main(int argc, char** argv) {
 
     return 0;
 }
-

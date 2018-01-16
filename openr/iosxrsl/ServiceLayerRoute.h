@@ -7,11 +7,12 @@
 #include <iosxrsl/sl_route_ipv4.pb.h>
 #include <iosxrsl/sl_route_ipv6.pb.h>
 
+
 namespace openr {
 
-class IosxrslRshuttle {
+class IosxrslRoute {
 public:
-    explicit IosxrslRshuttle(std::shared_ptr<grpc::Channel> Channel);
+    explicit IosxrslRoute(std::shared_ptr<grpc::Channel> Channel);
 
     enum PathUpdateAction
     {
@@ -199,7 +200,7 @@ public:
     void vrfRegMsgAdd(std::string vrfName);
 
     void vrfRegMsgAdd(std::string vrfName,
-                      unsigned int adminDistance,
+                      uint8_t adminDistance,
                       unsigned int vrfPurgeIntervalSeconds);
 
     bool registerVrf(unsigned int addrFamily);
