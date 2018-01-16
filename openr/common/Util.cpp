@@ -364,4 +364,12 @@ generateHash(
   }
   return static_cast<int64_t>(seed);
 }
+
+std::string
+getRemoteIfName(const thrift::Adjacency& adj) {
+  if (not adj.otherIfName.empty()) {
+    return adj.otherIfName;
+  }
+  return folly::sformat("neigh-{}", adj.ifName);
+}
 } // namespace openr

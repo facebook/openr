@@ -18,12 +18,17 @@
 using namespace openr;
 
 namespace {
-const auto adj12 = createAdjacency("2", "1/2", "fe80::2", "192.168.0.2", 10, 0);
-const auto adj13 = createAdjacency("3", "1/3", "fe80::3", "192.168.0.3", 10, 0);
+const auto adj12 =
+    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 0);
+const auto adj13 =
+    createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 0);
 
-const auto adj21 = createAdjacency("1", "2/1", "fe80::1", "192.168.0.1", 10, 0);
-const auto adj23 = createAdjacency("3", "2/3", "fe80::3", "192.168.0.3", 10, 0);
-const auto adj24 = createAdjacency("4", "2/4", "fe80::4", "192.168.0.4", 10, 0);
+const auto adj21 =
+    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 0);
+const auto adj23 =
+    createAdjacency("3", "2/3", "3/2", "fe80::3", "192.168.0.3", 10, 0);
+const auto adj24 =
+    createAdjacency("4", "2/4", "4/2", "fe80::4", "192.168.0.4", 10, 0);
 
 const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto addr2 = toIpPrefix("::ffff:10.2.2.2/128");

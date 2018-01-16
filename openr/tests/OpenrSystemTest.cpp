@@ -93,21 +93,33 @@ const folly::IPAddress ip3V6{"fe80::3"};
 const folly::IPAddress ip4V6{"fe80::4"};
 
 // R1 -> R2, R3, R4
-const auto adj12 = createAdjacency("2", "1/2", "fe80::2", "192.168.0.2", 1, 0);
-const auto adj13 = createAdjacency("3", "1/3", "fe80::3", "192.168.0.3", 1, 0);
-const auto adj14 = createAdjacency("4", "1/4", "fe80::4", "192.168.0.4", 1, 0);
+const auto adj12 =
+    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 1, 0);
+const auto adj13 =
+    createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 1, 0);
+const auto adj14 =
+    createAdjacency("4", "1/4", "4/1", "fe80::4", "192.168.0.4", 1, 0);
 // R2 -> R1, R3, R4
-const auto adj21 = createAdjacency("1", "2/1", "fe80::1", "192.168.0.1", 1, 0);
-const auto adj23 = createAdjacency("3", "2/3", "fe80::3", "192.168.0.3", 1, 0);
-const auto adj24 = createAdjacency("4", "2/4", "fe80::4", "192.168.0.4", 1, 0);
+const auto adj21 =
+    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 1, 0);
+const auto adj23 =
+    createAdjacency("3", "2/3", "3/2", "fe80::3", "192.168.0.3", 1, 0);
+const auto adj24 =
+    createAdjacency("4", "2/4", "4/2", "fe80::4", "192.168.0.4", 1, 0);
 // R3 -> R1, R2, R4
-const auto adj31 = createAdjacency("1", "3/1", "fe80::1", "192.168.0.1", 1, 0);
-const auto adj32 = createAdjacency("2", "3/2", "fe80::2", "192.168.0.2", 1, 0);
-const auto adj34 = createAdjacency("4", "3/4", "fe80::4", "192.168.0.4", 1, 0);
+const auto adj31 =
+    createAdjacency("1", "3/1", "1/3", "fe80::1", "192.168.0.1", 1, 0);
+const auto adj32 =
+    createAdjacency("2", "3/2", "2/3", "fe80::2", "192.168.0.2", 1, 0);
+const auto adj34 =
+    createAdjacency("4", "3/4", "4/3", "fe80::4", "192.168.0.4", 1, 0);
 // R4 -> R1, R2, R3
-const auto adj41 = createAdjacency("1", "4/1", "fe80::1", "192.168.0.1", 1, 0);
-const auto adj42 = createAdjacency("2", "4/2", "fe80::2", "192.168.0.2", 1, 0);
-const auto adj43 = createAdjacency("3", "4/3", "fe80::3", "192.168.0.3", 1, 0);
+const auto adj41 =
+    createAdjacency("1", "4/1", "1/4", "fe80::1", "192.168.0.1", 1, 0);
+const auto adj42 =
+    createAdjacency("2", "4/2", "2/4", "fe80::2", "192.168.0.2", 1, 0);
+const auto adj43 =
+    createAdjacency("3", "4/3", "3/4", "fe80::3", "192.168.0.3", 1, 0);
 
 using NextHop = pair<string /* ifname */, folly::IPAddress /* nexthop ip */>;
 // Note: use unordered_set bcoz paths in a route can be in arbitrary order

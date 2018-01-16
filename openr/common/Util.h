@@ -204,4 +204,13 @@ int64_t generateHash(
     const int64_t version,
     const std::string& originatorId,
     const folly::Optional<std::string>& value);
+
+/**
+ * TO BE DEPRECATED SOON: Backward compatible with empty remoteIfName
+ * Translate remote interface name from local interface name
+ * This is only applicable when remoteIfName is empty from peer adjacency update
+ * It returns remoteIfName if it is there else constructs one from localIfName
+ */
+std::string getRemoteIfName(
+  const thrift::Adjacency& adj);
 } // namespace openr

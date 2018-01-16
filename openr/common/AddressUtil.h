@@ -81,12 +81,12 @@ inline thrift::Adjacency
 createAdjacency(
     const std::string& nodeName,
     const std::string& ifName,
+    const std::string& remoteIfName,
     const std::string& nextHopV6,
     const std::string& nextHopV4,
     int32_t metric,
     int32_t adjLabel,
-    int64_t weight = Constants::kDefaultAdjWeight,
-    const std::string& remoteIfName = "") {
+    int64_t weight = Constants::kDefaultAdjWeight) {
   auto now = std::chrono::system_clock::now();
   int64_t timestamp =
       std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())

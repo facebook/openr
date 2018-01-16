@@ -34,56 +34,63 @@
 #include <openr/kvstore/KvStore.h>
 
 namespace openr {
+struct ProcessPublicationResult {
+  bool adjChanged{false};
+  bool prefixesChanged{false};
+};
 
 namespace detail {
-  /**
-   * Keep track of hash for pending SPF calculation because of certain
-   * updates in graph.
-   * Out of all buffered applications we try to keep the perf events for the
-   * oldest appearing event.
-   */
-  struct DecisionPendingUpdates {
+/**
+ * Keep track of hash for pending SPF calculation because of certain
+ * updates in graph.
+ * Out of all buffered applications we try to keep the perf events for the
+ * oldest appearing event.
+ */
+struct DecisionPendingUpdates {
+  void
+  clear() {
+    count_ = 0;
+    minTs_ = folly::none;
+    perfEvents_ = folly::none;
+  }
 
-    void clear() {
-      count_ = 0;
-      minTs_ = folly::none;
-      perfEvents_ = folly::none;
+  void
+  addUpdate(
+      const std::string& nodeName,
+      const folly::Optional<thrift::PerfEvents>& perfEvents) {
+    ++count_;
+
+    // Skip if perf information is missing
+    if (not perfEvents.hasValue()) {
+      return;
     }
 
-    void addUpdate(
-        const std::string& nodeName,
-        const folly::Optional<thrift::PerfEvents>& perfEvents) {
-      ++count_;
-
-      // Skip if perf information is missing
-      if (not perfEvents.hasValue()) {
-        return;
-      }
-
-      // Update local copy of perf evens if it is newer than the one to be added
-      // We do debounce (batch updates) for recomputing routes and in order to
-      // measure convergence performance, it is better to use event which is
-      // oldest.
-      if (!minTs_ or minTs_.value() > perfEvents->events.front().unixTs) {
-        minTs_ = perfEvents->events.front().unixTs;
-        perfEvents_ = perfEvents;
-        addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
-      }
+    // Update local copy of perf evens if it is newer than the one to be added
+    // We do debounce (batch updates) for recomputing routes and in order to
+    // measure convergence performance, it is better to use event which is
+    // oldest.
+    if (!minTs_ or minTs_.value() > perfEvents->events.front().unixTs) {
+      minTs_ = perfEvents->events.front().unixTs;
+      perfEvents_ = perfEvents;
+      addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
     }
+  }
 
-    uint32_t getCount() const {
-      return count_;
-    }
+  uint32_t
+  getCount() const {
+    return count_;
+  }
 
-    folly::Optional<thrift::PerfEvents> getPerfEvents() const {
-      return perfEvents_;
-    }
+  folly::Optional<thrift::PerfEvents>
+  getPerfEvents() const {
+    return perfEvents_;
+  }
 
-   private:
-    uint32_t count_{0};
-    folly::Optional<int64_t> minTs_;
-    folly::Optional<thrift::PerfEvents> perfEvents_;
-  };
+ private:
+  uint32_t count_{0};
+  folly::Optional<int64_t> minTs_;
+  folly::Optional<thrift::PerfEvents> perfEvents_;
+};
 } // namespace detail
 
 // The class to compute shortest-paths using Dijkstra algorithm
@@ -112,11 +119,11 @@ class SpfSolver {
   getAdjacencyDatabases();
 
   // update prefixes for a given router. Returns true if this has caused any
-  // change
+  // routeDb change
   bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
 
   // delete a node's prefix database
-  // return true if this has caused any change in graph
+  // return true if this has caused any change in routeDb
   bool deletePrefixDatabase(const std::string& nodeName);
 
   // get prefix databases
@@ -128,6 +135,10 @@ class SpfSolver {
 
   // compute all LFA routes from perspective of a given router
   thrift::RouteDatabase buildMultiPaths(const std::string& myNodeName);
+
+  // build route database using global prefix database and cached SPF
+  // computation from perspective of a given router.
+  thrift::RouteDatabase buildRouteDb(const std::string& myNodeName);
 
   std::unordered_map<std::string, int64_t> getCounters();
 
@@ -187,22 +198,34 @@ class Decision : public fbzmq::ZmqEventLoop {
   // process request
   void processRequest();
 
+  // process publication from KvStore
+  ProcessPublicationResult processPublication(
+      thrift::Publication const& thriftPub);
+
   /**
-   * Process received publication and populate the pendingUpdates_
+   * Process received publication and populate the pendingAdjUpdates_
    * attributes which can be applied later on after a debounce timeout.
    * returns `true` if SPF computation needs to be triggered
    */
-  detail::DecisionPendingUpdates pendingUpdates_;
-  std::unique_ptr<fbzmq::ZmqTimeout> processPendingUpdatesTimer_;
+  detail::DecisionPendingUpdates pendingAdjUpdates_;
+  std::unique_ptr<fbzmq::ZmqTimeout> processPendingAdjUpdatesTimer_;
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
-  bool processPublication(thrift::Publication const& thriftPub);
 
   /**
-   * Function to process pending publications. First one is immediate processing
-   * while second one is throttled one with timeout
-   * Constants::kSpfThrottleTimeout
+   * Process received publication and populate the pendingPrefixUpdates_
+   * attributes upon receiving prefix update publication
    */
-  void processPendingUpdates();
+  detail::DecisionPendingUpdates pendingPrefixUpdates_;
+
+  /**
+   * Function to process pending adjacency publications.
+   */
+  void processPendingAdjUpdates();
+
+  /**
+   * Function to process prefix updates.
+   */
+  void processPendingPrefixUpdates();
 
   // perform full dump of all LSDBs and run initial routing computations
   void initialSync(fbzmq::Context& zmqContext);
@@ -213,9 +236,7 @@ class Decision : public fbzmq::ZmqEventLoop {
   // submit events to monitor
   void logRouteEvent(const std::string& event, const int numOfRoutes);
   void logDebounceEvent(
-      const int numUpdates,
-      const std::chrono::milliseconds debounceTime);
-
+      const int numUpdates, const std::chrono::milliseconds debounceTime);
 
   // this node's name and the key markers
   const std::string myNodeName_;
