@@ -422,7 +422,7 @@ TEST(KvStoreClient, ApiTest) {
   evl.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
     // 1st get key
     auto maybeVal1 = client2->getKey("test_key2");
-    ASSERT(maybeVal1);
+    ASSERT(maybeVal1.hasValue());
     EXPECT_EQ(1, maybeVal1->version);
     EXPECT_EQ("test_value2", maybeVal1->value);
 
@@ -431,7 +431,7 @@ TEST(KvStoreClient, ApiTest) {
 
     // 2nd getkey
     auto maybeVal2 = client2->getKey("test_key2");
-    ASSERT(maybeVal2);
+    ASSERT(maybeVal2.hasValue());
     EXPECT_EQ(2, maybeVal2->version);
     EXPECT_EQ("test_value2-client2", maybeVal2->value);
 
@@ -468,19 +468,19 @@ TEST(KvStoreClient, ApiTest) {
   evl.scheduleTimeout(std::chrono::milliseconds(4), [&]() noexcept {
     // dump keys
     const auto maybeKeyVals = client1->dumpAllWithPrefix();
-    ASSERT(maybeKeyVals);
+    ASSERT(maybeKeyVals.hasValue());
     ASSERT_EQ(3, maybeKeyVals->size());
     EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value);
     EXPECT_EQ("test_value2-client2", maybeKeyVals->at("test_key2").value);
     EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value);
 
     const auto maybeKeyVals2 = client2->dumpAllWithPrefix();
-    ASSERT(maybeKeyVals2);
+    ASSERT(maybeKeyVals2.hasValue());
     EXPECT_EQ(*maybeKeyVals, *maybeKeyVals2);
 
     // dump keys with a given prefix
     const auto maybePrefixedKeyVals = client1->dumpAllWithPrefix("test");
-    ASSERT(maybePrefixedKeyVals);
+    ASSERT(maybePrefixedKeyVals.hasValue());
     ASSERT_EQ(2, maybePrefixedKeyVals->size());
     EXPECT_EQ("test_value1", maybePrefixedKeyVals->at("test_key1").value);
     EXPECT_EQ(
