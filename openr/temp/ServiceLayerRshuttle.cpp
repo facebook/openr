@@ -189,23 +189,357 @@ IosxrslRshuttle::iosxrIfName(std::string ifname)
     return ifnamePrefix + ifname.substr(ifname.length()-2);
 }
 
-void
-IosxrslRshuttle::buildUnicastRoute(
-  const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
 
-  for (const auto& nextHop : nextHops) {
+folly::Future<folly::Unit>
+IosxrslRshuttle::addUnicastRoute(
+    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
+  VLOG(3) << "Adding unicast route";
+  CHECK(not nextHops.empty());
+  CHECK(not prefix.first.isMulticast() && not prefix.first.isLinkLocal());
 
-    std::string xr_if_name = iosxrIfName(std::get<0>(nextHop));
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
 
-    if (ifIdx == 0) {
-      throw NetlinkException(folly::sformat(
-          "Failed to get ifidx for interface: {}", std::get<0>(nextHop)));
-    }
-    route->addNextHop(ifIdx, std::get<1>(nextHop));
-    VLOG(4) << "Added nextHop for prefix "
-            << folly::IPAddress::networkToString(prefix) << " nexthop dev "
-            << std::get<0>(nextHop) << " via " << std::get<1>(nextHop).str();
-  }
-  return route;
+  evl_->runInEventLoop(
+      [this, promise = std::move(promise), prefix, nextHops]() mutable {
+        try {
+          // In IOS-XR SL-API, we have the UPDATE utility
+          // So we do NOT need to check for prefix existence
+          // in current RIB. UPDATE will create a new route if 
+          // it doesn't exist.
+          doAddUnicastRoute(prefix, nextHops);
+          promise.setValue();
+        } catch (ServiceLayerException const& ex) {
+          LOG(ERROR) << "Error adding unicast routes to "
+                     << folly::IPAddress::networkToString(prefix);
+          promise.setException(ex);
+        } catch (std::exception const& ex) {
+          LOG(ERROR) << "Error adding unicast routes to "
+                     << folly::IPAddress::networkToString(prefix);
+          promise.setException(ex);
+        }
+      });
+  return future;
 }
 
+folly::Future<folly::Unit>
+IosxrslRshuttle::deleteUnicastRoute(const folly::CIDRNetwork& prefix) {
+  VLOG(3) << "Deleting unicast route";
+  CHECK(not prefix.first.isMulticast() && not prefix.first.isLinkLocal());
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  evl_->runInEventLoop([this, promise = std::move(promise), prefix]() mutable {
+    try {
+/*      if (unicastRouteDb_.count(prefix) == 0) {
+        LOG(ERROR) << "Trying to delete non-existing prefix "
+                   << folly::IPAddress::networkToString(prefix);
+      } else { */
+//        const auto& oldNextHops = unicastRouteDb_.at(prefix);
+        doDeleteUnicastRoute(prefix);
+//        unicastRouteDb_.erase(prefix);
+//      }
+      promise.setValue();
+    } catch (ServiceLayerException const& ex) {
+      LOG(ERROR) << "Error deleting unicast routes to "
+                 << folly::IPAddress::networkToString(prefix)
+                 << " Error: " << folly::exceptionStr(ex);
+      promise.setException(ex);
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error deleting unicast routes to "
+                 << folly::IPAddress::networkToString(prefix)
+                 << " Error: " << folly::exceptionStr(ex);
+      promise.setException(ex);
+    }
+  });
+  return future;
+}
+
+
+folly::Future<UnicastRoutes>
+IosxrslRshuttle::getUnicastRoutes() const {
+  VLOG(3) << "Getting all routes";
+
+  folly::Promise<UnicastRoutes> promise;
+  auto future = promise.getFuture();
+
+  evl_->runInEventLoop([this, promise = std::move(promise)]() mutable {
+    try {
+        promise.setValue(doGetUnicastRoutes());
+    } catch (ServiceLayerException const& ex) {
+      LOG(ERROR) << "Error updating route cache: " << folly::exceptionStr(ex);
+      promise.setException(ex);
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error updating route cache: " << folly::exceptionStr(ex);
+      promise.setException(ex);
+    }
+  });
+  return future;
+}
+
+UnicastRoutes
+IosxrslRshuttle::doGetUnicastRoutes() const {
+    // Combine the v4 and v6 maps before returning
+    if (iosxrslRoute_->routev4_msg.vrfname().empty() ||
+        iosxrslRoute_->routev6_msg.vrfname().empty()) {
+        throw ServiceLayerException(folly::sformat(
+            "VRF not set, could not fetch routes, Service Layer Error: {}",
+            service_layer::SLErrorStatus_SLErrno_SL_RPC_ROUTE_VRF_NAME_MISSING);
+    }
+    auto unicastRouteDb_ = routeDb_[iosxrslRoute_->routev4_msg.vrfname()];
+
+    unicastRouteDb_.insert(routeDb_[iosxrslRoute_->routev6_msg.vrfname()].begin(),
+                           routeDb_[iosxrslRoute_->routev6_msg.vrfname()].end());
+
+    return unicastRouteDb_;
+}
+
+folly::Future<folly::Unit>
+IosxrslRshuttle::syncRoutes(UnicastRoutes newRouteDb) {
+  VLOG(3) << "Syncing Routes....";
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  evl_->runInEventLoop(
+      [this, promise = std::move(promise), newRouteDb]() mutable {
+        try {
+          doSyncRoutes(newRouteDb);
+          promise.setValue();
+        } catch (ServiceLayerException const& ex) {
+          LOG(ERROR) << "Error syncing routeDb with Fib: "
+                     << folly::exceptionStr(ex);
+          promise.setException(ex);
+        } catch (std::exception const& ex) {
+          LOG(ERROR) << "Error syncing routeDb with Fib: "
+                     << folly::exceptionStr(ex);
+          promise.setException(ex);
+        }
+      });
+  return future;
+}
+
+void
+IosxrslRshuttle::doAddUnicastRoute(
+    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
+  if (prefix.first.isV4()) {
+    if(iosxrslRoute_->
+         routev4_msg.vrfname().empty()) {
+        throw ServiceLayerException(folly::sformat(
+            "Could not add Route to: {} Service Layer Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            service_layer::SLErrorStatus_SLErrno_SL_RPC_ROUTE_VRF_NAME_MISSING);
+    }
+    routeDb_[iosxrslRoute_->
+               routev4_msg.vrfname()][prefix] = nextHops; 
+    doAddUnicastRouteV4(prefix, nextHops);
+  } else {
+    if(iosxrslRoute_->
+         routev6_msg.vrfname().empty()) {
+        throw ServiceLayerException(folly::sformat(
+            "Could not add Route to: {} Service Layer Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            service_layer::SLErrorStatus_SLErrno_SL_RPC_ROUTE_VRF_NAME_MISSING);
+    }
+    routeDb_[iosxrslRoute_->
+               routev6_msg.vrfname()][prefix] = nextHops;
+    doAddUnicastRouteV6(prefix, nextHops);
+  }
+
+  // Cache new nexthops in our local-cache if everything is good
+//  unicastRoutes_[prefix].insert(nextHops.begin(), nextHops.end());
+}
+
+
+void
+IosxrslRshuttle::doAddUnicastRouteV4(
+    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
+  CHECK(prefix.first.isV4());
+
+  LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
+
+  for (auto const& nextHop : nextHops) {
+    CHECK(nextHop.second.isV4());
+    LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
+    // Create a path list
+
+    auto nexthop_if = iosxrIfName(std::get<0>(nextHop));
+    auto nexthop_address = std::get<1>(nextHop).str();
+
+    iosxrslRshuttle_->insertAddBatchV4(prefix.first.str(),
+                                    folly::to<uint8_t>(prefix.second),
+                                    kAqRouteProtoId,
+                                    nexthop_address,
+                                    nexthop_if);
+  }
+
+  // Using the Update Operation to replace an existing prefix
+  // or create one if it doesn't exist.
+  auto result  = iosxrslRshuttle_->routev4Op(service_layer::SL_OBJOP_UPDATE);
+  if (!result) {
+    throw ServiceLayerException(folly::sformat(
+        "Could not add Route to: {}",
+        folly::IPAddress::networkToString(prefix));
+  }
+}
+
+void
+IosxrslRshuttle::doAddUnicastRouteV6(
+    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
+  CHECK(prefix.first.isV6());
+  for (auto const& nextHop : nextHops) {
+    CHECK(nextHop.second.isV6());
+  }
+
+  LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
+
+  for (auto const& nextHop : nextHops) {
+    CHECK(nextHop.second.isV6());
+    LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
+    // Create a path list
+
+    auto nexthop_if = iosxrIfName(std::get<0>(nextHop));
+    auto nexthop_address = std::get<1>(nextHop).str();
+
+    iosxrslRshuttle_->insertAddBatchV6(prefix.first.str(),
+                                    folly::to<uint8_t>(prefix.second),
+                                    kAqRouteProtoId,
+                                    nexthop_address,
+                                    nexthop_if);
+  }
+
+  // Using the Update Operation to replace an existing prefix
+  // or create one if it doesn't exist.
+  auto result  = iosxrslRshuttle_->routev6Op(service_layer::SL_OBJOP_UPDATE);
+  if (!result) {
+    throw ServiceLayerException(folly::sformat(
+        "Could not add Route to: {}",
+        folly::IPAddress::networkToString(prefix));
+  }
+
+}
+
+void
+IosxrslRshuttle::doDeleteUnicastRoute(
+                    const folly::CIDRNetwork& prefix) {
+  if (prefix.first.isV4()) {
+    if(iosxrslRoute_->
+         routev4_msg.vrfname().empty()) {
+        throw ServiceLayerException(folly::sformat(
+            "Could not delete prefix: {} Service Layer Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            service_layer::SLErrorStatus_SLErrno_SL_RPC_ROUTE_VRF_NAME_MISSING);
+    }
+    routeDb_[iosxrslRoute_->
+               routev4_msg.vrfname()].erase(prefix);
+    deleteUnicastRouteV4(prefix);
+  } else {
+    if(iosxrslRoute_->
+         routev6_msg.vrfname().empty()) {
+        throw ServiceLayerException(folly::sformat(
+            "Could not delete prefix: {} Service Layer Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            service_layer::SLErrorStatus_SLErrno_SL_RPC_ROUTE_VRF_NAME_MISSING);
+    }
+    routeDb_[iosxrslRoute_->
+               routev6_msg.vrfname()].erase(prefix);
+
+    deleteUnicastRouteV6(prefix);
+  }
+
+}
+
+
+void
+IosxrslRshuttle::deleteUnicastRouteV4(
+                  const folly::CIDRNetwork& prefix) {
+  CHECK(prefix.first.isV4());
+
+  iosxrslRshuttle_->insertDeleteBatchV4(prefix.first.str(),
+                                  folly::to<uint8_t>(prefix.second));
+
+
+  auto result = iosxrslRshuttle_->routev4Op(service_layer::SL_OBJOP_DELETE);
+
+  if (!result) {
+    throw ServiceLayerException(folly::sformat(
+        "Failed to delete route {}",
+        folly::IPAddress::networkToString(prefix));
+  }
+}
+
+void
+IosxrslRshuttle::deleteUnicastRouteV6(
+    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
+  CHECK(prefix.first.isV6());
+
+  iosxrslRshuttle_->insertDeleteBatchV6(prefix.first.str(),
+                                  folly::to<uint8_t>(prefix.second));
+
+
+  auto result = iosxrslRshuttle_->routev6Op(service_layer::SL_OBJOP_DELETE);
+
+  if (!result) {
+    throw ServiceLayerException(folly::sformat(
+        "Failed to delete route {}",
+        folly::IPAddress::networkToString(prefix));
+  }
+
+
+}
+
+
+void
+IosxrslRshuttle::doSyncRoutes(UnicastRoutes newRouteDb) {
+
+  // Fetch the latest Application RIB state
+  unicastRouteDb_ = doGetUnicastRoutes();
+
+  // Go over routes that are not in new routeDb, delete
+  for (auto it = unicastRouteDb_.begin(); it != unicastRouteDb_.end();) {
+    auto const& prefix = it->first;
+    if (newRouteDb.find(prefix) == newRouteDb.end()) {
+      try {
+        doDeleteUnicastRoute(prefix);
+      } catch (ServiceLayerException const& err) {
+        LOG(ERROR) << folly::sformat(
+            "Could not del Route to: {} Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            folly::exceptionStr(err));
+      } catch (std::exception const& err) {
+        LOG(ERROR) << folly::sformat(
+            "Could not del Route to: {} Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            folly::exceptionStr(err));
+      }
+      it = unicastRouteDb_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  // Using the Route batch UPDATE utility in IOSXR SL-API,
+  // simply push the newRoutedb into the XR RIB
+
+  for (auto const& kv : newRouteDb) {
+      auto const& prefix = kv.first;
+      try {
+        doAddUnicastRoute(prefix, kv.second);
+      } catch (ServiceLayerException const& err) {
+        LOG(ERROR) << folly::sformat(
+            "Could not add Route to: {} Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            folly::exceptionStr(err));
+      } catch (std::exception const& err) {
+        LOG(ERROR) << folly::sformat(
+            "Could not add Route to: {} Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            folly::exceptionStr(err));
+      }
+      unicastRouteDb_.emplace(prefix, std::move(kv.second));
+  }
+
+}
+
+
+}
