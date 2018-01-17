@@ -175,9 +175,9 @@ NetlinkSystemHandler::NLSubscriberImpl::doInitNL() {
 
   // Periodic re-sync of neighbor entries from netlink
   netlinkDbResyncTimer_ = fbzmq::ZmqTimeout::make(evl_, [this]() noexcept {
-    LOG(INFO) << "Re-syncing Netlink DB";
+    VLOG(2) << "Re-syncing Netlink DB";
     updateNetlinkDb();
-    LOG(INFO) << "Completed re-syncing Netlink DB from Netlink Subscriber";
+    VLOG(2) << "Completed re-syncing Netlink DB from Netlink Subscriber";
   });
   netlinkDbResyncTimer_->scheduleTimeout(
       kNetlinkDbResyncInterval, true /* is Periodic */);
