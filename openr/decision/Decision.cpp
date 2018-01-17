@@ -1423,7 +1423,7 @@ Decision::initialSync(fbzmq::Context& zmqContext) {
 // periodically submit counters to Counters thread
 void
 Decision::submitCounters() {
-  VLOG(2) << "Submitting counters...";
+  VLOG(3) << "Submitting counters...";
 
   // Prepare for submitting counters
   auto counter = spfSolver_->getCounters();

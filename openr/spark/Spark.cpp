@@ -616,9 +616,6 @@ Spark::validateHelloPacket(
     }
   }
 
-  VLOG(2) << "Valid signature for packet from " << neighborName << " on "
-          << ifName;
-
   // get the map of tracked neighbors on this interface
   auto& ifNeighbors = neighbors_.at(ifName);
 
@@ -1441,7 +1438,7 @@ Spark::getNewLabelForIface(const std::string& ifName) {
 
 void
 Spark::submitCounters() {
-  VLOG(2) << "Submitting counters...";
+  VLOG(3) << "Submitting counters...";
 
   // Extract/build counters from thread-data
   auto counters = tData_.getCounters();

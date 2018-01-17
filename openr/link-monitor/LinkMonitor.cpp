@@ -34,7 +34,7 @@ namespace {
 
 const std::string kLinkMonitorId = "LinkMonitor";
 const auto kMulticastPrefixV6 = folly::IPAddress::createNetwork("ff00::/8");
-const std::chrono::seconds kIfUpRetryInterval{10};
+const std::chrono::seconds kIfUpRetryInterval{60};
 const std::chrono::milliseconds kMinIfSyncBackOff{8};
 const std::chrono::milliseconds kMaxIfSyncBackOff{8192};
 const std::string kNodeLabelRangePrefix = "nodeLabel:";
@@ -1345,7 +1345,7 @@ LinkMonitor::advertiseRedistAddrs() {
 
 void
 LinkMonitor::submitCounters() {
-  VLOG(2) << "Submitting counters ... ";
+  VLOG(3) << "Submitting counters ... ";
 
   // Extract/build counters from thread-data
   auto counters = tData_.getCounters();

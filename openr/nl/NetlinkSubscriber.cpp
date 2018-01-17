@@ -300,12 +300,10 @@ NetlinkSubscriber::getAllLinks() {
 
   std::lock_guard<std::mutex> lock(netlinkMutex_);
 
-  VLOG(2) << "Refilling link cache";
   nl_cache_refill(sock_, linkCache_);
-  VLOG(2) << "Refilling address cache";
   nl_cache_refill(sock_, addrCache_);
-
   fillLinkCache();
+
   return links_;
 }
 
@@ -323,15 +321,12 @@ NetlinkSubscriber::getAllReachableNeighbors() {
   // Neighbor uses linkcache to map ifIndex to name
   // we really dont need to update addrCache_ but
   // no harm doing it since fillLinkCache will update both
-  VLOG(2) << "Refilling link cache";
   nl_cache_refill(sock_, linkCache_);
-  VLOG(2) << "Refilling address cache";
   nl_cache_refill(sock_, addrCache_);
-  VLOG(2) << "Refilling neighbor cache";
   nl_cache_refill(sock_, neighborCache_);
-
   fillLinkCache();
   fillNeighborCache();
+
   return neighbors_;
 }
 
@@ -346,7 +341,7 @@ NetlinkSubscriber::handleLinkEvent(
     if (!linkEntry) {
       return;
     }
-    VLOG(2) << "Link Event: " << linkEntry->ifName << "(" << linkEntry->ifIndex
+    VLOG(3) << "Link Event: " << linkEntry->ifName << "(" << linkEntry->ifIndex
             << ") " << (linkEntry->isUp ? "up" : "down");
     if (runHandler) {
       handler_->linkEventFunc(*linkEntry);

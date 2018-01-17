@@ -465,7 +465,7 @@ Fib::createFibClient() {
 
 void
 Fib::submitCounters() {
-  VLOG(2) << "Submitting counters ... ";
+  VLOG(3) << "Submitting counters ... ";
 
   // Extract/build counters from thread-data
   auto counters = tData_.getCounters();
