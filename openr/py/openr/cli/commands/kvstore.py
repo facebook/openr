@@ -479,14 +479,39 @@ class TopologyCmd(KvStoreCmd):
                   '  pip install networkx')
             sys.exit(1)
 
+        rem_str = {
+            '.facebook.com': '',
+            '.tfbnw.net': '',
+        }
+        rem_str = dict((re.escape(k), v) for k, v in rem_str.items())
+        rem_pattern = re.compile("|".join(rem_str.keys()))
+
         publication = self.client.dump_all_with_prefix(Consts.ADJ_DB_MARKER)
         nodes = self.get_node_to_ips().keys() if not node else [node]
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, bidir,
                                          self.iter_publication)
         G = nx.Graph()
+        adj_metric_map = {}
+        node_overloaded = {}
+
+        for this_node_name, db in adjs_map.items():
+            node_overloaded[rem_pattern.sub(lambda m:
+                            rem_str[re.escape(m.group(0))],
+                            this_node_name)] = db['overloaded']
+            for adj in db['adjacencies']:
+                adj_metric_map[(this_node_name, adj['ifName'])] = adj['metric']
+
         for this_node_name, db in adjs_map.items():
             for adj in db['adjacencies']:
-                G.add_edge(this_node_name, adj['otherNodeName'], **adj)
+                adj['color'] = 'r' if adj['isOverloaded'] else 'b'
+                adj['adjOtherIfMetric'] = adj_metric_map[(adj['otherNodeName'],
+                                                            adj['otherIfName'])]
+                G.add_edge(rem_pattern.sub(lambda m:
+                                            rem_str[re.escape(m.group(0))],
+                                            this_node_name),
+                                            rem_pattern.sub(lambda m:
+                                                            rem_str[re.escape(m.group(0))],
+                                                            adj['otherNodeName']), **adj)
 
         # hack to get nice fabric
         # XXX: FB Specific
@@ -495,7 +520,14 @@ class TopologyCmd(KvStoreCmd):
         sswx = 0
         fswx = 0
         rswx = 0
+        blue_nodes = []
+        red_nodes = []
         for node in G.nodes():
+            if (node_overloaded[node]):
+                red_nodes.append(node)
+            else:
+                blue_nodes.append(node)
+
             if 'esw' in node:
                 pos[node] = [eswx, 3]
                 eswx += 10
@@ -512,16 +544,29 @@ class TopologyCmd(KvStoreCmd):
         maxswx = max(eswx, sswx, fswx, rswx)
         if maxswx > 0:
             # aesthetically pleasing multiplier (empirically determined)
-            plt.figure(figsize=(maxswx * 0.3, 8))
+            plt.figure(figsize=(maxswx * 0.5, 8))
         else:
             plt.figure(figsize=(len(G.nodes()) * 2, len(G.nodes()) * 2))
             pos = nx.spring_layout(G)
         plt.axis('off')
-        nx.draw_networkx(G, pos, ax=None, alpha=0.5, font_size=8)
+
+        edge_colors = []
+        for _, _, d in G.edges(data=True):
+            edge_colors.append(d['color'])
+
+        nx.draw_networkx_nodes(G, pos, ax=None, alpha=0.5,
+                                node_color='b', nodelist=blue_nodes)
+        nx.draw_networkx_nodes(G, pos, ax=None, alpha=0.5,
+                                node_color='r', nodelist=red_nodes)
+        nx.draw_networkx_labels(G, pos, ax=None, alpha=0.5, font_size=8)
+        nx.draw_networkx_edges(G, pos, ax=None, alpha=0.5,
+                                font_size=8, edge_color=edge_colors)
         if node:
-            edge_labels = dict([((u, v), str(d['ifName']) + ' metric: ' +
-                               str(d['metric']))
-                               for u, v, d in G.edges(data=True)])
+            edge_labels = dict([((u, v), '<' + str(d['otherIfName']) + ',  ' +
+                                str(d['metric']) +
+                                ' >     <' + str(d['ifName']) +
+                                    ', ' + str(d['adjOtherIfMetric']) + '>')
+                                for u, v, d in G.edges(data=True)])
             nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels,
                                          font_size=6)
 
