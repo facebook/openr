@@ -24,6 +24,8 @@
 
 namespace openr {
 
+extern const uint8_t kAqRouteProtoId;
+
 using IosxrslServer = std::unordered_set<std::pair<std::string, std::string>>;
 
 /**
@@ -33,6 +35,7 @@ using IosxrslServer = std::unordered_set<std::pair<std::string, std::string>>;
 class IosxrslFibHandler final : public thrift::FibServiceSvIf {
  public:
   explicit IosxrslFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop,
+                             std::vector<VrfData> vrfSet,
                              std::shared_ptr<grpc::Channel> Channel);
   ~IosxrslFibHandler() override {}
 

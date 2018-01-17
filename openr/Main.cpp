@@ -423,7 +423,14 @@ main(int argc, char** argv) {
                                         FLAGS_iosxr_slapi_ip,
                                         FLAGS_iosxr_slapi_port),
                          grpc::InsecureChannelCredentials());
-      auto fibHandler = std::make_shared<IosxrslFibHandler>(&mainEventLoop, channel);
+      std::vector<VrfData> vrf_set;
+      vrf_set.push_back(VrfData("default", kAqRouteProtoId, 500));
+
+      auto fibHandler = 
+      std::make_shared<IosxrslFibHandler>(&mainEventLoop, 
+                                          vrf_set,
+                                          channel);
+      fibHandler->setVrfContext("default");
       iosxrslFibServer->setNWorkerThreads(1);
       iosxrslFibServer->setNPoolThreads(1);
       iosxrslFibServer->setPort(FLAGS_fib_agent_port);

@@ -27,9 +27,9 @@ using folly::gen::mapped;
 
 namespace openr {
 
-namespace {
-
 const uint8_t kAqRouteProtoId = 99;
+
+namespace {
 
 // convert a routeDb into thrift exportable route spec
 std::vector<thrift::UnicastRoute>
@@ -86,23 +86,18 @@ IosxrslFibHandler::setVrfContext(std::string vrfName)
 
 
 IosxrslFibHandler::IosxrslFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop,
+                                     std::vector<VrfData> vrfSet,
                                      std::shared_ptr<grpc::Channel> Channel)
   :startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
                      .count())
 {
-
-    std::vector<VrfData> vrf_set;
-    vrf_set.push_back(VrfData("default", kAqRouteProtoId, 500));
-
-    iosxrslRshuttle_ = std::make_unique<IosxrslRshuttle>(zmqEventLoop,
-                                        vrf_set,
+   iosxrslRshuttle_ = std::make_unique<IosxrslRshuttle>(zmqEventLoop,
+                                        vrfSet,
                                         kAqRouteProtoId,
                                         Channel);
 
-    setVrfContext("default");
 }
-
 
 folly::Future<folly::Unit>
 IosxrslFibHandler::future_addUnicastRoute(

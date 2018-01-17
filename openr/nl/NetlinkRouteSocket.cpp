@@ -19,7 +19,6 @@
 #include <folly/String.h>
 #include <folly/gen/Base.h>
 #include <folly/gen/Core.h>
-#include <openr/iosxrsl/ServiceLayerRoute.h>
 
 
 using folly::gen::as;
