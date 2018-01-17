@@ -290,5 +290,5 @@ install_libnl
 install_fbthrift
 install_fbzmq
 
-echo "OpenR built and installed successfully"
+echo "OpenR Dependencies built and installed successfully"
 exit 0

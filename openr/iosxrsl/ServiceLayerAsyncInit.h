@@ -10,10 +10,10 @@
 #include <arpa/inet.h>
 
 #include <grpc++/grpc++.h>
-#include <sl_global.grpc.pb.h>
-#include <sl_global.pb.h>
-#include <sl_common_types.pb.h>
-#include <sl_version.pb.h>
+#include <iosxrsl/sl_global.grpc.pb.h>
+#include <iosxrsl/sl_global.pb.h>
+#include <iosxrsl/sl_common_types.pb.h>
+#include <iosxrsl/sl_version.pb.h>
 
 namespace openr {
 
