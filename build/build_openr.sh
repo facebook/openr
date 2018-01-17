@@ -143,7 +143,7 @@ install_fbzmq() {
     git clone https://github.com/facebook/fbzmq.git
   fi
   rev=$(find_github_hash facebook/fbzmq)
-  cd fbzmq/fbzmq/build
+  cd fbzmq/build
   if [[ ! -z "$rev" ]]; then
     git fetch origin
     git checkout "$rev"
