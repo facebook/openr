@@ -19,14 +19,6 @@
 
 namespace openr {
 
-// too bad 0xFB (251) is taken by gated/ospfase
-// We will use this as the proto for our routes
-const uint8_t kRouteProtoId = 99;
-} // namespace
-
-
-namespace openr {
-
 // nextHop => local interface and nextHop IP.
 using NextHops = std::unordered_set<std::pair<std::string, folly::IPAddress>>;
 

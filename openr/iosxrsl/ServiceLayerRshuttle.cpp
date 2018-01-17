@@ -23,8 +23,6 @@ namespace {
 
 const int kIpAddrBufSize = 1024;
 //const uint32_t kAqRouteTableId = ;
-const uint8_t kAqRouteProtoId = 99;
-
 } //anonymous namespace
 
 
