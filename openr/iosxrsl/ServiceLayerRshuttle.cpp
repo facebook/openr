@@ -194,8 +194,9 @@ IosxrslRshuttle::iosxrIfName(std::string ifname)
 
     std::replace(ifname.begin(),
                  ifname.end(),
-                 '_','/');    
-    return ifnamePrefix + ifname.substr(ifname.length()-2);
+                 '_','/');   
+
+    return ifnamePrefix + ifname.substr(2, ifname.length());
 }
 
 
@@ -373,16 +374,7 @@ IosxrslRshuttle::doAddUnicastRouteV4(
     LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
     // Create a path list
 
-    auto ifname = std::get<0>(nextHop);
-    if (ifname == "enp0s8") {
-        ifname =  "Gi0_0_0_0";
-    } else if (ifname == "enp0s9") {
-        ifname = "Gi0_0_0_1";
-    } else if (ifname == "enp0s10") {
-        ifname = "Gi0_0_0_2";
-    }
-
-    auto nexthop_if = iosxrIfName(ifname);
+    auto nexthop_if = iosxrIfName(std::get<0>(nextHop));
     auto nexthop_address = std::get<1>(nextHop).str();
 
     iosxrslRoute_->insertAddBatchV4(prefix.first.str(),
