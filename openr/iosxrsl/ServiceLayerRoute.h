@@ -1,11 +1,11 @@
 #pragma once
 
 #include "ServiceLayerAsyncInit.h"
-#include <sl_route_common.pb.h>
-#include <sl_route_ipv4.grpc.pb.h>
-#include <sl_route_ipv6.grpc.pb.h>
-#include <sl_route_ipv4.pb.h>
-#include <sl_route_ipv6.pb.h>
+#include <iosxrsl/sl_route_common.pb.h>
+#include <iosxrsl/sl_route_ipv4.grpc.pb.h>
+#include <iosxrsl/sl_route_ipv6.grpc.pb.h>
+#include <iosxrsl/sl_route_ipv4.pb.h>
+#include <iosxrsl/sl_route_ipv6.pb.h>
 
 
 namespace openr {
