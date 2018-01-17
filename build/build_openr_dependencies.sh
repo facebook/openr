@@ -238,28 +238,6 @@ install_libnl() {
   popd
 }
 
-install_openr() {
-  pushd .
-  cd "$BUILD_DIR"
-  cmake \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DBUILD_TESTS=ON \
-    -DADD_ROOT_TESTS=ON \
-    -DCMAKE_CXX_FLAGS="-Wno-unused-parameter" \
-    ../openr/
-  make
-  make install
-  chmod +x "/usr/local/sbin/run_openr.sh"
-  cd "$BUILD_DIR/../openr/py"
-  pip install cffi
-  pip install future
-  python setup.py build
-  python setup.py install
-  cd "$BUILD_DIR"
-  #make test
-  popd
-}
-
 #
 # Install required tools and libraries via package managers
 #
@@ -311,7 +289,6 @@ install_libzmq
 install_libnl
 install_fbthrift
 install_fbzmq
-install_openr
 
 echo "OpenR built and installed successfully"
 exit 0
