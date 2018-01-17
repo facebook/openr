@@ -29,19 +29,19 @@ DOMAIN=openr
 
 # List of comma separated list of prefixes to announce
 # e.g. "face:cafe::1/128,face:b00c::/64"
-PREFIXES="face:cafe::10/128,face:b00c::10/128"
+PREFIXES="50.1.1.1/32,face:cafe::10/128,face:b00c::10/128"
 
 # Used to assign elected address if prefix allocator is enabled
 LOOPBACK_IFACE="lo"
 
 # Announce all global addresses of interfaces into the network
-REDISTRIBUTE_IFACES="lo1"
+REDISTRIBUTE_IFACES="enp0s16"
 
 # dryrun => Do not program routes in dryrun mode
 DRYRUN=false
 
 # IOS-XR IP address for Service Layer Access
-IOSXR_SLAPI_IP="127.0.0.1"
+IOSXR_SLAPI_IP="14.1.1.20"
 
 # IOS-XR gRPC port for Service Layer Access
 IOSXR_SLAPI_PORT="57777"
@@ -62,7 +62,7 @@ HEALTH_CHECKER_PING_INTERVAL_S=3
 IFACE_PREFIXES="Gi,enp"
 
 # Logging verbosity
-VERBOSITY=1
+VERBOSITY=2
 
 # PrefixAllocator parameter
 ENABLE_PREFIX_ALLOC=false # Enable automatic election of prefixes for nodes
@@ -83,7 +83,8 @@ SPARK_KEEPALIVE_TIME_S=3
 SPARK_FASTINIT_KEEPALIVE_TIME_MS=100
 
 # Enable in build Fib service handler
-ENABLE_NETLINK_FIB_HANDLER=true
+ENABLE_NETLINK_FIB_HANDLER=false
+ENABLE_IOSXRSL_FIB_HANDLER=true
 FIB_HANDLER_PORT=60100
 
 # Enable in built System service handler
@@ -143,6 +144,7 @@ exec ${OPENR} \
   --spark_keepalive_time_s=${SPARK_KEEPALIVE_TIME_S} \
   --spark_fastinit_keepalive_time_ms=${SPARK_FASTINIT_KEEPALIVE_TIME_MS} \
   --enable_netlink_fib_handler=${ENABLE_NETLINK_FIB_HANDLER} \
+  --enable_iosxrsl_fib_handler=${ENABLE_IOSXRSL_FIB_HANDLER} \
   --enable_netlink_system_handler=${ENABLE_NETLINK_SYSTEM_HANDLER} \
   --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
   --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \

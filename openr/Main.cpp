@@ -35,12 +35,12 @@
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/platform/NetlinkFibHandler.h>
+#include <openr/platform/IosxrslFibHandler.h>
 #include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
-#include <openr/iosxrsl/ServiceLayerRoute.h>
 
 DEFINE_int32(
     kvstore_pub_port,
@@ -254,7 +254,14 @@ DEFINE_string(
     iosxr_slapi_port,
     "57777",
     "gRPC TCP port for IOS-XR SL-API");
-
+DEFINE_bool(
+    enable_iosxrsl_fib_handler,
+    false,
+    "If set, iosxrsl RIB handler will be started for route programming.");
+DEFINE_bool(
+    enable_iosxrsl_system_handler,
+    false,
+    "If set, iosxrsl system (interface, bfd) handler will be started for route programming.");
 
 using namespace fbzmq;
 using namespace openr;
@@ -401,40 +408,33 @@ main(int argc, char** argv) {
   }
 
 
-  AsyncNotifChannel asynchandler(grpc::CreateChannel(
-                            folly::sformat(
-          "{}:{}", FLAGS_iosxr_slapi_ip, FLAGS_iosxr_slapi_port), grpc::InsecureChannelCredentials()));
-  // Acquire the lock
-  std::unique_lock<std::mutex> init_lock(init_mutex);
+  // Start IosxrslFibHandler if specified
+  std::unique_ptr<apache::thrift::ThriftServer> iosxrslFibServer;
+  LOG(INFO) << "#######################";
+  LOG(INFO) << "FLAGS_enable_iosxrsl_fib_handler: " << FLAGS_enable_iosxrsl_fib_handler;
+  LOG(INFO) << "#######################";
 
-  // Spawn reader thread that maintains our Notification Channel
-  LOG(INFO) << "Starting Init thread for Service Layer to IOS-XR";
-  auto slInitThread = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, &asynchandler);
-  allThreads.emplace_back(std::move(slInitThread));
+  if (FLAGS_enable_iosxrsl_fib_handler) {
+    iosxrslFibServer = std::make_unique<apache::thrift::ThriftServer>();
+    auto fibThriftThread = std::thread([&iosxrslFibServer, &mainEventLoop]() {
+      folly::setThreadName("iosxrslFibService");
+      auto channel = grpc::CreateChannel(
+                         folly::sformat("{}:{}",
+                                        FLAGS_iosxr_slapi_ip,
+                                        FLAGS_iosxr_slapi_port),
+                         grpc::InsecureChannelCredentials());
+      auto fibHandler = std::make_shared<IosxrslFibHandler>(&mainEventLoop, channel);
+      iosxrslFibServer->setNWorkerThreads(1);
+      iosxrslFibServer->setNPoolThreads(1);
+      iosxrslFibServer->setPort(FLAGS_fib_agent_port);
+      iosxrslFibServer->setInterface(fibHandler);
 
-  service_layer::SLInitMsg init_msg;
-  init_msg.set_majorver(service_layer::SL_MAJOR_VERSION);
-  init_msg.set_minorver(service_layer::SL_MINOR_VERSION);
-  init_msg.set_subver(service_layer::SL_SUB_VERSION);
-
-
-  asynchandler.SendInitMsg(init_msg);  
-
-  //Wait on the mutex lock
-  while (!init_success) {
-      init_condVar.wait(init_lock);
+      LOG(INFO) << "Starting IOSXR-SL Fib server...";
+      iosxrslFibServer->serve();
+      LOG(INFO) << "IOSXR-SL Fib server got stopped.";
+    });
+    allThreads.emplace_back(std::move(fibThriftThread));
   }
-
-  vrfhandler = new SLVrf(grpc::CreateChannel(
-                   folly::sformat(
-          "{}:{}", FLAGS_iosxr_slapi_ip, FLAGS_iosxr_slapi_port), grpc::InsecureChannelCredentials()));
-
-  // Create a new SLVrfRegMsg batch
-  vrfhandler->vrfRegMsgAdd("default", 99, 500);
-
-  // Register the SLVrfRegMsg batch for v4 and v6
-  vrfhandler->registerVrf(AF_INET);
-  vrfhandler->registerVrf(AF_INET6);
 
 
   folly::Optional<KeyPair> keyPair;
@@ -810,24 +810,14 @@ main(int argc, char** argv) {
   if (netlinkFibServer) {
     netlinkFibServer->stop();
   }
+
+  if (iosxrslFibServer) {
+    iosxrslFibServer->stop();
+  }
+
   if (netlinkSystemServer) {
     netlinkSystemServer->stop();
   }
-
-  // Unregister all the vrfs that were registered against IOS-XR SL earlier
-  vrfhandler->vrf_msg.clear_vrfregmsgs();
-  vrfhandler->vrfRegMsgAdd("default");  
-  vrfhandler->unregisterVrf(AF_INET);
-  vrfhandler->unregisterVrf(AF_INET6);
-
-  // Delete the dynamically allocated vrf handler
-
-  delete vrfhandler;
-
-
-  LOG(INFO) << "Now shutting down asynchandler";
-  // Shutdown the async Init Channel for IOS-XR SL to automatically stop the thread
-  asynchandler.Shutdown();
 
   // Wait for all threads to finish
   for (auto& t : allThreads) {

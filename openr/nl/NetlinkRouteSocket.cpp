@@ -514,50 +514,13 @@ NetlinkRouteSocket::doAddUnicastRouteV4(
 
   LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
 
-
-  service_layer::SLRoutev4 routev4;
-
-  // Create a route shuttle object to hold route batches
-  auto rshuttle = RShuttle(vrfhandler->channel);
-
   // Create new set of nexthops to be programmed. Existing + New ones
   auto newNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
   for (auto const& nextHop : nextHops) {
     CHECK(nextHop.second.isV4());
     LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
     newNextHops.insert(nextHop);
-    // Create a path list
-
-    std::string xr_lnx_if = std::get<0>(nextHop);
-    std::string xr_if;
- 
-    if (xr_lnx_if == "Gi0_0_0_0") {
-        xr_if = "GigabitEthernet0/0/0/0";
-    } else if (xr_lnx_if == "Gi0_0_0_1") {
-        xr_if = "GigabitEthernet0/0/0/1";
-    } else if (xr_lnx_if == "Gi0_0_0_2") {
-        xr_if = "GigabitEthernet0/0/0/2";
-    } else if (xr_lnx_if == "enp0s8") {
-        xr_if = "GigabitEthernet0/0/0/0";
-    } else if (xr_lnx_if == "enp0s9") {
-        xr_if = "GigabitEthernet0/0/0/1";
-    } else if (xr_lnx_if == "enp0s10") {
-        xr_if = "GigabitEthernet0/0/0/2";
-    }
-
-    std::string nexthop_address = std::get<1>(nextHop).str(); 
-
-    rshuttle.insertAddBatchV4("default", 
-                               prefix.first.str(), 
-                               folly::to<uint8_t>(prefix.second),
-                               kAqRouteProtoId, 
-                               nexthop_address,
-                               xr_if);
-
-    //rshuttle.routev4PathAdd(routev4_ptr, rshuttle.ipv4ToLong(std::get<1>(nextHop).str().c_str()), xr_if);
-  }
-
-  rshuttle.routev4Op(service_layer::SL_OBJOP_UPDATE);
+ }
 
   auto route = buildUnicastRoute(prefix, newNextHops);
   auto err = rtnl_route_add(socket_, route->getRoutePtr(), NLM_F_REPLACE);
@@ -579,48 +542,13 @@ NetlinkRouteSocket::doAddUnicastRouteV6(
 
   LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
 
-
-  // Create a route shuttle object to hold route batches
-  auto rshuttle = RShuttle(vrfhandler->channel);
-
   // Create new set of nexthops to be programmed. Existing + New ones
   auto newNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
   for (auto const& nextHop : nextHops) {
     CHECK(nextHop.second.isV6());
     LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
     newNextHops.insert(nextHop);
-    // Create a path list
-
-    std::string xr_lnx_if = std::get<0>(nextHop);
-    std::string xr_if;
-
-    if (xr_lnx_if == "Gi0_0_0_0") {
-        xr_if = "GigabitEthernet0/0/0/0";
-    } else if (xr_lnx_if == "Gi0_0_0_1") {
-        xr_if = "GigabitEthernet0/0/0/1";
-    } else if (xr_lnx_if == "Gi0_0_0_2") {
-        xr_if = "GigabitEthernet0/0/0/2";
-    } else if (xr_lnx_if == "enp0s8") {
-        xr_if = "GigabitEthernet0/0/0/0";
-    } else if (xr_lnx_if == "enp0s9") {
-        xr_if = "GigabitEthernet0/0/0/1";
-    } else if (xr_lnx_if == "enp0s10") {
-        xr_if = "GigabitEthernet0/0/0/2";
-    }
-
-    std::string nexthop_address = std::get<1>(nextHop).str();
-
-    rshuttle.insertAddBatchV6("default",
-                               prefix.first.str(),
-                               folly::to<uint8_t>(prefix.second),
-                               kAqRouteProtoId,
-                               nexthop_address,
-                               xr_if);
   }
-
-  rshuttle.routev6Op(service_layer::SL_OBJOP_UPDATE);
-
-
   auto route = buildUnicastRoute(prefix, nextHops);
   auto err = rtnl_route_add(socket_, route->getRoutePtr(), 0 /* flags */);
   if (err != 0) {

@@ -262,7 +262,9 @@ add_library(openrlib
   nl/NetlinkSubscriber.cpp
   iosxrsl/ServiceLayerAsyncInit.cpp
   iosxrsl/ServiceLayerRoute.cpp
+  iosxrsl/ServiceLayerRshuttle.cpp
   platform/NetlinkFibHandler.cpp
+  platform/IosxrslFibHandler.cpp
   platform/NetlinkSystemHandler.cpp
   platform/PlatformPublisher.cpp
   prefix-manager/PrefixManager.cpp
@@ -470,6 +472,8 @@ install(FILES
 install(FILES
   iosxrsl/ServiceLayerAsyncInit.h
   iosxrsl/ServiceLayerRoute.h
+  iosxrsl/ServiceLayerRshuttle.h
+  iosxrsl/ServiceLayerException.h
   DESTINATION include/openr/iosxrsl
 )
 
