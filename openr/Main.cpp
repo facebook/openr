@@ -257,6 +257,10 @@ DEFINE_bool(
     advertise_interface_db,
     false,
     "Flag to optionally advertise interface-DB information in KvStore.");
+DEFINE_bool(
+    enable_segment_routing,
+    false,
+    "Flag to disable/enable segment routing");
 
 using namespace fbzmq;
 using namespace openr;
@@ -679,6 +683,7 @@ main(int argc, char** argv) {
       FLAGS_enable_perf_measurement,
       FLAGS_enable_v4,
       FLAGS_advertise_interface_db,
+      FLAGS_enable_segment_routing,
       AdjacencyDbMarker{Constants::kAdjDbMarker},
       InterfaceDbMarker{Constants::kInterfaceDbMarker},
       SparkCmdUrl{kSparkCmdUrl},

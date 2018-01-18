@@ -348,3 +348,13 @@ DECISION_DEBOUNCE_MAX_MS=250
 
 Experimental feature to measure convergence performance. Performance information
 can be viewed via breeze API `breeze perf fib`
+
+#### ENABLE_SEGMENT_ROUTING
+
+Experinmental and partially implemented segment routing feature. As of now it
+only elects node/adjacency labels. In future we will extend it to compute and
+program FIB routes.
+
+```
+ENABLE_SEGMENT_ROUTING=false
+```

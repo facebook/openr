@@ -39,6 +39,7 @@ ENABLE_NETLINK_SYSTEM_HANDLER=true
 ENABLE_PERF_MEASUREMENT=true
 ENABLE_PREFIX_ALLOC=false
 ENABLE_RTT_METRIC=true
+ENABLE_SEGMENT_ROUTING=false
 ENABLE_V4=false
 ENABLE_WATCHDOG=true
 FIB_HANDLER_PORT=60100
@@ -107,6 +108,7 @@ exec ${OPENR} \
   --enable_netlink_system_handler=${ENABLE_NETLINK_SYSTEM_HANDLER} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
   --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
+  --enable_segment_routing=${ENABLE_SEGMENT_ROUTING} \
   --enable_v4=${ENABLE_V4} \
   --fib_agent_port=${FIB_HANDLER_PORT} \
   --health_checker_ping_interval_s=${HEALTH_CHECKER_PING_INTERVAL_S} \

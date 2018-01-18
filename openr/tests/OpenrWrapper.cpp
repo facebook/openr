@@ -192,6 +192,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /* enable perf measurement */,
       false /* enable v4 */,
       true /* advertise interface db */,
+      true /* enable segment routing */,
       AdjacencyDbMarker{"adj:"},
       InterfaceDbMarker{"intf:"},
       SparkCmdUrl{sparkCmdUrl_},

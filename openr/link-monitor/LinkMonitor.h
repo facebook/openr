@@ -82,6 +82,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       bool enableV4,
       // enable interface db
       bool advertiseInterfaceDb,
+      // enable segment routing
+      bool enableSegmentRouting,
       // KvStore's adjacency object's key prefix
       AdjacencyDbMarker adjacencyDbMarker,
       InterfaceDbMarker interfaceDbMarker,
@@ -259,6 +261,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   const bool enableV4_{false};
   // advertise interface DB or not
   const bool advertiseInterfaceDb_{false};
+  // enable segment routing
+  const bool enableSegmentRouting_{false};
   // used to match the adjacency database keys
   const std::string adjacencyDbMarker_;
   // used to encode interface database key names

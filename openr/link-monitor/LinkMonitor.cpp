@@ -91,6 +91,7 @@ LinkMonitor::LinkMonitor(
     bool enablePerfMeasurement,
     bool enableV4,
     bool advertiseInterfaceDb,
+    bool enableSegmentRouting,
     AdjacencyDbMarker adjacencyDbMarker,
     InterfaceDbMarker interfaceDbMarker,
     SparkCmdUrl sparkCmdUrl,
@@ -120,6 +121,7 @@ LinkMonitor::LinkMonitor(
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(enableV4),
       advertiseInterfaceDb_(advertiseInterfaceDb),
+      enableSegmentRouting_(enableSegmentRouting),
       adjacencyDbMarker_(adjacencyDbMarker),
       interfaceDbMarker_(interfaceDbMarker),
       sparkCmdUrl_(sparkCmdUrl),
@@ -179,27 +181,29 @@ LinkMonitor::LinkMonitor(
       kvStoreLocalPubUrl_,
       folly::none /* recv timeout */);
 
-  // create range allocator to get unique node labels
-  rangeAllocator_ = std::make_unique<RangeAllocator<int32_t>>(
-      nodeId_,
-      kNodeLabelRangePrefix,
-      kvStoreClient_.get(),
-      [&](folly::Optional<int32_t> newVal) noexcept {
-        config_.nodeLabel = newVal ? newVal.value() : 0;
-        advertiseMyAdjacencies();
-      },
-      std::chrono::milliseconds(100),
-      std::chrono::seconds(2),
-      false /* override owner */);
+  if (enableSegmentRouting) {
+    // create range allocator to get unique node labels
+    rangeAllocator_ = std::make_unique<RangeAllocator<int32_t>>(
+        nodeId_,
+        kNodeLabelRangePrefix,
+        kvStoreClient_.get(),
+        [&](folly::Optional<int32_t> newVal) noexcept {
+          config_.nodeLabel = newVal ? newVal.value() : 0;
+          advertiseMyAdjacencies();
+        },
+        std::chrono::milliseconds(100),
+        std::chrono::seconds(2),
+        false /* override owner */);
 
-  // Delay range allocation until we have formed all of our adjcencies
-  scheduleTimeoutAt(adjHoldUntilTimePoint_, [this]() {
-    folly::Optional<int32_t> initValue;
-    if (config_.nodeLabel != 0) {
-      initValue = config_.nodeLabel;
-    }
-    rangeAllocator_->startAllocator(Constants::kSrGlobalRange, initValue);
-  });
+    // Delay range allocation until we have formed all of our adjcencies
+    scheduleTimeoutAt(adjHoldUntilTimePoint_, [this]() {
+      folly::Optional<int32_t> initValue;
+      if (config_.nodeLabel != 0) {
+        initValue = config_.nodeLabel;
+      }
+      rangeAllocator_->startAllocator(Constants::kSrGlobalRange, initValue);
+    });
+  }
 
   // Make thrift calls to do real programming
   try {
@@ -534,7 +538,7 @@ LinkMonitor::neighborUpEvent(
       toBinaryAddress(neighborAddrV6) /* nextHopV6 */,
       toBinaryAddress(neighborAddrV4) /* nextHopV4 */,
       (useRttMetric_ ? rttMetric : 1) /* metric */,
-      event.label /* adjacency-label */,
+      enableSegmentRouting_ ? event.label : 0 /* adjacency-label */,
       false /* overload bit */,
       event.rttUs,
       timestamp,
