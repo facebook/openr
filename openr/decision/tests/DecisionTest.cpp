@@ -1291,15 +1291,12 @@ class DecisionTestFixture : public ::testing::Test {
   thrift::RouteDatabase
   recvMyRouteDb(
       fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT>& decisionPub,
-      const string& myNodeName,
+      const string& /* myNodeName */,
       const apache::thrift::CompactSerializer& serializer) {
     auto maybeRouteDb =
         decisionPub.recvThriftObj<thrift::RouteDatabase>(serializer);
     EXPECT_FALSE(maybeRouteDb.hasError());
     auto routeDb = maybeRouteDb.value();
-
-    VLOG(4) << "---";
-
     return routeDb;
   }
 

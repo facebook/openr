@@ -473,6 +473,8 @@ if(BUILD_TESTS)
 
   find_library(GMOCK gmock)
   find_library(GMOCK_MAIN gmock_main)
+  find_library(GTEST gtest)
+  find_library(GTEST_MAIN gtest_main)
 
   add_executable(netlink_if_monitor
     nl/examples/NetlinkIfEventMonitor.cpp
@@ -572,6 +574,8 @@ if(BUILD_TESTS)
     ${SODIUM}
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
     -lboost_system
     -lpthread
     ${NLROUTE3}
@@ -597,11 +601,15 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
   target_link_libraries(range_allocator_test
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   if(ADD_ROOT_TESTS)
@@ -630,15 +638,24 @@ if(BUILD_TESTS)
 
   target_link_libraries(exp_backoff_test
     openrlib
+    ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
   target_link_libraries(knownkeys_store_test
     openrlib
+    ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
   target_link_libraries(util_test
     openrlib
+    ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   add_test(ExponentialBackoffTest exp_backoff_test)
@@ -660,6 +677,8 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   add_test(PersistentStoreTest config_store_test)
@@ -677,6 +696,8 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   add_test(DecisionTest decision_test)
@@ -694,6 +715,8 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   add_test(HealthCheckerTest health_checker_test)
@@ -714,11 +737,15 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
   target_link_libraries(kvstore_client_test
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   add_test(KvStoreTest kvstore_test)
@@ -745,6 +772,8 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   add_test(LinkMonitorTest link_monitor_test)
@@ -768,6 +797,8 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   install(TARGETS
@@ -802,16 +833,22 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
   target_link_libraries(netlink_route_socket_test
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
   target_link_libraries(netlink_subscriber_test
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   if(ADD_ROOT_TESTS)
@@ -839,6 +876,8 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   add_test(PrefixManagerTest prefix_manager_test)
@@ -861,11 +900,15 @@ if(BUILD_TESTS)
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
   target_link_libraries(mock_io_provider_test
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
   )
 
   add_test(SparkTest spark_test)
