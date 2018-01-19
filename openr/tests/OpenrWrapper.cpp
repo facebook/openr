@@ -320,34 +320,9 @@ OpenrWrapper<Serializer>::run() {
     }
   });
 
-  /*****
-    auto address = thrift::AddrEntry(
-        apache::thrift::FRAGILE,
-        "vethLMTest_" + nodeId_,
-        toIpPrefix(ipMasks[0]),
-        true);
-
-    thrift::PlatformEvent msgAddr;
-    msgAddr.eventType = thrift::PlatformEventType::ADDRESS_EVENT;
-    msgAddr.eventData = fbzmq::util::writeThriftObjStr(address, serializer_);
-
-    // send header of event in the first 2 byte
-    platformPubSock_.sendMore(
-        fbzmq::Message::from(static_cast<uint16_t>(msgAddr.eventType)).value());
-    const auto sendNeighEntryAddr =
-        platformPubSock_.sendThriftObj(msgAddr, serializer_);
-    if (sendNeighEntryAddr.hasError()) {
-      LOG(ERROR) << "Error in sending PlatformEventType Entry, event Type: "
-                 << folly::get_default(
-                        thrift::_PlatformEventType_VALUES_TO_NAMES,
-                        msgAddr.eventType,
-                        "UNKNOWN");
-    }
-  ******/
-
-  folly::Optional<folly::CIDRNetwork> seedPrefix;
-  seedPrefix.emplace(folly::IPAddress::createNetwork("fc00:cafe:babe::/62"));
-
+  const auto seedPrefix = folly::IPAddress::createNetwork(
+      "fc00:cafe:babe::/62");
+  const uint8_t allocPrefixLen = 64;
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
       nodeId_,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
@@ -355,8 +330,7 @@ OpenrWrapper<Serializer>::run() {
       PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       AllocPrefixMarker{"allocprefix:"}, // alloc_prefix_marker
-      seedPrefix,
-      static_cast<uint32_t>(64), // alloc_prefix_len
+      std::make_pair(seedPrefix, allocPrefixLen),
       false /* set loopback addr */,
       false /* override global address */,
       "" /* loopback interface name */,

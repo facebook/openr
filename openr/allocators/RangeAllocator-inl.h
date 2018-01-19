@@ -63,7 +63,9 @@ RangeAllocator<T>::~RangeAllocator() {
 
   // Unsubscribe from KvStoreClient if we have been to
   if (myValue_) {
-    kvStoreClient_->unsubscribeKey(createKey(*myValue_));
+    const auto myKey = createKey(*myValue_);
+    kvStoreClient_->unsubscribeKey(myKey);
+    kvStoreClient_->unsetKey(myKey);
   }
 }
 
@@ -311,6 +313,7 @@ RangeAllocator<T>::keyValUpdated(
 
     // Unsubscribe to update of lost value
     kvStoreClient_->unsubscribeKey(key);
+    kvStoreClient_->unsetKey(key);
     // Schedule allocation for new value
     scheduleAllocate(val);
   }

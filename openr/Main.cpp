@@ -541,9 +541,11 @@ main(int argc, char** argv) {
   std::unique_ptr<PrefixAllocator> prefixAllocator;
   if (FLAGS_enable_prefix_alloc) {
     // start prefix allocator
-    folly::Optional<folly::CIDRNetwork> seedPrefix;
+    folly::Optional<PrefixAllocatorParams> maybeAllocParams;
     if (!FLAGS_seed_prefix.empty()) {
-      seedPrefix.emplace(folly::IPAddress::createNetwork(FLAGS_seed_prefix));
+      maybeAllocParams = std::make_pair(
+          folly::IPAddress::createNetwork(FLAGS_seed_prefix),
+          FLAGS_alloc_prefix_len);
     }
     prefixAllocator = std::make_unique<PrefixAllocator>(
         FLAGS_node_name,
@@ -552,8 +554,7 @@ main(int argc, char** argv) {
         kPrefixManagerLocalCmdUrl,
         monitorSubmitUrl,
         AllocPrefixMarker{Constants::kPrefixAllocMarker},
-        seedPrefix,
-        FLAGS_alloc_prefix_len,
+        maybeAllocParams,
         FLAGS_set_loopback_address,
         FLAGS_override_loopback_global_addresses,
         FLAGS_iface,

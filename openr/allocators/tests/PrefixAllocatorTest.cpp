@@ -63,9 +63,12 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
   // Create seed prefix
   const auto seedPrefix = folly::IPAddress::createNetwork(
       folly::sformat("fc00:cafe:babe::/{}", FLAGS_seed_prefix_len));
-  folly::Optional<folly::CIDRNetwork> maybeSeedPrefix;
+  const auto newSeedPrefix = folly::IPAddress::createNetwork(
+      folly::sformat("fc00:cafe:b00c::/{}", FLAGS_seed_prefix_len));
+
+  folly::Optional<PrefixAllocatorParams> maybeAllocParams;
   if (!emptySeedPrefix) {
-    maybeSeedPrefix = seedPrefix;
+    maybeAllocParams = std::make_pair(seedPrefix, kAllocPrefixLen);
   }
 
   // allocate all subprefixes
@@ -92,6 +95,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     // client is destroyed
     fbzmq::ZmqEventLoop evl;
     std::atomic<bool> shouldWait{true};
+    std::atomic<bool> usingNewSeedPrefix{false};
 
     vector<std::unique_ptr<PersistentStore>> configStores;
     vector<std::unique_ptr<PrefixManager>> prefixManagers;
@@ -118,7 +122,13 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, prefixes[0].type);
         auto prefix = toIPNetwork(prefixes[0].prefix);
         EXPECT_EQ(kAllocPrefixLen, prefix.second);
-        EXPECT_TRUE(prefix.first.inSubnet(seedPrefix.first, seedPrefix.second));
+        if (usingNewSeedPrefix) {
+          EXPECT_TRUE(
+              prefix.first.inSubnet(newSeedPrefix.first, newSeedPrefix.second));
+        } else {
+          EXPECT_TRUE(
+              prefix.first.inSubnet(seedPrefix.first, seedPrefix.second));
+        }
 
         // Add to our entry and check for termination condition
         SYNCHRONIZED(nodeToPrefix) {
@@ -239,8 +249,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           PrefixManagerLocalCmdUrl{pfxMgrLocalUrl},
           MonitorSubmitUrl{"inproc://monitor_submit"},
           kAllocPrefixMarker,
-          maybeSeedPrefix,
-          kAllocPrefixLen,
+          maybeAllocParams,
           false /* set loopback addr */,
           false /* override global address */,
           "" /* loopback interface name */,
@@ -260,6 +269,36 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     while (shouldWait.load(std::memory_order_relaxed)) {
       std::this_thread::yield();
     }
+
+    //
+    // 4) Change network prefix if seeded via KvStore and wait for new
+    // allocation
+    //
+    if (emptySeedPrefix) {
+      // clear previous state
+      shouldWait.store(true, std::memory_order_relaxed);
+      usingNewSeedPrefix.store(true, std::memory_order_relaxed);
+      nodeToPrefix->clear();
+
+      // announce new seed prefix
+      auto prefixAllocParam = folly::sformat(
+          "{},{}",
+          folly::IPAddress::networkToString(newSeedPrefix),
+          kAllocPrefixLen);
+      auto res = kvStoreClient->setKey(kSeedPrefixKey, prefixAllocParam);
+      EXPECT_FALSE(res.hasError()) << res.error();
+
+      // wait for prefix allocation to finish
+      LOG(INFO) << "waiting for full allocation to complete with new "
+                << "seed prefix";
+      while (shouldWait.load(std::memory_order_relaxed)) {
+        std::this_thread::yield();
+      }
+    }
+
+    //
+    // Stop eventloop and wait for it.
+    //
     evl.stop();
     evl.waitUntilStopped();
 
@@ -301,12 +340,83 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       }
 
       const auto myNodeName = sformat("node-{}", i);
-      const auto prefix =
-          getNthPrefix(seedPrefix, kAllocPrefixLen, lastPrefixes[i], true);
+      const auto prefix = getNthPrefix(
+          usingNewSeedPrefix ? newSeedPrefix : seedPrefix,
+          kAllocPrefixLen,
+          lastPrefixes[i],
+          true);
       ASSERT_EQ(1, nodeToPrefix->count(myNodeName));
       ASSERT_EQ(prefix, nodeToPrefix->at(myNodeName));
     }
   } // for
+}
+
+TEST(PrefixAllocator, getPrefixCount) {
+  {
+    auto params = std::make_pair(
+        folly::IPAddress::createNetwork("face::/56"), 64);
+    EXPECT_EQ(256, PrefixAllocator::getPrefixCount(params));
+  }
+  {
+    auto params = std::make_pair(
+        folly::IPAddress::createNetwork("face::/64"), 64);
+    EXPECT_EQ(1, PrefixAllocator::getPrefixCount(params));
+  }
+  {
+    auto params = std::make_pair(
+        folly::IPAddress::createNetwork("face::/16"), 64);
+    EXPECT_EQ(1 << 31, PrefixAllocator::getPrefixCount(params));
+  }
+  {
+    auto params = std::make_pair(
+        folly::IPAddress::createNetwork("1.2.0.0/16"), 24);
+    EXPECT_EQ(256, PrefixAllocator::getPrefixCount(params));
+  }
+}
+
+TEST(PrefixAllocator, parseParamsStr) {
+  // Missing subnet specification in seed-prefix
+  {
+    auto maybeParams = PrefixAllocator::parseParamsStr("face::,64");
+    EXPECT_TRUE(maybeParams.hasError());
+  }
+
+  // Incorrect seed prefix
+  {
+    auto maybeParams = PrefixAllocator::parseParamsStr("face::b00c::/56,64");
+    EXPECT_TRUE(maybeParams.hasError());
+  }
+
+  // Seed prefix same or greather than alloc prefix length (error case).
+  {
+    auto maybeParams = PrefixAllocator::parseParamsStr("face:b00c::/64,64");
+    EXPECT_TRUE(maybeParams.hasError());
+    auto maybeParams2 = PrefixAllocator::parseParamsStr("face:b00c::/74,64");
+    EXPECT_TRUE(maybeParams2.hasError());
+  }
+
+  // Correct case - v6
+  {
+    auto maybeParams = PrefixAllocator::parseParamsStr("face::/56,64");
+    EXPECT_FALSE(maybeParams.hasError());
+    if (maybeParams.hasValue()) {
+      EXPECT_EQ(
+          folly::IPAddress::createNetwork("face::/56"), maybeParams->first);
+      EXPECT_EQ(64, maybeParams->second);
+    }
+  }
+
+  // Correct case - v4
+  {
+    // Note: last byte will be masked off
+    auto maybeParams = PrefixAllocator::parseParamsStr("1.2.0.1/16,24");
+    EXPECT_FALSE(maybeParams.hasError());
+    if (maybeParams.hasValue()) {
+      EXPECT_EQ(
+          folly::IPAddress::createNetwork("1.2.0.0/16"), maybeParams->first);
+      EXPECT_EQ(24, maybeParams->second);
+    }
+  }
 }
 
 int

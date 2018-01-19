@@ -31,6 +31,8 @@
 
 namespace openr {
 
+using PrefixAllocatorParams = std::pair<folly::CIDRNetwork, uint8_t>;
+
 /**
  * The class assigns local node unique prefixes from a given seed prefix in
  * a distributed manner.
@@ -44,10 +46,8 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
       const PrefixManagerLocalCmdUrl& prefixManagerLocalCmdUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const AllocPrefixMarker& allocPrefixMarker,
-      // prefix to allocate prefixes from
-      const folly::Optional<folly::CIDRNetwork> seedPrefix,
-      // allocated prefix length
-      uint32_t allocPrefixLen,
+      // Allocation params
+      const folly::Optional<PrefixAllocatorParams>& allocatorParams,
       // configure loopback address or not
       bool setLoopbackAddress,
       // override all global addresses on loopback interface
@@ -65,46 +65,51 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
   // Thread safe API for testing only
   folly::Optional<uint32_t> getMyPrefixIndex();
 
-  // check if all prefixes are allocated (must be called on same eventloop)
-  bool allPrefixAllocated();
+  // Static function to parse string representation of allocation params to
+  // strong types.
+  static folly::Expected<PrefixAllocatorParams, fbzmq::Error> parseParamsStr(
+      const std::string& paramStr) noexcept;
+
+  // Static function to get available prefix count from allocation params
+  static uint32_t getPrefixCount(
+      PrefixAllocatorParams const& allocParams) noexcept;
 
  private:
   //
   // Private methods
   //
 
+  //  Function to process param update from kvstore
+  void processAllocParamUpdate(thrift::Value const& value);
+
   // get my existing prefix index from kvstore if it's present
-  folly::Optional<uint32_t> getMyPrefixIndexFromKvStore();
+  folly::Optional<uint32_t> loadPrefixIndexFromKvStore();
+
+  // load prefix index from disk
+  folly::Optional<uint32_t> loadPrefixIndexFromDisk();
+
+  // save newly elected prefix index to disk
+  void savePrefixIndexToDisk(folly::Optional<uint32_t> prefixIndex);
 
   // initialize my prefix
-  void initMyPrefix();
+  uint32_t getInitPrefixIndex();
 
-  // load prefix from disk
-  folly::Optional<uint32_t> loadPrefixFromDisk();
-
-  // save newly elected prefix to disk
-  void savePrefixToDisk(folly::Optional<uint32_t> prefixIndex);
+  // start allocating prefixes, can be called again with new prefix
+  void startAllocation(PrefixAllocatorParams const& allocParams);
 
   // use my newly allocated prefix
   void applyMyPrefix(folly::Optional<uint32_t> prefixIndex);
 
-  //
-  // Private variables
-  //
-  // get key value if exists
-  folly::Optional<std::string> getValueByKey(
-      const std::string& keyName) noexcept;
-
-  // check for seed prefix
-  void checkSeedPrefix();
-
-  // start allocating prefixes
-  void startAlloc();
-
   void logPrefixEvent(
       std::string event,
       folly::Optional<uint32_t> oldPrefix,
-      folly::Optional<uint32_t> newPrefix);
+      folly::Optional<uint32_t> newPrefix,
+      folly::Optional<PrefixAllocatorParams> const& oldParams = folly::none,
+      folly::Optional<PrefixAllocatorParams> const& newParams = folly::none);
+
+  //
+  // Const private variables
+  //
 
   // this node's name
   const std::string myNodeName_{};
@@ -112,35 +117,28 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
   // this node's key marker for prefix allocation
   const std::string allocPrefixMarker_{};
 
-  // prefix to allocate prefixes from, e.g., fc00:cafe::/56
-  folly::Optional<folly::CIDRNetwork> seedPrefix_{};
-
-  // prefix size, e.g., 64 in fc00:cafe::/64
-  uint32_t allocPrefixLen_{0};
-
   // Parameter to set loopback addresses
   const bool setLoopbackAddress_{false};
   const bool overrideGlobalAddress_{false};
   const std::string loopbackIfaceName_;
 
-  // total number of available prefixes in seed prefix
-  uint32_t prefixCount_{0};
+  // Sync interval for range allocator
+  const std::chrono::milliseconds syncInterval_;
+
+  // hash node ID into prefix space
+  const std::hash<std::string> hasher{};
+
+  //
+  // Non-const private variables
+  //
+
+  // Allocation parameters e.g., fc00:cafe::/56, 64
+  folly::Optional<PrefixAllocatorParams> allocParams_;
 
   // index of my currently claimed prefix within seed prefix
   folly::Optional<uint32_t> myPrefixIndex_;
 
-  // hash node ID into prefix space
-  std::hash<std::string> hasher{};
-
   apache::thrift::CompactSerializer serializer_;
-
-  // periodic timer to check for a seed prefix from KvStore
-  // Used if the seed prefix was not already supplied to us
-  std::unique_ptr<fbzmq::ZmqTimeout> checkSeedPrefixTimer_{nullptr};
-
-  // interval to run sync with
-  // use ms, not seconds as in KvStore, mainly to save unit test time
-  const std::chrono::milliseconds syncInterval_{0};
 
   // we'll use this to get the full dump from the KvStore
   // and get and set my assigned prefix
@@ -155,6 +153,7 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
   // PrefixManager client
   std::unique_ptr<PrefixManagerClient> prefixManagerClient_;
 
+  // Monitor client for submitting counters/logs
   fbzmq::ZmqMonitorClient zmqMonitorClient_;
 };
 

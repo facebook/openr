@@ -153,7 +153,7 @@ PersistentStore::loadDatabaseFromDisk() noexcept {
   // Read data from file
   std::string fileData{""};
   if (not folly::readFile(storageFilePath_.c_str(), fileData)) {
-    LOG(ERROR) << "Failed to read file contents from '" << storageFilePath_
+    VLOG(1) << "Failed to read file contents from '" << storageFilePath_
                << "'. Error (" << errno << "): " << strerror(errno);
     return false;
   }
