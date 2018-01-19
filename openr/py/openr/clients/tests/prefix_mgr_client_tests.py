@@ -73,17 +73,18 @@ class PrefixMgr():
 
 class TestPrefixMgrClient(unittest.TestCase):
     def test(self):
-        PrefixMgr(zmq.Context(), "tcp://*:5000")
+        socket_url = "inproc://prefix-manager-url"
+        PrefixMgr(zmq.Context(), socket_url)
         num_req = 5
 
         def _prefix_mgr_server():
-            prefix_mgr_server = PrefixMgr(zmq.Context(), "tcp://*:5000")
+            prefix_mgr_server = PrefixMgr(zmq.Context(), socket_url)
             for _ in range(num_req):
                 prefix_mgr_server.process_request()
 
         def _prefix_mgr_client():
             prefix_mgr_client_inst = prefix_mgr_client.PrefixMgrClient(
-                zmq.Context(), "tcp://localhost:5000")
+                zmq.Context(), socket_url)
 
             resp = prefix_mgr_client_inst.add_prefix(
                 ['2620:0:1cff:dead:bef1:ffff:ffff:4/128'], 'LOOPBACK')
