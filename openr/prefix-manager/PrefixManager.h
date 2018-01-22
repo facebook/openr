@@ -37,11 +37,18 @@ class PrefixManager final : public fbzmq::ZmqEventLoop {
       const PrefixDbMarker& prefixDbMarker,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
+      const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
 
   // disable copying
   PrefixManager(PrefixManager const&) = delete;
   PrefixManager& operator=(PrefixManager const&) = delete;
+
+  // get prefix add counter
+  int64_t getPrefixAddCounter();
+
+  // get prefix withdraw counter
+  int64_t getPrefixWithdrawCounter();
 
  private:
   void persistPrefixDb();
@@ -55,6 +62,12 @@ class PrefixManager final : public fbzmq::ZmqEventLoop {
   void syncPrefixesByType(
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
+
+  // Submit internal state counters to monitor
+  void submitCounters();
+
+  //prefix counter for a given key
+  int64_t getCounter(const std::string& key);
 
   // this node name
   const std::string nodeId_;
@@ -79,6 +92,15 @@ class PrefixManager final : public fbzmq::ZmqEventLoop {
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
+
+  // Timer for submitting to monitor periodically
+  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
+
+  // DS to keep track of stats
+  fbzmq::ThreadData tData_;
+
+  // client to interact with monitor
+  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
 }; // PrefixManager
 

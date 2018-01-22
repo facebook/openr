@@ -236,6 +236,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         folly::none,
         PrefixDbMarker{Constants::kPrefixDbMarker},
         false,
+        MonitorSubmitUrl{"inproc://monitor_submit"},
         context);
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";

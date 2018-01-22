@@ -99,6 +99,7 @@ class PrefixManagerTestFixture : public ::testing::Test {
         folly::none,
         PrefixDbMarker{"prefix:"},
         false /* prefix-mananger perf measurement */,
+        MonitorSubmitUrl{"inproc://monitor_submit"},
         context);
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
@@ -271,6 +272,7 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
       folly::none,
       PrefixDbMarker{"prefix:"},
       false /* prefix-mananger perf measurement */,
+      MonitorSubmitUrl{"inproc://monitor_submit"},
       context);
 
   auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
@@ -331,6 +333,58 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
       prefixManagerClient->getPrefixesByType(thrift::PrefixType::DEFAULT);
   EXPECT_TRUE(resp4.value().success);
   EXPECT_EQ(0, resp4.value().prefixes.size());
+}
+
+
+TEST_F(PrefixManagerTestFixture, PrefixAddCount) {
+  auto count0 = prefixManager->getPrefixAddCounter();
+  EXPECT_EQ(0, count0);
+
+  prefixManagerClient->addPrefixes({prefixEntry1});
+  prefixManagerClient->addPrefixes({prefixEntry2});
+  prefixManagerClient->addPrefixes({prefixEntry3});
+
+  auto count1 = prefixManager->getPrefixAddCounter();
+  EXPECT_EQ(3, count1);
+
+  prefixManagerClient->addPrefixes({prefixEntry1});
+  prefixManagerClient->addPrefixes({prefixEntry2});
+  auto count2 = prefixManager->getPrefixAddCounter();
+  EXPECT_EQ(5, count2);
+
+  prefixManagerClient->withdrawPrefixes({addr1});
+  auto count3 = prefixManager->getPrefixAddCounter();
+  EXPECT_EQ(5, count3);
+}
+
+TEST_F(PrefixManagerTestFixture, PrefixWithdrawCount) {
+  auto count0 = prefixManager->getPrefixWithdrawCounter();
+  EXPECT_EQ(0, count0);
+
+  prefixManagerClient->withdrawPrefixes({addr1});
+  auto count1 = prefixManager->getPrefixWithdrawCounter();
+  EXPECT_EQ(0, count1);
+
+  prefixManagerClient->addPrefixes({prefixEntry1});
+  prefixManagerClient->addPrefixes({prefixEntry2});
+  prefixManagerClient->addPrefixes({prefixEntry3});
+
+  auto count2 = prefixManager->getPrefixWithdrawCounter();
+  EXPECT_EQ(0, count2);
+
+  prefixManagerClient->withdrawPrefixes({addr1});
+  auto count3 = prefixManager->getPrefixWithdrawCounter();
+  EXPECT_EQ(1, count3);
+
+  prefixManagerClient->withdrawPrefixes({addr4});
+  auto count4 = prefixManager->getPrefixWithdrawCounter();
+  EXPECT_EQ(1, count4);
+
+  prefixManagerClient->withdrawPrefixes({addr1});
+  prefixManagerClient->withdrawPrefixes({addr2});
+  auto count5 = prefixManager->getPrefixWithdrawCounter();
+  EXPECT_EQ(2, count5);
+
 }
 
 int

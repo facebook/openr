@@ -9,6 +9,7 @@
 
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <folly/futures/Future.h>
 #include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
 
@@ -33,6 +34,7 @@ PrefixManager::PrefixManager(
     const folly::Optional<fbzmq::KeyPair>& keyPair,
     const PrefixDbMarker& prefixDbMarker,
     bool enablePerfMeasurement,
+    const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
     : nodeId_{nodeId},
       globalCmdSock_(
@@ -72,6 +74,16 @@ PrefixManager::PrefixManager(
     }
     persistPrefixDb();
   }
+
+  zmqMonitorClient_ =
+      std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
+
+  // Schedule periodic timer for submission to monitor
+  const bool isPeriodic = true;
+  monitorTimer_ =
+      fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
+  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
+
 }
 
 void
@@ -135,6 +147,7 @@ PrefixManager::processRequest(
   thrift::PrefixManagerResponse response;
   switch (thriftReq.cmd) {
   case thrift::PrefixManagerCommand::ADD_PREFIXES: {
+    tData_.addStatValue("prefix_manager.add_prefixes", 1, fbzmq::COUNT);
     addOrUpdatePrefixes(thriftReq.prefixes);
     persistPrefixDb();
     response.success = true;
@@ -144,6 +157,7 @@ PrefixManager::processRequest(
     if (removePrefixes(thriftReq.prefixes)) {
       persistPrefixDb();
       response.success = true;
+      tData_.addStatValue("prefix_manager.withdraw_prefixes", 1, fbzmq::COUNT);
     } else {
       response.success = false;
       response.message = kErrorNoPrefixToRemove;
@@ -197,6 +211,46 @@ PrefixManager::processRequest(
   if (sndRet.hasError()) {
     LOG(ERROR) << "Error sending response. " << sndRet.error();
   }
+}
+
+void
+PrefixManager::submitCounters() {
+  VLOG(2) << "Submitting counters ... ";
+
+  // Extract/build counters from thread-data
+  auto counters = tData_.getCounters();
+
+  // Prepare for submitting counters
+  fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counters);
+
+  zmqMonitorClient_->setCounters(submittingCounters);
+}
+
+int64_t
+PrefixManager::getCounter(const std::string& key) {
+  std::unordered_map<std::string, int64_t> counters;
+
+  folly::Promise<std::unordered_map<std::string, int64_t>> promise;
+  auto future = promise.getFuture();
+  runImmediatelyOrInEventLoop([this, promise = std::move(promise)]() mutable {
+    promise.setValue(tData_.getCounters());
+  });
+  counters = future.get();
+
+  if (counters.find(key) != counters.end()) {
+    return counters[key];
+  }
+  return 0;
+}
+
+int64_t
+PrefixManager::getPrefixAddCounter() {
+  return getCounter("prefix_manager.add_prefixes.count.0");
+}
+
+int64_t
+PrefixManager::getPrefixWithdrawCounter() {
+  return getCounter("prefix_manager.withdraw_prefixes.count.0");
 }
 
 // helpers for modifying our Prefix Db

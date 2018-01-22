@@ -235,6 +235,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           folly::none,
           PrefixDbMarker{"prefix:"},
           false /* prefix-manager perf measurement */,
+          MonitorSubmitUrl{"inproc://monitor_submit"},
           zmqContext);
       threads.emplace_back([&prefixManager]() noexcept {
         prefixManager->run();

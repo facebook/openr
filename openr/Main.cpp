@@ -526,6 +526,7 @@ main(int argc, char** argv) {
       FLAGS_enable_encryption ? keyPair : folly::none,
       PrefixDbMarker{Constants::kPrefixDbMarker},
       FLAGS_enable_perf_measurement,
+      monitorSubmitUrl,
       context);
 
   allThreads.emplace_back(std::thread([&prefixManager]() noexcept {

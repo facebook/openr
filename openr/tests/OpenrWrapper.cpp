@@ -283,6 +283,7 @@ OpenrWrapper<Serializer>::run() {
       folly::none,
       PrefixDbMarker{"prefix:"},
       false /* prefix-mananger perf measurement */,
+      MonitorSubmitUrl{monitorSubmitUrl_},
       context_);
 
   prefixManagerClient_ = std::make_unique<PrefixManagerClient>(
