@@ -1,4 +1,6 @@
 #include "IosxrTelemetryDecode.h" 
+#include "IosxrTelemetryException.h"
+
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/json_util.h>
 
@@ -66,21 +68,26 @@ DecodeIPv6NeighborsGPB(const ::telemetry::TelemetryRowGPB& telemetry_gpb_row)
                     nodes::node::neighbor_interfaces::
                     neighbor_interface::host_addresses::host_address;
 
-    std::cout << "\n\n\n\n############################\n\n";
     auto ipv6_nd_neigh_entry_keys = ipv6_nd_neighbor_entry_KEYS();
-    ipv6_nd_neigh_entry_keys.ParseFromString(telemetry_gpb_row.keys());
-
-    VLOG(3) << "IPv6 ND entry keys \n"
-            << gpbMsgToJson(ipv6_nd_neigh_entry_keys);
-
+    if(ipv6_nd_neigh_entry_keys.ParseFromString(telemetry_gpb_row.keys()))
+    {
+        VLOG(3) << "IPv6 ND entry keys \n"
+                << gpbMsgToJson(ipv6_nd_neigh_entry_keys);
+    } else {
+        throw IosxrTelemetryException(folly::sformat(
+                    "Failed to fetch IPv6 neighbor entry keys"));
+    }
 
     auto ipv6_nd_neigh_entry = ipv6_nd_neighbor_entry();
-    ipv6_nd_neigh_entry.ParseFromString(telemetry_gpb_row.content());
+    if(ipv6_nd_neigh_entry.ParseFromString(telemetry_gpb_row.content()))
+    {
+        VLOG(3) << "IPv6 ND entry \n"
+                << gpbMsgToJson(ipv6_nd_neigh_entry);
+    } else {
+        throw IosxrTelemetryException(folly::sformat(
+                    "Failed to fetch IPv6 neighbor entry"));
+    }
 
-    VLOG(3) << "IPv6 ND entry \n"
-            << gpbMsgToJson(ipv6_nd_neigh_entry);
-
-    std::cout << "\n\n############################\n\n\n";
 }
 
 void
@@ -88,23 +95,29 @@ TelemetryDecode::
 DecodeIPv6NeighborsGPBKV(const ::telemetry::TelemetryField& telemetry_gpbkv_field)
 {
 
-    VLOG(2) << "OLA2!!!!!";
-
 }
 
 void
 TelemetryDecode::DecodeTelemetryDataGPB(const telemetry::Telemetry& telemetry_data)
 {
 
-    auto telemetry_gpb_table = telemetry_data.data_gpb();    
-    for (auto row_index=0;
-         row_index < telemetry_gpb_table.row_size();)
-    {
-        auto telemetry_gpb_row = telemetry_gpb_table.row(row_index);
-        VLOG(3) << "Telemetry GPB row \n"
-                << gpbMsgToJson(telemetry_gpb_row);
-        (this->*decodeSensorPathMapGPB[telemetry_data.encoding_path()])(telemetry_gpb_row);
-        row_index++;
+    auto& pathmap = decodeSensorPathMapGPB;
+    if (pathmap.find(telemetry_data.encoding_path()) != pathmap.end()) {
+        auto telemetry_gpb_table = telemetry_data.data_gpb();   
+        for (auto row_index=0;
+             row_index < telemetry_gpb_table.row_size();)
+        {
+           auto telemetry_gpb_row = telemetry_gpb_table.row(row_index);
+            VLOG(3) << "Telemetry GPB row \n"
+                    << gpbMsgToJson(telemetry_gpb_row);
+            (this->*pathmap[telemetry_data.encoding_path()])(telemetry_gpb_row);
+
+            row_index++;
+        }
+    } else {
+        throw IosxrTelemetryException(folly::sformat(
+                "Encoding Path {} not found in registered sensor paths",
+                telemetry_data.encoding_path())); 
     }
 }
 
@@ -118,19 +131,27 @@ TelemetryDecode::DecodeTelemetryDataGPBKV(const telemetry::Telemetry& telemetry_
 void
 TelemetryDecode::DecodeTelemetryData(const telemetry::Telemetry& telemetry_data)
 {
-    VLOG(2) << "Telemetry Data: \n"
+    VLOG(3) << "Telemetry Data: \n"
             << gpbMsgToJson(telemetry_data);
 
-    VLOG(2) << "Encoding Path : \n"
+    VLOG(3) << "Encoding Path : \n"
             << telemetry_data.encoding_path();
 
     if (telemetry_data.has_data_gpb()) {
+      try
+      {
         DecodeTelemetryDataGPB(telemetry_data);
-
+      } catch (IosxrTelemetryException const& ex) {
+        LOG(ERROR) << "Failed to decode Telemetry data as GPB";
+        LOG(ERROR) << ex.what();
+      } catch (std::exception const& ex) {
+        LOG(ERROR) << "Failed to decode Telemetry data as GPB";
+        LOG(ERROR) << ex.what();
+      }
     } else {
         DecodeTelemetryDataGPBKV(telemetry_data);
     }
- 
+
 }
 
 }

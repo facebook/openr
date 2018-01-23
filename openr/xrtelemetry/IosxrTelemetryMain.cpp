@@ -74,9 +74,9 @@ int main(int argc, char** argv) {
                                  IOSXR_TELEMETRY_DIALIN_GPB,
                                  "LLDP");
 
-    //asynchandler.AddSubscription(99,
-    //                             IOSXR_TELEMETRY_DIALIN_GPB,
-     //                            "INTERFACESSUB");
+    asynchandler.AddSubscription(99,
+                                 IOSXR_TELEMETRY_DIALIN_GPB,
+                                "INTERFACESSUB");
 
     asynchandler.SubscribeAll();
 
