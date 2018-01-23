@@ -267,7 +267,11 @@ getNthPrefix(
 
   // using bits (seedHostBitLen-allocHostBitLen-1)..0 of @prefixIndex to
   // set bits (seedHostBitLen - 1)..allocHostBitLen of ipBytes
-  for (uint8_t i = 0; i < seedHostBitLen - allocHostBitLen; ++i) {
+  for (
+    uint8_t i = 0;
+    i < std::min(32u, seedHostBitLen - allocHostBitLen);
+    ++i
+  ) {
     // global bit index across bytes
     auto idx = i + allocHostBitLen;
     // byte index: network byte order, i.e., big-endian

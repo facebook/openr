@@ -95,10 +95,14 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
   uint32_t getInitPrefixIndex();
 
   // start allocating prefixes, can be called again with new prefix
-  void startAllocation(PrefixAllocatorParams const& allocParams);
+  // or `folly::none` if seed prefix is no longer valid to withdraw
+  // what we had before!
+  void startAllocation(
+      folly::Optional<PrefixAllocatorParams> const& allocParams);
 
   // use my newly allocated prefix
-  void applyMyPrefix(folly::Optional<uint32_t> prefixIndex);
+  void applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex);
+  void applyMyPrefix(folly::Optional<folly::CIDRNetwork> prefix);
 
   void logPrefixEvent(
       std::string event,

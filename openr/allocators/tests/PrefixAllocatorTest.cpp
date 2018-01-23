@@ -43,6 +43,143 @@ const int kAllocPrefixLen = 128;
 const string kSeedPrefixKey = "e2e-network-prefix";
 const string kConfigStoreUrlBase{"inproc://config_store_cmd"};
 
+class PrefixAllocatorFixture : public ::testing::Test {
+ public:
+  void
+  SetUp() override {
+    // threadID constant
+    const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
+
+    //
+    // Start KvStore and attach a client to it
+    //
+    kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
+        zmqContext_,
+        myNodeName_,
+        std::chrono::seconds(60) /* db sync interval */,
+        std::chrono::seconds(600) /* counter submit interval */,
+        std::unordered_map<std::string, openr::thrift::PeerSpec>{});
+    kvStoreWrapper_->run();
+    kvStoreClient_ = std::make_unique<KvStoreClient>(
+        zmqContext_,
+        &evl_,
+        myNodeName_,
+        kvStoreWrapper_->localCmdUrl,
+        kvStoreWrapper_->localPubUrl);
+
+    LOG(INFO) << "The test store is running";
+
+    //
+    // Start persistent config store
+    //
+    tempFileName_ = folly::sformat("/tmp/openr.{}", tid);
+    configStore_ = std::make_unique<PersistentStore>(
+        tempFileName_,
+        PersistentStoreUrl{kConfigStoreUrlBase},
+        zmqContext_);
+    threads_.emplace_back([&]() noexcept { configStore_->run(); });
+    configStore_->waitUntilRunning();
+    configStoreClient_ = std::make_unique<PersistentStoreClient>(
+        PersistentStoreUrl{kConfigStoreUrlBase},
+        zmqContext_);
+
+    //
+    // Start PrefixManager
+    //
+    prefixManager_ = std::make_unique<PrefixManager>(
+        myNodeName_,
+        PrefixManagerGlobalCmdUrl{pfxMgrGlobalUrl_},
+        PrefixManagerLocalCmdUrl{pfxMgrLocalUrl_},
+        PersistentStoreUrl{kConfigStoreUrlBase},
+        KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
+        KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
+        folly::none,
+        PrefixDbMarker{"prefix:"},
+        false /* prefix-manager perf measurement */,
+        MonitorSubmitUrl{"inproc://monitor_submit"},
+        zmqContext_);
+    threads_.emplace_back([&]() noexcept { prefixManager_->run(); });
+    prefixManager_->waitUntilRunning();
+
+    //
+    // Create PrefixAllocator
+    //
+    createPrefixAllocator();
+  }
+
+  //
+  // (Re)Create PrefixAllocator
+  void createPrefixAllocator() {
+    // Destroy one if running
+    if (prefixAllocator_) {
+      prefixAllocator_->stop();
+      prefixAllocator_->waitUntilStopped();
+      prefixAllocator_.reset();
+    }
+
+    prefixAllocator_ = make_unique<PrefixAllocator>(
+        myNodeName_,
+        KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
+        KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
+        PrefixManagerLocalCmdUrl{pfxMgrLocalUrl_},
+        MonitorSubmitUrl{"inproc://monitor_submit"},
+        kAllocPrefixMarker,
+        folly::none,
+        false /* set loopback addr */,
+        false /* override global address */,
+        "" /* loopback interface name */,
+        kSyncInterval,
+        PersistentStoreUrl{kConfigStoreUrlBase},
+        zmqContext_);
+    threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
+    prefixAllocator_->waitUntilRunning();
+  }
+
+  void
+  TearDown() override {
+    kvStoreClient_.reset();
+    configStoreClient_.reset();
+
+    // Stop various modules
+    prefixAllocator_->stop();
+    prefixAllocator_->waitUntilStopped();
+    prefixManager_->stop();
+    prefixManager_->waitUntilStopped();
+    configStore_->stop();
+    configStore_->waitUntilStopped();
+    kvStoreWrapper_->stop();
+
+    // Join for all threads to finish
+    for (auto& thread : threads_) {
+      thread.join();
+    }
+  }
+
+ protected:
+  // ZMQ Context for IO processing
+  fbzmq::Context zmqContext_;
+
+  // Main thread event loop
+  fbzmq::ZmqEventLoop evl_;
+
+  const std::string myNodeName_{"test-node"};
+  const std::string pfxMgrGlobalUrl_{"inproc://prefix-manager-global"};
+  const std::string pfxMgrLocalUrl_{"inproc://prefix-manager-local-{}"};
+  std::string tempFileName_;
+
+  std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
+  std::unique_ptr<KvStoreClient> kvStoreClient_;
+  std::unique_ptr<PersistentStore> configStore_;
+  std::unique_ptr<PersistentStoreClient> configStoreClient_;
+  std::unique_ptr<PrefixManager> prefixManager_;
+  std::unique_ptr<PrefixAllocator> prefixAllocator_;
+
+  std::vector<std::thread> threads_;
+
+  // create serializer object for parsing kvstore key/values
+  apache::thrift::CompactSerializer serializer;
+};
+
 class PrefixAllocTest : public ::testing::TestWithParam<bool> {};
 
 INSTANTIATE_TEST_CASE_P(
@@ -350,6 +487,109 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       ASSERT_EQ(prefix, nodeToPrefix->at(myNodeName));
     }
   } // for
+}
+
+/**
+ * This diff aims at testing clearing previous allocation on failure to obtain
+ * allocation parameters from KvStore and ConfigStore.
+ */
+TEST_F(PrefixAllocatorFixture, ClearAllocation) {
+  folly::Synchronized<folly::Optional<folly::CIDRNetwork>> allocPrefix;
+  std::atomic<bool> hasAllocPrefix{false};
+  const std::string subscriptionKey = folly::sformat(
+      "{}{}", openr::Constants::kPrefixDbMarker, myNodeName_);
+
+  // Set callback
+  kvStoreClient_->subscribeKey(subscriptionKey,
+    [&](const std::string& /* key */, const thrift::Value& value) {
+      // Parse PrefixDb
+      ASSERT_TRUE(value.value.hasValue());
+      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+          value.value.value(), serializer);
+      auto& prefixes = prefixDb.prefixEntries;
+
+      // Verify some expectations
+      EXPECT_GE(1, prefixes.size());
+      if (prefixes.empty()) {
+        SYNCHRONIZED(allocPrefix) {
+          allocPrefix = folly::none;
+        }
+        LOG(INFO) << "Lost allocated prefix!";
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+      } else {
+        EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, prefixes[0].type);
+        auto prefix = toIPNetwork(prefixes[0].prefix);
+        EXPECT_EQ(kAllocPrefixLen, prefix.second);
+        SYNCHRONIZED(allocPrefix) {
+          allocPrefix = prefix;
+        }
+        LOG(INFO) << "Got new prefix allocation!";
+        hasAllocPrefix.store(true, std::memory_order_relaxed);
+      } // if
+    } // callback
+  );
+
+  // Start main event loop in a new thread
+  threads_.emplace_back([&]() noexcept { evl_.run(); });
+
+  //
+  // 1) Set seed prefix in kvStore and verify that we get an elected prefix
+  //
+  // announce new seed prefix
+  hasAllocPrefix.store(false, std::memory_order_relaxed);
+  const auto seedPrefix = folly::IPAddress::createNetwork("face:b00c::/64");
+  auto prefixAllocParam = folly::sformat(
+      "{},{}",
+      folly::IPAddress::networkToString(seedPrefix),
+      kAllocPrefixLen);
+  auto res = kvStoreClient_->setKey(kSeedPrefixKey, prefixAllocParam);
+  EXPECT_FALSE(res.hasError()) << res.error();
+  // busy loop until we have prefix
+  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+    std::this_thread::yield();
+  }
+  EXPECT_TRUE(allocPrefix->hasValue());
+  LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
+
+  //
+  // 2) Clear prefix-allocator, clear prefix in config store and config store
+  // and restart prefix allcoator. Expect prefix to be withdrawn
+  //
+  prefixAllocator_->stop();
+  prefixAllocator_->waitUntilStopped();
+  prefixAllocator_.reset();
+  evl_.runInEventLoop([&]() noexcept {
+    kvStoreClient_->setKey(
+      kSeedPrefixKey, "", 0, std::chrono::milliseconds(10));   // erase-key
+    kvStoreClient_->unsetKey(kSeedPrefixKey);
+  });
+  configStoreClient_->erase("prefix-allocator-config");
+  // wait long enough for key to expire
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  hasAllocPrefix.store(true, std::memory_order_relaxed);
+  createPrefixAllocator();
+  while (hasAllocPrefix.load(std::memory_order_relaxed)) {
+    std::this_thread::yield();
+  }
+  EXPECT_FALSE(allocPrefix->hasValue());
+  LOG(INFO) << "Step-2: Lost allocated prefix";
+
+  //
+  // 3) Set prefix and expect new prefix to be elected
+  //
+  hasAllocPrefix.store(false, std::memory_order_relaxed);
+  auto res2 = kvStoreClient_->setKey(kSeedPrefixKey, prefixAllocParam);
+  EXPECT_FALSE(res2.hasError()) << res2.error();
+  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+    std::this_thread::yield();
+  }
+  EXPECT_TRUE(allocPrefix->hasValue());
+  LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
+
+  // Stop main eventloop
+  evl_.stop();
+  evl_.waitUntilStopped();
 }
 
 TEST(PrefixAllocator, getPrefixCount) {

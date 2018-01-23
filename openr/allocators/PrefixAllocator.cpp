@@ -83,14 +83,47 @@ PrefixAllocator::PrefixAllocator(
         CHECK_EQ(kPrefixAllocParamKey, key);
         processAllocParamUpdate(value);
       });
+
     // get initial value if missed out in incremental updates (one time only)
     scheduleTimeout(0ms, [this]() noexcept {
+      // If we already have received initial value from KvStore then just skip
+      // this step
+      if (allocParams_.hasValue()) {
+        return;
+      }
+
+      // 1) Get initial value from KvStore!
       auto maybeValue = kvStoreClient_->getKey(kPrefixAllocParamKey);
       if (maybeValue.hasError()) {
         LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
                    << maybeValue.error();
       } else {
         processAllocParamUpdate(maybeValue.value());
+        return;
+      }
+
+      // 2) Start prefix allocator from previously configured params. Resume
+      // from where we left earlier!
+      auto maybeThriftAllocPrefix =
+        configStoreClient_.loadThriftObj<thrift::AllocPrefix>(kConfigKey);
+      if (maybeThriftAllocPrefix.hasValue()) {
+        const auto oldAllocParams = std::make_pair(
+          toIPNetwork(maybeThriftAllocPrefix->seedPrefix),
+          static_cast<uint8_t>(maybeThriftAllocPrefix->allocPrefixLen));
+        startAllocation(oldAllocParams);
+        return;
+      }
+
+      // If we weren't able to get alloc parameters so far, either from disk
+      // or kvstore then let's bail out and stop allocation process and
+      // withdraw our prefixes from PrefixManager as well as from loopback
+      // interface.
+      if (!allocParams_.hasValue()) {
+        LOG(WARNING)
+          << "Clearing previous prefix allocation state on failure to load "
+          << "allocation parameters from disk as well as KvStore.";
+        applyMyPrefix(folly::none);
+        return;
       }
     });
   } else {
@@ -153,6 +186,7 @@ PrefixAllocator::processAllocParamUpdate(thrift::Value const& value) {
   auto maybeParams = parseParamsStr(value.value.value());
   if (maybeParams.hasError()) {
     LOG(ERROR) << "Malformed prefix-allocator params. " << maybeParams.error();
+    startAllocation(folly::none);
   } else {
     startAllocation(maybeParams.value());
   }
@@ -185,8 +219,7 @@ PrefixAllocator::loadPrefixIndexFromDisk() {
   if (maybeThriftAllocPrefix.hasError()) {
     return folly::none;
   }
-  auto thriftAllocPrefix = maybeThriftAllocPrefix.value();
-  return static_cast<uint32_t>(thriftAllocPrefix.allocPrefixIndex);
+  return static_cast<uint32_t>(maybeThriftAllocPrefix->allocPrefixIndex);
 }
 
 void
@@ -251,14 +284,27 @@ PrefixAllocator::getInitPrefixIndex() {
 }
 
 void
-PrefixAllocator::startAllocation(PrefixAllocatorParams const& allocParams) {
-  if (allocParams_.hasValue()) {
+PrefixAllocator::startAllocation(
+    folly::Optional<PrefixAllocatorParams> const& allocParams) {
+  // Some informative logging
+  if (allocParams_.hasValue() and allocParams.hasValue()) {
     LOG(WARNING)
       << "Prefix allocation parameters are changing. \n"
       << "  Old: " << folly::IPAddress::networkToString(allocParams_->first)
       << ", " << static_cast<int16_t>(allocParams_->second) << "\n"
-      << "  New: " << folly::IPAddress::networkToString(allocParams.first)
-      << ", " << static_cast<int16_t>(allocParams.second);
+      << "  New: " << folly::IPAddress::networkToString(allocParams->first)
+      << ", " << static_cast<int16_t>(allocParams->second);
+  }
+  if (allocParams_.hasValue() and not allocParams.hasValue()) {
+    LOG(WARNING) << "Prefix allocation parameters are not valid anymore. \n"
+      << "  Old: " << folly::IPAddress::networkToString(allocParams_->first)
+      << ", " << static_cast<int16_t>(allocParams_->second) << "\n";
+  }
+  if (not allocParams_.hasValue() and allocParams.hasValue()) {
+    LOG(INFO)
+      << "Prefix allocation parameters have been received. \n"
+      << "  New: " << folly::IPAddress::networkToString(allocParams->first)
+      << ", " << static_cast<int16_t>(allocParams->second);
   }
   logPrefixEvent(
       "ALLOC_PARAMS_UPDATE",
@@ -268,9 +314,15 @@ PrefixAllocator::startAllocation(PrefixAllocatorParams const& allocParams) {
 
   // Update local state
   rangeAllocator_.reset();
-  applyMyPrefix(folly::none);   // Clear local state
+  if (allocParams_) {
+    applyMyPrefixIndex(folly::none);   // Clear local state
+  }
   CHECK(!myPrefixIndex_.hasValue());
   allocParams_ = allocParams;
+
+  if (!allocParams_.hasValue()) {
+    return;
+  }
 
   // create range allocator to get unique prefixes
   rangeAllocator_ = std::make_unique<RangeAllocator<uint32_t>>(
@@ -278,7 +330,7 @@ PrefixAllocator::startAllocation(PrefixAllocatorParams const& allocParams) {
       allocPrefixMarker_,
       kvStoreClient_.get(),
       [this](folly::Optional<uint32_t> newPrefixIndex) noexcept {
-        applyMyPrefix(newPrefixIndex);
+        applyMyPrefixIndex(newPrefixIndex);
       },
       syncInterval_,
       // no need for randomness since "collision" is harmless
@@ -298,7 +350,7 @@ PrefixAllocator::startAllocation(PrefixAllocatorParams const& allocParams) {
 }
 
 void
-PrefixAllocator::applyMyPrefix(folly::Optional<uint32_t> prefixIndex) {
+PrefixAllocator::applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex) {
   // Silently return if nothing changed. For e.g.
   if (myPrefixIndex_ == prefixIndex) {
     return;
@@ -325,19 +377,25 @@ PrefixAllocator::applyMyPrefix(folly::Optional<uint32_t> prefixIndex) {
   myPrefixIndex_ = prefixIndex;
 
   // Create network prefix to announce and loopback address to assign
-  auto const& seedPrefix = allocParams_->first;
-  auto const& allocPrefixLen = allocParams_->second;
   folly::Optional<folly::CIDRNetwork> prefix;
   if (prefixIndex) {
+    auto const& seedPrefix = allocParams_->first;
+    auto const& allocPrefixLen = allocParams_->second;
     prefix = getNthPrefix(seedPrefix, allocPrefixLen, *prefixIndex, true);
   }
 
+  // Announce my prefix
+  applyMyPrefix(std::move(prefix));
+}
+
+void
+PrefixAllocator::applyMyPrefix(folly::Optional<folly::CIDRNetwork> prefix) {
   // Flush existing loopback addresses
-  if (setLoopbackAddress_) {
+  if (setLoopbackAddress_ and allocParams_.hasValue()) {
     LOG(INFO) << "Flushing existing addresses from interface "
               << loopbackIfaceName_;
     if (!flushIfaceAddrs(
-            loopbackIfaceName_, seedPrefix, overrideGlobalAddress_)) {
+            loopbackIfaceName_, allocParams_->first, overrideGlobalAddress_)) {
       LOG(FATAL) << "Failed to flush addresses on interface "
                  << loopbackIfaceName_;
     }
