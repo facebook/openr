@@ -162,10 +162,15 @@ IosxrslRshuttle::iosxrIfName(std::string ifname)
                       {"Fg",FORTY_GIG}, {"Tf", TWENTY_FIVE_GIG},
                       {"Hg",HUNDRED_GIG}, {"Mg", MGMT}};
 
-
     auto ifnamePrefix = "";
 
-    switch (iosxrLnxIfname[ifname.substr(2)]) {
+    if (iosxrLnxIfname.find(ifname.substr(0,2)) ==
+            iosxrLnxIfname.end()) {
+        LOG(ERROR) << "Interface type not supported";
+        return "";
+    }
+
+    switch (iosxrLnxIfname[ifname.substr(0,2)]) {
     case GIG:
         ifnamePrefix = "GigabitEthernet";
         break;
@@ -195,6 +200,7 @@ IosxrslRshuttle::iosxrIfName(std::string ifname)
     std::replace(ifname.begin(),
                  ifname.end(),
                  '_','/');   
+
 
     return ifnamePrefix + ifname.substr(2, ifname.length());
 }
@@ -367,11 +373,11 @@ IosxrslRshuttle::doAddUnicastRouteV4(
     const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
   CHECK(prefix.first.isV4());
 
-  LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
+  VLOG(3) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
 
   for (auto const& nextHop : nextHops) {
     CHECK(nextHop.second.isV4());
-    LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
+    VLOG(3) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
     // Create a path list
 
     auto nexthop_if = iosxrIfName(std::get<0>(nextHop));
@@ -402,11 +408,11 @@ IosxrslRshuttle::doAddUnicastRouteV6(
     CHECK(nextHop.second.isV6());
   }
 
-  LOG(INFO) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
+  VLOG(3) << "Prefix Received: " << folly::IPAddress::networkToString(prefix);
 
   for (auto const& nextHop : nextHops) {
     CHECK(nextHop.second.isV6());
-    LOG(INFO) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
+    VLOG(3) << "Nexthop : "<< std::get<1>(nextHop).str() << ", " << std::get<0>(nextHop).c_str();
     // Create a path list
 
     auto nexthop_if = iosxrIfName(std::get<0>(nextHop));
