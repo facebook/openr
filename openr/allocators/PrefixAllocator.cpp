@@ -381,7 +381,7 @@ PrefixAllocator::applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex) {
   if (prefixIndex) {
     auto const& seedPrefix = allocParams_->first;
     auto const& allocPrefixLen = allocParams_->second;
-    prefix = getNthPrefix(seedPrefix, allocPrefixLen, *prefixIndex, true);
+    prefix = getNthPrefix(seedPrefix, allocPrefixLen, *prefixIndex);
   }
 
   // Announce my prefix
@@ -452,7 +452,7 @@ PrefixAllocator::logPrefixEvent(
     auto const& allocPrefixLen = allocParams_->second;
     sample.addString("old_prefix",
       folly::IPAddress::networkToString(
-        getNthPrefix(seedPrefix, allocPrefixLen, *oldPrefix, true)));
+        getNthPrefix(seedPrefix, allocPrefixLen, *oldPrefix)));
   }
 
   if (allocParams_.hasValue() && newPrefix) {
@@ -460,7 +460,7 @@ PrefixAllocator::logPrefixEvent(
     auto const& allocPrefixLen = allocParams_->second;
     sample.addString("new_prefix",
       folly::IPAddress::networkToString(
-        getNthPrefix(seedPrefix, allocPrefixLen, *newPrefix, true)));
+        getNthPrefix(seedPrefix, allocPrefixLen, *newPrefix)));
   }
 
   if (oldAllocParams.hasValue()) {

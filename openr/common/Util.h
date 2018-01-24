@@ -67,15 +67,13 @@ bool checkIncludeExcludeRegex(
 
 /**
  * @param prefixIndex subprefix index, starting from 0
- * @param mask apply mask to the IP portion
  * @return n-th subprefix of allocated length in seed prefix
  * note: only handle IPv6 and assume seed prefix comes unmasked
  */
 folly::CIDRNetwork getNthPrefix(
     const folly::CIDRNetwork& seedPrefix,
     uint32_t allocPrefixLen,
-    uint32_t prefixIndex,
-    bool mask);
+    uint32_t prefixIndex);
 
 // load key pair from file
 template <typename Serializer>

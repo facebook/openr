@@ -13,11 +13,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-namespace {
-// number of bits in ip v6
-const uint8_t kBitCount = 128;
-} // namespace
-
 namespace std {
 
 /**
@@ -135,14 +130,15 @@ addIfaceAddr(const std::string& ifName, const folly::IPAddress& addr) {
 
 folly::IPAddress
 createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept {
-  CHECK(prefix.first.isV6()) << "V4 is not supported";
   auto addr = prefix.first.mask(prefix.second);
 
-  // Set last bit to `1` if prefix length is less than 128
-  if (prefix.second < 128) {
-    auto bytes = addr.asV6().toByteArray();
-    bytes[15]++;
-    addr = folly::IPAddressV6(bytes);
+  // Set last bit to `1` if prefix length is not full
+  if (prefix.second != prefix.first.bitCount()) {
+    auto bytes = std::string(
+      reinterpret_cast<const char*>(addr.bytes()), addr.byteCount());
+    bytes[bytes.size() - 1] |= 0x01;    // Set last bit to 1
+    addr = folly::IPAddress::fromBinary(folly::ByteRange(
+      reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()));
   }
 
   return addr;
@@ -252,46 +248,51 @@ folly::CIDRNetwork
 getNthPrefix(
     const folly::CIDRNetwork& seedPrefix,
     uint32_t allocPrefixLen,
-    uint32_t prefixIndex,
-    bool mask) {
+    uint32_t prefixIndex) {
   // get underlying byte array representing IP
-  auto seedIp = seedPrefix.first;
-  auto seedIpV6 = seedIp.asV6();
-  auto ipBytes = seedIpV6.toByteArray();
+  const uint32_t bitCount = seedPrefix.first.bitCount();
+  auto ipBytes = std::string(
+    reinterpret_cast<const char*>(seedPrefix.first.bytes()),
+    seedPrefix.first.byteCount());
 
   // host number bit length
   // in seed prefix
-  auto seedHostBitLen = kBitCount - seedPrefix.second;
+  const uint32_t seedHostBitLen = bitCount - seedPrefix.second;
   // in allocated prefix
-  auto allocHostBitLen = kBitCount - allocPrefixLen;
+  const uint32_t allocHostBitLen = bitCount - allocPrefixLen;
+
+  // sanity check
+  const int32_t allocBits = std::min(
+      32, static_cast<int32_t>(seedHostBitLen - allocHostBitLen));
+  if (allocBits < 0) {
+    throw std::invalid_argument("Alloc prefix is bigger than seed prefix.");
+  }
+  if (allocBits < 32 and prefixIndex >= (1u << allocBits)) {
+    throw std::invalid_argument("Prefix index is out of range.");
+  }
 
   // using bits (seedHostBitLen-allocHostBitLen-1)..0 of @prefixIndex to
   // set bits (seedHostBitLen - 1)..allocHostBitLen of ipBytes
-  for (
-    uint8_t i = 0;
-    i < std::min(32u, seedHostBitLen - allocHostBitLen);
-    ++i
-  ) {
+  for (uint8_t i = 0; i < allocBits; ++i) {
     // global bit index across bytes
     auto idx = i + allocHostBitLen;
     // byte index: network byte order, i.e., big-endian
-    auto byteIdx = kBitCount / 8 - idx / 8 - 1;
+    auto byteIdx = bitCount / 8 - idx / 8 - 1;
     // bit index inside the byte
     auto bitIdx = idx % 8;
-
     if (prefixIndex & (0x1 << i)) {
       // set
-      ipBytes[byteIdx] |= (0x1 << bitIdx);
+      ipBytes.at(byteIdx) |= (0x1 << bitIdx);
     } else {
       // clear
-      ipBytes[byteIdx] &= ~(0x1 << bitIdx);
+      ipBytes.at(byteIdx) &= ~(0x1 << bitIdx);
     }
   }
 
   // convert back to CIDR
-  folly::IPAddress allocPrefixIp{folly::IPAddressV6{ipBytes}};
-  return {mask ? allocPrefixIp.mask(allocPrefixLen) : allocPrefixIp,
-          allocPrefixLen};
+  auto allocPrefixIp = folly::IPAddress::fromBinary(folly::ByteRange(
+        reinterpret_cast<const uint8_t*>(ipBytes.data()), ipBytes.size()));
+  return {allocPrefixIp.mask(allocPrefixLen), allocPrefixLen};
 }
 
 std::unordered_map<std::string, fbzmq::thrift::Counter>

@@ -481,8 +481,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       const auto prefix = getNthPrefix(
           usingNewSeedPrefix ? newSeedPrefix : seedPrefix,
           kAllocPrefixLen,
-          lastPrefixes[i],
-          true);
+          lastPrefixes[i]);
       ASSERT_EQ(1, nodeToPrefix->count(myNodeName));
       ASSERT_EQ(prefix, nodeToPrefix->at(myNodeName));
     }
@@ -496,6 +495,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 TEST_F(PrefixAllocatorFixture, ClearAllocation) {
   folly::Synchronized<folly::Optional<folly::CIDRNetwork>> allocPrefix;
   std::atomic<bool> hasAllocPrefix{false};
+  const uint8_t allocPrefixLen = 24;
   const std::string subscriptionKey = folly::sformat(
       "{}{}", openr::Constants::kPrefixDbMarker, myNodeName_);
 
@@ -519,7 +519,7 @@ TEST_F(PrefixAllocatorFixture, ClearAllocation) {
       } else {
         EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, prefixes[0].type);
         auto prefix = toIPNetwork(prefixes[0].prefix);
-        EXPECT_EQ(kAllocPrefixLen, prefix.second);
+        EXPECT_EQ(allocPrefixLen, prefix.second);
         SYNCHRONIZED(allocPrefix) {
           allocPrefix = prefix;
         }
@@ -537,18 +537,24 @@ TEST_F(PrefixAllocatorFixture, ClearAllocation) {
   //
   // announce new seed prefix
   hasAllocPrefix.store(false, std::memory_order_relaxed);
-  const auto seedPrefix = folly::IPAddress::createNetwork("face:b00c::/64");
+  const auto seedPrefix = folly::IPAddress::createNetwork("10.1.0.0/16");
   auto prefixAllocParam = folly::sformat(
       "{},{}",
       folly::IPAddress::networkToString(seedPrefix),
-      kAllocPrefixLen);
+      allocPrefixLen);
   auto res = kvStoreClient_->setKey(kSeedPrefixKey, prefixAllocParam);
   EXPECT_FALSE(res.hasError()) << res.error();
   // busy loop until we have prefix
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
-  EXPECT_TRUE(allocPrefix->hasValue());
+  SYNCHRONIZED(allocPrefix) {
+    EXPECT_TRUE(allocPrefix.hasValue());
+    if (allocPrefix.hasValue()) {
+      EXPECT_EQ(allocPrefixLen, allocPrefix->second);
+      EXPECT_TRUE(allocPrefix->first.inSubnet("10.1.0.0/16"));
+    }
+  }
   LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
 
   //

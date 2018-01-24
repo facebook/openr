@@ -54,38 +54,46 @@ TEST(UtilTest, KeyPair) {
 
 // test getNthPrefix()
 TEST(UtilTest, getNthPrefix) {
-  uint32_t seedPrefixLen = 32;
-  uint32_t allocPrefixLen = seedPrefixLen + 5;
-  folly::CIDRNetwork seedPrefix{folly::IPAddress{"face:b00c::1"},
-                                seedPrefixLen};
+  // v6 allocation parameters
+  const uint32_t seedPrefixLen = 32;
+  const uint32_t allocPrefixLen = seedPrefixLen + 5;
+  const folly::CIDRNetwork seedPrefix{
+      folly::IPAddress{"face:b00c::1"},
+      seedPrefixLen};
 
-  // unmasked
-  EXPECT_EQ(
-      folly::CIDRNetwork(folly::IPAddress("face:b00c::1"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 0, false));
-  EXPECT_EQ(
-      folly::CIDRNetwork(folly::IPAddress("face:b00c:800::1"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 1, false));
-  EXPECT_EQ(
-      folly::CIDRNetwork(folly::IPAddress("face:b00c:1800::1"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 3, false));
-  EXPECT_EQ(
-      folly::CIDRNetwork(folly::IPAddress("face:b00c:f800::1"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 31, false));
-
-  // masked
+  // v6
   EXPECT_EQ(
       folly::CIDRNetwork(folly::IPAddress("face:b00c::"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 0, true));
+      getNthPrefix(seedPrefix, allocPrefixLen, 0));
   EXPECT_EQ(
       folly::CIDRNetwork(folly::IPAddress("face:b00c:800::"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 1, true));
+      getNthPrefix(seedPrefix, allocPrefixLen, 1));
   EXPECT_EQ(
       folly::CIDRNetwork(folly::IPAddress("face:b00c:1800::"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 3, true));
+      getNthPrefix(seedPrefix, allocPrefixLen, 3));
   EXPECT_EQ(
       folly::CIDRNetwork(folly::IPAddress("face:b00c:f800::"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 31, true));
+      getNthPrefix(seedPrefix, allocPrefixLen, 31));
+
+  // v4
+  const auto v4SeedPrefix = folly::IPAddress::createNetwork("10.1.0.0/16");
+  EXPECT_EQ(
+      folly::IPAddress::createNetwork("10.1.110.0/24"),
+      getNthPrefix(v4SeedPrefix, 24, 110));
+  EXPECT_EQ(
+      folly::IPAddress::createNetwork("10.1.255.0/24"),
+      getNthPrefix(v4SeedPrefix, 24, 255));
+  EXPECT_EQ(
+      folly::IPAddress::createNetwork("10.1.0.0/16"),
+      getNthPrefix(v4SeedPrefix, 16, 0));
+
+  // Some error cases
+  // 1. prefixIndex is out of range
+  EXPECT_THROW(
+      getNthPrefix(v4SeedPrefix, 24, 256), std::invalid_argument);
+  // 2. alloc block is bigger than seed prefix block
+  EXPECT_THROW(
+      getNthPrefix(v4SeedPrefix, 15, 0), std::invalid_argument);
 }
 
 TEST(UtilTest, checkIncludeExcludeRegex) {
@@ -135,6 +143,24 @@ TEST(UtilTest, createLoopbackAddr) {
     auto network = folly::IPAddress::createNetwork("fc00::1/128");
     auto addr = createLoopbackAddr(network);
     EXPECT_EQ(folly::IPAddress("fc00::1"), addr);
+  }
+
+  {
+    auto network = folly::IPAddress::createNetwork("10.1.0.0/16");
+    auto addr = createLoopbackAddr(network);
+    EXPECT_EQ(folly::IPAddress("10.1.0.1"), addr);
+  }
+
+  {
+    auto network = folly::IPAddress::createNetwork("10.1.0.0/32");
+    auto addr = createLoopbackAddr(network);
+    EXPECT_EQ(folly::IPAddress("10.1.0.0"), addr);
+  }
+
+  {
+    auto network = folly::IPAddress::createNetwork("10.1.0.1/32");
+    auto addr = createLoopbackAddr(network);
+    EXPECT_EQ(folly::IPAddress("10.1.0.1"), addr);
   }
 }
 
