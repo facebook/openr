@@ -226,6 +226,12 @@ NetlinkFibHandler::aliveSince() {
   return startTime_;
 }
 
+openr::thrift::ServiceStatus
+NetlinkFibHandler::getStatus() {
+  VLOG(3) << "Received getStatus";
+  return openr::thrift::ServiceStatus::ALIVE;
+}
+
 folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
 NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
   LOG(INFO) << "Get routes from FIB for clientId " << clientId;

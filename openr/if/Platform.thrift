@@ -105,6 +105,18 @@ service SystemService {
 }
 
 /**
+ * Common status reporting mechanism across all services
+ */
+enum ServiceStatus {
+  DEAD = 0,
+  STARTING = 1,
+  ALIVE = 2,
+  STOPPING = 3,
+  STOPPED = 4,
+  WARNING = 5,
+}
+
+/**
  * Interface to on-box Fib.
  */
 service FibService {
@@ -146,6 +158,14 @@ service FibService {
    */
   i64 aliveSince() (priority = 'IMPORTANT')
 
+  /**
+   * Get the status of this service
+   */
+  ServiceStatus getStatus() (priority = 'IMPORTANT')
+
+  /**
+   * Get number of routes
+   */
   map<string, i64> getCounters()
 
   // Retreive list of routes per client

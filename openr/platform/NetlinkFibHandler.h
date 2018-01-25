@@ -56,6 +56,8 @@ class NetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
 
   int64_t aliveSince() override;
 
+  thrift::ServiceStatus getStatus() override;
+
   void getCounters(std::map<std::string, int64_t>& counters) override;
 
   folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
