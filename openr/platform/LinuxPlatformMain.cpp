@@ -26,6 +26,14 @@ DEFINE_string(
     platform_pub_url,
     "ipc://platform-pub-url",
     "Publisher URL for interface/address notifications");
+DEFINE_bool(
+    enable_netlink_fib_handler,
+    true,
+    "If set, netlink fib handler will be started for route programming.");
+DEFINE_bool(
+    enable_netlink_system_handler,
+    true,
+    "If set, netlink system handler will be started");
 
 using openr::NetlinkFibHandler;
 using openr::NetlinkSystemHandler;
@@ -41,28 +49,24 @@ main(int argc, char** argv) {
   }
 
   fbzmq::Context context;
-  fbzmq::ZmqEventLoop mainEventLoop, platformEvl;
+  fbzmq::ZmqEventLoop mainEventLoop;
 
   fbzmq::StopEventLoopSignalHandler eventLoopHandler(&mainEventLoop);
   eventLoopHandler.registerSignalHandler(SIGINT);
   eventLoopHandler.registerSignalHandler(SIGQUIT);
   eventLoopHandler.registerSignalHandler(SIGTERM);
 
-  auto platformZmqThread = std::thread([&platformEvl]() noexcept {
-    LOG(INFO) << "Starting Netlink Fib Platform ZMQ event loop thread ...";
-    folly::setThreadName("FibPlatform");
-    platformEvl.run();
-    LOG(INFO) << "Stopped Netlink Fib Platform ZMQ event loop thread ...";
-  });
-  platformEvl.waitUntilRunning();
-
-  auto nlHandler = std::make_shared<NetlinkSystemHandler>(
-      context,
-      openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
-      &platformEvl);
+  std::vector<std::thread> allThreads{};
 
   apache::thrift::ThriftServer systemServiceServer;
-  auto systemThriftThread =
+  if (FLAGS_enable_netlink_system_handler) {
+    // start NetlinkSystem thread
+    auto nlHandler = std::make_shared<NetlinkSystemHandler>(
+        context,
+        openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
+        &mainEventLoop);
+
+    auto systemThriftThread =
       std::thread([nlHandler, &systemServiceServer]() noexcept {
         folly::setThreadName("SystemService");
         systemServiceServer.setNWorkerThreads(1);
@@ -70,45 +74,47 @@ main(int argc, char** argv) {
         systemServiceServer.setPort(FLAGS_system_thrift_port);
         systemServiceServer.setInterface(nlHandler);
 
-        LOG(INFO) << "Starting System Service server...";
+        LOG(INFO) << "System Service starting...";
         systemServiceServer.serve();
-        LOG(INFO) << "Stopped System Service server...";
+        LOG(INFO) << "System Service stopped.";
       });
-
-  auto fibHandler = std::make_shared<NetlinkFibHandler>(&platformEvl);
+    allThreads.emplace_back(std::move(systemThriftThread));
+  }
 
   apache::thrift::ThriftServer linuxFibAgentServer;
-  auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
-    folly::setThreadName("FibService");
-    linuxFibAgentServer.setNWorkerThreads(1);
-    linuxFibAgentServer.setNPoolThreads(1);
-    linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
-    linuxFibAgentServer.setInterface(fibHandler);
+  if (FLAGS_enable_netlink_fib_handler) {
+    // start FibService thread
+    auto fibHandler = std::make_shared<NetlinkFibHandler>(&mainEventLoop);
 
-    LOG(INFO) << "Starting Fib Service server...";
-    linuxFibAgentServer.serve();
-  });
+    auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
+      folly::setThreadName("FibService");
+      linuxFibAgentServer.setNWorkerThreads(1);
+      linuxFibAgentServer.setNPoolThreads(1);
+      linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
+      linuxFibAgentServer.setInterface(fibHandler);
 
-  LOG(INFO) << "Starting the main loop";
+      LOG(INFO) << "Fib Agent starting...";
+      linuxFibAgentServer.serve();
+      LOG(INFO) << "Fib Agent stopped.";
+    });
+    allThreads.emplace_back(std::move(fibThriftThread));
+  }
+
+  LOG(INFO) << "Main event loop starting...";
   mainEventLoop.run();
-  LOG(INFO) << "Stopping the main loop";
+  LOG(INFO) << "Main event loop stopped.";
 
-  LOG(INFO) << "Main Event loop stopped... Stopping the servers";
-  linuxFibAgentServer.stop();
-  systemServiceServer.stop();
+  if (FLAGS_enable_netlink_fib_handler) {
+    linuxFibAgentServer.stop();
+  }
+  if (FLAGS_enable_netlink_system_handler) {
+    systemServiceServer.stop();
+  }
 
   // Wait for threads to finish
-  systemThriftThread.join();
-  fibThriftThread.join();
-  LOG(INFO) << "Main Event loop stopped... Server threads stopped";
-
-  platformEvl.stop();
-  platformEvl.waitUntilStopped();
-  LOG(INFO) << "Main Event loop stopped... Platform zmq event loops stopped";
-
-  platformZmqThread.join();
-
-  LOG(INFO) << "All threads stopped ..";
+  for (auto& t : allThreads) {
+    t.join();
+  }
 
   return 0;
 }
