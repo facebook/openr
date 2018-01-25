@@ -21,7 +21,7 @@ class PerfCmd(object):
 
         self.client = perf_client.PerfClient(
             cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_cmd_port),
+            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_rep_port),
             cli_opts.timeout,
             cli_opts.proto_factory)
 

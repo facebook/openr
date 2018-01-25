@@ -17,10 +17,10 @@ import zmq
 
 
 class PerfClient():
-    def __init__(self, zmq_ctx, fib_cmd_port, timeout=consts.Consts.TIMEOUT_MS,
+    def __init__(self, zmq_ctx, fib_rep_port, timeout=consts.Consts.TIMEOUT_MS,
                  proto_factory=consts.Consts.PROTO_FACTORY):
         self._fib_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout, proto_factory)
-        self._fib_cmd_socket.connect(fib_cmd_port)
+        self._fib_cmd_socket.connect(fib_rep_port)
 
     def view_fib(self):
         req_msg = fib_types.FibRequest(fib_types.FibCommand.PERF_DB_GET)
