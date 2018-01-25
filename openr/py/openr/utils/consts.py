@@ -42,3 +42,5 @@ class Consts(object):
 
     # Default serializer/deserializer for communication with OpenR
     PROTO_FACTORY = TCompactProtocolFactory
+
+    OPENR_CONFIG_FILE = '/etc/sysconfig/openr'

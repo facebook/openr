@@ -30,7 +30,7 @@ class MonitorCmd(object):
 
 
 class CountersCmd(MonitorCmd):
-    def run(self, prefix):
+    def run(self, prefix=''):
 
         resp = self.client.dump_all_counter_data()
         self.print_counters(resp, prefix)

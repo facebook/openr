@@ -22,7 +22,7 @@ click.disable_unicode_literals_warning = True
 
 from openr.Platform import ttypes as platform_types
 from openr.cli.clis import config, decision, fib, health_checker, kvstore
-from openr.cli.clis import lm, monitor, perf, prefix_mgr
+from openr.cli.clis import lm, monitor, perf, prefix_mgr, tech_support
 from openr.utils.consts import Consts
 
 
@@ -83,6 +83,7 @@ def main():
     cli.add_command(monitor.MonitorCli().monitor)
     cli.add_command(perf.PerfCli().perf)
     cli.add_command(prefix_mgr.PrefixMgrCli().prefixmgr)
+    cli.add_command(tech_support.TechSupportCli().tech_support)
 
     # let the magic begin
     cli()
