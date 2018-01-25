@@ -12,31 +12,18 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
+import bunch
 import click
 import json
+import zmq
 
 # Disable click unicode literals warning before importing other modules
 click.disable_unicode_literals_warning = True
 
-from openr.cli.clis import config, decision, fib, health_checker, kvstore, lm, \
-    monitor, perf, prefix_mgr
+from openr.Platform import platform_types
+from openr.cli.clis import config, decision, fib, health_checker, kvstore
+from openr.cli.clis import lm, monitor, perf, prefix_mgr
 from openr.utils.consts import Consts
-
-
-class CliOptions(object):
-    ''' Object for holding initial CLI state '''
-
-    def __init__(self, host, timeout, ports_config, enable_color):
-        self.hostname = host
-        self.timeout = timeout
-        self.ports_config = ports_config
-        self.enable_color = enable_color
-
-    def __repr__(self):
-        ''' String representation for debugging '''
-
-        return 'Host: {}, Timeout: {}\nPorts config:\n{}'.format(
-            self.hostname, self.timeout, self.ports_config)
 
 
 @click.group()
@@ -46,17 +33,41 @@ class CliOptions(object):
               type=int, help='Timeout for socket communication in ms')
 @click.option('--ports-config-file', '-f', default=None,
               type=str, help='JSON file for ports config')
-@click.option('--color/--no-color', default=True, help='Enalbe coloring display')
+@click.option('--color/--no-color', default=True,
+              help='Enalbe coloring display')
+@click.option('--verbose/--no-verbose', default=False,
+              help='Print verbose information')
 @click.pass_context
-def cli(ctx, host, timeout, ports_config_file, color):
+def cli(ctx, host, timeout, ports_config_file, color, verbose):
     ''' Command line tools for Open/R. '''
 
-    ports_config = {}
+    # Default config options
+    ctx.obj = bunch.Bunch({
+        'client_id': platform_types.FibClient.OPENR,
+        'config_store_url': Consts.CONFIG_STORE_URL,
+        'decision_rep_port': Consts.DECISION_REP_PORT,
+        'enable_color': color,
+        'fib_agent_port': Consts.FIB_AGENT_PORT,
+        'fib_rep_port': Consts.FIB_REP_PORT,
+        'health_checker_cmd_port': Consts.HEALTH_CHECKER_CMD_PORT,
+        'host': host,
+        'kv_pub_port': Consts.KVSTORE_PUB_PORT,
+        'kv_rep_port': Consts.KVSTORE_REP_PORT,
+        'lm_cmd_port': Consts.LINK_MONITOR_CMD_PORT,
+        'monitor_rep_port': Consts.MONITOR_REP_PORT,
+        'prefix_mgr_cmd_port': Consts.PREFIX_MGR_CMD_PORT,
+        'proto_factory': Consts.PROTO_FACTORY,
+        'timeout': timeout,
+        'verbose': verbose,
+        'zmq_ctx': zmq.Context(),
+    })
+
+    # Get override port configs
     if ports_config_file:
         with open(ports_config_file, 'r') as f:
-            ports_config = json.load(f)
-
-    ctx.obj = CliOptions(host, timeout, ports_config, color)
+            override_ports_config = json.load(f)
+            for key, value in override_ports_config.items():
+                ctx.obj[key] = value
 
 
 def main():

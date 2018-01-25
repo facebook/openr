@@ -11,23 +11,8 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import click
-import zmq
 
 from openr.cli.commands import config
-from openr.utils.consts import Consts
-
-
-class ConfigContext(object):
-    def __init__(self, verbose, zmq_ctx, timeout, config_store_url):
-        '''
-            :param zmq_ctx: the ZMQ context to create zmq sockets
-        '''
-
-        self.verbose = verbose
-        self.timeout = timeout
-        self.zmq_ctx = zmq_ctx
-        self.config_store_url = config_store_url
-        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class ConfigCli(object):
@@ -43,18 +28,12 @@ class ConfigCli(object):
 
     @click.group()
     @click.option('--config_store_url', default=None, help='Config Store IPC URL')
-    @click.option('--verbose/--no-verbose', default=False,
-                  help='Print verbose information')
     @click.pass_context
-    def config(ctx, config_store_url, verbose):  # noqa: B902
+    def config(ctx, config_store_url):  # noqa: B902
         ''' CLI tool to peek into Config Store module. '''
 
-        config_store_url = config_store_url or Consts.CONFIG_STORE_URL
-        override_url = ctx.obj.ports_config.get('config_store_url', None)
-        ctx.obj = ConfigContext(
-            verbose, zmq.Context(),
-            ctx.obj.timeout,
-            override_url or config_store_url)
+        if config_store_url:
+            ctx.obj.config_store_url = config_store_url
 
 
 class ConfigPrefixAllocatorCli(object):

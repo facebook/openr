@@ -11,34 +11,10 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import click
-import zmq
 
 from openr.cli.commands import kvstore
 from openr.utils.consts import Consts
 from openr.cli.utils.utils import parse_nodes
-
-
-class KvStoreContext(object):
-    def __init__(self, verbose, zmq_ctx, host, timeout,
-                 kv_rep_port, kv_pub_port, lm_cmd_port, enable_color):
-        '''
-            :param zmq_ctx: the ZMQ context to create zmq sockets
-            :param host string: the openr router host
-            :param kv_rep_port int: the kv-store port
-            :param enable_color bool: whether to turn on coloring display
-        '''
-
-        self.verbose = verbose
-        self.host = host
-        self.timeout = timeout
-        self.zmq_ctx = zmq_ctx
-        self.enable_color = enable_color
-
-        self.kv_rep_port = kv_rep_port
-        self.kv_pub_port = kv_pub_port
-        self.lm_cmd_port = lm_cmd_port
-
-        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class KvStoreCli(object):
@@ -58,25 +34,16 @@ class KvStoreCli(object):
         self.kvstore.add_command(SnoopCli().snoop)
 
     @click.group()
-    @click.option('--kv_rep_port', default=Consts.KVSTORE_REP_PORT,
-                  help='KV store rep port')
-    @click.option('--kv_pub_port', default=Consts.KVSTORE_PUB_PORT,
-                  help='KV store pub port')
-    @click.option('--verbose/--no-verbose', default=False,
-                  help='Print verbose information')
+    @click.option('--kv_rep_port', default=None, help='KV store rep port')
+    @click.option('--kv_pub_port', default=None, help='KV store pub port')
     @click.pass_context
-    def kvstore(ctx, kv_rep_port, kv_pub_port, verbose):  # noqa: B902
+    def kvstore(ctx, kv_rep_port, kv_pub_port):  # noqa: B902
         ''' CLI tool to peek into KvStore module. '''
 
-        ctx.obj = KvStoreContext(
-            verbose, zmq.Context(),
-            ctx.obj.hostname,
-            ctx.obj.timeout,
-            ctx.obj.ports_config.get('kv_rep_port', None) or kv_rep_port,
-            ctx.obj.ports_config.get('kv_pub_port', None) or kv_pub_port,
-            ctx.obj.ports_config.get('lm_cmd_port', None) or
-            Consts.LINK_MONITOR_CMD_PORT,
-            ctx.obj.enable_color)
+        if kv_pub_port:
+            ctx.obj.kv_pub_port = kv_pub_port
+        if kv_rep_port:
+            ctx.obj.kv_rep_port = kv_rep_port
 
 
 class PrefixesCli(object):

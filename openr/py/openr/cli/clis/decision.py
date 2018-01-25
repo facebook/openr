@@ -11,36 +11,9 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import click
-import zmq
 
 from openr.cli.commands import decision
-from openr.utils.consts import Consts
 from openr.cli.utils.utils import parse_nodes
-
-
-class DecisionContext(object):
-    def __init__(self, verbose, zmq_ctx, host, timeout,
-                 decision_rep_port, lm_cmd_port, kv_rep_port, fib_agent_port,
-                 enable_color):
-        '''
-            :param zmq_ctx: the ZMQ context to create zmq sockets
-            :param host string: the openr router host
-            :param decision_rep_port int: the decision module port
-            :param enable_color bool: whether to turn on coloring display
-        '''
-
-        self.verbose = verbose
-        self.host = host
-        self.timeout = timeout
-        self.zmq_ctx = zmq_ctx
-        self.enable_color = enable_color
-
-        self.decision_rep_port = decision_rep_port
-        self.lm_cmd_port = lm_cmd_port
-        self.kv_rep_port = kv_rep_port
-        self.fib_agent_port = fib_agent_port
-
-        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class DecisionCli(object):
@@ -52,24 +25,13 @@ class DecisionCli(object):
         self.decision.add_command(DecisionValidateCli().validate)
 
     @click.group()
-    @click.option('--decision_rep_port', default=Consts.DECISION_REP_PORT,
-                  help='Decision port')
-    @click.option('--verbose/--no-verbose', default=False,
-                  help='Print verbose information')
+    @click.option('--decision_rep_port', default=None, help='Decision port')
     @click.pass_context
-    def decision(ctx, decision_rep_port, verbose):  # noqa: B902
+    def decision(ctx, decision_rep_port):  # noqa: B902
         ''' CLI tool to peek into Decision module. '''
 
-        ctx.obj = DecisionContext(
-            verbose, zmq.Context(),
-            ctx.obj.hostname,
-            ctx.obj.timeout,
-            ctx.obj.ports_config.get('decision_rep_port', None) or decision_rep_port,
-            ctx.obj.ports_config.get('lm_cmd_port', None) or
-            Consts.LINK_MONITOR_CMD_PORT,
-            ctx.obj.ports_config.get('kv_rep_port', None) or Consts.KVSTORE_REP_PORT,
-            ctx.obj.ports_config.get('fib_agent_port', None) or Consts.FIB_AGENT_PORT,
-            ctx.obj.enable_color)
+        if decision_rep_port:
+            ctx.obj.decision_rep_port = decision_rep_port
 
 
 class PathCli(object):

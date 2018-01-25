@@ -11,29 +11,8 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import click
-import zmq
 
 from openr.cli.commands import prefix_mgr
-from openr.utils.consts import Consts
-
-
-class PrefixMgrContext(object):
-    def __init__(self, verbose, zmq_ctx, host, timeout,
-                 prefix_mgr_cmd_port):
-        '''
-            :param zmq_ctx: the ZMQ context to create zmq sockets
-            :param host string: the openr router host
-            :param kv_rep_port int: the kv-store port
-        '''
-
-        self.verbose = verbose
-        self.host = host
-        self.timeout = timeout
-        self.zmq_ctx = zmq_ctx
-
-        self.prefix_mgr_cmd_port = prefix_mgr_cmd_port
-
-        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class PrefixMgrCli(object):
@@ -44,20 +23,14 @@ class PrefixMgrCli(object):
         self.prefixmgr.add_command(SyncCli().sync)
 
     @click.group()
-    @click.option('--prefix_mgr_cmd_port', default=Consts.PREFIX_MGR_CMD_PORT,
+    @click.option('--prefix_mgr_cmd_port', default=None,
                   help='Prefix Manager port')
-    @click.option('--verbose/--no-verbose', default=False,
-                  help='Print verbose information')
     @click.pass_context
-    def prefixmgr(ctx, prefix_mgr_cmd_port, verbose):  # noqa: B902
+    def prefixmgr(ctx, prefix_mgr_cmd_port):  # noqa: B902
         ''' CLI tool to peek into Prefix Manager module. '''
 
-        ctx.obj = PrefixMgrContext(
-            verbose, zmq.Context(),
-            ctx.obj.hostname,
-            ctx.obj.timeout,
-            ctx.obj.ports_config.get('prefix_mgr_cmd_port', None) or
-            prefix_mgr_cmd_port)
+        if prefix_mgr_cmd_port:
+            ctx.obj.prefix_mgr_cmd_port = prefix_mgr_cmd_port
 
 
 class WithdrawCli(object):

@@ -11,26 +11,8 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import click
-import zmq
 
 from openr.cli.commands import perf
-from openr.utils.consts import Consts
-
-
-class PerfContext(object):
-    def __init__(self, verbose, zmq_ctx, host, timeout, fib_cmd_port):
-        '''
-            :param zmq_ctx: the ZMQ context to create zmq sockets
-            :param host string: the openr router host
-            :param fib_cmd_port int: the fib rep port
-        '''
-
-        self.verbose = verbose
-        self.host = host
-        self.timeout = timeout
-        self.zmq_ctx = zmq_ctx
-        self.fib_cmd_port = fib_cmd_port
-        self.proto_factory = Consts.PROTO_FACTORY
 
 
 class PerfCli(object):
@@ -38,19 +20,13 @@ class PerfCli(object):
         self.perf.add_command(ViewFibCli().fib)
 
     @click.group()
-    @click.option('--fib_cmd_port', default=Consts.FIB_REP_PORT,
-                  help='Fib rep port')
-    @click.option('--verbose/--no-verbose', default=False,
-                  help='Print verbose information')
+    @click.option('--fib_cmd_port', default=None, help='Fib rep port')
     @click.pass_context
-    def perf(ctx, fib_cmd_port, verbose):  # noqa: B902
+    def perf(ctx, fib_cmd_port):  # noqa: B902
         ''' CLI tool to view latest perf log of each module. '''
 
-        ctx.obj = PerfContext(
-            verbose, zmq.Context(),
-            ctx.obj.hostname,
-            ctx.obj.timeout,
-            ctx.obj.ports_config.get('fib_cmd_port', None) or fib_cmd_port)
+        if fib_cmd_port:
+            ctx.obj.fib_cmd_port = fib_cmd_port
 
 
 class ViewFibCli(object):
