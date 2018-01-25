@@ -20,7 +20,7 @@ import zmq
 # Disable click unicode literals warning before importing other modules
 click.disable_unicode_literals_warning = True
 
-from openr.Platform import platform_types
+from openr.Platform import ttypes as platform_types
 from openr.cli.clis import config, decision, fib, health_checker, kvstore
 from openr.cli.clis import lm, monitor, perf, prefix_mgr
 from openr.utils.consts import Consts
