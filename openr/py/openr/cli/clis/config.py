@@ -15,7 +15,6 @@ import zmq
 
 from openr.cli.commands import config
 from openr.utils.consts import Consts
-from openr.cli.utils import utils
 
 
 class ConfigContext(object):
@@ -50,13 +49,7 @@ class ConfigCli(object):
     def config(ctx, config_store_url, verbose):  # noqa: B902
         ''' CLI tool to peek into Config Store module. '''
 
-        config_store_url = config_store_url or "{}_{}".format(
-            Consts.CONFIG_STORE_URL_PREFIX,
-            utils.get_connected_node_name(
-                ctx.obj.hostname,
-                ctx.obj.ports_config.get('lm_cmd_port', None) or
-                Consts.LINK_MONITOR_CMD_PORT))
-
+        config_store_url = config_store_url or Consts.CONFIG_STORE_URL
         override_url = ctx.obj.ports_config.get('config_store_url', None)
         ctx.obj = ConfigContext(
             verbose, zmq.Context(),

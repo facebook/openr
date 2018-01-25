@@ -29,7 +29,7 @@ class Consts(object):
     PREFIX_MGR_CMD_PORT = 60011
     MONITOR_REP_PORT = 60008
     FIB_AGENT_PORT = 60100
-    CONFIG_STORE_URL_PREFIX = "ipc:///tmp/config_store_cmd"
+    CONFIG_STORE_URL = "ipc:///tmp/openr_config_store_cmd"
 
     TOPOLOGY_OUTPUT_FILE = '/tmp/openr-topology.png'
 

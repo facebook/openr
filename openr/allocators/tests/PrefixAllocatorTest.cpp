@@ -41,7 +41,7 @@ const int kAllocPrefixLen = 128;
 
 // key used by seed prefix in kvstore
 const string kSeedPrefixKey = "e2e-network-prefix";
-const string kConfigStoreUrlBase{"inproc://config_store_cmd"};
+const string kConfigStoreUrl{"inproc://openr_config_store_cmd"};
 
 class PrefixAllocatorFixture : public ::testing::Test {
  public:
@@ -75,12 +75,12 @@ class PrefixAllocatorFixture : public ::testing::Test {
     tempFileName_ = folly::sformat("/tmp/openr.{}", tid);
     configStore_ = std::make_unique<PersistentStore>(
         tempFileName_,
-        PersistentStoreUrl{kConfigStoreUrlBase},
+        PersistentStoreUrl{kConfigStoreUrl},
         zmqContext_);
     threads_.emplace_back([&]() noexcept { configStore_->run(); });
     configStore_->waitUntilRunning();
     configStoreClient_ = std::make_unique<PersistentStoreClient>(
-        PersistentStoreUrl{kConfigStoreUrlBase},
+        PersistentStoreUrl{kConfigStoreUrl},
         zmqContext_);
 
     //
@@ -90,7 +90,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         myNodeName_,
         PrefixManagerGlobalCmdUrl{pfxMgrGlobalUrl_},
         PrefixManagerLocalCmdUrl{pfxMgrLocalUrl_},
-        PersistentStoreUrl{kConfigStoreUrlBase},
+        PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         folly::none,
@@ -129,7 +129,7 @@ class PrefixAllocatorFixture : public ::testing::Test {
         false /* override global address */,
         "" /* loopback interface name */,
         kSyncInterval,
-        PersistentStoreUrl{kConfigStoreUrlBase},
+        PersistentStoreUrl{kConfigStoreUrl},
         zmqContext_);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
     prefixAllocator_->waitUntilRunning();
@@ -337,7 +337,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // spin up config store server for this allocator
       auto configStore = std::make_unique<PersistentStore>(
           tempFileName,
-          PersistentStoreUrl{kConfigStoreUrlBase + myNodeName},
+          PersistentStoreUrl{kConfigStoreUrl + myNodeName},
           zmqContext);
       threads.emplace_back([&configStore]() noexcept { configStore->run(); });
       configStore->waitUntilRunning();
@@ -349,7 +349,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       tempFileNames.emplace_back(tempFileName);
       auto tempConfigStore = std::make_unique<PersistentStore>(
           tempFileName,
-          PersistentStoreUrl{kConfigStoreUrlBase + myNodeName + "temp"},
+          PersistentStoreUrl{kConfigStoreUrl + myNodeName + "temp"},
           zmqContext);
       threads.emplace_back([&tempConfigStore]() noexcept {
         tempConfigStore->run();
@@ -366,7 +366,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           myNodeName,
           PrefixManagerGlobalCmdUrl{pfxMgrGlobalUrl},
           PrefixManagerLocalCmdUrl{pfxMgrLocalUrl},
-          PersistentStoreUrl{kConfigStoreUrlBase + myNodeName + "temp"},
+          PersistentStoreUrl{kConfigStoreUrl + myNodeName + "temp"},
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
           folly::none,
@@ -392,7 +392,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           false /* override global address */,
           "" /* loopback interface name */,
           kSyncInterval,
-          PersistentStoreUrl{kConfigStoreUrlBase + myNodeName},
+          PersistentStoreUrl{kConfigStoreUrl + myNodeName},
           zmqContext);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();

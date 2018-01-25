@@ -286,7 +286,7 @@ const SparkReportUrl kSparkReportUrl{"inproc://spark_server_report"};
 const SparkCmdUrl kSparkCmdUrl{"inproc://spark_server_cmd"};
 
 // the URL Prefix for the ConfigStore module
-const std::string kConfigStoreUrlPrefix{"ipc:///tmp/config_store_cmd"};
+const PersistentStoreUrl kConfigStoreUrl{"ipc:///tmp/openr_config_store_cmd"};
 
 const PrefixManagerLocalCmdUrl kPrefixManagerLocalCmdUrl{
     "inproc://prefix_manager_cmd_local"};
@@ -350,11 +350,6 @@ main(int argc, char** argv) {
 
   // Set up the zmq context for this process.
   Context context;
-
-  // Pad node_name after kConfigStoreUrlPrefix to differentiate nodes within a
-  // same host in emulator.
-  const PersistentStoreUrl kConfigStoreUrl{
-      folly::sformat("{}_{}", kConfigStoreUrlPrefix, FLAGS_node_name)};
 
   // Hack to assign different thread name to ZMQ threads for brevity. Bind
   // starts zmq ctx and reaper threads

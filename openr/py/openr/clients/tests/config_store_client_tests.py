@@ -61,15 +61,16 @@ class ConfigStore():
 class TestConfigStoreClient(unittest.TestCase):
     def test(self):
         num_req = 6
+        ctx = zmq.Context()
 
         def _cs_server():
-            cs_server = ConfigStore(zmq.Context(), "ipc:///tmp/config_store_cmd")
+            cs_server = ConfigStore(ctx, "inproc://openr_config_store_cmd")
             for _ in range(num_req):
                 cs_server.process_request()
 
         def _cs_client():
             cs_client_inst = config_store_client.ConfigStoreClient(
-                zmq.Context(), "ipc:///tmp/config_store_cmd")
+                ctx, "inproc://openr_config_store_cmd")
 
             self.assertEqual(cs_client_inst.load('key1'), store_db['key1'])
             with self.assertRaises(Exception):
