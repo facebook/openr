@@ -11,6 +11,7 @@
 #include <functional>
 #include <string>
 
+#include <boost/variant.hpp>
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
@@ -31,13 +32,29 @@
 
 namespace openr {
 
+enum class PrefixAllocatorModeStatic {};
+enum class PrefixAllocatorModeSeeded {};
+
 using PrefixAllocatorParams = std::pair<folly::CIDRNetwork, uint8_t>;
+using PrefixAllocatorMode = boost::variant<
+  PrefixAllocatorModeStatic,
+  PrefixAllocatorModeSeeded,
+  PrefixAllocatorParams>;
 
 /**
  * The class assigns local node unique prefixes from a given seed prefix in
  * a distributed manner.
+ *
+ * allocOptions:
+ * > PrefixAllocatorModeStatic
+ *   => looks for static allocation key in kvstore and use the prefix
+ * > PrefixAllocatorModeSeeded
+ *   => looks for PrefixAllocatorParams in kvstore and elects a subprefix
+ * > PrefixAllocatorParams
+ *   => elects subprefix from prefix allocator params
  */
-class PrefixAllocator : public fbzmq::ZmqEventLoop {
+class PrefixAllocator
+  : public fbzmq::ZmqEventLoop, public boost::static_visitor<> {
  public:
   PrefixAllocator(
       const std::string& myNodeName,
@@ -47,7 +64,7 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
       const MonitorSubmitUrl& monitorSubmitUrl,
       const AllocPrefixMarker& allocPrefixMarker,
       // Allocation params
-      const folly::Optional<PrefixAllocatorParams>& allocatorParams,
+      const PrefixAllocatorMode& allocMode,
       // configure loopback address or not
       bool setLoopbackAddress,
       // override all global addresses on loopback interface
@@ -61,6 +78,15 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
 
   PrefixAllocator(PrefixAllocator const&) = delete;
   PrefixAllocator& operator=(PrefixAllocator const&) = delete;
+
+  //
+  // boost visitor functions => 3 different ways to initialize
+  // PrefixAllocator. Only meant to be used internally.
+  //
+  void operator()(PrefixAllocatorModeStatic const&);
+  void operator()(PrefixAllocatorModeSeeded const&);
+  void operator()(PrefixAllocatorParams const&);
+
 
   // Thread safe API for testing only
   folly::Optional<uint32_t> getMyPrefixIndex();
@@ -79,7 +105,10 @@ class PrefixAllocator : public fbzmq::ZmqEventLoop {
   // Private methods
   //
 
-  //  Function to process param update from kvstore
+  // Function to process static allocation update from kvstore
+  void processStaticPrefixAllocUpdate(thrift::Value const& value);
+
+  //  Function to process allocation param update from kvstore
   void processAllocParamUpdate(thrift::Value const& value);
 
   // get my existing prefix index from kvstore if it's present

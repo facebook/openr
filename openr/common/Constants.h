@@ -81,6 +81,16 @@ class Constants {
   // default interval for prefix allocator to sync with kvstore
   static const std::chrono::milliseconds kPrefixAllocatorSyncInterval;
 
+  // seed prefix and allocated prefix length is separate by comma
+  static const std::string kSeedPrefixAllocLenSeparator;
+
+  // kvstore key for prefix allocator parameters indicating seed prefix and
+  // allocation prefix length
+  static const std::string kSeedPrefixAllocParamKey;
+
+  // kvstore key for prefix allocator parameters indicating static allocation
+  static const std::string kStaticPrefixAllocParamKey;
+
   //
   // LinkMonitor specific
   //

@@ -54,6 +54,7 @@ SET_LOOPBACK_ADDR=false
 SPARK_FASTINIT_KEEPALIVE_TIME_MS=100
 SPARK_HOLD_TIME_S=30
 SPARK_KEEPALIVE_TIME_S=3
+STATIC_PREFIX_ALLOC=false
 VERBOSITY=1
 
 #
@@ -123,6 +124,7 @@ exec ${OPENR} \
   --spark_fastinit_keepalive_time_ms=${SPARK_FASTINIT_KEEPALIVE_TIME_MS} \
   --spark_hold_time_s=${SPARK_HOLD_TIME_S} \
   --spark_keepalive_time_s=${SPARK_KEEPALIVE_TIME_S} \
+  --static_prefix_alloc=${STATIC_PREFIX_ALLOC} \
   --use_rtt_metric=${ENABLE_RTT_METRIC} \
   --enable_watchdog=${ENABLE_WATCHDOG} \
   --logbufsecs=0 \

@@ -32,6 +32,10 @@ const std::chrono::milliseconds Constants::kLinkThrottleTimeout{1000};
 const std::chrono::seconds Constants::kStoreSyncInterval{60};
 
 const std::chrono::milliseconds Constants::kPrefixAllocatorSyncInterval{1000};
+const std::string Constants::kSeedPrefixAllocLenSeparator{","};
+const std::string Constants::kSeedPrefixAllocParamKey{"e2e-network-prefix"};
+const std::string Constants::kStaticPrefixAllocParamKey{
+  "e2e-network-allocations"};
 
 const std::chrono::seconds Constants::kMonitorSubmitInterval{5};
 

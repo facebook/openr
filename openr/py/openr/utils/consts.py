@@ -20,6 +20,9 @@ class Consts(object):
     INTERFACE_DB_MARKER = 'intf:'
     PREFIX_DB_MARKER = 'prefix:'
 
+    SEED_PREFIX_ALLOC_PARAM_KEY = 'e2e-network-prefix'
+    STATIC_PREFIX_ALLOC_PARAM_KEY = 'e2e-network-allocations'
+
     KVSTORE_REP_PORT = 60002
     KVSTORE_PUB_PORT = 60001
     DECISION_REP_PORT = 60004

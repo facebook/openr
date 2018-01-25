@@ -18,3 +18,7 @@ struct AllocPrefix {
   // my allocated prefix, i.e., index within seed prefix
   3: i64 allocPrefixIndex
 }
+
+struct StaticAllocation {
+  1: map<string /* node-name */, IpPrefix.IpPrefix> nodePrefixes;
+}

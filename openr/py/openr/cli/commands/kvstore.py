@@ -21,11 +21,12 @@ import time
 import zmq
 
 from itertools import combinations
+from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients import kvstore_client, kvstore_subscriber
 from openr.cli.utils import utils
 from openr.utils.consts import Consts
 from openr.utils import printing
-from openr.utils.serializer import deserialize_thrift_object
+from openr.utils import serializer
 
 from openr.Lsdb import ttypes as lsdb_types
 from openr.KvStore import ttypes as kv_store_types
@@ -80,7 +81,7 @@ class KvStoreCmd(object):
         ''' get the dict of all nodes to their IP in the network '''
 
         def _parse_nodes(node_dict, value):
-            prefix_db = deserialize_thrift_object(
+            prefix_db = serializer.deserialize_thrift_object(
                 value.value, lsdb_types.PrefixDatabase)
             node_dict[prefix_db.thisNodeName] = self.get_node_ip(prefix_db)
 
@@ -181,7 +182,8 @@ class KeyValsCmd(KvStoreCmd):
 
         prefix_type = key.split(':')[0] + ":"
         if prefix_type in options.keys():
-            return deserialize_thrift_object(value.value, options[prefix_type])
+            return serializer.deserialize_thrift_object(
+                value.value, options[prefix_type])
         else:
             return None
 
@@ -233,12 +235,14 @@ class NodesCmd(KvStoreCmd):
         '''
 
         def _parse_nodes(rows, value):
-            prefix_db = deserialize_thrift_object(value.value,
-                                                  lsdb_types.PrefixDatabase)
+            prefix_db = serializer.deserialize_thrift_object(
+                value.value, lsdb_types.PrefixDatabase)
             marker = '* ' if prefix_db.thisNodeName == host_id else '> '
             row = ["{}{}".format(marker, prefix_db.thisNodeName)]
-            loopback_prefixes = [p.prefix for p in prefix_db.prefixEntries \
-                     if p.type == lsdb_types.PrefixType.LOOPBACK]
+            loopback_prefixes = [
+                p.prefix for p in prefix_db.prefixEntries
+                if p.type == lsdb_types.PrefixType.LOOPBACK
+            ]
             row.extend([utils.sprint_prefix(p) for p in loopback_prefixes])
             rows.append(row)
 
@@ -329,19 +333,19 @@ class KvCompareCmd(KvStoreCmd):
         ''' print db delta '''
 
         if key.startswith(Consts.PREFIX_DB_MARKER):
-            prefix_db = deserialize_thrift_object(value.value,
-                                                  lsdb_types.PrefixDatabase)
-            other_prefix_db = deserialize_thrift_object(other_val.value,
-                                                        lsdb_types.PrefixDatabase)
+            prefix_db = serializer.deserialize_thrift_object(
+                value.value, lsdb_types.PrefixDatabase)
+            other_prefix_db = serializer.deserialize_thrift_object(
+                other_val.value, lsdb_types.PrefixDatabase)
             other_prefix_set = {}
             utils.update_global_prefix_db(other_prefix_set, other_prefix_db)
             lines = utils.sprint_prefixes_db_delta(other_prefix_set, prefix_db)
 
         elif key.startswith(Consts.ADJ_DB_MARKER):
-            adj_db = deserialize_thrift_object(value.value,
-                                               lsdb_types.AdjacencyDatabase)
-            other_adj_db = deserialize_thrift_object(value.value,
-                                                     lsdb_types.AdjacencyDatabase)
+            adj_db = serializer.deserialize_thrift_object(
+                value.value, lsdb_types.AdjacencyDatabase)
+            other_adj_db = serializer.deserialize_thrift_object(
+                value.value, lsdb_types.AdjacencyDatabase)
             lines = utils.sprint_adj_db_delta(adj_db, other_adj_db)
 
         else:
@@ -664,8 +668,8 @@ class SnoopCmd(KvStoreCmd):
     def print_prefix_delta(self, key, value, delta, global_prefix_db,
                            global_publication_db):
         _, reported_node_name = key.split(':', 1)
-        prefix_db = deserialize_thrift_object(value.value,
-                                              lsdb_types.PrefixDatabase)
+        prefix_db = serializer.deserialize_thrift_object(
+            value.value, lsdb_types.PrefixDatabase)
         if delta:
             lines = utils.sprint_prefixes_db_delta(global_prefix_db, prefix_db)
         else:
@@ -682,8 +686,8 @@ class SnoopCmd(KvStoreCmd):
     def print_adj_delta(self, key, value, delta,
                         global_adj_db, global_publication_db):
         _, reported_node_name = key.split(':', 1)
-        new_adj_db = deserialize_thrift_object(value.value,
-                                               lsdb_types.AdjacencyDatabase)
+        new_adj_db = serializer.deserialize_thrift_object(
+            value.value, lsdb_types.AdjacencyDatabase)
         if delta:
             old_adj_db = global_adj_db.get(new_adj_db.thisNodeName,
                                            None)
@@ -749,3 +753,59 @@ class SnoopCmd(KvStoreCmd):
                 global_dbs.publications[key] = (value.version,
                                                 value.originatorId)
         return global_dbs
+
+
+class AllocationsCmd(SetKeyCmd):
+    def run_list(self):
+        key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
+        resp = self.client.get_keys([key])
+        if key not in resp.keyVals:
+            print('Static allocation is not set in KvStore')
+        else:
+            utils.print_allocations_table(resp.keyVals.get(key).value)
+
+    def run_set(self, node_name, prefix_str):
+        key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
+        prefix = utils.ip_str_to_prefix(prefix_str)
+
+        # Retrieve previous allocation
+        resp = self.client.get_keys([key])
+        allocs = None
+        if key in resp.keyVals:
+            allocs = serializer.deserialize_thrift_object(
+                resp.keyVals.get(key).value, alloc_types.StaticAllocation)
+        else:
+            allocs = alloc_types.StaticAllocation(nodePrefixes={})
+
+        # Return if there is no change
+        if allocs.nodePrefixes.get(node_name) == prefix:
+            print('No changes needed. {}\'s prefix is already set to {}'
+                  .format(node_name, prefix_str))
+            return
+
+        # Update value in KvStore
+        allocs.nodePrefixes[node_name] = prefix
+        value = serializer.serialize_thrift_object(allocs)
+        self.run(key, value, 'breeze', None, Consts.CONST_TTL_INF)
+
+    def run_unset(self, node_name):
+        key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
+
+        # Retrieve previous allocation
+        resp = self.client.get_keys([key])
+        allocs = None
+        if key in resp.keyVals:
+            allocs = serializer.deserialize_thrift_object(
+                resp.keyVals.get(key).value, alloc_types.StaticAllocation)
+        else:
+            allocs = alloc_types.StaticAllocation(nodePrefixes={node_name: ''})
+
+        # Return if there need no change
+        if node_name not in allocs.nodePrefixes:
+            print('No changes needed. {}\'s prefix is not set'
+                  .format(node_name))
+
+        # Update value in KvStore
+        del allocs.nodePrefixes[node_name]
+        value = serializer.serialize_thrift_object(allocs)
+        self.run(key, value, 'breeze', None, Consts.CONST_TTL_INF)

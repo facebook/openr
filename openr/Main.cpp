@@ -117,6 +117,7 @@ DEFINE_string(
     "it will be injected later together with allocated prefix length");
 DEFINE_bool(enable_prefix_alloc, false, "Enable automatic prefix allocation");
 DEFINE_int32(alloc_prefix_len, 128, "Allocated prefix length");
+DEFINE_bool(static_prefix_alloc, false, "Perform static prefix allocation");
 DEFINE_bool(
     set_loopback_address,
     false,
@@ -537,11 +538,15 @@ main(int argc, char** argv) {
   std::unique_ptr<PrefixAllocator> prefixAllocator;
   if (FLAGS_enable_prefix_alloc) {
     // start prefix allocator
-    folly::Optional<PrefixAllocatorParams> maybeAllocParams;
-    if (!FLAGS_seed_prefix.empty()) {
-      maybeAllocParams = std::make_pair(
+    PrefixAllocatorMode allocMode;
+    if (FLAGS_static_prefix_alloc) {
+      allocMode = PrefixAllocatorModeStatic();
+    } else if (!FLAGS_seed_prefix.empty()) {
+      allocMode = std::make_pair(
           folly::IPAddress::createNetwork(FLAGS_seed_prefix),
-          FLAGS_alloc_prefix_len);
+          static_cast<uint8_t>(FLAGS_alloc_prefix_len));
+    } else {
+      allocMode = PrefixAllocatorModeSeeded();
     }
     prefixAllocator = std::make_unique<PrefixAllocator>(
         FLAGS_node_name,
@@ -550,7 +555,7 @@ main(int argc, char** argv) {
         kPrefixManagerLocalCmdUrl,
         monitorSubmitUrl,
         AllocPrefixMarker{Constants::kPrefixAllocMarker},
-        maybeAllocParams,
+        allocMode,
         FLAGS_set_loopback_address,
         FLAGS_override_loopback_global_addresses,
         FLAGS_iface,

@@ -21,6 +21,7 @@ import sys
 import zmq
 
 from itertools import product
+from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.kvstore_client import KvStoreClient
 from openr.clients.lm_client import LMClient
 from openr.IpPrefix import ttypes as ip_types
@@ -265,7 +266,6 @@ def alloc_prefix_to_loopback_ip_str(prefix):
     return sprint_addr(ip_addr)
 
 
-
 def print_prefixes_table(resp, nodes, iter_func):
     ''' print prefixes '''
 
@@ -405,7 +405,6 @@ def build_global_interface_db(resp):
         intf_db = interface_db_to_dict(value)
         global_intf_db[intf_db.thisNodeName] = intf_db
     return global_intf_db
-
 
 
 def dump_adj_db_full(global_adj_db, adj_db, bidir):
@@ -995,3 +994,14 @@ def dump_node_kvs(node, kv_rep_port):
         print('cannot connect to {}\'s kvstore'.format(node))
         return None
     return kv
+
+
+def print_allocations_table(alloc_str):
+    ''' print static allocations '''
+
+    rows = []
+    allocations = deserialize_thrift_object(
+        alloc_str, alloc_types.StaticAllocation)
+    for node, prefix in allocations.nodePrefixes.items():
+        rows.append([node, sprint_prefix(prefix)])
+    print(printing.render_horizontal_table(rows, ['Node', 'Prefix']))
