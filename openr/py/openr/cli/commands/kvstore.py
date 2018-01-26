@@ -243,6 +243,8 @@ class NodesCmd(KvStoreCmd):
                 p.prefix for p in prefix_db.prefixEntries
                 if p.type == lsdb_types.PrefixType.LOOPBACK
             ]
+            loopback_prefixes.sort(key=lambda x: len(x.prefixAddress.addr),
+                                   reverse=True)
             row.extend([utils.sprint_prefix(p) for p in loopback_prefixes])
             rows.append(row)
 
