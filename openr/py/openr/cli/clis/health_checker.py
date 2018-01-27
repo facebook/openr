@@ -20,7 +20,7 @@ class HealthCheckerCli(object):
         self.healthchecker.add_command(PeekCli().peek)
 
     @click.group()
-    @click.option('--health_checker_cmd_port', default=None,
+    @click.option('--health_checker_cmd_port', default=None, type=int,
                   help='Health Checker port')
     @click.pass_context
     def healthchecker(ctx, health_checker_cmd_port):  # noqa: B902

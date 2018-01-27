@@ -30,10 +30,10 @@ class FibCli(object):
                                 name='validate-linux')
 
     @click.group()
-    @click.option('--fib_rep_port', default=None, help='Fib rep port')
-    @click.option('--fib_agent_port', default=None,
+    @click.option('--fib_rep_port', default=None, type=int, help='Fib rep port')
+    @click.option('--fib_agent_port', default=None, type=int,
                   help='Fib thrift server port')
-    @click.option('--client-id', default=None,
+    @click.option('--client-id', default=None, type=int,
                   help='FIB Client ID')
     @click.pass_context
     def fib(ctx, fib_rep_port, fib_agent_port, client_id):  # noqa: B902

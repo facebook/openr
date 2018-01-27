@@ -20,7 +20,7 @@ class MonitorCli(object):
         self.monitor.add_command(CountersCli().counters)
 
     @click.group()
-    @click.option('--monitor_rep_port', default=None, help='Monitor rep port')
+    @click.option('--monitor_rep_port', default=None, type=int, help='Monitor rep port')
     @click.pass_context
     def monitor(ctx, monitor_rep_port):  # noqa: B902
         ''' CLI tool to peek into Monitor module. '''

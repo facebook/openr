@@ -34,7 +34,7 @@ class LMCli(object):
                             name='unset-link-metric')
 
     @click.group()
-    @click.option('--lm_cmd_port', default=None, help='Link Monitor port')
+    @click.option('--lm_cmd_port', default=None, type=int, help='Link Monitor port')
     @click.pass_context
     def lm(ctx, lm_cmd_port):  # noqa: B902
         ''' CLI tool to peek into Link Monitor module. '''

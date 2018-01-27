@@ -20,7 +20,7 @@ class PerfCli(object):
         self.perf.add_command(ViewFibCli().fib)
 
     @click.group()
-    @click.option('--fib_rep_port', default=None, help='Fib rep port')
+    @click.option('--fib_rep_port', default=None, type=int, help='Fib rep port')
     @click.pass_context
     def perf(ctx, fib_rep_port):  # noqa: B902
         ''' CLI tool to view latest perf log of each module. '''

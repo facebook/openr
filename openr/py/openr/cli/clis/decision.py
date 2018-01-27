@@ -25,7 +25,7 @@ class DecisionCli(object):
         self.decision.add_command(DecisionValidateCli().validate)
 
     @click.group()
-    @click.option('--decision_rep_port', default=None, help='Decision port')
+    @click.option('--decision_rep_port', default=None, type=int, help='Decision port')
     @click.pass_context
     def decision(ctx, decision_rep_port):  # noqa: B902
         ''' CLI tool to peek into Decision module. '''

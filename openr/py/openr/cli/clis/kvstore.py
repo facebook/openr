@@ -37,8 +37,8 @@ class KvStoreCli(object):
         self.kvstore.add_command(AllocationsCli().unset, name='alloc-unset')
 
     @click.group()
-    @click.option('--kv_rep_port', default=None, help='KV store rep port')
-    @click.option('--kv_pub_port', default=None, help='KV store pub port')
+    @click.option('--kv_rep_port', default=None, type=int, help='KV store rep port')
+    @click.option('--kv_pub_port', default=None, type=int, help='KV store pub port')
     @click.pass_context
     def kvstore(ctx, kv_rep_port, kv_pub_port):  # noqa: B902
         ''' CLI tool to peek into KvStore module. '''
