@@ -21,8 +21,10 @@ class TechSupportCli(object):
     @click.command(name='tech-support')
     @click.option('--fib_agent_port', default=None, type=int,
                   help='Fib thrift server port')
+    @click.option('--routes', is_flag=True, default=False,
+                  help='Show routes in techsupport output')
     @click.pass_context
-    def tech_support(ctx, fib_agent_port):  # noqa: B902
+    def tech_support(ctx, fib_agent_port, routes):  # noqa: B902
         ''' Extensive logging of Open/R's state for debugging '''
 
         '''
@@ -34,4 +36,4 @@ class TechSupportCli(object):
         if fib_agent_port:
             ctx.obj.fib_agent_port = fib_agent_port
 
-        sys.exit(TechSupportCmd(ctx.obj).run())
+        TechSupportCmd(ctx.obj).run(routes)

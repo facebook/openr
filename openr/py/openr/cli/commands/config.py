@@ -39,8 +39,8 @@ class ConfigPrefixAllocatorCmd(ConfigCmd):
         try:
             prefix_alloc_blob = self.client.load(Consts.PREFIX_ALLOC_KEY)
         except KeyError:
-            print("Cannot load Prefix Allocator config")
-            sys.exit(1)
+            print("Missing Prefix Allocator config", file=sys.stderr)
+            return
 
         prefix_alloc = deserialize_thrift_object(
             prefix_alloc_blob, ap_types.AllocPrefix)
@@ -67,8 +67,8 @@ class ConfigLinkMonitorCmd(ConfigCmd):
         try:
             lm_config_blob = self.client.load(Consts.LINK_MONITOR_KEY)
         except KeyError:
-            print("Cannot load Link Monitor config")
-            sys.exit(1)
+            print("Missing Link Monitor config", file=sys.stderr)
+            return
 
         lm_config = deserialize_thrift_object(
             lm_config_blob, lm_types.LinkMonitorConfig)
@@ -97,8 +97,8 @@ class ConfigPrefixManagerCmd(ConfigCmd):
         try:
             prefix_mgr_config_blob = self.client.load(Consts.PREFIX_MGR_KEY)
         except KeyError:
-            print("Cannot load Prefix Manager config")
-            sys.exit(1)
+            print("Missing Prefix Manager config", file=sys.stderr)
+            return
 
         prefix_mgr_config = deserialize_thrift_object(
             prefix_mgr_config_blob, lsdb_types.PrefixDatabase)

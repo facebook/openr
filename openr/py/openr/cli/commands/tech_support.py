@@ -26,8 +26,11 @@ class TechSupportCmd():
         self.cli_opts = cli_opts
         # Keep short timeout
         self.cli_opts.timeout = 1000
+        # Print routes or not
+        self.print_routes = False
 
-    def run(self):
+    def run(self, routes):
+        self.print_routes = routes
         funcs = [
             ('openr config file', self.print_config_file),
             ('openr runtime params', self.print_runtime_params),
@@ -44,7 +47,6 @@ class TechSupportCmd():
             ('breeze fib validate', self.print_fib_validate),
             ('breeze fib routes', self.print_fib_routes),
             ('breeze fib list', self.print_fib_list),
-            ('breeze fib counters', self.print_fib_counters),
             ('breeze perf fib', self.print_perf_fib),
             ('breeze monitor counters', self.print_monitor_counters),
         ]
@@ -57,7 +59,7 @@ class TechSupportCmd():
                 failures.append(title)
                 print(e, file=sys.stderr)
         if failures:
-            self.print_title('tech-support failures')
+            self.print_title('openr-tech-support failures')
             print('\n'.join(failures))
         print()
         return -1 if failures else 0
@@ -107,19 +109,22 @@ class TechSupportCmd():
         decision.DecisionValidateCmd(self.cli_opts).run()
 
     def print_decision_routes(self):
+        if not self.print_routes:
+            return
         decision.DecisionRoutesCmd(self.cli_opts).run(['all'], [], False)
 
     def print_fib_validate(self):
         fib.FibValidateRoutesCmd(self.cli_opts).run(self.cli_opts)
 
     def print_fib_routes(self):
+        if not self.print_routes:
+            return
         fib.FibRoutesCmd(self.cli_opts).run([], False)
 
     def print_fib_list(self):
+        if not self.print_routes:
+            return
         fib.FibListRoutesCmd(self.cli_opts).run([])
-
-    def print_fib_counters(self):
-        fib.FibCountersCmd(self.cli_opts).run()
 
     def print_perf_fib(self):
         perf.ViewFibCmd(self.cli_opts).run()
