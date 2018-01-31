@@ -18,6 +18,7 @@ from openr.cli.commands import monitor
 class MonitorCli(object):
     def __init__(self):
         self.monitor.add_command(CountersCli().counters)
+        self.monitor.add_command(ForceCrashCli().force_crash)
 
     @click.group()
     @click.option('--monitor_rep_port', default=None, type=int, help='Monitor rep port')
@@ -39,3 +40,15 @@ class CountersCli(object):
         ''' Fetch and display OpenR counters '''
 
         monitor.CountersCmd(cli_opts).run(prefix)
+
+
+class ForceCrashCli(object):
+
+    @click.command(name='force-crash')
+    @click.option('--yes', '-y', is_flag=True,
+                  help='Assume yes (non-interactive)')
+    @click.pass_obj
+    def force_crash(cli_opts, yes):  # noqa: B902
+        ''' Trigger force crash of Open/R '''
+
+        monitor.ForceCrashCmd(cli_opts).run(yes)

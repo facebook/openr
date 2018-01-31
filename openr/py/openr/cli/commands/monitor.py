@@ -10,9 +10,12 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
+import os
+import zmq
+
 from openr.cli.utils import utils
 from openr.clients import monitor_client
-from openr.utils import printing
+from openr.utils import consts, printing, socket
 
 
 class MonitorCmd(object):
@@ -21,6 +24,7 @@ class MonitorCmd(object):
 
         self.host = cli_opts.host
         self.lm_cmd_port = cli_opts.lm_cmd_port
+        self.cli_opts = cli_opts
 
         self.client = monitor_client.MonitorClient(
             cli_opts.zmq_ctx,
@@ -49,3 +53,21 @@ class CountersCmd(MonitorCmd):
 
         print(printing.render_horizontal_table(rows, caption=caption, tablefmt='plain'))
         print()
+
+
+class ForceCrashCmd(MonitorCmd):
+    def run(self, yes):
+
+        if not yes:
+            yes = utils.yesno('Are you sure to trigger Open/R crash')
+
+        if not yes:
+            print('Not triggering force crash')
+            return
+
+        print('Triggering force crash')
+        sock = socket.Socket(self.cli_opts.zmq_ctx, zmq.REQ, timeout=200)
+        sock.set_sock_opt(zmq.LINGER, 1000)
+        sock.connect(consts.Consts.FORCE_CRASH_SERVER_URL)
+        sock.send('User {} issuing crash command'.format(os.environ['USER']))
+        sock.close()
