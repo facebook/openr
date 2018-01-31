@@ -19,8 +19,10 @@ from openr.cli.commands.tech_support import TechSupportCmd
 class TechSupportCli(object):
 
     @click.command(name='tech-support')
+    @click.option('--fib_agent_port', default=None, type=int,
+                  help='Fib thrift server port')
     @click.pass_context
-    def tech_support(ctx):  # noqa: B902
+    def tech_support(ctx, fib_agent_port):  # noqa: B902
         ''' Extensive logging of Open/R's state for debugging '''
 
         '''
@@ -28,5 +30,8 @@ class TechSupportCli(object):
 
         - Recent perf events
         '''
+
+        if fib_agent_port:
+            ctx.obj.fib_agent_port = fib_agent_port
 
         sys.exit(TechSupportCmd(ctx.obj).run())
