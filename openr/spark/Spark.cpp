@@ -785,7 +785,9 @@ Spark::processHelloPacket() {
 
   auto res = findInterfaceFromIfindex(ifIndex);
   if (!res) {
-    LOG(ERROR) << "Cannot find interface for ifIndex: " << ifIndex;
+    LOG(WARNING) << "Received packet from " << clientAddr.getAddressStr()
+                 << " on unknown interface with index " << ifIndex
+                 << ". Ignoring the packet.";
     return;
   }
   const std::string ifName = *res;
