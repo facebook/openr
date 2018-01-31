@@ -292,6 +292,8 @@ const PersistentStoreUrl kConfigStoreUrl{"ipc:///tmp/openr_config_store_cmd"};
 const PrefixManagerLocalCmdUrl kPrefixManagerLocalCmdUrl{
     "inproc://prefix_manager_cmd_local"};
 
+const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
+
 } // namespace
 
 int
@@ -351,6 +353,25 @@ main(int argc, char** argv) {
 
   // Set up the zmq context for this process.
   Context context;
+
+  // Register force crash handler
+  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> forceCrashServer{
+      context, folly::none, folly::none, fbzmq::NonblockingFlag{true}};
+  auto ret = forceCrashServer.bind(kForceCrashServerUrl);
+  if (ret.hasError()) {
+    LOG(ERROR) << "Failed to bind on {}" << std::string(kForceCrashServerUrl);
+    return 1;
+  }
+  mainEventLoop.addSocket(
+      fbzmq::RawZmqSocketPtr{*forceCrashServer}, ZMQ_POLLIN,
+      [&](int) noexcept {
+        auto msg = forceCrashServer.recvOne();
+        if (msg.hasError()) {
+          LOG(ERROR) << "Failed receiving message on forceCrashServer.";
+        }
+        LOG(FATAL) << "Triggering forceful crash. "
+                   << msg->read<std::string>().value();
+      });
 
   // Hack to assign different thread name to ZMQ threads for brevity. Bind
   // starts zmq ctx and reaper threads
