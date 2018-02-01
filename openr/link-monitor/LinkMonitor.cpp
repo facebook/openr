@@ -205,15 +205,6 @@ LinkMonitor::LinkMonitor(
     });
   }
 
-  // Make thrift calls to do real programming
-  try {
-    createNetlinkSystemHandlerClient();
-  } catch (const std::exception& e) {
-    client_.reset();
-    LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
-               << folly::exceptionStr(e);
-  }
-
   // Initialize ZMQ sockets
   prepare();
 }
@@ -294,8 +285,6 @@ LinkMonitor::prepare() noexcept {
     LOG(FATAL) << "Error connecting to URL '" << platformPubUrl_ << "' "
                << nlSub.error();
   }
-
-  syncInterfaces();
 
   // Listen for messages from spark
   addSocket(
@@ -490,8 +479,8 @@ LinkMonitor::prepare() noexcept {
               << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
     }
   });
-  // schedule immediate
-  interfaceDbSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  // schedule immediate with small timeout
+  interfaceDbSyncTimer_->scheduleTimeout(std::chrono::milliseconds(100));
 
   sendIfDbTimer_ =
       fbzmq::ZmqTimeout::make(this, [this]() noexcept { sendIfDbCallback(); });
