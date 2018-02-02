@@ -32,12 +32,7 @@ using apache::thrift::FRAGILE;
 
 namespace {
 
-const std::string kLinkMonitorId = "LinkMonitor";
-const auto kMulticastPrefixV6 = folly::IPAddress::createNetwork("ff00::/8");
 const std::chrono::seconds kIfUpRetryInterval{60};
-const std::chrono::milliseconds kMinIfSyncBackOff{8};
-const std::chrono::milliseconds kMaxIfSyncBackOff{8192};
-const std::string kNodeLabelRangePrefix = "nodeLabel:";
 const std::string kConfigKey{"link-monitor-config"};
 
 /**
@@ -140,7 +135,7 @@ LinkMonitor::LinkMonitor(
       sparkReportSock_(zmqContext),
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      expBackoff_(kMinIfSyncBackOff, kMaxIfSyncBackOff) {
+      expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff) {
   // Create throttled adjacency advertiser
   advertiseMyAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       this, Constants::kLinkThrottleTimeout, [this]() noexcept {
@@ -185,7 +180,7 @@ LinkMonitor::LinkMonitor(
     // create range allocator to get unique node labels
     rangeAllocator_ = std::make_unique<RangeAllocator<int32_t>>(
         nodeId_,
-        kNodeLabelRangePrefix,
+        Constants::kNodeLabelRangePrefix,
         kvStoreClient_.get(),
         [&](folly::Optional<int32_t> newVal) noexcept {
           config_.nodeLabel = newVal ? newVal.value() : 0;
@@ -1031,24 +1026,13 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
   }
 }
 
-//
-// Add interfaces in the system to the spark (URL is provided)
-//
 bool
 LinkMonitor::syncInterfaces() {
+  VLOG(2) << "Syncing Interface DB from Netlink Platform";
+
   //
-  // Discover existing interfaces and start Spark sessions on those
-  // that are up. Interface name must match the specified prefix
-  // NOTE:
-  // This may trigger our processLinkEvent/processAddrEvent handler to be
-  // invoked as it is registered handler with netlink and we are requesting
-  // a full update from kernel. This is ok.
-  // We check for redundant notifications
+  // Retrieve latest link snapshot from SystemService
   //
-  // We can also use this method for periodic re-syncs
-  //
-  std::set<std::string> updatedInterfaces;
-  VLOG(2) << "Creating client to dispatch query to Netlink Platform";
   std::vector<thrift::Link> links;
   try {
     createNetlinkSystemHandlerClient();
@@ -1060,78 +1044,29 @@ LinkMonitor::syncInterfaces() {
     return false;
   }
 
-  VLOG(2) << "Syncing Interface DB from Netlink Platform";
+  //
+  // Process received data. We convert received data to link and addr events
+  // and invoke our processLinkEntry and processAddrEntry handlers
+  //
   for (const auto& link : links) {
-    const std::string& ifName = link.ifName;
+    // Process link entry
+    const thrift::LinkEntry linkEntry(
+        apache::thrift::FRAGILE,
+        link.ifName,
+        link.ifIndex,
+        link.isUp,
+        link.weight);
+    processLinkEvent(linkEntry);
 
-    // Add address if it is supposed to be announced
-    if (checkRedistIfNameRegex(ifName)) {
-      if (!link.isUp and redistAddrs_.erase(ifName)) {
-        advertiseRedistAddrs();
-      } else {
-        for (auto const& network : link.networks) {
-          addDelRedistAddr(ifName, true, network);
-        }
-      }
+    // Process each addr entry
+    for (const auto& network : link.networks) {
+      const thrift::AddrEntry addrEntry(
+          apache::thrift::FRAGILE,
+          link.ifName,
+          network,
+          true /* is valid */);
+      processAddrEvent(addrEntry);
     }
-
-    if (!checkIncludeExcludeRegex(
-            ifName, includeRegexList_, excludeRegexList_)) {
-      VLOG(5) << "Interface " << ifName << " does not match iface regexes";
-      continue;
-    }
-
-    bool isUp = link.isUp;
-    int ifIndex = link.ifIndex;
-    uint64_t weight = link.weight;
-    std::unordered_set<folly::IPAddress> v4Addrs;
-    std::unordered_set<folly::IPAddress> v6LinkLocalAddrs;
-
-    const auto& networks = link.networks;
-    for (const auto& network : networks) {
-      // copy the ipAddr, we move it if we use it
-      auto ipAddr = toIPAddress(network.prefixAddress);
-      if (ipAddr.isV4()) {
-        v4Addrs.emplace(std::move(ipAddr));
-        continue;
-      }
-      if (ipAddr.isV6() && ipAddr.isLinkLocal()) {
-        v6LinkLocalAddrs.emplace(std::move(ipAddr));
-        continue;
-      }
-    }
-
-    InterfaceEntry newIfEntry(
-        ifIndex, isUp, weight, std::move(v4Addrs), std::move(v6LinkLocalAddrs));
-
-    // Interface does not exist
-    if (!interfaceDb_.count(ifName)) {
-      interfaceDb_.emplace(ifName, std::move(newIfEntry));
-      LOG(INFO) << "Added " << ifName << " : " << interfaceDb_.at(ifName);
-      updatedInterfaces.insert(ifName);
-    } else {
-      // We are a refresh sync
-      // Check if anything differs and warn and update else skip.
-      // If all same then just continue
-      if (newIfEntry == interfaceDb_.at(ifName)) {
-        VLOG(3) << "No change to Interface " << ifName << " : "
-                << interfaceDb_.at(ifName);
-        continue;
-      }
-
-      // This is an update
-      LOG(WARNING) << "Re-syncing " << ifName << " : "
-                   << interfaceDb_.at(ifName);
-      interfaceDb_[ifName] = std::move(newIfEntry);
-      updatedInterfaces.insert(ifName);
-    }
-  }
-
-  // Send an update only if there is an update
-  if (!updatedInterfaces.empty()) {
-    LOG(INFO) << "Completed sync of Interface DB from netlink for: "
-              << folly::join(", ", updatedInterfaces);
-    sendInterfaceDatabase();
   }
 
   return true;

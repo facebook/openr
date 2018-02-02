@@ -163,6 +163,7 @@ class Constants {
   static const std::string kInterfaceDbMarker;
   static const std::string kPrefixDbMarker;
   static const std::string kPrefixAllocMarker;
+  static const std::string kNodeLabelRangePrefix;
 
   // ID template for local command socket
   static const std::string kLocalCmdIdTemplate;

@@ -102,10 +102,11 @@ const std::string Constants::kAdjDbMarker{"adj:"};
 const std::string Constants::kInterfaceDbMarker{"intf:"};
 const std::string Constants::kPrefixDbMarker{"prefix:"};
 const std::string Constants::kPrefixAllocMarker{"allocprefix:"};
+const std::string Constants::kNodeLabelRangePrefix{"nodeLabel:"};
 
 // ExponentialBackoff constants
-const std::chrono::milliseconds Constants::kInitialBackoff{100};
-const std::chrono::milliseconds Constants::kMaxBackoff{4000};
+const std::chrono::milliseconds Constants::kInitialBackoff{64};
+const std::chrono::milliseconds Constants::kMaxBackoff{8192};
 
 // Default keepAlive values
 // We intend to garbage collect flows after 1 min of inactivity
