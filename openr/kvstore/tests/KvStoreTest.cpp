@@ -1004,8 +1004,9 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   std::unordered_map<std::string, thrift::Value> peerKeyVals;
   std::unordered_map<std::string, thrift::Value> diffKeyVals;
+  const std::unordered_map<std::string, thrift::Value> emptyKeyVals;
   for (int i = 0; i < 3; ++i) {
-    auto key = folly::sformat("test-key-{}", i);
+    const auto key = folly::sformat("test-key-{}", i);
     thrift::Value thriftVal(
         apache::thrift::FRAGILE,
         1 /* version */,
@@ -1017,6 +1018,7 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
 
     // Submit the key-value to myStore
     myStore->setKey(key, thriftVal);
+
     // Update hash
     thriftVal.hash = generateHash(
         thriftVal.version, thriftVal.originatorId, thriftVal.value);
@@ -1024,36 +1026,61 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
     // Store keyVals
     expectedKeyVals[key] = thriftVal;
     if (i == 0) {
-      peerKeyVals[key] = thriftVal;
-    } else {
       diffKeyVals[key] = thriftVal;
+    } else {
+      peerKeyVals[key] = thriftVal;
     }
   }
 
+  // 0. Expect all keys
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll());
-  // Request for KEY_DUMP with keyVals of test-value-0 provided
-  // myStore is supposed to send back a dump with keyVals of test-value-1 and
-  // test-value-2
+
+  // 1. Query missing keys (test-key-0 will be returned)
   EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
 
-  // provide another keyValHashes item from peer with same key but different
-  // hash
-  auto key = "test-key-1";
-  thrift::Value thriftVal(
+  // Add missing key, test-key-0, into peerKeyVals
+  const auto key = "test-key-0";
+  const auto strVal = folly::sformat("test-value-{}", myStore->nodeId);
+  const thrift::Value thriftVal(
       apache::thrift::FRAGILE,
-      2 /* version */,
+      1 /* version */,
       "gotham_city" /* originatorId */,
-      "why-so-serious" /* value */,
+      strVal /* value */,
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
-      0 /* hash */);
-  // Update hash
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+      generateHash(1, "gotham_city", strVal));
   peerKeyVals[key] = thriftVal;
-  // myStore is still supposed to provide 2 items of keyVals because
-  // test-key-1 has different hash and test-key-2 is missing
-  EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+
+  // 2. Query with same snapshot. Expect no changes
+  {
+    EXPECT_EQ(emptyKeyVals, myStore->syncKeyVals(peerKeyVals));
+  }
+
+  // 3. Query with different value (change value/hash of test-key-0)
+  {
+    auto newThriftVal = thriftVal;
+    newThriftVal.value = "why-so-serious";
+    newThriftVal.hash = generateHash(
+        newThriftVal.version, newThriftVal.originatorId, newThriftVal.value);
+    peerKeyVals[key] = newThriftVal;
+    EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+  }
+
+  // 3. Query with different originatorID (change originatorID of test-key-0)
+  {
+    auto newThriftVal = thriftVal;
+    newThriftVal.originatorId = "new_york_city";
+    peerKeyVals[key] = newThriftVal;
+    EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+  }
+
+  // 4. Query with different ttlVersion (change ttlVersion of test-key-1)
+  {
+    auto newThriftVal = thriftVal;
+    newThriftVal.ttlVersion = 0xb007;
+    peerKeyVals[key] = newThriftVal;
+    EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+  }
 }
 
 int

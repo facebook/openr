@@ -600,7 +600,8 @@ KvStore::dumpDifference(
       }
       if (kvStoreIt->second.hash != value.hash ||
         kvStoreIt->second.version != value.version ||
-        kvStoreIt->second.originatorId != value.originatorId) {
+        kvStoreIt->second.originatorId != value.originatorId ||
+        kvStoreIt->second.ttlVersion != value.ttlVersion) {
           // check for version and originatorId as 2nd check just in case if
           // hash happens to be colliding
           thriftPub.keyVals.emplace(key, value);
