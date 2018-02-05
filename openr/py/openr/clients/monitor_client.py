@@ -31,3 +31,13 @@ class MonitorClient():
         self._monitor_cmd_socket.send_thrift_obj(request)
         return self._monitor_cmd_socket.recv_thrift_obj(
             monitor_types.CounterValuesResponse)
+
+    def dump_log_data(self):
+
+        request = monitor_types.MonitorRequest()
+        request.cmd = monitor_types.MonitorCommand.GET_EVENT_LOGS
+
+        self._monitor_cmd_socket.send_thrift_obj(request)
+
+        return self._monitor_cmd_socket.recv_thrift_obj(
+            monitor_types.EventLogsResponse)

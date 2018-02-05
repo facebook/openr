@@ -30,6 +30,7 @@ class Consts(object):
     HEALTH_CHECKER_CMD_PORT = 60012
     LINK_MONITOR_CMD_PORT = 60006
     PREFIX_MGR_CMD_PORT = 60011
+    MONITOR_PUB_PORT = 60007
     MONITOR_REP_PORT = 60008
     FIB_AGENT_PORT = 60100
     CONFIG_STORE_URL = "ipc:///tmp/openr_config_store_cmd"

@@ -54,6 +54,7 @@ def cli(ctx, host, timeout, ports_config_file, color, verbose):
         'kv_pub_port': Consts.KVSTORE_PUB_PORT,
         'kv_rep_port': Consts.KVSTORE_REP_PORT,
         'lm_cmd_port': Consts.LINK_MONITOR_CMD_PORT,
+        'monitor_pub_port': Consts.MONITOR_PUB_PORT,
         'monitor_rep_port': Consts.MONITOR_REP_PORT,
         'prefix_mgr_cmd_port': Consts.PREFIX_MGR_CMD_PORT,
         'proto_factory': Consts.PROTO_FACTORY,

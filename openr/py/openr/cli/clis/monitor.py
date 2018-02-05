@@ -19,6 +19,8 @@ class MonitorCli(object):
     def __init__(self):
         self.monitor.add_command(CountersCli().counters)
         self.monitor.add_command(ForceCrashCli().force_crash)
+        self.monitor.add_command(MonitorSnoop().snoop)
+        self.monitor.add_command(MonitorLogs().logs)
 
     @click.group()
     @click.option('--monitor_rep_port', default=None, type=int, help='Monitor rep port')
@@ -52,3 +54,33 @@ class ForceCrashCli(object):
         ''' Trigger force crash of Open/R '''
 
         monitor.ForceCrashCmd(cli_opts).run(yes)
+
+
+class MonitorSnoop(object):
+
+    @click.command()
+    @click.option('--log/--no-log', default=True,
+                  help='Snoop on log')
+    @click.option('--counters/--no-counters', default=True,
+                  help='Snoop on counters')
+    @click.option('--delta/--no-delta', default=True,
+                  help='Output incremental changes')
+    @click.option('--duration', default=0,
+                  help='How long to snoop for. Default is infinite')
+    @click.pass_obj
+    def snoop(cli_opts, log, counters, delta, duration):  # noqa: B902
+        ''' Print changed counters '''
+
+        monitor.SnoopCmd(cli_opts).run(log, counters, delta, duration)
+
+
+class MonitorLogs(object):
+
+    @click.command()
+    @click.option('--prefix', default="", help='Show log events')
+    @click.option('--json/--no-json', default=False, help='Dump in JSON format')
+    @click.pass_obj
+    def logs(cli_opts, prefix, json):  # noqa: B902
+        ''' Print log events '''
+
+        monitor.LogCmd(cli_opts).run(json)
