@@ -318,6 +318,9 @@ KvStore::mergeKeyValues(
   // the publication to build if we update our KV store
   thrift::Publication thriftPub{};
 
+  // Counters for logging
+  uint32_t ttlUpdateCnt{0}, valUpdateCnt{0};
+
   for (const auto& kv : keyVals) {
     auto const& key = kv.first;
     auto const& value = kv.second;
@@ -412,6 +415,7 @@ KvStore::mergeKeyValues(
     VLOG(4) << "(mergeKeyValues) Inserting/Updating key: '" << key << "'";
 
     if (updateAllNeeded) {
+      ++valUpdateCnt;
       //
       // update everything for such key
       //
@@ -432,6 +436,7 @@ KvStore::mergeKeyValues(
             value.version, value.originatorId, value.value);
       }
     } else if (updateTtlNeeded) {
+      ++ttlUpdateCnt;
       //
       // update ttl,ttlVersion only
       //
@@ -446,6 +451,9 @@ KvStore::mergeKeyValues(
     thriftPub.keyVals.emplace(key, value);
   }
 
+  VLOG(4) << "(mergeKeyValues) updating " << thriftPub.keyVals.size()
+          << " keyvals. ValueUpdates: " << valUpdateCnt
+          << ", TtlUpdates: " << ttlUpdateCnt;
   return thriftPub;
 }
 
@@ -513,7 +521,7 @@ KvStore::processPublication() {
   // If the following publication is not empty, means we received some
   // new information and we haven't processed this publication before.
   // If so, relay it, else stop
-  auto deltaPub = mergeKeyValues(kvStore_, thriftPub.keyVals);
+  const auto deltaPub = mergeKeyValues(kvStore_, thriftPub.keyVals);
   updateTtlCountdownQueue(deltaPub);
   tData_.addStatValue(
       "kvstore.updated_key_vals", deltaPub.keyVals.size(), fbzmq::SUM);
@@ -890,6 +898,8 @@ KvStore::processRequest(
 
     const auto thriftPub = mergeKeyValues(kvStore_, keyVals);
     updateTtlCountdownQueue(thriftPub);
+    tData_.addStatValue(
+        "kvstore.updated_key_vals", thriftPub.keyVals.size(), fbzmq::SUM);
 
     // publish the updated key-values to the peers
     if (!thriftPub.keyVals.empty()) {
@@ -1015,11 +1025,14 @@ KvStore::processSyncResponse() noexcept {
   auto syncPub =
       syncPubMsg.readThriftObj<thrift::Publication>(serializer_).value();
 
-  VLOG(1) << "Sync response received from " << requestId << " with "
-          << syncPub.keyVals.size() << " key value pairs";
-
-  auto deltaPub = mergeKeyValues(kvStore_, syncPub.keyVals);
+  const auto deltaPub = mergeKeyValues(kvStore_, syncPub.keyVals);
   updateTtlCountdownQueue(deltaPub);
+  tData_.addStatValue(
+      "kvstore.updated_key_vals", deltaPub.keyVals.size(), fbzmq::SUM);
+
+  VLOG(1) << "Sync response received from " << requestId << " with "
+          << syncPub.keyVals.size() << " key value pairs which incured "
+          << deltaPub.keyVals.size() << " key-value updates";
 
   // publish the updated key-values to the peers
   if (!deltaPub.keyVals.empty()) {
