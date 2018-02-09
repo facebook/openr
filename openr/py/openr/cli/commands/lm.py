@@ -43,15 +43,15 @@ class UnsetNodeOverloadCmd(LMCmd):
 
 
 class SetLinkOverloadCmd(LMCmd):
-    def run(self, interface):
+    def run(self, interface, yes):
 
-        set_unset_link_overload(self.client, True, interface)
+        set_unset_link_overload(self.client, True, interface, yes)
 
 
 class UnsetLinkOverloadCmd(LMCmd):
-    def run(self, interface):
+    def run(self, interface, yes):
 
-        set_unset_link_overload(self.client, False, interface)
+        set_unset_link_overload(self.client, False, interface, yes)
 
 
 class SetLinkMetricCmd(LMCmd):
@@ -182,7 +182,7 @@ def set_unset_overload(client, overload):
         print('Failed to {}.\n'.format(action))
 
 
-def set_unset_link_overload(client, overload, interface):
+def set_unset_link_overload(client, overload, interface, yes):
     '''
     Set/Unset link overload. All transit traffic on this link will be drained.
     Equivalent to hard draining the link
@@ -205,10 +205,13 @@ def set_unset_link_overload(client, overload, interface):
         sys.exit(0)
 
     action = 'set overload bit' if overload else 'unset overload bit'
-    question_str = 'Are you sure to {} for interface {} ?'
-    if not utils.yesno(question_str.format(action, interface)):
-        print()
-        return
+    if not yes:
+        question_str = 'Are you sure to {} for interface {} ?'
+        if not utils.yesno(question_str.format(action, interface)):
+            print()
+            return
+    else:
+        print('Skipping interactive confirmation!')
 
     links = client.set_unset_link_overload(overload, interface)
 

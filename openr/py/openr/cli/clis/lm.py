@@ -81,22 +81,24 @@ class SetLinkOverloadCli(object):
 
     @click.command()
     @click.argument('interface')
+    @click.option('--yes', is_flag=True, help='Make command non-interactive')
     @click.pass_obj
-    def set_link_overload(cli_opts, interface):  # noqa: B902
+    def set_link_overload(cli_opts, interface, yes):  # noqa: B902
         ''' Set overload bit for a link. Transit traffic will be drained. '''
 
-        lm.SetLinkOverloadCmd(cli_opts).run(interface)
+        lm.SetLinkOverloadCmd(cli_opts).run(interface, yes)
 
 
 class UnsetLinkOverloadCli(object):
 
     @click.command()
     @click.argument('interface')
+    @click.option('--yes', is_flag=True, help='Make command non-interactive')
     @click.pass_obj
-    def unset_link_overload(cli_opts, interface):  # noqa: B902
+    def unset_link_overload(cli_opts, interface, yes):  # noqa: B902
         ''' Unset overload bit for a link to allow transit traffic. '''
 
-        lm.UnsetLinkOverloadCmd(cli_opts).run(interface)
+        lm.UnsetLinkOverloadCmd(cli_opts).run(interface, yes)
 
 
 class SetLinkMetricCli(object):
