@@ -38,12 +38,12 @@ class MonitorCmd(object):
 
 
 class CountersCmd(MonitorCmd):
-    def run(self, prefix=''):
+    def run(self, prefix='', is_json=False):
 
         resp = self.client.dump_all_counter_data()
-        self.print_counters(resp, prefix)
+        self.print_counters(resp, prefix, is_json)
 
-    def print_counters(self, resp, prefix):
+    def print_counters(self, resp, prefix, is_json):
         ''' print the Kv Store counters '''
 
         host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
@@ -53,10 +53,15 @@ class CountersCmd(MonitorCmd):
         for key, counter in sorted(resp.counters.items()):
             if not key.startswith(prefix):
                 continue
-            rows.append(['{} : {}'.format(key, counter.value)])
+            rows.append([key, ':', counter.value])
 
-        print(printing.render_horizontal_table(rows, caption=caption, tablefmt='plain'))
-        print()
+        if is_json:
+            json_data = {k: v for k, _, v in rows}
+            print(utils.json_dumps(json_data))
+        else:
+            print(printing.render_horizontal_table(rows, caption=caption,
+                                                   tablefmt='plain'))
+            print()
 
 
 class ForceCrashCmd(MonitorCmd):

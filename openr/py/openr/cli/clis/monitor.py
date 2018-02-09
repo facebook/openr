@@ -35,13 +35,14 @@ class MonitorCli(object):
 class CountersCli(object):
 
     @click.command()
+    @click.option('--json', is_flag=True, help='Output JSON object')
     @click.option('--prefix', default='',
                   help='Only show counters starting with prefix')
     @click.pass_obj
-    def counters(cli_opts, prefix):  # noqa: B902
+    def counters(cli_opts, prefix, json):  # noqa: B902
         ''' Fetch and display OpenR counters '''
 
-        monitor.CountersCmd(cli_opts).run(prefix)
+        monitor.CountersCmd(cli_opts).run(prefix, json)
 
 
 class ForceCrashCli(object):
