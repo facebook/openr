@@ -30,8 +30,8 @@ install_zstd() {
   fi
   cd zstd
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -43,8 +43,8 @@ install_mstch() {
   cd mstch
   cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" .
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -64,8 +64,8 @@ install_wangle() {
     -DFOLLY_LIBRARY=$DESTDIR/usr/local/lib \
     -DBUILD_TESTS=OFF .
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -80,8 +80,8 @@ install_libzmq() {
   ./autogen.sh
   ./configure
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -93,8 +93,8 @@ install_libsodium() {
   cd libsodium
   ./configure
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -112,8 +112,8 @@ install_folly() {
   autoreconf -ivf
   ./configure LIBS="-lpthread"
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -130,10 +130,10 @@ install_fbthrift() {
   fi
   cmake -DBUILD_SHARED_LIBS=ON ..
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   cd ../thrift/lib/py
-  python setup.py install
+  sudo python setup.py install
   popd
 }
 
@@ -156,10 +156,10 @@ install_fbzmq() {
     -DBUILD_TESTS=OFF \
     ../fbzmq/
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   cd ../fbzmq/py
-  python setup.py install
+  sudo python setup.py install
   popd
 }
 
@@ -174,8 +174,8 @@ install_glog() {
   set -eu && autoreconf -i
   ./configure
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -193,8 +193,8 @@ install_gflags() {
   cd mybuild
   cmake -DBUILD_SHARED_LIBS=ON ..
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -209,13 +209,13 @@ install_gtest() {
   cd googletest
   cmake .
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   cd ../googlemock
   cmake .
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -233,8 +233,8 @@ install_libnl() {
   ./autogen.sh
   ./configure
   make
-  make install
-  ldconfig
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -248,11 +248,11 @@ install_openr() {
     -DCMAKE_CXX_FLAGS="-Wno-unused-parameter" \
     ../openr/
   make
-  make install
-  chmod +x "/usr/local/sbin/run_openr.sh"
+  sudo make install
+  sudo chmod +x "/usr/local/sbin/run_openr.sh"
   cd "$BUILD_DIR/../openr/py"
-  pip install cffi
-  pip install future
+  sudo pip install cffi
+  sudo pip install future
   python setup.py build
   sudo python setup.py install
   cd "$BUILD_DIR"
@@ -263,8 +263,8 @@ install_openr() {
 #
 # Install required tools and libraries via package managers
 #
-
-apt-get install libdouble-conversion-dev \
+sudo apt-get update
+sudo apt-get install -y libdouble-conversion-dev \
   libssl-dev \
   cmake \
   make \
