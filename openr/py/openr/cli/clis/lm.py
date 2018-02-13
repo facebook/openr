@@ -106,24 +106,26 @@ class SetLinkMetricCli(object):
     @click.command()
     @click.argument('interface')
     @click.argument('metric')
+    @click.option('--yes', is_flag=True, help='Make command non-interactive')
     @click.pass_obj
-    def set_link_metric(cli_opts, interface, metric):  # noqa: B902
+    def set_link_metric(cli_opts, interface, metric, yes):  # noqa: B902
         '''
         Set custom metric value for a link. You can use high link metric value
         to emulate soft-drain behaviour.
         '''
 
-        lm.SetLinkMetricCmd(cli_opts).run(interface, metric)
+        lm.SetLinkMetricCmd(cli_opts).run(interface, metric, yes)
 
 
 class UnsetLinkMetricCli(object):
 
     @click.command()
     @click.argument('interface')
+    @click.option('--yes', is_flag=True, help='Make command non-interactive')
     @click.pass_obj
-    def unset_link_metric(cli_opts, interface):  # noqa: B902
+    def unset_link_metric(cli_opts, interface, yes):  # noqa: B902
         '''
         Unset previously set custom metric value on the interface.
         '''
 
-        lm.UnsetLinkMetricCmd(cli_opts).run(interface)
+        lm.UnsetLinkMetricCmd(cli_opts).run(interface, yes)

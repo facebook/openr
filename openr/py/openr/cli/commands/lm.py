@@ -55,15 +55,15 @@ class UnsetLinkOverloadCmd(LMCmd):
 
 
 class SetLinkMetricCmd(LMCmd):
-    def run(self, interface, metric):
+    def run(self, interface, metric, yes):
 
-        set_unset_link_metric(self.client, True, interface, metric)
+        set_unset_link_metric(self.client, True, interface, metric, yes)
 
 
 class UnsetLinkMetricCmd(LMCmd):
-    def run(self, interface):
+    def run(self, interface, yes):
 
-        set_unset_link_metric(self.client, False, interface, 0)
+        set_unset_link_metric(self.client, False, interface, 0, yes)
 
 
 class LMLinksCmd(LMCmd):
@@ -221,7 +221,7 @@ def set_unset_link_overload(client, overload, interface, yes):
         print('Failed to {} for the interface.\n'.format(action))
 
 
-def set_unset_link_metric(client, override, interface, metric):
+def set_unset_link_metric(client, override, interface, metric, yes):
     '''
     Set/Unset metric override for the specific link. This can be used to
     emulate soft drains.
@@ -244,10 +244,13 @@ def set_unset_link_metric(client, override, interface, metric):
         sys.exit(0)
 
     action = 'set override metric' if override else 'unset override metric'
-    question_str = 'Are you sure to {} for interface {} ?'
-    if not utils.yesno(question_str.format(action, interface)):
-        print()
-        return
+    if not yes:
+        question_str = 'Are you sure to {} for interface {} ?'
+        if not utils.yesno(question_str.format(action, interface)):
+            print()
+            return
+    else:
+        print('Skipping interactive confirmation!')
 
     links = client.set_unset_link_metric(override, interface, metric)
 
