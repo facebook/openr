@@ -44,46 +44,54 @@
 
 DEFINE_int32(
     kvstore_pub_port,
-    60001,
+    openr::Constants::kKvStorePubPort,
     "KvStore publisher port for emitting realtime key-value deltas");
-DEFINE_int32(kvstore_rep_port, 60002, "The port KvStore replier listens on");
+DEFINE_int32(kvstore_rep_port,
+    openr::Constants::kKvStoreRepPort, "The port KvStore replier listens on");
 DEFINE_int32(
     decision_pub_port,
-    60003,
+    openr::Constants::kDecisionPubPort,
     "Decision publisher port for emitting realtime route-db updates");
-DEFINE_int32(decision_rep_port, 60004, "The port Decision replier listens on");
+DEFINE_int32(decision_rep_port,
+    openr::Constants::kDecisionRepPort,
+    "The port Decision replier listens on");
 DEFINE_int32(
-    link_monitor_pub_port, 60005, "The port link monitor publishes on");
+    link_monitor_pub_port,
+    openr::Constants::kLinkMonitorPubPort,
+    "The port link monitor publishes on");
 DEFINE_int32(
     link_monitor_cmd_port,
-    60006,
+    openr::Constants::kLinkMonitorCmdPort,
     "The port link monitor listens for commands on ");
-DEFINE_int32(monitor_pub_port, 60007, "The port monitor publishes on");
-DEFINE_int32(monitor_rep_port, 60008, "The port monitor replies on");
-DEFINE_int32(fib_rep_port, 60009, "The port fib replier listens on");
+DEFINE_int32(monitor_pub_port,
+    openr::Constants::kMonitorPubPort, "The port monitor publishes on");
+DEFINE_int32(monitor_rep_port,
+    openr::Constants::kMonitorRepPort, "The port monitor replies on");
+DEFINE_int32(fib_rep_port,
+    openr::Constants::kFibRepPort, "The port fib replier listens on");
 DEFINE_int32(
     health_checker_port,
-    60010,
+    openr::Constants::kHealthCheckerPort,
     "The port health checker sends and recvs udp pings on");
 DEFINE_int32(
     prefix_manager_cmd_port,
-    60011,
+    openr::Constants::kPrefixManagerCmdPort,
     "The port prefix manager receives commands on");
 DEFINE_int32(
     health_checker_rep_port,
-    60012,
+    openr::Constants::kHealthCheckerRepPort,
     "The port Health Checker replier listens on");
 DEFINE_int32(
     system_agent_port,
-    60099,
+    openr::Constants::kSystemAgentPort,
     "Switch agent thrift service port for Platform programming.");
 DEFINE_int32(
     fib_agent_port,
-    60100, // NOTE 100 is on purpose
+    openr::Constants::kFibAgentPort, // NOTE 100 is on purpose
     "Switch agent thrift service port for FIB programming.");
 DEFINE_int32(
     spark_mcast_port,
-    6666,
+    openr::Constants::kSparkMcastPort,
     "Spark UDP multicast port for sending spark-hello messages.");
 DEFINE_string(
     platform_pub_url,

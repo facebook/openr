@@ -190,6 +190,53 @@ class Constants {
   // buffer size to keep latest perf log
   static const uint16_t kPerfBufferSize;
   static const std::chrono::seconds kConvergenceMaxDuration;
+
+  // OpenR ports
+
+  // KvStore publisher port for emitting realtime key-value deltas
+  static const int32_t kKvStorePubPort;
+
+  // The port KvStore replier listens on
+  static const int32_t kKvStoreRepPort;
+
+  // Decision publisher port for emitting realtime route-db updates
+  static const int32_t kDecisionPubPort;
+
+  // The port Decision replier listens on
+  static const int32_t kDecisionRepPort;
+
+  // The port link monitor publishes on
+  static const int32_t kLinkMonitorPubPort;
+
+  // The port link monitor listens for commands on
+  static const int32_t kLinkMonitorCmdPort;
+
+  // The port monitor publishes on
+  static const int32_t kMonitorPubPort;
+
+  // The port monitor replies on
+  static const int32_t kMonitorRepPort;
+
+  // The port fib replier listens on
+  static const int32_t kFibRepPort;
+
+  // The port health checker sends and recvs udp pings on
+  static const int32_t kHealthCheckerPort;
+
+  // The port prefix manager receives commands on
+  static const int32_t kPrefixManagerCmdPort;
+
+  // The port Health Checker replier listens on
+  static const int32_t kHealthCheckerRepPort;
+
+  // Switch agent thrift service port for Platform programming
+  static const int32_t kSystemAgentPort;
+
+  // Switch agent thrift service port for FIB programming
+  static const int32_t kFibAgentPort;
+
+  // Spark UDP multicast port for sending spark-hello messages
+  static const int32_t kSparkMcastPort;
 };
 
 } // namespace openr

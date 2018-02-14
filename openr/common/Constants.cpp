@@ -136,4 +136,51 @@ const int64_t Constants::kDefaultAdjWeight{1};
 const uint16_t Constants::kPerfBufferSize{10};
 const std::chrono::seconds Constants::kConvergenceMaxDuration{3s};
 
+// OpenR ports
+
+// KvStore publisher port for emitting realtime key-value deltas
+const int32_t Constants::kKvStorePubPort{60001};
+
+// The port KvStore replier listens on
+const int32_t Constants::kKvStoreRepPort{60002};
+
+// Decision publisher port for emitting realtime route-db updates
+const int32_t Constants::kDecisionPubPort{60003};
+
+// The port Decision replier listens on
+const int32_t Constants::kDecisionRepPort{60004};
+
+// The port link monitor publishes on
+const int32_t Constants::kLinkMonitorPubPort{60005};
+
+// The port link monitor listens for commands on
+const int32_t Constants::kLinkMonitorCmdPort{60006};
+
+// The port monitor publishes on
+const int32_t Constants::kMonitorPubPort{60007};
+
+// The port monitor replies on
+const int32_t Constants::kMonitorRepPort{60008};
+
+// The port fib replier listens on
+const int32_t Constants::kFibRepPort{60009};
+
+// The port health checker sends and recvs udp pings on
+const int32_t Constants::kHealthCheckerPort{60010};
+
+// The port prefix manager receives commands on
+const int32_t Constants::kPrefixManagerCmdPort{60011};
+
+// The port Health Checker replier listens on
+const int32_t Constants::kHealthCheckerRepPort{60012};
+
+// Switch agent thrift service port for Platform programming
+const int32_t Constants::kSystemAgentPort{60099};
+
+// Switch agent thrift service port for FIB programming
+const int32_t Constants::kFibAgentPort{60100};
+
+// Spark UDP multicast port for sending spark-hello messages
+const int32_t Constants::kSparkMcastPort{6666};
+
 } // namespace openr
