@@ -103,9 +103,11 @@ TEST(UtilTest, checkIncludeExcludeRegex) {
   std::vector<std::regex> includeRegexList{
       std::regex{"eth.*", extended | icase | optimize},
       std::regex{"terra", extended | icase | optimize},
+      std::regex{"po.*", extended | icase | optimize},
   };
   std::vector<std::regex> excludeRegexList{
-      std::regex{".*po.*", extended | icase | optimize},
+      std::regex{".*pi.*", extended | icase | optimize},
+      std::regex{"^(po)[0-9]{3}$", extended | icase | optimize},
   };
   EXPECT_TRUE(
       checkIncludeExcludeRegex("eth", includeRegexList, excludeRegexList));
@@ -119,11 +121,15 @@ TEST(UtilTest, checkIncludeExcludeRegex) {
   EXPECT_FALSE(
       checkIncludeExcludeRegex("helloeth", includeRegexList, excludeRegexList));
   EXPECT_FALSE(checkIncludeExcludeRegex(
-      "ethpohello", includeRegexList, excludeRegexList));
+      "ethpihello", includeRegexList, excludeRegexList));
   EXPECT_FALSE(
       checkIncludeExcludeRegex("terr", includeRegexList, excludeRegexList));
   EXPECT_FALSE(
       checkIncludeExcludeRegex("hello", includeRegexList, excludeRegexList));
+  EXPECT_FALSE(
+      checkIncludeExcludeRegex("po101", includeRegexList, excludeRegexList));
+  EXPECT_TRUE(
+      checkIncludeExcludeRegex("po1010", includeRegexList, excludeRegexList));
 }
 
 TEST(UtilTest, createLoopbackAddr) {

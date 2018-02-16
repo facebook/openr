@@ -45,6 +45,7 @@ ENABLE_WATCHDOG=true
 FIB_HANDLER_PORT=60100
 HEALTH_CHECKER_PING_INTERVAL_S=3
 IFACE_PREFIXES="terra,nic1,nic2"
+IFACE_REGEX_EXCLUDE=""
 LOOPBACK_IFACE="lo"
 OVERRIDE_LOOPBACK_ADDR=false
 PREFIXES=""
@@ -115,6 +116,7 @@ exec ${OPENR} \
   --health_checker_ping_interval_s=${HEALTH_CHECKER_PING_INTERVAL_S} \
   --iface=${LOOPBACK_IFACE} \
   --ifname_prefix=${IFACE_PREFIXES} \
+  --ifname_regex_exclude=${IFACE_REGEX_EXCLUDE} \
   --node_name="${HOSTNAME}" \
   --override_loopback_global_addresses=${OVERRIDE_LOOPBACK_ADDR} \
   --prefix="${PREFIXES}" \
