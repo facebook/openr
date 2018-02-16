@@ -1,7 +1,5 @@
 FROM ubuntu:16.04 
 
-ENV http_proxy 'http://proxy-wsa.esl.cisco.com:80'
-ENV https_proxy 'http://proxy-wsa.esl.cisco.com:80'
 
 RUN apt-get update && apt-get install -y autoconf automake libtool curl make g++ unzip git python-pip python-dev && git clone https://github.com/google/protobuf.git ~/protobuf && \
             cd ~/protobuf && \
