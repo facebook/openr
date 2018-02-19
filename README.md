@@ -1,4 +1,4 @@
-The current solution is shown below:
+The current integration is shown below:
 
 ![Open/R integration with IOS-XR- current design](/openr_xr_integration_current.png)
 
@@ -306,4 +306,25 @@ RP/0/RP0/CPU0:rtr1#
 ```
 
 There you go! There are 1002 service layer routes in the RIB, all thanks to Open/R acting as an IGP, learning routes from its neighbor and programming the IOS-XR RIB on the local box over gRPC.
+
+Again, if we dump the fib counters in open/R inside the docker container, we see the counters match up to the summary above:  
+
+
+```
+RP/0/RP0/CPU0:rtr1#bash
+Mon Feb 19 23:12:51.407 UTC
+[rtr1:~]$ 
+[rtr1:~]$ docker exec -it openr bash
+root@rtr1:/# ip netns exec global-vrf bash
+root@rtr1:/# 
+root@rtr1:/# breeze fib  counters
+
+== rtr1's Fib counters  ==
+
+fibagent.num_of_routes : 1002
+
+root@rtr1:/# 
+
+
+```
 
