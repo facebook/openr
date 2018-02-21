@@ -12,7 +12,7 @@ After=network-online.target
 [Service]
 Type=simple
 ExecStartPre=/usr/sbin/openr_install_acl.sh install
-ExecStart=/usr/sbin/run_openr.sh
+ExecStart=/usr/sbin/run_openr.sh /etc/sysconfig/fabric_openr_config
 Restart=always
 RestartSec=3
 TimeoutSec=10
