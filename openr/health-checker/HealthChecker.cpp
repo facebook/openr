@@ -83,8 +83,11 @@ HealthChecker::prepare(folly::Optional<int> maybeIpTos) noexcept {
   }
 
   kvStoreClient_->setKvCallback([this](
-      const std::string& key, const thrift::Value& thriftVal) noexcept {
-    processKeyVal(key, thriftVal);
+      const std::string& key,
+      folly::Optional<thrift::Value> thriftVal) noexcept {
+        if (thriftVal.hasValue()) {
+          processKeyVal(key, thriftVal.value());
+        }
   });
 
   // prepare and bind udp ping socket

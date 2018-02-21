@@ -72,10 +72,12 @@ void
 PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
   // subscribe for incremental updates of static prefix allocation key
   kvStoreClient_->subscribeKey(Constants::kStaticPrefixAllocParamKey,
-    [&](std::string const& key, thrift::Value const& value) {
+    [&](std::string const& key, folly::Optional<thrift::Value> value) {
       CHECK_EQ(Constants::kStaticPrefixAllocParamKey, key);
-      processStaticPrefixAllocUpdate(value);
-    });
+      if (value.hasValue()){
+        processStaticPrefixAllocUpdate(value.value());
+      }
+    }, false);
 
   // get initial value if missed out in incremental updates (one time only)
   scheduleTimeout(0ms, [this]() noexcept {
@@ -126,10 +128,12 @@ void
 PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
   // subscribe for incremental updates of seed prefix
   kvStoreClient_->subscribeKey(Constants::kSeedPrefixAllocParamKey,
-    [&](std::string const& key, thrift::Value const& value) {
+    [&](std::string const& key, folly::Optional<thrift::Value> value) {
       CHECK_EQ(Constants::kSeedPrefixAllocParamKey, key);
-      processAllocParamUpdate(value);
-    });
+      if (value.hasValue()) {
+        processAllocParamUpdate(value.value());
+      }
+    }, false);
 
   // get initial value if missed out in incremental updates (one time only)
   scheduleTimeout(0ms, [this]() noexcept {

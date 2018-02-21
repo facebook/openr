@@ -599,51 +599,112 @@ TEST(KvStoreClient, SubscribeApiTest) {
   // Schedule callback to set keys from client1 (this will be executed first)
   evl.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     client1->subscribeKey(
-        "test_key1", [&](std::string const& k, thrift::Value const& v) {
+        "test_key1", [&](std::string const& k,
+            folly::Optional<thrift::Value>  v) {
           // this should be called when client1 call persistKey for test_key1
           EXPECT_EQ("test_key1", k);
-          EXPECT_EQ(1, v.version);
-          EXPECT_EQ("test_value1", v.value);
+          EXPECT_EQ(1, v.value().version);
+          EXPECT_EQ("test_value1", v.value().value);
           key1CbCnt++;
-        });
+        }, false);
     client1->subscribeKey(
-        "test_key2", [&](std::string const& k, thrift::Value const& v) {
+        "test_key2", [&](std::string const& k,
+            folly::Optional<thrift::Value> v) {
           // this should be called when client2 call persistKey for test_key2
           EXPECT_EQ("test_key2", k);
-          EXPECT_LT(0, v.version);
-          EXPECT_GE(2, v.version);
-          switch (v.version) {
+          EXPECT_LT(0, v.value().version);
+          EXPECT_GE(2, v.value().version);
+          switch (v.value().version) {
           case 1:
-            EXPECT_EQ("test_value2", v.value);
+            EXPECT_EQ("test_value2", v.value().value);
             break;
           case 2:
-            EXPECT_EQ("test_value2-client2", v.value);
+            EXPECT_EQ("test_value2-client2", v.value().value);
             break;
           }
           key2CbCnt++;
-        });
+        }, false);
     client1->persistKey("test_key1", "test_value1");
     client1->setKey("test_key2", "test_value2");
   });
 
-  int key2CbCntClient2 = 0;
+  int key2CbCntClient2{0};
+
   // Schedule callback to persist key2 from client2 (this will be executed next)
-  evl.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
+  evl.scheduleTimeout(std::chrono::milliseconds(10), [&]() noexcept {
     client2->persistKey("test_key2", "test_value2-client2");
     client2->subscribeKey(
         "test_key2",
-        [&](std::string const& /* k */, thrift::Value const& /* v */) {
+        [&](std::string const& /* k */,
+            folly::Optional<thrift::Value> /* v */) {
           // this should never be called when client2 call persistKey
           // for test_key2 with same value
           key2CbCntClient2++;
-        });
+        }, false);
     // call persistkey with same value. should not get a callback here.
     client2->persistKey("test_key2", "test_value2-client2");
   });
 
+  /* test for key callback with the option of getting key Value */
+  int keyExpKeySubCbCnt{0}; /* reply count for key regd. with fetchValue=true */
+  evl.scheduleTimeout(std::chrono::milliseconds(11), [&]() noexcept {
+
+    client2->setKey("test_key_subs_cb", "test_key_subs_cb_val", 11);
+
+    folly::Optional<thrift::Value> keyValue;
+    /* register key callback with the option of getting key Value */
+    keyValue = client2->subscribeKey(
+      "test_key_subs_cb",
+      [&](std::string const& /* unused */,
+          folly::Optional<thrift::Value> /* v */) {
+      }, true);
+
+    if (keyValue.hasValue()) {
+      EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value);
+      keyExpKeySubCbCnt++;
+    }
+  });
+
+  /* test for expired keys update */
+  int keyExpKeyCbCnt{0};  /* expired key call back count specific to a key */
+  int keyExpCbCnt{0};  /* expired key call back count */
+  evl.scheduleTimeout(std::chrono::milliseconds(20), [&]() noexcept {
+
+    thrift::Value keyExpVal{apache::thrift::FRAGILE,
+                                   1,
+                                   nodeId,
+                                   "test_key_exp_val",
+                                   1,  /* ttl in msec */
+                                   500 /* ttl version */,
+                                   0 /* hash */};
+
+    /* register client callback for key updates from KvStore */
+    client2->setKvCallback(
+        [&](const std::string& key,
+        folly::Optional<thrift::Value> thriftVal) noexcept {
+      if (!thriftVal.hasValue()) {
+        EXPECT_EQ("test_key_exp", key);
+        keyExpCbCnt++;
+      }
+    });
+
+    /* register key callback for key updates from KvStore */
+    client2->subscribeKey(
+        "test_key_exp",
+        [&](std::string const& k, folly::Optional<thrift::Value> v) {
+          if (!v.hasValue()) {
+            EXPECT_EQ("test_key_exp", k);
+            keyExpKeyCbCnt++;
+            evl.stop();
+          }
+    }, false);
+
+    store->setKey("test_key_exp", keyExpVal);
+  });
+
   // Schedule timeout for terminating the event loop
   evl.scheduleTimeout(
-      std::chrono::milliseconds(1000), [&]() noexcept { evl.stop(); });
+      std::chrono::milliseconds(60), [&]() noexcept { evl.stop(); });
 
   // Start the event loop
   std::thread evlThread([&]() {
@@ -661,6 +722,9 @@ TEST(KvStoreClient, SubscribeApiTest) {
   EXPECT_LE(1, key2CbCnt); // from two clients in out of order. However values
                            // are going to be same.
   EXPECT_EQ(0, key2CbCntClient2);
+  EXPECT_EQ(1, keyExpCbCnt);
+  EXPECT_EQ(1, keyExpKeyCbCnt);
+  EXPECT_EQ(1, keyExpKeySubCbCnt);
 
   // Stop server
   LOG(INFO) << "Stopping store";

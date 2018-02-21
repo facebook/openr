@@ -254,11 +254,12 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         nodeToPrefix;
     auto prefixDbCb = [&](
         std::string const& /* key */,
-        thrift::Value const& value) mutable noexcept {
+        folly::Optional<thrift::Value> value) mutable noexcept {
       // Parse PrefixDb
-      ASSERT_TRUE(value.value.hasValue());
+      ASSERT_TRUE(value.hasValue());
+      ASSERT_TRUE(value.value().value.hasValue());
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-          value.value.value(), serializer);
+          value.value().value.value(), serializer);
       auto& prefixes = prefixDb.prefixEntries;
 
       // Verify some expectations
@@ -337,7 +338,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       const auto myNodeName = sformat("node-{}", i);
 
       // subscribe to prefixDb updates from KvStore for node
-      kvStoreClient->subscribeKey(sformat("prefix:{}", myNodeName), prefixDbCb);
+      kvStoreClient->subscribeKey(sformat("prefix:{}", myNodeName),
+                      prefixDbCb, false);
 
       // get a unique temp file name
       auto tempFileName = folly::sformat("/tmp/openr.{}.{}", tid, i);
@@ -519,11 +521,13 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
 
   // Set callback
   kvStoreClient_->subscribeKey(subscriptionKey,
-    [&](const std::string& /* key */, const thrift::Value& value) {
+    [&](const std::string& /* key */,
+        folly::Optional<thrift::Value> value) {
       // Parse PrefixDb
-      ASSERT_TRUE(value.value.hasValue());
+      ASSERT_TRUE(value.hasValue());
+      ASSERT_TRUE(value.value().value.hasValue());
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-          value.value.value(), serializer);
+          value.value().value.value(), serializer);
       auto& prefixes = prefixDb.prefixEntries;
 
       // Verify some expectations
@@ -544,8 +548,8 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
         LOG(INFO) << "Got new prefix allocation!";
         hasAllocPrefix.store(true, std::memory_order_relaxed);
       } // if
-    } // callback
-  );
+    },// callback
+    false);
 
   // Start main event loop in a new thread
   threads_.emplace_back([&]() noexcept { evl_.run(); });
@@ -637,11 +641,13 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
 
   // Set callback
   kvStoreClient_->subscribeKey(subscriptionKey,
-    [&](const std::string& /* key */, const thrift::Value& value) {
+    [&](const std::string& /* key */,
+        folly::Optional<thrift::Value> value) {
       // Parse PrefixDb
-      ASSERT_TRUE(value.value.hasValue());
+      ASSERT_TRUE(value.hasValue());
+      ASSERT_TRUE(value.value().value.hasValue());
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-          value.value.value(), serializer);
+          value.value().value.value(), serializer);
       auto& prefixes = prefixDb.prefixEntries;
 
       // Verify some expectations
@@ -661,8 +667,8 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
         LOG(INFO) << "Got new prefix allocation!";
         hasAllocPrefix.store(true, std::memory_order_relaxed);
       } // if
-    } // callback
-  );
+    },// callback
+    false);
 
   // Start main event loop in a new thread
   threads_.emplace_back([&]() noexcept { evl_.run(); });

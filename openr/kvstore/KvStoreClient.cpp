@@ -430,11 +430,20 @@ KvStoreClient::dumpAllWithPrefix(const std::string& prefix /* = "" */) {
   return maybePub.value().keyVals;
 }
 
-void
-KvStoreClient::subscribeKey(std::string const& key, KeyCallback callback) {
+folly::Optional<thrift::Value>
+KvStoreClient::subscribeKey(std::string const& key, KeyCallback callback,
+        bool fetchKeyValue) {
   VLOG(3) << "KvStoreClient: subscribeKey called for key " << key;
   CHECK(bool(callback)) << "Callback function for " << key << " is empty";
   keyCallbacks_[key] = std::move(callback);
+
+  if (fetchKeyValue) {
+    auto maybeValue = getKey(key);
+    if (maybeValue.hasValue()) {
+      return maybeValue.value();
+    }
+  }
+  return folly::none;
 }
 
 void
@@ -521,6 +530,24 @@ KvStoreClient::getPeers() {
   }
 
   return maybeReply->peers;
+}
+
+void
+KvStoreClient::processExpiredKeys(thrift::Publication const& publication) {
+
+  auto const& expiredKeys = publication.expiredKeys;
+
+  for (auto const& key : expiredKeys) {
+    /* callback registered by the thread */
+    if (kvCallback_) {
+      kvCallback_(key, folly::none);
+    }
+    /* key specific registered callback */
+    auto cb = keyCallbacks_.find(key);
+    if (cb != keyCallbacks_.end()) {
+      (cb->second)(key, folly::none);
+    }
+  }
 }
 
 void
@@ -640,6 +667,10 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
   } // for
 
   advertisePendingKeys();
+
+  if (publication.expiredKeys.size()) {
+    processExpiredKeys(publication);
+  }
 }
 
 void

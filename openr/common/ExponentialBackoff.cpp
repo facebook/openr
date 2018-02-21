@@ -25,8 +25,8 @@ ExponentialBackoff<Duration>::ExponentialBackoff(
     : initialBackoff_(initialBackoff),
       maxBackoff_(maxBackoff),
       currentBackoff_(0) {
-  CHECK(initialBackoff > Duration(0)) << "Backoff must be positive a value";
-  CHECK(initialBackoff < maxBackoff) << "Max backoff must be greater than "
+  CHECK(initialBackoff > Duration(0)) << "Backoff must be positive value";
+  CHECK(initialBackoff < maxBackoff) << "Max backoff must be greater than"
                                      << "initial backoff.";
 }
 

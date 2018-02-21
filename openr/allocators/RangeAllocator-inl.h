@@ -215,9 +215,12 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   // Subscribe to updates of this newKey
   kvStoreClient_->subscribeKey(
       newKey,
-      [this](const std::string& key, const thrift::Value& thriftVal) noexcept {
-        keyValUpdated(key, thriftVal);
-      });
+      [this](const std::string& key,
+          folly::Optional<thrift::Value> thriftVal) noexcept {
+        if (thriftVal.hasValue()) {
+          keyValUpdated(key, thriftVal.value());
+        }
+      }, false);
 }
 
 template <typename T>

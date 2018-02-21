@@ -123,10 +123,14 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // Subscribe our own prefixDb
   kvStoreClient_->subscribeKey(
       folly::sformat("prefix:{}", nodeId_),
-      [&](const std::string& /* key */, const thrift::Value& value) noexcept {
+      [&](const std::string& /* key */,
+          folly::Optional<thrift::Value> value) noexcept {
+        if (!value.hasValue()) {
+          return;
+        }
         // Parse PrefixDb
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            value.value.value(), serializer_);
+            value.value().value.value(), serializer_);
 
         SYNCHRONIZED(ipPrefix_) {
           bool received = false;
@@ -142,7 +146,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
             ipPrefix_ = folly::none;
           }
         }
-      });
+    }, false);
 
   //
   // create spark
