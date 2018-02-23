@@ -182,7 +182,7 @@ printIntfDb(const thrift::InterfaceDatabase& intfDb) {
 }
 
 const std::string kTestVethNamePrefix = "vethLMTest";
-const std::vector<uint64_t> kTestVethIfIndex = {1240, 1241};
+const std::vector<uint64_t> kTestVethIfIndex = {1240, 1241, 1242};
 const std::string kConfigStorePath = "/tmp/lm_ut_config_store.bin";
 const std::string kConfigStoreUrl = "inproc://lm_ut_config_store";
 } // namespace
@@ -1483,6 +1483,31 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
 
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
     }
+  });
+
+  // Emulate address and link events coming in out of order
+  const std::string linkZ = kTestVethNamePrefix + "Z";
+
+  // Addr event comes in first
+  mockNlHandler->sendAddrEvent(linkZ, "fe80::3", true /* is valid */);
+  // Link event comes in later
+  mockNlHandler->sendLinkEvent(
+      linkZ /* link name */,
+      kTestVethIfIndex[2] /* ifIndex */,
+      true /* is up */);
+
+  EXPECT_NO_THROW({
+    recvAndReplyIfUpdate();
+    auto res = collateIfUpdates(sparkIfDb);
+
+    // messages for 3 interfaces
+    EXPECT_EQ(3, res.size());
+    EXPECT_EQ(1, res.at(linkZ).isUpCount);
+    EXPECT_EQ(0, res.at(linkZ).isDownCount);
+    EXPECT_EQ(0, res.at(linkZ).v4AddrsMaxCount);
+    EXPECT_EQ(0, res.at(linkZ).v4AddrsMinCount);
+    EXPECT_EQ(1, res.at(linkZ).v6LinkLocalAddrsMaxCount);
+    EXPECT_EQ(0, res.at(linkZ).v6LinkLocalAddrsMinCount);
   });
 }
 

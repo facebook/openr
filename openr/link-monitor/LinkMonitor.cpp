@@ -1002,10 +1002,15 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
     return;
   }
 
-  // We assume that netlink will always send interface event
-  // for newly created interfaces before an address event
-  CHECK(interfaceDb_.count(ifName))
-      << "Address event on non existing interface: " << ifName;
+  // There is chance that netlink has not sent interface event yet
+  // before an address event
+  // If the interface entry doesn't exist, we create one in interfaceDb_ here
+  bool invalidLinkInfo = false;
+  if (!interfaceDb_.count(ifName)) {
+    LOG(INFO) << "Interface " << ifName << " does not exist before, adding...";
+    interfaceDb_.emplace(ifName, InterfaceEntry(0 /*ifIndex*/, false /*isUp*/));
+    invalidLinkInfo = true;
+  }
 
   bool isUpdated = false;
   auto ipAddr = toIPAddress(addrEntry.ipPrefix.prefixAddress);
@@ -1020,7 +1025,7 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
   LOG(INFO) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
             << intf;
 
-  if (isUpdated) {
+  if (!invalidLinkInfo and isUpdated) {
     VLOG(3) << "<addr> event updated on " << ifName;
     sendInterfaceDatabase();
   }
