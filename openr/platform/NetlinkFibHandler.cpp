@@ -156,11 +156,15 @@ NetlinkFibHandler::future_addUnicastRoutes(
     futures.emplace_back(std::move(future));
   }
   // Return an aggregate future which is fulfilled when all routes are added
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-  folly::collectAll(futures).then(
-      [promise = std::move(promise)]() mutable { promise.setValue(); });
-  return future;
+  return folly::collectAll(futures).then(
+      [](auto const& results) -> folly::Future<folly::Unit> {
+        for (auto const& r : results) {
+          if (r.hasException()) {
+            throw std::runtime_error("addUnicastRoutes Failed.");
+          }
+        };
+        return folly::Unit();
+      });
 }
 
 folly::Future<folly::Unit>
@@ -175,11 +179,15 @@ NetlinkFibHandler::future_deleteUnicastRoutes(
     futures.emplace_back(std::move(future));
   }
   // Return an aggregate future which is fulfilled when all routes are deleted
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-  folly::collectAll(futures).then(
-      [promise = std::move(promise)]() mutable { promise.setValue(); });
-  return future;
+  return folly::collectAll(futures).then(
+      [](auto const& results) -> folly::Future<folly::Unit> {
+        for (auto const& r : results) {
+          if (r.hasException()) {
+            throw std::runtime_error("deleteUnicastRoutes Failed.");
+          }
+        };
+        return folly::Unit();
+      });
 }
 
 folly::Future<folly::Unit>

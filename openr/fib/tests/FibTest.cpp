@@ -58,6 +58,8 @@ const auto path1_2_1 =
     createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_1", 1);
 const auto path1_2_2 =
     createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_2", 2);
+const auto path1_2_3 =
+    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_3", 1);
 const auto path1_3_1 =
     createPath(toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_1", 2);
 const auto path1_3_2 =
@@ -151,6 +153,11 @@ TEST_F(FibTestFixture, processRouteDb) {
   EXPECT_EQ(routes.size(), 0);
 
   int64_t countSync = mockFibHandler->getFibSyncCount();
+  // initial syncFib debounce
+  while (mockFibHandler->getFibSyncCount() <= countSync) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
 
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
@@ -159,20 +166,22 @@ TEST_F(FibTestFixture, processRouteDb) {
       thrift::Route(FRAGILE, prefix2, {path1_2_1, path1_2_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
-  // syncFib debounce
-  while (mockFibHandler->getFibSyncCount() <= countSync) {
+  int64_t countAdd = mockFibHandler->getAddRoutesCount();
+  // add routes
+  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 1);
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
 
   // Update routes
-  int64_t countAdd = mockFibHandler->getAddRoutesCount();
+  countAdd = mockFibHandler->getAddRoutesCount();
+  int64_t countDel = mockFibHandler->getDelRoutesCount();
   routeDb.routes.emplace_back(
       thrift::Route(FRAGILE, prefix3, {path1_3_1, path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
@@ -183,9 +192,131 @@ TEST_F(FibTestFixture, processRouteDb) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
   EXPECT_GT(mockFibHandler->getAddRoutesCount(), countAdd);
-  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), countDel);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
+}
+
+TEST_F(FibTestFixture, processInterfaceDb) {
+  // Make sure fib starts with clean route database
+  std::vector<thrift::UnicastRoute> routes;
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+
+  int64_t countSync = mockFibHandler->getFibSyncCount();
+  // initial syncFib debounce
+  while (mockFibHandler->getFibSyncCount() <= countSync) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+
+  // Mimic interface initially coming up
+  thrift::InterfaceDatabase intfDb(
+      FRAGILE,
+      "node-1",
+      {
+          {
+              path1_2_1.ifName,
+              thrift::InterfaceInfo(
+                  FRAGILE,
+                  true, // isUp
+                  100, // ifIndex
+                  {}, // v4Addrs
+                  {} // v6LinkLocalAddrs
+                  ),
+          },
+          {
+              path1_2_2.ifName,
+              thrift::InterfaceInfo(
+                  FRAGILE,
+                  true, // isUp
+                  100, // ifIndex
+                  {}, // v4Addrs
+                  {} // v6LinkLocalAddrs
+                  ),
+          },
+      },
+      thrift::PerfEvents());
+  intfDb.perfEvents = folly::none;
+  lmPub.sendThriftObj(intfDb, serializer).value();
+
+  // Mimic decision pub sock publishing RouteDatabase
+  thrift::RouteDatabase routeDb;
+  routeDb.thisNodeName = "node-1";
+  routeDb.routes.emplace_back(
+      thrift::Route(FRAGILE, prefix2, {path1_2_1, path1_2_2}));
+  decisionPub.sendThriftObj(routeDb, serializer).value();
+
+  int64_t countAdd = mockFibHandler->getAddRoutesCount();
+  // add routes
+  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+
+  // Mimic interface going down
+  thrift::InterfaceDatabase intfChange_1(
+      FRAGILE,
+      "node-1",
+      {
+          {
+              path1_2_1.ifName,
+              thrift::InterfaceInfo(
+                  FRAGILE,
+                  false, // isUp
+                  100, // ifIndex
+                  {}, // v4Addrs
+                  {} // v6LinkLocalAddrs
+                  ),
+          },
+      },
+      thrift::PerfEvents());
+  intfChange_1.perfEvents = folly::none;
+  lmPub.sendThriftObj(intfChange_1, serializer).value();
+
+  countAdd = mockFibHandler->getAddRoutesCount();
+  // update routes
+  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 1);
+
+  // Mimic interface going down
+  // the route entry associated with the prefix shall be removed this time
+  thrift::InterfaceDatabase intfChange_2(
+      FRAGILE,
+      "node-1",
+      {
+          {
+              path1_2_2.ifName,
+              thrift::InterfaceInfo(
+                  FRAGILE,
+                  false, // isUp
+                  100, // ifIndex
+                  {}, // v4Addrs
+                  {} // v6LinkLocalAddrs
+                  ),
+          },
+      },
+      thrift::PerfEvents());
+  intfChange_2.perfEvents = folly::none;
+  lmPub.sendThriftObj(intfChange_2, serializer).value();
+
+  int64_t countDel = mockFibHandler->getDelRoutesCount();
+  // remove routes
+  while (mockFibHandler->getDelRoutesCount() <= countDel) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+
 }
 
 TEST_F(FibTestFixture, basicAddAndDelete) {
@@ -195,6 +326,11 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   EXPECT_EQ(routes.size(), 0);
 
   int64_t countSync = mockFibHandler->getFibSyncCount();
+  // initial syncFib debounce
+  while (mockFibHandler->getFibSyncCount() <= countSync) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
 
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
@@ -205,8 +341,9 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
       thrift::Route(FRAGILE, prefix3, {path1_3_1, path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
-  // syncFib debounce
-  while (mockFibHandler->getFibSyncCount() <= countSync) {
+  int64_t countAdd = mockFibHandler->getAddRoutesCount();
+  // add routes
+  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
@@ -214,9 +351,9 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
 
-  int64_t countAdd = mockFibHandler->getAddRoutesCount();
+  countAdd = mockFibHandler->getAddRoutesCount();
   int64_t countDel = mockFibHandler->getDelRoutesCount();
-  EXPECT_EQ(countAdd, 0);
+  EXPECT_EQ(countAdd, 1);
   EXPECT_EQ(countDel, 0);
 
   // delete one route
@@ -227,7 +364,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
   countDel = mockFibHandler->getDelRoutesCount();
-  EXPECT_EQ(countAdd, 0);
+  EXPECT_EQ(countAdd, 1);
   EXPECT_EQ(countDel, 1);
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -242,7 +379,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
   countAdd = mockFibHandler->getAddRoutesCount();
-  EXPECT_EQ(countAdd, 1);
+  EXPECT_EQ(countAdd, 2);
   EXPECT_EQ(countDel, 1);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);

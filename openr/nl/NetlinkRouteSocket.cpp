@@ -860,7 +860,7 @@ NetlinkRouteSocket::doUpdateRoute(
     try {
       doAddUnicastRoute(prefix, toAdd);
     } catch (NetlinkException const& err) {
-      LOG(ERROR) << folly::sformat(
+      throw NetlinkException(folly::sformat(
           "Could not add Route to: {} via nextHops {} Error: {}",
           folly::IPAddress::networkToString(prefix),
           folly::join(
@@ -871,9 +871,9 @@ NetlinkRouteSocket::doUpdateRoute(
                         return (val.second.str() + "@" + val.first);
                       }) |
                   as<std::set<std::string>>()),
-          folly::exceptionStr(err));
+          folly::exceptionStr(err)));
     } catch (std::exception const& err) {
-      LOG(ERROR) << folly::sformat(
+      throw NetlinkException(folly::sformat(
           "Could not add Route to: {} via nextHops {} Error: {}",
           folly::IPAddress::networkToString(prefix),
           folly::join(
@@ -884,7 +884,7 @@ NetlinkRouteSocket::doUpdateRoute(
                         return (val.second.str() + "@" + val.first);
                       }) |
                   as<std::set<std::string>>()),
-          folly::exceptionStr(err));
+          folly::exceptionStr(err)));
     }
   }
 
@@ -894,7 +894,8 @@ NetlinkRouteSocket::doUpdateRoute(
     try {
       doDeleteUnicastRoute(prefix, toDel);
     } catch (NetlinkException const& err) {
-      LOG(ERROR) << folly::sformat(
+      throw NetlinkException(
+        folly::sformat(
           "Could not del Route to: {} via nextHops {} Error: {}",
           folly::IPAddress::networkToString(prefix),
           folly::join(
@@ -905,9 +906,10 @@ NetlinkRouteSocket::doUpdateRoute(
                         return (val.second.str() + "@" + val.first);
                       }) |
                   as<std::set<std::string>>()),
-          folly::exceptionStr(err));
+          folly::exceptionStr(err)));
     } catch (std::exception const& err) {
-      LOG(ERROR) << folly::sformat(
+      throw NetlinkException(
+        folly::sformat(
           "Could not del Route to: {} via nextHops {} Error: {}",
           folly::IPAddress::networkToString(prefix),
           folly::join(
@@ -918,7 +920,7 @@ NetlinkRouteSocket::doUpdateRoute(
                         return (val.second.str() + "@" + val.first);
                       }) |
                   as<std::set<std::string>>()),
-          folly::exceptionStr(err));
+          folly::exceptionStr(err)));
     }
   }
 }
@@ -936,15 +938,15 @@ NetlinkRouteSocket::doSyncRoutes(UnicastRoutes newRouteDb) {
       try {
         doDeleteUnicastRoute(prefix, it->second);
       } catch (NetlinkException const& err) {
-        LOG(ERROR) << folly::sformat(
+        throw NetlinkException(folly::sformat(
             "Could not del Route to: {} Error: {}",
             folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err));
+            folly::exceptionStr(err)));
       } catch (std::exception const& err) {
-        LOG(ERROR) << folly::sformat(
+        throw std::runtime_error(folly::sformat(
             "Could not del Route to: {} Error: {}",
             folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err));
+            folly::exceptionStr(err)));
       }
       it = unicastRouteDb_.erase(it);
     } else {
@@ -959,15 +961,15 @@ NetlinkRouteSocket::doSyncRoutes(UnicastRoutes newRouteDb) {
       try {
         doAddUnicastRoute(prefix, it->second);
       } catch (NetlinkException const& err) {
-        LOG(ERROR) << folly::sformat(
+        throw NetlinkException(folly::sformat(
             "Could not add Route to: {} Error: {}",
             folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err));
+            folly::exceptionStr(err)));
       } catch (std::exception const& err) {
-        LOG(ERROR) << folly::sformat(
+        throw std::runtime_error(folly::sformat(
             "Could not add Route to: {} Error: {}",
             folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err));
+            folly::exceptionStr(err)));
       }
       unicastRouteDb_.emplace(prefix, std::move(it->second));
       it = newRouteDb.erase(it);
@@ -980,8 +982,16 @@ NetlinkRouteSocket::doSyncRoutes(UnicastRoutes newRouteDb) {
   for (auto const& kv : unicastRouteDb_) {
     auto const& prefix = kv.first;
     if (newRouteDb.find(prefix) != newRouteDb.end()) {
-      doUpdateRoute(prefix, newRouteDb.at(prefix), unicastRouteDb_.at(prefix));
-      unicastRouteDb_[prefix] = newRouteDb.at(prefix);
+      try {
+        doUpdateRoute(
+            prefix, newRouteDb.at(prefix), unicastRouteDb_.at(prefix));
+        unicastRouteDb_[prefix] = newRouteDb.at(prefix);
+      } catch (std::exception const& err) {
+        throw std::runtime_error(folly::sformat(
+            "Could not add Route to: {} Error: {}",
+            folly::IPAddress::networkToString(prefix),
+            folly::exceptionStr(err)));
+      }
     }
   }
 }

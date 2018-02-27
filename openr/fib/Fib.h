@@ -1,4 +1,4 @@
-/**
+    /**
  * Copyright (c) 2014-present, Facebook, Inc.
  *
  * This source code is licensed under the MIT license found in the
@@ -95,8 +95,30 @@ class Fib final : public fbzmq::ZmqEventLoop {
   thrift::PerfDatabase dumpPerfDb() const;
 
   /**
-   * Sync the current routeDb_ with the switch agent. Returns true on success
-   * else returns false.
+   * Update agentRoutes_ to keep consistent with local routeDb_
+   */
+  void updateLocalAgentRoutes();
+
+  /**
+   * Find delta between routeDb_ and agentRoutes_
+   * Return type is a pair of <RoutesToBeUpdate, routesToRemove>
+   */
+  std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
+  findDeltaRoutes() const;
+
+  /**
+   * Update agentRoutes_ and trigger add/del routes thrift calls
+   * on success no action needed
+   * on failure invokes syncRouteDbDebounced
+   */
+  void updateRoutes(
+    const std::vector<thrift::UnicastRoute>& affectedRoutes,
+    const std::vector<thrift::IpPrefix>& prefixesToRemove);
+
+  /**
+   * Sync the current routeDb_ with the switch agent.
+   * on success no action needed
+   * on failure invokes syncRouteDbDebounced
    */
   bool syncRouteDb();
 

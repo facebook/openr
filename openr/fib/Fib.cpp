@@ -233,8 +233,10 @@ Fib::processRouteDb(thrift::RouteDatabase&& routeDb) {
   tData_.addStatValue("fib.process_route_db", 1, fbzmq::COUNT);
   logEvent("ROUTE_UPDATE");
 
-  // Sync new routes on switch agent. On failure set next retry
-  syncRouteDbDebounced();
+  // Find out delta to be programmed
+  auto const routeDelta = findDeltaRoutes();
+  // Send request to agent
+  updateRoutes(routeDelta.first, routeDelta.second);
 }
 
 void
@@ -261,38 +263,52 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
       LOG(INFO) << "Interface " << ifName << " went DOWN from UP state.";
     }
   }
+
+  std::vector<thrift::UnicastRoute> routesToUpdate;
+  std::vector<thrift::IpPrefix> prefixesToRemove;
+
   for (auto it = routeDb_.begin(); it != routeDb_.end();) {
     // Find valid paths
     std::vector<thrift::Path> validPaths;
-    std::vector<thrift::BinaryAddress> validNexthops;
     for (auto const& path : it->second) {
       if (affectedInterfaces.count(path.ifName) == 0) {
         validPaths.push_back(path);
-        validNexthops.push_back(path.nextHop);
-        auto& nexthop = validNexthops.back();
-        nexthop.ifName = path.ifName;
       }
     } // end for ... kv.second
 
-    // Add to affected routes only if something has changed and also reflect
-    // changes in routeDb_
-    if (validPaths.size() && validPaths.size() != it->second.size()) {
-      VLOG(1) << "Nexthop group resize for prefix: " << toString(it->first)
-              << ", old: " << it->second.size()
-              << ", new: " << validPaths.size();
-      it->second = validPaths;
+    // Find best paths
+    auto const& bestValidPaths = getBestPaths(validPaths);
+    std::vector<thrift::BinaryAddress> bestNexthops;
+    for (auto const& path: bestValidPaths) {
+      bestNexthops.push_back(path.nextHop);
+      auto& nexthop = bestNexthops.back();
+      nexthop.ifName = path.ifName;
     }
+
+    // Add to affected routes only if best path has changed and also reflect
+    // changes in routeDb_
+    auto const& currBestPaths = getBestPaths(it->second);
+    if (bestValidPaths.size() && bestValidPaths != currBestPaths) {
+      VLOG(1) << "bestPaths group resize for prefix: " << toString(it->first)
+              << ", old: " << currBestPaths.size()
+              << ", new: " << bestValidPaths.size();
+      routesToUpdate.emplace_back(thrift::UnicastRoute(
+        apache::thrift::FRAGILE, it->first, bestNexthops));
+    }
+    it->second = validPaths;
 
     // Remove route if no valid paths
     if (validPaths.size() == 0) {
       VLOG(1) << "Removing prefix " << toString(it->first)
               << " because of no valid nexthops.";
+      prefixesToRemove.push_back(it->first);
       it = routeDb_.erase(it);
     } else {
       ++it;
     }
   } // end for ... routeDb_
-  syncRouteDbDebounced();
+
+  updateRoutes(routesToUpdate, prefixesToRemove);
 }
 
 thrift::RouteDatabase
@@ -316,25 +332,36 @@ Fib::dumpPerfDb() const {
   return perfDb;
 }
 
-bool
-Fib::syncRouteDb() {
-  LOG(INFO) << "Syncing latest routeDb with fib-agent ... ";
+void
+Fib::updateLocalAgentRoutes() {
+  VLOG(4) << "Updating agent routes...";
+  // Build routes to be programmed.
+  std::set<thrift::UnicastRoute> newRoutes;
 
-  // In dry run we just print the routes. No real action
-  if (dryrun_) {
-    LOG(INFO) << "Skipping programing of routes in dryrun ... ";
-    for (auto const& kv : routeDb_) {
-      VLOG(1) << "> " << toIPAddress(kv.first.prefixAddress) << "/"
-              << kv.first.prefixLength;
-      for (auto const& path : kv.second) {
-        VLOG(1) << "via " << toIPAddress(path.nextHop) << "@" << path.ifName
-                << " metric " << path.metric;
-      }
-      VLOG(1) << "";
+  for (auto const& kv : routeDb_) {
+    DCHECK(kv.second.size() > 0);
+
+    auto bestPaths = getBestPaths(kv.second);
+
+    std::vector<thrift::BinaryAddress> nexthops;
+    for (auto const& path : bestPaths) {
+      nexthops.push_back(path.nextHop);
+      auto& nexthop = nexthops.back();
+      nexthop.ifName = path.ifName;
     }
-    logPerfEvents();
-    return true;
-  }
+
+    // Create thrift::UnicastRoute object in-place
+    newRoutes.emplace(
+        apache::thrift::FRAGILE, kv.first /* prefix */, std::move(nexthops));
+  } // for ... routeDb_
+
+  agentRoutes_ = std::move(newRoutes);
+}
+
+std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
+Fib::findDeltaRoutes() const {
+  std::pair<
+    std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>> res;
 
   // Build routes to be programmed.
   std::set<thrift::UnicastRoute> newRoutes;
@@ -356,6 +383,7 @@ Fib::syncRouteDb() {
         apache::thrift::FRAGILE, kv.first /* prefix */, std::move(nexthops));
   } // for ... routeDb_
 
+  // Find new routes to be added
   std::vector<thrift::UnicastRoute> routesToAdd;
   std::set_difference(
     newRoutes.begin(), newRoutes.end(),
@@ -366,6 +394,8 @@ Fib::syncRouteDb() {
     agentRoutes_.begin(), agentRoutes_.end(),
     newRoutes.begin(), newRoutes.end(),
     std::inserter(routesToRemoveOrUpdate, routesToRemoveOrUpdate.begin()));
+
+  // Find entry of prefix to be removed
   std::set<thrift::IpPrefix> prefixesToRemove;
   for (const auto& route : routesToRemoveOrUpdate) {
     prefixesToRemove.emplace(route.dest);
@@ -374,33 +404,128 @@ Fib::syncRouteDb() {
     prefixesToRemove.erase(route.dest);
   }
 
+  res.first = routesToAdd;
+  res.second = {prefixesToRemove.begin(), prefixesToRemove.end()};
+
+  return res;
+}
+
+void
+Fib::updateRoutes(
+  const std::vector<thrift::UnicastRoute>& routesToUpdate,
+  const std::vector<thrift::IpPrefix>& prefixesToRemove) {
+    // Do not program routes in case of dryrun
+    if (dryrun_) {
+      LOG(INFO) << "Affected routes: " << routesToUpdate.size();
+      for (auto const& route : routesToUpdate) {
+        VLOG(1) << "> " << toIPAddress(route.dest.prefixAddress) << "/"
+                << route.dest.prefixLength;
+        for (auto const& path : routeDb_[route.dest]) {
+          VLOG(1) << "via " << toIPAddress(path.nextHop) << "@" << path.ifName
+                  << " metric " << path.metric;
+        }
+        VLOG(1) << "";
+        logPerfEvents();
+      }
+
+      LOG(INFO) << "Routes to remove: " << prefixesToRemove.size();
+      for (auto const& prefix : prefixesToRemove) {
+        VLOG(1) << "> " << toIPAddress(prefix.prefixAddress) << "/"
+                << prefix.prefixLength;
+      }
+      return;
+    }
+
+    // Check if there's any full sync scheduled,
+    // if so, skip partial sync
+    if (syncRoutesTimer_->isScheduled()) {
+      VLOG(1) << "Pending full sync is scheduled, trigger it right now";
+      syncRoutesTimer_->cancelTimeout();
+      syncRoutesTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+      return;
+    }
+
+    VLOG(2) << "Processing route add/update for " << routesToUpdate.size()
+            << " routes, and route delete for " << prefixesToRemove.size()
+            << " prefixes";
+
+    // Make thrift calls to do real programming
+    try {
+      if (maybePerfEvents_) {
+        addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_DEBOUNCE");
+      }
+      createFibClient();
+      if (prefixesToRemove.size()) {
+        client_->sync_deleteUnicastRoutes(kFibId_, prefixesToRemove);
+      }
+      if (routesToUpdate.size()) {
+        client_->sync_addUnicastRoutes(kFibId_, routesToUpdate);
+      }
+      updateLocalAgentRoutes();
+      logPerfEvents();
+    } catch (const std::exception& e) {
+      tData_.addStatValue("fib.thrift.failure.add_del_route", 1, fbzmq::COUNT);
+      client_.reset();
+      syncRouteDbDebounced(); // Schedule future full sync of route DB
+      LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
+                 << folly::exceptionStr(e);
+    }
+}
+
+bool
+Fib::syncRouteDb() {
+  LOG(INFO) << "Syncing latest routeDb with fib-agent ... ";
+
+  // In dry run we just print the routes. No real action
+  if (dryrun_) {
+    LOG(INFO) << "Skipping programing of routes in dryrun ... ";
+    for (auto const& kv : routeDb_) {
+      VLOG(1) << "> " << toIPAddress(kv.first.prefixAddress) << "/"
+              << kv.first.prefixLength;
+      for (auto const& path : kv.second) {
+        VLOG(1) << "via " << toIPAddress(path.nextHop) << "@" << path.ifName
+                << " metric " << path.metric;
+      }
+      VLOG(1) << "";
+    }
+    logPerfEvents();
+    return true;
+  }
+
+  // Build routes to be programmed.
+  std::vector<thrift::UnicastRoute> routes;
+
+  for (auto const& kv : routeDb_) {
+    DCHECK(kv.second.size() > 0);
+
+    auto bestPaths = getBestPaths(kv.second);
+
+    std::vector<thrift::BinaryAddress> nexthops;
+    for (auto const& path : bestPaths) {
+      nexthops.push_back(path.nextHop);
+      auto& nexthop = nexthops.back();
+      nexthop.ifName = path.ifName;
+    }
+
+    // Create thrift::UnicastRoute object in-place
+    routes.emplace_back(
+        apache::thrift::FRAGILE, kv.first /* prefix */, std::move(nexthops));
+  } // for ... routeDb_
+
   try {
     if (maybePerfEvents_) {
       addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_DEBOUNCE");
     }
     createFibClient();
-    if (agentRoutes_.empty()) {
-      tData_.addStatValue("fib.sync_fib_calls", 1, fbzmq::COUNT);
-      client_->sync_syncFib(kFibId_, routesToAdd);
-    } else {
-      if (!routesToAdd.empty()) {
-        tData_.addStatValue("fib.add_routes_calls", 1, fbzmq::COUNT);
-        client_->sync_addUnicastRoutes(kFibId_, routesToAdd);
-      }
-      if (!prefixesToRemove.empty()) {
-        tData_.addStatValue("fib.delete_routes_calls", 1, fbzmq::COUNT);
-        client_->sync_deleteUnicastRoutes(kFibId_,
-          {prefixesToRemove.begin(), prefixesToRemove.end()});
-      }
-    }
-    agentRoutes_ = std::move(newRoutes);
+    tData_.addStatValue("fib.sync_fib_calls", 1, fbzmq::COUNT);
+    client_->sync_syncFib(kFibId_, routes);
+    updateLocalAgentRoutes();
     logPerfEvents();
     return true;
   } catch (std::exception const& e) {
     tData_.addStatValue("fib.thrift.failure.sync_fib", 1, fbzmq::COUNT);
     LOG(ERROR) << "Failed to sync routeDb with switch FIB agent. Error: "
                << folly::exceptionStr(e);
-    agentRoutes_.clear();
     client_.reset();
     return false;
   }
