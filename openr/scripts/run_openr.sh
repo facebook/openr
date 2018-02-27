@@ -46,6 +46,7 @@ FIB_HANDLER_PORT=60100
 HEALTH_CHECKER_PING_INTERVAL_S=3
 IFACE_PREFIXES="terra,nic1,nic2"
 IFACE_REGEX_EXCLUDE=""
+IFACE_REGEX_INCLUDE=""
 LOOPBACK_IFACE="lo"
 OVERRIDE_LOOPBACK_ADDR=false
 PREFIXES=""
@@ -57,6 +58,16 @@ SPARK_HOLD_TIME_S=30
 SPARK_KEEPALIVE_TIME_S=3
 STATIC_PREFIX_ALLOC=false
 VERBOSITY=1
+
+#
+# Some sanity checks before we start OpenR
+#
+
+if [ "${HOSTNAME}" = "localhost" ]; then
+  echo "No hostname found for the node, bailing out."
+  exit 1
+fi
+NODE_NAME=${HOSTNAME}
 
 #
 # Load custom configuration if any!
@@ -83,14 +94,6 @@ if source "${OPENR_CONFIG}"; then
 else
   echo "Configuration not found at ${OPENR_CONFIG}. Using default configuration"
 fi
-#
-# Some sanity checks before we start OpenR
-#
-
-if [ "${HOSTNAME}" = "localhost" ]; then
-  echo "No hostname found for the node, bailing out."
-  exit 1
-fi
 
 #
 # Let the magic begin \m/
@@ -99,7 +102,6 @@ fi
 exec ${OPENR} \
   --advertise_interface_db=${ADVERTISE_INTERFACE_DB} \
   --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
-  --chdir=/tmp \
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \
   --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \
   --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
@@ -112,22 +114,23 @@ exec ${OPENR} \
   --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
   --enable_segment_routing=${ENABLE_SEGMENT_ROUTING} \
   --enable_v4=${ENABLE_V4} \
-  --fib_agent_port=${FIB_HANDLER_PORT} \
+  --fib_handler_port=${FIB_HANDLER_PORT} \
   --health_checker_ping_interval_s=${HEALTH_CHECKER_PING_INTERVAL_S} \
-  --iface=${LOOPBACK_IFACE} \
-  --ifname_prefix=${IFACE_PREFIXES} \
-  --ifname_regex_exclude=${IFACE_REGEX_EXCLUDE} \
-  --node_name="${HOSTNAME}" \
-  --override_loopback_global_addresses=${OVERRIDE_LOOPBACK_ADDR} \
-  --prefix="${PREFIXES}" \
-  --redistribute_ifnames=${REDISTRIBUTE_IFACES} \
+  --loopback_iface=${LOOPBACK_IFACE} \
+  --iface_prefixes=${IFACE_PREFIXES} \
+  --iface_regex_exclude=${IFACE_REGEX_EXCLUDE} \
+  --iface_regex_include=${IFACE_REGEX_INCLUDE} \
+  --node_name="${NODE_NAME}" \
+  --override_loopback_addr=${OVERRIDE_LOOPBACK_ADDR} \
+  --prefixes="${PREFIXES}" \
+  --redistribute_ifaces=${REDISTRIBUTE_IFACES} \
   --seed_prefix=${SEED_PREFIX} \
   --set_loopback_address=${SET_LOOPBACK_ADDR} \
   --spark_fastinit_keepalive_time_ms=${SPARK_FASTINIT_KEEPALIVE_TIME_MS} \
   --spark_hold_time_s=${SPARK_HOLD_TIME_S} \
   --spark_keepalive_time_s=${SPARK_KEEPALIVE_TIME_S} \
   --static_prefix_alloc=${STATIC_PREFIX_ALLOC} \
-  --use_rtt_metric=${ENABLE_RTT_METRIC} \
+  --enable_rtt_metric=${ENABLE_RTT_METRIC} \
   --enable_watchdog=${ENABLE_WATCHDOG} \
   --logbufsecs=0 \
   --logtostderr \

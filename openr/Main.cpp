@@ -86,7 +86,7 @@ DEFINE_int32(
     openr::Constants::kSystemAgentPort,
     "Switch agent thrift service port for Platform programming.");
 DEFINE_int32(
-    fib_agent_port,
+    fib_handler_port,
     openr::Constants::kFibAgentPort, // NOTE 100 is on purpose
     "Switch agent thrift service port for FIB programming.");
 DEFINE_int32(
@@ -115,9 +115,11 @@ DEFINE_string(
     "The name of current node (also serves as originator id");
 DEFINE_bool(
     dryrun, true, "Run the process in dryrun mode. No FIB programming!");
-DEFINE_string(iface, "lo", "The iface to configure with the prefix");
+DEFINE_string(loopback_iface, "lo", "The iface to configure with the prefix");
 DEFINE_string(
-    prefix, "", "The prefix and loopback IP separated by comma for this node");
+    prefixes,
+    "",
+    "The prefix and loopback IP separated by comma for this node");
 DEFINE_string(
     seed_prefix,
     "",
@@ -131,32 +133,32 @@ DEFINE_bool(
     false,
     "Set the IP addresses from supplied prefix param to loopback (/128)");
 DEFINE_bool(
-    override_loopback_global_addresses,
+    override_loopback_addr,
     false,
     "If enabled then all global addresses assigned on loopback will be flushed "
     "whenever OpenR elects new prefix for node. Only effective when prefix "
     "allocator is turned on and set_loopback_address is also turned on");
 DEFINE_string(
-    ifname_prefix,
+    iface_prefixes,
     "terra,nic1,nic2",
     "A comma separated list of strings. Linux interface names with a prefix "
     "matching at least one will be used for neighbor discovery, provided the "
-    "interface is not excluded by the flag ifname_regex_exclude");
+    "interface is not excluded by the flag iface_regex_exclude");
 DEFINE_string(
-    ifname_regex_include,
+    iface_regex_include,
     "",
     "A comma separated list of extended POSIX regular expressions. Linux "
     "interface names containing a match (case insensitive) to at least one of "
-    "these and not excluded by the flag ifname_regex_exclude will be used for "
+    "these and not excluded by the flag iface_regex_exclude will be used for "
     "neighbor discovery");
 DEFINE_string(
-    ifname_regex_exclude,
+    iface_regex_exclude,
     "",
     "A comma separated list of extended POSIX regular expressions. Linux "
     "interface names containing a match (case insensitive) to at least one of "
     "these will not be used for neighbor discovery");
 DEFINE_string(
-    redistribute_ifnames,
+    redistribute_ifaces,
     "",
     "The interface names or regex who's prefixes we want to advertise");
 DEFINE_bool(enable_auth, false, "Enable known keys authentication in Spark");
@@ -167,7 +169,7 @@ DEFINE_string(
     "my certificate file containing private & public key pair");
 DEFINE_bool(enable_encryption, false, "Encrypt traffic between AQ instances");
 DEFINE_bool(
-    use_rtt_metric,
+    enable_rtt_metric,
     true,
     "Use dynamically learned RTT for interface metric values.");
 DEFINE_bool(
@@ -427,7 +429,7 @@ main(int argc, char** argv) {
     netlinkFibServer->setThreadManager(thriftThreadMgr);
     netlinkFibServer->setNumIOWorkerThreads(1);
     netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
-    netlinkFibServer->setPort(FLAGS_fib_agent_port);
+    netlinkFibServer->setPort(FLAGS_fib_handler_port);
 
     auto fibThriftThread = std::thread([&netlinkFibServer, &mainEventLoop]() {
       folly::setThreadName("FibService");
@@ -586,8 +588,8 @@ main(int argc, char** argv) {
         AllocPrefixMarker{Constants::kPrefixAllocMarker},
         allocMode,
         FLAGS_set_loopback_address,
-        FLAGS_override_loopback_global_addresses,
-        FLAGS_iface,
+        FLAGS_override_loopback_addr,
+        FLAGS_loopback_iface,
         Constants::kPrefixAllocatorSyncInterval,
         kConfigStoreUrl,
         context);
@@ -641,7 +643,7 @@ main(int argc, char** argv) {
   std::vector<openr::thrift::IpPrefix> networks;
   try {
     std::vector<std::string> prefixes;
-    folly::split(",", FLAGS_prefix, prefixes, true /* ignore empty */);
+    folly::split(",", FLAGS_prefixes, prefixes, true /* ignore empty */);
     for (auto const& prefix : prefixes) {
       // Perform some sanity checks before announcing the list of prefixes
       auto network = folly::IPAddress::createNetwork(prefix);
@@ -659,7 +661,7 @@ main(int argc, char** argv) {
     }
   } catch (std::exception const& err) {
     LOG(ERROR) << "Invalid Prefix string specified. Expeted comma separated "
-               << "list of IP/CIDR format, got '" << FLAGS_prefix << "'";
+               << "list of IP/CIDR format, got '" << FLAGS_prefixes << "'";
     return -1;
   }
 
@@ -669,7 +671,7 @@ main(int argc, char** argv) {
   //
 
   std::vector<std::string> regexIncludeStrings;
-  folly::split(",", FLAGS_ifname_regex_include, regexIncludeStrings, true);
+  folly::split(",", FLAGS_iface_regex_include, regexIncludeStrings, true);
   std::vector<std::regex> includeRegexList;
   auto const regexOpts = std::regex_constants::extended |
       std::regex_constants::icase | std::regex_constants::optimize;
@@ -679,20 +681,20 @@ main(int argc, char** argv) {
   }
   // add prefixes
   std::vector<std::string> ifNamePrefixes;
-  folly::split(",", FLAGS_ifname_prefix, ifNamePrefixes, true);
+  folly::split(",", FLAGS_iface_prefixes, ifNamePrefixes, true);
   for (auto& prefix : ifNamePrefixes) {
     includeRegexList.emplace_back(prefix + ".*", regexOpts);
   }
 
   std::vector<std::string> regexExcludeStrings;
-  folly::split(",", FLAGS_ifname_regex_exclude, regexExcludeStrings, true);
+  folly::split(",", FLAGS_iface_regex_exclude, regexExcludeStrings, true);
   std::vector<std::regex> excludeRegexList;
   for (auto& regexStr : regexExcludeStrings) {
     excludeRegexList.emplace_back(regexStr, regexOpts);
   }
 
   std::vector<std::string> redistStringList;
-  folly::split(",", FLAGS_redistribute_ifnames, redistStringList, true);
+  folly::split(",", FLAGS_redistribute_ifaces, redistStringList, true);
   std::vector<std::regex> redistRegexList;
   for (auto const& regexStr : redistStringList) {
     redistRegexList.emplace_back(regexStr, regexOpts);
@@ -709,7 +711,7 @@ main(int argc, char** argv) {
       excludeRegexList,
       redistRegexList,
       networks,
-      FLAGS_use_rtt_metric,
+      FLAGS_enable_rtt_metric,
       FLAGS_enable_full_mesh_reduction,
       FLAGS_enable_perf_measurement,
       FLAGS_enable_v4,
@@ -775,7 +777,7 @@ main(int argc, char** argv) {
   // Define and start Fib Module
   Fib fib(
       FLAGS_node_name,
-      FLAGS_fib_agent_port,
+      FLAGS_fib_handler_port,
       FLAGS_dryrun,
       std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
       DecisionPubUrl{folly::sformat("tcp://[::1]:{}", FLAGS_decision_pub_port)},
