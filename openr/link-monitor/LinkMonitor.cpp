@@ -945,25 +945,21 @@ LinkMonitor::processLinkUpdatedEvent(const std::string& ifName, bool isUp) {
   VLOG(3) << "sendIfDbTimer_ scheduled in " << retryTime.count() << " ms";
 }
 
-void
-LinkMonitor::processLinkEvent(const thrift::LinkEntry& linkEntry) {
+bool
+LinkMonitor::updateLinkEvent(const thrift::LinkEntry& linkEntry) {
   const std::string& ifName = linkEntry.ifName;
   const auto isUp = linkEntry.isUp;
   const auto ifIndex = linkEntry.ifIndex;
   const auto weight = linkEntry.weight;
 
-  if (!linkEntry.isUp and redistAddrs_.erase(ifName)) {
+  if (!isUp and redistAddrs_.erase(ifName)) {
     advertiseRedistAddrs();
   }
 
   if (!checkIncludeExcludeRegex(ifName, includeRegexList_, excludeRegexList_)) {
     VLOG(2) << "Interface " << ifName << " does not match iface regexes";
-    return;
+    return false;
   }
-
-  LOG(INFO) << "<link> event: " << (isUp ? "UP" : "DOWN") << " for " << ifName
-            << " (" << ifIndex << ")"
-            << " weight: " << weight;
 
   bool isUpdated = false;
   if (interfaceDb_.count(ifName)) {
@@ -976,6 +972,52 @@ LinkMonitor::processLinkEvent(const thrift::LinkEntry& linkEntry) {
     interfaceDb_.emplace(ifName, InterfaceEntry(ifIndex, isUp));
     LOG(INFO) << "Added " << ifName << " : " << interfaceDb_.at(ifName);
   }
+
+  return isUpdated;
+}
+
+bool
+LinkMonitor::updateAddrEvent(const thrift::AddrEntry& addrEntry) {
+  const std::string& ifName = addrEntry.ifName;
+
+  // Add address if it is supposed to be announced
+  if (checkRedistIfNameRegex(ifName)) {
+    addDelRedistAddr(ifName, addrEntry.isValid, addrEntry.ipPrefix);
+  }
+
+  if (!checkIncludeExcludeRegex(ifName, includeRegexList_, excludeRegexList_)) {
+    VLOG(2) << "Interface " << ifName << " does not match iface regexes";
+    return false;
+  }
+
+  bool isUpdated = false;
+  auto ipAddr = toIPAddress(addrEntry.ipPrefix.prefixAddress);
+  bool isValid = addrEntry.isValid;
+
+  LOG(INFO) << "<addr> event: " << ipAddr << (isValid ? " add" : " delete")
+            << " on " << ifName;
+
+  auto& intf = interfaceDb_.at(ifName);
+  LOG(INFO) << "Updating " << ifName << " : " << intf;
+  isUpdated = intf.updateEntry(ipAddr, isValid) && intf.isUp();
+  LOG(INFO) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
+            << intf;
+
+  return isUpdated;
+}
+
+void
+LinkMonitor::processLinkEvent(const thrift::LinkEntry& linkEntry) {
+  const std::string& ifName = linkEntry.ifName;
+  const auto isUp = linkEntry.isUp;
+  const auto ifIndex = linkEntry.ifIndex;
+  const auto weight = linkEntry.weight;
+
+  LOG(INFO) << "<link> event: " << (isUp ? "UP" : "DOWN") << " for " << ifName
+            << " (" << ifIndex << ")"
+            << " weight: " << weight;
+
+  const auto isUpdated = updateLinkEvent(linkEntry);
 
   if (isUpdated) {
     syslog(
@@ -992,16 +1034,6 @@ void
 LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
   const std::string& ifName = addrEntry.ifName;
 
-  // Add address if it is supposed to be announced
-  if (checkRedistIfNameRegex(ifName)) {
-    addDelRedistAddr(ifName, addrEntry.isValid, addrEntry.ipPrefix);
-  }
-
-  if (!checkIncludeExcludeRegex(ifName, includeRegexList_, excludeRegexList_)) {
-    VLOG(2) << "Interface " << ifName << " does not match iface regexes";
-    return;
-  }
-
   // There is chance that netlink has not sent interface event yet
   // before an address event
   // If the interface entry doesn't exist, we create one in interfaceDb_ here
@@ -1012,18 +1044,7 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
     invalidLinkInfo = true;
   }
 
-  bool isUpdated = false;
-  auto ipAddr = toIPAddress(addrEntry.ipPrefix.prefixAddress);
-  bool isValid = addrEntry.isValid;
-
-  LOG(INFO) << "<addr> event: " << ipAddr << (isValid ? " add" : " delete")
-            << " on " << ifName;
-
-  auto& intf = interfaceDb_.at(ifName);
-  LOG(INFO) << "Updating " << ifName << " : " << intf;
-  isUpdated = intf.updateEntry(ipAddr, isValid) && intf.isUp();
-  LOG(INFO) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
-            << intf;
+  const auto isUpdated = updateAddrEvent(addrEntry);
 
   if (!invalidLinkInfo and isUpdated) {
     VLOG(3) << "<addr> event updated on " << ifName;
@@ -1051,8 +1072,9 @@ LinkMonitor::syncInterfaces() {
 
   //
   // Process received data. We convert received data to link and addr events
-  // and invoke our processLinkEntry and processAddrEntry handlers
+  // and invoke our updateLinkEvent and updateAddrEvent handlers
   //
+  bool isUpdated = false;
   for (const auto& link : links) {
     // Process link entry
     const thrift::LinkEntry linkEntry(
@@ -1061,7 +1083,7 @@ LinkMonitor::syncInterfaces() {
         link.ifIndex,
         link.isUp,
         link.weight);
-    processLinkEvent(linkEntry);
+    isUpdated |= updateLinkEvent(linkEntry);
 
     // Process each addr entry
     for (const auto& network : link.networks) {
@@ -1070,8 +1092,14 @@ LinkMonitor::syncInterfaces() {
           link.ifName,
           network,
           true /* is valid */);
-      processAddrEvent(addrEntry);
+      isUpdated |= updateAddrEvent(addrEntry);
     }
+  }
+
+  // Send an update only if there is an update
+  if (isUpdated) {
+    LOG(INFO) << "Completed sync of Interface DB from netlink";
+    sendInterfaceDatabase();
   }
 
   return true;

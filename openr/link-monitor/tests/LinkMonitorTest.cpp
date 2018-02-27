@@ -1509,6 +1509,37 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
     EXPECT_EQ(1, res.at(linkZ).v6LinkLocalAddrsMaxCount);
     EXPECT_EQ(0, res.at(linkZ).v6LinkLocalAddrsMinCount);
   });
+
+  // Link goes down
+  mockNlHandler->sendLinkEvent(
+      linkX /* link name */,
+      kTestVethIfIndex[0] /* ifIndex */,
+      false /* is up */);
+  mockNlHandler->sendLinkEvent(
+      linkY /* link name */,
+      kTestVethIfIndex[1] /* ifIndex */,
+      false /* is up */);
+  mockNlHandler->sendLinkEvent(
+      linkZ /* link name */,
+      kTestVethIfIndex[2] /* ifIndex */,
+      false /* is up */);
+  {
+    // Both interfaces report as down on creation
+    // expect sparkIfDb to have two interfaces DOWN
+    recvAndReplyIfUpdate();
+    auto res = collateIfUpdates(sparkIfDb);
+
+    // messages for 3 interfaces
+    EXPECT_EQ(3, res.size());
+    for (const auto& ifName : ifNames) {
+      EXPECT_EQ(0, res.at(ifName).isUpCount);
+      EXPECT_EQ(1, res.at(ifName).isDownCount);
+      EXPECT_EQ(0, res.at(ifName).v4AddrsMaxCount);
+      EXPECT_EQ(0, res.at(ifName).v4AddrsMinCount);
+      EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
+      EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
+    }
+  }
 }
 
 // Test getting unique nodeLabels

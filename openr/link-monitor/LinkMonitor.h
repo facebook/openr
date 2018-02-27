@@ -177,6 +177,10 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // fashion. Prefer to use this instead of `advertiseMyAdjacencies`
   std::unique_ptr<fbzmq::ZmqThrottle> advertiseMyAdjacenciesThrottled_;
 
+  // Helper function to check if there's any link/addr update between
+  // incoming netlink event and local database
+  bool updateLinkEvent(const thrift::LinkEntry& linkEntry);
+  bool updateAddrEvent(const thrift::AddrEntry& addrEntry);
   // process an interface going up or down - we inform spark
   // of the new connection and it starts multicasting on new interface
   // attempting to discover a neighbor
