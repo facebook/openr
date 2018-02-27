@@ -57,7 +57,7 @@ int maskToPrefixLen(const struct sockaddr_in6* mask);
 // get prefix length from ipv4 mask
 int maskToPrefixLen(const struct sockaddr_in* mask);
 
-// report all IPv6 prefixes configured on the interface
+// report all IPv6/IPv4 prefixes configured on the interface
 std::vector<folly::CIDRNetwork> getIfacePrefixes(std::string ifName);
 
 bool checkIncludeExcludeRegex(
@@ -140,14 +140,24 @@ bool flushIfaceAddrs(
  * API to add address on the interface.
  * @return boolean indicating status of addr-add operation
  */
-bool addIfaceAddr(const std::string& ifName, const folly::IPAddress& addr);
+bool addIfaceAddr(const std::string& ifName, const folly::CIDRNetwork& prefix);
+
+/**
+ * API to delete a address on the interface
+ * @return boolean indicating status of addr-del operation
+ */
+bool delIfaceAddr(const std::string& ifName, const folly::CIDRNetwork& prefix);
 
 /**
  * Helper function to create loopback address (/128) out of network block.
  * Ideally any address in the block is valid address, in this case we just set
  * last bit of network block to `1`
  */
-folly::IPAddress createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept;
+folly::IPAddress
+createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept;
+
+folly::CIDRNetwork
+createLoopbackPrefix(const folly::CIDRNetwork& prefix) noexcept;
 
 std::unordered_map<std::string, fbzmq::thrift::Counter> prepareSubmitCounters(
     const std::unordered_map<std::string, int64_t>& counters);

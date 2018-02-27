@@ -498,6 +498,83 @@ PrefixAllocator::applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex) {
 
 void
 PrefixAllocator::applyMyPrefix(folly::Optional<folly::CIDRNetwork> prefix) {
+  if (prefix) {
+    updateMyPrefix(*prefix);
+  } else {
+    withdrawMyPrefix();
+  }
+}
+
+void
+PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
+  CHECK(allocParams_.hasValue()) << "Alloc parameters are not set.";
+  // existing global prefixes
+  auto oldPrefixes = getIfacePrefixes(loopbackIfaceName_);
+
+  // desired global prefixes
+  auto loopbackPrefix = createLoopbackPrefix(prefix);
+  std::vector<folly::CIDRNetwork> newPrefixes{loopbackPrefix};
+
+  // get a list of prefixes need to be deleted
+  std::vector<folly::CIDRNetwork> toDeletePrefixes;
+  std::set_difference(oldPrefixes.begin(), oldPrefixes.end(),
+                      newPrefixes.begin(), newPrefixes.end(),
+                      std::inserter(toDeletePrefixes,
+                        toDeletePrefixes.begin()));
+
+  // delete unwanted global prefixes
+  for (const auto& toDeletePrefix : toDeletePrefixes) {
+    bool needToDelete = false;
+    if (toDeletePrefix.first.inSubnet(
+          allocParams_->first.first, allocParams_->first.second)) {
+      // delete existing prefix in the subnet as seedPrefix
+      needToDelete = true;
+    } else if (overrideGlobalAddress_ and !toDeletePrefix.first.isLinkLocal()) {
+      // delete non-link-local addresses
+      needToDelete = true;
+    }
+
+    if (!needToDelete or !setLoopbackAddress_) {
+      continue;
+    }
+
+    LOG(INFO) << "Delete address "
+              << folly::IPAddress::networkToString(toDeletePrefix)
+              << " on interface " << loopbackIfaceName_;
+    if (!delIfaceAddr(loopbackIfaceName_, toDeletePrefix)) {
+      LOG(FATAL) << "Failed to delete address "
+                 << folly::IPAddress::networkToString(toDeletePrefix)
+                 << " on interface " << loopbackIfaceName_;
+    }
+  }
+
+  // Assign new address to loopback
+  if (setLoopbackAddress_) {
+    LOG(INFO) << "Assigning address "
+              << folly::IPAddress::networkToString(loopbackPrefix)
+              << " on interface " << loopbackIfaceName_;
+    if (!addIfaceAddr(loopbackIfaceName_, loopbackPrefix)) {
+      LOG(FATAL) << "Failed to assign address "
+                 << folly::IPAddress::networkToString(loopbackPrefix)
+                 << " on interface " << loopbackIfaceName_;
+    }
+  }
+
+  // replace previously allocated prefix with newly allocated one
+  auto ret = prefixManagerClient_->syncPrefixesByType(
+      openr::thrift::PrefixType::PREFIX_ALLOCATOR,
+      {openr::thrift::PrefixEntry(
+          apache::thrift::FRAGILE,
+          toIpPrefix(prefix),
+          openr::thrift::PrefixType::PREFIX_ALLOCATOR,
+          {})});
+  if (ret.hasError()) {
+    LOG(ERROR) << "Applying new prefix failed: " << ret.error();
+  }
+}
+
+void
+PrefixAllocator::withdrawMyPrefix() {
   // Flush existing loopback addresses
   if (setLoopbackAddress_ and allocParams_.hasValue()) {
     LOG(INFO) << "Flushing existing addresses from interface "
@@ -509,37 +586,11 @@ PrefixAllocator::applyMyPrefix(folly::Optional<folly::CIDRNetwork> prefix) {
     }
   }
 
-  // Assign new address to loopback
-  if (setLoopbackAddress_ and prefix) {
-    auto loopbackAddr = createLoopbackAddr(*prefix);
-    LOG(INFO) << "Assigning address " << loopbackAddr.str() << " on interface "
-              << loopbackIfaceName_;
-    if (!addIfaceAddr(loopbackIfaceName_, loopbackAddr)) {
-      LOG(FATAL) << "Failed to assign address " << loopbackAddr.str()
-                 << " on interface " << loopbackIfaceName_;
-    }
-  }
-
-  // Announce information in PrefixManager
-  LOG(INFO) << "Syncing prefix information to PrefixManager.";
-  if (prefix) {
-    // replace previously allocated prefix with newly allocated one
-    auto ret = prefixManagerClient_->syncPrefixesByType(
-        openr::thrift::PrefixType::PREFIX_ALLOCATOR,
-        {openr::thrift::PrefixEntry(
-            apache::thrift::FRAGILE,
-            toIpPrefix(*prefix),
-            openr::thrift::PrefixType::PREFIX_ALLOCATOR,
-            {})});
-    if (ret.hasError()) {
-      LOG(ERROR) << "Applying new prefix failed: " << ret.error();
-    }
-  } else {
-    auto ret = prefixManagerClient_->withdrawPrefixesByType(
-        openr::thrift::PrefixType::PREFIX_ALLOCATOR);
-    if (ret.hasError()) {
-      LOG(ERROR) << "Withdrawing old prefix failed: " << ret.error();
-    }
+  // withdraw prefix via prefixMgrClient
+  auto ret = prefixManagerClient_->withdrawPrefixesByType(
+      openr::thrift::PrefixType::PREFIX_ALLOCATOR);
+  if (ret.hasError()) {
+    LOG(ERROR) << "Withdrawing old prefix failed: " << ret.error();
   }
 }
 

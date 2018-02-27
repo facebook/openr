@@ -133,6 +133,12 @@ class PrefixAllocator
   void applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex);
   void applyMyPrefix(folly::Optional<folly::CIDRNetwork> prefix);
 
+  // update prefix
+  void updateMyPrefix(folly::CIDRNetwork prefix);
+
+  // withdraw prefix
+  void withdrawMyPrefix();
+
   void logPrefixEvent(
       std::string event,
       folly::Optional<uint32_t> oldPrefix,
