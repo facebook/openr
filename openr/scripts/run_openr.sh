@@ -117,7 +117,7 @@ exec ${OPENR} \
   --fib_handler_port=${FIB_HANDLER_PORT} \
   --health_checker_ping_interval_s=${HEALTH_CHECKER_PING_INTERVAL_S} \
   --loopback_iface=${LOOPBACK_IFACE} \
-  --iface_prefixes=${IFACE_PREFIXES} \
+  --ifname_prefix=${IFACE_PREFIXES} \
   --iface_regex_exclude=${IFACE_REGEX_EXCLUDE} \
   --iface_regex_include=${IFACE_REGEX_INCLUDE} \
   --node_name="${NODE_NAME}" \

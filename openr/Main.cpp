@@ -139,7 +139,7 @@ DEFINE_bool(
     "whenever OpenR elects new prefix for node. Only effective when prefix "
     "allocator is turned on and set_loopback_address is also turned on");
 DEFINE_string(
-    iface_prefixes,
+    ifname_prefix,
     "terra,nic1,nic2",
     "A comma separated list of strings. Linux interface names with a prefix "
     "matching at least one will be used for neighbor discovery, provided the "
@@ -681,7 +681,7 @@ main(int argc, char** argv) {
   }
   // add prefixes
   std::vector<std::string> ifNamePrefixes;
-  folly::split(",", FLAGS_iface_prefixes, ifNamePrefixes, true);
+  folly::split(",", FLAGS_ifname_prefix, ifNamePrefixes, true);
   for (auto& prefix : ifNamePrefixes) {
     includeRegexList.emplace_back(prefix + ".*", regexOpts);
   }
