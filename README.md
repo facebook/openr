@@ -16,13 +16,12 @@ The current integration is shown below:
   docker build --squash -it openr .
 
   ``` 
-  This should build the docker image that contains the following :
-
-  1) **Open/R** with NetlinkSystemhandler intact but NetlinkFibHandler disabled (in the run_openr.sh script).  
+  This should build the docker image that contains the following :  
+  1. **Open/R** with NetlinkSystemhandler intact but NetlinkFibHandler disabled (in the run_openr.sh script).  
   
-  2) **Open/R IosxrslFibHandler** that uses gRPC to connect to IOS-XR service layer API and handles route downloads.  
+  2. **Open/R IosxrslFibHandler** that uses gRPC to connect to IOS-XR service layer API and handles route downloads.  
   
-  3) **Open/R xrtelemetry** code that uses gRPC to receive a stream of IPv6 neighbors learnt over RP and linecards and programs the RP kernel where Open/R runs.  
+  3. **Open/R xrtelemetry** code that uses gRPC to receive a stream of IPv6 neighbors learnt over RP and linecards and programs the RP kernel where Open/R runs.  
     
   
 ### Deploying Open/R Docker image on NCS5500
