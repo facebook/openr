@@ -439,9 +439,7 @@ Fib::updateRoutes(
     // Check if there's any full sync scheduled,
     // if so, skip partial sync
     if (syncRoutesTimer_->isScheduled()) {
-      VLOG(1) << "Pending full sync is scheduled, trigger it right now";
-      syncRoutesTimer_->cancelTimeout();
-      syncRoutesTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+      VLOG(1) << "Pending full sync is scheduled, skip delta sync for now...";
       return;
     }
 
