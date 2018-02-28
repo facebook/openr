@@ -1469,22 +1469,7 @@ Spark::submitCounters() {
   // Aliveness report counters
   counters["spark.aliveness"] = 1;
 
-  // Prepare for submitting counters
-  fbzmq::CounterMap submittingCounters;
-  for (const auto& kv : counters) {
-    submittingCounters.emplace(
-        kv.first,
-        fbzmq::thrift::Counter(
-            apache::thrift::FRAGILE,
-            kv.second /* value */,
-            fbzmq::thrift::CounterValueType::COUNTER,
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch())
-                .count() /* current timestamp */
-            ));
-  }
-
-  zmqMonitorClient_->setCounters(submittingCounters);
+  zmqMonitorClient_->setCounters(prepareSubmitCounters(counters));
 }
 
 } // namespace openr
