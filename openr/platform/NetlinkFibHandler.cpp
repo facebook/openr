@@ -50,7 +50,9 @@ makeRoutes(const std::unordered_map<
                                 << "mapping next-hop " << nextHop.second.str()
                                 << " dev " << nextHop.first;
                             auto binaryAddr = toBinaryAddress(nextHop.second);
-                            binaryAddr.ifName = nextHop.first;
+                            if (not nextHop.first.empty()) {
+                              binaryAddr.ifName = nextHop.first;
+                            }
                             return binaryAddr;
                           }) |
         as<std::vector>();
@@ -111,10 +113,12 @@ NetlinkFibHandler::future_addUnicastRoute(
   auto prefix = std::make_pair(
       toIPAddress(route->dest.prefixAddress), route->dest.prefixLength);
 
-  auto newNextHops =
-      from(route->nexthops) | mapped([](const thrift::BinaryAddress& addr) {
-        return std::make_pair(addr.ifName.value(), toIPAddress(addr));
-      }) |
+  auto newNextHops = from(route->nexthops) |
+      mapped([](const thrift::BinaryAddress& addr) {
+                       return std::make_pair(
+                           (addr.ifName.hasValue() ? addr.ifName.value() : ""),
+                           toIPAddress(addr));
+                     }) |
       as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
   LOG(INFO)
@@ -124,7 +128,12 @@ NetlinkFibHandler::future_addUnicastRoute(
              ", ",
              from(route->nexthops) |
                  mapped([](const thrift::BinaryAddress& addr) {
-                   return (toIPAddress(addr).str() + "@" + addr.ifName.value());
+                   if (addr.ifName.hasValue()) {
+                     return (
+                         toIPAddress(addr).str() + "@" + addr.ifName.value());
+                   } else {
+                     return toIPAddress(addr).str();
+                   }
                  }) |
                  as<std::set<std::string>>());
 
@@ -209,10 +218,12 @@ NetlinkFibHandler::future_syncFib(
 
     auto prefix = std::make_pair(
         toIPAddress(route.dest.prefixAddress), route.dest.prefixLength);
-    auto newNextHops =
-        from(route.nexthops) | mapped([](const thrift::BinaryAddress& addr) {
-          return std::make_pair(addr.ifName.value(), toIPAddress(addr));
-        }) |
+    auto newNextHops = from(route.nexthops) |
+        mapped([](const thrift::BinaryAddress& addr) {
+                         return std::make_pair(
+                             addr.ifName.hasValue() ? addr.ifName.value() : "",
+                             toIPAddress(addr));
+                       }) |
         as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
     newRouteDb[prefix] = newNextHops;
   }

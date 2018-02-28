@@ -172,6 +172,42 @@ class NetlinkRoute final {
     rtnl_route_add_nexthop(route_, nextHop);
   }
 
+  // addNexthop with nexthop = global ip addresses
+  void
+  addNextHop(const folly::IPAddress& gateway) {
+    CHECK_EQ(destination_.first.family(), gateway.family());
+
+    if (gateway.isLinkLocal()) {
+      throw NetlinkException(folly::sformat(
+          "Failed to resolve interface name for link local address {}",
+          gateway.str()));
+    }
+
+    struct nl_addr* nlGateway = nl_addr_build(
+        gateway.family(), (void*)(gateway.bytes()), gateway.byteCount());
+
+    if (nlGateway == nullptr) {
+      throw NetlinkException("Failed to create nl addr for gateway");
+    }
+
+    // nextHop object takes a ref if gateway is successfully set
+    // Either way, success or failure, we drop our ref
+    SCOPE_EXIT {
+      nl_addr_put(nlGateway);
+    };
+
+    // We create a nextHop oject here but by adding it to route
+    // the route object owns it
+    // Once we destroy the route object, it will internally free this nextHop
+    struct rtnl_nexthop* nextHop = rtnl_route_nh_alloc();
+    if (nextHop == nullptr) {
+      throw NetlinkException("Failed to create nextHop");
+    }
+
+    rtnl_route_nh_set_gateway(nextHop, nlGateway);
+    rtnl_route_add_nexthop(route_, nextHop);
+  }
+
  private:
   NetlinkRoute(const NetlinkRoute&) = delete;
   NetlinkRoute& operator=(const NetlinkRoute&) = delete;
@@ -286,15 +322,22 @@ NetlinkRouteSocket::buildUnicastRoute(
   auto route = std::make_unique<NetlinkRoute>(prefix, routeProtocolId_);
   int ifIdx;
   for (const auto& nextHop : nextHops) {
-    ifIdx = rtnl_link_name2i(linkCache_, std::get<0>(nextHop).c_str());
-    if (ifIdx == 0) {
-      throw NetlinkException(folly::sformat(
-          "Failed to get ifidx for interface: {}", std::get<0>(nextHop)));
+    if (std::get<0>(nextHop).empty()) {
+      route->addNextHop(std::get<1>(nextHop));
+      VLOG(4) << "Added nextHop for prefix "
+              << folly::IPAddress::networkToString(prefix) << " nexthop via "
+              << std::get<1>(nextHop).str();
+    } else {
+      ifIdx = rtnl_link_name2i(linkCache_, std::get<0>(nextHop).c_str());
+      if (ifIdx == 0) {
+        throw NetlinkException(folly::sformat(
+            "Failed to get ifidx for interface: {}", std::get<0>(nextHop)));
+      }
+      route->addNextHop(ifIdx, std::get<1>(nextHop));
+      VLOG(4) << "Added nextHop for prefix "
+              << folly::IPAddress::networkToString(prefix) << " nexthop dev "
+              << std::get<0>(nextHop) << " via " << std::get<1>(nextHop).str();
     }
-    route->addNextHop(ifIdx, std::get<1>(nextHop));
-    VLOG(4) << "Added nextHop for prefix "
-            << folly::IPAddress::networkToString(prefix) << " nexthop dev "
-            << std::get<0>(nextHop) << " via " << std::get<1>(nextHop).str();
   }
   return route;
 }
