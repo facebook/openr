@@ -46,8 +46,11 @@ using NextHops = std::unordered_set<std::pair<std::string, folly::IPAddress>>;
 // Route => prefix and its possible nextHops
 using UnicastRoutes = std::unordered_map<folly::CIDRNetwork, NextHops>;
 
-// Multicast routes do not have nextHop IP
+// Multicast and link routes do not have nextHop IP
 using MulticastRoutes =
+    std::unordered_set<std::pair<folly::CIDRNetwork, std::string>>;
+
+using LinkRoutes =
     std::unordered_set<std::pair<folly::CIDRNetwork, std::string>>;
 
 class NetlinkRoute;
@@ -96,7 +99,9 @@ class NetlinkRouteSocket final {
   // Sync route table in kernel with given route table
   // Basically when there's mismatch between backend kernel and route table in
   // application, we sync kernel routing table with given data source
-  folly::Future<folly::Unit> syncRoutes(UnicastRoutes newRouteDb);
+  folly::Future<folly::Unit> syncUnicastRoutes(UnicastRoutes newRouteDb);
+
+  folly::Future<folly::Unit> syncLinkRoutes(const LinkRoutes& newRouteDb);
 
   // get cached unicast routing table
   folly::Future<UnicastRoutes> getUnicastRoutes() const;
@@ -147,13 +152,23 @@ class NetlinkRouteSocket final {
 
   UnicastRoutes doGetUnicastRoutes() const;
 
-  void doSyncRoutes(UnicastRoutes newRouteDb);
+  void doSyncUnicastRoutes(UnicastRoutes newRouteDb);
+
+  void doSyncLinkRoutes(const LinkRoutes& newRouteDb);
 
   std::unique_ptr<NetlinkRoute> buildUnicastRoute(
       const folly::CIDRNetwork& prefix, const NextHops& nextHops);
 
   std::unique_ptr<NetlinkRoute> buildMulticastRoute(
       const folly::CIDRNetwork& prefix, const std::string& ifName);
+
+  std::unique_ptr<NetlinkRoute> buildLinkRoute(
+      const folly::CIDRNetwork& prefix, const std::string& ifName);
+
+  std::unique_ptr<NetlinkRoute> buildMulticastOrLinkRouteHelper(
+      const folly::CIDRNetwork& prefix,
+      const std::string& ifName,
+      uint8_t scope);
 
   void doUpdateRoute(
       const folly::CIDRNetwork& prefix,
@@ -172,6 +187,7 @@ class NetlinkRouteSocket final {
   // Keep a local copy of unicast route db to reflect current forwarding state
   // This may out of sync with kernel, need to do explicit sync up
   UnicastRoutes unicastRouteDb_{};
+  LinkRoutes linkRouteDb_{};
 
   // Local cache. We do not use this to enforce any checks
   // for incoming requests. Merely an optimization for getUnicastRoutes()
@@ -179,6 +195,8 @@ class NetlinkRouteSocket final {
 
   // Check against redundant multicast routes
   MulticastRoutes mcastRoutes_{};
+
+  LinkRoutes linkRoutes_{};
 };
 
 } // namespace openr

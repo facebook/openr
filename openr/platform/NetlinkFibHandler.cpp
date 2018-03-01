@@ -228,7 +228,7 @@ NetlinkFibHandler::future_syncFib(
     newRouteDb[prefix] = newNextHops;
   }
 
-  return netlinkSocket_->syncRoutes(newRouteDb);
+  return netlinkSocket_->syncUnicastRoutes(newRouteDb);
 }
 
 folly::Future<int64_t>
