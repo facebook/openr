@@ -42,12 +42,16 @@ except NameError:
     pass
 
 
-def yesno(question):
+def yesno(question, skip_confirm=False):
     """
     Ask a yes/no question. No default, we want to avoid mistakes as
     much as possible. Repeat the question until we receive a valid
     answer.
     """
+    if skip_confirm:
+        print('Skipping interactive confirmation!')
+        return True
+
     while True:
         try:
             prompt = "{} [yn] ".format(question)
@@ -510,7 +514,7 @@ def print_adjs_json(adjs_map):
     print(json_dumps(adjs_map))
 
 
-def print_adjs_table(adjs_map, enable_color):
+def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
     ''' print adjacencies
 
         :param adjacencies as list of dict
@@ -521,6 +525,7 @@ def print_adjs_table(adjs_map, enable_color):
                      'NextHop-v6', 'Uptime']
 
     output = []
+    adj_found = False
     for node, val in sorted(adjs_map.items()):
         # report overloaded status in color
         is_overloaded = val['overloaded']
@@ -536,7 +541,15 @@ def print_adjs_table(adjs_map, enable_color):
 
         # horizontal adj table for a node
         rows = []
+        seg = ''
         for adj in sorted(val['adjacencies'], key=lambda adj: adj['otherNodeName']):
+            # filter if set
+            if neigh is not None and interface is not None:
+                if neigh == adj['otherNodeName'] and interface == adj['ifName']:
+                    adj_found = True
+                else:
+                    continue
+
             overload_status = click.style('Overloaded', fg='red')
             metric = (overload_status if enable_color else
                       'OVERLOADED') if adj['isOverloaded'] else adj['metric']
@@ -549,6 +562,10 @@ def print_adjs_table(adjs_map, enable_color):
             seg = printing.render_horizontal_table(rows, column_labels,
                                                    tablefmt='plain')
         output.append([cap, seg])
+
+    if neigh is not None and interface is not None and not adj_found:
+        print('Adjacency with {} {} is not formed.'.format(neigh, interface))
+        return
 
     print(printing.render_vertical_table(output))
 

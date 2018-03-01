@@ -66,6 +66,18 @@ class UnsetLinkMetricCmd(LMCmd):
         set_unset_link_metric(self.client, False, interface, 0, yes)
 
 
+class SetAdjMetricCmd(LMCmd):
+    def run(self, node, interface, metric, yes):
+
+        set_unset_adj_metric(self.client, True, node, interface, metric, yes)
+
+
+class UnsetAdjMetricCmd(LMCmd):
+    def run(self, node, interface, yes):
+
+        set_unset_adj_metric(self.client, False, node, interface, 0, yes)
+
+
 class LMLinksCmd(LMCmd):
     def run(self, all, json):
         links = self.client.dump_links(all)
@@ -259,3 +271,10 @@ def set_unset_link_metric(client, override, interface, metric, yes):
         print('Successfully {} for the interface.\n'.format(action))
     else:
         print('Failed to {} for the interface.\n'.format(action))
+
+
+def set_unset_adj_metric(client, override, node, interface, metric, yes):
+    '''
+    Set/Unset metric override for the specific adjacency.
+    '''
+    client.set_unset_adj_metric(override, node, interface, metric)

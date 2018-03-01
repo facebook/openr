@@ -754,9 +754,16 @@ LinkMonitor::advertiseMyAdjacencies() {
     // Set link overload bit
     adj.isOverloaded = config_.overloadedLinks.count(adj.ifName) > 0;
 
-    // Override link metric if it exists
+    // Override metric with link metric if it exists
     adj.metric =
         folly::get_default(config_.linkMetricOverrides, adj.ifName, adj.metric);
+
+    // Override metric with adj metric if it exists
+    thrift::AdjKey adjKey;
+    adjKey.nodeName = adj.otherNodeName;
+    adjKey.ifName = adj.ifName;
+    adj.metric =
+        folly::get_default(config_.adjMetricOverrides, adjKey, adj.metric);
 
     adjDb.adjacencies.emplace_back(std::move(adj));
   }
@@ -1179,14 +1186,14 @@ LinkMonitor::processCommand() {
                  << req.interfaceName;
       break;
     }
-    if (req.interfaceMetric < 1) {
+    if (req.overrideMetric < 1) {
       LOG(ERROR) << "Minimum allowed metric value for link is 1. Can't set "
-                 << "a value smaller than that. Got " << req.interfaceMetric;
+                 << "a value smaller than that. Got " << req.overrideMetric;
       break;
     }
     LOG(INFO) << "Overriding metric for interface " << req.interfaceName
-              << " to " << req.interfaceMetric;
-    config_.linkMetricOverrides[req.interfaceName] = req.interfaceMetric;
+              << " to " << req.overrideMetric;
+    config_.linkMetricOverrides[req.interfaceName] = req.overrideMetric;
     advertiseMyAdjacencies();
     break;
 
@@ -1237,6 +1244,61 @@ LinkMonitor::processCommand() {
         fbzmq::Message::fromThriftObj(reply, serializer_).value());
     if (ret.hasError()) {
       LOG(ERROR) << "Error sending response. " << ret.error();
+    }
+    break;
+  }
+
+  case thrift::LinkMonitorCommand::SET_ADJ_METRIC: {
+    if (req.overrideMetric < 1) {
+      LOG(ERROR) << "Minimum allowed metric value for adjacency is 1. Can't set"
+                 << " a value smaller than that. Got " << req.overrideMetric;
+      break;
+    }
+    if (req.adjNodeName == folly::none) {
+      LOG(ERROR) << "SET_ADJ_METRIC - adjacency node name not provided, "
+                 << req.interfaceName;
+      break;
+    }
+    thrift::AdjKey adjKey;
+    adjKey.ifName = req.interfaceName;
+    adjKey.nodeName = req.adjNodeName.value();
+    config_.adjMetricOverrides[adjKey] = req.overrideMetric;
+
+    if (adjacencies_.count(std::make_pair(req.adjNodeName.value(),
+                                                req.interfaceName))) {
+      LOG(INFO) << "Overriding metric for adjacency "
+                << req.adjNodeName.value() << " "
+                << req.interfaceName << " to " << req.overrideMetric;
+      advertiseMyAdjacencies();
+
+    } else {
+      LOG(WARNING) << "SET_ADJ_METRIC - adjacency is not yet formed for: "
+                 << req.adjNodeName.value() << " " << req.interfaceName;
+    }
+    break;
+  }
+
+  case thrift::LinkMonitorCommand::UNSET_ADJ_METRIC: {
+    if (req.adjNodeName == folly::none) {
+      LOG(ERROR) << "UNSET_ADJ_METRIC - adjacency node name not provided, "
+                 << req.interfaceName;
+      break;
+    }
+    thrift::AdjKey adjKey;
+    adjKey.ifName = req.interfaceName;
+    adjKey.nodeName = req.adjNodeName.value();
+
+    if (config_.adjMetricOverrides.erase(adjKey)) {
+      LOG(INFO) << "Removing metric override for adjacency "
+                << req.adjNodeName.value() << " " << req.interfaceName;
+
+        if (adjacencies_.count(std::make_pair(req.adjNodeName.value(),
+                                                req.interfaceName))) {
+          advertiseMyAdjacencies();
+        }
+    } else {
+      LOG(WARNING) << "Got adj-metric-unset request for unknown adjacency"
+                    << req.adjNodeName.value() << " " << req.interfaceName;
     }
     break;
   }

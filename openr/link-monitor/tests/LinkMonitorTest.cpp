@@ -339,7 +339,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         FRAGILE,
         thrift::LinkMonitorCommand::DUMP_LINKS,
         "" /* interface-name */,
-        0 /* interface-metric */);
+        0 /* interface-metric */,
+        "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(dumpLinksRequest, serializer).value();
 
     auto reply = lmCmdSocket.recvThriftObj<thrift::DumpLinksReply>(serializer);
@@ -646,6 +647,7 @@ TEST(LinkMonitorTest, PeerDifferenceTest) {
 // form peer connections and inform KvStore of adjacencies
 TEST_F(LinkMonitorTestFixture, BasicOperation) {
   const int linkMetric = 123;
+  const int adjMetric = 100;
 
   {
     InSequence dummy;
@@ -751,6 +753,26 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
+      // set adjacency metric, this should override the link metric
+      auto adj_2_1_modified = adj_2_1;
+      adj_2_1_modified.metric = adjMetric;
+
+      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      adjDb.isOverloaded = true;
+      expectedAdjDbs.push(std::move(adjDb));
+    }
+
+    {
+      // unset adjacency metric, this will remove the override
+      auto adj_2_1_modified = adj_2_1;
+      adj_2_1_modified.metric = linkMetric;
+
+      auto adjDb = createAdjDatabase("node-1", {adj_2_1_modified}, kNodeLabel);
+      adjDb.isOverloaded = true;
+      expectedAdjDbs.push(std::move(adjDb));
+    }
+
+    {
       // expect neighbor down
       auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel);
       adjDb.isOverloaded = true;
@@ -797,13 +819,15 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // 4. unset overload bit
   // 5. unset link overload bit - custom metric value should be in effect
   // 6. unset custom metric on link
-  // 7: set overload bit and custom metric on link
+  // 7: set overload bit
+  // 8: custom metric on link
   {
     const auto setOverloadRequest = thrift::LinkMonitorRequest(
         FRAGILE,
         thrift::LinkMonitorCommand::SET_OVERLOAD,
         "" /* interface-name */,
-        0 /* interface-metric */);
+        0 /* interface-metric */,
+        "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(setOverloadRequest, serializer);
     LOG(INFO) << "Testing set node overload command!";
     checkNextAdjPub("adj:node-1");
@@ -819,7 +843,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         FRAGILE,
         thrift::LinkMonitorCommand::SET_LINK_METRIC,
         "iface_2_1" /* interface-name */,
-        linkMetric /* interface-metric */);
+        linkMetric /* interface-metric */,
+        "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(setMetricRequest, serializer);
     LOG(INFO) << "Testing set link metric command!";
     checkNextAdjPub("adj:node-1");
@@ -828,7 +853,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         FRAGILE,
         thrift::LinkMonitorCommand::SET_LINK_OVERLOAD,
         "iface_2_1" /* interface-name */,
-        0 /* interface-metric */);
+        0 /* interface-metric */,
+        "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(setLinkOverloadRequest, serializer);
     LOG(INFO) << "Testing set link overload command!";
     checkNextAdjPub("adj:node-1");
@@ -844,7 +870,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         FRAGILE,
         thrift::LinkMonitorCommand::UNSET_OVERLOAD,
         "" /* interface-name */,
-        0 /* interface-metric */);
+        0 /* interface-metric */,
+        "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(unsetOverloadRequest, serializer);
     LOG(INFO) << "Testing unset node overload command!";
     checkNextAdjPub("adj:node-1");
@@ -860,16 +887,18 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         FRAGILE,
         thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD,
         "iface_2_1" /* interface-name */,
-        0 /* interface-metric */);
+        0 /* interface-metric */,
+        "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(unsetLinkOverloadRequest, serializer);
-    LOG(INFO) << "Testing set link overload command!";
+    LOG(INFO) << "Testing unset link overload command!";
     checkNextAdjPub("adj:node-1");
 
     const auto unsetMetricRequest = thrift::LinkMonitorRequest(
         FRAGILE,
         thrift::LinkMonitorCommand::UNSET_LINK_METRIC,
         "iface_2_1" /* interface-name */,
-        0 /* interface-metric */);
+        0 /* interface-metric */,
+        "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(unsetMetricRequest, serializer);
     LOG(INFO) << "Testing unset link metric command!";
     checkNextAdjPub("adj:node-1");
@@ -880,7 +909,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_FALSE(
         links.interfaceDetails.at("iface_2_1").metricOverride.hasValue());
 
-    // Set overload bit and link metric value
+    // 8/9. Set overload bit and link metric value
     lmCmdSocket.sendThriftObj(setOverloadRequest, serializer);
     LOG(INFO) << "Testing set node overload command!";
     checkNextAdjPub("adj:node-1");
@@ -889,7 +918,25 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
   }
 
-  // neighbor down
+  // 10. set and unset adjacency metric
+  {
+    auto setAdjMetricRequest = thrift::LinkMonitorRequest(
+    FRAGILE,
+    thrift::LinkMonitorCommand::SET_ADJ_METRIC,
+    "iface_2_1" /* interface-name */,
+    adjMetric /* adjacency-metric */,
+    "node-2" /* adjacency-node */);
+    lmCmdSocket.sendThriftObj(setAdjMetricRequest, serializer);
+    LOG(INFO) << "Testing set adj metric command!";
+    checkNextAdjPub("adj:node-1");
+
+    setAdjMetricRequest.cmd = thrift::LinkMonitorCommand::UNSET_ADJ_METRIC;
+    lmCmdSocket.sendThriftObj(setAdjMetricRequest, serializer);
+    LOG(INFO) << "Testing unset adj metric command!";
+    checkNextAdjPub("adj:node-1");
+  }
+
+  // 11. neighbor down
   {
     auto neighborEvent = createNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
@@ -948,7 +995,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_NO_THROW(
         sparkReport.bind(fbzmq::SocketUrl{"inproc://spark-report2"}).value());
 
-    // neighbor up
+    // 12. neighbor up
     {
       auto neighborEvent = createNeighborEvent(
           thrift::SparkNeighborEventType::NEIGHBOR_UP,
@@ -962,7 +1009,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       checkNextAdjPub("adj:node-1");
     }
 
-    // neighbor down
+    // 13. neighbor down
     {
       auto neighborEvent = createNeighborEvent(
           thrift::SparkNeighborEventType::NEIGHBOR_DOWN,

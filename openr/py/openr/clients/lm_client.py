@@ -47,9 +47,9 @@ class LMClient():
 
         return self.dump_links().thisNodeName
 
-    def send_link_monitor_cmd(self, command, interface='', metric=0):
+    def send_link_monitor_cmd(self, command, interface='', metric=0, node=''):
 
-        req_msg = lm_types.LinkMonitorRequest(command, interface, metric)
+        req_msg = lm_types.LinkMonitorRequest(command, interface, metric, node)
         self._lm_cmd_socket.send_thrift_obj(req_msg)
 
         return self.dump_links()
@@ -74,3 +74,11 @@ class LMClient():
         UNSET = lm_types.LinkMonitorCommand.UNSET_LINK_METRIC
 
         return self.send_link_monitor_cmd(SET if override else UNSET, interface, metric)
+
+    def set_unset_adj_metric(self, override, node, interface, metric):
+
+        SET = lm_types.LinkMonitorCommand.SET_ADJ_METRIC
+        UNSET = lm_types.LinkMonitorCommand.UNSET_ADJ_METRIC
+
+        return self.send_link_monitor_cmd(SET if override else UNSET,
+                                                  interface, metric, node)

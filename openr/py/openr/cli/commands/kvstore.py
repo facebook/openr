@@ -270,6 +270,14 @@ class AdjCmd(KvStoreCmd):
             utils.print_adjs_table(adjs_map, self.enable_color)
 
 
+class ShowAdjNodeCmd(KvStoreCmd):
+    def run(self, nodes, node, interface):
+        publication = self.client.dump_all_with_prefix(Consts.ADJ_DB_MARKER)
+        adjs_map = utils.adj_dbs_to_dict(publication, nodes, True,
+                                         self.iter_publication)
+        utils.print_adjs_table(adjs_map, self.enable_color, node, interface)
+
+
 class InterfacesCmd(KvStoreCmd):
     def run(self, nodes, json, print_all):
         publication = self.client.dump_all_with_prefix(

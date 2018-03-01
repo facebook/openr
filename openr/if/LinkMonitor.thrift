@@ -42,17 +42,26 @@ enum LinkMonitorCommand {
    * can be used to emulate soft-drain of links by using higher metric value
    * for link.
    *
-   * Request must have valid `interfaceName` and `interfaceMetric` values for
+   * Request must have valid `interfaceName` and `overrideMetric` values for
    * SET command. UNSET command only expects `interfaceName`.
    */
   SET_LINK_METRIC     = 6,  // No response will be sent
   UNSET_LINK_METRIC   = 7,  // No response will be sent
+
+  /**
+   * Command to override metric for specific adjacencies.
+   *
+   * Request must have valid 'adjacency' node name
+   */
+  SET_ADJ_METRIC     = 8,  // No response will be sent
+  UNSET_ADJ_METRIC   = 9,  // No response will be sent
 }
 
 struct LinkMonitorRequest {
  1: LinkMonitorCommand cmd
  2: string interfaceName
- 3: i32 interfaceMetric = 1  # Default value (can't be less than 1)
+ 3: i32 overrideMetric = 1  # Default value (can't be less than 1)
+ 4: optional string adjNodeName
 }
 
 struct InterfaceDetails {
@@ -66,6 +75,11 @@ struct DumpLinksReply {
  3: bool isOverloaded
  6: map<string, InterfaceDetails>
         (cpp.template = "std::unordered_map") interfaceDetails
+}
+
+struct AdjKey {
+  1: string nodeName;
+  2: string ifName;
 }
 
 //
@@ -89,4 +103,7 @@ struct LinkMonitorConfig {
   // Label allocated to node (via RangeAllocator).
   // `0` indicates null value (no value allocated)
   4: i32 nodeLabel = 0;
+
+  // Custom metric override for adjacency
+  5: map<AdjKey, i32> adjMetricOverrides;
 }

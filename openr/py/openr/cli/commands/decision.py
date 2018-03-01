@@ -102,7 +102,7 @@ class DecisionAdjCmd(DecisionCmd):
         if json:
             utils.print_adjs_json(adjs_map)
         else:
-            utils.print_adjs_table(adjs_map, self.enable_color)
+            utils.print_adjs_table(adjs_map, self.enable_color, None, None)
 
 
 class PathCmd(DecisionCmd):
