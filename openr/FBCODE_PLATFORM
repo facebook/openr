@@ -1,8 +1,0 @@
-# See https://fburl.com/PLATFORM-files for details about platform files.
-# OpenR uses the below mentioned platform as we run binaries built with buck
-# on network devices (switches and routers). They as of now don't support
-# gcc-5 because of older kernels. Once network devices are upgraded to newer
-# kernel with gcc-5 support we will move to gcc-5
-# NOTE: It can take several months to achieve that.
-# Dated: 02/01/2018
-gcc-4.9-glibc-2.20
