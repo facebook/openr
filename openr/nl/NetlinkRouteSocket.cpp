@@ -176,6 +176,10 @@ class NetlinkRoute final {
       throw NetlinkException("Failed to create nextHop");
     }
 
+    if (gateway.isV4()) {
+      rtnl_route_nh_set_flags(nextHop, RTNH_F_ONLINK);
+    }
+
     rtnl_route_nh_set_ifindex(nextHop, ifIdx);
     rtnl_route_nh_set_gateway(nextHop, nlGateway);
     rtnl_route_add_nexthop(route_, nextHop);
