@@ -37,10 +37,7 @@ thrift::BinaryAddress::operator<(const thrift::BinaryAddress& other) const {
   if (addr != other.addr) {
     return addr < other.addr;
   }
-  if (ifName != other.ifName) {
-    return ifName < other.ifName;
-  }
-  return port < other.port;
+  return ifName < other.ifName;
 }
 
 bool
