@@ -525,7 +525,8 @@ TEST_F(NetlinkIfFixture, MultiPathTest) {
 // - Try adding a route with invalid interface
 // - Catch error and verify no route is added
 TEST_F(NetlinkIfFixture, InvalidIfRouteAddTest) {
-  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+  const folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+  const folly::CIDRNetwork prefixV4{folly::IPAddress("169.254.1.100"), 16};
   auto nh1 = std::make_pair("invalid-if", folly::IPAddress("fe80::1"));
   NextHops nextHops1{nh1};
 
@@ -547,7 +548,7 @@ TEST_F(NetlinkIfFixture, InvalidIfRouteAddTest) {
 
   // Add a route without interface but using v4 link local address in nextHop
   EXPECT_THROW(
-      netlinkRouteSocket->addUnicastRoute(prefix, nextHops3).get(),
+      netlinkRouteSocket->addUnicastRoute(prefixV4, nextHops3).get(),
       std::exception);
 
   // No routes were added
