@@ -58,13 +58,6 @@ class Fib final : public fbzmq::ZmqEventLoop {
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
 
-  /**
-   * Given list of paths returns the list of best paths (paths with lowest
-   * metric value).
-   */
-  static std::vector<thrift::Path> getBestPaths(
-      std::vector<thrift::Path> const& paths);
-
  private:
   // No-copy
   Fib(const Fib&) = delete;
@@ -85,29 +78,12 @@ class Fib final : public fbzmq::ZmqEventLoop {
   void processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb);
 
   /**
-   * Convert local routeDb_ into RouteDataBase
-   */
-  thrift::RouteDatabase dumpRouteDb() const;
-
-  /**
    * Convert local perfDb_ into PerfDataBase
    */
   thrift::PerfDatabase dumpPerfDb() const;
 
   /**
-   * Update agentRoutes_ to keep consistent with local routeDb_
-   */
-  void updateLocalAgentRoutes();
-
-  /**
-   * Find delta between routeDb_ and agentRoutes_
-   * Return type is a pair of <RoutesToBeUpdate, routesToRemove>
-   */
-  std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
-  findDeltaRoutes() const;
-
-  /**
-   * Update agentRoutes_ and trigger add/del routes thrift calls
+   * Trigger add/del routes thrift calls
    * on success no action needed
    * on failure invokes syncRouteDbDebounced
    */
@@ -153,11 +129,14 @@ class Fib final : public fbzmq::ZmqEventLoop {
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
   folly::Optional<thrift::PerfEvents> maybePerfEvents_;
-  std::unordered_map<thrift::IpPrefix, std::vector<thrift::Path>> routeDb_;
+  thrift::RouteDatabase routeDb_;
   std::deque<thrift::PerfEvents> perfDb_;
 
-  // store the latest routes that the fib agent has
-  std::set<thrift::UnicastRoute> agentRoutes_;
+  // Flag to indicate the result of previous route programming attempt.
+  // If set, it means what currently cached in local routeDb_ has not been 100%
+  // successfully synced with agent, we have to trigger an enforced full fib
+  // sync with agent again
+  bool dirtyRouteDb_{false};
 
   // Create timestamp of recently logged perf event
   int64_t recentPerfEventCreateTs_{0};

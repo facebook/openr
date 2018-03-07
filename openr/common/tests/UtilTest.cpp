@@ -20,6 +20,21 @@
 using namespace std;
 using namespace openr;
 
+const auto prefix1 = toIpPrefix("::ffff:10.1.1.1/128");
+const auto prefix2 = toIpPrefix("::ffff:10.2.2.2/128");
+const auto prefix3 = toIpPrefix("::ffff:10.3.3.3/128");
+
+const auto path1_2_1 =
+    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_1", 1);
+const auto path1_2_2 =
+    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_2", 2);
+const auto path1_2_3 =
+    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_3", 1);
+const auto path1_3_1 =
+    createPath(toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_1", 2);
+const auto path1_3_2 =
+    createPath(toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_2", 2);
+
 // create and save a key pair in disk; load it and ensure it's the same as saved
 TEST(UtilTest, KeyPair) {
   char tempCertKeyFileName[] = "/tmp/certKeyFile.XXXXXX";
@@ -306,6 +321,64 @@ TEST(UtilTest, getTotalPerfEventsDurationTest) {
     auto duration = getTotalPerfEventsDuration(perfEvents);
     EXPECT_EQ(duration.count(), 200);
   }
+}
+
+TEST(UtilTest, getBestPaths) {
+  auto bestPaths = getBestPaths({path1_2_1, path1_2_2});
+  EXPECT_EQ(bestPaths.size(), 1);
+  EXPECT_EQ(bestPaths.at(0).ifName, "iface_1_2_1");
+  EXPECT_EQ(bestPaths.at(0).nextHop,
+            toBinaryAddress(folly::IPAddress("fe80::2")));
+  EXPECT_EQ(bestPaths.at(0).metric, 1);
+
+  bestPaths = getBestPaths({path1_2_1, path1_2_2, path1_2_3});
+  EXPECT_EQ(bestPaths.size(), 2);
+  sort(bestPaths.begin(), bestPaths.end());
+  EXPECT_EQ(bestPaths.at(0).ifName, "iface_1_2_1");
+  EXPECT_EQ(bestPaths.at(0).nextHop,
+            toBinaryAddress(folly::IPAddress("fe80::2")));
+  EXPECT_EQ(bestPaths.at(0).metric, 1);
+  EXPECT_EQ(bestPaths.at(1).ifName, "iface_1_2_3");
+  EXPECT_EQ(bestPaths.at(1).nextHop,
+            toBinaryAddress(folly::IPAddress("fe80::2")));
+  EXPECT_EQ(bestPaths.at(1).metric, 1);
+}
+
+TEST(UtilTest, findDeltaRoutes) {
+  thrift::RouteDatabase oldRouteDb;
+  oldRouteDb.thisNodeName = "node-1";
+  oldRouteDb.routes.emplace_back(
+      thrift::Route(apache::thrift::FRAGILE, prefix2, {path1_2_1, path1_2_2}));
+
+  thrift::RouteDatabase newRouteDb;
+  newRouteDb.thisNodeName = "node-1";
+  newRouteDb.routes.emplace_back(thrift::Route(
+      apache::thrift::FRAGILE, prefix2, {path1_2_1, path1_2_2, path1_2_3}));
+
+  const auto& res1 =
+      findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
+
+  EXPECT_EQ(res1.first.size(), 1);
+  EXPECT_EQ(res1.first, createUnicastRoutes(newRouteDb.routes));
+  EXPECT_EQ(res1.second.size(), 0);
+
+  // add more routes in newRouteDb
+  newRouteDb.routes.emplace_back(
+      thrift::Route(apache::thrift::FRAGILE, prefix3, {path1_3_1, path1_3_2}));
+
+  const auto& res2 =
+      findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
+  EXPECT_EQ(res2.first.size(), 2);
+  EXPECT_EQ(res2.first, createUnicastRoutes(newRouteDb.routes));
+  EXPECT_EQ(res2.second.size(), 0);
+
+  // empty out newRouteDb
+  newRouteDb.routes.clear();
+  const auto& res3 =
+      findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
+  EXPECT_EQ(res3.first.size(), 0);
+  EXPECT_EQ(res3.second.size(), 1);
+  EXPECT_EQ(res3.second.at(0), prefix2);
 }
 
 int

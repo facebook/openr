@@ -49,15 +49,26 @@ thrift::IpPrefix::operator<(const thrift::IpPrefix& other) const {
 }
 
 bool
-thrift::UnicastRoute::operator<(const thrift::UnicastRoute& other) const {
-  if (dest != other.dest) {
-    return dest < other.dest;
+thrift::Path::operator<(const openr::thrift::Path& other) const {
+  if (metric != other.metric) {
+    return metric < other.metric;
   }
-  auto myNhs = nexthops;
-  auto otherNhs = other.nexthops;
-  std::sort(myNhs.begin(), myNhs.end());
-  std::sort(otherNhs.begin(), otherNhs.end());
-  return myNhs < otherNhs;
+  if (ifName != other.ifName) {
+    return ifName < other.ifName;
+  }
+  return nextHop < other.nextHop;
+}
+
+bool
+thrift::Route::operator<(const openr::thrift::Route& other) const {
+  if (prefix != other.prefix) {
+    return prefix < other.prefix;
+  }
+  auto myPaths = paths;
+  auto otherPaths = other.paths;
+  std::sort(myPaths.begin(), myPaths.end());
+  std::sort(otherPaths.begin(), otherPaths.end());
+  return myPaths < otherPaths;
 }
 
 int
@@ -406,4 +417,84 @@ getRemoteIfName(const thrift::Adjacency& adj) {
   }
   return folly::sformat("neigh-{}", adj.ifName);
 }
+
+std::vector<thrift::Path>
+getBestPaths(std::vector<thrift::Path> const& paths) {
+  // Find minimum cost
+  int32_t minCost = std::numeric_limits<int32_t>::max();
+  for (auto const& path : paths) {
+    minCost = std::min(minCost, path.metric);
+  }
+
+  // Find paths with the minimum cost
+  std::vector<thrift::Path> ret;
+  for (auto const& path : paths) {
+    if (path.metric == minCost) {
+      ret.push_back(path);
+    }
+  }
+
+  return ret;
+}
+
+std::vector<thrift::UnicastRoute>
+createUnicastRoutes(
+    const std::vector<thrift::Route>& routes) {
+  // Build routes to be programmed.
+  std::vector<thrift::UnicastRoute> newRoutes;
+
+  for (auto const& route : routes) {
+    std::vector<thrift::BinaryAddress> nexthops;
+    for (auto const& path : getBestPaths(route.paths)) {
+      nexthops.push_back(path.nextHop);
+      auto& nexthop = nexthops.back();
+      nexthop.ifName = path.ifName;
+    }
+
+    // Create thrift::UnicastRoute object in-place
+    newRoutes.emplace_back(
+        apache::thrift::FRAGILE, route.prefix, std::move(nexthops));
+  } // for ... routes
+
+  return newRoutes;
+}
+
+std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
+findDeltaRoutes(
+  const thrift::RouteDatabase& newRouteDb,
+  const thrift::RouteDatabase& oldRouteDb) {
+  std::pair<
+    std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>> res;
+
+  DCHECK(newRouteDb.thisNodeName == oldRouteDb.thisNodeName);
+
+  // Find new routes to be added/updated/removed
+  std::vector<thrift::Route> routesToAddUpdate;
+  std::set_difference(
+    newRouteDb.routes.begin(), newRouteDb.routes.end(),
+    oldRouteDb.routes.begin(), oldRouteDb.routes.end(),
+    std::inserter(routesToAddUpdate, routesToAddUpdate.begin()));
+  std::vector<thrift::Route> routesToRemoveOrUpdate;
+  std::set_difference(
+    oldRouteDb.routes.begin(), oldRouteDb.routes.end(),
+    newRouteDb.routes.begin(), newRouteDb.routes.end(),
+    std::inserter(routesToRemoveOrUpdate, routesToRemoveOrUpdate.begin()));
+
+  // Find entry of prefix to be removed
+  std::set<thrift::IpPrefix> prefixesToRemove;
+  for (const auto& route : routesToRemoveOrUpdate) {
+    prefixesToRemove.emplace(route.prefix);
+  }
+  for (const auto& route : routesToAddUpdate) {
+    prefixesToRemove.erase(route.prefix);
+  }
+
+  // Build routes to be programmed.
+  res.first = createUnicastRoutes(routesToAddUpdate);
+  res.second = {prefixesToRemove.begin(), prefixesToRemove.end()};
+
+  return res;
+}
+
+
 } // namespace openr

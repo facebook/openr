@@ -24,6 +24,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/AllocPrefix_types.h>
+#include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/IpPrefix_types.h>
 #include <openr/if/gen-cpp2/KnownKeys_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -221,4 +222,26 @@ int64_t generateHash(
  */
 std::string getRemoteIfName(
   const thrift::Adjacency& adj);
+
+/**
+ * Given list of paths returns the list of best paths (paths with lowest
+ * metric value).
+ */
+std::vector<thrift::Path> getBestPaths(std::vector<thrift::Path> const& paths);
+
+/**
+ * Transform `thrift::Route` object to `thrift::UnicastRoute` object
+ * Only best nexthops are retained
+ */
+std::vector<thrift::UnicastRoute> createUnicastRoutes(
+    const std::vector<thrift::Route>& routes);
+
+/**
+ * Find delta between two route databases
+ * Return type is a pair of <RoutesToBeUpdate, routesToRemove>
+ */
+std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
+findDeltaRoutes(
+    const thrift::RouteDatabase& newRouteDb,
+    const thrift::RouteDatabase& oldRouteDb);
 } // namespace openr
