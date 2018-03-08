@@ -626,6 +626,8 @@ main(int argc, char** argv) {
       monitorSubmitUrl,
       KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
       KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
+      std::make_pair(Constants::kOpenrVersion,
+                     Constants::kOpenrSupportedVersion),
       context);
 
   std::thread sparkThread([&spark]() noexcept {

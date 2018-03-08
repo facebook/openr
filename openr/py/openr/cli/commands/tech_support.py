@@ -34,6 +34,7 @@ class TechSupportCmd():
         funcs = [
             ('openr config file', self.print_config_file),
             ('openr runtime params', self.print_runtime_params),
+            ('openr version', self.print_openr_version),
             ('openr config', self.print_config),
             ('breeze prefixmgr view', self.print_prefixmgr_view),
             ('breeze lm links', self.print_lm_links),
@@ -78,6 +79,9 @@ class TechSupportCmd():
         output = subprocess.check_output(
             ['pgrep', '-a', 'openr'], stderr=subprocess.STDOUT)
         print(output)
+
+    def print_openr_version(self):
+        lm.GetOpenrVersionCmd(self.cli_opts).run(False)
 
     def print_config(self):
         config.ConfigPrefixAllocatorCmd(self.cli_opts).run()

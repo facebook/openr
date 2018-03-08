@@ -237,6 +237,13 @@ class Constants {
 
   // Spark UDP multicast port for sending spark-hello messages
   static const int32_t kSparkMcastPort;
+
+  // Current OpenR version
+  static const int32_t kOpenrVersion;
+
+  // Lowest Supported OpenR version
+  static const int32_t kOpenrSupportedVersion;
+
 };
 
 } // namespace openr

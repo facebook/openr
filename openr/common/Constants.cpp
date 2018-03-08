@@ -183,4 +183,10 @@ const int32_t Constants::kFibAgentPort{60100};
 // Spark UDP multicast port for sending spark-hello messages
 const int32_t Constants::kSparkMcastPort{6666};
 
+// Current OpenR version, max build number <= 99
+const int32_t Constants::kOpenrVersion{20180307};
+
+// Lowest Supported OpenR version, max build number <= 99
+const int32_t Constants::kOpenrSupportedVersion{20180307};
+
 } // namespace openr

@@ -82,3 +82,13 @@ class LMClient():
 
         return self.send_link_monitor_cmd(SET if override else UNSET,
                                                   interface, metric, node)
+
+    def get_openr_version(self):
+
+        command = lm_types.LinkMonitorCommand.GET_VERSION
+
+        req_msg = lm_types.LinkMonitorRequest(command)
+        self._lm_cmd_socket.send_thrift_obj(req_msg)
+
+        return \
+           self._lm_cmd_socket.recv_thrift_obj(lm_types.OpenrVersions)

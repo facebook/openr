@@ -39,6 +39,8 @@ class LMCli(object):
                             name='set-adj-metric')
         self.lm.add_command(UnsetAdjMetricCli().unset_adj_metric,
                             name='unset-adj-metric')
+        self.lm.add_command(GetOpenrVersionCli().get_openr_version,
+                            name='version')
 
 
     @click.group()
@@ -180,3 +182,17 @@ class UnsetAdjMetricCli(object):
         lm.UnsetAdjMetricCmd(cli_opts).run(node, interface, yes)
         nodes = parse_nodes(cli_opts.host, '', cli_opts.lm_cmd_port)
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
+
+
+class GetOpenrVersionCli(object):
+
+    @click.command()
+    @click.option('--json/--no-json', default=False,
+                  help='Dump in JSON format')
+    @click.pass_obj
+    def get_openr_version(cli_opts, json):  # noqa: B902
+        '''
+        Get OpenR version
+        '''
+
+        lm.GetOpenrVersionCmd(cli_opts).run(json)

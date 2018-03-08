@@ -9,6 +9,7 @@ namespace cpp2 openr.thrift
 namespace py openr.LinkMonitor
 
 include "Lsdb.thrift"
+include "Spark.thrift"
 
 //
 // LinkMonitor provides simple API to drain/undrain the node
@@ -55,6 +56,11 @@ enum LinkMonitorCommand {
    */
   SET_ADJ_METRIC     = 8,  // No response will be sent
   UNSET_ADJ_METRIC   = 9,  // No response will be sent
+
+  /**
+   * Command to request OpenR version
+   */
+   GET_VERSION = 10, // replies with OpenR version
 }
 
 struct LinkMonitorRequest {
@@ -62,6 +68,11 @@ struct LinkMonitorRequest {
  2: string interfaceName
  3: i32 overrideMetric = 1  # Default value (can't be less than 1)
  4: optional string adjNodeName
+}
+
+struct OpenrVersions {
+ 1: Spark.OpenrVersion version
+ 2: Spark.OpenrVersion lowestSupportedVersion
 }
 
 struct InterfaceDetails {

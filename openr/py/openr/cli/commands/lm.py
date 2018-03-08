@@ -78,6 +78,12 @@ class UnsetAdjMetricCmd(LMCmd):
         set_unset_adj_metric(self.client, False, node, interface, 0, yes)
 
 
+class GetOpenrVersionCmd(LMCmd):
+    def run(self, json):
+
+        get_openr_version_cmd(self.client, json)
+
+
 class LMLinksCmd(LMCmd):
     def run(self, all, json):
         links = self.client.dump_links(all)
@@ -278,3 +284,21 @@ def set_unset_adj_metric(client, override, node, interface, metric, yes):
     Set/Unset metric override for the specific adjacency.
     '''
     client.set_unset_adj_metric(override, node, interface, metric)
+
+
+def get_openr_version_cmd(client, json):
+    '''
+    Get OpenR version command
+    '''
+    openr_version = client.get_openr_version()
+
+    if json:
+        version = utils.thrift_to_dict(openr_version)
+        print(utils.json_dumps(version))
+    else:
+        rows = []
+        columns = ['', '', '']
+        rows.append(['Current version', ':', openr_version.version])
+        rows.append(['Lowest supported version', ':',
+                        openr_version.lowestSupportedVersion])
+        print(printing.render_horizontal_table(rows, columns, tablefmt='plain'))

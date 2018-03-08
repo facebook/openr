@@ -63,9 +63,16 @@ struct ReflectedNeighborInfo {
 }
 
 //
+// OpenR version
+//
+typedef i32 OpenrVersion
+
+//
 // This is the data embedded in the payload of hello packet
 //
 struct SparkPayload {
+  7: OpenrVersion version = 20180307
+
   1: required SparkNeighbor originator
 
   // the senders sequence number, inremented on each hello

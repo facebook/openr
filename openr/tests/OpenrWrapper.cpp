@@ -168,6 +168,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStorePubPort{0}, // these port numbers won't be used
       KvStoreCmdPort{0},
+      std::make_pair(Constants::kOpenrVersion,
+                     Constants::kOpenrSupportedVersion),
       context_);
 
   // spark client socket

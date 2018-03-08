@@ -157,7 +157,10 @@ class SparkFixture : public testing::Test {
       int sparkNum,
       std::chrono::milliseconds holdTime = kHoldTime,
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
-      std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime) {
+      std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
+      std::pair<uint32_t, uint32_t> version =
+                       std::make_pair(Constants::kOpenrVersion,
+                       Constants::kOpenrSupportedVersion)) {
     return std::make_unique<SparkWrapper>(
         domainName,
         myNodeName,
@@ -172,6 +175,7 @@ class SparkFixture : public testing::Test {
         SparkCmdUrl{folly::sformat("{}-{}", kSparkCmdUrl, sparkNum)},
         MonitorSubmitUrl{
             folly::sformat("{}-{}", kSparkCounterCmdUrl, sparkNum)},
+        version,
         context,
         mockIoProvider);
   }
@@ -1725,6 +1729,106 @@ TEST_F(SparkFixture, dropPacketsTest) {
   monitorThread1->join();
   zmqMonitor2->stop();
   monitorThread2->join();
+}
+
+//
+// start spark1 spark2 together, one  with higher version,
+// verify adjacency is formed. Then start node-3 with an unspported
+// version, verify that adjacency is not formed
+//
+TEST_F(SparkFixture, VersionTest) {
+  LOG(INFO) << "SparkFixture version test";
+  using namespace std::chrono;
+  //
+  // Define interface names for the test
+  //
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2},
+                                   {iface3, ifIndex3}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 100}, {iface3, 100}}},
+      {iface2, {{iface1, 100}, {iface3, 100}}},
+      {iface3, {{iface1, 100}, {iface2, 100}}},
+  };
+
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start spark1, spark2 with a different but supported version
+  auto spark1 = createSpark(
+      kDomainName,
+      "node-1",
+      keyPair1,
+      nullptr,
+      1,
+      milliseconds(6000) /* hold time */,
+      milliseconds(2000) /* my keep alive time */,
+      milliseconds(2000) /* keep alive time */,
+      std::make_pair(Constants::kOpenrVersion,
+                    Constants::kOpenrSupportedVersion));
+  auto spark2 = createSpark(
+      kDomainName,
+      "node-2",
+      keyPair2,
+      nullptr,
+      2,
+      milliseconds(6000) /* hold time */,
+      milliseconds(2000) /* my keep alive time */,
+      milliseconds(2000) /* keep alive time */,
+      std::make_pair(Constants::kOpenrSupportedVersion,
+                    Constants::kOpenrSupportedVersion));
+
+  // start tracking iface1
+  EXPECT_TRUE(spark1->updateInterfaceDb(
+      {{iface1, ifIndex1, ip1V4.asV4(), ip1V6.asV6()}}));
+
+  // start tracking iface2
+  EXPECT_TRUE(spark2->updateInterfaceDb(
+      {{iface2, ifIndex2, ip2V4.asV4(), ip2V6.asV6()}}));
+
+  LOG(INFO) << "Preparing to receive the messages from sparks";
+  //
+  // Now wait for sparks to detect each other
+  //
+  {
+    auto event =
+        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "Version test: node-1 reported adjacency to node-2";
+  }
+  {
+    auto event =
+        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "Version test: node-2 reported adjacency to node-1";
+  }
+  //
+  // Start node-3 with an unsupported version, shouldn't form adjacency
+  //
+  LOG(INFO) << "Starting node-3";
+
+  // create Spark3
+  auto spark3 = createSpark(
+      kDomainName,
+      "node-3",
+      keyPair3,
+      nullptr,
+      3 /* changed */,
+      milliseconds(6000) /* hold time */,
+      milliseconds(2000) /* my keep alive time */,
+      milliseconds(2000) /* fast keep alive time */,
+      std::make_pair(Constants::kOpenrSupportedVersion - 1,
+                    Constants::kOpenrSupportedVersion));
+
+  LOG(INFO) << "Adding iface3 to node-3";
+
+  // add interface
+  EXPECT_TRUE(spark3->updateInterfaceDb(
+      {{iface3, ifIndex3, ip3V4.asV4(), ip3V6.asV6()}}));
+
+  auto maybeEvent = spark1->recvNeighborEvent(kHoldTime * 100);
+
+  EXPECT_FALSE(maybeEvent.hasValue());
 }
 
 int

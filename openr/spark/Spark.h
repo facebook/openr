@@ -67,6 +67,7 @@ class Spark final : public fbzmq::ZmqEventLoop {
       MonitorSubmitUrl const& monitorSubmitUrl,
       KvStorePubPort kvStorePubPort,
       KvStoreCmdPort kvStoreCmdPort,
+      std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext);
 
   ~Spark() override = default;
@@ -217,6 +218,9 @@ class Spark final : public fbzmq::ZmqEventLoop {
   // this is used to inform peers about my kvstore tcp ports
   const uint16_t kKvStorePubPort_;
   const uint16_t kKvStoreCmdPort_;
+
+  // current version and supported version
+  const thrift::OpenrVersions kVersion_;
 
   //
   // Interface tracking

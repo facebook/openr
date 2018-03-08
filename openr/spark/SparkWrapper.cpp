@@ -24,6 +24,7 @@ SparkWrapper::SparkWrapper(
     SparkReportUrl const& reportUrl,
     SparkCmdUrl const& cmdUrl,
     MonitorSubmitUrl const& monitorCmdUrl,
+    std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
     std::shared_ptr<IoProvider> ioProvider)
     : myNodeName_(myNodeName),
@@ -47,6 +48,7 @@ SparkWrapper::SparkWrapper(
       monitorCmdUrl,
       KvStorePubPort{10001},
       KvStoreCmdPort{10002},
+      version,
       zmqContext);
 
   // start spark

@@ -341,6 +341,7 @@ Spark::Spark(
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStorePubPort kvStorePubPort,
     KvStoreCmdPort kvStoreCmdPort,
+    std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext)
     : myDomainName_(myDomainName),
       myNodeName_(myNodeName),
@@ -358,6 +359,7 @@ Spark::Spark(
       cmdSocket_(zmqContext),
       kKvStorePubPort_(kvStorePubPort),
       kKvStoreCmdPort_(kvStoreCmdPort),
+      kVersion_(apache::thrift::FRAGILE, version.first, version.second),
       ioProvider_(std::make_shared<IoProvider>()) {
   CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
       << "Keep-alive-time must be less than hold-time.";
@@ -580,13 +582,21 @@ Spark::validateHelloPacket(
     std::string const& ifName, thrift::SparkHelloPacket const& helloPacket) {
   auto const& originator = helloPacket.payload.originator;
   auto const& neighborName = originator.nodeName;
+  uint32_t const& remoteVersion =
+                          static_cast<uint32_t>(helloPacket.payload.version);
 
   // in case our own packet has looped
   if (neighborName == myNodeName_) {
     LOG(ERROR) << "Ignore packet from self (" << myNodeName_ << ")";
     return PacketValidationResult::FAILURE;
   }
-
+  // version check
+  if (remoteVersion < static_cast<uint32_t>(kVersion_.lowestSupportedVersion)) {
+    LOG(ERROR) << "Unsupported version: " << neighborName << " "
+               << remoteVersion << ", must be >= "
+               << kVersion_.lowestSupportedVersion;
+    return PacketValidationResult::FAILURE;
+  }
   // known key check is enabled
   if (knownKeysStore_) {
     // see if the neighbor's public key is known
@@ -1065,6 +1075,7 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
   const auto ifIndex = interfaceEntry.ifIndex;
   const auto v4Addr = interfaceEntry.v4Addr;
   const auto v6Addr = interfaceEntry.v6LinkLocalAddr;
+  thrift::OpenrVersion openrVer(kVersion_.version);
 
   thrift::SparkNeighbor myself(
       apache::thrift::FRAGILE,
@@ -1081,6 +1092,7 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
   // create the hello packet payload
   auto payload = thrift::SparkPayload(
       apache::thrift::FRAGILE,
+      openrVer,
       myself,
       mySeqNum_,
       std::map<std::string, thrift::ReflectedNeighborInfo>{},

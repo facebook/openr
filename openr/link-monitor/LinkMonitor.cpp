@@ -1303,6 +1303,20 @@ LinkMonitor::processCommand() {
     break;
   }
 
+  case thrift::LinkMonitorCommand::GET_VERSION: {
+
+    thrift::OpenrVersions openrVersion(apache::thrift::FRAGILE,
+              Constants::kOpenrVersion, Constants::kOpenrSupportedVersion);
+
+    auto ret = linkMonitorCmdSock_.sendMultiple(
+        clientIdMessage,
+        fbzmq::Message::fromThriftObj(openrVersion, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending version response. " << ret.error();
+    }
+    break;
+  }
+
   default:
     LOG(ERROR) << "Link Monitor received unknown command: "
                << static_cast<int>(req.cmd);
