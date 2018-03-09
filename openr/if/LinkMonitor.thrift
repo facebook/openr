@@ -6,6 +6,7 @@
  */
 
 namespace cpp2 openr.thrift
+namespace php Openr
 namespace py openr.LinkMonitor
 
 include "Lsdb.thrift"
