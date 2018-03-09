@@ -19,7 +19,7 @@ namespace openr {
 class PrefixManagerClient final {
  public:
   PrefixManagerClient(
-      const PrefixManagerLocalCmdUrl& localCmdUrl, fbzmq::Context& ontext);
+      const PrefixManagerLocalCmdUrl& localCmdUrl, fbzmq::Context& context);
 
   folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error> addPrefixes(
       const std::vector<thrift::PrefixEntry>& prefixes);
