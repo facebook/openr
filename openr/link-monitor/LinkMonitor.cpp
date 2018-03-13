@@ -375,7 +375,7 @@ LinkMonitor::prepare() noexcept {
 
   addSocket(
       fbzmq::RawZmqSocketPtr{*nlEventSub_}, ZMQ_POLLIN, [this](int) noexcept {
-        VLOG(1) << "LinkMonitor: Netlink Platform message received....";
+        VLOG(2) << "LinkMonitor: Netlink Platform message received....";
         fbzmq::Message eventHeader, eventData;
         const auto ret = nlEventSub_.recvMultiple(eventHeader, eventData);
         if (ret.hasError()) {
@@ -435,7 +435,7 @@ LinkMonitor::prepare() noexcept {
       fbzmq::RawZmqSocketPtr{*linkMonitorCmdSock_},
       ZMQ_POLLIN,
       [this](int) noexcept {
-        LOG(INFO) << "LinkMonitor: processing LinkMonitor command";
+        VLOG(2) << "LinkMonitor: processing LinkMonitor command";
         processCommand();
       });
 
@@ -461,7 +461,7 @@ LinkMonitor::prepare() noexcept {
   interfaceDbSyncTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
     auto success = syncInterfaces();
     if (success) {
-      VLOG(1) << "InterfaceDb Sync is successful";
+      VLOG(2) << "InterfaceDb Sync is successful";
       expBackoff_.reportSuccess();
       interfaceDbSyncTimer_->scheduleTimeout(kIfUpRetryInterval, isPeriodic);
     } else {
@@ -469,9 +469,9 @@ LinkMonitor::prepare() noexcept {
       expBackoff_.reportError();
       interfaceDbSyncTimer_->scheduleTimeout(
           expBackoff_.getTimeRemainingUntilRetry());
-      VLOG(1) << "InterfaceDb Sync failed, apply exponential "
-              << "backoff and retry in "
-              << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
+      LOG(ERROR) << "InterfaceDb Sync failed, apply exponential "
+                 << "backoff and retry in "
+                 << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
     }
   });
   // schedule immediate with small timeout
@@ -1209,8 +1209,8 @@ LinkMonitor::processCommand() {
     break;
 
   case thrift::LinkMonitorCommand::DUMP_LINKS: {
-    LOG(INFO) << "Dump Links requested, replying with " << interfaceDb_.size()
-              << " links";
+    VLOG(2) << "Dump Links requested, replying with " << interfaceDb_.size()
+            << " links";
 
     auto makeIfDetails =
         [this](const std::pair<std::string, LinkMonitor::InterfaceEntry>& intf)

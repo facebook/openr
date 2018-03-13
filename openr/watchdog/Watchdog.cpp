@@ -50,7 +50,7 @@ Watchdog::delEvl(ZmqEventLoop* evl) {
 
 void
 Watchdog::updateCounters() {
-  VLOG(1) << "Checking thread aliveness counters...";
+  VLOG(2) << "Checking thread aliveness counters...";
 
   auto const& now = std::chrono::duration_cast<std::chrono::seconds>(
       std::chrono::system_clock::now().time_since_epoch());

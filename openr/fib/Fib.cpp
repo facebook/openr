@@ -514,7 +514,6 @@ Fib::logEvent(const std::string& event) {
 void
 Fib::logPerfEvents() {
   if (!maybePerfEvents_ or !maybePerfEvents_->events.size()) {
-    LOG(ERROR) << "Received null or empty perf events to log!";
     return;
   }
 

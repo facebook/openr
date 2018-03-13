@@ -89,14 +89,14 @@ NetlinkFibHandler::NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop)
   keepAliveCheckTimer_ = fbzmq::ZmqTimeout::make(zmqEventLoop, [&]() noexcept {
     auto now = std::chrono::steady_clock::now();
     if (now - recentKeepAliveTs_ > kRoutesHoldTimeout) {
-      LOG(ERROR) << "Open/R health check: FAIL. Expiring routes!";
+      LOG(WARNING) << "Open/R health check: FAIL. Expiring routes!";
       auto emptyRoutes = std::make_unique<std::vector<thrift::UnicastRoute>>();
       auto ret = future_syncFib(0 /* clientId */, std::move(emptyRoutes));
       ret.then([]() {
-        LOG(INFO) << "Expired routes on health check failure!";
+        LOG(WARNING) << "Expired routes on health check failure!";
       });
     } else {
-      LOG(INFO) << "Open/R health check: PASS";
+      VLOG(2) << "Open/R health check: PASS";
     }
   });
   zmqEventLoop->runInEventLoop([&]() {
