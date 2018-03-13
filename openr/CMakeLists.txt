@@ -155,6 +155,7 @@ thrift_object(
 add_dependencies(
   LinkMonitor-cpp2-obj
   Lsdb-cpp2-obj
+  Spark-cpp2-obj
 )
 
 thrift_object(
