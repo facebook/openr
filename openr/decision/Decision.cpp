@@ -220,17 +220,18 @@ createRouteMulti(
     return nullptr;
   }
 
-  vector<thrift::Path> paths;
+  std::set<thrift::Path> paths;
   for (auto const& kv : adjacencies) {
     auto const& adjacency = kv.first;
-    paths.emplace_back(
+    paths.insert(thrift::Path(
         FRAGILE,
         addr.isV4() ? adjacency.nextHopV4 : adjacency.nextHopV6,
         adjacency.ifName,
-        kv.second /* metric */);
+        kv.second /* metric */));
   }
 
-  return thrift::Route(FRAGILE, prefix, std::move(paths));
+  return thrift::Route(
+      FRAGILE, prefix, vector<thrift::Path>(paths.begin(), paths.end()));
 }
 
 } // anonymous namespace

@@ -1858,7 +1858,11 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
  * Test to verify route calculation when a prefix is advertised from more than
  * one node.
  *
- *               10
+ *
+ *  node4(p4)
+ *     |
+ *   5 |
+ *     |         10
  *  node1(p1) --------- node2(p2)
  *     |
  *     | 10
@@ -1867,6 +1871,10 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
  */
 TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   // Note: local copy overwriting global ones, to be changed in this test
+  auto adj14 =
+      createAdjacency("4", "1/4", "4/1", "fe80::4", "192.168.0.4", 5, 0);
+  auto adj41 =
+      createAdjacency("1", "4/1", "1/4", "fe80::1", "192.168.0.1", 5, 0);
   auto adj12 =
       createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 0);
   auto adj21 =
@@ -1878,13 +1886,15 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   //
   auto publication = thrift::Publication(
       FRAGILE,
-      {{"adj:1", createAdjValue("1", 1, {adj12, adj13})},
+      {{"adj:1", createAdjValue("1", 1, {adj14, adj12, adj13})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"adj:3", createAdjValue("3", 1, {adj31})},
+       {"adj:4", createAdjValue("4", 1, {adj41})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})},
        // node3 has same address w/ node2
-       {"prefix:3", createPrefixValue("3", 1, {addr2})}},
+       {"prefix:3", createPrefixValue("3", 1, {addr2})},
+       {"prefix:4", createPrefixValue("4", 1, {addr4})}},
       {});
 
   replyInitialSyncReq(publication);
@@ -1896,37 +1906,46 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   // Query new information
   // validate routers
   auto routeMapList =
-      dumpRouteDatabase(decisionReq, {"1", "2", "3"}, serializer);
-  EXPECT_EQ(3, routeMapList.size()); // 1 route per neighbor
+      dumpRouteDatabase(decisionReq, {"1", "2", "3", "4"}, serializer);
+  EXPECT_EQ(4, routeMapList.size()); // 1 route per neighbor
   RouteMap routeMap;
   for (auto kv : routeMapList) {
     fillRouteMap(kv.first, routeMap, kv.second);
   }
 
   // 1
-  EXPECT_EQ(1, routeMapList["1"].routes.size());
+  EXPECT_EQ(2, routeMapList["1"].routes.size());
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops(
           {make_pair(toNextHop(adj12), 10), make_pair(toNextHop(adj13), 10)}));
 
   // 2
-  EXPECT_EQ(1, routeMapList["2"].routes.size());
+  EXPECT_EQ(2, routeMapList["2"].routes.size());
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
       NextHops({make_pair(toNextHop(adj21), 10)}));
 
   // 3
-  EXPECT_EQ(1, routeMapList["3"].routes.size());
+  EXPECT_EQ(2, routeMapList["3"].routes.size());
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
       NextHops({make_pair(toNextHop(adj31), 10)}));
+
+  // 4
+  EXPECT_EQ(2, routeMapList["4"].routes.size());
+  EXPECT_EQ(
+      routeMap[make_pair("4", toString(addr2))],
+      NextHops({make_pair(toNextHop(adj41), 15)}));
 
   /**
    * Increase the distance between node-1 and node-2 to 100. Now we on node-1
    * will reflect weights into nexthops and FIB will not do multipath
    *
-   *               100
+   *  node4(p4)
+   *     |
+   *   5 |
+   *     |         100
    *  node1(p1) --------- node2(p2)
    *     |
    *     | 10
@@ -1938,7 +1957,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   publication = thrift::Publication(
       FRAGILE,
-      {{"adj:1", createAdjValue("1", 2, {adj12, adj13})},
+      {{"adj:1", createAdjValue("1", 2, {adj12, adj13, adj14})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
       {});
 
@@ -1951,31 +1970,39 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // Query new information
   // validate routers
-  routeMapList = dumpRouteDatabase(decisionReq, {"1", "2", "3"}, serializer);
-  EXPECT_EQ(3, routeMapList.size()); // 1 route per neighbor
+  routeMapList =
+      dumpRouteDatabase(decisionReq, {"1", "2", "3", "4"}, serializer);
+  EXPECT_EQ(4, routeMapList.size()); // 1 route per neighbor
   routeMap.clear();
   for (auto kv : routeMapList) {
     fillRouteMap(kv.first, routeMap, kv.second);
   }
 
   // 1
-  EXPECT_EQ(1, routeMapList["1"].routes.size());
+  EXPECT_EQ(2, routeMapList["1"].routes.size());
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops(
-          {make_pair(toNextHop(adj12), 100), make_pair(toNextHop(adj13), 10)}));
+          {make_pair(toNextHop(adj13), 10), make_pair(toNextHop(adj12), 100)}));
 
   // 2
-  EXPECT_EQ(1, routeMapList["2"].routes.size());
+  EXPECT_EQ(2, routeMapList["2"].routes.size());
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
       NextHops({make_pair(toNextHop(adj21), 100)}));
 
   // 3
-  EXPECT_EQ(1, routeMapList["3"].routes.size());
+  EXPECT_EQ(2, routeMapList["3"].routes.size());
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
       NextHops({make_pair(toNextHop(adj31), 10)}));
+
+  // 4
+  EXPECT_EQ(2, routeMapList["4"].routes.size());
+  EXPECT_EQ(
+      routeMap[make_pair("4", toString(addr2))],
+      NextHops(
+          {make_pair(toNextHop(adj41), 15), make_pair(toNextHop(adj41), 105)}));
 }
 
 /**
