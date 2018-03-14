@@ -392,11 +392,13 @@ NetlinkRouteSocket::addUnicastRoute(
           promise.setValue();
         } catch (NetlinkException const& ex) {
           LOG(ERROR) << "Error adding unicast routes to "
-                     << folly::IPAddress::networkToString(prefix);
+                     << folly::IPAddress::networkToString(prefix)
+                     << ". Exception: " << folly::exceptionStr(ex);
           promise.setException(ex);
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error adding unicast routes to "
-                     << folly::IPAddress::networkToString(prefix);
+                     << folly::IPAddress::networkToString(prefix)
+                     << ". Exception: " << folly::exceptionStr(ex);
           promise.setException(ex);
         }
       });
@@ -419,11 +421,13 @@ NetlinkRouteSocket::addMulticastRoute(
           promise.setValue();
         } catch (NetlinkException const& ex) {
           LOG(ERROR) << "Error adding multicast routes to "
-                     << folly::IPAddress::networkToString(prefix);
+                     << folly::IPAddress::networkToString(prefix)
+                     << ". Exception: " << folly::exceptionStr(ex);
           promise.setException(ex);
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error adding multicast routes to "
-                     << folly::IPAddress::networkToString(prefix);
+                     << folly::IPAddress::networkToString(prefix)
+                     << ". Exception: " << folly::exceptionStr(ex);
           promise.setException(ex);
         }
       });

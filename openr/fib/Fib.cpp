@@ -371,14 +371,14 @@ Fib::updateRoutes(
     client_.reset();
     dirtyRouteDb_ = true;
     syncRouteDbDebounced(); // Schedule future full sync of route DB
-    LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
+    LOG(ERROR) << "Failed to make thrift call to FibAgent. Error: "
                << folly::exceptionStr(e);
   }
 }
 
 bool
 Fib::syncRouteDb() {
-  LOG(INFO) << "Syncing latest routeDb with fib-agent on "
+  LOG(INFO) << "Syncing latest routeDb with fib-agent with "
             << routeDb_.routes.size() << " routes";
 
   // In dry run we just print the routes. No real action
