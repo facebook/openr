@@ -10,6 +10,7 @@ After=network-online.target wedge_agent.service
 [Service]
 Type=simple
 ExecStart=/etc/packages/openr/current/run_openr.sh /etc/packages/openr/current/fabric_openr_config
+ExecStartPost=/bin/ln -sf /etc/packages/openr/current/breeze /usr/sbin/breeze
 Restart=always
 RestartSec=3
 TimeoutSec=10
