@@ -245,6 +245,7 @@ install(FILES
 
 add_library(openrlib
   allocators/PrefixAllocator.cpp
+  common/BuildInfo.cpp
   common/KnownKeysStore.cpp
   common/ExponentialBackoff.cpp
   common/Util.cpp
@@ -413,13 +414,14 @@ install(FILES
 )
 
 install(FILES
-  common/KnownKeysStore.h
-  common/Types.h
   common/AddressUtil.h
-  common/ExponentialBackoff.h
-  common/Util.h
-  common/StepDetector.h
+  common/BuildInfo.h
   common/Constants.h
+  common/ExponentialBackoff.h
+  common/KnownKeysStore.h
+  common/StepDetector.h
+  common/Types.h
+  common/Util.h
   DESTINATION include/openr/common
 )
 

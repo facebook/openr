@@ -5,9 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <syslog.h>
+#include <iostream>
 #include <regex>
 #include <stdexcept>
+#include <syslog.h>
 
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
@@ -25,6 +26,7 @@
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/allocators/PrefixAllocator.h>
+#include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
@@ -316,6 +318,9 @@ main(int argc, char** argv) {
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   syslog(LOG_NOTICE, "Starting OpenR daemon.");
+
+  // Log build information
+  BuildInfo::log(std::cout);
 
   // Initialize all params
   folly::init(&argc, &argv);
