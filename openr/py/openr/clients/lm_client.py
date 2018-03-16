@@ -92,3 +92,11 @@ class LMClient():
 
         return \
            self._lm_cmd_socket.recv_thrift_obj(lm_types.OpenrVersions)
+
+    def get_build_info(self):
+
+        command = lm_types.LinkMonitorCommand.GET_BUILD_INFO
+        req_msg = lm_types.LinkMonitorRequest(command)
+        self._lm_cmd_socket.send_thrift_obj(req_msg)
+
+        return self._lm_cmd_socket.recv_thrift_obj(lm_types.BuildInfo)

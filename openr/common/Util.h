@@ -21,6 +21,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/AddressUtil.h>
+#include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/AllocPrefix_types.h>
@@ -28,6 +29,7 @@
 #include <openr/if/gen-cpp2/IpPrefix_types.h>
 #include <openr/if/gen-cpp2/KnownKeys_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 
 namespace std {
@@ -244,4 +246,7 @@ std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
 findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,
     const thrift::RouteDatabase& oldRouteDb);
+
+thrift::BuildInfo getBuildInfoThrift() noexcept;
+
 } // namespace openr

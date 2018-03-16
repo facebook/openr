@@ -39,9 +39,8 @@ class LMCli(object):
                             name='set-adj-metric')
         self.lm.add_command(UnsetAdjMetricCli().unset_adj_metric,
                             name='unset-adj-metric')
-        self.lm.add_command(GetOpenrVersionCli().get_openr_version,
-                            name='version')
-
+        self.lm.add_command(VersionCli().version, name='version')
+        self.lm.add_command(BuildInfoCli().build_info, name='build-info')
 
     @click.group()
     @click.option('--lm_cmd_port', default=None, type=int, help='Link Monitor port')
@@ -184,15 +183,27 @@ class UnsetAdjMetricCli(object):
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
 
 
-class GetOpenrVersionCli(object):
+class VersionCli(object):
 
     @click.command()
-    @click.option('--json/--no-json', default=False,
-                  help='Dump in JSON format')
+    @click.option('--json/--no-json', default=False, help='Dump in JSON format')
     @click.pass_obj
-    def get_openr_version(cli_opts, json):  # noqa: B902
+    def version(cli_opts, json):  # noqa: B902
         '''
         Get OpenR version
         '''
 
-        lm.GetOpenrVersionCmd(cli_opts).run(json)
+        lm.VersionCmd(cli_opts).run(json)
+
+
+class BuildInfoCli(object):
+
+    @click.command()
+    @click.option('--json/--no-json', default=False, help='Dump in JSON format')
+    @click.pass_obj
+    def build_info(cli_opts, json):  # noqa: B902
+        '''
+        Get build information from running version of Open/R
+        '''
+
+        lm.BuildInfoCmd(cli_opts).run(json)

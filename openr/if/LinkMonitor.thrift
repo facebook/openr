@@ -61,7 +61,12 @@ enum LinkMonitorCommand {
   /**
    * Command to request OpenR version
    */
-   GET_VERSION = 10, // replies with OpenR version
+   GET_VERSION = 10, // replies with OpenrVersions
+
+  /**
+   * Command to request build information
+   */
+  GET_BUILD_INFO = 11,  // replies with OpenrBuildInfo
 }
 
 struct LinkMonitorRequest {
@@ -118,4 +123,28 @@ struct LinkMonitorConfig {
 
   // Custom metric override for adjacency
   5: map<AdjKey, i32> adjMetricOverrides;
+}
+
+/**
+ * Struct representing build information. Attributes are described in detail
+ * in `openr/common/BuildInfo.h`
+ */
+struct BuildInfo {
+  1: string buildUser;
+  2: string buildTime;
+  3: i64 buildTimeUnix;
+  4: string buildHost;
+  5: string buildPath;
+  6: string buildRevision;
+  7: i64 buildRevisionCommitTimeUnix;
+  8: string buildUpstreamRevision;
+  9: i64 buildUpstreamRevisionCommitTimeUnix;
+  10: string buildPackageName;
+  11: string buildPackageVersion;
+  12: string buildPackageRelease;
+  13: string buildPlatform;
+  14: string buildRule;
+  15: string buildType;
+  16: string buildTool;
+  17: string buildMode;
 }

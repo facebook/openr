@@ -11,7 +11,6 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import click
-import sys
 
 from openr.cli.commands.tech_support import TechSupportCmd
 

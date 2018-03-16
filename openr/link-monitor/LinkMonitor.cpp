@@ -1317,6 +1317,17 @@ LinkMonitor::processCommand() {
     break;
   }
 
+  case thrift::LinkMonitorCommand::GET_BUILD_INFO: {
+    auto buildInfo = getBuildInfoThrift();
+    auto ret = linkMonitorCmdSock_.sendMultiple(
+        clientIdMessage,
+        fbzmq::Message::fromThriftObj(buildInfo, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending version response. " << ret.error();
+    }
+    break;
+  }
+
   default:
     LOG(ERROR) << "Link Monitor received unknown command: "
                << static_cast<int>(req.cmd);

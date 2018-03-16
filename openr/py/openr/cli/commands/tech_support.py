@@ -35,6 +35,7 @@ class TechSupportCmd():
             ('openr config file', self.print_config_file),
             ('openr runtime params', self.print_runtime_params),
             ('openr version', self.print_openr_version),
+            ('openr build information', self.print_build_info),
             ('openr config', self.print_config),
             ('breeze prefixmgr view', self.print_prefixmgr_view),
             ('breeze lm links', self.print_lm_links),
@@ -62,6 +63,7 @@ class TechSupportCmd():
         if failures:
             self.print_title('openr-tech-support failures')
             print('\n'.join(failures))
+
         print()
         return -1 if failures else 0
 
@@ -81,7 +83,10 @@ class TechSupportCmd():
         print(output)
 
     def print_openr_version(self):
-        lm.GetOpenrVersionCmd(self.cli_opts).run(False)
+        lm.VersionCmd(self.cli_opts).run(False)
+
+    def print_build_info(self):
+        lm.BuildInfoCmd(self.cli_opts).run(False)
 
     def print_config(self):
         config.ConfigPrefixAllocatorCmd(self.cli_opts).run()

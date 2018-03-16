@@ -496,5 +496,28 @@ findDeltaRoutes(
   return res;
 }
 
+thrift::BuildInfo
+getBuildInfoThrift() noexcept {
+ return thrift::BuildInfo(
+   apache::thrift::FRAGILE,
+   BuildInfo::getBuildUser(),
+   BuildInfo::getBuildTime(),
+   static_cast<int64_t>(BuildInfo::getBuildTimeUnix()),
+   BuildInfo::getBuildHost(),
+   BuildInfo::getBuildPath(),
+   BuildInfo::getBuildRevision(),
+   static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix()),
+   BuildInfo::getBuildUpstreamRevision(),
+   BuildInfo::getBuildUpstreamRevisionCommitTimeUnix(),
+   BuildInfo::getBuildPackageName(),
+   BuildInfo::getBuildPackageVersion(),
+   BuildInfo::getBuildPackageRelease(),
+   BuildInfo::getBuildPlatform(),
+   BuildInfo::getBuildRule(),
+   BuildInfo::getBuildType(),
+   BuildInfo::getBuildTool(),
+   BuildInfo::getBuildMode()
+ );
+}
 
 } // namespace openr
