@@ -298,6 +298,9 @@ const SparkReportUrl kSparkReportUrl{"inproc://spark_server_report"};
 // the URL for the spark server
 const SparkCmdUrl kSparkCmdUrl{"inproc://spark_server_cmd"};
 
+// the URL for Decision module
+const DecisionPubUrl kDecisionPubUrl{"inproc://decision_server_pub"};
+
 // the URL Prefix for the ConfigStore module
 const PersistentStoreUrl kConfigStoreUrl{"ipc:///tmp/openr_config_store_cmd"};
 
@@ -767,8 +770,7 @@ main(int argc, char** argv) {
       kvStoreLocalPubUrl,
       DecisionCmdUrl{folly::sformat(
           "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_rep_port)},
-      DecisionPubUrl{folly::sformat(
-          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_pub_port)},
+      kDecisionPubUrl,
       monitorSubmitUrl,
       context);
   std::thread decisionThread([&decision]() noexcept {
@@ -787,7 +789,7 @@ main(int argc, char** argv) {
       FLAGS_fib_handler_port,
       FLAGS_dryrun,
       std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
-      DecisionPubUrl{folly::sformat("tcp://[::1]:{}", FLAGS_decision_pub_port)},
+      kDecisionPubUrl,
       FibCmdUrl{
           folly::sformat("tcp://{}:{}", FLAGS_listen_addr, FLAGS_fib_rep_port)},
       LinkMonitorGlobalPubUrl{
