@@ -693,7 +693,6 @@ def print_interfaces_table(intf_map, print_all):
         lines.append('> {}\'s interfaces'.format(intf_db.thisNodeName))
         lines.append(sprint_interface_table(intf_db, print_all))
         lines.append('')
-    lines.pop()
     print('\n'.join(lines))
 
 
