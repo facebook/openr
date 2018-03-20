@@ -54,6 +54,8 @@ class KvStoreClient {
       std::string const& nodeId,
       std::string const& kvStoreLocalCmdUrl,
       std::string const& kvStoreLocalPubUrl,
+      folly::Optional<std::chrono::milliseconds>
+                      checkPersistKeyPeriod = 60000ms,
       folly::Optional<std::chrono::milliseconds> recvTimeout = 3000ms);
 
   ~KvStoreClient();
@@ -291,6 +293,8 @@ class KvStoreClient {
    */
   void prepareKvStoreCmdSock() noexcept;
 
+  void checkPersistKeyInStore();
+
   //
   // Immutable state
   //
@@ -308,6 +312,12 @@ class KvStoreClient {
   // Socket Urls (we assume local, unencrypted connection)
   const std::string kvStoreLocalCmdUrl_;
   const std::string kvStoreLocalPubUrl_;
+
+  // periodic timer to check existence of persist key in kv store
+  folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod_;
+
+  // check persiste key timer event
+  std::unique_ptr<fbzmq::ZmqTimeout> checkPersistKeyTimer_;
 
   // Recv Timeout to be used from from KvStore
   folly::Optional<std::chrono::milliseconds> recvTimeout_;

@@ -174,6 +174,7 @@ LinkMonitor::LinkMonitor(
       nodeId_,
       kvStoreLocalCmdUrl_,
       kvStoreLocalPubUrl_,
+      folly::none, /* persist key timer */
       folly::none /* recv timeout */);
 
   if (enableSegmentRouting) {

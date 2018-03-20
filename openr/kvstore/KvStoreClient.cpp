@@ -21,12 +21,14 @@ KvStoreClient::KvStoreClient(
     std::string const& nodeId,
     std::string const& kvStoreLocalCmdUrl,
     std::string const& kvStoreLocalPubUrl,
+    folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod,
     folly::Optional<std::chrono::milliseconds> recvTimeout)
     : nodeId_(nodeId),
       eventLoop_(eventLoop),
       context_(context),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
+      checkPersistKeyPeriod_(checkPersistKeyPeriod),
       recvTimeout_(recvTimeout),
       kvStoreCmdSock_(nullptr),
       kvStoreSubSock_(
@@ -77,6 +79,13 @@ KvStoreClient::KvStoreClient(
   ttlTimer_ = fbzmq::ZmqTimeout::make(
       eventLoop_, [this]() noexcept { advertiseTtlUpdates(); });
 
+  if (checkPersistKeyPeriod_.hasValue()) {
+    checkPersistKeyTimer_ = fbzmq::ZmqTimeout::make(
+      eventLoop_, [this]() noexcept { checkPersistKeyInStore(); });
+
+    checkPersistKeyTimer_->scheduleTimeout(checkPersistKeyPeriod_.value());
+  }
+
   // Attach socket callback
   eventLoop_->addSocket(
       fbzmq::RawZmqSocketPtr{*kvStoreSubSock_}, ZMQ_POLLIN, [&](int) noexcept {
@@ -111,6 +120,56 @@ KvStoreClient::prepareKvStoreCmdSock() noexcept {
     LOG(FATAL) << "Error connecting to URL '" << kvStoreLocalCmdUrl_ << "' "
                << kvStoreCmd.error();
   }
+}
+
+void
+KvStoreClient::checkPersistKeyInStore() {
+  // Prepare request
+  thrift::Request request;
+  request.cmd = thrift::Command::KEY_GET;
+
+  if (persistedKeyVals_.empty()) {
+    return;
+  }
+
+  for (auto const& key: persistedKeyVals_) {
+    request.keyGetParams.keys.push_back(key.first);
+  }
+  // Send request
+  prepareKvStoreCmdSock();
+  kvStoreCmdSock_->sendThriftObj(request, serializer_);
+
+  // Receive response
+  auto maybePublication = kvStoreCmdSock_->recvThriftObj<thrift::Publication>(
+      serializer_, recvTimeout_);
+
+  if (not maybePublication) {
+    kvStoreCmdSock_.reset();
+    LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
+               << "Exception: " << maybePublication.error();
+    // retry in 1 sec
+    checkPersistKeyTimer_->scheduleTimeout(1000ms);
+    return;
+  }
+
+  auto& publication = *maybePublication;
+  std::unordered_map<std::string, thrift::Value> keyVals;
+  for (auto const& key: persistedKeyVals_) {
+    auto rxkey  = publication.keyVals.find(key.first);
+    if (rxkey == publication.keyVals.end()) {
+       keyVals.emplace(key.first, persistedKeyVals_[key.first]);
+    }
+  }
+  // Advertise to KvStore
+  if (not keyVals.empty()) {
+    const auto ret = setKeysHelper(std::move(keyVals));
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
+                 << "Exception: " << ret.error();
+    }
+  }
+  processPublication(publication);
+  checkPersistKeyTimer_->scheduleTimeout(checkPersistKeyPeriod_.value());
 }
 
 void
@@ -168,6 +227,7 @@ KvStoreClient::persistKey(
 
   // Cache it in persistedKeyVals_. Override the existing one
   persistedKeyVals_[key] = thriftValue;
+
   // Override existing backoff as well
   backoffs_[key] = ExponentialBackoff<std::chrono::milliseconds>(
       Constants::kInitialBackoff, Constants::kMaxBackoff);

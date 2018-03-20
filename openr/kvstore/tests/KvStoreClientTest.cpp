@@ -363,6 +363,94 @@ TEST(KvStoreClient, PeerApiTest) {
   store->stop();
 }
 
+TEST(KvStoreClient, PersistKeyTest) {
+  fbzmq::Context context;
+  const std::string nodeId{"test_store"};
+
+  // Initialize and start KvStore with one fake peer
+  std::unordered_map<std::string, thrift::PeerSpec> peers;
+  peers.emplace(
+      "peer1",
+      thrift::PeerSpec(
+          apache::thrift::FRAGILE,
+          "inproc://fake_pub_url_1",
+          "inproc://fake_cmd_url_1",
+          fbzmq::util::genKeyPair().publicKey));
+  auto store = std::make_shared<KvStoreWrapper>(
+      context,
+      nodeId,
+      std::chrono::seconds(60) /* db sync interval */,
+      std::chrono::seconds(600) /* counter submit interval */,
+      peers);
+  store->run();
+
+  // Create another ZmqEventLoop instance for looping clients
+  fbzmq::ZmqEventLoop evl;
+
+  // Create and initialize kvstore-client, with persist key timer
+  auto client1 = std::make_shared<KvStoreClient>(
+      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl, 1000ms);
+
+  // Schedule callback to set keys from client1 (this will be executed first)
+  evl.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    client1->persistKey("test_key3", "test_value3");
+  });
+
+  // Schedule callback to get persist key from client1
+  evl.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
+    // 1st get key
+    auto maybeVal1 = client1->getKey("test_key3");
+
+    ASSERT(maybeVal1.hasValue());
+    EXPECT_EQ(1, maybeVal1->version);
+    EXPECT_EQ("test_value3", maybeVal1->value);
+  });
+
+  // simulate kvstore restart by erasing the test_key3
+  // set a TTL of 1ms in the store so that it gets deleted before refresh event
+  evl.scheduleTimeout(std::chrono::milliseconds(3), [&]() noexcept {
+
+    thrift::Value keyExpVal{apache::thrift::FRAGILE,
+                                 1,
+                                 nodeId,
+                                 "test_value3",
+                                 1,  /* ttl in msec */
+                                 500 /* ttl version */,
+                                 0 /* hash */};
+    store->setKey("test_key3", keyExpVal);
+  });
+
+  // check after few ms if key is deleted,
+  evl.scheduleTimeout(std::chrono::milliseconds(30), [&]() noexcept {
+    auto maybeVal3 = client1->getKey("test_key3");
+    ASSERT_FALSE(maybeVal3.hasValue());
+  });
+
+  // Schedule after a second, key will be erased and set back in kvstore
+  // with persist key check callback
+  evl.scheduleTimeout(std::chrono::milliseconds(3000), [&]() noexcept {
+    auto maybeVal3 = client1->getKey("test_key3");
+    ASSERT(maybeVal3.hasValue());
+    EXPECT_EQ(1, maybeVal3->version);
+    EXPECT_EQ("test_value3", maybeVal3->value);
+    evl.stop();
+  });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
+
+  // Stop store
+  LOG(INFO) << "Stopping store";
+  store->stop();
+}
+
 /**
  * Start a store and attach two clients to it. Set some Keys and add/del peers.
  * Verify that changes are visible in KvStore via a separate REQ socket to
