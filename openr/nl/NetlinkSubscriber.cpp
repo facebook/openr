@@ -375,7 +375,7 @@ NetlinkSubscriber::handleNeighborEvent(
     auto neighborKey =
         std::make_pair(neighborEntry->ifName, neighborEntry->destination);
     if (neighborEntry->isReachable) {
-      neighbors_.emplace(neighborKey, std::move(neighborEntry->linkAddress));
+      neighbors_[neighborKey] = neighborEntry->linkAddress;
     } else {
       neighbors_.erase(neighborKey);
     }
