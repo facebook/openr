@@ -436,8 +436,10 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
         other_node_db = global_adj_db.get(adj.otherNodeName, None)
         if other_node_db is None:
             continue
-        other_node_neighbors = set(a.otherNodeName for a in other_node_db.adjacencies)
-        if this_node_name not in other_node_neighbors:
+        other_node_neighbors = {
+            (a.otherNodeName, a.otherIfName) for a in other_node_db.adjacencies
+        }
+        if (this_node_name, adj.ifName) not in other_node_neighbors:
             continue
         adjacencies.append(adj)
 
