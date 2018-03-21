@@ -54,6 +54,8 @@ const auto adj24 =
 // R3 -> R1, R2, R4
 const auto adj31 =
     createAdjacency("1", "3/1", "1/3", "fe80::1", "192.168.0.1", 10, 0);
+const auto adj31_old =
+    createAdjacency("1", "3/1", "", "fe80::1", "192.168.0.1", 10, 0);
 const auto adj32 =
     createAdjacency("2", "3/2", "2/3", "fe80::2", "192.168.0.2", 10, 0);
 const auto adj34 =
@@ -353,7 +355,7 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   // Add all adjacency DBs
   auto adjacencyDb1 = createAdjDb("1", {adj12_old_1}, 0);
   auto adjacencyDb2 = createAdjDb("2", {adj21_old_1, adj23}, 0);
-  auto adjacencyDb3 = createAdjDb("3", {adj32, adj31}, 0);
+  auto adjacencyDb3 = createAdjDb("3", {adj32, adj31_old}, 0);
 
   EXPECT_FALSE(spfSolver.updatePrefixDatabase(prefixDb1));
   EXPECT_FALSE(spfSolver.updatePrefixDatabase(prefixDb2));
@@ -1483,6 +1485,61 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
 // The following topology is used:
 //
+//         100
+//  1--- ---------- 2
+//   \_           _/
+//      \_ ____ _/
+//          800
+
+// We upload parallel link 1---2 with the initial sync and later bring down the
+// one with lower metric. We then verify updated route database is received
+//
+
+TEST_F(DecisionTestFixture, ParallelLinks) {
+  auto adj12_1 =
+      createAdjacency("2", "1/2-1", "2/1-1", "fe80::2", "192.168.0.2", 100, 0);
+  auto adj12_2 =
+      createAdjacency("2", "1/2-2", "2/1-2", "fe80::2", "192.168.0.2", 800, 0);
+  auto adj21_1 =
+      createAdjacency("1", "2/1-1", "1/2-1", "fe80::1", "192.168.0.1", 100, 0);
+  auto adj21_2 =
+      createAdjacency("1", "2/1-2", "1/2-2", "fe80::1", "192.168.0.1", 800, 0);
+
+  auto publication = thrift::Publication(
+      FRAGILE,
+      {{"adj:1", createAdjValue("1", 1, {adj12_1, adj12_2})},
+       {"adj:2", createAdjValue("2", 1, {adj21_1, adj21_2})},
+       {"prefix:1", createPrefixValue("1", 1, {addr1})},
+       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+      {});
+
+  replyInitialSyncReq(publication);
+  auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(1, routeDb.routes.size());
+  RouteMap routeMap;
+  fillRouteMap("1", routeMap, routeDb);
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2))],
+      NextHops({make_pair(toNextHop(adj12_1), 100),
+                make_pair(toNextHop(adj12_2), 800)}));
+
+  publication = thrift::Publication(
+      FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {});
+
+  publishRouteDb(publication);
+  // receive my local Decision routeDb publication
+  routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
+  EXPECT_EQ(1, routeDb.routes.size());
+  routeMap.clear();
+  fillRouteMap("1", routeMap, routeDb);
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2))],
+      NextHops({make_pair(toNextHop(adj12_2), 800)}));
+}
+
+// The following topology is used:
+//
 // 1---2---3---4
 //
 // We upload the link 1---2 with the initial sync and later publish
@@ -1677,7 +1734,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   // SPF run.
   //
 
-  auto publication = thrift::Publication(
+  auto const publication = thrift::Publication(
       FRAGILE,
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},

@@ -606,10 +606,20 @@ SpfSolver::SpfSolverImpl::prepareGraph() {
   adjacencyIndex_.clear();
 
   // Create a set of all unidirectional adjacencies, which is from one node to
-  // another one connected by at least one interface
-  std::unordered_set<
-      std::pair<std::string /* myNodeName */, std::string /* otherNodeName */>>
+  // another one connected thru one remote interface
+  std::unordered_set<std::tuple<
+      std::string /* myNodeName*/,
+      std::string /* otherNodeName */,
+      std::string /* otherIfName*/>>
       presentAdjacencies;
+
+  // Create a set of all unidirectional adjacencies, just for those with old
+  // version of spark payload to maintain backward compatibility
+  // TODO: remove logic related to this data structure in the next release
+  std::unordered_set<
+      std::pair<std::string /* myNodeName*/, std::string /* otherNodeName */>>
+      compatiblePresentAdjacencies;
+
   for (auto const& kv : nodeData_) {
     auto const& thisNodeName = kv.first;
     auto const& adjacencies = kv.second.adjDb;
@@ -621,7 +631,17 @@ SpfSolver::SpfSolverImpl::prepareGraph() {
         continue;
       }
 
-      presentAdjacencies.insert({thisNodeName, adjacency.second.otherNodeName});
+      if (adjacency.second.otherIfName.empty() or
+          adjacency.second.otherIfName.find("neigh-") == 0) {
+        // maintain backward compatibility
+        compatiblePresentAdjacencies.insert(
+            std::make_pair(thisNodeName, adjacency.second.otherNodeName));
+      } else {
+        presentAdjacencies.insert(std::make_tuple(
+            thisNodeName,
+            adjacency.second.otherNodeName,
+            adjacency.second.otherIfName));
+      }
     }
   }
 
@@ -633,6 +653,7 @@ SpfSolver::SpfSolverImpl::prepareGraph() {
     // walk all my ajdacencies
     for (auto const& myAdjacency : adjacencies) {
       auto const& otherNodeName = myAdjacency.second.otherNodeName;
+      auto const& thisIfName = myAdjacency.second.ifName;
 
       // Skip if overloaded
       if (myAdjacency.second.isOverloaded) {
@@ -640,10 +661,14 @@ SpfSolver::SpfSolverImpl::prepareGraph() {
       }
 
       // Check for reverse adjacency
-      bool isBidir = presentAdjacencies.count({otherNodeName, thisNodeName});
-      if (!isBidir) {
+      bool isBidir = presentAdjacencies.count(
+          std::make_tuple(otherNodeName, thisNodeName, thisIfName));
+      bool compatibleIsBidir = compatiblePresentAdjacencies.count(
+          std::make_pair(otherNodeName, thisNodeName));
+      if (!isBidir and !compatibleIsBidir) {
         VLOG(2) << "Failed to find matching adjacency for `" << thisNodeName
-                << "' in `" << otherNodeName << "' database";
+                << "' in `" << otherNodeName
+                << "' thru interface " << thisIfName;
         continue;
       }
 
@@ -1330,6 +1355,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 
     try {
       if (key.find(adjacencyDbMarker_) == 0) {
+        // update adjacencyDb
         auto adjacencyDb =
             fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
                 rawVal.value.value(), serializer_);
@@ -1342,6 +1368,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       }
 
       if (key.find(prefixDbMarker_) == 0) {
+        // update prefixDb
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value.value(), serializer_);
         CHECK_EQ(nodeName, prefixDb.thisNodeName);
