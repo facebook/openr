@@ -684,7 +684,9 @@ NetlinkRouteSocket::deleteUnicastRouteV4(
     err = rtnl_route_add(socket_, route->getRoutePtr(), NLM_F_REPLACE);
   }
 
-  if (err != 0) {
+  // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
+  // some routes when interface goes down
+  if (err != 0 && nl_geterror(err) != nl_geterror(NLE_OBJ_NOTFOUND)) {
     throw NetlinkException(folly::sformat(
         "Failed to delete route {} Error: {}",
         folly::IPAddress::networkToString(prefix),
