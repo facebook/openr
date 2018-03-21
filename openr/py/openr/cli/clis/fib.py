@@ -11,6 +11,7 @@ from __future__ import unicode_literals
 from __future__ import division
 
 import click
+import sys
 
 from openr.cli.commands import fib
 
@@ -125,7 +126,7 @@ class FibValidateRoutesCli(object):
     def validate(cli_opts):  # noqa: B902
         ''' Validator to check that all routes as computed by Decision '''
 
-        fib.FibValidateRoutesCmd(cli_opts).run(cli_opts)
+        sys.exit(fib.FibValidateRoutesCmd(cli_opts).run(cli_opts))
 
 
 class FibListRoutesLinuxCli(object):

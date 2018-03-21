@@ -55,7 +55,7 @@ def get_route_as_dict(routes):
 
     :param routes: list ip_types.UnicastRoute (structured routes)
 
-    :returns: dict of routes (prefix : [nexthops]
+    :returns: dict of routes {prefix: [nexthops]}
     :rtype: dict
     '''
 
@@ -63,7 +63,7 @@ def get_route_as_dict(routes):
     # Make custom stringified object so we can hash and diff
     # dict of prefixes(str) : nexthops(str)
     routes_dict = {utils.sprint_prefix(route.dest):
-                   sorted([ip_nexthop_to_str(nh) for nh in route.nexthops])
+                   sorted(ip_nexthop_to_str(nh) for nh in route.nexthops)
                    for route in routes}
 
     return routes_dict
@@ -115,7 +115,7 @@ def prefixes_with_different_nexthops(lhs, rhs):
 
     for prefix in common_prefixes:
         if _lhs[prefix] != _rhs[prefix]:
-            prefixes.append(prefix)
+            prefixes.append((prefix, _lhs[prefix], _rhs[prefix]))
 
     return prefixes
 
@@ -133,7 +133,7 @@ def validate(routes_a, routes_b, sources, enable_color):
             else:
                 click.echo('PASS')
             print('{} and {} routing table match'.format(*sources))
-            return
+            return True
 
         # Something failed.. report it
         if enable_color:
@@ -152,9 +152,19 @@ def validate(routes_a, routes_b, sources, enable_color):
         if diff_prefixes:
             caption = 'Prefixes have different nexthops in {} and {}'.format(*sources)
             rows = []
-            for prefix in diff_prefixes:
-                rows.append([prefix])
-            print(printing.render_vertical_table(rows, caption=caption))
+            for prefix, lhs_nexthops, rhs_nexthops in diff_prefixes:
+                rows.append([
+                    prefix,
+                    ', '.join(lhs_nexthops),
+                    ', '.join(rhs_nexthops),
+                ])
+            column_labels = ['Prefix'] + sources
+            print(printing.render_horizontal_table(
+                rows,
+                column_labels,
+                caption=caption,
+            ))
+        return False
 
 
 def ip_nexthop_to_str(nh):
@@ -333,21 +343,43 @@ class FibSyncRoutesCmd(FibAgentCmd):
 class FibValidateRoutesCmd(FibAgentCmd):
     def run(self, cli_opts):
         try:
-            route_db = self.get_decision_route_db()
-            fib_routes = self.client.getRouteTableByClient(self.client.client_id)
+            decision_routes = self.get_decision_route_db(cli_opts)
+            fib_routes = self.get_fib_route_db(cli_opts)
+            agent_routes = self.client.getRouteTableByClient(
+                self.client.client_id
+            )
         except Exception as e:
             print('Failed to validate Fib routes.')
             print('Exception: {}'.format(e))
             sys.exit(1)
 
-        validate(self.get_routes(route_db), fib_routes, ['Decision', 'Fib'],
-                 cli_opts.enable_color)
+        res1 = validate(
+            decision_routes,
+            fib_routes,
+            ['Decision', 'Openr-Fib'],
+            cli_opts.enable_color,
+        )
+        res2 = validate(
+            fib_routes,
+            agent_routes,
+            ['Openr-Fib', 'FibAgent'],
+            cli_opts.enable_color,
+        )
+        return 0 if res1 and res2 else -1
 
-    def get_decision_route_db(self):
+    def get_fib_route_db(self, cli_opts):
+        client = fib_client.FibClient(
+            cli_opts.zmq_ctx,
+            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_rep_port),
+            cli_opts.timeout,
+            cli_opts.proto_factory)
+        return self.get_routes(client.get_route_db())
+
+    def get_decision_route_db(self, cli_opts):
         self.decision_client = decision_client.DecisionClient(
             zmq.Context(),
-            "tcp://[{}]:{}".format(self.client.host, self.decision_rep_port))
-        return self.decision_client.get_route_db()
+            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.decision_rep_port))
+        return self.get_routes(self.decision_client.get_route_db())
 
     def get_routes(self, route_db):
         '''
