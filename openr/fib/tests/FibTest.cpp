@@ -96,6 +96,7 @@ class FibTestFixture : public ::testing::Test {
         "node-1",
         port, /* thrift port */
         false, /* dryrun */
+        true, /* periodic syncFib */
         std::chrono::seconds(2),
         DecisionPubUrl{"inproc://decision-pub"},
         FibCmdUrl{"inproc://fib-cmd"},

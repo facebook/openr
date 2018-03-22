@@ -145,6 +145,9 @@ class Constants {
   // time interval between sending two health msg
   static const std::chrono::milliseconds kHealthCheckInterval;
 
+  // time interval to sync between fib and agent
+  static const std::chrono::seconds kSyncFibInterval;
+
   //
   // KvStore specific
   //

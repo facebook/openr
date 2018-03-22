@@ -66,6 +66,9 @@ const std::string Constants::kPrefixNameSeparator{":"};
 // time interval between sending two health msg
 const std::chrono::milliseconds Constants::kHealthCheckInterval{1000};
 
+// time interval to sync between fib and agent
+const std::chrono::seconds Constants::kSyncFibInterval{60};
+
 // overloaded note metric value. NOTE: this is greater than 32 bit value
 const uint64_t Constants::kOverloadNodeMetric{1ull << 32};
 

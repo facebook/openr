@@ -208,6 +208,7 @@ DEFINE_bool(
     false,
     "If set, will send pings to other nodes in network at interval specified by"
     "health_checker_ping_interval flag");
+DEFINE_bool(enable_fib_sync, false, "Enable periodic syncFib to FibAgent");
 DEFINE_int32(
     health_check_option,
     static_cast<uint32_t>(
@@ -788,6 +789,7 @@ main(int argc, char** argv) {
       FLAGS_node_name,
       FLAGS_fib_handler_port,
       FLAGS_dryrun,
+      FLAGS_enable_fib_sync,
       std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
       kDecisionPubUrl,
       FibCmdUrl{

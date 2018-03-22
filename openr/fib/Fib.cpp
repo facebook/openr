@@ -25,6 +25,7 @@ Fib::Fib(
     std::string myNodeName,
     int32_t thriftPort,
     bool dryrun,
+    bool enableFibSync,
     std::chrono::seconds coldStartDuration,
     const DecisionPubUrl& decisionPubUrl,
     const FibCmdUrl& fibRepUrl,
@@ -34,6 +35,7 @@ Fib::Fib(
     : myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),
+      enableFibSync_(enableFibSync),
       coldStartDuration_(coldStartDuration),
       decisionSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
@@ -78,6 +80,26 @@ Fib::Fib(
   if (not dryrun_) {
     healthChecker_->scheduleTimeout(
         Constants::kHealthCheckInterval, true /* schedule periodically */);
+  }
+
+  syncFibTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+    try {
+      // Build routes to be programmed.
+      const auto& routes = createUnicastRoutes(routeDb_.routes);
+      createFibClient();
+      client_->sync_syncFib(kFibId_, routes);
+    } catch (std::exception const& e) {
+      tData_.addStatValue("fib.thrift.failure.syncfib", 1, fbzmq::COUNT);
+      client_.reset();
+      LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
+                 << folly::exceptionStr(e);
+    }
+  });
+
+  // Only schedule sync Fib in non dry run and enable sync mode
+  if (not dryrun_ and enableFibSync_) {
+    syncFibTimer_->scheduleTimeout(
+        Constants::kSyncFibInterval, true /* schedule periodically */);
   }
 
   prepare();

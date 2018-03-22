@@ -51,6 +51,7 @@ class Fib final : public fbzmq::ZmqEventLoop {
   Fib(std::string myNodeName,
       int32_t thriftPort,
       bool dryrun,
+      bool enableFibSync,
       std::chrono::seconds coldStartDuration,
       const DecisionPubUrl& decisionPubUrl,
       const FibCmdUrl& fibRepUrl,
@@ -154,6 +155,9 @@ class Fib final : public fbzmq::ZmqEventLoop {
   // In dry run we do not make actual thrift call to manipulate routes
   bool dryrun_{true};
 
+  // Enable periodic syncFib to FibAgent
+  bool enableFibSync_{false};
+
   // amount of time to wait before send routes to agent either when this module
   // starts or the agent we are talking with restarts
   const std::chrono::seconds coldStartDuration_;
@@ -183,6 +187,9 @@ class Fib final : public fbzmq::ZmqEventLoop {
 
   // periodically send alive msg to switch agent
   std::unique_ptr<fbzmq::ZmqTimeout> healthChecker_{nullptr};
+
+  // periodically send sync msg to switch agent
+  std::unique_ptr<fbzmq::ZmqTimeout> syncFibTimer_{nullptr};
 
   // Timer for submitting to monitor periodically
   std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
