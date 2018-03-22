@@ -20,7 +20,7 @@ class TechSupportCli(object):
     @click.command(name='tech-support')
     @click.option('--fib_agent_port', default=None, type=int,
                   help='Fib thrift server port')
-    @click.option('--routes', is_flag=True, default=False,
+    @click.option('--routes', is_flag=True, default=True,
                   help='Show routes in techsupport output')
     @click.pass_context
     def tech_support(ctx, fib_agent_port, routes):  # noqa: B902

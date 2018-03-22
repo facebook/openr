@@ -168,7 +168,7 @@ class SnoopCmd(MonitorCmd):
 
 
 class LogCmd(MonitorCmd):
-    def run(self, json_opt):
+    def run(self, json_opt=False):
 
         resp = self.client.dump_log_data()
         self.print_log_data(resp, json_opt)

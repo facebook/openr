@@ -51,6 +51,7 @@ class TechSupportCmd():
             ('breeze fib list', self.print_fib_list),
             ('breeze perf fib', self.print_perf_fib),
             ('breeze monitor counters', self.print_monitor_counters),
+            ('breeze monitor logs', self.print_monitor_logs),
         ]
         failures = []
         for title, func in funcs:
@@ -140,3 +141,6 @@ class TechSupportCmd():
 
     def print_monitor_counters(self):
         monitor.CountersCmd(self.cli_opts).run()
+
+    def print_monitor_logs(self):
+        monitor.LogCmd(self.cli_opts).run()
