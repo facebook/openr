@@ -73,6 +73,45 @@ const auto path3_4_1 =
 const auto path3_4_2 =
     createPath(toBinaryAddress(folly::IPAddress("fe80::4")), "iface_3_4_2", 2);
 
+bool
+checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
+  if (lhs.routes.size() != rhs.routes.size()) {
+    return false;
+  }
+  std::unordered_map<thrift::IpPrefix, std::set<thrift::Path>> lhsRoutes;
+  std::unordered_map<thrift::IpPrefix, std::set<thrift::Path>> rhsRoutes;
+  for (auto const& route : lhs.routes) {
+    lhsRoutes.emplace(
+        route.prefix,
+        std::set<thrift::Path>(route.paths.begin(), route.paths.end()));
+  }
+  for (auto const& route : rhs.routes) {
+    rhsRoutes.emplace(
+        route.prefix,
+        std::set<thrift::Path>(route.paths.begin(), route.paths.end()));
+  }
+
+  for (auto const& kv : lhsRoutes) {
+    if (rhsRoutes.count(kv.first) == 0) {
+      return false;
+    }
+    if (rhsRoutes.at(kv.first) != kv.second) {
+      return false;
+    }
+  }
+
+  for (auto const& kv : rhsRoutes) {
+    if (lhsRoutes.count(kv.first) == 0) {
+      return false;
+    }
+    if (lhsRoutes.at(kv.first) != kv.second) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 class FibTestFixture : public ::testing::Test {
  public:
   void
@@ -91,6 +130,8 @@ class FibTestFixture : public ::testing::Test {
     EXPECT_NO_THROW(
         decisionRep.bind(fbzmq::SocketUrl{"inproc://decision-cmd"}).value());
     EXPECT_NO_THROW(lmPub.bind(fbzmq::SocketUrl{"inproc://lm-pub"}).value());
+    EXPECT_NO_THROW(
+        fibReq.connect(fbzmq::SocketUrl{"inproc://fib-cmd"}).value());
 
     fib = std::make_shared<Fib>(
         "node-1",
@@ -129,6 +170,19 @@ class FibTestFixture : public ::testing::Test {
     LOG(INFO) << "Mock fib platform is stopped";
   }
 
+  thrift::RouteDatabase
+  getRouteDb() {
+    fibReq.sendThriftObj(
+        thrift::FibRequest(FRAGILE, thrift::FibCommand::ROUTE_DB_GET),
+        serializer);
+
+    auto maybeReply = fibReq.recvThriftObj<thrift::RouteDatabase>(serializer);
+    EXPECT_FALSE(maybeReply.hasError());
+    const auto& routeDb = maybeReply.value();
+
+    return routeDb;
+  }
+
   int port{0};
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread fibThriftThread;
@@ -137,6 +191,7 @@ class FibTestFixture : public ::testing::Test {
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> decisionPub{context};
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> decisionRep{context};
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> lmPub{context};
+  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> fibReq{context};
 
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
@@ -157,7 +212,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   // initial syncFib debounce
   while (mockFibHandler->getFibSyncCount() <= countSync) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   // Mimic decision pub sock publishing RouteDatabase
@@ -171,7 +226,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   // add routes
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 1);
@@ -190,12 +245,33 @@ TEST_F(FibTestFixture, processRouteDb) {
   // syncFib debounce
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   EXPECT_GT(mockFibHandler->getAddRoutesCount(), countAdd);
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), countDel);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
+  EXPECT_TRUE(checkEqualRoutes(routeDb, getRouteDb()));
+
+  // Update routes by removing some nextHop
+  countAdd = mockFibHandler->getAddRoutesCount();
+  routeDb.routes.clear();
+  routeDb.routes.emplace_back(
+      thrift::Route(FRAGILE, prefix2, {path1_2_2, path1_2_3}));
+  routeDb.routes.emplace_back(
+      thrift::Route(FRAGILE, prefix3, {path1_3_2}));
+  decisionPub.sendThriftObj(routeDb, serializer).value();
+  // syncFib debounce
+  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  EXPECT_GT(mockFibHandler->getAddRoutesCount(), countAdd);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), countDel);
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 2);
+  EXPECT_TRUE(checkEqualRoutes(routeDb, getRouteDb()));
+
 }
 
 TEST_F(FibTestFixture, processInterfaceDb) {
@@ -208,7 +284,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   // initial syncFib debounce
   while (mockFibHandler->getFibSyncCount() <= countSync) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   // Mimic interface initially coming up
@@ -252,7 +328,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   // add routes
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   // Mimic interface going down
@@ -279,7 +355,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   // update routes
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
@@ -311,7 +387,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   // remove routes
   while (mockFibHandler->getDelRoutesCount() <= countDel) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
@@ -330,7 +406,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   // initial syncFib debounce
   while (mockFibHandler->getFibSyncCount() <= countSync) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   // Mimic decision pub sock publishing RouteDatabase
@@ -346,7 +422,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   // add routes
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -362,7 +438,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   decisionPub.sendThriftObj(routeDb, serializer).value();
   while (mockFibHandler->getDelRoutesCount() <= countDel) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   countDel = mockFibHandler->getDelRoutesCount();
   EXPECT_EQ(countAdd, 1);
@@ -377,7 +453,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   decisionPub.sendThriftObj(routeDb, serializer).value();
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   countAdd = mockFibHandler->getAddRoutesCount();
   EXPECT_EQ(countAdd, 2);
@@ -405,7 +481,7 @@ TEST_F(FibTestFixture, fibRestart) {
   // syncFib debounce
   while (mockFibHandler->getFibSyncCount() <= countSync) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -418,7 +494,7 @@ TEST_F(FibTestFixture, fibRestart) {
   // syncFib debounce
   while (mockFibHandler->getFibSyncCount() <= 0) {
     /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
