@@ -480,7 +480,7 @@ class KvSignatureCmd(KvStoreCmd):
 
 
 class TopologyCmd(KvStoreCmd):
-    def run(self, node, bidir, output_file):
+    def run(self, node, bidir, output_file, edge_label):
 
         try:
             import matplotlib.pyplot as plt
@@ -560,7 +560,8 @@ class TopologyCmd(KvStoreCmd):
             # aesthetically pleasing multiplier (empirically determined)
             plt.figure(figsize=(maxswx * 0.5, 8))
         else:
-            plt.figure(figsize=(len(G.nodes()) * 2, len(G.nodes()) * 2))
+            plt.figure(figsize=(min(len(G.nodes()) * 2, 150),
+                                min(len(G.nodes()) * 2, 150)))
             pos = nx.spring_layout(G)
         plt.axis('off')
 
@@ -575,12 +576,14 @@ class TopologyCmd(KvStoreCmd):
         nx.draw_networkx_labels(G, pos, ax=None, alpha=0.5, font_size=8)
         nx.draw_networkx_edges(G, pos, ax=None, alpha=0.5,
                                 font_size=8, edge_color=edge_colors)
+        edge_labels = {}
         if node:
-            edge_labels = dict([((u, v), '<' + str(d['otherIfName']) + ',  ' +
+            if edge_label:
+                edge_labels = {(u, v): '<' + str(d['otherIfName']) + ',  ' +
                                 str(d['metric']) +
                                 ' >     <' + str(d['ifName']) +
-                                    ', ' + str(d['adjOtherIfMetric']) + '>')
-                                for u, v, d in G.edges(data=True)])
+                                ', ' + str(d['adjOtherIfMetric']) + '>'
+                                for u, v, d in G.edges(data=True)}
             nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels,
                                          font_size=6)
 

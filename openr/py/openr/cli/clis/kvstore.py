@@ -220,12 +220,16 @@ class TopologyCli(object):
     @click.option('--output-file', default=Consts.TOPOLOGY_OUTPUT_FILE,
                   help='File to write .png image to '
                        '(default is \'/tmp/openr-topology.png\')')
+    @click.option('--edge-label/--no-edge-label', default=True,
+                  help='Exclude edge labels')
     @click.pass_obj
-    def topology(cli_opts, node, bidir, output_file):  # noqa: B902
+    def topology(cli_opts, node, bidir,  # noqa: B902
+                 output_file, edge_label):
         ''' generates an image file with a visualization of the openr topology
         '''
 
-        kvstore.TopologyCmd(cli_opts).run(node, bidir, output_file)
+        kvstore.TopologyCmd(cli_opts).run(
+            node, bidir, output_file, edge_label)
 
 
 class SnoopCli(object):
