@@ -1060,11 +1060,6 @@ NetlinkRouteSocket::doSyncUnicastRoutes(UnicastRoutes newRouteDb) {
     if (newRouteDb.find(prefix) == newRouteDb.end()) {
       try {
         doDeleteUnicastRoute(prefix, it->second);
-      } catch (NetlinkException const& err) {
-        throw NetlinkException(folly::sformat(
-            "Could not del Route to: {} Error: {}",
-            folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err)));
       } catch (std::exception const& err) {
         throw std::runtime_error(folly::sformat(
             "Could not del Route to: {} Error: {}",
@@ -1083,11 +1078,6 @@ NetlinkRouteSocket::doSyncUnicastRoutes(UnicastRoutes newRouteDb) {
     if (unicastRouteDb_.find(prefix) == unicastRouteDb_.end()) {
       try {
         doAddUnicastRoute(prefix, it->second);
-      } catch (NetlinkException const& err) {
-        throw NetlinkException(folly::sformat(
-            "Could not add Route to: {} Error: {}",
-            folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err)));
       } catch (std::exception const& err) {
         throw std::runtime_error(folly::sformat(
             "Could not add Route to: {} Error: {}",
@@ -1111,7 +1101,7 @@ NetlinkRouteSocket::doSyncUnicastRoutes(UnicastRoutes newRouteDb) {
         unicastRouteDb_[prefix] = newRouteDb.at(prefix);
       } catch (std::exception const& err) {
         throw std::runtime_error(folly::sformat(
-            "Could not add Route to: {} Error: {}",
+            "Could not update Route to: {} Error: {}",
             folly::IPAddress::networkToString(prefix),
             folly::exceptionStr(err)));
       }
