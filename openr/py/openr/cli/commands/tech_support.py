@@ -17,6 +17,7 @@ import sys
 from openr.utils.consts import Consts
 from openr.cli.commands import config, decision, fib, kvstore, lm, monitor
 from openr.cli.commands import perf, prefix_mgr
+from openr.cli.utils.utils import parse_nodes
 
 
 class TechSupportCmd():
@@ -121,7 +122,8 @@ class TechSupportCmd():
     def print_decision_routes(self):
         if not self.print_routes:
             return
-        decision.DecisionRoutesCmd(self.cli_opts).run(['all'], [], False)
+        nodes = parse_nodes(self.cli_opts.host, '', self.cli_opts.lm_cmd_port)
+        decision.DecisionRoutesCmd(self.cli_opts).run(nodes, [], False)
 
     def print_fib_validate(self):
         fib.FibValidateRoutesCmd(self.cli_opts).run(self.cli_opts)
