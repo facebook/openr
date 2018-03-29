@@ -361,7 +361,8 @@ class DecisionValidateCmd(DecisionCmd):
                                     kvstore_prefix_node_names, decision_adj_dbs,
                                     decision_prefix_dbs)
 
-        decision_adj_node_names = set(decision_adj_dbs.keys())
+        decision_adj_node_names = {node for node in decision_adj_dbs.keys()
+                                       if decision_adj_dbs[node].adjacencies}
         decision_prefix_node_names = set(decision_prefix_dbs.keys())
         self.print_db_diff(decision_adj_node_names, kvstore_adj_node_names,
                            ['Decision', 'KvStore'], 'adj')
