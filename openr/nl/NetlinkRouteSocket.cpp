@@ -390,11 +390,6 @@ NetlinkRouteSocket::addUnicastRoute(
           }
           unicastRouteDb_[prefix] = nextHops;
           promise.setValue();
-        } catch (NetlinkException const& ex) {
-          LOG(ERROR) << "Error adding unicast routes to "
-                     << folly::IPAddress::networkToString(prefix)
-                     << ". Exception: " << folly::exceptionStr(ex);
-          promise.setException(ex);
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error adding unicast routes to "
                      << folly::IPAddress::networkToString(prefix)
@@ -419,11 +414,6 @@ NetlinkRouteSocket::addMulticastRoute(
         try {
           doAddMulticastRoute(prefix, ifName);
           promise.setValue();
-        } catch (NetlinkException const& ex) {
-          LOG(ERROR) << "Error adding multicast routes to "
-                     << folly::IPAddress::networkToString(prefix)
-                     << ". Exception: " << folly::exceptionStr(ex);
-          promise.setException(ex);
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error adding multicast routes to "
                      << folly::IPAddress::networkToString(prefix)
@@ -454,11 +444,6 @@ NetlinkRouteSocket::deleteUnicastRoute(const folly::CIDRNetwork& prefix) {
             unicastRouteDb_.erase(prefix);
           }
           promise.setValue();
-        } catch (NetlinkException const& ex) {
-          LOG(ERROR) << "Error deleting unicast routes to "
-                     << folly::IPAddress::networkToString(prefix)
-                     << " Error: " << folly::exceptionStr(ex);
-          promise.setException(ex);
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error deleting unicast routes to "
                      << folly::IPAddress::networkToString(prefix)
@@ -483,11 +468,6 @@ NetlinkRouteSocket::deleteMulticastRoute(
         try {
           doDeleteMulticastRoute(prefix, ifName);
           promise.setValue();
-        } catch (NetlinkException const& ex) {
-          LOG(ERROR) << "Error deleting multicast routes to "
-                     << folly::IPAddress::networkToString(prefix)
-                     << " Error: " << folly::exceptionStr(ex);
-          promise.setException(ex);
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error deleting multicast routes to "
                      << folly::IPAddress::networkToString(prefix)
@@ -509,9 +489,6 @@ NetlinkRouteSocket::getUnicastRoutes() const {
     [this, promise = std::move(promise)]() mutable {
     try {
       promise.setValue(unicastRouteDb_);
-    } catch (NetlinkException const& ex) {
-      LOG(ERROR) << "Error updating route cache: " << folly::exceptionStr(ex);
-      promise.setException(ex);
     } catch (std::exception const& ex) {
       LOG(ERROR) << "Error updating route cache: " << folly::exceptionStr(ex);
       promise.setException(ex);
@@ -533,9 +510,6 @@ NetlinkRouteSocket::getKernelUnicastRoutes() {
       doUpdateRouteCache();
       unicastRouteDb_ = doGetUnicastRoutes();
       promise.setValue(unicastRouteDb_);
-    } catch (NetlinkException const& ex) {
-      LOG(ERROR) << "Error updating route cache: " << folly::exceptionStr(ex);
-      promise.setException(ex);
     } catch (std::exception const& ex) {
       LOG(ERROR) << "Error updating route cache: " << folly::exceptionStr(ex);
       promise.setException(ex);
@@ -555,10 +529,6 @@ NetlinkRouteSocket::syncUnicastRoutes(UnicastRoutes newRouteDb) {
         try {
           doSyncUnicastRoutes(newRouteDb);
           promise.setValue();
-        } catch (NetlinkException const& ex) {
-          LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
-                     << folly::exceptionStr(ex);
-          promise.setException(ex);
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
                      << folly::exceptionStr(ex);
@@ -579,10 +549,6 @@ NetlinkRouteSocket::syncLinkRoutes(const LinkRoutes& newRouteDb) {
         try {
           doSyncLinkRoutes(newRouteDb);
           promise.setValue();
-        } catch (NetlinkException const& ex) {
-          LOG(ERROR) << "Error syncing link routeDb with Fib: "
-                     << folly::exceptionStr(ex);
-          promise.setException(ex);
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error syncing link routeDb with Fib: "
                      << folly::exceptionStr(ex);
@@ -984,19 +950,6 @@ NetlinkRouteSocket::doUpdateRoute(
   if (!toAdd.empty()) {
     try {
       doAddUnicastRoute(prefix, toAdd);
-    } catch (NetlinkException const& err) {
-      throw NetlinkException(folly::sformat(
-          "Could not add Route to: {} via nextHops {} Error: {}",
-          folly::IPAddress::networkToString(prefix),
-          folly::join(
-              ", ",
-              from(toAdd) |
-                  mapped(
-                      [](const std::pair<std::string, folly::IPAddress>& val) {
-                        return (val.second.str() + "@" + val.first);
-                      }) |
-                  as<std::set<std::string>>()),
-          folly::exceptionStr(err)));
     } catch (std::exception const& err) {
       throw NetlinkException(folly::sformat(
           "Could not add Route to: {} via nextHops {} Error: {}",
@@ -1018,19 +971,6 @@ NetlinkRouteSocket::doUpdateRoute(
   if (!toDel.empty()) {
     try {
       doDeleteUnicastRoute(prefix, toDel);
-    } catch (NetlinkException const& err) {
-      throw NetlinkException(folly::sformat(
-          "Could not del Route to: {} via nextHops {} Error: {}",
-          folly::IPAddress::networkToString(prefix),
-          folly::join(
-              ", ",
-              from(toDel) |
-                  mapped(
-                      [](const std::pair<std::string, folly::IPAddress>& val) {
-                        return (val.second.str() + "@" + val.first);
-                      }) |
-                  as<std::set<std::string>>()),
-          folly::exceptionStr(err)));
     } catch (std::exception const& err) {
       throw NetlinkException(folly::sformat(
           "Could not del Route to: {} via nextHops {} Error: {}",

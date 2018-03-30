@@ -259,13 +259,14 @@ TEST_F(NetlinkSubscriberFixture, LinkFlapTest) {
   MyNetlinkHandler myHandler(
       [&]() noexcept {
         VLOG(3) << "Received event from netlink";
-        if (zmqLoop.isRunning() && myHandler.links.count(kVethNameX) &&
+        if (zmqLoop.isRunning() &&
+            myHandler.links.count(kVethNameX) &&
             myHandler.links.count(kVethNameY) &&
             myHandler.links.at(kVethNameX).isUp &&
             myHandler.links.at(kVethNameY).isUp &&
             myHandler.links.at(kVethNameX).networks.size() == 1 &&
             myHandler.links.at(kVethNameY).networks.size() == 1) {
-          VLOG(3) << "Expected events received. Stopping zmq event loop";
+          LOG(INFO) << "Expected events received. Stopping zmq event loop";
           zmqLoop.stop();
         }
       },

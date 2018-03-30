@@ -85,10 +85,7 @@ class NetlinkIfFixture : public testing::Test {
     bringUpIntf(kVethNameX);
     bringUpIntf(kVethNameY);
 
-    evl.scheduleTimeout(kEventLoopTimeout, [&]() noexcept {
-      VLOG(3) << "Timeout waiting for events... ";
-      evl.stop();
-    });
+    // create netlink route socket
     netlinkRouteSocket = std::make_unique<NetlinkRouteSocket>(&evl);
 
     // Run the zmq event loop in its own thread
@@ -104,6 +101,7 @@ class NetlinkIfFixture : public testing::Test {
 
   void
   TearDown() override {
+    evl.stop();
     eventThread.join();
 
     rtnl_link_delete(socket_, link_);
@@ -526,7 +524,7 @@ TEST_F(NetlinkIfFixture, MultiPathTest) {
 // - Catch error and verify no route is added
 TEST_F(NetlinkIfFixture, InvalidIfRouteAddTest) {
   const folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
-  const folly::CIDRNetwork prefixV4{folly::IPAddress("169.254.1.100"), 16};
+  const folly::CIDRNetwork prefixV4{folly::IPAddress("192.168.3.3"), 16};
   auto nh1 = std::make_pair("invalid-if", folly::IPAddress("fe80::1"));
   NextHops nextHops1{nh1};
 
