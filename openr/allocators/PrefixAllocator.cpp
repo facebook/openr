@@ -396,6 +396,10 @@ PrefixAllocator::startAllocation(
     folly::Optional<PrefixAllocatorParams> const& allocParams) {
   // Some informative logging
   if (allocParams_.hasValue() and allocParams.hasValue()) {
+    if (allocParams_ == allocParams) {
+      LOG(INFO) << "New and old params are same. Skipping";
+      return;
+    }
     LOG(WARNING)
       << "Prefix allocation parameters are changing. \n"
       << "  Old: " << folly::IPAddress::networkToString(allocParams_->first)
