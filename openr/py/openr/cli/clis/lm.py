@@ -69,21 +69,23 @@ class LMLinksCli(object):
 class SetNodeOverloadCli(object):
 
     @click.command()
+    @click.option('--yes', is_flag=True, help='Make command non-interactive')
     @click.pass_obj
-    def set_node_overload(cli_opts):  # noqa: B902
+    def set_node_overload(cli_opts, yes):  # noqa: B902
         ''' Set overload bit to stop transit traffic through node. '''
 
-        lm.SetNodeOverloadCmd(cli_opts).run()
+        lm.SetNodeOverloadCmd(cli_opts).run(yes)
 
 
 class UnsetNodeOverloadCli(object):
 
     @click.command()
+    @click.option('--yes', is_flag=True, help='Make command non-interactive')
     @click.pass_obj
-    def unset_node_overload(cli_opts):  # noqa: B902
+    def unset_node_overload(cli_opts, yes):  # noqa: B902
         ''' Unset overload bit to resume transit traffic through node. '''
 
-        lm.UnsetNodeOverloadCmd(cli_opts).run()
+        lm.UnsetNodeOverloadCmd(cli_opts).run(yes)
 
 
 class SetLinkOverloadCli(object):

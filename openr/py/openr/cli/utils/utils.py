@@ -43,11 +43,12 @@ except NameError:
 
 
 def yesno(question, skip_confirm=False):
-    """
+    '''
     Ask a yes/no question. No default, we want to avoid mistakes as
     much as possible. Repeat the question until we receive a valid
     answer.
-    """
+    '''
+
     if skip_confirm:
         print('Skipping interactive confirmation!')
         return True

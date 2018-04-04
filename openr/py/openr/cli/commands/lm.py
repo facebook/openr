@@ -31,15 +31,15 @@ class LMCmd(object):
 
 
 class SetNodeOverloadCmd(LMCmd):
-    def run(self):
+    def run(self, yes=False):
 
-        set_unset_overload(self.client, True)
+        set_unset_overload(self.client, True, yes)
 
 
 class UnsetNodeOverloadCmd(LMCmd):
-    def run(self):
+    def run(self, yes=False):
 
-        set_unset_overload(self.client, False)
+        set_unset_overload(self.client, False, yes)
 
 
 class SetLinkOverloadCmd(LMCmd):
@@ -206,7 +206,7 @@ class LMLinksCmd(LMCmd):
         print()
 
 
-def set_unset_overload(client, overload):
+def set_unset_overload(client, overload, yes):
     '''
     Set/Unset overload bit for the node. Setting overload bit will take
     away all transit traffic going through node while node will still
@@ -226,7 +226,7 @@ def set_unset_overload(client, overload):
         sys.exit(0)
 
     action = 'set overload bit' if overload else 'unset overload bit'
-    if not utils.yesno('Are you sure to {} for node {} ?'.format(action, host)):
+    if not utils.yesno('Are you sure to {} for node {} ?'.format(action, host), yes):
         print()
         return
 
@@ -262,13 +262,10 @@ def set_unset_link_overload(client, overload, interface, yes):
         sys.exit(0)
 
     action = 'set overload bit' if overload else 'unset overload bit'
-    if not yes:
-        question_str = 'Are you sure to {} for interface {} ?'
-        if not utils.yesno(question_str.format(action, interface)):
-            print()
-            return
-    else:
-        print('Skipping interactive confirmation!')
+    question_str = 'Are you sure to {} for interface {} ?'
+    if not utils.yesno(question_str.format(action, interface), yes):
+        print()
+        return
 
     links = client.set_unset_link_overload(overload, interface)
 
@@ -301,13 +298,10 @@ def set_unset_link_metric(client, override, interface, metric, yes):
         sys.exit(0)
 
     action = 'set override metric' if override else 'unset override metric'
-    if not yes:
-        question_str = 'Are you sure to {} for interface {} ?'
-        if not utils.yesno(question_str.format(action, interface)):
-            print()
-            return
-    else:
-        print('Skipping interactive confirmation!')
+    question_str = 'Are you sure to {} for interface {} ?'
+    if not utils.yesno(question_str.format(action, interface), yes):
+        print()
+        return
 
     links = client.set_unset_link_metric(override, interface, metric)
 
