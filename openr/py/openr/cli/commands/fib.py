@@ -62,9 +62,11 @@ def get_route_as_dict(routes):
     # Thrift object instances do not have hash support
     # Make custom stringified object so we can hash and diff
     # dict of prefixes(str) : nexthops(str)
-    routes_dict = {utils.sprint_prefix(route.dest):
-                   sorted(ip_nexthop_to_str(nh) for nh in route.nexthops)
-                   for route in routes}
+    routes_dict = {
+        utils.sprint_prefix(route.dest):
+        sorted(ip_nexthop_to_str(nh, True) for nh in route.nexthops)
+        for route in routes
+    }
 
     return routes_dict
 
@@ -167,14 +169,16 @@ def validate(routes_a, routes_b, sources, enable_color):
         return False
 
 
-def ip_nexthop_to_str(nh):
+def ip_nexthop_to_str(nh, ignore_v4_iface=False):
     '''
     Convert ttypes.BinaryAddress to string representation of a nexthop
     '''
 
-    return "{}{}{}".format(utils.sprint_addr(nh.addr),
-                           '@' if nh.ifName else '',
-                           nh.ifName)
+    ifName = '@{}'.format(nh.ifName) if nh.ifName else ''
+    if len(nh.addr) == 4 and ignore_v4_iface:
+        ifName = ''
+
+    return "{}{}".format(utils.sprint_addr(nh.addr), ifName)
 
 
 def print_routes(caption, routes, prefixes=None):
