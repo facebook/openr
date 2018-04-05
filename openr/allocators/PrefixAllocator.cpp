@@ -513,7 +513,8 @@ void
 PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   CHECK(allocParams_.hasValue()) << "Alloc parameters are not set.";
   // existing global prefixes
-  auto oldPrefixes = getIfacePrefixes(loopbackIfaceName_);
+  auto oldPrefixes =
+      getIfacePrefixes(loopbackIfaceName_, prefix.first.family());
 
   // desired global prefixes
   auto loopbackPrefix = createLoopbackPrefix(prefix);

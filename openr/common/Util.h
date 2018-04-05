@@ -61,7 +61,8 @@ int maskToPrefixLen(const struct sockaddr_in6* mask);
 int maskToPrefixLen(const struct sockaddr_in* mask);
 
 // report all IPv6/IPv4 prefixes configured on the interface
-std::vector<folly::CIDRNetwork> getIfacePrefixes(std::string ifName);
+std::vector<folly::CIDRNetwork> getIfacePrefixes(
+    std::string ifName, sa_family_t afNet);
 
 bool checkIncludeExcludeRegex(
     const std::string& name,

@@ -153,7 +153,7 @@ delIfaceAddr(const std::string& ifName, const folly::CIDRNetwork& prefix) {
       prefix.first.version(),
       folly::IPAddress::networkToString(prefix),
       ifName);
-  int rc = executeShellCommand(command) == 0;
+  int rc = executeShellCommand(command);
   if (rc == 0 or rc == 2) {
     // if return code is 2, it means address doesn't exist
     // we treat it as scucess deleted
@@ -181,7 +181,7 @@ createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept {
 folly::CIDRNetwork
 createLoopbackPrefix(const folly::CIDRNetwork& prefix) noexcept {
   auto addr = createLoopbackAddr(prefix);
-  return folly::CIDRNetwork{addr, prefix.second};
+  return folly::CIDRNetwork{addr, prefix.first.bitCount()};
 }
 
 int
@@ -238,7 +238,7 @@ maskToPrefixLen(const struct sockaddr_in* mask) {
 }
 
 std::vector<folly::CIDRNetwork>
-getIfacePrefixes(std::string ifName) {
+getIfacePrefixes(std::string ifName, sa_family_t afNet) {
   struct ifaddrs* ifaddr{nullptr};
   std::vector<folly::CIDRNetwork> results;
 
@@ -258,7 +258,9 @@ getIfacePrefixes(std::string ifName) {
   int prefixLength{0};
 
   for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
-    if (::strcmp(ifName.c_str(), ifa->ifa_name) || ifa->ifa_addr == nullptr) {
+    if (::strcmp(ifName.c_str(), ifa->ifa_name) ||
+        ifa->ifa_addr == nullptr ||
+        ifa->ifa_addr->sa_family != afNet) {
       continue;
     }
     if (ifa->ifa_addr->sa_family == AF_INET6) {
@@ -267,8 +269,12 @@ getIfacePrefixes(std::string ifName) {
           &((struct sockaddr_in6*)ifa->ifa_addr)->sin6_addr,
           sizeof(in6_addr));
       prefixLength = maskToPrefixLen((struct sockaddr_in6*)ifa->ifa_netmask);
+      folly::IPAddressV6 ifaceAddr(ip6);
+      if (ifaceAddr.isLoopback() or ifaceAddr.isLinkLocal()) {
+        continue;
+      }
       results.emplace_back(
-          folly::CIDRNetwork{folly::IPAddressV6(ip6), prefixLength});
+          folly::CIDRNetwork{ifaceAddr, prefixLength});
     }
     if (ifa->ifa_addr->sa_family == AF_INET) {
       struct in_addr ip;
@@ -277,8 +283,12 @@ getIfacePrefixes(std::string ifName) {
           &((struct sockaddr_in*)ifa->ifa_addr)->sin_addr,
           sizeof(in_addr));
       prefixLength = maskToPrefixLen((struct sockaddr_in*)ifa->ifa_netmask);
+      folly::IPAddressV4 ifaceAddr(ip);
+      if (ifaceAddr.isLoopback()) {
+        continue;
+      }
       results.emplace_back(
-          folly::CIDRNetwork{folly::IPAddressV4(ip), prefixLength});
+          folly::CIDRNetwork{ifaceAddr, prefixLength});
     }
   }
   return results;
