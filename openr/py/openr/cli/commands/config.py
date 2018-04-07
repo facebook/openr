@@ -15,7 +15,7 @@ import sys
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
 from openr.cli.utils import utils
-from openr.utils import printing
+from openr.utils import ipnetwork, printing
 
 from openr.clients import config_store_client
 from openr.AllocPrefix import ttypes as ap_types
@@ -48,7 +48,7 @@ class ConfigPrefixAllocatorCmd(ConfigCmd):
 
     def print_config(self, prefix_alloc):
         seed_prefix = prefix_alloc.seedPrefix
-        seed_prefix_addr = utils.sprint_addr(seed_prefix.prefixAddress.addr)
+        seed_prefix_addr = ipnetwork.sprint_addr(seed_prefix.prefixAddress.addr)
 
         caption = 'Prefix Allocator parameters stored'
         rows = []

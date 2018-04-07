@@ -16,7 +16,6 @@ import copy
 import datetime
 import ipaddr
 import json
-import socket
 import sys
 import zmq
 
@@ -24,12 +23,11 @@ from itertools import product
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.kvstore_client import KvStoreClient
 from openr.clients.lm_client import LMClient
-from openr.IpPrefix import ttypes as ip_types
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Platform import FibService
 from openr.Platform import ttypes as platform_types
-from openr.utils import printing
+from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
 from thrift.protocol import TBinaryProtocol
@@ -107,19 +105,6 @@ def time_since(timestamp):
     return fmt.format(**d)
 
 
-def contain_any_prefix(prefix, ip_networks):
-    '''
-    Utility function to check if prefix contain any of the prefixes/ips
-
-    :returns: True if prefix contains any of the ip_networks else False
-    '''
-
-    if ip_networks is None:
-        return True
-    prefix = ipaddr.IPNetwork(prefix)
-    return any([prefix.Contains(net) for net in ip_networks])
-
-
 def get_fib_agent_client(host, port, timeout_ms,
                          client_id=platform_types.FibClient.OPENR,
                          service=FibService):
@@ -170,33 +155,6 @@ def parse_nodes(host, nodes, lm_cmd_port):
     return nodes
 
 
-def sprint_addr(addr):
-    ''' binary ip addr -> string '''
-
-    family = socket.AF_INET if len(addr) == 4 else socket.AF_INET6
-    return socket.inet_ntop(family, addr)
-
-
-def sprint_prefix(prefix):
-    '''
-    :param prefix: ip_types.IpPrefix representing an CIDR network
-
-    :returns: string representation of prefix (CIDR network)
-    :rtype: str or unicode
-    '''
-
-    return '{}/{}'.format(sprint_addr(prefix.prefixAddress.addr),
-                          prefix.prefixLength)
-
-
-def sprint_prefix_type(prefix_type):
-    '''
-    :param prefix: lsdb_types.PrefixType
-    '''
-
-    return lsdb_types.PrefixType._VALUES_TO_NAMES.get(prefix_type, None)
-
-
 def sprint_prefixes_db_full(prefix_db, loopback_only=False):
     ''' given serialized prefixes output an array of lines
             representing those prefixes. IPV6 prefixes come before IPV4 prefixes.
@@ -215,44 +173,10 @@ def sprint_prefixes_db_full(prefix_db, loopback_only=False):
         if loopback_only and \
            prefix_entry.type is not lsdb_types.PrefixType.LOOPBACK:
             continue
-        prefix_strs.append([sprint_prefix(prefix_entry.prefix),
-                            sprint_prefix_type(prefix_entry.type)])
+        prefix_strs.append([ipnetwork.sprint_prefix(prefix_entry.prefix),
+                            ipnetwork.sprint_prefix_type(prefix_entry.type)])
 
     return printing.render_horizontal_table(prefix_strs, ['Prefix', 'Type'])
-
-
-def ip_str_to_addr(addr_str):
-    '''
-    :param addr_str: ip address in string representation
-
-    :returns: thrift struct BinaryAddress
-    :rtype: ip_types.BinaryAddress
-    '''
-
-    # Try v4
-    try:
-        addr = socket.inet_pton(socket.AF_INET, addr_str)
-        return ip_types.BinaryAddress(addr=addr)
-    except socket.error:
-        pass
-
-    # Try v6
-    addr = socket.inet_pton(socket.AF_INET6, addr_str)
-    return ip_types.BinaryAddress(addr=addr)
-
-
-def ip_str_to_prefix(prefix_str):
-    '''
-    :param prefix_str: string representing a prefix (CIDR network)
-
-    :returns: thrift struct IpPrefix
-    :rtype: ip_types.IpPrefix
-    '''
-
-    ip_str, ip_len_str = prefix_str.split('/')
-    return ip_types.IpPrefix(
-        prefixAddress=ip_str_to_addr(ip_str),
-        prefixLength=int(ip_len_str))
 
 
 def alloc_prefix_to_loopback_ip_str(prefix):
@@ -268,7 +192,7 @@ def alloc_prefix_to_loopback_ip_str(prefix):
     if prefix.prefixLength != 128:
         ip_addr = ip_addr[:-1] + chr(ord(ip_addr[-1]) | 1)
     print(ip_addr)
-    return sprint_addr(ip_addr)
+    return ipnetwork.sprint_addr(ip_addr)
 
 
 def print_prefixes_table(resp, nodes, iter_func):
@@ -310,7 +234,7 @@ def prefix_entry_to_dict(prefix_entry):
     def _update(prefix_entry_dict, prefix_entry):
         # Only addrs need string conversion so we udpate them
         prefix_entry_dict.update({
-            'prefix': sprint_prefix(prefix_entry.prefix),
+            'prefix': ipnetwork.sprint_prefix(prefix_entry.prefix),
         })
 
     return thrift_to_dict(prefix_entry, _update)
@@ -453,8 +377,8 @@ def adj_to_dict(adj):
     def _update(adj_dict, adj):
         # Only addrs need string conversion so we udpate them
         adj_dict.update({
-            'nextHopV6': sprint_addr(adj.nextHopV6.addr),
-            'nextHopV4': sprint_addr(adj.nextHopV4.addr)
+            'nextHopV6': ipnetwork.sprint_addr(adj.nextHopV6.addr),
+            'nextHopV4': ipnetwork.sprint_addr(adj.nextHopV4.addr)
         })
 
     return thrift_to_dict(adj, _update)
@@ -605,8 +529,8 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
             if this_node_name not in other_node_neighbors:
                 continue
 
-        nh_v6 = sprint_addr(adj.nextHopV6.addr)
-        nh_v4 = sprint_addr(adj.nextHopV4.addr)
+        nh_v6 = ipnetwork.sprint_addr(adj.nextHopV6.addr)
+        nh_v4 = ipnetwork.sprint_addr(adj.nextHopV4.addr)
         overload_status = click.style('Overloaded', fg='red')
         metric = overload_status if adj.isOverloaded else adj.metric
         uptime = time_since(adj.timestamp) if adj.timestamp else ''
@@ -627,8 +551,8 @@ def interface_db_to_dict(value):
         return bunch.Bunch(**{
             'isUp': info.isUp,
             'ifIndex': info.ifIndex,
-            'v4Addrs': [sprint_addr(v.addr) for v in info.v4Addrs],
-            'v6Addrs': [sprint_addr(v.addr) for v in info.v6LinkLocalAddrs],
+            'v4Addrs': [ipnetwork.sprint_addr(v.addr) for v in info.v4Addrs],
+            'v6Addrs': [ipnetwork.sprint_addr(v.addr) for v in info.v6LinkLocalAddrs],
         })
 
     assert(isinstance(value, kv_store_types.Value))
@@ -708,12 +632,12 @@ def print_routes_table(route_db, prefixes=None):
 
     route_strs = []
     for route in sorted(route_db.routes, key=lambda x: x.prefix.prefixAddress.addr):
-        prefix_str = sprint_prefix(route.prefix)
-        if not contain_any_prefix(prefix_str, networks):
+        prefix_str = ipnetwork.sprint_prefix(route.prefix)
+        if not ipnetwork.contain_any_prefix(prefix_str, networks):
             continue
 
         paths_str = '\n'.join(["via {}@{} metric {}".format(
-            sprint_addr(path.nextHop.addr),
+            ipnetwork.sprint_addr(path.nextHop.addr),
             path.ifName, path.metric) for path in route.paths])
         route_strs.append((prefix_str, paths_str))
 
@@ -728,7 +652,7 @@ def path_to_dict(path):
 
     def _update(path_dict, path):
         path_dict.update({
-            'nextHop': sprint_addr(path.nextHop.addr),
+            'nextHop': ipnetwork.sprint_addr(path.nextHop.addr),
         })
 
     return thrift_to_dict(path, _update)
@@ -739,7 +663,7 @@ def route_to_dict(route):
 
     def _update(route_dict, route):
         route_dict.update({
-            'prefix': sprint_prefix(route.prefix),
+            'prefix': ipnetwork.sprint_prefix(route.prefix),
             'paths': map(path_to_dict, route.paths)
         })
 
@@ -762,7 +686,7 @@ def print_routes_json(route_db_dict, prefixes=None):
     for routes in route_db_dict.values():
         filtered_routes = []
         for route in routes["routes"]:
-            if not contain_any_prefix(route["prefix"], networks):
+            if not ipnetwork.contain_any_prefix(route["prefix"], networks):
                 continue
             filtered_routes.append(route)
         routes["routes"] = filtered_routes
@@ -809,8 +733,8 @@ def adjacency_to_dict(adjacency):
     # Only addrs need string conversion so we udpate them
     adj_dict = copy.copy(adjacency).__dict__
     adj_dict.update({
-        'nextHopV6': sprint_addr(adjacency.nextHopV6.addr),
-        'nextHopV4': sprint_addr(adjacency.nextHopV4.addr)
+        'nextHopV6': ipnetwork.sprint_addr(adjacency.nextHopV6.addr),
+        'nextHopV4': ipnetwork.sprint_addr(adjacency.nextHopV4.addr)
     })
 
     return adj_dict
@@ -878,7 +802,7 @@ def update_global_prefix_db(global_prefix_db, prefix_db):
 
     prefix_set = set([])
     for prefix_entry in prefix_db.prefixEntries:
-        addr_str = sprint_addr(prefix_entry.prefix.prefixAddress.addr)
+        addr_str = ipnetwork.sprint_addr(prefix_entry.prefix.prefixAddress.addr)
         prefix_len = prefix_entry.prefix.prefixLength
         prefix_set.add("{}/{}".format(addr_str, prefix_len))
 
@@ -993,7 +917,7 @@ def sprint_prefixes_db_delta(global_prefixes_db, prefix_db):
 
     cur_prefixes = set([])
     for prefix_entry in prefix_db.prefixEntries:
-        cur_prefixes.add(sprint_prefix(prefix_entry.prefix))
+        cur_prefixes.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
 
     added_prefixes = cur_prefixes - prev_prefixes
     removed_prefixes = prev_prefixes - cur_prefixes
@@ -1022,5 +946,5 @@ def print_allocations_table(alloc_str):
     allocations = deserialize_thrift_object(
         alloc_str, alloc_types.StaticAllocation)
     for node, prefix in allocations.nodePrefixes.items():
-        rows.append([node, sprint_prefix(prefix)])
+        rows.append([node, ipnetwork.sprint_prefix(prefix)])
     print(printing.render_horizontal_table(rows, ['Node', 'Prefix']))

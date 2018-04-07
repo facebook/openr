@@ -18,7 +18,7 @@ import zmq
 from openr.clients import fib_client
 from openr.clients import decision_client
 from openr.cli.utils import utils
-from openr.utils import printing
+from openr.utils import ipnetwork, printing
 from openr.IpPrefix import ttypes as ip_types
 from openr.LinuxPlatform import LinuxFibService
 
@@ -32,7 +32,7 @@ def build_routes(prefixes, nexthops):
     :rtype: list
     '''
 
-    prefixes = [utils.ip_str_to_prefix(p) for p in prefixes]
+    prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
     nhs = []
     for nh_iface in nexthops:
         iface, addr = None, None
@@ -43,7 +43,7 @@ def build_routes(prefixes, nexthops):
             addr, iface = nh_iface.split('%')
         else:
             addr = nh_iface
-        nexthop = utils.ip_str_to_addr(addr)
+        nexthop = ipnetwork.ip_str_to_addr(addr)
         nexthop.ifName = iface
         nhs.append(nexthop)
     return [ip_types.UnicastRoute(dest=p, nexthops=nhs) for p in prefixes]
@@ -63,7 +63,7 @@ def get_route_as_dict(routes):
     # Make custom stringified object so we can hash and diff
     # dict of prefixes(str) : nexthops(str)
     routes_dict = {
-        utils.sprint_prefix(route.dest):
+        ipnetwork.sprint_prefix(route.dest):
         sorted(ip_nexthop_to_str(nh, True) for nh in route.nexthops)
         for route in routes
     }
@@ -178,7 +178,7 @@ def ip_nexthop_to_str(nh, ignore_v4_iface=False):
     if len(nh.addr) == 4 and ignore_v4_iface:
         ifName = ''
 
-    return "{}{}".format(utils.sprint_addr(nh.addr), ifName)
+    return "{}{}".format(ipnetwork.sprint_addr(nh.addr), ifName)
 
 
 def print_routes(caption, routes, prefixes=None):
@@ -189,8 +189,8 @@ def print_routes(caption, routes, prefixes=None):
 
     route_strs = []
     for route in routes:
-        dest = utils.sprint_prefix(route.dest)
-        if not utils.contain_any_prefix(dest, networks):
+        dest = ipnetwork.sprint_prefix(route.dest)
+        if not ipnetwork.contain_any_prefix(dest, networks):
             continue
 
         paths_str = '\n'.join(["via {}".format(ip_nexthop_to_str(nh))
@@ -319,7 +319,7 @@ class FibAddRoutesCmd(FibAgentCmd):
 
 class FibDelRoutesCmd(FibAgentCmd):
     def run(self, prefixes):
-        prefixes = [utils.ip_str_to_prefix(p) for p in prefixes.split(',')]
+        prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes.split(',')]
         try:
             self.client.deleteUnicastRoutes(self.client.client_id, prefixes)
         except Exception as e:

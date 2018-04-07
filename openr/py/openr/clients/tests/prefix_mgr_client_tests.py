@@ -16,7 +16,7 @@ from openr.utils import socket
 from openr.clients import prefix_mgr_client
 from openr.PrefixManager import ttypes as prefix_mgr_types
 from openr.Lsdb import ttypes as lsdb_types
-from openr.cli.utils.utils import ip_str_to_prefix, sprint_prefix
+from openr.utils.ipnetwork import ip_str_to_prefix, sprint_prefix
 
 import zmq
 import unittest

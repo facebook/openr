@@ -12,7 +12,7 @@ from __future__ import division
 
 from openr.clients import decision_client, kvstore_client
 from openr.cli.utils import utils
-from openr.utils import printing
+from openr.utils import ipnetwork, printing
 from openr.utils.serializer import deserialize_thrift_object
 from openr.Lsdb import ttypes as lsdb_types
 from openr.utils.consts import Consts
@@ -134,7 +134,7 @@ class PathCmd(DecisionCmd):
 
                 # Parse PrefixAllocator address
                 if prefix_entry.type == lsdb_types.PrefixType.PREFIX_ALLOCATOR:
-                    prefix = utils.sprint_prefix(prefix_entry.prefix)
+                    prefix = ipnetwork.sprint_prefix(prefix_entry.prefix)
                     if prefix_entry.prefix.prefixLength == 128:
                         prefix = prefix.split('/')[0]
                     else:
@@ -149,7 +149,7 @@ class PathCmd(DecisionCmd):
 
                 # Parse LOOPBACK address
                 if prefix_entry.type == lsdb_types.PrefixType.LOOPBACK:
-                    prefix = utils.sprint_prefix(prefix_entry.prefix)
+                    prefix = ipnetwork.sprint_prefix(prefix_entry.prefix)
                     loopback_set.add(prefix.split('/')[0])
                     continue
 
@@ -162,7 +162,7 @@ class PathCmd(DecisionCmd):
         def _parse(prefix_set, prefix_db):
             for prefix_entry in prefix_db.prefixEntries:
                 if len(prefix_entry.prefix.prefixAddress.addr) == 16:
-                    prefix_set.add(utils.sprint_prefix(prefix_entry.prefix))
+                    prefix_set.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
 
         prefix_set = set()
         self.iter_dbs(prefix_set, self.prefix_dbs, node, _parse)
@@ -174,8 +174,8 @@ class PathCmd(DecisionCmd):
         def _parse(if2node, adj_db):
             nexthop_dict = if2node[adj_db.thisNodeName]
             for adj in adj_db.adjacencies:
-                nh6_addr = utils.sprint_addr(adj.nextHopV6.addr)
-                nh4_addr = utils.sprint_addr(adj.nextHopV4.addr)
+                nh6_addr = ipnetwork.sprint_addr(adj.nextHopV6.addr)
+                nh4_addr = ipnetwork.sprint_addr(adj.nextHopV4.addr)
                 nexthop_dict[(adj.ifName, nh6_addr)] = adj.otherNodeName
                 nexthop_dict[(adj.ifName, nh4_addr)] = adj.otherNodeName
 
@@ -189,12 +189,12 @@ class PathCmd(DecisionCmd):
         max_prefix_len = -1
         lpm_route = None
         for route in route_db.routes:
-            if IPNetwork(utils.sprint_prefix(route.prefix)).Contains(
+            if IPNetwork(ipnetwork.sprint_prefix(route.prefix)).Contains(
                     IPAddress(dst_addr)):
                 next_hop_prefix_len = route.prefix.prefixLength
                 if next_hop_prefix_len == max_prefix_len:
                     raise Exception('Duplicate prefix found in routing table {}'
-                                    .format(utils.sprint_prefix(route.prefix)))
+                                    .format(ipnetwork.sprint_prefix(route.prefix)))
                 elif next_hop_prefix_len > max_prefix_len:
                     lpm_route = route
                     max_prefix_len = next_hop_prefix_len
@@ -229,13 +229,13 @@ class PathCmd(DecisionCmd):
                 fib_routes[route_db.thisNodeName].extend(
                     self.get_fib_path(
                         route_db.thisNodeName,
-                        utils.sprint_prefix(lpm_route.prefix),
+                        ipnetwork.sprint_prefix(lpm_route.prefix),
                         self.fib_agent_port,
                         self.timeout))
             min_cost = min([p.metric for p in lpm_route.paths])
             for path in [p for p in lpm_route.paths if p.metric == min_cost]:
                 if len(path.nextHop.addr) == 16:
-                    nh_addr = utils.sprint_addr(path.nextHop.addr)
+                    nh_addr = ipnetwork.sprint_addr(path.nextHop.addr)
                     next_hop_node_name = \
                         if2node[route_db.thisNodeName][(path.ifName, nh_addr)]
                     next_hop_nodes.append([
@@ -258,7 +258,7 @@ class PathCmd(DecisionCmd):
         except Exception:
             return []
         for route in routes:
-            if utils.sprint_prefix(route.dest) == dst_prefix:
+            if ipnetwork.sprint_prefix(route.dest) == dst_prefix:
                 return route.nexthops
         return []
 
@@ -313,7 +313,7 @@ class PathCmd(DecisionCmd):
                 # check if next hop node is in fib path
                 is_nexthop_in_fib_path = False
                 for nexthop in fib_routes[cur]:
-                    if next_hop_node[3] == utils.sprint_addr(nexthop.addr) and\
+                    if next_hop_node[3] == ipnetwork.sprint_addr(nexthop.addr) and\
                             next_hop_node[1] == nexthop.ifName:
                         is_nexthop_in_fib_path = True
 

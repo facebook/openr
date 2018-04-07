@@ -12,8 +12,7 @@ from __future__ import division
 
 from openr.PrefixManager import ttypes as prefix_mgr_types
 from openr.Lsdb import ttypes as lsdb_types
-from openr.utils import socket, consts
-from openr.cli.utils.utils import ip_str_to_prefix
+from openr.utils import socket, consts, ipnetwork
 
 import zmq
 
@@ -41,7 +40,7 @@ class PrefixMgrClient():
         if prefixes is not None:
             for prefix in prefixes:
                 req_msg.prefixes.append(lsdb_types.PrefixEntry(
-                    prefix=ip_str_to_prefix(prefix),
+                    prefix=ipnetwork.ip_str_to_prefix(prefix),
                     type=TYPE_TO_VALUES[prefix_type]))
 
         self._prefix_mgr_cmd_socket.send_thrift_obj(req_msg)

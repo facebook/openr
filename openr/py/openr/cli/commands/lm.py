@@ -12,7 +12,7 @@ from __future__ import division
 
 from openr.clients import lm_client
 from openr.cli.utils import utils
-from openr.utils import printing
+from openr.utils import ipnetwork, printing
 
 import click
 import sys
@@ -143,9 +143,9 @@ class LMLinksCmd(LMCmd):
 
         def _update(interface_info_dict, interface_info):
             interface_info_dict.update({
-                'v4Addrs': [utils.sprint_addr(v4Addr.addr)
+                'v4Addrs': [ipnetwork.sprint_addr(v4Addr.addr)
                             for v4Addr in interface_info.v4Addrs],
-                'v6LinkLocalAddrs': [utils.sprint_addr(v6Addr.addr)
+                'v6LinkLocalAddrs': [ipnetwork.sprint_addr(v6Addr.addr)
                                      for v6Addr in interface_info.v6LinkLocalAddrs]
             })
 
@@ -195,7 +195,7 @@ class LMLinksCmd(LMCmd):
             rows.append([k, state, overloaded, metric_override, index, ''])
             firstAddr = True
             for a in (v.info.v4Addrs + v.info.v6LinkLocalAddrs):
-                addrStr = utils.sprint_addr(a.addr)
+                addrStr = ipnetwork.sprint_addr(a.addr)
                 if firstAddr:
                     rows[-1][5] = addrStr
                     firstAddr = False

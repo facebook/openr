@@ -11,7 +11,7 @@ from __future__ import unicode_literals
 from __future__ import division
 
 from openr.clients import prefix_mgr_client
-from openr.utils import printing
+from openr.utils import ipnetwork, printing
 from openr.cli.utils import utils
 
 
@@ -63,8 +63,8 @@ class ViewCmd(PrefixMgrCmd):
         resp = self.client.view_prefix()
         rows = []
         for prefix_entry in resp.prefixes:
-            prefix_str = utils.sprint_prefix(prefix_entry.prefix)
-            prefix_type = utils.sprint_prefix_type(prefix_entry.type)
+            prefix_str = ipnetwork.sprint_prefix(prefix_entry.prefix)
+            prefix_type = ipnetwork.sprint_prefix_type(prefix_entry.type)
             rows.append((prefix_type, prefix_str))
         print('\n', printing.render_horizontal_table(rows, ['Type', 'Prefix']))
         print()

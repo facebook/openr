@@ -11,7 +11,7 @@ from __future__ import unicode_literals
 from __future__ import division
 
 from openr.clients import health_checker_client
-from openr.cli.utils import utils
+from openr.utils import ipnetwork
 
 import tabulate
 
@@ -36,7 +36,7 @@ class PeekCmd(HealthCheckerCmd):
         for name, node in resp.nodeInfo.items():
             rows.append([
                 name,
-                utils.sprint_addr(node.ipAddress.addr),
+                ipnetwork.sprint_addr(node.ipAddress.addr),
                 node.lastValSent,
                 node.lastAckFromNode,
                 node.lastAckToNode

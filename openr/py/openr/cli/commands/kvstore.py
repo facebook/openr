@@ -25,7 +25,7 @@ from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients import kvstore_client, kvstore_subscriber
 from openr.cli.utils import utils
 from openr.utils.consts import Consts
-from openr.utils import printing
+from openr.utils import ipnetwork, printing
 from openr.utils import serializer
 
 from openr.Lsdb import ttypes as lsdb_types
@@ -101,7 +101,7 @@ class KvStoreCmd(object):
         # First look for LOOPBACK prefix
         for prefix_entry in prefix_db.prefixEntries:
             if prefix_entry.type == lsdb_types.PrefixType.LOOPBACK:
-                return utils.sprint_addr(prefix_entry.prefix.prefixAddress.addr)
+                return ipnetwork.sprint_addr(prefix_entry.prefix.prefixAddress.addr)
 
         # Next look for PREFIX_ALLOCATOR prefix if any
         for prefix_entry in prefix_db.prefixEntries:
@@ -245,7 +245,7 @@ class NodesCmd(KvStoreCmd):
             ]
             loopback_prefixes.sort(key=lambda x: len(x.prefixAddress.addr),
                                    reverse=True)
-            row.extend([utils.sprint_prefix(p) for p in loopback_prefixes])
+            row.extend([ipnetwork.sprint_prefix(p) for p in loopback_prefixes])
             rows.append(row)
 
         rows = []
@@ -779,7 +779,7 @@ class AllocationsCmd(SetKeyCmd):
 
     def run_set(self, node_name, prefix_str):
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
-        prefix = utils.ip_str_to_prefix(prefix_str)
+        prefix = ipnetwork.ip_str_to_prefix(prefix_str)
 
         # Retrieve previous allocation
         resp = self.client.get_keys([key])
