@@ -14,9 +14,9 @@ import click
 import ipaddr
 import sys
 import zmq
+from collections import defaultdict
 
-from openr.clients import fib_client
-from openr.clients import decision_client
+from openr.clients import fib_client, decision_client, lm_client
 from openr.cli.utils import utils
 from openr.utils import ipnetwork, printing
 from openr.IpPrefix import ttypes as ip_types
@@ -124,49 +124,113 @@ def prefixes_with_different_nexthops(lhs, rhs):
 
 def validate(routes_a, routes_b, sources, enable_color):
 
-        extra_routes_in_a = routes_difference(routes_a, routes_b)
-        extra_routes_in_b = routes_difference(routes_b, routes_a)
-        diff_prefixes = prefixes_with_different_nexthops(routes_a, routes_b)
+    extra_routes_in_a = routes_difference(routes_a, routes_b)
+    extra_routes_in_b = routes_difference(routes_b, routes_a)
+    diff_prefixes = prefixes_with_different_nexthops(routes_a, routes_b)
 
-        # if all good, then return early
-        if not extra_routes_in_a and not extra_routes_in_b and not diff_prefixes:
-            if enable_color:
-                click.echo(click.style('PASS', bg='green', fg='black'))
-            else:
-                click.echo('PASS')
-            print('{} and {} routing table match'.format(*sources))
-            return True
-
-        # Something failed.. report it
+    # if all good, then return early
+    if not extra_routes_in_a and not extra_routes_in_b and not diff_prefixes:
         if enable_color:
-            click.echo(click.style('FAIL', bg='red', fg='black'))
+            click.echo(click.style('PASS', bg='green', fg='black'))
         else:
-            click.echo('FAIL')
-        print('{} and {} routing table do not match'.format(*sources))
-        if extra_routes_in_a:
-            caption = 'Routes in {} but not in {}'.format(*sources)
-            print_routes(caption, extra_routes_in_a)
+            click.echo('PASS')
+        print('{} and {} routing table match'.format(*sources))
+        return True
 
-        if extra_routes_in_b:
-            caption = 'Routes in {} but not in {}'.format(*reversed(sources))
-            print_routes(caption, extra_routes_in_b)
+    # Something failed.. report it
+    if enable_color:
+        click.echo(click.style('FAIL', bg='red', fg='black'))
+    else:
+        click.echo('FAIL')
+    print('{} and {} routing table do not match'.format(*sources))
+    if extra_routes_in_a:
+        caption = 'Routes in {} but not in {}'.format(*sources)
+        print_routes(caption, extra_routes_in_a)
 
-        if diff_prefixes:
-            caption = 'Prefixes have different nexthops in {} and {}'.format(*sources)
-            rows = []
-            for prefix, lhs_nexthops, rhs_nexthops in diff_prefixes:
-                rows.append([
-                    prefix,
-                    ', '.join(lhs_nexthops),
-                    ', '.join(rhs_nexthops),
-                ])
-            column_labels = ['Prefix'] + sources
-            print(printing.render_horizontal_table(
-                rows,
-                column_labels,
-                caption=caption,
-            ))
-        return False
+    if extra_routes_in_b:
+        caption = 'Routes in {} but not in {}'.format(*reversed(sources))
+        print_routes(caption, extra_routes_in_b)
+
+    if diff_prefixes:
+        caption = 'Prefixes have different nexthops in {} and {}'.format(*sources)
+        rows = []
+        for prefix, lhs_nexthops, rhs_nexthops in diff_prefixes:
+            rows.append([
+                prefix,
+                ', '.join(lhs_nexthops),
+                ', '.join(rhs_nexthops),
+            ])
+        column_labels = ['Prefix'] + sources
+        print(printing.render_horizontal_table(
+            rows,
+            column_labels,
+            caption=caption,
+        ))
+    return False
+
+
+def validate_route_nexthops(routes, interfaces, sources, enable_color):
+    '''
+    Validate between fib routes and lm interfaces
+
+    :param routes: list ip_types.UnicastRoute (structured routes)
+    :param interfaces: dict<interface-name, InterfaceDetail>
+    '''
+
+    print('Validating route nexthops from {}...'.format(*sources))
+
+    # record invalid routes in dict<error, list<route_db>>
+    invalid_routes = defaultdict(list)
+
+    # define error types
+    MISSING_NEXTHOP = 'Nexthop does not exist'
+    INVALID_SUBNET = 'Nexthop address is not in the same subnet as interface'
+    INVALID_LINK_LOCAL = 'Nexthop address is not link local'
+
+    for route in routes:
+        dest = ipnetwork.sprint_prefix(route.dest)
+        # record invalid nexthops in dict<error, list<nexthops>>
+        invalid_nexthop = defaultdict(list)
+        for nh in route.nexthops:
+            if nh.ifName not in interfaces or not interfaces[nh.ifName].info.isUp:
+                invalid_nexthop[MISSING_NEXTHOP].append(ip_nexthop_to_str(nh))
+                continue
+            # if nexthop addr is v4, make sure it belongs to same subnets as
+            # interface addr
+            if ipnetwork.ip_version(nh.addr) == 4:
+                for addr in interfaces[nh.ifName].info.v4Addrs:
+                    if not ipnetwork.is_same_subnet(nh.addr, addr.addr, '31'):
+                        invalid_nexthop[INVALID_SUBNET].append(ip_nexthop_to_str(nh))
+            # if nexthop addr is v6, make sure it's a link local addr
+            elif (ipnetwork.ip_version(nh.addr) == 6 and
+                  not ipnetwork.is_link_local(nh.addr)):
+                invalid_nexthop[INVALID_LINK_LOCAL].append(ip_nexthop_to_str(nh))
+
+        # build routes per error type
+        for k, v in invalid_nexthop.items():
+            invalid_routes[k].extend(build_routes([dest], v))
+
+    # if all good, then return early
+    if not invalid_routes:
+        if enable_color:
+            click.echo(click.style('PASS', bg='green', fg='black'))
+        else:
+            click.echo('PASS')
+        print('Route validation successful')
+        return True
+
+    # Something failed.. report it
+    if enable_color:
+        click.echo(click.style('FAIL', bg='red', fg='black'))
+    else:
+        click.echo('FAIL')
+    print('Route validation failed')
+    # Output report per error type
+    for err, route_db in invalid_routes.items():
+        caption = 'Error: {}'.format(err)
+        print_routes(caption, route_db)
+
+    return False
 
 
 def ip_nexthop_to_str(nh, ignore_v4_iface=False):
@@ -352,6 +416,8 @@ class FibValidateRoutesCmd(FibAgentCmd):
             agent_routes = self.client.getRouteTableByClient(
                 self.client.client_id
             )
+            lm_links = self.get_lm_link_db(cli_opts).interfaceDetails
+
         except Exception as e:
             print('Failed to validate Fib routes.')
             print('Exception: {}'.format(e))
@@ -369,7 +435,13 @@ class FibValidateRoutesCmd(FibAgentCmd):
             ['Openr-Fib', 'FibAgent'],
             cli_opts.enable_color,
         )
-        return 0 if res1 and res2 else -1
+        res3 = validate_route_nexthops(
+            fib_routes,
+            lm_links,
+            ['Openr-Fib', 'LinkMonitor'],
+            cli_opts.enable_color,
+        )
+        return 0 if res1 and res2 and res3 else -1
 
     def get_fib_route_db(self, cli_opts):
         client = fib_client.FibClient(
@@ -406,6 +478,14 @@ class FibValidateRoutesCmd(FibAgentCmd):
                                                          nexthops=nexthops))
 
         return shortest_routes
+
+    def get_lm_link_db(self, cli_opts):
+        self.lm_client = lm_client.LMClient(
+            cli_opts.zmq_ctx,
+            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.lm_cmd_port),
+            cli_opts.timeout,
+            cli_opts.proto_factory)
+        return self.lm_client.dump_links()
 
 
 class FibListRoutesLinuxCmd(FibLinuxAgentCmd):
