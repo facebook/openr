@@ -596,7 +596,6 @@ LinkMonitor::neighborDownEvent(
   advertiseMyAdjacencies();
 
   auto& ifNames = nbIfs_[remoteNodeName];
-  LOG(INFO) << "ifNames.size(): " << ifNames.size();
   ifNames.erase(ifName);
 
   // take a snapshot of new required peers
@@ -971,14 +970,14 @@ LinkMonitor::updateLinkEvent(const thrift::LinkEntry& linkEntry) {
 
   bool isUpdated = false;
   if (interfaceDb_.count(ifName)) {
-    LOG(INFO) << "Updating " << ifName << " : " << interfaceDb_.at(ifName);
+    VLOG(3) << "Updating " << ifName << " : " << interfaceDb_.at(ifName);
     isUpdated = interfaceDb_.at(ifName).updateEntry(ifIndex, isUp, weight);
-    LOG(INFO) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
-              << interfaceDb_.at(ifName);
+    VLOG(3) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
+            << interfaceDb_.at(ifName);
   } else {
     isUpdated = true;
     interfaceDb_.emplace(ifName, InterfaceEntry(ifIndex, isUp));
-    LOG(INFO) << "Added " << ifName << " : " << interfaceDb_.at(ifName);
+    VLOG(3) << "Added " << ifName << " : " << interfaceDb_.at(ifName);
   }
 
   return isUpdated;
@@ -1001,14 +1000,13 @@ LinkMonitor::updateAddrEvent(const thrift::AddrEntry& addrEntry) {
   bool isUpdated = false;
   auto ipAddr = toIPAddress(addrEntry.ipPrefix.prefixAddress);
   bool isValid = addrEntry.isValid;
-
-  LOG(INFO) << "<addr> event: " << ipAddr << (isValid ? " add" : " delete")
-            << " on " << ifName;
-
   auto& intf = interfaceDb_.at(ifName);
-  LOG(INFO) << "Updating " << ifName << " : " << intf;
+
+  VLOG(3) << "<addr> event: " << ipAddr << (isValid ? " add" : " delete")
+          << " on " << ifName;
+  VLOG(3) << "Updating " << ifName << " : " << intf;
   isUpdated = intf.updateEntry(ipAddr, isValid) && intf.isUp();
-  LOG(INFO) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
+  VLOG(3) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
             << intf;
 
   return isUpdated;
@@ -1021,9 +1019,8 @@ LinkMonitor::processLinkEvent(const thrift::LinkEntry& linkEntry) {
   const auto ifIndex = linkEntry.ifIndex;
   const auto weight = linkEntry.weight;
 
-  LOG(INFO) << "<link> event: " << (isUp ? "UP" : "DOWN") << " for " << ifName
-            << " (" << ifIndex << ")"
-            << " weight: " << weight;
+  VLOG(3) << "<link> event: " << (isUp ? "UP" : "DOWN") << " for " << ifName
+          << ", ifIndex: " << ifIndex << ", weight: " << weight;
 
   const auto isUpdated = updateLinkEvent(linkEntry);
 
@@ -1047,7 +1044,8 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
   // If the interface entry doesn't exist, we create one in interfaceDb_ here
   bool invalidLinkInfo = false;
   if (!interfaceDb_.count(ifName)) {
-    LOG(INFO) << "Interface " << ifName << " does not exist before, adding...";
+    LOG(WARNING) << "Received address event before interface up/down event for "
+                 << ifName << ". Adding...";
     interfaceDb_.emplace(ifName, InterfaceEntry(0 /*ifIndex*/, false /*isUp*/));
     invalidLinkInfo = true;
   }
@@ -1062,7 +1060,7 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
 
 bool
 LinkMonitor::syncInterfaces() {
-  VLOG(2) << "Syncing Interface DB from Netlink Platform";
+  VLOG(1) << "Syncing Interface DB from Netlink Platform";
 
   //
   // Retrieve latest link snapshot from SystemService
@@ -1106,7 +1104,7 @@ LinkMonitor::syncInterfaces() {
 
   // Send an update only if there is an update
   if (isUpdated) {
-    LOG(INFO) << "Completed sync of Interface DB from netlink";
+    VLOG(1) << "Completed sync of Interface DB from netlink";
     sendInterfaceDatabase();
   }
 

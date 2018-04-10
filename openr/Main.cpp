@@ -378,7 +378,7 @@ main(int argc, char** argv) {
       context, folly::none, folly::none, fbzmq::NonblockingFlag{true}};
   auto ret = forceCrashServer.bind(kForceCrashServerUrl);
   if (ret.hasError()) {
-    LOG(ERROR) << "Failed to bind on {}" << std::string(kForceCrashServerUrl);
+    LOG(ERROR) << "Failed to bind on " << std::string(kForceCrashServerUrl);
     return 1;
   }
   mainEventLoop.addSocket(
