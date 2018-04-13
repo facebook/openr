@@ -976,7 +976,7 @@ LinkMonitor::updateLinkEvent(const thrift::LinkEntry& linkEntry) {
             << interfaceDb_.at(ifName);
   } else {
     isUpdated = true;
-    interfaceDb_.emplace(ifName, InterfaceEntry(ifIndex, isUp));
+    interfaceDb_[ifName] = InterfaceEntry(ifIndex, isUp);
     VLOG(3) << "Added " << ifName << " : " << interfaceDb_.at(ifName);
   }
 
