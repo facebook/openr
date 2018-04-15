@@ -884,8 +884,8 @@ NetlinkRouteSocket::doUpdateRouteCache() {
     // of this route
     // These should not throw exceptions as they are libnl callbacks
     auto nextHopFunc = [](struct rtnl_nexthop * obj, void* ctx) noexcept->void {
-      char ipAddrBuf[kIpAddrBufSize];
-      char ifNameBuf[IFNAMSIZ];
+      char ipAddrBuf2[kIpAddrBufSize];
+      char ifNameBuf2[IFNAMSIZ];
       NextHopFuncCtx* nextHopFuncCtx = (NextHopFuncCtx*)ctx;
 
       struct rtnl_nexthop* nextHop =
@@ -895,8 +895,8 @@ NetlinkRouteSocket::doUpdateRouteCache() {
       std::string ifName(rtnl_link_i2name(
           nextHopFuncCtx->linkCache,
           rtnl_route_nh_get_ifindex(nextHop),
-          ifNameBuf,
-          sizeof(ifNameBuf)));
+          ifNameBuf2,
+          sizeof(ifNameBuf2)));
 
       // Get the gateway IP from nextHop
       struct nl_addr* gw = rtnl_route_nh_get_gateway(nextHop);
@@ -910,7 +910,7 @@ NetlinkRouteSocket::doUpdateRouteCache() {
         nextHopFuncCtx->nextHops->emplace(std::move(ifName), std::move(gwAddr));
       } catch (std::exception const& e) {
         LOG(ERROR) << "Error parsing GW addr: "
-                   << nl_addr2str(gw, ipAddrBuf, sizeof(ipAddrBuf));
+                   << nl_addr2str(gw, ipAddrBuf2, sizeof(ipAddrBuf2));
         return;
       }
     };
