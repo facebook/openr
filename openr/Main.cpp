@@ -111,6 +111,11 @@ DEFINE_string(
     config_store_filepath,
     "/tmp/aq_persistent_config_store.bin",
     "File name where to persist OpenR's internal state across restarts");
+DEFINE_bool(
+    assume_drained,
+    false,
+    "If set, will assume node is drained if no drain state is found in the "
+    "persistent store");
 DEFINE_string(
     node_name,
     "node1",
@@ -734,6 +739,7 @@ main(int argc, char** argv) {
       SparkReportUrl{kSparkReportUrl},
       monitorSubmitUrl,
       kConfigStoreUrl,
+      FLAGS_assume_drained,
       kPrefixManagerLocalCmdUrl,
       PlatformPublisherUrl{FLAGS_platform_pub_url},
       LinkMonitorGlobalPubUrl{

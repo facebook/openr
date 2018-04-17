@@ -205,6 +205,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       SparkReportUrl{sparkReportUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       PersistentStoreUrl{configStoreUrl_},
+      false,
       PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_},
       PlatformPublisherUrl{platformPubUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},

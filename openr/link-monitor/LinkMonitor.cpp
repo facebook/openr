@@ -93,6 +93,7 @@ LinkMonitor::LinkMonitor(
     SparkReportUrl sparkReportUrl,
     MonitorSubmitUrl const& monitorSubmitUrl,
     PersistentStoreUrl const& configStoreUrl,
+    bool assumeDrained,
     PrefixManagerLocalCmdUrl const& prefixManagerUrl,
     PlatformPublisherUrl const& platformPubUrl,
     LinkMonitorGlobalPubUrl linkMonitorGlobalPubUrl,
@@ -152,7 +153,7 @@ LinkMonitor::LinkMonitor(
   // Create config-store client
   configStoreClient_ =
       std::make_unique<PersistentStoreClient>(configStoreUrl, zmqContext);
-  scheduleTimeout(std::chrono::seconds(0), [this]() noexcept {
+  scheduleTimeout(std::chrono::seconds(0), [this, assumeDrained]() noexcept {
     auto config = configStoreClient_->loadThriftObj<thrift::LinkMonitorConfig>(
         kConfigKey);
     if (config.hasValue()) {
@@ -160,7 +161,9 @@ LinkMonitor::LinkMonitor(
       config_ = config.value();
       printLinkMonitorConfig(config_);
     } else {
-      LOG(ERROR) << "Failed to load link-monitor config.";
+      config_.isOverloaded = assumeDrained;
+      LOG(WARNING) << folly::sformat("Failed to load link-monitor config. "
+          "Setting node as {}", assumeDrained ? "DRAINED" : "UNDRAINED");
     }
   });
 

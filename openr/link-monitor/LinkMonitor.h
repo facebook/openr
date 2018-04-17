@@ -92,6 +92,9 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       SparkReportUrl sparkReportUrl,
       MonitorSubmitUrl const& monitorSubmitUrl,
       PersistentStoreUrl const& configStoreUrl,
+      // if set, we will assume drained if no drain state is found in the
+      // persitentStore
+      bool assumeDrained,
       PrefixManagerLocalCmdUrl const& prefixManagerUrl,
       // URL for platform publisher
       PlatformPublisherUrl const& platformPubUrl,

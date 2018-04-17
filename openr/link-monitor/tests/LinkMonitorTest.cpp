@@ -278,6 +278,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         SparkReportUrl{"inproc://spark-report"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         PersistentStoreUrl{kConfigStoreUrl},
+        false,
         PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url"},
@@ -976,6 +977,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         SparkReportUrl{"inproc://spark-report2"},
         MonitorSubmitUrl{"inproc://monitor-rep2"},
         PersistentStoreUrl{kConfigStoreUrl}, /* same config store */
+        false,
         PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
         PlatformPublisherUrl{"inproc://platform-pub-url2"},
         LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
@@ -1190,6 +1192,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       SparkReportUrl{"inproc://spark-report"},
       MonitorSubmitUrl{"inproc://monitor-rep"},
       PersistentStoreUrl{kConfigStoreUrl},
+      false,
       PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
       PlatformPublisherUrl{"inproc://platform-pub-url"},
       LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
@@ -1620,6 +1623,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         SparkReportUrl{"inproc://spark-report"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         PersistentStoreUrl{kConfigStoreUrl},
+        false,
         PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{

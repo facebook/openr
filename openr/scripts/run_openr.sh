@@ -28,6 +28,7 @@ OPENR=openr
 
 ADVERTISE_INTERFACE_DB=false
 ALLOC_PREFIX_LEN=128
+ASSUME_DRAINED=false
 CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
 DECISION_DEBOUNCE_MAX_MS=250
 DECISION_DEBOUNCE_MIN_MS=10
@@ -103,6 +104,7 @@ fi
 exec ${OPENR} \
   --advertise_interface_db=${ADVERTISE_INTERFACE_DB} \
   --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
+  --assume_drained=${ASSUME_DRAINED} \
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \
   --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \
   --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
