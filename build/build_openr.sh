@@ -104,13 +104,12 @@ install_folly() {
     git clone https://github.com/facebook/folly
   fi
   rev=$(find_github_hash facebook/folly)
-  cd folly/folly
+  cd folly/build
   if [[ ! -z "$rev" ]]; then
     git fetch origin
     git checkout "$rev"
   fi
-  autoreconf -ivf
-  ./configure LIBS="-lpthread"
+  cmake -DBUILD_SHARED_LIBS=ON ..
   make
   sudo make install
   sudo ldconfig
