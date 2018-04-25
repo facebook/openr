@@ -40,13 +40,13 @@ KvStoreWrapper::KvStoreWrapper(
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock(
       zmqContext,
       fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalPubIdTemplate, nodeId)},
+          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId)},
       keyPair);
 
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock(
       zmqContext,
       fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalCmdIdTemplate, nodeId)},
+          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId)},
       keyPair);
 
   // For testing puspose we are using inproc URLs for global sockets as well
@@ -150,7 +150,7 @@ KvStoreWrapper::setKey(std::string key, thrift::Value value) {
   }
 
   // Return the result
-  return *(maybeMsg->read<std::string>()) == Constants::kSuccessResponse;
+  return *(maybeMsg->read<std::string>()) == Constants::kSuccessResponse.toString();
 }
 
 folly::Optional<thrift::Value>

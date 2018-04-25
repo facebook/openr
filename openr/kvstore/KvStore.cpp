@@ -55,19 +55,19 @@ KvStore::KvStore(
       peerSubSock_(
           zmqContext,
           fbzmq::IdentityString{folly::sformat(
-              Constants::kGlobalSubIdTemplate, nodeId_)},
+              Constants::kGlobalSubIdTemplate.toString(), nodeId_)},
           keyPair,
           fbzmq::NonblockingFlag{true}),
       localCmdSock_(
           zmqContext,
           fbzmq::IdentityString{folly::sformat(
-              Constants::kLocalCmdIdTemplate, nodeId_)},
+              Constants::kLocalCmdIdTemplate.toString(), nodeId_)},
           keyPair,
           fbzmq::NonblockingFlag{true}),
       peerSyncSock_(
           zmqContext,
           fbzmq::IdentityString{folly::sformat(
-              Constants::kPeerSyncIdTemplate, nodeId_)},
+              Constants::kPeerSyncIdTemplate.toString(), nodeId_)},
           keyPair,
           fbzmq::NonblockingFlag{true}) {
   CHECK(not nodeId_.empty());
@@ -83,7 +83,7 @@ KvStore::KvStore(
     globalPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
         zmqContext,
         fbzmq::IdentityString{
-            folly::sformat(Constants::kGlobalPubIdTemplate, nodeId_)},
+            folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId_)},
         keyPair,
         fbzmq::NonblockingFlag{true});
   }
@@ -95,7 +95,7 @@ KvStore::KvStore(
     globalCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
         zmqContext,
         fbzmq::IdentityString{
-            folly::sformat(Constants::kGlobalCmdIdTemplate, nodeId_)},
+            folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId_)},
         keyPair,
         fbzmq::NonblockingFlag{true});
   }
@@ -775,7 +775,7 @@ KvStore::requestFullSyncFromPeers() {
     // peer is not connected over the router socket then it will error out
     // exception and we will retry again.
     auto const peerCmdSocketId =
-        folly::sformat(Constants::kGlobalCmdIdTemplate, peerName);
+        folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), peerName);
 
     thrift::Request dumpRequest;
     dumpRequest.cmd = thrift::Command::KEY_DUMP;
@@ -882,7 +882,7 @@ KvStore::processRequest(
 
     if (thriftReq.keySetParams.keyVals.empty()) {
       LOG(ERROR) << "Malformed set request, ignoring";
-      cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse).value());
+      cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
       return;
     }
 
@@ -913,7 +913,7 @@ KvStore::processRequest(
     }
 
     // respond to the client
-    cmdSock.sendOne(fbzmq::Message::from(Constants::kSuccessResponse).value());
+    cmdSock.sendOne(fbzmq::Message::from(Constants::kSuccessResponse.toString()).value());
     break;
   }
   case thrift::Command::KEY_GET: {
@@ -965,7 +965,7 @@ KvStore::processRequest(
 
     if (thriftReq.peerAddParams.peers.empty()) {
       LOG(ERROR) << "Malformed peer-add request, ignoring";
-      cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse).value());
+      cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
       return;
     }
     addPeers(thriftReq.peerAddParams.peers);
@@ -979,7 +979,7 @@ KvStore::processRequest(
 
     if (thriftReq.peerDelParams.peerNames.empty()) {
       LOG(ERROR) << "Malformed peer-del request, ignoring";
-      cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse).value());
+      cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
       return;
     }
     delPeers(thriftReq.peerDelParams.peerNames);
@@ -996,7 +996,7 @@ KvStore::processRequest(
 
   default:
     LOG(ERROR) << "Unknown command received";
-    cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse).value());
+    cmdSock.sendOne(fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
     break;
   }
 }
@@ -1199,18 +1199,6 @@ KvStore::countdownTtl() {
   globalPubSock_.sendOne(msg);
 }
 
-int
-KvStore::getPrefixCount() {
-  int count = 0;
-  for (auto const& kv : kvStore_) {
-    auto const& key = kv.first;
-    if (key.find(Constants::kPrefixDbMarker) == 0) {
-      ++count;
-    }
-  }
-  return count;
-}
-
 void
 KvStore::submitCounters() {
   VLOG(3) << "Submitting counters ... ";
@@ -1221,7 +1209,6 @@ KvStore::submitCounters() {
   // Add some more flat counters
   counters["kvstore.num_keys"] = kvStore_.size();
   counters["kvstore.num_peers"] = peers_.size();
-  counters["kvstore.num_prefixes"] = getPrefixCount();
   counters["kvstore.pending_full_sync"] = peersToSyncWith_.size();
 
   // Aliveness report counters
@@ -1245,7 +1232,7 @@ KvStore::logKvEvent(const std::string& event, const std::string& key) {
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 

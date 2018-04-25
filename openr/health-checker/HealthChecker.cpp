@@ -182,7 +182,7 @@ HealthChecker::processKeyVal(
   }
 
   std::string prefix, nodeName;
-  folly::split(Constants::kPrefixNameSeparator, key, prefix, nodeName);
+  folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
 
   if (key.find(adjacencyDbMarker_) == 0) {
     const auto adjacencyDb =

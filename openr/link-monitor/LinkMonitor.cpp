@@ -184,7 +184,7 @@ LinkMonitor::LinkMonitor(
     // create range allocator to get unique node labels
     rangeAllocator_ = std::make_unique<RangeAllocator<int32_t>>(
         nodeId_,
-        Constants::kNodeLabelRangePrefix,
+        Constants::kNodeLabelRangePrefix.toString(),
         kvStoreClient_.get(),
         [&](folly::Optional<int32_t> newVal) noexcept {
           config_.nodeLabel = newVal ? newVal.value() : 0;
@@ -899,7 +899,7 @@ LinkMonitor::createNetlinkSystemHandlerClient() {
   // Create socket to thrift server and set some connection parameters
   socket_ = apache::thrift::async::TAsyncSocket::newSocket(
       &evb_,
-      Constants::kPlatformHost,
+      Constants::kPlatformHost.toString(),
       platformThriftPort_,
       Constants::kPlatformConnTimeout.count());
 
@@ -1427,7 +1427,7 @@ LinkMonitor::logLinkEvent(const std::string& event, const std::string& iface) {
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 
@@ -1443,7 +1443,7 @@ LinkMonitor::logPeerEvent(
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 
@@ -1486,7 +1486,7 @@ LinkMonitor::logEvent(
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 

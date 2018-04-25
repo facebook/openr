@@ -1345,7 +1345,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     const auto& key = kv.first;
     const auto& rawVal = kv.second;
     std::string prefix, nodeName;
-    folly::split(Constants::kPrefixNameSeparator, key, prefix, nodeName);
+    folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
 
     if (not rawVal.value.hasValue()) {
       // skip TTL update
@@ -1387,7 +1387,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   // LSDB deletion
   for (const auto& key : thriftPub.expiredKeys) {
     std::string prefix, nodeName;
-    folly::split(Constants::kPrefixNameSeparator, key, prefix, nodeName);
+    folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
 
     if (key.find(adjacencyDbMarker_) == 0) {
       if (spfSolver_->deleteAdjacencyDatabase(nodeName)) {
@@ -1472,7 +1472,7 @@ Decision::logRouteEvent(const std::string& event, const int numOfRoutes) {
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 
@@ -1489,7 +1489,7 @@ Decision::logDebounceEvent(
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 

@@ -322,7 +322,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           folly::IPAddress::networkToString(seedPrefix),
           kAllocPrefixLen);
       auto res = kvStoreClient->setKey(
-          Constants::kSeedPrefixAllocParamKey, prefixAllocParam);
+          Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
       EXPECT_FALSE(res.hasError()) << res.error();
     }
 
@@ -437,7 +437,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           folly::IPAddress::networkToString(newSeedPrefix),
           kAllocPrefixLen);
       auto res = kvStoreClient->setKey(
-          Constants::kSeedPrefixAllocParamKey, prefixAllocParam);
+          Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
       EXPECT_FALSE(res.hasError()) << res.error();
 
       // wait for prefix allocation to finish
@@ -517,7 +517,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   std::atomic<bool> hasAllocPrefix{false};
   const uint8_t allocPrefixLen = 24;
   const std::string subscriptionKey = folly::sformat(
-      "{}{}", openr::Constants::kPrefixDbMarker, myNodeName_);
+      "{}{}", openr::Constants::kPrefixDbMarker.toString(), myNodeName_);
 
   // Set callback
   kvStoreClient_->subscribeKey(subscriptionKey,
@@ -565,7 +565,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
       folly::IPAddress::networkToString(seedPrefix),
       allocPrefixLen);
   auto res = kvStoreClient_->setKey(
-      Constants::kSeedPrefixAllocParamKey, prefixAllocParam);
+      Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
   EXPECT_FALSE(res.hasError()) << res.error();
   // busy loop until we have prefix
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
@@ -589,9 +589,9 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   prefixAllocator_.reset();
   evl_.runInEventLoop([&]() noexcept {
     kvStoreClient_->setKey(
-        Constants::kSeedPrefixAllocParamKey,
+        Constants::kSeedPrefixAllocParamKey.toString(),
         "", 0, std::chrono::milliseconds(10));   // erase-key
-    kvStoreClient_->unsetKey(Constants::kSeedPrefixAllocParamKey);
+    kvStoreClient_->unsetKey(Constants::kSeedPrefixAllocParamKey.toString());
   });
   configStoreClient_->erase("prefix-allocator-config");
   // wait long enough for key to expire
@@ -611,7 +611,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   //
   hasAllocPrefix.store(false, std::memory_order_relaxed);
   auto res2 = kvStoreClient_->setKey(
-      Constants::kSeedPrefixAllocParamKey, prefixAllocParam);
+      Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
   EXPECT_FALSE(res2.hasError()) << res2.error();
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
@@ -679,7 +679,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   hasAllocPrefix.store(false, std::memory_order_relaxed);
   staticAlloc.nodePrefixes[myNodeName_] = toIpPrefix("1.2.3.0/24");
   auto res = kvStoreClient_->setKey(
-      Constants::kStaticPrefixAllocParamKey,
+      Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
   EXPECT_FALSE(res.hasError()) << res.error();
   // busy loop until we have prefix
@@ -703,9 +703,9 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   prefixAllocator_.reset();
   evl_.runInEventLoop([&]() noexcept {
     kvStoreClient_->setKey(
-        Constants::kStaticPrefixAllocParamKey,
+        Constants::kStaticPrefixAllocParamKey.toString(),
         "", 0, std::chrono::milliseconds(10));   // erase-key
-    kvStoreClient_->unsetKey(Constants::kStaticPrefixAllocParamKey);
+    kvStoreClient_->unsetKey(Constants::kStaticPrefixAllocParamKey.toString());
   });
   configStoreClient_->erase("prefix-allocator-config");
   // wait long enough for key to expire
@@ -726,7 +726,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   hasAllocPrefix.store(false, std::memory_order_relaxed);
   staticAlloc.nodePrefixes[myNodeName_] = toIpPrefix("3.2.1.0/24");
   auto res2 = kvStoreClient_->setKey(
-      Constants::kStaticPrefixAllocParamKey,
+      Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
   EXPECT_FALSE(res2.hasError()) << res2.error();
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
@@ -746,7 +746,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   hasAllocPrefix.store(false, std::memory_order_relaxed);
   staticAlloc.nodePrefixes[myNodeName_] = toIpPrefix("5.6.7.0/24");
   auto res3 = kvStoreClient_->setKey(
-      Constants::kStaticPrefixAllocParamKey,
+      Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
   EXPECT_FALSE(res3.hasError()) << res3.error();
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
@@ -766,7 +766,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   hasAllocPrefix.store(true, std::memory_order_relaxed);
   staticAlloc.nodePrefixes.erase(myNodeName_);
   auto res4 = kvStoreClient_->setKey(
-      Constants::kStaticPrefixAllocParamKey,
+      Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
   EXPECT_FALSE(res4.hasError()) << res4.error();
   while (hasAllocPrefix.load(std::memory_order_relaxed)) {

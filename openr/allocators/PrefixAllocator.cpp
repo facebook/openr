@@ -71,9 +71,9 @@ PrefixAllocator::PrefixAllocator(
 void
 PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
   // subscribe for incremental updates of static prefix allocation key
-  kvStoreClient_->subscribeKey(Constants::kStaticPrefixAllocParamKey,
+  kvStoreClient_->subscribeKey(Constants::kStaticPrefixAllocParamKey.toString(),
     [&](std::string const& key, folly::Optional<thrift::Value> value) {
-      CHECK_EQ(Constants::kStaticPrefixAllocParamKey, key);
+      CHECK_EQ(Constants::kStaticPrefixAllocParamKey.toString(), key);
       if (value.hasValue()){
         processStaticPrefixAllocUpdate(value.value());
       }
@@ -89,7 +89,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
 
     // 1) Get initial value from KvStore!
     auto maybeValue = kvStoreClient_->getKey(
-        Constants::kStaticPrefixAllocParamKey);
+        Constants::kStaticPrefixAllocParamKey.toString());
     if (maybeValue.hasError()) {
       LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
                  << maybeValue.error();
@@ -127,9 +127,9 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
 void
 PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
   // subscribe for incremental updates of seed prefix
-  kvStoreClient_->subscribeKey(Constants::kSeedPrefixAllocParamKey,
+  kvStoreClient_->subscribeKey(Constants::kSeedPrefixAllocParamKey.toString(),
     [&](std::string const& key, folly::Optional<thrift::Value> value) {
-      CHECK_EQ(Constants::kSeedPrefixAllocParamKey, key);
+      CHECK_EQ(Constants::kSeedPrefixAllocParamKey.toString(), key);
       if (value.hasValue()) {
         processAllocParamUpdate(value.value());
       }
@@ -145,7 +145,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
 
     // 1) Get initial value from KvStore!
     auto maybeValue = kvStoreClient_->getKey(
-        Constants::kSeedPrefixAllocParamKey);
+        Constants::kSeedPrefixAllocParamKey.toString());
     if (maybeValue.hasError()) {
       LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
                  << maybeValue.error();
@@ -215,7 +215,7 @@ PrefixAllocator::parseParamsStr(const std::string& paramStr) noexcept {
   std::string seedPrefixStr;
   uint8_t allocPrefixLen;
   folly::split(
-      Constants::kSeedPrefixAllocLenSeparator,
+      Constants::kSeedPrefixAllocLenSeparator.toString(),
       paramStr, seedPrefixStr, allocPrefixLen);
 
   // Validate and convert seed-prefix to strong type, folly::CIDRNetwork
@@ -641,7 +641,7 @@ PrefixAllocator::logPrefixEvent(
 
   zmqMonitorClient_.addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 

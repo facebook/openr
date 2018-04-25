@@ -181,7 +181,7 @@ Fib::prepare() noexcept {
         serializer_, Constants::kReadTimeout);
     if (maybeThriftObj.hasError()) {
       LOG(ERROR) << "Error processing Fib Request: " << maybeThriftObj.error();
-      fibRep_.sendOne(fbzmq::Message::from(Constants::kErrorResponse).value());
+      fibRep_.sendOne(fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
       return;
     }
 
@@ -203,7 +203,7 @@ Fib::prepare() noexcept {
       break;
     default:
       LOG(ERROR) << "Unknown command received";
-      fibRep_.sendOne(fbzmq::Message::from(Constants::kErrorResponse).value());
+      fibRep_.sendOne(fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
     }
   });
 
@@ -483,7 +483,7 @@ Fib::createFibClient() {
   // Create socket to thrift server and set some connection parameters
   socket_ = apache::thrift::async::TAsyncSocket::newSocket(
       &evb_,
-      Constants::kPlatformHost,
+      Constants::kPlatformHost.toString(),
       thriftPort_,
       Constants::kPlatformConnTimeout.count());
 
@@ -529,7 +529,7 @@ Fib::logEvent(const std::string& event) {
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 
@@ -591,7 +591,7 @@ Fib::logPerfEvents() {
   sample.addInt("duration_ms", totalDuration.count());
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 

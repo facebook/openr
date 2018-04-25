@@ -234,7 +234,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         folly::none,
-        PrefixDbMarker{Constants::kPrefixDbMarker},
+        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         false,
         MonitorSubmitUrl{"inproc://monitor_submit"},
         context);

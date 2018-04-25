@@ -877,7 +877,7 @@ KvStoreClient::setKeysHelper(
   }
 
   const auto response = maybeReply->read<std::string>().value();
-  if (response != Constants::kSuccessResponse) {
+  if (response != Constants::kSuccessResponse.toString()) {
     return folly::makeUnexpected(
         fbzmq::Error(0, "KvStore error in SET_KEY. Received: " + response));
   }

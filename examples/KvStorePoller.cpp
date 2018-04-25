@@ -23,7 +23,8 @@ std::pair<
 KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::KvStoreClient::dumpAllWithPrefixMultipleAndParse<
     thrift::AdjacencyDatabase>(
-      zmqContext_, zmqUrls_, Constants::kAdjDbMarker, pollTimeout);
+      zmqContext_, zmqUrls_,
+      Constants::kAdjDbMarker.toString(), pollTimeout);
 
 }
 
@@ -33,7 +34,8 @@ std::pair<
 KvStorePoller::getPrefixDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::KvStoreClient::dumpAllWithPrefixMultipleAndParse<
     thrift::PrefixDatabase>(
-      zmqContext_, zmqUrls_, Constants::kPrefixDbMarker, pollTimeout);
+      zmqContext_, zmqUrls_,
+      Constants::kPrefixDbMarker.toString(), pollTimeout);
 }
 
 } // namespace openr

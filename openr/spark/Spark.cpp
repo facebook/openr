@@ -1129,7 +1129,9 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
   auto packet = util::writeThriftObjStr(helloPacket, serializer_);
 
   // send the payload
-  folly::SocketAddress dstAddr(Constants::kSparkMcastAddr, udpMcastPort_);
+  folly::SocketAddress dstAddr(
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
+      udpMcastPort_);
 
   if (kMinIpv6Mtu < packet.size()) {
     LOG(ERROR) << "Hello packet is too big, cannot sent!";
@@ -1277,7 +1279,7 @@ Spark::processInterfaceDbUpdate() {
     // On error, log and continue
     if (!toggleMcastGroup(
             mcastFd_,
-            Constants::kSparkMcastAddr,
+            folly::IPAddress(Constants::kSparkMcastAddr.toString()),
             interfaceDb_.at(ifName).ifIndex,
             false /* leave */,
             ioProvider_.get())) {
@@ -1304,7 +1306,7 @@ Spark::processInterfaceDbUpdate() {
     // We throw an error on the first one to encounter a problem
     if (!toggleMcastGroup(
             mcastFd_,
-            Constants::kSparkMcastAddr,
+            folly::IPAddress(Constants::kSparkMcastAddr.toString()),
             ifIndex,
             true /* join */,
             ioProvider_.get())) {
@@ -1386,7 +1388,7 @@ Spark::processInterfaceDbUpdate() {
       // On error, log and continue
       if (!toggleMcastGroup(
               mcastFd_,
-              Constants::kSparkMcastAddr,
+              folly::IPAddress(Constants::kSparkMcastAddr.toString()),
               interface.ifIndex,
               false /* leave */,
               ioProvider_.get())) {
@@ -1398,7 +1400,7 @@ Spark::processInterfaceDbUpdate() {
       // We throw an error on the first one to encounter a problem
       if (!toggleMcastGroup(
               mcastFd_,
-              Constants::kSparkMcastAddr,
+              folly::IPAddress(Constants::kSparkMcastAddr.toString()),
               newInterface.ifIndex,
               true /* join */,
               ioProvider_.get())) {

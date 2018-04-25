@@ -81,13 +81,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> kvStoreGlobalPubSock(
       context_,
       fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalPubIdTemplate, nodeId)},
+          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId)},
       keyPair);
 
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> kvStoreGlobalCmdSock(
       context_,
       fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalCmdIdTemplate, nodeId)},
+          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId)},
       keyPair);
 
   kvStoreGlobalPubSock.bind(fbzmq::SocketUrl{kvStoreGlobalPubUrl_}).value();
