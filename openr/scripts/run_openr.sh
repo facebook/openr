@@ -8,15 +8,28 @@
 #
 
 #
+# NOTE
+#
 # Ports 60000 - 60100 needs to be reserved in system so that they are always
 # free for openr to use. On linux you can do following to reserve.
 # > sysctl -w net.ipv4.ip_local_reserved_ports=60000-60100
 #
 
 #
+# NOTE
+#
 # Default OpenR configuration
 # Override the ones you need in `/etc/sysconfig/openr` for custom configuration
-# on the node
+# on the node or pass config name to this script
+# e.g. run_openr.sh /data/openr.cfg
+#
+
+#
+# NOTE
+#
+# Change `CONFIG_STORE_FILEPATH` to path which is persistent across reboot for
+# correct functioning of OpenR across reboot (e.g. preserving drain state)
+# e.g. CONFIG_STORE_FILEPATH=/data/openr_config_store.bin
 #
 
 #
@@ -36,7 +49,7 @@ DOMAIN=openr
 DRYRUN=false
 ENABLE_FIB_SYNC=false
 ENABLE_HEALTH_CHECKER=false
-ENABLE_NETLINK_FIB_HANDLER=false
+ENABLE_NETLINK_FIB_HANDLER=true
 ENABLE_NETLINK_SYSTEM_HANDLER=true
 ENABLE_PERF_MEASUREMENT=true
 ENABLE_PREFIX_ALLOC=false
