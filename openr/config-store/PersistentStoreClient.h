@@ -117,7 +117,7 @@ class PersistentStoreClient {
   const PersistentStoreUrl reqSocketUrl_;
   std::unique_ptr<fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>> reqSocket_;
 
-  // ThriftSerializer for send/recv of thrift objects over reqSocket_
+  // Thrift CompactSerializer for send/recv of thrift objects over reqSocket_
   apache::thrift::CompactSerializer serializer_;
 };
 
