@@ -11,6 +11,7 @@
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
 #include <folly/Random.h>
+#include <gmock/gmock.h>
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/Thrift.h>
@@ -24,6 +25,7 @@ DEFINE_bool(stress_test, false, "pass this to run the stress test");
 
 using namespace std;
 using namespace openr;
+using namespace testing;
 
 using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
@@ -476,9 +478,10 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
 
   // validate router 1
 
-  EXPECT_EQ(
+  EXPECT_THAT(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 20)}));
+      AnyOf(Eq(NextHops({make_pair(toNextHop(adj12, v4Enabled), 20)})),
+            Eq(NextHops({make_pair(toNextHop(adj13, v4Enabled), 20)}))));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
@@ -914,17 +917,19 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
 
   // validate router 1
 
-  EXPECT_EQ(
+  EXPECT_THAT(
       routeMap[make_pair("1", toString(addr4))],
-      NextHops({make_pair(toNextHop(adj12_2), 20)}));
+      AnyOf(Eq(NextHops({make_pair(toNextHop(adj12_2), 20)})),
+            Eq(NextHops({make_pair(toNextHop(adj13_1), 20)}))));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
       NextHops({make_pair(toNextHop(adj13_1), 10)}));
 
-  EXPECT_EQ(
+  EXPECT_THAT(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12_2), 10)}));
+      AnyOf(Eq(NextHops({make_pair(toNextHop(adj12_2), 10)})),
+            Eq(NextHops({make_pair(toNextHop(adj12_1), 10)}))));
 
   // validate router 2
 
@@ -932,13 +937,15 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
       routeMap[make_pair("2", toString(addr4))],
       NextHops({make_pair(toNextHop(adj24_1), 10)}));
 
-  EXPECT_EQ(
+  EXPECT_THAT(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj21_2), 20)}));
+      AnyOf(Eq(NextHops({make_pair(toNextHop(adj21_2), 20)})),
+            Eq(NextHops({make_pair(toNextHop(adj24_1), 20)}))));
 
-  EXPECT_EQ(
+  EXPECT_THAT(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj21_2), 10)}));
+      AnyOf(Eq(NextHops({make_pair(toNextHop(adj21_2), 10)})),
+            Eq(NextHops({make_pair(toNextHop(adj21_1), 10)}))));
 
   // validate router 3
 
@@ -946,9 +953,10 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
       routeMap[make_pair("3", toString(addr4))],
       NextHops({make_pair(toNextHop(adj34_1), 10)}));
 
-  EXPECT_EQ(
+  EXPECT_THAT(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj31_1), 20)}));
+      AnyOf(Eq(NextHops({make_pair(toNextHop(adj31_1), 20)})),
+            Eq(NextHops({make_pair(toNextHop(adj34_1), 20)}))));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
@@ -964,9 +972,10 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
       routeMap[make_pair("4", toString(addr2))],
       NextHops({make_pair(toNextHop(adj42_1), 10)}));
 
-  EXPECT_EQ(
+  EXPECT_THAT(
       routeMap[make_pair("4", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj42_1), 20)}));
+      AnyOf(Eq(NextHops({make_pair(toNextHop(adj42_1), 20)})),
+            Eq(NextHops({make_pair(toNextHop(adj43_1), 20)}))));
 }
 
 //
