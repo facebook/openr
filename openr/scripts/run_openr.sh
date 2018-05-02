@@ -79,10 +79,16 @@ VERBOSITY=1
 #
 
 if [ "${HOSTNAME}" = "localhost" ]; then
-  echo "No hostname found for the node, bailing out."
+  echo "ERROR: No hostname found for the node, bailing out." >&2
   exit 1
 fi
 NODE_NAME=${HOSTNAME}
+
+IPV6_DISABLED=$(sysctl -n net.ipv6.conf.all.disable_ipv6)
+if [ "${IPV6_DISABLED}" != "0" ]; then
+  echo "WARNING: IPv6 seems to be disabled and OpenR depends on it which may \
+lead to incorrect functioning" >&2
+fi
 
 #
 # Load custom configuration if any!
@@ -104,10 +110,11 @@ override any passed by this script"
   fi
 fi
 
-if source "${OPENR_CONFIG}"; then
+if [ -f "${OPENR_CONFIG}" ]; then
+  source "${OPENR_CONFIG}"
   echo "Using OpenR config parameters from ${OPENR_CONFIG}"
 else
-  echo "Configuration not found at ${OPENR_CONFIG}. Using default configuration"
+  echo "Configuration not found at ${OPENR_CONFIG}. Using default!"
 fi
 
 #
