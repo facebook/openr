@@ -85,9 +85,7 @@ HealthChecker::prepare(folly::Optional<int> maybeIpTos) noexcept {
   kvStoreClient_->setKvCallback([this](
       const std::string& key,
       folly::Optional<thrift::Value> thriftVal) noexcept {
-        if (thriftVal.hasValue()) {
-          processKeyVal(key, thriftVal.value());
-        }
+        processKeyVal(key, thriftVal);
   });
 
   // prepare and bind udp ping socket
@@ -176,25 +174,43 @@ HealthChecker::pingNodes() {
 
 void
 HealthChecker::processKeyVal(
-    std::string const& key, thrift::Value const& val) noexcept {
-  if (!val.value.hasValue()) {
-    return;
-  }
-
+    std::string const& key, folly::Optional<thrift::Value> val) noexcept {
   std::string prefix, nodeName;
   folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+
+  if (!val.hasValue()) {
+    VLOG(4) << "HealthChecker: key expired:" << key << " node:" << nodeName;
+
+    if (nodeInfo_.find(nodeName) == nodeInfo_.end()) {
+        return;
+    }
+    if (key.find(adjacencyDbMarker_) == 0) {
+      nodeInfo_[nodeName].neighbors.clear();
+    }
+    if (key.find(prefixDbMarker_) == 0) {
+      nodeInfo_[nodeName].ipAddress = toBinaryAddress(
+            std::move(folly::IPAddress{}));
+    }
+    if (nodeInfo_[nodeName].neighbors.empty() &&
+        nodeInfo_[nodeName].ipAddress.addr.empty()) {
+      VLOG(2) << "HealthChecker: Erasing node:" << nodeName;
+      nodeInfo_.erase(nodeName);
+      nodesToPing_.erase(nodeName);
+    }
+    return;
+  }
 
   if (key.find(adjacencyDbMarker_) == 0) {
     const auto adjacencyDb =
         fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
-            val.value.value(), serializer_);
+            val.value().value.value(), serializer_);
     CHECK_EQ(nodeName, adjacencyDb.thisNodeName);
     processAdjDb(adjacencyDb);
   }
 
   if (key.find(prefixDbMarker_) == 0) {
     auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-        val.value.value(), serializer_);
+        val.value().value.value(), serializer_);
     CHECK_EQ(nodeName, prefixDb.thisNodeName);
     processPrefixDb(prefixDb);
   }

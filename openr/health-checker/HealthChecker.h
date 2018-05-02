@@ -64,7 +64,8 @@ class HealthChecker final : public fbzmq::ZmqEventLoop {
 
   // called by kvStoreClient_ whenever for each key whenever a publication
   // is received
-  void processKeyVal(std::string const& key, thrift::Value const& val) noexcept;
+  void processKeyVal(
+      std::string const& key, folly::Optional<thrift::Value> val) noexcept;
 
   void processAdjDb(thrift::AdjacencyDatabase const& adjDb);
   void processPrefixDb(thrift::PrefixDatabase const& prefixDb);
