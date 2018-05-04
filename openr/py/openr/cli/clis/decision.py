@@ -21,7 +21,10 @@ class DecisionCli(object):
         self.decision.add_command(PathCli().path)
         self.decision.add_command(DecisionAdjCli().adj)
         self.decision.add_command(DecisionPrefixesCli().prefixes)
-        self.decision.add_command(DecisionRoutesCli().routes)
+        self.decision.add_command(
+            DecisionRoutesComputedCli().routes,
+            name='routes-computed',
+        )
         self.decision.add_command(DecisionValidateCli().validate)
 
     @click.group()
@@ -49,7 +52,7 @@ class PathCli(object):
         decision.PathCmd(cli_opts).run(src, dst, max_hop)
 
 
-class DecisionRoutesCli(object):
+class DecisionRoutesComputedCli(object):
 
     @click.command()
     @click.option('--nodes', default='',
@@ -64,7 +67,7 @@ class DecisionRoutesCli(object):
         ''' Request the routing table from Decision module '''
 
         nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
-        decision.DecisionRoutesCmd(cli_opts).run(nodes, prefixes, json)
+        decision.DecisionRoutesComputedCmd(cli_opts).run(nodes, prefixes, json)
 
 
 class DecisionPrefixesCli(object):

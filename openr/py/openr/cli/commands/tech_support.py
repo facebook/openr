@@ -48,8 +48,8 @@ class TechSupportCmd():
             ('breeze decision validate', self.print_decision_validate),
             ('breeze decision routes', self.print_decision_routes),
             ('breeze fib validate', self.print_fib_validate),
-            ('breeze fib routes', self.print_fib_routes),
-            ('breeze fib list', self.print_fib_list),
+            ('breeze fib routes-computed', self.print_fib_routes_computed),
+            ('breeze fib routes-installed', self.print_fib_routes_installed),
             ('breeze perf fib', self.print_perf_fib),
             ('breeze monitor counters', self.print_monitor_counters),
             ('breeze monitor logs', self.print_monitor_logs),
@@ -123,20 +123,20 @@ class TechSupportCmd():
         if not self.print_routes:
             return
         nodes = parse_nodes(self.cli_opts.host, '', self.cli_opts.lm_cmd_port)
-        decision.DecisionRoutesCmd(self.cli_opts).run(nodes, [], False)
+        decision.DecisionRoutesComputedCmd(self.cli_opts).run(nodes, [], False)
 
     def print_fib_validate(self):
         fib.FibValidateRoutesCmd(self.cli_opts).run(self.cli_opts)
 
-    def print_fib_routes(self):
+    def print_fib_routes_computed(self):
         if not self.print_routes:
             return
-        fib.FibRoutesCmd(self.cli_opts).run([], False)
+        fib.FibRoutesComputedCmd(self.cli_opts).run([], False)
 
-    def print_fib_list(self):
+    def print_fib_routes_installed(self):
         if not self.print_routes:
             return
-        fib.FibListRoutesCmd(self.cli_opts).run([])
+        fib.FibRoutesInstalledCmd(self.cli_opts).run([])
 
     def print_perf_fib(self):
         perf.ViewFibCmd(self.cli_opts).run()

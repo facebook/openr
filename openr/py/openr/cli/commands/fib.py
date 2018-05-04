@@ -16,7 +16,6 @@ import zmq
 from openr.clients import fib_client, decision_client, lm_client
 from openr.cli.utils import utils
 from openr.utils import ipnetwork, printing
-from openr.LinuxPlatform import LinuxFibService
 
 
 class FibCmd(object):
@@ -53,29 +52,7 @@ class FibAgentCmd(object):
             sys.exit(1)
 
 
-class FibLinuxAgentCmd(object):
-    def __init__(self, cli_opts):
-        ''' initialize the Linux Fib agent client '''
-
-        self.lm_cmd_port = cli_opts.lm_cmd_port
-
-        try:
-            self.client = utils.get_fib_agent_client(
-                cli_opts.host,
-                cli_opts.fib_agent_port,
-                cli_opts.timeout,
-                cli_opts.client_id,
-                LinuxFibService
-            )
-        except Exception as e:
-            print('Failed to get communicate to Fib. {}'.format(e))
-            print('Note: Specify correct host with -H/--host option and ' +
-                  'make sure that Fib is running on the host or ports ' +
-                  'are open on that box for network communication.')
-            sys.exit(1)
-
-
-class FibRoutesCmd(FibCmd):
+class FibRoutesComputedCmd(FibCmd):
     def run(self, prefixes, json):
         route_db = self.client.get_route_db()
         if json:
@@ -107,7 +84,7 @@ class FibCountersCmd(FibAgentCmd):
         print()
 
 
-class FibListRoutesCmd(FibAgentCmd):
+class FibRoutesInstalledCmd(FibAgentCmd):
     def run(self, prefixes):
         try:
             routes = self.client.getRouteTableByClient(self.client.client_id)
@@ -219,35 +196,3 @@ class FibValidateRoutesCmd(FibAgentCmd):
             cli_opts.timeout,
             cli_opts.proto_factory)
         return self.lm_client.dump_links()
-
-
-class FibListRoutesLinuxCmd(FibLinuxAgentCmd):
-    def run(self, prefixes):
-        try:
-            routes = self.client.getKernelRouteTable()
-        except Exception as e:
-            print('Failed to get routes from Fib.')
-            print('Exception: {}'.format(e))
-            sys.exit(1)
-
-        host_id = utils.get_connected_node_name(self.client.host, self.lm_cmd_port)
-        caption = '{}\'s kernel routes'.format(host_id)
-        utils.print_routes(caption, routes, prefixes)
-
-
-class FibValidateRoutesLinuxCmd():
-    def run(self, cli_opts):
-        try:
-            kernel_routes = FibLinuxAgentCmd(cli_opts).client.getKernelRouteTable()
-            fib_routes = FibAgentCmd(cli_opts).client.getRouteTableByClient(
-                cli_opts.client_id)
-        except Exception as e:
-            print('Failed to validate Fib routes.')
-            print('Exception: {}'.format(e))
-            sys.exit(1)
-
-        utils.compare_route_db(
-            kernel_routes,
-            fib_routes,
-            ['Kernel', 'Fib'],
-            cli_opts.enable_color)

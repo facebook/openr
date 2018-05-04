@@ -68,7 +68,7 @@ class DecisionPrefixesCmd(DecisionCmd):
             utils.print_prefixes_table(prefix_dbs, nodes, self.iter_dbs)
 
 
-class DecisionRoutesCmd(DecisionCmd):
+class DecisionRoutesComputedCmd(DecisionCmd):
     def run(self, nodes, prefixes, json):
         if 'all' in nodes:
             nodes = self._get_all_nodes()

@@ -18,17 +18,25 @@ from openr.cli.commands import fib
 
 class FibCli(object):
     def __init__(self):
-        self.fib.add_command(FibRoutesCli().routes)
-        self.fib.add_command(FibCountersCli().counters)
-        self.fib.add_command(FibListRoutesCli().list_routes, name='list')
+        self.fib.add_command(
+            FibRoutesComputedCli().routes,
+            name='routes-computed',
+        )
+        self.fib.add_command(
+            FibRoutesInstalledCli().routes,
+            name='routes-installed',
+        )
+
+        # NOTE: keeping alias `list` and `routes`
+        # for backward compatibility. Deprecated.
+        self.fib.add_command(FibRoutesComputedCli().routes, name='routes')
+        self.fib.add_command(FibRoutesInstalledCli().routes, name='list')
+
+        self.fib.add_command(FibCountersCli().counters, name='counters')
         self.fib.add_command(FibAddRoutesCli().add_routes, name='add')
         self.fib.add_command(FibDelRoutesCli().del_routes, name='del')
         self.fib.add_command(FibSyncRoutesCli().sync_routes, name='sync')
         self.fib.add_command(FibValidateRoutesCli().validate)
-        self.fib.add_command(FibListRoutesLinuxCli().list_routes_linux,
-                             name='list-linux')
-        self.fib.add_command(FibValidateRoutesLinuxCli().validate_linux,
-                                name='validate-linux')
 
     @click.group()
     @click.option('--fib_rep_port', default=None, type=int, help='Fib rep port')
@@ -48,20 +56,6 @@ class FibCli(object):
             ctx.obj.client_id = client_id
 
 
-class FibRoutesCli(object):
-
-    @click.command()
-    @click.option('--prefixes', '-p', default='', multiple=True,
-                  help='Get route for specific IPs or Prefixes.')
-    @click.option('--json/--no-json', default=False,
-                  help='Dump in JSON format')
-    @click.pass_obj
-    def routes(cli_opts, prefixes, json):  # noqa: B902
-        ''' Request routing table of the current host '''
-
-        fib.FibRoutesCmd(cli_opts).run(prefixes, json)
-
-
 class FibCountersCli(object):
 
     @click.command()
@@ -72,16 +66,30 @@ class FibCountersCli(object):
         fib.FibCountersCmd(cli_opts).run()
 
 
-class FibListRoutesCli(object):
+class FibRoutesInstalledCli(object):
 
     @click.command()
     @click.option('--prefixes', '-p', default='', multiple=True,
                   help='Get route for specific IPs or Prefixes.')
     @click.pass_obj
-    def list_routes(cli_opts, prefixes):  # noqa: B902
+    def routes(cli_opts, prefixes):  # noqa: B902
         ''' Get and print all the routes on fib agent '''
 
-        fib.FibListRoutesCmd(cli_opts).run(prefixes)
+        fib.FibRoutesInstalledCmd(cli_opts).run(prefixes)
+
+
+class FibRoutesComputedCli(object):
+
+    @click.command()
+    @click.option('--prefixes', '-p', default='', multiple=True,
+                  help='Get route for specific IPs or Prefixes.')
+    @click.option('--json/--no-json', default=False,
+                  help='Dump in JSON format')
+    @click.pass_obj
+    def routes(cli_opts, prefixes, json):  # noqa: B902
+        ''' Request routing table of the current host '''
+
+        fib.FibRoutesComputedCmd(cli_opts).run(prefixes, json)
 
 
 class FibAddRoutesCli(object):
@@ -127,25 +135,3 @@ class FibValidateRoutesCli(object):
         ''' Validator to check that all routes as computed by Decision '''
 
         sys.exit(fib.FibValidateRoutesCmd(cli_opts).run(cli_opts))
-
-
-class FibListRoutesLinuxCli(object):
-
-    @click.command()
-    @click.option('--prefixes', '-p', default='', multiple=True,
-                  help='Get route for specific IPs or Prefixes.')
-    @click.pass_obj
-    def list_routes_linux(cli_opts, prefixes):  # noqa: B902
-        ''' List routes from linux kernel routing table '''
-
-        fib.FibListRoutesLinuxCmd(cli_opts).run(prefixes)
-
-
-class FibValidateRoutesLinuxCli(object):
-
-    @click.command()
-    @click.pass_obj
-    def validate_linux(cli_opts):  # noqa: B902
-        ''' Validate that FIB routes and Kernel routes match '''
-
-        fib.FibValidateRoutesLinuxCmd().run(cli_opts)
