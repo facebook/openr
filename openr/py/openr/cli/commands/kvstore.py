@@ -245,16 +245,26 @@ class NodesCmd(KvStoreCmd):
             ]
             loopback_prefixes.sort(key=lambda x: len(x.prefixAddress.addr),
                                    reverse=True)
-            row.extend([ipnetwork.sprint_prefix(p) for p in loopback_prefixes])
+
+            # pick the very first most specific prefix
+            loopback_v6 = None
+            loopback_v4 = None
+            for p in loopback_prefixes:
+                if len(p.prefixAddress.addr) == 16 and \
+                   (loopback_v6 is None or p.prefixLength > loopback_v6.prefixLength):
+                    loopback_v6 = p
+                if len(p.prefixAddress.addr) == 4 and \
+                   (loopback_v4 is None or p.prefixLength > loopback_v4.prefixLength):
+                    loopback_v4 = p
+
+            row.append(ipnetwork.sprint_prefix(loopback_v6) if loopback_v6 else 'N/A')
+            row.append(ipnetwork.sprint_prefix(loopback_v4) if loopback_v4 else 'N/A')
             rows.append(row)
 
         rows = []
         self.iter_publication(rows, resp, set(['all']), _parse_nodes)
 
-        label = ['Node', 'V6-Loopback']
-        # if any node has a v4 loopback addr, we should have the v4-addr column
-        if any(len(row) > 2 for row in rows):
-            label.append('V4-Loopback')
+        label = ['Node', 'V6-Loopback', 'V4-Loopback']
 
         print(printing.render_horizontal_table(rows, label))
 
