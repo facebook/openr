@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -9,6 +11,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import str
+from builtins import object
 
 import bunch
 import datetime
@@ -306,7 +310,7 @@ class KvCompareCmd(KvStoreCmd):
         if nodes:
             nodes = set(nodes.strip().split(','))
             if 'all' in nodes:
-                nodes = all_nodes_to_ips.keys()
+                nodes = list(all_nodes_to_ips.keys())
             host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
             if host_id in nodes:
                 nodes.remove(host_id)
@@ -317,7 +321,7 @@ class KvCompareCmd(KvStoreCmd):
                 self.compare(our_kvs, kv_dict[node], host_id, node)
 
         else:
-            nodes = all_nodes_to_ips.keys()
+            nodes = list(all_nodes_to_ips.keys())
             kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips)
             for our_node, other_node in combinations(kv_dict.keys(), 2):
                 self.compare(kv_dict[our_node], kv_dict[other_node],
@@ -331,7 +335,7 @@ class KvCompareCmd(KvStoreCmd):
 
         # for comparing version and id info
         our_kv_pub_db = {}
-        for (key, value) in our_kvs.items():
+        for key, value in our_kvs.items():
             our_kv_pub_db[key] = (value.version, value.originatorId)
 
         for key, value in sorted(our_kvs.items()):
@@ -412,7 +416,6 @@ class PeersCmd(KvStoreCmd):
             row = [key]
             row.append('cmd via {}'.format(value.cmdUrl))
             row.append('pub via {}'.format(value.pubUrl))
-            row.append('Public Key: {}'.format(value.publicKey.encode("hex")))
             rows.append(row)
 
         print(printing.render_vertical_table(rows, caption=caption))
@@ -484,7 +487,7 @@ class KvSignatureCmd(KvStoreCmd):
 
         signature = hashlib.sha256()
         for _, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
-            signature.update(str(value.hash))
+            signature.update(str(value.hash).encode('utf-8'))
 
         print('sha256: {}'.format(signature.hexdigest()))
 
@@ -511,7 +514,7 @@ class TopologyCmd(KvStoreCmd):
         rem_pattern = re.compile("|".join(rem_str.keys()))
 
         publication = self.client.dump_all_with_prefix(Consts.ADJ_DB_MARKER)
-        nodes = self.get_node_to_ips().keys() if not node else [node]
+        nodes = list(self.get_node_to_ips().keys()) if not node else [node]
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, bidir,
                                          self.iter_publication)
         G = nx.Graph()
@@ -648,7 +651,7 @@ class SnoopCmd(KvStoreCmd):
 
     def print_delta(self, msg, regex, pattern, ttl, delta, global_dbs):
 
-        for (key, value) in msg.keyVals.items():
+        for key, value in msg.keyVals.items():
             if not key.startswith(regex) and not pattern.match(key):
                 continue
             if value.value is None:
@@ -772,7 +775,7 @@ class SnoopCmd(KvStoreCmd):
             global_dbs.prefixes = utils.build_global_prefix_db(resp)
             global_dbs.adjs = utils.build_global_adj_db(resp)
             global_dbs.interfaces = utils.build_global_interface_db(resp)
-            for (key, value) in resp.keyVals.items():
+            for key, value in resp.keyVals.items():
                 global_dbs.publications[key] = (value.version,
                                                 value.originatorId)
         return global_dbs

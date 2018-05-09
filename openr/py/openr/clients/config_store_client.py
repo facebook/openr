@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -9,6 +11,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import object
 
 from openr.PersistentStore import ttypes as ps_types
 from openr.utils import socket, consts
@@ -16,7 +19,7 @@ from openr.utils import socket, consts
 import zmq
 
 
-class ConfigStoreClient():
+class ConfigStoreClient(object):
     def __init__(self, zmq_ctx, cs_cmd_url, timeout=consts.Consts.TIMEOUT_MS,
                  proto_factory=consts.Consts.PROTO_FACTORY):
         self._cs_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout, proto_factory)

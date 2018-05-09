@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Copyright (c) 2014-present, Facebook, Inc.
@@ -11,6 +11,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import range
+from builtins import object
 
 from openr.utils import socket
 from openr.clients import decision_client
@@ -35,7 +37,7 @@ prefix_db.thisNodeName = 'san jose 1'
 prefix_dbs_cache = {'san jose 1': prefix_db}
 
 
-class Decision():
+class Decision(object):
     def __init__(self, zmq_ctx, url):
         self._decision_server_socket = socket.Socket(zmq_ctx, zmq.REP)
         self._decision_server_socket.bind(url)

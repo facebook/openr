@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -9,6 +11,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import str
+from builtins import object
 
 from openr.KvStore import ttypes as kv_store_types
 from openr.utils import consts, serializer, socket
@@ -16,7 +20,7 @@ from openr.utils import consts, serializer, socket
 import zmq
 
 
-class KvStoreClient():
+class KvStoreClient(object):
     def __init__(self, zmq_ctx, kv_store_cmd_url, timeout=consts.Consts.TIMEOUT_MS,
                  proto_factory=consts.Consts.PROTO_FACTORY):
         self._kv_store_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout,

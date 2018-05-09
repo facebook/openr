@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -9,6 +11,9 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import chr
+from builtins import input
+from builtins import map
 
 import bunch
 import click
@@ -34,12 +39,6 @@ from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
 from thrift.protocol import TBinaryProtocol
 from thrift.transport import TSocket, TTransport
-
-
-try:
-    input = raw_input
-except NameError:
-    pass
 
 
 def yesno(question, skip_confirm=False):
@@ -237,6 +236,7 @@ def prefix_entry_to_dict(prefix_entry):
         # Only addrs need string conversion so we udpate them
         prefix_entry_dict.update({
             'prefix': ipnetwork.sprint_prefix(prefix_entry.prefix),
+            'data': str(prefix_entry.data),
         })
 
     return thrift_to_dict(prefix_entry, _update)
@@ -250,7 +250,7 @@ def print_prefixes_json(resp, nodes, iter_func):
             prefix_db = deserialize_thrift_object(prefix_db.value,
                                                   lsdb_types.PrefixDatabase)
 
-        prefixEntries = map(prefix_entry_to_dict, prefix_db.prefixEntries)
+        prefixEntries = list(map(prefix_entry_to_dict, prefix_db.prefixEntries))
         prefixes_map[prefix_db.thisNodeName] = {'prefixEntries': prefixEntries}
 
     prefixes_map = {}
@@ -395,7 +395,7 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
     if not adjacencies:
         return
 
-    adjacencies = map(adj_to_dict, adjacencies)
+    adjacencies = list(map(adj_to_dict, adjacencies))
 
     # Dump is keyed by node name with attrs as key values
     adjs_map[adj_db.thisNodeName] = {
@@ -666,7 +666,7 @@ def route_to_dict(route):
     def _update(route_dict, route):
         route_dict.update({
             'prefix': ipnetwork.sprint_prefix(route.prefix),
-            'paths': map(path_to_dict, route.paths)
+            'paths': list(map(path_to_dict, route.paths))
         })
 
     return thrift_to_dict(route, _update)
@@ -675,7 +675,7 @@ def route_to_dict(route):
 def route_db_to_dict(route_db):
     ''' convert route from thrift instance into a dict in strings '''
 
-    return {'routes': map(route_to_dict, route_db.routes)}
+    return {'routes': list(map(route_to_dict, route_db.routes))}
 
 
 def print_routes_json(route_db_dict, prefixes=None):
@@ -1223,7 +1223,8 @@ def get_shortest_routes(route_db):
     '''
 
     shortest_routes = []
-    for route in sorted(route_db.routes):
+    for route in sorted(route_db.routes,
+                        key=lambda x: x.prefix.prefixAddress.addr):
         if not route.paths:
             continue
 

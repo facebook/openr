@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -9,6 +11,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import object
 
 import os
 import subprocess
@@ -20,7 +23,7 @@ from openr.cli.commands import perf, prefix_mgr
 from openr.cli.utils.utils import parse_nodes
 
 
-class TechSupportCmd():
+class TechSupportCmd(object):
 
     def __init__(self, cli_opts):
         ''' initialize the tech support command '''

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Copyright (c) 2014-present, Facebook, Inc.
@@ -11,6 +11,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import range
+from builtins import object
 
 from openr.utils import socket
 from openr.clients import kvstore_client
@@ -41,7 +43,7 @@ kv_store_cache = {'san jose 1': value1, 'san jose 2': value2,
                   'san francisco 1': value5}
 
 
-class KVStore():
+class KVStore(object):
     def __init__(self, zmq_ctx, url):
         self._kv_store_server_socket = socket.Socket(zmq_ctx, zmq.REP)
         self._kv_store_server_socket.bind(url)

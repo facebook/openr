@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Copyright (c) 2014-present, Facebook, Inc.
@@ -11,6 +11,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import range
+from builtins import object
 
 from openr.utils import socket
 from openr.clients import prefix_mgr_client
@@ -36,7 +38,7 @@ prefix_entry3 = lsdb_types.PrefixEntry(
     type=lsdb_types.PrefixType.LOOPBACK)
 
 
-class PrefixMgr():
+class PrefixMgr(object):
     def __init__(self, zmq_ctx, url):
         self._prefix_mgr_server_socket = socket.Socket(zmq_ctx, zmq.REP)
         self._prefix_mgr_server_socket.bind(url)
@@ -66,7 +68,7 @@ class PrefixMgr():
 
         if req.cmd == prefix_mgr_types.PrefixManagerCommand.GET_ALL_PREFIXES:
             resp = prefix_mgr_types.PrefixManagerResponse()
-            resp.prefixes = self._prefix_map.values()
+            resp.prefixes = list(self._prefix_map.values())
             resp.success = True
             self._prefix_mgr_server_socket.send_thrift_obj(resp)
 

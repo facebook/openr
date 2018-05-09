@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -9,6 +11,7 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+from builtins import object
 
 from openr.HealthChecker import ttypes as health_checker_types
 from openr.utils import socket, consts
@@ -16,7 +19,7 @@ from openr.utils import socket, consts
 import zmq
 
 
-class HealthCheckerClient():
+class HealthCheckerClient(object):
     def __init__(self, zmq_ctx, health_checker_cmd_port,
                  timeout=consts.Consts.TIMEOUT_MS,
                  proto_factory=consts.Consts.PROTO_FACTORY):
