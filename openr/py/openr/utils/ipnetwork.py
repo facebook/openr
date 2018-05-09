@@ -10,8 +10,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
-
-import ipaddr
+import ipaddress
 import socket
 
 from openr.IpPrefix import ttypes as ip_types
@@ -21,8 +20,7 @@ from openr.Lsdb import ttypes as lsdb_types
 def sprint_addr(addr):
     ''' binary ip addr -> string '''
 
-    family = socket.AF_INET if len(addr) == 4 else socket.AF_INET6
-    return socket.inet_ntop(family, addr)
+    return str(ipaddress.ip_address(addr))
 
 
 def sprint_prefix(prefix):
@@ -83,7 +81,7 @@ def ip_version(addr):
     ''' return ip addr version
     '''
 
-    return ipaddr.IPNetwork(sprint_addr(addr)).version
+    return ipaddress.ip_address(addr).version
 
 
 def is_same_subnet(addr1, addr2, subnet):
@@ -91,10 +89,8 @@ def is_same_subnet(addr1, addr2, subnet):
     Check whether two given addresses belong to the same subnet
     '''
 
-    addr_str1 = sprint_addr(addr1)
-    addr_str2 = sprint_addr(addr2)
-    if ipaddr.IPNetwork("{}/{}".format(addr_str1, subnet)) == ipaddr.IPNetwork(
-       "{}/{}".format(addr_str2, subnet)):
+    if ipaddress.ip_network((addr1, subnet), strict=False) == \
+       ipaddress.ip_network((addr2, subnet), strict=False):
         return True
 
     return False
@@ -104,7 +100,18 @@ def is_link_local(addr):
     '''
     Check whether given addr is link local or not
     '''
-    return ipaddr.IPNetwork(sprint_addr(addr)).is_link_local
+    return ipaddress.ip_network(addr).is_link_local
+
+
+def is_subnet_of(a, b):
+    '''
+    Check if network-b is subnet of network-a
+    '''
+
+    if a.network_address != b.network_address:
+        return False
+
+    return a.prefixlen >= b.prefixlen
 
 
 def contain_any_prefix(prefix, ip_networks):
@@ -116,5 +123,5 @@ def contain_any_prefix(prefix, ip_networks):
 
     if ip_networks is None:
         return True
-    prefix = ipaddr.IPNetwork(prefix)
-    return any([prefix.Contains(net) for net in ip_networks])
+    prefix = ipaddress.ip_network(prefix)
+    return any(is_subnet_of(prefix, net) for net in ip_networks)

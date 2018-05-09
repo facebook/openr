@@ -65,11 +65,10 @@ setup(
     install_requires=[
         'bunch',
         'click',
-        'Fabric',
         'futures',
         'hexdump',
-        'ipaddr',
         'networkx',
+        'py2-ipaddress',
         'pyzmq',
         'tabulate',
     ],

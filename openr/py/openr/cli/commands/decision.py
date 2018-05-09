@@ -18,7 +18,7 @@ from openr.Lsdb import ttypes as lsdb_types
 from openr.utils.consts import Consts
 
 from collections import defaultdict
-from ipaddr import IPAddress, IPNetwork
+import ipaddress
 import sys
 
 
@@ -188,9 +188,10 @@ class PathCmd(DecisionCmd):
 
         max_prefix_len = -1
         lpm_route = None
+        dst_addr = ipaddress.ip_address(dst_addr)
         for route in route_db.routes:
-            if IPNetwork(ipnetwork.sprint_prefix(route.prefix)).Contains(
-                    IPAddress(dst_addr)):
+            prefix = ipaddress.ip_network(ipnetwork.sprint_prefix(route.prefix))
+            if dst_addr in prefix:
                 next_hop_prefix_len = route.prefix.prefixLength
                 if next_hop_prefix_len == max_prefix_len:
                     raise Exception('Duplicate prefix found in routing table {}'
@@ -208,8 +209,9 @@ class PathCmd(DecisionCmd):
         '''
 
         cur_lpm_len = 0
+        dst_addr = ipaddress.ip_address(dst_addr)
         for cur_prefix in self.get_node_prefixes(node):
-            if IPNetwork(cur_prefix).Contains(IPAddress(dst_addr)):
+            if dst_addr in ipaddress.ip_network(cur_prefix):
                 cur_len = int(cur_prefix.split('/')[1])
                 cur_lpm_len = max(cur_lpm_len, cur_len)
         return cur_lpm_len
@@ -272,7 +274,7 @@ class PathCmd(DecisionCmd):
         if ':' not in dst:
             dst_addr = self.get_loopback_addr(dst)
         try:
-            IPAddress(dst_addr)
+            ipaddress.ip_address(dst_addr)
         except ValueError:
             print("node name or ip address not valid.")
             sys.exit(1)

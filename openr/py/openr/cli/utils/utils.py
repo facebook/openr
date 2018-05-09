@@ -14,7 +14,7 @@ import bunch
 import click
 import copy
 import datetime
-import ipaddr
+import ipaddress
 import json
 import sys
 import zmq
@@ -630,7 +630,7 @@ def print_routes_table(route_db, prefixes=None):
 
     networks = None
     if prefixes:
-        networks = [ipaddr.IPNetwork(p) for p in prefixes]
+        networks = [ipaddress.ip_network(p) for p in prefixes]
 
     route_strs = []
     for route in sorted(route_db.routes, key=lambda x: x.prefix.prefixAddress.addr):
@@ -682,7 +682,7 @@ def print_routes_json(route_db_dict, prefixes=None):
 
     networks = None
     if prefixes:
-        networks = [ipaddr.IPNetwork(p) for p in prefixes]
+        networks = [ipaddress.ip_network(p) for p in prefixes]
 
     # Filter out all routes based on prefixes!
     for routes in route_db_dict.values():
@@ -802,7 +802,7 @@ def update_global_prefix_db(global_prefix_db, prefix_db):
 
     this_node = prefix_db.thisNodeName
 
-    prefix_set = set([])
+    prefix_set = set()
     for prefix_entry in prefix_db.prefixEntries:
         addr_str = ipnetwork.sprint_addr(prefix_entry.prefix.prefixAddress.addr)
         prefix_len = prefix_entry.prefix.prefixLength
@@ -1199,7 +1199,7 @@ def print_routes(caption, routes, prefixes=None):
 
     networks = None
     if prefixes:
-        networks = [ipaddr.IPNetwork(p) for p in prefixes]
+        networks = [ipaddress.ip_network(p) for p in prefixes]
 
     route_strs = []
     for route in routes:
