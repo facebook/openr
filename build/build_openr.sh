@@ -218,6 +218,24 @@ install_gtest() {
   popd
 }
 
+install_re2() {
+  pushd .
+  if [[ ! -e "re2" ]]; then
+    git clone https://github.com/google/re2
+  fi
+  cd re2
+  if [[ ! -e "mybuild" ]]; then
+    mkdir mybuild
+  fi
+  cd mybuild
+  cmake ..
+  make
+  sudo make install
+  sudo ldconfig
+  popd
+}
+
+
 install_libnl() {
   pushd .
   if [[ ! -e "libnl" ]]; then
@@ -310,6 +328,7 @@ install_libzmq
 install_libnl
 install_fbthrift
 install_fbzmq
+install_re2
 install_openr
 
 echo "OpenR built and installed successfully"

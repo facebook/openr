@@ -8,23 +8,24 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
 
 include_directories(${CMAKE_SOURCE_DIR}/..)
 
-find_library(GLOG glog)
-find_library(GFLAGS gflags)
-find_library(THRIFT thrift PATHS)
-find_library(THRIFTCPP2 thriftcpp2 PATHS)
-find_library(PROTOCOL protocol PATHS)
-find_library(THRIFTPROTOCOL thriftprotocol PATHS)
-find_library(FOLLY folly PATHS)
-find_library(TRANSPORT transport PATHS)
-find_library(CONCURRENCY concurrency PATHS)
 find_library(ASYNC async PATHS)
-find_library(ZMQ zmq)
-find_library(FBZMQ fbzmq)
+find_library(CONCURRENCY concurrency PATHS)
 find_library(DOUBLE-CONVERSION double-conversion)
-find_library(SODIUM sodium)
-find_library(ZSTD zstd)
+find_library(FBZMQ fbzmq)
+find_library(FOLLY folly PATHS)
+find_library(GFLAGS gflags)
+find_library(GLOG glog)
 find_library(NL3 nl-3)
 find_library(NLROUTE3 nl-route-3)
+find_library(PROTOCOL protocol PATHS)
+find_library(RE2 re2)
+find_library(SODIUM sodium)
+find_library(THRIFT thrift PATHS)
+find_library(THRIFTCPP2 thriftcpp2 PATHS)
+find_library(THRIFTPROTOCOL thriftprotocol PATHS)
+find_library(TRANSPORT transport PATHS)
+find_library(ZMQ zmq)
+find_library(ZSTD zstd)
 
 find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
 
@@ -312,6 +313,7 @@ target_link_libraries(openrlib
   ${ZSTD}
   ${FOLLY}
   ${SODIUM}
+  ${RE2}
   -lboost_system
   -lpthread
   ${NLROUTE3}

@@ -16,6 +16,7 @@ from __future__ import unicode_literals
 import specs.fbthrift as fbthrift
 import specs.folly as folly
 import specs.fbzmq as fbzmq
+import specs.re2 as re2
 
 from shell_quoting import path_join, ShellQuoted
 
@@ -42,7 +43,7 @@ def fbcode_builder_spec(builder):
         builder.make_and_install()]
 
     return {
-        'depends_on': [folly, fbthrift, fbzmq],
+        'depends_on': [folly, fbthrift, fbzmq, re2],
         'steps': [
             builder.github_project_workdir('thom311/libnl', '.'),
             builder.step('Build and install thom311/libnl', libnl_build_commands),
