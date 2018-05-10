@@ -71,8 +71,7 @@ def cli(ctx, host, timeout, ports_config_file, color, verbose):
                 ctx.obj[key] = value
 
 
-def main():
-    ''' entry point for breeze '''
+def get_breeze_cli():
 
     # add cli submodules
     cli.add_command(config.ConfigCli().config)
@@ -85,8 +84,14 @@ def main():
     cli.add_command(perf.PerfCli().perf)
     cli.add_command(prefix_mgr.PrefixMgrCli().prefixmgr)
     cli.add_command(tech_support.TechSupportCli().tech_support)
+    return cli
+
+
+def main():
+    ''' entry point for breeze '''
 
     # let the magic begin
+    cli = get_breeze_cli()
     cli()
 
 
