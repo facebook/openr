@@ -493,7 +493,7 @@ class KvSignatureCmd(KvStoreCmd):
 
 
 class TopologyCmd(KvStoreCmd):
-    def run(self, node, bidir, output_file, edge_label):
+    def run(self, node, bidir, output_file, edge_label, json):
 
         try:
             import matplotlib.pyplot as plt
@@ -517,6 +517,10 @@ class TopologyCmd(KvStoreCmd):
         nodes = list(self.get_node_to_ips().keys()) if not node else [node]
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, bidir,
                                          self.iter_publication)
+
+        if json:
+            return self.topology_json_dump(adjs_map.items())
+
         G = nx.Graph()
         adj_metric_map = {}
         node_overloaded = {}
@@ -602,6 +606,12 @@ class TopologyCmd(KvStoreCmd):
 
         print('Saving topology to file => {}'.format(output_file))
         plt.savefig(output_file)
+
+    def topology_json_dump(self, adjs_map_items):
+        adj_topo = {}
+        for this_node_name, db in adjs_map_items:
+            adj_topo[this_node_name] = db
+        print(utils.json_dumps(adj_topo))
 
 
 class SnoopCmd(KvStoreCmd):
