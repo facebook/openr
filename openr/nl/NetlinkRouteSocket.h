@@ -118,28 +118,35 @@ class NetlinkRouteSocket final {
    * is because so that we can have consistent APIs to user even though kernel
    * has different behaviour for ipv4 and ipv6 route UAPIs.
    *
+   */
+  void doAddUpdateUnicastRoute(
+      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
+  /**
    * For v4 multipapth: All nexthops must be specified while programming a
    * route as kernel wipes out all existing ones.
    *
    * For v6 multipath: Kernel allows addition/deletion of individual routes
    *
    */
-  void doAddUnicastRoute(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
-  void doAddUnicastRouteV4(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
-  void doAddUnicastRouteV6(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
+  void doAddUpdateUnicastRouteV4(
+      const folly::CIDRNetwork& prefix,
+      const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
+          newNextHops);
+
+  void doAddUpdateUnicastRouteV6(
+      const folly::CIDRNetwork& prefix,
+      const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
+          newNextHops,
+      const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
+          oldNextHops);
 
   void doAddMulticastRoute(
       const folly::CIDRNetwork& prefix, const std::string& ifName);
 
-  void doDeleteUnicastRoute(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
-  void deleteUnicastRouteV4(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
-  void deleteUnicastRouteV6(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
+  /**
+   * Delete API has same behavior for v4 and v6: given prefix delete all routes
+   */
+  void doDeleteUnicastRoute(const folly::CIDRNetwork& prefix);
 
   void doDeleteMulticastRoute(
       const folly::CIDRNetwork& prefix, const std::string& ifName);
@@ -169,13 +176,6 @@ class NetlinkRouteSocket final {
       const folly::CIDRNetwork& prefix,
       const std::string& ifName,
       uint8_t scope);
-
-  void doUpdateRoute(
-      const folly::CIDRNetwork& prefix,
-      const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-          newNextHops,
-      const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-          oldNextHops);
 
   fbzmq::ZmqEventLoop* evl_{nullptr};
   const uint8_t routeProtocolId_{0};

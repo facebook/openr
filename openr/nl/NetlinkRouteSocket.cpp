@@ -382,12 +382,7 @@ NetlinkRouteSocket::addUnicastRoute(
   evl_->runImmediatelyOrInEventLoop(
       [this, promise = std::move(promise), prefix, nextHops]() mutable {
         try {
-          auto search = unicastRouteDb_.find(prefix);
-          if (search == unicastRouteDb_.end()) {
-            doAddUnicastRoute(prefix, nextHops);
-          } else {
-            doUpdateRoute(prefix, nextHops, search->second);
-          }
+          doAddUpdateUnicastRoute(prefix, nextHops);
           unicastRouteDb_[prefix] = nextHops;
           promise.setValue();
         } catch (std::exception const& ex) {
@@ -439,8 +434,7 @@ NetlinkRouteSocket::deleteUnicastRoute(const folly::CIDRNetwork& prefix) {
             LOG(ERROR) << "Trying to delete non-existing prefix "
                        << folly::IPAddress::networkToString(prefix);
           } else {
-            const auto& oldNextHops = unicastRouteDb_.at(prefix);
-            doDeleteUnicastRoute(prefix, oldNextHops);
+            doDeleteUnicastRoute(prefix);
             unicastRouteDb_.erase(prefix);
           }
           promise.setValue();
@@ -559,29 +553,48 @@ NetlinkRouteSocket::syncLinkRoutes(const LinkRoutes& newRouteDb) {
 }
 
 void
-NetlinkRouteSocket::doAddUnicastRoute(
+NetlinkRouteSocket::doAddUpdateUnicastRoute(
     const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
-  if (prefix.first.isV4()) {
-    doAddUnicastRouteV4(prefix, nextHops);
+
+  const bool isV4 = prefix.first.isV4();
+  for (auto const& nextHop : nextHops) {
+    CHECK_EQ(nextHop.second.isV4(), isV4);
+  }
+
+  // Create new set of nexthops to be programmed. Existing + New ones
+  auto oldNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
+  // Only update if there's any difference in new nextHops
+  if (oldNextHops == nextHops) {
+    return;
+  }
+
+  for (auto const& nexthop : oldNextHops) {
+    VLOG(2) << "existing nextHop for prefix "
+            << folly::IPAddress::networkToString(prefix) << " nexthop dev "
+            << std::get<0>(nexthop) << " via " << std::get<1>(nexthop).str();
+  }
+
+  for (auto const& nexthop : nextHops) {
+    VLOG(2) << "new nextHop for prefix "
+            << folly::IPAddress::networkToString(prefix) << " nexthop dev "
+            << std::get<0>(nexthop) << " via " << std::get<1>(nexthop).str();
+  }
+
+  if (isV4) {
+    doAddUpdateUnicastRouteV4(prefix, nextHops);
   } else {
-    doAddUnicastRouteV6(prefix, nextHops);
+    doAddUpdateUnicastRouteV6(prefix, nextHops, oldNextHops);
   }
 
   // Cache new nexthops in our local-cache if everything is good
-  unicastRoutes_[prefix].insert(nextHops.begin(), nextHops.end());
+  unicastRoutes_[prefix] = nextHops;
 }
 
 void
-NetlinkRouteSocket::doAddUnicastRouteV4(
-    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
-  CHECK(prefix.first.isV4());
-
-  // Create new set of nexthops to be programmed. Existing + New ones
-  auto newNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
-  for (auto const& nextHop : nextHops) {
-    CHECK(nextHop.second.isV4());
-    newNextHops.insert(nextHop);
-  }
+NetlinkRouteSocket::doAddUpdateUnicastRouteV4(
+    const folly::CIDRNetwork& prefix,
+    const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
+        newNextHops) {
 
   auto route = buildUnicastRoute(prefix, newNextHops);
   auto err = rtnl_route_add(socket_, route->getRoutePtr(), NLM_F_REPLACE);
@@ -594,80 +607,54 @@ NetlinkRouteSocket::doAddUnicastRouteV4(
 }
 
 void
-NetlinkRouteSocket::doAddUnicastRouteV6(
-    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
-  CHECK(prefix.first.isV6());
-  for (auto const& nextHop : nextHops) {
-    CHECK(nextHop.second.isV6());
+NetlinkRouteSocket::doAddUpdateUnicastRouteV6(
+    const folly::CIDRNetwork& prefix,
+    const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
+        newNextHops,
+    const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
+        oldNextHops) {
+
+  // We need to explicitly add new V6 routes & remove old routes
+  // With IPv6, if new route being requested has different properties
+  // (like gateway or metric or..) the existing one will not be replaced,
+  // instead a new route will be created, which may cause underlying kernel
+  // crash when releasing netdevices
+
+  // add new nexthops
+  auto toAdd = buildSetDifference(newNextHops, oldNextHops);
+  if (!toAdd.empty()) {
+    auto route = buildUnicastRoute(prefix, toAdd);
+    auto err = rtnl_route_add(socket_, route->getRoutePtr(), 0 /* flags */);
+    if (err != 0) {
+      throw NetlinkException(folly::sformat(
+          "Could not add Route to: {} Error: {}",
+          folly::IPAddress::networkToString(prefix),
+          nl_geterror(err)));
+    }
   }
 
-  auto route = buildUnicastRoute(prefix, nextHops);
-  auto err = rtnl_route_add(socket_, route->getRoutePtr(), 0 /* flags */);
-  if (err != 0) {
-    throw NetlinkException(folly::sformat(
-        "Could not add Route to: {} Error: {}",
-        folly::IPAddress::networkToString(prefix),
-        nl_geterror(err)));
+  // remove stale nexthops
+  auto toDel = buildSetDifference(oldNextHops, newNextHops);
+  if (!toDel.empty()) {
+    auto route = buildUnicastRoute(prefix, toDel);
+    int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0 /* flags */);
+
+    // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
+    // some routes when interface goes down
+    if (err != 0 && nl_geterror(err) != nl_geterror(NLE_OBJ_NOTFOUND)) {
+      throw NetlinkException(folly::sformat(
+          "Failed to delete route {} Error: {}",
+          folly::IPAddress::networkToString(prefix),
+          nl_geterror(err)));
+    }
   }
 }
 
 void
 NetlinkRouteSocket::doDeleteUnicastRoute(
-    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
-  if (prefix.first.isV4()) {
-    deleteUnicastRouteV4(prefix, nextHops);
-  } else {
-    deleteUnicastRouteV6(prefix, nextHops);
-  }
+    const folly::CIDRNetwork& prefix) {
 
-  // Update local cache with reduced nexthops
-  auto& existingNexthops = unicastRoutes_[prefix];
-  for (auto const& nextHop : nextHops) {
-    existingNexthops.erase(nextHop);
-  }
-
-  // Remove entry if it doesn't exists
-  if (existingNexthops.empty()) {
-    unicastRoutes_.erase(prefix);
-  }
-}
-
-void
-NetlinkRouteSocket::deleteUnicastRouteV4(
-    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
-  CHECK(prefix.first.isV4());
-  auto newNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
-  for (auto const& nextHop : nextHops) {
-    CHECK(nextHop.second.isV4());
-    newNextHops.erase(nextHop);
-  }
-
-  auto route = buildUnicastRoute(prefix, newNextHops);
-  int err = 0;
-  if (newNextHops.empty()) {
-    err = rtnl_route_delete(socket_, route->getRoutePtr(), 0 /* flags */);
-  } else {
-    err = rtnl_route_add(socket_, route->getRoutePtr(), NLM_F_REPLACE);
-  }
-
-  // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
-  // some routes when interface goes down
-  if (err != 0 && nl_geterror(err) != nl_geterror(NLE_OBJ_NOTFOUND)) {
-    throw NetlinkException(folly::sformat(
-        "Failed to delete route {} Error: {}",
-        folly::IPAddress::networkToString(prefix),
-        nl_geterror(err)));
-  }
-}
-
-void
-NetlinkRouteSocket::deleteUnicastRouteV6(
-    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
-  CHECK(prefix.first.isV6());
-  for (auto const& nextHop : nextHops) {
-    CHECK(nextHop.second.isV6());
-  }
-
+  const auto& nextHops = unicastRoutes_.at(prefix);
   auto route = buildUnicastRoute(prefix, nextHops);
   int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0 /* flags */);
 
@@ -679,6 +666,9 @@ NetlinkRouteSocket::deleteUnicastRouteV6(
         folly::IPAddress::networkToString(prefix),
         nl_geterror(err)));
   }
+
+  // Update local cache with removed prefix
+  unicastRoutes_.erase(prefix);
 }
 
 void
@@ -934,60 +924,6 @@ NetlinkRouteSocket::doUpdateRouteCache() {
   nl_cache_foreach_filter(cacheV6_, nullptr, routeFunc, &routeFuncCtx);
 }
 
-// helper: given a set of old vs new next-hops add/del the prefix routing info
-void
-NetlinkRouteSocket::doUpdateRoute(
-    const folly::CIDRNetwork& prefix,
-    const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-        newNextHops,
-    const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-        oldNextHops) {
-  DCHECK(!prefix.first.isMulticast());
-  DCHECK(!prefix.first.isLinkLocal());
-
-  // add new route
-  auto toAdd = buildSetDifference(newNextHops, oldNextHops);
-  if (!toAdd.empty()) {
-    try {
-      doAddUnicastRoute(prefix, toAdd);
-    } catch (std::exception const& err) {
-      throw NetlinkException(folly::sformat(
-          "Could not add Route to: {} via nextHops {} Error: {}",
-          folly::IPAddress::networkToString(prefix),
-          folly::join(
-              ", ",
-              from(toAdd) |
-                  mapped(
-                      [](const std::pair<std::string, folly::IPAddress>& val) {
-                        return (val.second.str() + "@" + val.first);
-                      }) |
-                  as<std::set<std::string>>()),
-          folly::exceptionStr(err)));
-    }
-  }
-
-  // remove stale route
-  auto toDel = buildSetDifference(oldNextHops, newNextHops);
-  if (!toDel.empty()) {
-    try {
-      doDeleteUnicastRoute(prefix, toDel);
-    } catch (std::exception const& err) {
-      throw NetlinkException(folly::sformat(
-          "Could not del Route to: {} via nextHops {} Error: {}",
-          folly::IPAddress::networkToString(prefix),
-          folly::join(
-              ", ",
-              from(toDel) |
-                  mapped(
-                      [](const std::pair<std::string, folly::IPAddress>& val) {
-                        return (val.second.str() + "@" + val.first);
-                      }) |
-                  as<std::set<std::string>>()),
-          folly::exceptionStr(err)));
-    }
-  }
-}
-
 void
 NetlinkRouteSocket::doSyncUnicastRoutes(UnicastRoutes newRouteDb) {
   // Get latest routing table from kernel and use it as our snapshot
@@ -999,7 +935,7 @@ NetlinkRouteSocket::doSyncUnicastRoutes(UnicastRoutes newRouteDb) {
     auto const& prefix = it->first;
     if (newRouteDb.find(prefix) == newRouteDb.end()) {
       try {
-        doDeleteUnicastRoute(prefix, it->second);
+        doDeleteUnicastRoute(prefix);
       } catch (std::exception const& err) {
         throw std::runtime_error(folly::sformat(
             "Could not del Route to: {} Error: {}",
@@ -1012,41 +948,21 @@ NetlinkRouteSocket::doSyncUnicastRoutes(UnicastRoutes newRouteDb) {
     }
   }
 
-  // Go over routes that did not exist in old FIB, add
-  for (auto it = newRouteDb.begin(); it != newRouteDb.end();) {
-    auto const& prefix = it->first;
-    if (unicastRouteDb_.find(prefix) == unicastRouteDb_.end()) {
-      try {
-        doAddUnicastRoute(prefix, it->second);
-      } catch (std::exception const& err) {
-        throw std::runtime_error(folly::sformat(
-            "Could not add Route to: {} Error: {}",
-            folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err)));
-      }
-      unicastRouteDb_.emplace(prefix, std::move(it->second));
-      it = newRouteDb.erase(it);
-    } else {
-      ++it;
+  // Go over routes in new routeDb, update/add
+  for (auto const& kv : newRouteDb) {
+    auto const& prefix = kv.first;
+    auto const& nextHops = kv.second;
+    try {
+      doAddUpdateUnicastRoute(prefix, nextHops);
+      unicastRouteDb_[prefix] = nextHops;
+    } catch (std::exception const& err) {
+      throw std::runtime_error(folly::sformat(
+          "Could not update Route to: {} Error: {}",
+          folly::IPAddress::networkToString(prefix),
+          folly::exceptionStr(err)));
     }
   }
 
-  // STEP4: Go over routes that exist both in old and new routeDb, update
-  for (auto const& kv : unicastRouteDb_) {
-    auto const& prefix = kv.first;
-    if (newRouteDb.find(prefix) != newRouteDb.end()) {
-      try {
-        doUpdateRoute(
-            prefix, newRouteDb.at(prefix), unicastRouteDb_.at(prefix));
-        unicastRouteDb_[prefix] = newRouteDb.at(prefix);
-      } catch (std::exception const& err) {
-        throw std::runtime_error(folly::sformat(
-            "Could not update Route to: {} Error: {}",
-            folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err)));
-      }
-    }
-  }
 }
 
 void
@@ -1058,22 +974,14 @@ NetlinkRouteSocket::doSyncLinkRoutes(const LinkRoutes& newRouteDb) {
   for (const auto& routeToDel : toDel) {
     const auto& prefix = routeToDel.first;
     const auto& ifName = routeToDel.second;
-    try {
-      std::unique_ptr<NetlinkRoute> route = buildLinkRoute(prefix, ifName);
-      int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0);
-      if (err != 0) {
-        throw NetlinkException(folly::sformat(
-            "Could not del link Route to: {} dev {} Error: {}",
-            folly::IPAddress::networkToString(prefix),
-            ifName,
-            nl_geterror(err)));
-      }
-    } catch (std::exception const& err) {
-      throw std::runtime_error(folly::sformat(
+    std::unique_ptr<NetlinkRoute> route = buildLinkRoute(prefix, ifName);
+    int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0);
+    if (err != 0) {
+      throw NetlinkException(folly::sformat(
           "Could not del link Route to: {} dev {} Error: {}",
           folly::IPAddress::networkToString(prefix),
           ifName,
-          folly::exceptionStr(err)));
+          nl_geterror(err)));
     }
   }
 
@@ -1081,22 +989,14 @@ NetlinkRouteSocket::doSyncLinkRoutes(const LinkRoutes& newRouteDb) {
   for (const auto& routeToAdd : toAdd) {
     const auto& prefix = routeToAdd.first;
     const auto& ifName = routeToAdd.second;
-    try {
-      std::unique_ptr<NetlinkRoute> route = buildLinkRoute(prefix, ifName);
-      int err = rtnl_route_add(socket_, route->getRoutePtr(), 0);
-      if (err != 0) {
-        throw NetlinkException(folly::sformat(
-            "Could not add link Route to: {} dev {} Error: {}",
-            folly::IPAddress::networkToString(prefix),
-            ifName,
-            nl_geterror(err)));
-      }
-    } catch (std::exception const& err) {
-      throw std::runtime_error(folly::sformat(
+    std::unique_ptr<NetlinkRoute> route = buildLinkRoute(prefix, ifName);
+    int err = rtnl_route_add(socket_, route->getRoutePtr(), 0);
+    if (err != 0) {
+      throw NetlinkException(folly::sformat(
           "Could not add link Route to: {} dev {} Error: {}",
           folly::IPAddress::networkToString(prefix),
           ifName,
-          folly::exceptionStr(err)));
+          nl_geterror(err)));
     }
   }
 

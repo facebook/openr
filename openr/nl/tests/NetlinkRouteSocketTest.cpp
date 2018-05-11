@@ -212,96 +212,159 @@ TEST_F(NetlinkIfFixture, SingleRouteTestV4) {
   EXPECT_EQ(0, routes.size());
 }
 
-// - Add a route
-// - verify it is added
-// - Add another path (nexthop) to the same route
-// - Verify the route is updated with 2 paths
-// - Delete it and then verify it is deleted
-TEST_F(NetlinkIfFixture, UpdateSingleRouteTest) {
-  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+
+TEST_F(NetlinkIfFixture, UpdateRouteTest) {
+  // - Add a route
+  // - Verify it is added
+  // - Add another path (nexthop) to the same route
+  // - Verify the route is updated with 2 paths
+  // - Delete it and then verify it is deleted
+  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
   auto nh1 = std::make_pair(kVethNameY, folly::IPAddress("fe80::1"));
   auto nh2 = std::make_pair(kVethNameX, folly::IPAddress("fe80::1"));
   NextHops nextHops{nh1};
 
   // Add a route with single nextHop
-  netlinkRouteSocket->addUnicastRoute(prefix, nextHops).get();
-  auto routes = netlinkRouteSocket->getUnicastRoutes().get();
+  netlinkRouteSocket->addUnicastRoute(prefix1, nextHops).get();
+  auto routes = netlinkRouteSocket->getKernelUnicastRoutes().get();
 
   EXPECT_EQ(1, routes.size());
-  ASSERT_EQ(1, routes.count(prefix));
-  EXPECT_EQ(nextHops, routes.at(prefix));
+  ASSERT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(nextHops, routes.at(prefix1));
 
-  // Add another nextHop nh2
+  // Change nexthop to nh2
   nextHops.clear();
   nextHops.insert(nh2);
 
   // Update the same route with new nextHop nh2
-  netlinkRouteSocket->addUnicastRoute(prefix, nextHops).get();
+  netlinkRouteSocket->addUnicastRoute(prefix1, nextHops).get();
 
   // The route should now have only nh2
   routes = netlinkRouteSocket->getUnicastRoutes().get();
   EXPECT_EQ(1, routes.size());
-  ASSERT_EQ(1, routes.count(prefix));
-  EXPECT_EQ(nextHops, routes.at(prefix));
+  ASSERT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(nextHops, routes.at(prefix1));
+
+  // Add back nexthop nh1
+  nextHops.insert(nh1);
+  // Update the same route with new nextHop nh1
+  netlinkRouteSocket->addUnicastRoute(prefix1, nextHops).get();
+
+  // The route should now have both nh1 and nh2
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+  EXPECT_EQ(1, routes.size());
+  ASSERT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(nextHops, routes.at(prefix1));
 
   // Delete the route via both nextHops
-  netlinkRouteSocket->deleteUnicastRoute(prefix).get();
+  netlinkRouteSocket->deleteUnicastRoute(prefix1).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+  EXPECT_EQ(0, routes.size());
+
+  // - Add a route with 2 paths (nextHops)
+  // - Verify it is added
+  // - Remove one of the paths (nextHops)
+  // - Verify the route is updated with 1 path
+  // - Delete it and then verify it is deleted
+  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
+
+  // Add a route with 2 nextHops
+  netlinkRouteSocket->addUnicastRoute(prefix2, nextHops).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(1, routes.size());
+  ASSERT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops, routes.at(prefix2));
+
+  // Remove 1 of nextHops from the route
+  nextHops.erase(nh1);
+  netlinkRouteSocket->addUnicastRoute(prefix2, nextHops).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(1, routes.size());
+  ASSERT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops, routes.at(prefix2));
+
+  // Delete the same route
+  netlinkRouteSocket->deleteUnicastRoute(prefix2).get();
   routes = netlinkRouteSocket->getUnicastRoutes().get();
   EXPECT_EQ(0, routes.size());
 }
 
-TEST_F(NetlinkIfFixture, UpdateSingleRouteTestV4) {
-  const folly::CIDRNetwork prefix{folly::IPAddress("192.168.0.11"), 32};
+TEST_F(NetlinkIfFixture, UpdateRouteTestV4) {
+  // - Add a route
+  // - Verify it is added
+  // - Add another path (nexthop) to the same route
+  // - Verify the route is updated with 2 paths
+  // - Delete it and then verify it is deleted
+  const folly::CIDRNetwork prefix1{folly::IPAddress("192.168.0.11"), 32};
   const auto nh1 = std::make_pair(kVethNameY, folly::IPAddress("169.254.0.1"));
   const auto nh2 = std::make_pair(kVethNameX, folly::IPAddress("169.254.0.2"));
   NextHops nextHops{nh1};
 
   // Add a route with single nextHop
-  netlinkRouteSocket->addUnicastRoute(prefix, nextHops).get();
+  netlinkRouteSocket->addUnicastRoute(prefix1, nextHops).get();
   auto routes = netlinkRouteSocket->getUnicastRoutes().get();
 
   EXPECT_EQ(1, routes.size());
-  ASSERT_EQ(1, routes.count(prefix));
-  EXPECT_EQ(nextHops, routes.at(prefix));
+  ASSERT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(nextHops, routes.at(prefix1));
 
-  // Add another nextHop nh2
+  // Change nexthop to nh2
   nextHops.clear();
   nextHops.insert(nh2);
 
   // Update the same route with new nextHop nh2
-  netlinkRouteSocket->addUnicastRoute(prefix, nextHops).get();
+  netlinkRouteSocket->addUnicastRoute(prefix1, nextHops).get();
 
   // The route should now have only nh2
   routes = netlinkRouteSocket->getUnicastRoutes().get();
   EXPECT_EQ(1, routes.size());
-  ASSERT_EQ(1, routes.count(prefix));
-  EXPECT_EQ(nextHops, routes.at(prefix));
+  ASSERT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(nextHops, routes.at(prefix1));
+
+  // Add back nexthop nh1
+  nextHops.insert(nh1);
+  // Update the same route with new nextHop nh1
+  netlinkRouteSocket->addUnicastRoute(prefix1, nextHops).get();
+
+  // The route should now have both nh1 and nh2
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+  EXPECT_EQ(1, routes.size());
+  ASSERT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(nextHops, routes.at(prefix1));
 
   // Delete the route via both nextHops
-  netlinkRouteSocket->deleteUnicastRoute(prefix).get();
+  netlinkRouteSocket->deleteUnicastRoute(prefix1).get();
   routes = netlinkRouteSocket->getUnicastRoutes().get();
   EXPECT_EQ(0, routes.size());
-}
 
-// - Add a route with 2 paths (nextHops)
-// - verify it is added
-// - Delete it and then verify it is deleted
-TEST_F(NetlinkIfFixture, MultiRouteTest) {
-  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::"), 64};
-  auto nh1 = std::make_pair(kVethNameY, folly::IPAddress("fe80::1"));
-  auto nh2 = std::make_pair(kVethNameX, folly::IPAddress("fe80::1"));
-  const NextHops nextHops{nh1, nh2};
+  // - Add a route with 2 paths (nextHops)
+  // - Verify it is added
+  // - Remove one of the paths (nextHops)
+  // - Verify the route is updated with 1 path
+  // - Delete it and then verify it is deleted
+  const folly::CIDRNetwork prefix2{folly::IPAddress("192.168.0.12"), 32};
 
   // Add a route with 2 nextHops
-  netlinkRouteSocket->addUnicastRoute(prefix, nextHops).get();
-  auto routes = netlinkRouteSocket->getUnicastRoutes().get();
+  netlinkRouteSocket->addUnicastRoute(prefix2, nextHops).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
 
   EXPECT_EQ(1, routes.size());
-  ASSERT_EQ(1, routes.count(prefix));
-  EXPECT_EQ(nextHops, routes.at(prefix));
+  ASSERT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops, routes.at(prefix2));
+
+  // Remove 1 of nextHops from the route
+  nextHops.erase(nh1);
+  netlinkRouteSocket->addUnicastRoute(prefix2, nextHops).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(1, routes.size());
+  ASSERT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops, routes.at(prefix2));
 
   // Delete the same route
-  netlinkRouteSocket->deleteUnicastRoute(prefix).get();
+  netlinkRouteSocket->deleteUnicastRoute(prefix2).get();
   routes = netlinkRouteSocket->getUnicastRoutes().get();
   EXPECT_EQ(0, routes.size());
 }
@@ -324,26 +387,6 @@ TEST_F(NetlinkIfFixture, SocketRestart) {
   EXPECT_EQ(1, routes.size());
   ASSERT_EQ(1, routes.count(prefix));
   EXPECT_EQ(nextHops, routes.at(prefix));
-}
-
-TEST_F(NetlinkIfFixture, MultiRouteTestV4) {
-  const folly::CIDRNetwork prefix{folly::IPAddress("192.168.0.11"), 32};
-  const auto nh1 = std::make_pair(kVethNameY, folly::IPAddress("169.254.0.1"));
-  const auto nh2 = std::make_pair(kVethNameX, folly::IPAddress("169.254.0.2"));
-  const NextHops nextHops{nh1, nh2};
-
-  // Add a route with 2 nextHops
-  netlinkRouteSocket->addUnicastRoute(prefix, nextHops).get();
-  auto routes = netlinkRouteSocket->getUnicastRoutes().get();
-
-  EXPECT_EQ(1, routes.size());
-  ASSERT_EQ(1, routes.count(prefix));
-  EXPECT_EQ(nextHops, routes.at(prefix));
-
-  // Delete the same route
-  netlinkRouteSocket->deleteUnicastRoute(prefix).get();
-  routes = netlinkRouteSocket->getUnicastRoutes().get();
-  EXPECT_EQ(0, routes.size());
 }
 
 // - Add a route with 3 paths (nextHops)
@@ -440,6 +483,119 @@ TEST_F(NetlinkIfFixture, UpdateMultiRouteTestV4) {
   // Delete the route
   nextHops.clear();
   netlinkRouteSocket->deleteUnicastRoute(prefix).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+  EXPECT_EQ(0, routes.size());
+}
+
+// Create unicast routes database
+// Modify route database in various ways: change nexthops, remove prefixes.. etc
+// Verify netlinkRouteSocket sync up with route db correctly
+TEST_F(NetlinkIfFixture, SyncRouteTest) {
+  UnicastRoutes routeDb;
+  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::"), 64};
+  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:4::"), 64};
+  auto nh1 = std::make_pair(kVethNameY, folly::IPAddress("fe80::1"));
+  auto nh2 = std::make_pair(kVethNameX, folly::IPAddress("fe80::2"));
+  auto nh3 = std::make_pair(kVethNameX, folly::IPAddress("fe80::3"));
+  auto nh4 = std::make_pair(kVethNameY, folly::IPAddress("fe80::4"));
+  NextHops nextHops1{nh1, nh2};
+  NextHops nextHops2{nh3};
+  routeDb[prefix1] = nextHops1;
+  routeDb[prefix2] = nextHops2;
+
+  // Sync routeDb
+  netlinkRouteSocket->syncUnicastRoutes(routeDb).get();
+  auto routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(2, routes.size());
+  EXPECT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops1, routes.at(prefix1));
+  EXPECT_EQ(nextHops2, routes.at(prefix2));
+
+  // Change nexthops
+  nextHops1.erase(nh1);
+  nextHops2.insert(nh4);
+  routeDb[prefix1] = nextHops1;
+  routeDb[prefix2] = nextHops2;
+
+  // Sync routeDb
+  netlinkRouteSocket->syncUnicastRoutes(routeDb).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(2, routes.size());
+  EXPECT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops1, routes.at(prefix1));
+  EXPECT_EQ(nextHops2, routes.at(prefix2));
+
+  // Remove prefixes
+  routeDb.erase(prefix1);
+  // Sync routeDb
+  netlinkRouteSocket->syncUnicastRoutes(routeDb).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(1, routes.size());
+  EXPECT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops2, routes.at(prefix2));
+
+  // Delete the remaining route
+  netlinkRouteSocket->deleteUnicastRoute(prefix2).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+  EXPECT_EQ(0, routes.size());
+}
+
+TEST_F(NetlinkIfFixture, SyncRouteTestV4) {
+  UnicastRoutes routeDb;
+  folly::CIDRNetwork prefix1{folly::IPAddress("192.168.0.11"), 32};
+  folly::CIDRNetwork prefix2{folly::IPAddress("192.168.0.12"), 32};
+  const auto nh1 = std::make_pair(kVethNameY, folly::IPAddress("169.254.0.1"));
+  const auto nh2 = std::make_pair(kVethNameX, folly::IPAddress("169.254.0.2"));
+  const auto nh3 = std::make_pair(kVethNameY, folly::IPAddress("169.254.0.3"));
+  const auto nh4 = std::make_pair(kVethNameX, folly::IPAddress("169.254.0.4"));
+  NextHops nextHops1{nh1, nh2};
+  NextHops nextHops2{nh3};
+  routeDb[prefix1] = nextHops1;
+  routeDb[prefix2] = nextHops2;
+
+  // Sync routeDb
+  netlinkRouteSocket->syncUnicastRoutes(routeDb).get();
+  auto routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(2, routes.size());
+  EXPECT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops1, routes.at(prefix1));
+  EXPECT_EQ(nextHops2, routes.at(prefix2));
+
+  // Change nexthops
+  nextHops1.erase(nh1);
+  nextHops2.insert(nh4);
+  routeDb[prefix1] = nextHops1;
+  routeDb[prefix2] = nextHops2;
+
+  // Sync routeDb
+  netlinkRouteSocket->syncUnicastRoutes(routeDb).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(2, routes.size());
+  EXPECT_EQ(1, routes.count(prefix1));
+  EXPECT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops1, routes.at(prefix1));
+  EXPECT_EQ(nextHops2, routes.at(prefix2));
+
+  // Remove prefixes
+  routeDb.erase(prefix1);
+  // Sync routeDb
+  netlinkRouteSocket->syncUnicastRoutes(routeDb).get();
+  routes = netlinkRouteSocket->getUnicastRoutes().get();
+
+  EXPECT_EQ(1, routes.size());
+  EXPECT_EQ(1, routes.count(prefix2));
+  EXPECT_EQ(nextHops2, routes.at(prefix2));
+
+  // Delete the remaining route
+  netlinkRouteSocket->deleteUnicastRoute(prefix2).get();
   routes = netlinkRouteSocket->getUnicastRoutes().get();
   EXPECT_EQ(0, routes.size());
 }
