@@ -127,8 +127,11 @@ class PrefixesCmd(KvStoreCmd):
 
 
 class KeysCmd(KvStoreCmd):
-    def run(self, json_fmt, prefix, ttl):
-        resp = self.client.dump_key_with_prefix(prefix)
+    def run(self, json_fmt, prefix, originator, ttl):
+        if originator is not None:
+            resp = self.client.dump_all_with_prefix(prefix, originator)
+        else:
+            resp = self.client.dump_key_with_prefix(prefix)
         self.print_kvstore_keys(resp, ttl, json_fmt)
 
     def print_kvstore_keys(self, resp, ttl, json_fmt):

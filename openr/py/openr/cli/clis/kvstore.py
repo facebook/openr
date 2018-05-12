@@ -74,13 +74,14 @@ class KeysCli(object):
     @click.option('--json/--no-json', default=False,
                   help='Dump in JSON format')
     @click.option('--prefix', default='', help='string to filter keys')
+    @click.option('--originator', default=None, help='originator string to filter keys')
     @click.option('--ttl/--no-ttl', default=False,
                   help='Show ttl value and version as well')
     @click.pass_obj
-    def keys(cli_opts, json, prefix, ttl):  # noqa: B902
+    def keys(cli_opts, json, prefix, originator, ttl):  # noqa: B902
         ''' dump all available keys '''
 
-        kvstore.KeysCmd(cli_opts).run(json, prefix, ttl)
+        kvstore.KeysCmd(cli_opts).run(json, prefix, originator, ttl)
 
 
 class KeyValsCli(object):

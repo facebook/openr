@@ -24,6 +24,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/Util.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -46,6 +47,36 @@ using TtlCountdownQueue = std::priority_queue<
     std::vector<TtlCountdownQueueEntry>,
     std::greater<TtlCountdownQueueEntry> // Always returns smallest first
     >;
+
+class KvStoreFilters {
+  public:
+    // takes the list of comma separated key prefixes to match,
+    // and the list of originator IDs to match in the value
+    explicit KvStoreFilters(std::vector<std::string> const& keyPrefix,
+                      std::set<std::string> const& originatorIds);
+
+    // Check if key matches the filters
+    bool keyMatch(
+      std::string const& key,
+      thrift::Value const& value
+    ) const;
+
+    // return comma separeated string prefix
+    std::vector<std::string> getKeyPrefixes() const;
+
+    // return set of origninator IDs
+    std::set<std::string> getOrigniatorIdList() const;
+
+  private:
+    // list of string prefixes, empty list matches all keys
+    std::vector<std::string> keyPrefixList_{};
+
+    // set of node IDs to match, empty set matches all nodes
+    std::set<std::string> originatorIds_{};
+
+    // keyPrefix class to create RE2 set and to match keys
+    std::unique_ptr<KeyPrefix> keyPrefixObjList_{};
+};
 
 // The class represent a server that stores KV pairs in internal map.
 // it listens for submission on REP socket, subscribes to peers via
@@ -84,6 +115,8 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       std::chrono::seconds monitorSubmitInterval,
       // initial list of peers to connect to
       std::unordered_map<std::string, thrift::PeerSpec> peers,
+      // KvStore key filters
+      folly::Optional<KvStoreFilters> filters = folly::none,
       // optional: pre allocated and bound global pub socket
       // will allocate new pub socket if not supplied
       folly::Optional<fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>>
@@ -98,7 +131,8 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // Return a publication made out of the updated values
   static thrift::Publication mergeKeyValues(
       std::unordered_map<std::string, thrift::Value>& kvStore,
-      std::unordered_map<std::string, thrift::Value> const& update);
+      std::unordered_map<std::string, thrift::Value> const& update,
+      folly::Optional<KvStoreFilters> const& filters = folly::none);
 
  private:
   // disable copying
@@ -119,14 +153,17 @@ class KvStore final : public fbzmq::ZmqEventLoop {
 
   // dump the entries of my KV store whose keys match the given prefix
   // if prefix is the empty sting, the full KV store is dumped
-  thrift::Publication dumpAllWithPrefix(std::string const& prefix) const;
+  thrift::Publication dumpAllWithFilters(
+      KvStoreFilters const& kvFilters) const;
 
   // dump the hashes of my KV store whose keys match the given prefix
   // if prefix is the empty sting, the full hash store is dumped
-  thrift::Publication dumpHashWithPrefix(std::string const& prefix) const;
+  thrift::Publication dumpHashWithFilters(
+      KvStoreFilters const& kvFilters) const;
 
   // dump the keys on which hashes differ from given keyVals
   thrift::Publication dumpDifference(
+      std::unordered_map<std::string, thrift::Value> const& keyVal,
       std::unordered_map<std::string, thrift::Value> const& keyValHash) const;
 
   // add new peers to sync with
@@ -209,6 +246,9 @@ class KvStore final : public fbzmq::ZmqEventLoop {
 
   // The peers we will be talking to: both PUB and CMD URLs for each
   std::unordered_map<std::string, thrift::PeerSpec> peers_;
+
+  // key/value filters
+  folly::Optional<KvStoreFilters> filters_;
 
   // the socket to publish changes to kv-store
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock_;

@@ -29,6 +29,39 @@ hash<openr::thrift::IpPrefix>::operator()(
 
 namespace openr {
 
+// create RE2 set for the list of key prefixes
+KeyPrefix::KeyPrefix(std::vector<std::string> const& keyPrefixList) {
+  if (keyPrefixList.empty()) {
+    return;
+  }
+  re2::RE2::Options re2Options;
+  re2Options.set_case_sensitive(true);
+  keyPrefix_ =
+    std::make_unique<re2::RE2::Set>(re2Options, re2::RE2::ANCHOR_START);
+  std::string re2AddError{};
+
+  for (auto const& keyPrefix: keyPrefixList) {
+    if (keyPrefix_->Add(keyPrefix, &re2AddError) < 0) {
+      LOG(FATAL) << "Failed to add prefixes to RE2 set: '" << keyPrefix << "', "
+                 << "error: '" << re2AddError << "'";
+      return;
+    }
+  }
+  if (!keyPrefix_->Compile()) {
+    LOG(FATAL) << "Failed to compile re2 set" ;
+    keyPrefix_.reset();
+  }
+}
+
+// match the key with the list of prefixes
+bool KeyPrefix::keyMatch(std::string const& key) const {
+  if (!keyPrefix_) {
+    return true;
+  }
+  std::vector<int> matches;
+  return keyPrefix_->Match(key, &matches);
+}
+
 // need operator< for creating std::set of these thrift types. we need ordered
 // set for set algebra. thrift declares but does not define these for us.
 

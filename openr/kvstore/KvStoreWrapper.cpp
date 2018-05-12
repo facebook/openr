@@ -27,6 +27,7 @@ KvStoreWrapper::KvStoreWrapper(
     std::chrono::seconds dbSyncInterval,
     std::chrono::seconds monitorSubmitInterval,
     std::unordered_map<std::string, thrift::PeerSpec> peers,
+    folly::Optional<KvStoreFilters> filters,
     folly::Optional<fbzmq::KeyPair> keyPair)
     : nodeId(nodeId),
       localCmdUrl(folly::sformat("inproc://{}-kvstore-cmd", nodeId)),
@@ -76,6 +77,7 @@ KvStoreWrapper::KvStoreWrapper(
       dbSyncInterval,
       monitorSubmitInterval,
       peers,
+      std::move(filters),
       std::move(globalPubSock),
       std::move(globalCmdSock));
 }
@@ -179,12 +181,16 @@ KvStoreWrapper::getKey(std::string key) {
 }
 
 std::unordered_map<std::string /* key */, thrift::Value>
-KvStoreWrapper::dumpAll(std::string const& prefix) {
+KvStoreWrapper::dumpAll(folly::Optional<KvStoreFilters> filters) {
   // Prepare request
   thrift::Request request;
   request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams.prefix = prefix;
-
+  if (filters.hasValue()) {
+    std::string keyPrefix =
+      folly::join(",", filters.value().getKeyPrefixes());
+    request.keyDumpParams.prefix = keyPrefix;
+    request.keyDumpParams.originatorIds = filters.value().getOrigniatorIdList();
+  }
   // Make ZMQ call and wait for response
   reqSock_.sendThriftObj(request, serializer_);
   auto maybeMsg = reqSock_.recvThriftObj<thrift::Publication>(serializer_);
@@ -237,7 +243,6 @@ KvStoreWrapper::syncKeyVals(thrift::KeyVals const& keyValHashes) {
   // Return the result
   return publication.keyVals;
 }
-
 
 thrift::Publication
 KvStoreWrapper::recvPublication(std::chrono::milliseconds timeout) {

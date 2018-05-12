@@ -93,6 +93,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStoreGlobalPubSock.bind(fbzmq::SocketUrl{kvStoreGlobalPubUrl_}).value();
   kvStoreGlobalCmdSock.bind(fbzmq::SocketUrl{kvStoreGlobalCmdUrl_}).value();
 
+  folly::Optional<KvStoreFilters> filters = folly::none;
   kvStore_ = std::make_unique<KvStore>(
       context_,
       nodeId_,
@@ -106,6 +107,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreDbSyncInterval,
       kvStoreMonitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec>{},
+      std::move(filters),
       std::move(kvStoreGlobalPubSock),
       std::move(kvStoreGlobalCmdSock));
 

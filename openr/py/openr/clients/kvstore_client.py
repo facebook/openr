@@ -47,13 +47,14 @@ class KvStoreClient(object):
 
         return self._kv_store_cmd_socket.recv()
 
-    def dump_all_with_prefix(self, prefix=""):
+    def dump_all_with_prefix(self, prefix="", originator=""):
         '''  dump the entries of kvstore whose key matches the given prefix
              if prefix is an empty string, the full KV store is dumped
         '''
 
         req_msg = kv_store_types.Request(kv_store_types.Command.KEY_DUMP)
         req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
+        req_msg.keyDumpParams.originator = {originator}
         self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
         return self._kv_store_cmd_socket.recv_thrift_obj(

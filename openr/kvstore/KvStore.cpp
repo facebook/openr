@@ -21,6 +21,40 @@ using namespace std::chrono;
 
 namespace openr {
 
+KvStoreFilters::KvStoreFilters(
+    std::vector<std::string> const& keyPrefix,
+    std::set<std::string> const& nodeIds)
+    : keyPrefixList_(keyPrefix),
+      originatorIds_(nodeIds) {
+  // create re2 set
+  keyPrefixObjList_ = std::make_unique<KeyPrefix>(keyPrefixList_);
+}
+
+bool KvStoreFilters::keyMatch(
+    std::string const& key,
+    thrift::Value const& value
+  ) const {
+  if (keyPrefixList_.empty() && originatorIds_.empty()) {
+    return true;
+  }
+  if (!keyPrefixList_.empty() && keyPrefixObjList_->keyMatch(key)) {
+    return true;
+  }
+  if (!originatorIds_.empty() &&
+      originatorIds_.count(value.originatorId)) {
+    return true;
+  }
+  return false;
+}
+
+std::vector<std::string> KvStoreFilters::getKeyPrefixes() const {
+  return keyPrefixList_;
+}
+
+std::set<std::string> KvStoreFilters::getOrigniatorIdList() const {
+  return originatorIds_;
+}
+
 KvStore::KvStore(
     // initializers for immutable state
     fbzmq::Context& zmqContext,
@@ -36,6 +70,7 @@ KvStore::KvStore(
     std::chrono::seconds monitorSubmitInterval,
     // initializer for mutable state
     std::unordered_map<std::string, thrift::PeerSpec> peers,
+    folly::Optional<KvStoreFilters> filters,
     // initializer for optionals
     folly::Optional<fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>>
         preBoundGlobalPubSock /* = folly::none */,
@@ -50,6 +85,7 @@ KvStore::KvStore(
       dbSyncInterval_(dbSyncInterval),
       monitorSubmitInterval_(monitorSubmitInterval),
       peers_(std::move(peers)),
+      filters_(std::move(filters)),
       // initialize zmq sockets
       localPubSock_{zmqContext},
       peerSubSock_(
@@ -314,7 +350,8 @@ KvStore::KvStore(
 thrift::Publication
 KvStore::mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
-    std::unordered_map<std::string, thrift::Value> const& keyVals) {
+    std::unordered_map<std::string, thrift::Value> const& keyVals,
+    folly::Optional<KvStoreFilters> const& filters) {
   // the publication to build if we update our KV store
   thrift::Publication thriftPub{};
 
@@ -324,6 +361,14 @@ KvStore::mergeKeyValues(
   for (const auto& kv : keyVals) {
     auto const& key = kv.first;
     auto const& value = kv.second;
+
+    if (
+      filters.hasValue() &&
+      not filters->keyMatch(kv.first, kv.second)) {
+      VLOG(4) << "key: " << key << " not adding from "
+          << value.originatorId;
+      continue;
+    }
 
     // versions must start at 1; setting this to zero here means
     // we would be beaten by any version supplied by the setter
@@ -521,7 +566,7 @@ KvStore::processPublication() {
   // If the following publication is not empty, means we received some
   // new information and we haven't processed this publication before.
   // If so, relay it, else stop
-  const auto deltaPub = mergeKeyValues(kvStore_, thriftPub.keyVals);
+  const auto deltaPub = mergeKeyValues(kvStore_, thriftPub.keyVals, filters_);
   updateTtlCountdownQueue(deltaPub);
   tData_.addStatValue(
       "kvstore.updated_key_vals", deltaPub.keyVals.size(), fbzmq::SUM);
@@ -559,10 +604,12 @@ KvStore::getKeyVals(std::vector<std::string> const& keys) {
 // dump the entries of my KV store whose keys match the given prefix
 // if prefix is the empty string, the full KV store is dumped
 thrift::Publication
-KvStore::dumpAllWithPrefix(std::string const& prefix) const {
+KvStore::dumpAllWithFilters(
+         KvStoreFilters const& kvFilters) const {
   thrift::Publication thriftPub;
+
   for (auto const& kv : kvStore_) {
-    if (kv.first.compare(0, prefix.length(), prefix) != 0) {
+    if (not kvFilters.keyMatch(kv.first, kv.second)) {
       continue;
     }
     thriftPub.keyVals[kv.first] = kv.second;
@@ -573,10 +620,10 @@ KvStore::dumpAllWithPrefix(std::string const& prefix) const {
 // dump the hashes of my KV store whose keys match the given prefix
 // if prefix is the empty string, the full hash store is dumped
 thrift::Publication
-KvStore::dumpHashWithPrefix(std::string const& prefix) const {
+KvStore::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
   thrift::Publication thriftPub;
   for (auto const& kv : kvStore_) {
-    if (kv.first.compare(0, prefix.length(), prefix) != 0) {
+    if (not kvFilters.keyMatch(kv.first, kv.second)) {
       continue;
     }
     DCHECK(kv.second.hash.hasValue());
@@ -593,9 +640,10 @@ KvStore::dumpHashWithPrefix(std::string const& prefix) const {
 // dump the keys on which hashes differ from given keyVals
 thrift::Publication
 KvStore::dumpDifference(
+  std::unordered_map<std::string, thrift::Value> const& keyVal,
   std::unordered_map<std::string, thrift::Value> const& keyValHashes) const {
     thrift::Publication thriftPub;
-    for (const auto& kv : kvStore_) {
+    for (const auto& kv : keyVal) {
       auto const& key = kv.first;
       auto const& value = kv.second;
 
@@ -711,8 +759,7 @@ KvStore::addPeers(
       peersToSyncWith_.emplace(
           peerName,
           ExponentialBackoff<std::chrono::milliseconds>(
-              Constants::kInitialBackoff, Constants::kMaxBackoff));
-
+            Constants::kInitialBackoff, Constants::kMaxBackoff));
     } catch (std::exception const& e) {
       LOG(ERROR) << "Error connecting to: `" << peerName
                  << "` reason: " << folly::exceptionStr(e);
@@ -779,8 +826,18 @@ KvStore::requestFullSyncFromPeers() {
 
     thrift::Request dumpRequest;
     dumpRequest.cmd = thrift::Command::KEY_DUMP;
+    if (filters_.hasValue()) {
+      std::string keyPrefix =
+        folly::join(",", filters_.value().getKeyPrefixes());
+      dumpRequest.keyDumpParams.prefix = keyPrefix;
+      dumpRequest.keyDumpParams.originatorIds =
+        filters_.value().getOrigniatorIdList();
+    }
+    std::set<std::string> originator{};
+    std::vector<std::string> keyPrefixList{};
+    KvStoreFilters kvFilters{keyPrefixList, originator};
     dumpRequest.keyDumpParams.keyValHashes =
-      std::move(dumpHashWithPrefix("").keyVals);
+      std::move(dumpHashWithFilters(kvFilters).keyVals);
     VLOG(1) << "Sending full sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
     latestSentPeerSync_.emplace(
@@ -896,7 +953,7 @@ KvStore::processRequest(
       }
     }
 
-    const auto thriftPub = mergeKeyValues(kvStore_, keyVals);
+    const auto thriftPub = mergeKeyValues(kvStore_, keyVals, filters_);
     updateTtlCountdownQueue(thriftPub);
     tData_.addStatValue(
         "kvstore.updated_key_vals", thriftPub.keyVals.size(), fbzmq::SUM);
@@ -931,15 +988,24 @@ KvStore::processRequest(
               << thriftReq.keyDumpParams.keyValHashes.value().size()
               << " keyValHashes item(s) provided from peer";
     } else {
-      VLOG(3) << "Dump all keys requested";
+      VLOG(3) << "Dump all keys requested - "
+              << "KeyPrefixes:"
+              << thriftReq.keyDumpParams.prefix
+              << " Originator IDs:"
+              << folly::join(",", thriftReq.keyDumpParams.originatorIds);
     }
-
     tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
 
-    const auto thriftPub =
-        (thriftReq.keyDumpParams.keyValHashes.hasValue())
-        ? dumpDifference(thriftReq.keyDumpParams.keyValHashes.value())
-        : dumpAllWithPrefix(thriftReq.keyDumpParams.prefix);
+    std::vector<std::string> keyPrefixList;
+    folly::split(",", thriftReq.keyDumpParams.prefix, keyPrefixList, true);
+    const auto keyPrefixMatch = KvStoreFilters(
+        keyPrefixList, thriftReq.keyDumpParams.originatorIds);
+    auto thriftPub = dumpAllWithFilters(keyPrefixMatch);
+    if (thriftReq.keyDumpParams.keyValHashes.hasValue()) {
+      thriftPub = dumpDifference(
+        thriftPub.keyVals,
+        thriftReq.keyDumpParams.keyValHashes.value());
+    }
     const auto retPub = cmdSock.sendOne(
         fbzmq::Message::fromThriftObj(thriftPub, serializer_).value());
     if (retPub.hasError()) {
@@ -950,8 +1016,11 @@ KvStore::processRequest(
   case thrift::Command::HASH_DUMP: {
     VLOG(3) << "Dump all hashes requested";
     tData_.addStatValue("kvstore.cmd_hash_dump", 1, fbzmq::COUNT);
-
-    const auto hashDump = dumpHashWithPrefix(thriftReq.keyDumpParams.prefix);
+    std::set<std::string> originator{};
+    std::vector<std::string> keyPrefixList{};
+    folly::split(",", thriftReq.keyDumpParams.prefix, keyPrefixList, true);
+    KvStoreFilters kvFilters{keyPrefixList, originator};
+    const auto hashDump = dumpHashWithFilters(kvFilters);
     const auto request = cmdSock.sendOne(
         fbzmq::Message::fromThriftObj(hashDump, serializer_).value());
     if (request.hasError()) {
@@ -1025,7 +1094,7 @@ KvStore::processSyncResponse() noexcept {
   auto syncPub =
       syncPubMsg.readThriftObj<thrift::Publication>(serializer_).value();
 
-  const auto deltaPub = mergeKeyValues(kvStore_, syncPub.keyVals);
+  const auto deltaPub = mergeKeyValues(kvStore_, syncPub.keyVals, filters_);
   updateTtlCountdownQueue(deltaPub);
   tData_.addStatValue(
       "kvstore.updated_key_vals", deltaPub.keyVals.size(), fbzmq::SUM);

@@ -33,6 +33,7 @@ class KvStoreWrapper {
       std::chrono::seconds dbSyncInterval,
       std::chrono::seconds monitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
+      folly::Optional<KvStoreFilters> filters = folly::none,
       folly::Optional<fbzmq::KeyPair> keyPair = folly::none);
 
   ~KvStoreWrapper() {
@@ -66,7 +67,7 @@ class KvStoreWrapper {
    * if we pass a prefix, only return keys that match it
    */
   std::unordered_map<std::string /* key */, thrift::Value> dumpAll(
-      std::string const& prefix = "");
+      folly::Optional<KvStoreFilters> filters = folly::none);
 
   /**
    * API to get dump hashes from KvStore.

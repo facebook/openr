@@ -280,6 +280,20 @@ DEFINE_bool(
     enable_segment_routing,
     false,
     "Flag to disable/enable segment routing");
+DEFINE_bool(
+    set_leaf_node,
+    false,
+    "Flag to enable/disable node as a leaf node");
+DEFINE_string(
+    key_prefix_filters,
+    "",
+    "Only keys matching any of the prefixes in the list "
+    "will be added to kvstore");
+DEFINE_string(
+    key_originator_id_filters,
+    "",
+    "Only keys with originator ID matching any of the originator ID will "
+    "be added to kvstore.");
 
 using namespace fbzmq;
 using namespace openr;
@@ -363,7 +377,7 @@ main(int argc, char** argv) {
       << "Overlapping global/local segment routing label space.";
 
   // Prepare IP-TOS value from flag and do sanity checks
-  folly::Optional<int> maybeIpTos;
+  folly::Optional<int> maybeIpTos{0};
   if (FLAGS_ip_tos != 0) {
     CHECK_LE(0, FLAGS_ip_tos) << "ip_tos must be greater than 0";
     CHECK_GE(256, FLAGS_ip_tos) << "ip_tos must be less than 256";
@@ -529,6 +543,26 @@ main(int argc, char** argv) {
   monitor.waitUntilRunning();
   allThreads.emplace_back(std::move(monitorThread));
 
+  folly::Optional<KvStoreFilters> kvFilters = folly::none;
+  // Add key prefixes to allow if set as leaf node
+  if (FLAGS_set_leaf_node) {
+    std::vector<std::string> keyPrefixList;
+    folly::split(",", FLAGS_key_prefix_filters, keyPrefixList, true);
+
+    // save nodeIds in the set
+    std::set<std::string> originatorIds{};
+    folly::splitTo<std::string>(
+      ",",
+      FLAGS_key_originator_id_filters,
+      std::inserter(originatorIds, originatorIds.begin()),
+      true);
+
+    keyPrefixList.push_back(Constants::kPrefixAllocMarker.toString());
+    keyPrefixList.push_back(Constants::kNodeLabelRangePrefix.toString());
+    originatorIds.insert(FLAGS_node_name);
+    kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
+  }
+
   // Start KVStore
   KvStore store(
       context,
@@ -544,7 +578,8 @@ main(int argc, char** argv) {
       FLAGS_enable_encryption ? keyPair : folly::none,
       Constants::kStoreSyncInterval,
       Constants::kMonitorSubmitInterval,
-      std::unordered_map<std::string, openr::thrift::PeerSpec>{});
+      std::unordered_map<std::string, openr::thrift::PeerSpec>{},
+      std::move(kvFilters));
   std::thread kvStoreThread([&store]() noexcept {
     LOG(INFO) << "Starting KvStore thread...";
     folly::setThreadName("KvStore");

@@ -78,6 +78,7 @@ struct KeyGetParams {
 // DB change
 struct KeyDumpParams {
   1: string prefix
+  3: set<string> originatorIds
   2: optional KeyVals keyValHashes
 }
 

@@ -19,6 +19,8 @@
 #include <folly/Memory.h>
 #include <folly/String.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <re2/re2.h>
+#include <re2/set.h>
 
 #include <openr/common/AddressUtil.h>
 #include <openr/common/BuildInfo.h>
@@ -47,6 +49,18 @@ struct hash<openr::thrift::IpPrefix> {
 using KeyPair = fbzmq::KeyPair;
 
 namespace openr {
+
+/**
+ * Class to store re2 objects, provides API to match string with regex
+ */
+class KeyPrefix{
+ public:
+  explicit KeyPrefix(std::vector<std::string> const& keyPrefixList);
+  bool keyMatch(std::string const& key) const;
+
+ private:
+  std::unique_ptr<re2::RE2::Set> keyPrefix_;
+};
 
 /**
  * Utility function to execute shell command and return true/false as indication

@@ -90,13 +90,15 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   KvStoreWrapper*
   createKvStore(
       std::string nodeId,
-      std::unordered_map<std::string, thrift::PeerSpec> peers) {
+      std::unordered_map<std::string, thrift::PeerSpec> peers,
+      folly::Optional<KvStoreFilters> filters = folly::none) {
     auto ptr = std::make_unique<KvStoreWrapper>(
         context,
         nodeId,
         kDbSyncInterval,
         kMonitorSubmitInterval,
-        std::move(peers));
+        std::move(peers),
+        std::move(filters));
     stores_.emplace_back(std::move(ptr));
     return stores_.back().get();
   }
@@ -489,6 +491,177 @@ TEST(KvStore, MonitorReport) {
   kvStore.stop();
   t.join();
   LOG(INFO) << "KvStore thread finished";
+}
+
+TEST_F(KvStoreTestFixture, LeafNode) {
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+
+  folly::Optional<KvStoreFilters>
+      kvFilters0{KvStoreFilters({"e2e"}, {"store0"})};
+  auto store0 = createKvStore("store0", emptyPeers, std::move(kvFilters0));
+  auto store1 = createKvStore("store1", emptyPeers);
+  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
+  std::unordered_map<std::string, thrift::Value> expectedOrignatorVals;
+
+  store0->run();
+  store1->run();
+
+  // Set key into store0 with origninator ID as "store0".
+  // getKey should pass for this key.
+  LOG(INFO) << "Setting value in store0 with originator id as store0...";
+  thrift::Value thriftVal(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "store0" /* originatorId */,
+      "value1" /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+
+  thriftVal.hash = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  EXPECT_TRUE(store0->setKey("test1", thriftVal));
+  // Adding key in store1 too
+  EXPECT_TRUE(store1->setKey("test1", thriftVal));
+  expectedKeyVals["test1"] = thriftVal;
+  expectedOrignatorVals["test1"] = thriftVal;
+
+  auto maybeThriftVal = store0->getKey("test1");
+  ASSERT_TRUE(maybeThriftVal.hasValue());
+
+  // Set key with a different originator ID
+  // This shouldn't be added to Kvstore
+  LOG(INFO) << "Setting value in store0 with originator id as store1...";
+  thrift::Value thriftVal2(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "store1" /* originatorId */,
+      "value1" /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal2.hash = generateHash(
+        thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+  EXPECT_TRUE(store0->setKey("test2", thriftVal2));
+  // Adding key in store1 too
+  EXPECT_TRUE(store1->setKey("test2", thriftVal2));
+  expectedKeyVals["test2"] = thriftVal2;
+
+  maybeThriftVal = store0->getKey("test2");
+  ASSERT_FALSE(maybeThriftVal.hasValue());
+
+  std::unordered_map<std::string, thrift::Value> expectedKeyPrefixVals;
+  // Set key with a different originator ID, but matching prefix
+  // This should be added to Kvstore.
+  LOG(INFO) << "Setting key value with a matching key prefix...";
+  thrift::Value thriftVal3(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "store1" /* originatorId */,
+      "value1" /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal3.hash = generateHash(
+        thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
+  EXPECT_TRUE(store0->setKey("e2exyz", thriftVal3));
+  // Adding key in store1 too
+  EXPECT_TRUE(store1->setKey("e2exyz", thriftVal3));
+  expectedKeyVals["e2exyz"] = thriftVal3;
+  expectedKeyPrefixVals["e2exyz"] = thriftVal3;
+
+  maybeThriftVal = store0->getKey("e2exyz");
+  ASSERT_TRUE(maybeThriftVal.hasValue());
+
+  // Add another matching key prefix, different originator ID
+  // This should be added to Kvstore.
+  LOG(INFO) << "Setting key value with a matching key prefix...";
+  thrift::Value thriftVal4(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "store1" /* originatorId */,
+      "value1" /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal4.hash = generateHash(
+        thriftVal4.version, thriftVal4.originatorId, thriftVal4.value);
+  EXPECT_TRUE(store0->setKey("e2e", thriftVal4));
+  // Adding key in store1 too
+  EXPECT_TRUE(store1->setKey("e2e", thriftVal4));
+  expectedKeyVals["e2e"] = thriftVal4;
+  expectedKeyPrefixVals["e2e"] = thriftVal4;
+
+  maybeThriftVal = store0->getKey("e2e");
+  ASSERT_TRUE(maybeThriftVal.hasValue());
+
+  // Add non-matching key prefix, different originator ID..
+  // This shouldn't be added to Kvstore.
+  LOG(INFO) << "Setting key value with a non-matching key prefix...";
+  thrift::Value thriftVal5(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "storex" /* originatorId */,
+      "value1" /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal5.hash = generateHash(
+        thriftVal5.version, thriftVal5.originatorId, thriftVal5.value);
+  EXPECT_TRUE(store0->setKey("e2", thriftVal5));
+  // Adding key in store1 too
+  EXPECT_TRUE(store1->setKey("e2", thriftVal5));
+  expectedKeyVals["e2"] = thriftVal5;
+
+  maybeThriftVal = store0->getKey("e2");
+  ASSERT_FALSE(maybeThriftVal.hasValue());
+
+  // Add key in store1 with originator ID of store0
+  LOG(INFO) << "Setting key with origninator ID of leaf into a non-leaf node";
+  thrift::Value thriftVal6(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "store0" /* originatorId */,
+      "value1" /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  thriftVal6.hash = generateHash(
+        thriftVal6.version, thriftVal6.originatorId, thriftVal6.value);
+  EXPECT_TRUE(store1->setKey("test3", thriftVal6));
+  expectedKeyVals["test3"] = thriftVal6;
+  expectedOrignatorVals["test3"] = thriftVal6;
+
+  // Store1 should have 6 keys
+  EXPECT_EQ(expectedKeyVals, store1->dumpAll());
+
+  // Request dumpAll from store1 with a key prefix provided,
+  // must return 2 keys
+  folly::Optional<KvStoreFilters> kvFilters1{KvStoreFilters({"e2e"}, {})};
+  EXPECT_EQ(expectedKeyPrefixVals, store1->dumpAll(std::move(kvFilters1)));
+
+  // Request dumpAll from store1 with a originator prefix provided,
+  // must return 2 keys
+  folly::Optional<KvStoreFilters>
+      kvFilters2{KvStoreFilters({""}, {"store0"})};
+  EXPECT_EQ(expectedOrignatorVals, store1->dumpAll(std::move(kvFilters2)));
+
+  expectedOrignatorVals["e2exyz"] = thriftVal2;
+  expectedOrignatorVals["e2e"] = thriftVal4;
+
+  // Request dumpAll from store1 with a key prefix and
+  // originator prefix provided, must return 4 keys
+  folly::Optional<KvStoreFilters>
+      kvFilters3{KvStoreFilters({"e2e"}, {"store0"})};
+  EXPECT_EQ(expectedOrignatorVals, store1->dumpAll(std::move(kvFilters3)));
+
+  // try dumpAll with multiple key and originator prefix
+  expectedOrignatorVals["test3"] = thriftVal6;
+  expectedOrignatorVals["e2"] = thriftVal5;
+  folly::Optional<KvStoreFilters>
+      kvFilters4{KvStoreFilters({"e2e","test3"}, {"store0","storex"})};
+  EXPECT_EQ(
+        expectedOrignatorVals, store1->dumpAll(std::move(kvFilters4)));
 }
 
 /**
@@ -981,9 +1154,9 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
       }
     }
   }
-
   // Verify myStore database. we only want keys with "0" prefix
-  EXPECT_EQ(expectedKeyVals, myStore->dumpAll("0"));
+  folly::Optional<KvStoreFilters> kvFilters{KvStoreFilters({"0"}, {})};
+  EXPECT_EQ(expectedKeyVals, myStore->dumpAll(std::move(kvFilters)));
 }
 
 /**
