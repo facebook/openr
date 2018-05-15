@@ -26,7 +26,7 @@ from openr.cli.clis import lm, monitor, perf, prefix_mgr, tech_support
 from openr.utils.consts import Consts
 
 
-@click.group()
+@click.group(name='breeze')
 @click.option('--host', '-H', default='localhost',
               type=str, help='Host to connect to (default = localhost)')
 @click.option('--timeout', '-t', default=Consts.TIMEOUT_MS,
