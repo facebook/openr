@@ -302,13 +302,13 @@ LinkMonitor::prepare() noexcept {
         }
         auto event = maybeEvent.value();
 
-        auto neighborAddrV4 = toIPAddress(event.neighbor.transportAddressV4);
-        auto neighborAddrV6 = toIPAddress(event.neighbor.transportAddressV6);
+        auto neighborAddrV4 = event.neighbor.transportAddressV4;
+        auto neighborAddrV6 = event.neighbor.transportAddressV6;
 
         VLOG(2) << "Received neighbor event for " << event.neighbor.nodeName
                 << " from " << event.neighbor.ifName << " at " << event.ifName
-                << " with addrs " << neighborAddrV6.str() << " and "
-                << neighborAddrV4.str();
+                << " with addrs " << toString(neighborAddrV6) << " and "
+                << (enableV4_ ? toString(neighborAddrV4) : "");
 
         switch (event.eventType) {
         case thrift::SparkNeighborEventType::NEIGHBOR_UP:
@@ -487,8 +487,8 @@ LinkMonitor::prepare() noexcept {
 
 void
 LinkMonitor::neighborUpEvent(
-    const folly::IPAddress& neighborAddrV4,
-    const folly::IPAddress& neighborAddrV6,
+    const thrift::BinaryAddress& neighborAddrV4,
+    const thrift::BinaryAddress& neighborAddrV6,
     const thrift::SparkNeighborEvent& event) {
   const std::string& ifName = event.ifName;
   const std::string& remoteNodeName = event.neighbor.nodeName;
@@ -504,7 +504,8 @@ LinkMonitor::neighborUpEvent(
       std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
           .count();
 
-  VLOG(2) << "LinkMonitor::neighborUpEvent called for '" << neighborAddrV6.str()
+  VLOG(2) << "LinkMonitor::neighborUpEvent called for '"
+          << toString(neighborAddrV6)
           << "', nodeName: '" << remoteNodeName << "'"
           << ", nodeIfName: '" << remoteIfName << "'";
   syslog(
@@ -523,8 +524,8 @@ LinkMonitor::neighborUpEvent(
       FRAGILE,
       remoteNodeName /* otherNodeName */,
       ifName,
-      toBinaryAddress(neighborAddrV6) /* nextHopV6 */,
-      toBinaryAddress(neighborAddrV4) /* nextHopV4 */,
+      neighborAddrV6 /* nextHopV6 */,
+      neighborAddrV4 /* nextHopV4 */,
       (useRttMetric_ ? rttMetric : 1) /* metric */,
       enableSegmentRouting_ ? event.label : 0 /* adjacency-label */,
       false /* overload bit */,
@@ -538,12 +539,12 @@ LinkMonitor::neighborUpEvent(
     // use link local address
     pubUrl = folly::sformat(
         "tcp://[{}%{}]:{}",
-        neighborAddrV6.str(),
+        toString(neighborAddrV6),
         ifName,
         neighborKvStorePubPort);
     repUrl = folly::sformat(
         "tcp://[{}%{}]:{}",
-        neighborAddrV6.str(),
+        toString(neighborAddrV6),
         ifName,
         neighborKvStoreCmdPort);
   } else {
@@ -1001,14 +1002,16 @@ LinkMonitor::updateAddrEvent(const thrift::AddrEntry& addrEntry) {
   }
 
   bool isUpdated = false;
-  auto ipAddr = toIPAddress(addrEntry.ipPrefix.prefixAddress);
+  auto ipNetwork = toIPNetwork(addrEntry.ipPrefix);
   bool isValid = addrEntry.isValid;
   auto& intf = interfaceDb_.at(ifName);
 
-  VLOG(3) << "<addr> event: " << ipAddr << (isValid ? " add" : " delete")
+  VLOG(3) << "<addr> event: " << ipNetwork.first.str()
+          << "/" << +ipNetwork.second
+          << (isValid ? " add" : " delete")
           << " on " << ifName;
   VLOG(3) << "Updating " << ifName << " : " << intf;
-  isUpdated = intf.updateEntry(ipAddr, isValid) && intf.isUp();
+  isUpdated = intf.updateEntry(ipNetwork, isValid) && intf.isUp();
   VLOG(3) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
             << intf;
 
@@ -1449,14 +1452,23 @@ LinkMonitor::logPeerEvent(
 
 thrift::InterfaceInfo
 LinkMonitor::InterfaceEntry::getInterfaceInfo() const {
+
+  std::vector<thrift::IpPrefix> networks;
+  for (const auto& network : networks_) {
+    networks.emplace_back(toIpPrefix(network));
+  }
+
   return thrift::InterfaceInfo(
       FRAGILE,
       isUp_,
       ifIndex_,
-      folly::gen::from(v4Addrs_) | folly::gen::map(toBinaryAddress) |
+      // TO BE DEPERECATED SOON
+      folly::gen::from(getV4Addrs()) | folly::gen::map(toBinaryAddress) |
           folly::gen::as<std::vector>(),
-      folly::gen::from(v6LinkLocalAddrs_) | folly::gen::map(toBinaryAddress) |
-          folly::gen::as<std::vector>());
+      // TO BE DEPRECATED SOON
+      folly::gen::from(getV6LinkLocalAddrs()) |
+        folly::gen::map(toBinaryAddress) | folly::gen::as<std::vector>(),
+      networks);
 }
 
 bool

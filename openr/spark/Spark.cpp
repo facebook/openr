@@ -588,6 +588,18 @@ Spark::validateHelloPacket(
   // in case our own packet has looped
   if (neighborName == myNodeName_) {
     LOG(ERROR) << "Ignore packet from self (" << myNodeName_ << ")";
+    tData_.addStatValue("spark.invalid_keepalive.looped_packet", 1, fbzmq::SUM);
+    return PacketValidationResult::FAILURE;
+  }
+  // domain check
+  if (originator.domainName != myDomainName_) {
+    LOG(ERROR) << "Ignoring hello packet from node " << originator.nodeName
+               << " on interface " << originator.ifName
+               << " because it's from different domain "
+               << originator.domainName
+               << ". My domain is " << myDomainName_;
+    tData_.addStatValue(
+        "spark.invalid_keepalive.different_domain", 1, fbzmq::SUM);
     return PacketValidationResult::FAILURE;
   }
   // version check
@@ -595,6 +607,8 @@ Spark::validateHelloPacket(
     LOG(ERROR) << "Unsupported version: " << neighborName << " "
                << remoteVersion << ", must be >= "
                << kVersion_.lowestSupportedVersion;
+    tData_.addStatValue(
+        "spark.invalid_keepalive.invalid_version", 1, fbzmq::SUM);
     return PacketValidationResult::FAILURE;
   }
   // known key check is enabled
@@ -605,10 +619,14 @@ Spark::validateHelloPacket(
       if (originator.publicKey != neighborKey) {
         LOG(ERROR) << "Neighbor " << neighborName
                    << " is known but with a mismatched key";
+        tData_.addStatValue(
+            "spark.invalid_keepalive.invalid_key", 1, fbzmq::SUM);
         return PacketValidationResult::FAILURE;
       }
     } catch (std::out_of_range const& err) {
       LOG(ERROR) << "Neighbor " << neighborName << " is unknown";
+      tData_.addStatValue(
+          "spark.invalid_keepalive.invalid_neighbor", 1, fbzmq::SUM);
       return PacketValidationResult::FAILURE;
     }
   }
@@ -622,6 +640,38 @@ Spark::validateHelloPacket(
             helloPacket.payload.originator.publicKey)) {
       LOG(ERROR) << "Invalid signature for packet from " << neighborName
                  << " on " << ifName;
+      tData_.addStatValue(
+          "spark.invalid_keepalive.invalid_signature", 1, fbzmq::SUM);
+      return PacketValidationResult::FAILURE;
+    }
+  }
+
+  // validate v4 address subnet
+  if (enableV4_) {
+    // make sure v4 address is already specified on neighbor
+    auto const& myV4Network = interfaceDb_.at(ifName).v4Network;
+    auto const& myV4Addr = myV4Network.first;
+    auto const& myV4PrefixLen = myV4Network.second;
+    auto const& neighV4Addr = originator.transportAddressV4;
+    try {
+      toIPAddress(neighV4Addr);
+    } catch (const folly::IPAddressFormatException& ex) {
+      LOG(ERROR) << "Neighbor V4 address is not known";
+      tData_.addStatValue(
+        "spark.invalid_keepalive.missing_v4_addr", 1, fbzmq::SUM);
+      return PacketValidationResult::FAILURE;
+    }
+
+    // validate subnet of v4 address
+    auto const& neighCidrNetwork =
+        folly::sformat("{}/{}", toString(neighV4Addr), myV4PrefixLen);
+
+    if (!myV4Addr.inSubnet(neighCidrNetwork)) {
+      LOG(ERROR) << "Neighbor V4 address " << toString(neighV4Addr)
+                 << " is not in the same subnet with local V4 address "
+                 << myV4Addr.str() << "/" << +myV4PrefixLen;
+      tData_.addStatValue(
+          "spark.invalid_keepalive.different_subnet", 1, fbzmq::SUM);
       return PacketValidationResult::FAILURE;
     }
   }
@@ -842,16 +892,6 @@ Spark::processHelloPacket() {
     return;
   }
 
-  // Ignore the hello packet if it is from outside of our domain
-  const auto& originator = helloPacket.payload.originator;
-  if (originator.domainName != myDomainName_) {
-    VLOG(2) << "Ignoring hello packet from node " << originator.nodeName
-            << " from iface " << originator.ifName
-            << " because it is from external domain " << originator.domainName
-            << ". My domain is " << myDomainName_;
-    return;
-  }
-
   auto validationResult = validateHelloPacket(ifName, helloPacket);
   if (validationResult == PacketValidationResult::FAILURE) {
     LOG(ERROR) << "Ignoring invalid packet received from "
@@ -860,6 +900,7 @@ Spark::processHelloPacket() {
   }
 
   // the map of adjacent neighbors should have been already created
+  auto const& originator = helloPacket.payload.originator;
   auto& neighbor = neighbors_.at(ifName).at(originator.nodeName);
   bool isAdjacent = neighbor.isAdjacent;
 
@@ -1073,8 +1114,8 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
 
   const auto& interfaceEntry = interfaceDb_.at(ifName);
   const auto ifIndex = interfaceEntry.ifIndex;
-  const auto v4Addr = interfaceEntry.v4Addr;
-  const auto v6Addr = interfaceEntry.v6LinkLocalAddr;
+  const auto v4Addr = interfaceEntry.v4Network.first;
+  const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
   thrift::OpenrVersion openrVer(kVersion_.version);
 
   thrift::SparkNeighbor myself(
@@ -1139,7 +1180,7 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
   }
 
   auto bytesSent = sendMessage(
-      mcastFd_, ifIndex, v6Addr, dstAddr, packet, ioProvider_.get());
+      mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
 
   if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
     VLOG(1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
@@ -1189,32 +1230,43 @@ Spark::processInterfaceDbUpdate() {
     const auto& ifName = kv.first;
     const auto isUp = kv.second.isUp;
     const auto& ifIndex = kv.second.ifIndex;
-    const auto& v4Addrs = kv.second.v4Addrs;
-    const auto& v6LinkLocalAddrs = kv.second.v6LinkLocalAddrs;
+    const auto& networks = kv.second.networks;
+
+    std::vector<folly::CIDRNetwork> v4Networks;
+    std::vector<folly::CIDRNetwork> v6LinkLocalNetworks;
+    for (const auto& ntwk : networks) {
+      const auto& ipNetwork = toIPNetwork(ntwk);
+      if (ipNetwork.first.isV4()) {
+        v4Networks.emplace_back(ipNetwork);
+      }
+      else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
+        v6LinkLocalNetworks.emplace_back(ipNetwork);
+      }
+    }
 
     if (!isUp) {
       continue;
     }
-    if (v6LinkLocalAddrs.empty()) {
+    if (v6LinkLocalNetworks.empty()) {
       VLOG(2) << "IPv6 link local address not found";
       continue;
     }
-    if (enableV4_ && v4Addrs.empty()) {
+    if (enableV4_ && v4Networks.empty()) {
       VLOG(2) << "IPv4 enabled but no IPv4 addresses are configured";
       continue;
     }
 
     // We have a valid entry
     // Obtain v4 address if enabled, else default
-    folly::IPAddressV4 v4Addr;
+    folly::CIDRNetwork v4Network;
     if (enableV4_) {
-      CHECK(v4Addrs.size());
-      v4Addr = toIPAddress(v4Addrs.front()).asV4();
+      CHECK(v4Networks.size());
+      v4Network = v4Networks.front();
     }
-    folly::IPAddressV6 v6LinkLocalAddr(
-        toIPAddress(v6LinkLocalAddrs.front()).asV6());
+    folly::CIDRNetwork v6LinkLocalNetwork = v6LinkLocalNetworks.front();
 
-    newInterfaceDb.emplace(ifName, Interface(ifIndex, v4Addr, v6LinkLocalAddr));
+    newInterfaceDb.emplace(ifName,
+      Interface(ifIndex, v4Network, v6LinkLocalNetwork));
   }
 
   auto newIfaces = folly::gen::from(newInterfaceDb) | folly::gen::get<0>() |
@@ -1411,9 +1463,11 @@ Spark::processInterfaceDbUpdate() {
     LOG(INFO)
         << "Updating iface " << ifName << " in spark tracking from "
         << "(ifindex " << interface.ifIndex << ", addrs "
-        << interface.v6LinkLocalAddr << " , " << interface.v4Addr << ") to "
+        << interface.v6LinkLocalNetwork.first << " , "
+        << interface.v4Network.first << ") to "
         << "(ifindex " << newInterface.ifIndex << ", addrs "
-        << newInterface.v6LinkLocalAddr << " , " << newInterface.v4Addr << ")";
+        << newInterface.v6LinkLocalNetwork.first << " , "
+        << newInterface.v4Network.first << ")";
 
     interface = std::move(newInterface);
   }

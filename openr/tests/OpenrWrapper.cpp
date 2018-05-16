@@ -495,8 +495,10 @@ OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
             apache::thrift::FRAGILE,
             true,
             interface.ifIndex,
-            {toBinaryAddress(interface.v4Addr)},
-            {toBinaryAddress(interface.v6LinkLocalAddr)}));
+            {}, // v4Addrs: TO BE DEPRECATED SOON
+            {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
+            {toIpPrefix(interface.v4Network),
+             toIpPrefix(interface.v6LinkLocalNetwork)}));
   }
 
   sparkReqSock_.sendThriftObj(ifDb, serializer_).value();

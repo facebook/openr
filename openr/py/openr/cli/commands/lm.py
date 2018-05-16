@@ -146,10 +146,14 @@ class LMLinksCmd(LMCmd):
 
         def _update(interface_info_dict, interface_info):
             interface_info_dict.update({
+                # TO BE DEPRECATED SOON
                 'v4Addrs': [ipnetwork.sprint_addr(v4Addr.addr)
                             for v4Addr in interface_info.v4Addrs],
+                # TO BE DEPRECATED SOON
                 'v6LinkLocalAddrs': [ipnetwork.sprint_addr(v6Addr.addr)
-                                     for v6Addr in interface_info.v6LinkLocalAddrs]
+                                     for v6Addr in interface_info.v6LinkLocalAddrs],
+                'networks': [ipnetwork.sprint_prefix(prefix)
+                            for prefix in interface_info.networks],
             })
 
         return utils.thrift_to_dict(interface_info, _update)
@@ -197,8 +201,8 @@ class LMLinksCmd(LMCmd):
                 metric_override = click.style('Overloaded', fg='red')
             rows.append([k, state, metric_override, ''])
             firstAddr = True
-            for a in (v.info.v4Addrs + v.info.v6LinkLocalAddrs):
-                addrStr = ipnetwork.sprint_addr(a.addr)
+            for prefix in (v.info.networks):
+                addrStr = ipnetwork.sprint_addr(prefix.prefixAddress.addr)
                 if firstAddr:
                     rows[-1][3] = addrStr
                     firstAddr = False

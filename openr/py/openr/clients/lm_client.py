@@ -42,7 +42,7 @@ class LMClient(object):
         if not all:
             links.interfaceDetails = {
                 k: v for k, v in links.interfaceDetails.items()
-                if len(v.info.v6LinkLocalAddrs + v.info.v4Addrs) != 0}
+                if len(v.info.networks) != 0}
 
         return links
 

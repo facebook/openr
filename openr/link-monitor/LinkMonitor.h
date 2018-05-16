@@ -144,8 +144,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   //
 
   void neighborUpEvent(
-      const folly::IPAddress& neighborAddrV4,
-      const folly::IPAddress& neighborAddrV6,
+      const thrift::BinaryAddress& neighborAddrV4,
+      const thrift::BinaryAddress& neighborAddrV6,
       const thrift::SparkNeighborEvent& event);
 
   void neighborDownEvent(
@@ -387,13 +387,11 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
         int ifIndex,
         bool isUp,
         uint64_t weight,
-        const std::unordered_set<folly::IPAddress>& v4Addrs,
-        const std::unordered_set<folly::IPAddress>& v6LinkLocalAddrs)
+        const std::unordered_set<folly::CIDRNetwork>& networks)
         : ifIndex_(ifIndex),
           isUp_(isUp),
           weight_(weight),
-          v4Addrs_(v4Addrs),
-          v6LinkLocalAddrs_(v6LinkLocalAddrs) {}
+          networks_(networks) {}
 
     // Creating entries only from link status information
     InterfaceEntry(int ifIndex, bool isUp) : ifIndex_(ifIndex), isUp_(isUp) {}
@@ -409,21 +407,12 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
     }
 
     bool
-    updateEntry(const folly::IPAddress& ipAddr, bool isValid) {
+    updateEntry(const folly::CIDRNetwork& ipNetwork, bool isValid) {
       bool isUpdated = false;
-      if (ipAddr.isV4()) {
-        if (isValid) {
-          isUpdated |= (v4Addrs_.insert(ipAddr)).second;
-        } else {
-          isUpdated |= (v4Addrs_.erase(ipAddr) == 1);
-        }
-      }
-      if (ipAddr.isV6() && ipAddr.isLinkLocal()) {
-        if (isValid) {
-          isUpdated |= (v6LinkLocalAddrs_.insert(ipAddr)).second;
-        } else {
-          isUpdated |= (v6LinkLocalAddrs_.erase(ipAddr) == 1);
-        }
+      if (isValid) {
+        isUpdated |= (networks_.insert(ipNetwork)).second;
+      } else {
+        isUpdated |= (networks_.erase(ipNetwork) == 1);
       }
       return isUpdated;
     }
@@ -434,8 +423,7 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       return (
           (ifIndex_ == interfaceEntry.getIfIndex()) &&
           (isUp_ == interfaceEntry.isUp()) &&
-          (v4Addrs_ == interfaceEntry.getV4Addrs()) &&
-          (v6LinkLocalAddrs_ == interfaceEntry.getV6LinkLocalAddrs()) &&
+          (networks_ == interfaceEntry.getNetworks()) &&
           (weight_ == interfaceEntry.getWeight()));
     }
 
@@ -463,13 +451,30 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
     }
 
     // returns const references for optimization
-    const std::unordered_set<folly::IPAddress>&
-    getV4Addrs() const {
-      return v4Addrs_;
+    const std::unordered_set<folly::CIDRNetwork>&
+    getNetworks() const {
+      return networks_;
     }
-    const std::unordered_set<folly::IPAddress>&
+
+    std::unordered_set<folly::IPAddress>
+    getV4Addrs() const {
+      std::unordered_set<folly::IPAddress> v4Addrs;
+      for (auto const& ntwk : networks_) {
+        if (ntwk.first.isV4()) {
+          v4Addrs.insert(ntwk.first);
+        }
+      }
+      return v4Addrs;
+    }
+    std::unordered_set<folly::IPAddress>
     getV6LinkLocalAddrs() const {
-      return v6LinkLocalAddrs_;
+      std::unordered_set<folly::IPAddress> v6Addrs;
+      for (auto const& ntwk : networks_) {
+        if (ntwk.first.isV6() && ntwk.first.isLinkLocal()) {
+            v6Addrs.insert(ntwk.first);
+        }
+      }
+      return v6Addrs;
     }
 
     // Create the Interface info for Interface request
@@ -483,8 +488,7 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
     // We keep the set of IPs and push to Spark
     // Spark really cares about one, but we let
     // Spark handle that
-    std::unordered_set<folly::IPAddress> v4Addrs_;
-    std::unordered_set<folly::IPAddress> v6LinkLocalAddrs_;
+    std::unordered_set<folly::CIDRNetwork> networks_;
   };
 
   // all interfaces states, including DOWN one

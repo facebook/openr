@@ -298,8 +298,9 @@ TEST_F(FibTestFixture, processInterfaceDb) {
                   FRAGILE,
                   true, // isUp
                   100, // ifIndex
-                  {}, // v4Addrs
-                  {} // v6LinkLocalAddrs
+                  {}, // v4Addrs: TO BE DEPRECATED SOON
+                  {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
+                  {} // networks
                   ),
           },
           {
@@ -308,8 +309,9 @@ TEST_F(FibTestFixture, processInterfaceDb) {
                   FRAGILE,
                   true, // isUp
                   100, // ifIndex
-                  {}, // v4Addrs
-                  {} // v6LinkLocalAddrs
+                  {}, // v4Addrs: TO BE DEPRECATED SOON
+                  {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
+                  {} // networks
                   ),
           },
       },
@@ -342,8 +344,9 @@ TEST_F(FibTestFixture, processInterfaceDb) {
                   FRAGILE,
                   false, // isUp
                   100, // ifIndex
-                  {}, // v4Addrs
-                  {} // v6LinkLocalAddrs
+                  {}, // v4Addrs: TO BE DEPRECATED SOON
+                  {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
+                  {} // networks
                   ),
           },
       },
@@ -374,8 +377,9 @@ TEST_F(FibTestFixture, processInterfaceDb) {
                   FRAGILE,
                   false, // isUp
                   100, // ifIndex
-                  {}, // v4Addrs
-                  {} // v6LinkLocalAddrs
+                  {}, // v4Addrs: TO BE DEPRECATED SOON
+                  {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
+                  {} // networks
                   ),
           },
       },

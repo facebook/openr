@@ -82,15 +82,15 @@ const int ifIndex31{31};
 const int ifIndex32{32};
 const int ifIndex34{34};
 
-const folly::IPAddress ip1V4{"192.168.0.1"};
-const folly::IPAddress ip2V4{"192.168.0.2"};
-const folly::IPAddress ip3V4{"192.168.0.3"};
-const folly::IPAddress ip4V4{"192.168.0.4"};
+const folly::CIDRNetwork ip1V4(folly::IPAddress("192.168.0.1"), 32);
+const folly::CIDRNetwork ip2V4(folly::IPAddress("192.168.0.2"), 32);
+const folly::CIDRNetwork ip3V4(folly::IPAddress("192.168.0.3"), 32);
+const folly::CIDRNetwork ip4V4(folly::IPAddress("192.168.0.4"), 32);
 
-const folly::IPAddress ip1V6{"fe80::1"};
-const folly::IPAddress ip2V6{"fe80::2"};
-const folly::IPAddress ip3V6{"fe80::3"};
-const folly::IPAddress ip4V6{"fe80::4"};
+const folly::CIDRNetwork ip1V6(folly::IPAddress("fe80::1"), 128);
+const folly::CIDRNetwork ip2V6(folly::IPAddress("fe80::2"), 128);
+const folly::CIDRNetwork ip3V6(folly::IPAddress("fe80::3"), 128);
+const folly::CIDRNetwork ip4V6(folly::IPAddress("fe80::4"), 128);
 
 // R1 -> R2, R3, R4
 const auto adj12 =
@@ -285,23 +285,23 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 
   // start tracking iface1
   EXPECT_TRUE(openr1->sparkUpdateInterfaceDb(
-      {{iface12, ifIndex12, ip1V4.asV4(), ip1V6.asV6()},
-       {iface13, ifIndex13, ip1V4.asV4(), ip1V6.asV6()}}));
+      {{iface12, ifIndex12, ip1V4, ip1V6},
+       {iface13, ifIndex13, ip1V4, ip1V6}}));
 
   // start tracking iface2
   EXPECT_TRUE(openr2->sparkUpdateInterfaceDb(
-      {{iface21, ifIndex21, ip2V4.asV4(), ip2V6.asV6()},
-       {iface24, ifIndex24, ip2V4.asV4(), ip2V6.asV6()}}));
+      {{iface21, ifIndex21, ip2V4, ip2V6},
+       {iface24, ifIndex24, ip2V4, ip2V6}}));
 
   // start tracking iface3
   EXPECT_TRUE(openr3->sparkUpdateInterfaceDb(
-      {{iface31, ifIndex31, ip3V4.asV4(), ip3V6.asV6()},
-       {iface34, ifIndex34, ip3V4.asV4(), ip3V6.asV6()}}));
+      {{iface31, ifIndex31, ip3V4, ip3V6},
+       {iface34, ifIndex34, ip3V4, ip3V6}}));
 
   // start tracking iface4
   EXPECT_TRUE(openr4->sparkUpdateInterfaceDb(
-      {{iface42, ifIndex42, ip4V4.asV4(), ip4V6.asV6()},
-       {iface43, ifIndex43, ip4V4.asV4(), ip4V6.asV6()}}));
+      {{iface42, ifIndex42, ip4V4, ip4V6},
+       {iface43, ifIndex43, ip4V4, ip4V6}}));
 
   /* sleep override */
   // wait until all aquamen got synced on kvstore
@@ -497,27 +497,27 @@ TEST_P(FullMeshTopologyFixture, FullMeshKvstorePeerTest) {
 
   // start tracking iface1
   EXPECT_TRUE(openr1->sparkUpdateInterfaceDb(
-      {{iface12, ifIndex12, ip1V4.asV4(), ip1V6.asV6()},
-       {iface13, ifIndex13, ip1V4.asV4(), ip1V6.asV6()},
-       {iface14, ifIndex14, ip1V4.asV4(), ip1V6.asV6()}}));
+      {{iface12, ifIndex12, ip1V4, ip1V6},
+       {iface13, ifIndex13, ip1V4, ip1V6},
+       {iface14, ifIndex14, ip1V4, ip1V6}}));
 
   // start tracking iface2
   EXPECT_TRUE(openr2->sparkUpdateInterfaceDb(
-      {{iface21, ifIndex21, ip2V4.asV4(), ip2V6.asV6()},
-       {iface23, ifIndex23, ip2V4.asV4(), ip2V6.asV6()},
-       {iface24, ifIndex24, ip2V4.asV4(), ip2V6.asV6()}}));
+      {{iface21, ifIndex21, ip2V4, ip2V6},
+       {iface23, ifIndex23, ip2V4, ip2V6},
+       {iface24, ifIndex24, ip2V4, ip2V6}}));
 
   // start tracking iface3
   EXPECT_TRUE(openr3->sparkUpdateInterfaceDb(
-      {{iface31, ifIndex31, ip3V4.asV4(), ip3V6.asV6()},
-       {iface32, ifIndex32, ip3V4.asV4(), ip3V6.asV6()},
-       {iface34, ifIndex34, ip3V4.asV4(), ip3V6.asV6()}}));
+      {{iface31, ifIndex31, ip3V4, ip3V6},
+       {iface32, ifIndex32, ip3V4, ip3V6},
+       {iface34, ifIndex34, ip3V4, ip3V6}}));
 
   // start tracking iface4
   EXPECT_TRUE(openr4->sparkUpdateInterfaceDb(
-      {{iface41, ifIndex41, ip4V4.asV4(), ip4V6.asV6()},
-       {iface42, ifIndex42, ip4V4.asV4(), ip4V6.asV6()},
-       {iface43, ifIndex43, ip4V4.asV4(), ip4V6.asV6()}}));
+      {{iface41, ifIndex41, ip4V4, ip4V6},
+       {iface42, ifIndex42, ip4V4, ip4V6},
+       {iface43, ifIndex43, ip4V4, ip4V6}}));
 
   /* sleep override */
   // wait until all aquamen got synced on kvstore

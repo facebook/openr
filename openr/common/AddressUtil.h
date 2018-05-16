@@ -52,7 +52,7 @@ toIPAddress(const thrift::BinaryAddress& addr) {
 inline folly::CIDRNetwork
 toIPNetwork(const thrift::IpPrefix& prefix) {
   return folly::IPAddress::createNetwork(
-      toIPAddress(prefix.prefixAddress).str(), prefix.prefixLength);
+      toIPAddress(prefix.prefixAddress).str(), prefix.prefixLength, false);
 }
 
 inline thrift::IpPrefix

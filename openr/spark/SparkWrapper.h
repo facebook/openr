@@ -14,8 +14,8 @@ namespace openr {
 struct InterfaceEntry {
   std::string ifName;
   int ifIndex;
-  folly::IPAddressV4 v4Addr;
-  folly::IPAddressV6 v6LinkLocalAddr;
+  folly::CIDRNetwork v4Network;
+  folly::CIDRNetwork v6LinkLocalNetwork;
 };
 
 /**

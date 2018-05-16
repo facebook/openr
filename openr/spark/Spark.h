@@ -229,20 +229,22 @@ class Spark final : public fbzmq::ZmqEventLoop {
    public:
     Interface(
         int ifIndex,
-        const folly::IPAddressV4& v4Addr,
-        const folly::IPAddressV6& v6LinkLocalAddr)
-        : ifIndex(ifIndex), v4Addr(v4Addr), v6LinkLocalAddr(v6LinkLocalAddr) {}
+        const folly::CIDRNetwork& v4Network,
+        const folly::CIDRNetwork& v6LinkLocalNetwork)
+        : ifIndex(ifIndex), v4Network(v4Network),
+          v6LinkLocalNetwork(v6LinkLocalNetwork) {}
 
     bool
     operator==(const Interface& interface) const {
       return (
-          (ifIndex == interface.ifIndex) && (v4Addr == interface.v4Addr) &&
-          (v6LinkLocalAddr == interface.v6LinkLocalAddr));
+          (ifIndex == interface.ifIndex) &&
+          (v4Network == interface.v4Network) &&
+          (v6LinkLocalNetwork == interface.v6LinkLocalNetwork));
     }
 
     int ifIndex{0};
-    folly::IPAddressV4 v4Addr;
-    folly::IPAddressV6 v6LinkLocalAddr;
+    folly::CIDRNetwork v4Network;
+    folly::CIDRNetwork v6LinkLocalNetwork;
   };
 
   // Map of interface entries keyed by ifName

@@ -565,8 +565,9 @@ def interface_db_to_dict(value):
         return bunch.Bunch(**{
             'isUp': info.isUp,
             'ifIndex': info.ifIndex,
-            'v4Addrs': [ipnetwork.sprint_addr(v.addr) for v in info.v4Addrs],
-            'v6Addrs': [ipnetwork.sprint_addr(v.addr) for v in info.v6LinkLocalAddrs],
+            'Addrs': [
+                ipnetwork.sprint_addr(v.prefixAddress.addr) for v in info.networks
+            ],
         })
 
     assert(isinstance(value, kv_store_types.Value))
@@ -614,7 +615,7 @@ def sprint_interface_table(intf_db, print_all):
         rows.append([intf_name, status, intf.ifIndex, ''])
 
         first_row = True
-        for addr in intf.v4Addrs + intf.v6Addrs:
+        for addr in intf.Addrs:
             if first_row:
                 first_row = False
                 rows[-1][-1] = addr
@@ -1155,8 +1156,10 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color,
             # if nexthop addr is v4, make sure it belongs to same subnets as
             # interface addr
             if ipnetwork.ip_version(nh.addr) == 4:
-                for addr in interfaces[nh.ifName].info.v4Addrs:
-                    if not ipnetwork.is_same_subnet(nh.addr, addr.addr, '31'):
+                for prefix in interfaces[nh.ifName].info.networks:
+                    if ipnetwork.ip_version(prefix.prefixAddress.addr) == 4 and \
+                       not ipnetwork.is_same_subnet(
+                           nh.addr, prefix.prefixAddress.addr, '31'):
                         invalid_nexthop[INVALID_SUBNET].append(ip_nexthop_to_str(nh))
             # if nexthop addr is v6, make sure it's a link local addr
             elif (ipnetwork.ip_version(nh.addr) == 6 and

@@ -95,8 +95,11 @@ SparkWrapper::updateInterfaceDb(
             apache::thrift::FRAGILE,
             true,
             interface.ifIndex,
-            {toBinaryAddress(interface.v4Addr)},
-            {toBinaryAddress(interface.v6LinkLocalAddr)}));
+            // TO BE DEPRECATED SOON
+            {toBinaryAddress(interface.v4Network.first)},
+            {toBinaryAddress(interface.v4Network.first)},
+            {toIpPrefix(interface.v4Network),
+             toIpPrefix(interface.v6LinkLocalNetwork)}));
   }
 
   reqSock_.sendThriftObj(ifDb, serializer_);

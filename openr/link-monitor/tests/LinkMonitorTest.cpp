@@ -168,11 +168,8 @@ printIntfDb(const thrift::InterfaceDatabase& intfDb) {
   LOG(INFO) << "Node: " << intfDb.thisNodeName;
   for (auto const& kv : intfDb.interfaces) {
     std::vector<std::string> addrs;
-    for (auto const& addr : kv.second.v4Addrs) {
-      addrs.emplace_back(toString(addr));
-    }
-    for (auto const& addr : kv.second.v6LinkLocalAddrs) {
-      addrs.emplace_back(toString(addr));
+    for (auto const& addr : kv.second.networks) {
+      addrs.emplace_back(toString(addr.prefixAddress));
     }
     LOG(INFO) << "  Interface => name: " << kv.first
               << ", Status: " << kv.second.isUp
@@ -389,8 +386,17 @@ class LinkMonitorTestFixture : public ::testing::Test {
       } else {
         res[ifName].isDownCount++;
       }
-      int v4AddrsCount = kv.second.v4Addrs.size();
-      int v6LinkLocalAddrsCount = kv.second.v6LinkLocalAddrs.size();
+      int v4AddrsCount = 0;
+      int v6LinkLocalAddrsCount = 0;
+      for (const auto& network : kv.second.networks) {
+        const auto& ipNetwork = toIPNetwork(network);
+        if (ipNetwork.first.isV4()) {
+          v4AddrsCount++;
+        }
+        else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
+          v6LinkLocalAddrsCount++;
+        }
+      }
 
       res[ifName].v4AddrsMaxCount =
           max(v4AddrsCount, res[ifName].v4AddrsMaxCount);
@@ -667,8 +673,9 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
                       FRAGILE,
                       true, // isUp
                       100, // ifIndex
-                      {}, // v4Addrs
-                      {} // v6LinkLocalAddrs
+                      {}, // v4Addrs: TO BE DEPRECATED SOON
+                      {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
+                      {} // networks
                       ),
               },
           },
@@ -1444,8 +1451,8 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
 
   // Emulate add address event: v4 while interfaces are down. No addr events
   // should be reported.
-  mockNlHandler->sendAddrEvent(linkX, "10.0.0.1", true /* is valid */);
-  mockNlHandler->sendAddrEvent(linkY, "10.0.0.2", true /* is valid */);
+  mockNlHandler->sendAddrEvent(linkX, "10.0.0.1/31", true /* is valid */);
+  mockNlHandler->sendAddrEvent(linkY, "10.0.0.2/31", true /* is valid */);
 
   EXPECT_NO_THROW({
     recvAndReplyIfUpdate();
@@ -1474,8 +1481,8 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
 
   // Emulate add address event: v6 while interfaces are in UP state. Both
   // v4 and v6 addresses should be reported.
-  mockNlHandler->sendAddrEvent(linkX, "fe80::1", true /* is valid */);
-  mockNlHandler->sendAddrEvent(linkY, "fe80::2", true /* is valid */);
+  mockNlHandler->sendAddrEvent(linkX, "fe80::1/128", true /* is valid */);
+  mockNlHandler->sendAddrEvent(linkY, "fe80::2/128", true /* is valid */);
 
   EXPECT_NO_THROW({
     recvAndReplyIfUpdate();
@@ -1494,8 +1501,8 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   });
 
   // Emulate delete address event: v4
-  mockNlHandler->sendAddrEvent(linkX, "10.0.0.1", false /* is valid */);
-  mockNlHandler->sendAddrEvent(linkY, "10.0.0.2", false /* is valid */);
+  mockNlHandler->sendAddrEvent(linkX, "10.0.0.1/31", false /* is valid */);
+  mockNlHandler->sendAddrEvent(linkY, "10.0.0.2/31", false /* is valid */);
 
   EXPECT_NO_THROW({
     recvAndReplyIfUpdate();
@@ -1514,8 +1521,8 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   });
 
   // Emulate delete address event: v6
-  mockNlHandler->sendAddrEvent(linkX, "fe80::1", false /* is valid */);
-  mockNlHandler->sendAddrEvent(linkY, "fe80::2", false /* is valid */);
+  mockNlHandler->sendAddrEvent(linkX, "fe80::1/128", false /* is valid */);
+  mockNlHandler->sendAddrEvent(linkY, "fe80::2/128", false /* is valid */);
 
   EXPECT_NO_THROW({
     recvAndReplyIfUpdate();
@@ -1539,7 +1546,7 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   const std::string linkZ = kTestVethNamePrefix + "Z";
 
   // Addr event comes in first
-  mockNlHandler->sendAddrEvent(linkZ, "fe80::3", true /* is valid */);
+  mockNlHandler->sendAddrEvent(linkZ, "fe80::3/128", true /* is valid */);
   // Link event comes in later
   mockNlHandler->sendLinkEvent(
       linkZ /* link name */,
