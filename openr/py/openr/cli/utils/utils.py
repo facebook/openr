@@ -204,7 +204,7 @@ def print_prefixes_table(resp, nodes, iter_func):
             prefix_db = deserialize_thrift_object(prefix_db.value,
                                                   lsdb_types.PrefixDatabase)
 
-        rows.append(["{}'s prefixes".format(prefix_db.thisNodeName),
+        rows.append(["{}".format(prefix_db.thisNodeName),
                      sprint_prefixes_db_full(prefix_db)])
 
     rows = []
@@ -449,24 +449,31 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
         :param adjacencies as list of dict
     '''
 
-    column_labels = ['Neighbor', 'Local Interface', 'Remote Interface',
-                     'Metric', 'Weight', 'Adj Label', 'NextHop-v4',
+    column_labels = ['Neighbor', 'Local Intf', 'Remote Intf',
+                     'Metric', 'Label', 'NextHop-v4',
                      'NextHop-v6', 'Uptime']
 
     output = []
     adj_found = False
     for node, val in sorted(adjs_map.items()):
-        # report overloaded status in color
+        adj_tokens = []
+
+        # report adjacency version
+        if 'version' in val:
+            adj_tokens.append('Version: {}'.format(val['version']))
+
+        # report overloaded only when it is overloaded
         is_overloaded = val['overloaded']
-        # report overloaded status in color
-        overload_color = 'red' if is_overloaded else 'green'
-        overload_status = click.style(
-            '{}'.format(is_overloaded), fg=overload_color)
-        cap = "{}'s adjacencies, version: {}, Node Label: {}, " "Overloaded?: {}".format(
-            node, val['version']
-            if 'version' in val else 'N/A', val['node_label'], overload_status
-            if enable_color else ('TRUE' if is_overloaded else 'FALSE')
-        )
+        if is_overloaded:
+            overload_str = '{}'.format(is_overloaded)
+            if enable_color:
+                overload_str = click.style(overload_str, fg='red')
+            adj_tokens.append('Overloaded: {}'.format(overload_str))
+
+        # report node label if non zero
+        node_label = val['node_label']
+        if node_label:
+            adj_tokens.append('Node Label: {}'.format(node_label))
 
         # horizontal adj table for a node
         rows = []
@@ -486,10 +493,15 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
 
             rows.append([adj['otherNodeName'], adj['ifName'],
                          adj['otherIfName'], metric,
-                         adj['weight'], adj['adjLabel'], adj['nextHopV4'],
+                         adj['adjLabel'], adj['nextHopV4'],
                          adj['nextHopV6'], uptime])
             seg = printing.render_horizontal_table(rows, column_labels,
                                                    tablefmt='plain')
+        cap = "{} {} {}".format(
+            node,
+            '=>' if adj_tokens else '',
+            ', '.join(adj_tokens),
+        )
         output.append([cap, seg])
 
     if neigh is not None and interface is not None and not adj_found:
@@ -517,8 +529,8 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
 
     rows = []
 
-    column_labels = ['Neighbor', 'Local Interface', 'Remote Interface',
-                     'Metric', 'Adj Label', 'NextHop-v4', 'NextHop-v6',
+    column_labels = ['Neighbor', 'Local Intf', 'Remote Intf',
+                     'Metric', 'Label', 'NextHop-v4', 'NextHop-v6',
                      'Uptime']
 
     for adj in adj_db.adjacencies:

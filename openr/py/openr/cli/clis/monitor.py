@@ -24,6 +24,7 @@ class MonitorCli(object):
         self.monitor.add_command(ForceCrashCli().force_crash)
         self.monitor.add_command(MonitorSnoop().snoop)
         self.monitor.add_command(MonitorLogs().logs)
+        self.monitor.add_command(MonitorStatistics().statistics)
 
     @click.group()
     @click.option('--monitor_rep_port', default=None, type=int, help='Monitor rep port')
@@ -88,3 +89,13 @@ class MonitorLogs(object):
         ''' Print log events '''
 
         monitor.LogCmd(cli_opts).run(json)
+
+
+class MonitorStatistics(object):
+
+    @click.command()
+    @click.pass_obj
+    def statistics(cli_opts):  # noqa: B902
+        ''' Print counters in pretty format '''
+
+        monitor.StatisticsCmd(cli_opts).run()

@@ -155,20 +155,31 @@ class KeysCmd(KvStoreCmd):
 
         rows = []
         for key, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
+            hash_offset = '+' if value.hash > 0 else ''
             if ttl:
                 if value.ttl != Consts.CONST_TTL_INF:
                     ttlStr = str(datetime.timedelta(milliseconds=value.ttl))
                 else:
                     ttlStr = "Inf"
-                rows.append([key, value.originatorId, value.version, value.hash,
-                              ttlStr, value.ttlVersion])
+                rows.append([
+                    key,
+                    value.originatorId,
+                    value.version,
+                    '{}{:x}'.format(hash_offset, value.hash),
+                    '{} - {}'.format(ttlStr, value.ttlVersion),
+                ])
             else:
-                rows.append([key, value.originatorId, value.version, value.hash])
+                rows.append([
+                    key,
+                    value.originatorId,
+                    value.version,
+                    '{}{:x}'.format(hash_offset, value.hash),
+                ])
 
         caption = "Available keys in KvStore"
-        column_labels = ["Key", "OriginatorId", "Version", "Hash"]
+        column_labels = ["Key", "Originator", "Ver", "Hash"]
         if ttl:
-            column_labels = column_labels + ["TTL (HH:MM:SS)", "TTL Version"]
+            column_labels = column_labels + ["TTL - Ver"]
 
         print(printing.render_horizontal_table(rows, column_labels, caption))
 

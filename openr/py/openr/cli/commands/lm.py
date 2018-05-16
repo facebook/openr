@@ -187,23 +187,23 @@ class LMLinksCmd(LMCmd):
         '''
 
         rows = []
-        columns = ['Interface', 'Status', 'Overloaded', 'Metric Override',
-                   'ifIndex', 'Addresses']
+        columns = ['Interface', 'Status', 'Metric Override',
+                   'Addresses']
 
         for (k, v) in sorted(interfaces.items()):
-            state = 'Up' if v.info.isUp else 'Down'
-            overloaded = 'True' if v.isOverloaded else ''
+            state = 'Up' if v.info.isUp else click.style('Down', fg='red')
             metric_override = v.metricOverride if v.metricOverride else ''
-            index = v.info.ifIndex
-            rows.append([k, state, overloaded, metric_override, index, ''])
+            if v.isOverloaded:
+                metric_override = click.style('Overloaded', fg='red')
+            rows.append([k, state, metric_override, ''])
             firstAddr = True
             for a in (v.info.v4Addrs + v.info.v6LinkLocalAddrs):
                 addrStr = ipnetwork.sprint_addr(a.addr)
                 if firstAddr:
-                    rows[-1][5] = addrStr
+                    rows[-1][3] = addrStr
                     firstAddr = False
                 else:
-                    rows.append(['', '', '', '', '', addrStr])
+                    rows.append(['', '', '', addrStr])
 
         print(printing.render_horizontal_table(rows, columns, caption))
         print()

@@ -24,6 +24,7 @@ from openr.utils import consts, printing, socket
 from openr.clients import monitor_client, monitor_subscriber
 from fbzmq.Monitor import ttypes as monitor_types
 
+
 class MonitorCmd(object):
     def __init__(self, cli_opts):
         ''' initialize the Monitor client '''
@@ -194,3 +195,95 @@ class LogCmd(MonitorCmd):
 
         for log_sample in log_samples:
             print_log_sample(log_sample)
+
+
+class StatisticsCmd(MonitorCmd):
+
+    def run(self):
+        stats_templates = [
+            {
+                'title': 'KvStore Stats',
+                'counters': [
+                    ('KeyVals', 'kvstore.num_keys'),
+                    ('Peering Sessions', 'kvstore.num_peers'),
+                    ('Pending Sync', 'kvstore.pending_full_sync'),
+                ],
+                'stats': [
+                    (
+                        'Rcvd Publications',
+                        'kvstore.received_publications.count',
+                    ),
+                    ('Rcvd KeyVals', 'kvstore.received_key_vals.sum'),
+                    ('Updates KeyVals', 'kvstore.updated_key_vals.sum'),
+                ],
+            },
+            {
+                'title': 'LinkMonitor Stats',
+                'counters': [
+                    ('Adjacent Neighbors', 'spark.num_adjacent_neighbors'),
+                    ('Tracked Neighbors', 'spark.num_tracked_neighbors'),
+                ],
+                'stats': [
+                    ('Updates AdjDb', 'link_monitor.advertise_adjacencies.sum'),
+                    ('Rcvd Hello Pkts', 'spark.hello_packet_recv.sum'),
+                    ('Sent Hello Pkts', 'spark.hello_packet_sent.sum'),
+                ],
+            },
+            {
+                'title': 'Decision/Fib Stats',
+                'counters': [
+                ],
+                'stats': [
+                    ('Updates AdjDbs', 'decision.adj_db_update.count'),
+                    ('Updates PrefixDbs', 'decision.prefix_db_update.count'),
+                    ('SPF Runs', 'decision.spf_runs.count'),
+                    ('SPF Avg Duration (ms)', 'decision.spf_duration.avg'),
+                    (
+                        'Convergence Duration (ms)',
+                        'fib.convergence_time_ms.avg',
+                    ),
+                    ('Updates RouteDb', 'fib.process_route_db.count'),
+                    ('Full Route Sync', 'fib.sync_fib_calls.count'),
+                ],
+            },
+        ]
+
+        counters = self.client.dump_all_counter_data().counters
+        self.print_stats(stats_templates, counters)
+
+    def print_stats(self, stats_templates, counters):
+        '''
+        Print in pretty format
+        '''
+
+        suffixes = ['60', '600', '3600', '0']
+
+        for template in stats_templates:
+            counters_rows = []
+            for title, key in template['counters']:
+                val = counters.get(key, None)
+                counters_rows.append([title, 'N/A' if not val else val.value])
+
+            stats_cols = ['Stat', '1 min', '10 mins', '1 hour', 'All Time']
+            stats_rows = []
+            for title, key_prefix in template['stats']:
+                row = [title]
+                for key in ['{}.{}'.format(key_prefix, s) for s in suffixes]:
+                    val = counters.get(key, None)
+                    row.append('N/A' if not val else val.value)
+                stats_rows.append(row)
+
+            print('> {} '.format(template['title']))
+            if counters_rows:
+                print()
+                print(printing.render_horizontal_table(
+                    counters_rows,
+                    tablefmt='plain',
+                ).strip('\n'))
+            if stats_rows:
+                print()
+                print(printing.render_horizontal_table(
+                    stats_rows,
+                    column_labels=stats_cols,
+                    tablefmt='simple',
+                ).strip('\n'))
