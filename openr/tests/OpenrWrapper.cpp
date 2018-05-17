@@ -165,6 +165,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nullptr, // known keys store
       v4Enabled, // enable v4
       true, // enable packet signature
+      true, // enable subnet validation
       SparkReportUrl{sparkReportUrl_},
       SparkCmdUrl{sparkCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},

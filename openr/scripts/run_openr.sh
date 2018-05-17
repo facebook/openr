@@ -47,6 +47,7 @@ DECISION_DEBOUNCE_MAX_MS=250
 DECISION_DEBOUNCE_MIN_MS=10
 DOMAIN=openr
 DRYRUN=false
+ENABLE_SUBNET_VALIDATION=true
 ENABLE_FIB_SYNC=false
 ENABLE_HEALTH_CHECKER=false
 ENABLE_NETLINK_FIB_HANDLER=true
@@ -130,6 +131,7 @@ exec ${OPENR} \
   --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
   --domain=${DOMAIN} \
   --dryrun=${DRYRUN} \
+  --enable_subnet_validation=${ENABLE_SUBNET_VALIDATION} \
   --enable_fib_sync=${ENABLE_FIB_SYNC} \
   --enable_health_checker=${ENABLE_HEALTH_CHECKER} \
   --enable_netlink_fib_handler=${ENABLE_NETLINK_FIB_HANDLER} \

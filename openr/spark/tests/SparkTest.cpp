@@ -173,6 +173,7 @@ class SparkFixture : public testing::Test {
         knownKeysStore,
         true /* enable v4 */,
         true /* enable packet signature */,
+        true /* enable subnet validation */,
         SparkReportUrl{folly::sformat("{}-{}", kSparkReportUrl, sparkNum)},
         SparkCmdUrl{folly::sformat("{}-{}", kSparkCmdUrl, sparkNum)},
         MonitorSubmitUrl{

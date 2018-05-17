@@ -188,6 +188,11 @@ DEFINE_bool(
     false,
     "Enable v4 in OpenR for exchanging and programming v4 routes. Works only"
     "when Switch FIB Agent is used for FIB programming. No NSS/Linux.");
+DEFINE_bool(
+    enable_subnet_validation,
+    true,
+    "Enable subnet validation on adjacencies to avoid mis-cabling of v4 address"
+    "on different subnets on each end.");
 DEFINE_int32(
     spark_hold_time_s,
     18,
@@ -670,6 +675,7 @@ main(int argc, char** argv) {
       FLAGS_enable_auth ? &knownKeysStore : nullptr,
       FLAGS_enable_v4,
       FLAGS_enable_spark_signature,
+      FLAGS_enable_subnet_validation,
       kSparkReportUrl,
       kSparkCmdUrl,
       monitorSubmitUrl,

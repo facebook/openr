@@ -38,6 +38,7 @@ class SparkWrapper {
       KnownKeysStore* knownKeysStore,
       bool enableV4,
       bool enableSignature,
+      bool enableSubnetValidation,
       SparkReportUrl const& reportUrl,
       SparkCmdUrl const& cmdUrl,
       MonitorSubmitUrl const& monitorCmdUrl,

@@ -191,6 +191,16 @@ transport and v4/v6 topologies are congruent.
 ENABLE_V4=false
 ```
 
+#### ENABLE_SUBNET_VALIDATION
+
+OpenR supports subnet validation to avoid mis-cabling of v4 addresses on
+different subnets on each end of the link. Need to enable v4 and this flag at
+the same time to turn on validation.
+
+```
+ENABLE_SUBNET_VALIDATION=true
+```
+
 #### ENABLE_HEALTH_CHECKER
 
 OpenR can measure network health internally by pinging other nodes in the

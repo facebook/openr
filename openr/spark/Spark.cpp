@@ -336,6 +336,7 @@ Spark::Spark(
     KnownKeysStore* knownKeysStore,
     bool enableV4,
     bool enableSignature,
+    bool enableSubnetValidation,
     SparkReportUrl const& reportUrl,
     SparkCmdUrl const& cmdUrl,
     MonitorSubmitUrl const& monitorSubmitUrl,
@@ -353,6 +354,7 @@ Spark::Spark(
       knownKeysStore_(knownKeysStore),
       enableV4_(enableV4),
       enableSignature_(enableSignature),
+      enableSubnetValidation_(enableSubnetValidation),
       reportUrl_(reportUrl),
       reportSocket_(zmqContext),
       cmdUrl_(cmdUrl),
@@ -647,7 +649,7 @@ Spark::validateHelloPacket(
   }
 
   // validate v4 address subnet
-  if (enableV4_) {
+  if (enableV4_ and enableSubnetValidation_) {
     // make sure v4 address is already specified on neighbor
     auto const& myV4Network = interfaceDb_.at(ifName).v4Network;
     auto const& myV4Addr = myV4Network.first;

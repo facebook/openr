@@ -62,6 +62,7 @@ class Spark final : public fbzmq::ZmqEventLoop {
       KnownKeysStore* knownKeysStore,
       bool enableV4,
       bool enableSignature,
+      bool enableSubnetValidation,
       SparkReportUrl const& reportUrl,
       SparkCmdUrl const& cmdUrl,
       MonitorSubmitUrl const& monitorSubmitUrl,
@@ -195,6 +196,11 @@ class Spark final : public fbzmq::ZmqEventLoop {
   // signatures. This can consume too much CPU out of your box if there
   // are hundreds of interfaces
   const bool enableSignature_{true};
+
+  // If enabled, then all newly formed adjacency will be validated on v4 subnet
+  // If subnets are different on each end of adjacency, neighboring session will
+  // not be formed
+  const bool enableSubnetValidation_{true};
 
   // the next sequence number to be used on any interface for outgoing hellos
   // NOTE: we increment this on hello sent out of any interfaces
