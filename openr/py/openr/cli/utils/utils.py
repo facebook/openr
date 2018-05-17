@@ -562,12 +562,20 @@ def interface_db_to_dict(value):
     '''
 
     def _parse_intf_info(info):
+        addrs = []
+        if info.networks is not None:
+            addrs = [
+                ipnetwork.sprint_addr(v.prefixAddress.addr) for v in info.networks
+            ]
+        else:
+            addrs = [
+                ipnetwork.sprint_addr(v.addr) for v in info.v4Addrs] + [
+                ipnetwork.sprint_addr(v.addr) for v in info.v6LinkLocalAddrs]
+
         return bunch.Bunch(**{
             'isUp': info.isUp,
             'ifIndex': info.ifIndex,
-            'Addrs': [
-                ipnetwork.sprint_addr(v.prefixAddress.addr) for v in info.networks
-            ],
+            'Addrs': addrs,
         })
 
     assert(isinstance(value, kv_store_types.Value))
