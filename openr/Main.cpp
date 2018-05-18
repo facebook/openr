@@ -416,13 +416,7 @@ main(int argc, char** argv) {
                    << msg->read<std::string>().value();
       });
 
-  // Hack to assign different thread name to ZMQ threads for brevity. Bind
-  // starts zmq ctx and reaper threads
-  folly::setThreadName("zmq_ctx_reaper");
-  {
-    Socket<ZMQ_REP, ZMQ_SERVER> tmpSock(context);
-    tmpSock.bind(SocketUrl{"ipc://*"}).value();
-  }
+  // Set main thread name
   folly::setThreadName("openr");
 
   // Watchdog thread to monitor thread aliveness
