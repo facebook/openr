@@ -690,7 +690,7 @@ KvStore::addPeers(
 
         if (hasKeyChanged || it->second.pubUrl != peerSpec.pubUrl) {
           pubUrlUpdated = true;
-          LOG(INFO) << "Unsubscribing from " << peerSpec.pubUrl;
+          LOG(INFO) << "Unsubscribing from " << it->second.pubUrl;
           auto const ret =
               peerSubSock_.disconnect(fbzmq::SocketUrl{it->second.pubUrl});
           if (ret.hasError()) {
@@ -701,7 +701,7 @@ KvStore::addPeers(
 
         if (hasKeyChanged || it->second.cmdUrl != peerSpec.cmdUrl) {
           cmdUrlUpdated = true;
-          LOG(INFO) << "Disconnecting from " << peerSpec.cmdUrl;
+          LOG(INFO) << "Disconnecting from " << it->second.cmdUrl;
           const auto ret =
               peerSyncSock_.disconnect(fbzmq::SocketUrl{it->second.cmdUrl});
           if (ret.hasError()) {
