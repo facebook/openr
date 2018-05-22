@@ -99,7 +99,7 @@ Fib::Fib(
   // Only schedule sync Fib in non dry run and enable sync mode
   if (not dryrun_ and enableFibSync_) {
     syncFibTimer_->scheduleTimeout(
-        Constants::kSyncFibInterval, true /* schedule periodically */);
+        Constants::kPlatformSyncInterval, true /* schedule periodically */);
   }
 
   prepare();

@@ -453,6 +453,7 @@ main(int argc, char** argv) {
     CHECK(thriftThreadMgr);
     netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>(
         "disabled" /* sasl policy */, false /* insecure-loopback */);
+    netlinkFibServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
     netlinkFibServer->setThreadManager(thriftThreadMgr);
     netlinkFibServer->setNumIOWorkerThreads(1);
     netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
@@ -476,6 +477,7 @@ main(int argc, char** argv) {
     CHECK(thriftThreadMgr);
     netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>(
         "disabled" /* sasl policy */, false /* insecure-loopback */);
+    netlinkSystemServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
     netlinkSystemServer->setThreadManager(thriftThreadMgr);
     netlinkSystemServer->setNumIOWorkerThreads(1);
     netlinkSystemServer->setCpp2WorkerThreadName("SystemTWorker");

@@ -144,8 +144,15 @@ class Constants {
   static constexpr std::chrono::milliseconds kPlatformConnTimeout{100};
   static constexpr std::chrono::milliseconds kPlatformProcTimeout{10000};
 
-  // time interval to sync between fib and agent
-  static constexpr std::chrono::seconds kSyncFibInterval{60};
+  // time interval to sync between Open/R and Platform
+  static constexpr std::chrono::seconds kPlatformSyncInterval{60};
+
+  // Timeout duration for which if a client connection has no activity, then it
+  // will be dropped. We keep it 3 * kPlatformSyncInterval so that thrift
+  // connection between OpenR and platform service remains up forever under
+  // ideal conditions.
+  static constexpr std::chrono::seconds kPlatformThriftIdleTimeout{
+      Constants::kPlatformSyncInterval * 3};
 
   // Protocol ID for OpenR routes
   static constexpr uint8_t kAqRouteProtoId{99};

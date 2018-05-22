@@ -32,7 +32,6 @@ using apache::thrift::FRAGILE;
 
 namespace {
 
-const std::chrono::seconds kIfUpRetryInterval{60};
 const std::string kConfigKey{"link-monitor-config"};
 
 /**
@@ -467,7 +466,8 @@ LinkMonitor::prepare() noexcept {
     if (success) {
       VLOG(2) << "InterfaceDb Sync is successful";
       expBackoff_.reportSuccess();
-      interfaceDbSyncTimer_->scheduleTimeout(kIfUpRetryInterval, isPeriodic);
+      interfaceDbSyncTimer_->scheduleTimeout(
+          Constants::kPlatformSyncInterval, isPeriodic);
     } else {
       tData_.addStatValue(
           "link_monitor.thrift.failure.getAllLinks", 1, fbzmq::SUM);
