@@ -783,6 +783,8 @@ LinkMonitor::advertiseMyAdjacencies() {
     DCHECK(!adjDb.perfEvents.hasValue());
   }
 
+  LOG(INFO) << "Updating adjacency database in KvStore with "
+            << adjDb.adjacencies.size() << " entries.";
   const auto keyName = adjacencyDbMarker_ + nodeId_;
   std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
   kvStoreClient_->persistKey(keyName, adjDbStr, Constants::kKvStoreDbTtl);

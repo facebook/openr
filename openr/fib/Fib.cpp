@@ -61,7 +61,6 @@ Fib::Fib(
           expBackoff_.getTimeRemainingUntilRetry());
     }
   });
-
   syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
 
   healthChecker_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
@@ -459,10 +458,8 @@ Fib::keepAliveCheck() {
                  << "Performing full route DB sync ...";
     // set dirty flag
     dirtyRouteDb_ = true;
-    // reset our backoff and wait coldStartDuration_ to try to program routes on
-    // the newly started agent.
     expBackoff_.reportSuccess();
-    syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
+    syncRouteDbDebounced();
   }
   latestAliveSince_ = aliveSince;
 }
