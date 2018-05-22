@@ -469,6 +469,8 @@ LinkMonitor::prepare() noexcept {
       expBackoff_.reportSuccess();
       interfaceDbSyncTimer_->scheduleTimeout(kIfUpRetryInterval, isPeriodic);
     } else {
+      tData_.addStatValue(
+          "link_monitor.thrift.failure.getAllLinks", 1, fbzmq::SUM);
       // Apply exponential backoff and schedule next run
       expBackoff_.reportError();
       interfaceDbSyncTimer_->scheduleTimeout(

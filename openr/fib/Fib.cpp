@@ -89,7 +89,7 @@ Fib::Fib(
       createFibClient();
       client_->sync_syncFib(kFibId_, routes);
     } catch (std::exception const& e) {
-      tData_.addStatValue("fib.thrift.failure.syncfib", 1, fbzmq::COUNT);
+      tData_.addStatValue("fib.thrift.failure.syncFib", 1, fbzmq::COUNT);
       client_.reset();
       LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
                  << folly::exceptionStr(e);
