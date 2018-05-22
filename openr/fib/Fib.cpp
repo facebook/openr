@@ -572,10 +572,10 @@ Fib::logPerfEvents() {
   // Log event
   auto eventStrs = sprintPerfEvents(*maybePerfEvents_);
   maybePerfEvents_ = folly::none;
-  LOG(INFO) << "OpenR convergence performance. "
+  VLOG(2) << "OpenR convergence performance. "
             << "Duration=" << totalDuration.count();
   for (auto& str : eventStrs) {
-    LOG(INFO) << "  " << str;
+    VLOG(2) << "  " << str;
   }
 
   // Export convergence duration counter
