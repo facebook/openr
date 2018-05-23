@@ -298,6 +298,10 @@ NetlinkRouteSocket::~NetlinkRouteSocket() {
   nl_cache_free(cacheV4_);
   nl_cache_free(cacheV6_);
   nl_socket_free(socket_);
+  linkCache_ = nullptr;
+  cacheV4_ = nullptr;
+  cacheV6_ = nullptr;
+  socket_ = nullptr;
 }
 
 std::unique_ptr<NetlinkRoute>
@@ -305,14 +309,9 @@ NetlinkRouteSocket::buildMulticastOrLinkRouteHelper(
     const folly::CIDRNetwork& prefix,
     const std::string& ifName,
     uint8_t scope) {
-  int err = 0;
-  err = nl_cache_refill(socket_, linkCache_);
-  if (err != 0) {
-    throw NetlinkException(folly::sformat(
-        "Failed to refill link cache . Error: {}", nl_geterror(err)));
-  }
-
   auto route = std::make_unique<NetlinkRoute>(prefix, routeProtocolId_, scope);
+
+  updateLinkCacheThrottled();
   int ifIdx = rtnl_link_name2i(linkCache_, ifName.c_str());
   if (ifIdx == 0) {
     throw NetlinkException(
@@ -339,15 +338,7 @@ NetlinkRouteSocket::buildLinkRoute(
 std::unique_ptr<NetlinkRoute>
 NetlinkRouteSocket::buildUnicastRoute(
     const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
-  int err = 0;
-  err = nl_cache_refill(socket_, linkCache_);
-  if (err != 0) {
-    throw NetlinkException(folly::sformat(
-        "Failed to refill link cache . Error: {}", nl_geterror(err)));
-  }
-
   auto route = std::make_unique<NetlinkRoute>(prefix, routeProtocolId_);
-  int ifIdx;
   for (const auto& nextHop : nextHops) {
     if (std::get<0>(nextHop).empty()) {
       route->addNextHop(std::get<1>(nextHop));
@@ -355,7 +346,8 @@ NetlinkRouteSocket::buildUnicastRoute(
               << folly::IPAddress::networkToString(prefix) << " nexthop via "
               << std::get<1>(nextHop).str();
     } else {
-      ifIdx = rtnl_link_name2i(linkCache_, std::get<0>(nextHop).c_str());
+      updateLinkCacheThrottled();
+      int ifIdx = rtnl_link_name2i(linkCache_, std::get<0>(nextHop).c_str());
       if (ifIdx == 0) {
         throw NetlinkException(folly::sformat(
             "Failed to get ifidx for interface: {}", std::get<0>(nextHop)));
@@ -371,7 +363,7 @@ NetlinkRouteSocket::buildUnicastRoute(
 
 folly::Future<folly::Unit>
 NetlinkRouteSocket::addUnicastRoute(
-    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
+    folly::CIDRNetwork prefix, NextHops nextHops) {
   VLOG(3) << "Adding unicast route";
   CHECK(not nextHops.empty());
   CHECK(not prefix.first.isMulticast() && not prefix.first.isLinkLocal());
@@ -380,7 +372,11 @@ NetlinkRouteSocket::addUnicastRoute(
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-      [this, promise = std::move(promise), prefix, nextHops]() mutable {
+      [ this,
+        promise = std::move(promise),
+        prefix = std::move(prefix),
+        nextHops = std::move(nextHops)
+      ]() mutable {
         try {
           doAddUpdateUnicastRoute(prefix, nextHops);
           unicastRouteDb_[prefix] = nextHops;
@@ -397,7 +393,7 @@ NetlinkRouteSocket::addUnicastRoute(
 
 folly::Future<folly::Unit>
 NetlinkRouteSocket::addMulticastRoute(
-    const folly::CIDRNetwork& prefix, const std::string& ifName) {
+    folly::CIDRNetwork prefix, std::string ifName) {
   VLOG(3) << "Adding multicast route";
   CHECK(prefix.first.isMulticast());
 
@@ -405,7 +401,11 @@ NetlinkRouteSocket::addMulticastRoute(
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-      [this, promise = std::move(promise), prefix, ifName]() mutable {
+      [ this,
+        promise = std::move(promise),
+        prefix = std::move(prefix),
+        ifName = std::move(ifName)
+      ]() mutable {
         try {
           doAddMulticastRoute(prefix, ifName);
           promise.setValue();
@@ -420,7 +420,7 @@ NetlinkRouteSocket::addMulticastRoute(
 }
 
 folly::Future<folly::Unit>
-NetlinkRouteSocket::deleteUnicastRoute(const folly::CIDRNetwork& prefix) {
+NetlinkRouteSocket::deleteUnicastRoute(folly::CIDRNetwork prefix) {
   VLOG(3) << "Deleting unicast route";
   CHECK(not prefix.first.isMulticast() && not prefix.first.isLinkLocal());
 
@@ -428,7 +428,10 @@ NetlinkRouteSocket::deleteUnicastRoute(const folly::CIDRNetwork& prefix) {
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-      [this, promise = std::move(promise), prefix]() mutable {
+      [ this,
+        promise = std::move(promise),
+        prefix = std::move(prefix)
+      ]() mutable {
         try {
           if (unicastRouteDb_.count(prefix) == 0) {
             LOG(ERROR) << "Trying to delete non-existing prefix "
@@ -450,7 +453,7 @@ NetlinkRouteSocket::deleteUnicastRoute(const folly::CIDRNetwork& prefix) {
 
 folly::Future<folly::Unit>
 NetlinkRouteSocket::deleteMulticastRoute(
-    const folly::CIDRNetwork& prefix, const std::string& ifName) {
+    folly::CIDRNetwork prefix, std::string ifName) {
   VLOG(3) << "Deleting multicast route";
   CHECK(prefix.first.isMulticast());
 
@@ -458,7 +461,11 @@ NetlinkRouteSocket::deleteMulticastRoute(
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-      [this, promise = std::move(promise), prefix, ifName]() mutable {
+      [ this,
+        promise = std::move(promise),
+        prefix = std::move(prefix),
+        ifName = std::move(ifName)
+      ]() mutable {
         try {
           doDeleteMulticastRoute(prefix, ifName);
           promise.setValue();
@@ -519,7 +526,10 @@ NetlinkRouteSocket::syncUnicastRoutes(UnicastRoutes newRouteDb) {
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-      [this, promise = std::move(promise), newRouteDb]() mutable {
+      [ this,
+        promise = std::move(promise),
+        newRouteDb = std::move(newRouteDb)
+      ]() mutable {
         try {
           doSyncUnicastRoutes(newRouteDb);
           promise.setValue();
@@ -533,13 +543,16 @@ NetlinkRouteSocket::syncUnicastRoutes(UnicastRoutes newRouteDb) {
 }
 
 folly::Future<folly::Unit>
-NetlinkRouteSocket::syncLinkRoutes(const LinkRoutes& newRouteDb) {
+NetlinkRouteSocket::syncLinkRoutes(LinkRoutes newRouteDb) {
   VLOG(3) << "Syncing Link Routes....";
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-      [this, promise = std::move(promise), newRouteDb]() mutable {
+      [ this,
+        promise = std::move(promise),
+        newRouteDb = std::move(newRouteDb)
+      ]() mutable {
         try {
           doSyncLinkRoutes(newRouteDb);
           promise.setValue();
@@ -562,7 +575,9 @@ NetlinkRouteSocket::doAddUpdateUnicastRoute(
   }
 
   // Create new set of nexthops to be programmed. Existing + New ones
-  auto oldNextHops = folly::get_default(unicastRoutes_, prefix, NextHops{});
+  static const NextHops emptyNextHops;
+  const NextHops& oldNextHops = folly::get_default(
+      unicastRoutes_, prefix, emptyNextHops);
   // Only update if there's any difference in new nextHops
   if (oldNextHops == nextHops) {
     return;
@@ -593,8 +608,7 @@ NetlinkRouteSocket::doAddUpdateUnicastRoute(
 void
 NetlinkRouteSocket::doAddUpdateUnicastRouteV4(
     const folly::CIDRNetwork& prefix,
-    const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-        newNextHops) {
+    const NextHops& newNextHops) {
 
   auto route = buildUnicastRoute(prefix, newNextHops);
   auto err = rtnl_route_add(socket_, route->getRoutePtr(), NLM_F_REPLACE);
@@ -609,10 +623,8 @@ NetlinkRouteSocket::doAddUpdateUnicastRouteV4(
 void
 NetlinkRouteSocket::doAddUpdateUnicastRouteV6(
     const folly::CIDRNetwork& prefix,
-    const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-        newNextHops,
-    const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-        oldNextHops) {
+    const NextHops& newNextHops,
+    const NextHops& oldNextHops) {
 
   // We need to explicitly add new V6 routes & remove old routes
   // With IPv6, if new route being requested has different properties
@@ -654,8 +666,7 @@ void
 NetlinkRouteSocket::doDeleteUnicastRoute(
     const folly::CIDRNetwork& prefix) {
 
-  const auto& nextHops = unicastRoutes_.at(prefix);
-  auto route = buildUnicastRoute(prefix, nextHops);
+  auto route = std::make_unique<NetlinkRoute>(prefix, routeProtocolId_);
   int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0 /* flags */);
 
   // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
@@ -925,7 +936,7 @@ NetlinkRouteSocket::doUpdateRouteCache() {
 }
 
 void
-NetlinkRouteSocket::doSyncUnicastRoutes(UnicastRoutes newRouteDb) {
+NetlinkRouteSocket::doSyncUnicastRoutes(const UnicastRoutes& newRouteDb) {
   // Get latest routing table from kernel and use it as our snapshot
   doUpdateRouteCache();
   unicastRouteDb_ = doGetUnicastRoutes();
@@ -962,7 +973,6 @@ NetlinkRouteSocket::doSyncUnicastRoutes(UnicastRoutes newRouteDb) {
           folly::exceptionStr(err)));
     }
   }
-
 }
 
 void
@@ -1001,6 +1011,28 @@ NetlinkRouteSocket::doSyncLinkRoutes(const LinkRoutes& newRouteDb) {
   }
 
   linkRoutes_ = newRouteDb;
-} // namespace openr
+}
+
+void
+NetlinkRouteSocket::updateLinkCacheThrottled() {
+  if (linkCache_ == nullptr or socket_ == nullptr) {
+    return;
+  }
+
+  // Apply throttling
+  const auto now = std::chrono::steady_clock::now();
+  const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+      now - linkCacheUpdateTs_);
+  if (elapsed < Constants::kNetlinkSyncThrottleInterval) {
+    return;
+  }
+  linkCacheUpdateTs_ = now;
+
+  // Update cache
+  int ret = nl_cache_refill(socket_, linkCache_);
+  if (ret != 0) {
+    LOG(ERROR) << "Failed to refill link cache . Error: " << nl_geterror(ret);
+  }
+}
 
 } // namespace openr

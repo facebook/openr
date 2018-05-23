@@ -101,8 +101,12 @@ class NetlinkIfFixture : public testing::Test {
 
   void
   TearDown() override {
-    evl.stop();
-    eventThread.join();
+    if (evl.isRunning()) {
+      evl.stop();
+      eventThread.join();
+    }
+
+    netlinkRouteSocket.reset();
 
     rtnl_link_delete(socket_, link_);
     nl_cache_free(linkCache_);

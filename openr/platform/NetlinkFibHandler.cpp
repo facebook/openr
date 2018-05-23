@@ -78,6 +78,18 @@ getClientName(const int16_t clientId) {
   return it->second;
 }
 
+NextHops
+fromThriftNexthops(const std::vector<thrift::BinaryAddress>& thriftNexthops) {
+  NextHops nexthops;
+  for (auto const& nexthop : thriftNexthops) {
+    nexthops.emplace(
+      nexthop.ifName.hasValue() ? nexthop.ifName.value() : "",
+      toIPAddress(nexthop)
+    );
+  }
+  return nexthops;
+}
+
 } // namespace
 
 NetlinkFibHandler::NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop)
@@ -85,7 +97,9 @@ NetlinkFibHandler::NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop)
           std::make_unique<NetlinkRouteSocket>(zmqEventLoop, kAqRouteProtoId)),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
-                     .count()) {
+                     .count()),
+      evl_{zmqEventLoop} {
+  CHECK_NOTNULL(zmqEventLoop);
   keepAliveCheckTimer_ = fbzmq::ZmqTimeout::make(zmqEventLoop, [&]() noexcept {
     auto now = std::chrono::steady_clock::now();
     if (now - recentKeepAliveTs_ > kRoutesHoldTimeout) {
@@ -110,45 +124,22 @@ NetlinkFibHandler::future_addUnicastRoute(
     int16_t, std::unique_ptr<thrift::UnicastRoute> route) {
   DCHECK(route->nexthops.size());
 
-  auto prefix = std::make_pair(
-      toIPAddress(route->dest.prefixAddress), route->dest.prefixLength);
+  LOG(INFO) << "Adding/Updating route for " << toString(route->dest);
 
-  auto newNextHops = from(route->nexthops) |
-      mapped([](const thrift::BinaryAddress& addr) {
-                       return std::make_pair(
-                           (addr.ifName.hasValue() ? addr.ifName.value() : ""),
-                           toIPAddress(addr));
-                     }) |
-      as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
-
-  LOG(INFO)
-      << "Adding route for " << folly::IPAddress::networkToString(prefix)
-      << " via "
-      << folly::join(
-             ", ",
-             from(route->nexthops) |
-                 mapped([](const thrift::BinaryAddress& addr) {
-                   if (addr.ifName.hasValue()) {
-                     return (
-                         toIPAddress(addr).str() + "@" + addr.ifName.value());
-                   } else {
-                     return toIPAddress(addr).str();
-                   }
-                 }) |
-                 as<std::set<std::string>>());
-
-  return netlinkSocket_->addUnicastRoute(prefix, newNextHops);
+  auto prefix = toIPNetwork(route->dest);
+  auto nexthops = fromThriftNexthops(route->nexthops);
+  return netlinkSocket_->addUnicastRoute(
+      std::move(prefix),
+      std::move(nexthops)
+  );
 }
 
 folly::Future<folly::Unit>
 NetlinkFibHandler::future_deleteUnicastRoute(
     int16_t, std::unique_ptr<thrift::IpPrefix> prefix) {
-  auto myPrefix =
-      std::make_pair(toIPAddress(prefix->prefixAddress), prefix->prefixLength);
+  LOG(INFO) << "Deleting route for " << toString(*prefix);
 
-  LOG(INFO) << "Deleting route for "
-            << folly::IPAddress::networkToString(myPrefix);
-
+  auto myPrefix = toIPNetwork(*prefix);
   return netlinkSocket_->deleteUnicastRoute(myPrefix);
 }
 
@@ -156,47 +147,60 @@ folly::Future<folly::Unit>
 NetlinkFibHandler::future_addUnicastRoutes(
     int16_t clientId,
     std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) {
-  LOG(INFO) << "Adding routes to FIB. Client: " << getClientName(clientId);
+  LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
 
-  std::vector<folly::Future<folly::Unit>> futures;
-  for (auto& route : *routes) {
-    auto routePtr = folly::make_unique<thrift::UnicastRoute>(std::move(route));
-    auto future = future_addUnicastRoute(clientId, std::move(routePtr));
-    futures.emplace_back(std::move(future));
-  }
-  // Return an aggregate future which is fulfilled when all routes are added
-  return folly::collectAll(futures).then(
-      [](auto const& results) -> folly::Future<folly::Unit> {
-        for (auto const& r : results) {
-          if (r.hasException()) {
-            throw std::runtime_error("addUnicastRoutes Failed.");
-          }
-        };
-        return folly::Unit();
-      });
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  // Run all route updates in a single eventloop
+  evl_->runImmediatelyOrInEventLoop(
+    [ this, clientId,
+      promise = std::move(promise),
+      routes = std::move(routes)
+    ]() mutable {
+      for (auto& route : *routes) {
+        auto ptr = folly::make_unique<thrift::UnicastRoute>(std::move(route));
+        try {
+          // This is going to be synchronous call as we are invoking from
+          // within event loop
+          future_addUnicastRoute(clientId, std::move(ptr)).get();
+        } catch (std::exception const& e) {
+          promise.setException(e);
+          return;
+        }
+      }
+      promise.setValue();
+    });
+
+  return future;
 }
 
 folly::Future<folly::Unit>
 NetlinkFibHandler::future_deleteUnicastRoutes(
     int16_t clientId, std::unique_ptr<std::vector<thrift::IpPrefix>> prefixes) {
-  LOG(INFO) << "Deleting routes from FIB. Client: " << getClientName(clientId);
+  LOG(INFO) << "Deleting routes of client: " << getClientName(clientId);
 
-  std::vector<folly::Future<folly::Unit>> futures;
-  for (auto& prefix : *prefixes) {
-    auto prefixPtr = folly::make_unique<thrift::IpPrefix>(std::move(prefix));
-    auto future = future_deleteUnicastRoute(clientId, std::move(prefixPtr));
-    futures.emplace_back(std::move(future));
-  }
-  // Return an aggregate future which is fulfilled when all routes are deleted
-  return folly::collectAll(futures).then(
-      [](auto const& results) -> folly::Future<folly::Unit> {
-        for (auto const& r : results) {
-          if (r.hasException()) {
-            throw std::runtime_error("deleteUnicastRoutes Failed.");
-          }
-        };
-        return folly::Unit();
-      });
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop(
+    [ this, clientId,
+      promise = std::move(promise),
+      prefixes = std::move(prefixes)
+    ]() mutable {
+      for (auto& prefix : *prefixes) {
+        auto ptr = folly::make_unique<thrift::IpPrefix>(std::move(prefix));
+        try {
+          future_deleteUnicastRoute(clientId, std::move(ptr)).get();
+        } catch (std::exception const& e) {
+          promise.setException(e);
+          return;
+        }
+      }
+      promise.setValue();
+    });
+
+  return future;
 }
 
 folly::Future<folly::Unit>
@@ -208,27 +212,14 @@ NetlinkFibHandler::future_syncFib(
 
   // Build new routeDb
   UnicastRoutes newRouteDb;
-
   for (auto const& route : *routes) {
-    if (route.nexthops.size() == 0) {
-      LOG(ERROR) << "Got empty nexthops for prefix " << toString(route.dest)
-                 << " ... Skipping";
-      continue;
-    }
-
-    auto prefix = std::make_pair(
-        toIPAddress(route.dest.prefixAddress), route.dest.prefixLength);
-    auto newNextHops = from(route.nexthops) |
-        mapped([](const thrift::BinaryAddress& addr) {
-                         return std::make_pair(
-                             addr.ifName.hasValue() ? addr.ifName.value() : "",
-                             toIPAddress(addr));
-                       }) |
-        as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
-    newRouteDb[prefix] = newNextHops;
+    CHECK(route.nexthops.size());
+    auto prefix = toIPNetwork(route.dest);
+    auto nexthops = fromThriftNexthops(route.nexthops);
+    newRouteDb.emplace(std::move(prefix), std::move(nexthops));
   }
 
-  return netlinkSocket_->syncUnicastRoutes(newRouteDb);
+  return netlinkSocket_->syncUnicastRoutes(std::move(newRouteDb));
 }
 
 folly::Future<int64_t>

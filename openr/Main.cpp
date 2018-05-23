@@ -449,8 +449,10 @@ main(int argc, char** argv) {
 
   // Start NetlinkFibHandler if specified
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
+  std::unique_ptr<fbzmq::ZmqEventLoop> netlinkFibEvl;
   if (FLAGS_enable_netlink_fib_handler) {
     CHECK(thriftThreadMgr);
+    netlinkFibEvl = std::make_unique<fbzmq::ZmqEventLoop>();
     netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>(
         "disabled" /* sasl policy */, false /* insecure-loopback */);
     netlinkFibServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
@@ -459,9 +461,16 @@ main(int argc, char** argv) {
     netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
     netlinkFibServer->setPort(FLAGS_fib_handler_port);
 
-    auto fibThriftThread = std::thread([&netlinkFibServer, &mainEventLoop]() {
+    auto fibEvlThread = std::thread([&netlinkFibEvl]() {
+      folly::setThreadName("FibEvl");
+      netlinkFibEvl->run();
+    });
+    netlinkFibEvl->waitUntilRunning();
+    allThreads.emplace_back(std::move(fibEvlThread));
+
+    auto fibThriftThread = std::thread([&netlinkFibServer, &netlinkFibEvl]() {
       folly::setThreadName("FibService");
-      auto fibHandler = std::make_shared<NetlinkFibHandler>(&mainEventLoop);
+      auto fibHandler = std::make_shared<NetlinkFibHandler>(&(*netlinkFibEvl));
       netlinkFibServer->setInterface(fibHandler);
 
       LOG(INFO) << "Starting NetlinkFib server...";
@@ -910,6 +919,10 @@ main(int argc, char** argv) {
   monitor.waitUntilStopped();
   configStore.stop();
   configStore.waitUntilStopped();
+  if (netlinkFibEvl) {
+    netlinkFibEvl->stop();
+    netlinkFibEvl->waitUntilStopped();
+  }
   if (netlinkFibServer) {
     netlinkFibServer->stop();
   }

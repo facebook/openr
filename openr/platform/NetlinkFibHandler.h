@@ -79,6 +79,9 @@ class NetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
   // Time when service started, in number of seconds, since epoch
   const int64_t startTime_{0};
 
+  // ZMQ Eventloop pointer
+  fbzmq::ZmqEventLoop* evl_{nullptr};
+
   // Recent timepoint of aliveSince
   std::chrono::steady_clock::time_point recentKeepAliveTs_;
 

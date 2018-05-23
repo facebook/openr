@@ -81,27 +81,27 @@ class NetlinkRouteSocket final {
   // but kernel will reject the request
 
   folly::Future<folly::Unit> addUnicastRoute(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
+      folly::CIDRNetwork prefix, NextHops nextHops);
 
   // Delete all next hops associated with prefix
   folly::Future<folly::Unit> deleteUnicastRoute(
-      const folly::CIDRNetwork& prefix);
+      folly::CIDRNetwork prefix);
 
   // Throw exceptions if the route already existed
   // This is to prevent duplicate routes in some systems where kernel
   // already added this route for us
   folly::Future<folly::Unit> addMulticastRoute(
-      const folly::CIDRNetwork& prefix, const std::string& ifName);
+      folly::CIDRNetwork prefix, std::string ifName);
 
   folly::Future<folly::Unit> deleteMulticastRoute(
-      const folly::CIDRNetwork& prefix, const std::string& ifName);
+      folly::CIDRNetwork prefix, std::string ifName);
 
   // Sync route table in kernel with given route table
   // Basically when there's mismatch between backend kernel and route table in
   // application, we sync kernel routing table with given data source
   folly::Future<folly::Unit> syncUnicastRoutes(UnicastRoutes newRouteDb);
 
-  folly::Future<folly::Unit> syncLinkRoutes(const LinkRoutes& newRouteDb);
+  folly::Future<folly::Unit> syncLinkRoutes(LinkRoutes newRouteDb);
 
   // get cached unicast routing table
   folly::Future<UnicastRoutes> getUnicastRoutes() const;
@@ -130,15 +130,12 @@ class NetlinkRouteSocket final {
    */
   void doAddUpdateUnicastRouteV4(
       const folly::CIDRNetwork& prefix,
-      const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-          newNextHops);
+      const NextHops& newNextHops);
 
   void doAddUpdateUnicastRouteV6(
       const folly::CIDRNetwork& prefix,
-      const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-          newNextHops,
-      const std::unordered_set<std::pair<std::string, folly::IPAddress>>&
-          oldNextHops);
+      const NextHops& newNextHops,
+      const NextHops& oldNextHops);
 
   void doAddMulticastRoute(
       const folly::CIDRNetwork& prefix, const std::string& ifName);
@@ -159,7 +156,7 @@ class NetlinkRouteSocket final {
 
   UnicastRoutes doGetUnicastRoutes() const;
 
-  void doSyncUnicastRoutes(UnicastRoutes newRouteDb);
+  void doSyncUnicastRoutes(const UnicastRoutes& newRouteDb);
 
   void doSyncLinkRoutes(const LinkRoutes& newRouteDb);
 
@@ -177,12 +174,23 @@ class NetlinkRouteSocket final {
       const std::string& ifName,
       uint8_t scope);
 
+  /**
+   * This function will update link cache internally but will ensure that it is
+   * updated only once in a second. First call will trigger update and all
+   * subsequent calls within a second will be ignored.
+   */
+  void updateLinkCacheThrottled();
+
   fbzmq::ZmqEventLoop* evl_{nullptr};
   const uint8_t routeProtocolId_{0};
   struct nl_sock* socket_{nullptr};
   struct nl_cache* cacheV4_{nullptr};
   struct nl_cache* cacheV6_{nullptr};
   struct nl_cache* linkCache_{nullptr};
+
+  // Timer to refresh linkCache_ to pick up new interface information
+  std::chrono::steady_clock::time_point linkCacheUpdateTs_{
+    std::chrono::steady_clock::now() - Constants::kNetlinkSyncThrottleInterval};
 
   // Keep a local copy of unicast route db to reflect current forwarding state
   // This may out of sync with kernel, need to do explicit sync up

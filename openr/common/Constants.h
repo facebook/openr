@@ -154,6 +154,9 @@ class Constants {
   static constexpr std::chrono::seconds kPlatformThriftIdleTimeout{
       Constants::kPlatformSyncInterval * 3};
 
+  // Duration for throttling full sync of network state from kernel via netlink
+  static constexpr std::chrono::seconds kNetlinkSyncThrottleInterval{3};
+
   // Protocol ID for OpenR routes
   static constexpr uint8_t kAqRouteProtoId{99};
 

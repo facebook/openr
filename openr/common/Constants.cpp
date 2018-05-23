@@ -74,6 +74,7 @@ constexpr std::chrono::seconds Constants::kMaxKeepAliveInterval;
 constexpr std::chrono::seconds Constants::kMonitorSubmitInterval;
 constexpr std::chrono::seconds Constants::kPlatformSyncInterval;
 constexpr std::chrono::seconds Constants::kPlatformThriftIdleTimeout;
+constexpr std::chrono::seconds Constants::kNetlinkSyncThrottleInterval;
 constexpr std::chrono::seconds Constants::kStoreSyncInterval;
 constexpr std::pair<int32_t, int32_t> Constants::kSrGlobalRange;
 constexpr std::pair<int32_t, int32_t> Constants::kSrLocalRange;
