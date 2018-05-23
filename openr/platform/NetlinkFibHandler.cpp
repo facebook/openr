@@ -124,7 +124,7 @@ NetlinkFibHandler::future_addUnicastRoute(
     int16_t, std::unique_ptr<thrift::UnicastRoute> route) {
   DCHECK(route->nexthops.size());
 
-  LOG(INFO) << "Adding/Updating route for " << toString(route->dest);
+  VLOG(1) << "Adding/Updating route for " << toString(route->dest);
 
   auto prefix = toIPNetwork(route->dest);
   auto nexthops = fromThriftNexthops(route->nexthops);
@@ -137,7 +137,7 @@ NetlinkFibHandler::future_addUnicastRoute(
 folly::Future<folly::Unit>
 NetlinkFibHandler::future_deleteUnicastRoute(
     int16_t, std::unique_ptr<thrift::IpPrefix> prefix) {
-  LOG(INFO) << "Deleting route for " << toString(*prefix);
+  VLOG(1) << "Deleting route for " << toString(*prefix);
 
   auto myPrefix = toIPNetwork(*prefix);
   return netlinkSocket_->deleteUnicastRoute(myPrefix);
@@ -278,7 +278,6 @@ NetlinkFibHandler::future_getKernelRouteTable() {
 
 void
 NetlinkFibHandler::getCounters(std::map<std::string, int64_t>& counters) {
-  LOG(INFO) << "Get counters requested";
   auto routes = netlinkSocket_->getUnicastRoutes().get();
   counters["fibagent.num_of_routes"] = routes.size();
 }
