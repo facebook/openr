@@ -736,7 +736,6 @@ TEST_F(NetlinkSubscriberFixture, AddrAddRemoveTest) {
   // We will either timeout if expected events are not received
   // or stop after we receive expected events
   std::thread eventThread([&]() { zmqLoop.run(); });
-
   zmqLoop.waitUntilRunning();
 
   // Now emulate the links going up. This will generate link-local addresses.
@@ -794,8 +793,8 @@ TEST_F(NetlinkSubscriberFixture, AddrAddRemoveTest) {
         myHandler.links.count(kVethNameY) &&
         myHandler.links.at(kVethNameX).isUp &&
         myHandler.links.at(kVethNameY).isUp &&
-        // This is the ony change - wait for 2 events
-        myHandler.addrEventCount == 2) {
+        // This is the ony change - wait for 4 addr delete events
+        myHandler.addrEventCount == 4) {
       VLOG(3) << "Expected events received. Stopping zmq event loop";
       allEventsReceived = true;
       zmqLoop.stop();
@@ -832,7 +831,7 @@ TEST_F(NetlinkSubscriberFixture, AddrAddRemoveTest) {
   zmqLoop.waitUntilStopped();
   zmqLoop.cancelTimeout(timeout);
 
-  // Verify that the addresses disappeared
+  // Verify that the addresses disappeared (ipv6 link local addresses remains)
   links = netlinkSubscriber.getAllLinks();
   EXPECT_EQ(1, links.at(kVethNameX).networks.size());
   EXPECT_EQ(1, links.at(kVethNameY).networks.size());

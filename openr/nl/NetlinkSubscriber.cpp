@@ -18,6 +18,7 @@
 #include <folly/Optional.h>
 #include <folly/ScopeGuard.h>
 #include <folly/String.h>
+#include <folly/futures/Future.h>
 
 namespace {
 const folly::StringPiece kLinkObjectStr("route/link");
@@ -114,8 +115,8 @@ buildNeighbor(struct nl_object* obj, struct nl_cache* linkCache, bool deleted) {
       static_cast<const unsigned char*>(nl_addr_get_binary_addr(dst)),
       nl_addr_get_len(dst)));
 
-  std::string ifName =
-      ifIndexToName(linkCache, rtnl_neigh_get_ifindex(neighbor));
+  const std::string ifName = ifIndexToName(
+      linkCache, rtnl_neigh_get_ifindex(neighbor));
   bool isReachable =
       deleted ? false : isNeighborReachable(rtnl_neigh_get_state(neighbor));
 
@@ -166,7 +167,8 @@ buildAddr(struct nl_object* obj, struct nl_cache* linkCache, bool deleted) {
     return folly::none;
   }
 
-  std::string ifName = ifIndexToName(linkCache, rtnl_addr_get_ifindex(addr));
+  const std::string ifName = ifIndexToName(
+      linkCache, rtnl_addr_get_ifindex(addr));
   struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
   if (!ipaddr) {
     LOG(ERROR) << "Invalid ip address for link " << ifName;
@@ -196,26 +198,31 @@ namespace openr {
 NetlinkSubscriber::NetlinkSubscriber(
     fbzmq::ZmqEventLoop* zmqLoop, NetlinkSubscriber::Handler* handler)
     : zmqLoop_(zmqLoop), handler_(handler) {
-  if (!zmqLoop_ || !handler_) {
-    throw NetlinkException("Invalid args for creating NetlinkSubscriber");
-  }
+  CHECK(zmqLoop != nullptr) << "Missing event loop.";
+  CHECK(handler != nullptr) << "Missing subscription handler.";
 
-  sock_ = nl_socket_alloc();
-  if (!sock_) {
-    throw NetlinkException(folly::sformat("Failed to create netlink socket"));
-  }
-
+  // Create netlink socket for only notification subscription
+  subNlSock_ = nl_socket_alloc();
+  CHECK(subNlSock_ != nullptr) << "Failed to create netlink socket.";
   SCOPE_FAIL {
-    nl_socket_free(sock_);
+    nl_socket_free(subNlSock_);
   };
 
-  int err = nl_cache_mngr_alloc(
-      sock_, NETLINK_ROUTE, NL_AUTO_PROVIDE, &cacheManager_);
-  if (err != 0) {
-    throw NetlinkException(folly::sformat(
-        "Failed to create cache Manager. Error: {}", nl_geterror(err)));
-  }
+  // Create netlink socket for periodic refresh of our caches (link/addr/neigh)
+  reqNlSock_ = nl_socket_alloc();
+  CHECK(reqNlSock_ != nullptr) << "Failed to create netlink socket.";
+  SCOPE_FAIL {
+    nl_socket_free(reqNlSock_);
+  };
 
+  int err = nl_connect(reqNlSock_, NETLINK_ROUTE);
+  CHECK_EQ(err, 0) << "Failed to connect nl socket. Error " << nl_geterror(err);
+
+  // Create cache manager using notification socket
+  err = nl_cache_mngr_alloc(
+      subNlSock_, NETLINK_ROUTE, NL_AUTO_PROVIDE, &cacheManager_);
+  CHECK_EQ(err, 0)
+    << "Failed to create cache manager. Error: " << nl_geterror(err);
   SCOPE_FAIL {
     nl_cache_mngr_free(cacheManager_);
   };
@@ -223,59 +230,44 @@ NetlinkSubscriber::NetlinkSubscriber(
   // Request a neighbor cache to be created and registered with cache manager
   // neighbor event handler is provided which has this object as opaque data so
   // we can get object state back in this static callback
-  // NOTE:
-  // We store this object as opaque data into libnl so we can access linkCache_
-  // to map ifIndex to link name.
-  // We can create a context with just user handler and linkCache_ but
-  // for now, lets just give the entire object to libnl as opaque data
-  // We are careful not to call methods from the libnl callback for fear of
-  // race conditions. Call to dataReady() will implicitly update the
-  // linkCache_ and use it as read-only in the libnl callback
   err = nl_cache_mngr_add(
       cacheManager_,
       kNeighborObjectStr.data(),
       neighborEventFunc,
       this,
       &neighborCache_);
-
   if (err != 0 || !neighborCache_) {
-    throw NetlinkException(folly::sformat(
-        "Failed to add neighbor cache to manager. Error: {}",
-        nl_geterror(err)));
+    CHECK(false)
+      << "Failed to add neighbor cache to manager. Error: " << nl_geterror(err);
   }
 
   // Add link cache to manager. Same caveats as for neighborEventFunc
   err = nl_cache_mngr_add(
       cacheManager_, kLinkObjectStr.data(), linkEventFunc, this, &linkCache_);
-
   if (err != 0 || !linkCache_) {
-    throw NetlinkException(folly::sformat(
-        "Failed to add link cache to manager. Error: {}", nl_geterror(err)));
+    CHECK(false)
+      << "Failed to add link cache to manager. Error: " << nl_geterror(err);
   }
 
   // Add address cache to manager. Same caveats as for neighborEventFunc
   err = nl_cache_mngr_add(
       cacheManager_, kAddrObjectStr.data(), addrEventFunc, this, &addrCache_);
-
   if (err != 0 || !addrCache_) {
-    throw NetlinkException(folly::sformat(
-        "Failed to add addr cache to manager. Error: {}", nl_geterror(err)));
+    CHECK(false)
+      << "Failed to add addr cache to manager. Error: " << nl_geterror(err);
   }
 
+  // Get socket FD to monitor for updates
   int socketFd = nl_cache_mngr_get_fd(cacheManager_);
-  if (socketFd == -1) {
-    throw NetlinkException("Failed to get socket fd");
-  }
+  CHECK_NE(socketFd, -1) << "Failed to get socket fd";
 
   // Anytime this socket has data, have libnl process it
   // Our registered handlers will be invoked..
   zmqLoop_->addSocketFd(socketFd, POLLIN, [this](int) noexcept {
-    try {
-      dataReady();
-    } catch (std::exception const& e) {
-      LOG(ERROR) << "Error processing data on socket: "
-                 << folly::exceptionStr(e);
-      return;
+    int lambdaErr = nl_cache_mngr_data_ready(cacheManager_);
+    if (lambdaErr < 0) {
+      LOG(ERROR) << "Error processing data on netlink socket. Error: "
+                 << nl_geterror(lambdaErr);
     }
   });
 }
@@ -284,55 +276,65 @@ NetlinkSubscriber::~NetlinkSubscriber() {
   VLOG(2) << "Destroying cache we created";
 
   zmqLoop_->removeSocketFd(nl_cache_mngr_get_fd(cacheManager_));
+
   // Manager will release our caches internally
   nl_cache_mngr_free(cacheManager_);
-  nl_socket_free(sock_);
+  nl_socket_free(subNlSock_);
+  nl_socket_free(reqNlSock_);
+
+  neighborCache_ = nullptr;
+  linkCache_ = nullptr;
+  addrCache_ = nullptr;
+  cacheManager_ = nullptr;
+  subNlSock_ = nullptr;
+  reqNlSock_ = nullptr;
 }
 
 Links
 NetlinkSubscriber::getAllLinks() {
   VLOG(3) << "Getting links";
 
-  // Update kernel caches which will invoke registered handlers
-  // where we update our local cache
-  // This will happen in the calling thread context
-  updateFromKernelCaches();
+  folly::Promise<Links> promise;
+  auto future = promise.getFuture();
 
-  std::lock_guard<std::mutex> lock(netlinkMutex_);
+  zmqLoop_->runImmediatelyOrInEventLoop(
+    [this, promise = std::move(promise)] () mutable {
+      nl_cache_refill(reqNlSock_, linkCache_);
+      nl_cache_refill(reqNlSock_, addrCache_);
+      updateLinkAddrCache();
 
-  nl_cache_refill(sock_, linkCache_);
-  nl_cache_refill(sock_, addrCache_);
-  fillLinkCache();
+      promise.setValue(links_);
+    });
 
-  return links_;
+  return future.get();
 }
 
 Neighbors
 NetlinkSubscriber::getAllReachableNeighbors() {
   VLOG(3) << "Getting neighbors";
 
-  // Update kernel caches which will invoke registered handlers
-  // In those handlers we also update our local cache
-  // This will happen in the calling thread context
-  updateFromKernelCaches();
+  folly::Promise<Neighbors> promise;
+  auto future = promise.getFuture();
 
-  std::lock_guard<std::mutex> lock(netlinkMutex_);
+  zmqLoop_->runImmediatelyOrInEventLoop(
+    [this, promise = std::move(promise)] () mutable {
+      // Neighbor uses linkcache to map ifIndex to name
+      // we really dont need to update addrCache_ but
+      // no harm doing it since updateLinkAddrCache will update both
+      nl_cache_refill(reqNlSock_, linkCache_);
+      nl_cache_refill(reqNlSock_, addrCache_);
+      nl_cache_refill(reqNlSock_, neighborCache_);
+      updateLinkAddrCache();
+      updateNeighborCache();
 
-  // Neighbor uses linkcache to map ifIndex to name
-  // we really dont need to update addrCache_ but
-  // no harm doing it since fillLinkCache will update both
-  nl_cache_refill(sock_, linkCache_);
-  nl_cache_refill(sock_, addrCache_);
-  nl_cache_refill(sock_, neighborCache_);
-  fillLinkCache();
-  fillNeighborCache();
+      promise.setValue(neighbors_);
+    });
 
-  return neighbors_;
+  return future.get();
 }
 
-// Invoked from libnl data processing callback whenver there
+// Invoked from libnl data processing callback whenever there
 // is data on the socket
-// Our mutex should be held
 void
 NetlinkSubscriber::handleLinkEvent(
     nl_object* obj, bool deleted, bool runHandler) noexcept {
@@ -343,14 +345,17 @@ NetlinkSubscriber::handleLinkEvent(
     }
     VLOG(3) << "Link Event: " << linkEntry->ifName << "(" << linkEntry->ifIndex
             << ") " << (linkEntry->isUp ? "up" : "down");
-    if (runHandler) {
-      handler_->linkEventFunc(*linkEntry);
-    }
+    auto& linkObj = links_[linkEntry->ifName];
+    linkObj.isUp = linkEntry->isUp;
+    linkObj.ifIndex = linkEntry->ifIndex;
     if (!linkEntry->isUp) {
       removeNeighborCacheEntries(linkEntry->ifName);
     }
-    links_[linkEntry->ifName].isUp = linkEntry->isUp;
-    links_[linkEntry->ifName].ifIndex = linkEntry->ifIndex;
+
+    // Invoke handler
+    if (runHandler) {
+      handler_->linkEventFunc(*linkEntry);
+    }
   } catch (std::exception const& e) {
     LOG(ERROR) << "Error building link entry / invoking registered handler: "
                << folly::exceptionStr(e);
@@ -369,15 +374,17 @@ NetlinkSubscriber::handleNeighborEvent(
             << " dest: " << neighborEntry->destination
             << " linkAddr: " << neighborEntry->linkAddress
             << (neighborEntry->isReachable ? " Reachable" : " Unreachable");
-    if (runHandler) {
-      handler_->neighborEventFunc(*neighborEntry);
-    }
-    auto neighborKey =
+    const auto neighborKey =
         std::make_pair(neighborEntry->ifName, neighborEntry->destination);
     if (neighborEntry->isReachable) {
       neighbors_[neighborKey] = neighborEntry->linkAddress;
     } else {
       neighbors_.erase(neighborKey);
+    }
+
+    // Invoke handler
+    if (runHandler) {
+      handler_->neighborEventFunc(*neighborEntry);
     }
   } catch (std::exception const& e) {
     LOG(ERROR) << "Error building neighbor entry/invoking registered handler: "
@@ -396,11 +403,6 @@ NetlinkSubscriber::handleAddrEvent(
     VLOG(3) << "Address event: " << addrEntry->ifName
             << ", address: " << addrEntry->network.first.str()
             << (addrEntry->isValid ? " Valid" : " Invalid");
-
-    if (runHandler) {
-      handler_->addrEventFunc(*addrEntry);
-    }
-
     if (addrEntry->isValid) {
       links_[addrEntry->ifName].networks.insert(addrEntry->network);
     } else {
@@ -408,6 +410,11 @@ NetlinkSubscriber::handleAddrEvent(
       if (it != links_.end()) {
         it->second.networks.erase(addrEntry->network);
       }
+    }
+
+    // Invoke handler
+    if (runHandler) {
+      handler_->addrEventFunc(*addrEntry);
     }
   } catch (const std::exception& e) {
     LOG(ERROR) << "Error building addr entry/invoking registered handler: "
@@ -443,7 +450,7 @@ NetlinkSubscriber::addrEventFunc(
 }
 
 void
-NetlinkSubscriber::fillLinkCache() {
+NetlinkSubscriber::updateLinkAddrCache() {
   auto linkFunc = [](struct nl_object * obj, void* arg) noexcept->void {
     CHECK(arg) << "Opaque context does not exist";
     reinterpret_cast<NetlinkSubscriber*>(arg)->handleLinkEvent(
@@ -460,7 +467,7 @@ NetlinkSubscriber::fillLinkCache() {
 }
 
 void
-NetlinkSubscriber::fillNeighborCache() {
+NetlinkSubscriber::updateNeighborCache() {
   auto neighborFunc = [](struct nl_object * obj, void* arg) noexcept {
     CHECK(arg) << "Opaque context does not exist";
     reinterpret_cast<NetlinkSubscriber*>(arg)->handleNeighborEvent(
@@ -477,33 +484,6 @@ NetlinkSubscriber::removeNeighborCacheEntries(const std::string& ifName) {
     } else {
       ++it;
     }
-  }
-}
-
-// Data is ready on socket, request a read. This will invoke our registered
-// handler which in turn will retrieve the user stored handler and
-// invoke it
-void
-NetlinkSubscriber::dataReady() {
-  std::lock_guard<std::mutex> lock(netlinkMutex_);
-  int err = nl_cache_mngr_data_ready(cacheManager_);
-  if (err < 0) {
-    throw NetlinkException(folly::sformat(
-        "Failed to read ready data from cache manager. Error: {}",
-        nl_geterror(err)));
-  }
-}
-
-// Process any outstanding events on the socket and let libnl
-// update all registered caches
-// If we have no outstanding events, this call should be harmless
-void
-NetlinkSubscriber::updateFromKernelCaches() {
-  try {
-    dataReady();
-  } catch (std::exception const& e) {
-    LOG(ERROR) << "Error processing data on socket: " << folly::exceptionStr(e);
-    return;
   }
 }
 

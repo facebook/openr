@@ -9,7 +9,6 @@
 
 #include <functional>
 #include <map>
-#include <mutex>
 #include <unordered_map>
 
 #include <fbzmq/async/ZmqEventLoop.h>
@@ -102,7 +101,8 @@ struct NeighborEntry {
 // They should however not be called from within the registered handlers in the
 // Handler object provided below (there should be no good reason to anyway)
 // Internally, the user provided Handler funcs and get*() methods both update
-// the same internal libnl cache, which we protect via our mutex.
+// the same internal libnl cache, which we protect by serializing calls into a
+// sigle eventloop.
 //
 // Further, getAllLinks() / getAllReachableNeighbors() will internally request
 // refill of libnl caches. This will trigger user regiseterd Handler func to be
@@ -114,9 +114,6 @@ class NetlinkSubscriber final {
   // A simple collection of handlers invoked on relevant events
   // This object is passed to NetlinkSubscriber
   // If caller is not interested in a handler, it can simply not override it
-  // NOTE:
-  // User should not call get* API of NetlinkSubscriber object
-  // within these funcs to avoid recursive locking
   class Handler {
    public:
     Handler() = default;
@@ -191,21 +188,24 @@ class NetlinkSubscriber final {
       nl_object* obj, bool deleted, bool runHandler) noexcept;
   void handleAddrEvent(nl_object* obj, bool deleted, bool runHandler) noexcept;
 
-  // Helper methods to do an initial fill of our local cache
-  void fillLinkCache();
-  void fillNeighborCache();
+  // Helper methods to do full update of link cache from kernel
+  void updateLinkAddrCache();
+  void updateNeighborCache();
 
   // If a link went down, remove all associated neighbor entries
   void removeNeighborCacheEntries(const std::string& ifName);
 
-  // Helper method to request kernel to update libnls caches
-  // Internally uses mutex to protect against get* API called from main thread
-  void dataReady();
-  void updateFromKernelCaches();
-
-  // We create our own socket explicitly to allow refilling
-  // of caches
-  struct nl_sock* sock_{nullptr};
+  // Netlink scokets to interact with linux kernel. We deliberately use two
+  // sockets as it is a recommended way instead of multiplexing things over
+  // single socket. We have been seeing issues with multiplexing things (like
+  // Object Busy, Link Cache not updating etc.)
+  //
+  // subNlSock_ => Is a read only socket which subscribes to multicast groups
+  //                 for links, addrs and neighbor notifications.
+  // reqNlSock_ => Is a req/rep socket that is used to request full snapshot of
+  //               links, addrs and neighbor entries and update local cache.
+  struct nl_sock* subNlSock_{nullptr};
+  struct nl_sock* reqNlSock_{nullptr};
 
   // libnl uses the cacheManager to manages all caches
   // This is needed to subscribe for events
@@ -218,12 +218,6 @@ class NetlinkSubscriber final {
 
   fbzmq::ZmqEventLoop* zmqLoop_{nullptr};
   Handler* handler_{nullptr};
-
-  // Zmq thread calls update methods which updates libnl caches
-  // The get* API also requests updates to libnl caches and these API
-  // may be called from Main thread. This mutex synchronizes between
-  // the 2 threads
-  std::mutex netlinkMutex_;
 
   // We keep an internal cache of Neighbor and Link entries
   // These are used in the get* methods
