@@ -1454,11 +1454,9 @@ Decision::submitCounters() {
   VLOG(3) << "Submitting counters...";
 
   // Prepare for submitting counters
-  auto counter = spfSolver_->getCounters();
-  counter["decision.aliveness"] = 1;
-  fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counter);
+  auto counters = spfSolver_->getCounters();
 
-  zmqMonitorClient_->setCounters(submittingCounters);
+  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 void

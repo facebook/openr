@@ -455,17 +455,10 @@ HealthChecker::submitCounters() {
 
   // Extract/build counters from thread-data
   auto counters = tData_.getCounters();
-
   counters["health_checker.nodes_to_ping_size"] = nodesToPing_.size();
   counters["health_checker.nodes_info_size"] = nodeInfo_.size();
 
-  // Aliveness report counters
-  counters["health_checker.aliveness"] = 1;
-
-  // Prepare for submitting counters
-  fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counters);
-
-  zmqMonitorClient_->setCounters(submittingCounters);
+  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 } // namespace openr

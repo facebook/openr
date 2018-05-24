@@ -1536,10 +1536,7 @@ Spark::submitCounters() {
   counters["spark.my_seq_num"] = mySeqNum_;
   counters["spark.pending_timers"] = getNumPendingTimeouts();
 
-  // Aliveness report counters
-  counters["spark.aliveness"] = 1;
-
-  zmqMonitorClient_->setCounters(prepareSubmitCounters(counters));
+  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 } // namespace openr

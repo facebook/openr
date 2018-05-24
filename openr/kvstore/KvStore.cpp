@@ -1280,14 +1280,7 @@ KvStore::submitCounters() {
   counters["kvstore.num_peers"] = peers_.size();
   counters["kvstore.pending_full_sync"] = peersToSyncWith_.size();
 
-  // Aliveness report counters
-  counters["kvstore.aliveness"] = 1;
-
-  // Prepare for submitting counters
-  fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counters);
-
-  CHECK(zmqMonitorClient_);
-  zmqMonitorClient_->setCounters(submittingCounters);
+  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 void

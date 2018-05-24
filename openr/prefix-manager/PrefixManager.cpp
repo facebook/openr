@@ -220,10 +220,7 @@ PrefixManager::submitCounters() {
   // Extract/build counters from thread-data
   auto counters = tData_.getCounters();
 
-  // Prepare for submitting counters
-  fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counters);
-
-  zmqMonitorClient_->setCounters(submittingCounters);
+  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 int64_t

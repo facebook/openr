@@ -507,13 +507,7 @@ Fib::submitCounters() {
   counters["fib.num_routes"] = routeDb_.routes.size();
   counters["fib.require_routedb_sync"] = syncRoutesTimer_->isScheduled();
 
-  // Aliveness report counters
-  counters["fib.aliveness"] = 1;
-
-  // Prepare for submitting counters
-  fbzmq::CounterMap submittingCounters = prepareSubmitCounters(counters);
-
-  zmqMonitorClient_->setCounters(submittingCounters);
+  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 void
