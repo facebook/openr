@@ -68,7 +68,7 @@ setup(
         'futures',
         'hexdump',
         'networkx',
-        'py2-ipaddress',
+        'python-ipaddress',
         'pyzmq',
         'tabulate',
     ],

@@ -28,6 +28,12 @@ class DecisionCli(object):
             DecisionRoutesComputedCli().routes,
             name='routes-computed',
         )
+
+        # for TG backward compatibility. Deprecated.
+        self.decision.add_command(
+            DecisionRoutesComputedCli().routes,
+            name='routes',
+        )
         self.decision.add_command(DecisionValidateCli().validate)
 
     @click.group()
