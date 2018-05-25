@@ -1164,7 +1164,11 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color,
             # if nexthop addr is v4, make sure it belongs to same subnets as
             # interface addr
             if ipnetwork.ip_version(nh.addr) == 4:
-                for prefix in interfaces[nh.ifName].info.networks:
+                networks = interfaces[nh.ifName].info.networks
+                if networks is None:
+                    # maintain backward compatbility
+                    networks = []
+                for prefix in networks:
                     if ipnetwork.ip_version(prefix.prefixAddress.addr) == 4 and \
                        not ipnetwork.is_same_subnet(
                            nh.addr, prefix.prefixAddress.addr, '31'):
