@@ -316,8 +316,8 @@ sudo apt-get install -y libdouble-conversion-dev \
 # install other dependencies from source
 #
 
-install_glog
 install_gflags
+install_glog # Requires gflags to be build first
 install_gtest
 install_mstch
 install_zstd
