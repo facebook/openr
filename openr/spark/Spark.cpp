@@ -1260,7 +1260,7 @@ Spark::processInterfaceDbUpdate() {
 
     // We have a valid entry
     // Obtain v4 address if enabled, else default
-    folly::CIDRNetwork v4Network;
+    folly::CIDRNetwork v4Network{folly::IPAddress("0.0.0.0"), 32};
     if (enableV4_) {
       CHECK(v4Networks.size());
       v4Network = v4Networks.front();
