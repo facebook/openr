@@ -22,6 +22,9 @@ from openr.Lsdb import ttypes as lsdb_types
 def sprint_addr(addr):
     ''' binary ip addr -> string '''
 
+    if not len(addr):
+        return ''
+
     return str(ipaddress.ip_address(addr))
 
 
