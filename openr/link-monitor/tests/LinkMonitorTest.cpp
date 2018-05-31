@@ -1721,13 +1721,17 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/128", true);
   mockNlHandler->sendAddrEvent("loopback", "2803:cafe:babe::1/128", true);
 
+  // push some valid interface addresses with subnet
+  mockNlHandler->sendAddrEvent("loopback", "10.128.241.1/24", true);
+  mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", true);
+
   // verify
   prefixes.clear();
-  while (prefixes.size() != 5) {
+  while (prefixes.size() != 7) {
     LOG(INFO) << "Testing address advertisements";
     prefixes = getNextPrefixDb("prefix:node-1");
-    if (prefixes.size() != 5) {
-      LOG(INFO) << "Looking for 5 prefixes got " << prefixes.size();
+    if (prefixes.size() != 7) {
+      LOG(INFO) << "Looking for 7 prefixes got " << prefixes.size();
       continue;
     }
     EXPECT_EQ(1, prefixes.count(staticPrefix1));
@@ -1735,6 +1739,9 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
     EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::1/128")));
     EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:cafe:babe::1/128")));
     EXPECT_EQ(1, prefixes.count(toIpPrefix("10.127.240.1/32")));
+
+    EXPECT_EQ(1, prefixes.count(toIpPrefix("10.128.241.0/24")));
+    EXPECT_EQ(1, prefixes.count(toIpPrefix("2803:6080:4958:b403::/64")));
   }
 
   //
@@ -1744,6 +1751,10 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   // withdraw some addresses
   mockNlHandler->sendAddrEvent("loopback", "10.127.240.1/32", false);
   mockNlHandler->sendAddrEvent("loopback", "2803:cafe:babe::1/128", false);
+
+  // withdraw addresses with subnet
+  mockNlHandler->sendAddrEvent("loopback", "10.128.241.1/24", false);
+  mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", false);
 
   // verify
   prefixes.clear();

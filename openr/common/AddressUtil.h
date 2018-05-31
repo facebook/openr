@@ -50,9 +50,9 @@ toIPAddress(const thrift::BinaryAddress& addr) {
 }
 
 inline folly::CIDRNetwork
-toIPNetwork(const thrift::IpPrefix& prefix) {
+toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
   return folly::IPAddress::createNetwork(
-      toIPAddress(prefix.prefixAddress).str(), prefix.prefixLength, false);
+      toIPAddress(prefix.prefixAddress).str(), prefix.prefixLength, applyMask);
 }
 
 inline thrift::IpPrefix

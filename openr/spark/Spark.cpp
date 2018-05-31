@@ -1237,7 +1237,7 @@ Spark::processInterfaceDbUpdate() {
     std::vector<folly::CIDRNetwork> v4Networks;
     std::vector<folly::CIDRNetwork> v6LinkLocalNetworks;
     for (const auto& ntwk : networks) {
-      const auto& ipNetwork = toIPNetwork(ntwk);
+      const auto& ipNetwork = toIPNetwork(ntwk, false);
       if (ipNetwork.first.isV4()) {
         v4Networks.emplace_back(ipNetwork);
       }

@@ -1006,7 +1006,7 @@ LinkMonitor::updateAddrEvent(const thrift::AddrEntry& addrEntry) {
   }
 
   bool isUpdated = false;
-  auto ipNetwork = toIPNetwork(addrEntry.ipPrefix);
+  auto ipNetwork = toIPNetwork(addrEntry.ipPrefix, false);
   bool isValid = addrEntry.isValid;
   auto& intf = interfaceDb_.at(ifName);
 

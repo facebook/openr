@@ -96,17 +96,26 @@ MockNetlinkSystemHandler::sendLinkEvent(
 void
 MockNetlinkSystemHandler::sendAddrEvent(
     const std::string& ifName, const std::string& prefix, const bool isValid) {
+  const auto ipNetwork = folly::IPAddress::createNetwork(prefix, -1, false);
+
   // Update linkDb_
   SYNCHRONIZED(linkDb_) {
     if (isValid) {
-      linkDb_[ifName].networks.insert(folly::IPAddress::createNetwork(prefix));
+      linkDb_[ifName].networks.insert(ipNetwork);
     } else {
-      linkDb_[ifName].networks.erase(folly::IPAddress::createNetwork(prefix));
+      linkDb_[ifName].networks.erase(ipNetwork);
     }
   }
 
-  platformPublisher_->publishAddrEvent(
-      thrift::AddrEntry(FRAGILE, ifName, toIpPrefix(prefix), isValid));
+  platformPublisher_->publishAddrEvent(thrift::AddrEntry(
+      FRAGILE,
+      ifName,
+      thrift::IpPrefix(
+          FRAGILE,
+          toBinaryAddress(ipNetwork.first),
+          ipNetwork.second
+      ),
+      isValid));
 }
 
 void
