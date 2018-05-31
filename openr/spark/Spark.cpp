@@ -944,6 +944,14 @@ Spark::processHelloPacket() {
         VLOG(3) << "Measured new RTT for neighbor " << originator.nodeName
                 << " from iface " << originator.ifName << " over interface "
                 << ifName << " as " << rtt.count() / 1000.0 << "ms.";
+        // Mask off to millisecond accuracy!
+        // Reason => Relying on microsecond accuracy is too inacurate. For
+        // practical scenarios like Backbone network having accuracy upto
+        // milliseconds is sufficient. Further load on system can heavily
+        // infuence rtt at microseconds but not much at milliseconds and hence
+        // when node comes back up measurement will more likely to be the same
+        // as the previous one.
+        rtt = std::max(rtt / 1000 * 1000, std::chrono::microseconds(1000));
 
         // It is possible for things to go wrong in RTT calculation because of
         // clock adjustment.

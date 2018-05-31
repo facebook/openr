@@ -531,7 +531,7 @@ LinkMonitor::neighborUpEvent(
       (useRttMetric_ ? rttMetric : 1) /* metric */,
       enableSegmentRouting_ ? event.label : 0 /* adjacency-label */,
       false /* overload bit */,
-      event.rttUs,
+      (useRttMetric_ ? event.rttUs : 0),
       timestamp,
       weight,
       remoteIfName /* otherIfName */);

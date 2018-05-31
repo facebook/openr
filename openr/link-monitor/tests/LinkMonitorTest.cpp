@@ -108,7 +108,7 @@ const auto adj_2_1 = thrift::Adjacency(
     1 /* metric */,
     1 /* label */,
     false /* overload-bit */,
-    100 /* rtt */,
+    0 /* rtt */,
     kTimestamp /* timestamp */,
     Constants::kDefaultAdjWeight /* weight */,
     "" /* otherIfName */);
@@ -122,7 +122,7 @@ const auto adj_2_2 = thrift::Adjacency(
     1 /* metric */,
     2 /* label */,
     false /* overload-bit */,
-    100 /* rtt */,
+    0 /* rtt */,
     kTimestamp /* timestamp */,
     Constants::kDefaultAdjWeight /* weight */,
     "" /* otherIfName */);
