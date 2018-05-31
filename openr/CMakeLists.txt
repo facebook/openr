@@ -260,7 +260,6 @@ add_library(openrlib
   kvstore/KvStore.cpp
   kvstore/KvStoreWrapper.cpp
   link-monitor/LinkMonitor.cpp
-  nl/NetlinkIfSocket.cpp
   nl/NetlinkRouteSocket.cpp
   nl/NetlinkSubscriber.cpp
   platform/NetlinkFibHandler.cpp
@@ -459,7 +458,6 @@ install(FILES
 install(FILES
   nl/NetlinkSubscriber.h
   nl/NetlinkException.h
-  nl/NetlinkIfSocket.h
   nl/NetlinkRouteSocket.h
   DESTINATION include/openr/nl
 )
@@ -512,30 +510,6 @@ if(BUILD_TESTS)
   find_library(GMOCK_MAIN gmock_main)
   find_library(GTEST gtest)
   find_library(GTEST_MAIN gtest_main)
-
-  add_executable(netlink_if_monitor
-    nl/examples/NetlinkIfEventMonitor.cpp
-  )
-
-  target_include_directories(netlink_if_monitor
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-
-  target_link_libraries(netlink_if_monitor
-    openrlib
-    ${GLOG}
-    ${GFLAGS}
-    ${FOLLY}
-    -lpthread
-    ${NLROUTE3}
-    ${NL3}
-  )
-
-  install(TARGETS
-    netlink_if_monitor
-    DESTINATION sbin
-  )
 
   add_executable(netlink_route_sample
     nl/examples/NetlinkRouteSample.cpp
@@ -843,9 +817,6 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/fib
   )
 
-  add_executable(netlink_if_socket_test
-    nl/tests/NetlinkIfSocketTest.cpp
-  )
   add_executable(netlink_route_socket_test
     nl/tests/NetlinkRouteSocketTest.cpp
   )
@@ -853,10 +824,6 @@ if(BUILD_TESTS)
     nl/tests/NetlinkSubscriberTest.cpp
   )
 
-  target_include_directories(netlink_if_socket_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
   target_include_directories(netlink_route_socket_test
     PRIVATE
     ${LIBNL3-HEADERS}/libnl3
@@ -866,13 +833,6 @@ if(BUILD_TESTS)
     ${LIBNL3-HEADERS}/libnl3
   )
 
-  target_link_libraries(netlink_if_socket_test
-    openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
-  )
   target_link_libraries(netlink_route_socket_test
     openrlib
     ${GMOCK}
@@ -892,13 +852,11 @@ if(BUILD_TESTS)
     # This test fails under Travis, so adding it as an exception
     add_test(FibTest fib_test)
     # these tests must be run by root user
-    add_test(NetlinkIfSocketTest netlink_if_socket_test)
     add_test(NetlinkRouteSocketTest netlink_route_socket_test)
     add_test(NetlinkSubscriberTest netlink_subscriber_test)
   endif()
 
   install(TARGETS
-    netlink_if_socket_test
     netlink_route_socket_test
     netlink_subscriber_test
     DESTINATION sbin/tests/openr/nl
