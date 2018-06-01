@@ -34,7 +34,7 @@ from openr.utils.consts import Consts
 @click.option('--ports-config-file', '-f', default=None,
               type=str, help='JSON file for ports config')
 @click.option('--color/--no-color', default=True,
-              help='Enalbe coloring display')
+              help='Enable coloring display')
 @click.option('--verbose/--no-verbose', default=False,
               help='Print verbose information')
 @click.pass_context
