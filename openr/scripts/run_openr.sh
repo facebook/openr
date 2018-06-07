@@ -39,6 +39,7 @@
 # OpenR binary path or command name present on bin paths
 OPENR=openr
 
+# Keep this list in sorted order
 ADVERTISE_INTERFACE_DB=false
 ALLOC_PREFIX_LEN=128
 ASSUME_DRAINED=false
@@ -63,11 +64,13 @@ HEALTH_CHECKER_PING_INTERVAL_S=3
 IFACE_PREFIXES="terra,nic1,nic2"
 IFACE_REGEX_EXCLUDE=""
 IFACE_REGEX_INCLUDE=""
+KEY_PREFIX_FILTERS=""
 LOOPBACK_IFACE="lo"
 OVERRIDE_LOOPBACK_ADDR=false
 PREFIXES=""
 REDISTRIBUTE_IFACES="lo1"
 SEED_PREFIX=""
+SET_LEAF_NODE=false
 SET_LOOPBACK_ADDR=false
 SPARK_FASTINIT_KEEPALIVE_TIME_MS=100
 SPARK_HOLD_TIME_S=30
@@ -119,7 +122,7 @@ else
 fi
 
 #
-# Let the magic begin \m/
+# Let the magic begin. Keep the options sorted except for log level \m/
 #
 
 exec ${OPENR} \
@@ -138,14 +141,17 @@ exec ${OPENR} \
   --enable_netlink_system_handler=${ENABLE_NETLINK_SYSTEM_HANDLER} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
   --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
+  --enable_rtt_metric=${ENABLE_RTT_METRIC} \
   --enable_segment_routing=${ENABLE_SEGMENT_ROUTING} \
   --enable_v4=${ENABLE_V4} \
+  --enable_watchdog=${ENABLE_WATCHDOG} \
   --fib_handler_port=${FIB_HANDLER_PORT} \
   --health_checker_ping_interval_s=${HEALTH_CHECKER_PING_INTERVAL_S} \
-  --loopback_iface=${LOOPBACK_IFACE} \
   --ifname_prefix=${IFACE_PREFIXES} \
   --iface_regex_exclude=${IFACE_REGEX_EXCLUDE} \
   --iface_regex_include=${IFACE_REGEX_INCLUDE} \
+  --key_prefix_filters=${KEY_PREFIX_FILTERS} \
+  --loopback_iface=${LOOPBACK_IFACE} \
   --node_name="${NODE_NAME}" \
   --override_loopback_addr=${OVERRIDE_LOOPBACK_ADDR} \
   --prefixes="${PREFIXES}" \
@@ -155,9 +161,8 @@ exec ${OPENR} \
   --spark_fastinit_keepalive_time_ms=${SPARK_FASTINIT_KEEPALIVE_TIME_MS} \
   --spark_hold_time_s=${SPARK_HOLD_TIME_S} \
   --spark_keepalive_time_s=${SPARK_KEEPALIVE_TIME_S} \
+  --set_leaf_node=${SET_LEAF_NODE} \
   --static_prefix_alloc=${STATIC_PREFIX_ALLOC} \
-  --enable_rtt_metric=${ENABLE_RTT_METRIC} \
-  --enable_watchdog=${ENABLE_WATCHDOG} \
   --logbufsecs=0 \
   --logtostderr \
   --max_log_size=1 \

@@ -354,6 +354,32 @@ DECISION_DEBOUNCE_MIN_MS=10
 DECISION_DEBOUNCE_MAX_MS=250
 ```
 
+#### SET_LEAF_NODE
+
+Sometimes a node maybe a leaf node and have only one path in to network. This
+node does not require to keep track of the entire topology. In this case, it may
+be useful to optimize memory by reducing the amount of key/vals tracked by the
+node.
+
+Setting this flag enables key prefix filters defined by KEY_PREFIX_FILTERS.
+A node only tracks keys in kvstore that matches one of the prefixes in
+KEY_PREFIX_FILTERS.
+
+```
+SET_LEAF_NODE=false
+```
+
+#### KEY_PREFIX_FILTERS
+
+This comma separated string is used to set the key prefixes when key prefix
+filter is enabled (See SET_LEAF_NODE).
+It is also set when requesting KEY_DUMP from peer to request keys that match
+one of these prefixes.
+
+```
+KEY_PREFIX_FILTERS="foo,bar"
+```
+
 #### ENABLE_PERF_MEASUREMENT
 
 Experimental feature to measure convergence performance. Performance information
