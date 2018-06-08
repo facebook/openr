@@ -109,7 +109,7 @@ install_folly() {
     git fetch origin
     git checkout "$rev"
   fi
-  cmake -DBUILD_SHARED_LIBS=ON ..
+  cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" ..
   make
   sudo make install
   sudo ldconfig
@@ -262,7 +262,7 @@ install_openr() {
     -DBUILD_SHARED_LIBS=OFF \
     -DBUILD_TESTS=ON \
     -DADD_ROOT_TESTS=ON \
-    -DCMAKE_CXX_FLAGS="-Wno-unused-parameter" \
+    -DCMAKE_CXX_FLAGS="-Wno-unused-parameter -fPIC" \
     ../openr/
   make
   sudo make install
