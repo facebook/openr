@@ -14,6 +14,19 @@ namespace openr {
 
 // static
 template <typename ThriftType>
+ThriftType
+KvStoreClient::parseThriftValue(thrift::Value const& value) {
+  apache::thrift::CompactSerializer serializer;
+
+  DCHECK(value.value.hasValue());
+
+  auto buf =
+    folly::IOBuf::wrapBufferAsValue(value.value->data(), value.value->size());
+  return fbzmq::util::readThriftObj<ThriftType>(buf, serializer);
+}
+
+// static
+template <typename ThriftType>
 std::unordered_map<std::string, ThriftType>
 KvStoreClient::parseThriftValues(
     std::unordered_map<std::string, thrift::Value> const& keyVals) {
@@ -22,13 +35,8 @@ KvStoreClient::parseThriftValues(
 
   for (auto const& kv : keyVals) {
     // Here: kv.first is the key string, kv.second is thrift::Value
-
-    DCHECK(kv.second.value.hasValue());
-
-    auto buf = folly::IOBuf::wrapBufferAsValue(
-        kv.second.value->data(), kv.second.value->size());
-    auto deser = fbzmq::util::readThriftObj<ThriftType>(buf, serializer);
-    result.emplace(kv.first, std::move(deser));
+    result.emplace(
+          kv.first, KvStoreClient::parseThriftValue<ThriftType>(kv.second));
   } // for
 
   return result;

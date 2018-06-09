@@ -117,6 +117,10 @@ class KvStoreClient {
       fbzmq::Error>
   dumpAllWithPrefix(const std::string& prefix = "");
 
+  // helper for deserialization
+  template <typename ThriftType>
+  static ThriftType parseThriftValue(thrift::Value const& value);
+
   /**
    * Given map of thrift::Value object parse them into map of ThriftType
    * objects,
