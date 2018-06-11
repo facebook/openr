@@ -30,7 +30,6 @@ template <typename ThriftType>
 std::unordered_map<std::string, ThriftType>
 KvStoreClient::parseThriftValues(
     std::unordered_map<std::string, thrift::Value> const& keyVals) {
-  apache::thrift::CompactSerializer serializer;
   std::unordered_map<std::string, ThriftType> result;
 
   for (auto const& kv : keyVals) {
