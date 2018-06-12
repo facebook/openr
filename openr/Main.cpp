@@ -193,6 +193,10 @@ DEFINE_bool(
     true,
     "Enable subnet validation on adjacencies to avoid mis-cabling of v4 address"
     "on different subnets on each end.");
+DEFINE_bool(
+    enable_lfa,
+    false,
+    "Enable LFA computation for quick reroute per RFC 5286");
 DEFINE_int32(
     spark_hold_time_s,
     18,
@@ -821,6 +825,7 @@ main(int argc, char** argv) {
     decision = std::make_unique<Decision>(
         FLAGS_node_name,
         FLAGS_enable_v4,
+        FLAGS_enable_lfa,
         AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),

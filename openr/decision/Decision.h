@@ -98,7 +98,7 @@ class SpfSolver {
  public:
   // these need to be defined in the .cpp so they can refer
   // to the actual implementation of SpfSolverImpl
-  explicit SpfSolver(bool enableV4);
+  SpfSolver(const std::string& myNodeName, bool enableV4, bool computeLfaPaths);
   ~SpfSolver();
 
   //
@@ -106,9 +106,10 @@ class SpfSolver {
   // be defined in the .cpp
   //
 
-  // update adjacencies for the given router; everything is replaced. Returns
-  // true if this has caused any change in graph
-  bool updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
+  // update adjacencies for the given router
+  std::pair<bool /* topology has changed*/,
+            bool /* local nextHop addrs have changed */>
+  updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
 
   // delete a node's adjacency database
   // return true if this has caused any change in graph
@@ -130,11 +131,8 @@ class SpfSolver {
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
-  // compute the routes from perspective of a given router
-  thrift::RouteDatabase buildShortestPaths(const std::string& myNodeName);
-
-  // compute all LFA routes from perspective of a given router
-  thrift::RouteDatabase buildMultiPaths(const std::string& myNodeName);
+  // compute all routes from perspective of a given router
+  thrift::RouteDatabase buildPaths(const std::string& myNodeName);
 
   // build route database using global prefix database and cached SPF
   // computation from perspective of a given router.
@@ -174,6 +172,7 @@ class Decision : public fbzmq::ZmqEventLoop {
   Decision(
       std::string myNodeName,
       bool enableV4,
+      bool computeLfaPaths,
       const AdjacencyDbMarker& adjacencyDbMarker,
       const PrefixDbMarker& prefixDbMarker,
       std::chrono::milliseconds debounceMinDur,

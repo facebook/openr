@@ -51,6 +51,7 @@ DRYRUN=false
 ENABLE_SUBNET_VALIDATION=true
 ENABLE_FIB_SYNC=false
 ENABLE_HEALTH_CHECKER=false
+ENABLE_LFA=false
 ENABLE_NETLINK_FIB_HANDLER=true
 ENABLE_NETLINK_SYSTEM_HANDLER=true
 ENABLE_OLD_DECISION_MODULE=false
@@ -138,6 +139,7 @@ exec ${OPENR} \
   --enable_subnet_validation=${ENABLE_SUBNET_VALIDATION} \
   --enable_fib_sync=${ENABLE_FIB_SYNC} \
   --enable_health_checker=${ENABLE_HEALTH_CHECKER} \
+  --enable_lfa=${ENABLE_LFA} \
   --enable_netlink_fib_handler=${ENABLE_NETLINK_FIB_HANDLER} \
   --enable_netlink_system_handler=${ENABLE_NETLINK_SYSTEM_HANDLER} \
   --enable_old_decision_module=${ENABLE_OLD_DECISION_MODULE} \

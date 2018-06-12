@@ -8,13 +8,10 @@
 #include "Decision.h"
 
 #include <chrono>
+#include <set>
 #include <string>
+#include <unordered_set>
 
-#include <boost/functional/hash.hpp>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/dijkstra_shortest_paths.hpp>
-#include <boost/graph/graph_traits.hpp>
-#include <boost/property_map/property_map.hpp>
 #include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -32,245 +29,402 @@ using namespace std;
 
 using apache::thrift::FRAGILE;
 
-using Weight = uint64_t;
-using Graph = boost::adjacency_list<
-    boost::listS,
-    boost::vecS,
-    boost::directedS,
-    boost::no_property,
-    boost::property<boost::edge_weight_t, Weight>>;
-using VertexDescriptor = boost::graph_traits<Graph>::vertex_descriptor;
-using EdgeDescriptor = boost::graph_traits<Graph>::edge_descriptor;
-using EdgeProperty = boost::property<boost::edge_weight_t, Weight>;
-using IndexMap = boost::property_map<Graph, boost::vertex_index_t>::type;
-using WeightMap = boost::property_map<Graph, boost::edge_weight_t>;
-using PredecessorMap = boost::iterator_property_map<
-    VertexDescriptor*,
-    IndexMap,
-    VertexDescriptor,
-    VertexDescriptor&>;
-using DistanceMap =
-    boost::iterator_property_map<Weight*, IndexMap, Weight, Weight&>;
-
-namespace openr {
+using Metric = uint64_t;
 
 namespace {
-
-using NexthopAdj = std::pair<thrift::Adjacency, Weight>;
 
 // Default HWM is 1k. We set it to 0 to buffer all received messages.
 const int kStoreSubReceiveHwm{0};
 
-struct NodeData {
-  std::string nodeName;
+//
+// Why define Link and LinkState? Isn't link state fully captured by something
+// like std::unordered_map<std::string, thrift::AdjacencyDatabase>?
+// It is, but these classes provide a few major benefits over that simple
+// structure:
+//
+// 1. Only stores bidirectional links. i.e. for a link, the node at both ends
+// is advertising the adjancecy
+//
+// 2. Defines a hash and comparators that operate on the essential property of a
+// network link: the tuple: unorderedPair<orderedPair<nodeName, ifName>,
+//                                orderedPair<nodeName, ifName>>
+//
+// 3. For each unique link in the network, holds a single object that can be
+// quickly accessed and modified via the nodeName of either end of the link.
+//
+// 4. Provides useful apis to read and write link state.
+//
 
-  bool isOverloaded{false};
+class Link {
+ public:
+  Link(const std::string& nodeName1, const openr::thrift::Adjacency& adj1,
+       const std::string& nodeName2, const openr::thrift::Adjacency& adj2)
+       : n1_(nodeName1), n2_(nodeName2),
+         if1_(adj1.ifName), if2_(adj2.ifName),
+         metric1_(adj1.metric), metric2_(adj2.metric),
+         overload1_(adj1.isOverloaded), overload2_(adj2.isOverloaded),
+         nhV41_(adj1.nextHopV4), nhV42_(adj2.nextHopV4),
+         nhV61_(adj1.nextHopV6), nhV62_(adj2.nextHopV6),
+         orderedNames(std::minmax(std::make_pair(n1_, if1_),
+                                  std::make_pair(n2_, if2_))),
+         hash(std::hash<
+           std::pair<std::pair<std::string, std::string>,
+                     std::pair<std::string, std::string>>>()(orderedNames)) {}
 
-  int32_t nodeLabel{0};
+ private:
+  const std::string n1_, n2_, if1_, if2_;
+  Metric metric1_{1}, metric2_{1};
+  bool overload1_{false}, overload2_{false};
+  openr::thrift::BinaryAddress nhV41_, nhV42_, nhV61_, nhV62_;
+  const std::pair<
+    std::pair<std::string, std::string>,
+    std::pair<std::string, std::string>> orderedNames;
 
-  unordered_map<
-      std::pair<
-          std::string /* remoteIfName */,
-          std::string /* remoteNodeName */>,
-      thrift::Adjacency>
-      adjDb;
+ public:
+  const size_t hash{0};
 
-  std::unordered_set<thrift::IpPrefix> prefixes;
-
-  bool
-  isAdjacent(std::string const& otherIfName, std::string const& otherNodeName) {
-    return adjDb.count({otherIfName, otherNodeName});
+  const std::string& getOtherNodeName(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return n2_;
+    }
+    if (n2_ == nodeName) {
+      return n1_;
+    }
+    throw std::invalid_argument(nodeName);
   }
 
-  bool
-  isNeighbor(std::string const& otherNodeName) {
-    for (auto const& kv : adjDb) {
-      auto const& neighbor = kv.first.second;
-      if (neighbor == otherNodeName) {
-        return true;
-      }
-    }
-    return false;
+  const std::string& firstNodeName() const {
+    return orderedNames.first.first;
   }
 
-  // Update adjDb, at the same time check if drain status of router/adjacency
-  // changes, if so return true to trigger SPF recalculation
-  bool
-  updateAdjacencyDb(
-      thrift::AdjacencyDatabase adjacencyDb,
-      std::vector<std::tuple<std::string, std::string, std::string>>& toUpdate,
-      std::vector<std::tuple<std::string, std::string, std::string>>& toDel) {
-    DCHECK(nodeName == adjacencyDb.thisNodeName)
-        << "call updateAdjacencyDb on wrong node!";
-    // Check if there's any node/adjcency overload, if so trigger SPF
-    bool triggerSpf = (isOverloaded != adjacencyDb.isOverloaded) or
-      (nodeLabel != adjacencyDb.nodeLabel);
-
-    std::unordered_set<
-        std::pair<std::string /* remote interface */, std::string /* node */>>
-        newAdj;
-
-    for (auto const& adj : adjacencyDb.adjacencies) {
-      auto const& remoteIfName = getRemoteIfName(adj);
-      newAdj.emplace(std::make_pair(remoteIfName, adj.otherNodeName));
-
-      // if already in adjDb, check if drain status changed
-      if (isAdjacent(remoteIfName, adj.otherNodeName)) {
-        VLOG(3) << nodeName << " and neighbor " << adj.otherNodeName
-                << " is verified adjacent on remote IfName " << remoteIfName;
-        auto& it = adjDb.at(std::make_pair(remoteIfName, adj.otherNodeName));
-        if (it != adj) {
-          // Update cached adjDb
-          VLOG(3) << "Adjacency exsists and is found updated";
-          it = adj;
-          toUpdate.push_back(
-            std::make_tuple(adj.ifName, adj.otherIfName, adj.otherNodeName));
-        }
-      } else {
-        // Update cached adjDb
-        VLOG(3) << "Adjacency between " << nodeName
-                << " and " << adj.otherNodeName
-                << " on interface " << remoteIfName << " is freshly inserted";
-        adjDb.emplace(std::make_pair(remoteIfName, adj.otherNodeName), adj);
-        toUpdate.push_back(
-          std::make_tuple(adj.ifName, adj.otherIfName, adj.otherNodeName));
-      }
-    }
-
-    for (auto it = adjDb.begin(); it != adjDb.end();) {
-      if (newAdj.count(it->first) == 0) {
-        toDel.push_back(std::make_tuple(
-          it->second.ifName, it->second.otherIfName, it->second.otherNodeName));
-        // Update cahced adjDb
-        it = adjDb.erase(it);
-      } else {
-        ++it;
-      }
-    }
-
-    // update AdjacencyDatabase attributes
-    isOverloaded = adjacencyDb.isOverloaded;
-    nodeLabel = adjacencyDb.nodeLabel;
-    return triggerSpf;
+  const std::string& secondNodeName() const {
+    return orderedNames.second.first;
   }
 
-  bool
-  updatePrefixDb(std::unordered_set<thrift::IpPrefix> prefixDb) {
-    bool prefixChange = false;
-    // check if there's any prefix to be removed
-    for (auto const& prefix : prefixes) {
-      if (prefixDb.count(prefix) == 0) {
-        prefixChange = true;
-        break;
-      }
+  const std::string& getIfaceFromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return if1_;
     }
-    // check if there's any new prefix to be added
-    for (auto const& prefix : prefixDb) {
-      if (prefixes.count(prefix) == 0) {
-        prefixChange = true;
-        break;
-      }
+    if (n2_ == nodeName) {
+      return if2_;
     }
+    throw std::invalid_argument(nodeName);
+  }
 
-    // Update cached prefixes
-    prefixes = prefixDb;
-    return prefixChange;
+  Metric getMetricFromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return metric1_;
+    }
+    if (n2_ == nodeName) {
+      return metric2_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
+
+  bool getOverloadFromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return overload1_;
+    }
+    if (n2_ == nodeName) {
+      return overload2_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
+
+  bool isOverloaded() const {
+    return overload1_ || overload2_;
+  }
+
+  const openr::thrift::BinaryAddress&
+  getNhV4FromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return nhV41_;
+    }
+    if (n2_ == nodeName) {
+      return nhV42_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
+
+  const openr::thrift::BinaryAddress&
+  getNhV6FromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return nhV61_;
+    }
+    if (n2_ == nodeName) {
+      return nhV62_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
+
+  void setNhV4FromNode(const std::string& nodeName,
+      const openr::thrift::BinaryAddress& nhV4) {
+    if (n1_ == nodeName) {
+      nhV41_ = nhV4;
+    } else if (n2_ == nodeName) {
+      nhV42_ = nhV4;
+    } else {
+      throw std::invalid_argument(nodeName);
+    }
+  }
+
+  void setNhV6FromNode(const std::string& nodeName,
+      const openr::thrift::BinaryAddress& nhV6) {
+    if (n1_ == nodeName) {
+      nhV61_ = nhV6;
+    } else if (n2_ == nodeName) {
+      nhV62_ = nhV6;
+    } else {
+      throw std::invalid_argument(nodeName);
+    }
+  }
+
+  void setMetricFromNode(const std::string& nodeName, Metric d) {
+    if (n1_ == nodeName) {
+      metric1_ = d;
+    } else if (n2_ == nodeName) {
+      metric2_ = d;
+    } else {
+      throw std::invalid_argument(nodeName);
+    }
+  }
+
+  void setOverloadFromNode(const std::string& nodeName, bool overload) {
+    if (n1_ == nodeName) {
+      overload1_ = overload;
+    } else if (n2_ == nodeName) {
+      overload2_ = overload;
+    } else {
+      throw std::invalid_argument(nodeName);
+    }
+  }
+
+  bool operator<(const Link& other) const {
+    return this->hash < other.hash;
+  }
+
+  bool operator==(const Link& other) const {
+    if (this->hash != other.hash) {
+      return false;
+    }
+    return this->orderedNames == other.orderedNames;
+  }
+
+  std::string toString() const {
+    return folly::sformat("{}%{} <---> {}%{}", n1_, if1_, n2_, if2_);
+  }
+
+  std::string directionalToString(const std::string& fromNode) const {
+    return folly::sformat("{}%{} ---> {}%{}",
+        fromNode,
+        getIfaceFromNode(fromNode),
+        getOtherNodeName(fromNode),
+        getIfaceFromNode(getOtherNodeName(fromNode)));
+  }
+}; // class Link
+
+// Classes needed for running Dijkstra
+class DijkstraQNode {
+ public:
+  DijkstraQNode(const std::string& n, Metric d):
+     nodeName(n), distance(d) {}
+  const std::string nodeName;
+  Metric distance{0};
+  std::unordered_set<std::string> nextHops;
+};
+
+class DijkstraQ {
+ private:
+  std::vector<std::shared_ptr<DijkstraQNode>> heap_;
+  std::unordered_map<std::string, std::shared_ptr<DijkstraQNode>> nameToNode_;
+
+  struct {
+    bool operator()(std::shared_ptr<DijkstraQNode> a,
+        std::shared_ptr<DijkstraQNode> b) const {
+      if (a->distance != b->distance) {
+        return a->distance > b->distance;
+      }
+      return a->nodeName > b->nodeName;
+    }
+  } DijkstraQNodeGreater;
+
+ public:
+
+  void insertNode(const std::string& nodeName, Metric d) {
+    heap_.push_back(std::make_shared<DijkstraQNode>(nodeName, d));
+    nameToNode_[nodeName] = heap_.back();
+    std::push_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
+  }
+
+  std::shared_ptr<DijkstraQNode>
+  get(const std::string& nodeName) {
+    if (nameToNode_.count(nodeName)) {
+      return nameToNode_.at(nodeName);
+    }
+    return nullptr;
+  }
+
+  std::shared_ptr<DijkstraQNode> extractMin() {
+    if (heap_.empty()) {
+      return nullptr;
+    }
+    auto min = heap_.at(0);
+    CHECK(nameToNode_.erase(min->nodeName));
+    std::pop_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
+    heap_.pop_back();
+    return min;
+  }
+
+  void decreaseKey(const std::string& nodeName, Metric d) {
+    if (nameToNode_.count(nodeName)) {
+      if (nameToNode_.at(nodeName)->distance < d) {
+        throw std::invalid_argument(std::to_string(d));
+      }
+      nameToNode_.at(nodeName)->distance = d;
+      // this is a bit slow but is rarely called in our application. In fact,
+      // in networks where the metric is hop count, this will never be called
+      // and the Dijkstra run is no different than BFS
+      std::make_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
+    } else {
+      throw std::invalid_argument(nodeName);
+    }
   }
 };
 
-/**
- * Create a route with single path.
- */
-folly::Optional<thrift::Route>
-createRoute(
-    const thrift::IpPrefix& prefix,
-    const thrift::Adjacency& adjacency,
-    Weight metric,
-    bool enableV4) {
-  auto addr = toIPAddress(prefix.prefixAddress);
-  if (addr.isV4() and !enableV4) {
-    LOG(ERROR) << "Received v4 prefix while v4 is not enabled.";
-    return nullptr;
-  }
-
-  thrift::Path path(
-      FRAGILE,
-      addr.isV4() ? adjacency.nextHopV4 : adjacency.nextHopV6,
-      adjacency.ifName,
-      metric);
-  return thrift::Route(FRAGILE, prefix, {std::move(path)});
-}
-
-/**
- * Create multi-path route, prefix with set of loop-free next-hops. If any
- * error occurs then the returned value will be empty and error will be logged.
- */
-folly::Optional<thrift::Route>
-createRouteMulti(
-    const thrift::IpPrefix& prefix,
-    const vector<pair<thrift::Adjacency, Weight>>& adjacencies,
-    bool enableV4) {
-  auto addr = toIPAddress(prefix.prefixAddress);
-  if (addr.isV4() and !enableV4) {
-    LOG(ERROR) << "Received v4 prefix while v4 is not enabled.";
-    return nullptr;
-  }
-
-  if (adjacencies.empty()) {
-    return nullptr;
-  }
-
-  std::set<thrift::Path> paths;
-  for (auto const& kv : adjacencies) {
-    auto const& adjacency = kv.first;
-    paths.insert(thrift::Path(
-        FRAGILE,
-        addr.isV4() ? adjacency.nextHopV4 : adjacency.nextHopV6,
-        adjacency.ifName,
-        kv.second /* metric */));
-  }
-
-  return thrift::Route(
-      FRAGILE, prefix, vector<thrift::Path>(paths.begin(), paths.end()));
-}
-
 } // anonymous namespace
+
+namespace std {
+
+// needed for certain containers
+
+template <>
+struct hash<Link> {
+  size_t operator()(Link const& link) const {
+    return link.hash;
+  }
+};
+
+} // namespace std
+
+
+namespace {
+
+
+class LinkState {
+ public:
+
+  struct LinkPtrHash {
+   bool operator()(const std::shared_ptr<Link>& l) const {
+     return l->hash;
+   }
+  };
+
+  struct LinkPtrLess {
+    bool operator()(const std::shared_ptr<Link>& lhs,
+        const std::shared_ptr<Link>& rhs) const {
+      return *lhs < *rhs;
+    }
+  };
+
+  struct LinkPtrEqual {
+    bool operator()(const std::shared_ptr<Link>& lhs,
+        const std::shared_ptr<Link>& rhs) const {
+      return *lhs == *rhs;
+    }
+  };
+
+  // for both these cotainers, we want to compare the actual link being stored
+  // and not the object address
+  using LinkSet =
+      std::unordered_set<std::shared_ptr<Link>, LinkPtrHash, LinkPtrEqual>;
+  using OrderedLinkSet = std::set<std::shared_ptr<Link>, LinkPtrLess>;
+
+  void addLink(const Link& link) {
+    auto key = std::make_shared<Link>(link);
+    CHECK(linkMap_[link.firstNodeName()].insert(key).second);
+    CHECK(linkMap_[link.secondNodeName()].insert(key).second);
+  }
+
+  // throws std::out_of_range if links are not present
+  void removeLink(const Link& link) {
+    auto key = std::make_shared<Link>(link);
+    CHECK(linkMap_.at(link.firstNodeName()).erase(key));
+    CHECK(linkMap_.at(link.secondNodeName()).erase(key));
+  }
+
+  void removeLinksFromNode(const std::string& nodeName) {
+    // erase ptrs to these links from other nodes
+    for (auto const& link : linkMap_.at(nodeName)) {
+      CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
+    }
+    linkMap_.erase(nodeName);
+  }
+
+  const LinkSet& linksFromNode(const std::string& nodeName) {
+    static const LinkSet defaultEmptySet;
+    auto search = linkMap_.find(nodeName);
+    if (search != linkMap_.end()) {
+      return search->second;
+    }
+    return defaultEmptySet;
+  }
+
+  OrderedLinkSet orderedLinksFromNode(const std::string& nodeName) {
+    OrderedLinkSet set;
+    auto search = linkMap_.find(nodeName);
+    if (search != linkMap_.end()) {
+      for (auto const& link : search->second) {
+        set.emplace(link);
+      }
+    }
+    return set;
+  }
+
+ private:
+  // this stores the same link object accessible from either nodeName
+  std::unordered_map<std::string /* nodeName */, LinkSet> linkMap_;
+
+}; // class LinkState
+} // anonymous namespace
+
+
+namespace openr {
 
 /**
  * Private implementation of the SpfSolver
  */
 class SpfSolver::SpfSolverImpl {
  public:
-  explicit SpfSolverImpl(bool enableV4) : enableV4_(enableV4) {}
+  SpfSolverImpl(
+      const std::string& myNodeName,
+      bool enableV4,
+      bool computeLfaPaths)
+      : myNodeName_(myNodeName),
+        enableV4_(enableV4),
+        computeLfaPaths_(computeLfaPaths) {}
 
   ~SpfSolverImpl() = default;
 
-  bool updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
+  std::pair<bool /* topology has changed*/,
+            bool /* local nextHop addrs have changed */>
+  updateAdjacencyDatabase(thrift::AdjacencyDatabase const& newAdjacencyDb);
+
+  // returns true if the AdjacencyDatabase existed
   bool deleteAdjacencyDatabase(const std::string& nodeName);
+
   std::unordered_map<std::string /* nodeName */, thrift::AdjacencyDatabase>
   getAdjacencyDatabases();
+  // returns true if the prefixDb changed
   bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
+
+  // returns true if the PrefixDatabase existed
   bool deletePrefixDatabase(const std::string& nodeName);
+
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
-  thrift::RouteDatabase buildShortestPaths(const std::string& myNodeName);
-  thrift::RouteDatabase buildMultiPaths(const std::string& myNodeName);
+  thrift::RouteDatabase buildPaths(const std::string& myNodeName);
   thrift::RouteDatabase buildRouteDb(const std::string& myNodeName);
-
-  /**
-   * Graph is prepared as followed
-   * 1. Add all node vertices (adjDb_.keys())
-   * 2. Use adjDb to add edges between nodes. bidirectional check is
-   *    enforced here.
-   *
-   * Bidirectional Check: An edge between node will be considered only when
-   * both nodes reports each other. Otherwise it is ignored.
-   *
-   * Prepare data structures that we use for SPF run and it can be re-used
-   * across multiple SPF computations.
-   */
-  void prepareGraph();
 
   std::unordered_map<std::string, int64_t> getCounters();
 
@@ -284,251 +438,179 @@ class SpfSolver::SpfSolverImpl {
   SpfSolverImpl(SpfSolverImpl const&) = delete;
   SpfSolverImpl& operator=(SpfSolverImpl const&) = delete;
 
-  // run SPF and produce map from node name to next-hop and metric to reach it
+  // run SPF and produce map from node name to next-hops that have shortest
+  // paths to it
   unordered_map<
-      string /* other node name */,
-      pair<string /* next-hop node name */, Weight /* metric */>>
-  runSpf(const std::string& myNodeName);
+      string /* otherNodeName */,
+      pair<Metric, unordered_set<string /* nextHopNodeName */>>>
+  runSpf(const std::string& nodeName);
 
-  // bidirectionally verify newly added/deleted interfaces
-  // When adjacency update is received, we enforce the bidirectional check and
-  // only trigger SPF re-calculation when there's actual link change.
-  // For example, for a graph like:
-  // node1: intf1 -------- node2: intf2
-  // When we firstly receive adjacency update from node1 declaring that node2
-  // is added at local interface intf1, we don't trigger SPF immediately
-  // because node1 --- node2 is not fully brought up yet. We only trigger SPF
-  // when node2 also updates its adjacency with nodes1 added at node2's
-  // local interface intf2.
-  // Similarly, when the link is brought down, we trigger SPF recalculation
-  // immediately when node1 is declaring node2 is no longer its neighbor,
-  // and we don't trigger spf caclulation again when node2 reports node1 as
-  // down on it's intf2 following previous event as the adjacency is no
-  // longer bi-directional
-  bool bidirectionalAdjacencyCheck(
-      const std::string& nodeName,
-      const std::vector<std::tuple<
-          std::string /* local intf */,
-          std::string /* remote intf */,
-          std::string /* remote node */>>& toUpdate,
-      const std::vector<std::tuple<
-          std::string /* local intf */,
-          std::string /* remote intf */,
-          std::string /* remote node */>>& toDel);
+  std::set<Link> getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb);
 
-  // this is the new data structure to support adjacencyDb updates, prefix
-  // update and corresponding bidirectional check
-  std::unordered_map<std::string /* nodeName */, NodeData> nodeData_;
+  Metric findMinDistToNeighbor(
+    const std::string& myNodeName, const std::string& neighborName);
 
-  // the graph we operate on for SPF
-  Graph graph_;
+  // returns Link object if the reverse adjancency is present in
+  // adjacencyDatabases_.at(adj.otherNodeName), else returns folly::none
+  folly::Optional<Link> maybeMakeLink(
+    const std::string& nodeName, const thrift::Adjacency& adj);
 
-  // helpers for mapping router names to descriptros and vice versa
-  unordered_map<string /* router name */, VertexDescriptor> nameToDescriptor_;
-  unordered_map<VertexDescriptor, string /* router name */> descriptorToName_;
+  std::unordered_map<
+      std::string, thrift::AdjacencyDatabase> adjacencyDatabases_;
 
-  // compare two adjacencies
-  struct AdjComparator {
-    bool
-    operator()(
-        const thrift::Adjacency& lhs, const thrift::Adjacency& rhs) const {
-      return lhs.metric < rhs.metric;
-    }
-  };
-
-  // compare two next-hop adjacencies
-  struct NexthopAdjComparator {
-    bool
-    operator()(const NexthopAdj& lhs, const NexthopAdj& rhs) const {
-      return lhs.first.metric < rhs.first.metric;
-    }
-  };
-
-  // Adjacencies indexed by originating router and destination router
-  // Note: use multiset, not set, since there are duplicates, i.e., adjacencies
-  // with same metric
-  unordered_map<
-      pair<string /* thisRouterName */, string /* otherRouterName */>,
-      multiset<
-          thrift::Adjacency,
-          AdjComparator> /* adjacencies ordered by non-descreasing metric */>
-      adjacencyIndex_;
+  LinkState linkState_;
 
   // Save all direct next-hop distance from a given source node to a destination
   // node. We update it as we compute all LFA routes from perspective of source
   std::unordered_map<
-      std::string /* node name */,
-      std::unordered_map<
-          std::string /* destination node */,
-          std::map<
-              std::string /* nexthop node */,
-              Weight /* metric value from source node to destination node */>>>
-      allDistFromNode_;
+      std::string /* source nodeName */,
+      unordered_map<
+          string /* otherNodeName */,
+          pair<Metric, unordered_set<string /* nextHopNodeName */>>>>
+      spfResults_;
+
+  // For each prefix in the network, stores a set of nodes that advertise it
+  std::unordered_map<
+    thrift::IpPrefix, std::unordered_set<std::string>> prefixes_;
+  std::unordered_map<std::string, thrift::PrefixDatabase> prefixDatabases_;
 
   // track some stats
   fbzmq::ThreadData tData_;
 
+  const std::string myNodeName_;
+
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
   // nexthops to Fib module for programming. Else it will just drop them.
   const bool enableV4_{false};
+
+  const bool computeLfaPaths_{false};
 };
 
-bool
+std::pair<bool /* topology has changed*/,
+          bool /* local nextHop addrs have changed */>
 SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
-    thrift::AdjacencyDatabase const& adjacencyDb) {
-  auto const& nodeName = adjacencyDb.thisNodeName;
+    thrift::AdjacencyDatabase const& newAdjacencyDb) {
+  auto const& nodeName = newAdjacencyDb.thisNodeName;
   VLOG(2) << "Updating adjacency database for node " << nodeName;
   tData_.addStatValue("decision.adj_db_update", 1, fbzmq::COUNT);
 
-  for (auto const& adj : adjacencyDb.adjacencies) {
-    VLOG(3) << "  nbr: " << adj.otherNodeName << ", remoteIfName: "
+  for (auto const& adj : newAdjacencyDb.adjacencies) {
+    VLOG(3) << "  neighbor: " << adj.otherNodeName << ", remoteIfName: "
             << getRemoteIfName(adj)
             << ", ifName: " << adj.ifName << ", metric: " << adj.metric
             << ", overloaded: " << adj.isOverloaded << ", rtt: " << adj.rtt;
   }
 
-  // Insert if not exists
-  if (nodeData_.count(nodeName) == 0) {
-    // This is a new node inserted in nodeData.adjDb, create entry in adjDb
-    NodeData newNode;
-    newNode.nodeName = adjacencyDb.thisNodeName;
-    newNode.isOverloaded = adjacencyDb.isOverloaded;
-    newNode.nodeLabel = adjacencyDb.nodeLabel;
-    nodeData_.emplace(nodeName, newNode);
-  }
+  // Default construct if it did not exist
+  thrift::AdjacencyDatabase priorAdjacencyDb(
+      std::move(adjacencyDatabases_[nodeName]));
+  // replace
+  adjacencyDatabases_[nodeName] = newAdjacencyDb;
 
-  std::vector<std::tuple<
-      std::string /* local intf */,
-      std::string /* remote intf */,
-      std::string /* remote node */>> toUpdate;
-  std::vector<std::tuple<
-      std::string /* local intf */,
-      std::string /* remote intf */,
-      std::string /* remote node */>> toDel;
-  // Check if there's any node/adjcency overload, if so trigger SPF
-  // updateAdjacencyDb only returns true if both ends of the adjacencies are
-  // bidirectionally verified
-  if (nodeData_.at(nodeName).updateAdjacencyDb(adjacencyDb, toUpdate, toDel)) {
-    VLOG(3) << "Node label or overload attribute changed for " << nodeName;
-    return true;
-  }
+  // for comparing old and new state, we order the links based on the tuple
+  // <nodeName1, iface1, nodeName2, iface2>, this allows us to easily discern
+  // topology changes in the single loop below
+  auto oldLinks = linkState_.orderedLinksFromNode(nodeName);
+  auto newLinks = getOrderedLinkSet(newAdjacencyDb);
 
-  // If nothing changed, no need to trigger SPF
-  if (toUpdate.empty() and toDel.empty()) {
-    VLOG(3) << "Nothing to update in adjDb";
-    return false;
-  }
+  // fill these sets with the appropriate links
+  std::unordered_set<Link> linksUp;
+  std::unordered_set<Link> linksDown;
 
-  return bidirectionalAdjacencyCheck(nodeName, toUpdate, toDel);
-}
+  bool topoChanged =
+      newAdjacencyDb.isOverloaded != priorAdjacencyDb.isOverloaded;
 
-bool
-SpfSolver::SpfSolverImpl::bidirectionalAdjacencyCheck(
-    const std::string& nodeName,
-    const std::vector<std::tuple<
-        std::string /* local intf */,
-        std::string /* remote intf */,
-        std::string /* remote node */>>& toUpdate,
-    const std::vector<std::tuple<
-        std::string /* local intf */,
-        std::string /* remote intf */,
-        std::string /* remote node */>>& toDel) {
-  // Check if newly added adjacencies is bidirectional. If so, trigger SPF
-  for (auto const& adj : toUpdate) {
-    auto const& ifName = std::get<0>(adj);
-    auto const& otherIfName = std::get<1>(adj);
-    auto const& otherNodeName = std::get<2>(adj);
-    if (nodeData_.count(otherNodeName) == 0) {
+  bool localNextHopsChanged = false;
+
+  auto newIter = newLinks.begin();
+  auto oldIter = oldLinks.begin();
+  while (newIter != newLinks.end() || oldIter != oldLinks.end()) {
+    if (newIter != newLinks.end() &&
+        (oldIter == oldLinks.end() || *newIter < **oldIter)) {
+      // newIter is pointing at a Link not currently present, record this as a
+      // link to add and advance newIter
+      topoChanged = true;
+      linkState_.addLink(*newIter);
+      ++newIter;
       continue;
     }
-    auto otherNodeIt = nodeData_.find(otherNodeName);
-    // For newly added adjacencies, we only re-caculate SPF when current
-    // node is also present in adjDb of added adjacencies
-    // otherwise this adjacency update is not bidirectional verified
-    // SPF won't get affected
-    if (otherNodeIt->second.isAdjacent(ifName, nodeName)) {
-      VLOG(2) << "Adding adjacency between " << nodeName << " and other node "
-              << otherNodeName << " is bidirectionally verified on interface "
-              << ifName;
-      return true;
-    }
-    // if otherIfName is empty, we do loose bidirectional check:
-    // if otherNodeName is neighbor of myNodeName, we assume this is a
-    // bidirectional verified neighbor
-    if (otherIfName.empty() && otherNodeIt->second.isNeighbor(nodeName)) {
-      VLOG(2) << "Adding adjacency between " << nodeName << " and other node "
-              << otherNodeName << " is bidirectionally verified as neighbors";
-      return true;
-    }
-  }
-
-  for (auto const& adj : toDel) {
-    auto const& ifName = std::get<0>(adj);
-    auto const& otherIfName = std::get<1>(adj);
-    auto const& otherNodeName = std::get<2>(adj);
-    if (nodeData_.count(otherNodeName) == 0) {
+    if (oldIter != oldLinks.end() &&
+        (newIter == newLinks.end() || **oldIter < *newIter)) {
+      // oldIter is pointing at a Link that is no longer present, record this as
+      // a link to remove and advance oldIter
+      topoChanged = true;
+      linkState_.removeLink(**oldIter);
+      ++oldIter;
       continue;
     }
-    auto otherNodeIt = nodeData_.find(otherNodeName);
-    // For deleted adjacencies, we only re-caculated SPF when current node
-    // is still present in adjDb of any of deleted adjacencies
-    if (otherNodeIt->second.isAdjacent(ifName, nodeName)) {
-      VLOG(2) << "Deleting adjacency between " << nodeName << " and other node "
-              << otherNodeName << " is bidirectionally verified on interface "
-              << ifName;
-      return true;
+    // The newIter and oldIter point to the same link. This link did not go up
+    // or down. The topology may still have changed though if the link overlaod
+    // or metric changed
+    if (newIter->getMetricFromNode(nodeName) !=
+        (*oldIter)->getMetricFromNode(nodeName)) {
+      topoChanged = true;
+      // change the metric on the link object we already have
+      (*oldIter)->setMetricFromNode(
+          nodeName, newIter->getMetricFromNode(nodeName));
+
+      VLOG(3) << folly::sformat(
+          "Metric change on link {}: {} => {}",
+          newIter->directionalToString(nodeName),
+          (*oldIter)->getMetricFromNode(nodeName),
+          newIter->getMetricFromNode(nodeName));
     }
-    // The following is to make sure to keep backward compatibility with
-    // previous version of openr, in which remote interface is not specified in
-    // newly discovered neighbor.
-    // if remote interface is not specified, we do loose bidirectional check:
-    // myNodeName is already discovered as the neighbor of remote node,
-    // we assume this is a bidirectional verified neighbor
-    if (otherIfName.empty() && otherNodeIt->second.isNeighbor(nodeName)) {
-      VLOG(2) << "Deleting adjacency between " << nodeName << " and other node "
-              << otherNodeName << " is bidirectionally verified as neighbors";
-      return true;
+    if (newIter->getOverloadFromNode(nodeName) !=
+        (*oldIter)->getOverloadFromNode(nodeName)) {
+      topoChanged = true;
+      // change the overload value in the link object we already have
+      (*oldIter)->setOverloadFromNode(
+          nodeName, newIter->getOverloadFromNode(nodeName));
+      VLOG(3) << folly::sformat(
+          "Overload change on link {}: {} => {}",
+          newIter->directionalToString(nodeName),
+          (*oldIter)->getOverloadFromNode(nodeName),
+          newIter->getOverloadFromNode(nodeName));
     }
+    if (myNodeName_ == nodeName) {
+      // check if local nextHops Changed
+      if(newIter->getNhV4FromNode(nodeName) !=
+          (*oldIter)->getNhV4FromNode(nodeName)) {
+        localNextHopsChanged = true;
+        (*oldIter)->setNhV4FromNode(nodeName,
+            newIter->getNhV4FromNode(nodeName));
+      }
+      if(newIter->getNhV6FromNode(nodeName) !=
+          (*oldIter)->getNhV6FromNode(nodeName)) {
+        localNextHopsChanged = true;
+        (*oldIter)->setNhV6FromNode(nodeName,
+            newIter->getNhV6FromNode(nodeName));
+      }
+    }
+    ++newIter;
+    ++oldIter;
   }
 
-  return false;
+  return std::make_pair(topoChanged, localNextHopsChanged);
 }
+
 
 bool
 SpfSolver::SpfSolverImpl::deleteAdjacencyDatabase(const std::string& nodeName) {
-  auto nodeIt = nodeData_.find(nodeName);
+  auto search = adjacencyDatabases_.find(nodeName);
 
-  if (nodeIt == nodeData_.end()) {
+  if (search == adjacencyDatabases_.end()) {
     LOG(WARNING) << "Trying to delete adjacency db for nonexisting node "
                  << nodeName;
     return false;
   }
-  nodeIt->second.adjDb.clear();
-  // reset
-  nodeIt->second.isOverloaded = false;
-  nodeIt->second.nodeLabel = 0;
-  if (nodeIt->second.adjDb.empty() and nodeIt->second.prefixes.empty()) {
-    nodeData_.erase(nodeName);
-  }
+  linkState_.removeLinksFromNode(nodeName);
+  adjacencyDatabases_.erase(search);
   return true;
 }
 
 std::unordered_map<std::string /* nodeName */, thrift::AdjacencyDatabase>
 SpfSolver::SpfSolverImpl::getAdjacencyDatabases() {
-  std::unordered_map<std::string, thrift::AdjacencyDatabase> adjacencyDbs;
-  for (auto const& kv : nodeData_) {
-    auto const& nodeName = kv.first;
-    auto const& nodeInfo = kv.second;
-    thrift::AdjacencyDatabase adjDb;
-    adjDb.thisNodeName = nodeInfo.nodeName;
-    adjDb.isOverloaded = nodeInfo.isOverloaded;
-    adjDb.nodeLabel = nodeInfo.nodeLabel;
-    for (auto const& adj : nodeInfo.adjDb) {
-      adjDb.adjacencies.emplace_back(adj.second);
-    }
-    adjacencyDbs.emplace(nodeName, adjDb);
-  }
-  return adjacencyDbs;
+  return adjacencyDatabases_;
 }
 
 bool
@@ -538,548 +620,369 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
   VLOG(2) << "Updating prefix database for node " << nodeName;
   tData_.addStatValue("decision.prefix_db_update", 1, fbzmq::COUNT);
 
-  std::unordered_set<thrift::IpPrefix> prefixes;
-  for (auto const& prefixEntry : prefixDb.prefixEntries) {
-    prefixes.insert(prefixEntry.prefix);
+  std::set<thrift::IpPrefix> oldPrefixSet;
+  for (const auto& prefixEntry : prefixDatabases_[nodeName].prefixEntries) {
+    oldPrefixSet.emplace(prefixEntry.prefix);
   }
 
-  if (nodeData_.count(nodeName) == 0) {
-    NodeData newNode;
-    newNode.nodeName = nodeName;
-    newNode.prefixes = prefixes;
-    nodeData_.emplace(nodeName, newNode);
-    // When prefix-db is added before adjacency-db, we won't have any route
-    // to other nodes even after SPF computation
-    return false;
+  // update the entry
+  prefixDatabases_[nodeName] = prefixDb;
+  std::set<thrift::IpPrefix> newPrefixSet;
+  for (const auto& prefixEntry : prefixDb.prefixEntries) {
+    newPrefixSet.emplace(prefixEntry.prefix);
   }
 
-  return nodeData_.at(nodeName).updatePrefixDb(prefixes);
+
+  std::set<thrift::IpPrefix> prefixesToRemove;
+  std::set_difference(
+    oldPrefixSet.begin(), oldPrefixSet.end(),
+    newPrefixSet.begin(), newPrefixSet.end(),
+    std::inserter(prefixesToRemove, prefixesToRemove.begin()));
+
+  std::set<thrift::IpPrefix> prefixesToAdd;
+  std::set_difference(
+    newPrefixSet.begin(), newPrefixSet.end(),
+    oldPrefixSet.begin(), oldPrefixSet.end(),
+    std::inserter(prefixesToAdd, prefixesToAdd.begin()));
+
+  for (const auto& prefix : prefixesToRemove) {
+    auto& nodeList = prefixes_.at(prefix);
+    nodeList.erase(nodeName);
+    if (nodeList.empty()) {
+      prefixes_.erase(prefix);
+    }
+  }
+  for (const auto& prefix : prefixesToAdd) {
+    prefixes_[prefix].emplace(nodeName);
+  }
+
+  return !(prefixesToAdd.empty() && prefixesToRemove.empty());
 }
 
 bool
 SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
-  auto nodeIt = nodeData_.find(nodeName);
-  if (nodeIt == nodeData_.end()) {
-    LOG(INFO) << "Trying to delete prefix db for nonexisting node " << nodeName;
-    return false;
-  }
-  if (nodeIt->second.prefixes.empty()) {
-    LOG(INFO) << "Trying to delete empty prefix db for node " << nodeName;
+  auto search = prefixDatabases_.find(nodeName);
+  if (search == prefixDatabases_.end() ||
+      search->second.prefixEntries.empty()) {
+    LOG(INFO) << "Trying to delete empty or non-existent prefix db for node "
+              << nodeName;
+    if (search != prefixDatabases_.end()) {
+      prefixDatabases_.erase(search);
+    }
     return false;
   }
 
-  nodeIt->second.prefixes.clear();
-  if (nodeIt->second.adjDb.empty() and nodeIt->second.prefixes.empty()) {
-    nodeData_.erase(nodeName);
+  for (const auto& prefixEntry : search->second.prefixEntries) {
+    auto& nodeList = prefixes_.at(prefixEntry.prefix);
+    nodeList.erase(nodeName);
+    if (nodeList.empty()) {
+      prefixes_.erase(prefixEntry.prefix);
+    }
   }
+
+  prefixDatabases_.erase(search);
   return true;
 }
 
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
 SpfSolver::SpfSolverImpl::getPrefixDatabases() {
-  // prefixes per advertising router
-  std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
-      prefixDbs;
-
-  // construct prefix dbs from nodeData_.prefixes
-  for (auto const& kv : nodeData_) {
-    const auto& nodeName = kv.first;
-    const auto& prefixes = kv.second.prefixes;
-    auto& prefixDb = prefixDbs[nodeName];
-    prefixDb.thisNodeName = nodeName;
-    for (auto const& prefix : prefixes) {
-      prefixDb.prefixEntries.emplace_back(
-          apache::thrift::FRAGILE, prefix, thrift::PrefixType::LOOPBACK, "");
-    }
-  }
-
-  return prefixDbs;
+  return prefixDatabases_;
 }
 
-void
-SpfSolver::SpfSolverImpl::prepareGraph() {
-  VLOG(2) << "SpfSolver::SpfSolverImpl::prepareGraph() called.";
-
-  graph_.clear();
-  nameToDescriptor_.clear();
-  descriptorToName_.clear();
-  adjacencyIndex_.clear();
-
-  // Create a set of all unidirectional adjacencies, which is from one node to
-  // another one connected thru one remote interface
-  std::unordered_set<std::tuple<
-      std::string /* myNodeName*/,
-      std::string /* otherNodeName */,
-      std::string /* otherIfName*/>>
-      presentAdjacencies;
-
-  // Create a set of all unidirectional adjacencies, just for those with old
-  // version of spark payload to maintain backward compatibility
-  // TODO: remove logic related to this data structure in the next release
-  std::unordered_set<
-      std::pair<std::string /* myNodeName*/, std::string /* otherNodeName */>>
-      compatiblePresentAdjacencies;
-
-  for (auto const& kv : nodeData_) {
-    auto const& thisNodeName = kv.first;
-    auto const& adjacencies = kv.second.adjDb;
-
-    for (auto const& adjacency : adjacencies) {
-      // Skip adjacency from SPF graph if it is overloaded to avoid transit
-      // traffic through it.
-      if (adjacency.second.isOverloaded) {
-        continue;
-      }
-
-      if (adjacency.second.otherIfName.empty() or
-          adjacency.second.otherIfName.find("neigh-") == 0) {
-        // maintain backward compatibility
-        compatiblePresentAdjacencies.insert(
-            std::make_pair(thisNodeName, adjacency.second.otherNodeName));
-      } else {
-        presentAdjacencies.insert(std::make_tuple(
-            thisNodeName,
-            adjacency.second.otherNodeName,
-            adjacency.second.otherIfName));
-      }
-    }
-  }
-
-  // Build adjacencyIndex_ with bidirectional check enforced
-  for (auto const& kv : nodeData_) {
-    auto const& thisNodeName = kv.first;
-    auto const& adjacencies = kv.second.adjDb;
-
-    // walk all my ajdacencies
-    for (auto const& myAdjacency : adjacencies) {
-      auto const& otherNodeName = myAdjacency.second.otherNodeName;
-      auto const& thisIfName = myAdjacency.second.ifName;
-
-      // Skip if overloaded
-      if (myAdjacency.second.isOverloaded) {
-        continue;
-      }
-
-      // Check for reverse adjacency
-      bool isBidir = presentAdjacencies.count(
-          std::make_tuple(otherNodeName, thisNodeName, thisIfName));
-      bool compatibleIsBidir = compatiblePresentAdjacencies.count(
-          std::make_pair(otherNodeName, thisNodeName));
-      if (!isBidir and !compatibleIsBidir) {
-        VLOG(2) << "Failed to find matching adjacency for `" << thisNodeName
-                << "' in `" << otherNodeName
-                << "' thru interface " << thisIfName;
-        continue;
-      }
-
-      adjacencyIndex_[{thisNodeName, otherNodeName}].insert(myAdjacency.second);
-    } // for adjDb
-  } // for nodeData_
-
-  // 1. Add all node vertices
-  for (auto const& kv : nodeData_) {
-    auto const& nodeName = kv.first;
-    auto const& descriptor = boost::add_vertex(graph_);
-    nameToDescriptor_[nodeName] = descriptor;
-    descriptorToName_[descriptor] = nodeName;
-  }
-
-  // 2. Add edges between node vertices
-  for (const auto& kv : adjacencyIndex_) {
-    const auto& thisNodeName = kv.first.first;
-    const auto& otherNodeName = kv.first.second;
-    const auto& adjacencies = kv.second;
-
-    // this will not throw by virtue of building the name to descriptor map.
-    // bidirectional check is enforced
-    auto const& srcVertex = nameToDescriptor_.at(thisNodeName);
-    auto const& dstVertex = nameToDescriptor_.at(otherNodeName);
-
-    // Is thisNode overloaded. If node is overloaded then we bump up metric
-    // values of it's outgoing edges by `kOverloadNodeMetric`. We use this
-    // information later on to deduce if a shortest path is going over
-    // overloaded node or not.
-    // NOTE: link's metric can never be greater than kOverloadNodeMetric
-    uint64_t metric = adjacencies.begin()->metric;
-    if (nodeData_.at(thisNodeName).isOverloaded) {
-      metric += Constants::kOverloadNodeMetric;
-    }
-
-    // for two nodes with multiple adjacencies in between, use the min metric
-    // as their edge metric
-    boost::add_edge(srcVertex, dstVertex, EdgeProperty(metric), graph_);
-  } // for adjacencyIndex_
-
-} // prepareGraph
-
 /**
- * Compute shortest-path routes from perspective of myNodeName; NOTE: you
- * need to call prepareGraph() to initialize the graph structure before
- * calling this method.
+ * Compute shortest-path routes from perspective of nodeName;
  */
 unordered_map<
-    string /* otherVertexName (node) */,
-    pair<string /* nextHopVertexName (node) */, Weight>>
-SpfSolver::SpfSolverImpl::runSpf(const std::string& myNodeName) {
+    string /* otherNodeName */,
+    pair<Metric, unordered_set<string /* nextHopNodeName */>>>
+SpfSolver::SpfSolverImpl::runSpf(const std::string& thisNodeName) {
+  unordered_map<string, pair<Metric, unordered_set<string>>> result;
+
   tData_.addStatValue("decision.spf_runs", 1, fbzmq::COUNT);
+  const auto startTime = std::chrono::steady_clock::now();
 
-  // map of other nodes, next-hops and distances to reach to them
-  unordered_map<
-      string /* otherVertexName */,
-      pair<string /* nextHopVertexName */, Weight>>
-      result;
+  DijkstraQ q;
+  q.insertNode(thisNodeName, 0);
+  uint64_t loop = 0;
+  for (auto node = q.extractMin(); node; node = q.extractMin()) {
+    ++loop;
+    // we've found this node's shortest paths. record it
+    auto emplaceRc = result.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(node->nodeName),
+      std::forward_as_tuple(node->distance, std::move(node->nextHops)));
+    CHECK(emplaceRc.second);
 
-  // Find our node-vertex-descriptor before proceeding
-  auto it = nameToDescriptor_.find(myNodeName);
-  if (it == nameToDescriptor_.end()) {
-    LOG(ERROR) << "Could not find descriptor for router `" << myNodeName << "`";
-    return result;
-  }
-  auto const& myVertex = it->second;
+    auto& recordedNodeName = emplaceRc.first->first;
+    auto& recordedNodeMetric = emplaceRc.first->second.first;
+    auto& recordedNodeNextHops = emplaceRc.first->second.second;
 
-  // Refer here for example of BGL Dijkstra use:
-  // http://programmingexamples.net/wiki/Boost/BGL/DijkstraComputePath
-
-  // holds predecessors for vertices in shortest-path tree
-  // i.e. indexed by vertex and gives you the vertex that
-  // precedes this one on the path toward the SPT root
-  vector<VertexDescriptor> pred(boost::num_vertices(graph_));
-
-  // distances from each vertex to the root of SPT
-  vector<Weight> dist(boost::num_vertices(graph_));
-
-  // build SPT from this vertex
-  IndexMap indexMap = boost::get(boost::vertex_index, graph_);
-  PredecessorMap predMap(&pred[0], indexMap);
-  DistanceMap distMap(&dist[0], indexMap);
-  boost::dijkstra_shortest_paths(
-      graph_, myVertex, boost::distance_map(distMap).predecessor_map(predMap));
-
-  // walk all the nodes in the topology and compute paths to their prefixes
-  for (auto const& kv : nameToDescriptor_) {
-    auto const& otherVertexName = kv.first;
-    auto const& otherVertex = kv.second;
-
-    // skip self
-    if (otherVertexName == myNodeName) {
+    if (adjacencyDatabases_.at(recordedNodeName).isOverloaded
+        && recordedNodeName != thisNodeName) {
+      // no transit traffic through this node. we've recorded the nexthops to
+      // this node, but will not consider any of it's adjancecies as offering
+      // lower cost paths towards further away nodes. This effectively drains
+      // traffic away from this node
       continue;
     }
-
-    // indirectly connected, trace the path
-    auto prevVertex = otherVertex;
-    auto currVertex = pred[otherVertex];
-
-    if (currVertex == prevVertex) {
-      // unreachable from the root of the SPT
-      continue;
+    // we have the shortest path nexthops for recordedNodeName. Use these
+    // nextHops for any node that is connected to recordedNodeName that doesn't
+    // already have a lower cost path from thisNodeName
+    //
+    // this is the "relax" step in the Dijkstra Algorithim pseudocode in CLRS
+    for (const auto& link : linkState_.linksFromNode(recordedNodeName)) {
+      auto otherNodeName = link->getOtherNodeName(recordedNodeName);
+      if (link->isOverloaded() || result.count(otherNodeName)) {
+        continue;
+      }
+      auto metric = link->getMetricFromNode(recordedNodeName);
+      auto otherNode = q.get(otherNodeName);
+      if (!otherNode) {
+        q.insertNode(otherNodeName, recordedNodeMetric + metric);
+        otherNode = q.get(otherNodeName);
+      }
+      if (otherNode->distance >= recordedNodeMetric + metric) {
+        // recordedNodeName is either along an alternate shortest path towards
+        // otherNodeName or is along a new shorter path. In either case,
+        // otherNodeName should use recordedNodeName's nextHops until it finds
+        // some shorter path
+        if (otherNode->distance > recordedNodeMetric + metric) {
+          // if this is strictly better, forget about any other nexthops
+          otherNode->nextHops.clear();
+          q.decreaseKey(otherNode->nodeName, recordedNodeMetric + metric);
+        }
+        otherNode->nextHops.insert(
+          recordedNodeNextHops.begin(), recordedNodeNextHops.end());
+      }
+      if (otherNode->nextHops.empty()) {
+        // this node is directly connected to the source
+        otherNode->nextHops.emplace(otherNode->nodeName);
+      }
     }
-
-    while (currVertex != myVertex) {
-      prevVertex = currVertex;
-      currVertex = pred[currVertex];
-    }
-
-    // at this point prevVertex -> to our nextHop
-    auto nextHopVertexName = descriptorToName_[prevVertex];
-    result[otherVertexName] = {nextHopVertexName, dist[otherVertex]};
-  } // for nameToDescriptor_
-
-  // Print SPF table for debugging
-  VLOG(4) << "SPF table for " << myNodeName;
-  for (auto const& kv : result) {
-    auto const& otherVertexName = kv.first;
-    auto const& nextHopVertexName = kv.second.first;
-    auto const& weight = kv.second.second;
-    VLOG(4) << folly::sformat(
-        "  {} via {}, cost {}", otherVertexName, nextHopVertexName, weight);
   }
-
+  VLOG(3) << "Dijkstra loop count: " << loop;
+  auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - startTime);
+  LOG(INFO) << "SPF elapsed time: " << deltaTime.count() << "ms.";
+  tData_.addStatValue(
+      "decision.spf_ms", deltaTime.count(), fbzmq::AVG);
   return result;
 }
 
 thrift::RouteDatabase
-SpfSolver::SpfSolverImpl::buildShortestPaths(const std::string& myNodeName) {
-  VLOG(4) << "SpfSolver::buildShortestPaths for " << myNodeName;
+SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
+  VLOG(4) << "SpfSolver::buildPaths for " << myNodeName;
   tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
-  if (nodeData_.count(myNodeName) == 0) {
-    LOG(ERROR) << "Couldn't find node-database for myself: `" << myNodeName
-               << "`, skipping spf run";
-    return routeDb;
-  }
-
-  const auto startTime = std::chrono::steady_clock::now();
-
-  prepareGraph();
-  auto spfMap = runSpf(myNodeName);
-  const bool myselfOverloaded = nodeData_.at(myNodeName).isOverloaded;
-
-  // Load balance traffic to a given prefix advertised from two or more nodes
-  // Combine nexthops towards all nodes bounded to the same prefix and pick
-  // the smallest from them for loop-free routing
-  unordered_map<
-      thrift::IpPrefix, /* prefix */
-      multiset<
-          std::pair<thrift::Adjacency, Weight>,
-          NexthopAdjComparator>
-          /* adjacencies ordered by non-descreasing metric */>
-      prefixToNextHops;
-
-  for (auto const& kv : nodeData_) {
-    auto const& thisNodeName = kv.first;
-    if (thisNodeName == myNodeName) {
-      continue;
-    }
-    // Find minimum nexthop to reach that node
-    auto nodeIt = spfMap.find(thisNodeName);
-    if (nodeIt == spfMap.end()) {
-      VLOG(2) << "Skipping unreachable node " << thisNodeName;
-      continue;
-    }
-
-    auto const& nextHopNodeName = nodeIt->second.first;
-    auto metric = nodeIt->second.second;
-
-    // Subtract overload metric value if myself is overloaded
-    if (myselfOverloaded) {
-      CHECK_LT(Constants::kOverloadNodeMetric, metric);
-      metric -= Constants::kOverloadNodeMetric;
-    }
-
-    // Skip route if it is going through a node which is overloaded
-    if (metric > Constants::kOverloadNodeMetric) {
-      VLOG(2) << "Skipping shortest route to node " << thisNodeName
-              << " because it is via an overloaded node.";
-      continue;
-    }
-
-    // Add route for each prefix bounded to this node via the nextHopNodeName
-    auto const& nhAdjs = adjacencyIndex_.at({myNodeName, nextHopNodeName});
-    for (auto const& prefix : kv.second.prefixes) {
-      prefixToNextHops[prefix].insert(std::make_pair(*nhAdjs.begin(), metric));
-    }
-  } // for nodeData_
-
-  for (auto const& kv : prefixToNextHops) {
-    auto const& prefix = kv.first;
-    // pick up nexthop with minimum metric
-    auto const& nhAdj = *kv.second.begin();
-    auto route =
-        createRoute(prefix, nhAdj.first, nhAdj.second /* metric */, enableV4_);
-    if (route) {
-      routeDb.routes.emplace_back(std::move(*route));
-    }
-  }
-
-  auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "Decision::buildShortestPaths took " << deltaTime.count()
-            << "ms.";
-  tData_.addStatValue(
-      "decision.spf.shortestpath_ms", deltaTime.count(), fbzmq::AVG);
-
-  return routeDb;
-} // buildShortestPaths
-
-thrift::RouteDatabase
-SpfSolver::SpfSolverImpl::buildMultiPaths(const std::string& myNodeName) {
-  VLOG(4) << "SpfSolver::buildMultiPaths for " << myNodeName;
-  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
-
-  thrift::RouteDatabase routeDb;
-  routeDb.thisNodeName = myNodeName;
-  if (nodeData_.count(myNodeName) == 0) {
+  if (adjacencyDatabases_.count(myNodeName) == 0) {
     LOG(ERROR) << "Couldn't find node-database for myself: " << myNodeName
-               << ", skipping multi-spf run";
+               << ", skipping buildPaths run";
     return routeDb;
   }
 
   auto const& startTime = std::chrono::steady_clock::now();
 
-  // reset next-hops info
-  std::unordered_map<
-    std::string /* destination-node */,
-    std::map<
-        std::string /* nexthop node */,
-        Weight /* metric value from nexthop-node to destination-node */>>
-    nodeDist;
-
-  prepareGraph();
-  auto prepareTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "Decision::prepareGraph took " << prepareTime.count() << "ms.";
-
-  auto mySpfPaths = runSpf(myNodeName);
-
-  // avoid duplicate iterations over a neighbor which can happen due to multiple
-  // adjacencies to it
-  std::unordered_set<std::string /* adjacent node name */> visitedAdjNodes;
-
-  // Go over all neighbors and find shortest distance of prefixes from them
-  for (auto const& adj : nodeData_.at(myNodeName).adjDb) {
-    auto const& adjNodeName = adj.second.otherNodeName;
-
-    // Skip if already visited before
-    if (not visitedAdjNodes.insert(adjNodeName).second) {
-      VLOG(4) << "Adjacent neighbor " << adjNodeName << " has been considered.";
-      continue;
-    }
-
-    // Skip if we don't have reverse edge from adjNodeName->myNodeName
-    if (!adjacencyIndex_.count({adjNodeName, myNodeName})) {
-      VLOG(2) << "Neighbor " << adjNodeName << " doesn't have reverse edge "
-              << "to myself " << myNodeName << ". Skipping spf run for it.";
-      continue;
-    }
-
-    // Update cost from this node to itself
-    nodeDist[adjNodeName][adjNodeName] = 0;
-
-    // Run SPF for the node
-    VLOG(4) << "Running SPF for neighbor: " << adjNodeName;
-    auto nbrSpfPaths = runSpf(adjNodeName);
-
-    // Walk through all nodes and find shortest distance from myNodeName
-    // to the prefix via adjNodeName
-    for (auto const& kv : nodeData_) {
-      auto const& thisNodeName = kv.first;
-      if (thisNodeName == myNodeName) {
+  spfResults_.clear();
+  spfResults_[myNodeName] = runSpf(myNodeName);
+  if (computeLfaPaths_) {
+    // avoid duplicate iterations over a neighbor which can happen due to
+    // multiple adjacencies to it
+    std::unordered_set<std::string /* adjacent node name */> visitedAdjNodes;
+    for (auto const& link : linkState_.linksFromNode(myNodeName)) {
+      auto const& otherNodeName = link->getOtherNodeName(myNodeName);
+      // Skip if already visited
+      if (!visitedAdjNodes.insert(otherNodeName).second ||
+          link->isOverloaded()) {
         continue;
       }
-
-      // Skip if node is unreachable from neighbor
-      auto nodeIt = nbrSpfPaths.find(thisNodeName);
-      if (nodeIt == nbrSpfPaths.end()) {
-        continue; // Node is unreachable from neighbor
-      }
-
-      // Get distances from adjNodeName
-      auto adjNodeDist = nodeIt->second.second;
-      auto adjMyNodeDist = nbrSpfPaths.at(myNodeName).second;
-
-      // Get optimal distance of thisNodeName from us. Node must be
-      // reachable from us because it is reachable from our neighbor
-      auto myNodeDist = mySpfPaths.at(thisNodeName).second;
-
-      // A neighbor (N) can provide loop free alternate to destination (D) from
-      // source (S) if and only if
-      //   Distance_opt(N, D) < Distance_opt(N, S) + Distance_opt(S, D)
-      // For more info read: https://tools.ietf.org/html/rfc5286
-      // NOTE: We are using negated condition here to skip the neighbor
-      if (adjNodeDist >= adjMyNodeDist + myNodeDist) {
-        VLOG(4) << "Skipping non LFA nexthop " << adjNodeName << " to "
-                << "node " << thisNodeName;
-        continue;
-      }
-
-      VLOG(4) << "Adding LFA nexthop " << adjNodeName << " for node "
-              << thisNodeName;
-      nodeDist[thisNodeName][adjNodeName] = adjNodeDist;
-    } // nodeData_
-  } // nodeData_[myNodeName].adjDb
+      spfResults_[otherNodeName] = runSpf(otherNodeName);
+    }
+  }
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "Decision::buildMultiPaths took " << deltaTime.count() << "ms.";
+  LOG(INFO) << "Decision::buildPaths took " << deltaTime.count() << "ms.";
   tData_.addStatValue(
-      "decision.spf.multipath_ms", deltaTime.count(), fbzmq::AVG);
-
-  // Update allDistFromNode_ for myNodeName
-  allDistFromNode_[myNodeName] = nodeDist;
+      "decision.build_paths_ms", deltaTime.count(), fbzmq::AVG);
 
   return buildRouteDb(myNodeName);
 
-} // buildMultiPaths
+} // buildPaths
 
 thrift::RouteDatabase
 SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   VLOG(4) << "SpfSolver::buildRouteDb for " << myNodeName;
-
   tData_.addStatValue("decision.route_build_requests", 1, fbzmq::COUNT);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
-  if (allDistFromNode_.count(myNodeName) == 0) {
+  if (spfResults_.count(myNodeName) == 0) {
     LOG(ERROR) << "Could not find adjacency Db for myself: " << myNodeName
                << ", skipping multi-spf run";
     return routeDb;
   }
-
-  const auto& nodeDist = allDistFromNode_.at(myNodeName);
+  const auto& shortestPathsFromHere = spfResults_.at(myNodeName);
 
   const auto startTime = std::chrono::steady_clock::now();
-  // Build RouteDb for all prefixes including LFAs
-  unordered_map<
-      thrift::IpPrefix, /* prefix */
-      vector<std::pair<thrift::Adjacency, Weight>>>
-      prefixToNextHops;
-  for (auto const& kv : nodeData_) {
-    auto const& nodeName = kv.first;
 
-    // skip our own prefixes
-    if (nodeName == myNodeName) {
+  for (const auto& kv : prefixes_) {
+    const auto& prefix = kv.first;
+    const auto& nodesWithPrefix = kv.second;
+    if (nodesWithPrefix.count(myNodeName)) {
+      // skip adding route for prefixes advertised by this node
+      continue;
+    }
+    auto prefixStr = prefix.prefixAddress.addr;
+    bool isV4Prefix = prefixStr.size() == folly::IPAddressV4::byteCount();
+    if (isV4Prefix && !enableV4_) {
+      LOG(WARNING) << "Received v4 prefix while v4 is not enabled.";
       continue;
     }
 
-    auto nodeIt = nodeDist.find(nodeName);
-    if (nodeIt == nodeDist.end()) {
-      VLOG(4) << "Skipping route to unreachable node " << nodeName;
+    Metric prefixMetric = std::numeric_limits<Metric>::max();
+
+    // find the set of the closest nodes that advertise this prefix
+    std::unordered_set<std::string> minCostNodes;
+    for (const auto& node : nodesWithPrefix) {
+      try {
+        const auto nodeDistance = shortestPathsFromHere.at(node).first;
+        if (prefixMetric >= nodeDistance) {
+          if (prefixMetric > nodeDistance) {
+            prefixMetric = nodeDistance;
+            minCostNodes.clear();
+          }
+          minCostNodes.emplace(node);
+        }
+      } catch (std::out_of_range const& e) {
+        LOG(WARNING) << "No path to " << node << " from " << myNodeName
+                     << " for prefix: " << toString(prefix);
+      }
+    }
+
+    if (minCostNodes.empty()) {
+      LOG(WARNING) << "No route to prefix " << toString(prefix)
+                   << ", advertised by: " << folly::join(", ", nodesWithPrefix);
+      tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
       continue;
     }
 
-    std::vector<std::pair<thrift::Adjacency, Weight>> adjacencies;
-    for (auto const& nhMetric : nodeIt->second) {
-      auto const& nhNodeName = nhMetric.first;
-      auto metric = nhMetric.second;
+    // build up next hop nodes both nodes that are along a shortest path to the
+    // prefix and, if enabled, those with an LFA path to the prefix
+    std::unordered_map<
+      std::string /* nextHopNodeName */,
+      Metric /* the distance from the nexthop to the dest */> nextHopNodes;
 
-      // Skip route if it is going through a node which is overloaded
-      // NOTE: the metric here is a distance to prefix-node via our neighbor
-      if (metric > Constants::kOverloadNodeMetric) {
-        VLOG(2) << "Skipping shortest route to node " << nodeName
-                << " because it is via an overloaded node.";
-        continue;
-      }
-
-      // Add all adjacencies to nextHopNodeName as potential nexthops. FIB will
-      // only program ones with min metric and others will act as LFAs
-      for (const auto& adj : adjacencyIndex_.at({myNodeName, nhNodeName})) {
-        adjacencies.push_back({adj, metric + adj.metric});
+    // add neighbors with shortest path to the prefix
+    for (const auto& node : minCostNodes) {
+      for (const auto& nhName : shortestPathsFromHere.at(node).second) {
+        nextHopNodes[nhName] =
+            prefixMetric - findMinDistToNeighbor(myNodeName, nhName);
       }
     }
 
-    for (auto const& prefix : kv.second.prefixes) {
-      // skip routeDb update when a prefix is advertised from more than one node
-      if (nodeData_.at(myNodeName).prefixes.count(prefix)) {
-        VLOG(2) << "Prefix " << toString(prefix) << "is bouned to myself "
-                << myNodeName << ", skipping routeDb update....";
-        continue;
+    // add any other neighbors that have LFA paths to the prefix
+    if (computeLfaPaths_) {
+      for (const auto& kv2 : spfResults_) {
+        const auto& neighborName = kv2.first;
+        const auto& shortestPathsFromNeighbor = kv2.second;
+        if (neighborName == myNodeName
+            || nextHopNodes.find(neighborName) != nextHopNodes.end()) {
+          continue;
+        }
+        Metric distanceFromNeighbor = std::numeric_limits<Metric>::max();
+        for (const auto& node : nodesWithPrefix) {
+          try {
+            const auto d = shortestPathsFromNeighbor.at(node).first;
+            if (distanceFromNeighbor > d) {
+              distanceFromNeighbor = d;
+            }
+          } catch (std::out_of_range const& e) {
+            LOG(WARNING) << "No path to " << node << " from neighbor "
+                         << neighborName;
+          }
+        }
+        Metric neighborToHere =
+            shortestPathsFromNeighbor.at(myNodeName).first;
+        // This is the LFA condition per RFC 5286
+        if (distanceFromNeighbor < prefixMetric + neighborToHere) {
+          nextHopNodes[neighborName] = distanceFromNeighbor;
+        }
       }
-      prefixToNextHops[prefix].insert(
-          prefixToNextHops[prefix].end(),
-          adjacencies.begin(),
-          adjacencies.end());
     }
-  } // for nodeData_ (build RouteDb)
 
-  for (auto const& kv : prefixToNextHops) {
-    auto const& prefix = kv.first;
-    auto const& adjs = kv.second;
-    auto route = createRouteMulti(prefix, adjs, enableV4_);
-    if (route) {
-      routeDb.routes.emplace_back(std::move(*route));
+    std::vector<thrift::Path> paths;
+    for (const auto& link : linkState_.linksFromNode(myNodeName)) {
+      const auto search = nextHopNodes.find(link->getOtherNodeName(myNodeName));
+      if (search != nextHopNodes.end() && !link->isOverloaded()) {
+        Metric distOverLink =
+            link->getMetricFromNode(myNodeName) + search->second;
+        if (computeLfaPaths_ || distOverLink == prefixMetric) {
+          // if we are computing LFA paths, any nexthop to the node will do
+          // otherwise, we only want those nexthops along a shortest path
+          paths.emplace_back(
+            apache::thrift::FRAGILE,
+            isV4Prefix ? link->getNhV4FromNode(myNodeName) :
+                         link->getNhV6FromNode(myNodeName),
+            link->getIfaceFromNode(myNodeName),
+            distOverLink);
+        }
+      }
     }
-  }
+    routeDb.routes.emplace_back(
+      apache::thrift::FRAGILE, prefix, std::move(paths));
+  } // for prefixes_
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "Decision::buildRouteDb took " << deltaTime.count() << "ms.";
   tData_.addStatValue(
       "decision.spf.buildroute_ms", deltaTime.count(), fbzmq::AVG);
-
   return routeDb;
 } // buildRouteDb
+
+Metric
+SpfSolver::SpfSolverImpl::findMinDistToNeighbor(
+    const std::string& myNodeName, const std::string& neighborName) {
+  Metric min = std::numeric_limits<Metric>::max();
+  for (const auto& link : linkState_.linksFromNode(myNodeName)) {
+    if (link->getOtherNodeName(myNodeName) == neighborName) {
+      min = std::min(link->getMetricFromNode(myNodeName), min);
+    }
+  }
+  return min;
+}
+
+folly::Optional<Link>
+SpfSolver::SpfSolverImpl::maybeMakeLink(
+    const std::string& nodeName, const thrift::Adjacency& adj) {
+  // only return Link if it is bidirectional.
+  auto search = adjacencyDatabases_.find(adj.otherNodeName);
+  if (search != adjacencyDatabases_.end()) {
+    for (const auto& otherAdj : search->second.adjacencies) {
+      if (nodeName == otherAdj.otherNodeName
+          && adj.otherIfName == otherAdj.ifName
+          && adj.ifName == otherAdj.otherIfName) {
+        return Link(nodeName, adj, adj.otherNodeName, otherAdj);
+      }
+    }
+  }
+  return folly::none;
+}
+
+std::set<Link>
+SpfSolver::SpfSolverImpl::getOrderedLinkSet(
+    const thrift::AdjacencyDatabase& adjDb) {
+  std::set<Link> links;
+  for (const auto& adj : adjDb.adjacencies) {
+    auto maybeLink = maybeMakeLink(adjDb.thisNodeName, adj);
+    if (maybeLink) {
+      links.emplace(maybeLink.value());
+    }
+  }
+  return links;
+}
 
 std::unordered_map<std::string, int64_t>
 SpfSolver::SpfSolverImpl::getCounters() {
@@ -1090,16 +993,19 @@ SpfSolver::SpfSolverImpl::getCounters() {
 // Public SpfSolver
 //
 
-SpfSolver::SpfSolver(bool enableV4)
-    : impl_(new SpfSolver::SpfSolverImpl(enableV4)) {}
+SpfSolver::SpfSolver(
+    const std::string& myNodeName, bool enableV4, bool computeLfaPaths)
+    : impl_(
+        new SpfSolver::SpfSolverImpl(myNodeName, enableV4, computeLfaPaths)) {}
 
 SpfSolver::~SpfSolver() {}
 
 // update adjacencies for the given router; everything is replaced
-bool
+std::pair<bool /* topology has changed*/,
+          bool /* local nextHop addrs have changed */>
 SpfSolver::updateAdjacencyDatabase(
-    thrift::AdjacencyDatabase const& adjacencyDb) {
-  return impl_->updateAdjacencyDatabase(adjacencyDb);
+    thrift::AdjacencyDatabase const& newAdjacencyDb) {
+  return impl_->updateAdjacencyDatabase(newAdjacencyDb);
 }
 
 bool
@@ -1129,13 +1035,8 @@ SpfSolver::getPrefixDatabases() {
 }
 
 thrift::RouteDatabase
-SpfSolver::buildShortestPaths(const std::string& myNodeName) {
-  return impl_->buildShortestPaths(myNodeName);
-}
-
-thrift::RouteDatabase
-SpfSolver::buildMultiPaths(const std::string& myNodeName) {
-  return impl_->buildMultiPaths(myNodeName);
+SpfSolver::buildPaths(const std::string& myNodeName) {
+  return impl_->buildPaths(myNodeName);
 }
 
 thrift::RouteDatabase
@@ -1155,6 +1056,7 @@ SpfSolver::getCounters() {
 Decision::Decision(
     std::string myNodeName,
     bool enableV4,
+    bool computeLfaPaths,
     const AdjacencyDbMarker& adjacencyDbMarker,
     const PrefixDbMarker& prefixDbMarker,
     std::chrono::milliseconds debounceMinDur,
@@ -1181,7 +1083,8 @@ Decision::Decision(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
   processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
       this, [this]() noexcept { processPendingUpdates(); });
-  spfSolver_ = std::make_unique<SpfSolver>(enableV4);
+  spfSolver_ =
+      std::make_unique<SpfSolver>(myNodeName_, enableV4, computeLfaPaths);
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
@@ -1294,7 +1197,7 @@ Decision::processRequest() {
       nodeName = myNodeName_;
     }
 
-    reply.routeDb = spfSolver_->buildMultiPaths(nodeName);
+    reply.routeDb = spfSolver_->buildPaths(nodeName);
     break;
   }
 
@@ -1345,7 +1248,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     const auto& key = kv.first;
     const auto& rawVal = kv.second;
     std::string prefix, nodeName;
-    folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+    folly::split(
+      Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
 
     if (not rawVal.value.hasValue()) {
       // skip TTL update
@@ -1360,9 +1264,14 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
             fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
                 rawVal.value.value(), serializer_);
         CHECK_EQ(nodeName, adjacencyDb.thisNodeName);
-        if (spfSolver_->updateAdjacencyDatabase(adjacencyDb)) {
+        auto rc = spfSolver_->updateAdjacencyDatabase(adjacencyDb);
+        if (rc.first) {
           res.adjChanged = true;
           pendingAdjUpdates_.addUpdate(myNodeName_, adjacencyDb.perfEvents);
+        }
+        if (rc.second) {
+          res.prefixesChanged = true;
+          pendingPrefixUpdates_.addUpdate(myNodeName_, adjacencyDb.perfEvents);
         }
         continue;
       }
@@ -1387,7 +1296,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   // LSDB deletion
   for (const auto& key : thriftPub.expiredKeys) {
     std::string prefix, nodeName;
-    folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+    folly::split(
+      Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
 
     if (key.find(adjacencyDbMarker_) == 0) {
       if (spfSolver_->deleteAdjacencyDatabase(nodeName)) {
@@ -1534,7 +1444,7 @@ Decision::processPendingAdjUpdates() {
 
   // run SPF once for all updates received
   LOG(INFO) << "Decision: computing new paths.";
-  auto routeDb = spfSolver_->buildMultiPaths(myNodeName_);
+  auto routeDb = spfSolver_->buildPaths(myNodeName_);
   logRouteEvent("ROUTE_CALC", routeDb.routes.size());
   if (maybePerfEvents) {
     addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_SPF");

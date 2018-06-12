@@ -212,6 +212,17 @@ one v6 loopback addressed announced into the network for the reachability check.
 ENABLE_HEALTH_CHECKER=true
 ```
 
+#### ENABLE_LFA
+
+With this option, additional Loop-Free Alternate (LFA) routes can be computed,
+per RFC 5286, for fast failure recovery. Under the failure of all primary
+nexthops for a prefix, because of link failure, next best precomputed LFA will
+be used without need of an SPF run.
+
+```
+ENABLE_LFA=false
+```
+
 #### HEALTH_CHECKER_PING_INTERVAL_S
 
 Configure ping interval of the health checker. The below option configures it to

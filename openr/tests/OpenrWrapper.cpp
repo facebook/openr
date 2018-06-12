@@ -223,6 +223,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   decision_ = std::make_unique<Decision>(
       nodeId_,
       v4Enabled, // enable v4
+      true, // computeLfaPaths
       AdjacencyDbMarker{"adj:"},
       PrefixDbMarker{"prefix:"},
       std::chrono::milliseconds(10),
