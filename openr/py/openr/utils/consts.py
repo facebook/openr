@@ -35,7 +35,7 @@ class Consts(object):
     PREFIX_MGR_CMD_PORT = 60011
     MONITOR_PUB_PORT = 60007
     MONITOR_REP_PORT = 60008
-    FIB_AGENT_PORT = 60100
+    FIB_AGENT_PORT = 60099
     CONFIG_STORE_URL = "ipc:///tmp/openr_config_store_cmd"
     FORCE_CRASH_SERVER_URL = "ipc:///tmp/force_crash_server"
 

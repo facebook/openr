@@ -32,7 +32,7 @@ from openr.clients.lm_client import LMClient
 from openr.IpPrefix import ttypes as ip_types
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
-from openr.Platform import FibService
+from openr.Platform import NetlinkService
 from openr.Platform import ttypes as platform_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
@@ -108,7 +108,7 @@ def time_since(timestamp):
 
 def get_fib_agent_client(host, port, timeout_ms,
                          client_id=platform_types.FibClient.OPENR,
-                         service=FibService):
+                         service=NetlinkService):
     '''
     Get thrift client for talking to Fib thrift service
 

@@ -889,7 +889,7 @@ LinkMonitor::sendIfDbCallback() {
 }
 
 void
-LinkMonitor::createNetlinkSystemHandlerClient() {
+LinkMonitor::createNetlinkServiceHandlerClient() {
   // Reset client if channel is not good
   if (socket_ && (!socket_->good() || socket_->hangup())) {
     client_.reset();
@@ -918,7 +918,7 @@ LinkMonitor::createNetlinkSystemHandlerClient() {
 
   // Reset client_
   client_ =
-      std::make_unique<thrift::SystemServiceAsyncClient>(std::move(channel));
+      std::make_unique<thrift::NetlinkServiceAsyncClient>(std::move(channel));
 }
 
 std::chrono::milliseconds
@@ -1077,11 +1077,11 @@ LinkMonitor::syncInterfaces() {
   //
   std::vector<thrift::Link> links;
   try {
-    createNetlinkSystemHandlerClient();
+    createNetlinkServiceHandlerClient();
     client_->sync_getAllLinks(links);
   } catch (const std::exception& e) {
     client_.reset();
-    LOG(ERROR) << "Failed to sync LinkDb from NetlinkSystemHandler. Error: "
+    LOG(ERROR) << "Failed to sync LinkDb from NetlinkServiceHandler. Error: "
                << folly::exceptionStr(e);
     return false;
   }

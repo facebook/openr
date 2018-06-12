@@ -19,7 +19,7 @@
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/FibService.h>
+#include <openr/if/gen-cpp2/NetlinkService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
@@ -106,8 +106,8 @@ class Fib final : public fbzmq::ZmqEventLoop {
   void syncRouteDbDebounced();
 
   /**
-   * Get aliveSince from FibService, and check if Fib restarts
-   * If so, push syncFib to FibService
+   * Get aliveSince from netlinkService, and check if Fib restarts
+   * If so, push syncFib to NetlinkService
    */
   void keepAliveCheck();
 
@@ -178,7 +178,7 @@ class Fib final : public fbzmq::ZmqEventLoop {
   // manipulate routes.
   folly::EventBase evb_;
   std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_{nullptr};
-  std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
+  std::unique_ptr<thrift::NetlinkServiceAsyncClient> client_{nullptr};
 
   // Callback timer to sync routes to switch agent and scheduled on route-sync
   // failure. ExponentialBackoff timer to ease up things if they go wrong
@@ -200,8 +200,8 @@ class Fib final : public fbzmq::ZmqEventLoop {
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
-  // Latest aliveSince heard from FibService. If the next one is different then
-  // it means that FibAgent has restarted and we need to perform sync.
+  // Latest aliveSince heard from NetlinkService. If the next one is different
+  // then it means that FibAgent has restarted and we need to perform sync.
   int64_t latestAliveSince_{0};
 
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};

@@ -34,7 +34,7 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/if/gen-cpp2/SystemService.h>
+#include <openr/if/gen-cpp2/NetlinkService.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
@@ -202,10 +202,10 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // sending out to spark
   void sendIfDbCallback();
 
-  // Utility function to create thrift client connection to NetlinkSystemHandler
-  // Can throw exception if it fails to open transport to client on
-  // specified port.
-  void createNetlinkSystemHandlerClient();
+  // Utility function to create thrift client connection to
+  // NetlinkServiceHandler. Can throw exception if it fails to
+  // open transport to client on specified port.
+  void createNetlinkServiceHandlerClient();
 
   // get next try time, which should be the minimum remaining time among
   // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
@@ -294,11 +294,11 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // can be shared, e.g., to gmock expetation call
   std::unique_ptr<KvStoreClient> kvStoreClient_;
 
-  // Thrift client connection to switch SystemService, which we actually use to
+  // Thrift client connection to switch NetlinkService, which we actually use to
   // manipulate routes.
   folly::EventBase evb_;
   std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_;
-  std::unique_ptr<thrift::SystemServiceAsyncClient> client_;
+  std::unique_ptr<thrift::NetlinkServiceAsyncClient> client_;
 
   //
   // Mutable state

@@ -12,14 +12,14 @@ namespace cpp2 openr.thrift
 namespace py openr.LinuxPlatform
 
 /**
- * Platform.fibService provides common functionality all Platforms must
+ * Platform.NetlinkService provides common functionality all Platforms must
  * must implement.
  *
- * Here we extend the service here to provide Linux Fib specific functionality
+ * Here we extend the service here to provide Linux specific functionality
  * In this case it is to export the kernel routing table Other Fib agents can
  * export things like Hardware state, stats, counters, etc.
  */
-service LinuxFibService extends Platform.FibService {
+service LinuxNetlinkService extends Platform.NetlinkService {
 
   list<IpPrefix.UnicastRoute> getKernelRouteTable() throws
       (1: Platform.PlatformError error)
