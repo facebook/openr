@@ -255,6 +255,22 @@ install_libnl() {
   popd
 }
 
+install_krb5() {
+  pushd .
+  if [[ ! -e "krb5" ]]; then
+    git clone https://github.com/krb5/krb5
+  fi
+  cd krb5/src
+  git fetch origin
+  git checkout krb5-1.16.1-final
+  set -eu && autoreconf -i
+  ./configure
+  make
+  sudo make install
+  sudo ldconfig
+  popd
+}
+
 install_openr() {
   pushd .
   cd "$BUILD_DIR"
@@ -299,7 +315,6 @@ sudo apt-get install -y libdouble-conversion-dev \
   liblz4-dev \
   liblzma-dev \
   scons \
-  libkrb5-dev \
   libsnappy-dev \
   libsasl2-dev \
   libnuma-dev \
@@ -326,6 +341,7 @@ install_wangle
 install_libsodium
 install_libzmq
 install_libnl
+install_krb5
 install_fbthrift
 install_fbzmq
 install_re2
