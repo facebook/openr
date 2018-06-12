@@ -65,7 +65,7 @@ setup(
     install_requires=[
         'bunch',
         'click',
-        'futures',
+        'futures; python_version < "3"',
         'hexdump',
         'networkx',
         'ipaddress',
