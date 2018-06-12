@@ -254,6 +254,7 @@ add_library(openrlib
   config-store/PersistentStore.cpp
   config-store/PersistentStoreClient.cpp
   decision/Decision.cpp
+  decision-old/DecisionOld.cpp
   fib/Fib.cpp
   health-checker/HealthChecker.cpp
   kvstore/KvStoreClient.cpp
@@ -433,6 +434,11 @@ install(FILES
 install(FILES
   decision/Decision.h
   DESTINATION include/openr/decision
+)
+
+install(FILES
+  decision-old/DecisionOld.h
+  DESTINATION include/openr/decision-old
 )
 
 install(FILES

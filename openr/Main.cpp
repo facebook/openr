@@ -31,6 +31,7 @@
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/decision/Decision.h>
+#include <openr/decision-old/DecisionOld.h>
 #include <openr/fib/Fib.h>
 #include <openr/health-checker/HealthChecker.h>
 #include <openr/kvstore/KvStore.h>
@@ -298,6 +299,11 @@ DEFINE_string(
     "",
     "Only keys with originator ID matching any of the originator ID will "
     "be added to kvstore.");
+DEFINE_bool(
+    enable_old_decision_module,
+    false,
+    "Set this flag to revert to old decision code");
+
 
 using namespace fbzmq;
 using namespace openr;
@@ -785,29 +791,57 @@ main(int argc, char** argv) {
   // receives itself as one of the nodes before running the spf.
 
   // Start Decision Module
-  Decision decision(
-      FLAGS_node_name,
-      FLAGS_enable_v4,
-      AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-      PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-      std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
-      std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
-      kvStoreLocalCmdUrl,
-      kvStoreLocalPubUrl,
-      DecisionCmdUrl{folly::sformat(
-          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_rep_port)},
-      kDecisionPubUrl,
-      monitorSubmitUrl,
-      context);
-  std::thread decisionThread([&decision]() noexcept {
-    LOG(INFO) << "Starting Decision thread...";
-    folly::setThreadName("Decision");
-    decision.run();
-    LOG(INFO) << "Decision thread got stopped.";
-  });
-  decision.waitUntilRunning();
-  allThreads.emplace_back(std::move(decisionThread));
-  watchdog->addEvl(&decision, "Decision");
+  std::unique_ptr<Decision> decision{nullptr};
+  std::unique_ptr<DecisionOld> decisionOld{nullptr};
+  if (FLAGS_enable_old_decision_module) {
+    decisionOld = std::make_unique<DecisionOld>(
+        FLAGS_node_name,
+        FLAGS_enable_v4,
+        AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
+        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+        std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
+        std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
+        kvStoreLocalCmdUrl,
+        kvStoreLocalPubUrl,
+        DecisionCmdUrl{folly::sformat(
+            "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_rep_port)},
+        kDecisionPubUrl,
+        monitorSubmitUrl,
+        context);
+    std::thread decisionThread([&decisionOld]() noexcept {
+      LOG(INFO) << "Starting Decision thread...";
+      folly::setThreadName("Decision");
+      decisionOld->run();
+      LOG(INFO) << "Decision thread got stopped.";
+    });
+    decisionOld->waitUntilRunning();
+    allThreads.emplace_back(std::move(decisionThread));
+    watchdog->addEvl(decisionOld.get(), "Decision");
+  } else {
+    decision = std::make_unique<Decision>(
+        FLAGS_node_name,
+        FLAGS_enable_v4,
+        AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
+        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+        std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
+        std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
+        kvStoreLocalCmdUrl,
+        kvStoreLocalPubUrl,
+        DecisionCmdUrl{folly::sformat(
+            "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_rep_port)},
+        kDecisionPubUrl,
+        monitorSubmitUrl,
+        context);
+    std::thread decisionThread([&decision]() noexcept {
+      LOG(INFO) << "Starting Decision thread...";
+      folly::setThreadName("Decision");
+      decision->run();
+      LOG(INFO) << "Decision thread got stopped.";
+    });
+    decision->waitUntilRunning();
+    allThreads.emplace_back(std::move(decisionThread));
+    watchdog->addEvl(decision.get(), "Decision");
+  }
 
   // Define and start Fib Module
   // If Fib handler is enabled, use unified port number for both
@@ -880,8 +914,13 @@ main(int argc, char** argv) {
   }
   fib.stop();
   fib.waitUntilStopped();
-  decision.stop();
-  decision.waitUntilStopped();
+  if (decision) {
+    decision->stop();
+    decision->waitUntilStopped();
+  } else {
+    decisionOld->stop();
+    decisionOld->waitUntilStopped();
+  }
   linkMonitor.stop();
   linkMonitor.waitUntilStopped();
   spark.stop();
