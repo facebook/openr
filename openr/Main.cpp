@@ -37,7 +37,8 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/platform/NetlinkServiceHandler.h>
+#include <openr/platform/NetlinkFibHandler.h>
+#include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
@@ -448,48 +449,74 @@ main(int argc, char** argv) {
 
   // Create ThreadManager for thrift services
   std::shared_ptr<ThreadManager> thriftThreadMgr;
-  thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
-    2 /* num of threads */,
-    false /* task stats */);
-  thriftThreadMgr->setNamePrefix("ThriftCpuPool");
-  thriftThreadMgr->start();
+  if (FLAGS_enable_netlink_fib_handler or FLAGS_enable_netlink_system_handler) {
+    thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
+        2 /* num of threads */,
+        false /* task stats */);
+    thriftThreadMgr->setNamePrefix("ThriftCpuPool");
+    thriftThreadMgr->start();
+  }
 
-  // Use different eventloop threads for Fib & System handler
-  std::unique_ptr<fbzmq::ZmqEventLoop>
-      netlinkFibEvl = std::make_unique<fbzmq::ZmqEventLoop>();
-  auto fibEvlThread = std::thread([&netlinkFibEvl]() {
-    folly::setThreadName("FibEvl");
-    netlinkFibEvl->run();
-  });
-  netlinkFibEvl->waitUntilRunning();
-  allThreads.emplace_back(std::move(fibEvlThread));
-  // Start NetlinkServiceHandler
-  std::unique_ptr<apache::thrift::ThriftServer> netlinkServer;
-  CHECK(thriftThreadMgr);
-  netlinkServer = std::make_unique<apache::thrift::ThriftServer>(
-      "disabled" /* sasl policy */, false /* insecure-loopback */);
-  netlinkServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
-  netlinkServer->setThreadManager(thriftThreadMgr);
-  netlinkServer->setNumIOWorkerThreads(1);
-  netlinkServer->setCpp2WorkerThreadName("SystemTWorker");
-  netlinkServer->setPort(FLAGS_system_agent_port);
+  // Start NetlinkFibHandler if specified
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
+  std::unique_ptr<fbzmq::ZmqEventLoop> netlinkFibEvl;
+  if (FLAGS_enable_netlink_fib_handler) {
+    CHECK(thriftThreadMgr);
+    netlinkFibEvl = std::make_unique<fbzmq::ZmqEventLoop>();
+    netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>(
+        "disabled" /* sasl policy */, false /* insecure-loopback */);
+    netlinkFibServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
+    netlinkFibServer->setThreadManager(thriftThreadMgr);
+    netlinkFibServer->setNumIOWorkerThreads(1);
+    netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
+    netlinkFibServer->setPort(FLAGS_fib_handler_port);
 
-  auto netlinkThriftThread =
-      std::thread(
-        [&netlinkServer, &context, &mainEventLoop, &netlinkFibEvl]() {
-        folly::setThreadName("SystemService");
-        auto serviceHandler = std::make_unique<NetlinkServiceHandler>(
-            context,
-            PlatformPublisherUrl{FLAGS_platform_pub_url},
-            &(*netlinkFibEvl), /* fib event loop */
-            &mainEventLoop /* system event loog */);
-        netlinkServer->setInterface(std::move(serviceHandler));
+    auto fibEvlThread = std::thread([&netlinkFibEvl]() {
+      folly::setThreadName("FibEvl");
+      netlinkFibEvl->run();
+    });
+    netlinkFibEvl->waitUntilRunning();
+    allThreads.emplace_back(std::move(fibEvlThread));
 
-        LOG(INFO) << "Starting NetlinkService server...";
-        netlinkServer->serve();
-        LOG(INFO) << "NetlinkService server got stopped.";
-      });
-  allThreads.emplace_back(std::move(netlinkThriftThread));
+    auto fibThriftThread = std::thread([&netlinkFibServer, &netlinkFibEvl]() {
+      folly::setThreadName("FibService");
+      auto fibHandler = std::make_shared<NetlinkFibHandler>(&(*netlinkFibEvl));
+      netlinkFibServer->setInterface(fibHandler);
+
+      LOG(INFO) << "Starting NetlinkFib server...";
+      netlinkFibServer->serve();
+      LOG(INFO) << "NetlinkFib server got stopped.";
+    });
+    allThreads.emplace_back(std::move(fibThriftThread));
+  }
+
+  // Start NetlinkSystemHandler if specified
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
+  if (FLAGS_enable_netlink_system_handler) {
+    CHECK(thriftThreadMgr);
+    netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>(
+        "disabled" /* sasl policy */, false /* insecure-loopback */);
+    netlinkSystemServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
+    netlinkSystemServer->setThreadManager(thriftThreadMgr);
+    netlinkSystemServer->setNumIOWorkerThreads(1);
+    netlinkSystemServer->setCpp2WorkerThreadName("SystemTWorker");
+    netlinkSystemServer->setPort(FLAGS_system_agent_port);
+
+    auto systemThriftThread =
+        std::thread([&netlinkSystemServer, &context, &mainEventLoop]() {
+          folly::setThreadName("SystemService");
+          auto systemHandler = std::make_unique<NetlinkSystemHandler>(
+              context,
+              PlatformPublisherUrl{FLAGS_platform_pub_url},
+              &mainEventLoop);
+          netlinkSystemServer->setInterface(std::move(systemHandler));
+
+          LOG(INFO) << "Starting NetlinkSystem server...";
+          netlinkSystemServer->serve();
+          LOG(INFO) << "NetlinkSystem server got stopped.";
+        });
+    allThreads.emplace_back(std::move(systemThriftThread));
+  }
 
   folly::Optional<KeyPair> keyPair;
   if (FLAGS_enable_auth) {
@@ -849,15 +876,9 @@ main(int argc, char** argv) {
   }
 
   // Define and start Fib Module
-  // If Fib handler is enabled, use unified port number for both
-  // fib service and system service (i.e. 'kSystemAgentPort'),
-  // otherwise use different ports for each service
-  // (i.e. 'kSystemAgentPort' and 'kFibAgentPort')
-  int32_t fibThriftPort = FLAGS_enable_netlink_fib_handler
-                          ? FLAGS_system_agent_port : FLAGS_fib_handler_port ;
   Fib fib(
       FLAGS_node_name,
-      fibThriftPort,
+      FLAGS_fib_handler_port,
       FLAGS_dryrun,
       FLAGS_enable_fib_sync,
       std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
@@ -946,8 +967,11 @@ main(int argc, char** argv) {
     netlinkFibEvl->stop();
     netlinkFibEvl->waitUntilStopped();
   }
-  if (netlinkServer) {
-    netlinkServer->stop();
+  if (netlinkFibServer) {
+    netlinkFibServer->stop();
+  }
+  if (netlinkSystemServer) {
+    netlinkSystemServer->stop();
   }
   if (thriftThreadMgr) {
     thriftThreadMgr->stop();

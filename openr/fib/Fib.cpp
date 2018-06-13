@@ -493,8 +493,7 @@ Fib::createFibClient() {
   channel->setClientType(THRIFT_FRAMED_DEPRECATED);
 
   // Reset client_
-  client_ =
-      std::make_unique<thrift::NetlinkServiceAsyncClient>(std::move(channel));
+  client_ = std::make_unique<thrift::FibServiceAsyncClient>(std::move(channel));
 }
 
 void

@@ -43,7 +43,7 @@ include_directories(${CMAKE_BINARY_DIR}/thrift-out)
 
 thrift_object(
   "LinuxPlatform" #file_name
-  "LinuxNetlinkService" #services
+  "LinuxFibService" #services
   "cpp2" #language
   "optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
@@ -161,7 +161,7 @@ add_dependencies(
 
 thrift_object(
   "Platform" #file_name
-  "NetlinkService" #services
+  "FibService;SystemService" #services
   "cpp2" #language
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
@@ -263,7 +263,8 @@ add_library(openrlib
   link-monitor/LinkMonitor.cpp
   nl/NetlinkRouteSocket.cpp
   nl/NetlinkSubscriber.cpp
-  platform/NetlinkServiceHandler.cpp
+  platform/NetlinkFibHandler.cpp
+  platform/NetlinkSystemHandler.cpp
   platform/PlatformPublisher.cpp
   prefix-manager/PrefixManager.cpp
   prefix-manager/PrefixManagerClient.cpp
@@ -364,7 +365,8 @@ install(TARGETS
 
 add_executable(platform_linux
   platform/LinuxPlatformMain.cpp
-  platform/NetlinkServiceHandler.cpp
+  platform/NetlinkFibHandler.cpp
+  platform/NetlinkSystemHandler.cpp
 )
 
 target_include_directories(platform_linux
@@ -467,8 +469,9 @@ install(FILES
 )
 
 install(FILES
+  platform/NetlinkSystemHandler.h
   platform/PlatformPublisher.h
-  platform/NetlinkServiceHandler.h
+  platform/NetlinkFibHandler.h
   DESTINATION include/openr/platform
 )
 

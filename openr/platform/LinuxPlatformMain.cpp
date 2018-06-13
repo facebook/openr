@@ -13,10 +13,11 @@
 #include <glog/logging.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
-#include <openr/platform/NetlinkServiceHandler.h>
+#include <openr/platform/NetlinkFibHandler.h>
+#include <openr/platform/NetlinkSystemHandler.h>
 
 DEFINE_int32(
-    system_thrift_port, 60099, "Thrift server port for NetlinkServiceHandler");
+    system_thrift_port, 60099, "Thrift server port for NetlinkSystemHandler");
 DEFINE_int32(
     fib_thrift_port, 60100, "Thrift server port for the NetlinkFibHandler");
 DEFINE_string(
@@ -34,7 +35,8 @@ DEFINE_bool(
     true,
     "If set, netlink system handler will be started");
 
-using openr::NetlinkServiceHandler;
+using openr::NetlinkFibHandler;
+using openr::NetlinkSystemHandler;
 
 int
 main(int argc, char** argv) {
@@ -56,32 +58,58 @@ main(int argc, char** argv) {
 
   std::vector<std::thread> allThreads{};
 
-  // Only need to start the NetlinkService on 'system_thrift_port'
-  apache::thrift::ThriftServer netlinkServiceServer;
-  auto nlHandler = std::make_shared<NetlinkServiceHandler>(
-      context,
-      openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
-      &mainEventLoop);
+  apache::thrift::ThriftServer systemServiceServer;
+  if (FLAGS_enable_netlink_system_handler) {
+    // start NetlinkSystem thread
+    auto nlHandler = std::make_shared<NetlinkSystemHandler>(
+        context,
+        openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
+        &mainEventLoop);
 
-  auto systemThriftThread =
-    std::thread([nlHandler, &netlinkServiceServer]() noexcept {
-      folly::setThreadName("SystemService");
-      netlinkServiceServer.setNWorkerThreads(1);
-      netlinkServiceServer.setNPoolThreads(1);
-      netlinkServiceServer.setPort(FLAGS_system_thrift_port);
-      netlinkServiceServer.setInterface(nlHandler);
+    auto systemThriftThread =
+      std::thread([nlHandler, &systemServiceServer]() noexcept {
+        folly::setThreadName("SystemService");
+        systemServiceServer.setNWorkerThreads(1);
+        systemServiceServer.setNPoolThreads(1);
+        systemServiceServer.setPort(FLAGS_system_thrift_port);
+        systemServiceServer.setInterface(nlHandler);
 
-      LOG(INFO) << "Netlink Service starting...";
-      netlinkServiceServer.serve();
-      LOG(INFO) << "Netlink Service stopped.";
+        LOG(INFO) << "System Service starting...";
+        systemServiceServer.serve();
+        LOG(INFO) << "System Service stopped.";
+      });
+    allThreads.emplace_back(std::move(systemThriftThread));
+  }
+
+  apache::thrift::ThriftServer linuxFibAgentServer;
+  if (FLAGS_enable_netlink_fib_handler) {
+    // start FibService thread
+    auto fibHandler = std::make_shared<NetlinkFibHandler>(&mainEventLoop);
+
+    auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
+      folly::setThreadName("FibService");
+      linuxFibAgentServer.setNWorkerThreads(1);
+      linuxFibAgentServer.setNPoolThreads(1);
+      linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
+      linuxFibAgentServer.setInterface(fibHandler);
+
+      LOG(INFO) << "Fib Agent starting...";
+      linuxFibAgentServer.serve();
+      LOG(INFO) << "Fib Agent stopped.";
     });
-  allThreads.emplace_back(std::move(systemThriftThread));
+    allThreads.emplace_back(std::move(fibThriftThread));
+  }
 
   LOG(INFO) << "Main event loop starting...";
   mainEventLoop.run();
   LOG(INFO) << "Main event loop stopped.";
 
-  netlinkServiceServer.stop();
+  if (FLAGS_enable_netlink_fib_handler) {
+    linuxFibAgentServer.stop();
+  }
+  if (FLAGS_enable_netlink_system_handler) {
+    systemServiceServer.stop();
+  }
 
   // Wait for threads to finish
   for (auto& t : allThreads) {

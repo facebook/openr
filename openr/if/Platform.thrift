@@ -85,20 +85,14 @@ exception PlatformError {
 } ( message = "message" )
 
 /**
- * Thrift Service API definitions for platform module which includes two parts:
- * Part1:
  * Thrift Service API definitions for on-box system information like links,
  * addresses and neighbors. OpenR leverages links and address information as
  * a part of link discovery and uses it to perform neighbor discovery on
  * retrieved links. There is also PUB/SUB mechanism over which updates can be
  * relayed to OpenR in realtime.
- * Part2:
- * Thrift Service API for on-box Fib.
  */
-service NetlinkService {
+service SystemService {
   /**
-   * On-box system information
-   *
    * SystemService client can query the following items:
    * 1. query all links keyed by interface names
    * 2. query all reachable neighbors
@@ -108,34 +102,48 @@ service NetlinkService {
 
   list<NeighborEntry> getAllNeighbors()
     throws (1: PlatformError error)
+}
 
-  /**
-   * On-box Fib interfaces
-   */
+/**
+ * Common status reporting mechanism across all services
+ */
+enum ServiceStatus {
+  DEAD = 0,
+  STARTING = 1,
+  ALIVE = 2,
+  STOPPING = 3,
+  STOPPED = 4,
+  WARNING = 5,
+}
+
+/**
+ * Interface to on-box Fib.
+ */
+service FibService {
   void addUnicastRoute(
     1: i16 clientId,
     2: IpPrefix.UnicastRoute route,
-    ) throws (1: PlatformError error)
+  ) throws (1: PlatformError error)
 
   void deleteUnicastRoute(
     1: i16 clientId,
     2: IpPrefix.IpPrefix prefix,
-    ) throws (1: PlatformError error)
+  ) throws (1: PlatformError error)
 
   void addUnicastRoutes(
     1: i16 clientId,
     2: list<IpPrefix.UnicastRoute> routes,
-    ) throws (1: PlatformError error)
+  ) throws (1: PlatformError error)
 
   void deleteUnicastRoutes(
     1: i16 clientId,
     2: list<IpPrefix.IpPrefix> prefixes,
-    ) throws (1: PlatformError error)
+  ) throws (1: PlatformError error)
 
   void syncFib(
     1: i16 clientId,
     2: list<IpPrefix.UnicastRoute> routes,
-    ) throws (1: PlatformError error)
+  ) throws (1: PlatformError error)
 
   /**
    * DEPRECATED ... Use `aliveSince` API instead
@@ -143,7 +151,7 @@ service NetlinkService {
    */
   i64 periodicKeepAlive(
     1: i16 clientId,
-    )
+  )
 
   /**
    * Returns the unix time that the service has been running since
@@ -164,16 +172,4 @@ service NetlinkService {
   list<IpPrefix.UnicastRoute> getRouteTableByClient(
     1: i16 clientId
   ) throws (1: PlatformError error)
-}
-
-/**
- * Common status reporting mechanism across all services
- */
-enum ServiceStatus {
-  DEAD = 0,
-  STARTING = 1,
-  ALIVE = 2,
-  STOPPING = 3,
-  STOPPED = 4,
-  WARNING = 5,
 }

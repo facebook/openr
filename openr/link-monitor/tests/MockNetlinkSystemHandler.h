@@ -22,7 +22,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/if/gen-cpp2/NetlinkService.h>
+#include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/nl/NetlinkSubscriber.h>
 #include <openr/platform/PlatformPublisher.h>
 
@@ -33,7 +33,7 @@ namespace openr {
  * NetlinkEvent Publisher as well as System Service on linux platform.
  */
 
-class MockNetlinkSystemHandler final : public thrift::NetlinkServiceSvIf {
+class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
  public:
   MockNetlinkSystemHandler(
       fbzmq::Context& context, const std::string& platformPublisherUrl);
