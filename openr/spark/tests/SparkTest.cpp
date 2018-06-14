@@ -1396,7 +1396,8 @@ TEST_F(SparkFixture, DomainTest) {
         folly::sformat("node-{}", i) /* myNodeName */,
         fbzmq::util::genKeyPair(),
         nullptr,
-        i);
+        i,
+        std::chrono::milliseconds(6000));
     sparks.push_back(std::move(spark));
   }
 
@@ -1511,7 +1512,8 @@ TEST_F(SparkFixture, SubnetTest) {
         folly::sformat("node-{}", i) /* myNodeName */,
         fbzmq::util::genKeyPair(),
         nullptr,
-        i);
+        i,
+        std::chrono::milliseconds(6000));
     sparks.push_back(std::move(spark));
   }
 
