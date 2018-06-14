@@ -9,7 +9,6 @@
 
 #include <chrono>
 #include <memory>
-#include <regex>
 #include <string>
 #include <utility>
 
@@ -24,6 +23,8 @@
 #include <folly/Optional.h>
 #include <folly/io/async/EventBase.h>
 #include <glog/logging.h>
+#include <re2/re2.h>
+#include <re2/set.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -64,11 +65,11 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       KvStoreLocalCmdUrl kvStoreLocalCmdUrl,
       KvStoreLocalPubUrl kvStoreLocalPubUrl,
       // interface names to monitor
-      std::vector<std::regex> const& includeRegexList,
+      std::unique_ptr<re2::RE2::Set> includeRegexList,
       // interface names to exclude
-      std::vector<std::regex> const& excludeRegexList,
+      std::unique_ptr<re2::RE2::Set> excludeRegexList,
       // interface names to advertise their addresses
-      std::vector<std::regex> const& redistRegexList,
+      std::unique_ptr<re2::RE2::Set> redistRegexList,
       // static list of prefixes to announce
       std::vector<thrift::IpPrefix> const& staticPrefixes,
       // measure and use RTT of adjacencies for link
@@ -251,11 +252,11 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   const std::string kvStoreLocalCmdUrl_;
   const std::string kvStoreLocalPubUrl_;
   // the interface names that match we can run on
-  const std::vector<std::regex> includeRegexList_;
+  std::unique_ptr<re2::RE2::Set> includeRegexList_;
   // the interface names that match we can't run on
-  const std::vector<std::regex> excludeRegexList_;
+  std::unique_ptr<re2::RE2::Set> excludeRegexList_;
   // the interface names regex for advertising their global addresses
-  const std::vector<std::regex> redistRegexList_;
+  std::unique_ptr<re2::RE2::Set> redistRegexList_;
   // static list of prefixes to announce
   const std::vector<thrift::IpPrefix> staticPrefixes_;
   // Use spark measured RTT to neighbor as link metric

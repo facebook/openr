@@ -6,7 +6,6 @@
  */
 
 #include <iostream>
-#include <regex>
 #include <stdexcept>
 #include <syslog.h>
 
@@ -21,6 +20,8 @@
 #include <folly/init/Init.h>
 #include <folly/system/ThreadName.h>
 #include <glog/logging.h>
+#include <re2/re2.h>
+#include <re2/set.h>
 #include <sodium.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
@@ -742,34 +743,62 @@ main(int argc, char** argv) {
   // Construct the regular expressions to match interface names against
   //
 
+  re2::RE2::Options regexOpts;
+  regexOpts.set_case_sensitive(false);
   std::vector<std::string> regexIncludeStrings;
   folly::split(",", FLAGS_iface_regex_include, regexIncludeStrings, true);
-  std::vector<std::regex> includeRegexList;
-  auto const regexOpts = std::regex_constants::extended |
-      std::regex_constants::icase | std::regex_constants::optimize;
+  auto includeRegexList =
+      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
 
+  std::string regexErr;
   for (auto& regexStr : regexIncludeStrings) {
-    includeRegexList.emplace_back(regexStr, regexOpts);
+    if (-1 == includeRegexList->Add(regexStr, &regexErr)) {
+      LOG(FATAL) << "Add iface regex failed " << regexErr;
+    }
   }
   // add prefixes
   std::vector<std::string> ifNamePrefixes;
   folly::split(",", FLAGS_ifname_prefix, ifNamePrefixes, true);
   for (auto& prefix : ifNamePrefixes) {
-    includeRegexList.emplace_back(prefix + ".*", regexOpts);
+    if (-1 == includeRegexList->Add(prefix + ".*", &regexErr)) {
+      LOG(FATAL) << "Invalid regex " << regexErr;
+    }
+  }
+  // Compiling empty Re2 Set will cause undefined error
+  if (regexIncludeStrings.empty() && ifNamePrefixes.empty()) {
+    includeRegexList.reset();
+  } else if (!includeRegexList->Compile()) {
+    LOG(FATAL) << "Regex compile failed";
   }
 
   std::vector<std::string> regexExcludeStrings;
   folly::split(",", FLAGS_iface_regex_exclude, regexExcludeStrings, true);
-  std::vector<std::regex> excludeRegexList;
+  auto excludeRegexList =
+      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
   for (auto& regexStr : regexExcludeStrings) {
-    excludeRegexList.emplace_back(regexStr, regexOpts);
+    if (-1 == excludeRegexList->Add(regexStr, &regexErr)) {
+      LOG(FATAL) << "Invalid regext " << regexErr;
+    }
+  }
+  if (regexExcludeStrings.empty()) {
+    excludeRegexList.reset();
+  } else if (!excludeRegexList->Compile()) {
+    LOG(FATAL) << "Regex compile failed";
   }
 
   std::vector<std::string> redistStringList;
   folly::split(",", FLAGS_redistribute_ifaces, redistStringList, true);
-  std::vector<std::regex> redistRegexList;
+  auto redistRegexList =
+      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
   for (auto const& regexStr : redistStringList) {
-    redistRegexList.emplace_back(regexStr, regexOpts);
+    if (-1 == redistRegexList->Add(regexStr, &regexErr)) {
+      LOG(FATAL) << "Invalid regext " << regexErr;
+    }
+  }
+  if (redistStringList.empty()) {
+    redistRegexList.reset();
+  } else if (!redistRegexList->Compile()) {
+    LOG(FATAL) << "Regex compile failed";
   }
 
   // Create link monitor instance.
@@ -779,9 +808,9 @@ main(int argc, char** argv) {
       FLAGS_system_agent_port,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl},
-      includeRegexList,
-      excludeRegexList,
-      redistRegexList,
+      std::move(includeRegexList),
+      std::move(excludeRegexList),
+      std::move(redistRegexList),
       networks,
       FLAGS_enable_rtt_metric,
       FLAGS_enable_full_mesh_reduction,

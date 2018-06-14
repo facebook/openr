@@ -23,6 +23,8 @@
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <re2/re2.h>
+#include <re2/set.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 #include <thrift/lib/cpp2/Thrift.h>
@@ -55,10 +57,7 @@ namespace {
 // we need the right key length for some checks in zmqSocket
 const std::string pubKey = fbzmq::util::genKeyPair().publicKey;
 
-const auto regexOpts =
-  std::regex_constants::extended |
-  std::regex_constants::icase |
-  std::regex_constants::optimize;
+re2::RE2::Options regexOpts;
 
 const auto peerSpec_2_1 = thrift::PeerSpec(
     FRAGILE,
@@ -249,6 +248,21 @@ class LinkMonitorTestFixture : public ::testing::Test {
     EXPECT_NO_THROW(
         sparkIfDbResp.bind(fbzmq::SocketUrl{"inproc://spark-req"}).value());
 
+    regexOpts.set_case_sensitive(false);
+    std::string regexErr;
+    auto includeRegexList =
+        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+    includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
+    includeRegexList->Add("iface.*", &regexErr);
+    includeRegexList->Compile();
+
+    std::unique_ptr<re2::RE2::Set> excludeRegexList;
+
+    auto redistRegexList =
+        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+    redistRegexList->Add("loopback", &regexErr);
+    redistRegexList->Compile();
+
     // start a link monitor
     linkMonitor = make_shared<LinkMonitor>(
         context,
@@ -256,12 +270,9 @@ class LinkMonitorTestFixture : public ::testing::Test {
         port, /* thrift service port */
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        std::vector<std::regex>{
-          std::regex{kTestVethNamePrefix + ".*", regexOpts},
-          std::regex{"iface.*", regexOpts}},
-        std::vector<std::regex>{},
-        std::vector<std::regex>{
-          std::regex{"loopback", regexOpts}}, // redistribute interface name
+        std::move(includeRegexList),
+        std::move(excludeRegexList),
+        std::move(redistRegexList), // redistribute interface name
         std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
         false /* useRttMetric */,
         false /* enable full mesh reduction */,
@@ -961,16 +972,25 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     // mock "restarting" link monitor with existing config store
     // use different endpoints for sockets
     // simply close() and bind/connect again do not work
+
+    std::string regexErr;
+    auto includeRegexList =
+        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+    includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
+    includeRegexList->Compile();
+    std::unique_ptr<re2::RE2::Set> excludeRegexList;
+    std::unique_ptr<re2::RE2::Set> redistRegexList;
+
     auto linkMonitor = make_shared<LinkMonitor>(
         context,
         "node-1",
         port, // platform pub port
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        std::vector<std::regex>{
-          std::regex{kTestVethNamePrefix + ".*", regexOpts}},
-        std::vector<std::regex>{},
-        std::vector<std::regex>{}, // redistribute interface names
+        std::move(includeRegexList),
+        std::move(excludeRegexList),
+        // redistribute interface names
+        std::move(redistRegexList),
         std::vector<thrift::IpPrefix>{}, // static prefixes
         false /* useRttMetric */,
         false /* enable full mesh reduction */,
@@ -1174,18 +1194,29 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   linkMonitorThread->join();
   linkMonitor.reset();
 
+  std::string regexErr;
+  auto includeRegexList =
+      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+  includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
+  includeRegexList->Add("iface.*", &regexErr);
+  includeRegexList->Compile();
+
+  std::unique_ptr<re2::RE2::Set> excludeRegexList;
+
+  auto redistRegexList =
+      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+  redistRegexList->Add("loopback", &regexErr);
+  redistRegexList->Compile();
+
   linkMonitor = make_shared<LinkMonitor>(
       context,
       "node-1",
       port, // platform pub port
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-      std::vector<std::regex>{
-        std::regex{kTestVethNamePrefix + ".*", regexOpts},
-        std::regex{"iface.*", regexOpts}},
-      std::vector<std::regex>{},
-      std::vector<std::regex>{
-        std::regex{"loopback", regexOpts}}, // redistribute interface name
+      std::move(includeRegexList),
+      std::move(excludeRegexList),
+      std::move(redistRegexList), // redistribute interface name
       std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
       false /* useRttMetric */,
       false /* enable full mesh reduction */,
@@ -1603,6 +1634,14 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
 TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   size_t kNumNodesToTest = 10;
 
+  std::string regexErr;
+  auto includeRegexList =
+      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+  includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
+  includeRegexList->Compile();
+  std::unique_ptr<re2::RE2::Set> excludeRegexList;
+  std::unique_ptr<re2::RE2::Set> redistRegexList;
+
   // spin up kNumNodesToTest - 1 new link monitors. 1 is spun up in setup()
   std::vector<std::unique_ptr<LinkMonitor>> linkMonitors;
   std::vector<std::unique_ptr<std::thread>> linkMonitorThreads;
@@ -1613,10 +1652,9 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         0, // platform pub port
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        std::vector<std::regex>{
-          std::regex{kTestVethNamePrefix + ".*", regexOpts}},
-        std::vector<std::regex>{},
-        std::vector<std::regex>{},
+        std::move(includeRegexList),
+        std::move(excludeRegexList),
+        std::move(redistRegexList),
         std::vector<thrift::IpPrefix>(),
         false /* useRttMetric */,
         false /* enable full mesh reduction */,

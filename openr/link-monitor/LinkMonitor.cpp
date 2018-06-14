@@ -76,9 +76,9 @@ LinkMonitor::LinkMonitor(
     int32_t platformThriftPort,
     KvStoreLocalCmdUrl kvStoreLocalCmdUrl,
     KvStoreLocalPubUrl kvStoreLocalPubUrl,
-    std::vector<std::regex> const& includeRegexList,
-    std::vector<std::regex> const& excludeRegexList,
-    std::vector<std::regex> const& redistRegexList,
+    std::unique_ptr<re2::RE2::Set> includeRegexList,
+    std::unique_ptr<re2::RE2::Set> excludeRegexList,
+    std::unique_ptr<re2::RE2::Set> redistRegexList,
     std::vector<thrift::IpPrefix> const& staticPrefixes,
     bool useRttMetric,
     bool enableFullMeshReduction,
@@ -107,9 +107,9 @@ LinkMonitor::LinkMonitor(
       platformThriftPort_(platformThriftPort),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
-      includeRegexList_(includeRegexList),
-      excludeRegexList_(excludeRegexList),
-      redistRegexList_(redistRegexList),
+      includeRegexList_(std::move(includeRegexList)),
+      excludeRegexList_(std::move(excludeRegexList)),
+      redistRegexList_(std::move(redistRegexList)),
       staticPrefixes_(staticPrefixes),
       useRttMetric_(useRttMetric),
       enableFullMeshReduction_(enableFullMeshReduction),
@@ -1471,12 +1471,11 @@ LinkMonitor::InterfaceEntry::getInterfaceInfo() const {
 
 bool
 LinkMonitor::checkRedistIfNameRegex(const std::string& ifName) {
-  for (const auto& regex : redistRegexList_) {
-    if (std::regex_match(ifName, regex)) {
-      return true;
-    }
+  if (!redistRegexList_) {
+    return false;
   }
-  return false;
+  std::vector<int> matches;
+  return redistRegexList_->Match(ifName, &matches);
 }
 
 void

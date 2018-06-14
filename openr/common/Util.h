@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <regex>
 #include <string>
 #include <vector>
 
@@ -80,8 +79,8 @@ std::vector<folly::CIDRNetwork> getIfacePrefixes(
 
 bool checkIncludeExcludeRegex(
     const std::string& name,
-    const std::vector<std::regex>& includeRegexList,
-    const std::vector<std::regex>& excludeRegexList);
+    const std::unique_ptr<re2::RE2::Set>& includeRegexList,
+    const std::unique_ptr<re2::RE2::Set>& excludeRegexList);
 
 /**
  * @param prefixIndex subprefix index, starting from 0

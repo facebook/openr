@@ -8,6 +8,8 @@
 #include "OpenrWrapper.h"
 
 #include <folly/MapUtil.h>
+#include <re2/re2.h>
+#include <re2/set.h>
 
 namespace openr {
 
@@ -183,18 +185,26 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   std::vector<thrift::IpPrefix> networks;
   networks.emplace_back(toIpPrefix(folly::IPAddress::createNetwork("::/0")));
+  re2::RE2::Options options;
+  options.set_case_sensitive(false);
+  std::string regexErr;
+  auto includeRegexList =
+      std::make_unique<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
+  includeRegexList->Add(ifName + ".*", &regexErr);
+  includeRegexList->Compile();
+  std::unique_ptr<re2::RE2::Set> excludeRegexList;
+  std::unique_ptr<re2::RE2::Set> redistRegexList;
+
   linkMonitor_ = std::make_unique<LinkMonitor>(
       context_,
       nodeId_,
       static_cast<int32_t>(60099), // platfrom pub port
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      std::vector<std::regex>{std::regex{ifName + ".*",
-                                         std::regex_constants::extended |
-                                             std::regex_constants::icase |
-                                             std::regex_constants::optimize}},
-      std::vector<std::regex>{},
-      std::vector<std::regex>{}, // redistribute interface names
+      std::move(includeRegexList),
+      std::move(excludeRegexList),
+      // redistribute interface names
+      std::move(redistRegexList),
       networks,
       false, /* use rtt metric */
       enableFullMeshReduction, /* enable full mesh reduction */
