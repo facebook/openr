@@ -772,7 +772,6 @@ SpfSolver::SpfSolverImpl::runSpf(const std::string& thisNodeName) {
 thrift::RouteDatabase
 SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
   VLOG(4) << "SpfSolver::buildPaths for " << myNodeName;
-  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
@@ -782,6 +781,7 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
     return routeDb;
   }
 
+  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
   auto const& startTime = std::chrono::steady_clock::now();
 
   spfResults_.clear();
@@ -1089,9 +1089,7 @@ Decision::Decision(
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
-  // Initialize ZMQ sockets
-  scheduleTimeout(
-      std::chrono::seconds(0), [this, &zmqContext]() { prepare(zmqContext); });
+  prepare(zmqContext);
 }
 
 void
@@ -1173,7 +1171,11 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
         processRequest();
       });
 
-  initialSync(zmqContext);
+  auto zmqContextPtr = &zmqContext;
+  scheduleTimeout(
+      std::chrono::seconds(0),
+      [this, zmqContextPtr] { initialSync(*zmqContextPtr); }
+  );
 }
 
 void

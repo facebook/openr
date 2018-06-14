@@ -28,7 +28,6 @@
 #include <openr/if/gen-cpp2/AllocPrefix_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/IpPrefix_types.h>
-#include <openr/if/gen-cpp2/KnownKeys_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
@@ -44,8 +43,6 @@ struct hash<openr::thrift::IpPrefix> {
 };
 
 } // namespace std
-
-using KeyPair = fbzmq::KeyPair;
 
 namespace openr {
 
@@ -91,56 +88,6 @@ folly::CIDRNetwork getNthPrefix(
     const folly::CIDRNetwork& seedPrefix,
     uint32_t allocPrefixLen,
     uint32_t prefixIndex);
-
-// load key pair from file
-template <typename Serializer>
-KeyPair
-loadKeyPairFromFile(
-    const std::string& keyPairFilePath, const Serializer& serializer) {
-  std::string keyPairStr;
-
-  if (!folly::readFile(keyPairFilePath.c_str(), keyPairStr)) {
-    throw std::runtime_error(
-        folly::sformat("Failed loading key pair file {}", keyPairFilePath));
-  }
-
-  try {
-    auto thriftKeyPair = fbzmq::util::readThriftObjStr<thrift::CurveKeyPair>(
-        keyPairStr, serializer);
-
-    return {thriftKeyPair.privateKey, thriftKeyPair.publicKey};
-  } catch (const std::exception& e) {
-    LOG(ERROR) << "Could not parse key pair from file " << keyPairFilePath;
-    // rethrow
-    throw;
-  }
-}
-
-// save key pair to file
-template <typename Serializer>
-void
-saveKeyPairToFile(
-    const std::string& keyPairFilePath,
-    const KeyPair& keyPair,
-    const Serializer& serializer) {
-  std::string keyPairStr;
-
-  thrift::CurveKeyPair thriftKeyPair(
-      apache::thrift::FRAGILE, keyPair.privateKey, keyPair.publicKey);
-
-  try {
-    keyPairStr = fbzmq::util::writeThriftObjStr(thriftKeyPair, serializer);
-  } catch (const std::exception& e) {
-    LOG(ERROR) << "Could not serialize key pair";
-    // rethrow
-    throw;
-  }
-
-  if (!folly::writeFile(keyPairStr, keyPairFilePath.c_str())) {
-    throw std::runtime_error(
-        folly::sformat("Failed saving key pair to file {}", keyPairFilePath));
-  }
-}
 
 /**
  * API to flush addresses on the interface. It will flush all addresses

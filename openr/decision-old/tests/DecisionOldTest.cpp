@@ -1260,6 +1260,9 @@ class DecisionOldTestFixture : public ::testing::Test {
     decisionPub.setSockOpt(ZMQ_SUBSCRIBE, "", 0).value();
     decisionPub.connect(fbzmq::SocketUrl{"inproc://decision-pub"});
     decisionReq.connect(fbzmq::SocketUrl{"inproc://decision-rep"});
+
+    // Make request from decision to ensure that sockets are ready for use!
+    dumpRouteDatabase(decisionReq, {"random-node"}, serializer);
   }
 
   void

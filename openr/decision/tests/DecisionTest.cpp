@@ -1265,7 +1265,7 @@ class DecisionTestFixture : public ::testing::Test {
         AdjacencyDbMarker{"adj:"},
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),
-        std::chrono::milliseconds(250),
+        std::chrono::milliseconds(500),
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
         DecisionCmdUrl{"inproc://decision-rep"},
@@ -1285,6 +1285,9 @@ class DecisionTestFixture : public ::testing::Test {
     decisionPub.setSockOpt(ZMQ_SUBSCRIBE, "", 0).value();
     decisionPub.connect(fbzmq::SocketUrl{"inproc://decision-pub"});
     decisionReq.connect(fbzmq::SocketUrl{"inproc://decision-rep"});
+
+    // Make request from decision to ensure that sockets are ready for use!
+    dumpRouteDatabase(decisionReq, {"random-node"}, serializer);
   }
 
   void

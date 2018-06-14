@@ -74,24 +74,6 @@ const std::chrono::milliseconds kHoldTime(100);
 // the keep-alive for spark hello messages
 const std::chrono::milliseconds kKeepAliveTime(20);
 
-// produce a random string of given length - for value generation
-std::string
-genRandomStr(const int len) {
-  std::string s;
-  s.resize(len);
-
-  static const char alphanum[] =
-      "0123456789"
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      "abcdefghijklmnopqrstuvwxyz";
-
-  for (int i = 0; i < len; ++i) {
-    s[i] = alphanum[folly::Random::rand32() % (sizeof(alphanum) - 1)];
-  }
-
-  return s;
-}
-
 //
 // Lame-ass attempt to skip unexpected messages, such as RTT
 // change event. Trying 3 times is a wild guess, no logic.
@@ -154,8 +136,6 @@ class SparkFixture : public testing::Test {
   createSpark(
       std::string const& domainName,
       std::string const& myNodeName,
-      KeyPair keyPair,
-      KnownKeysStore* knownKeysStore,
       int sparkNum,
       std::chrono::milliseconds holdTime = kHoldTime,
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
@@ -169,10 +149,7 @@ class SparkFixture : public testing::Test {
         holdTime /* myHoldTime */,
         keepAliveTime /* myKeepAliveTime */,
         fastInitKeepAliveTime,
-        keyPair,
-        knownKeysStore,
         true /* enable v4 */,
-        true /* enable packet signature */,
         true /* enable subnet validation */,
         SparkReportUrl{folly::sformat("{}-{}", kSparkReportUrl, sparkNum)},
         SparkCmdUrl{folly::sformat("{}-{}", kSparkCmdUrl, sparkNum)},
@@ -190,22 +167,7 @@ class SparkFixture : public testing::Test {
   unique_ptr<std::thread> mockIoProviderThread{nullptr};
 
   CompactSerializer serializer_;
-
-  KeyPair keyPair1 = fbzmq::util::genKeyPair();
-  KeyPair keyPair2 = fbzmq::util::genKeyPair();
-  KeyPair keyPair3 = fbzmq::util::genKeyPair();
 };
-
-//
-// Validate the signing functions
-//
-TEST(SparkTest, SignatureTest) {
-  auto text = genRandomStr(1024);
-  auto keyPair = fbzmq::util::genKeyPair();
-
-  auto sig = Spark::signMessage(text, keyPair.privateKey);
-  EXPECT_TRUE(Spark::validateSignature(sig, text, keyPair.publicKey));
-}
 
 //
 // Start two sparks, let them form adjacency, then make it unidirectional
@@ -230,10 +192,10 @@ TEST_F(SparkFixture, UnidirectionalTest) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
+  auto spark1 = createSpark(kDomainName, "node-1", 1);
 
   // start spark2
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
+  auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
   EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -253,7 +215,7 @@ TEST_F(SparkFixture, UnidirectionalTest) {
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-2", event->neighbor.nodeName);
-    EXPECT_EQ(keyPair2.publicKey, event->neighbor.publicKey);
+    EXPECT_EQ("", event->neighbor.publicKey);
     EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(*event));
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
@@ -264,7 +226,7 @@ TEST_F(SparkFixture, UnidirectionalTest) {
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-1", event->neighbor.nodeName);
-    EXPECT_EQ(keyPair1.publicKey, event->neighbor.publicKey);
+    EXPECT_EQ("", event->neighbor.publicKey);
     EXPECT_EQ(make_pair(ip1V4.first, ip1V6.first), getTransportAddrs(*event));
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -326,8 +288,6 @@ TEST_F(SparkFixture, GracefulRestart) {
   auto spark1 = createSpark(
       kDomainName,
       "node-1",
-      keyPair1,
-      nullptr,
       1,
       std::chrono::milliseconds(1000) /* hold time */,
       std::chrono::milliseconds(200) /* my keep alive time */);
@@ -336,8 +296,6 @@ TEST_F(SparkFixture, GracefulRestart) {
   auto spark2 = createSpark(
       kDomainName,
       "node-2",
-      keyPair2,
-      nullptr,
       2,
       std::chrono::milliseconds(1000) /* hold time */,
       std::chrono::milliseconds(200) /* my keep alive time */);
@@ -380,8 +338,6 @@ TEST_F(SparkFixture, GracefulRestart) {
   spark2 = createSpark(
       kDomainName,
       "node-2",
-      keyPair2,
-      nullptr,
       3 /* changed */,
       std::chrono::milliseconds(1000) /* hold time */,
       std::chrono::milliseconds(200) /* my keep alive time */);
@@ -435,10 +391,10 @@ TEST_F(SparkFixture, HoldTimerExpired) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
+  auto spark1 = createSpark(kDomainName, "node-1", 1);
 
   // start spark2
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
+  auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
   EXPECT_TRUE(spark1->updateInterfaceDb(
@@ -482,8 +438,7 @@ TEST_F(SparkFixture, HoldTimerExpired) {
   /* sleep override */
   std::this_thread::sleep_for(kHoldTime * 3 / 2);
 
-  spark2 =
-      createSpark(kDomainName, "node-2", keyPair2, nullptr, 3 /* changed */);
+  spark2 = createSpark(kDomainName, "node-2", 3 /* changed */);
 
   LOG(INFO) << "Adding iface2 to node-2";
 
@@ -538,10 +493,10 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
+  auto spark1 = createSpark(kDomainName, "node-1", 1);
 
   // start spark1
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
+  auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
   EXPECT_TRUE(spark1->updateInterfaceDb(
@@ -590,10 +545,10 @@ TEST_F(SparkFixture, IfaceRemovalTest) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
+  auto spark1 = createSpark(kDomainName, "node-1", 1);
 
   // start spark2
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
+  auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
   EXPECT_TRUE(spark1->updateInterfaceDb(
@@ -708,10 +663,10 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
+  auto spark1 = createSpark(kDomainName, "node-1", 1);
 
   // start spark2
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
+  auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
   EXPECT_TRUE(spark1->updateInterfaceDb(
@@ -746,7 +701,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   LOG(INFO) << "Creating and starting spark-3";
 
   // start spark3
-  auto spark3 = createSpark(kDomainName, "node-3", keyPair3, nullptr, 3);
+  auto spark3 = createSpark(kDomainName, "node-3", 3);
 
   // start tracking iface3
   EXPECT_TRUE(spark3->updateInterfaceDb(
@@ -761,7 +716,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-3", event->neighbor.nodeName);
-    EXPECT_EQ(keyPair3.publicKey, event->neighbor.publicKey);
+    EXPECT_EQ("", event->neighbor.publicKey);
     // ifIndex already used for assigning label to node-2 via iface1. So next
     // label will be assigned from the end.
     EXPECT_EQ(Constants::kSrLocalRange.second, event->label);
@@ -777,7 +732,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-3", event->neighbor.nodeName);
-    EXPECT_EQ(keyPair3.publicKey, event->neighbor.publicKey);
+    EXPECT_EQ("", event->neighbor.publicKey);
     // ifIndex already used for assigning label to node-1 via iface2. So next
     // label will be assigned from the end.
     EXPECT_EQ(Constants::kSrLocalRange.second, event->label);
@@ -810,7 +765,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface3, event.ifName);
     EXPECT_EQ("node-1", event.neighbor.nodeName);
-    EXPECT_EQ(keyPair1.publicKey, event.neighbor.publicKey);
+    EXPECT_EQ("", event.neighbor.publicKey);
     EXPECT_EQ(make_pair(ip1V4.first, ip1V6.first), getTransportAddrs(event));
     EXPECT_EQ(1, expectedLabels.count(event.label));
 
@@ -820,7 +775,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface3, event.ifName);
     EXPECT_EQ("node-2", event.neighbor.nodeName);
-    EXPECT_EQ(keyPair2.publicKey, event.neighbor.publicKey);
+    EXPECT_EQ("", event.neighbor.publicKey);
     EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(event));
     EXPECT_EQ(1, expectedLabels.count(event.label));
 
@@ -899,13 +854,13 @@ TEST_F(SparkFixture, HubAndSpoke) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
+  auto spark1 = createSpark(kDomainName, "node-1", 1);
 
   // start spark2
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
+  auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start spark3
-  auto spark3 = createSpark(kDomainName, "node-3", keyPair3, nullptr, 3);
+  auto spark3 = createSpark(kDomainName, "node-3", 3);
 
   // tell spark1 to start hello on two interfaces
   EXPECT_TRUE(spark1->updateInterfaceDb(
@@ -938,7 +893,7 @@ TEST_F(SparkFixture, HubAndSpoke) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface1_2, event.ifName);
     EXPECT_EQ("node-2", event.neighbor.nodeName);
-    EXPECT_EQ(keyPair2.publicKey, event.neighbor.publicKey);
+    EXPECT_EQ("", event.neighbor.publicKey);
     EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(event));
 
     event = events["node-3"];
@@ -946,7 +901,7 @@ TEST_F(SparkFixture, HubAndSpoke) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface1_3, event.ifName);
     EXPECT_EQ("node-3", event.neighbor.nodeName);
-    EXPECT_EQ(keyPair3.publicKey, event.neighbor.publicKey);
+    EXPECT_EQ("", event.neighbor.publicKey);
     EXPECT_EQ(make_pair(ip3V4.first, ip3V6.first), getTransportAddrs(event));
 
     LOG(INFO) << "node-1 reported adjacencies UP to node-2, node-3";
@@ -993,213 +948,6 @@ TEST_F(SparkFixture, HubAndSpoke) {
 }
 
 //
-// Authenticate by checking if a peer's key is known
-//
-TEST_F(SparkFixture, KnownKeysAuth) {
-  SCOPE_EXIT {
-    LOG(INFO) << "SparkFixture ignore unwhitelisted test";
-  };
-
-  KnownKeysStore knownKeysStore;
-
-  knownKeysStore.setKeyByName("node-1", keyPair1.publicKey);
-  knownKeysStore.setKeyByName("node-2", keyPair2.publicKey);
-
-  //
-  // Define interface names for the test
-  //
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
-
-  // connect interfaces directly
-  ConnectedIfPairs connectedPairs = {
-      {iface1, {{iface2, 100}}},
-      {iface2, {{iface1, 100}}},
-  };
-  mockIoProvider->setConnectedPairs(connectedPairs);
-
-  // start spark1
-  auto spark1 = createSpark(
-      kDomainName,
-      "node-1",
-      keyPair1,
-      &knownKeysStore /* known keys auth */,
-      1);
-
-  // start spark2
-  auto spark2 = createSpark(
-      kDomainName,
-      "node-2",
-      keyPair2,
-      &knownKeysStore /* known keys auth */,
-      2);
-
-  // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
-
-  // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
-
-  LOG(INFO)
-      << "Preparing to receive the messages from sparks since keys are known";
-
-  //
-  // Now wait for sparks to detect each other
-  //
-  {
-    auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-1 reported adjacency to node-2";
-  }
-
-  {
-    auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-2 reported adjacency to node-1";
-  }
-
-  //
-  // case 1): Fail authentication as node-2's key mismatches known one
-  //
-
-  // Note: assume private and public keys are different in a key pair
-  knownKeysStore.setKeyByName("node-2", keyPair2.privateKey);
-
-  LOG(INFO) << "Preparing to receive the DOWN messages from sparks due to key "
-               "mismatch with known keys";
-
-  //
-  // node-1 should report node-2 as down, after ignoring its hello packets
-  // since the public key does not match known one
-  //
-  {
-    auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-1 reported down adjacency to node-2";
-  }
-
-  //
-  // case 2): Fail authentication as node-100's key is unknown
-  //
-  //
-  // Kill and restart spark2
-  //
-
-  LOG(INFO) << "Killing and restarting node-2 with a different name";
-
-  spark2 =
-      createSpark(kDomainName, "node-100", keyPair2, nullptr, 4 /* changed */);
-
-  LOG(INFO) << "Adding iface2 to node-100";
-
-  // re-add interface
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
-
-  LOG(INFO)
-      << "Preparing to NOT receive the messages from sparks due to neighbor "
-         "not existent in known keys";
-
-  //
-  // Now wait for sparks to NOT report anything
-  //
-  EXPECT_TRUE(spark1->recvNeighborEvent(kHoldTime * 3 / 2).hasError());
-
-  EXPECT_TRUE(spark2->recvNeighborEvent(kHoldTime * 3 / 2).hasError());
-}
-
-//
-// Fail authentication when key changes
-//
-TEST_F(SparkFixture, KeyChangeTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "SparkFixture key change test";
-  };
-
-  //
-  // Define interface names for the test
-  //
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
-
-  // connect interfaces directly
-  ConnectedIfPairs connectedPairs = {
-      {iface1, {{iface2, 100}}},
-      {iface2, {{iface1, 100}}},
-  };
-  mockIoProvider->setConnectedPairs(connectedPairs);
-
-  // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
-
-  // start spark2
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
-
-  // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
-
-  // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
-
-  LOG(INFO) << "Preparing to receive the messages from sparks";
-
-  //
-  // Now wait for sparks to detect each other
-  //
-  {
-    auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-1 reported adjacency to node-2";
-  }
-
-  {
-    auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-2 reported adjacency to node-1";
-  }
-
-  LOG(INFO) << "Change node-2's key";
-
-  // stop it first
-  spark2->stop();
-  spark2->setKeyPair(fbzmq::util::genKeyPair());
-  // resume
-  spark2->run();
-
-  LOG(INFO) << "Waiting for node-1 to report loss of neighbor";
-
-  //
-  // First node will immediately report loss of neighbor
-  //
-  {
-    auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-1 reported down adjacency to node-2";
-  }
-
-  //
-  // node-1 will use node-2's new key after kicking it out and re-acquire it
-  //
-
-  LOG(INFO) << "Waiting for node-1 to report UP again";
-
-  {
-    auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-1 reported UP adjacency to node-2";
-  }
-}
-
-//
 // Start two sparks, let them form adjacency, then increase and decrease RTT and
 // see we get NEIGHBOR_RTT_CHANGE event.
 //
@@ -1221,10 +969,10 @@ TEST_F(SparkFixture, RttTest) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
+  auto spark1 = createSpark(kDomainName, "node-1", 1);
 
   // start spark2
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
+  auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
   EXPECT_TRUE(spark1->updateInterfaceDb(
@@ -1325,10 +1073,10 @@ TEST_F(SparkFixture, StressTest) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start spark1
-  auto spark1 = createSpark(kDomainName, "node-1", keyPair1, nullptr, 1);
+  auto spark1 = createSpark(kDomainName, "node-1", 1);
 
   // start spark2
-  auto spark2 = createSpark(kDomainName, "node-2", keyPair2, nullptr, 2);
+  auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   //
   // Add Interfaces to both sparks
@@ -1394,8 +1142,6 @@ TEST_F(SparkFixture, DomainTest) {
     auto spark = createSpark(
         domainName,
         folly::sformat("node-{}", i) /* myNodeName */,
-        fbzmq::util::genKeyPair(),
-        nullptr,
         i,
         std::chrono::milliseconds(6000));
     sparks.push_back(std::move(spark));
@@ -1510,8 +1256,6 @@ TEST_F(SparkFixture, SubnetTest) {
     auto spark = createSpark(
         "spark-test" /* domain name */,
         folly::sformat("node-{}", i) /* myNodeName */,
-        fbzmq::util::genKeyPair(),
-        nullptr,
         i,
         std::chrono::milliseconds(6000));
     sparks.push_back(std::move(spark));
@@ -1601,8 +1345,6 @@ TEST_F(SparkFixture, FastInitTest) {
   auto spark1 = createSpark(
       kDomainName,
       "node-1",
-      keyPair1,
-      nullptr,
       1,
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,
@@ -1610,8 +1352,6 @@ TEST_F(SparkFixture, FastInitTest) {
   auto spark2 = createSpark(
       kDomainName,
       "node-2",
-      keyPair2,
-      nullptr,
       2,
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,
@@ -1668,8 +1408,6 @@ TEST_F(SparkFixture, FastInitTest) {
   spark2 = createSpark(
       kDomainName,
       "node-2",
-      keyPair2,
-      nullptr,
       3 /* changed */,
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,
@@ -1745,8 +1483,6 @@ TEST_F(SparkFixture, dropPacketsTest) {
   auto spark1 = createSpark(
       kDomainName,
       "node-1",
-      keyPair1,
-      nullptr,
       1,
       600ms /* hold time */,
       200ms /* my keep alive time */,
@@ -1754,8 +1490,6 @@ TEST_F(SparkFixture, dropPacketsTest) {
   auto spark2 = createSpark(
       kDomainName,
       "node-2",
-      keyPair2,
-      nullptr,
       2,
       600ms /* hold time */,
       // Make Keep Aive Small so Spark1 will drop some of Spark2's
@@ -1874,8 +1608,6 @@ TEST_F(SparkFixture, VersionTest) {
   auto spark1 = createSpark(
       kDomainName,
       "node-1",
-      keyPair1,
-      nullptr,
       1,
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,
@@ -1885,8 +1617,6 @@ TEST_F(SparkFixture, VersionTest) {
   auto spark2 = createSpark(
       kDomainName,
       "node-2",
-      keyPair2,
-      nullptr,
       2,
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,
@@ -1927,8 +1657,6 @@ TEST_F(SparkFixture, VersionTest) {
   auto spark3 = createSpark(
       kDomainName,
       "node-3",
-      keyPair3,
-      nullptr,
       3 /* changed */,
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,

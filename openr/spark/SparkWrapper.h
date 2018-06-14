@@ -34,10 +34,7 @@ class SparkWrapper {
       std::chrono::milliseconds myHoldTime,
       std::chrono::milliseconds myKeepAliveTime,
       std::chrono::milliseconds myFastInitKeepAliveTime,
-      KeyPair keyPair,
-      KnownKeysStore* knownKeysStore,
       bool enableV4,
-      bool enableSignature,
       bool enableSubnetValidation,
       SparkReportUrl const& reportUrl,
       SparkCmdUrl const& cmdUrl,
@@ -61,9 +58,6 @@ class SparkWrapper {
   // receive spark neighbor event
   folly::Expected<thrift::SparkNeighborEvent, fbzmq::Error> recvNeighborEvent(
       folly::Optional<std::chrono::milliseconds> timeout = folly::none);
-
-  // set key pair
-  void setKeyPair(const KeyPair& keyPair);
 
   //
   // Private state

@@ -35,38 +35,6 @@ const auto path1_3_1 =
 const auto path1_3_2 =
     createPath(toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_2", 2);
 
-// create and save a key pair in disk; load it and ensure it's the same as saved
-TEST(UtilTest, KeyPair) {
-  char tempCertKeyFileName[] = "/tmp/certKeyFile.XXXXXX";
-  // get a unique temp file name
-  EXPECT_TRUE(::mkstemp(tempCertKeyFileName));
-
-  // delete the original temp file
-  SCOPE_EXIT {
-    ::unlink(tempCertKeyFileName);
-  };
-
-  //
-  // Init cert
-  //
-  apache::thrift::SimpleJSONSerializer serializer;
-
-  // load non-existent file
-  EXPECT_THROW(loadKeyPairFromFile(tempCertKeyFileName, serializer), exception);
-
-  // create in memory key pair
-  auto keyPair = fbzmq::util::genKeyPair();
-
-  // save it in file
-  saveKeyPairToFile(tempCertKeyFileName, keyPair, serializer);
-
-  // load it from file
-  auto keyPair2 = loadKeyPairFromFile(tempCertKeyFileName, serializer);
-
-  EXPECT_EQ(keyPair.privateKey, keyPair2.privateKey);
-  EXPECT_EQ(keyPair.publicKey, keyPair2.publicKey);
-}
-
 // test getNthPrefix()
 TEST(UtilTest, getNthPrefix) {
   // v6 allocation parameters

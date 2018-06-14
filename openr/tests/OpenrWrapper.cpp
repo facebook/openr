@@ -77,20 +77,17 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   // create kvstore
   //
-  auto keyPair = fbzmq::util::genKeyPair();
 
   // kvstore global pub/cmd socket
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> kvStoreGlobalPubSock(
       context_,
       fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId)},
-      keyPair);
+          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId)});
 
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> kvStoreGlobalCmdSock(
       context_,
       fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId)},
-      keyPair);
+          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId)});
 
   kvStoreGlobalPubSock.bind(fbzmq::SocketUrl{kvStoreGlobalPubUrl_}).value();
   kvStoreGlobalCmdSock.bind(fbzmq::SocketUrl{kvStoreGlobalCmdUrl_}).value();
@@ -105,7 +102,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       folly::none /* ip-tos */,
-      keyPair,
+      folly::none,
       kvStoreDbSyncInterval,
       kvStoreMonitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec>{},
@@ -163,10 +160,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       sparkKeepAliveTime, // keep alive ms
       sparkFastInitKeepAliveTime, // fastInitKeepAliveTime ms
       folly::none, // ip-tos
-      keyPair,
-      nullptr, // known keys store
       v4Enabled, // enable v4
-      true, // enable packet signature
       true, // enable subnet validation
       SparkReportUrl{sparkReportUrl_},
       SparkCmdUrl{sparkCmdUrl_},

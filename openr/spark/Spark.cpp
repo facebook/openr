@@ -332,10 +332,7 @@ Spark::Spark(
     std::chrono::milliseconds myKeepAliveTime,
     std::chrono::milliseconds fastInitKeepAliveTime,
     folly::Optional<int> maybeIpTos,
-    KeyPair keyPair,
-    KnownKeysStore* knownKeysStore,
     bool enableV4,
-    bool enableSignature,
     bool enableSubnetValidation,
     SparkReportUrl const& reportUrl,
     SparkCmdUrl const& cmdUrl,
@@ -350,10 +347,7 @@ Spark::Spark(
       myHoldTime_(myHoldTime),
       myKeepAliveTime_(myKeepAliveTime),
       fastInitKeepAliveTime_(fastInitKeepAliveTime),
-      keyPair_(std::move(keyPair)),
-      knownKeysStore_(knownKeysStore),
       enableV4_(enableV4),
-      enableSignature_(enableSignature),
       enableSubnetValidation_(enableSubnetValidation),
       reportUrl_(reportUrl),
       reportSocket_(zmqContext),
@@ -387,41 +381,6 @@ Spark::Spark(
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
-}
-
-//
-// Sign a message given a private key
-//
-std::string
-Spark::signMessage(std::string const& msg, std::string const& privateKey) {
-  unsigned char sig[crypto_sign_BYTES];
-
-  VLOG(4) << "Signing message of size " << msg.size()
-          << " with private key size " << privateKey.size();
-
-  ::crypto_sign_detached(
-      sig,
-      nullptr,
-      reinterpret_cast<const unsigned char*>(msg.data()),
-      msg.size(),
-      reinterpret_cast<const unsigned char*>(privateKey.data()));
-
-  return std::string(reinterpret_cast<const char*>(sig), crypto_sign_BYTES);
-}
-
-//
-// Verify a message given a signature and public key
-//
-bool
-Spark::validateSignature(
-    std::string const& signature,
-    std::string const& msg,
-    std::string const& publicKey) {
-  return ::crypto_sign_verify_detached(
-             reinterpret_cast<const unsigned char*>(signature.data()),
-             reinterpret_cast<const unsigned char*>(msg.data()),
-             msg.size(),
-             reinterpret_cast<const unsigned char*>(publicKey.data())) == 0;
 }
 
 void
@@ -612,40 +571,6 @@ Spark::validateHelloPacket(
     tData_.addStatValue(
         "spark.invalid_keepalive.invalid_version", 1, fbzmq::SUM);
     return PacketValidationResult::FAILURE;
-  }
-  // known key check is enabled
-  if (knownKeysStore_) {
-    // see if the neighbor's public key is known
-    try {
-      auto neighborKey = knownKeysStore_->getKeyByName(neighborName);
-      if (originator.publicKey != neighborKey) {
-        LOG(ERROR) << "Neighbor " << neighborName
-                   << " is known but with a mismatched key";
-        tData_.addStatValue(
-            "spark.invalid_keepalive.invalid_key", 1, fbzmq::SUM);
-        return PacketValidationResult::FAILURE;
-      }
-    } catch (std::out_of_range const& err) {
-      LOG(ERROR) << "Neighbor " << neighborName << " is unknown";
-      tData_.addStatValue(
-          "spark.invalid_keepalive.invalid_neighbor", 1, fbzmq::SUM);
-      return PacketValidationResult::FAILURE;
-    }
-  }
-
-  // validate the packet signature, to make sure the sender has the private key
-  if (enableSignature_) {
-    auto payloadStr = util::writeThriftObjStr(helloPacket.payload, serializer_);
-    if (!validateSignature(
-            helloPacket.signature,
-            payloadStr,
-            helloPacket.payload.originator.publicKey)) {
-      LOG(ERROR) << "Invalid signature for packet from " << neighborName
-                 << " on " << ifName;
-      tData_.addStatValue(
-          "spark.invalid_keepalive.invalid_signature", 1, fbzmq::SUM);
-      return PacketValidationResult::FAILURE;
-    }
   }
 
   // validate v4 address subnet
@@ -1133,7 +1058,7 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
       myDomainName_,
       myNodeName_,
       myHoldTime_.count(),
-      keyPair_.publicKey,
+      "",  /* Empty public key */
       toBinaryAddress(v6Addr),
       toBinaryAddress(v4Addr),
       kKvStorePubPort_,
@@ -1167,17 +1092,10 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
     neighborInfo.lastMyMsgRcvdTsInUs = neighbor.localTimestamp.count();
   }
 
-  // Build packet signature if enabled
-  std::string signature{""};
-  if (enableSignature_) {
-    auto payloadStr = util::writeThriftObjStr(payload, serializer_);
-    signature = signMessage(payloadStr, keyPair_.privateKey);
-  }
-
-  // build the hello packet from payload and signature
-  thrift::SparkHelloPacket helloPacket(
-      apache::thrift::FRAGILE, payload, signature);
-  auto packet = util::writeThriftObjStr(helloPacket, serializer_);
+  // build the hello packet from payload and empty signature
+  auto packet = util::writeThriftObjStr(
+      thrift::SparkHelloPacket{apache::thrift::FRAGILE, payload, ""},
+      serializer_);
 
   // send the payload
   folly::SocketAddress dstAddr(

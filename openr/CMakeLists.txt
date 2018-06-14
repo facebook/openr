@@ -119,16 +119,6 @@ add_dependencies(
 )
 
 thrift_object(
-  "KnownKeys" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
-)
-
-thrift_object(
   "HealthChecker" #file_name
   "" #services
   "cpp2" #language
@@ -247,7 +237,6 @@ install(FILES
 add_library(openrlib
   allocators/PrefixAllocator.cpp
   common/BuildInfo.cpp
-  common/KnownKeysStore.cpp
   common/ExponentialBackoff.cpp
   common/Util.cpp
   common/Constants.cpp
@@ -277,7 +266,6 @@ add_library(openrlib
   $<TARGET_OBJECTS:Fib-cpp2-obj>
   $<TARGET_OBJECTS:HealthChecker-cpp2-obj>
   $<TARGET_OBJECTS:IpPrefix-cpp2-obj>
-  $<TARGET_OBJECTS:KnownKeys-cpp2-obj>
   $<TARGET_OBJECTS:KvStore-cpp2-obj>
   $<TARGET_OBJECTS:LinkMonitor-cpp2-obj>
   $<TARGET_OBJECTS:LinuxPlatform-cpp2-obj>
@@ -420,7 +408,6 @@ install(FILES
   common/BuildInfo.h
   common/Constants.h
   common/ExponentialBackoff.h
-  common/KnownKeysStore.h
   common/StepDetector.h
   common/Types.h
   common/Util.h
@@ -646,21 +633,11 @@ if(BUILD_TESTS)
   add_executable(exp_backoff_test
     common/tests/ExponentialBackoffTest.cpp
   )
-  add_executable(knownkeys_store_test
-    common/tests/KnownKeysStoreTest.cpp
-  )
   add_executable(util_test
     common/tests/UtilTest.cpp
   )
 
   target_link_libraries(exp_backoff_test
-    openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
-  )
-  target_link_libraries(knownkeys_store_test
     openrlib
     ${GMOCK}
     ${GMOCK_MAIN}
@@ -676,12 +653,10 @@ if(BUILD_TESTS)
   )
 
   add_test(ExponentialBackoffTest exp_backoff_test)
-  add_test(KnownKeysStoreTest knownkeys_store_test)
   add_test(UtilTest util_test)
 
   install(TARGETS
     exp_backoff_test
-    knownkeys_store_test
     util_test
     DESTINATION sbin/tests/openr/common
   )

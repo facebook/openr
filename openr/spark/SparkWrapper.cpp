@@ -17,10 +17,7 @@ SparkWrapper::SparkWrapper(
     std::chrono::milliseconds myHoldTime,
     std::chrono::milliseconds myKeepAliveTime,
     std::chrono::milliseconds myFastInitKeepAliveTime,
-    KeyPair keyPair,
-    KnownKeysStore* knownKeysStore,
     bool enableV4,
-    bool enableSignature,
     bool enableSubnetValidation,
     SparkReportUrl const& reportUrl,
     SparkCmdUrl const& cmdUrl,
@@ -40,10 +37,7 @@ SparkWrapper::SparkWrapper(
       myKeepAliveTime,
       myFastInitKeepAliveTime /* fastInitKeepAliveTime */,
       folly::none /* ip-tos */,
-      keyPair,
-      knownKeysStore,
       enableV4,
-      enableSignature,
       enableSubnetValidation,
       reportUrl,
       cmdUrl,
@@ -127,11 +121,6 @@ SparkWrapper::recvNeighborEvent(
     return folly::makeUnexpected(maybeMsg.error());
   }
   return maybeMsg.value();
-}
-
-void
-SparkWrapper::setKeyPair(const KeyPair& keyPair) {
-  spark_->setKeyPair(keyPair);
 }
 
 } // namespace openr

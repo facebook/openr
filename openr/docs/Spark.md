@@ -30,14 +30,6 @@ the packet out on. That's it, nothing much else.
 For more information about message formats, check out
 - [if/Spark.thrift](https://github.com/facebook/openr/blob/master/openr/if/Spark.thrift)
 
-### Encrypted Packets
----
-
-Every hello packet can optionally be signed by the sender's private key, and
-verify the signature on reception. The public key in the packet is reported in
-the neighbor event and allows the downstream consumer to implement authentication,
-e.g. compare it to the list of known keys.
-
 ### RTT Measurement
 ---
 

@@ -800,7 +800,6 @@ SpfSolverOld::SpfSolverOldImpl::runSpf(const std::string& myNodeName) {
 thrift::RouteDatabase
 SpfSolverOld::SpfSolverOldImpl::buildShortestPaths(const std::string& myNodeName) {
   VLOG(4) << "SpfSolverOld::buildShortestPaths for " << myNodeName;
-  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
@@ -810,6 +809,7 @@ SpfSolverOld::SpfSolverOldImpl::buildShortestPaths(const std::string& myNodeName
     return routeDb;
   }
 
+  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
   const auto startTime = std::chrono::steady_clock::now();
 
   prepareGraph();
@@ -886,7 +886,6 @@ SpfSolverOld::SpfSolverOldImpl::buildShortestPaths(const std::string& myNodeName
 thrift::RouteDatabase
 SpfSolverOld::SpfSolverOldImpl::buildMultiPaths(const std::string& myNodeName) {
   VLOG(4) << "SpfSolverOld::buildMultiPaths for " << myNodeName;
-  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
@@ -896,6 +895,7 @@ SpfSolverOld::SpfSolverOldImpl::buildMultiPaths(const std::string& myNodeName) {
     return routeDb;
   }
 
+  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
   auto const& startTime = std::chrono::steady_clock::now();
 
   // reset next-hops info
@@ -1187,8 +1187,7 @@ DecisionOld::DecisionOld(
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
   // Initialize ZMQ sockets
-  scheduleTimeout(
-      std::chrono::seconds(0), [this, &zmqContext]() { prepare(zmqContext); });
+  prepare(zmqContext);
 }
 
 void
@@ -1270,7 +1269,11 @@ DecisionOld::prepare(fbzmq::Context& zmqContext) noexcept {
         processRequest();
       });
 
-  initialSync(zmqContext);
+  auto zmqContextPtr = &zmqContext;
+  scheduleTimeout(
+      std::chrono::seconds(0),
+      [this, zmqContextPtr] { initialSync(*zmqContextPtr); }
+  );
 }
 
 void

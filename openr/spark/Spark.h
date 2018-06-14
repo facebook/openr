@@ -22,7 +22,6 @@
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/KnownKeysStore.h>
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
@@ -58,10 +57,7 @@ class Spark final : public fbzmq::ZmqEventLoop {
       std::chrono::milliseconds myKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime,
       folly::Optional<int> ipTos,
-      KeyPair keyPair,
-      KnownKeysStore* knownKeysStore,
       bool enableV4,
-      bool enableSignature,
       bool enableSubnetValidation,
       SparkReportUrl const& reportUrl,
       SparkCmdUrl const& cmdUrl,
@@ -79,28 +75,6 @@ class Spark final : public fbzmq::ZmqEventLoop {
     ioProvider_ = std::move(ioProvider);
   }
 
-  // set key pair, used for unit-testing
-  void
-  setKeyPair(const KeyPair& keyPair) {
-    // can only be called when stopped or from the same thread
-    CHECK(isInEventLoop());
-    keyPair_ = keyPair;
-  }
-
-  //
-  // Crypto methods. We put them here for unit-testing.
-  //
-
-  // sign a given message
-  static std::string signMessage(
-      std::string const& msg, std::string const& privateKey);
-
-  // verify a message signature
-  static bool validateSignature(
-      std::string const& signature,
-      std::string const& msg,
-      std::string const& publicKey);
-
  private:
   // Spark is non-copyable
   Spark(Spark const&) = delete;
@@ -114,8 +88,7 @@ class Spark final : public fbzmq::ZmqEventLoop {
   //
   // (1) neighbor is not self (packet not looped back)
   // (2) authentication if keys are already known before
-  // (3) signature is good
-  // (4) validate hello packet sequence number. detects neighbor restart if
+  // (3) validate hello packet sequence number. detects neighbor restart if
   //     sequence number gets wrapped up again.
   PacketValidationResult validateHelloPacket(
       std::string const& ifName, thrift::SparkHelloPacket const& helloPacket);
@@ -181,21 +154,9 @@ class Spark final : public fbzmq::ZmqEventLoop {
   // usual keep alive interval
   const std::chrono::milliseconds fastInitKeepAliveTime_{0};
 
-  // the ECC key pair to be used with libsodium for signing
-  KeyPair keyPair_{};
-
-  // known public keys to authenticate peers
-  // authenticate is disabled if set to nullptr, e.g., for testing
-  const KnownKeysStore* knownKeysStore_{nullptr};
-
   // This flag indicates that we will also exchange v4 transportAddress in
   // Spark HelloMessage
   const bool enableV4_{false};
-
-  // If enabled, then all spark hello packets will be signed with ECC
-  // signatures. This can consume too much CPU out of your box if there
-  // are hundreds of interfaces
-  const bool enableSignature_{true};
 
   // If enabled, then all newly formed adjacency will be validated on v4 subnet
   // If subnets are different on each end of adjacency, neighboring session will

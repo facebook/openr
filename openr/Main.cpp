@@ -170,8 +170,6 @@ DEFINE_string(
     redistribute_ifaces,
     "",
     "The interface names or regex who's prefixes we want to advertise");
-DEFINE_bool(enable_auth, false, "Enable known keys authentication in Spark");
-DEFINE_string(known_keys_file_path, "/tmp/known_keys.json", "Known keys file");
 DEFINE_string(
     cert_file_path,
     "/tmp/cert_node_1.json",
@@ -232,11 +230,6 @@ DEFINE_int32(
     "Health check scenarios, default set as ping neighbor of neighbor");
 DEFINE_int32(
     health_check_pct, 50, "Health check pct % of nodes in entire topology");
-DEFINE_bool(
-    enable_spark_signature,
-    false,
-    "Enable the spark packet signature. Disabling It can save you some "
-    "CPU cycles");
 DEFINE_bool(
     enable_netlink_fib_handler,
     false,
@@ -519,14 +512,6 @@ main(int argc, char** argv) {
     allThreads.emplace_back(std::move(systemThriftThread));
   }
 
-  folly::Optional<KeyPair> keyPair;
-  if (FLAGS_enable_auth) {
-    auto jsonSerializer = apache::thrift::SimpleJSONSerializer();
-    keyPair = loadKeyPairFromFile(FLAGS_cert_file_path, jsonSerializer);
-  } else {
-    keyPair = util::genKeyPair();
-  }
-
   const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
   const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{"inproc://kvstore_cmd_local"};
   const MonitorSubmitUrl monitorSubmitUrl{
@@ -596,7 +581,7 @@ main(int argc, char** argv) {
           "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
       monitorSubmitUrl,
       maybeIpTos,
-      FLAGS_enable_encryption ? keyPair : folly::none,
+      folly::none,
       Constants::kStoreSyncInterval,
       Constants::kMonitorSubmitInterval,
       std::unordered_map<std::string, openr::thrift::PeerSpec>{},
@@ -620,7 +605,7 @@ main(int argc, char** argv) {
       kConfigStoreUrl,
       kvStoreLocalCmdUrl,
       kvStoreLocalPubUrl,
-      FLAGS_enable_encryption ? keyPair : folly::none,
+      folly::none,
       PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
       FLAGS_enable_perf_measurement,
       monitorSubmitUrl,
@@ -677,7 +662,6 @@ main(int argc, char** argv) {
   //
   // Start the spark service. For now, use random key-pair
   //
-  KnownKeysStore knownKeysStore(FLAGS_known_keys_file_path);
 
   Spark spark(
       FLAGS_domain, // My domain
@@ -687,10 +671,7 @@ main(int argc, char** argv) {
       std::chrono::seconds(FLAGS_spark_keepalive_time_s),
       std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
       maybeIpTos,
-      keyPair.value(),
-      FLAGS_enable_auth ? &knownKeysStore : nullptr,
       FLAGS_enable_v4,
-      FLAGS_enable_spark_signature,
       FLAGS_enable_subnet_validation,
       kSparkReportUrl,
       kSparkCmdUrl,
