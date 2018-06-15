@@ -31,14 +31,13 @@ PrefixManager::PrefixManager(
     const PersistentStoreUrl& persistentStoreUrl,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
-    const folly::Optional<fbzmq::KeyPair>& keyPair,
     const PrefixDbMarker& prefixDbMarker,
     bool enablePerfMeasurement,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
     : nodeId_{nodeId},
       globalCmdSock_(
-          zmqContext, folly::none, keyPair, fbzmq::NonblockingFlag{true}),
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       localCmdSock_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       configStoreClient_{persistentStoreUrl, zmqContext},

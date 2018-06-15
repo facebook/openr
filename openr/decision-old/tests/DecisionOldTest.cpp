@@ -98,7 +98,7 @@ const auto prefixDb4V4 =
 
 // timeout to wait until decision debounce
 // (i.e. spf recalculation, route rebuild) finished
-const std::chrono::milliseconds debounceTimeout{250};
+const std::chrono::milliseconds debounceTimeout{500};
 
 using NextHop = pair<string /* ifname */, folly::IPAddress /* nexthop ip */>;
 // Note: use unordered_set bcoz paths in a route can be in arbitrary order
@@ -1612,15 +1612,6 @@ TEST_F(DecisionOldTestFixture, PubDebouncing) {
       {});
 
   publishRouteDb(publication);
-
-  /* sleep override */
-  // wait long enough for SPF to finish if it is called and short enoughs
-  // before deboucing timer debounceTimeout expires
-  std::this_thread::sleep_for(debounceTimeout / 20);
-  // validate SPF: shall not have run here
-  counters = decision->getCounters();
-  EXPECT_EQ(1, counters["decision.paths_build_requests.count.0"]);
-  EXPECT_EQ(1, counters["decision.route_build_requests.count.0"]);
 
   /* sleep override */
   // wait for debouncing to kick in

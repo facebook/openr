@@ -27,8 +27,7 @@ KvStoreWrapper::KvStoreWrapper(
     std::chrono::seconds dbSyncInterval,
     std::chrono::seconds monitorSubmitInterval,
     std::unordered_map<std::string, thrift::PeerSpec> peers,
-    folly::Optional<KvStoreFilters> filters,
-    folly::Optional<fbzmq::KeyPair> keyPair)
+    folly::Optional<KvStoreFilters> filters)
     : nodeId(nodeId),
       localCmdUrl(folly::sformat("inproc://{}-kvstore-cmd", nodeId)),
       localPubUrl(folly::sformat("inproc://{}-kvstore-pub", nodeId)),
@@ -41,14 +40,12 @@ KvStoreWrapper::KvStoreWrapper(
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock(
       zmqContext,
       fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId)},
-      keyPair);
+          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId)});
 
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock(
       zmqContext,
       fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId)},
-      keyPair);
+          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId)});
 
   // For testing puspose we are using inproc URLs for global sockets as well
   VLOG(1) << "KvStoreWrapper: Pre binding global pub/sock";
@@ -73,7 +70,6 @@ KvStoreWrapper::KvStoreWrapper(
       KvStoreGlobalCmdUrl{globalCmdUrl},
       MonitorSubmitUrl{monitorSubmitUrl},
       folly::none /* ip-tos */,
-      keyPair,
       dbSyncInterval,
       monitorSubmitInterval,
       peers,

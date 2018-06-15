@@ -106,9 +106,6 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       MonitorSubmitUrl monitorSubmitUrl,
       // IP TOS value to set on sockets using TCP
       folly::Optional<int> ipTos,
-      // the key pair to use for crypto sockets. if set to
-      // folly::none, crypto is not used.
-      folly::Optional<fbzmq::KeyPair> keyPair,
       // how often to request full db sync from peers
       std::chrono::seconds dbSyncInterval,
       // how often to submit to monitor

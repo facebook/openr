@@ -87,9 +87,9 @@ class Spark final : public fbzmq::ZmqEventLoop {
   // passed the following checks:
   //
   // (1) neighbor is not self (packet not looped back)
-  // (2) authentication if keys are already known before
-  // (3) validate hello packet sequence number. detects neighbor restart if
+  // (2) validate hello packet sequence number. detects neighbor restart if
   //     sequence number gets wrapped up again.
+  // (3) performs various other validation e.g. domain, subnet validation etc.
   PacketValidationResult validateHelloPacket(
       std::string const& ifName, thrift::SparkHelloPacket const& helloPacket);
 

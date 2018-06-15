@@ -31,9 +31,6 @@ struct SparkNeighbor {
   // how long to retain our data for in milliseconds
   2: required i32 holdTime
 
-  // our public key
-  3: required binary publicKey
-
   // our transport addresses (right now - link local)
   4: IpPrefix.BinaryAddress transportAddressV6
   5: IpPrefix.BinaryAddress transportAddressV4

@@ -464,7 +464,6 @@ TEST(KvStore, MonitorReport) {
       KvStoreGlobalCmdUrl{"inproc://global_cmd"},
       MonitorSubmitUrl{"inproc://monitor_submit"},
       folly::none /* ip-tos */,
-      fbzmq::util::genKeyPair(),
       std::chrono::seconds(1) /* Db Sync Interval */,
       std::chrono::seconds(1) /* Monitor Submit Interval */,
       std::unordered_map<std::string, thrift::PeerSpec>{});

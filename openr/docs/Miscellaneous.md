@@ -72,10 +72,10 @@ number then it is an indication that a node has restarted.
 
 On detecting node-restart (receipt of hello packet with wrapped sequence number)
 Spark generates a NEIGHBOR_RESTART event and passes it to LinkMonitor with
-latest neighbor info (socket urls and public key). LinkMonitor updates KvStore
-to update neighbors adjacency (will be updated only if needed). However, spark
-doesn't reset the **holdTimer** for the neighbor which has been detected as
-restarted and it doesn't do unless it sees itself in the subsequent neighbor's hello
+latest neighbor info (socket urls). LinkMonitor updates KvStore to update
+neighbors adjacency (will be updated only if needed). However, spark doesn't
+reset the **holdTimer** for the neighbor which has been detected as restarted
+and it doesn't do unless it sees itself in the subsequent neighbor's hello
 packets.
 
 #### Notes on Timers

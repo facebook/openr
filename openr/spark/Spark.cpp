@@ -653,13 +653,6 @@ Spark::validateHelloPacket(
     return PacketValidationResult::NEIGHBOR_RESTART;
   }
 
-  // get the previously stored public key and make sure it's the same
-  if (originator.publicKey != neighbor.info.publicKey) {
-    LOG(ERROR) << "Neighbor " << neighborName
-               << " changed public key, ignoring hello";
-    return PacketValidationResult::FAILURE;
-  }
-
   // update the sequence number
   neighbor.seqNum = newSeqNum;
 
@@ -1058,7 +1051,6 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
       myDomainName_,
       myNodeName_,
       myHoldTime_.count(),
-      "",  /* Empty public key */
       toBinaryAddress(v6Addr),
       toBinaryAddress(v4Addr),
       kKvStorePubPort_,

@@ -3,13 +3,12 @@
 
 `Spark` is a simple hello protocol we use for neighbor discovery. You can find
 packet definitions in if/Spark.thrift. The Hello packet contains the node name,
-its Curve ECC public key, and the list of neighbors it has heard from. This allows
-all neighbors on a segment to agree on bidirectional visibility. Once we see
-ourselves in a neighbor's hello packets we inform the downstream consumer of a
-neighbor event. Each packet also carries the hold time, which tells the receiver
-how long to keep the information valid for. There is no provision for p2p
-sessions or rapid hellos - we expect the lower layers to tell us of interface
-event quickly.
+and the list of neighbors it has heard from. This allows all neighbors on a
+segment to agree on bidirectional visibility. Once we see ourselves in a
+neighbor's hello packets we inform the downstream consumer of a neighbor event.
+Each packet also carries the hold time, which tells the receiver how long to
+keep the information valid for. There is no provision for p2p sessions or rapid
+hellos - we expect the lower layers to tell us of interface event quickly.
 
 The rate of hello packet send is defined by `keepAliveTime` and this time must
 be less than the `holdTime` for each node. Having these times as separate

@@ -60,21 +60,18 @@ re2::RE2::Options regexOpts;
 const auto peerSpec_2_1 = thrift::PeerSpec(
     FRAGILE,
     "tcp://[fe80::2%iface_2_1]:10001",
-    "tcp://[fe80::2%iface_2_1]:10002",
-    "");
+    "tcp://[fe80::2%iface_2_1]:10002");
 
 const auto peerSpec_2_2 = thrift::PeerSpec(
     FRAGILE,
     "tcp://[fe80::2%iface_2_2]:10001",
-    "tcp://[fe80::2%iface_2_2]:10002",
-    "");
+    "tcp://[fe80::2%iface_2_2]:10002");
 
 const auto nb2 = thrift::SparkNeighbor(
     FRAGILE,
     "domain",
     "node-2",
     0, /* hold time */
-    "", /* public key */
     toBinaryAddress(folly::IPAddress("fe80::2")),
     toBinaryAddress(folly::IPAddress("192.168.0.2")),
     10001,
@@ -86,7 +83,6 @@ const auto nb3 = thrift::SparkNeighbor(
     "domain",
     "node-3",
     0, /* hold time */
-    "", /* public key */
     toBinaryAddress(folly::IPAddress("fe80::3")),
     toBinaryAddress(folly::IPAddress("192.168.0.3")),
     10001,
@@ -227,7 +223,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        folly::none,
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         false,
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -593,28 +588,23 @@ TEST(LinkMonitorTest, PeerDifferenceTest) {
   const thrift::PeerSpec peerSpec1{
       apache::thrift::FRAGILE,
       "inproc://fake_pub_url_1",
-      "inproc://fake_cmd_url_1",
-      ""};
+      "inproc://fake_cmd_url_1"};
   const thrift::PeerSpec peerSpec2{
       apache::thrift::FRAGILE,
       "inproc://fake_pub_url_2",
-      "inproc://fake_cmd_url_2",
-      ""};
+      "inproc://fake_cmd_url_2"};
   const thrift::PeerSpec peerSpec3{
       apache::thrift::FRAGILE,
       "inproc://fake_pub_url_3",
-      "inproc://fake_cmd_url_3",
-      ""};
+      "inproc://fake_cmd_url_3"};
   const thrift::PeerSpec peerSpec4{
       apache::thrift::FRAGILE,
       "inproc://fake_pub_url_4",
-      "inproc://fake_cmd_url_4",
-      ""};
+      "inproc://fake_cmd_url_4"};
   const thrift::PeerSpec peerSpec5{
       apache::thrift::FRAGILE,
       "inproc://fake_pub_url_5",
-      "inproc://fake_cmd_url_5",
-      ""};
+      "inproc://fake_cmd_url_5"};
 
   oldPeers.emplace(
       std::piecewise_construct,

@@ -33,7 +33,6 @@ class PrefixManager final : public fbzmq::ZmqEventLoop {
       const PersistentStoreUrl& persistentStoreUrl,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
-      const folly::Optional<fbzmq::KeyPair>& keyPair,
       const PrefixDbMarker& prefixDbMarker,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,

@@ -215,7 +215,6 @@ TEST_F(SparkFixture, UnidirectionalTest) {
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-2", event->neighbor.nodeName);
-    EXPECT_EQ("", event->neighbor.publicKey);
     EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(*event));
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
@@ -226,7 +225,6 @@ TEST_F(SparkFixture, UnidirectionalTest) {
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-1", event->neighbor.nodeName);
-    EXPECT_EQ("", event->neighbor.publicKey);
     EXPECT_EQ(make_pair(ip1V4.first, ip1V6.first), getTransportAddrs(*event));
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -716,7 +714,6 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-3", event->neighbor.nodeName);
-    EXPECT_EQ("", event->neighbor.publicKey);
     // ifIndex already used for assigning label to node-2 via iface1. So next
     // label will be assigned from the end.
     EXPECT_EQ(Constants::kSrLocalRange.second, event->label);
@@ -732,7 +729,6 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-3", event->neighbor.nodeName);
-    EXPECT_EQ("", event->neighbor.publicKey);
     // ifIndex already used for assigning label to node-1 via iface2. So next
     // label will be assigned from the end.
     EXPECT_EQ(Constants::kSrLocalRange.second, event->label);
@@ -765,7 +761,6 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface3, event.ifName);
     EXPECT_EQ("node-1", event.neighbor.nodeName);
-    EXPECT_EQ("", event.neighbor.publicKey);
     EXPECT_EQ(make_pair(ip1V4.first, ip1V6.first), getTransportAddrs(event));
     EXPECT_EQ(1, expectedLabels.count(event.label));
 
@@ -775,7 +770,6 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface3, event.ifName);
     EXPECT_EQ("node-2", event.neighbor.nodeName);
-    EXPECT_EQ("", event.neighbor.publicKey);
     EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(event));
     EXPECT_EQ(1, expectedLabels.count(event.label));
 
@@ -893,7 +887,6 @@ TEST_F(SparkFixture, HubAndSpoke) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface1_2, event.ifName);
     EXPECT_EQ("node-2", event.neighbor.nodeName);
-    EXPECT_EQ("", event.neighbor.publicKey);
     EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(event));
 
     event = events["node-3"];
@@ -901,7 +894,6 @@ TEST_F(SparkFixture, HubAndSpoke) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface1_3, event.ifName);
     EXPECT_EQ("node-3", event.neighbor.nodeName);
-    EXPECT_EQ("", event.neighbor.publicKey);
     EXPECT_EQ(make_pair(ip3V4.first, ip3V6.first), getTransportAddrs(event));
 
     LOG(INFO) << "node-1 reported adjacencies UP to node-2, node-3";

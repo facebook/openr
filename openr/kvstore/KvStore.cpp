@@ -65,7 +65,6 @@ KvStore::KvStore(
     KvStoreGlobalCmdUrl globalCmdUrl,
     MonitorSubmitUrl monitorSubmitUrl,
     folly::Optional<int> maybeIpTos,
-    folly::Optional<fbzmq::KeyPair> keyPair,
     std::chrono::seconds dbSyncInterval,
     std::chrono::seconds monitorSubmitInterval,
     // initializer for mutable state
@@ -92,19 +91,19 @@ KvStore::KvStore(
           zmqContext,
           fbzmq::IdentityString{folly::sformat(
               Constants::kGlobalSubIdTemplate.toString(), nodeId_)},
-          keyPair,
+          folly::none,
           fbzmq::NonblockingFlag{true}),
       localCmdSock_(
           zmqContext,
           fbzmq::IdentityString{folly::sformat(
               Constants::kLocalCmdIdTemplate.toString(), nodeId_)},
-          keyPair,
+          folly::none,
           fbzmq::NonblockingFlag{true}),
       peerSyncSock_(
           zmqContext,
           fbzmq::IdentityString{folly::sformat(
               Constants::kPeerSyncIdTemplate.toString(), nodeId_)},
-          keyPair,
+          folly::none,
           fbzmq::NonblockingFlag{true}) {
   CHECK(not nodeId_.empty());
   CHECK(not localPubUrl_.empty());
@@ -120,7 +119,7 @@ KvStore::KvStore(
         zmqContext,
         fbzmq::IdentityString{
             folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId_)},
-        keyPair,
+        folly::none,
         fbzmq::NonblockingFlag{true});
   }
 
@@ -132,7 +131,7 @@ KvStore::KvStore(
         zmqContext,
         fbzmq::IdentityString{
             folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId_)},
-        keyPair,
+        folly::none,
         fbzmq::NonblockingFlag{true});
   }
 
@@ -682,13 +681,7 @@ KvStore::addPeers(
       if (it != peers_.end()) {
         LOG(INFO) << "Updating existing peer " << peerName;
 
-        // If public key is different then we need to update both sockets.
-        bool hasKeyChanged = (it->second.publicKey != peerSpec.publicKey);
-        if (hasKeyChanged) {
-          LOG(INFO) << "Public key of peer " << peerName << " has changed.";
-        }
-
-        if (hasKeyChanged || it->second.pubUrl != peerSpec.pubUrl) {
+        if (it->second.pubUrl != peerSpec.pubUrl) {
           pubUrlUpdated = true;
           LOG(INFO) << "Unsubscribing from " << it->second.pubUrl;
           auto const ret =
@@ -699,7 +692,7 @@ KvStore::addPeers(
           }
         }
 
-        if (hasKeyChanged || it->second.cmdUrl != peerSpec.cmdUrl) {
+        if (it->second.cmdUrl != peerSpec.cmdUrl) {
           cmdUrlUpdated = true;
           LOG(INFO) << "Disconnecting from " << it->second.cmdUrl;
           const auto ret =
@@ -724,14 +717,6 @@ KvStore::addPeers(
 
       if (pubUrlUpdated) {
         LOG(INFO) << "Subscribing to " << peerSpec.pubUrl;
-        if (peerSpec.publicKey.length() == crypto_sign_ed25519_PUBLICKEYBYTES) {
-          const auto peerSyncAddKey = peerSubSock_.addServerKey(
-              fbzmq::SocketUrl{peerSpec.pubUrl},
-              fbzmq::PublicKey{peerSpec.publicKey});
-          if (peerSyncAddKey.hasError()) {
-            LOG(FATAL) << "Error adding ServerKey " << peerSyncAddKey.error();
-          }
-        }
         if (peerSubSock_.connect(fbzmq::SocketUrl{peerSpec.pubUrl})
                 .hasError()) {
           LOG(FATAL) << "Error connecting to URL '" << peerSpec.pubUrl << "'";
@@ -740,14 +725,6 @@ KvStore::addPeers(
 
       if (cmdUrlUpdated) {
         LOG(INFO) << "Connecting sync channel to " << peerSpec.cmdUrl;
-        if (peerSpec.publicKey.length() == crypto_sign_ed25519_PUBLICKEYBYTES) {
-          const auto peerSyncAddKey = peerSyncSock_.addServerKey(
-              fbzmq::SocketUrl{peerSpec.cmdUrl},
-              fbzmq::PublicKey{peerSpec.publicKey});
-          if (peerSyncAddKey.hasError()) {
-            LOG(FATAL) << "Error adding ServerKey " << peerSyncAddKey.error();
-          }
-        }
         if (peerSyncSock_.connect(fbzmq::SocketUrl{peerSpec.cmdUrl})
                 .hasError()) {
           LOG(FATAL) << "Error connecting to URL '" << peerSpec.cmdUrl << "'";

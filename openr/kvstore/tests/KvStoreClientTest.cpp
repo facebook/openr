@@ -270,16 +270,13 @@ TEST(KvStoreClient, PeerApiTest) {
   const std::string peerName3{"peer3"};
   const thrift::PeerSpec peerSpec1{apache::thrift::FRAGILE,
                                    "inproc://fake_pub_url_1",
-                                   "inproc://fake_cmd_url_1",
-                                   fbzmq::util::genKeyPair().publicKey};
+                                   "inproc://fake_cmd_url_1"};
   const thrift::PeerSpec peerSpec2{apache::thrift::FRAGILE,
                                    "inproc://fake_pub_url_2",
-                                   "inproc://fake_cmd_url_2",
-                                   fbzmq::util::genKeyPair().publicKey};
+                                   "inproc://fake_cmd_url_2"};
   const thrift::PeerSpec peerSpec3{apache::thrift::FRAGILE,
                                    "inproc://fake_pub_url_3",
-                                   "inproc://fake_cmd_url_3",
-                                   fbzmq::util::genKeyPair().publicKey};
+                                   "inproc://fake_cmd_url_3"};
 
   // Initialize and start KvStore with one fake peer
   std::unordered_map<std::string, thrift::PeerSpec> peers;
@@ -374,8 +371,7 @@ TEST(KvStoreClient, PersistKeyTest) {
       thrift::PeerSpec(
           apache::thrift::FRAGILE,
           "inproc://fake_pub_url_1",
-          "inproc://fake_cmd_url_1",
-          fbzmq::util::genKeyPair().publicKey));
+          "inproc://fake_cmd_url_1"));
   auto store = std::make_shared<KvStoreWrapper>(
       context,
       nodeId,
@@ -467,8 +463,7 @@ TEST(KvStoreClient, ApiTest) {
       thrift::PeerSpec(
           apache::thrift::FRAGILE,
           "inproc://fake_pub_url_1",
-          "inproc://fake_cmd_url_1",
-          fbzmq::util::genKeyPair().publicKey));
+          "inproc://fake_cmd_url_1"));
   auto store = std::make_shared<KvStoreWrapper>(
       context,
       nodeId,
@@ -500,8 +495,7 @@ TEST(KvStoreClient, ApiTest) {
         thrift::PeerSpec(
             apache::thrift::FRAGILE,
             "inproc://fake_pub_url_2",
-            "inproc://fake_cmd_url_2",
-            fbzmq::util::genKeyPair().publicKey));
+            "inproc://fake_cmd_url_2"));
     EXPECT_TRUE(client1->addPeers(peerMap).hasValue());
     EXPECT_TRUE(client1->delPeer("peer1").hasValue());
   });

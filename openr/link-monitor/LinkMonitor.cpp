@@ -496,7 +496,6 @@ LinkMonitor::neighborUpEvent(
   const std::string& remoteNodeName = event.neighbor.nodeName;
   const std::string& remoteIfName = event.neighbor.ifName;
   const auto adjId = std::make_pair(remoteNodeName, ifName);
-  const std::string& neighborPublicKey = event.neighbor.publicKey;
   const int32_t neighborKvStorePubPort = event.neighbor.kvStorePubPort;
   const int32_t neighborKvStoreCmdPort = event.neighbor.kvStoreCmdPort;
   auto rttMetric = getRttMetric(event.rttUs);
@@ -563,7 +562,7 @@ LinkMonitor::neighborUpEvent(
       std::piecewise_construct,
       std::forward_as_tuple(adjId),
       std::forward_as_tuple(std::make_pair(
-          thrift::PeerSpec(FRAGILE, pubUrl, repUrl, neighborPublicKey),
+          thrift::PeerSpec(FRAGILE, pubUrl, repUrl),
           std::move(newAdj))));
 
   // Advertise new adjancies in a throttled fashion

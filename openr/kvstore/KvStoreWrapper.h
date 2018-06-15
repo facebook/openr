@@ -33,8 +33,7 @@ class KvStoreWrapper {
       std::chrono::seconds dbSyncInterval,
       std::chrono::seconds monitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      folly::Optional<KvStoreFilters> filters = folly::none,
-      folly::Optional<fbzmq::KeyPair> keyPair = folly::none);
+      folly::Optional<KvStoreFilters> filters = folly::none);
 
   ~KvStoreWrapper() {
     stop();
@@ -106,7 +105,7 @@ class KvStoreWrapper {
   thrift::PeerSpec
   getPeerSpec() const {
     return thrift::PeerSpec(
-        apache::thrift::FRAGILE, globalPubUrl, globalCmdUrl, keyPair.publicKey);
+        apache::thrift::FRAGILE, globalPubUrl, globalCmdUrl);
   }
 
  public:
@@ -128,9 +127,6 @@ class KvStoreWrapper {
    * Socket URL for zmq Monitoring
    */
   const std::string monitorSubmitUrl;
-
-  // auto-generated at construction time and passed to crypto socket factory
-  const fbzmq::KeyPair keyPair;
 
  private:
   // Thrift serializer object for serializing/deserializing of thrift objects

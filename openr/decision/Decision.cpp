@@ -1178,7 +1178,7 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
 
   auto zmqContextPtr = &zmqContext;
   scheduleTimeout(
-      std::chrono::seconds(0),
+      std::chrono::milliseconds(500),
       [this, zmqContextPtr] { initialSync(*zmqContextPtr); }
   );
 }

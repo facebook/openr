@@ -247,12 +247,10 @@ $ breeze kvstore peers
 > node2
 cmd via tcp://[fe80::e0fd:b7ff:fe23:e73f%if_1_2_0]:60002
 pub via tcp://[fe80::e0fd:b7ff:fe23:e73f%if_1_2_0]:60001
-Public Key: 5a62189100e89af0019ac763c04b718e6cb4322e767a178e34de48ce559ec4d9
 
 > node3
 cmd via tcp://[fe80::ecf4:d3ff:fef1:4cb6%if_1_3_0]:60002
 pub via tcp://[fe80::ecf4:d3ff:fef1:4cb6%if_1_3_0]:60001
-Public Key: a9d9397cdaf85ec9745e2dadf44f0414ce60cf51325fb5bf3136d2526d7b92ec
 ```
 
 #### Snoop
@@ -643,7 +641,7 @@ via fe80::21c:73ff:fe3c:e50c@Port-Channel1201
 ```
 
 - Add new route
-```  
+```
 // add route
 $ breeze -H leb01.labdca1 fib add '192.168.0.0/32' '1.3.4.5@Port-Channel1201'
 192.168.0.0 32

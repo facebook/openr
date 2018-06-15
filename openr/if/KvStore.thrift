@@ -88,7 +88,6 @@ struct KeyDumpParams {
 struct PeerSpec {
   1: string pubUrl
   2: string cmdUrl
-  3: binary publicKey
 }
 
 // parameters for peer addition

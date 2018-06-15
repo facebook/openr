@@ -24,12 +24,10 @@ if __name__ == '__main__':
                                            'A sample for adj table'))
 
     data2 = [['eb01.atn1', 'tcp://[fe80::21c:73ff:fed6:17cc%po1021]:60002',
-              'tcp://[fe80::21c:73ff:fed6:17cc%po1021]:60001',
-              'bd7755613b3fc59424b592638accadfc9dd14405246c64ca4d1117871bf56fc5'],
+              'tcp://[fe80::21c:73ff:fed6:17cc%po1021]:60001'],
              ['eb01.atn1', 'tcp://[fe80::21c:73ff:fed6:17cc%po1021]:60002',
-              'tcp://[fe80::21c:73ff:fed6:17cc%po1021]:60001',
-              'bd7755613b3fc59424b592638accadfc9dd14405246c64ca4d1117871bf56fc5'],
+              'tcp://[fe80::21c:73ff:fed6:17cc%po1021]:60001'],
              ]
-    column_labels2 = ['cmd via', 'pub via', 'Public Key:']
+    column_labels2 = ['cmd via', 'pub via']
     print(printing.render_vertical_table(data2, column_labels2,
                                          'A sample for peers table'))
