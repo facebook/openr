@@ -1572,6 +1572,39 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops({make_pair(toNextHop(adj12_2), 800)}));
+
+  // restore the original state
+  publication = thrift::Publication(
+      FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}}, {});
+
+  publishRouteDb(publication);
+  // receive my local Decision routeDb publication
+  routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
+  EXPECT_EQ(1, routeDb.routes.size());
+  routeMap.clear();
+  fillRouteMap("1", routeMap, routeDb);
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2))],
+      NextHops({make_pair(toNextHop(adj12_1), 100),
+                make_pair(toNextHop(adj12_2), 800)}));
+
+  // overload the least cost link
+  auto adj21_1_overloaded = adj21_1;
+  adj21_1_overloaded.isOverloaded = true;
+
+  publication = thrift::Publication(
+      FRAGILE, {{"adj:2",
+                  createAdjValue("2", 2, {adj21_1_overloaded, adj21_2})}}, {});
+
+  publishRouteDb(publication);
+  // receive my local Decision routeDb publication
+  routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
+  EXPECT_EQ(1, routeDb.routes.size());
+  routeMap.clear();
+  fillRouteMap("1", routeMap, routeDb);
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2))],
+      NextHops({make_pair(toNextHop(adj12_2), 800)}));
 }
 
 // The following topology is used:

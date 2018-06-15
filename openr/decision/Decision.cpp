@@ -561,7 +561,11 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     }
     if (newIter->getOverloadFromNode(nodeName) !=
         (*oldIter)->getOverloadFromNode(nodeName)) {
-      topoChanged = true;
+
+      // for spf, we do not consider simplex overloading, so there is no need to
+      // rerun unless this is true
+      topoChanged |= newIter->isOverloaded() != (*oldIter)->isOverloaded();
+
       // change the overload value in the link object we already have
       (*oldIter)->setOverloadFromNode(
           nodeName, newIter->getOverloadFromNode(nodeName));
@@ -947,7 +951,8 @@ SpfSolver::SpfSolverImpl::findMinDistToNeighbor(
     const std::string& myNodeName, const std::string& neighborName) {
   Metric min = std::numeric_limits<Metric>::max();
   for (const auto& link : linkState_.linksFromNode(myNodeName)) {
-    if (link->getOtherNodeName(myNodeName) == neighborName) {
+    if (!link->isOverloaded() &&
+        link->getOtherNodeName(myNodeName) == neighborName) {
       min = std::min(link->getMetricFromNode(myNodeName), min);
     }
   }
