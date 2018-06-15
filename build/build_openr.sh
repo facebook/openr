@@ -286,6 +286,7 @@ install_openr() {
   cd "$BUILD_DIR/../openr/py"
   sudo pip install cffi
   sudo pip install future
+  sudo pip install --upgrade typing
   python setup.py build
   sudo python setup.py install
   cd "$BUILD_DIR"
