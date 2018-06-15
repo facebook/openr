@@ -306,7 +306,7 @@ NetlinkSubscriber::getAllLinks() {
       promise.setValue(links_);
     });
 
-  return future.get();
+  return std::move(future).get();
 }
 
 Neighbors
@@ -330,7 +330,7 @@ NetlinkSubscriber::getAllReachableNeighbors() {
       promise.setValue(neighbors_);
     });
 
-  return future.get();
+  return std::move(future).get();
 }
 
 // Invoked from libnl data processing callback whenever there

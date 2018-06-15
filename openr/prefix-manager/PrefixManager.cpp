@@ -231,7 +231,7 @@ PrefixManager::getCounter(const std::string& key) {
   runImmediatelyOrInEventLoop([this, promise = std::move(promise)]() mutable {
     promise.setValue(tData_.getCounters());
   });
-  counters = future.get();
+  counters = std::move(future).get();
 
   if (counters.find(key) != counters.end()) {
     return counters[key];

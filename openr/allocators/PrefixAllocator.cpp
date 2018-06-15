@@ -206,7 +206,7 @@ PrefixAllocator::getMyPrefixIndex() {
   runInEventLoop([this, promise = std::move(promise)]() mutable {
     promise.setValue(myPrefixIndex_);
   });
-  return future.get();
+  return std::move(future).get();
 }
 
 folly::Expected<PrefixAllocatorParams, fbzmq::Error>
