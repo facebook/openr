@@ -72,6 +72,7 @@ const auto nb2 = thrift::SparkNeighbor(
     "domain",
     "node-2",
     0, /* hold time */
+    "", /* DEPRECATED - public key */
     toBinaryAddress(folly::IPAddress("fe80::2")),
     toBinaryAddress(folly::IPAddress("192.168.0.2")),
     10001,
@@ -83,6 +84,7 @@ const auto nb3 = thrift::SparkNeighbor(
     "domain",
     "node-3",
     0, /* hold time */
+    "", /* DEPRECATED - public key */
     toBinaryAddress(folly::IPAddress("fe80::3")),
     toBinaryAddress(folly::IPAddress("192.168.0.3")),
     10001,

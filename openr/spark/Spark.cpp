@@ -1051,6 +1051,7 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
       myDomainName_,
       myNodeName_,
       myHoldTime_.count(),
+      "", /* DEPRECATED - public key */
       toBinaryAddress(v6Addr),
       toBinaryAddress(v4Addr),
       kKvStorePubPort_,
