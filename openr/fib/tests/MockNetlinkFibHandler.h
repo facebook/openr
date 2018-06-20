@@ -22,8 +22,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/if/gen-cpp2/Fib_types.h>
-#include <openr/if/gen-cpp2/LinuxFibService.h>
-#include <openr/if/gen-cpp2/LinuxPlatform_types.h>
+#include <openr/if/gen-cpp2/FibService.h>
 
 namespace openr {
 
@@ -38,7 +37,7 @@ using UnicastRoutes = std::unordered_map<folly::CIDRNetwork, NextHops>;
  * NetlinkEvent Publisher as well as Fib Service on linux platform.
  */
 
-class MockNetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
+class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
  public:
   MockNetlinkFibHandler();
 

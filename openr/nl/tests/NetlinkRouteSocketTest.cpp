@@ -230,7 +230,7 @@ TEST_F(NetlinkIfFixture, UpdateRouteTest) {
 
   // Add a route with single nextHop
   netlinkRouteSocket->addUnicastRoute(prefix1, nextHops).get();
-  auto routes = netlinkRouteSocket->getKernelUnicastRoutes().get();
+  auto routes = netlinkRouteSocket->getUnicastRoutes().get();
 
   EXPECT_EQ(1, routes.size());
   ASSERT_EQ(1, routes.count(prefix1));

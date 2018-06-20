@@ -498,27 +498,6 @@ NetlinkRouteSocket::getUnicastRoutes() const {
   return future;
 }
 
-folly::Future<UnicastRoutes>
-NetlinkRouteSocket::getKernelUnicastRoutes() {
-  VLOG(3) << "Getting all routes from Kernel";
-
-  folly::Promise<UnicastRoutes> promise;
-  auto future = promise.getFuture();
-
-  evl_->runImmediatelyOrInEventLoop(
-    [this, promise = std::move(promise)]() mutable {
-    try {
-      doUpdateRouteCache();
-      unicastRouteDb_ = doGetUnicastRoutes();
-      promise.setValue(unicastRouteDb_);
-    } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error updating route cache: " << folly::exceptionStr(ex);
-      promise.setException(ex);
-    }
-  });
-  return future;
-}
-
 folly::Future<folly::Unit>
 NetlinkRouteSocket::syncUnicastRoutes(UnicastRoutes newRouteDb) {
   VLOG(3) << "Syncing Unicast Routes....";

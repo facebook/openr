@@ -259,23 +259,6 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
       });
 }
 
-folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
-NetlinkFibHandler::future_getKernelRouteTable() {
-  LOG(INFO) << "Get routes from kernel";
-
-  return netlinkSocket_->getKernelUnicastRoutes()
-      .then([](UnicastRoutes res) mutable {
-        return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
-            makeRoutes(res));
-      })
-      .onError([](std::exception const& ex) {
-        LOG(ERROR) << "Failed to get routing table by client: " << ex.what()
-                   << ", returning empty table instead";
-        return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
-            makeRoutes(UnicastRoutes({})));
-      });
-}
-
 void
 NetlinkFibHandler::getCounters(std::map<std::string, int64_t>& counters) {
   auto routes = netlinkSocket_->getUnicastRoutes().get();

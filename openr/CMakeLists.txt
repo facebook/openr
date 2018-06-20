@@ -42,22 +42,6 @@ file(MAKE_DIRECTORY ${THRIFT_DIR})
 include_directories(${CMAKE_BINARY_DIR}/thrift-out)
 
 thrift_object(
-  "LinuxPlatform" #file_name
-  "LinuxFibService" #services
-  "cpp2" #language
-  "optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
-)
-
-add_dependencies(
-  LinuxPlatform-cpp2-obj
-  IpPrefix-cpp2-obj
-  Platform-cpp2-obj
-)
-
-thrift_object(
   "PersistentStore" #file_name
   "" #services
   "cpp2" #language
@@ -268,7 +252,6 @@ add_library(openrlib
   $<TARGET_OBJECTS:IpPrefix-cpp2-obj>
   $<TARGET_OBJECTS:KvStore-cpp2-obj>
   $<TARGET_OBJECTS:LinkMonitor-cpp2-obj>
-  $<TARGET_OBJECTS:LinuxPlatform-cpp2-obj>
   $<TARGET_OBJECTS:Lsdb-cpp2-obj>
   $<TARGET_OBJECTS:PersistentStore-cpp2-obj>
   $<TARGET_OBJECTS:Platform-cpp2-obj>

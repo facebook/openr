@@ -20,8 +20,7 @@
 #include <openr/common/AddressUtil.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
-#include <openr/if/gen-cpp2/LinuxFibService.h>
-#include <openr/if/gen-cpp2/LinuxPlatform_types.h>
+#include <openr/if/gen-cpp2/FibService.h>
 #include <openr/nl/NetlinkRouteSocket.h>
 
 namespace openr {
@@ -29,7 +28,7 @@ namespace openr {
  * This class implements OpenR's Platform.FibService thrit interface for
  * programming routes on Linux platform for packet routing in kernel
  */
-class NetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
+class NetlinkFibHandler final : public thrift::FibServiceSvIf {
  public:
   explicit NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop);
   ~NetlinkFibHandler() override {}
@@ -62,8 +61,6 @@ class NetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
 
   folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
   future_getRouteTableByClient(int16_t clientId) override;
-  folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
-  future_getKernelRouteTable() override;
 
  private:
   NetlinkFibHandler(const NetlinkFibHandler&) = delete;

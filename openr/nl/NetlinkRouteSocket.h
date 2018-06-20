@@ -106,9 +106,6 @@ class NetlinkRouteSocket final {
   // get cached unicast routing table
   folly::Future<UnicastRoutes> getUnicastRoutes() const;
 
-  // get kernel unicast routing table
-  folly::Future<UnicastRoutes> getKernelUnicastRoutes();
-
  private:
   NetlinkRouteSocket(const NetlinkRouteSocket&) = delete;
   NetlinkRouteSocket& operator=(const NetlinkRouteSocket&) = delete;
