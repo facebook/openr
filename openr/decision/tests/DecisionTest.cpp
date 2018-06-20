@@ -244,6 +244,93 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   EXPECT_EQ(0, routeDb.routes.size());
 }
 
+/**
+ * Test to verify adjacencyDatabase update
+ */
+TEST(SpfSolver, AdjacencyUpdate) {
+  auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
+  auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
+
+  std::string nodeName("1");
+  SpfSolver spfSolver(
+    nodeName, false /* disable v4 */, false /* disable LFA */);
+
+  //
+  // Feed SPF solver with R1 and R2's adjacency + prefix dbs
+  //
+
+  {
+    auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb1);
+    EXPECT_FALSE(res.first);
+    EXPECT_FALSE(res.second);
+  }
+  {
+    auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb2);
+    EXPECT_TRUE(res.first);
+    EXPECT_FALSE(res.second);
+  }
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
+
+  //
+  // dump routes for both nodes, expect one route entry on each
+  //
+
+  auto routeDb = spfSolver.buildPaths("1");
+  EXPECT_EQ("1", routeDb.thisNodeName);
+  EXPECT_EQ(1, routeDb.routes.size());
+
+  routeDb = spfSolver.buildPaths("2");
+  EXPECT_EQ("2", routeDb.thisNodeName);
+  EXPECT_EQ(1, routeDb.routes.size());
+
+  //
+  // Update adjacency database of node 1 by changing it's nexthops and verift
+  // that update properly responds to the event
+  //
+  adjacencyDb1.adjacencies[0].nextHopV6 = toBinaryAddress("fe80::1234:b00c");
+  {
+    auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb1);
+    EXPECT_FALSE(res.first);
+    EXPECT_TRUE(res.second);
+  }
+
+  //
+  // dump routes for both nodes, expect one route entry on each
+  //
+
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_EQ("1", routeDb.thisNodeName);
+  EXPECT_EQ(1, routeDb.routes.size());
+
+  routeDb = spfSolver.buildPaths("2");
+  EXPECT_EQ("2", routeDb.thisNodeName);
+  EXPECT_EQ(1, routeDb.routes.size());
+
+  //
+  // Update adjacency database of node 2 by changing it's nexthops and verift
+  // that update properly responds to the event (no spf trigger needed)
+  //
+  adjacencyDb2.adjacencies[0].nextHopV6 = toBinaryAddress("fe80::5678:b00c");
+  {
+    auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb2);
+    EXPECT_FALSE(res.first);
+    EXPECT_FALSE(res.second);
+  }
+
+  //
+  // dump routes for both nodes, expect one route entry on each
+  //
+
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_EQ("1", routeDb.thisNodeName);
+  EXPECT_EQ(1, routeDb.routes.size());
+
+  routeDb = spfSolver.buildPaths("2");
+  EXPECT_EQ("2", routeDb.thisNodeName);
+  EXPECT_EQ(1, routeDb.routes.size());
+}
+
 //
 // Test topology:
 // connected bidirectionally

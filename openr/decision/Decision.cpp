@@ -575,20 +575,18 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
           (*oldIter)->getOverloadFromNode(nodeName),
           newIter->getOverloadFromNode(nodeName));
     }
-    if (myNodeName_ == nodeName) {
-      // check if local nextHops Changed
-      if(newIter->getNhV4FromNode(nodeName) !=
-          (*oldIter)->getNhV4FromNode(nodeName)) {
-        localNextHopsChanged = true;
-        (*oldIter)->setNhV4FromNode(nodeName,
-            newIter->getNhV4FromNode(nodeName));
-      }
-      if(newIter->getNhV6FromNode(nodeName) !=
-          (*oldIter)->getNhV6FromNode(nodeName)) {
-        localNextHopsChanged = true;
-        (*oldIter)->setNhV6FromNode(nodeName,
-            newIter->getNhV6FromNode(nodeName));
-      }
+    // check if local nextHops Changed
+    if(newIter->getNhV4FromNode(nodeName) !=
+        (*oldIter)->getNhV4FromNode(nodeName)) {
+      localNextHopsChanged = myNodeName_ == nodeName;
+      (*oldIter)->setNhV4FromNode(nodeName,
+          newIter->getNhV4FromNode(nodeName));
+    }
+    if(newIter->getNhV6FromNode(nodeName) !=
+        (*oldIter)->getNhV6FromNode(nodeName)) {
+      localNextHopsChanged = myNodeName_ == nodeName;
+      (*oldIter)->setNhV6FromNode(nodeName,
+          newIter->getNhV6FromNode(nodeName));
     }
     ++newIter;
     ++oldIter;

@@ -1460,11 +1460,19 @@ LinkMonitor::InterfaceEntry::getInterfaceInfo() const {
       isUp_,
       ifIndex_,
       // TO BE DEPERECATED SOON
-      folly::gen::from(getV4Addrs()) | folly::gen::map(toBinaryAddress) |
-          folly::gen::as<std::vector>(),
+      folly::gen::from(getV4Addrs()) |
+        folly::gen::map(
+          [](const folly::IPAddress& ip) {
+            return toBinaryAddress(ip);
+          }) |
+        folly::gen::as<std::vector>(),
       // TO BE DEPRECATED SOON
       folly::gen::from(getV6LinkLocalAddrs()) |
-        folly::gen::map(toBinaryAddress) | folly::gen::as<std::vector>(),
+        folly::gen::map(
+          [](const folly::IPAddress& ip) {
+            return toBinaryAddress(ip);
+          }) |
+        folly::gen::as<std::vector>(),
       networks);
 }
 

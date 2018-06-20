@@ -34,6 +34,11 @@ toBinaryAddress(const folly::IPAddress& addr) {
                                    : thrift::BinaryAddress();
 }
 
+inline thrift::BinaryAddress
+toBinaryAddress(const std::string& addr) {
+  return toBinaryAddress(folly::IPAddress(addr));
+}
+
 template <typename T>
 inline folly::IPAddress
 toIPAddress(const T& input) {
