@@ -457,8 +457,7 @@ main(int argc, char** argv) {
   if (FLAGS_enable_netlink_fib_handler) {
     CHECK(thriftThreadMgr);
     netlinkFibEvl = std::make_unique<fbzmq::ZmqEventLoop>();
-    netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>(
-        "disabled" /* sasl policy */, false /* insecure-loopback */);
+    netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>();
     netlinkFibServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
     netlinkFibServer->setThreadManager(thriftThreadMgr);
     netlinkFibServer->setNumIOWorkerThreads(1);
@@ -488,8 +487,7 @@ main(int argc, char** argv) {
   std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
   if (FLAGS_enable_netlink_system_handler) {
     CHECK(thriftThreadMgr);
-    netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>(
-        "disabled" /* sasl policy */, false /* insecure-loopback */);
+    netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>();
     netlinkSystemServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
     netlinkSystemServer->setThreadManager(thriftThreadMgr);
     netlinkSystemServer->setNumIOWorkerThreads(1);
