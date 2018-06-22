@@ -113,15 +113,7 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       // initial list of peers to connect to
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       // KvStore key filters
-      folly::Optional<KvStoreFilters> filters = folly::none,
-      // optional: pre allocated and bound global pub socket
-      // will allocate new pub socket if not supplied
-      folly::Optional<fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>>
-          preBoundGlobalPubSock = folly::none,
-      // optional: pre allocated and bound global cmd socket
-      // will allocate new cmd socket if not supplied
-      folly::Optional<fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>>
-          preBoundGlobalCmdSock = folly::none);
+      folly::Optional<KvStoreFilters> filters = folly::none);
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)

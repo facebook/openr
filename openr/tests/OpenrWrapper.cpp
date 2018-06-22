@@ -78,20 +78,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create kvstore
   //
 
-  // kvstore global pub/cmd socket
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> kvStoreGlobalPubSock(
-      context_,
-      fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId)});
-
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> kvStoreGlobalCmdSock(
-      context_,
-      fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId)});
-
-  kvStoreGlobalPubSock.bind(fbzmq::SocketUrl{kvStoreGlobalPubUrl_}).value();
-  kvStoreGlobalCmdSock.bind(fbzmq::SocketUrl{kvStoreGlobalCmdUrl_}).value();
-
   folly::Optional<KvStoreFilters> filters = folly::none;
   kvStore_ = std::make_unique<KvStore>(
       context_,
@@ -105,9 +91,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreDbSyncInterval,
       kvStoreMonitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec>{},
-      std::move(filters),
-      std::move(kvStoreGlobalPubSock),
-      std::move(kvStoreGlobalCmdSock));
+      std::move(filters));
 
   // kvstore client socket
   kvStoreReqSock_.connect(fbzmq::SocketUrl{kvStoreLocalCmdUrl_}).value();

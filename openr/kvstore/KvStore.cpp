@@ -69,12 +69,7 @@ KvStore::KvStore(
     std::chrono::seconds monitorSubmitInterval,
     // initializer for mutable state
     std::unordered_map<std::string, thrift::PeerSpec> peers,
-    folly::Optional<KvStoreFilters> filters,
-    // initializer for optionals
-    folly::Optional<fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>>
-        preBoundGlobalPubSock /* = folly::none */,
-    folly::Optional<fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>>
-        preBoundGlobalCmdSock /* = folly::none */)
+    folly::Optional<KvStoreFilters> filters)
     : zmqContext_(zmqContext),
       nodeId_(std::move(nodeId)),
       localPubUrl_(std::move(localPubUrl)),
@@ -111,29 +106,23 @@ KvStore::KvStore(
   CHECK(not localCmdUrl_.empty());
   CHECK(not globalCmdUrl_.empty());
 
-  if (preBoundGlobalPubSock) {
-    globalPubSock_ = std::move(*preBoundGlobalPubSock);
-  } else {
-    // allocate new global pub socket if not provided
-    globalPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
-        zmqContext,
-        fbzmq::IdentityString{
-            folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId_)},
-        folly::none,
-        fbzmq::NonblockingFlag{true});
-  }
+  // allocate new global pub socket if not provided
+  globalPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
+      zmqContext,
+      fbzmq::IdentityString{
+          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId_)},
+      folly::none,
+      fbzmq::NonblockingFlag{true});
 
-  if (preBoundGlobalCmdSock) {
-    globalCmdSock_ = std::move(*preBoundGlobalCmdSock);
-  } else {
-    // allocate new global cmd socket if not provided
-    globalCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
-        zmqContext,
-        fbzmq::IdentityString{
-            folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId_)},
-        folly::none,
-        fbzmq::NonblockingFlag{true});
-  }
+
+  // allocate new global cmd socket if not provided
+  globalCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
+      zmqContext,
+      fbzmq::IdentityString{
+          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId_)},
+      folly::none,
+      fbzmq::NonblockingFlag{true});
+
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
@@ -292,14 +281,13 @@ KvStore::KvStore(
     LOG(FATAL) << "Error binding to URL '" << localPubUrl_ << "' "
                << localPubBind.error();
   }
-  if (!preBoundGlobalPubSock) {
-    VLOG(2) << "KvStore: Binding globalPubUrl '" << globalPubUrl_ << "'";
-    const auto globalPubBind =
-        globalPubSock_.bind(fbzmq::SocketUrl{globalPubUrl_});
-    if (globalPubBind.hasError()) {
-      LOG(FATAL) << "Error binding to URL '" << globalPubUrl_ << "' "
-                 << globalPubBind.error();
-    }
+
+  VLOG(2) << "KvStore: Binding globalPubUrl '" << globalPubUrl_ << "'";
+  const auto globalPubBind =
+      globalPubSock_.bind(fbzmq::SocketUrl{globalPubUrl_});
+  if (globalPubBind.hasError()) {
+    LOG(FATAL) << "Error binding to URL '" << globalPubUrl_ << "' "
+               << globalPubBind.error();
   }
 
   VLOG(2) << "KvStore: Binding localCmdUrl '" << localCmdUrl_ << "'";
@@ -308,15 +296,15 @@ KvStore::KvStore(
     LOG(FATAL) << "Error binding to URL '" << localCmdUrl_ << "' "
                << localCmdBind.error();
   }
-  if (!preBoundGlobalCmdSock) {
-    VLOG(2) << "KvStore: Binding globalCmdUrl '" << globalCmdUrl_ << "'";
-    const auto globalCmdBind =
-        globalCmdSock_.bind(fbzmq::SocketUrl{globalCmdUrl_});
-    if (globalCmdBind.hasError()) {
-      LOG(FATAL) << "Error binding to URL '" << globalCmdUrl_ << "' "
-                 << globalCmdBind.error();
-    }
+
+  VLOG(2) << "KvStore: Binding globalCmdUrl '" << globalCmdUrl_ << "'";
+  const auto globalCmdBind =
+      globalCmdSock_.bind(fbzmq::SocketUrl{globalCmdUrl_});
+  if (globalCmdBind.hasError()) {
+    LOG(FATAL) << "Error binding to URL '" << globalCmdUrl_ << "' "
+               << globalCmdBind.error();
   }
+
 
   // Subscribe to all messages
   auto const peerSyncSub = peerSubSock_.setSockOpt(ZMQ_SUBSCRIBE, "", 0);

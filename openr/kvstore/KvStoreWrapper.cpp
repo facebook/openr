@@ -36,29 +36,7 @@ KvStoreWrapper::KvStoreWrapper(
       monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
       reqSock_(zmqContext),
       subSock_(zmqContext) {
-  // pre allocate and bind global pub and cmd socket for kvstore
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock(
-      zmqContext,
-      fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId)});
 
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock(
-      zmqContext,
-      fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId)});
-
-  // For testing puspose we are using inproc URLs for global sockets as well
-  VLOG(1) << "KvStoreWrapper: Pre binding global pub/sock";
-  const auto globalPub = globalPubSock.bind(fbzmq::SocketUrl{globalPubUrl});
-  if (globalPub.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << globalPubUrl << "' "
-               << globalPub.error();
-  }
-  const auto globalCmd = globalCmdSock.bind(fbzmq::SocketUrl{globalCmdUrl});
-  if (globalCmd.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << globalCmdUrl << "' "
-               << globalCmd.error();
-  }
 
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   kvStore_ = std::make_unique<KvStore>(
@@ -73,9 +51,7 @@ KvStoreWrapper::KvStoreWrapper(
       dbSyncInterval,
       monitorSubmitInterval,
       peers,
-      std::move(filters),
-      std::move(globalPubSock),
-      std::move(globalCmdSock));
+      std::move(filters));
 }
 
 void
