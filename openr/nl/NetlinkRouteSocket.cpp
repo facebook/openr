@@ -26,14 +26,6 @@ using folly::gen::mapped;
 
 namespace {
 const int kIpAddrBufSize = 128;
-const uint32_t kAqRouteTableId = RT_TABLE_MAIN;
-
-// iproute2 protocol IDs in the kernel are a shared resource
-// Various well known and custom protocols use it
-// This is a *Weak* attempt to protect against some already
-// known protocols
-const uint8_t kMinRouteProtocolId = 17;
-const uint8_t kMaxRouteProtocolId = 245;
 
 } // anonymous namespace
 
@@ -46,22 +38,19 @@ namespace openr {
 // we have a link cache to translate ifName to ifIndex
 struct RouteFuncCtx {
   RouteFuncCtx(
-      UnicastRoutes* unicastRoutes,
-      MulticastRoutes* multicastRoutes,
-      LinkRoutes* linkRoutes,
-      nl_cache* linkCache,
-      uint8_t routeProtocolId)
-      : unicastRoutes(unicastRoutes),
-        multicastRoutes(multicastRoutes),
-        linkRoutes(linkRoutes),
-        linkCache(linkCache),
-        routeProtocolId_(routeProtocolId) {}
+      UnicastRoutesDb* unicastRoutesCache,
+      MulticastRoutesDb* multicastRoutesCache,
+      LinkRoutesDb* linkRoutesCache,
+      nl_cache* linkCache)
+      : unicastRoutesCache(unicastRoutesCache),
+        multicastRoutesCache(multicastRoutesCache),
+        linkRoutesCache(linkRoutesCache),
+        linkCache(linkCache) {}
 
-  UnicastRoutes* unicastRoutes{nullptr};
-  MulticastRoutes* multicastRoutes{nullptr};
-  LinkRoutes* linkRoutes{nullptr};
+  UnicastRoutesDb* unicastRoutesCache{nullptr};
+  MulticastRoutesDb* multicastRoutesCache{nullptr};
+  LinkRoutesDb* linkRoutesCache{nullptr};
   nl_cache* linkCache{nullptr};
-  uint8_t routeProtocolId_{0};
 };
 
 // Our context to pass to libnl when iterating nextHops for a specific route
@@ -78,14 +67,14 @@ struct NextHopFuncCtx {
 // A simple wrapper over libnl route object
 class NetlinkRoute final {
  public:
-  NetlinkRoute(const folly::CIDRNetwork& destination, uint8_t routeProtocolId)
-      : NetlinkRoute(destination, routeProtocolId, RT_SCOPE_UNIVERSE) {}
+  NetlinkRoute(const folly::CIDRNetwork& destination, uint8_t protocolId)
+      : NetlinkRoute(destination, protocolId, RT_SCOPE_UNIVERSE) {}
 
   NetlinkRoute(
       const folly::CIDRNetwork& destination,
-      uint8_t routeProtocolId,
+      uint8_t protocolId,
       uint8_t scope)
-      : destination_(destination), routeProtocolId_(routeProtocolId) {
+      : destination_(destination), protocolId_(protocolId) {
     VLOG(4) << "Creating route object";
 
     route_ = rtnl_route_alloc();
@@ -99,8 +88,8 @@ class NetlinkRoute final {
     rtnl_route_set_scope(route_, scope);
     rtnl_route_set_type(route_, RTN_UNICAST);
     rtnl_route_set_family(route_, destination.first.family());
-    rtnl_route_set_table(route_, kAqRouteTableId);
-    rtnl_route_set_protocol(route_, routeProtocolId_);
+    rtnl_route_set_table(route_, RT_TABLE_MAIN);
+    rtnl_route_set_protocol(route_, protocolId_);
 
     // We need to set destination
     struct nl_addr* nlAddr = nl_addr_build(
@@ -226,19 +215,14 @@ class NetlinkRoute final {
   NetlinkRoute& operator=(const NetlinkRoute&) = delete;
 
   folly::CIDRNetwork destination_;
-  uint8_t routeProtocolId_{0};
+  uint8_t protocolId_{0};
   struct rtnl_route* route_{nullptr};
 };
 
 NetlinkRouteSocket::NetlinkRouteSocket(
-    fbzmq::ZmqEventLoop* zmqEventLoop, uint8_t routeProtocolId)
-    : evl_(zmqEventLoop), routeProtocolId_(routeProtocolId) {
+    fbzmq::ZmqEventLoop* zmqEventLoop)
+    : evl_(zmqEventLoop) {
   CHECK(evl_) << "Invalid ZMQ event loop handle";
-  if ((routeProtocolId_ < kMinRouteProtocolId) ||
-      (routeProtocolId_ > kMaxRouteProtocolId)) {
-    throw NetlinkException(
-        folly::sformat("Invalid route protocol ID: {}", routeProtocolId));
-  }
 
   // We setup the socket explicitly to create our cache explicitly
   int err = 0;
@@ -288,7 +272,7 @@ NetlinkRouteSocket::NetlinkRouteSocket(
 
   evl_->runImmediatelyOrInEventLoop([this]() mutable {
     doUpdateRouteCache();
-    unicastRouteDb_ = doGetUnicastRoutes();
+    unicastRoutesDb_ = doGetUnicastRoutes();
   });
 }
 
@@ -308,8 +292,9 @@ std::unique_ptr<NetlinkRoute>
 NetlinkRouteSocket::buildMulticastOrLinkRouteHelper(
     const folly::CIDRNetwork& prefix,
     const std::string& ifName,
+    uint8_t protocolId,
     uint8_t scope) {
-  auto route = std::make_unique<NetlinkRoute>(prefix, routeProtocolId_, scope);
+  auto route = std::make_unique<NetlinkRoute>(prefix, protocolId, scope);
 
   updateLinkCacheThrottled();
   int ifIdx = rtnl_link_name2i(linkCache_, ifName.c_str());
@@ -325,20 +310,28 @@ NetlinkRouteSocket::buildMulticastOrLinkRouteHelper(
 
 std::unique_ptr<NetlinkRoute>
 NetlinkRouteSocket::buildMulticastRoute(
-    const folly::CIDRNetwork& prefix, const std::string& ifName) {
-  return buildMulticastOrLinkRouteHelper(prefix, ifName, RT_SCOPE_UNIVERSE);
+    uint8_t protocolId,
+    const folly::CIDRNetwork& prefix,
+    const std::string& ifName) {
+  return buildMulticastOrLinkRouteHelper(
+            prefix, ifName, protocolId, RT_SCOPE_UNIVERSE);
 }
 
 std::unique_ptr<NetlinkRoute>
 NetlinkRouteSocket::buildLinkRoute(
-    const folly::CIDRNetwork& prefix, const std::string& ifName) {
-  return buildMulticastOrLinkRouteHelper(prefix, ifName, RT_SCOPE_LINK);
+    uint8_t protocolId,
+    const folly::CIDRNetwork& prefix,
+    const std::string& ifName) {
+  return buildMulticastOrLinkRouteHelper(
+            prefix, ifName, protocolId, RT_SCOPE_LINK);
 }
 
 std::unique_ptr<NetlinkRoute>
 NetlinkRouteSocket::buildUnicastRoute(
-    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
-  auto route = std::make_unique<NetlinkRoute>(prefix, routeProtocolId_);
+    uint8_t protocolId,
+    const folly::CIDRNetwork& prefix,
+    const NextHops& nextHops) {
+  auto route = std::make_unique<NetlinkRoute>(prefix, protocolId);
   for (const auto& nextHop : nextHops) {
     if (std::get<0>(nextHop).empty()) {
       route->addNextHop(std::get<1>(nextHop));
@@ -363,7 +356,9 @@ NetlinkRouteSocket::buildUnicastRoute(
 
 folly::Future<folly::Unit>
 NetlinkRouteSocket::addUnicastRoute(
-    folly::CIDRNetwork prefix, NextHops nextHops) {
+    uint8_t protocolId,
+    folly::CIDRNetwork prefix,
+    NextHops nextHops) {
   VLOG(3) << "Adding unicast route";
   CHECK(not nextHops.empty());
   CHECK(not prefix.first.isMulticast() && not prefix.first.isLinkLocal());
@@ -375,11 +370,12 @@ NetlinkRouteSocket::addUnicastRoute(
       [ this,
         promise = std::move(promise),
         prefix = std::move(prefix),
-        nextHops = std::move(nextHops)
+        nextHops = std::move(nextHops),
+        protocolId
       ]() mutable {
         try {
-          doAddUpdateUnicastRoute(prefix, nextHops);
-          unicastRouteDb_[prefix] = nextHops;
+          doAddUpdateUnicastRoute(protocolId, prefix, nextHops);
+          unicastRoutesDb_[protocolId][prefix] = nextHops;
           promise.setValue();
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error adding unicast routes to "
@@ -393,7 +389,9 @@ NetlinkRouteSocket::addUnicastRoute(
 
 folly::Future<folly::Unit>
 NetlinkRouteSocket::addMulticastRoute(
-    folly::CIDRNetwork prefix, std::string ifName) {
+    uint8_t protocolId,
+    folly::CIDRNetwork prefix,
+    std::string ifName) {
   VLOG(3) << "Adding multicast route";
   CHECK(prefix.first.isMulticast());
 
@@ -404,10 +402,11 @@ NetlinkRouteSocket::addMulticastRoute(
       [ this,
         promise = std::move(promise),
         prefix = std::move(prefix),
-        ifName = std::move(ifName)
+        ifName = std::move(ifName),
+        protocolId
       ]() mutable {
         try {
-          doAddMulticastRoute(prefix, ifName);
+          doAddMulticastRoute(protocolId, prefix, ifName);
           promise.setValue();
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error adding multicast routes to "
@@ -420,7 +419,9 @@ NetlinkRouteSocket::addMulticastRoute(
 }
 
 folly::Future<folly::Unit>
-NetlinkRouteSocket::deleteUnicastRoute(folly::CIDRNetwork prefix) {
+NetlinkRouteSocket::deleteUnicastRoute(
+  uint8_t protocolId,
+  folly::CIDRNetwork prefix) {
   VLOG(3) << "Deleting unicast route";
   CHECK(not prefix.first.isMulticast() && not prefix.first.isLinkLocal());
 
@@ -430,15 +431,17 @@ NetlinkRouteSocket::deleteUnicastRoute(folly::CIDRNetwork prefix) {
   evl_->runImmediatelyOrInEventLoop(
       [ this,
         promise = std::move(promise),
-        prefix = std::move(prefix)
+        prefix = std::move(prefix),
+        protocolId
       ]() mutable {
         try {
-          if (unicastRouteDb_.count(prefix) == 0) {
+          auto& unicastRoutes = unicastRoutesDb_[protocolId];
+          if (unicastRoutes.count(prefix) == 0) {
             LOG(ERROR) << "Trying to delete non-existing prefix "
                        << folly::IPAddress::networkToString(prefix);
           } else {
-            doDeleteUnicastRoute(prefix);
-            unicastRouteDb_.erase(prefix);
+            doDeleteUnicastRoute(protocolId, prefix);
+            unicastRoutes.erase(prefix);
           }
           promise.setValue();
         } catch (std::exception const& ex) {
@@ -453,7 +456,9 @@ NetlinkRouteSocket::deleteUnicastRoute(folly::CIDRNetwork prefix) {
 
 folly::Future<folly::Unit>
 NetlinkRouteSocket::deleteMulticastRoute(
-    folly::CIDRNetwork prefix, std::string ifName) {
+    uint8_t protocolId,
+    folly::CIDRNetwork prefix,
+    std::string ifName) {
   VLOG(3) << "Deleting multicast route";
   CHECK(prefix.first.isMulticast());
 
@@ -464,10 +469,11 @@ NetlinkRouteSocket::deleteMulticastRoute(
       [ this,
         promise = std::move(promise),
         prefix = std::move(prefix),
-        ifName = std::move(ifName)
+        ifName = std::move(ifName),
+        protocolId
       ]() mutable {
         try {
-          doDeleteMulticastRoute(prefix, ifName);
+          doDeleteMulticastRoute(protocolId, prefix, ifName);
           promise.setValue();
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error deleting multicast routes to "
@@ -479,27 +485,104 @@ NetlinkRouteSocket::deleteMulticastRoute(
   return future;
 }
 
+folly::Future<int64_t>
+NetlinkRouteSocket::getRouteCount() const {
+  VLOG(3) << "Getting routes number";
+
+  folly::Promise<int64_t> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop(
+    [this,
+     p = std::move(promise)]() mutable {
+     int64_t count = 0;
+     for (const auto& routes: unicastRoutesDb_) {
+       count += routes.second.size();
+     }
+     p.setValue(count);
+  });
+  return future;
+}
+
 folly::Future<UnicastRoutes>
-NetlinkRouteSocket::getUnicastRoutes() const {
-  VLOG(3) << "Getting all routes";
+NetlinkRouteSocket::getCachedUnicastRoutes(uint8_t protocolId) const {
+  VLOG(3) << "Getting unicast routes by protocol " << protocolId;
 
   folly::Promise<UnicastRoutes> promise;
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-    [this, promise = std::move(promise)]() mutable {
+    [this,
+     p = std::move(promise),
+     protocolId]() mutable {
     try {
-      promise.setValue(unicastRouteDb_);
+      static const UnicastRoutes emptyRoutes;
+      const UnicastRoutes& routes =
+          folly::get_default(unicastRoutesCache_, protocolId, emptyRoutes);
+      p.setValue(routes);
     } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error updating route cache: " << folly::exceptionStr(ex);
-      promise.setException(ex);
+      LOG(ERROR) << "Error getting unicast route cache: "
+                 << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
+  return future;
+}
+
+folly::Future<MulticastRoutes>
+NetlinkRouteSocket::getCachedMulticastRoutes(uint8_t protocolId) const {
+  VLOG(3) << "Getting multicast routes by protocol " << protocolId;
+
+  folly::Promise<MulticastRoutes> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop(
+    [this,
+     p = std::move(promise),
+     protocolId]() mutable {
+    try {
+      static const MulticastRoutes emptyRoutes;
+      const MulticastRoutes& routes =
+          folly::get_default(mcastRoutesCache_, protocolId, emptyRoutes);
+      p.setValue(routes);
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error getting route cache: "
+                 << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
+  return future;
+}
+
+// get cached link route by protocol ID
+folly::Future<LinkRoutes>
+NetlinkRouteSocket::getCachedLinkRoutes(uint8_t protocolId) const {
+  VLOG(3) << "Getting link routes by protocol " << protocolId;
+
+  folly::Promise<LinkRoutes> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop(
+    [this,
+     p = std::move(promise),
+     protocolId]() mutable {
+    try {
+      static const LinkRoutes emptyRoutes;
+      const LinkRoutes& routes =
+          folly::get_default(linkRoutesCache_, protocolId, emptyRoutes);
+      p.setValue(routes);
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error getting route cache: "
+                 << folly::exceptionStr(ex);
+      p.setException(ex);
     }
   });
   return future;
 }
 
 folly::Future<folly::Unit>
-NetlinkRouteSocket::syncUnicastRoutes(UnicastRoutes newRouteDb) {
+NetlinkRouteSocket::syncUnicastRoutes(
+  uint8_t protocolId, UnicastRoutes newRouteDb) {
   VLOG(3) << "Syncing Unicast Routes....";
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
@@ -507,10 +590,11 @@ NetlinkRouteSocket::syncUnicastRoutes(UnicastRoutes newRouteDb) {
   evl_->runImmediatelyOrInEventLoop(
       [ this,
         promise = std::move(promise),
-        newRouteDb = std::move(newRouteDb)
+        newRouteDb = std::move(newRouteDb),
+        protocolId
       ]() mutable {
         try {
-          doSyncUnicastRoutes(newRouteDb);
+          doSyncUnicastRoutes(protocolId, newRouteDb);
           promise.setValue();
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
@@ -522,7 +606,8 @@ NetlinkRouteSocket::syncUnicastRoutes(UnicastRoutes newRouteDb) {
 }
 
 folly::Future<folly::Unit>
-NetlinkRouteSocket::syncLinkRoutes(LinkRoutes newRouteDb) {
+NetlinkRouteSocket::syncLinkRoutes(
+  uint8_t protocolId, LinkRoutes newRouteDb) {
   VLOG(3) << "Syncing Link Routes....";
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
@@ -530,10 +615,11 @@ NetlinkRouteSocket::syncLinkRoutes(LinkRoutes newRouteDb) {
   evl_->runImmediatelyOrInEventLoop(
       [ this,
         promise = std::move(promise),
-        newRouteDb = std::move(newRouteDb)
+        newRouteDb = std::move(newRouteDb),
+        protocolId
       ]() mutable {
         try {
-          doSyncLinkRoutes(newRouteDb);
+          doSyncLinkRoutes(protocolId, newRouteDb);
           promise.setValue();
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error syncing link routeDb with Fib: "
@@ -546,7 +632,9 @@ NetlinkRouteSocket::syncLinkRoutes(LinkRoutes newRouteDb) {
 
 void
 NetlinkRouteSocket::doAddUpdateUnicastRoute(
-    const folly::CIDRNetwork& prefix, const NextHops& nextHops) {
+  uint8_t protocolId,
+  const folly::CIDRNetwork& prefix,
+  const NextHops& nextHops) {
 
   const bool isV4 = prefix.first.isV4();
   for (auto const& nextHop : nextHops) {
@@ -554,9 +642,10 @@ NetlinkRouteSocket::doAddUpdateUnicastRoute(
   }
 
   // Create new set of nexthops to be programmed. Existing + New ones
+  auto& unicastRoutes = unicastRoutesCache_[protocolId];
   static const NextHops emptyNextHops;
-  const NextHops& oldNextHops = folly::get_default(
-      unicastRoutes_, prefix, emptyNextHops);
+  const NextHops& oldNextHops =
+      folly::get_default(unicastRoutes, prefix, emptyNextHops);
   // Only update if there's any difference in new nextHops
   if (oldNextHops == nextHops) {
     return;
@@ -575,21 +664,22 @@ NetlinkRouteSocket::doAddUpdateUnicastRoute(
   }
 
   if (isV4) {
-    doAddUpdateUnicastRouteV4(prefix, nextHops);
+    doAddUpdateUnicastRouteV4(protocolId, prefix, nextHops);
   } else {
-    doAddUpdateUnicastRouteV6(prefix, nextHops, oldNextHops);
+    doAddUpdateUnicastRouteV6(protocolId, prefix, nextHops, oldNextHops);
   }
 
   // Cache new nexthops in our local-cache if everything is good
-  unicastRoutes_[prefix] = nextHops;
+  unicastRoutes[prefix] = nextHops;
 }
 
 void
 NetlinkRouteSocket::doAddUpdateUnicastRouteV4(
-    const folly::CIDRNetwork& prefix,
-    const NextHops& newNextHops) {
+  uint8_t protocolId,
+  const folly::CIDRNetwork& prefix,
+  const NextHops& newNextHops) {
 
-  auto route = buildUnicastRoute(prefix, newNextHops);
+  auto route = buildUnicastRoute(protocolId, prefix, newNextHops);
   auto err = rtnl_route_add(socket_, route->getRoutePtr(), NLM_F_REPLACE);
   if (err != 0) {
     throw NetlinkException(folly::sformat(
@@ -601,9 +691,10 @@ NetlinkRouteSocket::doAddUpdateUnicastRouteV4(
 
 void
 NetlinkRouteSocket::doAddUpdateUnicastRouteV6(
-    const folly::CIDRNetwork& prefix,
-    const NextHops& newNextHops,
-    const NextHops& oldNextHops) {
+  uint8_t protocolId,
+  const folly::CIDRNetwork& prefix,
+  const NextHops& newNextHops,
+  const NextHops& oldNextHops) {
 
   // We need to explicitly add new V6 routes & remove old routes
   // With IPv6, if new route being requested has different properties
@@ -614,7 +705,7 @@ NetlinkRouteSocket::doAddUpdateUnicastRouteV6(
   // add new nexthops
   auto toAdd = buildSetDifference(newNextHops, oldNextHops);
   if (!toAdd.empty()) {
-    auto route = buildUnicastRoute(prefix, toAdd);
+    auto route = buildUnicastRoute(protocolId, prefix, toAdd);
     auto err = rtnl_route_add(socket_, route->getRoutePtr(), 0 /* flags */);
     if (err != 0) {
       throw NetlinkException(folly::sformat(
@@ -627,7 +718,7 @@ NetlinkRouteSocket::doAddUpdateUnicastRouteV6(
   // remove stale nexthops
   auto toDel = buildSetDifference(oldNextHops, newNextHops);
   if (!toDel.empty()) {
-    auto route = buildUnicastRoute(prefix, toDel);
+    auto route = buildUnicastRoute(protocolId, prefix, toDel);
     int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0 /* flags */);
 
     // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
@@ -643,9 +734,10 @@ NetlinkRouteSocket::doAddUpdateUnicastRouteV6(
 
 void
 NetlinkRouteSocket::doDeleteUnicastRoute(
-    const folly::CIDRNetwork& prefix) {
+  uint8_t protocolId,
+  const folly::CIDRNetwork& prefix) {
 
-  auto route = std::make_unique<NetlinkRoute>(prefix, routeProtocolId_);
+  auto route = std::make_unique<NetlinkRoute>(prefix, protocolId);
   int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0 /* flags */);
 
   // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
@@ -658,19 +750,23 @@ NetlinkRouteSocket::doDeleteUnicastRoute(
   }
 
   // Update local cache with removed prefix
-  unicastRoutes_.erase(prefix);
+  auto& unicastRoutes = unicastRoutesCache_[protocolId];
+  unicastRoutes.erase(prefix);
 }
 
 void
 NetlinkRouteSocket::doAddMulticastRoute(
-    const folly::CIDRNetwork& prefix, const std::string& ifName) {
+    uint8_t protocolId,
+    const folly::CIDRNetwork& prefix,
+    const std::string& ifName) {
   // Since the time we build our cache at init, virtual interfaces
   // could have been created which may have multicast routes
   // installed by the kernel
   // Hence Triggering an update here
   doUpdateRouteCache();
 
-  if (mcastRoutes_.count(std::make_pair(prefix, ifName))) {
+  auto& mcastRoutes = mcastRoutesCache_[protocolId];
+  if (mcastRoutes.count(std::make_pair(prefix, ifName))) {
     // This could be kernel proto or our proto. we dont care
     LOG(WARNING)
         << "Multicast route: " << folly::IPAddress::networkToString(prefix)
@@ -683,7 +779,8 @@ NetlinkRouteSocket::doAddMulticastRoute(
       << " for interface: " << ifName;
 
   // We add it with our proto-ID
-  std::unique_ptr<NetlinkRoute> route = buildMulticastRoute(prefix, ifName);
+  std::unique_ptr<NetlinkRoute> route =
+      buildMulticastRoute(protocolId, prefix, ifName);
   int err = rtnl_route_add(socket_, route->getRoutePtr(), 0);
   if (err != 0) {
     throw NetlinkException(folly::sformat(
@@ -692,16 +789,19 @@ NetlinkRouteSocket::doAddMulticastRoute(
         nl_geterror(err)));
   }
 
-  mcastRoutes_.emplace(prefix, ifName);
+  mcastRoutes.emplace(prefix, ifName);
 }
 
 void
 NetlinkRouteSocket::doDeleteMulticastRoute(
-    const folly::CIDRNetwork& prefix, const std::string& ifName) {
+    uint8_t protocolId,
+    const folly::CIDRNetwork& prefix,
+    const std::string& ifName) {
   // Triggering an update here
   doUpdateRouteCache();
 
-  if (mcastRoutes_.count(std::make_pair(prefix, ifName)) == 0) {
+  auto& mcastRoutes = mcastRoutesCache_[protocolId];
+  if (mcastRoutes.count(std::make_pair(prefix, ifName)) == 0) {
     // This could be kernel proto or our proto. we dont care
     LOG(WARNING)
         << "Multicast route: " << folly::IPAddress::networkToString(prefix)
@@ -714,7 +814,8 @@ NetlinkRouteSocket::doDeleteMulticastRoute(
           << " for interface: " << ifName;
 
   // We add it with our proto-ID
-  std::unique_ptr<NetlinkRoute> route = buildMulticastRoute(prefix, ifName);
+  std::unique_ptr<NetlinkRoute> route =
+      buildMulticastRoute(protocolId, prefix, ifName);
   int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0);
   if (err != 0) {
     throw NetlinkException(folly::sformat(
@@ -723,12 +824,12 @@ NetlinkRouteSocket::doDeleteMulticastRoute(
         nl_geterror(err)));
   }
 
-  mcastRoutes_.erase(std::make_pair(prefix, ifName));
+  mcastRoutes.erase(std::make_pair(prefix, ifName));
 }
 
-UnicastRoutes
+UnicastRoutesDb
 NetlinkRouteSocket::doGetUnicastRoutes() const {
-  return unicastRoutes_;
+  return unicastRoutesCache_;
 }
 
 void
@@ -752,9 +853,9 @@ NetlinkRouteSocket::doUpdateRouteCache() {
   }
 
   // clear our own state, we will re-fill here
-  unicastRoutes_.clear();
-  mcastRoutes_.clear();
-  linkRoutes_.clear();
+  unicastRoutesCache_.clear();
+  mcastRoutesCache_.clear();
+  linkRoutesCache_.clear();
 
   // Our function for each route called by libnl on iteration
   // These should not throw exceptions as they are libnl callbacks
@@ -772,7 +873,7 @@ NetlinkRouteSocket::doUpdateRouteCache() {
     struct nl_addr* dst = rtnl_route_get_dst(route);
 
     // Skip cached route entries and any routes not in the main table
-    if ((table != kAqRouteTableId) || (flags & RTM_F_CLONED)) {
+    if ((table != RT_TABLE_MAIN) || (flags & RTM_F_CLONED)) {
       return;
     }
 
@@ -817,14 +918,8 @@ NetlinkRouteSocket::doUpdateRouteCache() {
           rtnl_route_nh_get_ifindex(nextHop),
           ifNameBuf,
           sizeof(ifNameBuf)));
-      routeFuncCtx->multicastRoutes->emplace(
-          std::make_pair(std::move(prefix), ifName));
-      return;
-    }
-
-    // Skip non OpenR routes
-    // We deliberately do this after multicast route check
-    if (proto != routeFuncCtx->routeProtocolId_) {
+      auto& mcastRoutes = (*(routeFuncCtx->multicastRoutesCache))[proto];
+      mcastRoutes.emplace(std::make_pair(std::move(prefix), ifName));
       return;
     }
 
@@ -841,8 +936,8 @@ NetlinkRouteSocket::doUpdateRouteCache() {
           rtnl_route_nh_get_ifindex(nextHop),
           ifNameBuf,
           sizeof(ifNameBuf)));
-      routeFuncCtx->linkRoutes->emplace(
-          std::make_pair(std::move(prefix), ifName));
+      auto& linkRoutes = (*(routeFuncCtx->linkRoutesCache))[proto];
+      linkRoutes.emplace(std::make_pair(std::move(prefix), ifName));
       return;
     }
 
@@ -853,7 +948,7 @@ NetlinkRouteSocket::doUpdateRouteCache() {
 
     // Check for duplicates. Only applicable for v4 case
     // For v6. Duplicate route is treated as nexthop in kernel
-    auto& unicastRoutes = *(routeFuncCtx->unicastRoutes);
+    auto& unicastRoutes = (*(routeFuncCtx->unicastRoutesCache))[proto];
     if (prefix.first.isV4() && unicastRoutes.count(prefix)) {
       LOG(FATAL) << "Got redundant v4 route for prefix "
                  << folly::IPAddress::networkToString(prefix)
@@ -904,35 +999,37 @@ NetlinkRouteSocket::doUpdateRouteCache() {
   // Create context and let libnl call our handler routeFunc for
   // each route
   RouteFuncCtx routeFuncCtx{
-    &unicastRoutes_,
-    &mcastRoutes_,
-    &linkRoutes_,
-    linkCache_,
-    routeProtocolId_
+    &unicastRoutesCache_,
+    &mcastRoutesCache_,
+    &linkRoutesCache_,
+    linkCache_
   };
   nl_cache_foreach_filter(cacheV4_, nullptr, routeFunc, &routeFuncCtx);
   nl_cache_foreach_filter(cacheV6_, nullptr, routeFunc, &routeFuncCtx);
 }
 
 void
-NetlinkRouteSocket::doSyncUnicastRoutes(const UnicastRoutes& newRouteDb) {
+NetlinkRouteSocket::doSyncUnicastRoutes(
+    uint8_t protocolId,
+    const UnicastRoutes& newRouteDb) {
   // Get latest routing table from kernel and use it as our snapshot
   doUpdateRouteCache();
-  unicastRouteDb_ = doGetUnicastRoutes();
+  unicastRoutesDb_ = doGetUnicastRoutes();
+  auto& unicastRoutes = unicastRoutesDb_[protocolId];
 
   // Go over routes that are not in new routeDb, delete
-  for (auto it = unicastRouteDb_.begin(); it != unicastRouteDb_.end();) {
+  for (auto it = unicastRoutes.begin(); it != unicastRoutes.end();) {
     auto const& prefix = it->first;
     if (newRouteDb.find(prefix) == newRouteDb.end()) {
       try {
-        doDeleteUnicastRoute(prefix);
+        doDeleteUnicastRoute(protocolId, prefix);
       } catch (std::exception const& err) {
         throw std::runtime_error(folly::sformat(
             "Could not del Route to: {} Error: {}",
             folly::IPAddress::networkToString(prefix),
             folly::exceptionStr(err)));
       }
-      it = unicastRouteDb_.erase(it);
+      it = unicastRoutes.erase(it);
     } else {
       ++it;
     }
@@ -943,8 +1040,8 @@ NetlinkRouteSocket::doSyncUnicastRoutes(const UnicastRoutes& newRouteDb) {
     auto const& prefix = kv.first;
     auto const& nextHops = kv.second;
     try {
-      doAddUpdateUnicastRoute(prefix, nextHops);
-      unicastRouteDb_[prefix] = nextHops;
+      doAddUpdateUnicastRoute(protocolId, prefix, nextHops);
+      unicastRoutes[prefix] = nextHops;
     } catch (std::exception const& err) {
       throw std::runtime_error(folly::sformat(
           "Could not update Route to: {} Error: {}",
@@ -955,15 +1052,18 @@ NetlinkRouteSocket::doSyncUnicastRoutes(const UnicastRoutes& newRouteDb) {
 }
 
 void
-NetlinkRouteSocket::doSyncLinkRoutes(const LinkRoutes& newRouteDb) {
+NetlinkRouteSocket::doSyncLinkRoutes(
+    uint8_t protocolId,
+    const LinkRoutes& newRouteDb) {
   // Update linkRoutes_ with latest routes from the kernel
   doUpdateRouteCache();
-
-  const auto toDel = buildSetDifference(linkRoutes_, newRouteDb);
+  auto& linkRoutes = linkRoutesCache_[protocolId];
+  const auto toDel = buildSetDifference(linkRoutes, newRouteDb);
   for (const auto& routeToDel : toDel) {
     const auto& prefix = routeToDel.first;
     const auto& ifName = routeToDel.second;
-    std::unique_ptr<NetlinkRoute> route = buildLinkRoute(prefix, ifName);
+    std::unique_ptr<NetlinkRoute> route =
+        buildLinkRoute(protocolId, prefix, ifName);
     int err = rtnl_route_delete(socket_, route->getRoutePtr(), 0);
     if (err != 0) {
       throw NetlinkException(folly::sformat(
@@ -974,11 +1074,12 @@ NetlinkRouteSocket::doSyncLinkRoutes(const LinkRoutes& newRouteDb) {
     }
   }
 
-  const auto toAdd = buildSetDifference(newRouteDb, linkRoutes_);
+  const auto toAdd = buildSetDifference(newRouteDb, linkRoutes);
   for (const auto& routeToAdd : toAdd) {
     const auto& prefix = routeToAdd.first;
     const auto& ifName = routeToAdd.second;
-    std::unique_ptr<NetlinkRoute> route = buildLinkRoute(prefix, ifName);
+    std::unique_ptr<NetlinkRoute> route =
+        buildLinkRoute(protocolId, prefix, ifName);
     int err = rtnl_route_add(socket_, route->getRoutePtr(), 0);
     if (err != 0) {
       throw NetlinkException(folly::sformat(
@@ -989,7 +1090,7 @@ NetlinkRouteSocket::doSyncLinkRoutes(const LinkRoutes& newRouteDb) {
     }
   }
 
-  linkRoutes_ = newRouteDb;
+  linkRoutes = newRouteDb;
 }
 
 void

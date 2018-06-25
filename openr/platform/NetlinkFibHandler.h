@@ -15,6 +15,7 @@
 
 #include <fbzmq/async/ZmqTimeout.h>
 #include <folly/futures/Future.h>
+#include <folly/Expected.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 
 #include <openr/common/AddressUtil.h>
@@ -65,6 +66,10 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
  private:
   NetlinkFibHandler(const NetlinkFibHandler&) = delete;
   NetlinkFibHandler& operator=(const NetlinkFibHandler&) = delete;
+
+  template<class A>
+  folly::Expected<int16_t, bool>
+  getProtocol(folly::Promise<A>& promise, int16_t clientId);
 
   // Used to interact with Linux kernel routing table
   std::unique_ptr<NetlinkRouteSocket> netlinkSocket_;

@@ -32,12 +32,6 @@ extern "C" {
 #include <netlink/socket.h>
 }
 
-namespace {
-// too bad 0xFB (251) is taken by gated/ospfase
-// We will use this as the proto for our routes
-const uint8_t kRouteProtoId = 99;
-} // namespace
-
 namespace openr {
 
 // nextHop => local interface and nextHop IP.
@@ -46,18 +40,26 @@ using NextHops = std::unordered_set<std::pair<std::string, folly::IPAddress>>;
 // Route => prefix and its possible nextHops
 using UnicastRoutes = std::unordered_map<folly::CIDRNetwork, NextHops>;
 
+// protocolId=>routes
+using UnicastRoutesDb = std::unordered_map<uint8_t, UnicastRoutes>;
+
 // Multicast and link routes do not have nextHop IP
 using MulticastRoutes =
     std::unordered_set<std::pair<folly::CIDRNetwork, std::string>>;
 
+// protocolId=>routes
+using MulticastRoutesDb = std::unordered_map<uint8_t, MulticastRoutes>;
+
 using LinkRoutes =
     std::unordered_set<std::pair<folly::CIDRNetwork, std::string>>;
+
+// protocolId=>routes
+using LinkRoutesDb = std::unordered_map<uint8_t, LinkRoutes>;
 
 class NetlinkRoute;
 
 // A simple wrapper over libnl API to add / delete routes
-// All routes are added with the provided RT_PROTO ID (routeProtocolId)
-// If none is provided, we default to kRouteProtoId
+// Users can on the fly request to manipulate routes with any protocol ids
 // We are stateless to the effect that we do not check against duplicate
 // route additions and non existing route removals. It is upto the user
 // to enforce such checks. Any such error will cause libnl to error, and
@@ -71,8 +73,7 @@ class NetlinkRoute;
 class NetlinkRouteSocket final {
  public:
   explicit NetlinkRouteSocket(
-      fbzmq::ZmqEventLoop* zmqEventLoop,
-      uint8_t routeProtocolId = kRouteProtoId);
+      fbzmq::ZmqEventLoop* zmqEventLoop);
   ~NetlinkRouteSocket();
 
   // If adding multipath nextHops for the same prefix at different times,
@@ -81,30 +82,50 @@ class NetlinkRouteSocket final {
   // but kernel will reject the request
 
   folly::Future<folly::Unit> addUnicastRoute(
+      uint8_t protocolId,
       folly::CIDRNetwork prefix, NextHops nextHops);
 
   // Delete all next hops associated with prefix
   folly::Future<folly::Unit> deleteUnicastRoute(
+      uint8_t protocolId,
       folly::CIDRNetwork prefix);
 
   // Throw exceptions if the route already existed
   // This is to prevent duplicate routes in some systems where kernel
   // already added this route for us
   folly::Future<folly::Unit> addMulticastRoute(
+      uint8_t protocolId,
       folly::CIDRNetwork prefix, std::string ifName);
 
   folly::Future<folly::Unit> deleteMulticastRoute(
+      uint8_t protocolId,
       folly::CIDRNetwork prefix, std::string ifName);
 
   // Sync route table in kernel with given route table
   // Basically when there's mismatch between backend kernel and route table in
   // application, we sync kernel routing table with given data source
-  folly::Future<folly::Unit> syncUnicastRoutes(UnicastRoutes newRouteDb);
+  folly::Future<folly::Unit> syncUnicastRoutes(
+      uint8_t protocolId,
+      UnicastRoutes newRouteDb);
 
-  folly::Future<folly::Unit> syncLinkRoutes(LinkRoutes newRouteDb);
+  folly::Future<folly::Unit> syncLinkRoutes(
+      uint8_t protocolId,
+      LinkRoutes newRouteDb);
 
-  // get cached unicast routing table
-  folly::Future<UnicastRoutes> getUnicastRoutes() const;
+  // get cached unicast routing by protocol ID
+  folly::Future<UnicastRoutes>
+  getCachedUnicastRoutes(uint8_t protocolId) const;
+
+  // get cached multicast routing by protocol ID
+  folly::Future<MulticastRoutes>
+  getCachedMulticastRoutes(uint8_t protocolId) const;
+
+  // get cached link route by protocol ID
+  folly::Future<LinkRoutes>
+  getCachedLinkRoutes(uint8_t protocolId) const;
+
+  // get number of all cached routes
+  folly::Future<int64_t> getRouteCount() const;
 
  private:
   NetlinkRouteSocket(const NetlinkRouteSocket&) = delete;
@@ -117,7 +138,9 @@ class NetlinkRouteSocket final {
    *
    */
   void doAddUpdateUnicastRoute(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
+      uint8_t protocolId,
+      const folly::CIDRNetwork& prefix,
+      const NextHops& nextHops);
   /**
    * For v4 multipapth: All nexthops must be specified while programming a
    * route as kernel wipes out all existing ones.
@@ -126,49 +149,67 @@ class NetlinkRouteSocket final {
    *
    */
   void doAddUpdateUnicastRouteV4(
+      uint8_t protocolId,
       const folly::CIDRNetwork& prefix,
       const NextHops& newNextHops);
 
   void doAddUpdateUnicastRouteV6(
+      uint8_t protocolId,
       const folly::CIDRNetwork& prefix,
       const NextHops& newNextHops,
       const NextHops& oldNextHops);
 
   void doAddMulticastRoute(
-      const folly::CIDRNetwork& prefix, const std::string& ifName);
+      uint8_t routeProtocolId,
+      const folly::CIDRNetwork& prefix,
+      const std::string& ifName);
 
   /**
    * Delete API has same behavior for v4 and v6: given prefix delete all routes
    */
-  void doDeleteUnicastRoute(const folly::CIDRNetwork& prefix);
+  void doDeleteUnicastRoute(
+      uint8_t protocolId,
+      const folly::CIDRNetwork& prefix);
 
   void doDeleteMulticastRoute(
-      const folly::CIDRNetwork& prefix, const std::string& ifName);
+      uint8_t protocolId,
+      const folly::CIDRNetwork& prefix,
+      const std::string& ifName);
 
   /**
-   * Update our route cache. Only routes tagged with our protocolID are read.
-   * External users can trigger this on demand to sync with routes from kernel.
+   * Update our route cache for all protocols ids
    */
   void doUpdateRouteCache();
 
-  UnicastRoutes doGetUnicastRoutes() const;
+  UnicastRoutesDb doGetUnicastRoutes() const;
 
-  void doSyncUnicastRoutes(const UnicastRoutes& newRouteDb);
+  void doSyncUnicastRoutes(
+      uint8_t protocolId,
+      const UnicastRoutes& newRouteDb);
 
-  void doSyncLinkRoutes(const LinkRoutes& newRouteDb);
+  void doSyncLinkRoutes(
+      uint8_t protocolId,
+      const LinkRoutes& newRouteDb);
 
   std::unique_ptr<NetlinkRoute> buildUnicastRoute(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
+      uint8_t protocolId,
+      const folly::CIDRNetwork& prefix,
+      const NextHops& nextHops);
 
   std::unique_ptr<NetlinkRoute> buildMulticastRoute(
-      const folly::CIDRNetwork& prefix, const std::string& ifName);
+      uint8_t protocolId,
+      const folly::CIDRNetwork& prefix,
+      const std::string& ifName);
 
   std::unique_ptr<NetlinkRoute> buildLinkRoute(
-      const folly::CIDRNetwork& prefix, const std::string& ifName);
+      uint8_t protocolId,
+      const folly::CIDRNetwork& prefix,
+      const std::string& ifName);
 
   std::unique_ptr<NetlinkRoute> buildMulticastOrLinkRouteHelper(
       const folly::CIDRNetwork& prefix,
       const std::string& ifName,
+      uint8_t protocolId,
       uint8_t scope);
 
   /**
@@ -191,17 +232,17 @@ class NetlinkRouteSocket final {
 
   // Keep a local copy of unicast route db to reflect current forwarding state
   // This may out of sync with kernel, need to do explicit sync up
-  UnicastRoutes unicastRouteDb_{};
-  LinkRoutes linkRouteDb_{};
+  UnicastRoutesDb unicastRoutesDb_;
+  LinkRoutesDb linkRouteDb_;
 
   // Local cache. We do not use this to enforce any checks
   // for incoming requests. Merely an optimization for getUnicastRoutes()
-  UnicastRoutes unicastRoutes_{};
+  UnicastRoutesDb unicastRoutesCache_;
 
   // Check against redundant multicast routes
-  MulticastRoutes mcastRoutes_{};
+  MulticastRoutesDb mcastRoutesCache_;
 
-  LinkRoutes linkRoutes_{};
+  LinkRoutesDb linkRoutesCache_;
 };
 
 } // namespace openr

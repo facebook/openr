@@ -41,11 +41,11 @@ RouteDumper(fbzmq::ZmqEventLoop* evl) {
   LOG(INFO) << "Starting Route dumper..";
 
   // Create the netlinkRouteSocket object
-  NetlinkRouteSocket netlinkRouteSocket(evl, kAqRouteProtoId);
+  NetlinkRouteSocket netlinkRouteSocket(evl);
 
   LOG(INFO) << "Dumping Routes";
   LOG(INFO) << "==============";
-  auto routes = netlinkRouteSocket.getUnicastRoutes().get();
+  auto routes = netlinkRouteSocket.getCachedUnicastRoutes(kAqRouteProtoId).get();
 
   for (const auto& kv : routes) {
     auto nhopStr =

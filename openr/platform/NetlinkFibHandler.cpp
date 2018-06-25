@@ -18,6 +18,7 @@
 #include <folly/gen/Core.h>
 
 #include <openr/common/AddressUtil.h>
+#include <openr/if/gen-cpp2/Platform_constants.h>
 
 using apache::thrift::FRAGILE;
 
@@ -29,8 +30,14 @@ namespace openr {
 
 namespace {
 
-const uint8_t kAqRouteProtoId = 99;
 const std::chrono::seconds kRoutesHoldTimeout{30};
+
+// iproute2 protocol IDs in the kernel are a shared resource
+// Various well known and custom protocols use it
+// This is a *Weak* attempt to protect against some already
+// known protocols
+const uint8_t kMinRouteProtocolId = 17;
+const uint8_t kMaxRouteProtocolId = 245;
 
 // convert a routeDb into thrift exportable route spec
 std::vector<thrift::UnicastRoute>
@@ -94,7 +101,7 @@ fromThriftNexthops(const std::vector<thrift::BinaryAddress>& thriftNexthops) {
 
 NetlinkFibHandler::NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop)
     : netlinkSocket_(
-          std::make_unique<NetlinkRouteSocket>(zmqEventLoop, kAqRouteProtoId)),
+          std::make_unique<NetlinkRouteSocket>(zmqEventLoop)),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
                      .count()),
@@ -119,16 +126,43 @@ NetlinkFibHandler::NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop)
   });
 }
 
+template<class A>
+folly::Expected<int16_t, bool>
+NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
+  auto ret = thrift::Platform_constants::clientIdtoProtocolId().find(clientId);
+  if (ret == thrift::Platform_constants::clientIdtoProtocolId().end()) {
+    auto ex =
+      NetlinkException(folly::sformat("Invalid ClientId : {}", clientId));
+    promise.setException(ex);
+    return folly::makeUnexpected(false);
+  }
+  if (ret->second < kMinRouteProtocolId || ret->second > kMaxRouteProtocolId) {
+    auto ex =
+      NetlinkException(folly::sformat("Invalid Protocol Id : {}", ret->second));
+    promise.setException(ex);
+    return folly::makeUnexpected(false);
+  }
+  return ret->second;
+}
+
 folly::Future<folly::Unit>
 NetlinkFibHandler::future_addUnicastRoute(
-    int16_t, std::unique_ptr<thrift::UnicastRoute> route) {
+    int16_t clientId, std::unique_ptr<thrift::UnicastRoute> route) {
   DCHECK(route->nexthops.size());
 
   VLOG(1) << "Adding/Updating route for " << toString(route->dest);
 
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  auto protocol = getProtocol(promise, clientId);
+  if (protocol.hasError()) {
+    return future;
+  }
+
   auto prefix = toIPNetwork(route->dest);
   auto nexthops = fromThriftNexthops(route->nexthops);
   return netlinkSocket_->addUnicastRoute(
+      protocol.value(),
       std::move(prefix),
       std::move(nexthops)
   );
@@ -136,11 +170,18 @@ NetlinkFibHandler::future_addUnicastRoute(
 
 folly::Future<folly::Unit>
 NetlinkFibHandler::future_deleteUnicastRoute(
-    int16_t, std::unique_ptr<thrift::IpPrefix> prefix) {
+    int16_t clientId, std::unique_ptr<thrift::IpPrefix> prefix) {
   VLOG(1) << "Deleting route for " << toString(*prefix);
 
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  auto protocol = getProtocol(promise, clientId);
+  if (protocol.hasError()) {
+    return future;
+  }
+
   auto myPrefix = toIPNetwork(*prefix);
-  return netlinkSocket_->deleteUnicastRoute(myPrefix);
+  return netlinkSocket_->deleteUnicastRoute(protocol.value(), myPrefix);
 }
 
 folly::Future<folly::Unit>
@@ -210,6 +251,13 @@ NetlinkFibHandler::future_syncFib(
   LOG(INFO) << "Syncing FIB with provided routes. Client: "
             << getClientName(clientId);
 
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  auto protocol = getProtocol(promise, clientId);
+  if (protocol.hasError()) {
+    return future;
+  }
+
   // Build new routeDb
   UnicastRoutes newRouteDb;
   for (auto const& route : *routes) {
@@ -219,7 +267,8 @@ NetlinkFibHandler::future_syncFib(
     newRouteDb.emplace(std::move(prefix), std::move(nexthops));
   }
 
-  return netlinkSocket_->syncUnicastRoutes(std::move(newRouteDb));
+  return netlinkSocket_->
+            syncUnicastRoutes(protocol.value(), std::move(newRouteDb));
 }
 
 folly::Future<int64_t>
@@ -246,7 +295,15 @@ folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
 NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
   LOG(INFO) << "Get routes from FIB for clientId " << clientId;
 
-  return netlinkSocket_->getUnicastRoutes()
+  folly::Promise<
+      std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>> promise;
+  auto future = promise.getFuture();
+  auto protocol = getProtocol(promise, clientId);
+  if (protocol.hasError()) {
+    return future;
+  }
+
+  return netlinkSocket_->getCachedUnicastRoutes(protocol.value())
       .then([](UnicastRoutes res) mutable {
         return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
             makeRoutes(res));
@@ -261,8 +318,7 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
 
 void
 NetlinkFibHandler::getCounters(std::map<std::string, int64_t>& counters) {
-  auto routes = netlinkSocket_->getUnicastRoutes().get();
-  counters["fibagent.num_of_routes"] = routes.size();
+  counters["fibagent.num_of_routes"] = netlinkSocket_->getRouteCount().get();
 }
 
 } // namespace openr
