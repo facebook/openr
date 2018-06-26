@@ -181,8 +181,6 @@ class NetlinkRouteSocket final {
    */
   void doUpdateRouteCache();
 
-  UnicastRoutesDb doGetUnicastRoutes() const;
-
   void doSyncUnicastRoutes(
       uint8_t protocolId,
       const UnicastRoutes& newRouteDb);
@@ -229,11 +227,6 @@ class NetlinkRouteSocket final {
   // Timer to refresh linkCache_ to pick up new interface information
   std::chrono::steady_clock::time_point linkCacheUpdateTs_{
     std::chrono::steady_clock::now() - Constants::kNetlinkSyncThrottleInterval};
-
-  // Keep a local copy of unicast route db to reflect current forwarding state
-  // This may out of sync with kernel, need to do explicit sync up
-  UnicastRoutesDb unicastRoutesDb_;
-  LinkRoutesDb linkRouteDb_;
 
   // Local cache. We do not use this to enforce any checks
   // for incoming requests. Merely an optimization for getUnicastRoutes()

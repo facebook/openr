@@ -272,7 +272,6 @@ NetlinkRouteSocket::NetlinkRouteSocket(
 
   evl_->runImmediatelyOrInEventLoop([this]() mutable {
     doUpdateRouteCache();
-    unicastRoutesDb_ = doGetUnicastRoutes();
   });
 }
 
@@ -375,7 +374,6 @@ NetlinkRouteSocket::addUnicastRoute(
       ]() mutable {
         try {
           doAddUpdateUnicastRoute(protocolId, prefix, nextHops);
-          unicastRoutesDb_[protocolId][prefix] = nextHops;
           promise.setValue();
         } catch (std::exception const& ex) {
           LOG(ERROR) << "Error adding unicast routes to "
@@ -435,13 +433,12 @@ NetlinkRouteSocket::deleteUnicastRoute(
         protocolId
       ]() mutable {
         try {
-          auto& unicastRoutes = unicastRoutesDb_[protocolId];
+          const auto& unicastRoutes = unicastRoutesCache_[protocolId];
           if (unicastRoutes.count(prefix) == 0) {
             LOG(ERROR) << "Trying to delete non-existing prefix "
                        << folly::IPAddress::networkToString(prefix);
           } else {
             doDeleteUnicastRoute(protocolId, prefix);
-            unicastRoutes.erase(prefix);
           }
           promise.setValue();
         } catch (std::exception const& ex) {
@@ -496,7 +493,7 @@ NetlinkRouteSocket::getRouteCount() const {
     [this,
      p = std::move(promise)]() mutable {
      int64_t count = 0;
-     for (const auto& routes: unicastRoutesDb_) {
+     for (const auto& routes: unicastRoutesCache_) {
        count += routes.second.size();
      }
      p.setValue(count);
@@ -827,11 +824,6 @@ NetlinkRouteSocket::doDeleteMulticastRoute(
   mcastRoutes.erase(std::make_pair(prefix, ifName));
 }
 
-UnicastRoutesDb
-NetlinkRouteSocket::doGetUnicastRoutes() const {
-  return unicastRoutesCache_;
-}
-
 void
 NetlinkRouteSocket::doUpdateRouteCache() {
   // Refill from kernel
@@ -1014,24 +1006,25 @@ NetlinkRouteSocket::doSyncUnicastRoutes(
     const UnicastRoutes& newRouteDb) {
   // Get latest routing table from kernel and use it as our snapshot
   doUpdateRouteCache();
-  unicastRoutesDb_ = doGetUnicastRoutes();
-  auto& unicastRoutes = unicastRoutesDb_[protocolId];
+  auto& unicastRoutes = unicastRoutesCache_[protocolId];
 
   // Go over routes that are not in new routeDb, delete
-  for (auto it = unicastRoutes.begin(); it != unicastRoutes.end();) {
-    auto const& prefix = it->first;
-    if (newRouteDb.find(prefix) == newRouteDb.end()) {
-      try {
-        doDeleteUnicastRoute(protocolId, prefix);
-      } catch (std::exception const& err) {
-        throw std::runtime_error(folly::sformat(
-            "Could not del Route to: {} Error: {}",
-            folly::IPAddress::networkToString(prefix),
-            folly::exceptionStr(err)));
-      }
-      it = unicastRoutes.erase(it);
-    } else {
-      ++it;
+  std::unordered_set<folly::CIDRNetwork> toDelete;
+  for (auto const& kv : unicastRoutes) {
+    if (newRouteDb.find(kv.first) == newRouteDb.end()) {
+      toDelete.insert(kv.first);
+    }
+  }
+  // Delete routes from kernel
+  for (auto it = toDelete.begin(); it != toDelete.end(); ++it) {
+    auto const& prefix = *it;
+    try {
+      doDeleteUnicastRoute(protocolId, prefix);
+    } catch (std::exception const& err) {
+      throw std::runtime_error(folly::sformat(
+        "Could not del Route to: {} Error: {}",
+        folly::IPAddress::networkToString(prefix),
+        folly::exceptionStr(err)));
     }
   }
 
@@ -1041,7 +1034,6 @@ NetlinkRouteSocket::doSyncUnicastRoutes(
     auto const& nextHops = kv.second;
     try {
       doAddUpdateUnicastRoute(protocolId, prefix, nextHops);
-      unicastRoutes[prefix] = nextHops;
     } catch (std::exception const& err) {
       throw std::runtime_error(folly::sformat(
           "Could not update Route to: {} Error: {}",
