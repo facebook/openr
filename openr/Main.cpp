@@ -340,14 +340,14 @@ const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
 
 } // namespace
 
-void waitForFibService() {
+void waitForFibService(const fbzmq::ZmqEventLoop& evl) {
   auto waitForFibStart = std::chrono::steady_clock::now();
 
   auto fibStatus = openr::thrift::ServiceStatus::DEAD;
   folly::EventBase evb;
   std::shared_ptr<apache::thrift::async::TAsyncSocket> socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
-  while (openr::thrift::ServiceStatus::ALIVE != fibStatus) {
+  while (evl.isRunning() && openr::thrift::ServiceStatus::ALIVE != fibStatus) {
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG(INFO) << "Waiting for FibService to come up...";
@@ -532,7 +532,16 @@ main(int argc, char** argv) {
     allThreads.emplace_back(std::move(systemThriftThread));
   }
 
-  waitForFibService();
+  // Starting main event-loop
+  std::thread mainEventLoopThread([&]() noexcept {
+    LOG(INFO) << "Starting main event loop...";
+    folly::setThreadName("MainLoop");
+    mainEventLoop.run();
+    LOG(INFO) << "Main event loop got stopped";
+  });
+  mainEventLoop.waitUntilRunning();
+
+  waitForFibService(mainEventLoop);
 
   const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
   const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{"inproc://kvstore_cmd_local"};
@@ -959,9 +968,8 @@ main(int argc, char** argv) {
     watchdog->addEvl(healthChecker.get(), "HealthChecker");
   }
 
-  LOG(INFO) << "Starting main event loop...";
-  mainEventLoop.run();
-  LOG(INFO) << "Main event loop got stopped";
+  // Wait for main-event loop to return
+  mainEventLoopThread.join();
 
   // Stop all threads (in reverse order of their creation)
   if (healthChecker) {
