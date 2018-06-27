@@ -134,16 +134,17 @@ fillRouteMap(
 }
 
 RouteMap
-getRouteMap(
-    SpfSolver& spfSolver, const vector<string>& nodes) {
+getRouteMap(SpfSolver& spfSolver, const vector<string>& nodes) {
   RouteMap routeMap;
 
   for (string const& node : nodes) {
     auto routeDb = spfSolver.buildPaths(node);
-    EXPECT_EQ(node, routeDb.thisNodeName);
+    if (not routeDb.hasValue()) {
+      continue;
+    }
 
-    fillRouteMap(node, routeMap, routeDb);
-    VLOG(4) << "---";
+    EXPECT_EQ(node, routeDb->thisNodeName);
+    fillRouteMap(node, routeMap, routeDb.value());
   }
 
   return routeMap;
@@ -178,8 +179,9 @@ TEST(ShortestPathTest, UnreachableNodes) {
 
   for (string const& node : allNodes) {
     auto routeDb = spfSolver.buildPaths(node);
-    EXPECT_EQ(node, routeDb.thisNodeName);
-    EXPECT_EQ(0, routeDb.routes.size());
+    ASSERT(routeDb.hasValue());
+    EXPECT_EQ(node, routeDb->thisNodeName);
+    EXPECT_EQ(0, routeDb->routes.size());
   }
 }
 
@@ -205,8 +207,9 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
 
   auto routeDb = spfSolver.buildPaths("1");
-  EXPECT_EQ("1", routeDb.thisNodeName);
-  EXPECT_EQ(0, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("1", routeDb->thisNodeName);
+  EXPECT_EQ(0, routeDb->routes.size());
 }
 
 //
@@ -236,12 +239,29 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   // dump routes for both nodes, expect no routing entries
 
   auto routeDb = spfSolver.buildPaths("1");
-  EXPECT_EQ("1", routeDb.thisNodeName);
-  EXPECT_EQ(0, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("1", routeDb->thisNodeName);
+  EXPECT_EQ(0, routeDb->routes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  EXPECT_EQ("2", routeDb.thisNodeName);
-  EXPECT_EQ(0, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("2", routeDb->thisNodeName);
+  EXPECT_EQ(0, routeDb->routes.size());
+}
+
+//
+// Query route for unknown neighbor. It should return none
+//
+TEST(ShortestPathTest, UnknownNode) {
+  std::string nodeName("1");
+  SpfSolver spfSolver(
+    nodeName, false /* disable v4 */, false /* disable LFA */);
+
+  auto routeDb = spfSolver.buildPaths("1");
+  EXPECT_FALSE(routeDb.hasValue());
+
+  routeDb = spfSolver.buildPaths("2");
+  EXPECT_FALSE(routeDb.hasValue());
 }
 
 /**
@@ -277,12 +297,14 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   auto routeDb = spfSolver.buildPaths("1");
-  EXPECT_EQ("1", routeDb.thisNodeName);
-  EXPECT_EQ(1, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("1", routeDb->thisNodeName);
+  EXPECT_EQ(1, routeDb->routes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  EXPECT_EQ("2", routeDb.thisNodeName);
-  EXPECT_EQ(1, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("2", routeDb->thisNodeName);
+  EXPECT_EQ(1, routeDb->routes.size());
 
   //
   // Update adjacency database of node 1 by changing it's nexthops and verift
@@ -300,12 +322,14 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   routeDb = spfSolver.buildPaths("1");
-  EXPECT_EQ("1", routeDb.thisNodeName);
-  EXPECT_EQ(1, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("1", routeDb->thisNodeName);
+  EXPECT_EQ(1, routeDb->routes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  EXPECT_EQ("2", routeDb.thisNodeName);
-  EXPECT_EQ(1, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("2", routeDb->thisNodeName);
+  EXPECT_EQ(1, routeDb->routes.size());
 
   //
   // Update adjacency database of node 2 by changing it's nexthops and verift
@@ -323,12 +347,15 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   routeDb = spfSolver.buildPaths("1");
-  EXPECT_EQ("1", routeDb.thisNodeName);
-  EXPECT_EQ(1, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("1", routeDb->thisNodeName);
+  EXPECT_EQ(1, routeDb->routes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  EXPECT_EQ("2", routeDb.thisNodeName);
-  EXPECT_EQ(1, routeDb.routes.size());
+  ASSERT(routeDb.hasValue());
+  EXPECT_EQ("2", routeDb->thisNodeName);
+  EXPECT_EQ(1, routeDb->routes.size());
+
 }
 
 //
@@ -368,10 +395,12 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   // route from 1 to 3
   auto routeDb = spfSolver.buildPaths("1");
   bool foundRouteV6 = false;
-  for (auto const& route : routeDb.routes) {
-    if (route.prefix == addr3) {
-      foundRouteV6 = true;
-      break;
+  if (routeDb.hasValue()) {
+    for (auto const& route : routeDb->routes) {
+      if (route.prefix == addr3) {
+        foundRouteV6 = true;
+        break;
+      }
     }
   }
 

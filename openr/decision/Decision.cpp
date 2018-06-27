@@ -423,8 +423,10 @@ class SpfSolver::SpfSolverImpl {
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
-  thrift::RouteDatabase buildPaths(const std::string& myNodeName);
-  thrift::RouteDatabase buildRouteDb(const std::string& myNodeName);
+  folly::Optional<thrift::RouteDatabase> buildPaths(
+      const std::string& myNodeName);
+  folly::Optional<thrift::RouteDatabase> buildRouteDb(
+      const std::string& myNodeName);
 
   std::unordered_map<std::string, int64_t> getCounters();
 
@@ -771,20 +773,14 @@ SpfSolver::SpfSolverImpl::runSpf(const std::string& thisNodeName) {
   return result;
 }
 
-thrift::RouteDatabase
+folly::Optional<thrift::RouteDatabase>
 SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
-  VLOG(4) << "SpfSolver::buildPaths for " << myNodeName;
-
-  thrift::RouteDatabase routeDb;
-  routeDb.thisNodeName = myNodeName;
   if (adjacencyDatabases_.count(myNodeName) == 0) {
-    LOG(ERROR) << "Couldn't find node-database for myself: " << myNodeName
-               << ", skipping buildPaths run";
-    return routeDb;
+    return folly::none;
   }
 
-  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
   auto const& startTime = std::chrono::steady_clock::now();
+  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
 
   spfResults_.clear();
   spfResults_[myNodeName] = runSpf(myNodeName);
@@ -810,25 +806,21 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
       "decision.build_paths_ms", deltaTime.count(), fbzmq::AVG);
 
   return buildRouteDb(myNodeName);
-
 } // buildPaths
 
-thrift::RouteDatabase
+folly::Optional<thrift::RouteDatabase>
 SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
-  VLOG(4) << "SpfSolver::buildRouteDb for " << myNodeName;
+  if (adjacencyDatabases_.count(myNodeName) == 0 ||
+      spfResults_.count(myNodeName) == 0) {
+    return folly::none;
+  }
+
+  const auto startTime = std::chrono::steady_clock::now();
   tData_.addStatValue("decision.route_build_requests", 1, fbzmq::COUNT);
+  const auto& shortestPathsFromHere = spfResults_.at(myNodeName);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
-  if (spfResults_.count(myNodeName) == 0) {
-    LOG(ERROR) << "Could not find adjacency Db for myself: " << myNodeName
-               << ", skipping multi-spf run";
-    return routeDb;
-  }
-  const auto& shortestPathsFromHere = spfResults_.at(myNodeName);
-
-  const auto startTime = std::chrono::steady_clock::now();
-
   for (const auto& kv : prefixes_) {
     const auto& prefix = kv.first;
     const auto& nodesWithPrefix = kv.second;
@@ -1037,12 +1029,12 @@ SpfSolver::getPrefixDatabases() {
   return impl_->getPrefixDatabases();
 }
 
-thrift::RouteDatabase
+folly::Optional<thrift::RouteDatabase>
 SpfSolver::buildPaths(const std::string& myNodeName) {
   return impl_->buildPaths(myNodeName);
 }
 
-thrift::RouteDatabase
+folly::Optional<thrift::RouteDatabase>
 SpfSolver::buildRouteDb(const std::string& myNodeName) {
   return impl_->buildRouteDb(myNodeName);
 }
@@ -1202,7 +1194,12 @@ Decision::processRequest() {
       nodeName = myNodeName_;
     }
 
-    reply.routeDb = spfSolver_->buildPaths(nodeName);
+    auto maybeRouteDb = spfSolver_->buildPaths(nodeName);
+    if (maybeRouteDb.hasValue()) {
+      reply.routeDb = std::move(maybeRouteDb.value());
+    } else {
+      reply.routeDb.thisNodeName = nodeName;
+    }
     break;
   }
 
@@ -1449,7 +1446,13 @@ Decision::processPendingAdjUpdates() {
 
   // run SPF once for all updates received
   LOG(INFO) << "Decision: computing new paths.";
-  auto routeDb = spfSolver_->buildPaths(myNodeName_);
+  auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
+  if (not maybeRouteDb.hasValue()) {
+    LOG(WARNING) << "AdjacencyDb updates incurred no route updates";
+    return;
+  }
+
+  auto& routeDb = maybeRouteDb.value();
   logRouteEvent("ROUTE_CALC", routeDb.routes.size());
   if (maybePerfEvents) {
     addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_SPF");
@@ -1470,7 +1473,13 @@ Decision::processPendingPrefixUpdates() {
 
   // update routeDb once for all updates received
   LOG(INFO) << "Decision: updating new routeDb.";
-  auto routeDb = spfSolver_->buildRouteDb(myNodeName_);
+  auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
+  if (not maybeRouteDb.hasValue()) {
+    LOG(WARNING) << "PrefixDb updates incurred no route updates";
+    return;
+  }
+
+  auto& routeDb = maybeRouteDb.value();
   logRouteEvent("ROUTE_CALC", routeDb.routes.size());
   if (maybePerfEvents) {
     addPerfEvent(*maybePerfEvents, myNodeName_, "ROUTE_UPDATE");
