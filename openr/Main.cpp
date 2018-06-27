@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <iostream>
 #include <stdexcept>
 #include <syslog.h>
 
@@ -352,7 +351,7 @@ main(int argc, char** argv) {
   syslog(LOG_NOTICE, "Starting OpenR daemon.");
 
   // Log build information
-  BuildInfo::log(std::cout);
+  BuildInfo::log(LOG(INFO));
 
   // Initialize all params
   folly::init(&argc, &argv);
