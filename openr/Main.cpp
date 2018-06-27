@@ -22,6 +22,7 @@
 #include <re2/re2.h>
 #include <re2/set.h>
 #include <sodium.h>
+#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
@@ -339,6 +340,28 @@ const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
 
 } // namespace
 
+void waitForFibService() {
+  auto waitForFibStart = std::chrono::steady_clock::now();
+
+  auto fibStatus = openr::thrift::ServiceStatus::DEAD;
+  folly::EventBase evb;
+  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket;
+  std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
+  while (openr::thrift::ServiceStatus::ALIVE != fibStatus) {
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    LOG(INFO) << "Waiting for FibService to come up...";
+    openr::Fib::createFibClient(evb, socket, client, FLAGS_fib_handler_port);
+    try {
+      fibStatus = client->sync_getStatus();
+    } catch (const std::exception& e) {}
+  }
+
+  auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - waitForFibStart).count();
+  LOG(INFO) << "FibService up. Waited for " << waitMs << " ms.";
+}
+
 int
 main(int argc, char** argv) {
   // Initialize syslog
@@ -508,6 +531,8 @@ main(int argc, char** argv) {
         });
     allThreads.emplace_back(std::move(systemThriftThread));
   }
+
+  waitForFibService();
 
   const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
   const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{"inproc://kvstore_cmd_local"};

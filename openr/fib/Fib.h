@@ -59,6 +59,17 @@ class Fib final : public fbzmq::ZmqEventLoop {
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
 
+  /**
+   * Utility function to create thrift client connection to SwitchAgent. Can
+   * throw exception if it fails to open transport to client on specified port.
+   * It will return immediately if healthy client connection already exists.
+   */
+  static void createFibClient(
+    folly::EventBase& evb,
+    std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+    std::unique_ptr<thrift::FibServiceAsyncClient>& client,
+    int32_t port);
+
  private:
   // No-copy
   Fib(const Fib&) = delete;
@@ -110,13 +121,6 @@ class Fib final : public fbzmq::ZmqEventLoop {
    * If so, push syncFib to FibService
    */
   void keepAliveCheck();
-
-  /**
-   * Utility function to create thrift client connection to SwitchAgent. Can
-   * throw exception if it fails to open transport to client on specified port.
-   * It will return immediately if healthy client connection already exists.
-   */
-  void createFibClient();
 
   // Submit internal state counters to monitor
   void submitCounters();

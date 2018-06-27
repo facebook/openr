@@ -85,7 +85,7 @@ Fib::Fib(
     try {
       // Build routes to be programmed.
       const auto& routes = createUnicastRoutes(routeDb_.routes);
-      createFibClient();
+      createFibClient(evb_, socket_, client_, thriftPort_);
       client_->sync_syncFib(kFibId_, routes);
     } catch (std::exception const& e) {
       tData_.addStatValue("fib.thrift.failure.syncFib", 1, fbzmq::COUNT);
@@ -378,7 +378,7 @@ Fib::updateRoutes(
     if (maybePerfEvents_) {
       addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_DEBOUNCE");
     }
-    createFibClient();
+    createFibClient(evb_, socket_, client_, thriftPort_);
     if (prefixesToRemove.size()) {
       client_->sync_deleteUnicastRoutes(kFibId_, prefixesToRemove);
     }
@@ -424,7 +424,7 @@ Fib::syncRouteDb() {
     if (maybePerfEvents_) {
       addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_DEBOUNCE");
     }
-    createFibClient();
+    createFibClient(evb_, socket_, client_, thriftPort_);
     tData_.addStatValue("fib.sync_fib_calls", 1, fbzmq::COUNT);
     client_->sync_syncFib(kFibId_, routes);
     dirtyRouteDb_ = false;
@@ -450,7 +450,7 @@ Fib::syncRouteDbDebounced() {
 
 void
 Fib::keepAliveCheck() {
-  createFibClient();
+  createFibClient(evb_, socket_, client_, thriftPort_);
   int64_t aliveSince = client_->sync_aliveSince();
   // Check if FIB has restarted or not
   if (aliveSince != latestAliveSince_) {
@@ -465,27 +465,30 @@ Fib::keepAliveCheck() {
 }
 
 void
-Fib::createFibClient() {
+Fib::createFibClient(folly::EventBase& evb,
+std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+std::unique_ptr<thrift::FibServiceAsyncClient>& client,
+int32_t port) {
   // Reset client if channel is not good
-  if (socket_ && (!socket_->good() || socket_->hangup())) {
-    client_.reset();
-    socket_.reset();
+  if (socket && (!socket->good() || socket->hangup())) {
+    client.reset();
+    socket.reset();
   }
 
   // Do not create new client if one exists already
-  if (client_) {
+  if (client) {
     return;
   }
 
   // Create socket to thrift server and set some connection parameters
-  socket_ = apache::thrift::async::TAsyncSocket::newSocket(
-      &evb_,
+  socket = apache::thrift::async::TAsyncSocket::newSocket(
+      &evb,
       Constants::kPlatformHost.toString(),
-      thriftPort_,
+      port,
       Constants::kPlatformConnTimeout.count());
 
   // Create channel and set timeout
-  auto channel = apache::thrift::HeaderClientChannel::newChannel(socket_);
+  auto channel = apache::thrift::HeaderClientChannel::newChannel(socket);
   channel->setTimeout(Constants::kPlatformProcTimeout.count());
 
   // Set BinaryProtocol and Framed client type for talkiing with thrift1 server
@@ -493,7 +496,7 @@ Fib::createFibClient() {
   channel->setClientType(THRIFT_FRAMED_DEPRECATED);
 
   // Reset client_
-  client_ = std::make_unique<thrift::FibServiceAsyncClient>(std::move(channel));
+  client = std::make_unique<thrift::FibServiceAsyncClient>(std::move(channel));
 }
 
 void
