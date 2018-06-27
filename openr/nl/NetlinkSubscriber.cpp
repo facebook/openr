@@ -241,6 +241,9 @@ NetlinkSubscriber::NetlinkSubscriber(
       << "Failed to add neighbor cache to manager. Error: " << nl_geterror(err);
   }
 
+  // Subscribe all events by default
+  subscribeAllEvents();
+
   // Add link cache to manager. Same caveats as for neighborEventFunc
   err = nl_cache_mngr_add(
       cacheManager_, kLinkObjectStr.data(), linkEventFunc, this, &linkCache_);
@@ -333,6 +336,32 @@ NetlinkSubscriber::getAllReachableNeighbors() {
   return std::move(future).get();
 }
 
+void NetlinkSubscriber::subscribeEvent(NetlinkEventType event) {
+  if (event >= MAX_EVENT_TYPE) {
+    return;
+  }
+  eventFlags_.set(event);
+}
+
+void NetlinkSubscriber::unsubscribeEvent(NetlinkEventType event) {
+  if (event >= MAX_EVENT_TYPE) {
+    return;
+  }
+  eventFlags_.reset(event);
+}
+
+void NetlinkSubscriber::subscribeAllEvents() {
+  for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
+    eventFlags_.set(i);
+  }
+}
+
+void NetlinkSubscriber::unsubscribeAllEvents() {
+  for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
+    eventFlags_.reset(i);
+  }
+}
+
 // Invoked from libnl data processing callback whenever there
 // is data on the socket
 void
@@ -353,7 +382,7 @@ NetlinkSubscriber::handleLinkEvent(
     }
 
     // Invoke handler
-    if (runHandler) {
+    if (runHandler && eventFlags_[LINK_EVENT]) {
       handler_->linkEventFunc(*linkEntry);
     }
   } catch (std::exception const& e) {
@@ -383,7 +412,7 @@ NetlinkSubscriber::handleNeighborEvent(
     }
 
     // Invoke handler
-    if (runHandler) {
+    if (runHandler && eventFlags_[NEIGH_EVENT]) {
       handler_->neighborEventFunc(*neighborEntry);
     }
   } catch (std::exception const& e) {
@@ -413,7 +442,7 @@ NetlinkSubscriber::handleAddrEvent(
     }
 
     // Invoke handler
-    if (runHandler) {
+    if (runHandler && eventFlags_[ADDR_EVENT]) {
       handler_->addrEventFunc(*addrEntry);
     }
   } catch (const std::exception& e) {

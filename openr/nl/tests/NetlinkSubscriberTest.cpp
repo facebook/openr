@@ -11,6 +11,8 @@
 
 #include <folly/Format.h>
 #include <folly/ScopeGuard.h>
+#include <folly/Subprocess.h>
+#include <folly/system/Shell.h>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -28,6 +30,7 @@ extern "C" {
 
 using namespace openr;
 using namespace fbzmq;
+using namespace folly::literals::shell_literals;
 
 namespace {
 const std::string kVethNameX("vethTestX");
@@ -838,6 +841,291 @@ TEST_F(NetlinkSubscriberFixture, AddrAddRemoveTest) {
   EXPECT_EQ(1, myHandler.links.at(kVethNameX).networks.size());
   EXPECT_EQ(1, myHandler.links.at(kVethNameY).networks.size());
   EXPECT_TRUE(allEventsReceived);
+}
+
+// Link event flag test
+// Subscribe/Unsubscribe link event
+TEST_F(NetlinkSubscriberFixture, LinkEventFlagTest) {
+  ZmqEventLoop zmqLoop;
+
+  // A timeout to stop the UT in case we never received expected events
+  // UT will mostly likely fail as our checks at the end will fail
+  auto setTimeout = [&] {
+    return zmqLoop.scheduleTimeout(kEventLoopTimeout, [&]() noexcept {
+      VLOG(3) << "Timeout waiting for events... ";
+      zmqLoop.stop();
+    });
+  };
+  int timeout = setTimeout();
+
+  bool allEventsReceived = false;
+
+  // We expect both links to be up after which we stop the zmq loop
+  // This func helps stop zmq loop when expected events are processed
+  MyNetlinkHandler myHandler(
+      [&]() noexcept {
+        VLOG(3) << "Received event from netlink";
+        if (zmqLoop.isRunning() && myHandler.links.count(kVethNameX) &&
+            myHandler.links.count(kVethNameY) &&
+            myHandler.links.at(kVethNameX).isUp &&
+            myHandler.links.at(kVethNameY).isUp &&
+            myHandler.addrEventCount == 0) {
+          VLOG(3) << "Expected events received. Stopping zmq event loop";
+          allEventsReceived = true;
+          zmqLoop.stop();
+        }
+      },
+      "vethTest" /* Filter on test links only */);
+
+  // Only enable link event
+  NetlinkSubscriber netlinkSubscriber(&zmqLoop, &myHandler);
+  netlinkSubscriber.unsubscribeAllEvents();
+  netlinkSubscriber.subscribeEvent(NetlinkSubscriber::LINK_EVENT);
+
+  // Run the zmq event loop in its own thread
+  // We will either timeout if expected events are not received
+  // or stop after we receive expected events
+  std::thread eventThread([&]() { zmqLoop.run(); });
+  zmqLoop.waitUntilRunning();
+  VLOG(3) << "Hello";
+
+  // Now emulate the links going up. This will generate link-local addresses
+  // We deliberately choose system calls here to completely
+  // decouple from netlink socket behavior being tested
+  {
+    auto cmd = "ip link set dev {} up"_shellify(kVethNameX.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+    cmd = "ip link set dev {} up"_shellify(kVethNameY.c_str());
+    folly::Subprocess proc1(std::move(cmd));
+    EXPECT_EQ(0, proc1.wait().exitStatus());
+  }
+
+
+  eventThread.join();
+  zmqLoop.waitUntilStopped();
+  zmqLoop.cancelTimeout(timeout);
+
+  EXPECT_TRUE(allEventsReceived);
+  EXPECT_LE(2, myHandler.linkEventCount);
+  EXPECT_EQ(0, myHandler.addrEventCount);
+  EXPECT_EQ(0, myHandler.neighborEventCount);
+
+  // Now bring the links down and disable link event handler
+  myHandler.linkEventCount = 0;
+  netlinkSubscriber.unsubscribeEvent(NetlinkSubscriber::LINK_EVENT);
+
+  timeout = setTimeout();
+  std::thread eventThread2([&]() { zmqLoop.run(); });
+  zmqLoop.waitUntilRunning();
+
+  // Shutdown links
+  {
+    auto cmd = "ip link set dev {} down"_shellify(kVethNameX.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+    cmd = "ip link set dev {} down"_shellify(kVethNameY.c_str());
+    folly::Subprocess proc1(std::move(cmd));
+    EXPECT_EQ(0, proc1.wait().exitStatus());
+  }
+
+  eventThread2.join();
+  zmqLoop.waitUntilStopped();
+  zmqLoop.cancelTimeout(timeout);
+
+  EXPECT_EQ(0, myHandler.linkEventCount);
+  EXPECT_EQ(0, myHandler.addrEventCount);
+  EXPECT_EQ(0, myHandler.neighborEventCount);
+}
+
+// Subscribe/Unsubscribe neighbor event
+TEST_F(NetlinkSubscriberFixture, NeighEventFlagTest) {
+  ZmqEventLoop zmqLoop;
+  auto neighborKey1 = std::make_pair(kVethNameX, kNextHopIp1);
+  auto neighborKey2 = std::make_pair(kVethNameY, kNextHopIp2);
+
+// A timeout to stop the UT in case we never received expected events
+  // UT will mostly likely fail as our checks at the end will fail
+  auto setTimeout = [&] {
+    return zmqLoop.scheduleTimeout(kEventLoopTimeout, [&]() noexcept {
+      VLOG(3) << "Timeout waiting for events... ";
+      zmqLoop.stop();
+    });
+  };
+  int timeout = setTimeout();
+
+  // A timeout to stop the UT in case we never received expected events
+  // UT will mostly likely fail as our checks at the end will fail
+  zmqLoop.scheduleTimeout(kEventLoopTimeout, [&]() noexcept {
+    VLOG(3) << "Timeout waiting for events... ";
+    zmqLoop.stop();
+  });
+
+  // We expect link and neighbor events to be delivered
+  // 4 neighbor event (create and delete)
+  // This func helps stop zmq loop when expected events are processed
+  MyNetlinkHandler myHandler(
+      [&]() noexcept {
+        VLOG(3) << "Received event from netlink";
+        if (zmqLoop.isRunning() &&
+            myHandler.neighbors.count(neighborKey1) == 1 &&
+            myHandler.neighborEventCount >= 1) {
+          VLOG(3) << "Expected events received. Stopping zmq event loop";
+          zmqLoop.stop();
+        }
+      },
+      "vethTest" /* Filter on test links only */);
+
+  NetlinkSubscriber netlinkSubscriber(&zmqLoop, &myHandler);
+  // Only enable neighbor event
+  netlinkSubscriber.unsubscribeAllEvents();
+  netlinkSubscriber.subscribeEvent(NetlinkSubscriber::NEIGH_EVENT);
+
+  // Run the zmq event loop in its own thread
+  // We will either timeout if expected events are not received
+  // or stop after we receive expected events
+  std::thread eventThread([&]() {
+    zmqLoop.run();
+    zmqLoop.waitUntilStopped();
+  });
+
+  zmqLoop.waitUntilRunning();
+
+  // Now add a neighbor entry in the system
+  addTestNeighborEntry(kVethNameX, kNextHopIp1, kLinkAddr1);
+
+  eventThread.join();
+  zmqLoop.waitUntilStopped();
+  zmqLoop.cancelTimeout(timeout);
+
+  // Now verify our events
+  // 1+ neighbor events
+  EXPECT_LE(1, myHandler.neighborEventCount);
+  EXPECT_EQ(0, myHandler.linkEventCount);
+  EXPECT_EQ(0, myHandler.addrEventCount);
+
+
+  // Unsubscribe neighbor event
+  netlinkSubscriber.unsubscribeEvent(NetlinkSubscriber::NEIGH_EVENT);
+  myHandler.neighborEventCount = 0;
+
+  // Now delete both the neighbor entries from the system
+  timeout = setTimeout();
+  std::thread eventThread2([&]() { zmqLoop.run(); });
+  zmqLoop.waitUntilRunning();
+
+  deleteTestNeighborEntry(kVethNameX, kNextHopIp1, kLinkAddr1);
+
+  eventThread2.join();
+  zmqLoop.waitUntilStopped();
+  zmqLoop.cancelTimeout(timeout);
+
+  EXPECT_LE(0, myHandler.neighborEventCount);
+  EXPECT_EQ(0, myHandler.linkEventCount);
+  EXPECT_EQ(0, myHandler.addrEventCount);
+}
+
+// Subscribe/Unsubscribe addr event
+TEST_F(NetlinkSubscriberFixture, AddrEventFlagTest) {
+  ZmqEventLoop zmqLoop;
+
+  // A timeout to stop the UT in case we never received expected events
+  // UT will mostly likely fail as our checks at the end will fail
+  auto setTimeout = [&] {
+    return zmqLoop.scheduleTimeout(kEventLoopTimeout, [&]() noexcept {
+      VLOG(3) << "Timeout waiting for events... ";
+      zmqLoop.stop();
+    });
+  };
+  int timeout = setTimeout();
+  bool allEventsReceived = false;
+
+  // We expect both links to be up after which we stop the zmq loop
+  // This func helps stop zmq loop when expected events are processed
+  MyNetlinkHandler myHandler(
+      [&]() noexcept {
+        VLOG(3) << "Received event from netlink";
+        if (zmqLoop.isRunning() &&
+            myHandler.addrEventCount == 4) {
+          VLOG(3) << "Expected events received. Stopping zmq event loop";
+          allEventsReceived = true;
+          zmqLoop.stop();
+        }
+      },
+      "vethTest" /* Filter on test links only */);
+
+  NetlinkSubscriber netlinkSubscriber(&zmqLoop, &myHandler);
+  // Only subscribe addr event
+  netlinkSubscriber.unsubscribeAllEvents();
+  netlinkSubscriber.subscribeEvent(NetlinkSubscriber::ADDR_EVENT);
+
+  // Run the zmq event loop in its own thread
+  // We will either timeout if expected events are not received
+  // or stop after we receive expected events
+  std::thread eventThread([&]() { zmqLoop.run(); });
+  zmqLoop.waitUntilRunning();
+
+  // Now emulate the links going up. This will generate link-local addresses.
+  // Also add manual IPs
+  // We deliberately choose system calls here to completely
+  // decouple from netlink socket behavior being tested
+  {
+    auto cmd = "ip link set dev {} up"_shellify(kVethNameX.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+
+    cmd = "ip link set dev {} up"_shellify(kVethNameY.c_str());
+    folly::Subprocess proc1(std::move(cmd));
+    EXPECT_EQ(0, proc1.wait().exitStatus());
+
+    cmd = "ip addr add {} dev {}"_shellify(
+      folly::IPAddress::networkToString(kIpAddr1).c_str(), kVethNameX.c_str());
+    folly::Subprocess proc2(std::move(cmd));
+    EXPECT_EQ(0, proc2.wait().exitStatus());
+
+    cmd = "ip addr add {} dev {}"_shellify(
+      folly::IPAddress::networkToString(kIpAddr2).c_str(), kVethNameY.c_str());
+    folly::Subprocess proc3(std::move(cmd));
+    EXPECT_EQ(0, proc3.wait().exitStatus());
+  }
+  eventThread.join();
+  zmqLoop.waitUntilStopped();
+  zmqLoop.cancelTimeout(timeout);
+
+  EXPECT_TRUE(allEventsReceived);
+  EXPECT_LE(4, myHandler.addrEventCount);
+  EXPECT_EQ(0, myHandler.neighborEventCount);
+  EXPECT_EQ(0, myHandler.linkEventCount);
+
+  // Now remove the addresses
+  myHandler.addrEventCount = 0;
+  // Unsubscribe addr event
+  netlinkSubscriber.unsubscribeEvent(NetlinkSubscriber::ADDR_EVENT);
+
+  timeout = setTimeout();
+  std::thread eventThread2([&]() { zmqLoop.run(); });
+  zmqLoop.waitUntilRunning();
+
+  {
+    auto cmd = "ip addr del {} dev {}"_shellify(
+                  folly::IPAddress::networkToString(kIpAddr1).c_str(),
+                  kVethNameX.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+
+    cmd = "ip addr del {} dev {}"_shellify(
+                  folly::IPAddress::networkToString(kIpAddr2).c_str(),
+                  kVethNameY.c_str());
+    folly::Subprocess proc1(std::move(cmd));
+    EXPECT_EQ(0, proc1.wait().exitStatus());
+  }
+  eventThread2.join();
+  zmqLoop.waitUntilStopped();
+  zmqLoop.cancelTimeout(timeout);
+
+  EXPECT_LE(0, myHandler.addrEventCount);
+  EXPECT_EQ(0, myHandler.neighborEventCount);
+  EXPECT_EQ(0, myHandler.linkEventCount);
 }
 
 int

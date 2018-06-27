@@ -14,6 +14,7 @@
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
+#include <folly/AtomicBitSet.h>
 
 extern "C" {
 #include <linux/if.h>
@@ -27,6 +28,7 @@ extern "C" {
 }
 
 namespace openr {
+
 
 // Link Object Helpers
 // map of links and their attributes
@@ -111,6 +113,14 @@ struct NeighborEntry {
 // only in the context of zmq event loop thread
 class NetlinkSubscriber final {
  public:
+
+  enum NetlinkEventType {
+    LINK_EVENT = 0,
+    NEIGH_EVENT,
+    ADDR_EVENT,
+    MAX_EVENT_TYPE // sentinel
+  };
+
   // A simple collection of handlers invoked on relevant events
   // This object is passed to NetlinkSubscriber
   // If caller is not interested in a handler, it can simply not override it
@@ -166,6 +176,20 @@ class NetlinkSubscriber final {
   // This will invoke subscriber methods even if eventLoop is not yet
   // running. Subscriber method will be invoked in calling thread context
   Neighbors getAllReachableNeighbors();
+
+  // Subscribe specific event
+  // No effect for invalid event types
+  void subscribeEvent(NetlinkEventType event);
+
+  // Unsubscribe specific event
+  // No effect for invalid event types
+  void unsubscribeEvent(NetlinkEventType event);
+
+  // Subscribe all supported events
+  void subscribeAllEvents();
+
+  // Unsubscribe all events
+  void unsubscribeAllEvents();
 
  private:
   NetlinkSubscriber(const NetlinkSubscriber&) = delete;
@@ -223,5 +247,8 @@ class NetlinkSubscriber final {
   // These are used in the get* methods
   Neighbors neighbors_{};
   Links links_{};
+
+  // Indicating to run which event type's handler
+  folly::AtomicBitSet<MAX_EVENT_TYPE> eventFlags_;
 };
 } // namespace openr
