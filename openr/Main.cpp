@@ -373,11 +373,11 @@ main(int argc, char** argv) {
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   syslog(LOG_NOTICE, "Starting OpenR daemon.");
 
-  // Log build information
-  BuildInfo::log(LOG(INFO));
-
   // Initialize all params
   folly::init(&argc, &argv);
+
+  // Log build information
+  BuildInfo::log(LOG(INFO));
 
   // start signal handler before any thread
   ZmqEventLoop mainEventLoop;

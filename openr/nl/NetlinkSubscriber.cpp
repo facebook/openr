@@ -273,6 +273,8 @@ NetlinkSubscriber::NetlinkSubscriber(
     if (lambdaErr < 0) {
       LOG(ERROR) << "Error processing data on netlink socket. Error: "
                  << nl_geterror(lambdaErr);
+    } else {
+      VLOG(2) << "Processed " << lambdaErr << " netlink messages.";
     }
   });
 }
@@ -374,8 +376,6 @@ NetlinkSubscriber::handleLinkEvent(
     if (!linkEntry) {
       return;
     }
-    VLOG(3) << "Link Event: " << linkEntry->ifName << "(" << linkEntry->ifIndex
-            << ") " << (linkEntry->isUp ? "up" : "down");
     auto& linkObj = links_[linkEntry->ifName];
     linkObj.isUp = linkEntry->isUp;
     linkObj.ifIndex = linkEntry->ifIndex;
@@ -385,6 +385,9 @@ NetlinkSubscriber::handleLinkEvent(
 
     // Invoke handler
     if (runHandler && eventFlags_[LINK_EVENT]) {
+      VLOG(2) << "Link Event - ifName: " << linkEntry->ifName
+              << ", ifIndex: " << linkEntry->ifIndex
+              << ", state: " << (linkEntry->isUp ? "up" : "down");
       handler_->linkEventFunc(*linkEntry);
     }
   } catch (std::exception const& e) {
@@ -401,10 +404,6 @@ NetlinkSubscriber::handleNeighborEvent(
     if (!neighborEntry) {
       return;
     }
-    VLOG(3) << "Neigbbor event: " << neighborEntry->ifName
-            << " dest: " << neighborEntry->destination
-            << " linkAddr: " << neighborEntry->linkAddress
-            << (neighborEntry->isReachable ? " Reachable" : " Unreachable");
     const auto neighborKey =
         std::make_pair(neighborEntry->ifName, neighborEntry->destination);
     if (neighborEntry->isReachable) {
@@ -415,6 +414,11 @@ NetlinkSubscriber::handleNeighborEvent(
 
     // Invoke handler
     if (runHandler && eventFlags_[NEIGH_EVENT]) {
+      VLOG(2) << "Neigbbor Event - ifName: " << neighborEntry->ifName
+              << ", macAddr: " << neighborEntry->destination
+              << ", address: " << neighborEntry->linkAddress
+              << ", state: "
+              << (neighborEntry->isReachable ? " Reachable" : " Unreachable");
       handler_->neighborEventFunc(*neighborEntry);
     }
   } catch (std::exception const& e) {
@@ -431,9 +435,6 @@ NetlinkSubscriber::handleAddrEvent(
     if (!addrEntry) {
       return;
     }
-    VLOG(3) << "Address event: " << addrEntry->ifName
-            << ", address: " << addrEntry->network.first.str()
-            << (addrEntry->isValid ? " Valid" : " Invalid");
     if (addrEntry->isValid) {
       links_[addrEntry->ifName].networks.insert(addrEntry->network);
     } else {
@@ -445,6 +446,9 @@ NetlinkSubscriber::handleAddrEvent(
 
     // Invoke handler
     if (runHandler && eventFlags_[ADDR_EVENT]) {
+      VLOG(2) << "Address Event - ifName: " << addrEntry->ifName
+              << ", address: " << addrEntry->network.first.str()
+              << ", state: " << (addrEntry->isValid ? " Added" : " Removed");
       handler_->addrEventFunc(*addrEntry);
     }
   } catch (const std::exception& e) {
