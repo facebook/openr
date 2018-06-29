@@ -67,6 +67,8 @@ IFACE_PREFIXES="terra,nic1,nic2"
 IFACE_REGEX_EXCLUDE=""
 IFACE_REGEX_INCLUDE=""
 KEY_PREFIX_FILTERS=""
+LINK_FLAP_INITIAL_BACKOFF_MS=1000
+LINK_FLAP_MAX_BACKOFF_MS=60000
 LOOPBACK_IFACE="lo"
 OVERRIDE_LOOPBACK_ADDR=false
 PREFIXES=""
@@ -155,6 +157,8 @@ exec ${OPENR} \
   --iface_regex_exclude=${IFACE_REGEX_EXCLUDE} \
   --iface_regex_include=${IFACE_REGEX_INCLUDE} \
   --key_prefix_filters=${KEY_PREFIX_FILTERS} \
+  --link_flap_initial_backoff_ms=${LINK_FLAP_INITIAL_BACKOFF_MS} \
+  --link_flap_max_backoff_ms=${LINK_FLAP_MAX_BACKOFF_MS} \
   --loopback_iface=${LOOPBACK_IFACE} \
   --node_name="${NODE_NAME}" \
   --override_loopback_addr=${OVERRIDE_LOOPBACK_ADDR} \
