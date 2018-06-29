@@ -26,6 +26,9 @@ const folly::StringPiece kNeighborObjectStr("route/neigh");
 const folly::StringPiece kAddrObjectStr("route/addr");
 // We currently only handle v6 neighbor entries.
 const uint8_t kFilterRouteFamily = AF_INET6;
+// Socket buffer size for netlink sockets we create
+// We use 2MB, default is 32KB
+const size_t kNlSockRecvBuf{2 * 1024 * 1024};
 
 // NUD_REACHABLE    a confirmed working cache entry
 // NUD_STALE        an expired cache entry
@@ -204,16 +207,10 @@ NetlinkSubscriber::NetlinkSubscriber(
   // Create netlink socket for only notification subscription
   subNlSock_ = nl_socket_alloc();
   CHECK(subNlSock_ != nullptr) << "Failed to create netlink socket.";
-  SCOPE_FAIL {
-    nl_socket_free(subNlSock_);
-  };
 
   // Create netlink socket for periodic refresh of our caches (link/addr/neigh)
   reqNlSock_ = nl_socket_alloc();
   CHECK(reqNlSock_ != nullptr) << "Failed to create netlink socket.";
-  SCOPE_FAIL {
-    nl_socket_free(reqNlSock_);
-  };
 
   int err = nl_connect(reqNlSock_, NETLINK_ROUTE);
   CHECK_EQ(err, 0) << "Failed to connect nl socket. Error " << nl_geterror(err);
@@ -223,9 +220,14 @@ NetlinkSubscriber::NetlinkSubscriber(
       subNlSock_, NETLINK_ROUTE, NL_AUTO_PROVIDE, &cacheManager_);
   CHECK_EQ(err, 0)
     << "Failed to create cache manager. Error: " << nl_geterror(err);
-  SCOPE_FAIL {
-    nl_cache_mngr_free(cacheManager_);
-  };
+
+  // Set high buffers on netlink socket (especially on sub socket) so that
+  // bulk events can also be received
+  err = nl_socket_set_buffer_size(reqNlSock_, kNlSockRecvBuf, 0);
+  CHECK_EQ(err, 0) << "Failed to set socket buffer on reqNlSock_";
+  err = nl_socket_set_buffer_size(subNlSock_, kNlSockRecvBuf, 0);
+  CHECK_EQ(err, 0) << "Failed to set socket buffer on subNlSock_";
+
 
   // Request a neighbor cache to be created and registered with cache manager
   // neighbor event handler is provided which has this object as opaque data so
