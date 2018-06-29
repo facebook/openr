@@ -117,7 +117,7 @@ class TechSupportCmd(object):
         kvstore.PrefixesCmd(self.cli_opts).run(['all'], False)
 
     def print_kvstore_keys(self):
-        kvstore.KeysCmd(self.cli_opts).run(False, '', True)
+        kvstore.KeysCmd(self.cli_opts).run(False, '', originator=None, ttl=True)
 
     def print_decision_validate(self):
         decision.DecisionValidateCmd(self.cli_opts).run()
