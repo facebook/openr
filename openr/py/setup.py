@@ -70,6 +70,8 @@ setup(
         'networkx',
         'ipaddress',
         'pyzmq',
+        'six',
         'tabulate',
+        'typing',
     ],
 )
