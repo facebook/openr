@@ -57,7 +57,15 @@ class HealthChecker final : public fbzmq::ZmqEventLoop {
 
  private:
   // prepare sockets and timeouts
-  void prepare(folly::Optional<int> maybeIpTos) noexcept;
+  void prepare() noexcept;
+
+  /**
+   * Helper functions to create/close ping socket on demand. Socket is created
+   * or updated whenever a loopback address associated with current node
+   * changes. All ping packets that originates use the local loopback address.
+   */
+  void createPingSocket() noexcept;
+  void closePingSocket() noexcept;
 
   // called periodically to send pings to nodesToPing_
   void pingNodes();
@@ -82,7 +90,7 @@ class HealthChecker final : public fbzmq::ZmqEventLoop {
 
   const std::string myNodeName_;
 
-  thrift::HealthCheckOption healthCheckOption_;
+  const thrift::HealthCheckOption healthCheckOption_;
 
   const uint32_t healthCheckPct_{0};
 
@@ -95,9 +103,11 @@ class HealthChecker final : public fbzmq::ZmqEventLoop {
   // the prefix we use to find the prefix db key announcements
   const std::string prefixDbMarker_;
 
+  const folly::Optional<int> maybeIpTos_;
+
   apache::thrift::CompactSerializer serializer_;
 
-  int pingSocketFd_{-1};
+  folly::Optional<int> pingSocketFd_;
 
   // Command Sockets to listen from requests
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> repSock_;

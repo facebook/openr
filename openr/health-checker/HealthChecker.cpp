@@ -40,6 +40,7 @@ HealthChecker::HealthChecker(
       pingInterval_(pingInterval),
       adjacencyDbMarker_(adjacencyDbMarker),
       prefixDbMarker_(prefixDbMarker),
+      maybeIpTos_(maybeIpTos),
       repSock_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
   // Sanity check on healthCheckPct validation
@@ -60,13 +61,11 @@ HealthChecker::HealthChecker(
   }
 
   // Initialize sockets in event loop
-  scheduleTimeout(
-      std::chrono::seconds(0),
-      [this, maybeIpTos]() noexcept { prepare(maybeIpTos); });
+  scheduleTimeout(std::chrono::seconds(0), [this]() noexcept { prepare(); });
 }
 
 void
-HealthChecker::prepare(folly::Optional<int> maybeIpTos) noexcept {
+HealthChecker::prepare() noexcept {
   // get a dump from kvStore and set callback to process all future publications
 
   const auto adjMap = kvStoreClient_->dumpAllWithPrefix(adjacencyDbMarker_);
@@ -86,48 +85,6 @@ HealthChecker::prepare(folly::Optional<int> maybeIpTos) noexcept {
       const std::string& key,
       folly::Optional<thrift::Value> thriftVal) noexcept {
         processKeyVal(key, thriftVal);
-  });
-
-  // prepare and bind udp ping socket
-  VLOG(2) << "Preparing and binding UDP socket to receive health check pings";
-  pingSocketFd_ = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (pingSocketFd_ < 0) {
-    LOG(FATAL) << "Failed creating UDP socket: " << folly::errnoStr(errno);
-  }
-  // make v6 only
-  const int v6Only = 1;
-  if (::setsockopt(
-          pingSocketFd_, IPPROTO_IPV6, IPV6_V6ONLY, &v6Only, sizeof(v6Only)) !=
-      0) {
-    LOG(FATAL) << "Failed making the socket v6 only: "
-               << folly::errnoStr(errno);
-  }
-  // Set ip-tos
-  if (maybeIpTos) {
-    const int ipTos = *maybeIpTos;
-    if (::setsockopt(
-            pingSocketFd_, IPPROTO_IPV6, IPV6_TCLASS,
-            &ipTos, sizeof(int)) != 0) {
-      LOG(FATAL) << "Failed setting ip-tos value on socket. Error: "
-                 << folly::errnoStr(errno);
-    }
-  }
-  const auto pingSockAddr =
-      folly::SocketAddress(folly::IPAddress("::"), udpPingPort_);
-  sockaddr_storage addrStorage;
-  pingSockAddr.getAddress(&addrStorage);
-  sockaddr* saddr = reinterpret_cast<sockaddr*>(&addrStorage);
-  if (::bind(pingSocketFd_, saddr, pingSockAddr.getActualSize()) != 0) {
-    LOG(FATAL) << "Failed binding the socket: " << folly::errnoStr(errno);
-  }
-  // Listen for incoming messages on ping FD
-  addSocketFd(pingSocketFd_, ZMQ_POLLIN, [this](int) noexcept {
-    try {
-      processMessage();
-    } catch (std::exception const& err) {
-      LOG(ERROR) << "HealthChecker: error processing health check ping "
-                 << folly::exceptionStr(err);
-    }
   });
 
   // Listen for request on health checker cmd socket
@@ -151,7 +108,106 @@ HealthChecker::prepare(folly::Optional<int> maybeIpTos) noexcept {
 }
 
 void
+HealthChecker::createPingSocket() noexcept {
+  // Socket fd exists
+  if (pingSocketFd_.hasValue()) {
+    return;
+  }
+
+  // Sanity checks on our loopback address
+  auto myNodeIt = nodeInfo_.find(myNodeName_);
+  if (myNodeIt == nodeInfo_.end() || myNodeIt->second.ipAddress.addr.empty()) {
+    LOG(WARNING) << "Can't create ping socket because of no known v6 address.";
+    return;
+  }
+  const auto myLoopbackAddr = toIPAddress(myNodeIt->second.ipAddress);
+  if (not myLoopbackAddr.isV6()) {
+    LOG(WARNING) << "Can't create ping socket because of no known v6 address.";
+    return;
+  }
+
+  // prepare and bind udp ping socket
+  VLOG(2) << "Preparing and binding UDP socket to receive health check pings";
+  int socketFd = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+  if (socketFd < 0) {
+    LOG(ERROR) << "Failed creating UDP socket: " << folly::errnoStr(errno);
+    return;
+  }
+
+  // make v6 only
+  const int v6Only = 1;
+  if (setsockopt(
+        socketFd, IPPROTO_IPV6, IPV6_V6ONLY,
+        &v6Only, sizeof(v6Only)) != 0) {
+    LOG(ERROR) << "Failed making the socket v6 only: "
+               << folly::errnoStr(errno);
+    close(socketFd);
+    return;
+  }
+
+  // Set ip-tos
+  if (maybeIpTos_) {
+    const int ipTos = *maybeIpTos_;
+    if (::setsockopt(
+            socketFd, IPPROTO_IPV6, IPV6_TCLASS,
+            &ipTos, sizeof(int)) != 0) {
+      LOG(ERROR) << "Failed setting ip-tos value on socket. Error: "
+                 << folly::errnoStr(errno);
+      close(socketFd);
+      return;
+    }
+  }
+
+  // Set source address
+  const auto pingSockAddr = folly::SocketAddress(myLoopbackAddr, udpPingPort_);
+  sockaddr_storage addrStorage;
+  pingSockAddr.getAddress(&addrStorage);
+  sockaddr* saddr = reinterpret_cast<sockaddr*>(&addrStorage);
+  if (::bind(socketFd, saddr, pingSockAddr.getActualSize()) != 0) {
+    LOG(ERROR) << "Failed binding the socket: " << folly::errnoStr(errno)
+               << " " << myLoopbackAddr.str();
+    close(socketFd);
+    return;
+  }
+
+  // Listen for incoming messages on ping FD
+  addSocketFd(socketFd, ZMQ_POLLIN, [this](int) noexcept {
+    try {
+      processMessage();
+    } catch (std::exception const& err) {
+      LOG(ERROR) << "HealthChecker: error processing health check ping "
+                 << folly::exceptionStr(err);
+    }
+  });
+
+  // Assign socketFd to state variable
+  LOG(INFO) << "Created new ping socket with fd " << socketFd
+            << " with source address " << myLoopbackAddr.str();
+  pingSocketFd_ = socketFd;
+}
+
+void
+HealthChecker::closePingSocket() noexcept {
+  if (not pingSocketFd_.hasValue()) {
+    return;
+  }
+
+  // Remove socket fd from polling list and close-fd
+  removeSocketFd(pingSocketFd_.value());
+  close(pingSocketFd_.value());
+
+  // Set state value for fd to none
+  LOG(INFO) << "Closed an existing socket fd " << pingSocketFd_.value();
+  pingSocketFd_ = folly::none;
+}
+
+void
 HealthChecker::pingNodes() {
+  if (not pingSocketFd_.hasValue()) {
+    LOG(ERROR) << "Ping socket has not initialized yet. Skipping ping nodes.";
+    return;
+  }
+
   for (const auto& node : nodesToPing_) {
     try {
       auto& info = nodeInfo_.at(node);
@@ -176,7 +232,8 @@ void
 HealthChecker::processKeyVal(
     std::string const& key, folly::Optional<thrift::Value> val) noexcept {
   std::string prefix, nodeName;
-  folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+  folly::split(
+      Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
 
   if (!val.hasValue()) {
     VLOG(4) << "HealthChecker: key expired:" << key << " node:" << nodeName;
@@ -228,47 +285,61 @@ HealthChecker::processAdjDb(thrift::AdjacencyDatabase const& adjDb) {
 
 void
 HealthChecker::processPrefixDb(thrift::PrefixDatabase const& prefixDb) {
-  // first check whether the ipAddress we are pinging is still in prefixDb
-  bool foundOldIpAddress = false;
+  // Find all valid node addresses from prefixEntries
+  std::vector<thrift::BinaryAddress> nodeAddrs;
   for (auto const& prefixEntry : prefixDb.prefixEntries) {
-    const auto addrStr =
-        folly::StringPiece(prefixEntry.prefix.prefixAddress.addr);
-    folly::IPAddress addr;
+    folly::CIDRNetwork prefix;
+    folly::Optional<folly::IPAddress> addr;
+
+    // Sanity check for prefix
     try {
-      addr = folly::IPAddress::fromBinary(addrStr);
+      prefix = toIPNetwork(prefixEntry.prefix);
     } catch (const std::exception& e) {
-      LOG(ERROR) << "Invalid IP: " << addrStr;
       continue;
     }
-    if (!addr.isV6()) {
+
+    // Ignore if not v6
+    if (not prefix.first.isV6()) {
       continue;
     }
-    if (nodeInfo_[prefixDb.thisNodeName].ipAddress == toBinaryAddress(addr)) {
+
+    // Use prefix if type LOOPBACK
+    if (prefixEntry.type == thrift::PrefixType::LOOPBACK &&
+        prefix.second == 128) {
+      addr = prefix.first;
+    }
+
+    // Use prefix if type PREFIX_ALLOCATOR
+    if (prefixEntry.type == thrift::PrefixType::PREFIX_ALLOCATOR) {
+      addr = createLoopbackAddr(prefix);
+    }
+
+    // Skip if no address
+    if (not addr.hasValue()) {
+      continue;
+    }
+
+    // Add valid address
+    nodeAddrs.emplace_back(toBinaryAddress(*addr));
+  }
+
+  // Check if address exists
+  bool foundOldIpAddress{false};
+  for (const auto& nodeAddr : nodeAddrs) {
+    if (nodeInfo_[prefixDb.thisNodeName].ipAddress == nodeAddr) {
       foundOldIpAddress = true;
       break;
     }
   }
-
-  if (foundOldIpAddress) {
+  if (nodeAddrs.empty() or foundOldIpAddress) {
     return;
   }
 
-  // If didn't find old ipAddress to ping, update with the first v6 address
-  // in the prefix DB
-  for (auto const& prefixEntry : prefixDb.prefixEntries) {
-    const auto addrStr =
-        folly::StringPiece(prefixEntry.prefix.prefixAddress.addr);
-    folly::IPAddress addr;
-    try {
-      addr = folly::IPAddress::fromBinary(addrStr);
-    } catch (const std::exception& e) {
-      LOG(ERROR) << "Invalid IP: " << addrStr;
-      continue;
-    }
-    if (addr.isV6()) {
-      nodeInfo_[prefixDb.thisNodeName].ipAddress = toBinaryAddress(addr);
-      return;
-    }
+  // Update node's IPAddress
+  nodeInfo_[prefixDb.thisNodeName].ipAddress = nodeAddrs.at(0);
+  if (prefixDb.thisNodeName == myNodeName_) {
+    closePingSocket();
+    createPingSocket();
   }
 }
 
@@ -329,7 +400,7 @@ HealthChecker::sendDatagram(
   auto addrLen = addr.getAddress(&addrStorage);
 
   auto bytesSent = ::sendto(
-      pingSocketFd_,
+      pingSocketFd_.value(),
       const_cast<char*>(packet.data()),
       packet.size(),
       0,
@@ -344,12 +415,14 @@ HealthChecker::sendDatagram(
 
 void
 HealthChecker::processMessage() {
+  CHECK(pingSocketFd_.hasValue());
+
   std::array<char, kMaxPingPacketSize> buf;
 
   sockaddr_storage addrStorage;
   socklen_t addrlen = sizeof(addrStorage);
   auto bytesRead = ::recvfrom(
-      pingSocketFd_,
+      pingSocketFd_.value(),
       buf.data(),
       kMaxPingPacketSize,
       0,
