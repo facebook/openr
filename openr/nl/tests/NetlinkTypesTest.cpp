@@ -152,6 +152,79 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   nl_addr_put(dstObj);
 }
 
+TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
+  folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
+  uint32_t flags = 0x01;
+  uint32_t priority = 3;
+  uint8_t tos = 2;
+  NetlinkNextHopBuilder nhBuilder;
+  auto nh1 = nhBuilder.setIfIndex(kIfIndex).build();
+  RouteBuilder builder;
+  auto route = builder.setDestination(dst)
+                      .setType(RTN_UNICAST)
+                      .setProtocolId(kProtocolId)
+                      .setScope(RT_SCOPE_UNIVERSE)
+                      .setRouteTable(RT_TABLE_MAIN)
+                      .setFlags(flags)
+                      .setPriority(priority)
+                      .setTos(tos)
+                      .addNextHop(nh1)
+                      .build();
+
+  struct rtnl_route* p = route.fromNetlinkRoute();
+  Route route1(std::move(route));
+  EXPECT_TRUE(nullptr == route.fromNetlinkRoute());
+  struct rtnl_route* p1 = route1.fromNetlinkRoute();
+  EXPECT_EQ(p, p1);
+  EXPECT_EQ(AF_INET6, route1.getFamily());
+  EXPECT_EQ(AF_INET6, rtnl_route_get_family(p1));
+  EXPECT_EQ(kProtocolId, route1.getProtocolId());
+  EXPECT_EQ(kProtocolId, rtnl_route_get_protocol(p1));
+  EXPECT_EQ(RT_SCOPE_UNIVERSE, route1.getScope());
+  EXPECT_EQ(RT_SCOPE_UNIVERSE, rtnl_route_get_scope(p1));
+  EXPECT_EQ(RT_TABLE_MAIN, route1.getRouteTable());
+  EXPECT_EQ(RT_TABLE_MAIN, rtnl_route_get_table(p1));
+  EXPECT_EQ(dst, route1.getDestination());
+  EXPECT_EQ(RTN_UNICAST, route1.getType());
+  EXPECT_EQ(RTN_UNICAST, rtnl_route_get_type(p1));
+  EXPECT_TRUE(route1.getFlags().hasValue());
+  EXPECT_EQ(flags, route1.getFlags().value());
+  EXPECT_EQ(flags, rtnl_route_get_flags(p1));
+  EXPECT_TRUE(route1.getPriority().hasValue());
+  EXPECT_EQ(priority, route1.getPriority().value());
+  EXPECT_EQ(priority, rtnl_route_get_priority(p1));
+  EXPECT_TRUE(route1.getTos().hasValue());
+  EXPECT_EQ(tos, route1.getTos().value());
+  EXPECT_EQ(tos, rtnl_route_get_tos(p1));
+  EXPECT_EQ(1, route1.getNextHops().size());
+
+  Route route2 = std::move(route1);
+  EXPECT_TRUE(nullptr == route1.fromNetlinkRoute());
+  struct rtnl_route* p2 = route2.fromNetlinkRoute();
+  EXPECT_EQ(p, p2);
+  EXPECT_EQ(AF_INET6, route2.getFamily());
+  EXPECT_EQ(AF_INET6, rtnl_route_get_family(p2));
+  EXPECT_EQ(kProtocolId, route2.getProtocolId());
+  EXPECT_EQ(kProtocolId, rtnl_route_get_protocol(p2));
+  EXPECT_EQ(RT_SCOPE_UNIVERSE, route2.getScope());
+  EXPECT_EQ(RT_SCOPE_UNIVERSE, rtnl_route_get_scope(p2));
+  EXPECT_EQ(RT_TABLE_MAIN, route2.getRouteTable());
+  EXPECT_EQ(RT_TABLE_MAIN, rtnl_route_get_table(p2));
+  EXPECT_EQ(dst, route2.getDestination());
+  EXPECT_EQ(RTN_UNICAST, route2.getType());
+  EXPECT_EQ(RTN_UNICAST, rtnl_route_get_type(p2));
+  EXPECT_TRUE(route2.getFlags().hasValue());
+  EXPECT_EQ(flags, route2.getFlags().value());
+  EXPECT_EQ(flags, rtnl_route_get_flags(p2));
+  EXPECT_TRUE(route2.getPriority().hasValue());
+  EXPECT_EQ(priority, route2.getPriority().value());
+  EXPECT_EQ(priority, rtnl_route_get_priority(p2));
+  EXPECT_TRUE(route2.getTos().hasValue());
+  EXPECT_EQ(tos, route2.getTos().value());
+  EXPECT_EQ(tos, rtnl_route_get_tos(p2));
+  EXPECT_EQ(1, route2.getNextHops().size());
+}
+
 TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
 
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
@@ -233,6 +306,96 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
   struct rtnl_route* object1 = route.fromNetlinkRoute();
   EXPECT_EQ(object, object1);
   nl_addr_put(dstObj);
+}
+
+TEST_F(NetlinkTypesFixture, IfAddressMoveConsTest) {
+  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+  uint32_t flags = 0x01;
+  IfAddressBuilder builder;
+  auto ifAddr = builder.setPrefix(prefix)
+                       .setIfIndex(kIfIndex)
+                       .setFlags(flags)
+                       .build();
+  struct rtnl_addr* p = ifAddr.fromIfAddress();
+  IfAddress ifAddr1(std::move(ifAddr));
+  EXPECT_TRUE(nullptr == ifAddr.fromIfAddress());
+  struct rtnl_addr* p1 = ifAddr1.fromIfAddress();
+  EXPECT_EQ(p, p1);
+  EXPECT_EQ(AF_INET6, rtnl_addr_get_family(p1));
+  EXPECT_EQ(AF_INET6, ifAddr1.getFamily());
+  EXPECT_EQ(prefix.second, rtnl_addr_get_prefixlen(p1));
+  EXPECT_EQ(prefix.second, ifAddr1.getPrefixLen());
+  EXPECT_EQ(RT_SCOPE_NOWHERE, rtnl_addr_get_scope(p1));
+  EXPECT_FALSE(ifAddr1.getScope().hasValue());
+  EXPECT_EQ(flags, rtnl_addr_get_flags(p1));
+  EXPECT_TRUE(ifAddr1.getFlags().hasValue());
+  EXPECT_EQ(flags, ifAddr1.getFlags().value());
+  EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(p1));
+  EXPECT_EQ(kIfIndex, ifAddr1.getIfIndex());
+
+  IfAddress ifAddr2 = std::move(ifAddr1);
+  struct rtnl_addr* p2 = ifAddr2.fromIfAddress();
+  EXPECT_TRUE(nullptr == ifAddr1.fromIfAddress());
+  EXPECT_EQ(p, p2);
+  EXPECT_EQ(AF_INET6, rtnl_addr_get_family(p2));
+  EXPECT_EQ(AF_INET6, ifAddr2.getFamily());
+  EXPECT_EQ(prefix.second, rtnl_addr_get_prefixlen(p2));
+  EXPECT_EQ(prefix.second, ifAddr2.getPrefixLen());
+  EXPECT_EQ(RT_SCOPE_NOWHERE, rtnl_addr_get_scope(p2));
+  EXPECT_FALSE(ifAddr2.getScope().hasValue());
+  EXPECT_EQ(flags, rtnl_addr_get_flags(p2));
+  EXPECT_TRUE(ifAddr2.getFlags().hasValue());
+  EXPECT_EQ(flags, ifAddr2.getFlags().value());
+  EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(p2));
+  EXPECT_EQ(kIfIndex, ifAddr2.getIfIndex());
+}
+
+TEST_F(NetlinkTypesFixture, IfAddressTest) {
+  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+  uint32_t flags = 0x01;
+  IfAddressBuilder builder;
+  auto ifAddr = builder.setPrefix(prefix)
+                       .setIfIndex(kIfIndex)
+                       .setFlags(flags)
+                       .build();
+  struct rtnl_addr* addr = ifAddr.fromIfAddress();
+  EXPECT_TRUE(addr != nullptr);
+  EXPECT_EQ(AF_INET6, rtnl_addr_get_family(addr));
+  EXPECT_EQ(AF_INET6, ifAddr.getFamily());
+  EXPECT_EQ(prefix.second, rtnl_addr_get_prefixlen(addr));
+  EXPECT_EQ(prefix.second, ifAddr.getPrefixLen());
+  EXPECT_EQ(RT_SCOPE_NOWHERE, rtnl_addr_get_scope(addr));
+  EXPECT_FALSE(ifAddr.getScope().hasValue());
+  EXPECT_EQ(flags, rtnl_addr_get_flags(addr));
+  EXPECT_TRUE(ifAddr.getFlags().hasValue());
+  EXPECT_EQ(flags, ifAddr.getFlags().value());
+  EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(addr));
+  EXPECT_EQ(kIfIndex, ifAddr.getIfIndex());
+  EXPECT_EQ(addr, ifAddr.fromIfAddress());
+
+  folly::CIDRNetwork prefixV4{folly::IPAddress("192.168.0.11"), 32};
+  builder.reset();
+  auto ifAddr1 = builder.setPrefix(prefixV4)
+                        .setFlags(flags)
+                        .setScope(rtnl_str2scope("site"))
+                        .setIfIndex(kIfIndex)
+                        .build();
+  addr = nullptr;
+  addr = ifAddr1.fromIfAddress();
+  EXPECT_TRUE(addr != nullptr);
+  EXPECT_EQ(AF_INET, rtnl_addr_get_family(addr));
+  EXPECT_EQ(AF_INET, ifAddr1.getFamily());
+  EXPECT_EQ(prefixV4.second, rtnl_addr_get_prefixlen(addr));
+  EXPECT_EQ(prefixV4.second, ifAddr1.getPrefixLen());
+  EXPECT_EQ(rtnl_str2scope("site"), rtnl_addr_get_scope(addr));
+  EXPECT_TRUE(ifAddr1.getScope().hasValue());
+  EXPECT_EQ(rtnl_str2scope("site"), ifAddr1.getScope().value());
+  EXPECT_EQ(flags, rtnl_addr_get_flags(addr));
+  EXPECT_TRUE(ifAddr1.getFlags().hasValue());
+  EXPECT_EQ(flags, ifAddr1.getFlags().value());
+  EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(addr));
+  EXPECT_EQ(kIfIndex, ifAddr1.getIfIndex());
+  EXPECT_EQ(addr, ifAddr1.fromIfAddress());
 }
 
 int main(int argc, char* argv[]) {

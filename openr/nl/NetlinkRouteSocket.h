@@ -8,6 +8,7 @@
 #pragma once
 
 #include "NetlinkException.h"
+#include "NetlinkTypes.h"
 
 #include <functional>
 #include <unordered_map>
@@ -126,6 +127,19 @@ class NetlinkRouteSocket final {
 
   // get number of all cached routes
   folly::Future<int64_t> getRouteCount() const;
+
+  // add Interface address e.g. ip addr add 192.168.1.1/24 dev em1
+  folly::Future<folly::Unit> addIfAddress(const IfAddress& ifAddr);
+
+  // delete Interface address e.g. ip addr del 192.168.1.1/24 dev em1
+  folly::Future<folly::Unit> delIfAddress(const IfAddress& ifAddr);
+
+  // get interface index from name
+  // 0 means no such interface
+  folly::Future<int> getIfIndex(const std::string& ifName);
+
+  // get interface name form index
+  folly::Future<std::string> getIfName(int ifIndex);
 
  private:
   NetlinkRouteSocket(const NetlinkRouteSocket&) = delete;

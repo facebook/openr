@@ -447,4 +447,174 @@ struct rtnl_nexthop* NetlinkNextHop::buildNextHopInternal(
   return nextHop;
 }
 
+/*================================IfAddress===================================*/
+
+IfAddress IfAddressBuilder::build() {
+  return IfAddress(*this);
+}
+
+IfAddressBuilder& IfAddressBuilder::setIfIndex(int ifIndex) {
+  ifIndex_ = ifIndex;
+  return *this;
+}
+
+int IfAddressBuilder::getIfIndex() const {
+  return ifIndex_;
+}
+
+IfAddressBuilder&
+IfAddressBuilder::setPrefix(const folly::CIDRNetwork& prefix) {
+  prefix_ = prefix;
+  return *this;
+}
+
+const folly::CIDRNetwork& IfAddressBuilder::getPrefix() const {
+  return prefix_;
+}
+
+IfAddressBuilder& IfAddressBuilder::setScope(uint8_t scope) {
+  scope_ = scope;
+  return *this;
+}
+
+folly::Optional<uint8_t> IfAddressBuilder::getScope() const {
+  return scope_;
+}
+
+IfAddressBuilder& IfAddressBuilder::setFlags(uint8_t flags) {
+  flags_ = flags;
+  return *this;
+}
+
+folly::Optional<uint8_t> IfAddressBuilder::getFlags() const {
+  return flags_;
+}
+
+IfAddress::IfAddress(IfAddressBuilder& builder)
+  : prefix_(builder.getPrefix()),
+    ifIndex_(builder.getIfIndex()),
+    scope_(builder.getScope()),
+    flags_(builder.getFlags()) {
+  init();
+}
+
+IfAddress::~IfAddress() {
+  if (ifAddr_) {
+    rtnl_addr_put(ifAddr_);
+    ifAddr_ = nullptr;
+  }
+}
+
+IfAddress::IfAddress(IfAddress&& other) noexcept
+  : prefix_(other.prefix_),
+    ifIndex_(other.ifIndex_),
+    scope_(other.scope_),
+    flags_(other.flags_) {
+  if (other.ifAddr_) {
+    ifAddr_ = other.ifAddr_;
+    other.ifAddr_ = nullptr;
+  }
+}
+
+IfAddress& IfAddress::operator=(IfAddress&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+
+  prefix_ = other.prefix_;
+  ifIndex_ = other.ifIndex_;
+  scope_ = other.scope_;
+  flags_ = other.flags_;
+  // release old object
+  if (ifAddr_) {
+    rtnl_addr_put(ifAddr_);
+    ifAddr_ = nullptr;
+  }
+  if (other.ifAddr_) {
+    ifAddr_ = other.ifAddr_;
+    other.ifAddr_ = nullptr;
+  }
+  return *this;
+}
+
+void IfAddressBuilder::reset() {
+  ifIndex_ = 0;
+  scope_.clear();
+  flags_.clear();
+}
+
+uint8_t IfAddress::getFamily() const {
+  return prefix_.first.family();
+}
+
+uint8_t IfAddress::getPrefixLen() const {
+  return prefix_.second;
+}
+
+int IfAddress::getIfIndex() const {
+  return ifIndex_;
+}
+
+const folly::CIDRNetwork& IfAddress::getPrefix() const {
+  return prefix_;
+}
+
+folly::Optional<uint8_t> IfAddress::getScope() const {
+  return scope_;
+}
+
+folly::Optional<uint8_t> IfAddress::getFlags() const {
+  return flags_;
+}
+
+// Will construct rtnl_addr object on the first time call, then will return
+// the same object pointer
+struct rtnl_addr* IfAddress::fromIfAddress() const {
+  return ifAddr_;
+}
+
+void IfAddress::init() {
+  if (ifAddr_) {
+    return;
+  }
+
+  // Get local addr
+  struct nl_addr* localAddr = nl_addr_build(
+      prefix_.first.family(),
+      (void*)(prefix_.first.bytes()),
+      prefix_.first.byteCount());
+  if (nullptr == localAddr) {
+    throw NetlinkException("Failed to create local addr");
+  }
+  nl_addr_set_prefixlen(localAddr, prefix_.second);
+
+  ifAddr_ = rtnl_addr_alloc();
+  if (nullptr == ifAddr_) {
+    throw NetlinkException("Failed to create rtnl_addr object");
+  }
+
+  rtnl_addr_set_ifindex(ifAddr_, ifIndex_);
+
+  // rtnl_addr_set_local will increase reference for localAddr
+  SCOPE_EXIT {
+    nl_addr_put(localAddr);
+  };
+
+  SCOPE_FAIL {
+    nl_addr_put(localAddr);
+    rtnl_addr_put(ifAddr_);
+    ifAddr_ = nullptr;
+  };
+  // Setting the local address will automatically set the address family
+  // and the prefix length to the correct values.
+  rtnl_addr_set_local(ifAddr_, localAddr);
+
+  if (scope_.hasValue()) {
+    rtnl_addr_set_scope(ifAddr_, scope_.value());
+  }
+  if (flags_.hasValue()) {
+    rtnl_addr_set_flags(ifAddr_, flags_.value());
+  }
+}
+
 } // namespace openr

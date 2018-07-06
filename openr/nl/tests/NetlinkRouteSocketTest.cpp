@@ -73,6 +73,9 @@ class NetlinkIfFixture : public testing::Test {
     rtnl_link_alloc_cache(socket_, AF_UNSPEC, &linkCache_);
     ASSERT(linkCache_);
 
+    rtnl_addr_alloc_cache(socket_, &addrCache_);
+    ASSERT(addrCache_);
+
     rtnl_link_set_name(link_, kVethNameX.c_str());
     rtnl_link_set_name(rtnl_link_veth_get_peer(link_), kVethNameY.c_str());
     int err = rtnl_link_add(socket_, link_, NLM_F_CREATE);
@@ -111,14 +114,26 @@ class NetlinkIfFixture : public testing::Test {
 
     rtnl_link_delete(socket_, link_);
     nl_cache_free(linkCache_);
+    nl_cache_free(addrCache_);
     nl_socket_free(socket_);
     rtnl_link_veth_release(link_);
   }
 
  protected:
+
+   void rtnlAddrCB(void(*cb)(struct nl_object*, void*), void* arg) {
+     nl_cache_refill(socket_, addrCache_);
+     nl_cache_foreach_filter(addrCache_, nullptr, cb, arg);
+   }
+
   std::unique_ptr<NetlinkRouteSocket> netlinkRouteSocket;
   fbzmq::ZmqEventLoop evl;
   std::thread eventThread;
+
+  struct rtnl_link* link_{nullptr};
+  struct nl_sock* socket_{nullptr};
+  struct nl_cache* linkCache_{nullptr};
+  struct nl_cache* addrCache_{nullptr};
 
  private:
   void
@@ -164,10 +179,11 @@ class NetlinkIfFixture : public testing::Test {
     error = ioctl(sockFd, SIOCSIFFLAGS, static_cast<void*>(&ifr));
     CHECK_EQ(0, error);
   }
+};
 
-  struct rtnl_link* link_{nullptr};
-  struct nl_sock* socket_{nullptr};
-  struct nl_cache* linkCache_{nullptr};
+struct AddressCallbackContext {
+  struct nl_cache* linkeCache{nullptr};
+  std::vector<IfAddress> results;
 };
 
 TEST_F(NetlinkIfFixture, EmptyRouteTest) {
@@ -1122,6 +1138,176 @@ TEST_F(NetlinkIfFixture, MultiProtocolSyncLinkRouteTest) {
   netlinkRouteSocket->syncLinkRoutes(kAqRouteProtoId1, routeDbV4).get();
   routes = netlinkRouteSocket->getCachedLinkRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(0, routes.size());
+}
+
+TEST_F(NetlinkIfFixture, IfNametoIfIndexTest) {
+  int ifIndex = netlinkRouteSocket->getIfIndex(kVethNameX).get();
+  std::array<char, IFNAMSIZ> ifNameBuf;
+  std::string ifName(
+    rtnl_link_i2name(linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+  EXPECT_EQ(rtnl_link_name2i(linkCache_, kVethNameX.c_str()), ifIndex);
+  EXPECT_EQ(ifName, netlinkRouteSocket->getIfName(ifIndex).get());
+
+  ifIndex = netlinkRouteSocket->getIfIndex(kVethNameY).get();
+  std::string ifName1(
+    rtnl_link_i2name(linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+  EXPECT_EQ(rtnl_link_name2i(linkCache_, kVethNameY.c_str()), ifIndex);
+  EXPECT_EQ(ifName1, netlinkRouteSocket->getIfName(ifIndex).get());
+}
+
+TEST_F(NetlinkIfFixture, AddDelIfAddressBaseTest) {
+  folly::CIDRNetwork prefixV6{folly::IPAddress("fc00:cafe:3::3"), 128};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkRouteSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr = builder.setPrefix(prefixV6)
+                       .setIfIndex(ifIndex)
+                       .build();
+
+  builder.reset();
+  int ifIndex1 = netlinkRouteSocket->getIfIndex(kVethNameY).get();
+  const folly::CIDRNetwork prefixV4{folly::IPAddress("192.168.0.11"), 32};
+  auto ifAddr1 = builder.setPrefix(prefixV4)
+                        .setIfIndex(ifIndex1)
+                        .build();
+
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
+    struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
+    if (!ipaddr) {
+      return;
+    }
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork prefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+    IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(prefix)
+                            .setIfIndex(rtnl_addr_get_ifindex(addr))
+                            .build();
+    ctx->results.emplace_back(std::move(tmpAddr));
+  };
+  AddressCallbackContext ctx;
+  rtnlAddrCB(addrFunc, &ctx);
+  size_t before = ctx.results.size();
+
+  // Add address
+  netlinkRouteSocket->addIfAddress(ifAddr).get();
+  netlinkRouteSocket->addIfAddress(ifAddr1).get();
+
+  ctx.results.clear();
+  rtnlAddrCB(addrFunc, &ctx);
+
+  // two more addresses
+  EXPECT_EQ(before + 2, ctx.results.size());
+
+  int cnt = 0;
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefixV6 && ret.getIfIndex() == ifIndex) {
+      cnt++;
+    } else if (ret.getPrefix() == prefixV4
+            && ret.getIfIndex() == ifIndex1) {
+      cnt++;
+    }
+  }
+  EXPECT_EQ(2, cnt);
+
+  // delete addresses
+  netlinkRouteSocket->delIfAddress(ifAddr).get();
+  netlinkRouteSocket->delIfAddress(ifAddr1).get();
+
+  ctx.results.clear();
+  rtnlAddrCB(addrFunc, &ctx);
+
+  EXPECT_EQ(before, ctx.results.size());
+
+  bool found = false;
+  for (const auto& ret : ctx.results) {
+    // No more added address
+    if ((ret.getPrefix() == prefixV6 && ret.getIfIndex() == ifIndex)
+    || (ret.getPrefix() == prefixV4 && ret.getIfIndex() == ifIndex1)) {
+       found = true;
+     }
+   }
+   EXPECT_FALSE(found);
+}
+
+TEST_F(NetlinkIfFixture, AddDelDuplicatedIfAddressTest) {
+  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkRouteSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr = builder.setPrefix(prefix)
+                       .setIfIndex(ifIndex)
+                       .build();
+  builder.reset();
+  auto ifAddr1 = builder.setPrefix(prefix)
+                        .setIfIndex(ifIndex)
+                        .build();
+
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
+    struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
+    if (!ipaddr) {
+      return;
+    }
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork tmpPrefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+    IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
+                            .setIfIndex(rtnl_addr_get_ifindex(addr))
+                            .build();
+    ctx->results.emplace_back(std::move(tmpAddr));
+  };
+  AddressCallbackContext ctx;
+  rtnlAddrCB(addrFunc, &ctx);
+  size_t before = ctx.results.size();
+
+  // Add new address
+  netlinkRouteSocket->addIfAddress(ifAddr).get();
+  // Add duplicated address
+  netlinkRouteSocket->addIfAddress(ifAddr1).get();
+
+  ctx.results.clear();
+  rtnlAddrCB(addrFunc, &ctx);
+
+  // one more addresse
+  EXPECT_EQ(before + 1, ctx.results.size());
+
+  int cnt = 0;
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefix&& ret.getIfIndex() == ifIndex) {
+      cnt++;
+    }
+  }
+  EXPECT_EQ(1, cnt);
+
+  // delete addresses
+  netlinkRouteSocket->delIfAddress(ifAddr).get();
+  // double delete
+  netlinkRouteSocket->delIfAddress(ifAddr1).get();
+
+  ctx.results.clear();
+  rtnlAddrCB(addrFunc, &ctx);
+
+  EXPECT_EQ(before, ctx.results.size());
+
+  bool found = false;
+  for (const auto& ret : ctx.results) {
+    // No more added address
+    if ((ret.getPrefix() == prefix && ret.getIfIndex() == ifIndex)) {
+       found = true;
+     }
+   }
+   EXPECT_FALSE(found);
 }
 
 int

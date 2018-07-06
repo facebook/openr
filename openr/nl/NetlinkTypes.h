@@ -16,6 +16,7 @@ extern "C" {
 #include <netlink/cache.h>
 #include <netlink/errno.h>
 #include <netlink/netlink.h>
+#include <netlink/route/addr.h>
 #include <netlink/route/link.h>
 #include <netlink/route/route.h>
 #include <netlink/socket.h>
@@ -131,23 +132,28 @@ class RouteBuilder {
 
   Route build() const;
 
+  // Required
   RouteBuilder& setDestination(const folly::CIDRNetwork& dst);
 
   const folly::CIDRNetwork& getDestination() const;
 
-  RouteBuilder& setType(uint8_t type);
+  // Required, default RTN_UNICAST
+  RouteBuilder& setType(uint8_t type = RTN_UNICAST);
 
   uint8_t getType() const;
 
-  RouteBuilder& setRouteTable(uint8_t routeTable);
+  // Required, default RT_TABLE_MAIN
+  RouteBuilder& setRouteTable(uint8_t routeTable = RT_TABLE_MAIN);
 
   uint8_t getRouteTable() const;
 
-  RouteBuilder& setProtocolId(uint8_t protocolId);
+  // Required, default 99
+  RouteBuilder& setProtocolId(uint8_t protocolId = DEFAULT_PROTOCOL_ID);
 
   uint8_t getProtocolId() const;
 
-  RouteBuilder& setScope(uint8_t scope);
+  // Required, default RT_SCOPE_UNIVERSE
+  RouteBuilder& setScope(uint8_t scope = RT_SCOPE_UNIVERSE);
 
   uint8_t getScope() const;
 
@@ -238,4 +244,83 @@ class Route final {
    folly::CIDRNetwork dst_;
    struct rtnl_route* route_{nullptr};
 };
+
+class IfAddress;
+class IfAddressBuilder final {
+ public:
+   IfAddressBuilder() {}
+   ~IfAddressBuilder() {}
+
+   IfAddress build();
+
+   // Required
+   IfAddressBuilder& setIfIndex(int ifIndex);
+
+   int getIfIndex() const;
+
+   // Required
+   IfAddressBuilder& setPrefix(const folly::CIDRNetwork& prefix);
+
+   const folly::CIDRNetwork& getPrefix() const;
+
+   IfAddressBuilder& setScope(uint8_t scope);
+
+   folly::Optional<uint8_t> getScope() const;
+
+   IfAddressBuilder& setFlags(uint8_t flags);
+
+   folly::Optional<uint8_t> getFlags() const;
+
+   // Reset builder, all the required fields need to be set again
+   void reset();
+
+ private:
+   folly::CIDRNetwork prefix_;
+   int ifIndex_;
+   folly::Optional<uint8_t> scope_;
+   folly::Optional<uint8_t> flags_;
+
+};
+
+// Wrapper class fo rtnl_addr
+class IfAddress final {
+ public:
+   explicit IfAddress(IfAddressBuilder& builder);
+   ~IfAddress();
+
+   IfAddress(IfAddress&&) noexcept;
+
+   IfAddress& operator=(IfAddress&&) noexcept;
+
+   uint8_t getFamily() const;
+
+   uint8_t getPrefixLen() const;
+
+   int getIfIndex() const;
+
+   const folly::CIDRNetwork& getPrefix() const;
+
+   folly::Optional<uint8_t> getScope() const;
+
+   folly::Optional<uint8_t> getFlags() const;
+
+   /**
+    * Will construct rtnl_addr object on the first time call, then will return
+    * the same object pointer. It will just return the pointer
+    * without increase the ref count. Caller shouldn't do rtnl_route_put
+    * without explicit increase of it's ref count
+    */
+   struct rtnl_addr* fromIfAddress() const;
+
+ private:
+
+   void init();
+
+   folly::CIDRNetwork prefix_;
+   int ifIndex_{0};
+   folly::Optional<uint8_t> scope_;
+   folly::Optional<uint8_t> flags_;
+   struct rtnl_addr* ifAddr_{nullptr};
+};
+
 } // namespace openr

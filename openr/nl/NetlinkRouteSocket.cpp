@@ -627,6 +627,79 @@ NetlinkRouteSocket::syncLinkRoutes(
   return future;
 }
 
+folly::Future<folly::Unit>
+NetlinkRouteSocket::addIfAddress(const IfAddress& ifAddr) {
+  VLOG(3) << "Add IfAddress...";
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  struct rtnl_addr* addr = ifAddr.fromIfAddress();
+
+  evl_->runImmediatelyOrInEventLoop(
+      [this, p = std::move(promise), addr]() mutable {
+        if (nullptr == addr) {
+          NetlinkException ex("Can't get rtnl_addr");
+          p.setException(std::move(ex));
+          return;
+        }
+        int err = rtnl_addr_add(socket_, addr, 0);
+        // NLE_EXIST means duplicated address
+        // we treat it as success for backward compatibility
+        if (NLE_SUCCESS == err || -NLE_EXIST == err) {
+          p.setValue();
+        } else {
+          NetlinkException ex(folly::sformat(
+            "Failed to add address Error: {}",
+            nl_geterror(err)));
+          p.setException(std::move(ex));
+        }
+      });
+  return future;
+}
+
+folly::Future<folly::Unit>
+NetlinkRouteSocket::delIfAddress(const IfAddress& ifAddr) {
+  VLOG(3) << "Delete IfAddress...";
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  struct rtnl_addr* addr = ifAddr.fromIfAddress();
+
+  evl_->runImmediatelyOrInEventLoop(
+      [this, p = std::move(promise), addr]() mutable {
+        if (nullptr == addr) {
+          NetlinkException ex("Can't get rtnl_addr");
+          p.setException(std::move(ex));
+          return;
+        }
+        int err = rtnl_addr_delete(socket_, addr, 0);
+        // NLE_NOADDR means delete invalid address
+        // we treat it as success for backward compatibility
+        if (NLE_SUCCESS == err || -NLE_NOADDR == err) {
+          p.setValue();
+        } else {
+          NetlinkException ex(folly::sformat(
+            "Failed to add address Error: {}",
+            nl_geterror(err)));
+          p.setException(std::move(ex));
+        }
+      });
+  return future;
+}
+
+folly::Future<int>
+NetlinkRouteSocket::getIfIndex(const std::string& ifName) {
+  return rtnl_link_name2i(linkCache_, ifName.c_str());
+}
+
+folly::Future<std::string>
+NetlinkRouteSocket::getIfName(int ifIndex) {
+  std::array<char, IFNAMSIZ> ifNameBuf;
+  std::string ifName(
+    rtnl_link_i2name(linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+  return ifName;
+}
+
 void
 NetlinkRouteSocket::doAddUpdateUnicastRoute(
   uint8_t protocolId,
