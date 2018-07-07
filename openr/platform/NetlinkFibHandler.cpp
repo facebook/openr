@@ -37,7 +37,7 @@ const std::chrono::seconds kRoutesHoldTimeout{30};
 // This is a *Weak* attempt to protect against some already
 // known protocols
 const uint8_t kMinRouteProtocolId = 17;
-const uint8_t kMaxRouteProtocolId = 245;
+const uint8_t kMaxRouteProtocolId = 253;
 
 // convert a routeDb into thrift exportable route spec
 std::vector<thrift::UnicastRoute>
