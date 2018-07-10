@@ -189,7 +189,7 @@ struct AddressCallbackContext {
 TEST_F(NetlinkIfFixture, EmptyRouteTest) {
   auto routes = netlinkRouteSocket->getCachedUnicastRoutes(kAqRouteProtoId);
   SCOPE_EXIT {
-    EXPECT_EQ(0, routes.get().size());
+    EXPECT_EQ(0, std::move(routes).get().size());
   };
 }
 
