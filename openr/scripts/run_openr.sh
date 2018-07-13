@@ -66,6 +66,7 @@ HEALTH_CHECKER_PING_INTERVAL_S=3
 IFACE_PREFIXES="terra,nic1,nic2"
 IFACE_REGEX_EXCLUDE=""
 IFACE_REGEX_INCLUDE=""
+IP_TOS=192
 KEY_PREFIX_FILTERS=""
 LINK_FLAP_INITIAL_BACKOFF_MS=1000
 LINK_FLAP_MAX_BACKOFF_MS=60000
@@ -156,6 +157,7 @@ exec ${OPENR} \
   --ifname_prefix=${IFACE_PREFIXES} \
   --iface_regex_exclude=${IFACE_REGEX_EXCLUDE} \
   --iface_regex_include=${IFACE_REGEX_INCLUDE} \
+  --ip_tos=${IP_TOS} \
   --key_prefix_filters=${KEY_PREFIX_FILTERS} \
   --link_flap_initial_backoff_ms=${LINK_FLAP_INITIAL_BACKOFF_MS} \
   --link_flap_max_backoff_ms=${LINK_FLAP_MAX_BACKOFF_MS} \

@@ -405,3 +405,14 @@ program FIB routes.
 ```
 ENABLE_SEGMENT_ROUTING=false
 ```
+
+#### IP_TOS
+
+Set type of service (TOS) value with which every control plane packet from
+Open/R will be marked with. This marking can be used to prioritize control plane
+traffic (as compared to data plane) so that congention in network doesn't affect
+operations of Open/R
+
+```
+IP_TOS=192
+```
