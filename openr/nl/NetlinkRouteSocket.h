@@ -129,10 +129,10 @@ class NetlinkRouteSocket final {
   folly::Future<int64_t> getRouteCount() const;
 
   // add Interface address e.g. ip addr add 192.168.1.1/24 dev em1
-  folly::Future<folly::Unit> addIfAddress(const IfAddress& ifAddr);
+  folly::Future<folly::Unit> addIfAddress(const fbnl::IfAddress& ifAddr);
 
   // delete Interface address e.g. ip addr del 192.168.1.1/24 dev em1
-  folly::Future<folly::Unit> delIfAddress(const IfAddress& ifAddr);
+  folly::Future<folly::Unit> delIfAddress(const fbnl::IfAddress& ifAddr);
 
   // get interface index from name
   // 0 means no such interface

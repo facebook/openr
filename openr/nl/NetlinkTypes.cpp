@@ -2,6 +2,7 @@
 #include "NetlinkException.h"
 
 namespace openr {
+namespace fbnl {
 
 Route RouteBuilder::build() const {
   return Route(*this);
@@ -80,12 +81,12 @@ folly::Optional<uint8_t> RouteBuilder::getTos() const {
   return tos_;
 }
 
-RouteBuilder& RouteBuilder::addNextHop(const NetlinkNextHop& nextHop) {
+RouteBuilder& RouteBuilder::addNextHop(const NextHop& nextHop) {
   nextHops_.push_back(nextHop);
   return *this;
 }
 
-const std::vector<NetlinkNextHop>&
+const std::vector<NextHop>&
 RouteBuilder::getNextHops() const {
   return nextHops_;
 }
@@ -187,7 +188,7 @@ folly::Optional<uint32_t> Route::getPriority() const {
   return priority_;
 }
 
-const std::vector<NetlinkNextHop>&
+const std::vector<NextHop>&
 Route::getNextHops() const {
   return nextHops_;
 }
@@ -280,64 +281,64 @@ struct nl_addr* Route::buildAddrObject(const folly::CIDRNetwork& addr) {
 
 /*=================================NextHop====================================*/
 
-NetlinkNextHop NetlinkNextHopBuilder::build() const {
-  return NetlinkNextHop(*this);
+NextHop NextHopBuilder::build() const {
+  return NextHop(*this);
 }
 
-void NetlinkNextHopBuilder::reset() {
+void NextHopBuilder::reset() {
   ifIndex_.clear();
   weight_.clear();
   gateway_.clear();
 }
 
-NetlinkNextHopBuilder& NetlinkNextHopBuilder::setIfIndex(int ifIndex) {
+NextHopBuilder& NextHopBuilder::setIfIndex(int ifIndex) {
   ifIndex_ = ifIndex;
   return *this;
 }
 
-NetlinkNextHopBuilder&
-NetlinkNextHopBuilder::setGateway(const folly::IPAddress& gateway) {
+NextHopBuilder&
+NextHopBuilder::setGateway(const folly::IPAddress& gateway) {
   gateway_ = gateway;
   return *this;
 }
 
-NetlinkNextHopBuilder& NetlinkNextHopBuilder::setWeight(uint8_t weight) {
+NextHopBuilder& NextHopBuilder::setWeight(uint8_t weight) {
   weight_ = weight;
   return *this;
 }
 
-folly::Optional<int> NetlinkNextHopBuilder::getIfIndex() const {
+folly::Optional<int> NextHopBuilder::getIfIndex() const {
   return ifIndex_;
 }
 
-folly::Optional<folly::IPAddress> NetlinkNextHopBuilder::getGateway() const {
+folly::Optional<folly::IPAddress> NextHopBuilder::getGateway() const {
   return gateway_;
 }
 
-folly::Optional<uint8_t> NetlinkNextHopBuilder::getWeight() const {
+folly::Optional<uint8_t> NextHopBuilder::getWeight() const {
   return weight_;
 }
 
-NetlinkNextHop::NetlinkNextHop(const NetlinkNextHopBuilder& builder)
+NextHop::NextHop(const NextHopBuilder& builder)
   : ifIndex_(builder.getIfIndex()),
     gateway_(builder.getGateway()),
     weight_(builder.getWeight()) {
   init();
 }
 
-folly::Optional<int> NetlinkNextHop::getIfIndex() const {
+folly::Optional<int> NextHop::getIfIndex() const {
   return ifIndex_;
 }
 
-folly::Optional<folly::IPAddress> NetlinkNextHop::getGateway() const {
+folly::Optional<folly::IPAddress> NextHop::getGateway() const {
   return gateway_;
 }
 
-folly::Optional<uint8_t> NetlinkNextHop::getWeight() const {
+folly::Optional<uint8_t> NextHop::getWeight() const {
   return weight_;
 }
 
-void NetlinkNextHop::init() {
+void NextHop::init() {
   if (nextHop_) {
     return;
   }
@@ -350,18 +351,18 @@ void NetlinkNextHop::init() {
   }
 }
 
-struct rtnl_nexthop* NetlinkNextHop::fromNetlinkNextHop() const {
+struct rtnl_nexthop* NextHop::fromNetlinkNextHop() const {
   return nextHop_;
 }
 
-void NetlinkNextHop::release() {
+void NextHop::release() {
   if (nextHop_) {
     rtnl_route_nh_free(nextHop_);
     nextHop_ = nullptr;
   }
 }
 
-struct rtnl_nexthop* NetlinkNextHop::buildNextHopInternal(const int ifIdx) {
+struct rtnl_nexthop* NextHop::buildNextHopInternal(const int ifIdx) {
   // We create a nextHop oject here but by adding it to route
   // the route object owns it
   // Once we destroy the route object, it will internally free this nextHop
@@ -376,7 +377,7 @@ struct rtnl_nexthop* NetlinkNextHop::buildNextHopInternal(const int ifIdx) {
   return nextHop;
 }
 
-struct rtnl_nexthop* NetlinkNextHop::buildNextHopInternal(
+struct rtnl_nexthop* NextHop::buildNextHopInternal(
   int ifIdx, const folly::IPAddress& gateway) {
   struct nl_addr* nlGateway = nl_addr_build(
       gateway.family(), (void*)(gateway.bytes()), gateway.byteCount());
@@ -412,7 +413,7 @@ struct rtnl_nexthop* NetlinkNextHop::buildNextHopInternal(
 }
 
 // build nexthop with nexthop = global ip addresses
-struct rtnl_nexthop* NetlinkNextHop::buildNextHopInternal(
+struct rtnl_nexthop* NextHop::buildNextHopInternal(
   const folly::IPAddress& gateway) {
   if (gateway.isLinkLocal()) {
     throw NetlinkException(folly::sformat(
@@ -617,4 +618,5 @@ void IfAddress::init() {
   }
 }
 
+} // namespace fbnl
 } // namespace openr

@@ -23,24 +23,25 @@ extern "C" {
 }
 
 namespace openr {
+namespace fbnl {
 
 const uint8_t DEFAULT_PROTOCOL_ID = 99;
 
-class NetlinkNextHop;
-class NetlinkNextHopBuilder final {
+class NextHop;
+class NextHopBuilder final {
  public:
-   NetlinkNextHopBuilder() {}
-   ~NetlinkNextHopBuilder() {}
+   NextHopBuilder() {}
+   ~NextHopBuilder() {}
 
-   NetlinkNextHop build() const;
+   NextHop build() const;
 
    void reset();
 
-   NetlinkNextHopBuilder& setIfIndex(int ifIndex);
+   NextHopBuilder& setIfIndex(int ifIndex);
 
-   NetlinkNextHopBuilder& setGateway(const folly::IPAddress& gateway);
+   NextHopBuilder& setGateway(const folly::IPAddress& gateway);
 
-   NetlinkNextHopBuilder& setWeight(uint8_t weight);
+   NextHopBuilder& setWeight(uint8_t weight);
 
    folly::Optional<int> getIfIndex() const;
 
@@ -55,9 +56,9 @@ class NetlinkNextHopBuilder final {
 };
 
 // Wrapper class for rtnl_nexthop
-class NetlinkNextHop final {
+class NextHop final {
  public:
-   explicit NetlinkNextHop(const NetlinkNextHopBuilder& builder);
+   explicit NextHop(const NextHopBuilder& builder);
 
    folly::Optional<int> getIfIndex() const;
 
@@ -169,9 +170,9 @@ class RouteBuilder {
 
   folly::Optional<uint8_t> getTos() const;
 
-  RouteBuilder& addNextHop(const NetlinkNextHop& nextHop);
+  RouteBuilder& addNextHop(const NextHop& nextHop);
 
-  const std::vector<NetlinkNextHop>&
+  const std::vector<NextHop>&
   getNextHops() const;
 
  private:
@@ -182,7 +183,7 @@ class RouteBuilder {
   folly::Optional<uint32_t> flags_;
   folly::Optional<uint32_t> priority_;
   folly::Optional<uint8_t> tos_;
-  std::vector<NetlinkNextHop> nextHops_;
+  std::vector<NextHop> nextHops_;
   folly::CIDRNetwork dst_;
 };
 
@@ -215,7 +216,7 @@ class Route final {
 
    folly::Optional<uint8_t> getTos() const;
 
-   const std::vector<NetlinkNextHop>&
+   const std::vector<NextHop>&
    getNextHops() const;
 
    /**
@@ -240,7 +241,7 @@ class Route final {
    folly::Optional<uint32_t> flags_;
    folly::Optional<uint32_t> priority_;
    folly::Optional<uint8_t> tos_;
-   std::vector<NetlinkNextHop> nextHops_;
+   std::vector<NextHop> nextHops_;
    folly::CIDRNetwork dst_;
    struct rtnl_route* route_{nullptr};
 };
@@ -323,4 +324,5 @@ class IfAddress final {
    struct rtnl_addr* ifAddr_{nullptr};
 };
 
+} // namespace fbnl
 } // namespace openr

@@ -628,7 +628,7 @@ NetlinkRouteSocket::syncLinkRoutes(
 }
 
 folly::Future<folly::Unit>
-NetlinkRouteSocket::addIfAddress(const IfAddress& ifAddr) {
+NetlinkRouteSocket::addIfAddress(const fbnl::IfAddress& ifAddr) {
   VLOG(3) << "Add IfAddress...";
 
   folly::Promise<folly::Unit> promise;
@@ -658,7 +658,7 @@ NetlinkRouteSocket::addIfAddress(const IfAddress& ifAddr) {
 }
 
 folly::Future<folly::Unit>
-NetlinkRouteSocket::delIfAddress(const IfAddress& ifAddr) {
+NetlinkRouteSocket::delIfAddress(const fbnl::IfAddress& ifAddr) {
   VLOG(3) << "Delete IfAddress...";
 
   folly::Promise<folly::Unit> promise;

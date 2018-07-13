@@ -16,6 +16,7 @@ extern "C" {
 }
 
 using namespace openr;
+using namespace openr::fbnl;
 
 const uint8_t kProtocolId = 99;
 const int kIfIndex = 1;
@@ -36,7 +37,7 @@ class NetlinkTypesFixture : public testing::Test {
 
 TEST_F(NetlinkTypesFixture, NextHopIfIndexConsTest) {
   // Create NextHop with ifindex
-  NetlinkNextHopBuilder builder;
+  NextHopBuilder builder;
   auto nh = builder.setIfIndex(kIfIndex).build();
   EXPECT_TRUE(nh.getIfIndex().hasValue());
   EXPECT_EQ(kIfIndex, nh.getIfIndex().value());
@@ -60,7 +61,7 @@ TEST_F(NetlinkTypesFixture, NextHopIfIndexConsTest) {
 TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
   // Create NextHop with gateway
   folly::IPAddress gateway("fc00:cafe:3::3");
-  NetlinkNextHopBuilder builder;
+  NextHopBuilder builder;
   auto nh = builder.setGateway(gateway)
                    .setWeight(kWeight)
                    .build();
@@ -84,7 +85,7 @@ TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
 
 TEST_F(NetlinkTypesFixture, NexthopGeneralConsTest) {
   folly::IPAddress gateway("fc00:cafe:3::3");
-  NetlinkNextHopBuilder builder;
+  NextHopBuilder builder;
   auto nh = builder.setGateway(gateway)
                    .setIfIndex(kIfIndex)
                    .setWeight(kWeight)
@@ -157,7 +158,7 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
   uint32_t flags = 0x01;
   uint32_t priority = 3;
   uint8_t tos = 2;
-  NetlinkNextHopBuilder nhBuilder;
+  NextHopBuilder nhBuilder;
   auto nh1 = nhBuilder.setIfIndex(kIfIndex).build();
   RouteBuilder builder;
   auto route = builder.setDestination(dst)
@@ -232,7 +233,7 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
   uint32_t priority = 3;
   uint8_t tos = 2;
   folly::IPAddress gateway("face:cafe:3::3");
-  NetlinkNextHopBuilder builder;
+  NextHopBuilder builder;
   auto nh1 = builder.setIfIndex(kIfIndex).build();
   builder.reset();
   auto nh2 = builder.setGateway(gateway).build();

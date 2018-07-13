@@ -36,6 +36,7 @@ extern "C" {
 #include <openr/nl/NetlinkRouteSocket.h>
 
 using namespace openr;
+using namespace openr::fbnl;
 
 using folly::gen::as;
 using folly::gen::from;
