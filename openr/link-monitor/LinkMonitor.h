@@ -500,10 +500,15 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   std::unordered_map<std::string, std::unordered_set<thrift::IpPrefix>>
       redistAddrs_;
 
-  // interface name to backoff mapping
-  // interface with backoff.canTryNow() will be considered as stable interface
-  std::unordered_map<std::string, ExponentialBackoff<std::chrono::milliseconds>>
-      linkBackoffs_;
+  // interface name to pair <last flap timestamp, backoff> mapping
+  // interface with backoff.canTryNow() will be
+  // backoff gets penalized if last timestamp interface was flapped is within
+  // penalty threshold
+  std::unordered_map<
+      std::string,
+      std::pair<folly::Optional<std::chrono::steady_clock::time_point>,
+                ExponentialBackoff<std::chrono::milliseconds>>>
+    linkBackoffs_;
 
   // Timer for scheduling when to send interfaceDb to spark
   std::unique_ptr<fbzmq::ZmqTimeout> sendIfDbTimer_;

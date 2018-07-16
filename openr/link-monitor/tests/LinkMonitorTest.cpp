@@ -1233,7 +1233,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       std::chrono::seconds(1),
       // link flap backoffs, set high backoffs for this test
       std::chrono::milliseconds(1500),
-      std::chrono::milliseconds(12000));
+      std::chrono::milliseconds(20000));
 
     linkMonitorThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "LinkMonitor thread starting";
@@ -1241,6 +1241,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       LOG(INFO) << "LinkMonitor thread finishing";
     });
     linkMonitor->waitUntilRunning();
+
+    // connect cmd socket to updated url
+    EXPECT_NO_THROW(
+        lmCmdSocket.connect(fbzmq::SocketUrl{"inproc://link-monitor-cmd-url2"})
+            .value());
 
 
   mockNlHandler->sendLinkEvent(
@@ -1284,6 +1289,12 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
   // at this point, both interface should have backoff=1.5sec
+  auto links = dumpLinks();
+  EXPECT_EQ(2, links.interfaceDetails.size());
+  for (const auto& ifName : ifNames) {
+    EXPECT_LE(
+        links.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 1500);
+  }
 
   /* sleep override */
   std::this_thread::sleep_for(flapInterval);
@@ -1297,7 +1308,6 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
-  // at this point, both interface should have backoff=3sec
 
   /* sleep override */
   std::this_thread::sleep_for(flapInterval);
@@ -1318,10 +1328,16 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
     // been cleared up yet
     recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
+    auto links1 = dumpLinks();
     EXPECT_EQ(2, res.size());
+    EXPECT_EQ(2, links1.interfaceDetails.size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
+      EXPECT_GE(
+          links1.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 3000);
+      EXPECT_LE(
+          links1.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 6000);
     }
   }
 
@@ -1359,14 +1375,17 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
+  // at this point, both interface should have backoff=12sec
 
   {
     // expect sparkIfDb to have two interfaces DOWN
     recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
+    auto links2 = dumpLinks();
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());
+    EXPECT_EQ(2, links2.interfaceDetails.size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
@@ -1374,6 +1393,52 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v4AddrsMinCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
+      EXPECT_GE(
+          links2.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 6000);
+      EXPECT_LE(
+          links2.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 12000);
+    }
+  }
+
+  /* sleep override */
+  std::this_thread::sleep_for(flapInterval);
+
+  // Bringing up the interfaces
+  VLOG(2) << "*** bring up 2 interfaces ***";
+  mockNlHandler->sendLinkEvent(
+      linkX /* link name */,
+      kTestVethIfIndex[0] /* ifIndex */,
+      true /* is up */);
+  mockNlHandler->sendLinkEvent(
+      linkY /* link name */,
+      kTestVethIfIndex[1] /* ifIndex */,
+      true /* is up */);
+  // at this point, both interface should have backoff back to init value
+
+  // make sure to pause long enough to clear out back off timers
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(30));
+
+  {
+    // expect sparkIfDb to have two interfaces UP
+    recvAndReplyIfUpdate();
+    auto res = collateIfUpdates(sparkIfDb);
+    auto links3 = dumpLinks();
+
+    // messages for 2 interfaces
+    EXPECT_EQ(2, res.size());
+    EXPECT_EQ(2, links3.interfaceDetails.size());
+    for (const auto& ifName : ifNames) {
+      EXPECT_EQ(1, res.at(ifName).isUpCount);
+      EXPECT_EQ(0, res.at(ifName).isDownCount);
+      EXPECT_EQ(0, res.at(ifName).v4AddrsMaxCount);
+      EXPECT_EQ(0, res.at(ifName).v4AddrsMinCount);
+      EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
+      EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
+      EXPECT_GE(
+          links3.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 0);
+      EXPECT_LE(
+          links3.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 1500);
     }
   }
 }

@@ -802,16 +802,24 @@ LinkMonitor::createInterfaceDatabase() {
         std::make_pair(ifState.first, ifState.second.getInterfaceInfo());
 
     if (linkBackoffs_.count(ifState.first)) {
-      auto& backoff = linkBackoffs_.at(ifState.first);
-      if (backoff.canTryNow()) {
-        // clear backoff on stable interface
-        backoff.reportSuccess();
-      } else {
-        // mark unstable interface as DOWN, don't let spark do
-        // neighbor discovery
-        pair.second.isUp = false;
-      }
-    }
+       auto& linkBackoff = linkBackoffs_.at(ifState.first);
+
+       if (linkBackoff.second.canTryNow()) {
+         // current timestamp
+         auto timestamp = std::chrono::steady_clock::now();
+         // clear backoff if interface keeps stable longer than threshold
+         if (linkBackoff.first.hasValue() &&
+             std::chrono::duration_cast<std::chrono::milliseconds>(
+                 timestamp - linkBackoff.first.value()) >= flapMaxBackoff_) {
+           linkBackoff.second.reportSuccess();
+         }
+         linkBackoff.first.assign(timestamp);
+       } else {
+         // mark unstable interface as DOWN, don't let spark do
+         // neighbor discovery
+         pair.second.isUp = false;
+       }
+     }
     return pair;
   };
 
@@ -873,7 +881,7 @@ LinkMonitor::sendIfDbCallback() {
   VLOG(3) << "<linkBackoffs_>:";
   for (const auto& kv : linkBackoffs_) {
     VLOG(3) << kv.first << ": "
-            << kv.second.getTimeRemainingUntilRetry().count() << " ms";
+            << kv.second.second.getTimeRemainingUntilRetry().count() << " ms";
   }
 
   // Send list of currently UP and STABLE interfaces
@@ -925,7 +933,7 @@ LinkMonitor::getRetryTimeOnUnstableInterfaces() {
   bool hasUnstableInterface = false;
   std::chrono::milliseconds minRemainMs = flapMaxBackoff_;
   for (const auto& kv : linkBackoffs_) {
-    const auto& backoff = kv.second;
+    const auto& backoff = kv.second.second;
     const auto& curRemainMs = backoff.getTimeRemainingUntilRetry();
     if (curRemainMs.count() > 0) {
       minRemainMs = std::min(minRemainMs, curRemainMs);
@@ -949,10 +957,12 @@ LinkMonitor::processLinkUpdatedEvent(const std::string& ifName, bool isUp) {
     // add backoff for newly added interface
     linkBackoffs_.emplace(
         ifName,
-        ExponentialBackoff<std::chrono::milliseconds>(
-            flapInitialBackoff_, flapMaxBackoff_));
+        std::make_pair(
+          std::chrono::steady_clock::time_point(),
+          ExponentialBackoff<std::chrono::milliseconds>(
+              flapInitialBackoff_, flapMaxBackoff_)));
   }
-  linkBackoffs_.at(ifName).reportError();
+  linkBackoffs_.at(ifName).second.reportError();
 
   auto retryTime = getRetryTimeOnUnstableInterfaces();
   sendIfDbTimer_->scheduleTimeout(retryTime);
@@ -1227,13 +1237,20 @@ LinkMonitor::processCommand() {
           apache::thrift::FRAGILE,
           intf.second.getInterfaceInfo(),
           config_.overloadedLinks.count(intf.first) > 0,
-          0 /* custom metric value */);
+          0 /* custom metric value */,
+          0 /* link flap back off time */);
 
       folly::Optional<int32_t> maybeMetric;
       if (config_.linkMetricOverrides.count(intf.first) > 0) {
         maybeMetric.assign(config_.linkMetricOverrides.at(intf.first));
       }
       ifDetails.metricOverride = maybeMetric;
+
+      if (linkBackoffs_.count(intf.first) != 0) {
+        ifDetails.linkFlapBackOffMs = linkBackoffs_.at(intf.first)
+                                          .second.getTimeRemainingUntilRetry()
+                                          .count();
+      }
 
       return std::make_pair(intf.first, ifDetails);
     };

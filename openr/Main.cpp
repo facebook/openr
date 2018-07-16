@@ -250,11 +250,11 @@ DEFINE_int32(
 DEFINE_int32(
     link_flap_initial_backoff_ms,
     1000,
-    "initial backoff to dampen link flaps (in seconds)");
+    "initial backoff to dampen link flaps (in milliseconds)");
 DEFINE_int32(
     link_flap_max_backoff_ms,
     60000,
-    "max backoff to dampen link flaps (in seconds)");
+    "max backoff to dampen link flaps (in millseconds)");
 DEFINE_bool(
     enable_perf_measurement,
     true,

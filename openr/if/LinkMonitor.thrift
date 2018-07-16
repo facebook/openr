@@ -85,6 +85,7 @@ struct InterfaceDetails {
   1: Lsdb.InterfaceInfo info
   2: bool isOverloaded
   3: optional i32 metricOverride
+  4: optional i64 linkFlapBackOffMs
 }
 
 struct DumpLinksReply {
