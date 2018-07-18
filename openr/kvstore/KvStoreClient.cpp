@@ -413,7 +413,8 @@ KvStoreClient::dumpAllWithPrefixMultiple(
     fbzmq::Context& context,
     const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
     const std::string& prefix,
-    folly::Optional<std::chrono::milliseconds> recvTimeout) {
+    folly::Optional<std::chrono::milliseconds> recvTimeout,
+    folly::Optional<int> maybeIpTos) {
   // this protects the shared map
   std::mutex m;
   // we'll aggregate responses into this map
@@ -441,6 +442,21 @@ KvStoreClient::dumpAllWithPrefixMultiple(
         }
         failureCount++;
         return;
+      }
+
+      if (maybeIpTos.hasValue()) {
+        const int ipTos = maybeIpTos.value();
+        const auto sockTos = sock.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
+        if (sockTos.hasError()) {
+          VLOG(4) << "Error setting ZMQ_TOS to " << ipTos << " "
+                  << sockTos.error();
+          {
+            folly::SharedMutex::WriteHolder lock(mutex);
+            unreachedUrls.push_back(url);
+          }
+          failureCount++;
+          return;
+        }
       }
 
       auto maybe = dumpImpl(sock, serializer, prefix, recvTimeout);

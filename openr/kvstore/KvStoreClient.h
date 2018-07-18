@@ -155,7 +155,8 @@ class KvStoreClient {
       fbzmq::Context& context,
       const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
       const std::string& prefix,
-      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none);
+      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none,
+      folly::Optional<int> maybeIpTos = folly::none);
 
   /**
    * Similar to the above but parses the values according to the ThrifType
@@ -183,7 +184,8 @@ class KvStoreClient {
       fbzmq::Context& context,
       const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
       const std::string& prefix,
-      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none);
+      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none,
+      folly::Optional<int> maybeIpTos = folly::none);
 
   /**
    * APIs to subscribe/unsubscribe to value change of a key in KvStore

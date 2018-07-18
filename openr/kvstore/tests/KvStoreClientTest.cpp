@@ -117,8 +117,8 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixAndParseMultiple_allStoresDown) {
   store2->stop();
   store3->stop();
 
-  auto maybe =
-      KvStoreClient::dumpAllWithPrefixMultiple(context, urls, "test_", 1000ms);
+  auto maybe = KvStoreClient::dumpAllWithPrefixMultiple(
+      context, urls, "test_", 1000ms, 192);
 
   ASSERT_FALSE(maybe.first.hasValue());
   // ALL url should be unreachable
