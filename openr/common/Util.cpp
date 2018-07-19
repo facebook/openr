@@ -291,7 +291,7 @@ getIfacePrefixes(std::string ifName, sa_family_t afNet) {
   for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
     if (::strcmp(ifName.c_str(), ifa->ifa_name) ||
         ifa->ifa_addr == nullptr ||
-        ifa->ifa_addr->sa_family != afNet) {
+        (afNet != AF_UNSPEC && ifa->ifa_addr->sa_family != afNet)) {
       continue;
     }
     if (ifa->ifa_addr->sa_family == AF_INET6) {

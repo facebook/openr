@@ -102,6 +102,28 @@ service SystemService {
 
   list<NeighborEntry> getAllNeighbors()
     throws (1: PlatformError error)
+
+  /**
+   * Backward compatibility has been considered
+   * As of now all the production platforms use our own SystemHandler
+   * New platforms need implement those interfaces based on the platform APIs
+   */
+  void addIfaceAddresses(
+    1: string iface,
+    2: list<IpPrefix.IpPrefix> addrs)
+    throws (1: PlatformError error)
+
+  void removeIfaceAddresses(
+    1: string iface,
+    2: list<IpPrefix.IpPrefix> addrs)
+    throws (1: PlatformError error)
+
+  void syncIfaceAddresses(
+    1: string iface,
+    2: i16 family,
+    3: i16 scope,
+    4: list<IpPrefix.IpPrefix> addrs)
+    throws (1: PlatformError error)
 }
 
 /**

@@ -469,8 +469,18 @@ IfAddressBuilder::setPrefix(const folly::CIDRNetwork& prefix) {
   return *this;
 }
 
-const folly::CIDRNetwork& IfAddressBuilder::getPrefix() const {
+folly::Optional<folly::CIDRNetwork> IfAddressBuilder::getPrefix() const {
   return prefix_;
+}
+
+IfAddressBuilder& IfAddressBuilder::setFamily(uint8_t family) {
+  family_ = family;
+  return *this;
+}
+
+// Family will be shadowed if prefix is set
+folly::Optional<uint8_t> IfAddressBuilder::getFamily() const {
+  return family_;
 }
 
 IfAddressBuilder& IfAddressBuilder::setScope(uint8_t scope) {
@@ -491,11 +501,20 @@ folly::Optional<uint8_t> IfAddressBuilder::getFlags() const {
   return flags_;
 }
 
+void IfAddressBuilder::reset() {
+  ifIndex_ = 0;
+  prefix_.clear();
+  scope_.clear();
+  flags_.clear();
+  family_.clear();
+}
+
 IfAddress::IfAddress(IfAddressBuilder& builder)
   : prefix_(builder.getPrefix()),
     ifIndex_(builder.getIfIndex()),
     scope_(builder.getScope()),
-    flags_(builder.getFlags()) {
+    flags_(builder.getFlags()),
+    family_(builder.getFamily()) {
   init();
 }
 
@@ -510,7 +529,8 @@ IfAddress::IfAddress(IfAddress&& other) noexcept
   : prefix_(other.prefix_),
     ifIndex_(other.ifIndex_),
     scope_(other.scope_),
-    flags_(other.flags_) {
+    flags_(other.flags_),
+    family_(other.family_) {
   if (other.ifAddr_) {
     ifAddr_ = other.ifAddr_;
     other.ifAddr_ = nullptr;
@@ -526,6 +546,7 @@ IfAddress& IfAddress::operator=(IfAddress&& other) noexcept {
   ifIndex_ = other.ifIndex_;
   scope_ = other.scope_;
   flags_ = other.flags_;
+  family_ = other.family_;
   // release old object
   if (ifAddr_) {
     rtnl_addr_put(ifAddr_);
@@ -538,25 +559,26 @@ IfAddress& IfAddress::operator=(IfAddress&& other) noexcept {
   return *this;
 }
 
-void IfAddressBuilder::reset() {
-  ifIndex_ = 0;
-  scope_.clear();
-  flags_.clear();
-}
-
 uint8_t IfAddress::getFamily() const {
-  return prefix_.first.family();
+  if (prefix_.hasValue()) {
+    return prefix_->first.family();
+  } else {
+    return family_.value();
+  }
 }
 
 uint8_t IfAddress::getPrefixLen() const {
-  return prefix_.second;
+  if (prefix_.hasValue()) {
+    return prefix_->second;
+  }
+  return 0;
 }
 
 int IfAddress::getIfIndex() const {
   return ifIndex_;
 }
 
-const folly::CIDRNetwork& IfAddress::getPrefix() const {
+folly::Optional<folly::CIDRNetwork> IfAddress::getPrefix() const {
   return prefix_;
 }
 
@@ -579,37 +601,46 @@ void IfAddress::init() {
     return;
   }
 
-  // Get local addr
-  struct nl_addr* localAddr = nl_addr_build(
-      prefix_.first.family(),
-      (void*)(prefix_.first.bytes()),
-      prefix_.first.byteCount());
-  if (nullptr == localAddr) {
-    throw NetlinkException("Failed to create local addr");
-  }
-  nl_addr_set_prefixlen(localAddr, prefix_.second);
-
   ifAddr_ = rtnl_addr_alloc();
   if (nullptr == ifAddr_) {
     throw NetlinkException("Failed to create rtnl_addr object");
   }
-
   rtnl_addr_set_ifindex(ifAddr_, ifIndex_);
+
+  // Get local addr
+  struct nl_addr* localAddr = nullptr;
+  if (prefix_.hasValue()) {
+    localAddr = nl_addr_build(
+      prefix_->first.family(),
+      (void*)(prefix_->first.bytes()),
+      prefix_->first.byteCount());
+    if (nullptr == localAddr) {
+      throw NetlinkException("Failed to create local addr");
+    }
+    nl_addr_set_prefixlen(localAddr, prefix_->second);
+    // Setting the local address will automatically set the address family
+    // and the prefix length to the correct values.
+    rtnl_addr_set_local(ifAddr_, localAddr);
+  }
 
   // rtnl_addr_set_local will increase reference for localAddr
   SCOPE_EXIT {
-    nl_addr_put(localAddr);
+    if (localAddr) {
+      nl_addr_put(localAddr);
+    }
   };
 
   SCOPE_FAIL {
-    nl_addr_put(localAddr);
+    if (localAddr) {
+      nl_addr_put(localAddr);
+    }
     rtnl_addr_put(ifAddr_);
     ifAddr_ = nullptr;
   };
-  // Setting the local address will automatically set the address family
-  // and the prefix length to the correct values.
-  rtnl_addr_set_local(ifAddr_, localAddr);
 
+  if (family_.hasValue()) {
+    rtnl_addr_set_family(ifAddr_, family_.value());
+  }
   if (scope_.hasValue()) {
     rtnl_addr_set_scope(ifAddr_, scope_.value());
   }

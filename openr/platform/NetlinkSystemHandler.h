@@ -23,6 +23,7 @@
 
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
+#include <openr/nl/NetlinkRouteSocket.h>
 #include <openr/platform/PlatformPublisher.h>
 
 namespace openr {
@@ -39,7 +40,8 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   NetlinkSystemHandler(
       fbzmq::Context& context,
       const PlatformPublisherUrl& platformPublisherUrl,
-      fbzmq::ZmqEventLoop* zmqEventLoop);
+      fbzmq::ZmqEventLoop* zmqEventLoop,
+      std::shared_ptr<NetlinkRouteSocket> netlinkRouteSocket);
 
   ~NetlinkSystemHandler() override;
 
@@ -52,12 +54,41 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   folly::Future<std::unique_ptr<std::vector<thrift::NeighborEntry>>>
   future_getAllNeighbors() override;
 
+  folly::Future<folly::Unit> future_addIfaceAddresses(
+    std::unique_ptr<std::string> iface,
+    std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+
+  folly::Future<folly::Unit> future_removeIfaceAddresses(
+    std::unique_ptr<std::string> iface,
+    std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+
+  folly::Future<folly::Unit> future_syncIfaceAddresses(
+    std::unique_ptr<std::string> iface,
+    int16_t family, int16_t scope,
+    std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+
  private:
   void initNetlinkSystemHandler();
+
+  void addIfaceAddrInternal(
+    const std::string& ifName,
+    const folly::CIDRNetwork& prefix);
+
+  void removeIfaceAddrInternal(
+    const std::string& ifName,
+    const folly::CIDRNetwork& prefix);
+
+  void syncIfaceAddrsInternal(
+    const std::string& ifName,
+    int16_t family,
+    int16_t scope,
+    const std::vector<::openr::thrift::IpPrefix>& addrs);
 
   // Implementation class for NetlinkSystemHandler internals
   class NLSubscriberImpl;
   std::unique_ptr<NLSubscriberImpl> nlImpl_;
+  fbzmq::ZmqEventLoop* mainEventLoop_;
+  std::shared_ptr<NetlinkRouteSocket> netlinkRouteSocket_;
 };
 
 } // namespace openr

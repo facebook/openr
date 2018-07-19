@@ -31,7 +31,9 @@ namespace openr {
  */
 class NetlinkFibHandler final : public thrift::FibServiceSvIf {
  public:
-  explicit NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop);
+  explicit NetlinkFibHandler(
+    fbzmq::ZmqEventLoop* zmqEventLoop,
+    std::shared_ptr<NetlinkRouteSocket> netlinkSocket);
   ~NetlinkFibHandler() override {}
 
   folly::Future<folly::Unit> future_addUnicastRoute(
@@ -72,7 +74,7 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
   getProtocol(folly::Promise<A>& promise, int16_t clientId);
 
   // Used to interact with Linux kernel routing table
-  std::unique_ptr<NetlinkRouteSocket> netlinkSocket_;
+  std::shared_ptr<NetlinkRouteSocket> netlinkSocket_;
 
   // Monotonic ID from periodicKeepAlive
   // Fib push whenever the ID has not incremented since last pull...

@@ -1196,9 +1196,8 @@ TEST_F(NetlinkIfFixture, AddDelIfAddressBaseTest) {
   size_t before = ctx.results.size();
 
   // Add address
-  netlinkRouteSocket->addIfAddress(ifAddr).get();
-  netlinkRouteSocket->addIfAddress(ifAddr1).get();
-
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr1)).get();
   ctx.results.clear();
   rtnlAddrCB(addrFunc, &ctx);
 
@@ -1217,8 +1216,15 @@ TEST_F(NetlinkIfFixture, AddDelIfAddressBaseTest) {
   EXPECT_EQ(2, cnt);
 
   // delete addresses
-  netlinkRouteSocket->delIfAddress(ifAddr).get();
-  netlinkRouteSocket->delIfAddress(ifAddr1).get();
+  ifAddr = builder.setPrefix(prefixV6)
+                  .setIfIndex(ifIndex)
+                  .build();
+  builder.reset();
+  ifAddr1 = builder.setPrefix(prefixV4)
+                   .setIfIndex(ifIndex1)
+                   .build();
+  netlinkRouteSocket->delIfAddress(std::move(ifAddr)).get();
+  netlinkRouteSocket->delIfAddress(std::move(ifAddr1)).get();
 
   ctx.results.clear();
   rtnlAddrCB(addrFunc, &ctx);
@@ -1273,9 +1279,9 @@ TEST_F(NetlinkIfFixture, AddDelDuplicatedIfAddressTest) {
   size_t before = ctx.results.size();
 
   // Add new address
-  netlinkRouteSocket->addIfAddress(ifAddr).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr)).get();
   // Add duplicated address
-  netlinkRouteSocket->addIfAddress(ifAddr1).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr1)).get();
 
   ctx.results.clear();
   rtnlAddrCB(addrFunc, &ctx);
@@ -1292,9 +1298,16 @@ TEST_F(NetlinkIfFixture, AddDelDuplicatedIfAddressTest) {
   EXPECT_EQ(1, cnt);
 
   // delete addresses
-  netlinkRouteSocket->delIfAddress(ifAddr).get();
+  ifAddr = builder.setPrefix(prefix)
+                  .setIfIndex(ifIndex)
+                  .build();
+  builder.reset();
+  ifAddr1 = builder.setPrefix(prefix)
+                   .setIfIndex(ifIndex)
+                   .build();
+  netlinkRouteSocket->delIfAddress(std::move(ifAddr)).get();
   // double delete
-  netlinkRouteSocket->delIfAddress(ifAddr1).get();
+  netlinkRouteSocket->delIfAddress(std::move(ifAddr1)).get();
 
   ctx.results.clear();
   rtnlAddrCB(addrFunc, &ctx);
@@ -1309,6 +1322,304 @@ TEST_F(NetlinkIfFixture, AddDelDuplicatedIfAddressTest) {
      }
    }
    EXPECT_FALSE(found);
+}
+
+TEST_F(NetlinkIfFixture, AddressSyncTest) {
+  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
+  folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};
+  folly::CIDRNetwork prefix4{folly::IPAddress("192.168.0.12"), 32};
+  folly::CIDRNetwork prefix5{folly::IPAddress("fc00:cafe:3::5"), 128};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkRouteSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr1 = builder.setPrefix(prefix1)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr2 = builder.setPrefix(prefix2)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr3 = builder.setPrefix(prefix3)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr4 = builder.setPrefix(prefix4)
+                        .setIfIndex(ifIndex)
+                        .build();
+
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
+    struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
+    if (!ipaddr) {
+      return;
+    }
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork tmpPrefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+    IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
+                            .setIfIndex(rtnl_addr_get_ifindex(addr))
+                            .setScope(rtnl_addr_get_scope(addr))
+                            .build();
+    ctx->results.emplace_back(std::move(tmpAddr));
+  };
+
+  // Add new address
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr1)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr2)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr3)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr4)).get();
+
+  AddressCallbackContext ctx;
+  rtnlAddrCB(addrFunc, &ctx);
+
+  bool p1 = false, p2 = false, p3 = false, p4 = false, p5 = false;
+  // Check contains all prefix
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefix1) {
+      p1 = true;
+    } else if (ret.getPrefix() == prefix2) {
+      p2 = true;
+    } else if (ret.getPrefix() == prefix3) {
+      p3 = true;
+    } else if (ret.getPrefix() == prefix4) {
+      p4 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_TRUE(p2);
+  EXPECT_TRUE(p3);
+  EXPECT_TRUE(p4);
+
+  std::vector<IfAddress> addrs;
+
+  // Different ifindex will throw exception
+  builder.reset();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex + 1).setPrefix(prefix1).build());
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix2).build());
+  EXPECT_THROW(netlinkRouteSocket->
+    syncIfAddress(ifIndex, std::move(addrs)).get(), std::exception);
+
+
+  // Prefix not set will throw exception
+  builder.reset();
+  addrs.clear();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  builder.reset();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).build());
+  EXPECT_THROW(netlinkRouteSocket->
+    syncIfAddress(ifIndex, std::move(addrs)).get(), std::exception);
+
+  // Sync v6 address
+  builder.reset();
+  addrs.clear();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  netlinkRouteSocket->syncIfAddress(ifIndex, std::move(addrs), AF_INET6).get();
+
+  // Sync v4 address
+  builder.reset();
+  addrs.clear();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix4).build());
+  netlinkRouteSocket->syncIfAddress(ifIndex, std::move(addrs), AF_INET).get();
+
+  ctx.results.clear();
+  rtnlAddrCB(addrFunc, &ctx);
+
+  // Check no prefix2, prefix3
+  p1 = false, p2 = false, p3 = false, p4 = false;
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefix1) {
+      p1 = true;
+    } else if (ret.getPrefix() == prefix2) {
+      p2 = true;
+    } else if (ret.getPrefix() == prefix3) {
+      p3 = true;
+    } else if (ret.getPrefix() == prefix4) {
+      p4 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_FALSE(p2);
+  EXPECT_FALSE(p3);
+  EXPECT_TRUE(p4);
+
+  builder.reset();
+  ifAddr2 = builder.setPrefix(prefix2)
+                   .setIfIndex(ifIndex)
+                   .build();
+  builder.reset();
+  auto ifAddr5 = builder.setPrefix(prefix5)
+                        .setIfIndex(ifIndex)
+                        .build();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr2)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr5)).get();
+
+  builder.reset();
+  addrs.clear();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix5).build());
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  netlinkRouteSocket->syncIfAddress(ifIndex, std::move(addrs), AF_INET6).get();
+
+  ctx.results.clear();
+  rtnlAddrCB(addrFunc, &ctx);
+
+  // Check no prefix2, prefix3
+  p1 = false, p2 = false, p3 = false, p4 = false;
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefix1) {
+      p1 = true;
+    } else if (ret.getPrefix() == prefix2) {
+      p2 = true;
+    } else if (ret.getPrefix() == prefix3) {
+      p3 = true;
+    } else if (ret.getPrefix() == prefix4) {
+      p4 = true;
+    } else if (ret.getPrefix() == prefix5) {
+      p5 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_FALSE(p2);
+  EXPECT_FALSE(p3);
+  EXPECT_TRUE(p4);
+  EXPECT_TRUE(p5);
+}
+
+TEST_F(NetlinkIfFixture, AddressFlushTest) {
+  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
+  folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};
+  folly::CIDRNetwork prefix4{folly::IPAddress("192.168.0.12"), 32};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkRouteSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr1 = builder.setPrefix(prefix1)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr2 = builder.setPrefix(prefix2)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr3 = builder.setPrefix(prefix3)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr4 = builder.setPrefix(prefix4)
+                        .setIfIndex(ifIndex)
+                        .build();
+
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
+    struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
+    if (!ipaddr) {
+      return;
+    }
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork tmpPrefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+    IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
+                            .setIfIndex(rtnl_addr_get_ifindex(addr))
+                            .setScope(rtnl_addr_get_scope(addr))
+                            .build();
+    ctx->results.emplace_back(std::move(tmpAddr));
+  };
+
+  // Add new address
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr1)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr2)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr3)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr4)).get();
+
+  AddressCallbackContext ctx;
+  rtnlAddrCB(addrFunc, &ctx);
+
+  int ipV4cnt = 0, ipV6cnt = 0;
+  for (const auto& ret : ctx.results) {
+    if (ret.getFamily() == AF_INET && ret.getIfIndex() == ifIndex) {
+      ipV4cnt++;
+    }
+    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex) {
+      ipV6cnt++;
+    }
+  }
+
+  // delete IPV6 address family
+  std::vector<IfAddress> addrs;
+  netlinkRouteSocket->
+    syncIfAddress(ifIndex, std::move(addrs), AF_INET6).get();
+  ctx.results.clear();
+  rtnlAddrCB(addrFunc, &ctx);
+
+  // No V6 address found
+  int actualV4cnt = 0, actualV6cnt = 0;
+  for (const auto& ret : ctx.results) {
+    // No more added address
+    if (ret.getFamily() == AF_INET && ret.getIfIndex() == ifIndex) {
+      actualV4cnt++;
+     }
+    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex
+      && ret.getScope().value() == RT_SCOPE_UNIVERSE) {
+      actualV6cnt++;
+     }
+  }
+  EXPECT_EQ(ipV4cnt, actualV4cnt);
+  EXPECT_EQ(0, actualV6cnt);
+
+  addrs.clear();
+  netlinkRouteSocket->syncIfAddress(ifIndex, std::move(addrs), AF_INET).get();
+
+  // No v4 address
+  ctx.results.clear();
+  rtnlAddrCB(addrFunc, &ctx);
+  actualV4cnt = 0, actualV6cnt = 0;
+  for (const auto& ret : ctx.results) {
+    // No more added address
+    if (ret.getFamily() == AF_INET && ret.getIfIndex() == ifIndex) {
+      actualV4cnt++;
+     }
+    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex
+     && ret.getScope().value() == RT_SCOPE_UNIVERSE) {
+      actualV6cnt++;
+     }
+  }
+  EXPECT_EQ(0, actualV4cnt);
+  EXPECT_EQ(0, actualV6cnt);
+}
+
+TEST_F(NetlinkIfFixture, DeconsTest) {
+  for (int i = 0; i < 100; ++i) {
+    auto evl_ = new fbzmq::ZmqEventLoop();
+    auto eventLoopThread_ = std::thread([evl = evl_]() {
+      evl->run();
+    });
+    evl_->waitUntilRunning();
+    std::unique_ptr<NetlinkRouteSocket> p =
+      std::make_unique<NetlinkRouteSocket>(evl_);
+      evl_->stop();
+      evl_->waitUntilStopped();
+      eventLoopThread_.join();
+    delete evl_;
+  }
 }
 
 int

@@ -59,6 +59,14 @@ using LinkRoutesDb = std::unordered_map<uint8_t, LinkRoutes>;
 
 class NetlinkRoute;
 
+struct FlushFuncCtx {
+  FlushFuncCtx(struct rtnl_addr* addr, struct nl_sock* sock);
+  bool hasError{false};
+  std::string errMsg;
+  struct rtnl_addr* ifAddr{nullptr};
+  struct nl_sock* socket;
+};
+
 // A simple wrapper over libnl API to add / delete routes
 // Users can on the fly request to manipulate routes with any protocol ids
 // We are stateless to the effect that we do not check against duplicate
@@ -129,10 +137,37 @@ class NetlinkRouteSocket final {
   folly::Future<int64_t> getRouteCount() const;
 
   // add Interface address e.g. ip addr add 192.168.1.1/24 dev em1
-  folly::Future<folly::Unit> addIfAddress(const fbnl::IfAddress& ifAddr);
+  folly::Future<folly::Unit> addIfAddress(fbnl::IfAddress ifAddr);
 
-  // delete Interface address e.g. ip addr del 192.168.1.1/24 dev em1
-  folly::Future<folly::Unit> delIfAddress(const fbnl::IfAddress& ifAddr);
+  /**
+   * Delete Interface address e.g.
+   * -- ip addr del 192.168.1.1/24 dev em1
+   *
+   * Prefix, ifIndex are mandatory, the specific address and
+   * interface tuple will be deleted
+   */
+  folly::Future<folly::Unit> delIfAddress(fbnl::IfAddress ifAddr);
+
+  /**
+   * Sync addrs on the specific iface, the iface in addrs should be the same,
+   * otherwiese the method will throw NetlinkException.
+   * There are two steps to sync address
+   * 1. Flush addresses according to ifIndex, family, scope
+   * 2. Add 'addrs' to the iface
+   * 'family' and 'scope' are used to give more specific sync conditions
+   * If not set, they are not considered when flush addresses.
+   * If set, only addresses with 'family' and 'scope' will be flushed
+   * before sync
+   *
+   * When addrs is empty, this will flush all the addresses on the iface
+   * according to family and scope. Leaving out family and scope will
+   * result in all addresses of the specified address interface tuple to
+   * be deleted.
+   */
+  folly::Future<folly::Unit> syncIfAddress(
+    int ifIndex,
+    std::vector<fbnl::IfAddress> addrs,
+    int family = AF_UNSPEC, int scope = RT_SCOPE_NOWHERE);
 
   // get interface index from name
   // 0 means no such interface
@@ -223,6 +258,15 @@ class NetlinkRouteSocket final {
       const std::string& ifName,
       uint8_t protocolId,
       uint8_t scope);
+
+  void doAddIfAddress(struct rtnl_addr* addr);
+
+  void doDeleteAddr(struct rtnl_addr* addr);
+
+  void doFlushAddr(struct rtnl_addr* addr);
+
+  void doSyncIfAddress(
+    int ifIdnex, std::vector<fbnl::IfAddress> addrs, int family, int scope);
 
   /**
    * This function will update link cache internally but will ensure that it is

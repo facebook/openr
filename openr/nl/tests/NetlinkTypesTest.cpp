@@ -1,4 +1,5 @@
 #include <openr/nl/NetlinkTypes.h>
+#include <openr/nl/NetlinkException.h>
 
 #include <gtest/gtest.h>
 #include <glog/logging.h>
@@ -397,6 +398,41 @@ TEST_F(NetlinkTypesFixture, IfAddressTest) {
   EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(addr));
   EXPECT_EQ(kIfIndex, ifAddr1.getIfIndex());
   EXPECT_EQ(addr, ifAddr1.fromIfAddress());
+}
+
+TEST_F(NetlinkTypesFixture, IfAddressMiscTest) {
+  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+  uint32_t flags = 0x01;
+  IfAddressBuilder builder;
+  auto ifAddr = builder.setPrefix(prefix)
+                       .setIfIndex(kIfIndex)
+                       .setFlags(flags)
+                       .setFamily(AF_INET6) // will be shadowed
+                       .build();
+  struct rtnl_addr* addr = ifAddr.fromIfAddress();
+  EXPECT_TRUE(addr != nullptr);
+  EXPECT_EQ(AF_INET6, rtnl_addr_get_family(addr));
+  EXPECT_EQ(AF_INET6, ifAddr.getFamily());
+  EXPECT_EQ(prefix.second, rtnl_addr_get_prefixlen(addr));
+  EXPECT_EQ(prefix.second, ifAddr.getPrefixLen());
+  EXPECT_EQ(RT_SCOPE_NOWHERE, rtnl_addr_get_scope(addr));
+  EXPECT_FALSE(ifAddr.getScope().hasValue());
+  EXPECT_EQ(flags, rtnl_addr_get_flags(addr));
+  EXPECT_TRUE(ifAddr.getFlags().hasValue());
+  EXPECT_EQ(flags, ifAddr.getFlags().value());
+  EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(addr));
+  EXPECT_EQ(kIfIndex, ifAddr.getIfIndex());
+  EXPECT_EQ(addr, ifAddr.fromIfAddress());
+
+  addr = nullptr;
+  builder.reset();
+  auto ifAddr1 = builder.setFamily(AF_INET).setIfIndex(kIfIndex).build();
+  struct rtnl_addr* addr1 = ifAddr1.fromIfAddress();
+  EXPECT_TRUE(addr1 != nullptr);
+  EXPECT_EQ(AF_INET, rtnl_addr_get_family(addr1));
+  EXPECT_EQ(AF_INET, ifAddr1.getFamily());
+  EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(addr1));
+  EXPECT_EQ(kIfIndex, ifAddr1.getIfIndex());
 }
 
 int main(int argc, char* argv[]) {

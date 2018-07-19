@@ -99,9 +99,10 @@ fromThriftNexthops(const std::vector<thrift::BinaryAddress>& thriftNexthops) {
 
 } // namespace
 
-NetlinkFibHandler::NetlinkFibHandler(fbzmq::ZmqEventLoop* zmqEventLoop)
-    : netlinkSocket_(
-          std::make_unique<NetlinkRouteSocket>(zmqEventLoop)),
+NetlinkFibHandler::NetlinkFibHandler(
+  fbzmq::ZmqEventLoop* zmqEventLoop,
+  std::shared_ptr<NetlinkRouteSocket> netlinkSocket)
+    : netlinkSocket_(netlinkSocket),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
                      .count()),

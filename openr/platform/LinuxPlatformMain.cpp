@@ -58,13 +58,25 @@ main(int argc, char** argv) {
 
   std::vector<std::thread> allThreads{};
 
+  auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  auto nlEvlThread = std::thread([&nlEventLoop]() {
+    folly::setThreadName("NetlinkEvl");
+    nlEventLoop->run();
+  });
+  nlEventLoop->waitUntilRunning();
+  allThreads.emplace_back(std::move(nlEvlThread));
+
+  auto nlRouteSocket =
+    std::make_shared<openr::NetlinkRouteSocket>(nlEventLoop.get());
+
   apache::thrift::ThriftServer systemServiceServer;
   if (FLAGS_enable_netlink_system_handler) {
     // start NetlinkSystem thread
     auto nlHandler = std::make_shared<NetlinkSystemHandler>(
         context,
         openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
-        &mainEventLoop);
+        &mainEventLoop,
+        nlRouteSocket);
 
     auto systemThriftThread =
       std::thread([nlHandler, &systemServiceServer]() noexcept {
@@ -84,7 +96,8 @@ main(int argc, char** argv) {
   apache::thrift::ThriftServer linuxFibAgentServer;
   if (FLAGS_enable_netlink_fib_handler) {
     // start FibService thread
-    auto fibHandler = std::make_shared<NetlinkFibHandler>(&mainEventLoop);
+    auto fibHandler =
+      std::make_shared<NetlinkFibHandler>(&mainEventLoop, nlRouteSocket);
 
     auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
       folly::setThreadName("FibService");
@@ -103,6 +116,9 @@ main(int argc, char** argv) {
   LOG(INFO) << "Main event loop starting...";
   mainEventLoop.run();
   LOG(INFO) << "Main event loop stopped.";
+
+  nlEventLoop->stop();
+  nlEventLoop->waitUntilStopped();
 
   if (FLAGS_enable_netlink_fib_handler) {
     linuxFibAgentServer.stop();

@@ -259,10 +259,14 @@ class IfAddressBuilder final {
 
    int getIfIndex() const;
 
-   // Required
    IfAddressBuilder& setPrefix(const folly::CIDRNetwork& prefix);
 
-   const folly::CIDRNetwork& getPrefix() const;
+   folly::Optional<folly::CIDRNetwork> getPrefix() const;
+
+   IfAddressBuilder& setFamily(uint8_t family);
+
+   // Family will be shadowed if prefix is set
+   folly::Optional<uint8_t> getFamily() const;
 
    IfAddressBuilder& setScope(uint8_t scope);
 
@@ -276,11 +280,11 @@ class IfAddressBuilder final {
    void reset();
 
  private:
-   folly::CIDRNetwork prefix_;
+   folly::Optional<folly::CIDRNetwork> prefix_;
    int ifIndex_;
    folly::Optional<uint8_t> scope_;
    folly::Optional<uint8_t> flags_;
-
+   folly::Optional<uint8_t> family_;
 };
 
 // Wrapper class fo rtnl_addr
@@ -293,13 +297,14 @@ class IfAddress final {
 
    IfAddress& operator=(IfAddress&&) noexcept;
 
+   // Family will be shadowed if prefix is set
    uint8_t getFamily() const;
 
    uint8_t getPrefixLen() const;
 
    int getIfIndex() const;
 
-   const folly::CIDRNetwork& getPrefix() const;
+   folly::Optional<folly::CIDRNetwork> getPrefix() const;
 
    folly::Optional<uint8_t> getScope() const;
 
@@ -317,10 +322,11 @@ class IfAddress final {
 
    void init();
 
-   folly::CIDRNetwork prefix_;
+   folly::Optional<folly::CIDRNetwork> prefix_;
    int ifIndex_{0};
    folly::Optional<uint8_t> scope_;
    folly::Optional<uint8_t> flags_;
+   folly::Optional<uint8_t> family_;
    struct rtnl_addr* ifAddr_{nullptr};
 };
 

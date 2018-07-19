@@ -36,9 +36,12 @@ namespace openr {
 NetlinkSystemHandler::NetlinkSystemHandler(
     fbzmq::Context& context,
     const PlatformPublisherUrl& platformPublisherUrl,
-    fbzmq::ZmqEventLoop* zmqEventLoop)
+    fbzmq::ZmqEventLoop* zmqEventLoop,
+    std::shared_ptr<NetlinkRouteSocket> netlinkRouteSocket)
     : nlImpl_(std::make_unique<NetlinkSystemHandler::NLSubscriberImpl>(
-          context, platformPublisherUrl, zmqEventLoop)) {
+          context, platformPublisherUrl, zmqEventLoop)),
+      mainEventLoop_(zmqEventLoop),
+      netlinkRouteSocket_(netlinkRouteSocket) {
   initNetlinkSystemHandler();
 }
 
@@ -289,4 +292,114 @@ NetlinkSystemHandler::future_getAllNeighbors() {
   auto future = nlImpl_->getAllNeighbors();
   return future;
 }
+
+folly::Future<folly::Unit> NetlinkSystemHandler::future_addIfaceAddresses(
+  std::unique_ptr<std::string> iface,
+  std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) {
+  VLOG(3) << "Add iface addresses";
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  mainEventLoop_->runInEventLoop(
+    [this, p = std::move(promise),
+     addresses = std::move(addrs),
+     ifName = std::move(iface)]() mutable {
+      try {
+        for (const auto& addr : *addresses) {
+          const auto& prefix = toIPNetwork(addr);
+          addIfaceAddrInternal(*ifName, prefix);
+        }
+        p.setValue();
+      } catch (const std::exception& ex) {
+        p.setException(ex);
+      }
+    });
+    return future;
+}
+
+void NetlinkSystemHandler::addIfaceAddrInternal(
+  const std::string& ifName,
+  const folly::CIDRNetwork& prefix) {
+  int ifIndex = netlinkRouteSocket_->getIfIndex(ifName).get();
+  fbnl::IfAddressBuilder builder;
+  auto addr = builder.setPrefix(prefix)
+                     .setIfIndex(ifIndex)
+                     .build();
+  netlinkRouteSocket_->addIfAddress(std::move(addr)).get();
+}
+
+folly::Future<folly::Unit> NetlinkSystemHandler::future_removeIfaceAddresses(
+  std::unique_ptr<std::string> iface,
+  std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) {
+  VLOG(3) << "Remove iface addresses";
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  mainEventLoop_->runInEventLoop(
+    [this, p = std::move(promise),
+     addresses = std::move(addrs),
+     ifName = std::move(iface)]() mutable {
+      try {
+        for (const auto& addr : *addresses) {
+          const auto& prefix = toIPNetwork(addr);
+          removeIfaceAddrInternal(*ifName, prefix);
+        }
+        p.setValue();
+      } catch (const std::exception& ex) {
+        p.setException(ex);
+      }
+    });
+    return future;
+}
+
+void NetlinkSystemHandler::removeIfaceAddrInternal(
+  const std::string& ifName,
+  const folly::CIDRNetwork& prefix) {
+  int ifIndex = netlinkRouteSocket_->getIfIndex(ifName).get();
+  fbnl::IfAddressBuilder builder;
+  builder.setPrefix(prefix)
+         .setIfIndex(ifIndex);
+  netlinkRouteSocket_->delIfAddress(builder.build()).get();
+}
+
+folly::Future<folly::Unit> NetlinkSystemHandler::future_syncIfaceAddresses(
+  std::unique_ptr<std::string> iface,
+  int16_t family, int16_t scope,
+  std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) {
+  VLOG(3) << "Sync iface addresses";
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  mainEventLoop_->runInEventLoop(
+    [this, p = std::move(promise),
+     ifName = std::move(iface),
+     addresses = std::move(addrs),
+     family, scope]() mutable {
+      try {
+        syncIfaceAddrsInternal(*ifName, family, scope, *addresses);
+        p.setValue();
+      } catch (const std::exception& ex) {
+        p.setException(ex);
+      }
+    });
+    return future;
+}
+
+void NetlinkSystemHandler::syncIfaceAddrsInternal(
+  const std::string& ifName,
+  int16_t family,
+  int16_t scope,
+  const std::vector<::openr::thrift::IpPrefix>& addrs) {
+  int ifIndex = netlinkRouteSocket_->getIfIndex(ifName).get();
+  std::vector<fbnl::IfAddress> ifAddrs;
+  fbnl::IfAddressBuilder builder;
+  for (const auto& addr : addrs) {
+    builder.setFamily(family)
+           .setIfIndex(ifIndex)
+           .setScope(scope)
+           .setPrefix(toIPNetwork(addr));
+    ifAddrs.emplace_back(builder.build());
+    builder.reset();
+  }
+  netlinkRouteSocket_->
+    syncIfAddress(ifIndex, std::move(ifAddrs), family, scope).get();
+}
+
 } // namespace openr
