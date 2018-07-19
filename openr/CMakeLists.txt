@@ -584,6 +584,12 @@ if(BUILD_TESTS)
   add_executable(prefix_allocator_test
     allocators/tests/PrefixAllocatorTest.cpp
   )
+
+  target_include_directories(prefix_allocator_test
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+
   add_executable(range_allocator_test
     allocators/tests/RangeAllocatorTest.cpp
   )

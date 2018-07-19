@@ -16,8 +16,13 @@
 #include <folly/String.h>
 #include <folly/futures/Future.h>
 
+#include <thrift/lib/cpp/protocol/TProtocolTypes.h>
+#include <thrift/lib/cpp/transport/THeader.h>
+#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
+#include <openr/nl/NetlinkTypes.h>
 
 using namespace fbzmq;
 using namespace std::chrono_literals;
@@ -46,7 +51,8 @@ PrefixAllocator::PrefixAllocator(
     const std::string& loopbackIfaceName,
     std::chrono::milliseconds syncInterval,
     PersistentStoreUrl const& configStoreUrl,
-    fbzmq::Context& zmqContext)
+    fbzmq::Context& zmqContext,
+    int32_t systemServicePort)
     : myNodeName_(myNodeName),
       allocPrefixMarker_(allocPrefixMarker),
       setLoopbackAddress_(setLoopbackAddress),
@@ -54,7 +60,8 @@ PrefixAllocator::PrefixAllocator(
       loopbackIfaceName_(loopbackIfaceName),
       syncInterval_(syncInterval),
       configStoreClient_(configStoreUrl, zmqContext),
-      zmqMonitorClient_(zmqContext, monitorSubmitUrl) {
+      zmqMonitorClient_(zmqContext, monitorSubmitUrl),
+      systemServicePort_(systemServicePort) {
 
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClient>(
@@ -118,7 +125,8 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
       LOG(WARNING)
         << "Clearing previous prefix allocation state on failure to load "
         << "allocation parameters from disk as well as KvStore.";
-      applyMyPrefix(folly::none);
+      applyState_ = std::make_pair(true, folly::none);
+      applyMyPrefix();
       return;
     }
   });
@@ -174,7 +182,8 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
       LOG(WARNING)
         << "Clearing previous prefix allocation state on failure to load "
         << "allocation parameters from disk as well as KvStore.";
-      applyMyPrefix(folly::none);
+      applyState_ = std::make_pair(true, folly::none);
+      applyMyPrefix();
       return;
     }
   });
@@ -266,7 +275,8 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
   // Withdraw my prefix if not found
   if (myPrefixIt == staticAlloc.nodePrefixes.end() and allocParams_) {
     VLOG(2) << "Lost prefix";
-    applyMyPrefix(folly::none);
+    applyState_ = std::make_pair(true, folly::none);
+    applyMyPrefix();
     allocParams_ = folly::none;
   }
 
@@ -497,16 +507,34 @@ PrefixAllocator::applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex) {
   }
 
   // Announce my prefix
-  applyMyPrefix(std::move(prefix));
+  applyState_ = std::make_pair(true, std::move(prefix));
+  applyMyPrefix();
 }
 
 void
-PrefixAllocator::applyMyPrefix(folly::Optional<folly::CIDRNetwork> prefix) {
-  if (prefix) {
-    updateMyPrefix(*prefix);
-  } else {
-    withdrawMyPrefix();
+PrefixAllocator::applyMyPrefix() {
+  if (!applyState_.first) {
+    return;
   }
+  try {
+    if (applyState_.second) {
+      updateMyPrefix(*applyState_.second);
+    } else {
+      withdrawMyPrefix();
+    }
+    applyState_.first = false;
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Apply prefix failed, will retry in "
+               << &Constants::kPrefixAllocatorRetryInterval << "ms address: "
+               << (applyState_.second.hasValue()
+                ? folly::IPAddress::networkToString(applyState_.second.value())
+                : "none");
+    scheduleTimeout(
+      Constants::kPrefixAllocatorRetryInterval,
+      [this]() noexcept {
+        applyMyPrefix();
+      });
+    }
 }
 
 void
@@ -518,14 +546,19 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
 
   // desired global prefixes
   auto loopbackPrefix = createLoopbackPrefix(prefix);
-  std::vector<folly::CIDRNetwork> newPrefixes{loopbackPrefix};
+  std::vector<folly::CIDRNetwork> toSyncPrefixes{loopbackPrefix};
 
   // get a list of prefixes need to be deleted
   std::vector<folly::CIDRNetwork> toDeletePrefixes;
   std::set_difference(oldPrefixes.begin(), oldPrefixes.end(),
-                      newPrefixes.begin(), newPrefixes.end(),
+                      toSyncPrefixes.begin(), toSyncPrefixes.end(),
                       std::inserter(toDeletePrefixes,
                         toDeletePrefixes.begin()));
+
+  if (toDeletePrefixes.empty() && !oldPrefixes.empty()) {
+    LOG(INFO) << "Prefix not changed";
+    return;
+  }
 
   // delete unwanted global prefixes
   for (const auto& toDeletePrefix : toDeletePrefixes) {
@@ -540,29 +573,24 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
     }
 
     if (!needToDelete or !setLoopbackAddress_) {
+      toSyncPrefixes.emplace_back(toDeletePrefix);
       continue;
     }
 
-    LOG(INFO) << "Delete address "
+    LOG(INFO) << "Will delete address "
               << folly::IPAddress::networkToString(toDeletePrefix)
               << " on interface " << loopbackIfaceName_;
-    if (!delIfaceAddr(loopbackIfaceName_, toDeletePrefix)) {
-      LOG(FATAL) << "Failed to delete address "
-                 << folly::IPAddress::networkToString(toDeletePrefix)
-                 << " on interface " << loopbackIfaceName_;
-    }
   }
 
   // Assign new address to loopback
   if (setLoopbackAddress_) {
-    LOG(INFO) << "Assigning address "
+    LOG(INFO) << "Assigning address: "
               << folly::IPAddress::networkToString(loopbackPrefix)
               << " on interface " << loopbackIfaceName_;
-    if (!addIfaceAddr(loopbackIfaceName_, loopbackPrefix)) {
-      LOG(FATAL) << "Failed to assign address "
-                 << folly::IPAddress::networkToString(loopbackPrefix)
-                 << " on interface " << loopbackIfaceName_;
-    }
+    toSyncPrefixes.emplace_back(loopbackPrefix);
+    syncIfaceAddrs(
+      loopbackIfaceName_, prefix.first.family(),
+      RT_SCOPE_UNIVERSE, toSyncPrefixes);
   }
 
   // replace previously allocated prefix with newly allocated one
@@ -584,10 +612,14 @@ PrefixAllocator::withdrawMyPrefix() {
   if (setLoopbackAddress_ and allocParams_.hasValue()) {
     LOG(INFO) << "Flushing existing addresses from interface "
               << loopbackIfaceName_;
-    if (!flushIfaceAddrs(
-            loopbackIfaceName_, allocParams_->first, overrideGlobalAddress_)) {
-      LOG(FATAL) << "Failed to flush addresses on interface "
-                 << loopbackIfaceName_;
+
+    if (overrideGlobalAddress_) {
+      std::vector<folly::CIDRNetwork> addrs;
+      const auto& prefix = allocParams_->first;
+      syncIfaceAddrs(
+        loopbackIfaceName_, prefix.first.family(), RT_SCOPE_UNIVERSE, addrs);
+    } else {
+      delIfaceAddr(loopbackIfaceName_, allocParams_->first);
     }
   }
 
@@ -596,6 +628,43 @@ PrefixAllocator::withdrawMyPrefix() {
       openr::thrift::PrefixType::PREFIX_ALLOCATOR);
   if (ret.hasError()) {
     LOG(ERROR) << "Withdrawing old prefix failed: " << ret.error();
+  }
+}
+
+void PrefixAllocator::syncIfaceAddrs(
+  const std::string& ifName,
+  int family,
+  int scope,
+  const std::vector<folly::CIDRNetwork>& prefixes) {
+  createThriftClient(evb_, socket_, client_, systemServicePort_);
+
+  std::vector<thrift::IpPrefix> addrs;
+  for (const auto& prefix : prefixes) {
+    addrs.emplace_back(toIpPrefix(prefix));
+  }
+  try {
+    client_->sync_syncIfaceAddresses(ifName, family, scope, addrs);
+  } catch (const std::exception& ex) {
+    client_.reset();
+    LOG(ERROR) << "PrefixAllocator sync IfAddress failed";
+    throw;
+  }
+}
+
+void PrefixAllocator::delIfaceAddr(
+  const std::string& ifName,
+  const folly::CIDRNetwork& prefix) {
+  createThriftClient(evb_, socket_, client_, systemServicePort_);
+
+  std::vector<thrift::IpPrefix> addrs;
+  addrs.emplace_back(toIpPrefix(prefix));
+  try {
+    client_->sync_removeIfaceAddresses(ifName, addrs);
+  } catch (const std::exception& ex) {
+    client_.reset();
+    LOG(ERROR) << "PrefixAllocator del IfAddress failed: "
+               << folly::IPAddress::networkToString(prefix);
+    throw;
   }
 }
 
@@ -643,6 +712,43 @@ PrefixAllocator::logPrefixEvent(
       apache::thrift::FRAGILE,
       Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
+}
+
+void
+PrefixAllocator::createThriftClient(
+  folly::EventBase& evb,
+  std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+  std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
+  int32_t port) {
+  // Reset client if channel is not good
+  if (socket && (!socket->good() || socket->hangup())) {
+    client.reset();
+    socket.reset();
+  }
+
+  // Do not create new client if one exists already
+  if (client) {
+    return;
+  }
+
+  // Create socket to thrift server and set some connection parameters
+  socket = apache::thrift::async::TAsyncSocket::newSocket(
+      &evb,
+      Constants::kPlatformHost.toString(),
+      port,
+      Constants::kPlatformConnTimeout.count());
+
+  // Create channel and set timeout
+  auto channel = apache::thrift::HeaderClientChannel::newChannel(socket);
+  channel->setTimeout(Constants::kPlatformProcTimeout.count());
+
+  // Set BinaryProtocol and Framed client type for talkiing with thrift1 server
+  channel->setProtocolId(apache::thrift::protocol::T_BINARY_PROTOCOL);
+  channel->setClientType(THRIFT_FRAMED_DEPRECATED);
+
+  // Reset client_
+  client =
+    std::make_unique<thrift::SystemServiceAsyncClient>(std::move(channel));
 }
 
 } // namespace openr

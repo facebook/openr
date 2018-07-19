@@ -90,29 +90,6 @@ folly::CIDRNetwork getNthPrefix(
     uint32_t prefixIndex);
 
 /**
- * API to flush addresses on the interface. It will flush all addresses
- * under given subnet.
- * If `flushAllGlobalAddrs` is set to true then all global addresses on the
- * interface will be flushed away (for same protocol version as of prefix).
- */
-bool flushIfaceAddrs(
-    const std::string& ifName,
-    const folly::CIDRNetwork& prefix,
-    bool flushAllGlobalAddrs);
-
-/**
- * API to add address on the interface.
- * @return boolean indicating status of addr-add operation
- */
-bool addIfaceAddr(const std::string& ifName, const folly::CIDRNetwork& prefix);
-
-/**
- * API to delete a address on the interface
- * @return boolean indicating status of addr-del operation
- */
-bool delIfaceAddr(const std::string& ifName, const folly::CIDRNetwork& prefix);
-
-/**
  * Helper function to create loopback address (/128) out of network block.
  * Ideally any address in the block is valid address, in this case we just set
  * last bit of network block to `1`

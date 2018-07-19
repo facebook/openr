@@ -157,6 +157,9 @@ class Constants {
   // Duration for throttling full sync of network state from kernel via netlink
   static constexpr std::chrono::seconds kNetlinkSyncThrottleInterval{3};
 
+  // PrefixAllocator address programming retry interval 100 ms
+  static constexpr std::chrono::milliseconds kPrefixAllocatorRetryInterval{100};
+
   // Protocol ID for OpenR routes
   static constexpr uint8_t kAqRouteProtoId{99};
 

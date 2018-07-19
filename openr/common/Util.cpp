@@ -139,60 +139,6 @@ splitByComma(const std::string& input) {
   return output;
 }
 
-bool
-flushIfaceAddrs(
-    const std::string& ifName,
-    const folly::CIDRNetwork& prefix,
-    bool flushAllGlobalAddrs) {
-  std::string command;
-  if (flushAllGlobalAddrs) {
-    command = folly::sformat(
-        "ip -{} addr flush dev {} scope global",
-        prefix.first.version(),
-        ifName);
-  } else {
-    command = folly::sformat(
-        "ip -{} addr flush dev {} to {}",
-        prefix.first.version(),
-        ifName,
-        folly::IPAddress::networkToString(prefix));
-  }
-  return executeShellCommand(command) == 0;
-}
-
-bool
-addIfaceAddr(const std::string& ifName, const folly::CIDRNetwork& prefix) {
-  auto command = folly::sformat(
-      "ip -{} addr add {} dev {}",
-      prefix.first.version(),
-      folly::IPAddress::networkToString(prefix),
-      ifName);
-
-  int rc = executeShellCommand(command);
-  if (rc == 0 or rc == 2) {
-    // if return code is 2, it means address already existed
-    // we treat it as success added
-    return true;
-  }
-  return false;
-}
-
-bool
-delIfaceAddr(const std::string& ifName, const folly::CIDRNetwork& prefix) {
-  auto command = folly::sformat(
-      "ip -{} addr del {} dev {}",
-      prefix.first.version(),
-      folly::IPAddress::networkToString(prefix),
-      ifName);
-  int rc = executeShellCommand(command);
-  if (rc == 0 or rc == 2) {
-    // if return code is 2, it means address doesn't exist
-    // we treat it as scucess deleted
-    return true;
-  }
-  return false;
-}
-
 folly::IPAddress
 createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept {
   auto addr = prefix.first.mask(prefix.second);

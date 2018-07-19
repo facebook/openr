@@ -680,7 +680,8 @@ main(int argc, char** argv) {
         FLAGS_loopback_iface,
         Constants::kPrefixAllocatorSyncInterval,
         kConfigStoreUrl,
-        context);
+        context,
+        FLAGS_system_agent_port);
     // Spawn a PrefixAllocator thread
     allThreads.emplace_back(std::thread([&prefixAllocator]() noexcept {
       LOG(INFO) << "Starting PrefixAllocator thread ...";

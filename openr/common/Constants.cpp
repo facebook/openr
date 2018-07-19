@@ -67,6 +67,7 @@ constexpr std::chrono::milliseconds Constants::kPrefixAllocatorSyncInterval;
 constexpr std::chrono::milliseconds Constants::kRangeAllocTtl;
 constexpr std::chrono::milliseconds Constants::kReadTimeout;
 constexpr std::chrono::milliseconds Constants::kTtlInfInterval;
+constexpr std::chrono::milliseconds Constants::kPrefixAllocatorRetryInterval;
 constexpr std::chrono::seconds Constants::kConvergenceMaxDuration;
 constexpr std::chrono::seconds Constants::kKeepAliveIntvl;
 constexpr std::chrono::seconds Constants::kKeepAliveTime;

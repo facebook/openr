@@ -335,7 +335,8 @@ OpenrWrapper<Serializer>::run() {
       "" /* loopback interface name */,
       Constants::kPrefixAllocatorSyncInterval,
       PersistentStoreUrl{configStoreUrl_},
-      context_);
+      context_,
+      Constants::kSystemAgentPort /* system agent port*/);
 
   // Spawn a PrefixManager thread
   std::thread prefixManagerThread([this]() noexcept {

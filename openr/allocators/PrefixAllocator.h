@@ -17,6 +17,8 @@
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
+#include <folly/io/async/EventBase.h>
+#include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/AddressUtil.h>
@@ -25,9 +27,11 @@
 #include <openr/config-store/PersistentStoreClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
+
 #include "RangeAllocator.h"
 
 namespace openr {
@@ -74,7 +78,8 @@ class PrefixAllocator
       // period to check prefix collision
       std::chrono::milliseconds syncInterval,
       PersistentStoreUrl const& configStoreUrl,
-      fbzmq::Context& zmqContext);
+      fbzmq::Context& zmqContext,
+      int32_t systemServicePort);
 
   PrefixAllocator(PrefixAllocator const&) = delete;
   PrefixAllocator& operator=(PrefixAllocator const&) = delete;
@@ -131,7 +136,7 @@ class PrefixAllocator
 
   // use my newly allocated prefix
   void applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex);
-  void applyMyPrefix(folly::Optional<folly::CIDRNetwork> prefix);
+  void applyMyPrefix();
 
   // update prefix
   void updateMyPrefix(folly::CIDRNetwork prefix);
@@ -145,6 +150,23 @@ class PrefixAllocator
       folly::Optional<uint32_t> newPrefix,
       folly::Optional<PrefixAllocatorParams> const& oldParams = folly::none,
       folly::Optional<PrefixAllocatorParams> const& newParams = folly::none);
+
+  void syncIfaceAddrs(
+    const std::string& ifName,
+    int family,
+    int scope,
+    const std::vector<folly::CIDRNetwork>& prefixes);
+
+  void delIfaceAddr(
+    const std::string& ifName,
+    const folly::CIDRNetwork& prefix);
+
+  // Create client when necessary
+  void createThriftClient(
+    folly::EventBase& evb,
+    std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+    std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
+    int32_t port);
 
   //
   // Const private variables
@@ -194,6 +216,20 @@ class PrefixAllocator
 
   // Monitor client for submitting counters/logs
   fbzmq::ZmqMonitorClient zmqMonitorClient_;
+
+  // Thriftclient for system service
+  int32_t systemServicePort_{0};
+  folly::EventBase evb_;
+  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_{nullptr};
+  std::unique_ptr<thrift::SystemServiceAsyncClient> client_{nullptr};
+
+  /**
+   * applyMyPrefix use this state to decide how to program address to kernel
+   * boolean field means the address is beed applied or not.
+   * When Optional value is empty, it means cleanup addresses on the iface
+   * otherwise applys the Optional value to the iface
+   */
+  std::pair<bool, folly::Optional<folly::CIDRNetwork>> applyState_;
 };
 
 } // namespace openr

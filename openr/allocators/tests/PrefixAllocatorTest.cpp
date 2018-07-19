@@ -134,7 +134,8 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         "" /* loopback interface name */,
         kSyncInterval,
         PersistentStoreUrl{kConfigStoreUrl},
-        zmqContext_);
+        zmqContext_,
+        Constants::kSystemAgentPort);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
     prefixAllocator_->waitUntilRunning();
   }
@@ -404,7 +405,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           "" /* loopback interface name */,
           kSyncInterval,
           PersistentStoreUrl{kConfigStoreUrl + myNodeName},
-          zmqContext);
+          zmqContext,
+          Constants::kSystemAgentPort);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();
       allocators.emplace_back(std::move(allocator));
