@@ -17,6 +17,13 @@ exception MeshServiceError {
 typedef map<string, i32>
 (cpp.type = "std::unordered_map<std::string, int32_t>") PeerMetrics
 
+struct MeshEncryption {
+  1: bool enabled
+  2: string password
+  3: list<i32> saeGroups
+  4: i32 debugVerbosity
+}
+
 struct Mesh {
   1: string meshId
   2: string ifName
@@ -25,7 +32,7 @@ struct Mesh {
   5: i32 channelTypeInt
   6: i32 channelWidth
   7: i32 centerFreq1
-  12: bool encryptionEnabled
+  13: optional MeshEncryption encryption
   8: optional i32 rssiThreshold
   9: optional string macAddress
   10: optional i32 ttl
