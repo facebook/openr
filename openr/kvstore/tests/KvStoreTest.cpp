@@ -1255,6 +1255,71 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   }
 }
 
+/**
+ * Start single testable store, and set key values with oneway method. Verify
+ * content of KvStore by querying it.
+ */
+TEST_F(KvStoreTestFixture, OneWaySetKey) {
+  LOG(INFO) << "Starting test KvStore";
+
+  // set up the store that we'll be testing
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  const auto myNodeId = "test-node1";
+  auto myStore = createKvStore(myNodeId, emptyPeers);
+  myStore->run();
+
+  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
+
+  // Set key1 via KvStoreWrapper::setKey with solicitResponse
+  const auto key1 = folly::sformat("test-key-1");
+  const thrift::Value thriftVal1(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "gotham_city" /* originatorId */,
+      folly::sformat("test-value-1"),
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(1, "gotham_city", std::string("test-value-1")));
+  expectedKeyVals[key1] = thriftVal1;
+  myStore->setKey(key1, thriftVal1);
+
+  // Set key2 by new request socket. Ensure no response comes.
+  const auto key2 = folly::sformat("test-key-2");
+  const thrift::Value thriftVal2(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "gotham_city" /* originatorId */,
+      folly::sformat("test-value-2"),
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(1, "gotham_city", std::string("test-value-2")));
+  expectedKeyVals[key2] = thriftVal2;
+  {
+    fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock{
+        context, folly::none, folly::none, fbzmq::NonblockingFlag{true}};
+    reqSock.connect(fbzmq::SocketUrl{myStore->localCmdUrl});
+
+    // Prepare request
+    thrift::Request request;
+    request.cmd = thrift::Command::KEY_SET;
+    request.keySetParams.keyVals.emplace(key2, thriftVal2);
+    request.keySetParams.solicitResponse = false;
+    request.keySetParams.originatorId = "test-node2";
+
+    // Make ZMQ call and wait for response
+    apache::thrift::CompactSerializer serializer;
+    auto sendStatus = reqSock.sendThriftObj(request, serializer);
+    EXPECT_FALSE(sendStatus.hasError());
+
+    // Try to receive message
+    auto recvStatus = reqSock.recvOne(std::chrono::milliseconds(100));
+    EXPECT_TRUE(recvStatus.hasError());
+  }
+
+  // Expect both keys in KvStore
+  EXPECT_EQ(expectedKeyVals, myStore->dumpAll());
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

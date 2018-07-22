@@ -114,9 +114,15 @@ KvStoreWrapper::setKey(std::string key, thrift::Value value) {
   thrift::Request request;
   request.cmd = thrift::Command::KEY_SET;
   request.keySetParams.keyVals.emplace(std::move(key), std::move(value));
+  request.keySetParams.solicitResponse = true;
 
   // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
+  auto sendStatus = reqSock_.sendThriftObj(request, serializer_);
+  if (sendStatus.hasError()) {
+    LOG(ERROR) << "setKey send request failed: " << sendStatus.error();
+    return false;
+  }
+
   auto maybeMsg = reqSock_.recvOne();
   if (maybeMsg.hasError()) {
     LOG(ERROR) << "setKey recv response failed: " << maybeMsg.error();
@@ -124,7 +130,8 @@ KvStoreWrapper::setKey(std::string key, thrift::Value value) {
   }
 
   // Return the result
-  return *(maybeMsg->read<std::string>()) == Constants::kSuccessResponse.toString();
+  const auto msg = maybeMsg->read<std::string>();
+  return *msg == Constants::kSuccessResponse.toString();
 }
 
 folly::Optional<thrift::Value>

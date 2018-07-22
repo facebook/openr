@@ -64,6 +64,12 @@ struct KeySetParams {
 
   // NOTE: we retain the original number in thrift struct
   2: KeyVals keyVals;
+
+  // Solicit for an ack. This can be set to false to make requests one-way
+  3: bool solicitResponse = 1;
+
+  // Name of node who is originating set key request
+  4: optional string originatorId;
 }
 
 // parameters for the KEY_GET command

@@ -886,8 +886,10 @@ KvStore::processRequest(
       << apache::thrift::TEnumTraits<thrift::Command>::findName(thriftReq.cmd)
       << "` received";
 
-  // send back the id and the delimiter
-  {
+  // send back the id and the delimiter for all cases except when KEY_SET
+  // is requested with solicitRequest=false
+  if (thriftReq.cmd != thrift::Command::KEY_SET ||
+      thriftReq.keySetParams.solicitResponse) {
     auto ret = cmdSock.sendMultipleMore(requestIdMsg, delimMsg);
     if (ret.hasError()) {
       LOG(ERROR) << "Failed to send first two parts of the message. "
@@ -935,7 +937,10 @@ KvStore::processRequest(
     }
 
     // respond to the client
-    cmdSock.sendOne(fbzmq::Message::from(Constants::kSuccessResponse.toString()).value());
+    if (thriftReq.keySetParams.solicitResponse) {
+      cmdSock.sendOne(
+          fbzmq::Message::from(Constants::kSuccessResponse.toString()).value());
+    }
     break;
   }
   case thrift::Command::KEY_GET: {
