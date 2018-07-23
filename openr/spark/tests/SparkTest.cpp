@@ -1527,12 +1527,14 @@ TEST_F(SparkFixture, dropPacketsTest) {
   // Get the counters from sparks and see what happened
   auto spark1Counters = zmqMonitorClient1->dumpCounters();
   // Hack to wait for counters to be submitted
-  while (spark1Counters.size() == 0) {
+  while (spark1Counters.find("spark.hello_packet_recv.sum.0") ==
+      spark1Counters.end()) {
     spark1Counters = zmqMonitorClient1->dumpCounters();
   }
 
   auto spark2Counters = zmqMonitorClient2->dumpCounters();
-  while (spark2Counters.size() == 0) {
+  while (spark2Counters.find("spark.hello_packet_recv.sum.0") ==
+      spark2Counters.end()) {
     spark2Counters = zmqMonitorClient2->dumpCounters();
   }
 

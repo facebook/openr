@@ -22,6 +22,7 @@ find_library(NLROUTE3 nl-route-3)
 find_library(PROTOCOL protocol PATHS)
 find_library(RE2 re2)
 find_library(SODIUM sodium)
+find_library(SIGAR sigar)
 find_library(THRIFT thrift PATHS)
 find_library(THRIFTCPP2 thriftcpp2 PATHS)
 find_library(THRIFTPROTOCOL thriftprotocol PATHS)
@@ -287,6 +288,7 @@ target_link_libraries(openrlib
   ${ZSTD}
   ${FOLLY}
   ${SODIUM}
+  ${SIGAR}
   ${RE2}
   -lboost_system
   -lpthread
@@ -325,6 +327,7 @@ target_link_libraries(openr
   ${THRIFTPROTOCOL}
   ${FOLLY}
   ${SODIUM}
+  ${SIGAR}
   -lboost_system
   -lpthread
   ${NLROUTE3}
@@ -362,6 +365,7 @@ target_link_libraries(platform_linux
   ${CONCURRENCY}
   ${THRIFTPROTOCOL}
   ${SODIUM}
+  ${SIGAR}
   ${ZMQ}
   -lboost_system
   -lpthread
@@ -563,6 +567,7 @@ if(BUILD_TESTS)
     ${ZSTD}
     ${FOLLY}
     ${SODIUM}
+    ${SIGAR}
     ${GMOCK}
     ${GMOCK_MAIN}
     ${GTEST}
