@@ -5,10 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+ #include "MockSystemServiceHandler.h"
+
 #include <atomic>
 #include <mutex>
 
 #include <fbzmq/zmq/Common.h>
+#include <folly/init/Init.h>
 #include <folly/ScopeGuard.h>
 #include <folly/Synchronized.h>
 #include <folly/gen/Base.h>
@@ -19,6 +22,14 @@
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+
+#include <thrift/lib/cpp/transport/THeader.h>
+#include <thrift/lib/cpp2/util/ScopedServerThread.h>
+#include <thrift/lib/cpp2/Thrift.h>
+#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+#include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
 
 using namespace std;
 using namespace folly;
@@ -86,6 +97,14 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     configStoreClient_->erase("prefix-allocator-config");
     configStoreClient_->erase("prefix-manager-config");
 
+    mockServiceHandler_ = std::make_shared<MockSystemServiceHandler>();
+    server_ = std::make_shared<apache::thrift::ThriftServer>();
+    server_->setPort(0);
+    server_->setInterface(mockServiceHandler_);
+
+    systemThriftThread_.start(server_);
+    port_ = systemThriftThread_.getAddress()->getPort();
+
     //
     // Start PrefixManager
     //
@@ -135,7 +154,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         kSyncInterval,
         PersistentStoreUrl{kConfigStoreUrl},
         zmqContext_,
-        Constants::kSystemAgentPort);
+        port_);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
     prefixAllocator_->waitUntilRunning();
   }
@@ -161,6 +180,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     // delete tempfile name
     ::unlink(tempFileName_.c_str());
+    systemThriftThread_.stop();
   }
 
  protected:
@@ -186,9 +206,34 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   // create serializer object for parsing kvstore key/values
   apache::thrift::CompactSerializer serializer;
+
+  std::shared_ptr<MockSystemServiceHandler> mockServiceHandler_;
+  int32_t port_{0};
+  std::shared_ptr<apache::thrift::ThriftServer> server_;
+  apache::thrift::util::ScopedServerThread systemThriftThread_;
 };
 
-class PrefixAllocTest : public ::testing::TestWithParam<bool> {};
+class PrefixAllocTest : public ::testing::TestWithParam<bool> {
+ public:
+   void SetUp() override {
+    mockServiceHandler_ = std::make_shared<MockSystemServiceHandler>();
+    server_ = std::make_shared<apache::thrift::ThriftServer>();
+    server_->setPort(0);
+    server_->setInterface(mockServiceHandler_);
+
+    systemThriftThread_.start(server_);
+    port_ = systemThriftThread_.getAddress()->getPort();
+  }
+
+  void TearDown() override {
+    systemThriftThread_.stop();
+  }
+ protected:
+   std::shared_ptr<MockSystemServiceHandler> mockServiceHandler_;
+   int32_t port_{0};
+   std::shared_ptr<apache::thrift::ThriftServer> server_;
+   apache::thrift::util::ScopedServerThread systemThriftThread_;
+};
 
 INSTANTIATE_TEST_CASE_P(
     EmptySeedPrefixInstance, PrefixAllocTest, ::testing::Bool());
@@ -406,7 +451,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           kSyncInterval,
           PersistentStoreUrl{kConfigStoreUrl + myNodeName},
           zmqContext,
-          Constants::kSystemAgentPort);
+          port_);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();
       allocators.emplace_back(std::move(allocator));
@@ -855,8 +900,8 @@ int
 main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
+  folly::init(&argc, &argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
   FLAGS_logtostderr = true;
 

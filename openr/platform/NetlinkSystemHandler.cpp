@@ -306,7 +306,7 @@ folly::Future<folly::Unit> NetlinkSystemHandler::future_addIfaceAddresses(
       try {
         for (const auto& addr : *addresses) {
           const auto& prefix = toIPNetwork(addr);
-          addIfaceAddrInternal(*ifName, prefix);
+          doAddIfaceAddr(*ifName, prefix);
         }
         p.setValue();
       } catch (const std::exception& ex) {
@@ -316,7 +316,7 @@ folly::Future<folly::Unit> NetlinkSystemHandler::future_addIfaceAddresses(
     return future;
 }
 
-void NetlinkSystemHandler::addIfaceAddrInternal(
+void NetlinkSystemHandler::doAddIfaceAddr(
   const std::string& ifName,
   const folly::CIDRNetwork& prefix) {
   int ifIndex = netlinkRouteSocket_->getIfIndex(ifName).get();
@@ -340,7 +340,7 @@ folly::Future<folly::Unit> NetlinkSystemHandler::future_removeIfaceAddresses(
       try {
         for (const auto& addr : *addresses) {
           const auto& prefix = toIPNetwork(addr);
-          removeIfaceAddrInternal(*ifName, prefix);
+          doRemoveIfaceAddr(*ifName, prefix);
         }
         p.setValue();
       } catch (const std::exception& ex) {
@@ -350,7 +350,45 @@ folly::Future<folly::Unit> NetlinkSystemHandler::future_removeIfaceAddresses(
     return future;
 }
 
-void NetlinkSystemHandler::removeIfaceAddrInternal(
+folly::Future<std::unique_ptr<std::vector<::openr::thrift::IpPrefix>>>
+NetlinkSystemHandler::future_getIfaceAddresses(
+  std::unique_ptr<std::string> iface, int16_t family, int16_t scope) {
+  VLOG(3) << "Get iface addresses";
+  folly::Promise<std::unique_ptr<
+                  std::vector<::openr::thrift::IpPrefix>>> promise;
+  auto future = promise.getFuture();
+  mainEventLoop_->runInEventLoop(
+    [this, p = std::move(promise),
+     ifName = std::move(iface), family, scope] () mutable {
+       try {
+         auto addrs = doGetIfaceAddrs(*ifName, family, scope);
+         p.setValue(std::move(addrs));
+       } catch (const std::exception& ex) {
+         p.setException(ex);
+       }
+     });
+  return future;
+}
+
+std::unique_ptr<std::vector<openr::thrift::IpPrefix>>
+NetlinkSystemHandler::doGetIfaceAddrs(
+  const std::string& iface,
+  int16_t family,
+  int16_t scope) {
+    auto addrs = std::make_unique<std::vector<openr::thrift::IpPrefix>>();
+    int ifIndex = netlinkRouteSocket_->getIfIndex(iface).get();
+    auto ifAddrs =
+      netlinkRouteSocket_->getIfAddrs(ifIndex, family, scope).get();
+
+    addrs->clear();
+    for (const auto& ifAddr : ifAddrs) {
+      addrs->emplace_back(toIpPrefix(ifAddr.getPrefix().value()));
+    }
+    return addrs;
+}
+
+
+void NetlinkSystemHandler::doRemoveIfaceAddr(
   const std::string& ifName,
   const folly::CIDRNetwork& prefix) {
   int ifIndex = netlinkRouteSocket_->getIfIndex(ifName).get();
@@ -373,7 +411,7 @@ folly::Future<folly::Unit> NetlinkSystemHandler::future_syncIfaceAddresses(
      addresses = std::move(addrs),
      family, scope]() mutable {
       try {
-        syncIfaceAddrsInternal(*ifName, family, scope, *addresses);
+        doSyncIfaceAddrs(*ifName, family, scope, *addresses);
         p.setValue();
       } catch (const std::exception& ex) {
         p.setException(ex);
@@ -382,7 +420,7 @@ folly::Future<folly::Unit> NetlinkSystemHandler::future_syncIfaceAddresses(
     return future;
 }
 
-void NetlinkSystemHandler::syncIfaceAddrsInternal(
+void NetlinkSystemHandler::doSyncIfaceAddrs(
   const std::string& ifName,
   int16_t family,
   int16_t scope,

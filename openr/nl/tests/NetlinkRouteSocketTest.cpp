@@ -1622,6 +1622,96 @@ TEST_F(NetlinkIfFixture, DeconsTest) {
   }
 }
 
+TEST_F(NetlinkIfFixture, GetAddrsTest) {
+  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
+  folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};
+  folly::CIDRNetwork prefix4{folly::IPAddress("192.168.0.12"), 32};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkRouteSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr1 = builder.setPrefix(prefix1)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr2 = builder.setPrefix(prefix2)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr3 = builder.setPrefix(prefix3)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr4 = builder.setPrefix(prefix4)
+                        .setIfIndex(ifIndex)
+                        .build();
+
+  // Cleaup all address
+  std::vector<IfAddress> addrs;
+  netlinkRouteSocket->
+    syncIfAddress(ifIndex, std::move(addrs)).get();
+
+  // Add new address
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr1)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr2)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr3)).get();
+  netlinkRouteSocket->addIfAddress(std::move(ifAddr4)).get();
+
+  // Check get V6 address
+  auto v6Addrs = netlinkRouteSocket->getIfAddrs(ifIndex, AF_INET6).get();
+  EXPECT_EQ(2, v6Addrs.size());
+  bool p1 = false, p2 = false;
+  for (const auto& addr : v6Addrs) {
+    if (addr.getPrefix().value() == prefix1) {
+      p1 = true;
+    }
+    if (addr.getPrefix().value() == prefix2) {
+      p2 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_TRUE(p2);
+
+  // Check get V4 address
+  auto v4Addrs = netlinkRouteSocket->getIfAddrs(ifIndex, AF_INET).get();
+  EXPECT_EQ(2, v4Addrs.size());
+  bool p3 = false, p4 = false;
+  for (const auto& addr : v4Addrs) {
+    if (addr.getPrefix().value() == prefix3) {
+      p3 = true;
+    }
+    if (addr.getPrefix().value() == prefix4) {
+      p4 = true;
+    }
+  }
+  EXPECT_TRUE(p3);
+  EXPECT_TRUE(p4);
+
+  // CHeck get all address
+  auto allAddrs = netlinkRouteSocket->getIfAddrs(ifIndex).get();
+  EXPECT_EQ(4, allAddrs.size());
+  p1 = false, p2 = false, p3 = false, p4 = false;
+  for (const auto& addr : allAddrs) {
+    if (addr.getPrefix().value() == prefix1) {
+      p1 = true;
+    }
+    if (addr.getPrefix().value() == prefix2) {
+      p2 = true;
+    }
+    if (addr.getPrefix().value() == prefix3) {
+      p3 = true;
+    }
+    if (addr.getPrefix().value() == prefix4) {
+      p4 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_TRUE(p2);
+  EXPECT_TRUE(p3);
+  EXPECT_TRUE(p4);
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

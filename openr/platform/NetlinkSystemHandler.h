@@ -67,22 +67,32 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
     int16_t family, int16_t scope,
     std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
 
+  folly::Future<std::unique_ptr<std::vector<::openr::thrift::IpPrefix>>>
+  future_getIfaceAddresses(
+    std::unique_ptr<std::string> iface, int16_t family, int16_t scope) override;
+
  private:
   void initNetlinkSystemHandler();
 
-  void addIfaceAddrInternal(
+  void doAddIfaceAddr(
     const std::string& ifName,
     const folly::CIDRNetwork& prefix);
 
-  void removeIfaceAddrInternal(
+  void doRemoveIfaceAddr(
     const std::string& ifName,
     const folly::CIDRNetwork& prefix);
 
-  void syncIfaceAddrsInternal(
+  void doSyncIfaceAddrs(
     const std::string& ifName,
     int16_t family,
     int16_t scope,
     const std::vector<::openr::thrift::IpPrefix>& addrs);
+
+  std::unique_ptr<std::vector<openr::thrift::IpPrefix>>
+  doGetIfaceAddrs(
+    const std::string& iface,
+    int16_t family,
+    int16_t scope);
 
   // Implementation class for NetlinkSystemHandler internals
   class NLSubscriberImpl;

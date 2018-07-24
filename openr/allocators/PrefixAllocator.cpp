@@ -525,7 +525,8 @@ PrefixAllocator::applyMyPrefix() {
     applyState_.first = false;
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Apply prefix failed, will retry in "
-               << &Constants::kPrefixAllocatorRetryInterval << "ms address: "
+               << Constants::kPrefixAllocatorRetryInterval.count()
+               << " ms address: "
                << (applyState_.second.hasValue()
                 ? folly::IPAddress::networkToString(applyState_.second.value())
                 : "none");
@@ -541,8 +542,8 @@ void
 PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   CHECK(allocParams_.hasValue()) << "Alloc parameters are not set.";
   // existing global prefixes
-  auto oldPrefixes =
-      getIfacePrefixes(loopbackIfaceName_, prefix.first.family());
+  std::vector<folly::CIDRNetwork> oldPrefixes;
+  getIfacePrefixes(loopbackIfaceName_, prefix.first.family(), oldPrefixes);
 
   // desired global prefixes
   auto loopbackPrefix = createLoopbackPrefix(prefix);
@@ -628,6 +629,18 @@ PrefixAllocator::withdrawMyPrefix() {
       openr::thrift::PrefixType::PREFIX_ALLOCATOR);
   if (ret.hasError()) {
     LOG(ERROR) << "Withdrawing old prefix failed: " << ret.error();
+  }
+}
+
+void PrefixAllocator::getIfacePrefixes(
+    const std::string& iface, int family,
+    std::vector<folly::CIDRNetwork>& addrs) {
+  createThriftClient(evb_, socket_, client_, systemServicePort_);
+  std::vector<thrift::IpPrefix> prefixes;
+  client_->sync_getIfaceAddresses(prefixes, iface, family, RT_SCOPE_UNIVERSE);
+  addrs.clear();
+  for (const auto& prefix : prefixes) {
+    addrs.emplace_back(toIPNetwork(prefix));
   }
 }
 

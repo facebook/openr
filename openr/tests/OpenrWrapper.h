@@ -47,7 +47,8 @@ class OpenrWrapper {
       std::chrono::milliseconds linkFlapInitialBackoff,
       std::chrono::milliseconds linkFlapMaxBackoff,
       std::chrono::seconds fibColdStartDuration,
-      std::shared_ptr<IoProvider> ioProvider);
+      std::shared_ptr<IoProvider> ioProvider,
+      int32_t systemPort);
 
   ~OpenrWrapper() {
     stop();
@@ -159,6 +160,8 @@ class OpenrWrapper {
 
   // socket to publish platform events
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> platformPubSock_;
+
+  int32_t systemPort_;
 };
 
 } // namespace openr

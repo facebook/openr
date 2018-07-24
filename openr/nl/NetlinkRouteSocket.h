@@ -57,15 +57,18 @@ using LinkRoutes =
 // protocolId=>routes
 using LinkRoutesDb = std::unordered_map<uint8_t, LinkRoutes>;
 
-class NetlinkRoute;
-
-struct FlushFuncCtx {
-  FlushFuncCtx(struct rtnl_addr* addr, struct nl_sock* sock);
-  bool hasError{false};
-  std::string errMsg;
-  struct rtnl_addr* ifAddr{nullptr};
-  struct nl_sock* socket;
+struct GetAddrsFuncCtx {
+  GetAddrsFuncCtx(int addrIfIndex, int addrFamily, int addrScope)
+    : ifIndex(addrIfIndex),
+      family(addrFamily),
+      scope(addrScope) {}
+  int ifIndex{0};
+  int family{AF_UNSPEC};
+  int scope{RT_SCOPE_NOWHERE};
+  std::vector<fbnl::IfAddress> addrs;
 };
+
+class NetlinkRoute;
 
 // A simple wrapper over libnl API to add / delete routes
 // Users can on the fly request to manipulate routes with any protocol ids
@@ -152,11 +155,11 @@ class NetlinkRouteSocket final {
    * Sync addrs on the specific iface, the iface in addrs should be the same,
    * otherwiese the method will throw NetlinkException.
    * There are two steps to sync address
-   * 1. Flush addresses according to ifIndex, family, scope
-   * 2. Add 'addrs' to the iface
+   * 1. Add 'addrs' to the iface
+   * 2. Delete addresses according to ifIndex, family, scope
    * 'family' and 'scope' are used to give more specific sync conditions
-   * If not set, they are not considered when flush addresses.
-   * If set, only addresses with 'family' and 'scope' will be flushed
+   * If not set, they are not considered when deleting addresses.
+   * If set, only addresses with 'family' and 'scope' will be deleted
    * before sync
    *
    * When addrs is empty, this will flush all the addresses on the iface
@@ -175,6 +178,12 @@ class NetlinkRouteSocket final {
 
   // get interface name form index
   folly::Future<std::string> getIfName(int ifIndex);
+
+  /**
+   * Get iface address list according
+   */
+  folly::Future<std::vector<fbnl::IfAddress>> getIfAddrs(
+    int ifIndex, int family = AF_UNSPEC, int scope = RT_SCOPE_NOWHERE);
 
  private:
   NetlinkRouteSocket(const NetlinkRouteSocket&) = delete;
@@ -263,10 +272,12 @@ class NetlinkRouteSocket final {
 
   void doDeleteAddr(struct rtnl_addr* addr);
 
-  void doFlushAddr(struct rtnl_addr* addr);
-
   void doSyncIfAddress(
     int ifIdnex, std::vector<fbnl::IfAddress> addrs, int family, int scope);
+
+  void doGetIfAddrs(
+    int ifIndex, int family, int scope,
+    std::vector<fbnl::IfAddress>& addrs);
 
   /**
    * This function will update link cache internally but will ensure that it is

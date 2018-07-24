@@ -161,6 +161,10 @@ class PrefixAllocator
     const std::string& ifName,
     const folly::CIDRNetwork& prefix);
 
+  void getIfacePrefixes(
+    const std::string& iface, int family,
+    std::vector<folly::CIDRNetwork>& addrs);
+
   // Create client when necessary
   void createThriftClient(
     folly::EventBase& evb,

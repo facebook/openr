@@ -547,6 +547,7 @@ if(BUILD_TESTS)
     tests/OpenrSystemTest.cpp
     tests/OpenrWrapper.cpp
     spark/tests/MockIoProvider.cpp
+    tests/MockSystemHandler.cpp
   )
 
   target_include_directories(openr_system_test
@@ -588,6 +589,7 @@ if(BUILD_TESTS)
 
   add_executable(prefix_allocator_test
     allocators/tests/PrefixAllocatorTest.cpp
+    allocators/tests/MockSystemServiceHandler.cpp
   )
 
   target_include_directories(prefix_allocator_test

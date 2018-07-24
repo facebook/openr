@@ -97,8 +97,8 @@ service SystemService {
    * 1. query all links keyed by interface names
    * 2. query all reachable neighbors
    */
-  list<Link> getAllLinks(
-  ) throws (1: PlatformError error)
+  list<Link> getAllLinks()
+    throws (1: PlatformError error)
 
   list<NeighborEntry> getAllNeighbors()
     throws (1: PlatformError error)
@@ -123,6 +123,10 @@ service SystemService {
     2: i16 family,
     3: i16 scope,
     4: list<IpPrefix.IpPrefix> addrs)
+    throws (1: PlatformError error)
+
+  list<IpPrefix.IpPrefix> getIfaceAddresses(
+    1: string iface, 2: i16 family, 3: i16 scope)
     throws (1: PlatformError error)
 }
 

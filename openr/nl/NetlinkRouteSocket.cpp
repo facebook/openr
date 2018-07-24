@@ -76,11 +76,6 @@ struct NextHopFuncCtx {
   nl_cache* linkCache{nullptr};
 };
 
-FlushFuncCtx::FlushFuncCtx(struct rtnl_addr* addr, struct nl_sock* sock)
-  : ifAddr(addr),
-    socket(sock)
-{}
-
 // A simple wrapper over libnl route object
 class NetlinkRoute final {
  public:
@@ -724,59 +719,71 @@ NetlinkRouteSocket::syncIfAddress(
   return future;
 }
 
+folly::Future<std::vector<fbnl::IfAddress>>
+NetlinkRouteSocket::getIfAddrs(int ifIndex, int family, int scope) {
+  VLOG(3) << "Get IfaceAddrs...";
+
+  folly::Promise<std::vector<fbnl::IfAddress>> promise;
+  auto future = promise.getFuture();
+  evl_->runImmediatelyOrInEventLoop(
+    [this, p = std::move(promise),
+     ifIndex, family, scope] () mutable {
+      try {
+        std::vector<fbnl::IfAddress> addrs;
+        doGetIfAddrs(ifIndex, family, scope, addrs);
+        p.setValue(std::move(addrs));
+      } catch (const std::exception& ex) {
+        p.setException(ex);
+      }
+    });
+  return future;
+}
+
 void NetlinkRouteSocket::doSyncIfAddress(
     int ifIndex, std::vector<fbnl::IfAddress> addrs, int family, int scope) {
-  // Flush addrs on iface
-  if (addrs.empty()) {
-    fbnl::IfAddressBuilder builder;
-    auto addr = builder.setIfIndex(ifIndex)
-                       .setFamily(family)
-                       .setScope(scope)
-                       .build();
-    doFlushAddr(addr.fromIfAddress());
-  } else {
-    // Check ifindex and prefix
-    std::vector<folly::CIDRNetwork> newPrefixes;
-    for (const auto& addr : addrs) {
-      if (addr.getIfIndex() != ifIndex) {
-        throw NetlinkException("Inconsistent ifIndex in addrs");
-      }
-      if (!addr.getPrefix().hasValue()) {
-        throw NetlinkException("Prefix must be set when sync addresses");
-      }
-      newPrefixes.emplace_back(addr.getPrefix().value());
+  // Check ifindex and prefix
+  std::vector<folly::CIDRNetwork> newPrefixes;
+  for (const auto& addr : addrs) {
+    if (addr.getIfIndex() != ifIndex) {
+      throw NetlinkException("Inconsistent ifIndex in addrs");
     }
-
-    const std::string& ifName = getIfName(ifIndex).get();
-    auto oldPrefixes =
-        getIfacePrefixes(ifName, family);
-
-    PrefixCmp cmp;
-    sort(newPrefixes.begin(), newPrefixes.end(), cmp);
-    sort(oldPrefixes.begin(), oldPrefixes.end(), cmp);
-
-    // get a list of prefixes need to be deleted
-    std::vector<folly::CIDRNetwork> toDeletePrefixes;
-    std::set_difference(oldPrefixes.begin(), oldPrefixes.end(),
-                        newPrefixes.begin(), newPrefixes.end(),
-                        std::inserter(toDeletePrefixes,
-                        toDeletePrefixes.begin()));
-
-    // Do add first, because in Linux deleting the only IP will cause if down.
-    // Add new address, existed addresses will be ignored
-    for (const auto& addr : addrs) {
-      doAddIfAddress(addr.fromIfAddress());
+    if (!addr.getPrefix().hasValue()) {
+      throw NetlinkException("Prefix must be set when sync addresses");
     }
+    newPrefixes.emplace_back(addr.getPrefix().value());
+  }
 
-    // Delete deprecated addresses
-    fbnl::IfAddressBuilder builder;
-    for (const auto& toDel : toDeletePrefixes) {
-      auto delAddr = builder.setIfIndex(ifIndex)
-                            .setPrefix(toDel)
-                            .setScope(scope)
-                            .build();
-      doDeleteAddr(delAddr.fromIfAddress());
-    }
+  std::vector<folly::CIDRNetwork> oldPrefixes;
+  auto oldAddrs = getIfAddrs(ifIndex, family, scope).get();
+  for (const auto& addr : oldAddrs) {
+    oldPrefixes.emplace_back(addr.getPrefix().value());
+  }
+
+  PrefixCmp cmp;
+  sort(newPrefixes.begin(), newPrefixes.end(), cmp);
+  sort(oldPrefixes.begin(), oldPrefixes.end(), cmp);
+
+  // get a list of prefixes need to be deleted
+  std::vector<folly::CIDRNetwork> toDeletePrefixes;
+  std::set_difference(oldPrefixes.begin(), oldPrefixes.end(),
+                      newPrefixes.begin(), newPrefixes.end(),
+                      std::inserter(toDeletePrefixes,
+                      toDeletePrefixes.begin()));
+
+  // Do add first, because in Linux deleting the only IP will cause if down.
+  // Add new address, existed addresses will be ignored
+  for (const auto& addr : addrs) {
+    doAddIfAddress(addr.fromIfAddress());
+  }
+
+  // Delete deprecated addresses
+  fbnl::IfAddressBuilder builder;
+  for (const auto& toDel : toDeletePrefixes) {
+    auto delAddr = builder.setIfIndex(ifIndex)
+                          .setPrefix(toDel)
+                          .setScope(scope)
+                          .build();
+    doDeleteAddr(delAddr.fromIfAddress());
   }
 }
 
@@ -794,33 +801,40 @@ void NetlinkRouteSocket::doDeleteAddr(struct rtnl_addr* addr) {
   }
 }
 
-void NetlinkRouteSocket::doFlushAddr(struct rtnl_addr* addr) {
-  FlushFuncCtx funcCtx(addr, socket_);
-  auto flushFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    FlushFuncCtx* ctx = static_cast<FlushFuncCtx*> (arg);
-    struct rtnl_addr* toDel = reinterpret_cast<struct rtnl_addr*>(obj);
-    // Stop flushing when error happends
-    if (ctx->hasError) {
+void NetlinkRouteSocket::doGetIfAddrs(
+  int ifIndex, int family, int scope,
+  std::vector<fbnl::IfAddress>& addrs) {
+  GetAddrsFuncCtx funcCtx(ifIndex, family, scope);
+  auto getFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    GetAddrsFuncCtx* ctx = static_cast<GetAddrsFuncCtx*> (arg);
+    struct rtnl_addr* toAdd = reinterpret_cast<struct rtnl_addr*>(obj);
+    if (ctx->family != AF_UNSPEC
+     && ctx->family != rtnl_addr_get_family(toAdd)) {
       return;
     }
-    // Address family and interface index must be the same
-    uint8_t family = rtnl_addr_get_family(ctx->ifAddr);
-    int ifIndex = rtnl_addr_get_ifindex(ctx->ifAddr);
-    int scope = rtnl_addr_get_scope(ctx->ifAddr);
-    if (family != AF_UNSPEC && family != rtnl_addr_get_family(toDel)) {
+    if (ctx->scope != RT_SCOPE_NOWHERE
+     && ctx->scope != rtnl_addr_get_scope(toAdd)) {
       return;
     }
-    if (scope != RT_SCOPE_NOWHERE && scope != rtnl_addr_get_scope(toDel)) {
+    if (ctx->ifIndex != rtnl_addr_get_ifindex(toAdd)) {
       return;
     }
-    if (ifIndex != rtnl_addr_get_ifindex(toDel)) {
+    struct nl_addr* ipaddr = rtnl_addr_get_local(toAdd);
+    if (!ipaddr) {
       return;
     }
-    int err = rtnl_addr_delete(ctx->socket, toDel, 0);
-    if (NLE_SUCCESS != err && -NLE_NOADDR != err) {
-      ctx->hasError = true;
-      ctx->errMsg = std::string(nl_geterror(err));
-    }
+    folly::IPAddress ipAddress =
+      folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork prefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(toAdd));
+    fbnl::IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(prefix)
+                            .setIfIndex(ctx->ifIndex)
+                            .setScope(ctx->scope)
+                            .build();
+    ctx->addrs.emplace_back(std::move(tmpAddr));
   };
 
   struct nl_cache* addrCache = nullptr;
@@ -833,13 +847,9 @@ void NetlinkRouteSocket::doFlushAddr(struct rtnl_addr* addr) {
         "Failed to allocate addr cache . Error: {}", nl_geterror(err)));
   }
   CHECK_NOTNULL(addrCache);
-  nl_cache_foreach(addrCache, flushFunc, &funcCtx);
+  nl_cache_foreach(addrCache, getFunc, &funcCtx);
   nl_cache_free(addrCache);
-
-  if (funcCtx.hasError) {
-    throw NetlinkException(folly::sformat(
-      "Failed to flush address Error: {}", funcCtx.errMsg));
-  }
+  funcCtx.addrs.swap(addrs);
 }
 
 folly::Future<int>

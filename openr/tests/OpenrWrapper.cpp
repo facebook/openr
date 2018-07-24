@@ -28,7 +28,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds linkFlapInitialBackoff,
     std::chrono::milliseconds linkFlapMaxBackoff,
     std::chrono::seconds fibColdStartDuration,
-    std::shared_ptr<IoProvider> ioProvider)
+    std::shared_ptr<IoProvider> ioProvider,
+    int32_t systemPort)
     : context_(context),
       nodeId_(nodeId),
       ioProvider_(std::move(ioProvider)),
@@ -58,7 +59,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreReqSock_(context),
       sparkReqSock_(context),
       fibReqSock_(context),
-      platformPubSock_(context) {
+      platformPubSock_(context),
+      systemPort_(systemPort) {
   // LM ifName
   std::string ifName = "vethLMTest_" + nodeId_;
 
@@ -336,7 +338,7 @@ OpenrWrapper<Serializer>::run() {
       Constants::kPrefixAllocatorSyncInterval,
       PersistentStoreUrl{configStoreUrl_},
       context_,
-      Constants::kSystemAgentPort /* system agent port*/);
+      systemPort_ /* system agent port*/);
 
   // Spawn a PrefixManager thread
   std::thread prefixManagerThread([this]() noexcept {

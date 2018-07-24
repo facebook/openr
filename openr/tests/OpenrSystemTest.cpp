@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include "MockSystemHandler.h"
+
 #include <stdexcept>
 
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
@@ -21,7 +23,15 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <sodium.h>
+
+#include <thrift/lib/cpp/transport/THeader.h>
+#include <thrift/lib/cpp2/util/ScopedServerThread.h>
+#include <thrift/lib/cpp2/Thrift.h>
+#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+#include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
+
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/AddressUtil.h>
@@ -172,6 +182,14 @@ class OpenrFixture : public ::testing::Test {
       LOG(INFO) << "mockIoProvider thread got stopped.";
     });
     mockIoProvider->waitUntilRunning();
+
+    mockServiceHandler_ = std::make_shared<MockSystemHandler>();
+    server_ = std::make_shared<apache::thrift::ThriftServer>();
+    server_->setPort(0);
+    server_->setInterface(mockServiceHandler_);
+
+    systemThriftThread_.start(server_);
+    port_ = systemThriftThread_.getAddress()->getPort();
   }
 
   void
@@ -180,6 +198,7 @@ class OpenrFixture : public ::testing::Test {
     LOG(INFO) << "Stopping mockIoProvider thread.";
     mockIoProvider->stop();
     mockIoProviderThread->join();
+    systemThriftThread_.stop();
   }
 
   /**
@@ -202,7 +221,8 @@ class OpenrFixture : public ::testing::Test {
         kLinkFlapInitialBackoff,
         kLinkFlapMaxBackoff,
         kFibColdStartDuration,
-        mockIoProvider);
+        mockIoProvider,
+        port_);
     aquamen_.emplace_back(std::move(ptr));
     return aquamen_.back().get();
   }
@@ -211,6 +231,12 @@ class OpenrFixture : public ::testing::Test {
   fbzmq::Context context;
   std::shared_ptr<MockIoProvider> mockIoProvider{nullptr};
   std::unique_ptr<std::thread> mockIoProviderThread{nullptr};
+
+ protected:
+   std::shared_ptr<MockSystemHandler> mockServiceHandler_;
+   int32_t port_{0};
+   std::shared_ptr<apache::thrift::ThriftServer> server_;
+   apache::thrift::util::ScopedServerThread systemThriftThread_;
 
  private:
   std::vector<std::unique_ptr<OpenrWrapper<CompactSerializer>>> aquamen_{};
