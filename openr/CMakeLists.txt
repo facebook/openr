@@ -379,7 +379,7 @@ install(TARGETS
 )
 
 # intstall the openr startup script
-install(FILES
+install(PROGRAMS
   ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_openr.sh
   DESTINATION sbin
 )
