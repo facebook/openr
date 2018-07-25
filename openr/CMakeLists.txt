@@ -28,6 +28,7 @@ find_library(THRIFTCPP2 thriftcpp2 PATHS)
 find_library(THRIFTPROTOCOL thriftprotocol PATHS)
 find_library(TRANSPORT transport PATHS)
 find_library(ZMQ zmq)
+find_library(SIGAR sigar)
 find_library(ZSTD zstd)
 
 find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
@@ -290,6 +291,7 @@ target_link_libraries(openrlib
   ${SODIUM}
   ${SIGAR}
   ${RE2}
+  ${SIGAR}
   -lboost_system
   -lpthread
   ${NLROUTE3}
@@ -367,6 +369,7 @@ target_link_libraries(platform_linux
   ${SODIUM}
   ${SIGAR}
   ${ZMQ}
+  ${SIGAR}
   -lboost_system
   -lpthread
   ${NLROUTE3}
@@ -573,6 +576,7 @@ if(BUILD_TESTS)
     ${GMOCK_MAIN}
     ${GTEST}
     ${GTEST_MAIN}
+    ${SIGAR}
     -lboost_system
     -lpthread
     ${NLROUTE3}

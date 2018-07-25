@@ -302,7 +302,7 @@ DEFINE_bool(
     enable_old_decision_module,
     false,
     "Set this flag to revert to old decision code");
-
+DEFINE_int32(memory_limit_mb, 300, "Memory limit in MB");
 
 using namespace fbzmq;
 using namespace openr;
@@ -451,7 +451,8 @@ main(int argc, char** argv) {
     watchdog = std::make_unique<Watchdog>(
       FLAGS_node_name,
       std::chrono::seconds(FLAGS_watchdog_interval_s),
-      std::chrono::seconds(FLAGS_watchdog_threshold_s));
+      std::chrono::seconds(FLAGS_watchdog_threshold_s),
+      FLAGS_memory_limit_mb);
 
     // Spawn a watchdog thread
     allThreads.emplace_back(std::thread([&watchdog]() noexcept {

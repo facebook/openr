@@ -20,8 +20,11 @@
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
 #include <openr/spark/SparkWrapper.h>
+#include <openr/watchdog/Watchdog.h>
 
 namespace openr {
+// memory limit for watchdog checks
+const uint32_t memLimitMB{250};
 
 /**
  * A utility class to wrap OpenR's Main.cpp
@@ -91,6 +94,16 @@ class OpenrWrapper {
    * get route databse from fib
    */
   thrift::RouteDatabase fibDumpRouteDatabase();
+
+  /*
+   * to get counters
+   */
+  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient{nullptr};
+
+  /*
+   * watchdog thread (used for checking memory limit exceeded)
+   */
+  std::unique_ptr<Watchdog> watchdog;
 
  private:
   // Disable copy constructor

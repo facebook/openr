@@ -14,6 +14,7 @@
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
+#include <fbzmq/service/resource-monitor/ResourceMonitor.h>
 #include <fbzmq/service/stats/ThreadData.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -27,7 +28,8 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
   Watchdog(
       std::string const& myNodeName,
       std::chrono::seconds healthCheckInterval,
-      std::chrono::seconds healthCheckThreshold);
+      std::chrono::seconds healthCheckThreshold,
+      uint32_t critialMemoryMB);
 
   ~Watchdog() override = default;
 
@@ -39,11 +41,16 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
 
   void delEvl(ZmqEventLoop* evl);
 
+  bool memoryLimitExceeded() const;
+
  private:
 
   void updateCounters();
 
-  void fireCrash(const std::string& thread);
+  // monitor memory usage
+  void monitorMemory();
+
+  void fireCrash(const std::string &msg);
 
   const std::string myNodeName_;
 
@@ -61,6 +68,16 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
 
   // boolean to indicate previous failure
   bool previousStatus_{true};
+
+  // critcal memory threhsold
+  uint32_t criticalMemoryMB_{0};
+
+  // amount of time memory usage sustained above memory limit
+  folly::Optional<std::chrono::steady_clock::time_point> memExceedTime_ =
+      folly::none;
+
+  // resource monitor
+  fbzmq::ResourceMonitor resourceMonitor_{};
 };
 
 } // namespace openr

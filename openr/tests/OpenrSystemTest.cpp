@@ -738,6 +738,62 @@ TEST_P(FullMeshTopologyFixture, FullMeshKvstorePeerTest) {
                           make_pair(toNextHop(adj42, v4Enabled), 2)}));
 }
 
+//
+// Verify resource monitor
+//
+TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
+  // define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface12, ifIndex12},
+                                    {iface21, ifIndex21}});
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface12, {{iface21, 100}}},
+      {iface21, {{iface12, 100}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  bool v4Enabled(GetParam());
+  v4Enabled = false;
+
+  bool enableFullMeshReduction = false;
+
+  auto openr1 = createOpenr("1", v4Enabled, enableFullMeshReduction);
+  auto openr2 = createOpenr("2", v4Enabled, enableFullMeshReduction);
+
+  openr1->run();
+  openr2->run();
+
+  /* sleep override */
+  // wait until all aquamen got synced on kvstore
+  std::this_thread::sleep_for(kMaxOpenrSyncTime);
+
+  // make sure every openr has a prefix allocated
+  EXPECT_TRUE(openr1->getIpPrefix().hasValue());
+  EXPECT_TRUE(openr2->getIpPrefix().hasValue());
+
+  auto counters1 = openr1->zmqMonitorClient->dumpCounters();
+  while (counters1.size() == 0) {
+    counters1 = openr1->zmqMonitorClient->dumpCounters();
+  }
+
+  std::string memKey{"process.memory.rss"};
+  std::string cpuKey{"process.cpu.pct"};
+  // check if counters contain the cpu and memory resource usage
+  EXPECT_EQ(counters1.count(memKey), 1);
+  EXPECT_EQ(counters1.count(cpuKey), 1);
+  EXPECT_FALSE(openr1->watchdog->memoryLimitExceeded());
+
+  // allocate memory to go beyond memory limit and check if watchdog
+  // catches the over the limit condition
+  auto memUsage = counters1[memKey].value / 1e6;
+  auto allocMem = openr::memLimitMB - memUsage;
+
+  vector<int64_t> v((allocMem + 5) * 0x100000);
+  fill(v.begin(), v.end(), 1);
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  EXPECT_TRUE(openr1->watchdog->memoryLimitExceeded());
+}
+
 int
 main(int argc, char** argv) {
   // parse command line flags

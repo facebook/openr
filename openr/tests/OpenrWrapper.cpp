@@ -241,6 +241,18 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // FIB client socket
   fibReqSock_.connect(fbzmq::SocketUrl{fibCmdUrl_}).value();
+
+  // Watchdog thread to monitor thread aliveness
+  watchdog = std::make_unique<Watchdog>(
+     nodeId_,
+     std::chrono::seconds(1),
+     std::chrono::seconds(60),
+     openr::memLimitMB);
+
+  // Zmq monitor client to get counters
+   zmqMonitorClient = std::make_unique<fbzmq::ZmqMonitorClient> (
+      context_,
+      MonitorSubmitUrl{folly::sformat("inproc://{}-monitor-submit", nodeId_)});
 }
 
 template <class Serializer>
@@ -396,6 +408,15 @@ OpenrWrapper<Serializer>::run() {
   fib_->waitUntilRunning();
   allThreads_.emplace_back(std::move(fibThread));
 
+  // start watchdog
+  std::thread watchdogThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " watchdog running.";
+    watchdog->run();
+    VLOG(1) << nodeId_ << " watchdog stopped.";
+  });
+  watchdog->waitUntilRunning();
+  allThreads_.emplace_back(std::move(watchdogThread));
+
   // start eventLoop_
   allThreads_.emplace_back([&]() {
     VLOG(1) << nodeId_ << " Starting eventLoop_";
@@ -410,6 +431,8 @@ OpenrWrapper<Serializer>::stop() {
   // stop all modules in reverse order
   eventLoop_.stop();
   eventLoop_.waitUntilStopped();
+  watchdog->stop();
+  watchdog->waitUntilStopped();
   fib_->stop();
   fib_->waitUntilStopped();
   decision_->stop();

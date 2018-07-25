@@ -268,6 +268,9 @@ class Constants {
 
   // Lowest Supported OpenR version
   static constexpr int32_t kOpenrSupportedVersion{20180307};
+
+  // Threshold time in secs to crash after reaching critical memory
+  static constexpr std::chrono::seconds kMemoryThresholdTime{600};
 };
 
 } // namespace openr

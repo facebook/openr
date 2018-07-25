@@ -77,6 +77,7 @@ constexpr std::chrono::seconds Constants::kPlatformSyncInterval;
 constexpr std::chrono::seconds Constants::kPlatformThriftIdleTimeout;
 constexpr std::chrono::seconds Constants::kNetlinkSyncThrottleInterval;
 constexpr std::chrono::seconds Constants::kStoreSyncInterval;
+constexpr std::chrono::seconds Constants::kMemoryThresholdTime;
 constexpr std::pair<int32_t, int32_t> Constants::kSrGlobalRange;
 constexpr std::pair<int32_t, int32_t> Constants::kSrLocalRange;
 constexpr uint16_t Constants::kPerfBufferSize;
