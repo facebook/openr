@@ -51,6 +51,7 @@ KvStoreWrapper::KvStoreWrapper(
       dbSyncInterval,
       monitorSubmitInterval,
       peers,
+      false /* enable legacy flooding */,
       std::move(filters));
 }
 

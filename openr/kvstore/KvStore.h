@@ -112,6 +112,8 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       std::chrono::seconds monitorSubmitInterval,
       // initial list of peers to connect to
       std::unordered_map<std::string, thrift::PeerSpec> peers,
+      // Enable legacy flooding
+      bool legacyFlooding = true,
       // KvStore key filters
       folly::Optional<KvStoreFilters> filters = folly::none);
 
@@ -187,6 +189,14 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // periodically count down and purge expired keys if any
   void countdownTtl();
 
+  // Function to flood publication to neighbors
+  // publication => data element to flood
+  // originatorId => optional parameter indicating name of node who originated
+  //                 the publication.
+  void floodPublication(
+      thrift::Publication const& publication,
+      folly::Optional<std::string> originatorId);
+
   // count number of prefixes in kvstore
   int getPrefixCount();
 
@@ -230,6 +240,12 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // to avoid submission of counters in testing.
   const std::chrono::seconds monitorSubmitInterval_;
 
+  // Enable legacy flooding using ZMQ PUB-SUB. If set to false then flooding
+  // will be done via KvStore's one way SET_KEY requests and publications will
+  // be sent out old way for internal clients for functioning of Open/R and
+  // external clients for debugging purpose only
+  const bool legacyFlooding_{true};
+
   //
   // Mutable state
   //
@@ -244,6 +260,8 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock_;
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock_;
 
+  // DEPRECATED: Use of sub socket will be removed soon for flooding between
+  // KvStores.
   // the socket we use to subscribe to other KvStores
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> peerSubSock_;
 

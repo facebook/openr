@@ -115,7 +115,7 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   // Public member variables
   fbzmq::Context context;
 
- private:
+  // Internal stores
   std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};
 };
 
@@ -829,9 +829,10 @@ TEST_P(KvStoreTestTtlFixture, Graph) {
 }
 
 /**
- * Start single testable store, and make it sync with N other stores (only one
- * way connection). We only rely on pub-sub and sync logic on a single store to
- * do all the work.
+ * Start single testable store, and make it sync with N other stores. We only
+ * rely on pub-sub and sync logic on a single store to do all the work.
+ *
+ * Also verify behavior of new flooding.
  */
 TEST_F(KvStoreTestFixture, BasicSync) {
   const std::string kOriginBase = "peer-store-";
@@ -882,6 +883,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // race condition where certain updates are lost over PUB/SUB channel
   for (auto& store : peerStores) {
     myStore->addPeer(store->nodeId, store->getPeerSpec());
+    store->addPeer(myStore->nodeId, myStore->getPeerSpec());
   }
 
   // Wait for full-sync to complete. Full-sync is complete when all of our
@@ -948,6 +950,91 @@ TEST_F(KvStoreTestFixture, BasicSync) {
 
   // Verify our database and all neighbor database
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll());
+
+  //
+  // Update key in peerStore[0] and verify flooding behavior
+  // Invariant => Sent publication to a neighbor never reflects back
+  // - Only one publication and key_vals is received in all stores
+  // - Only one publication and key_vals is updated in all stores
+  // - Only one publication, key_vals is sent out of peerStore[0]
+  // - Exactly 15 publications, key_vals is sent out of myStore
+  //   (15 peers except originator)
+  // - No publication or key_vals is sent out of peerStores except peerStore[0]
+  //
+  auto getNodeCounters = [&]() {
+    std::map<std::string, fbzmq::thrift::CounterMap> nodeCounters;
+    for (auto& store : stores_) {
+      nodeCounters.emplace(store->nodeId, store->getCounters());
+    }
+    return nodeCounters;
+  };
+  LOG(INFO) << "Testing flooding behavior";
+
+  // Get current counters
+  auto oldNodeCounters = getNodeCounters();
+
+  // Set new key
+  {
+    auto& store = peerStores[0];
+    auto key = folly::sformat("flood-test-key-1", store->nodeId);
+    thrift::Value thriftVal(
+        apache::thrift::FRAGILE,
+        2 /* version */,
+        "gotham_city" /* originatorId */,
+        folly::sformat("flood-test-value-1", store->nodeId),
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        0 /* hash */);
+
+    // Submit the key-value to store
+    LOG(INFO) << "Setting key in peerStores[0]";
+    store->setKey(key, thriftVal);
+  }
+
+  // Receive publication from each store as one update is atleast expected
+  {
+    for (auto& store : stores_) {
+      VLOG(2) << "Receiving publication from " << store->nodeId;
+      store->recvPublication(kTimeout);
+    }
+  }
+
+  // Get new counters
+  auto newNodeCounters = getNodeCounters();
+
+  // Verify counters
+  for (auto& store : stores_) {
+    VLOG(2) << "Verifying counters from " << store->nodeId;
+    auto& oldCounters = oldNodeCounters[store->nodeId];
+    auto& newCounters = newNodeCounters[store->nodeId];
+    EXPECT_EQ(
+      oldCounters["kvstore.received_publications.count.0"].value + 1,
+      newCounters["kvstore.received_publications.count.0"].value
+    );
+    EXPECT_EQ(
+      oldCounters["kvstore.received_key_vals.sum.0"].value + 1,
+      newCounters["kvstore.received_key_vals.sum.0"].value
+    );
+    EXPECT_EQ(
+      oldCounters["kvstore.updated_key_vals.sum.0"].value + 1,
+      newCounters["kvstore.updated_key_vals.sum.0"].value
+    );
+    int sentOffset = 0;
+    if (store->nodeId == peerStores[0]->nodeId) {
+      sentOffset = 1;
+    }
+    if (store->nodeId == myStore->nodeId) {
+      sentOffset = 15;
+    }
+    EXPECT_EQ(
+      oldCounters["kvstore.sent_publications.count.0"].value + sentOffset,
+      newCounters["kvstore.sent_publications.count.0"].value
+    );
+    EXPECT_EQ(
+      oldCounters["kvstore.sent_key_vals.sum.0"].value + sentOffset,
+      newCounters["kvstore.sent_key_vals.sum.0"].value
+    );
+  }
 }
 
 /**

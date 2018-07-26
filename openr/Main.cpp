@@ -303,6 +303,11 @@ DEFINE_bool(
     false,
     "Set this flag to revert to old decision code");
 DEFINE_int32(memory_limit_mb, 300, "Memory limit in MB");
+DEFINE_bool(
+    enable_legacy_flooding,
+    true,
+    "Legacy flooding is not optimized but can be enabled to keep compatibility"
+    "with old KvStore which doesn't support new flooding mechanism");
 
 using namespace fbzmq;
 using namespace openr;
@@ -620,6 +625,7 @@ main(int argc, char** argv) {
       Constants::kStoreSyncInterval,
       Constants::kMonitorSubmitInterval,
       std::unordered_map<std::string, openr::thrift::PeerSpec>{},
+      FLAGS_enable_legacy_flooding,
       std::move(kvFilters));
   std::thread kvStoreThread([&store]() noexcept {
     LOG(INFO) << "Starting KvStore thread...";
