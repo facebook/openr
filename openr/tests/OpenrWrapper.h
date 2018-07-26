@@ -24,7 +24,7 @@
 
 namespace openr {
 // memory limit for watchdog checks
-const uint32_t memLimitMB{250};
+const uint32_t memLimitMB{350};
 
 /**
  * A utility class to wrap OpenR's Main.cpp
