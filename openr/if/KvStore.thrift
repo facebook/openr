@@ -45,6 +45,7 @@ enum Command {
   KEY_GET   = 2,
   KEY_DUMP  = 3,
   HASH_DUMP = 7,
+  COUNTERS_GET = 9,   // Return object will be Monitor::CounterMap
 
   // operations on the store peers
   PEER_ADD  = 4,

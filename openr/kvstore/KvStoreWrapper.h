@@ -88,6 +88,11 @@ class KvStoreWrapper {
   thrift::Publication recvPublication(std::chrono::milliseconds timeout);
 
   /**
+   * API to get counters from KvStore directly
+   */
+  fbzmq::thrift::CounterMap getCounters();
+
+  /**
    * APIs to manage (add/remove) KvStore peers. Returns true on success else
    * returns false.
    */

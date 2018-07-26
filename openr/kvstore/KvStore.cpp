@@ -1003,6 +1003,15 @@ KvStore::processRequest(
     }
     break;
   }
+  case thrift::Command::COUNTERS_GET: {
+    VLOG(3) << "Counters are requested";
+    fbzmq::thrift::CounterValuesResponse counters{
+      apache::thrift::FRAGILE,
+      getCounters()};
+    cmdSock.sendOne(
+        fbzmq::Message::fromThriftObj(counters, serializer_).value());
+    break;
+  }
   case thrift::Command::PEER_ADD:
     VLOG(2) << "Peer addition requested";
     tData_.addStatValue("kvstore.cmd_peer_add", 1, fbzmq::COUNT);
@@ -1242,10 +1251,8 @@ KvStore::countdownTtl() {
   globalPubSock_.sendOne(msg);
 }
 
-void
-KvStore::submitCounters() {
-  VLOG(3) << "Submitting counters ... ";
-
+fbzmq::thrift::CounterMap
+KvStore::getCounters() {
   // Extract/build counters from thread-data
   auto counters = tData_.getCounters();
 
@@ -1254,7 +1261,13 @@ KvStore::submitCounters() {
   counters["kvstore.num_peers"] = peers_.size();
   counters["kvstore.pending_full_sync"] = peersToSyncWith_.size();
 
-  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
+  return prepareSubmitCounters(std::move(counters));
+}
+
+void
+KvStore::submitCounters() {
+  VLOG(3) << "Submitting counters ... ";
+  zmqMonitorClient_->setCounters(getCounters());
 }
 
 void

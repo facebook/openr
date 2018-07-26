@@ -234,6 +234,23 @@ KvStoreWrapper::recvPublication(std::chrono::milliseconds timeout) {
   return maybeMsg.value();
 }
 
+fbzmq::thrift::CounterMap
+KvStoreWrapper::getCounters() {
+  // Prepare request
+  thrift::Request request;
+  request.cmd = thrift::Command::COUNTERS_GET;
+
+  // Make ZMQ call and wait for response
+  reqSock_.sendThriftObj(request, serializer_);
+  auto maybeMsg = reqSock_.recvThriftObj<fbzmq::thrift::CounterValuesResponse>(
+      serializer_);
+  if (maybeMsg.hasError()) {
+    LOG(FATAL) << "getCounters recv response failed: " << maybeMsg.error();
+  }
+
+  return std::move(maybeMsg->counters);
+}
+
 bool
 KvStoreWrapper::addPeer(std::string peerName, thrift::PeerSpec spec) {
   // Prepare request

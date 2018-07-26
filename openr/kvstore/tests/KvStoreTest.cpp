@@ -455,27 +455,17 @@ TEST(KvStore, MonitorReport) {
   fbzmq::Context context;
   CompactSerializer serializer;
 
-  KvStore kvStore(
+  KvStoreWrapper kvStore(
       context,
       "test",
-      KvStoreLocalPubUrl{"inproc://local_pub"},
-      KvStoreGlobalPubUrl{"inproc://global_pub"},
-      KvStoreLocalCmdUrl{"inproc://local_cmd"},
-      KvStoreGlobalCmdUrl{"inproc://global_cmd"},
-      MonitorSubmitUrl{"inproc://monitor_submit"},
-      folly::none /* ip-tos */,
       std::chrono::seconds(1) /* Db Sync Interval */,
       std::chrono::seconds(1) /* Monitor Submit Interval */,
       std::unordered_map<std::string, thrift::PeerSpec>{});
+  kvStore.run();
 
   // create and bind socket to receive counters
   fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_SERVER> server(context);
-  server.bind(fbzmq::SocketUrl{"inproc://monitor_submit"}).value();
-
-  std::thread t([&kvStore]() {
-    kvStore.run();
-    LOG(INFO) << "KvStore stopped";
-  });
+  server.bind(fbzmq::SocketUrl{kvStore.monitorSubmitUrl}).value();
 
   std::vector<fbzmq::PollItem> pollItems = {
       {reinterpret_cast<void*>(*server), 0, ZMQ_POLLIN, 0}};
@@ -486,9 +476,15 @@ TEST(KvStore, MonitorReport) {
       .value()
       .readThriftObj<fbzmq::thrift::MonitorRequest>(serializer)
       .value();
+
+  // receive counters from KvStore
+  auto counters = kvStore.getCounters();
+  EXPECT_EQ(1, counters.count("kvstore.num_keys"));
+  EXPECT_EQ(1, counters.count("kvstore.num_peers"));
+  EXPECT_EQ(1, counters.count("kvstore.pending_full_sync"));
+
   LOG(INFO) << "Counters received, yo";
   kvStore.stop();
-  t.join();
   LOG(INFO) << "KvStore thread finished";
 }
 

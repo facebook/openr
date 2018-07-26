@@ -191,6 +191,7 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   int getPrefixCount();
 
   // Extracts the counters and submit them to monitor
+  fbzmq::thrift::CounterMap getCounters();
   void submitCounters();
 
   // Submit events to monitor
