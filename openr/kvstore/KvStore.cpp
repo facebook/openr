@@ -114,7 +114,6 @@ KvStore::KvStore(
       folly::none,
       fbzmq::NonblockingFlag{true});
 
-
   // allocate new global cmd socket if not provided
   globalCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
       zmqContext,
@@ -122,7 +121,6 @@ KvStore::KvStore(
           folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId_)},
       folly::none,
       fbzmq::NonblockingFlag{true});
-
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
@@ -713,6 +711,16 @@ KvStore::addPeers(
 
       if (cmdUrlUpdated) {
         LOG(INFO) << "Connecting sync channel to " << peerSpec.cmdUrl;
+        auto const peerCmdSocketId = folly::sformat(
+            Constants::kGlobalCmdIdTemplate.toString(), peerName);
+        auto const optStatus = peerSyncSock_.setSockOpt(
+            ZMQ_CONNECT_RID,
+            peerCmdSocketId.data(),
+            peerCmdSocketId.size());
+        if (optStatus.hasError()) {
+          LOG(FATAL) << "Error setting ZMQ_CONNECT_RID with value "
+                     << peerCmdSocketId;
+        }
         if (peerSyncSock_.connect(fbzmq::SocketUrl{peerSpec.cmdUrl})
                 .hasError()) {
           LOG(FATAL) << "Error connecting to URL '" << peerSpec.cmdUrl << "'";
@@ -730,10 +738,7 @@ KvStore::addPeers(
                  << "` reason: " << folly::exceptionStr(e);
     }
   }
-
-  // Request full sync from peers after adding peers in kInitialBackoff. Trying
-  // immediately leads to failure as TCP sockets might not have been setup yet.
-  fullSyncTimer_->scheduleTimeout(Constants::kInitialBackoff);
+  fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
 }
 
 // delete some peers we are subscribed to
@@ -770,7 +775,7 @@ KvStore::delPeers(std::vector<std::string> const& peers) {
 void
 KvStore::requestFullSyncFromPeers() {
   // minimal timeout for next run
-  auto timeout = std::chrono::milliseconds(Constants::kMaxBackoff);
+  auto timeout = std::chrono::milliseconds(0);
 
   // Make requests
   for (auto it = peersToSyncWith_.begin(); it != peersToSyncWith_.end();) {
@@ -815,9 +820,9 @@ KvStore::requestFullSyncFromPeers() {
 
     if (ret.hasError()) {
       // this could be pretty common on initial connection setup
-      VLOG(2) << "Failed to send full sync request to peer " << peerName
-              << " using id " << peerCmdSocketId << " (will try again). "
-              << ret.error();
+      LOG(ERROR) << "Failed to send full sync request to peer " << peerName
+                 << " using id " << peerCmdSocketId << " (will try again). "
+                 << ret.error();
       expBackoff.reportError(); // Apply exponential backoff
       timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       ++it;
@@ -1069,9 +1074,9 @@ KvStore::processSyncResponse() noexcept {
   tData_.addStatValue(
       "kvstore.updated_key_vals", deltaPub.keyVals.size(), fbzmq::SUM);
 
-  VLOG(1) << "Sync response received from " << requestId << " with "
-          << syncPub.keyVals.size() << " key value pairs which incured "
-          << deltaPub.keyVals.size() << " key-value updates";
+  LOG(INFO) << "Sync response received from " << requestId << " with "
+            << syncPub.keyVals.size() << " key value pairs which incured "
+            << deltaPub.keyVals.size() << " key-value updates";
 
   // publish the updated key-values to the peers
   if (!deltaPub.keyVals.empty()) {
@@ -1118,8 +1123,6 @@ KvStore::requestSync() {
     return;
   }
 
-  VLOG(2) << "Requesting periodic sync from one of the neighbor ...";
-
   // Randomly select one neighbor to request full-dump from
   int randomIndex = folly::Random::rand32() % peers_.size();
   int index{0};
@@ -1133,6 +1136,7 @@ KvStore::requestSync() {
   }
 
   // Enqueue neighbor for full-sync (insert only if entry doesn't exists)
+  LOG(INFO) << "Requesting periodic sync from " << randomNeighbor;
   peersToSyncWith_.emplace(
       randomNeighbor,
       ExponentialBackoff<std::chrono::milliseconds>(
@@ -1140,7 +1144,7 @@ KvStore::requestSync() {
 
   // initial full sync request if peersToSyncWith_ was empty
   if (not fullSyncTimer_->isScheduled()) {
-    fullSyncTimer_->scheduleTimeout(Constants::kInitialBackoff);
+    fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
   }
 }
 
