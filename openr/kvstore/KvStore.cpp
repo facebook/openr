@@ -713,7 +713,7 @@ KvStore::addPeers(
       if (cmdUrlUpdated) {
         LOG(INFO) << "Connecting sync channel to " << peerSpec.cmdUrl;
         auto const peerCmdSocketId = folly::sformat(
-            Constants::kGlobalCmdIdTemplate.toString(), peerName);
+            Constants::kGlobalCmdLocalIdTemplate.toString(), peerName);
         auto const optStatus = peerSyncSock_.setSockOpt(
             ZMQ_CONNECT_RID,
             peerCmdSocketId.data(),
@@ -794,8 +794,8 @@ KvStore::requestFullSyncFromPeers() {
     // Generate and send router-socket id of peer first. If the kvstore of
     // peer is not connected over the router socket then it will error out
     // exception and we will retry again.
-    auto const peerCmdSocketId =
-        folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), peerName);
+    auto const peerCmdSocketId = folly::sformat(
+        Constants::kGlobalCmdLocalIdTemplate.toString(), peerName);
 
     thrift::Request dumpRequest;
     dumpRequest.cmd = thrift::Command::KEY_DUMP;
@@ -1112,7 +1112,7 @@ KvStore::processSyncResponse() noexcept {
   for (auto const& kv : peers_) {
     // Create ID for peer to whom we can send request
     auto const peerCmdSocketId = folly::sformat(
-        Constants::kGlobalCmdIdTemplate.toString(), kv.first);
+        Constants::kGlobalCmdLocalIdTemplate.toString(), kv.first);
     if (peerCmdSocketId == requestId) {
       originatorId = kv.first;
       break;
@@ -1326,7 +1326,7 @@ KvStore::floodPublication(
 
     // Create ID for peer to whom we can send request
     auto const peerCmdSocketId = folly::sformat(
-        Constants::kGlobalCmdIdTemplate.toString(), kv.first);
+        Constants::kGlobalCmdLocalIdTemplate.toString(), kv.first);
 
     // Send flood request
     auto const ret = peerSyncSock_.sendMultiple(
