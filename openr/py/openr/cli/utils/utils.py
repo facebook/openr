@@ -41,6 +41,9 @@ from thrift.protocol import TBinaryProtocol
 from thrift.transport import TSocket, TTransport
 
 
+from six import PY3, binary_type
+
+
 def yesno(question, skip_confirm=False):
     '''
     Ask a yes/no question. No default, we want to avoid mistakes as
@@ -74,7 +77,25 @@ def json_dumps(data):
     :return: json encoded string
     '''
 
-    return json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False)
+    def make_serializable(obj):
+        '''
+        Funtion called if a non seralizable object is hit
+        - Today we only support bytes to str for Python 3
+
+        :param obj: object that can not be serializable
+
+        :return: decode of bytes to a str
+        '''
+
+        if PY3 and isinstance(obj, binary_type):
+            return obj.decode("utf-8")
+
+        raise TypeError("{} is not JSON serializable".format(obj))
+
+    return json.dumps(
+        data, default=make_serializable, sort_keys=True, indent=2,
+        ensure_ascii=False
+    )
 
 
 def time_since(timestamp):
