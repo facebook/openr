@@ -12,6 +12,10 @@
 #include "NetlinkException.h"
 #include "NetlinkTypes.h"
 
+#include <folly/AtomicBitSet.h>
+#include <folly/IPAddress.h>
+#include <folly/futures/Future.h>
+
 #include <fbzmq/async/ZmqEventLoop.h>
 
 #include <folly/futures/Future.h>
@@ -60,6 +64,7 @@ class NetlinkSocket {
      LINK_EVENT = 0,
      NEIGH_EVENT,
      ADDR_EVENT,
+     ROUTE_EVENT,
      MAX_EVENT_TYPE // sentinel
    };
 
@@ -76,20 +81,33 @@ class NetlinkSocket {
        boost::apply_visitor(EventVisitor(action, this), event);
      }
 
-     virtual void linkEventFunc(int action, const Link& linkEntry) {
-       VLOG(3) << "LinkEventFunc";
+     virtual void linkEventFunc(
+        int action, const openr::fbnl::Link& linkEntry) {
+       VLOG(3) << "LinkEventFunc action: " << action
+               << " LinkName: " << linkEntry.getLinkName();
      }
 
-     virtual void neighborEventFunc(int action, const Neighbor& neighborEntry) {
-       VLOG(3) << "NeighborEventFucn";
+     virtual void neighborEventFunc(
+        int action, const openr::fbnl::Neighbor& neighborEntry) {
+       VLOG(3) << "NeighborEventFucn action: " << action
+               << " Neighbor IfIndex: "
+               << neighborEntry.getIfIndex();
      }
 
-     virtual void addrEventFunc(int action, const IfAddress& addrEntry) {
-       VLOG(3) << "AddrEventFunc";
+     virtual void addrEventFunc(
+        int action, const openr::fbnl::IfAddress& addrEntry) {
+       VLOG(3) << "AddrEventFunc action: " << action << "Address: "
+               << (addrEntry.getPrefix().hasValue()
+                ? folly::IPAddress::networkToString(
+                          addrEntry.getPrefix().value()) : "");
      }
 
-     virtual void routeEventFunc(int action, const Route& routeEntry) {
-       VLOG(3) << "RouteEventFunc";
+     virtual void routeEventFunc(
+        int action, const openr::fbnl::Route& routeEntry) {
+       VLOG(3) << "RouteEventFunc action: " << action
+               << "Destination: "
+               << folly::IPAddress::networkToString(
+                          routeEntry.getDestination());
      }
 
     private:
@@ -97,29 +115,34 @@ class NetlinkSocket {
      EventsHandler& operator=(const EventsHandler&) = delete;
    };
 
-   struct EventVisitor {
-     EventsHandler* eventHandler;
+   struct EventVisitor : public boost::static_visitor<> {
      int32_t eventAction; // NL_ACT_DEL, NL_ACT_NEW
-     EventVisitor(int action, EventsHandler* handler);
+     EventsHandler* eventHandler;
+     EventVisitor(int action, EventsHandler* handler)
+      : eventAction(action),
+        eventHandler(handler) {}
 
-     void operator()(Route const& route) {
+     void operator()(openr::fbnl::Route const& route) const {
        eventHandler->routeEventFunc(eventAction, route);
      }
 
-     void operator()(IfAddress const& addr) {
+     void operator()(openr::fbnl::IfAddress const& addr) const {
        eventHandler->addrEventFunc(eventAction, addr);
      }
 
-     void operator()(Neighbor const& neigh) {
+     void operator()(openr::fbnl::Neighbor const& neigh) const {
        eventHandler->neighborEventFunc(eventAction, neigh);
      }
 
-     void operator()(Link const& link) {
+     void operator()(openr::fbnl::Link const& link) const {
        eventHandler->linkEventFunc(eventAction, link);
      }
    };
 
-   explicit NetlinkSocket(fbzmq::ZmqEventLoop* evl, EventsHandler);
+   NetlinkSocket(
+     fbzmq::ZmqEventLoop* evl,
+     std::unique_ptr<EventsHandler> handler);
+
    virtual ~NetlinkSocket();
 
    /**
@@ -156,7 +179,7 @@ class NetlinkSocket {
     * @throws NetlinkException
     */
    virtual folly::Future<folly::Unit>
-   syncUnicastRoutes(NlUnicastRoutes newRouteDb);
+   syncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes newRouteDb);
 
    /**
     * Delete routes that not in the 'newRouteDb' but in kernel
@@ -164,7 +187,7 @@ class NetlinkSocket {
     * @throws NetlinkException
     */
    virtual folly::Future<folly::Unit>
-   syncLinkRoutes(NlLinkRoutes newRouteDb);
+   syncLinkRoutes(uint8_t protocolId, NlLinkRoutes newRouteDb);
 
    /**
     * Get cached unicast routing by protocol ID
@@ -283,6 +306,39 @@ class NetlinkSocket {
    void unsubscribeAllEvents();
 
  private:
+   // This is the callback we pass into libnl when data is ready on the socket
+   // The opaque data will contain the user registered NetlinkSubscriber
+   // These are static to match C function vector prototype
+   static void routeCacheCB(
+     struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
+
+   static void linkCacheCB(
+     struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
+
+   void handleRouteEvent(
+     nl_object* obj, int action, bool runHandler) noexcept;
+
+   void handleLinkEvent(
+     nl_object* obj, int action, bool runHandler) noexcept;
+
+   void doUpdateRouteCache(struct rtnl_route* obj, int action);
+
+   void doAddUpdateUnicastRoute(Route route);
+
+   void doDeleteUnicastRoute(Route route);
+
+   void doAddMulticastRoute(Route route);
+
+   void doDeleteMulticastRoute(Route route);
+
+   void doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb);
+
+   void doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb);
+
+   void checkMulticastRoute(const Route& route);
+
+   void checkUnicastRoute(const Route& route);
+ private:
    /**
     * Netlink scokets to interact with linux kernel. We deliberately use two
     * sockets as it is a recommended way instead of multiplexing things over
@@ -307,8 +363,7 @@ class NetlinkSocket {
    struct nl_cache* neighborCache_{nullptr};
    struct nl_cache* linkCache_{nullptr};
    struct nl_cache* addrCache_{nullptr};
-   struct nl_cache* routeCacheV4_{nullptr};
-   struct nl_cache* routeCacheV6_{nullptr};
+   struct nl_cache* routeCache_{nullptr};
 
    fbzmq::ZmqEventLoop* evl_{nullptr};
 
@@ -323,7 +378,7 @@ class NetlinkSocket {
 
    NlLinkRoutesDb linkRoutesCache_;
 
-   EventsHandler* handler_{nullptr};
+   std::unique_ptr<EventsHandler> handler_{nullptr};
 
    /**
     * We keep an internal cache of Neighbor and Link entries

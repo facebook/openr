@@ -118,7 +118,7 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   // Use default values
   auto route = builder.setDestination(dst)
          .setProtocolId(kProtocolId)
-         .buildUnicastRoute();
+         .buildRoute();
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
   EXPECT_EQ(RT_SCOPE_UNIVERSE, route.getScope());
@@ -171,7 +171,7 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
                       .setPriority(priority)
                       .setTos(tos)
                       .addNextHop(nh1)
-                      .buildUnicastRoute();
+                      .buildRoute();
 
   struct rtnl_route* p = route.fromNetlinkRoute();
   Route route1(std::move(route));
@@ -252,7 +252,7 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
                         .addNextHop(nh1)
                         .addNextHop(nh2)
                         .addNextHop(nh3)
-                        .buildUnicastRoute();
+                        .buildRoute();
 
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
@@ -514,7 +514,7 @@ TEST_F(NetlinkTypesFixture, LinkTypeTest) {
   EXPECT_EQ(kIfIndex, rtnl_link_get_ifindex(obj));
   EXPECT_EQ(kIfIndex, link.getIfIndex());
   EXPECT_EQ(linkName, std::string(rtnl_link_get_name(obj)));
-  EXPECT_EQ(linkName, link.getLInkName());
+  EXPECT_EQ(linkName, link.getLinkName());
   EXPECT_EQ(flags, rtnl_link_get_flags(obj));
   EXPECT_EQ(flags, link.getFlags());
   EXPECT_TRUE(link.isUp());
@@ -526,7 +526,7 @@ TEST_F(NetlinkTypesFixture, LinkTypeTest) {
   EXPECT_EQ(kIfIndex, rtnl_link_get_ifindex(obj));
   EXPECT_EQ(kIfIndex, link1.getIfIndex());
   EXPECT_EQ(linkName, std::string(rtnl_link_get_name(obj)));
-  EXPECT_EQ(linkName, link1.getLInkName());
+  EXPECT_EQ(linkName, link1.getLinkName());
   EXPECT_EQ(flags, rtnl_link_get_flags(obj));
   EXPECT_EQ(flags, link1.getFlags());
   EXPECT_TRUE(link1.isUp());

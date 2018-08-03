@@ -8,13 +8,109 @@ namespace fbnl {
 
 const std::set<int> kNeighborReachableStates{
     NUD_REACHABLE, NUD_STALE, NUD_DELAY, NUD_PERMANENT, NUD_PROBE, NUD_NOARP};
+const int kIpAddrBufSize = 128;
 
 bool isNeighborReachable(int state) {
   return kNeighborReachableStates.count(state);
 }
 
-Route RouteBuilder::buildUnicastRoute() const {
+Route RouteBuilder::buildRoute() const {
   return Route(*this);
+}
+
+Route RouteBuilder::buildFromObject(struct rtnl_route* obj) const {
+  CHECK_NOTNULL(obj);
+  RouteBuilder builder;
+  uint32_t scope = rtnl_route_get_scope(obj);
+  uint32_t table = rtnl_route_get_table(obj);
+  uint32_t flags = rtnl_route_get_flags(obj);
+  uint32_t proto = rtnl_route_get_protocol(obj);
+  uint32_t type = rtnl_route_get_type(obj);
+  builder.setScope(scope)
+         .setRouteTable(table)
+         .setFlags(flags)
+         .setProtocolId(proto)
+         .setType(type);
+
+  struct nl_addr* dst = rtnl_route_get_dst(obj);
+
+  // Special handling for default routes
+  // All others can be constructed from binary address form
+  folly::CIDRNetwork prefix;
+  std::array<char, kIpAddrBufSize> ipAddrBuf;
+  if (nl_addr_get_prefixlen(dst) == 0) {
+    if (nl_addr_get_family(dst) == AF_INET6) {
+      VLOG(3) << "Creating a V6 default route";
+      prefix = folly::IPAddress::createNetwork("::/0");
+    } else if (nl_addr_get_family(dst) == AF_INET) {
+      VLOG(3) << "Creating a V4 default route";
+      prefix = folly::IPAddress::createNetwork("0.0.0.0/0");
+    } else {
+      throw NetlinkException("Unknown address family for default route");
+    }
+  } else {
+    // route object dst is the prefix. parse it
+    try {
+      const auto ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+          static_cast<const unsigned char*>(nl_addr_get_binary_addr(dst)),
+          nl_addr_get_len(dst)));
+      prefix = {ipAddress, nl_addr_get_prefixlen(dst)};
+    } catch (std::exception const& e) {
+      throw NetlinkException(folly::sformat(
+        "Error creating prefix for addr: {}",
+        nl_addr2str(dst, ipAddrBuf.data(), ipAddrBuf.size())));
+    }
+  }
+  builder.setDestination(prefix);
+  auto nextHopFunc = [](struct rtnl_nexthop * obj, void* ctx) noexcept->void {
+    struct nl_addr* gw = rtnl_route_nh_get_gateway(obj);
+    int ifIndex = rtnl_route_nh_get_ifindex(obj);
+    // One of gateway or ifIndex must be set
+    if (!gw && 0 == ifIndex) {
+      return;
+    }
+    RouteBuilder* rtBuilder = reinterpret_cast<RouteBuilder*>(ctx);
+    NextHopBuilder nhBuilder;
+    rtBuilder->addNextHop(std::move(nhBuilder.buildFromObject(obj)));
+  };
+  rtnl_route_foreach_nexthop(obj, nextHopFunc, &builder);
+  return builder.buildRoute();
+}
+
+Route RouteBuilder::buildMulticastRoute() const {
+  if (!routeIfIndex_.hasValue() || routeIfIndex_.value() == 0
+   || !routeIfName_.hasValue()) {
+    throw NetlinkException("Iface index and Iface name must be set");
+  }
+  NextHopBuilder nhBuilder;
+  nhBuilder.setIfIndex(routeIfIndex_.value());
+
+  RouteBuilder builder;
+  return builder.setDestination(dst_)
+                .setProtocolId(protocolId_)
+                .setScope(scope_)
+                .setType(RTN_MULTICAST)
+                .setRouteIfName(routeIfName_.value())
+                .addNextHop(nhBuilder.build())
+                .buildRoute();
+}
+
+Route RouteBuilder::buildLinkRoute() const {
+  if (!routeIfIndex_.hasValue() || routeIfIndex_.value() == 0
+   || !routeIfName_.hasValue()) {
+    throw NetlinkException("Iface index and Iface name must be set");
+  }
+  NextHopBuilder nhBuilder;
+  nhBuilder.setIfIndex(routeIfIndex_.value());
+
+  RouteBuilder builder;
+  return builder.setDestination(dst_)
+                .setProtocolId(protocolId_)
+                .setScope(RT_SCOPE_LINK)
+                .setType(RTN_UNICAST)
+                .setRouteIfName(routeIfName_.value())
+                .addNextHop(nhBuilder.build())
+                .buildRoute();
 }
 
 RouteBuilder& RouteBuilder::setDestination(const folly::CIDRNetwork& dst) {
@@ -90,6 +186,24 @@ folly::Optional<uint8_t> RouteBuilder::getTos() const {
   return tos_;
 }
 
+RouteBuilder& RouteBuilder::setRouteIfName(const std::string& ifName) {
+  routeIfName_ = ifName;
+  return *this;
+}
+
+folly::Optional<std::string> RouteBuilder::getRouteIfName() const {
+  return routeIfName_;
+}
+
+RouteBuilder& RouteBuilder::setRouteIfIndex(int ifIndex) {
+  routeIfIndex_ = ifIndex;
+  return *this;
+}
+
+folly::Optional<int> RouteBuilder::getRouteIfIndex() const {
+  return routeIfIndex_;
+}
+
 RouteBuilder& RouteBuilder::addNextHop(const NextHop& nextHop) {
   nextHops_.push_back(nextHop);
   return *this;
@@ -98,6 +212,18 @@ RouteBuilder& RouteBuilder::addNextHop(const NextHop& nextHop) {
 const std::vector<NextHop>&
 RouteBuilder::getNextHops() const {
   return nextHops_;
+}
+
+void RouteBuilder::reset() {
+  type_ = RTN_UNICAST;
+  routeTable_ = RT_TABLE_MAIN;
+  protocolId_ = DEFAULT_PROTOCOL_ID;
+  scope_ = RT_SCOPE_UNIVERSE;
+  flags_.clear();
+  priority_.clear();
+  tos_.clear();
+  nextHops_.clear();
+  routeIfName_.clear();
 }
 
 Route::Route(const RouteBuilder& builder)
@@ -109,7 +235,8 @@ Route::Route(const RouteBuilder& builder)
     priority_(builder.getPriority()),
     tos_(builder.getTos()),
     nextHops_(builder.getNextHops()),
-    dst_ (builder.getDestination()) {
+    dst_ (builder.getDestination()),
+    routeIfName_(builder.getRouteIfName()) {
   init();
 }
 
@@ -129,7 +256,8 @@ Route::Route(Route&& other) noexcept
     priority_(other.priority_),
     tos_(other.tos_),
     nextHops_(other.nextHops_),
-    dst_ (other.dst_) {
+    dst_ (other.dst_),
+    routeIfName_(other.routeIfName_) {
   if (other.route_) {
     // prevent double release
     route_ = other.route_;
@@ -150,6 +278,7 @@ Route& Route::operator=(Route&& other) noexcept {
   tos_ = other.tos_;
   nextHops_ = other.nextHops_;
   dst_ = other.dst_;
+  routeIfName_ = other.routeIfName_;
   if (route_) {
     rtnl_route_put(route_);
     route_ = nullptr;
@@ -159,6 +288,16 @@ Route& Route::operator=(Route&& other) noexcept {
     other.route_ = nullptr;
   }
   return *this;
+}
+
+bool operator==(const Route& lhs, const Route& rhs) {
+  return lhs.getType() == rhs.getType()
+      && lhs.getTos() == rhs.getTos()
+      && lhs.getFlags() == rhs.getFlags()
+      && lhs.getScope() == rhs.getScope()
+      && lhs.getDestination() == rhs.getDestination()
+      && lhs.getPriority() == rhs.getPriority()
+      && lhs.getNextHops() == rhs.getNextHops();
 }
 
 uint8_t Route::getFamily() const {
@@ -200,6 +339,10 @@ folly::Optional<uint32_t> Route::getPriority() const {
 const std::vector<NextHop>&
 Route::getNextHops() const {
   return nextHops_;
+}
+
+folly::Optional<std::string> Route::getRouteIfName() const {
+  return routeIfName_;
 }
 
 struct rtnl_route* Route::fromNetlinkRoute() const {
@@ -290,6 +433,21 @@ struct nl_addr* Route::buildAddrObject(const folly::CIDRNetwork& addr) {
 
 /*=================================NextHop====================================*/
 
+NextHop NextHopBuilder::buildFromObject(struct rtnl_nexthop* obj) const {
+  CHECK_NOTNULL(obj);
+  NextHopBuilder builder;
+  builder.setIfIndex(rtnl_route_nh_get_ifindex(obj));
+  // Get the gateway IP from nextHop
+  struct nl_addr* gw = rtnl_route_nh_get_gateway(obj);
+  if (!gw) {
+    return builder.build();
+  }
+  auto gwAddr = folly::IPAddress::fromBinary(folly::ByteRange(
+    (const unsigned char*)nl_addr_get_binary_addr(gw), nl_addr_get_len(gw)));
+  builder.setGateway(gwAddr);
+  return builder.build();
+}
+
 NextHop NextHopBuilder::build() const {
   return NextHop(*this);
 }
@@ -333,6 +491,12 @@ NextHop::NextHop(const NextHopBuilder& builder)
     gateway_(builder.getGateway()),
     weight_(builder.getWeight()) {
   init();
+}
+
+bool operator==(const NextHop& lhs, const NextHop& rhs) {
+  return lhs.getIfIndex() == rhs.getIfIndex()
+      && lhs.getGateway() == rhs.getGateway()
+      && lhs.getWeight() == rhs.getWeight();
 }
 
 folly::Optional<int> NextHop::getIfIndex() const {
@@ -661,6 +825,7 @@ void IfAddress::init() {
 /*================================Neighbor====================================*/
 
 Neighbor NeighborBuilder::buildFromObject(struct rtnl_neigh* neighbor) const {
+  CHECK_NOTNULL(neighbor);
   NeighborBuilder builder;
   // The destination IP
   struct nl_addr* dst = rtnl_neigh_get_dst(neighbor);
@@ -874,6 +1039,7 @@ void Neighbor::init() {
 /*==================================Link======================================*/
 
 Link LinkBuilder::buildFromObject(struct rtnl_link* link) {
+  CHECK_NOTNULL(link);
   std::string linkName("unknown");
   const char* linkNameStr = rtnl_link_get_name(link);
   if (linkNameStr) {
@@ -961,7 +1127,7 @@ Link& Link::operator=(Link&& other) noexcept {
   return *this;
 }
 
-const std::string& Link::getLInkName() const {
+const std::string& Link::getLinkName() const {
   return linkName_;
 }
 

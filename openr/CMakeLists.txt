@@ -239,6 +239,7 @@ add_library(openrlib
   kvstore/KvStoreWrapper.cpp
   link-monitor/LinkMonitor.cpp
   nl/NetlinkRouteSocket.cpp
+  nl/NetlinkSocket.cpp
   nl/NetlinkSubscriber.cpp
   nl/NetlinkTypes.cpp
   platform/NetlinkFibHandler.cpp
@@ -445,6 +446,7 @@ install(FILES
   nl/NetlinkSubscriber.h
   nl/NetlinkException.h
   nl/NetlinkRouteSocket.h
+  nl/NetlinkSocket.h
   nl/NetlinkTypes.h
   DESTINATION include/openr/nl
 )
@@ -811,6 +813,9 @@ if(BUILD_TESTS)
   add_executable(netlink_types_test
     nl/tests/NetlinkTypesTest.cpp
   )
+  add_executable(netlink_socket_test
+    nl/tests/NetlinkSocketTest.cpp
+  )
 
   target_include_directories(netlink_route_socket_test
     PRIVATE
@@ -821,6 +826,10 @@ if(BUILD_TESTS)
     ${LIBNL3-HEADERS}/libnl3
   )
   target_include_directories(netlink_types_test
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+  target_include_directories(netlink_socket_test
     PRIVATE
     ${LIBNL3-HEADERS}/libnl3
   )
@@ -846,6 +855,13 @@ if(BUILD_TESTS)
     ${GTEST}
     ${GTEST_MAIN}
   )
+  target_link_libraries(netlink_socket_test
+    openrlib
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+  )
 
   if(ADD_ROOT_TESTS)
     # This test fails under Travis, so adding it as an exception
@@ -854,6 +870,7 @@ if(BUILD_TESTS)
     add_test(NetlinkRouteSocketTest netlink_route_socket_test)
     add_test(NetlinkSubscriberTest netlink_subscriber_test)
     add_test(NetlinkTypesTest netlink_types_test)
+    add_test(NetlinkSocketTest netlink_socket_test)
   endif()
 
   install(TARGETS

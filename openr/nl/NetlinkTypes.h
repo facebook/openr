@@ -37,6 +37,7 @@ class NextHopBuilder final {
    NextHopBuilder() {}
    ~NextHopBuilder() {}
 
+   NextHop buildFromObject(struct rtnl_nexthop* obj) const;
    NextHop build() const;
 
    void reset();
@@ -100,6 +101,8 @@ private:
    struct rtnl_nexthop* nextHop_{nullptr};
 };
 
+bool operator==(const NextHop& lhs, const NextHop& rhs);
+
 /**
  * Values for core fields
  * ============================
@@ -136,17 +139,19 @@ class RouteBuilder {
   ~RouteBuilder() {}
 
   /**
-   * Build unicast route
+   * Build route (default: unicast)
    * @required parameter:
    * ProtocolId, Destination, Nexthop
    * @throw NetlinkException on failed
    */
-  Route buildUnicastRoute() const;
+  Route buildRoute() const;
+
+  Route buildFromObject(struct rtnl_route* obj) const;
 
   /**
    * Build multicast route
    * @required parameter:
-   * ProtocolId, Destination, Iface Name
+   * ProtocolId, Destination, Iface Name, Iface Index
    * @throw NetlinkException on failed
    */
   Route buildMulticastRoute() const;
@@ -154,7 +159,7 @@ class RouteBuilder {
   /**
    * Build link route
    * @required parameter:
-   * ProtocolId, Destination, Iface Name
+   * ProtocolId, Destination, Iface Name, Iface Index
    * @throw NetlinkException on failed
    */
   Route buildLinkRoute() const;
@@ -198,12 +203,18 @@ class RouteBuilder {
 
   RouteBuilder& addNextHop(const NextHop& nextHop);
 
-  RouteBuilder& setIfName(const std::string& ifName);
+  RouteBuilder& setRouteIfName(const std::string& ifName);
 
-  folly::Optional<std::string> getIfName() const;
+  folly::Optional<std::string> getRouteIfName() const;
 
-  const std::vector<NextHop>&
-  getNextHops() const;
+  // Multicast/Link route only need ifIndex in nexthop
+  RouteBuilder& setRouteIfIndex(int ifIndex);
+
+  folly::Optional<int> getRouteIfIndex() const;
+
+  const std::vector<NextHop>& getNextHops() const;
+
+  void reset();
 
  private:
   uint8_t type_{RTN_UNICAST};
@@ -215,7 +226,8 @@ class RouteBuilder {
   folly::Optional<uint8_t> tos_;
   std::vector<NextHop> nextHops_;
   folly::CIDRNetwork dst_;
-  folly::Optional<std::string> ifName_;
+  folly::Optional<int> routeIfIndex_; // for multicast or link route
+  folly::Optional<std::string> routeIfName_; // for multicast or linkroute
 };
 
 // Wrapper class for rtnl_route
@@ -250,6 +262,8 @@ class Route final {
    const std::vector<NextHop>&
    getNextHops() const;
 
+   folly::Optional<std::string> getRouteIfName() const;
+
    /**
     * This method Will construct rtnl_route object on the first time call,
     * then will return the same object pointer. It will just return the pointer
@@ -274,8 +288,11 @@ class Route final {
    folly::Optional<uint8_t> tos_;
    std::vector<NextHop> nextHops_;
    folly::CIDRNetwork dst_;
+   folly::Optional<std::string> routeIfName_;
    struct rtnl_route* route_{nullptr};
 };
+
+bool operator==(const Route& lhs, const Route& rhs);
 
 class IfAddress;
 class IfAddressBuilder final {
@@ -488,7 +505,7 @@ class Link final {
 
    Link& operator=(Link&&) noexcept;
 
-   const std::string& getLInkName() const;
+   const std::string& getLinkName() const;
 
    int getIfIndex() const;
 
@@ -517,20 +534,28 @@ using NlUnicastRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
 // protocolId=>routes
 using NlUnicastRoutesDb = std::unordered_map<uint8_t, NlUnicastRoutes>;
 
-// Multicast and link routes do not have nextHop IP
-using NlMulticastRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
+/**
+ * Multicast and link routes do not have nextHop IP
+ * key=>(destination, ifName)
+ * value=> route object
+ */
+using NlMulticastRoutes = std::unordered_map<
+                            std::pair<folly::CIDRNetwork, std::string>, Route>;
 
 // protocolId=>routes
 using NlMulticastRoutesDb = std::unordered_map<uint8_t, NlMulticastRoutes>;
 
-using NlLinkRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
+using NlLinkRoutes = std::unordered_map<
+                            std::pair<folly::CIDRNetwork, std::string>, Route>;
 
 // protocolId=>routes
 using NlLinkRoutesDb = std::unordered_map<uint8_t, NlLinkRoutes>;
 
-// Neighbor Object Helpers
-// Map of neighbors that are reachable
-// link name, destination IP and link Address
+/**
+ * Neighbor Object Helpers
+ * Map of neighbors that are reachable
+ * link name, destination IP and link Address
+ */
 using NlNeighbors = std::
     unordered_map<std::pair<std::string, folly::IPAddress>, Neighbor>;
 
