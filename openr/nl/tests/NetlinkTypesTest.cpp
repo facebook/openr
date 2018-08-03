@@ -118,7 +118,7 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   // Use default values
   auto route = builder.setDestination(dst)
          .setProtocolId(kProtocolId)
-         .build();
+         .buildUnicastRoute();
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
   EXPECT_EQ(RT_SCOPE_UNIVERSE, route.getScope());
@@ -171,7 +171,7 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
                       .setPriority(priority)
                       .setTos(tos)
                       .addNextHop(nh1)
-                      .build();
+                      .buildUnicastRoute();
 
   struct rtnl_route* p = route.fromNetlinkRoute();
   Route route1(std::move(route));
@@ -252,7 +252,7 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
                         .addNextHop(nh1)
                         .addNextHop(nh2)
                         .addNextHop(nh3)
-                        .build();
+                        .buildUnicastRoute();
 
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
@@ -444,4 +444,90 @@ int main(int argc, char* argv[]) {
 
   // Run the tests
   return RUN_ALL_TESTS();
+}
+
+TEST_F(NetlinkTypesFixture, NeighborTypeTest) {
+  folly::IPAddress dst("fc00:cafe:3::3");
+  folly::MacAddress mac("00:00:00:00:00:00");
+  NeighborBuilder builder;
+  auto neigh = builder.setIfIndex(kIfIndex)
+                      .setState(NUD_REACHABLE)
+                      .setDestination(dst)
+                      .setLinkAddress(mac)
+                      .build();
+  struct rtnl_neigh* obj = neigh.fromNeighbor();
+  EXPECT_TRUE(obj != nullptr);
+  struct nl_addr* dstObj = rtnl_neigh_get_dst(obj);
+  EXPECT_TRUE(dstObj != nullptr);
+  auto dstAddr = folly::IPAddress::fromBinary(folly::ByteRange(
+      static_cast<const unsigned char*>(nl_addr_get_binary_addr(dstObj)),
+      nl_addr_get_len(dstObj)));
+  EXPECT_EQ(dst, dstAddr);
+  EXPECT_EQ(dst, neigh.getDestination());
+
+  struct nl_addr* macObj = rtnl_neigh_get_lladdr(obj);
+  EXPECT_TRUE(macObj != nullptr);
+  auto macAddr = folly::MacAddress::fromBinary(folly::ByteRange(
+      static_cast<const unsigned char*>(nl_addr_get_binary_addr(macObj)),
+      nl_addr_get_len(macObj)));
+  EXPECT_EQ(mac, macAddr);
+  EXPECT_EQ(mac, neigh.getLinkAddress());
+  EXPECT_EQ(kIfIndex, rtnl_neigh_get_ifindex(obj));
+  EXPECT_EQ(kIfIndex, neigh.getIfIndex());
+  EXPECT_EQ(AF_INET6, neigh.getFamily());
+
+  auto neigh1 = builder.buildFromObject(obj);
+  EXPECT_TRUE(obj != neigh1.fromNeighbor());
+  obj = neigh1.fromNeighbor();
+  EXPECT_TRUE(obj != nullptr);
+  dstObj = rtnl_neigh_get_dst(obj);
+  EXPECT_TRUE(dstObj != nullptr);
+  dstAddr = folly::IPAddress::fromBinary(folly::ByteRange(
+      static_cast<const unsigned char*>(nl_addr_get_binary_addr(dstObj)),
+      nl_addr_get_len(dstObj)));
+  EXPECT_EQ(dst, dstAddr);
+  EXPECT_EQ(dst, neigh1.getDestination());
+
+  macObj = rtnl_neigh_get_lladdr(obj);
+  EXPECT_TRUE(macObj != nullptr);
+  macAddr = folly::MacAddress::fromBinary(folly::ByteRange(
+      static_cast<const unsigned char*>(nl_addr_get_binary_addr(macObj)),
+      nl_addr_get_len(macObj)));
+  EXPECT_EQ(mac, macAddr);
+  EXPECT_EQ(mac, neigh1.getLinkAddress());
+  EXPECT_EQ(kIfIndex, rtnl_neigh_get_ifindex(obj));
+  EXPECT_EQ(kIfIndex, neigh1.getIfIndex());
+  EXPECT_EQ(AF_INET6, neigh1.getFamily());
+}
+
+TEST_F(NetlinkTypesFixture, LinkTypeTest) {
+  std::string linkName("iface");
+  unsigned int flags = 0x0 | IFF_RUNNING;
+
+  LinkBuilder builder;
+  auto link  = builder.setIfIndex(kIfIndex)
+                      .setFlags(flags)
+                      .setLinkName(linkName)
+                      .build();
+  struct rtnl_link* obj = link.fromLink();
+  EXPECT_TRUE(obj != nullptr);
+  EXPECT_EQ(kIfIndex, rtnl_link_get_ifindex(obj));
+  EXPECT_EQ(kIfIndex, link.getIfIndex());
+  EXPECT_EQ(linkName, std::string(rtnl_link_get_name(obj)));
+  EXPECT_EQ(linkName, link.getLInkName());
+  EXPECT_EQ(flags, rtnl_link_get_flags(obj));
+  EXPECT_EQ(flags, link.getFlags());
+  EXPECT_TRUE(link.isUp());
+
+  auto link1 = builder.buildFromObject(obj);
+  EXPECT_TRUE(obj != link1.fromLink());
+  obj = link1.fromLink();
+  EXPECT_TRUE(obj != nullptr);
+  EXPECT_EQ(kIfIndex, rtnl_link_get_ifindex(obj));
+  EXPECT_EQ(kIfIndex, link1.getIfIndex());
+  EXPECT_EQ(linkName, std::string(rtnl_link_get_name(obj)));
+  EXPECT_EQ(linkName, link1.getLInkName());
+  EXPECT_EQ(flags, rtnl_link_get_flags(obj));
+  EXPECT_EQ(flags, link1.getFlags());
+  EXPECT_TRUE(link1.isUp());
 }

@@ -8,17 +8,21 @@
 #pragma once
 
 #include <vector>
+#include <unordered_map>
 
 #include <folly/Optional.h>
 #include <folly/IPAddress.h>
+#include <folly/MacAddress.h>
 
 extern "C" {
+#include <linux/if.h>
 #include <netlink/cache.h>
 #include <netlink/errno.h>
 #include <netlink/netlink.h>
 #include <netlink/route/addr.h>
 #include <netlink/route/link.h>
 #include <netlink/route/route.h>
+#include <netlink/route/neighbour.h>
 #include <netlink/socket.h>
 }
 
@@ -131,7 +135,29 @@ class RouteBuilder {
   RouteBuilder() {}
   ~RouteBuilder() {}
 
-  Route build() const;
+  /**
+   * Build unicast route
+   * @required parameter:
+   * ProtocolId, Destination, Nexthop
+   * @throw NetlinkException on failed
+   */
+  Route buildUnicastRoute() const;
+
+  /**
+   * Build multicast route
+   * @required parameter:
+   * ProtocolId, Destination, Iface Name
+   * @throw NetlinkException on failed
+   */
+  Route buildMulticastRoute() const;
+
+  /**
+   * Build link route
+   * @required parameter:
+   * ProtocolId, Destination, Iface Name
+   * @throw NetlinkException on failed
+   */
+  Route buildLinkRoute() const;
 
   // Required
   RouteBuilder& setDestination(const folly::CIDRNetwork& dst);
@@ -172,6 +198,10 @@ class RouteBuilder {
 
   RouteBuilder& addNextHop(const NextHop& nextHop);
 
+  RouteBuilder& setIfName(const std::string& ifName);
+
+  folly::Optional<std::string> getIfName() const;
+
   const std::vector<NextHop>&
   getNextHops() const;
 
@@ -185,6 +215,7 @@ class RouteBuilder {
   folly::Optional<uint8_t> tos_;
   std::vector<NextHop> nextHops_;
   folly::CIDRNetwork dst_;
+  folly::Optional<std::string> ifName_;
 };
 
 // Wrapper class for rtnl_route
@@ -281,7 +312,7 @@ class IfAddressBuilder final {
 
  private:
    folly::Optional<folly::CIDRNetwork> prefix_;
-   int ifIndex_;
+   int ifIndex_{0};
    folly::Optional<uint8_t> scope_;
    folly::Optional<uint8_t> flags_;
    folly::Optional<uint8_t> family_;
@@ -329,6 +360,182 @@ class IfAddress final {
    folly::Optional<uint8_t> family_;
    struct rtnl_addr* ifAddr_{nullptr};
 };
+
+class Neighbor;
+class NeighborBuilder final {
+ public:
+   NeighborBuilder() {}
+   ~NeighborBuilder() {}
+
+   // Only support V6 neighbor
+   Neighbor buildFromObject(struct rtnl_neigh* obj) const;
+
+   /**
+    * Build Neighbor object to add/del neighbors
+    * Add Neighbor:
+    *   IfIndex, destination, state must be set
+    * Del Neighbor:
+    *   Neighbours are uniquely identified by their interface index and
+    *   destination address, you may fill out other attributes but they
+    *   will have no influence.
+    */
+   Neighbor build() const;
+
+   NeighborBuilder& setIfIndex(int ifIndex);
+
+   int getIfIndex() const;
+
+   NeighborBuilder& setDestination(const folly::IPAddress& dest);
+
+   folly::IPAddress getDestination() const;
+
+   NeighborBuilder& setLinkAddress(const folly::MacAddress& linkAddress);
+
+   folly::Optional<folly::MacAddress> getLinkAddress() const;
+
+   /**
+    * NUD_INCOMPLETE
+    * NUD_REACHABLE
+    * NUD_STALE
+    * NUD_DELAY
+    * NUD_PROBE
+    * NUD_FAILED
+    * NUD_NOARP
+    * NUD_PERMANENT
+    */
+   NeighborBuilder& setState(int state);
+
+   folly::Optional<int> getState() const;
+
+ private:
+   int ifIndex_{0};
+   folly::IPAddress destination_;
+   folly::Optional<folly::MacAddress> linkAddress_;
+   folly::Optional<int> state_;
+};
+
+// Wrapper class for rtnl_neigh
+class Neighbor final {
+ public:
+   explicit Neighbor(const NeighborBuilder& builder);
+   ~Neighbor();
+
+   Neighbor(Neighbor&&) noexcept;
+
+   Neighbor& operator=(Neighbor&&) noexcept;
+
+   int getIfIndex() const;
+
+   int getFamily() const;
+
+   folly::IPAddress getDestination() const;
+
+   folly::Optional<folly::MacAddress> getLinkAddress() const;
+
+   folly::Optional<int> getState() const;
+
+   struct rtnl_neigh* fromNeighbor() const;
+
+ private:
+
+   Neighbor(const Neighbor&);
+   Neighbor& operator=(const Neighbor&);
+
+   void init();
+
+   int ifIndex_;
+   folly::IPAddress destination_;
+   folly::Optional<folly::MacAddress> linkAddress_;
+   folly::Optional<int> state_;
+   struct rtnl_neigh* neigh_{nullptr};
+};
+
+class Link;
+class LinkBuilder final {
+ public:
+   LinkBuilder() {}
+   ~LinkBuilder() {}
+
+   Link buildFromObject(struct rtnl_link* link);
+
+   Link build();
+
+   LinkBuilder& setLinkName(const std::string& linkName);
+
+   const std::string& getLinkName() const;
+
+   LinkBuilder& setIfIndex(int ifIndex);
+
+   int getIfIndex() const;
+
+   LinkBuilder& setFlags(uint32_t flags);
+
+   uint32_t getFlags() const;
+
+ private:
+   std::string linkName_;
+   int ifIndex_{0};
+   uint32_t flags_{0};
+};
+
+class Link final {
+ public:
+   explicit Link(const LinkBuilder& builder);
+
+   ~Link();
+
+   Link(Link&&) noexcept;
+
+   Link& operator=(Link&&) noexcept;
+
+   const std::string& getLInkName() const;
+
+   int getIfIndex() const;
+
+   unsigned int getFlags() const;
+
+   bool isUp() const;
+
+   struct rtnl_link* fromLink() const;
+
+ private:
+
+   void init();
+
+   Link(const Link&);
+   Link& operator=(const Link&);
+
+   std::string linkName_;
+   int ifIndex_{0};
+   uint32_t flags_{0};
+   struct rtnl_link* link_{nullptr};
+};
+
+// Route => prefix and its possible nextHops
+using NlUnicastRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
+
+// protocolId=>routes
+using NlUnicastRoutesDb = std::unordered_map<uint8_t, NlUnicastRoutes>;
+
+// Multicast and link routes do not have nextHop IP
+using NlMulticastRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
+
+// protocolId=>routes
+using NlMulticastRoutesDb = std::unordered_map<uint8_t, NlMulticastRoutes>;
+
+using NlLinkRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
+
+// protocolId=>routes
+using NlLinkRoutesDb = std::unordered_map<uint8_t, NlLinkRoutes>;
+
+// Neighbor Object Helpers
+// Map of neighbors that are reachable
+// link name, destination IP and link Address
+using NlNeighbors = std::
+    unordered_map<std::pair<std::string, folly::IPAddress>, Neighbor>;
+
+// keyed by link name
+using NlLinks = std::unordered_map<std::string, Link>;
 
 } // namespace fbnl
 } // namespace openr

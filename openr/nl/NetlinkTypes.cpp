@@ -1,10 +1,19 @@
 #include "NetlinkTypes.h"
 #include "NetlinkException.h"
 
+#include <set>
+
 namespace openr {
 namespace fbnl {
 
-Route RouteBuilder::build() const {
+const std::set<int> kNeighborReachableStates{
+    NUD_REACHABLE, NUD_STALE, NUD_DELAY, NUD_PERMANENT, NUD_PROBE, NUD_NOARP};
+
+bool isNeighborReachable(int state) {
+  return kNeighborReachableStates.count(state);
+}
+
+Route RouteBuilder::buildUnicastRoute() const {
   return Route(*this);
 }
 
@@ -647,6 +656,339 @@ void IfAddress::init() {
   if (flags_.hasValue()) {
     rtnl_addr_set_flags(ifAddr_, flags_.value());
   }
+}
+
+/*================================Neighbor====================================*/
+
+Neighbor NeighborBuilder::buildFromObject(struct rtnl_neigh* neighbor) const {
+  NeighborBuilder builder;
+  // The destination IP
+  struct nl_addr* dst = rtnl_neigh_get_dst(neighbor);
+  if (!dst) {
+    LOG(ERROR) << "Invalid destination for neighbor";
+    throw openr::NetlinkException(
+        "Failed to get destination IP from neighbor entry");
+  }
+  const auto ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+      static_cast<const unsigned char*>(nl_addr_get_binary_addr(dst)),
+      nl_addr_get_len(dst)));
+  int state = rtnl_neigh_get_state(neighbor);
+  builder.setDestination(ipAddress)
+         .setIfIndex(rtnl_neigh_get_ifindex(neighbor))
+         .setState(state);
+
+  // link address exists only for reachable states, so it may not
+  // always exist
+  folly::MacAddress macAddress;
+  if (isNeighborReachable(state)) {
+    struct nl_addr* linkAddress = rtnl_neigh_get_lladdr(neighbor);
+    if (!linkAddress) {
+      LOG(ERROR) << "Invalid link address for neigbbor";
+      throw openr::NetlinkException(
+          "Failed to get link address from neighbor entry");
+    }
+    // Skip entries with invalid mac-addresses
+    if (nl_addr_get_len(linkAddress) != folly::MacAddress::SIZE) {
+      LOG(ERROR) << "Invalid link address for neigbbor";
+      throw openr::NetlinkException("Invalid mac address");
+    }
+    macAddress = folly::MacAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(linkAddress)),
+        nl_addr_get_len(linkAddress)));
+  }
+  builder.setLinkAddress(macAddress);
+
+  std::array<char, 128> stateBuf = {""};
+  VLOG(4)
+      << "Built neighbor entry: "
+      << " family " << rtnl_neigh_get_family(neighbor)
+      << " IfIndex " << rtnl_neigh_get_ifindex(neighbor) << " : "
+      << ipAddress.str() << " -> " << macAddress.toString() << " state "
+      << rtnl_neigh_state2str(state, stateBuf.data(), stateBuf.size());
+
+  return builder.build();
+}
+
+Neighbor NeighborBuilder::build() const {
+  return Neighbor(*this);
+}
+
+NeighborBuilder& NeighborBuilder::setIfIndex(int ifIndex) {
+  ifIndex_ = ifIndex;
+  return *this;
+}
+
+int NeighborBuilder::getIfIndex() const {
+  return ifIndex_;
+}
+
+NeighborBuilder& NeighborBuilder::setDestination(const folly::IPAddress& dest) {
+  destination_ = dest;
+  return *this;
+}
+
+folly::IPAddress NeighborBuilder::getDestination() const {
+  return destination_;
+}
+
+NeighborBuilder& NeighborBuilder::setLinkAddress(
+  const folly::MacAddress& linkAddress) {
+    linkAddress_ = linkAddress;
+    return *this;
+}
+
+folly::Optional<folly::MacAddress> NeighborBuilder::getLinkAddress() const {
+  return linkAddress_;
+}
+
+NeighborBuilder& NeighborBuilder::setState(int state) {
+  state_ = state;
+  return *this;
+}
+
+folly::Optional<int> NeighborBuilder::getState() const {
+  return state_;
+}
+
+Neighbor::Neighbor(const NeighborBuilder& builder)
+  : ifIndex_(builder.getIfIndex()),
+    destination_(builder.getDestination()),
+    linkAddress_(builder.getLinkAddress()),
+    state_(builder.getState()) {
+  init();
+}
+
+Neighbor::~Neighbor() {
+  if (neigh_) {
+    rtnl_neigh_put(neigh_);
+    neigh_ = nullptr;
+  }
+}
+
+Neighbor::Neighbor(Neighbor&& other) noexcept
+  : ifIndex_(other.ifIndex_),
+    destination_(other.destination_),
+    linkAddress_(other.linkAddress_),
+    state_(other.state_) {
+  if (other.neigh_) {
+    neigh_ = other.neigh_;
+    other.neigh_ = nullptr;
+  }
+}
+
+Neighbor& Neighbor::operator=(Neighbor && other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+
+  ifIndex_ = other.ifIndex_;
+  destination_ = other.destination_;
+  linkAddress_ = other.linkAddress_;
+  state_ = other.state_;
+  if (neigh_) {
+    rtnl_neigh_put(neigh_);
+    neigh_ = nullptr;
+  }
+  if (other.neigh_) {
+    neigh_ = other.neigh_;
+    other.neigh_ = nullptr;
+  }
+  return *this;
+}
+
+int Neighbor::getIfIndex() const {
+  return ifIndex_;
+}
+
+int Neighbor::getFamily() const {
+  return destination_.family();
+}
+
+folly::IPAddress Neighbor::getDestination() const {
+  return destination_;
+}
+
+folly::Optional<folly::MacAddress> Neighbor::getLinkAddress() const {
+  return linkAddress_;
+}
+
+folly::Optional<int> Neighbor::getState() const {
+  return state_;
+}
+
+struct rtnl_neigh* Neighbor::fromNeighbor() const {
+  return neigh_;
+}
+
+void Neighbor::init() {
+  neigh_ = rtnl_neigh_alloc();
+  if (!neigh_) {
+    throw NetlinkException("create neighbor object failed");
+  }
+  rtnl_neigh_set_ifindex(neigh_, ifIndex_);
+
+  struct nl_addr* dst =
+    nl_addr_build(destination_.family(),
+                  (void*)(destination_.bytes()),
+                  destination_.byteCount());
+  if (dst == nullptr) {
+    throw NetlinkException("Failed to create dst addr");
+  }
+  rtnl_neigh_set_dst(neigh_, dst);
+
+  struct nl_addr* llAddr = nullptr;
+  if (linkAddress_.hasValue()) {
+    llAddr = nl_addr_build(
+                  AF_UNSPEC,
+                  (void*)linkAddress_.value().bytes(),
+                  folly::MacAddress::SIZE);
+    if (llAddr == nullptr) {
+      throw NetlinkException("Failed to create link addr");
+    }
+    rtnl_neigh_set_lladdr(neigh_, llAddr);
+  }
+
+  // neigh object takes a ref if dst/llAddr is successfully set
+  // Either way, success or failure, we drop our ref
+  SCOPE_EXIT {
+    nl_addr_put(dst);
+    if (llAddr) {
+      nl_addr_put(llAddr);
+    }
+  };
+
+  SCOPE_FAIL {
+    if (dst) {
+      nl_addr_put(dst);
+    }
+    if (llAddr) {
+      nl_addr_put(llAddr);
+    }
+  };
+
+  if (state_.hasValue()) {
+    rtnl_neigh_set_state(neigh_, state_.value());
+  }
+}
+
+/*==================================Link======================================*/
+
+Link LinkBuilder::buildFromObject(struct rtnl_link* link) {
+  std::string linkName("unknown");
+  const char* linkNameStr = rtnl_link_get_name(link);
+  if (linkNameStr) {
+    linkName.assign(linkNameStr);
+  }
+
+  LinkBuilder builder;
+  builder.setIfIndex(rtnl_link_get_ifindex(link))
+         .setFlags(rtnl_link_get_flags(link))
+         .setLinkName(linkName);
+  return builder.build();
+}
+
+Link LinkBuilder::build() {
+  return Link(*this);
+}
+
+LinkBuilder& LinkBuilder::setLinkName(const std::string& linkName) {
+  linkName_ = linkName;
+  return *this;
+}
+
+const std::string& LinkBuilder::getLinkName() const {
+  return linkName_;
+}
+
+LinkBuilder& LinkBuilder::setIfIndex(int ifIndex) {
+  ifIndex_ = ifIndex;
+  return *this;
+}
+
+int LinkBuilder::getIfIndex() const {
+  return ifIndex_;
+}
+
+LinkBuilder& LinkBuilder::setFlags(uint32_t flags) {
+  flags_ = flags;
+  return *this;
+}
+
+uint32_t LinkBuilder::getFlags() const {
+  return flags_;
+}
+
+Link::Link(const LinkBuilder& builder) {
+  ifIndex_ = builder.getIfIndex();
+  linkName_ = builder.getLinkName();
+  flags_ = builder.getFlags();
+  init();
+}
+
+Link::~Link() {
+  if (link_) {
+    rtnl_link_put(link_);
+    link_ = nullptr;
+  }
+}
+
+Link::Link(Link&& other) noexcept
+  : linkName_(other.linkName_),
+    ifIndex_(other.ifIndex_),
+    flags_(other.flags_) {
+  if (other.link_) {
+    link_ = other.link_;
+    other.link_ = nullptr;
+  }
+}
+
+Link& Link::operator=(Link&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+  linkName_ = other.linkName_;
+  ifIndex_ = other.ifIndex_;
+  flags_ = other.flags_;
+
+  if (link_) {
+    rtnl_link_put(link_);
+    link_ = nullptr;
+  }
+  if (other.link_) {
+    link_ = other.link_;
+    other.link_ = nullptr;
+  }
+  return *this;
+}
+
+const std::string& Link::getLInkName() const {
+  return linkName_;
+}
+
+int Link::getIfIndex() const {
+  return ifIndex_;
+}
+
+uint32_t Link::getFlags() const {
+  return flags_;
+}
+
+void Link::init() {
+  link_ = rtnl_link_alloc();
+  if (!link_) {
+    throw NetlinkException("Allocate link object failed");
+  }
+  rtnl_link_set_ifindex(link_, ifIndex_);
+  rtnl_link_set_flags(link_, flags_);
+  rtnl_link_set_name(link_, linkName_.c_str());
+}
+
+bool Link::isUp() const {
+  return !!(flags_ & IFF_RUNNING);
+}
+
+struct rtnl_link* Link::fromLink() const {
+  return link_;
 }
 
 } // namespace fbnl
