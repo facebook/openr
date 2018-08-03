@@ -62,11 +62,14 @@ class FibCli(object):
 class FibCountersCli(object):
 
     @click.command()
+    @click.option('--json/--no-json', default=False,
+                  help='Dump in JSON format')
     @click.pass_obj
-    def counters(cli_opts):  # noqa: B902
+    def counters(cli_opts, json):  # noqa: B902
         ''' Get various counters on fib agent '''
 
-        fib.FibCountersCmd(cli_opts).run()
+        return_code = fib.FibCountersCmd(cli_opts).run(json)
+        sys.exit(return_code)
 
 
 class FibRoutesInstalledCli(object):

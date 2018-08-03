@@ -66,25 +66,30 @@ class FibRoutesComputedCmd(FibCmd):
 
 
 class FibCountersCmd(FibAgentCmd):
-    def run(self):
+    def run(self, json_opt):
         try:
-            self.print_counters(self.client.getCounters())
+            self.print_counters(self.client.getCounters(), json_opt)
+            return 0
         except Exception as e:
             print('Failed to get counter from Fib')
             print('Exception: {}'.format(e))
-            sys.exit(1)
+            return 1
 
-    def print_counters(self, counters):
+    def print_counters(self, counters, json_opt):
         ''' print the Fib counters '''
 
         host_id = utils.get_connected_node_name(self.client.host, self.lm_cmd_port)
         caption = '{}\'s Fib counters'.format(host_id)
 
-        rows = []
-        for key in counters:
-            rows.append(['{} : {}'.format(key, counters[key])])
-        print(printing.render_horizontal_table(rows, caption=caption, tablefmt='plain'))
-        print()
+        if json_opt:
+            utils.print_json(counters)
+        else:
+            rows = []
+            for key in counters:
+                rows.append(['{} : {}'.format(key, counters[key])])
+            print(printing.render_horizontal_table(
+                rows, caption=caption, tablefmt='plain'))
+            print()
 
 
 class FibRoutesInstalledCmd(FibAgentCmd):
