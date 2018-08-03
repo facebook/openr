@@ -195,7 +195,7 @@ class Constants {
   // ID template for global command socket
   static constexpr folly::StringPiece kGlobalCmdIdTemplate{"{}::TCP::CMD"};
   static constexpr folly::StringPiece kGlobalCmdLocalIdTemplate{
-      "{}::TCP::CMD::LOCAL"};
+      "{}::{}::TCP::CMD::LOCAL"};
   // ID template for peer sync socket
   static constexpr folly::StringPiece kPeerSyncIdTemplate{"{}::TCP::SYNC"};
   // ID template for the global PUB socket

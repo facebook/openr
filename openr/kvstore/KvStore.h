@@ -250,8 +250,12 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // Mutable state
   //
 
-  // The peers we will be talking to: both PUB and CMD URLs for each
-  std::unordered_map<std::string, thrift::PeerSpec> peers_;
+  // The peers we will be talking to: both PUB and CMD URLs for each. We use
+  // peerAddCounter_ to uniquely identify a peering session's socket-id.
+  uint64_t peerAddCounter_{0};
+  std::unordered_map<
+    std::string /* node-name */,
+    std::pair<thrift::PeerSpec, std::string /* socket-id */ >> peers_;
 
   // key/value filters
   folly::Optional<KvStoreFilters> filters_;

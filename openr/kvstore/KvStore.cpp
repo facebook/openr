@@ -80,7 +80,6 @@ KvStore::KvStore(
       dbSyncInterval_(dbSyncInterval),
       monitorSubmitInterval_(monitorSubmitInterval),
       legacyFlooding_(legacyFlooding),
-      peers_(std::move(peers)),
       filters_(std::move(filters)),
       // initialize zmq sockets
       localPubSock_{zmqContext},
@@ -326,13 +325,9 @@ KvStore::KvStore(
 
   VLOG(2) << "Subscribing/connecting to all peers...";
 
-  // Copy local peers into new object
-  std::unordered_map<std::string, thrift::PeerSpec> peersToAdd{};
-  peers_.swap(peersToAdd); // peers_ is empty now
-
   // Add all existing peers again. This will also ensure querying full dump
   // from each peer.
-  addPeers(peersToAdd);
+  addPeers(peers);
 
   // Hook up timer with countdownTtl(). The actual scheduling happens within
   // mergeKeyValues()
@@ -659,9 +654,14 @@ KvStore::dumpDifference(
 void
 KvStore::addPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
+  ++peerAddCounter_;
   for (auto const& kv : peers) {
     auto const& peerName = kv.first;
-    auto const& peerSpec = kv.second;
+    auto const& newPeerSpec = kv.second;
+    auto const& newPeerId = folly::sformat(
+        Constants::kGlobalCmdLocalIdTemplate.toString(),
+        peerName,
+        peerAddCounter_);
 
     try {
       auto it = peers_.find(peerName);
@@ -670,61 +670,64 @@ KvStore::addPeers(
 
       if (it != peers_.end()) {
         LOG(INFO) << "Updating existing peer " << peerName;
+        auto& peerSpec = it->second.first;
 
-        if (legacyFlooding_ && it->second.pubUrl != peerSpec.pubUrl) {
+        if (legacyFlooding_ && peerSpec.pubUrl != newPeerSpec.pubUrl) {
           pubUrlUpdated = true;
-          LOG(INFO) << "Unsubscribing from " << it->second.pubUrl;
+          LOG(INFO) << "Unsubscribing from " << peerSpec.pubUrl;
           auto const ret =
-              peerSubSock_.disconnect(fbzmq::SocketUrl{it->second.pubUrl});
+              peerSubSock_.disconnect(fbzmq::SocketUrl{peerSpec.pubUrl});
           if (ret.hasError()) {
-            LOG(FATAL) << "Error Disconnecting to URL '" << it->second.pubUrl
+            LOG(FATAL) << "Error Disconnecting to URL '" << peerSpec.pubUrl
                        << "' " << ret.error();
           }
         }
 
-        if (it->second.cmdUrl != peerSpec.cmdUrl) {
+        if (peerSpec.cmdUrl != newPeerSpec.cmdUrl) {
           cmdUrlUpdated = true;
-          LOG(INFO) << "Disconnecting from " << it->second.cmdUrl;
+          LOG(INFO) << "Disconnecting from " << peerSpec.cmdUrl;
           const auto ret =
-              peerSyncSock_.disconnect(fbzmq::SocketUrl{it->second.cmdUrl});
+              peerSyncSock_.disconnect(fbzmq::SocketUrl{peerSpec.cmdUrl});
           if (ret.hasError()) {
-            LOG(FATAL) << "Error Disconnecting to URL '" << it->second.cmdUrl
+            LOG(FATAL) << "Error Disconnecting to URL '" << peerSpec.cmdUrl
                        << "' " << ret.error();
           }
         }
 
         // Update entry with new data
-        it->second = peerSpec;
+        it->second.first = newPeerSpec;
+        it->second.second = newPeerId;
       } else {
         LOG(INFO) << "Adding new peer " << peerName;
         pubUrlUpdated = true;
         cmdUrlUpdated = true;
-        std::tie(it, std::ignore) = peers_.emplace(peerName, peerSpec);
+        std::tie(it, std::ignore) = peers_.emplace(
+            peerName, std::make_pair(newPeerSpec, newPeerId));
       }
 
       if (legacyFlooding_ && pubUrlUpdated) {
-        LOG(INFO) << "Subscribing to " << peerSpec.pubUrl;
-        if (peerSubSock_.connect(fbzmq::SocketUrl{peerSpec.pubUrl})
+        LOG(INFO) << "Subscribing to " << newPeerSpec.pubUrl;
+        if (peerSubSock_.connect(fbzmq::SocketUrl{newPeerSpec.pubUrl})
                 .hasError()) {
-          LOG(FATAL) << "Error connecting to URL '" << peerSpec.pubUrl << "'";
+          LOG(FATAL) << "Error connecting to URL '"
+                     << newPeerSpec.pubUrl << "'";
         }
       }
 
       if (cmdUrlUpdated) {
-        LOG(INFO) << "Connecting sync channel to " << peerSpec.cmdUrl;
-        auto const peerCmdSocketId = folly::sformat(
-            Constants::kGlobalCmdLocalIdTemplate.toString(), peerName);
+        LOG(INFO) << "Connecting sync channel to " << newPeerSpec.cmdUrl;
         auto const optStatus = peerSyncSock_.setSockOpt(
             ZMQ_CONNECT_RID,
-            peerCmdSocketId.data(),
-            peerCmdSocketId.size());
+            newPeerId.data(),
+            newPeerId.size());
         if (optStatus.hasError()) {
           LOG(FATAL) << "Error setting ZMQ_CONNECT_RID with value "
-                     << peerCmdSocketId;
+                     << newPeerId;
         }
-        if (peerSyncSock_.connect(fbzmq::SocketUrl{peerSpec.cmdUrl})
+        if (peerSyncSock_.connect(fbzmq::SocketUrl{newPeerSpec.cmdUrl})
                 .hasError()) {
-          LOG(FATAL) << "Error connecting to URL '" << peerSpec.cmdUrl << "'";
+          LOG(FATAL) << "Error connecting to URL '"
+                     << newPeerSpec.cmdUrl << "'";
         }
       }
 
@@ -753,7 +756,7 @@ KvStore::delPeers(std::vector<std::string> const& peers) {
       continue;
     }
 
-    auto const& peerSpec = it->second;
+    auto const& peerSpec = it->second.first;
 
     if (legacyFlooding_) {
       LOG(INFO) << "Unsubscribing from: " << peerSpec.pubUrl;
@@ -794,8 +797,7 @@ KvStore::requestFullSyncFromPeers() {
     // Generate and send router-socket id of peer first. If the kvstore of
     // peer is not connected over the router socket then it will error out
     // exception and we will retry again.
-    auto const peerCmdSocketId = folly::sformat(
-        Constants::kGlobalCmdLocalIdTemplate.toString(), peerName);
+    auto const& peerCmdSocketId = peers_.at(peerName).second;
 
     thrift::Request dumpRequest;
     dumpRequest.cmd = thrift::Command::KEY_DUMP;
@@ -850,7 +852,9 @@ KvStore::requestFullSyncFromPeers() {
 thrift::PeerCmdReply
 KvStore::dumpPeers() {
   thrift::PeerCmdReply reply;
-  reply.peers.insert(peers_.begin(), peers_.end());
+  for (auto const& kv : peers_) {
+    reply.peers.emplace(kv.first, kv.second.first);
+  }
   return reply;
 }
 
@@ -1110,10 +1114,7 @@ KvStore::processSyncResponse() noexcept {
   // Find originatorId and publish updated key-values to the peers
   folly::Optional<std::string> originatorId;
   for (auto const& kv : peers_) {
-    // Create ID for peer to whom we can send request
-    auto const peerCmdSocketId = folly::sformat(
-        Constants::kGlobalCmdLocalIdTemplate.toString(), kv.first);
-    if (peerCmdSocketId == requestId) {
+    if (kv.second.second == requestId) {
       originatorId = kv.first;
       break;
     }
@@ -1324,11 +1325,8 @@ KvStore::floodPublication(
     tData_.addStatValue(
         "kvstore.sent_key_vals", publication.keyVals.size(), fbzmq::SUM);
 
-    // Create ID for peer to whom we can send request
-    auto const peerCmdSocketId = folly::sformat(
-        Constants::kGlobalCmdLocalIdTemplate.toString(), kv.first);
-
     // Send flood request
+    auto const& peerCmdSocketId = kv.second.second;
     auto const ret = peerSyncSock_.sendMultiple(
         fbzmq::Message::from(peerCmdSocketId).value(),
         fbzmq::Message(),
