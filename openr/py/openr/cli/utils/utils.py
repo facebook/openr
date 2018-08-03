@@ -1326,6 +1326,31 @@ def print_routes(caption, routes, prefixes=None):
     print(printing.render_vertical_table(route_strs, caption=caption))
 
 
+def get_routes_json(host, client, routes, prefixes=None):
+
+    networks = None
+    if prefixes:
+        networks = [ipaddress.ip_network(p) for p in prefixes]
+
+    data = {
+        "host": host,
+        "client": client,
+        "routes": []
+    }
+
+    for route in routes:
+        dest = ipnetwork.sprint_prefix(route.dest)
+        if not ipnetwork.contain_any_prefix(dest, networks):
+            continue
+        route_data = {
+            "dest": dest,
+            "nexthops": [ip_nexthop_to_str(nh) for nh in route.nexthops]
+        }
+        data['routes'].append(route_data)
+
+    return data
+
+
 def get_shortest_routes(route_db):
     '''
     Find all shortest routes for each prefix in routeDb

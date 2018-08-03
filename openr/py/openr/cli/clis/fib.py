@@ -74,11 +74,14 @@ class FibRoutesInstalledCli(object):
     @click.command()
     @click.option('--prefixes', '-p', default='', multiple=True,
                   help='Get route for specific IPs or Prefixes.')
+    @click.option('--json/--no-json', default=False,
+                  help='Dump in JSON format')
     @click.pass_obj
-    def routes(cli_opts, prefixes):  # noqa: B902
+    def routes(cli_opts, prefixes, json):  # noqa: B902
         ''' Get and print all the routes on fib agent '''
 
-        fib.FibRoutesInstalledCmd(cli_opts).run(prefixes)
+        return_code = fib.FibRoutesInstalledCmd(cli_opts).run(prefixes, json)
+        sys.exit(return_code)
 
 
 class FibRoutesComputedCli(object):

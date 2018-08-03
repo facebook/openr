@@ -88,18 +88,25 @@ class FibCountersCmd(FibAgentCmd):
 
 
 class FibRoutesInstalledCmd(FibAgentCmd):
-    def run(self, prefixes):
+    def run(self, prefixes, json_opt):
         try:
             routes = self.client.getRouteTableByClient(self.client.client_id)
         except Exception as e:
             print('Failed to get routes from Fib.')
             print('Exception: {}'.format(e))
-            sys.exit(1)
+            return 1
 
         host_id = utils.get_connected_node_name(self.client.host, self.lm_cmd_port)
-        caption = '{}\'s FIB routes by client {}'.format(host_id,
-                                                         self.client.client_id)
-        utils.print_routes(caption, routes, prefixes)
+        client_id = self.client.client_id
+
+        if json_opt:
+            utils.print_json(utils.get_routes_json(
+                host_id, client_id, routes, prefixes))
+        else:
+            caption = '{}\'s FIB routes by client {}'.format(host_id, client_id)
+            utils.print_routes(caption, routes, prefixes)
+
+        return 0
 
 
 class FibAddRoutesCmd(FibAgentCmd):
