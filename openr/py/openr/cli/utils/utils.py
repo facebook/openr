@@ -455,13 +455,13 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
     return adjs_map
 
 
-def print_adjs_json(adjs_map):
-    ''' print adjacencies in json
+def print_json(map):
+    ''' print json format of input dict
 
-        :param adjacencies as list of dict
+        @map: list of dict
     '''
 
-    print(json_dumps(adjs_map))
+    print(json_dumps(map))
 
 
 def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
@@ -738,32 +738,96 @@ def print_routes_json(route_db_dict, prefixes=None):
     print(json_dumps(route_db_dict))
 
 
-def find_adj_list_deltas(old_adj_list, new_adj_list):
+def find_adj_list_deltas(old_adj_list, new_adj_list, tags=None):
     ''' given the old adj list and the new one for some node, return
         change list.
 
         :param old_adj_list [Adjacency]: old adjacency list
         :param new_adj_list [Adjacency]: new adjacency list
+        :param tags 3-tuple(string): a tuple of labels for
+            (in old only, in new only, in both but different)
 
         :return [(str, Adjacency, Adjacency)]: list of tuples of
             (changeType, oldAdjacency, newAdjacency)
             in the case where an adjacency is added or removed,
             oldAdjacency or newAdjacency is None, respectively
     '''
+    if not tags:
+        tags = ("NEIGHBOR_DOWN, NEIGHBOR_UP, NEIGHBOR_UPDATE")
 
     old_neighbors = set(a.otherNodeName for a in old_adj_list)
     new_neighbors = set(a.otherNodeName for a in new_adj_list)
-    delta_list = [("NEIGHBOR_DOWN", a, None) for a in old_adj_list
+    delta_list = [(tags[0], a, None) for a in old_adj_list
                   if a.otherNodeName in old_neighbors - new_neighbors]
-    delta_list.extend([("NEIGHBOR_UP", None, a) for a in new_adj_list
+    delta_list.extend([(tags[1], None, a) for a in new_adj_list
                        if a.otherNodeName in new_neighbors - old_neighbors])
-    delta_list.extend([("NEIGHBOR_UPDATE", a, b) for a, b
+    delta_list.extend([(tags[2], a, b) for a, b
                       in product(old_adj_list, new_adj_list)
                       if (a.otherNodeName == b.otherNodeName and
                           a.ifName == b.ifName and
                           a.otherNodeName in new_neighbors & old_neighbors and
                           a != b)])
     return delta_list
+
+
+
+def adj_list_deltas_json(adj_deltas_list, tags=None):
+    '''
+    Parses a list of adjacency list deltas (from func find_adj_list_deltas),
+    and returns the data as a json-formatted dict, and a status code.
+        {
+            tag-down: [nodes_down],
+            tag-up: [nodes_up],
+            tag-update: [
+                {
+                    "old_adj": old_adj,
+                    "new_adj": new_adj
+                }
+            ]
+        }
+
+    @param adj_deltas_list: list<(changeType, oldAdjacency, newAdjacency)>
+    @param tags: 3-tuple(string). a tuple of labels for
+        (in old only, in new only, in both but different)
+    '''
+    if not tags:
+        tags = ("NEIGHBOR_DOWN, NEIGHBOR_UP, NEIGHBOR_UPDATE")
+
+    return_code = 0
+    nodes_down = []
+    nodes_up = []
+    nodes_update = []
+
+    for data in adj_deltas_list:
+        old_adj = adjacency_to_dict(data[1]) if data[1] else None
+        new_adj = adjacency_to_dict(data[2]) if data[2] else None
+
+        if data[0] == tags[0]:
+            assert(new_adj is None)
+            nodes_down.append(old_adj)
+            return_code = 1
+        elif data[0] == tags[1]:
+            assert(old_adj is None)
+            nodes_up.append(new_adj)
+            return_code = 1
+        elif data[0] == tags[2]:
+            assert(old_adj is not None and new_adj is not None)
+            nodes_update.append({tags[0]: old_adj, tags[1]: new_adj})
+            return_code = 1
+        else:
+            raise ValueError('Unexpected change type "{}" in adjacency deltas list'.
+                format(data[0]))
+
+    deltas_json = {}
+
+    if nodes_down:
+        deltas_json.update({tags[0]: nodes_down})
+    if nodes_up:
+        deltas_json.update({tags[1]: nodes_up})
+    if nodes_update:
+        deltas_json.update({tags[2]: nodes_update})
+
+    return deltas_json, return_code
 
 
 def adjacency_to_dict(adjacency):

@@ -293,7 +293,7 @@ class AdjCmd(KvStoreCmd):
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, bidir,
                                          self.iter_publication)
         if json:
-            utils.print_adjs_json(adjs_map)
+            utils.print_json(adjs_map)
         else:
             utils.print_adjs_table(adjs_map, self.enable_color)
 

@@ -14,6 +14,7 @@ from __future__ import division
 from builtins import object
 
 import click
+import sys
 
 from openr.cli.commands import decision
 from openr.cli.utils.utils import parse_nodes
@@ -116,8 +117,38 @@ class DecisionAdjCli(object):
 class DecisionValidateCli(object):
 
     @click.command()
+    @click.option('--json/--no-json', default=False,
+                  help='Dump in JSON format')
     @click.pass_obj
-    def validate(cli_opts):  # noqa: B902
-        ''' Check all prefix & adj dbs in Decision against that in KvStore '''
+    def validate(cli_opts, json):  # noqa: B902
+        '''
+        Check all prefix & adj dbs in Decision against that in KvStore
 
-        decision.DecisionValidateCmd(cli_opts).run()
+        If --json is provided, returns database diffs in the following format.
+        "neighbor_down" is a list of nodes not in the inspected node's dump that were expected,
+        "neighbor_up" is a list of unexpected nodes in inspected node's dump,
+        "neighbor_update" is a list of expected nodes whose metadata are unexpected.
+            {
+                "neighbor_down": [
+                    {
+                        "new_adj": null,
+                        "old_adj": $inconsistent_node
+                    }
+                ],
+                "neighbor_up": [
+                    {
+                        "new_adj": $inconsistent_node
+                        "old_adj": null
+                    }
+                ],
+                "neighbor_update": [
+                    {
+                        "new_adj": $inconsistent_node
+                        "old_adj": $inconsistent_node
+                    }
+                ]
+            }
+        '''
+
+        return_code = decision.DecisionValidateCmd(cli_opts).run(json)
+        sys.exit(return_code)
