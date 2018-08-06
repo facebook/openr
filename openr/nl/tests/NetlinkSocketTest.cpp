@@ -62,6 +62,11 @@ class NetlinkSocketFixture : public testing::Test {
     std::vector<Route> results;
   };
 
+  struct AddressCallbackContext {
+    struct nl_cache* linkeCache{nullptr};
+    std::vector<IfAddress> results;
+  };
+
   NetlinkSocketFixture() = default;
   ~NetlinkSocketFixture() override = default;
 
@@ -1687,6 +1692,569 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
     }
   }
   EXPECT_EQ(0, count);
+}
+
+TEST_F(NetlinkSocketFixture, IfNametoIfIndexTest) {
+  int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
+  std::array<char, IFNAMSIZ> ifNameBuf;
+  std::string ifName(
+    rtnl_link_i2name(linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+  EXPECT_EQ(rtnl_link_name2i(linkCache_, kVethNameX.c_str()), ifIndex);
+  EXPECT_EQ(ifName, netlinkSocket->getIfName(ifIndex).get());
+
+  ifIndex = netlinkSocket->getIfIndex(kVethNameY).get();
+  std::string ifName1(
+    rtnl_link_i2name(linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+  EXPECT_EQ(rtnl_link_name2i(linkCache_, kVethNameY.c_str()), ifIndex);
+  EXPECT_EQ(ifName1, netlinkSocket->getIfName(ifIndex).get());
+}
+
+TEST_F(NetlinkSocketFixture, AddDelIfAddressBaseTest) {
+  folly::CIDRNetwork prefixV6{folly::IPAddress("fc00:cafe:3::3"), 128};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr = builder.setPrefix(prefixV6)
+                       .setIfIndex(ifIndex)
+                       .build();
+
+  builder.reset();
+  int ifIndex1 = netlinkSocket->getIfIndex(kVethNameY).get();
+  const folly::CIDRNetwork prefixV4{folly::IPAddress("192.168.0.11"), 32};
+  auto ifAddr1 = builder.setPrefix(prefixV4)
+                        .setIfIndex(ifIndex1)
+                        .build();
+
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
+    struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
+    if (!ipaddr) {
+      return;
+    }
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork prefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+    IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(prefix)
+                            .setIfIndex(rtnl_addr_get_ifindex(addr))
+                            .build();
+    ctx->results.emplace_back(std::move(tmpAddr));
+  };
+  AddressCallbackContext ctx;
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+  size_t before = ctx.results.size();
+
+  // Add address
+  netlinkSocket->addIfAddress(std::move(ifAddr)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr1)).get();
+  ctx.results.clear();
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  // two more addresses
+  EXPECT_EQ(before + 2, ctx.results.size());
+
+  int cnt = 0;
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefixV6 && ret.getIfIndex() == ifIndex) {
+      cnt++;
+    } else if (ret.getPrefix() == prefixV4
+            && ret.getIfIndex() == ifIndex1) {
+      cnt++;
+    }
+  }
+  EXPECT_EQ(2, cnt);
+
+  // delete addresses
+  ifAddr = builder.setPrefix(prefixV6)
+                  .setIfIndex(ifIndex)
+                  .build();
+  builder.reset();
+  ifAddr1 = builder.setPrefix(prefixV4)
+                   .setIfIndex(ifIndex1)
+                   .build();
+  netlinkSocket->delIfAddress(std::move(ifAddr)).get();
+  netlinkSocket->delIfAddress(std::move(ifAddr1)).get();
+
+  ctx.results.clear();
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  EXPECT_EQ(before, ctx.results.size());
+
+  bool found = false;
+  for (const auto& ret : ctx.results) {
+    // No more added address
+    if ((ret.getPrefix() == prefixV6 && ret.getIfIndex() == ifIndex)
+    || (ret.getPrefix() == prefixV4 && ret.getIfIndex() == ifIndex1)) {
+       found = true;
+     }
+   }
+   EXPECT_FALSE(found);
+}
+
+TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
+  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr = builder.setPrefix(prefix)
+                       .setIfIndex(ifIndex)
+                       .build();
+  builder.reset();
+  auto ifAddr1 = builder.setPrefix(prefix)
+                        .setIfIndex(ifIndex)
+                        .build();
+
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
+    struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
+    if (!ipaddr) {
+      return;
+    }
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork tmpPrefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+    IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
+                            .setIfIndex(rtnl_addr_get_ifindex(addr))
+                            .build();
+    ctx->results.emplace_back(std::move(tmpAddr));
+  };
+  AddressCallbackContext ctx;
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+  size_t before = ctx.results.size();
+
+  // Add new address
+  netlinkSocket->addIfAddress(std::move(ifAddr)).get();
+  // Add duplicated address
+  netlinkSocket->addIfAddress(std::move(ifAddr1)).get();
+
+  ctx.results.clear();
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  // one more addresse
+  EXPECT_EQ(before + 1, ctx.results.size());
+
+  int cnt = 0;
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefix&& ret.getIfIndex() == ifIndex) {
+      cnt++;
+    }
+  }
+  EXPECT_EQ(1, cnt);
+
+  // delete addresses
+  ifAddr = builder.setPrefix(prefix)
+                  .setIfIndex(ifIndex)
+                  .build();
+  builder.reset();
+  ifAddr1 = builder.setPrefix(prefix)
+                   .setIfIndex(ifIndex)
+                   .build();
+  netlinkSocket->delIfAddress(std::move(ifAddr)).get();
+  // double delete
+  netlinkSocket->delIfAddress(std::move(ifAddr1)).get();
+
+  ctx.results.clear();
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  EXPECT_EQ(before, ctx.results.size());
+
+  bool found = false;
+  for (const auto& ret : ctx.results) {
+    // No more added address
+    if ((ret.getPrefix() == prefix && ret.getIfIndex() == ifIndex)) {
+       found = true;
+     }
+   }
+   EXPECT_FALSE(found);
+}
+
+TEST_F(NetlinkSocketFixture, AddressSyncTest) {
+  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
+  folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};
+  folly::CIDRNetwork prefix4{folly::IPAddress("192.168.0.12"), 32};
+  folly::CIDRNetwork prefix5{folly::IPAddress("fc00:cafe:3::5"), 128};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr1 = builder.setPrefix(prefix1)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr2 = builder.setPrefix(prefix2)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr3 = builder.setPrefix(prefix3)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr4 = builder.setPrefix(prefix4)
+                        .setIfIndex(ifIndex)
+                        .build();
+
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
+    struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
+    if (!ipaddr) {
+      return;
+    }
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork tmpPrefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+    IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
+                            .setIfIndex(rtnl_addr_get_ifindex(addr))
+                            .setScope(rtnl_addr_get_scope(addr))
+                            .build();
+    ctx->results.emplace_back(std::move(tmpAddr));
+  };
+
+  // Add new address
+  netlinkSocket->addIfAddress(std::move(ifAddr1)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr2)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr3)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr4)).get();
+
+  AddressCallbackContext ctx;
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  bool p1 = false, p2 = false, p3 = false, p4 = false, p5 = false;
+  // Check contains all prefix
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefix1) {
+      p1 = true;
+    } else if (ret.getPrefix() == prefix2) {
+      p2 = true;
+    } else if (ret.getPrefix() == prefix3) {
+      p3 = true;
+    } else if (ret.getPrefix() == prefix4) {
+      p4 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_TRUE(p2);
+  EXPECT_TRUE(p3);
+  EXPECT_TRUE(p4);
+
+  std::vector<IfAddress> addrs;
+
+  // Different ifindex will throw exception
+  builder.reset();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex + 1).setPrefix(prefix1).build());
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix2).build());
+  EXPECT_THROW(netlinkSocket->
+    syncIfAddress(ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE).get(),
+    std::exception);
+
+  // Prefix not set will throw exception
+  builder.reset();
+  addrs.clear();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  builder.reset();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).build());
+  EXPECT_THROW(netlinkSocket->
+    syncIfAddress(ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE).get(),
+    std::exception);
+
+  // Sync v6 address
+  builder.reset();
+  addrs.clear();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  netlinkSocket->syncIfAddress(
+    ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE).get();
+
+  // Sync v4 address
+  builder.reset();
+  addrs.clear();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix4).build());
+  netlinkSocket->syncIfAddress(
+    ifIndex, std::move(addrs), AF_INET, RT_SCOPE_NOWHERE).get();
+
+  ctx.results.clear();
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  // Check no prefix2, prefix3
+  p1 = false, p2 = false, p3 = false, p4 = false;
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefix1) {
+      p1 = true;
+    } else if (ret.getPrefix() == prefix2) {
+      p2 = true;
+    } else if (ret.getPrefix() == prefix3) {
+      p3 = true;
+    } else if (ret.getPrefix() == prefix4) {
+      p4 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_FALSE(p2);
+  EXPECT_FALSE(p3);
+  EXPECT_TRUE(p4);
+
+  builder.reset();
+  ifAddr2 = builder.setPrefix(prefix2)
+                   .setIfIndex(ifIndex)
+                   .build();
+  builder.reset();
+  auto ifAddr5 = builder.setPrefix(prefix5)
+                        .setIfIndex(ifIndex)
+                        .build();
+  netlinkSocket->addIfAddress(std::move(ifAddr2)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr5)).get();
+
+  builder.reset();
+  addrs.clear();
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix5).build());
+  addrs.emplace_back(
+    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  netlinkSocket->syncIfAddress(
+    ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE).get();
+
+  ctx.results.clear();
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  // Check no prefix2, prefix3
+  p1 = false, p2 = false, p3 = false, p4 = false;
+  for (const auto& ret : ctx.results) {
+    if (ret.getPrefix() == prefix1) {
+      p1 = true;
+    } else if (ret.getPrefix() == prefix2) {
+      p2 = true;
+    } else if (ret.getPrefix() == prefix3) {
+      p3 = true;
+    } else if (ret.getPrefix() == prefix4) {
+      p4 = true;
+    } else if (ret.getPrefix() == prefix5) {
+      p5 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_FALSE(p2);
+  EXPECT_FALSE(p3);
+  EXPECT_TRUE(p4);
+  EXPECT_TRUE(p5);
+}
+
+TEST_F(NetlinkSocketFixture, AddressFlushTest) {
+  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
+  folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};
+  folly::CIDRNetwork prefix4{folly::IPAddress("192.168.0.12"), 32};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr1 = builder.setPrefix(prefix1)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr2 = builder.setPrefix(prefix2)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr3 = builder.setPrefix(prefix3)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr4 = builder.setPrefix(prefix4)
+                        .setIfIndex(ifIndex)
+                        .build();
+
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
+    struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
+    if (!ipaddr) {
+      return;
+    }
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
+        nl_addr_get_len(ipaddr)));
+    folly::CIDRNetwork tmpPrefix =
+      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+    IfAddressBuilder ifBuilder;
+    auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
+                            .setIfIndex(rtnl_addr_get_ifindex(addr))
+                            .setScope(rtnl_addr_get_scope(addr))
+                            .build();
+    ctx->results.emplace_back(std::move(tmpAddr));
+  };
+
+  // Add new address
+  netlinkSocket->addIfAddress(std::move(ifAddr1)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr2)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr3)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr4)).get();
+
+  AddressCallbackContext ctx;
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  int ipV4cnt = 0, ipV6cnt = 0;
+  for (const auto& ret : ctx.results) {
+    if (ret.getFamily() == AF_INET && ret.getIfIndex() == ifIndex) {
+      ipV4cnt++;
+    }
+    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex) {
+      ipV6cnt++;
+    }
+  }
+
+  // delete IPV6 address family
+  std::vector<IfAddress> addrs;
+  netlinkSocket->
+    syncIfAddress(ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE).get();
+  ctx.results.clear();
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+
+  // No V6 address found
+  int actualV4cnt = 0, actualV6cnt = 0;
+  for (const auto& ret : ctx.results) {
+    // No more added address
+    if (ret.getFamily() == AF_INET && ret.getIfIndex() == ifIndex) {
+      actualV4cnt++;
+     }
+    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex
+      && ret.getScope().value() == RT_SCOPE_UNIVERSE) {
+      actualV6cnt++;
+     }
+  }
+  EXPECT_EQ(ipV4cnt, actualV4cnt);
+  EXPECT_EQ(0, actualV6cnt);
+
+  addrs.clear();
+  netlinkSocket->syncIfAddress(
+    ifIndex, std::move(addrs), AF_INET, RT_SCOPE_NOWHERE).get();
+
+  // No v4 address
+  ctx.results.clear();
+  rtnlCacheCB(addrFunc, &ctx, addrCache_);
+  actualV4cnt = 0, actualV6cnt = 0;
+  for (const auto& ret : ctx.results) {
+    // No more added address
+    if (ret.getFamily() == AF_INET && ret.getIfIndex() == ifIndex) {
+      actualV4cnt++;
+     }
+    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex
+     && ret.getScope().value() == RT_SCOPE_UNIVERSE) {
+      actualV6cnt++;
+     }
+  }
+  EXPECT_EQ(0, actualV4cnt);
+  EXPECT_EQ(0, actualV6cnt);
+}
+
+TEST_F(NetlinkSocketFixture, GetAddrsTest) {
+  folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
+  folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};
+  folly::CIDRNetwork prefix4{folly::IPAddress("192.168.0.12"), 32};
+  IfAddressBuilder builder;
+
+  int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
+  ASSERT_NE(0, ifIndex);
+  auto ifAddr1 = builder.setPrefix(prefix1)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr2 = builder.setPrefix(prefix2)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr3 = builder.setPrefix(prefix3)
+                        .setIfIndex(ifIndex)
+                        .build();
+  builder.reset();
+  auto ifAddr4 = builder.setPrefix(prefix4)
+                        .setIfIndex(ifIndex)
+                        .build();
+
+  // Cleaup all address
+  std::vector<IfAddress> addrs;
+  netlinkSocket->
+    syncIfAddress(ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE).get();
+
+  // Add new address
+  netlinkSocket->addIfAddress(std::move(ifAddr1)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr2)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr3)).get();
+  netlinkSocket->addIfAddress(std::move(ifAddr4)).get();
+
+  // Check get V6 address
+  auto v6Addrs = netlinkSocket->
+    getIfAddrs(ifIndex, AF_INET6, RT_SCOPE_NOWHERE).get();
+  EXPECT_EQ(2, v6Addrs.size());
+  bool p1 = false, p2 = false;
+  for (const auto& addr : v6Addrs) {
+    if (addr.getPrefix().value() == prefix1) {
+      p1 = true;
+    }
+    if (addr.getPrefix().value() == prefix2) {
+      p2 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_TRUE(p2);
+
+  // Check get V4 address
+  auto v4Addrs = netlinkSocket->
+    getIfAddrs(ifIndex, AF_INET, RT_SCOPE_NOWHERE).get();
+  EXPECT_EQ(2, v4Addrs.size());
+  bool p3 = false, p4 = false;
+  for (const auto& addr : v4Addrs) {
+    if (addr.getPrefix().value() == prefix3) {
+      p3 = true;
+    }
+    if (addr.getPrefix().value() == prefix4) {
+      p4 = true;
+    }
+  }
+  EXPECT_TRUE(p3);
+  EXPECT_TRUE(p4);
+
+  // CHeck get all address
+  auto allAddrs = netlinkSocket->
+    getIfAddrs(ifIndex, AF_UNSPEC, RT_SCOPE_NOWHERE).get();
+  EXPECT_EQ(4, allAddrs.size());
+  p1 = false, p2 = false, p3 = false, p4 = false;
+  for (const auto& addr : allAddrs) {
+    if (addr.getPrefix().value() == prefix1) {
+      p1 = true;
+    }
+    if (addr.getPrefix().value() == prefix2) {
+      p2 = true;
+    }
+    if (addr.getPrefix().value() == prefix3) {
+      p3 = true;
+    }
+    if (addr.getPrefix().value() == prefix4) {
+      p4 = true;
+    }
+  }
+  EXPECT_TRUE(p1);
+  EXPECT_TRUE(p2);
+  EXPECT_TRUE(p3);
+  EXPECT_TRUE(p4);
 }
 
 int main(int argc, char* argv[]) {

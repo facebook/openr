@@ -25,6 +25,28 @@ namespace fbnl {
 
 using EventVariant = boost::variant<Route, Neighbor, IfAddress, Link>;
 
+struct GetAddrsFuncCtx {
+  GetAddrsFuncCtx(int addrIfIndex, int addrFamily, int addrScope)
+    : ifIndex(addrIfIndex),
+      family(addrFamily),
+      scope(addrScope) {}
+  int ifIndex{0};
+  int family{AF_UNSPEC};
+  int scope{RT_SCOPE_NOWHERE};
+  std::vector<fbnl::IfAddress> addrs;
+};
+
+struct PrefixCmp {
+  bool operator()(
+    const folly::CIDRNetwork& lhs, const folly::CIDRNetwork& rhs) {
+    if (lhs.first != rhs.first) {
+      return lhs.first < rhs.first;
+    } else {
+      return lhs.second < rhs.second;
+    }
+  }
+};
+
 /**
  * A general netlink class provides APIs that interact with kernel on route
  * programming, iface/address management, iface/route/address monitoring,
@@ -315,10 +337,16 @@ class NetlinkSocket {
    static void linkCacheCB(
      struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
 
+   static void addrCacheCB(
+     struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
+
    void handleRouteEvent(
      nl_object* obj, int action, bool runHandler) noexcept;
 
    void handleLinkEvent(
+     nl_object* obj, int action, bool runHandler) noexcept;
+
+   void handleAddrEvent(
      nl_object* obj, int action, bool runHandler) noexcept;
 
    void doUpdateRouteCache(struct rtnl_route* obj, int action);
@@ -338,6 +366,18 @@ class NetlinkSocket {
    void checkMulticastRoute(const Route& route);
 
    void checkUnicastRoute(const Route& route);
+
+   void doAddIfAddress(struct rtnl_addr* addr);
+
+   void doDeleteAddr(struct rtnl_addr* addr);
+
+   void doSyncIfAddress(
+     int ifIdnex, std::vector<fbnl::IfAddress> addrs, int family, int scope);
+
+   void doGetIfAddrs(
+     int ifIndex, int family, int scope,
+     std::vector<fbnl::IfAddress>& addrs);
+
  private:
    /**
     * Netlink scokets to interact with linux kernel. We deliberately use two
