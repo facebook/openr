@@ -156,11 +156,12 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
 
 TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::IPAddress gateway("face:cafe:3::3");
   uint32_t flags = 0x01;
   uint32_t priority = 3;
   uint8_t tos = 2;
   NextHopBuilder nhBuilder;
-  auto nh1 = nhBuilder.setIfIndex(kIfIndex).build();
+  auto nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway).build();
   RouteBuilder builder;
   auto route = builder.setDestination(dst)
                       .setType(RTN_UNICAST)
@@ -199,6 +200,8 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
   EXPECT_EQ(tos, route1.getTos().value());
   EXPECT_EQ(tos, rtnl_route_get_tos(p1));
   EXPECT_EQ(1, route1.getNextHops().size());
+  EXPECT_TRUE(route1.getNextHops()[0].getGateway().hasValue());
+  EXPECT_EQ(gateway, route1.getNextHops()[0].getGateway().value());
 
   Route route2 = std::move(route1);
   EXPECT_TRUE(nullptr == route1.fromNetlinkRoute());

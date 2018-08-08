@@ -5,6 +5,7 @@ namespace {
 const folly::StringPiece kRouteObjectStr("route/route");
 const folly::StringPiece kLinkObjectStr("route/link");
 const folly::StringPiece kAddrObjectStr("route/addr");
+const folly::StringPiece kNeighborObjectStr("route/neigh");
 
 // Socket buffer size for netlink sockets we create
 // We use 2MB, default is 32KB
@@ -17,11 +18,10 @@ namespace fbnl {
 
 NetlinkSocket::NetlinkSocket(
   fbzmq::ZmqEventLoop* evl,
-  std::unique_ptr<EventsHandler> handler)
+  std::shared_ptr<EventsHandler> handler)
   : evl_(evl),
     handler_(std::move(handler)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
-  CHECK(handler_ != nullptr) << "Missing subscription handler.";
 
   // Create netlink socket for only notification subscription
   subSock_ = nl_socket_alloc();
@@ -74,6 +74,14 @@ NetlinkSocket::NetlinkSocket(
       << "Failed to add addr cache to manager. Error: " << nl_geterror(err);
   }
 
+  err = nl_cache_mngr_add(
+      cacheManager_, kNeighborObjectStr.data(),
+      neighCacheCB, this, &neighborCache_);
+  if (err != 0 || !neighborCache_) {
+    CHECK(false)
+      << "Failed to add neighbor cache to manager. Error: " << nl_geterror(err);
+  }
+
   // Get socket FD to monitor for updates
   int socketFd = nl_cache_mngr_get_fd(cacheManager_);
   CHECK_NE(socketFd, -1) << "Failed to get socket fd";
@@ -104,6 +112,7 @@ NetlinkSocket::~NetlinkSocket() {
   routeCache_ = nullptr;
   linkCache_ = nullptr;
   cacheManager_ = nullptr;
+  neighborCache_ = nullptr;
   subSock_ = nullptr;
   reqSock_ = nullptr;
 }
@@ -117,12 +126,10 @@ void NetlinkSocket::routeCacheCB(
 void NetlinkSocket::handleRouteEvent(
     struct nl_object* obj, int action, bool runHandler) noexcept {
   CHECK_NOTNULL(obj);
-  const char* objectStr = nl_object_get_type(obj);
-  if (objectStr && (objectStr != kRouteObjectStr)) {
-    LOG(ERROR)
-      << "Invalid nl_object type expect route/route, actual: " << objectStr;
+  if (!checkObjectType(obj, kRouteObjectStr)) {
     return;
   }
+
   struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
   try {
     doUpdateRouteCache(routeObj, action);
@@ -130,7 +137,7 @@ void NetlinkSocket::handleRouteEvent(
     LOG(ERROR) << "UpdateCacheFailed";
   }
 
-  if (runHandler && eventFlags_[NEIGH_EVENT]) {
+  if (handler_ && runHandler && eventFlags_[ROUTE_EVENT]) {
     RouteBuilder builder;
     EventVariant event = builder.buildFromObject(routeObj);
     handler_->handleEvent(action, event);
@@ -144,8 +151,40 @@ void NetlinkSocket::linkCacheCB(
 }
 
 void NetlinkSocket::handleLinkEvent(
-     struct nl_object* , int , bool) noexcept {
-  // TODO handl link events in subscription implementation
+     struct nl_object* obj, int action, bool runHandler) noexcept {
+  CHECK_NOTNULL(obj);
+  if (!checkObjectType(obj, kLinkObjectStr)) {
+    return;
+  }
+
+  struct rtnl_link* linkObj = reinterpret_cast<struct rtnl_link*>(obj);
+  try {
+    LinkBuilder builder;
+    auto link = builder.buildFromObject(linkObj);
+    auto& linkAttr = links_[link.getLinkName()];
+    linkAttr.isUp = link.isUp();
+    linkAttr.ifIndex = link.getIfIndex();
+    if (!linkAttr.isUp) {
+      removeNeighborCacheEntries(link.getLinkName());
+    }
+
+    if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
+      EventVariant event = std::move(link);
+      handler_->handleEvent(action, event);
+    }
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Handl link event failed: " << folly::exceptionStr(ex);
+  }
+}
+
+void NetlinkSocket::removeNeighborCacheEntries(const std::string& ifName) {
+  for (auto it = neighbors_.begin(); it != neighbors_.end();) {
+    if (std::get<0>(it->first) == ifName) {
+      it = neighbors_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 void NetlinkSocket::addrCacheCB(
@@ -155,8 +194,69 @@ void NetlinkSocket::addrCacheCB(
 }
 
 void NetlinkSocket::handleAddrEvent(
-  struct nl_object*, int , bool) noexcept {
-  // TODO handl addr events in subscription implementation
+    struct nl_object* obj, int action, bool runHandler) noexcept {
+  CHECK_NOTNULL(obj);
+  if (!checkObjectType(obj, kAddrObjectStr)) {
+    return;
+  }
+
+  struct rtnl_addr* addrObj = reinterpret_cast<struct rtnl_addr*>(obj);
+  try {
+    IfAddressBuilder builder;
+    bool isValid = (action != NL_ACT_DEL);
+    auto ifAddr = builder.buildFromObject(addrObj);
+    std::string ifName = getIfName(ifAddr.getIfIndex()).get();
+    if (isValid) {
+      links_[ifName].networks.emplace(ifAddr.getPrefix().value());
+    } else {
+      auto it = links_.find(ifName);
+      if (it != links_.end()) {
+        it->second.networks.erase(ifAddr.getPrefix().value());
+      }
+    }
+
+    if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
+      EventVariant event = std::move(ifAddr);
+      handler_->handleEvent(action, event);
+    }
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Handl addr event failed: " << folly::exceptionStr(ex);
+  }
+}
+
+void NetlinkSocket::neighCacheCB(
+    struct nl_cache *, struct nl_object *obj, int action, void *data) noexcept {
+  CHECK(data) << "Opaque context does not exist in neighbor callback";
+  reinterpret_cast<NetlinkSocket*>(data)->
+    handleNeighborEvent(obj, action, true);
+}
+
+void NetlinkSocket::handleNeighborEvent(
+    nl_object *obj, int action, bool runHandler) noexcept {
+  CHECK_NOTNULL(obj);
+  if (!checkObjectType(obj, kNeighborObjectStr)) {
+    return;
+  }
+
+  struct rtnl_neigh* neighObj = reinterpret_cast<struct rtnl_neigh*>(obj);
+  try {
+    NeighborBuilder builder;
+    auto neigh = builder.buildFromObject(neighObj);
+    std::string ifName = getIfName(neigh.getIfIndex()).get();
+    auto key = std::make_pair(ifName, neigh.getDestination());
+    neighbors_.erase(key);
+    if (neigh.isReachable()) {
+      neighbors_.emplace(std::make_pair(key, std::move(neigh)));
+    }
+
+    if (runHandler && eventFlags_[NEIGH_EVENT]) {
+      NeighborBuilder nhBuilder;
+      EventVariant event = nhBuilder.buildFromObject(neighObj);
+      handler_->handleEvent(action, event);
+    }
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Handl neighbor event failed: " << folly::exceptionStr(ex);
+  }
 }
 
 void NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
@@ -233,7 +333,7 @@ void NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
 
 folly::Future<folly::Unit> NetlinkSocket::addRoute(Route route) {
   auto prefix = route.getDestination();
-  VLOG(3) << "NetlinkSocket add route"
+  VLOG(3) << "NetlinkSocket add route "
           << folly::IPAddress::networkToString(prefix);
 
   folly::Promise<folly::Unit> promise;
@@ -955,31 +1055,110 @@ void NetlinkSocket::doGetIfAddrs(
 }
 
 folly::Future<NlLinks> NetlinkSocket::getAllLinks() {
+  VLOG(3) << "NetlinkSocket get all links...";
   folly::Promise<NlLinks> promise;
-  // TODO Need implement
-  return promise.getFuture();
+  auto future = promise.getFuture();
+  evl_->runImmediatelyOrInEventLoop(
+    [this, p = std::move(promise)] () mutable {
+      try {
+        updateLinkCache();
+        updateAddrCache();
+        p.setValue(links_);
+      } catch (const std::exception& ex) {
+        p.setException(ex);
+      }
+  });
+  return future;
 }
 
 folly::Future<NlNeighbors> NetlinkSocket::getAllReachableNeighbors() {
+  VLOG(3) << "NetlinkSocket get neighbors...";
   folly::Promise<NlNeighbors> promise;
-  // TODO Need implement
-  return promise.getFuture();
+  auto future = promise.getFuture();
+  evl_->runImmediatelyOrInEventLoop(
+    [this, p = std::move(promise)] () mutable {
+      try {
+        //Neighbor need linkcache to map ifIndex to name
+        updateAddrCache();
+        updateNeighborCache();
+        p.setValue(std::move(neighbors_));
+      } catch (const std::exception& ex) {
+        p.setException(ex);
+      }
+    });
+  return future;
 }
 
-void NetlinkSocket::subscribeEvent(NetlinkEventType) {
-  // TODO Need implement
+bool NetlinkSocket::checkObjectType(
+    struct nl_object* obj, folly::StringPiece expectType) {
+  CHECK_NOTNULL(obj);
+  const char* objectStr = nl_object_get_type(obj);
+  if (objectStr && objectStr != expectType) {
+    LOG(ERROR)
+      << "Invalid nl_object type, expect: "
+      << expectType << ",  actual: " << objectStr;
+    return false;
+  }
+  return true;
 }
 
-void NetlinkSocket::unsubscribeEvent(NetlinkEventType) {
-  // TODO Need implement
+void NetlinkSocket::updateLinkCache() {
+  auto linkFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    CHECK(arg) << "Opaque context does not exist";
+    reinterpret_cast<NetlinkSocket*>(arg)->
+              handleLinkEvent(obj, NL_ACT_GET, false);
+  };
+  nl_cache_refill(reqSock_, linkCache_);
+  nl_cache_foreach_filter(linkCache_, nullptr, linkFunc, this);
+}
+
+void NetlinkSocket::updateAddrCache() {
+  auto addrFunc = [](struct nl_object * obj, void* arg) noexcept {
+    CHECK(arg) << "Opaque context does not exist";
+    reinterpret_cast<NetlinkSocket*>(arg)->
+              handleAddrEvent(obj, NL_ACT_GET, false);
+  };
+  nl_cache_refill(reqSock_, addrCache_);
+  nl_cache_foreach_filter(addrCache_, nullptr, addrFunc, this);
+}
+
+void NetlinkSocket::updateNeighborCache() {
+  auto neighborFunc = [](struct nl_object * obj, void* arg) noexcept {
+    CHECK(arg) << "Opaque context does not exist";
+    reinterpret_cast<NetlinkSocket*>(arg)->
+              handleNeighborEvent(obj, NL_ACT_GET, false);
+  };
+  nl_cache_foreach_filter(neighborCache_, nullptr, neighborFunc, this);
+}
+
+void NetlinkSocket::subscribeEvent(NetlinkEventType event) {
+  if (event >= MAX_EVENT_TYPE) {
+    return;
+  }
+  eventFlags_.set(event);
+}
+
+void NetlinkSocket::unsubscribeEvent(NetlinkEventType event) {
+  if (event >= MAX_EVENT_TYPE) {
+    return;
+  }
+  eventFlags_.reset(event);
 }
 
 void NetlinkSocket::subscribeAllEvents() {
-  // TODO Need implement
+  for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
+    eventFlags_.set(i);
+  }
 }
 
 void NetlinkSocket::unsubscribeAllEvents() {
-  // TODO Need implement
+  for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
+    eventFlags_.reset(i);
+  }
+}
+
+void NetlinkSocket::setEventHandler(std::shared_ptr<EventsHandler> handler) {
+  handler_ = handler;
 }
 
 } // namespace fbnl

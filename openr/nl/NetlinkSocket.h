@@ -14,6 +14,7 @@
 
 #include <folly/AtomicBitSet.h>
 #include <folly/IPAddress.h>
+#include <folly/String.h>
 #include <folly/futures/Future.h>
 
 #include <fbzmq/async/ZmqEventLoop.h>
@@ -161,9 +162,9 @@ class NetlinkSocket {
      }
    };
 
-   NetlinkSocket(
+   explicit NetlinkSocket(
      fbzmq::ZmqEventLoop* evl,
-     std::unique_ptr<EventsHandler> handler);
+     std::shared_ptr<EventsHandler> handler = nullptr);
 
    virtual ~NetlinkSocket();
 
@@ -312,6 +313,7 @@ class NetlinkSocket {
    /**
     * Subscribe specific event
     * No effect for invalid event types
+    * NOTE: By default NetlinkSocket subscribes NO event
     */
    void subscribeEvent(NetlinkEventType event);
 
@@ -327,6 +329,8 @@ class NetlinkSocket {
    // Unsubscribe all events
    void unsubscribeAllEvents();
 
+   virtual void setEventHandler(std::shared_ptr<EventsHandler> handler);
+
  private:
    // This is the callback we pass into libnl when data is ready on the socket
    // The opaque data will contain the user registered NetlinkSubscriber
@@ -340,6 +344,9 @@ class NetlinkSocket {
    static void addrCacheCB(
      struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
 
+   static void neighCacheCB(
+     struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
+
    void handleRouteEvent(
      nl_object* obj, int action, bool runHandler) noexcept;
 
@@ -347,6 +354,9 @@ class NetlinkSocket {
      nl_object* obj, int action, bool runHandler) noexcept;
 
    void handleAddrEvent(
+     nl_object* obj, int action, bool runHandler) noexcept;
+
+   void handleNeighborEvent(
      nl_object* obj, int action, bool runHandler) noexcept;
 
    void doUpdateRouteCache(struct rtnl_route* obj, int action);
@@ -377,6 +387,17 @@ class NetlinkSocket {
    void doGetIfAddrs(
      int ifIndex, int family, int scope,
      std::vector<fbnl::IfAddress>& addrs);
+
+   void removeNeighborCacheEntries(const std::string& ifName);
+
+   void updateLinkCache();
+
+   void updateAddrCache();
+
+   void updateNeighborCache();
+
+   bool checkObjectType(
+     struct nl_object* obj, folly::StringPiece expectType);
 
  private:
    /**
@@ -418,11 +439,11 @@ class NetlinkSocket {
 
    NlLinkRoutesDb linkRoutesCache_;
 
-   std::unique_ptr<EventsHandler> handler_{nullptr};
+   std::shared_ptr<EventsHandler> handler_{nullptr};
 
    /**
     * We keep an internal cache of Neighbor and Link entries
-    * These are used in the get* methods
+    * These are used in the getAllLinks/getAllReachableNeighbors methods
     */
    NlNeighbors neighbors_{};
    NlLinks links_{};

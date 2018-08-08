@@ -9,6 +9,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <folly/Optional.h>
 #include <folly/IPAddress.h>
@@ -300,7 +301,9 @@ class IfAddressBuilder final {
    IfAddressBuilder() {}
    ~IfAddressBuilder() {}
 
-   IfAddress build();
+   IfAddress build() const;
+
+   IfAddress buildFromObject(struct rtnl_addr* addr) const;
 
    // Required
    IfAddressBuilder& setIfIndex(int ifIndex);
@@ -338,7 +341,7 @@ class IfAddressBuilder final {
 // Wrapper class fo rtnl_addr
 class IfAddress final {
  public:
-   explicit IfAddress(IfAddressBuilder& builder);
+   explicit IfAddress(const IfAddressBuilder& builder);
    ~IfAddress();
 
    IfAddress(IfAddress&&) noexcept;
@@ -410,6 +413,8 @@ class NeighborBuilder final {
 
    folly::Optional<folly::MacAddress> getLinkAddress() const;
 
+   bool getIsReachable() const;
+
    /**
     * NUD_INCOMPLETE
     * NUD_REACHABLE
@@ -426,6 +431,7 @@ class NeighborBuilder final {
 
  private:
    int ifIndex_{0};
+   bool isReachable_{false};
    folly::IPAddress destination_;
    folly::Optional<folly::MacAddress> linkAddress_;
    folly::Optional<int> state_;
@@ -453,6 +459,8 @@ class Neighbor final {
 
    struct rtnl_neigh* fromNeighbor() const;
 
+   bool isReachable() const;
+
  private:
 
    Neighbor(const Neighbor&);
@@ -460,7 +468,8 @@ class Neighbor final {
 
    void init();
 
-   int ifIndex_;
+   int ifIndex_{0};
+   bool isReachable_{false};
    folly::IPAddress destination_;
    folly::Optional<folly::MacAddress> linkAddress_;
    folly::Optional<int> state_;
@@ -473,9 +482,9 @@ class LinkBuilder final {
    LinkBuilder() {}
    ~LinkBuilder() {}
 
-   Link buildFromObject(struct rtnl_link* link);
+   Link buildFromObject(struct rtnl_link* link) const;
 
-   Link build();
+   Link build() const;
 
    LinkBuilder& setLinkName(const std::string& linkName);
 
@@ -509,7 +518,7 @@ class Link final {
 
    int getIfIndex() const;
 
-   unsigned int getFlags() const;
+   uint32_t getFlags() const;
 
    bool isUp() const;
 
@@ -526,6 +535,13 @@ class Link final {
    int ifIndex_{0};
    uint32_t flags_{0};
    struct rtnl_link* link_{nullptr};
+};
+
+// Link helper class that records Link attributes on the fly
+struct LinkAttribute final {
+  bool isUp{false};
+  int ifIndex{0};
+  std::unordered_set<folly::CIDRNetwork> networks;
 };
 
 // Route => prefix and its possible nextHops
@@ -560,7 +576,7 @@ using NlNeighbors = std::
     unordered_map<std::pair<std::string, folly::IPAddress>, Neighbor>;
 
 // keyed by link name
-using NlLinks = std::unordered_map<std::string, Link>;
+using NlLinks = std::unordered_map<std::string, LinkAttribute>;
 
 } // namespace fbnl
 } // namespace openr
