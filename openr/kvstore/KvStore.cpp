@@ -387,6 +387,7 @@ KvStore::mergeKeyValues(
     VLOG(4) << "(mergeKeyValues) key: '" << key << "' value: '"
             << (value.value.hasValue() ? "valid" : "null")
             << "' new version: " << newVersion << " old version: " << myVersion
+            << " new TTL: " << value.ttl
             << " new originator: '" << value.originatorId
             << "' new TTL version: " << value.ttlVersion;
     VLOG_IF(5, value.value.hasValue())
@@ -858,6 +859,28 @@ KvStore::dumpPeers() {
   return reply;
 }
 
+// update TTL with remainng time to expire, TTL version remains
+// same so existing keys will not be updated with this TTL
+void
+KvStore::updatePublicationTtl(thrift::Publication &thriftPub) {
+  auto timeNow = std::chrono::steady_clock::now();
+  for (const auto& qE : ttlCountdownQueue_) {
+    auto timeLeft = qE.expiryTime - timeNow;
+    auto kv = thriftPub.keyVals.find(qE.key);
+    if (kv != thriftPub.keyVals.end()) {
+      // remove key from publication if time left is below ttl threshold
+      if (duration_cast<milliseconds>(timeLeft).count() >
+          Constants::kTtlThreshold) {
+        // reduce by kTtlThreshold msec to account for tx time
+        kv->second.ttl = duration_cast<milliseconds>(timeLeft).count() -
+                          Constants::kTtlThreshold;
+      } else {
+          thriftPub.keyVals.erase(kv);
+      }
+    }
+  }
+}
+
 // process a request pending on cmd_ socket
 void
 KvStore::processRequest(
@@ -981,6 +1004,7 @@ KvStore::processRequest(
         thriftPub.keyVals,
         thriftReq.keyDumpParams.keyValHashes.value());
     }
+    updatePublicationTtl(thriftPub);
     const auto retPub = cmdSock.sendOne(
         fbzmq::Message::fromThriftObj(thriftPub, serializer_).value());
     if (retPub.hasError()) {
@@ -995,7 +1019,8 @@ KvStore::processRequest(
     std::vector<std::string> keyPrefixList{};
     folly::split(",", thriftReq.keyDumpParams.prefix, keyPrefixList, true);
     KvStoreFilters kvFilters{keyPrefixList, originator};
-    const auto hashDump = dumpHashWithFilters(kvFilters);
+    auto hashDump = dumpHashWithFilters(kvFilters);
+    updatePublicationTtl(hashDump);
     const auto request = cmdSock.sendOne(
         fbzmq::Message::fromThriftObj(hashDump, serializer_).value());
     if (request.hasError()) {

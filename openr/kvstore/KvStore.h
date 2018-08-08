@@ -10,10 +10,10 @@
 #include <chrono>
 #include <map>
 #include <memory>
-#include <queue>
 #include <string>
 
 #include <boost/serialization/strong_typedef.hpp>
+#include <boost/heap/priority_queue.hpp>
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
@@ -42,10 +42,11 @@ struct TtlCountdownQueueEntry {
   }
 };
 
-using TtlCountdownQueue = std::priority_queue<
+using TtlCountdownQueue = boost::heap::priority_queue<
     TtlCountdownQueueEntry,
-    std::vector<TtlCountdownQueueEntry>,
-    std::greater<TtlCountdownQueueEntry> // Always returns smallest first
+    // Always returns smallest first
+    boost::heap::compare<std::greater<TtlCountdownQueueEntry>>,
+    boost::heap::stable<true>
     >;
 
 class KvStoreFilters {
@@ -196,6 +197,9 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   void floodPublication(
       thrift::Publication const& publication,
       folly::Optional<std::string> originatorId);
+
+  // update Time to expire filed in Publication
+  void updatePublicationTtl(thrift::Publication& thriftPub);
 
   // count number of prefixes in kvstore
   int getPrefixCount();

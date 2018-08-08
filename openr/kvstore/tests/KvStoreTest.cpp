@@ -660,6 +660,81 @@ TEST_F(KvStoreTestFixture, LeafNode) {
 }
 
 /**
+ * Test to verify that during peer sync TTLs are sent with remaining
+ * time to expire, and new keys are added with that TTL while TTL for
+ * existing keys is not updated.
+ * 1. Start store0,
+ * 2. Add two keys to store0
+ * 3. Sleep for 200msec
+ * 4. Start store1 and add one of the keys
+ * 5  Sync with keys from store0
+ * 6. Check store1 adds a new key with TTL equal to [default value - 200msec]
+ * 7. Check TTL for existing key in store1 does not get updated
+ */
+TEST_F(KvStoreTestFixture, PeerSyncTtlExpirey) {
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto store0 = createKvStore("store0", emptyPeers);
+  auto store1 = createKvStore("store1", emptyPeers);
+  store0->run();
+  store1->run();
+
+  thrift::Value thriftVal1(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "node1" /* originatorId */,
+      "value1" /* value */,
+      kTtlMs /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+
+  thriftVal1.hash =
+      generateHash(
+        thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+
+  thrift::Value thriftVal2(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "node1" /* originatorId */,
+      "value2" /* value */,
+      kTtlMs /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+
+  thriftVal2.hash =
+      generateHash(
+        thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+
+  EXPECT_TRUE(store0->setKey("test1", thriftVal1));
+  auto maybeThriftVal = store0->getKey("test1");
+  ASSERT_TRUE(maybeThriftVal.hasValue());
+  EXPECT_EQ(thriftVal1, *maybeThriftVal);
+
+  EXPECT_TRUE(store0->setKey("test2", thriftVal2));
+  maybeThriftVal = store0->getKey("test2");
+  ASSERT_TRUE(maybeThriftVal.hasValue());
+  EXPECT_EQ(thriftVal2, *maybeThriftVal);
+
+  EXPECT_TRUE(store1->setKey("test2", thriftVal2));
+  maybeThriftVal = store1->getKey("test2");
+  ASSERT_TRUE(maybeThriftVal.hasValue());
+  EXPECT_EQ(thriftVal2, *maybeThriftVal);
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  EXPECT_TRUE(store1->addPeer(store0->nodeId, store0->getPeerSpec()));
+  // wait to sync kvstore
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  // key 'test1' should be added with remaining TTL
+  maybeThriftVal = store1->getKey("test1");
+  ASSERT_TRUE(maybeThriftVal.hasValue());
+  EXPECT_LE(maybeThriftVal.value().ttl, kTtlMs - 200);
+
+  // key 'test2' should not be updated, it should have kTtlMs
+  maybeThriftVal = store1->getKey("test2");
+  ASSERT_TRUE(maybeThriftVal.hasValue());
+  EXPECT_EQ(maybeThriftVal.value().ttl, kTtlMs);
+}
+
+/**
  * Test to verify PEER_ADD/PEER_DEL and verify that keys are synchronized
  * to the neighbor.
  * 1. Start store0, store1 and store2

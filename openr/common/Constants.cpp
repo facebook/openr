@@ -54,6 +54,7 @@ constexpr int32_t Constants::kSparkMcastPort;
 constexpr int32_t Constants::kSystemAgentPort;
 constexpr int64_t Constants::kDefaultAdjWeight;
 constexpr int64_t Constants::kTtlInfinity;
+constexpr int64_t Constants::kTtlThreshold;
 constexpr size_t Constants::kNumTimeSeries;
 constexpr std::chrono::milliseconds Constants::kHealthCheckInterval;
 constexpr std::chrono::milliseconds Constants::kInitialBackoff;
