@@ -206,7 +206,10 @@ class OpenrFixture : public ::testing::Test {
    */
   OpenrWrapper<CompactSerializer>*
   createOpenr(
-      std::string nodeId, bool v4Enabled, bool enableFullMeshReduction) {
+      std::string nodeId,
+      bool v4Enabled,
+      bool enableFullMeshReduction,
+      uint32_t memLimit = openr::memLimitMB) {
     auto ptr = std::make_unique<OpenrWrapper<CompactSerializer>>(
         context,
         nodeId,
@@ -222,7 +225,8 @@ class OpenrFixture : public ::testing::Test {
         kLinkFlapMaxBackoff,
         kFibColdStartDuration,
         mockIoProvider,
-        port_);
+        port_,
+        memLimit);
     aquamen_.emplace_back(std::move(ptr));
     return aquamen_.back().get();
   }
@@ -741,7 +745,7 @@ TEST_P(FullMeshTopologyFixture, FullMeshKvstorePeerTest) {
 //
 // Verify resource monitor
 //
-TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
+TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
   // define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface12, ifIndex12},
                                     {iface21, ifIndex21}});
@@ -756,12 +760,28 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   v4Enabled = false;
 
   bool enableFullMeshReduction = false;
+  std::string memKey{"process.memory.rss"};
+  std::string cpuKey{"process.cpu.pct"};
+  uint32_t rssMemInUse{0};
 
-  auto openr1 = createOpenr("1", v4Enabled, enableFullMeshReduction);
-  auto openr2 = createOpenr("2", v4Enabled, enableFullMeshReduction);
+  // find out rss memory in use
+  {
+    auto openr2 = createOpenr("2", v4Enabled, enableFullMeshReduction);
+    openr2->run();
 
+    auto counters2 = openr2->zmqMonitorClient->dumpCounters();
+    /* sleep override */
+    std::this_thread::sleep_for(kMaxOpenrSyncTime);
+    while (counters2.size() == 0) {
+      counters2 = openr2->zmqMonitorClient->dumpCounters();
+    }
+    rssMemInUse = counters2[memKey].value / 1e6;
+  }
+
+  uint32_t memLimitMB = static_cast<uint32_t>(rssMemInUse) + 500;
+  auto openr1 =
+    createOpenr("1", v4Enabled, enableFullMeshReduction, memLimitMB);
   openr1->run();
-  openr2->run();
 
   /* sleep override */
   // wait until all aquamen got synced on kvstore
@@ -769,29 +789,35 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
 
   // make sure every openr has a prefix allocated
   EXPECT_TRUE(openr1->getIpPrefix().hasValue());
-  EXPECT_TRUE(openr2->getIpPrefix().hasValue());
 
   auto counters1 = openr1->zmqMonitorClient->dumpCounters();
   while (counters1.size() == 0) {
     counters1 = openr1->zmqMonitorClient->dumpCounters();
   }
 
-  std::string memKey{"process.memory.rss"};
-  std::string cpuKey{"process.cpu.pct"};
   // check if counters contain the cpu and memory resource usage
   EXPECT_EQ(counters1.count(memKey), 1);
   EXPECT_EQ(counters1.count(cpuKey), 1);
-  EXPECT_FALSE(openr1->watchdog->memoryLimitExceeded());
 
   // allocate memory to go beyond memory limit and check if watchdog
   // catches the over the limit condition
-  auto memUsage = counters1[memKey].value / 1e6;
-  auto allocMem = openr::memLimitMB - memUsage;
+  uint32_t memUsage = static_cast<uint32_t>(counters1[memKey].value / 1e6);
 
-  vector<int64_t> v((allocMem + 5) * 0x100000);
-  fill(v.begin(), v.end(), 1);
-  std::this_thread::sleep_for(std::chrono::seconds(5));
-  EXPECT_TRUE(openr1->watchdog->memoryLimitExceeded());
+  if (memUsage < memLimitMB) {
+    EXPECT_FALSE(openr1->watchdog->memoryLimitExceeded());
+    uint32_t allocMem = memLimitMB - memUsage + 10;
+
+    LOG(INFO) << "Allocating:" << allocMem << ", Mem in use:" << memUsage
+              << ", Memory limit:" << memLimitMB << "MB";
+    vector<int8_t> v((allocMem) * 0x100000);
+    fill(v.begin(), v.end(), 1);
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    EXPECT_TRUE(openr1->watchdog->memoryLimitExceeded());
+  } else {
+    // memory already recached above the limit
+    EXPECT_TRUE(openr1->watchdog->memoryLimitExceeded());
+  }
 }
 
 int

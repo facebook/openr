@@ -29,7 +29,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds linkFlapMaxBackoff,
     std::chrono::seconds fibColdStartDuration,
     std::shared_ptr<IoProvider> ioProvider,
-    int32_t systemPort)
+    int32_t systemPort,
+    uint32_t memLimit)
     : context_(context),
       nodeId_(nodeId),
       ioProvider_(std::move(ioProvider)),
@@ -248,7 +249,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
      nodeId_,
      std::chrono::seconds(1),
      std::chrono::seconds(60),
-     openr::memLimitMB);
+     memLimit);
 
   // Zmq monitor client to get counters
    zmqMonitorClient = std::make_unique<fbzmq::ZmqMonitorClient> (

@@ -24,7 +24,7 @@
 
 namespace openr {
 // memory limit for watchdog checks
-const uint32_t memLimitMB{350};
+const uint32_t memLimitMB{5000};
 
 /**
  * A utility class to wrap OpenR's Main.cpp
@@ -51,7 +51,8 @@ class OpenrWrapper {
       std::chrono::milliseconds linkFlapMaxBackoff,
       std::chrono::seconds fibColdStartDuration,
       std::shared_ptr<IoProvider> ioProvider,
-      int32_t systemPort);
+      int32_t systemPort,
+      uint32_t memLimit = openr::memLimitMB);
 
   ~OpenrWrapper() {
     stop();

@@ -64,7 +64,8 @@ Watchdog::monitorMemory() {
      return;
   }
   if (memInUse_.value()/1e6 > criticalMemoryMB_) {
-    LOG(WARNING) << "Memory usage critical:" << memInUse_.value() << " bytes";
+    LOG(WARNING) << "Memory usage critical:" << memInUse_.value() << " bytes,"
+                 << " Memory limit:" << criticalMemoryMB_ << " MB";
     if (not memExceedTime_.hasValue()) {
       memExceedTime_ = std::chrono::steady_clock::now();
       return;
