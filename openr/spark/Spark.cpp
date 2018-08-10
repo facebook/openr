@@ -656,6 +656,17 @@ Spark::validateHelloPacket(
   // update the sequence number
   neighbor.seqNum = newSeqNum;
 
+  // consider neighbor restart if v4 address has changed on neighbor's
+  // interface (due to duplicate IPv4 detection).
+  if (enableV4_) {
+    auto const& rcvdV4Addr = originator.transportAddressV4;
+    auto const& existingV4Addr = neighbor.info.transportAddressV4;
+    if (rcvdV4Addr != existingV4Addr) {
+      LOG(INFO) << neighborName << " seems to be have reassigned IPv4 address";
+      return PacketValidationResult::NEIGHBOR_RESTART;
+    }
+  }
+
   return PacketValidationResult::SUCCESS;
 }
 
