@@ -467,8 +467,18 @@ PrefixAllocator::startAllocation(
     << ", allocation prefix length: "
     << static_cast<int16_t>(allocParams_->second);
   const uint32_t prefixCount = getPrefixCount(*allocParams_);
+  uint32_t startIndex = 0;
+  uint32_t endIndex = prefixCount - 1;
+
+  // For IPv4, if the prefix length is 32
+  // then the first and last IP in that subnet are not valid host addresses.
+  if (allocParams_->first.first.isV4() && allocParams_->second == 32) {
+    startIndex += 1;
+    endIndex -= 1;
+  }
+
   rangeAllocator_->startAllocator(
-      std::make_pair(0, prefixCount - 1), getInitPrefixIndex());
+      std::make_pair(startIndex, endIndex), getInitPrefixIndex());
 }
 
 void
