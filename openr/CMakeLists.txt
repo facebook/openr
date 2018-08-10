@@ -500,6 +500,30 @@ if(BUILD_TESTS)
   find_library(GTEST gtest)
   find_library(GTEST_MAIN gtest_main)
 
+  add_executable(netlink_socket_sample
+    nl/examples/NetlinkSocketSample.cpp
+  )
+
+  target_include_directories(netlink_socket_sample
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+
+  target_link_libraries(netlink_socket_sample
+    openrlib
+    ${GLOG}
+    ${GFLAGS}
+    ${FOLLY}
+    -lpthread
+    ${NLROUTE3}
+    ${NL3}
+  )
+
+  install(TARGETS
+    netlink_socket_sample
+    DESTINATION sbin
+  )
+
   add_executable(netlink_route_sample
     nl/examples/NetlinkRouteSample.cpp
   )
