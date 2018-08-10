@@ -7,6 +7,7 @@
 
 #include "NetlinkSubscriber.h"
 #include "NetlinkException.h"
+#include "NetlinkTypes.h"
 
 #include <algorithm>
 #include <array>
@@ -24,6 +25,7 @@ namespace {
 const folly::StringPiece kLinkObjectStr("route/link");
 const folly::StringPiece kNeighborObjectStr("route/neigh");
 const folly::StringPiece kAddrObjectStr("route/addr");
+const folly::StringPiece kRouteObjectStr("route/route");
 // We currently only handle v6 neighbor entries.
 const uint8_t kFilterRouteFamily = AF_INET6;
 // Socket buffer size for netlink sockets we create
@@ -194,6 +196,40 @@ buildAddr(struct nl_object* obj, struct nl_cache* linkCache, bool deleted) {
       std::move(ifName), {std::move(ipAddress), netmask}, !deleted};
 }
 
+folly::Optional<openr::RouteEntry>
+buildRoute(struct nl_object* obj, struct nl_cache* linkCache, bool deleted) {
+  CHECK(obj) << "Invalid object pointer";
+  CHECK(linkCache) << "Invalid link cache";
+  struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
+  const char* objectStr = nl_object_get_type(obj);
+  if (objectStr && objectStr != kRouteObjectStr) {
+    LOG(ERROR) << "Invalid nl_object type: " << objectStr
+               << " expect: " << kRouteObjectStr.data();
+    return folly::none;
+  }
+
+  try {
+    openr::fbnl::RouteBuilder builder;
+    openr::fbnl::Route route = builder.buildFromObject(routeObj);
+    openr::RouteEntry routeEntry(
+      route.getDestination(), route.getScope(), route.getRouteTable(),
+      route.getProtocolId(), route.getType(), deleted);
+    for (const auto& nextHop : route.getNextHops()) {
+      if (!nextHop.getIfIndex().hasValue()
+       || !nextHop.getGateway().hasValue()) {
+         continue;
+      }
+      std::string ifName =
+        ifIndexToName(linkCache, nextHop.getIfIndex().value());
+      routeEntry.nexthops.emplace(ifName, nextHop.getGateway().value());
+    }
+    return routeEntry;
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Parsing route object failed";
+    return folly::none;
+  }
+}
+
 } // anonymous namespace
 
 namespace openr {
@@ -243,8 +279,10 @@ NetlinkSubscriber::NetlinkSubscriber(
       << "Failed to add neighbor cache to manager. Error: " << nl_geterror(err);
   }
 
-  // Subscribe all events by default
-  subscribeAllEvents();
+  // For backward compitability,subscribe addr, link and neigh events by default
+  subscribeEvent(ADDR_EVENT);
+  subscribeEvent(LINK_EVENT);
+  subscribeEvent(NEIGH_EVENT);
 
   // Add link cache to manager. Same caveats as for neighborEventFunc
   err = nl_cache_mngr_add(
@@ -260,6 +298,13 @@ NetlinkSubscriber::NetlinkSubscriber(
   if (err != 0 || !addrCache_) {
     CHECK(false)
       << "Failed to add addr cache to manager. Error: " << nl_geterror(err);
+  }
+
+  err = nl_cache_mngr_add(
+    cacheManager_, kRouteObjectStr.data(), routeEventFunc, this, &routeCache_);
+  if (err != 0 || !routeCache_) {
+    CHECK(false) << "Failed to add route cache to manager. Error: "
+                 << nl_geterror(err);
   }
 
   // Get socket FD to monitor for updates
@@ -427,6 +472,21 @@ NetlinkSubscriber::handleNeighborEvent(
   }
 }
 
+void NetlinkSubscriber::handleRouteEvent(
+    nl_object *obj, bool deleted, bool runHandler) noexcept {
+  auto routeEntry = buildRoute(obj, linkCache_, deleted);
+  if (!routeEntry) {
+    return;
+  }
+
+  if (runHandler && eventFlags_[ROUTE_EVENT]) {
+    VLOG(2) << "Route Event - Prefix: "
+            << folly::IPAddress::networkToString(routeEntry->prefix)
+            << (routeEntry->isDeleted ? " Deleted" : " Added");
+    handler_->routeEventFunc(*routeEntry);
+  }
+}
+
 void
 NetlinkSubscriber::handleAddrEvent(
     nl_object* obj, bool deleted, bool runHandler) noexcept {
@@ -481,6 +541,15 @@ NetlinkSubscriber::addrEventFunc(
   CHECK(data) << "Opaque context does not exist";
   const bool deleted = (action == NL_ACT_DEL);
   reinterpret_cast<NetlinkSubscriber*>(data)->handleAddrEvent(
+      obj, deleted, true);
+}
+
+void
+NetlinkSubscriber::routeEventFunc(
+    struct nl_cache *, struct nl_object *obj, int action, void *data) noexcept {
+  CHECK(data) << "Opaque context does not exist";
+  bool deleted = (action == NL_ACT_DEL);
+  reinterpret_cast<NetlinkSubscriber*>(data)->handleRouteEvent(
       obj, deleted, true);
 }
 

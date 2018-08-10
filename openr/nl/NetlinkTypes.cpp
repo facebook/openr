@@ -444,7 +444,8 @@ NextHop NextHopBuilder::buildFromObject(struct rtnl_nexthop* obj) const {
   }
   auto gwAddr = folly::IPAddress::fromBinary(folly::ByteRange(
     (const unsigned char*)nl_addr_get_binary_addr(gw), nl_addr_get_len(gw)));
-  builder.setGateway(gwAddr);
+  builder.setGateway(gwAddr)
+         .setWeight(rtnl_route_nh_get_weight(obj));
   return builder.build();
 }
 

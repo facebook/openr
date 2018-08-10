@@ -81,6 +81,28 @@ struct NeighborEntry {
   const bool isReachable{false};
 };
 
+// Route helper type
+struct RouteEntry {
+  RouteEntry(
+    const folly::CIDRNetwork& prefix,
+    uint32_t scope, uint32_t table,
+    uint32_t proto, uint32_t type, bool isDeleted)
+    : scope(scope),
+      table(table),
+      proto(proto),
+      type(type),
+      isDeleted(isDeleted),
+      prefix(prefix) {}
+
+  const uint32_t scope{RT_SCOPE_NOWHERE};
+  const uint32_t table{RT_TABLE_UNSPEC};
+  const uint32_t proto{99};
+  const uint32_t type{RTN_UNICAST};
+  const bool isDeleted{false};
+  const folly::CIDRNetwork prefix;
+  std::unordered_set<std::pair<std::string, folly::IPAddress>> nexthops;
+};
+
 // A simple wrapper over Netlink Socket for Subscribing to events and
 // getting cached state.
 // Contains all netlink details. We throw execptions for anything gone wrong
@@ -118,6 +140,7 @@ class NetlinkSubscriber final {
     LINK_EVENT = 0,
     NEIGH_EVENT,
     ADDR_EVENT,
+    ROUTE_EVENT,
     MAX_EVENT_TYPE // sentinel
   };
 
@@ -150,6 +173,13 @@ class NetlinkSubscriber final {
           << "Address: " << folly::IPAddress::networkToString(addrEntry.network)
           << " on link: " << addrEntry.ifName
           << (addrEntry.isValid ? " ADDED" : " DELETED");
+    }
+
+    virtual void
+    routeEventFunc(const RouteEntry& routeEntry) {
+      VLOG(3) << "Route entry: "
+              << folly::IPAddress::networkToString(routeEntry.prefix)
+              << (routeEntry.isDeleted ? " Deleted " : " Added");
     }
 
    private:
@@ -207,10 +237,14 @@ class NetlinkSubscriber final {
   static void addrEventFunc(
       struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
 
+  static void routeEventFunc(
+    struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
+
   void handleLinkEvent(nl_object* obj, bool deleted, bool runHandler) noexcept;
   void handleNeighborEvent(
       nl_object* obj, bool deleted, bool runHandler) noexcept;
   void handleAddrEvent(nl_object* obj, bool deleted, bool runHandler) noexcept;
+  void handleRouteEvent(nl_object* obj, bool deleted, bool runHandler) noexcept;
 
   // Helper methods to do full update of link cache from kernel
   void updateLinkAddrCache();
@@ -239,6 +273,7 @@ class NetlinkSubscriber final {
   struct nl_cache* neighborCache_{nullptr};
   struct nl_cache* linkCache_{nullptr};
   struct nl_cache* addrCache_{nullptr};
+  struct nl_cache* routeCache_{nullptr};
 
   fbzmq::ZmqEventLoop* zmqLoop_{nullptr};
   Handler* handler_{nullptr};
