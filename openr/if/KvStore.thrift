@@ -43,7 +43,8 @@ enum Command {
   // operations on keys in the store
   KEY_SET   = 1,
   KEY_GET   = 2,
-  KEY_DUMP  = 3,
+  KEY_DUMP  = 3,      // dump keys only if TTL balance > kTtlThreshold
+  KEY_DUMP_ALL  = 10, // dump keys regardless of TTL balance
   HASH_DUMP = 7,
   COUNTERS_GET = 9,   // Return object will be Monitor::CounterMap
 

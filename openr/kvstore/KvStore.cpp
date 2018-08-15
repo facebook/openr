@@ -980,6 +980,7 @@ KvStore::processRequest(
         fbzmq::Message::fromThriftObj(thriftPub, serializer_).value());
     break;
   }
+  case thrift::Command::KEY_DUMP_ALL:
   case thrift::Command::KEY_DUMP: {
     if (thriftReq.keyDumpParams.keyValHashes.hasValue()) {
       VLOG(3) << "Dump keys requested along with "
@@ -1004,7 +1005,9 @@ KvStore::processRequest(
         thriftPub.keyVals,
         thriftReq.keyDumpParams.keyValHashes.value());
     }
-    updatePublicationTtl(thriftPub);
+    if (thriftReq.cmd == thrift::Command::KEY_DUMP) {
+      updatePublicationTtl(thriftPub);
+    }
     const auto retPub = cmdSock.sendOne(
         fbzmq::Message::fromThriftObj(thriftPub, serializer_).value());
     if (retPub.hasError()) {
@@ -1020,7 +1023,6 @@ KvStore::processRequest(
     folly::split(",", thriftReq.keyDumpParams.prefix, keyPrefixList, true);
     KvStoreFilters kvFilters{keyPrefixList, originator};
     auto hashDump = dumpHashWithFilters(kvFilters);
-    updatePublicationTtl(hashDump);
     const auto request = cmdSock.sendOne(
         fbzmq::Message::fromThriftObj(hashDump, serializer_).value());
     if (request.hasError()) {

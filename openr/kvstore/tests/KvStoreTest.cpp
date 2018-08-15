@@ -1066,6 +1066,9 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     store->setKey(key, thriftVal);
   }
 
+  // let kvstore sync
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
   // Receive publication from each store as one update is atleast expected
   {
     for (auto& store : stores_) {
