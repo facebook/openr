@@ -276,7 +276,7 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
   if (myPrefixIt == staticAlloc.nodePrefixes.end() and allocParams_) {
     VLOG(2) << "Lost prefix";
     applyState_ = std::make_pair(true, folly::none);
-    applyMyPrefix();
+    applyMyPrefixIndex(folly::none);
     allocParams_ = folly::none;
   }
 
@@ -509,7 +509,7 @@ PrefixAllocator::applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex) {
   myPrefixIndex_ = prefixIndex;
 
   // Create network prefix to announce and loopback address to assign
-  folly::Optional<folly::CIDRNetwork> prefix;
+  folly::Optional<folly::CIDRNetwork> prefix = folly::none;
   if (prefixIndex) {
     auto const& seedPrefix = allocParams_->first;
     auto const& allocPrefixLen = allocParams_->second;
