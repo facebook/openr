@@ -278,7 +278,7 @@ void NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
                  << folly::IPAddress::networkToString(prefix);
       return;
     }
-    auto maybeIfIndex = route.getNextHops()[0].getIfIndex();
+    auto maybeIfIndex = route.getNextHops().begin()->getIfIndex();
     if (!maybeIfIndex.hasValue()) {
       LOG(ERROR) << "Invalid NextHop"
                  << folly::IPAddress::networkToString(prefix);
@@ -302,7 +302,7 @@ void NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
                  << folly::IPAddress::networkToString(prefix);
       return;
     }
-    auto maybeIfIndex = route.getNextHops()[0].getIfIndex();
+    auto maybeIfIndex = route.getNextHops().begin()->getIfIndex();
     if (!maybeIfIndex.hasValue()) {
       LOG(ERROR) << "Invalid NextHop"
                  << folly::IPAddress::networkToString(prefix);
@@ -601,7 +601,6 @@ void NetlinkSocket::doSyncUnicastRoutes(
   std::unordered_set<folly::CIDRNetwork> toDelete;
   for (auto const& kv : unicastRoutes) {
     if (syncDb.find(kv.first) == syncDb.end()) {
-      VLOG(3) << "FUCK TO DEL " << folly::IPAddress::networkToString(kv.first);
       toDelete.insert(kv.first);
     }
   }
@@ -629,7 +628,6 @@ void NetlinkSocket::doSyncUnicastRoutes(
     auto const& prefix = kv.first;
     try {
       RouteBuilder builder;
-      VLOG(3) << "FUCK TO ADD " << folly::IPAddress::networkToString(kv.first);
       doAddUpdateUnicastRoute(
         builder.buildFromObject(kv.second.fromNetlinkRoute()));
     } catch (std::exception const& err) {

@@ -154,6 +154,94 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   nl_addr_put(dstObj);
 }
 
+TEST_F(NetlinkTypesFixture, RouteEqualTest) {
+  folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::IPAddress gateway1("face:cafe:3::3");
+  folly::IPAddress gateway2("face:cafe:3::4");
+  folly::IPAddress gateway3("face:cafe:3::5");
+  uint32_t flags = 0x01;
+  uint32_t priority = 3;
+  uint8_t tos = 2;
+  NextHopBuilder nhBuilder;
+  auto nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
+  nhBuilder.reset();
+  auto nh2 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway2).build();
+  RouteBuilder builder1;
+  auto route1 = builder1.setDestination(dst)
+                      .setType(RTN_UNICAST)
+                      .setProtocolId(kProtocolId)
+                      .setScope(RT_SCOPE_UNIVERSE)
+                      .setRouteTable(RT_TABLE_MAIN)
+                      .setFlags(flags)
+                      .setPriority(priority)
+                      .setTos(tos)
+                      .addNextHop(nh1)
+                      .addNextHop(nh2)
+                      .buildRoute();
+  RouteBuilder builder2;
+  nhBuilder.reset();
+  nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
+  nhBuilder.reset();
+  nh2 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway2).build();
+  auto route2 = builder2.setDestination(dst)
+                      .setType(RTN_UNICAST)
+                      .setProtocolId(kProtocolId)
+                      .setScope(RT_SCOPE_UNIVERSE)
+                      .setRouteTable(RT_TABLE_MAIN)
+                      .setFlags(flags)
+                      .setPriority(priority)
+                      .setTos(tos)
+                      .addNextHop(nh2)
+                      .addNextHop(nh1)
+                      .buildRoute();
+  EXPECT_TRUE(route1 == route2);
+  RouteBuilder builder3;
+  nhBuilder.reset();
+  nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
+  auto route3 = builder3.setDestination(dst)
+                      .setType(RTN_UNICAST)
+                      .setProtocolId(kProtocolId)
+                      .setScope(RT_SCOPE_UNIVERSE)
+                      .setRouteTable(RT_TABLE_MAIN)
+                      .setFlags(flags)
+                      .setPriority(priority)
+                      .setTos(tos)
+                      .addNextHop(nh1)
+                      .buildRoute();
+  EXPECT_FALSE(route2 == route3);
+  RouteBuilder builder4;
+  nhBuilder.reset();
+  nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
+  auto nh3 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway3).build();
+  auto route4 = builder4.setDestination(dst)
+                      .setType(RTN_UNICAST)
+                      .setProtocolId(kProtocolId)
+                      .setScope(RT_SCOPE_UNIVERSE)
+                      .setRouteTable(RT_TABLE_MAIN)
+                      .setFlags(flags)
+                      .setPriority(priority)
+                      .setTos(tos)
+                      .addNextHop(nh1)
+                      .addNextHop(nh3)
+                      .buildRoute();
+  EXPECT_FALSE(route2 == route4);
+
+  // Add same nexthop
+  nhBuilder.reset();
+  auto nh4 =
+    nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
+  nhBuilder.reset();
+  auto nh5 =
+    nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
+  RouteBuilder builder5;
+  auto route5 = builder5.setDestination(dst)
+                        .addNextHop(nh4)
+                        .addNextHop(nh5)
+                        .buildRoute();
+  EXPECT_EQ(1, route5.getNextHops().size());
+  nh5.release();
+}
+
 TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::IPAddress gateway("face:cafe:3::3");
@@ -200,8 +288,8 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
   EXPECT_EQ(tos, route1.getTos().value());
   EXPECT_EQ(tos, rtnl_route_get_tos(p1));
   EXPECT_EQ(1, route1.getNextHops().size());
-  EXPECT_TRUE(route1.getNextHops()[0].getGateway().hasValue());
-  EXPECT_EQ(gateway, route1.getNextHops()[0].getGateway().value());
+  EXPECT_TRUE(route1.getNextHops().begin()->getGateway().hasValue());
+  EXPECT_EQ(gateway, route1.getNextHops().begin()->getGateway().value());
 
   Route route2 = std::move(route1);
   EXPECT_TRUE(nullptr == route1.fromNetlinkRoute());

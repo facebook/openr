@@ -294,7 +294,7 @@ class NetlinkSocketFixture : public testing::Test {
     ASSERT_EQ(1, routes.count(prefix1));
     const Route& rt = routes.at(prefix1);
     EXPECT_EQ(1, rt.getNextHops().size());
-    EXPECT_EQ(nexthops[0], rt.getNextHops()[0].getGateway());
+    EXPECT_EQ(nexthops[0], rt.getNextHops().begin()->getGateway());
 
     // Check kernel
     RouteCallbackContext ctx;
@@ -303,7 +303,7 @@ class NetlinkSocketFixture : public testing::Test {
     for (const auto& r : ctx.results) {
       if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
        && r.getNextHops().size() == 1
-       && r.getNextHops()[0].getGateway() == nexthops[0]) {
+       && r.getNextHops().begin()->getGateway() == nexthops[0]) {
          count++;
       }
     }
@@ -327,11 +327,11 @@ class NetlinkSocketFixture : public testing::Test {
     ASSERT_EQ(1, routes.count(prefix1));
     const Route& rt1 = routes.at(prefix1);
     EXPECT_EQ(1, rt1.getNextHops().size());
-    EXPECT_EQ(nexthops[0], rt1.getNextHops()[0].getGateway());
+    EXPECT_EQ(nexthops[0], rt1.getNextHops().begin()->getGateway());
 
     // Add back nexthop nh1
     if (isV4) {
-      nexthops.emplace_back(folly::IPAddress("169.254.0.2"));
+      nexthops.emplace_back(folly::IPAddress("169.254.0.1"));
     } else {
       nexthops.emplace_back(folly::IPAddress("fe80::1"));
     }
@@ -394,7 +394,7 @@ class NetlinkSocketFixture : public testing::Test {
     ASSERT_EQ(1, routes.count(prefix2));
     const Route& rt4 = routes.at(prefix2);
     EXPECT_EQ(1, rt4.getNextHops().size());
-    EXPECT_EQ(nexthops[0], rt4.getNextHops()[0].getGateway());
+    EXPECT_EQ(nexthops[0], rt4.getNextHops().begin()->getGateway());
 
     // Check kernel
     ctx.results.clear();
@@ -403,7 +403,7 @@ class NetlinkSocketFixture : public testing::Test {
     for (const auto& r : ctx.results) {
       if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
        && r.getNextHops().size() == 1
-       && r.getNextHops()[0].getGateway() == nexthops[0]) {
+       && r.getNextHops().begin()->getGateway() == nexthops[0]) {
          count++;
       }
     }
@@ -420,7 +420,7 @@ class NetlinkSocketFixture : public testing::Test {
     for (const auto& r : ctx.results) {
       if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
        && r.getNextHops().size() == 1
-       && r.getNextHops()[0].getGateway() == nexthops[0]) {
+       && r.getNextHops().begin()->getGateway() == nexthops[0]) {
          count++;
       }
     }
@@ -730,7 +730,7 @@ TEST_F(NetlinkSocketFixture, SingleRouteTest) {
   for (const auto& r : ctx.results) {
     if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId
      && r.getNextHops().size() == 1
-     && r.getNextHops()[0].getGateway() == nexthops[0]) {
+     && r.getNextHops().begin()->getGateway() == nexthops[0]) {
        count++;
     }
   }
@@ -744,7 +744,7 @@ TEST_F(NetlinkSocketFixture, SingleRouteTest) {
   EXPECT_EQ(prefix, rt.getDestination());
   EXPECT_EQ(kAqRouteProtoId, rt.getProtocolId());
   EXPECT_EQ(1, rt.getNextHops().size());
-  EXPECT_EQ(nexthops[0], rt.getNextHops()[0].getGateway());
+  EXPECT_EQ(nexthops[0], rt.getNextHops().begin()->getGateway());
 
   // Delete the same route
   netlinkSocket->delRoute(
@@ -782,7 +782,7 @@ TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
   for (const auto& r : ctx.results) {
     if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId
      && r.getNextHops().size() == 1
-     && r.getNextHops()[0].getGateway() == nexthops[0]) {
+     && r.getNextHops().begin()->getGateway() == nexthops[0]) {
        count++;
     }
   }
@@ -796,7 +796,7 @@ TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
   EXPECT_EQ(prefix, rt.getDestination());
   EXPECT_EQ(kAqRouteProtoId, rt.getProtocolId());
   EXPECT_EQ(1, rt.getNextHops().size());
-  EXPECT_EQ(nexthops[0], rt.getNextHops()[0].getGateway());
+  EXPECT_EQ(nexthops[0], rt.getNextHops().begin()->getGateway());
 
   // Delete the same route
   netlinkSocket->delRoute(
@@ -1570,6 +1570,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
     buildRoute(ifIndexX, kAqRouteProtoId1, nextHops1V4, prefix1V4)).get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(1, routes.size());
+  nextHops2V4.clear();
   netlinkSocket->delRoute(
     buildRoute(ifIndexY, kAqRouteProtoId1, nextHops2V4, prefix2V4)).get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();

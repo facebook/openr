@@ -205,11 +205,11 @@ folly::Optional<int> RouteBuilder::getRouteIfIndex() const {
 }
 
 RouteBuilder& RouteBuilder::addNextHop(const NextHop& nextHop) {
-  nextHops_.push_back(nextHop);
+  nextHops_.emplace(nextHop);
   return *this;
 }
 
-const std::vector<NextHop>&
+const NextHopSet&
 RouteBuilder::getNextHops() const {
   return nextHops_;
 }
@@ -291,13 +291,23 @@ Route& Route::operator=(Route&& other) noexcept {
 }
 
 bool operator==(const Route& lhs, const Route& rhs) {
-  return lhs.getType() == rhs.getType()
+  bool ret = lhs.getType() == rhs.getType()
       && lhs.getTos() == rhs.getTos()
       && lhs.getFlags() == rhs.getFlags()
       && lhs.getScope() == rhs.getScope()
       && lhs.getDestination() == rhs.getDestination()
       && lhs.getPriority() == rhs.getPriority()
-      && lhs.getNextHops() == rhs.getNextHops();
+      && lhs.getNextHops().size() == rhs.getNextHops().size();
+
+  if (!ret) {
+    return false;
+  }
+  for (const NextHop& nh : lhs.getNextHops()) {
+    if (!rhs.getNextHops().count(nh)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 uint8_t Route::getFamily() const {
@@ -336,7 +346,7 @@ folly::Optional<uint32_t> Route::getPriority() const {
   return priority_;
 }
 
-const std::vector<NextHop>&
+const NextHopSet&
 Route::getNextHops() const {
   return nextHops_;
 }
@@ -498,6 +508,20 @@ bool operator==(const NextHop& lhs, const NextHop& rhs) {
   return lhs.getIfIndex() == rhs.getIfIndex()
       && lhs.getGateway() == rhs.getGateway()
       && lhs.getWeight() == rhs.getWeight();
+}
+
+size_t NextHopHash::operator()(const NextHop& nh) const {
+  size_t res = 0;
+  if (nh.getIfIndex().hasValue()) {
+    res += std::hash<std::string>()(std::to_string(nh.getIfIndex().value()));
+  }
+  if (nh.getGateway().hasValue()) {
+    res += std::hash<std::string>()(nh.getGateway().value().str());
+  }
+  if (nh.getWeight().hasValue()) {
+    res += std::hash<std::string>()(std::to_string(nh.getWeight().value()));
+  }
+  return res;
 }
 
 folly::Optional<int> NextHop::getIfIndex() const {

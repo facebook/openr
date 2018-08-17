@@ -102,8 +102,14 @@ private:
    struct rtnl_nexthop* nextHop_{nullptr};
 };
 
+
 bool operator==(const NextHop& lhs, const NextHop& rhs);
 
+struct NextHopHash {
+  size_t operator() (const openr::fbnl::NextHop& nh) const;
+};
+
+using NextHopSet = std::unordered_set<NextHop, NextHopHash>;
 /**
  * Values for core fields
  * ============================
@@ -213,7 +219,7 @@ class RouteBuilder {
 
   folly::Optional<int> getRouteIfIndex() const;
 
-  const std::vector<NextHop>& getNextHops() const;
+  const NextHopSet& getNextHops() const;
 
   void reset();
 
@@ -225,7 +231,7 @@ class RouteBuilder {
   folly::Optional<uint32_t> flags_;
   folly::Optional<uint32_t> priority_;
   folly::Optional<uint8_t> tos_;
-  std::vector<NextHop> nextHops_;
+  NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
   folly::Optional<int> routeIfIndex_; // for multicast or link route
   folly::Optional<std::string> routeIfName_; // for multicast or linkroute
@@ -260,8 +266,7 @@ class Route final {
 
    folly::Optional<uint8_t> getTos() const;
 
-   const std::vector<NextHop>&
-   getNextHops() const;
+   const NextHopSet& getNextHops() const;
 
    folly::Optional<std::string> getRouteIfName() const;
 
@@ -287,7 +292,7 @@ class Route final {
    folly::Optional<uint32_t> flags_;
    folly::Optional<uint32_t> priority_;
    folly::Optional<uint8_t> tos_;
-   std::vector<NextHop> nextHops_;
+   NextHopSet nextHops_;
    folly::CIDRNetwork dst_;
    folly::Optional<std::string> routeIfName_;
    struct rtnl_route* route_{nullptr};
