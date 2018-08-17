@@ -507,4 +507,10 @@ getBuildInfoThrift() noexcept {
  );
 }
 
+folly::IPAddress
+toIPAddress(const thrift::fbbinary& binAddr) {
+  return folly::IPAddress::fromBinary(folly::ByteRange(
+      reinterpret_cast<const uint8_t*>(binAddr.data()), binAddr.size()));
+}
+
 } // namespace openr

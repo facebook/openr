@@ -187,4 +187,7 @@ findDeltaRoutes(
 
 thrift::BuildInfo getBuildInfoThrift() noexcept;
 
+folly::IPAddress
+toIPAddress(const thrift::fbbinary& binAddr);
+
 } // namespace openr
