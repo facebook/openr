@@ -452,7 +452,7 @@ class EraseKeyCmd(KvStoreCmd):
 
         print(publication.keyVals)
         response = self.client.set_key(publication.keyVals)
-        if response != 'OK':
+        if response != b'OK':
             print('Error: failed to set ttl to 0')
         else:
             print('Success: key {} will be erased soon from all KvStores.'
@@ -483,7 +483,7 @@ class SetKeyCmd(KvStoreCmd):
         # Advertise publication back to KvStore
         keyVals = {key: val}
         response = self.client.set_key(keyVals)
-        if response != 'OK':
+        if response != b'OK':
             print('Error: Failed to set key into KvStore')
         else:
             print('Success: Set key {} with version {} and ttl {} successfully'
