@@ -5,8 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <stdexcept>
 #include <syslog.h>
+#include <stdexcept>
 
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
@@ -31,8 +31,8 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
-#include <openr/decision/Decision.h>
 #include <openr/decision-old/DecisionOld.h>
+#include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/health-checker/HealthChecker.h>
 #include <openr/kvstore/KvStore.h>
@@ -46,17 +46,53 @@
 #include <openr/spark/Spark.h>
 #include <openr/watchdog/Watchdog.h>
 
+using namespace fbzmq;
+using namespace openr;
+
+using namespace folly::gen;
+
+using apache::thrift::CompactSerializer;
+using apache::thrift::FRAGILE;
+using apache::thrift::concurrency::ThreadManager;
+
+namespace {
+//
+// Local constants
+//
+
+// the URL for the spark server
+const SparkReportUrl kSparkReportUrl{"inproc://spark_server_report"};
+
+// the URL for the spark server
+const SparkCmdUrl kSparkCmdUrl{"inproc://spark_server_cmd"};
+
+// the URL for Decision module
+const DecisionPubUrl kDecisionPubUrl{"inproc://decision_server_pub"};
+
+// the URL Prefix for the ConfigStore module
+const PersistentStoreUrl kConfigStoreUrl{"ipc:///tmp/openr_config_store_cmd"};
+
+const PrefixManagerLocalCmdUrl kPrefixManagerLocalCmdUrl{
+    "inproc://prefix_manager_cmd_local"};
+
+const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
+
+} // namespace
+
 DEFINE_int32(
     kvstore_pub_port,
     openr::Constants::kKvStorePubPort,
     "KvStore publisher port for emitting realtime key-value deltas");
-DEFINE_int32(kvstore_rep_port,
-    openr::Constants::kKvStoreRepPort, "The port KvStore replier listens on");
+DEFINE_int32(
+    kvstore_rep_port,
+    openr::Constants::kKvStoreRepPort,
+    "The port KvStore replier listens on");
 DEFINE_int32(
     decision_pub_port,
     openr::Constants::kDecisionPubPort,
     "Decision publisher port for emitting realtime route-db updates");
-DEFINE_int32(decision_rep_port,
+DEFINE_int32(
+    decision_rep_port,
     openr::Constants::kDecisionRepPort,
     "The port Decision replier listens on");
 DEFINE_int32(
@@ -67,12 +103,18 @@ DEFINE_int32(
     link_monitor_cmd_port,
     openr::Constants::kLinkMonitorCmdPort,
     "The port link monitor listens for commands on ");
-DEFINE_int32(monitor_pub_port,
-    openr::Constants::kMonitorPubPort, "The port monitor publishes on");
-DEFINE_int32(monitor_rep_port,
-    openr::Constants::kMonitorRepPort, "The port monitor replies on");
-DEFINE_int32(fib_rep_port,
-    openr::Constants::kFibRepPort, "The port fib replier listens on");
+DEFINE_int32(
+    monitor_pub_port,
+    openr::Constants::kMonitorPubPort,
+    "The port monitor publishes on");
+DEFINE_int32(
+    monitor_rep_port,
+    openr::Constants::kMonitorRepPort,
+    "The port monitor replies on");
+DEFINE_int32(
+    fib_rep_port,
+    openr::Constants::kFibRepPort,
+    "The port fib replier listens on");
 DEFINE_int32(
     health_checker_port,
     openr::Constants::kHealthCheckerPort,
@@ -194,9 +236,8 @@ DEFINE_bool(
     "Enable subnet validation on adjacencies to avoid mis-cabling of v4 address"
     "on different subnets on each end.");
 DEFINE_bool(
-    enable_lfa,
-    false,
-    "Enable LFA computation for quick reroute per RFC 5286");
+    enable_lfa, false, "Enable LFA computation for quick reroute per RFC 5286");
+DEFINE_bool(enable_spark, true, "If set, enables Spark for neighbor discovery");
 DEFINE_int32(
     spark_hold_time_s,
     18,
@@ -212,6 +253,8 @@ DEFINE_int32(
     spark_fastinit_keepalive_time_ms,
     100,
     "Fast initial keep alive time (in milliseconds)");
+DEFINE_string(spark_report_url, kSparkReportUrl, "Spark Report URL");
+DEFINE_string(spark_cmd_url, kSparkCmdUrl, "Spark Cmd URL");
 DEFINE_int32(
     health_checker_ping_interval_s,
     10,
@@ -281,13 +324,8 @@ DEFINE_bool(
     false,
     "Flag to optionally advertise interface-DB information in KvStore.");
 DEFINE_bool(
-    enable_segment_routing,
-    false,
-    "Flag to disable/enable segment routing");
-DEFINE_bool(
-    set_leaf_node,
-    false,
-    "Flag to enable/disable node as a leaf node");
+    enable_segment_routing, false, "Flag to disable/enable segment routing");
+DEFINE_bool(set_leaf_node, false, "Flag to enable/disable node as a leaf node");
 DEFINE_string(
     key_prefix_filters,
     "",
@@ -313,43 +351,11 @@ DEFINE_int32(
     openr::Constants::kHighWaterMark,
     "Max number of packets to hold in kvstore ZMQ socket queue per peer");
 
-using namespace fbzmq;
-using namespace openr;
-
-using namespace folly::gen;
-
-using apache::thrift::CompactSerializer;
-using apache::thrift::FRAGILE;
-using apache::thrift::concurrency::ThreadManager;
-
 // Disable background jemalloc background thread => new jemalloc-5 feature
 const char* malloc_conf = "background_thread:false";
 
-namespace {
-//
-// Local constants
-//
-
-// the URL for the spark server
-const SparkReportUrl kSparkReportUrl{"inproc://spark_server_report"};
-
-// the URL for the spark server
-const SparkCmdUrl kSparkCmdUrl{"inproc://spark_server_cmd"};
-
-// the URL for Decision module
-const DecisionPubUrl kDecisionPubUrl{"inproc://decision_server_pub"};
-
-// the URL Prefix for the ConfigStore module
-const PersistentStoreUrl kConfigStoreUrl{"ipc:///tmp/openr_config_store_cmd"};
-
-const PrefixManagerLocalCmdUrl kPrefixManagerLocalCmdUrl{
-    "inproc://prefix_manager_cmd_local"};
-
-const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
-
-} // namespace
-
-void waitForFibService(const fbzmq::ZmqEventLoop& evl) {
+void
+waitForFibService(const fbzmq::ZmqEventLoop& evl) {
   auto waitForFibStart = std::chrono::steady_clock::now();
 
   auto fibStatus = openr::thrift::ServiceStatus::DEAD;
@@ -357,17 +363,18 @@ void waitForFibService(const fbzmq::ZmqEventLoop& evl) {
   std::shared_ptr<apache::thrift::async::TAsyncSocket> socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
   while (evl.isRunning() && openr::thrift::ServiceStatus::ALIVE != fibStatus) {
-
     std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG(INFO) << "Waiting for FibService to come up...";
     openr::Fib::createFibClient(evb, socket, client, FLAGS_fib_handler_port);
     try {
       fibStatus = client->sync_getStatus();
-    } catch (const std::exception& e) {}
+    } catch (const std::exception& e) {
+    }
   }
 
   auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now() - waitForFibStart).count();
+                    std::chrono::steady_clock::now() - waitForFibStart)
+                    .count();
   LOG(INFO) << "FibService up. Waited for " << waitMs << " ms.";
 }
 
@@ -441,8 +448,7 @@ main(int argc, char** argv) {
     return 1;
   }
   mainEventLoop.addSocket(
-      fbzmq::RawZmqSocketPtr{*forceCrashServer}, ZMQ_POLLIN,
-      [&](int) noexcept {
+      fbzmq::RawZmqSocketPtr{*forceCrashServer}, ZMQ_POLLIN, [&](int) noexcept {
         auto msg = forceCrashServer.recvOne();
         if (msg.hasError()) {
           LOG(ERROR) << "Failed receiving message on forceCrashServer.";
@@ -458,10 +464,10 @@ main(int argc, char** argv) {
   std::unique_ptr<Watchdog> watchdog{nullptr};
   if (FLAGS_enable_watchdog) {
     watchdog = std::make_unique<Watchdog>(
-      FLAGS_node_name,
-      std::chrono::seconds(FLAGS_watchdog_interval_s),
-      std::chrono::seconds(FLAGS_watchdog_threshold_s),
-      FLAGS_memory_limit_mb);
+        FLAGS_node_name,
+        std::chrono::seconds(FLAGS_watchdog_interval_s),
+        std::chrono::seconds(FLAGS_watchdog_threshold_s),
+        FLAGS_memory_limit_mb);
 
     // Spawn a watchdog thread
     allThreads.emplace_back(std::thread([&watchdog]() noexcept {
@@ -477,8 +483,7 @@ main(int argc, char** argv) {
   std::shared_ptr<ThreadManager> thriftThreadMgr;
   if (FLAGS_enable_netlink_fib_handler or FLAGS_enable_netlink_system_handler) {
     thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
-        2 /* num of threads */,
-        false /* task stats */);
+        2 /* num of threads */, false /* task stats */);
     thriftThreadMgr->setNamePrefix("ThriftCpuPool");
     thriftThreadMgr->start();
   }
@@ -506,16 +511,16 @@ main(int argc, char** argv) {
     netlinkFibServer->setPort(FLAGS_fib_handler_port);
 
     netlinkFibServerThread = std::make_unique<std::thread>(
-      [&netlinkFibServer, &nlEventLoop, &nlRouteSocket]() {
-        folly::setThreadName("FibService");
-        auto fibHandler = std::make_shared<NetlinkFibHandler>(
-            nlEventLoop.get(), nlRouteSocket);
-        netlinkFibServer->setInterface(std::move(fibHandler));
+        [&netlinkFibServer, &nlEventLoop, &nlRouteSocket]() {
+          folly::setThreadName("FibService");
+          auto fibHandler = std::make_shared<NetlinkFibHandler>(
+              nlEventLoop.get(), nlRouteSocket);
+          netlinkFibServer->setInterface(std::move(fibHandler));
 
-        LOG(INFO) << "Starting NetlinkFib server...";
-        netlinkFibServer->serve();
-        LOG(INFO) << "NetlinkFib server got stopped.";
-      });
+          LOG(INFO) << "Starting NetlinkFib server...";
+          netlinkFibServer->serve();
+          LOG(INFO) << "NetlinkFib server got stopped.";
+        });
   }
 
   // Start NetlinkSystemHandler if specified
@@ -531,19 +536,19 @@ main(int argc, char** argv) {
     netlinkSystemServer->setPort(FLAGS_system_agent_port);
 
     netlinkSystemServerThread = std::make_unique<std::thread>(
-      [&netlinkSystemServer, &context, &mainEventLoop, &nlRouteSocket]() {
-        folly::setThreadName("SystemService");
-        auto systemHandler = std::make_unique<NetlinkSystemHandler>(
-            context,
-            PlatformPublisherUrl{FLAGS_platform_pub_url},
-            &mainEventLoop,
-            nlRouteSocket);
-        netlinkSystemServer->setInterface(std::move(systemHandler));
+        [&netlinkSystemServer, &context, &mainEventLoop, &nlRouteSocket]() {
+          folly::setThreadName("SystemService");
+          auto systemHandler = std::make_unique<NetlinkSystemHandler>(
+              context,
+              PlatformPublisherUrl{FLAGS_platform_pub_url},
+              &mainEventLoop,
+              nlRouteSocket);
+          netlinkSystemServer->setInterface(std::move(systemHandler));
 
-        LOG(INFO) << "Starting NetlinkSystem server...";
-        netlinkSystemServer->serve();
-        LOG(INFO) << "NetlinkSystem server got stopped.";
-      });
+          LOG(INFO) << "Starting NetlinkSystem server...";
+          netlinkSystemServer->serve();
+          LOG(INFO) << "NetlinkSystem server got stopped.";
+        });
   }
 
   // Starting main event-loop
@@ -603,10 +608,10 @@ main(int argc, char** argv) {
     // save nodeIds in the set
     std::set<std::string> originatorIds{};
     folly::splitTo<std::string>(
-      ",",
-      FLAGS_key_originator_id_filters,
-      std::inserter(originatorIds, originatorIds.begin()),
-      true);
+        ",",
+        FLAGS_key_originator_id_filters,
+        std::inserter(originatorIds, originatorIds.begin()),
+        true);
 
     keyPrefixList.push_back(Constants::kPrefixAllocMarker.toString());
     keyPrefixList.push_back(Constants::kNodeLabelRangePrefix.toString());
@@ -708,35 +713,36 @@ main(int argc, char** argv) {
   //
   // Start the spark service. For now, use random key-pair
   //
-
-  Spark spark(
-      FLAGS_domain, // My domain
-      FLAGS_node_name, // myNodeName
-      static_cast<uint16_t>(FLAGS_spark_mcast_port),
-      std::chrono::seconds(FLAGS_spark_hold_time_s),
-      std::chrono::seconds(FLAGS_spark_keepalive_time_s),
-      std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
-      maybeIpTos,
-      FLAGS_enable_v4,
-      FLAGS_enable_subnet_validation,
-      kSparkReportUrl,
-      kSparkCmdUrl,
-      monitorSubmitUrl,
-      KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
-      KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
-      std::make_pair(Constants::kOpenrVersion,
-                     Constants::kOpenrSupportedVersion),
-      context);
-
-  std::thread sparkThread([&spark]() noexcept {
-    LOG(INFO) << "Starting the spark thread...";
-    folly::setThreadName("Spark");
-    spark.run();
-    LOG(INFO) << "Spark thread got stopped.";
-  });
-  spark.waitUntilRunning();
-  allThreads.emplace_back(std::move(sparkThread));
-  watchdog->addEvl(&spark, "Spark");
+  std::unique_ptr<Spark> spark;
+  if (FLAGS_enable_spark) {
+    spark = std::make_unique<Spark>(
+        FLAGS_domain, // My domain
+        FLAGS_node_name, // myNodeName
+        static_cast<uint16_t>(FLAGS_spark_mcast_port),
+        std::chrono::seconds(FLAGS_spark_hold_time_s),
+        std::chrono::seconds(FLAGS_spark_keepalive_time_s),
+        std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
+        maybeIpTos,
+        FLAGS_enable_v4,
+        FLAGS_enable_subnet_validation,
+        SparkReportUrl{FLAGS_spark_report_url},
+        SparkCmdUrl{FLAGS_spark_cmd_url},
+        monitorSubmitUrl,
+        KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
+        KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
+        std::make_pair(
+            Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
+        context);
+    // Spawn a Spark thread
+    allThreads.emplace_back(std::thread([&spark]() noexcept {
+      LOG(INFO) << "Starting the spark thread...";
+      folly::setThreadName("Spark");
+      spark->run();
+      LOG(INFO) << "Spark thread got stopped.";
+    }));
+    watchdog->addEvl(spark.get(), "Spark");
+    spark->waitUntilRunning();
+  }
 
   // Static list of prefixes to announce into the network as long as OpenR is
   // running.
@@ -764,7 +770,6 @@ main(int argc, char** argv) {
                << "list of IP/CIDR format, got '" << FLAGS_prefixes << "'";
     return -1;
   }
-
 
   //
   // Construct the regular expressions to match interface names against
@@ -847,8 +852,8 @@ main(int argc, char** argv) {
       FLAGS_enable_segment_routing,
       AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
       InterfaceDbMarker{Constants::kInterfaceDbMarker.toString()},
-      SparkCmdUrl{kSparkCmdUrl},
-      SparkReportUrl{kSparkReportUrl},
+      SparkCmdUrl{FLAGS_spark_cmd_url},
+      SparkReportUrl{FLAGS_spark_report_url},
       monitorSubmitUrl,
       kConfigStoreUrl,
       FLAGS_assume_drained,
@@ -971,7 +976,7 @@ main(int argc, char** argv) {
         kvStoreLocalCmdUrl,
         kvStoreLocalPubUrl,
         HealthCheckerCmdUrl{folly::sformat(
-          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_health_checker_rep_port)},
+            "tcp://{}:{}", FLAGS_listen_addr, FLAGS_health_checker_rep_port)},
         monitorSubmitUrl,
         context);
     // Spawn a HealthChecker thread
@@ -1004,8 +1009,10 @@ main(int argc, char** argv) {
   }
   linkMonitor.stop();
   linkMonitor.waitUntilStopped();
-  spark.stop();
-  spark.waitUntilStopped();
+  if (spark) {
+    spark->stop();
+    spark->waitUntilStopped();
+  }
   if (prefixAllocator) {
     prefixAllocator->stop();
     prefixAllocator->waitUntilStopped();
