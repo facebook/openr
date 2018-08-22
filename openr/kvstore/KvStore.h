@@ -116,7 +116,9 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       // Enable legacy flooding
       bool legacyFlooding = true,
       // KvStore key filters
-      folly::Optional<KvStoreFilters> filters = folly::none);
+      folly::Optional<KvStoreFilters> filters = folly::none,
+      // ZMQ high water mark
+      int zmqHwm = Constants::kHighWaterMark);
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)
@@ -249,6 +251,9 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // be sent out old way for internal clients for functioning of Open/R and
   // external clients for debugging purpose only
   const bool legacyFlooding_{true};
+
+  // ZMQ high water mark for PUB sockets
+  const int hwm_;
 
   //
   // Mutable state

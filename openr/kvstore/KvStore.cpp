@@ -70,7 +70,8 @@ KvStore::KvStore(
     // initializer for mutable state
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     bool legacyFlooding,
-    folly::Optional<KvStoreFilters> filters)
+    folly::Optional<KvStoreFilters> filters,
+    int zmqHwm)
     : zmqContext_(zmqContext),
       nodeId_(std::move(nodeId)),
       localPubUrl_(std::move(localPubUrl)),
@@ -80,6 +81,7 @@ KvStore::KvStore(
       dbSyncInterval_(dbSyncInterval),
       monitorSubmitInterval_(monitorSubmitInterval),
       legacyFlooding_(legacyFlooding),
+      hwm_(zmqHwm),
       filters_(std::move(filters)),
       // initialize zmq sockets
       localPubSock_{zmqContext},
@@ -140,54 +142,53 @@ KvStore::KvStore(
   //
 
   // HWM for pub and peer sub sockets
-  const int hwm = Constants::kHighWaterMark;
   const auto localPubHwm =
-      localPubSock_.setSockOpt(ZMQ_SNDHWM, &hwm, sizeof(int));
+      localPubSock_.setSockOpt(ZMQ_SNDHWM, &hwm_, sizeof(hwm_));
   if (localPubHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm << " "
+    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << localPubHwm.error();
   }
   const auto globalPubHwm =
-      globalPubSock_.setSockOpt(ZMQ_SNDHWM, &hwm, sizeof(int));
+      globalPubSock_.setSockOpt(ZMQ_SNDHWM, &hwm_, sizeof(hwm_));
   if (globalPubHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm << " "
+    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << globalPubHwm.error();
   }
 
   const auto localCmdSndHwm =
-      localCmdSock_.setSockOpt(ZMQ_SNDHWM, &hwm, sizeof(int));
+      localCmdSock_.setSockOpt(ZMQ_SNDHWM, &hwm_, sizeof(hwm_));
   if (localCmdSndHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm << " "
+    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << localCmdSndHwm.error();
   }
   const auto globalCmdSndHwm =
-      globalCmdSock_.setSockOpt(ZMQ_SNDHWM, &hwm, sizeof(int));
+      globalCmdSock_.setSockOpt(ZMQ_SNDHWM, &hwm_, sizeof(hwm_));
   if (globalCmdSndHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm << " "
+    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << globalCmdSndHwm.error();
   }
   const auto peersSyncSndHwm =
-      peerSyncSock_.setSockOpt(ZMQ_SNDHWM, &hwm, sizeof(int));
+      peerSyncSock_.setSockOpt(ZMQ_SNDHWM, &hwm_, sizeof(hwm_));
   if (peersSyncSndHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm << " "
+    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << peersSyncSndHwm.error();
   }
   const auto localCmdRcvHwm =
-      localCmdSock_.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(int));
+      localCmdSock_.setSockOpt(ZMQ_RCVHWM, &hwm_, sizeof(hwm_));
   if (localCmdRcvHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm << " "
+    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << localCmdRcvHwm.error();
   }
   const auto globalCmdRcvHwm =
-      globalCmdSock_.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(int));
+      globalCmdSock_.setSockOpt(ZMQ_RCVHWM, &hwm_, sizeof(hwm_));
   if (globalCmdRcvHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm << " "
+    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << globalCmdRcvHwm.error();
   }
   const auto peerSyncRcvHwm =
-      peerSyncSock_.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(int));
+      peerSyncSock_.setSockOpt(ZMQ_RCVHWM, &hwm_, sizeof(hwm_));
   if (peerSyncRcvHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm << " "
+    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << peerSyncRcvHwm.error();
   }
 

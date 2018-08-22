@@ -308,6 +308,10 @@ DEFINE_bool(
     true,
     "Legacy flooding is not optimized but can be enabled to keep compatibility"
     "with old KvStore which doesn't support new flooding mechanism");
+DEFINE_int32(
+    kvstore_zmq_hwm,
+    openr::Constants::kHighWaterMark,
+    "Max number of packets to hold in kvstore ZMQ socket queue per peer");
 
 using namespace fbzmq;
 using namespace openr;
@@ -626,7 +630,8 @@ main(int argc, char** argv) {
       Constants::kMonitorSubmitInterval,
       std::unordered_map<std::string, openr::thrift::PeerSpec>{},
       FLAGS_enable_legacy_flooding,
-      std::move(kvFilters));
+      std::move(kvFilters),
+      FLAGS_kvstore_zmq_hwm);
   std::thread kvStoreThread([&store]() noexcept {
     LOG(INFO) << "Starting KvStore thread...";
     folly::setThreadName("KvStore");

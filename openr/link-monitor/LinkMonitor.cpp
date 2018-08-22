@@ -304,7 +304,7 @@ LinkMonitor::prepare() noexcept {
         auto neighborAddrV4 = event.neighbor.transportAddressV4;
         auto neighborAddrV6 = event.neighbor.transportAddressV6;
 
-        VLOG(2) << "Received neighbor event for " << event.neighbor.nodeName
+        VLOG(1) << "Received neighbor event for " << event.neighbor.nodeName
                 << " from " << event.neighbor.ifName << " at " << event.ifName
                 << " with addrs " << toString(neighborAddrV6) << " and "
                 << (enableV4_ ? toString(neighborAddrV4) : "");
