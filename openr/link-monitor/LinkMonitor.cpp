@@ -505,7 +505,7 @@ LinkMonitor::neighborUpEvent(
       std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
           .count();
 
-  VLOG(2) << "LinkMonitor::neighborUpEvent called for '"
+  VLOG(1) << "LinkMonitor::neighborUpEvent called for '"
           << toString(neighborAddrV6)
           << "', nodeName: '" << remoteNodeName << "'"
           << ", nodeIfName: '" << remoteIfName << "'";
@@ -574,7 +574,7 @@ LinkMonitor::neighborDownEvent(
     const std::string& remoteNodeName, const std::string& ifName) {
   const auto adjId = std::make_pair(remoteNodeName, ifName);
 
-  VLOG(2) << "LinkMonitor::neighborDownEvent called for nodeName: '"
+  VLOG(1) << "LinkMonitor::neighborDownEvent called for nodeName: '"
           << remoteNodeName << "', interface: '" << ifName << "'";
   syslog(
       LOG_NOTICE,

@@ -834,6 +834,8 @@ KvStore::requestFullSyncFromPeers() {
       timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       ++it;
     } else {
+      tData_.addStatValue(
+          folly::sformat("kvstore.sync_sent_{}", peerName), 1, fbzmq::COUNT);
       // Remove the iterator
       it = peersToSyncWith_.erase(it);
     }
@@ -994,7 +996,10 @@ KvStore::processRequest(
               << " Originator IDs:"
               << folly::join(",", thriftReq.keyDumpParams.originatorIds);
     }
-    tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
+    tData_.addStatValue(
+      folly::sformat("kvstore.cmd_key_dump_{}", requestId.c_str()),
+      1,
+      fbzmq::COUNT);
 
     std::vector<std::string> keyPrefixList;
     folly::split(",", thriftReq.keyDumpParams.prefix, keyPrefixList, true);
