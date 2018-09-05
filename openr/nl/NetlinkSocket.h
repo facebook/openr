@@ -100,37 +100,44 @@ class NetlinkSocket {
      virtual ~EventsHandler() = default;
 
      // Callback invoked by NetlinkSocket when registered event happens
-     void handleEvent(int action, const EventVariant& event) {
-       boost::apply_visitor(EventVisitor(action, this), event);
+     void
+     handleEvent(
+         const std::string& ifName, int action, const EventVariant& event) {
+       boost::apply_visitor(EventVisitor(ifName, action, this), event);
      }
 
      virtual void linkEventFunc(
-        int action, const openr::fbnl::Link& linkEntry) {
-       VLOG(3) << "LinkEventFunc action: " << action
-               << " LinkName: " << linkEntry.getLinkName();
+        const std::string& ifName,
+        const openr::fbnl::Link& linkEntry) {
+       VLOG(3) << " Link IfIndex: " << linkEntry.getIfIndex()
+               << ", ifName: " << ifName;
      }
 
      virtual void neighborEventFunc(
-        int action, const openr::fbnl::Neighbor& neighborEntry) {
-       VLOG(3) << "NeighborEventFucn action: " << action
-               << " Neighbor IfIndex: "
-               << neighborEntry.getIfIndex();
+        const std::string& ifName,
+        const openr::fbnl::Neighbor& neighborEntry) {
+       VLOG(3) << " Neighbor IfIndex: "
+               << neighborEntry.getIfIndex()
+               << ", ifName: " << ifName;
      }
 
      virtual void addrEventFunc(
-        int action, const openr::fbnl::IfAddress& addrEntry) {
-       VLOG(3) << "AddrEventFunc action: " << action << "Address: "
+       const std::string& ifName,
+        const openr::fbnl::IfAddress& addrEntry) {
+       VLOG(3) << "Address: "
                << (addrEntry.getPrefix().hasValue()
                 ? folly::IPAddress::networkToString(
-                          addrEntry.getPrefix().value()) : "");
+                          addrEntry.getPrefix().value()) : "")
+               << ", ifName: " << ifName;
      }
 
      virtual void routeEventFunc(
-        int action, const openr::fbnl::Route& routeEntry) {
-       VLOG(3) << "RouteEventFunc action: " << action
-               << "Destination: "
+       const std::string& ifName,
+        const openr::fbnl::Route& routeEntry) {
+       VLOG(3) << "Destination: "
                << folly::IPAddress::networkToString(
-                          routeEntry.getDestination());
+                          routeEntry.getDestination())
+               << ", ifName: " << ifName;
      }
 
     private:
@@ -139,26 +146,28 @@ class NetlinkSocket {
    };
 
    struct EventVisitor : public boost::static_visitor<> {
-     int32_t eventAction; // NL_ACT_DEL, NL_ACT_NEW
+     std::string linkName;
+     int eventAction; // NL_ACT_DEL, NL_ACT_NEW
      EventsHandler* eventHandler;
-     EventVisitor(int action, EventsHandler* handler)
-      : eventAction(action),
+     EventVisitor(const std::string& ifName, int action, EventsHandler* handler)
+      : linkName(ifName),
+        eventAction(action),
         eventHandler(handler) {}
 
      void operator()(openr::fbnl::Route const& route) const {
-       eventHandler->routeEventFunc(eventAction, route);
+       eventHandler->routeEventFunc(linkName, route);
      }
 
      void operator()(openr::fbnl::IfAddress const& addr) const {
-       eventHandler->addrEventFunc(eventAction, addr);
+       eventHandler->addrEventFunc(linkName, addr);
      }
 
      void operator()(openr::fbnl::Neighbor const& neigh) const {
-       eventHandler->neighborEventFunc(eventAction, neigh);
+       eventHandler->neighborEventFunc(linkName, neigh);
      }
 
      void operator()(openr::fbnl::Link const& link) const {
-       eventHandler->linkEventFunc(eventAction, link);
+       eventHandler->linkEventFunc(linkName, link);
      }
    };
 
@@ -286,7 +295,7 @@ class NetlinkSocket {
     * 0 means no such interface
     * @throws NetlinkException
     */
-   virtual folly::Future<int> getIfIndex(const std::string& ifName) const;
+   virtual folly::Future<int> getIfIndex(const std::string& ifName);
 
    /**
     * Get interface name form index
@@ -395,6 +404,8 @@ class NetlinkSocket {
    void updateAddrCache();
 
    void updateNeighborCache();
+
+   void updateRouteCache();
 
    bool checkObjectType(
      struct nl_object* obj, folly::StringPiece expectType);

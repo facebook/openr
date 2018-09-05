@@ -90,6 +90,44 @@ PlatformPublisher::publishPlatformEvent(
 }
 
 void
+PlatformPublisher::linkEventFunc(
+    const std::string& ifName,
+    const openr::fbnl::Link& linkEntry) {
+  VLOG(4) << "Handling Link Event in NetlinkSystemHandler...";
+  publishLinkEvent(thrift::LinkEntry(
+      FRAGILE,
+      ifName,
+      linkEntry.getIfIndex(),
+      linkEntry.isUp(),
+      Constants::kDefaultAdjWeight));
+}
+
+void
+PlatformPublisher::addrEventFunc(
+    const std::string& ifName,
+    const openr::fbnl::IfAddress& addrEntry) {
+  VLOG(4) << "Handling Address Event in NetlinkSystemHandler...";
+  publishAddrEvent(thrift::AddrEntry(
+      FRAGILE,
+      ifName,
+      toIpPrefix(addrEntry.getPrefix().value()),
+      addrEntry.isValid()));
+}
+
+void
+PlatformPublisher::neighborEventFunc(
+    const std::string& ifName,
+    const openr::fbnl::Neighbor& neighborEntry) {
+  VLOG(4) << "Handling Neighbor Event in NetlinkSystemHandler...";
+  publishNeighborEvent(thrift::NeighborEntry(
+      FRAGILE,
+      ifName,
+      toBinaryAddress(neighborEntry.getDestination()),
+      neighborEntry.getLinkAddress().value().toString(),
+      neighborEntry.isReachable()));
+}
+
+void
 PlatformPublisher::stop() {
   platformPubSock_.close();
 }

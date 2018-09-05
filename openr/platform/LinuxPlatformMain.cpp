@@ -13,8 +13,10 @@
 #include <glog/logging.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
+#include <openr/nl/NetlinkSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/platform/NetlinkSystemHandler.h>
+#include <openr/platform/PlatformPublisher.h>
 
 DEFINE_int32(
     system_thrift_port, 60099, "Thrift server port for NetlinkSystemHandler");
@@ -58,7 +60,18 @@ main(int argc, char** argv) {
 
   std::vector<std::thread> allThreads{};
 
+  // Create event publisher to handle event subscription
+  auto eventPublisher = std::make_shared<openr::PlatformPublisher>(
+      context, openr::PlatformPublisherUrl{FLAGS_platform_pub_url});
+
   auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  auto nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
+      nlEventLoop.get(), eventPublisher);
+  // Subscribe selected network events
+  nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::LINK_EVENT);
+  nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::NEIGH_EVENT);
+  nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::ADDR_EVENT);
+
   auto nlEvlThread = std::thread([&nlEventLoop]() {
     folly::setThreadName("NetlinkEvl");
     nlEventLoop->run();
@@ -66,17 +79,12 @@ main(int argc, char** argv) {
   nlEventLoop->waitUntilRunning();
   allThreads.emplace_back(std::move(nlEvlThread));
 
-  auto nlRouteSocket =
-    std::make_shared<openr::NetlinkRouteSocket>(nlEventLoop.get());
-
   apache::thrift::ThriftServer systemServiceServer;
   if (FLAGS_enable_netlink_system_handler) {
     // start NetlinkSystem thread
     auto nlHandler = std::make_shared<NetlinkSystemHandler>(
-        context,
-        openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
         &mainEventLoop,
-        nlRouteSocket);
+        nlSocket);
 
     auto systemThriftThread =
       std::thread([nlHandler, &systemServiceServer]() noexcept {
@@ -97,7 +105,7 @@ main(int argc, char** argv) {
   if (FLAGS_enable_netlink_fib_handler) {
     // start FibService thread
     auto fibHandler =
-      std::make_shared<NetlinkFibHandler>(&mainEventLoop, nlRouteSocket);
+      std::make_shared<NetlinkFibHandler>(&mainEventLoop, nlSocket);
 
     auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
       folly::setThreadName("FibService");

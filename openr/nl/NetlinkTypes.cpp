@@ -18,20 +18,22 @@ Route RouteBuilder::buildRoute() const {
   return Route(*this);
 }
 
-Route RouteBuilder::buildFromObject(struct rtnl_route* obj) const {
+Route RouteBuilder::buildFromObject(struct rtnl_route* obj) {
+  return loadFromObject(obj).buildRoute();
+}
+
+RouteBuilder& RouteBuilder::loadFromObject(struct rtnl_route* obj) {
   CHECK_NOTNULL(obj);
-  RouteBuilder builder;
   uint32_t scope = rtnl_route_get_scope(obj);
   uint32_t table = rtnl_route_get_table(obj);
   uint32_t flags = rtnl_route_get_flags(obj);
   uint32_t proto = rtnl_route_get_protocol(obj);
   uint32_t type = rtnl_route_get_type(obj);
-  builder.setScope(scope)
-         .setRouteTable(table)
-         .setFlags(flags)
-         .setProtocolId(proto)
-         .setType(type);
-
+  setScope(scope);
+  setRouteTable(table);
+  setFlags(flags);
+  setProtocolId(proto);
+  setType(type);
   struct nl_addr* dst = rtnl_route_get_dst(obj);
 
   // Special handling for default routes
@@ -61,7 +63,7 @@ Route RouteBuilder::buildFromObject(struct rtnl_route* obj) const {
         nl_addr2str(dst, ipAddrBuf.data(), ipAddrBuf.size())));
     }
   }
-  builder.setDestination(prefix);
+  setDestination(prefix);
   auto nextHopFunc = [](struct rtnl_nexthop * obj, void* ctx) noexcept->void {
     struct nl_addr* gw = rtnl_route_nh_get_gateway(obj);
     int ifIndex = rtnl_route_nh_get_ifindex(obj);
@@ -73,8 +75,8 @@ Route RouteBuilder::buildFromObject(struct rtnl_route* obj) const {
     NextHopBuilder nhBuilder;
     rtBuilder->addNextHop(std::move(nhBuilder.buildFromObject(obj)));
   };
-  rtnl_route_foreach_nexthop(obj, nextHopFunc, &builder);
-  return builder.buildRoute();
+  rtnl_route_foreach_nexthop(obj, nextHopFunc, static_cast<void*>(this));
+  return *this;
 }
 
 Route RouteBuilder::buildMulticastRoute() const {
@@ -214,11 +216,21 @@ RouteBuilder::getNextHops() const {
   return nextHops_;
 }
 
+RouteBuilder& RouteBuilder::setValid(bool isValid) {
+  isValid_ = isValid;
+  return *this;
+}
+
+bool RouteBuilder::isValid() const {
+  return isValid_;
+}
+
 void RouteBuilder::reset() {
   type_ = RTN_UNICAST;
   routeTable_ = RT_TABLE_MAIN;
   protocolId_ = DEFAULT_PROTOCOL_ID;
   scope_ = RT_SCOPE_UNIVERSE;
+  isValid_ = false;
   flags_.clear();
   priority_.clear();
   tos_.clear();
@@ -231,6 +243,7 @@ Route::Route(const RouteBuilder& builder)
     routeTable_(builder.getRouteTable()),
     protocolId_(builder.getProtocolId()),
     scope_(builder.getScope()),
+    isValid_(builder.isValid()),
     flags_(builder.getFlags()),
     priority_(builder.getPriority()),
     tos_(builder.getTos()),
@@ -252,6 +265,7 @@ Route::Route(Route&& other) noexcept
     routeTable_(other.routeTable_),
     protocolId_(other.protocolId_),
     scope_(other.scope_),
+    isValid_(other.isValid_),
     flags_(other.flags_),
     priority_(other.priority_),
     tos_(other.tos_),
@@ -273,6 +287,7 @@ Route& Route::operator=(Route&& other) noexcept {
   routeTable_ = other.routeTable_;
   protocolId_ = other.protocolId_;
   scope_ = other.scope_;
+  isValid_ = other.isValid_;
   flags_ = other.flags_;
   priority_ = other.priority_;
   tos_ = other.tos_;
@@ -295,6 +310,7 @@ bool operator==(const Route& lhs, const Route& rhs) {
       && lhs.getTos() == rhs.getTos()
       && lhs.getFlags() == rhs.getFlags()
       && lhs.getScope() == rhs.getScope()
+      && lhs.isValid() == rhs.isValid()
       && lhs.getDestination() == rhs.getDestination()
       && lhs.getPriority() == rhs.getPriority()
       && lhs.getNextHops().size() == rhs.getNextHops().size();
@@ -353,6 +369,10 @@ Route::getNextHops() const {
 
 folly::Optional<std::string> Route::getRouteIfName() const {
   return routeIfName_;
+}
+
+bool Route::isValid() const {
+  return isValid_;
 }
 
 struct rtnl_route* Route::fromNetlinkRoute() const {
@@ -652,7 +672,13 @@ IfAddress IfAddressBuilder::build() const {
   return IfAddress(*this);
 }
 
-IfAddress IfAddressBuilder::buildFromObject(struct rtnl_addr* addr) const {
+IfAddress IfAddressBuilder::buildFromObject(struct rtnl_addr* addr) {
+  return loadFromObject(addr).build();
+}
+
+
+IfAddressBuilder& IfAddressBuilder::loadFromObject(struct rtnl_addr* addr) {
+  reset();
   struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
   if (!ipaddr) {
     throw openr::NetlinkException("Failed to get ip address");
@@ -662,11 +688,10 @@ IfAddress IfAddressBuilder::buildFromObject(struct rtnl_addr* addr) const {
       nl_addr_get_len(ipaddr)));
 
   uint8_t prefixLen = nl_addr_get_prefixlen(ipaddr);
-  IfAddressBuilder builder;
-  return builder.setIfIndex(rtnl_addr_get_ifindex(addr))
-                .setFlags(rtnl_addr_get_flags(addr))
-                .setPrefix(std::make_pair(ipAddress, prefixLen))
-                .build();
+  setIfIndex(rtnl_addr_get_ifindex(addr));
+  setFlags(rtnl_addr_get_flags(addr));
+  setPrefix(std::make_pair(ipAddress, prefixLen));
+  return *this;
 }
 
 IfAddressBuilder& IfAddressBuilder::setIfIndex(int ifIndex) {
@@ -716,8 +741,18 @@ folly::Optional<uint8_t> IfAddressBuilder::getFlags() const {
   return flags_;
 }
 
+IfAddressBuilder& IfAddressBuilder::setValid(bool isValid) {
+  isValid_ = isValid;
+  return *this;
+}
+
+bool IfAddressBuilder::isValid() const {
+  return isValid_;
+}
+
 void IfAddressBuilder::reset() {
   ifIndex_ = 0;
+  isValid_ = false;
   prefix_.clear();
   scope_.clear();
   flags_.clear();
@@ -727,6 +762,7 @@ void IfAddressBuilder::reset() {
 IfAddress::IfAddress(const IfAddressBuilder& builder)
   : prefix_(builder.getPrefix()),
     ifIndex_(builder.getIfIndex()),
+    isValid_(builder.isValid()),
     scope_(builder.getScope()),
     flags_(builder.getFlags()),
     family_(builder.getFamily()) {
@@ -743,6 +779,7 @@ IfAddress::~IfAddress() {
 IfAddress::IfAddress(IfAddress&& other) noexcept
   : prefix_(other.prefix_),
     ifIndex_(other.ifIndex_),
+    isValid_(other.isValid_),
     scope_(other.scope_),
     flags_(other.flags_),
     family_(other.family_) {
@@ -759,6 +796,7 @@ IfAddress& IfAddress::operator=(IfAddress&& other) noexcept {
 
   prefix_ = other.prefix_;
   ifIndex_ = other.ifIndex_;
+  isValid_ = other.isValid_;
   scope_ = other.scope_;
   flags_ = other.flags_;
   family_ = other.family_;
@@ -791,6 +829,10 @@ uint8_t IfAddress::getPrefixLen() const {
 
 int IfAddress::getIfIndex() const {
   return ifIndex_;
+}
+
+bool IfAddress::isValid() const {
+  return isValid_;
 }
 
 folly::Optional<folly::CIDRNetwork> IfAddress::getPrefix() const {
@@ -866,7 +908,9 @@ void IfAddress::init() {
 
 /*================================Neighbor====================================*/
 
-Neighbor NeighborBuilder::buildFromObject(struct rtnl_neigh* neighbor) const {
+Neighbor
+NeighborBuilder::buildFromObject(
+    struct rtnl_neigh* neighbor, bool deleted) const {
   CHECK_NOTNULL(neighbor);
   NeighborBuilder builder;
   // The destination IP
@@ -880,10 +924,10 @@ Neighbor NeighborBuilder::buildFromObject(struct rtnl_neigh* neighbor) const {
       static_cast<const unsigned char*>(nl_addr_get_binary_addr(dst)),
       nl_addr_get_len(dst)));
   int state = rtnl_neigh_get_state(neighbor);
-  bool isReachable = isNeighborReachable(state);
+  bool isReachable = deleted ? false : isNeighborReachable(state);
   builder.setDestination(ipAddress)
          .setIfIndex(rtnl_neigh_get_ifindex(neighbor))
-         .setState(state);
+         .setState(state, deleted);
 
   // link address exists only for reachable states, so it may not
   // always exist
@@ -949,9 +993,9 @@ folly::Optional<folly::MacAddress> NeighborBuilder::getLinkAddress() const {
   return linkAddress_;
 }
 
-NeighborBuilder& NeighborBuilder::setState(int state) {
+NeighborBuilder& NeighborBuilder::setState(int state, bool deleted) {
   state_ = state;
-  isReachable_ = isNeighborReachable(state);
+  isReachable_ = deleted ? false : isNeighborReachable(state);
   return *this;
 }
 

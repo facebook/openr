@@ -18,6 +18,7 @@
 #include <folly/gen/Core.h>
 
 #include <openr/common/AddressUtil.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 
 using apache::thrift::FRAGILE;
@@ -39,42 +40,6 @@ const std::chrono::seconds kRoutesHoldTimeout{30};
 const uint8_t kMinRouteProtocolId = 17;
 const uint8_t kMaxRouteProtocolId = 253;
 
-// convert a routeDb into thrift exportable route spec
-std::vector<thrift::UnicastRoute>
-makeRoutes(const std::unordered_map<
-           folly::CIDRNetwork,
-           std::unordered_set<std::pair<std::string, folly::IPAddress>>>&
-               routeDb) {
-  std::vector<thrift::UnicastRoute> routes;
-
-  for (auto const& kv : routeDb) {
-    auto const& prefix = kv.first;
-    auto const& nextHops = kv.second;
-
-    auto binaryNextHops = from(nextHops) |
-        mapped([](const std::pair<std::string, folly::IPAddress>& nextHop) {
-                            VLOG(2)
-                                << "mapping next-hop " << nextHop.second.str()
-                                << " dev " << nextHop.first;
-                            auto binaryAddr = toBinaryAddress(nextHop.second);
-                            if (not nextHop.first.empty()) {
-                              binaryAddr.ifName = nextHop.first;
-                            }
-                            return binaryAddr;
-                          }) |
-        as<std::vector>();
-
-    routes.emplace_back(thrift::UnicastRoute(
-        apache::thrift::FRAGILE,
-        thrift::IpPrefix(
-            apache::thrift::FRAGILE,
-            toBinaryAddress(prefix.first),
-            static_cast<int16_t>(prefix.second)),
-        std::move(binaryNextHops)));
-  }
-  return routes;
-}
-
 std::string
 getClientName(const int16_t clientId) {
   auto it = thrift::_FibClient_VALUES_TO_NAMES.find(
@@ -84,24 +49,11 @@ getClientName(const int16_t clientId) {
   }
   return it->second;
 }
-
-NextHops
-fromThriftNexthops(const std::vector<thrift::BinaryAddress>& thriftNexthops) {
-  NextHops nexthops;
-  for (auto const& nexthop : thriftNexthops) {
-    nexthops.emplace(
-      nexthop.ifName.hasValue() ? nexthop.ifName.value() : "",
-      toIPAddress(nexthop)
-    );
-  }
-  return nexthops;
-}
-
 } // namespace
 
 NetlinkFibHandler::NetlinkFibHandler(
   fbzmq::ZmqEventLoop* zmqEventLoop,
-  std::shared_ptr<NetlinkRouteSocket> netlinkSocket)
+  std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket)
     : netlinkSocket_(netlinkSocket),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
@@ -145,6 +97,39 @@ NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
   return ret->second;
 }
 
+std::vector<thrift::UnicastRoute>
+NetlinkFibHandler::toThriftUnicastRoutes(
+  const fbnl::NlUnicastRoutes& routeDb) {
+  std::vector<thrift::UnicastRoute> routes;
+
+  for (auto const& kv : routeDb) {
+    auto const& prefix = kv.first;
+    auto const& nextHops = kv.second.getNextHops();
+
+    std::unordered_set<thrift::BinaryAddress> binaryNextHops;
+
+    for (auto const& nh : nextHops) {
+      CHECK(nh.getGateway().hasValue());
+      const auto& ifName = nh.getIfIndex().hasValue()
+          ? netlinkSocket_->getIfName(nh.getIfIndex().value()).get()
+          : "";
+      auto binaryAddr = toBinaryAddress(nh.getGateway().value());
+      binaryAddr.ifName = ifName;
+      binaryNextHops.insert(binaryAddr);
+    }
+
+    routes.emplace_back(thrift::UnicastRoute(
+        apache::thrift::FRAGILE,
+        thrift::IpPrefix(
+            apache::thrift::FRAGILE,
+            toBinaryAddress(prefix.first),
+            static_cast<int16_t>(prefix.second)),
+        std::vector<thrift::BinaryAddress>(
+          binaryNextHops.begin(), binaryNextHops.end())));
+  }
+  return routes;
+}
+
 folly::Future<folly::Unit>
 NetlinkFibHandler::future_addUnicastRoute(
     int16_t clientId, std::unique_ptr<thrift::UnicastRoute> route) {
@@ -159,13 +144,20 @@ NetlinkFibHandler::future_addUnicastRoute(
     return future;
   }
 
-  auto prefix = toIPNetwork(route->dest);
-  auto nexthops = fromThriftNexthops(route->nexthops);
-  return netlinkSocket_->addUnicastRoute(
-      protocol.value(),
-      std::move(prefix),
-      std::move(nexthops)
-  );
+  fbnl::RouteBuilder rtBuilder;
+  rtBuilder.setDestination(toIPNetwork(route->dest))
+           .setProtocolId(protocol.value());
+  fbnl::NextHopBuilder nhBuilder;
+  for (const auto& nh : route->nexthops) {
+    if (nh.ifName.hasValue()) {
+      nhBuilder.setIfIndex(netlinkSocket_->getIfIndex(nh.ifName.value()).get());
+    }
+    nhBuilder.setGateway(toIPAddress(nh));
+    rtBuilder.addNextHop(nhBuilder.build());
+    nhBuilder.reset();
+  }
+
+  return netlinkSocket_->addRoute(rtBuilder.buildRoute());
 }
 
 folly::Future<folly::Unit>
@@ -180,8 +172,10 @@ NetlinkFibHandler::future_deleteUnicastRoute(
     return future;
   }
 
-  auto myPrefix = toIPNetwork(*prefix);
-  return netlinkSocket_->deleteUnicastRoute(protocol.value(), myPrefix);
+  fbnl::RouteBuilder rtBuilder;
+  rtBuilder.setDestination(toIPNetwork(*prefix))
+           .setProtocolId(protocol.value());
+  return netlinkSocket_->delRoute(rtBuilder.buildRoute());
 }
 
 folly::Future<folly::Unit>
@@ -259,16 +253,31 @@ NetlinkFibHandler::future_syncFib(
   }
 
   // Build new routeDb
-  UnicastRoutes newRouteDb;
+  fbnl::NlUnicastRoutes newRoutes;
+  fbnl::RouteBuilder rtBuilder;
+  fbnl::NextHopBuilder nhBuilder;
   for (auto const& route : *routes) {
     CHECK(route.nexthops.size());
     auto prefix = toIPNetwork(route.dest);
-    auto nexthops = fromThriftNexthops(route.nexthops);
-    newRouteDb.emplace(std::move(prefix), std::move(nexthops));
+    rtBuilder.setDestination(prefix)
+        .setProtocolId(protocol.value());
+
+    for (const auto& nh : route.nexthops) {
+      if (nh.ifName.hasValue()) {
+        nhBuilder.setIfIndex(
+            netlinkSocket_->getIfIndex(nh.ifName.value()).get());
+      }
+      nhBuilder.setGateway(toIPAddress(nh));
+      rtBuilder.addNextHop(nhBuilder.build());
+      nhBuilder.reset();
+    }
+
+    newRoutes.emplace(prefix, rtBuilder.buildRoute());
+    rtBuilder.reset();
   }
 
   return netlinkSocket_->
-            syncUnicastRoutes(protocol.value(), std::move(newRouteDb));
+            syncUnicastRoutes(protocol.value(), std::move(newRoutes));
 }
 
 folly::Future<int64_t>
@@ -304,15 +313,14 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
   }
 
   return netlinkSocket_->getCachedUnicastRoutes(protocol.value())
-      .then([](UnicastRoutes res) mutable {
+      .then([this](fbnl::NlUnicastRoutes res) mutable {
         return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
-            makeRoutes(res));
+            toThriftUnicastRoutes(res));
       })
       .onError([](std::exception const& ex) {
         LOG(ERROR) << "Failed to get routing table by client: " << ex.what()
                    << ", returning empty table instead";
-        return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
-            makeRoutes(UnicastRoutes({})));
+        return std::make_unique<std::vector<openr::thrift::UnicastRoute>>();
       });
 }
 

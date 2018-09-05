@@ -481,74 +481,83 @@ main(int argc, char** argv) {
 
   // Create ThreadManager for thrift services
   std::shared_ptr<ThreadManager> thriftThreadMgr;
+
+  auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
+  std::unique_ptr<std::thread> netlinkFibServerThread;
+  std::unique_ptr<std::thread> netlinkSystemServerThread;
+
   if (FLAGS_enable_netlink_fib_handler or FLAGS_enable_netlink_system_handler) {
     thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
         2 /* num of threads */, false /* task stats */);
     thriftThreadMgr->setNamePrefix("ThriftCpuPool");
     thriftThreadMgr->start();
-  }
 
-  auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
-  auto nlEvlThread = std::thread([&nlEventLoop]() {
-    folly::setThreadName("NetlinkEvl");
-    nlEventLoop->run();
-  });
-  nlEventLoop->waitUntilRunning();
-  allThreads.emplace_back(std::move(nlEvlThread));
+    // Create event publisher to handle event subscription
+    auto eventPublisher = std::make_shared<PlatformPublisher>(
+        context, PlatformPublisherUrl{FLAGS_platform_pub_url});
 
-  auto nlRouteSocket = std::make_shared<NetlinkRouteSocket>(nlEventLoop.get());
+    auto nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
+        nlEventLoop.get(), eventPublisher);
+    // Subscribe selected network events
+    nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::LINK_EVENT);
+    nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::NEIGH_EVENT);
+    nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::ADDR_EVENT);
+    auto nlEvlThread = std::thread([&nlEventLoop]() {
+      folly::setThreadName("NetlinkEvl");
+      nlEventLoop->run();
+    });
+    nlEventLoop->waitUntilRunning();
+    allThreads.emplace_back(std::move(nlEvlThread));
 
-  // Start NetlinkFibHandler if specified
-  std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
-  std::unique_ptr<std::thread> netlinkFibServerThread;
-  if (FLAGS_enable_netlink_fib_handler) {
-    CHECK(thriftThreadMgr);
-    netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>();
-    netlinkFibServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
-    netlinkFibServer->setThreadManager(thriftThreadMgr);
-    netlinkFibServer->setNumIOWorkerThreads(1);
-    netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
-    netlinkFibServer->setPort(FLAGS_fib_handler_port);
+    if (FLAGS_enable_netlink_fib_handler) {
+      CHECK(thriftThreadMgr);
 
-    netlinkFibServerThread = std::make_unique<std::thread>(
-        [&netlinkFibServer, &nlEventLoop, &nlRouteSocket]() {
-          folly::setThreadName("FibService");
-          auto fibHandler = std::make_shared<NetlinkFibHandler>(
-              nlEventLoop.get(), nlRouteSocket);
-          netlinkFibServer->setInterface(std::move(fibHandler));
+      // Start NetlinkFibHandler if specified
+      netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>();
+      netlinkFibServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
+      netlinkFibServer->setThreadManager(thriftThreadMgr);
+      netlinkFibServer->setNumIOWorkerThreads(1);
+      netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
+      netlinkFibServer->setPort(FLAGS_fib_handler_port);
 
-          LOG(INFO) << "Starting NetlinkFib server...";
-          netlinkFibServer->serve();
-          LOG(INFO) << "NetlinkFib server got stopped.";
-        });
-  }
+      netlinkFibServerThread = std::make_unique<std::thread>(
+          [&netlinkFibServer, &nlEventLoop, &nlSocket]() {
+            folly::setThreadName("FibService");
+            auto fibHandler = std::make_shared<NetlinkFibHandler>(
+                nlEventLoop.get(), nlSocket);
+            netlinkFibServer->setInterface(std::move(fibHandler));
 
-  // Start NetlinkSystemHandler if specified
-  std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
-  std::unique_ptr<std::thread> netlinkSystemServerThread;
-  if (FLAGS_enable_netlink_system_handler) {
-    CHECK(thriftThreadMgr);
-    netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>();
-    netlinkSystemServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
-    netlinkSystemServer->setThreadManager(thriftThreadMgr);
-    netlinkSystemServer->setNumIOWorkerThreads(1);
-    netlinkSystemServer->setCpp2WorkerThreadName("SystemTWorker");
-    netlinkSystemServer->setPort(FLAGS_system_agent_port);
+            LOG(INFO) << "Starting NetlinkFib server...";
+            netlinkFibServer->serve();
+            LOG(INFO) << "NetlinkFib server got stopped.";
+          });
+    }
 
-    netlinkSystemServerThread = std::make_unique<std::thread>(
-        [&netlinkSystemServer, &context, &mainEventLoop, &nlRouteSocket]() {
-          folly::setThreadName("SystemService");
-          auto systemHandler = std::make_unique<NetlinkSystemHandler>(
-              context,
-              PlatformPublisherUrl{FLAGS_platform_pub_url},
-              &mainEventLoop,
-              nlRouteSocket);
-          netlinkSystemServer->setInterface(std::move(systemHandler));
+    // Start NetlinkSystemHandler if specified
+    if (FLAGS_enable_netlink_system_handler) {
+      CHECK(thriftThreadMgr);
+      netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>();
+      netlinkSystemServer->setIdleTimeout(
+          Constants::kPlatformThriftIdleTimeout);
+      netlinkSystemServer->setThreadManager(thriftThreadMgr);
+      netlinkSystemServer->setNumIOWorkerThreads(1);
+      netlinkSystemServer->setCpp2WorkerThreadName("SystemTWorker");
+      netlinkSystemServer->setPort(FLAGS_system_agent_port);
 
-          LOG(INFO) << "Starting NetlinkSystem server...";
-          netlinkSystemServer->serve();
-          LOG(INFO) << "NetlinkSystem server got stopped.";
-        });
+      netlinkSystemServerThread = std::make_unique<std::thread>(
+          [&netlinkSystemServer, &mainEventLoop, &nlSocket]() {
+            folly::setThreadName("SystemService");
+            auto systemHandler = std::make_unique<NetlinkSystemHandler>(
+                &mainEventLoop, nlSocket);
+            netlinkSystemServer->setInterface(std::move(systemHandler));
+
+            LOG(INFO) << "Starting NetlinkSystem server...";
+            netlinkSystemServer->serve();
+            LOG(INFO) << "NetlinkSystem server got stopped.";
+          });
+    }
   }
 
   // Starting main event-loop

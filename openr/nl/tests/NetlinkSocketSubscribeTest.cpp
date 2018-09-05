@@ -176,7 +176,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
     this->eventFunc = std::move(eventFunc);
   }
 
-  void linkEventFunc(int , const openr::fbnl::Link& linkEntry) override {
+  void linkEventFunc(
+      const std::string& , const openr::fbnl::Link& linkEntry) override {
     std::string ifName = linkEntry.getLinkName();
     VLOG(3) << "**Link : " << ifName
             << (linkEntry.isUp() ? " UP" : " DOWN");
@@ -195,8 +196,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   }
 
   void addrEventFunc(
-      int action, const openr::fbnl::IfAddress& addrEntry) override {
-    bool isValid = (action != NL_ACT_DEL);
+      const std::string& , const openr::fbnl::IfAddress& addrEntry) override {
+    bool isValid =  addrEntry.isValid();
     std::string ifName =
       netlinkSocket->getIfName(addrEntry.getIfIndex()).get();
     VLOG(3) << "**Address : "
@@ -220,14 +221,14 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   }
 
   void neighborEventFunc(
-      int action, const openr::fbnl::Neighbor& neighborEntry) override {
+      const std::string& ,
+      const openr::fbnl::Neighbor& neighborEntry) override {
     std::string ifName =
       netlinkSocket->getIfName(neighborEntry.getIfIndex()).get();
     VLOG(3) << "** Neighbor entry: " << ifName << " : "
             << neighborEntry.getDestination().str() << " -> "
             << neighborEntry.getLinkAddress().value().toString()
-            << (neighborEntry.isReachable()? " : Reachable" : " : Unreachable")
-            << " action " << action;
+            << (neighborEntry.isReachable()? " : Reachable" : " : Unreachable");
 
     // Ignore entries on unknown interfaces
     if (ifName.find(ifNamePrefix) == std::string::npos) {
@@ -252,12 +253,12 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   }
 
   void routeEventFunc(
-      int action, const openr::fbnl::Route& routeEntry) override {
+      const std::string& , const openr::fbnl::Route& routeEntry) override {
     VLOG(3) << "** Route entry: " << "Dest : "
             << folly::IPAddress::networkToString(routeEntry.getDestination())
-            << " action " << action;
+            << " action " << (routeEntry.isValid() ? "Add" : "Del");
 
-    if (NL_ACT_DEL == action) {
+    if (not routeEntry.isValid()) {
       routeDelEventCount++;
       routes.erase(routeEntry.getDestination());
     } else {

@@ -23,8 +23,7 @@
 
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
-#include <openr/nl/NetlinkRouteSocket.h>
-#include <openr/platform/PlatformPublisher.h>
+#include <openr/nl/NetlinkSocket.h>
 
 namespace openr {
 
@@ -38,10 +37,8 @@ namespace openr {
 class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
  public:
   NetlinkSystemHandler(
-      fbzmq::Context& context,
-      const PlatformPublisherUrl& platformPublisherUrl,
       fbzmq::ZmqEventLoop* zmqEventLoop,
-      std::shared_ptr<NetlinkRouteSocket> netlinkRouteSocket);
+      std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket);
 
   ~NetlinkSystemHandler() override;
 
@@ -65,11 +62,12 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   folly::Future<folly::Unit> future_syncIfaceAddresses(
     std::unique_ptr<std::string> iface,
     int16_t family, int16_t scope,
-    std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+    std::unique_ptr<std::vector<thrift::IpPrefix>> addrs) override;
 
-  folly::Future<std::unique_ptr<std::vector<::openr::thrift::IpPrefix>>>
+  folly::Future<std::unique_ptr<std::vector<thrift::IpPrefix>>>
   future_getIfaceAddresses(
     std::unique_ptr<std::string> iface, int16_t family, int16_t scope) override;
+
 
  private:
   void initNetlinkSystemHandler();
@@ -94,11 +92,14 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
     int16_t family,
     int16_t scope);
 
-  // Implementation class for NetlinkSystemHandler internals
-  class NLSubscriberImpl;
-  std::unique_ptr<NLSubscriberImpl> nlImpl_;
+  std::unique_ptr<std::vector<openr::thrift::Link>>
+  doGetAllLinks();
+
+  std::unique_ptr<std::vector<openr::thrift::NeighborEntry>>
+  doGetAllNeighbors();
+
   fbzmq::ZmqEventLoop* mainEventLoop_;
-  std::shared_ptr<NetlinkRouteSocket> netlinkRouteSocket_;
+  std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket_;
 };
 
 } // namespace openr

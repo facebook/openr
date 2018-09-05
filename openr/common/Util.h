@@ -42,6 +42,22 @@ struct hash<openr::thrift::IpPrefix> {
   size_t operator()(openr::thrift::IpPrefix const&) const;
 };
 
+/**
+ * Make BinaryAddress hashable
+ */
+template <>
+struct hash<openr::thrift::BinaryAddress> {
+  size_t operator()(openr::thrift::BinaryAddress const&) const;
+};
+
+/**
+ * Make UnicastRoute hashable
+ */
+template <>
+struct hash<openr::thrift::UnicastRoute> {
+  size_t operator()(openr::thrift::UnicastRoute const&) const;
+};
+
 } // namespace std
 
 namespace openr {

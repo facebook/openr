@@ -153,7 +153,9 @@ class RouteBuilder {
    */
   Route buildRoute() const;
 
-  Route buildFromObject(struct rtnl_route* obj) const;
+  Route buildFromObject(struct rtnl_route* obj);
+
+  RouteBuilder& loadFromObject(struct rtnl_route* obj);
 
   /**
    * Build multicast route
@@ -194,6 +196,10 @@ class RouteBuilder {
   // Required, default RT_SCOPE_UNIVERSE
   RouteBuilder& setScope(uint8_t scope = RT_SCOPE_UNIVERSE);
 
+  RouteBuilder& setValid(bool isValid);
+
+  bool isValid() const;
+
   uint8_t getScope() const;
 
   RouteBuilder& setFlags(uint32_t flags);
@@ -228,6 +234,7 @@ class RouteBuilder {
   uint8_t routeTable_{RT_TABLE_MAIN};
   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
   uint8_t scope_{RT_SCOPE_UNIVERSE};
+  bool isValid_{false};
   folly::Optional<uint32_t> flags_;
   folly::Optional<uint32_t> priority_;
   folly::Optional<uint8_t> tos_;
@@ -268,6 +275,8 @@ class Route final {
 
    const NextHopSet& getNextHops() const;
 
+   bool isValid() const;
+
    folly::Optional<std::string> getRouteIfName() const;
 
    /**
@@ -289,6 +298,7 @@ class Route final {
    uint8_t routeTable_;
    uint8_t protocolId_;
    uint8_t scope_;
+   bool isValid_{false};
    folly::Optional<uint32_t> flags_;
    folly::Optional<uint32_t> priority_;
    folly::Optional<uint8_t> tos_;
@@ -308,7 +318,9 @@ class IfAddressBuilder final {
 
    IfAddress build() const;
 
-   IfAddress buildFromObject(struct rtnl_addr* addr) const;
+   IfAddress buildFromObject(struct rtnl_addr* addr);
+
+   IfAddressBuilder& loadFromObject(struct rtnl_addr* addr);
 
    // Required
    IfAddressBuilder& setIfIndex(int ifIndex);
@@ -332,12 +344,17 @@ class IfAddressBuilder final {
 
    folly::Optional<uint8_t> getFlags() const;
 
+   IfAddressBuilder& setValid(bool isValid);
+
+   bool isValid() const;
+
    // Reset builder, all the required fields need to be set again
    void reset();
 
  private:
    folly::Optional<folly::CIDRNetwork> prefix_;
    int ifIndex_{0};
+   bool isValid_{false};
    folly::Optional<uint8_t> scope_;
    folly::Optional<uint8_t> flags_;
    folly::Optional<uint8_t> family_;
@@ -366,6 +383,8 @@ class IfAddress final {
 
    folly::Optional<uint8_t> getFlags() const;
 
+   bool isValid() const;
+
    /**
     * Will construct rtnl_addr object on the first time call, then will return
     * the same object pointer. It will just return the pointer
@@ -380,6 +399,7 @@ class IfAddress final {
 
    folly::Optional<folly::CIDRNetwork> prefix_;
    int ifIndex_{0};
+   bool isValid_{false};
    folly::Optional<uint8_t> scope_;
    folly::Optional<uint8_t> flags_;
    folly::Optional<uint8_t> family_;
@@ -393,7 +413,7 @@ class NeighborBuilder final {
    ~NeighborBuilder() {}
 
    // Only support V6 neighbor
-   Neighbor buildFromObject(struct rtnl_neigh* obj) const;
+   Neighbor buildFromObject(struct rtnl_neigh* obj, bool deleted=false) const;
 
    /**
     * Build Neighbor object to add/del neighbors
@@ -430,7 +450,7 @@ class NeighborBuilder final {
     * NUD_NOARP
     * NUD_PERMANENT
     */
-   NeighborBuilder& setState(int state);
+   NeighborBuilder& setState(int state, bool deleted=false);
 
    folly::Optional<int> getState() const;
 

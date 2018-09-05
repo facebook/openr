@@ -22,7 +22,8 @@
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/FibService.h>
-#include <openr/nl/NetlinkRouteSocket.h>
+#include <openr/nl/NetlinkSocket.h>
+#include <openr/nl/NetlinkTypes.h>
 
 namespace openr {
 /**
@@ -33,7 +34,7 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
  public:
   explicit NetlinkFibHandler(
     fbzmq::ZmqEventLoop* zmqEventLoop,
-    std::shared_ptr<NetlinkRouteSocket> netlinkSocket);
+    std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket);
   ~NetlinkFibHandler() override {}
 
   folly::Future<folly::Unit> future_addUnicastRoute(
@@ -73,8 +74,11 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
   folly::Expected<int16_t, bool>
   getProtocol(folly::Promise<A>& promise, int16_t clientId);
 
+  std::vector<thrift::UnicastRoute>
+  toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb);
+
   // Used to interact with Linux kernel routing table
-  std::shared_ptr<NetlinkRouteSocket> netlinkSocket_;
+  std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket_;
 
   // Monotonic ID from periodicKeepAlive
   // Fib push whenever the ID has not incremented since last pull...

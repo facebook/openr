@@ -79,7 +79,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   MyNetlinkHandler() = default;
   ~MyNetlinkHandler() override = default;
 
-  void linkEventFunc(int , const openr::fbnl::Link& linkEntry) override {
+  void linkEventFunc(
+    const std::string& , const openr::fbnl::Link& linkEntry) override {
     std::string ifName = linkEntry.getLinkName();
     LOG(INFO) << "**Link : " << ifName
               << (linkEntry.isUp() ? " UP" : " DOWN");
@@ -87,8 +88,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   }
 
   void addrEventFunc(
-      int action, const openr::fbnl::IfAddress& addrEntry) override {
-    bool isValid = (action != NL_ACT_DEL);
+      const std::string& , const openr::fbnl::IfAddress& addrEntry) override {
+    bool isValid = addrEntry.isValid();
     LOG(INFO) << "**Address : "
               << folly::IPAddress::networkToString(
                           addrEntry.getPrefix().value())
@@ -98,7 +99,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   }
 
    void neighborEventFunc(
-       int, const openr::fbnl::Neighbor& neighborEntry) override {
+       const std::string&,
+       const openr::fbnl::Neighbor& neighborEntry) override {
      LOG(INFO) << "** Neighbor entry: "
                << neighborEntry.getDestination().str() << " -> "
                << neighborEntry.getLinkAddress().value().toString()
@@ -108,7 +110,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
    }
 
    void routeEventFunc(
-       int, const openr::fbnl::Route& routeEntry) override {
+       const std::string&, const openr::fbnl::Route& routeEntry) override {
      LOG(INFO) << "** Route entry: " << "Dest : "
                << folly::IPAddress::networkToString(
                     routeEntry.getDestination());
