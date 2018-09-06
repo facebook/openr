@@ -58,7 +58,7 @@ def yesno(question, skip_confirm=False):
     while True:
         try:
             prompt = "{} [yn] ".format(question)
-            answer = input(prompt)
+            answer = input(prompt).lower()
         except EOFError:
             with open("/dev/tty") as sys.stdin:
                 continue
