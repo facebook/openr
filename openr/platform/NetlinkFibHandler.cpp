@@ -66,8 +66,9 @@ NetlinkFibHandler::NetlinkFibHandler(
       LOG(WARNING) << "Open/R health check: FAIL. Expiring routes!";
       auto emptyRoutes = std::make_unique<std::vector<thrift::UnicastRoute>>();
       auto ret = future_syncFib(0 /* clientId */, std::move(emptyRoutes));
-      std::move(ret).then(
-          []() { LOG(WARNING) << "Expired routes on health check failure!"; });
+      std::move(ret).then([](folly::Unit) {
+        LOG(WARNING) << "Expired routes on health check failure!";
+      });
     } else {
       VLOG(2) << "Open/R health check: PASS";
     }
