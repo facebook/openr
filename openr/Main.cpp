@@ -523,7 +523,7 @@ main(int argc, char** argv) {
       netlinkFibServer->setPort(FLAGS_fib_handler_port);
 
       netlinkFibServerThread = std::make_unique<std::thread>(
-          [&netlinkFibServer, &nlEventLoop, &nlSocket]() {
+          [&netlinkFibServer, &nlEventLoop, nlSocket]() {
             folly::setThreadName("FibService");
             auto fibHandler = std::make_shared<NetlinkFibHandler>(
                 nlEventLoop.get(), nlSocket);
@@ -547,7 +547,7 @@ main(int argc, char** argv) {
       netlinkSystemServer->setPort(FLAGS_system_agent_port);
 
       netlinkSystemServerThread = std::make_unique<std::thread>(
-          [&netlinkSystemServer, &mainEventLoop, &nlSocket]() {
+          [&netlinkSystemServer, &mainEventLoop, nlSocket]() {
             folly::setThreadName("SystemService");
             auto systemHandler = std::make_unique<NetlinkSystemHandler>(
                 &mainEventLoop, nlSocket);
