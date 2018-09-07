@@ -55,8 +55,14 @@ TEST_F(NetlinkTypesFixture, NextHopIfIndexConsTest) {
   // Get multiple times
   struct rtnl_nexthop* object1 = nh.fromNetlinkNextHop();
   EXPECT_EQ(object, object1);
+
+  NextHopBuilder newBuilder;
+  auto nhFromObj = newBuilder.buildFromObject(object);
+  EXPECT_EQ(nh, nhFromObj);
+
   // Free object
   rtnl_route_nh_free(object);
+  nhFromObj.release();
 }
 
 TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
@@ -79,9 +85,15 @@ TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
   struct nl_addr* nl_gw = nl_addr_build(
     gateway.family(), (void*)gateway.bytes(), gateway.byteCount());
   EXPECT_TRUE(nl_addr_cmp(nl_gw, rtnl_route_nh_get_gateway(object)) == 0);
+
+  NextHopBuilder newBuilder;
+  auto nhFromObj = newBuilder.buildFromObject(object);
+  EXPECT_EQ(nh, nhFromObj);
+
   // Free object
   nl_addr_put(nl_gw);
   rtnl_route_nh_free(object);
+  nhFromObj.release();
 }
 
 TEST_F(NetlinkTypesFixture, NexthopGeneralConsTest) {
@@ -107,9 +119,15 @@ TEST_F(NetlinkTypesFixture, NexthopGeneralConsTest) {
     gateway.family(), (void*)gateway.bytes(), gateway.byteCount());
   EXPECT_TRUE(nl_addr_cmp(nl_gw, rtnl_route_nh_get_gateway(object)) == 0);
   EXPECT_TRUE(object == nh.fromNetlinkNextHop());
+
+  NextHopBuilder newBuilder;
+  auto nhFromObj = newBuilder.buildFromObject(object);
+  EXPECT_EQ(nh, nhFromObj);
+
   // Free object
   nl_addr_put(nl_gw);
   rtnl_route_nh_free(object);
+  nhFromObj.release();
 }
 
 TEST_F(NetlinkTypesFixture, RouteBaseTest) {

@@ -632,7 +632,7 @@ void NetlinkSocket::doSyncUnicastRoutes(
     try {
       RouteBuilder builder;
       doDeleteUnicastRoute(
-        builder.buildFromObject(iter->second.fromNetlinkRoute()));
+          builder.buildFromObject(iter->second.fromNetlinkRoute()));
     } catch (std::exception const& err) {
       throw std::runtime_error(folly::sformat(
         "Could not del Route to: {} Error: {}",
@@ -647,7 +647,7 @@ void NetlinkSocket::doSyncUnicastRoutes(
     try {
       RouteBuilder builder;
       doAddUpdateUnicastRoute(
-        builder.buildFromObject(kv.second.fromNetlinkRoute()));
+          builder.buildFromObject(kv.second.fromNetlinkRoute()));
     } catch (std::exception const& err) {
       throw std::runtime_error(folly::sformat(
           "Could not update Route to: {} Error: {}",
@@ -737,9 +737,9 @@ NetlinkSocket::getCachedUnicastRoutes(uint8_t protocolId) const {
         const NlUnicastRoutes& routes = iter->second;
         RouteBuilder builder;
         for (const auto& route : routes) {
-          ret.emplace(std::make_pair(
-            route.first,
-            builder.buildFromObject(route.second.fromNetlinkRoute())));
+          ret.emplace(
+              route.first,
+              builder.buildFromObject(route.second.fromNetlinkRoute()));
           builder.reset();
         }
       }
@@ -771,9 +771,9 @@ NetlinkSocket::getCachedMulticastRoutes(uint8_t protocolId) const {
         const NlMulticastRoutes& routes = iter->second;
         RouteBuilder builder;
         for (const auto& route : routes) {
-          ret.emplace(std::make_pair(
-            route.first,
-            builder.buildFromObject(route.second.fromNetlinkRoute())));
+          ret.emplace(
+              route.first,
+              builder.buildFromObject(route.second.fromNetlinkRoute()));
           builder.reset();
         }
       }
@@ -806,9 +806,9 @@ NetlinkSocket::getCachedLinkRoutes(uint8_t protocolId) const {
         const NlLinkRoutes& routes = iter->second;
         RouteBuilder builder;
         for (const auto& route : routes) {
-          ret.emplace(std::make_pair(
-            route.first,
-            builder.buildFromObject(route.second.fromNetlinkRoute())));
+          ret.emplace(
+              route.first,
+              builder.buildFromObject(route.second.fromNetlinkRoute()));
           builder.reset();
         }
       }

@@ -83,7 +83,9 @@ class NextHop final {
 
    void release();
 
- private:
+   std::string str() const;
+
+  private:
    void init();
 
    // Nexthop build helper
@@ -288,8 +290,8 @@ class Route final {
    struct rtnl_route* fromNetlinkRoute() const;
 
  private:
-   Route(const Route&);
    Route& operator=(const Route&);
+   Route(const Route&) = default;
 
    void init();
    struct nl_addr* buildAddrObject(const folly::CIDRNetwork& addr);

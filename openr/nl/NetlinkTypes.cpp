@@ -466,7 +466,13 @@ struct nl_addr* Route::buildAddrObject(const folly::CIDRNetwork& addr) {
 NextHop NextHopBuilder::buildFromObject(struct rtnl_nexthop* obj) const {
   CHECK_NOTNULL(obj);
   NextHopBuilder builder;
-  builder.setIfIndex(rtnl_route_nh_get_ifindex(obj));
+
+  // set ifindex, rtnl_nexthop defaut ifindex to 0
+  auto ifindex = rtnl_route_nh_get_ifindex(obj);
+  if (ifindex != 0) {
+    builder.setIfIndex(ifindex);
+  }
+
   // Get the gateway IP from nextHop
   struct nl_addr* gw = rtnl_route_nh_get_gateway(obj);
   if (!gw) {
@@ -578,6 +584,15 @@ void NextHop::release() {
     rtnl_route_nh_free(nextHop_);
     nextHop_ = nullptr;
   }
+}
+
+std::string
+NextHop::str() const {
+  return folly::sformat(
+      "Nexthop Info: Gateway = {}, Interface index = {}, Weight = {}",
+      (getGateway() ? getGateway()->str() : "Null"),
+      (getIfIndex() ? std::to_string(*getIfIndex()) : "Null"),
+      (getWeight() ? std::to_string(*getWeight()) : "Null"));
 }
 
 struct rtnl_nexthop* NextHop::buildNextHopInternal(const int ifIdx) {
