@@ -32,6 +32,14 @@ namespace fbnl {
 
 const uint8_t DEFAULT_PROTOCOL_ID = 99;
 
+enum NetlinkEventType {
+  LINK_EVENT = 0,
+  NEIGH_EVENT,
+  ADDR_EVENT,
+  ROUTE_EVENT,
+  MAX_EVENT_TYPE // sentinel
+};
+
 class NextHop;
 class NextHopBuilder final {
  public:

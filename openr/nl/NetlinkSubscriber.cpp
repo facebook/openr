@@ -280,9 +280,9 @@ NetlinkSubscriber::NetlinkSubscriber(
   }
 
   // For backward compitability,subscribe addr, link and neigh events by default
-  subscribeEvent(ADDR_EVENT);
-  subscribeEvent(LINK_EVENT);
-  subscribeEvent(NEIGH_EVENT);
+  subscribeEvent(fbnl::ADDR_EVENT);
+  subscribeEvent(fbnl::LINK_EVENT);
+  subscribeEvent(fbnl::NEIGH_EVENT);
 
   // Add link cache to manager. Same caveats as for neighborEventFunc
   err = nl_cache_mngr_add(
@@ -385,28 +385,29 @@ NetlinkSubscriber::getAllReachableNeighbors() {
   return std::move(future).get();
 }
 
-void NetlinkSubscriber::subscribeEvent(NetlinkEventType event) {
-  if (event >= MAX_EVENT_TYPE) {
+void NetlinkSubscriber::subscribeEvent(fbnl::NetlinkEventType event) {
+  if (event >= fbnl::MAX_EVENT_TYPE) {
     return;
   }
   eventFlags_.set(event);
 }
 
-void NetlinkSubscriber::unsubscribeEvent(NetlinkEventType event) {
-  if (event >= MAX_EVENT_TYPE) {
+void NetlinkSubscriber::unsubscribeEvent(
+    fbnl::NetlinkEventType event) {
+  if (event >= fbnl::MAX_EVENT_TYPE) {
     return;
   }
   eventFlags_.reset(event);
 }
 
 void NetlinkSubscriber::subscribeAllEvents() {
-  for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
+  for (size_t i = 0; i < fbnl::MAX_EVENT_TYPE; ++i) {
     eventFlags_.set(i);
   }
 }
 
 void NetlinkSubscriber::unsubscribeAllEvents() {
-  for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
+  for (size_t i = 0; i < fbnl::MAX_EVENT_TYPE; ++i) {
     eventFlags_.reset(i);
   }
 }
@@ -429,7 +430,7 @@ NetlinkSubscriber::handleLinkEvent(
     }
 
     // Invoke handler
-    if (runHandler && eventFlags_[LINK_EVENT]) {
+    if (runHandler && eventFlags_[fbnl::LINK_EVENT]) {
       VLOG(2) << "Link Event - ifName: " << linkEntry->ifName
               << ", ifIndex: " << linkEntry->ifIndex
               << ", state: " << (linkEntry->isUp ? "up" : "down");
@@ -458,7 +459,7 @@ NetlinkSubscriber::handleNeighborEvent(
     }
 
     // Invoke handler
-    if (runHandler && eventFlags_[NEIGH_EVENT]) {
+    if (runHandler && eventFlags_[fbnl::NEIGH_EVENT]) {
       VLOG(2) << "Neigbbor Event - ifName: " << neighborEntry->ifName
               << ", macAddr: " << neighborEntry->destination
               << ", address: " << neighborEntry->linkAddress
@@ -479,7 +480,7 @@ void NetlinkSubscriber::handleRouteEvent(
     return;
   }
 
-  if (runHandler && eventFlags_[ROUTE_EVENT]) {
+  if (runHandler && eventFlags_[fbnl::ROUTE_EVENT]) {
     VLOG(2) << "Route Event - Prefix: "
             << folly::IPAddress::networkToString(routeEntry->prefix)
             << (routeEntry->isDeleted ? " Deleted" : " Added");
@@ -505,7 +506,7 @@ NetlinkSubscriber::handleAddrEvent(
     }
 
     // Invoke handler
-    if (runHandler && eventFlags_[ADDR_EVENT]) {
+    if (runHandler && eventFlags_[fbnl::ADDR_EVENT]) {
       VLOG(2) << "Address Event - ifName: " << addrEntry->ifName
               << ", address: " << addrEntry->network.first.str()
               << ", state: " << (addrEntry->isValid ? " Added" : " Removed");

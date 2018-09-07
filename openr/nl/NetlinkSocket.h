@@ -83,13 +83,6 @@ struct PrefixCmp {
  */
 class NetlinkSocket {
  public:
-   enum NetlinkEventType {
-     LINK_EVENT = 0,
-     NEIGH_EVENT,
-     ADDR_EVENT,
-     ROUTE_EVENT,
-     MAX_EVENT_TYPE // sentinel
-   };
 
    // A simple collection of handlers invoked on relevant events
    // This object is passed to NetlinkSubscriber

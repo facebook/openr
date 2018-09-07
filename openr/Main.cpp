@@ -501,9 +501,8 @@ main(int argc, char** argv) {
     auto nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
         nlEventLoop.get(), eventPublisher);
     // Subscribe selected network events
-    nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::LINK_EVENT);
-    nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::NEIGH_EVENT);
-    nlSocket->subscribeEvent(openr::fbnl::NetlinkSocket::ADDR_EVENT);
+    nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
+    nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);
     auto nlEvlThread = std::thread([&nlEventLoop]() {
       folly::setThreadName("NetlinkEvl");
       nlEventLoop->run();

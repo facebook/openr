@@ -16,6 +16,8 @@
 #include <folly/MacAddress.h>
 #include <folly/AtomicBitSet.h>
 
+#include <openr/nl/NetlinkTypes.h>
+
 extern "C" {
 #include <linux/if.h>
 #include <netlink/cache.h>
@@ -136,14 +138,6 @@ struct RouteEntry {
 class NetlinkSubscriber final {
  public:
 
-  enum NetlinkEventType {
-    LINK_EVENT = 0,
-    NEIGH_EVENT,
-    ADDR_EVENT,
-    ROUTE_EVENT,
-    MAX_EVENT_TYPE // sentinel
-  };
-
   // A simple collection of handlers invoked on relevant events
   // This object is passed to NetlinkSubscriber
   // If caller is not interested in a handler, it can simply not override it
@@ -209,11 +203,11 @@ class NetlinkSubscriber final {
 
   // Subscribe specific event
   // No effect for invalid event types
-  void subscribeEvent(NetlinkEventType event);
+  void subscribeEvent(fbnl::NetlinkEventType event);
 
   // Unsubscribe specific event
   // No effect for invalid event types
-  void unsubscribeEvent(NetlinkEventType event);
+  void unsubscribeEvent(fbnl::NetlinkEventType event);
 
   // Subscribe all supported events
   void subscribeAllEvents();
@@ -284,6 +278,6 @@ class NetlinkSubscriber final {
   Links links_{};
 
   // Indicating to run which event type's handler
-  folly::AtomicBitSet<MAX_EVENT_TYPE> eventFlags_;
+  folly::AtomicBitSet<fbnl::MAX_EVENT_TYPE> eventFlags_;
 };
 } // namespace openr

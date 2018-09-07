@@ -920,7 +920,7 @@ TEST_F(NetlinkSubscriberFixture, LinkEventFlagTest) {
   // Only enable link event
   NetlinkSubscriber netlinkSubscriber(&zmqLoop, &myHandler);
   netlinkSubscriber.unsubscribeAllEvents();
-  netlinkSubscriber.subscribeEvent(NetlinkSubscriber::LINK_EVENT);
+  netlinkSubscriber.subscribeEvent(fbnl::LINK_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -953,7 +953,7 @@ TEST_F(NetlinkSubscriberFixture, LinkEventFlagTest) {
 
   // Now bring the links down and disable link event handler
   myHandler.linkEventCount = 0;
-  netlinkSubscriber.unsubscribeEvent(NetlinkSubscriber::LINK_EVENT);
+  netlinkSubscriber.unsubscribeEvent(fbnl::LINK_EVENT);
 
   timeout = setTimeout();
   std::thread eventThread2([&]() { zmqLoop.run(); });
@@ -1021,7 +1021,7 @@ TEST_F(NetlinkSubscriberFixture, NeighEventFlagTest) {
   NetlinkSubscriber netlinkSubscriber(&zmqLoop, &myHandler);
   // Only enable neighbor event
   netlinkSubscriber.unsubscribeAllEvents();
-  netlinkSubscriber.subscribeEvent(NetlinkSubscriber::NEIGH_EVENT);
+  netlinkSubscriber.subscribeEvent(fbnl::NEIGH_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -1050,7 +1050,7 @@ TEST_F(NetlinkSubscriberFixture, NeighEventFlagTest) {
 
 
   // Unsubscribe neighbor event
-  netlinkSubscriber.unsubscribeEvent(NetlinkSubscriber::NEIGH_EVENT);
+  netlinkSubscriber.unsubscribeEvent(fbnl::NEIGH_EVENT);
   myHandler.neighborEventCount = 0;
 
   // Now delete both the neighbor entries from the system
@@ -1103,7 +1103,7 @@ TEST_F(NetlinkSubscriberFixture, AddrEventFlagTest) {
   NetlinkSubscriber netlinkSubscriber(&zmqLoop, &myHandler);
   // Only subscribe addr event
   netlinkSubscriber.unsubscribeAllEvents();
-  netlinkSubscriber.subscribeEvent(NetlinkSubscriber::ADDR_EVENT);
+  netlinkSubscriber.subscribeEvent(fbnl::ADDR_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -1148,7 +1148,7 @@ TEST_F(NetlinkSubscriberFixture, AddrEventFlagTest) {
   // Now remove the addresses
   myHandler.addrEventCount = 0;
   // Unsubscribe addr event
-  netlinkSubscriber.unsubscribeEvent(NetlinkSubscriber::ADDR_EVENT);
+  netlinkSubscriber.unsubscribeEvent(fbnl::ADDR_EVENT);
 
   timeout = setTimeout();
   std::thread eventThread2([&]() { zmqLoop.run(); });
@@ -1346,7 +1346,7 @@ TEST_F(NetlinkSubscriberFixture, RouteFlagTest) {
 
   NetlinkSubscriber netlinkSubscriber(&zmqLoop, &myHandler);
   netlinkSubscriber.unsubscribeAllEvents();
-  netlinkSubscriber.subscribeEvent(NetlinkSubscriber::ROUTE_EVENT);
+  netlinkSubscriber.subscribeEvent(fbnl::ROUTE_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -1412,7 +1412,7 @@ TEST_F(NetlinkSubscriberFixture, RouteFlagTest) {
   EXPECT_EQ(1, myHandler.routes.count(kPrefix3));
 
   myHandler.routeAddEventCount = 0;
-  netlinkSubscriber.unsubscribeEvent(NetlinkSubscriber::ROUTE_EVENT);
+  netlinkSubscriber.unsubscribeEvent(fbnl::ROUTE_EVENT);
   timeout = setTimeout();
   std::thread eventThread2([&]() { zmqLoop.run(); });
   zmqLoop.waitUntilRunning();
