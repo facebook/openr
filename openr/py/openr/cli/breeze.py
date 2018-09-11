@@ -12,13 +12,29 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
-import bunch
+#
+# Disable click unicode literals warning before importing other modules
+#
 import click
+click.disable_unicode_literals_warning = True
+
+
+#
+# Set encoding to UTF-8 for all modules as it is needed for click in python3
+#
+import locale
+
+
+def getpreferredencoding(do_setlocale=True):
+    return "utf-8"
+
+
+locale.getpreferredencoding = getpreferredencoding
+
+
+import bunch
 import json
 import zmq
-
-# Disable click unicode literals warning before importing other modules
-click.disable_unicode_literals_warning = True
 
 from openr.Platform import ttypes as platform_types
 from openr.cli.clis import config, decision, fib, health_checker, kvstore
