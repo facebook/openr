@@ -349,7 +349,7 @@ class PathCmd(DecisionCmd):
 
 
 class DecisionValidateCmd(DecisionCmd):
-    def run(self, json):
+    def run(self, json=False):
         '''Returns a status code. 0 = success, 1 = failure'''
         print('Decision is in sync with KvStore if nothing shows up')
         print()

@@ -93,7 +93,7 @@ class FibCountersCmd(FibAgentCmd):
 
 
 class FibRoutesInstalledCmd(FibAgentCmd):
-    def run(self, prefixes, json_opt):
+    def run(self, prefixes, json_opt=False):
         try:
             routes = self.client.getRouteTableByClient(self.client.client_id)
         except Exception as e:
