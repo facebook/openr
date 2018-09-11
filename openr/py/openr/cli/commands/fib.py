@@ -52,7 +52,7 @@ class FibAgentCmd(object):
             print('Note: Specify correct host with -H/--host option and ' +
                   'make sure that Fib is running on the host or ports ' +
                   'are open on that box for network communication.')
-            sys.exit(1)
+            raise
 
 
 class FibRoutesComputedCmd(FibCmd):
@@ -123,9 +123,10 @@ class FibAddRoutesCmd(FibAgentCmd):
         except Exception as e:
             print('Failed to add routes.')
             print('Exception: {}'.format(e))
-            sys.exit(1)
+            return 1
 
         print('Added {} routes.'.format(len(routes)))
+        return 0
 
 
 class FibDelRoutesCmd(FibAgentCmd):
@@ -136,9 +137,10 @@ class FibDelRoutesCmd(FibAgentCmd):
         except Exception as e:
             print('Failed to delete routes.')
             print('Exception: {}'.format(e))
-            sys.exit(1)
+            return 1
 
         print('Deleted {} routes.'.format(len(prefixes)))
+        return 0
 
 
 class FibSyncRoutesCmd(FibAgentCmd):
@@ -150,9 +152,10 @@ class FibSyncRoutesCmd(FibAgentCmd):
         except Exception as e:
             print('Failed to sync routes.')
             print('Exception: {}'.format(e))
-            sys.exit(1)
+            return 1
 
         print('Reprogrammed FIB with {} routes.'.format(len(routes)))
+        return 0
 
 
 class FibValidateRoutesCmd(FibAgentCmd):
@@ -168,7 +171,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
         except Exception as e:
             print('Failed to validate Fib routes.')
             print('Exception: {}'.format(e))
-            sys.exit(1)
+            return 1
 
         res1, _ = utils.compare_route_db(
             decision_routes,
