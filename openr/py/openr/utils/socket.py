@@ -40,6 +40,7 @@ class Socket(object):
         self._socket = self.zmq_ctx.socket(self.socket_type)
         self._socket.set(zmq.IPV6, 1)
         self._socket.set(zmq.LINGER, 0)
+        self._socket.set(zmq.TOS, consts.Consts.IP_TOS)
 
     def _config_socket(self, socket_url, method):
 
