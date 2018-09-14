@@ -143,6 +143,15 @@ class NetlinkSocketFixture : public testing::Test {
     nl_cache_foreach_filter(cache, nullptr, cb, arg);
   }
 
+  Route
+  buildNullRoute(int protocolId, const folly::CIDRNetwork& dest) {
+    fbnl::RouteBuilder rtBuilder;
+    auto route = rtBuilder.setDestination(dest)
+                     .setProtocolId(protocolId)
+                     .setType(RTN_BLACKHOLE);
+    return rtBuilder.buildRoute();
+  }
+
   Route buildRoute(
     int ifIndex,
     int protocolId,
@@ -154,8 +163,7 @@ class NetlinkSocketFixture : public testing::Test {
                           .setProtocolId(protocolId);
     fbnl::NextHopBuilder nhBuilder;
     for (const auto& nh : nexthops) {
-      nhBuilder.setIfIndex(ifIndex)
-               .setGateway(nh);
+      nhBuilder.setIfIndex(ifIndex).setGateway(nh);
       rtBuilder.addNextHop(nhBuilder.build());
       nhBuilder.reset();
     }
@@ -801,6 +809,117 @@ TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
   // Delete the same route
   netlinkSocket->delRoute(
     buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
+  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  EXPECT_EQ(0, routes.size());
+}
+
+// - Add a null route (nexthops empty)
+// - verify it is added,
+// - Delete it and then verify it is deleted
+TEST_F(NetlinkSocketFixture, NullRouteTest) {
+  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:4::4"), 128};
+
+  auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
+    struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
+    RouteBuilder builder;
+    if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
+      ctx->results.emplace_back(builder.buildFromObject(routeObj));
+    }
+  };
+  RouteCallbackContext ctx;
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  int before = ctx.results.size();
+
+  // Add a route
+  netlinkSocket->addRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
+
+  // Check in Kernel
+  // v6 blackhole route has default nexthop point to lo
+  // E.g. blackhole 2401:db00:e003:9100:106f::/80 dev lo
+  ctx.results.clear();
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  EXPECT_EQ(before + 1, ctx.results.size());
+  int count = 0;
+  for (const auto& r : ctx.results) {
+    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 1 && r.getType() == RTN_BLACKHOLE) {
+      count++;
+    }
+  }
+  EXPECT_EQ(1, count);
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+
+  EXPECT_EQ(1, routes.size());
+  ASSERT_EQ(1, routes.count(prefix));
+  const Route& rt = routes.at(prefix);
+  EXPECT_EQ(prefix, rt.getDestination());
+  EXPECT_EQ(kAqRouteProtoId, rt.getProtocolId());
+  EXPECT_EQ(1, rt.getNextHops().size());
+  EXPECT_EQ(
+      netlinkSocket->getIfIndex("lo").get(),
+      *rt.getNextHops().begin()->getIfIndex());
+  EXPECT_EQ(RTN_BLACKHOLE, rt.getType());
+
+  std::array<char, 100> name;
+  rtnl_link_i2name(routeCache_, 1, name.data(), 100);
+
+  // Delete the same route
+  netlinkSocket->delRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
+  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  EXPECT_EQ(0, routes.size());
+}
+
+// - Add a null route (nexthops empty)
+// - verify it is added,
+// - Delete it and then verify it is deleted
+TEST_F(NetlinkSocketFixture, NullRouteV4Test) {
+  folly::CIDRNetwork prefix{folly::IPAddress("192.168.0.11"), 32};
+
+  auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
+    struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
+    RouteBuilder builder;
+    if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
+      ctx->results.emplace_back(builder.buildFromObject(routeObj));
+    }
+  };
+  RouteCallbackContext ctx;
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  int before = ctx.results.size();
+
+  // Add a route
+  netlinkSocket->addRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
+
+  // Check in Kernel
+  // v4 blackhole route:
+  // E.g. blackhole 10.120.175.0/24 proto gated/bgp
+  ctx.results.clear();
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  EXPECT_EQ(before + 1, ctx.results.size());
+  int count = 0;
+  for (const auto& r : ctx.results) {
+    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 0 && r.getType() == RTN_BLACKHOLE) {
+      count++;
+    }
+  }
+  EXPECT_EQ(1, count);
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+
+  EXPECT_EQ(1, routes.size());
+  ASSERT_EQ(1, routes.count(prefix));
+  const Route& rt = routes.at(prefix);
+  EXPECT_EQ(prefix, rt.getDestination());
+  EXPECT_EQ(kAqRouteProtoId, rt.getProtocolId());
+  EXPECT_EQ(0, rt.getNextHops().size());
+  EXPECT_EQ(RTN_BLACKHOLE, rt.getType());
+
+  std::array<char, 100> name;
+  rtnl_link_i2name(routeCache_, 1, name.data(), 100);
+
+  // Delete the same route
+  netlinkSocket->delRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
 }

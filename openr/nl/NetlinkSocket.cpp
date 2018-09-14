@@ -365,14 +365,15 @@ folly::Future<folly::Unit> NetlinkSocket::addRoute(Route route) {
          uint8_t type = r.getType();
          switch (type) {
            case RTN_UNICAST:
-           doAddUpdateUnicastRoute(std::move(r));
-           break;
+           case RTN_BLACKHOLE:
+             doAddUpdateUnicastRoute(std::move(r));
+             break;
            case RTN_MULTICAST:
-           doAddMulticastRoute(std::move(r));
-           break;
+             doAddMulticastRoute(std::move(r));
+             break;
            default:
-           throw NetlinkException(
-             folly::sformat("Unsupported route type {}", (int)type));
+             throw NetlinkException(
+                 folly::sformat("Unsupported route type {}", (int)type));
          }
          p.setValue();
        } catch (std::exception const& ex) {
@@ -387,12 +388,8 @@ folly::Future<folly::Unit> NetlinkSocket::addRoute(Route route) {
 
 void NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   checkUnicastRoute(route);
+
   const auto& dest = route.getDestination();
-  if (dest.first.isMulticast() || dest.first.isLinkLocal()) {
-    throw NetlinkException(
-      folly::sformat("Invalid unicast route type for: {}",
-      folly::IPAddress::networkToString(dest)));
-  }
 
   // Create new set of nexthops to be programmed. Existing + New ones
   auto& unicastRoutes = unicastRoutesCache_[route.getProtocolId()];
@@ -457,14 +454,15 @@ NetlinkSocket::delRoute(Route route) {
           uint8_t type = r.getType();
           switch (type) {
             case RTN_UNICAST:
-            doDeleteUnicastRoute(std::move(r));
-            break;
+            case RTN_BLACKHOLE:
+              doDeleteUnicastRoute(std::move(r));
+              break;
             case RTN_MULTICAST:
-            doDeleteMulticastRoute(std::move(r));
-            break;
+              doDeleteMulticastRoute(std::move(r));
+              break;
             default:
-            throw NetlinkException(
-              folly::sformat("Unsupported route type {}", (int)type));
+              throw NetlinkException(
+                  folly::sformat("Unsupported route type {}", (int)type));
           }
           p.setValue();
         } catch (std::exception const& ex) {

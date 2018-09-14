@@ -134,8 +134,6 @@ NetlinkFibHandler::toThriftUnicastRoutes(
 folly::Future<folly::Unit>
 NetlinkFibHandler::future_addUnicastRoute(
     int16_t clientId, std::unique_ptr<thrift::UnicastRoute> route) {
-  DCHECK(route->nexthops.size());
-
   VLOG(1) << "Adding/Updating route for " << toString(route->dest);
 
   folly::Promise<folly::Unit> promise;
@@ -148,16 +146,20 @@ NetlinkFibHandler::future_addUnicastRoute(
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setDestination(toIPNetwork(route->dest))
            .setProtocolId(protocol.value());
-  fbnl::NextHopBuilder nhBuilder;
-  for (const auto& nh : route->nexthops) {
-    if (nh.ifName.hasValue()) {
-      nhBuilder.setIfIndex(netlinkSocket_->getIfIndex(nh.ifName.value()).get());
+  if (route->nexthops.empty()) {
+    rtBuilder.setType(RTN_BLACKHOLE);
+  } else {
+    fbnl::NextHopBuilder nhBuilder;
+    for (const auto& nh : route->nexthops) {
+      if (nh.ifName.hasValue()) {
+        nhBuilder.setIfIndex(
+            netlinkSocket_->getIfIndex(nh.ifName.value()).get());
+      }
+      nhBuilder.setGateway(toIPAddress(nh));
+      rtBuilder.addNextHop(nhBuilder.build());
+      nhBuilder.reset();
     }
-    nhBuilder.setGateway(toIPAddress(nh));
-    rtBuilder.addNextHop(nhBuilder.build());
-    nhBuilder.reset();
   }
-
   return netlinkSocket_->addRoute(rtBuilder.buildRoute());
 }
 
@@ -256,21 +258,24 @@ NetlinkFibHandler::future_syncFib(
   // Build new routeDb
   fbnl::NlUnicastRoutes newRoutes;
   fbnl::RouteBuilder rtBuilder;
-  fbnl::NextHopBuilder nhBuilder;
   for (auto const& route : *routes) {
-    CHECK(route.nexthops.size());
     auto prefix = toIPNetwork(route.dest);
     rtBuilder.setDestination(prefix)
         .setProtocolId(protocol.value());
 
-    for (const auto& nh : route.nexthops) {
-      if (nh.ifName.hasValue()) {
-        nhBuilder.setIfIndex(
-            netlinkSocket_->getIfIndex(nh.ifName.value()).get());
+    if (route.nexthops.empty()) {
+      rtBuilder.setType(RTN_BLACKHOLE);
+    } else {
+      fbnl::NextHopBuilder nhBuilder;
+      for (const auto& nh : route.nexthops) {
+        if (nh.ifName.hasValue()) {
+          nhBuilder.setIfIndex(
+              netlinkSocket_->getIfIndex(nh.ifName.value()).get());
+        }
+        nhBuilder.setGateway(toIPAddress(nh));
+        rtBuilder.addNextHop(nhBuilder.build());
+        nhBuilder.reset();
       }
-      nhBuilder.setGateway(toIPAddress(nh));
-      rtBuilder.addNextHop(nhBuilder.build());
-      nhBuilder.reset();
     }
 
     newRoutes.emplace(prefix, rtBuilder.buildRoute());
