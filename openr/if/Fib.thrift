@@ -35,7 +35,7 @@ struct Route {
   // in theory, the same path may repeat multiple times
   // and this could be used for weighted load-sharing..
   2: list<Path> paths
-}
+} (no_default_comparators)
 
 // announced under keys starting with "routes:"
 struct RouteDatabase {

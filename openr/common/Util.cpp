@@ -92,33 +92,6 @@ bool KeyPrefix::keyMatch(std::string const& key) const {
 // set for set algebra. thrift declares but does not define these for us.
 
 bool
-thrift::BinaryAddress::operator<(const thrift::BinaryAddress& other) const {
-  if (addr != other.addr) {
-    return addr < other.addr;
-  }
-  return ifName < other.ifName;
-}
-
-bool
-thrift::IpPrefix::operator<(const thrift::IpPrefix& other) const {
-  if (prefixAddress != other.prefixAddress) {
-    return prefixAddress < other.prefixAddress;
-  }
-  return prefixLength < other.prefixLength;
-}
-
-bool
-thrift::Path::operator<(const openr::thrift::Path& other) const {
-  if (metric != other.metric) {
-    return metric < other.metric;
-  }
-  if (ifName != other.ifName) {
-    return ifName < other.ifName;
-  }
-  return nextHop < other.nextHop;
-}
-
-bool
 thrift::Route::operator<(const openr::thrift::Route& other) const {
   if (prefix != other.prefix) {
     return prefix < other.prefix;
