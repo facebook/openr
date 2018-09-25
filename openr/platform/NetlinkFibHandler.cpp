@@ -20,6 +20,12 @@
 #include <openr/common/AddressUtil.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
+#include <openr/platform/NetlinkFibHandler.h>
+
+DEFINE_bool(
+    enable_recursive_lookup,
+    false,
+    "If set, recursive lookup (in static routes) will be enabled");
 
 using apache::thrift::FRAGILE;
 
@@ -32,6 +38,7 @@ namespace openr {
 namespace {
 
 const std::chrono::seconds kRoutesHoldTimeout{30};
+const std::chrono::seconds kSyncStaticRouteTimeout{30};
 
 // iproute2 protocol IDs in the kernel are a shared resource
 // Various well known and custom protocols use it
@@ -73,9 +80,29 @@ NetlinkFibHandler::NetlinkFibHandler(
       VLOG(2) << "Open/R health check: PASS";
     }
   });
+  if (FLAGS_enable_recursive_lookup) {
+    syncStaticRouteTimer_ =
+        fbzmq::ZmqTimeout::make(zmqEventLoop, [&]() noexcept {
+          netlinkSocket_->getCachedUnicastRoutes(RTPROT_STATIC)
+              .then([this](fbnl::NlUnicastRoutes res) mutable {
+                staticRouteCache_ = std::move(res);
+                LOG(INFO) << "Static routes synced.";
+              })
+              .onError([](std::exception const& ex) {
+                LOG(ERROR) << "Failed to get static routes: " << ex.what();
+              })
+              .onTimeout(std::chrono::seconds(1), []() {
+                LOG(ERROR) << "Timed out on getting static routes.";
+              });
+        });
+  }
   zmqEventLoop->runInEventLoop([&]() {
     const bool isPeriodic = true;
     keepAliveCheckTimer_->scheduleTimeout(kRoutesHoldTimeout, isPeriodic);
+    if (FLAGS_enable_recursive_lookup) {
+      syncStaticRouteTimer_->scheduleTimeout(
+          kSyncStaticRouteTimeout, isPeriodic);
+    }
   });
 }
 
@@ -143,24 +170,7 @@ NetlinkFibHandler::future_addUnicastRoute(
     return future;
   }
 
-  fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setDestination(toIPNetwork(route->dest))
-           .setProtocolId(protocol.value());
-  if (route->nexthops.empty()) {
-    rtBuilder.setType(RTN_BLACKHOLE);
-  } else {
-    fbnl::NextHopBuilder nhBuilder;
-    for (const auto& nh : route->nexthops) {
-      if (nh.ifName.hasValue()) {
-        nhBuilder.setIfIndex(
-            netlinkSocket_->getIfIndex(nh.ifName.value()).get());
-      }
-      nhBuilder.setGateway(toIPAddress(nh));
-      rtBuilder.addNextHop(nhBuilder.build());
-      nhBuilder.reset();
-    }
-  }
-  return netlinkSocket_->addRoute(rtBuilder.buildRoute());
+  return netlinkSocket_->addRoute(buildRoute(*route, protocol.value()));
 }
 
 folly::Future<folly::Unit>
@@ -257,29 +267,9 @@ NetlinkFibHandler::future_syncFib(
 
   // Build new routeDb
   fbnl::NlUnicastRoutes newRoutes;
-  fbnl::RouteBuilder rtBuilder;
   for (auto const& route : *routes) {
-    auto prefix = toIPNetwork(route.dest);
-    rtBuilder.setDestination(prefix)
-        .setProtocolId(protocol.value());
-
-    if (route.nexthops.empty()) {
-      rtBuilder.setType(RTN_BLACKHOLE);
-    } else {
-      fbnl::NextHopBuilder nhBuilder;
-      for (const auto& nh : route.nexthops) {
-        if (nh.ifName.hasValue()) {
-          nhBuilder.setIfIndex(
-              netlinkSocket_->getIfIndex(nh.ifName.value()).get());
-        }
-        nhBuilder.setGateway(toIPAddress(nh));
-        rtBuilder.addNextHop(nhBuilder.build());
-        nhBuilder.reset();
-      }
-    }
-
-    newRoutes.emplace(prefix, rtBuilder.buildRoute());
-    rtBuilder.reset();
+    newRoutes.emplace(
+        toIPNetwork(route.dest), buildRoute(route, protocol.value()));
   }
 
   return netlinkSocket_->
@@ -328,6 +318,62 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
                    << ", returning empty table instead";
         return std::make_unique<std::vector<openr::thrift::UnicastRoute>>();
       });
+}
+
+fbnl::Route
+NetlinkFibHandler::buildRoute(
+    const thrift::UnicastRoute& route, int protocol) const noexcept {
+  fbnl::RouteBuilder rtBuilder;
+  rtBuilder.setDestination(toIPNetwork(route.dest)).setProtocolId(protocol);
+
+  // treat empty nexthop as null route
+  if (route.nexthops.empty()) {
+    rtBuilder.setType(RTN_BLACKHOLE);
+    return rtBuilder.buildRoute();
+  }
+
+  // add nexthops
+  fbnl::NextHopBuilder nhBuilder;
+  for (const auto& nh : route.nexthops) {
+    // if recursive lookup is enabled, try resolve nexthop first
+    if (FLAGS_enable_recursive_lookup) {
+      const auto& resolvedNhSet = lookupNexthop(nh);
+      for (const auto& resolvedNh : resolvedNhSet) {
+        if (resolvedNh.getIfIndex().hasValue()) {
+          nhBuilder.setIfIndex(resolvedNh.getIfIndex().value());
+        }
+        if (resolvedNh.getGateway().hasValue()) {
+          nhBuilder.setGateway(resolvedNh.getGateway().value());
+        }
+        rtBuilder.addNextHop(nhBuilder.build());
+        nhBuilder.reset();
+      }
+      // This nexthop has been resolved, continue to next
+      if (resolvedNhSet.size()) {
+        continue;
+      }
+    }
+    // recursive lookup is not enabled, or nexthop is not resolved
+    if (nh.ifName.hasValue()) {
+      nhBuilder.setIfIndex(netlinkSocket_->getIfIndex(nh.ifName.value()).get());
+    }
+    nhBuilder.setGateway(toIPAddress(nh));
+    rtBuilder.addNextHop(nhBuilder.build());
+    nhBuilder.reset();
+  }
+  return rtBuilder.buildRoute();
+}
+
+fbnl::NextHopSet
+NetlinkFibHandler::lookupNexthop(const thrift::BinaryAddress& nh) const
+    noexcept {
+  VLOG(3) << "Nexthop Lookup for " << toIPAddress(nh).str();
+  const auto& staticRoute = staticRouteCache_.find(
+      folly::IPAddress::createNetwork(toIPAddress(nh).str()));
+  if (staticRoute == staticRouteCache_.cend()) {
+    return fbnl::NextHopSet{};
+  }
+  return staticRoute->second.getNextHops();
 }
 
 void

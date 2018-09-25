@@ -332,11 +332,6 @@ void NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
     return;
   }
 
-  // Ideally link-local routes should never be programmed
-  if (prefix.first.isLinkLocal()) {
-    return;
-  }
-
   auto& unicastRoutes = unicastRoutesCache_[protocol];
   if (NL_ACT_DEL != action) {
     unicastRoutes.erase(prefix);
