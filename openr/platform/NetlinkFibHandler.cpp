@@ -73,7 +73,7 @@ NetlinkFibHandler::NetlinkFibHandler(
       LOG(WARNING) << "Open/R health check: FAIL. Expiring routes!";
       auto emptyRoutes = std::make_unique<std::vector<thrift::UnicastRoute>>();
       auto ret = future_syncFib(0 /* clientId */, std::move(emptyRoutes));
-      std::move(ret).then([](folly::Unit) {
+      std::move(ret).thenValue([](folly::Unit) {
         LOG(WARNING) << "Expired routes on health check failure!";
       });
     } else {
@@ -309,7 +309,7 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
   }
 
   return netlinkSocket_->getCachedUnicastRoutes(protocol.value())
-      .then([this](fbnl::NlUnicastRoutes res) mutable {
+      .thenValue([this](fbnl::NlUnicastRoutes res) mutable {
         return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
             toThriftUnicastRoutes(res));
       })
