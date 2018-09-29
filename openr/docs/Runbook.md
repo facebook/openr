@@ -416,3 +416,15 @@ operations of Open/R
 ```
 IP_TOS=192
 ```
+
+### MEMORY_LIMIT_MB
+
+Enforce upper limit on amount of memory in mega-bytes that open/r process can
+use. Above this limit watchdog thread will trigger crash. Service can be
+auto-restarted via system or some kind of service manager. This is very useful
+to guarantee protocol doesn't cause trouble to other services on device where
+it runs and takes care of slow memory leak kind of issues.
+
+```
+MEMORY_LIMIT_MB=300
+```

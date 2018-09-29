@@ -72,6 +72,7 @@ KEY_PREFIX_FILTERS=""
 LINK_FLAP_INITIAL_BACKOFF_MS=1000
 LINK_FLAP_MAX_BACKOFF_MS=60000
 LOOPBACK_IFACE="lo"
+MEMORY_LIMIT_MB=300
 OVERRIDE_LOOPBACK_ADDR=false
 PREFIXES=""
 REDISTRIBUTE_IFACES="lo1"
@@ -164,6 +165,7 @@ exec ${OPENR} \
   --link_flap_initial_backoff_ms=${LINK_FLAP_INITIAL_BACKOFF_MS} \
   --link_flap_max_backoff_ms=${LINK_FLAP_MAX_BACKOFF_MS} \
   --loopback_iface=${LOOPBACK_IFACE} \
+  --memory_limit_mb=${MEMORY_LIMIT_MB} \
   --node_name="${NODE_NAME}" \
   --override_loopback_addr=${OVERRIDE_LOOPBACK_ADDR} \
   --prefixes="${PREFIXES}" \
