@@ -1256,10 +1256,13 @@ class DecisionOldTestFixture : public ::testing::Test {
     decision->waitUntilRunning();
 
     const int hwm = 1000;
-    decisionPub.setSockOpt(ZMQ_SNDHWM, &hwm, sizeof(hwm)).value();
+    decisionPub.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(hwm)).value();
     decisionPub.setSockOpt(ZMQ_SUBSCRIBE, "", 0).value();
     decisionPub.connect(fbzmq::SocketUrl{"inproc://decision-pub"});
     decisionReq.connect(fbzmq::SocketUrl{"inproc://decision-rep"});
+
+    // Make initial sync request with empty route-db
+    replyInitialSyncReq(thrift::Publication());
 
     // Make request from decision to ensure that sockets are ready for use!
     dumpRouteDatabase(decisionReq, {"random-node"}, serializer);
@@ -1414,7 +1417,7 @@ TEST_F(DecisionOldTestFixture, BasicOperations) {
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {});
 
-  replyInitialSyncReq(publication);
+  publishRouteDb(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
   EXPECT_EQ(1, routeDb.routes.size());
   RouteMap routeMap;
@@ -1525,7 +1528,7 @@ TEST_F(DecisionOldTestFixture, ParallelLinks) {
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {});
 
-  replyInitialSyncReq(publication);
+  publishRouteDb(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
   EXPECT_EQ(1, routeDb.routes.size());
   RouteMap routeMap;
@@ -1573,7 +1576,7 @@ TEST_F(DecisionOldTestFixture, PubDebouncing) {
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
   EXPECT_EQ(0, counters["decision.route_build_requests.count.0"]);
-  replyInitialSyncReq(publication);
+  publishRouteDb(publication);
 
   /* sleep override */
   // wait for SPF to finish
@@ -1716,7 +1719,7 @@ TEST_F(DecisionOldTestFixture, NoSpfOnIrrelevantPublication) {
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
 
-  replyInitialSyncReq(publication);
+  publishRouteDb(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -1748,7 +1751,7 @@ TEST_F(DecisionOldTestFixture, NoSpfOnDuplicatePublication) {
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
 
-  replyInitialSyncReq(publication);
+  publishRouteDb(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -1808,7 +1811,11 @@ TEST_F(DecisionOldTestFixture, LoopFreeAlternatePaths) {
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
       {});
 
-  replyInitialSyncReq(publication);
+  publishRouteDb(publication);
+
+  // wait for SPF to finish
+  /* sleep override */
+  std::this_thread::sleep_for(2 * debounceTimeout);
 
   // validate routers
   auto routeMapList =
@@ -1957,7 +1964,7 @@ TEST_F(DecisionOldTestFixture, DuplicatePrefixes) {
        {"prefix:4", createPrefixValue("4", 1, {addr4})}},
       {});
 
-  replyInitialSyncReq(publication);
+  publishRouteDb(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -2112,7 +2119,7 @@ TEST_F(DecisionOldTestFixture, DecisionOldSubReliability) {
   // publish initial link state info to KvStore, This should trigger the
   // SPF run.
   //
-  replyInitialSyncReq(initialPub);
+  publishRouteDb(initialPub);
 
   //
   // Hammer DecisionOld with lot of duplicate publication for 2 * ThrottleTimeout
