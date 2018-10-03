@@ -84,7 +84,7 @@ NetlinkFibHandler::NetlinkFibHandler(
     syncStaticRouteTimer_ =
         fbzmq::ZmqTimeout::make(zmqEventLoop, [&]() noexcept {
           netlinkSocket_->getCachedUnicastRoutes(RTPROT_STATIC)
-              .then([this](fbnl::NlUnicastRoutes res) mutable {
+              .thenValue([this](fbnl::NlUnicastRoutes res) mutable {
                 staticRouteCache_ = std::move(res);
                 LOG(INFO) << "Static routes synced.";
               })

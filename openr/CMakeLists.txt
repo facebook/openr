@@ -824,6 +824,11 @@ if(BUILD_TESTS)
     ${GTEST_MAIN}
   )
 
+  if(ADD_ROOT_TESTS)
+    # This test fails under Travis, so adding it as an exception
+    add_test(FibTest fib_test)
+  endif()
+
   install(TARGETS
     fib_test
     DESTINATION sbin/tests/openr/fib
@@ -902,13 +907,11 @@ if(BUILD_TESTS)
     ${GTEST_MAIN}
   )
 
+  add_test(NetlinkTypesTest netlink_types_test)
   if(ADD_ROOT_TESTS)
-    # This test fails under Travis, so adding it as an exception
-    add_test(FibTest fib_test)
     # these tests must be run by root user
     add_test(NetlinkRouteSocketTest netlink_route_socket_test)
     add_test(NetlinkSubscriberTest netlink_subscriber_test)
-    add_test(NetlinkTypesTest netlink_types_test)
     add_test(NetlinkSocketTest netlink_socket_test)
     add_test(NetlinkSocketTest netlink_socket_subscribe_test)
   endif()
