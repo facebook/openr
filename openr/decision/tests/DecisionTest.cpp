@@ -1471,7 +1471,7 @@ class DecisionTestFixture : public ::testing::Test {
 
   // publish routeDb
   void
-  publishRouteDb(const thrift::Publication& publication) {
+  sendKvPublication(const thrift::Publication& publication) {
     kvStorePub.sendThriftObj(publication, serializer);
   }
 
@@ -1557,7 +1557,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
   EXPECT_EQ(1, routeDb.routes.size());
   RouteMap routeMap;
@@ -1581,7 +1581,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
       {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // validate routers
 
@@ -1628,7 +1628,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   publication = thrift::Publication(
       FRAGILE, thrift::KeyVals{}, {"adj:3", "prefix:3"} /* expired keys */);
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
   EXPECT_EQ(1, routeDb.routes.size());
   fillRouteMap("1", routeMap, routeDb);
@@ -1667,7 +1667,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
   EXPECT_EQ(1, routeDb.routes.size());
   RouteMap routeMap;
@@ -1681,7 +1681,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   publication = thrift::Publication(
       FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
   // receive my local Decision routeDb publication
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
   EXPECT_EQ(1, routeDb.routes.size());
@@ -1695,7 +1695,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   publication = thrift::Publication(
       FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}}, {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
   // receive my local Decision routeDb publication
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
   EXPECT_EQ(1, routeDb.routes.size());
@@ -1714,7 +1714,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       FRAGILE, {{"adj:2",
                   createAdjValue("2", 2, {adj21_1_overloaded, adj21_2})}}, {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
   // receive my local Decision routeDb publication
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
   EXPECT_EQ(1, routeDb.routes.size());
@@ -1748,7 +1748,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
   EXPECT_EQ(0, counters["decision.route_build_requests.count.0"]);
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   /* sleep override */
   // wait for SPF to finish
@@ -1773,7 +1773,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
       {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // we simulate adding a new router R4
 
@@ -1786,7 +1786,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        {"adj:3", createAdjValue("3", 5, {adj32, adj34})}},
       {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   /* sleep override */
   // wait for debouncing to kick in
@@ -1803,7 +1803,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 1, {addr4})}},
       {});
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   /* sleep override */
   // wait for route rebuilding to finish
@@ -1822,13 +1822,13 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 2, {addr4, addr5})}},
       {});
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"adj:2", createAdjValue("2", 5, {adj21})}},
       {});
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   /* sleep override */
   // wait for SPF to finish
@@ -1847,19 +1847,19 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 5, {addr4})}},
       {});
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 7, {addr4, addr6})}},
       {});
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 8, {addr4, addr5, addr6})}},
       {});
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   /* sleep override */
   // wait for route rebuilding to finish
@@ -1891,7 +1891,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -1923,7 +1923,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -1934,7 +1934,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   EXPECT_EQ(1, counters["decision.paths_build_requests.count.0"]);
 
   // Send same publication again to Decision using pub socket
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -1983,7 +1983,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
       {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -2047,7 +2047,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
       {});
 
   // Send same publication again to Decision using pub socket
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -2136,7 +2136,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
        {"prefix:4", createPrefixValue("4", 1, {addr4})}},
       {});
 
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -2201,7 +2201,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
       {});
 
   // Send same publication again to Decision using pub socket
-  publishRouteDb(publication);
+  sendKvPublication(publication);
 
   // wait for SPF to finish
   /* sleep override */
@@ -2291,7 +2291,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // publish initial link state info to KvStore, This should trigger the
   // SPF run.
   //
-  publishRouteDb(initialPub);
+  sendKvPublication(initialPub);
 
   //
   // Hammer Decision with lot of duplicate publication for 2 * ThrottleTimeout
@@ -2312,7 +2312,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
       break;
     }
     ++totalSent;
-    publishRouteDb(duplicatePub);
+    sendKvPublication(duplicatePub);
   }
 
   // Receive RouteUpdate from Decision
@@ -2333,7 +2333,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   auto newAddr = toIpPrefix("face:b00c:babe::1/128");
   newPub.keyVals["prefix:1"] = createPrefixValue("1", 2, {newAddr});
   LOG(INFO) << "Advertising prefix update";
-  publishRouteDb(newPub);
+  sendKvPublication(newPub);
   // Receive RouteUpdate from Decision
   auto routes2 = recvMyRouteDb(decisionPub, "1", serializer);
   EXPECT_EQ(999, routes2.routes.size()); // Route to all nodes except mine
