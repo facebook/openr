@@ -60,12 +60,12 @@ MockNetlinkSystemHandler::getAllNeighbors(
     std::vector<thrift::NeighborEntry>& neighborDb) {
   VLOG(3) << "Query all reachable neighbors from Netlink";
   SYNCHRONIZED(neighborDb_) {
-    for (const auto kv : neighborDb_) {
+    for (const auto& kv : neighborDb_) {
       thrift::NeighborEntry neighborEntry = thrift::NeighborEntry(
           FRAGILE,
           kv.first.first,
           toBinaryAddress(kv.first.second),
-          kv.second.toString(),
+          kv.second.getLinkAddress()->toString(),
           true);
       neighborDb.push_back(neighborEntry);
     }
@@ -78,7 +78,7 @@ MockNetlinkSystemHandler::sendLinkEvent(
   // Update linkDb_
   SYNCHRONIZED(linkDb_) {
     if (!linkDb_.count(ifName)) {
-      LinkAttributes newLinkEntry;
+      fbnl::LinkAttribute newLinkEntry;
       newLinkEntry.isUp = isUp;
       newLinkEntry.ifIndex = ifIndex;
       linkDb_.emplace(ifName, newLinkEntry);

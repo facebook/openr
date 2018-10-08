@@ -587,19 +587,19 @@ using NlUnicastRoutesDb = std::unordered_map<uint8_t, NlUnicastRoutes>;
 
 /**
  * Multicast and link routes do not have nextHop IP
- * key=>(destination, ifName)
- * value=> route object
+ * key => (destination, ifName)
+ * value => route object
  */
 using NlMulticastRoutes = std::unordered_map<
-                            std::pair<folly::CIDRNetwork, std::string>, Route>;
+    std::pair<folly::CIDRNetwork, std::string>, Route>;
 
-// protocolId=>routes
+// protocolId => routes
 using NlMulticastRoutesDb = std::unordered_map<uint8_t, NlMulticastRoutes>;
 
 using NlLinkRoutes = std::unordered_map<
-                            std::pair<folly::CIDRNetwork, std::string>, Route>;
+    std::pair<folly::CIDRNetwork, std::string>, Route>;
 
-// protocolId=>routes
+// protocolId => routes
 using NlLinkRoutesDb = std::unordered_map<uint8_t, NlLinkRoutes>;
 
 /**
@@ -607,8 +607,8 @@ using NlLinkRoutesDb = std::unordered_map<uint8_t, NlLinkRoutes>;
  * Map of neighbors that are reachable
  * link name, destination IP and link Address
  */
-using NlNeighbors = std::
-    unordered_map<std::pair<std::string, folly::IPAddress>, Neighbor>;
+using NlNeighbors = std::unordered_map<
+    std::pair<std::string, folly::IPAddress>, Neighbor>;
 
 // keyed by link name
 using NlLinks = std::unordered_map<std::string, LinkAttribute>;

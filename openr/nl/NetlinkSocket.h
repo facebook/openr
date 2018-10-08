@@ -84,9 +84,8 @@ struct PrefixCmp {
 class NetlinkSocket {
  public:
 
-   // A simple collection of handlers invoked on relevant events
-   // This object is passed to NetlinkSubscriber
-   // If caller is not interested in a handler, it can simply not override it
+   // A simple collection of handlers invoked on relevant netlink events. If
+   // caller is not interested in a handler, it can simply not override it
    class EventsHandler {
     public:
      EventsHandler() = default;
@@ -335,7 +334,7 @@ class NetlinkSocket {
 
  private:
    // This is the callback we pass into libnl when data is ready on the socket
-   // The opaque data will contain the user registered NetlinkSubscriber
+   // The opaque data will contain the user registered EventHandler
    // These are static to match C function vector prototype
    static void routeCacheCB(
      struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;

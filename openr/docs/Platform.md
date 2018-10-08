@@ -15,8 +15,8 @@ For more information about message formats, checkout
 ### Netlink System Handler
 ---
 
-Inherits from `NetlinkSubscriber`, a simple wrapper over Netlink Socket for
-subscribing link/address/neighbor events.
+Inherits from `NetlinkSocket::EventHandler`, a simple wrapper over Netlink
+Socket for subscribing link/address/neighbor events.
 Publishes system dependent link activity (address or status) learned via
 `netlink` in real-time to clients (i.e.LinkMonitor) of Platform.
 Provides thrift service interface for client modules (i.e. LinkMonitor) to
