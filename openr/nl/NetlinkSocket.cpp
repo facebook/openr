@@ -1,5 +1,11 @@
-#include "NetlinkSocket.h"
-#include "NetlinkException.h"
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#include <openr/nl/NetlinkSocket.h>
 
 namespace {
 const folly::StringPiece kRouteObjectStr("route/route");
@@ -367,7 +373,7 @@ folly::Future<folly::Unit> NetlinkSocket::addRoute(Route route) {
              doAddMulticastRoute(std::move(r));
              break;
            default:
-             throw NetlinkException(
+             throw fbnl::NlException(
                  folly::sformat("Unsupported route type {}", (int)type));
          }
          p.setValue();
@@ -399,7 +405,7 @@ void NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     int err =
       rtnl_route_add(reqSock_, route.fromNetlinkRoute(), NLM_F_REPLACE);
     if (0 != err) {
-      throw NetlinkException(folly::sformat(
+      throw fbnl::NlException(folly::sformat(
           "Could not add V4 Route to: {} Error: {}",
           folly::IPAddress::networkToString(dest),
           nl_geterror(err)));
@@ -413,7 +419,7 @@ void NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     if (iter != unicastRoutes.end()) {
       int err = rtnl_route_delete(reqSock_, iter->second.fromNetlinkRoute(), 0);
       if (0 != err && -NLE_OBJ_NOTFOUND != err) {
-        throw NetlinkException(
+        throw fbnl::NlException(
           folly::sformat("Failed to delete route {} Error: {}",
           folly::IPAddress::networkToString(dest),
           nl_geterror(err)));
@@ -421,7 +427,7 @@ void NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     }
     int err = rtnl_route_add(reqSock_, route.fromNetlinkRoute(), 0);
     if (0 != err) {
-      throw NetlinkException(
+      throw fbnl::NlException(
         folly::sformat("Could not add V6 Route to: {} Error: {}",
                        folly::IPAddress::networkToString(dest),
                        nl_geterror(err)));
@@ -456,7 +462,7 @@ NetlinkSocket::delRoute(Route route) {
               doDeleteMulticastRoute(std::move(r));
               break;
             default:
-              throw NetlinkException(
+              throw fbnl::NlException(
                   folly::sformat("Unsupported route type {}", (int)type));
           }
           p.setValue();
@@ -473,7 +479,7 @@ NetlinkSocket::delRoute(Route route) {
 void NetlinkSocket::checkUnicastRoute(const Route &route) {
   const auto& prefix = route.getDestination();
   if (prefix.first.isMulticast() || prefix.first.isLinkLocal()) {
-    throw NetlinkException(
+    throw fbnl::NlException(
       folly::sformat("Invalid unicast route type for: {}",
       folly::IPAddress::networkToString(prefix)));
   }
@@ -494,7 +500,7 @@ void NetlinkSocket::doDeleteUnicastRoute(Route route) {
   // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
   // some routes when interface goes down
   if (err != 0 && -NLE_OBJ_NOTFOUND != err) {
-    throw NetlinkException(folly::sformat(
+    throw fbnl::NlException(folly::sformat(
         "Failed to delete route {} Error: {}",
         folly::IPAddress::networkToString(route.getDestination()),
         nl_geterror(err)));
@@ -526,7 +532,7 @@ void NetlinkSocket::doAddMulticastRoute(Route route) {
 
   int err = rtnl_route_add(reqSock_, route.fromNetlinkRoute(), 0);
   if (err != 0) {
-    throw NetlinkException(folly::sformat(
+    throw fbnl::NlException(folly::sformat(
         "Failed to add multicast route {} Error: {}",
         folly::IPAddress::networkToString(prefix),
         nl_geterror(err)));
@@ -537,12 +543,12 @@ void NetlinkSocket::doAddMulticastRoute(Route route) {
 void NetlinkSocket::checkMulticastRoute(const Route &route) {
   auto prefix = route.getDestination();
   if (not prefix.first.isMulticast()) {
-    throw NetlinkException(
+    throw fbnl::NlException(
       folly::sformat("Invalid multicast address {}",
       folly::IPAddress::networkToString(prefix)));
   }
   if (not route.getRouteIfName().hasValue()) {
-    throw NetlinkException(
+    throw fbnl::NlException(
       folly::sformat("Need set Iface name for multicast address {}",
       folly::IPAddress::networkToString(prefix)));
   }
@@ -570,7 +576,7 @@ void NetlinkSocket::doDeleteMulticastRoute(Route route) {
 
   int err = rtnl_route_delete(reqSock_, iter->second.fromNetlinkRoute(), 0);
   if (err != 0) {
-    throw NetlinkException(folly::sformat(
+    throw fbnl::NlException(folly::sformat(
         "Failed to delete multicast route {} Error: {}",
         folly::IPAddress::networkToString(prefix),
         nl_geterror(err)));
@@ -688,7 +694,7 @@ void NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     }
     int err = rtnl_route_delete(reqSock_, iter->second.fromNetlinkRoute(), 0);
     if (err != 0) {
-      throw NetlinkException(folly::sformat(
+      throw fbnl::NlException(folly::sformat(
           "Could not del link Route to: {} dev {} Error: {}",
           folly::IPAddress::networkToString(routeToDel.first),
           routeToDel.second,
@@ -702,7 +708,7 @@ void NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     }
     int err = rtnl_route_add(reqSock_, routeToAdd.second.fromNetlinkRoute(), 0);
     if (err != 0) {
-      throw NetlinkException(folly::sformat(
+      throw fbnl::NlException(folly::sformat(
           "Could not add link Route to: {} dev {} Error: {}",
           folly::IPAddress::networkToString(routeToAdd.first.first),
           routeToAdd.first.second,
@@ -892,13 +898,13 @@ NetlinkSocket::addIfAddress(IfAddress ifAddress) {
 void NetlinkSocket::doAddIfAddress(
   struct rtnl_addr* addr) {
   if (nullptr == addr) {
-    throw NetlinkException("Can't get rtnl_addr");
+    throw fbnl::NlException("Can't get rtnl_addr");
   }
   int err = rtnl_addr_add(reqSock_, addr, 0);
   // NLE_EXIST means duplicated address
   // we treat it as success for backward compatibility
   if (NLE_SUCCESS != err && -NLE_EXIST != err) {
-    throw NetlinkException(folly::sformat(
+    throw fbnl::NlException(folly::sformat(
       "Failed to add address Error: {}",
       nl_geterror(err)));
   }
@@ -911,7 +917,7 @@ NetlinkSocket::delIfAddress(IfAddress ifAddress) {
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
   if (!ifAddress.getPrefix().hasValue()) {
-    NetlinkException ex("Prefix must be set");
+    fbnl::NlException ex("Prefix must be set");
     promise.setException(std::move(ex));
     return future;
   }
@@ -976,10 +982,10 @@ void NetlinkSocket::doSyncIfAddress(
   std::vector<folly::CIDRNetwork> newPrefixes;
   for (const auto& addr : addrs) {
     if (addr.getIfIndex() != ifIndex) {
-      throw NetlinkException("Inconsistent ifIndex in addrs");
+      throw fbnl::NlException("Inconsistent ifIndex in addrs");
     }
     if (!addr.getPrefix().hasValue()) {
-      throw NetlinkException("Prefix must be set when sync addresses");
+      throw fbnl::NlException("Prefix must be set when sync addresses");
     }
     newPrefixes.emplace_back(addr.getPrefix().value());
   }
@@ -1020,13 +1026,13 @@ void NetlinkSocket::doSyncIfAddress(
 
 void NetlinkSocket::doDeleteAddr(struct rtnl_addr* addr) {
   if (nullptr == addr) {
-    throw NetlinkException("Can't get rtnl_addr");
+    throw fbnl::NlException("Can't get rtnl_addr");
   }
   int err = rtnl_addr_delete(reqSock_, addr, 0);
   // NLE_NOADDR means delete invalid address
   // we treat it as success for backward compatibility
   if (NLE_SUCCESS != err && -NLE_NOADDR != err) {
-    throw NetlinkException(folly::sformat(
+    throw fbnl::NlException(folly::sformat(
       "Failed to delete address Error: {}",
       nl_geterror(err)));
   }

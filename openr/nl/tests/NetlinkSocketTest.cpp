@@ -14,12 +14,12 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Exception.h>
 #include <folly/Format.h>
-#include <folly/MacAddress.h>
 #include <folly/gen/Base.h>
-
+#include <folly/MacAddress.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#include <openr/nl/NetlinkSocket.h>
 
 extern "C" {
 #include <netlink/cache.h>
@@ -32,8 +32,6 @@ extern "C" {
 #include <linux/if.h>
 #include <sys/ioctl.h>
 }
-
-#include <openr/nl/NetlinkSocket.h>
 
 using namespace openr;
 using namespace openr::fbnl;

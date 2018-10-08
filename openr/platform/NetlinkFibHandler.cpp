@@ -112,13 +112,13 @@ NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
   auto ret = thrift::Platform_constants::clientIdtoProtocolId().find(clientId);
   if (ret == thrift::Platform_constants::clientIdtoProtocolId().end()) {
     auto ex =
-      NetlinkException(folly::sformat("Invalid ClientId : {}", clientId));
+      fbnl::NlException(folly::sformat("Invalid ClientId : {}", clientId));
     promise.setException(ex);
     return folly::makeUnexpected(false);
   }
   if (ret->second < kMinRouteProtocolId || ret->second > kMaxRouteProtocolId) {
-    auto ex =
-      NetlinkException(folly::sformat("Invalid Protocol Id : {}", ret->second));
+    auto ex = fbnl::NlException(
+        folly::sformat("Invalid Protocol Id : {}", ret->second));
     promise.setException(ex);
     return folly::makeUnexpected(false);
   }

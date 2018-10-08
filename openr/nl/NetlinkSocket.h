@@ -8,18 +8,12 @@
 #pragma once
 
 #include <boost/variant.hpp>
-
-#include "NetlinkException.h"
-#include "NetlinkTypes.h"
-
+#include <fbzmq/async/ZmqEventLoop.h>
 #include <folly/AtomicBitSet.h>
 #include <folly/IPAddress.h>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
-
-#include <fbzmq/async/ZmqEventLoop.h>
-
-#include <folly/futures/Future.h>
+#include <openr/nl/NetlinkTypes.h>
 
 namespace openr {
 namespace fbnl {
@@ -177,10 +171,10 @@ class NetlinkSocket {
     * always provide unique nextHops and not cumulative list.
     * Currently we do not enforce checks from local cache,
     * but kernel will reject the request
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     *
     * Add multicast route, see RouteBuilder::buildMulticastRoute()
-    * @throws NetlinkException if the route already existed
+    * @throws fbnl::NlException if the route already existed
     */
    virtual folly::Future<folly::Unit> addRoute(Route route);
 
@@ -190,7 +184,7 @@ class NetlinkSocket {
     * exactly the same destination and nexthops as in route table.
     * For convience, one can just set destination, this will delete all nextHops
     * accociated with it.
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<folly::Unit> delRoute(Route route);
 
@@ -200,7 +194,7 @@ class NetlinkSocket {
     * Add/Update routes in 'newRouteDb'
     * Basically when there's mismatch between backend kernel and route table in
     * application, we sync kernel routing table with given data source
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<folly::Unit>
    syncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes newRouteDb);
@@ -208,41 +202,41 @@ class NetlinkSocket {
    /**
     * Delete routes that not in the 'newRouteDb' but in kernel
     * Add/Update routes in 'newRouteDb'
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<folly::Unit>
    syncLinkRoutes(uint8_t protocolId, NlLinkRoutes newRouteDb);
 
    /**
     * Get cached unicast routing by protocol ID
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<NlUnicastRoutes>
    getCachedUnicastRoutes(uint8_t protocolId) const;
 
    /**
     * Get cached multicast routing by protocol ID
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<NlMulticastRoutes>
    getCachedMulticastRoutes(uint8_t protocolId) const;
 
    /**
     * Get cached link route by protocol ID
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<NlLinkRoutes>
    getCachedLinkRoutes(uint8_t protocolId) const;
 
    /**
     * Get number of all cached routes
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<int64_t> getRouteCount() const;
 
    /**
     * Add Interface address e.g. ip addr add 192.168.1.1/24 dev em1
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<folly::Unit> addIfAddress(fbnl::IfAddress ifAddr);
 
@@ -257,7 +251,7 @@ class NetlinkSocket {
 
     /**
      * Sync addrs on the specific iface, the iface in addrs should be the same,
-     * otherwiese the method will throw NetlinkException.
+     * otherwiese the method will throw fbnl::NlException.
      * There are two steps to sync address
      * 1. Add 'addrs' to the iface
      * 2. Delete addresses according to ifIndex, family, scope
@@ -285,13 +279,13 @@ class NetlinkSocket {
    /**
     * Get interface index from name
     * 0 means no such interface
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<int> getIfIndex(const std::string& ifName);
 
    /**
     * Get interface name form index
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<std::string> getIfName(int ifIndex) const;
 
@@ -299,7 +293,7 @@ class NetlinkSocket {
     * Get all links entries
     * This will invoke subscriber methods even if eventLoop is not yet
     * running. Subscriber method will be invoked in calling thread context
-    * @throws NetlinkException
+    * @throws fbnl::NlException
     */
    virtual folly::Future<NlLinks> getAllLinks();
 

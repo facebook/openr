@@ -13,10 +13,10 @@
 #include <folly/ScopeGuard.h>
 #include <folly/Subprocess.h>
 #include <folly/system/Shell.h>
-
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#include <openr/nl/NetlinkSocket.h>
 
 extern "C" {
 #include <netlink/errno.h>
@@ -25,8 +25,6 @@ extern "C" {
 #include <netlink/route/link/veth.h>
 #include <netlink/socket.h>
 }
-
-#include <openr/nl/NetlinkSocket.h>
 
 using namespace openr;
 using namespace openr::fbnl;

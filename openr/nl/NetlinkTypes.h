@@ -7,13 +7,14 @@
 
 #pragma once
 
-#include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
-#include <folly/Optional.h>
+#include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
+#include <folly/Optional.h>
 
 extern "C" {
 #include <linux/if.h>
@@ -22,13 +23,20 @@ extern "C" {
 #include <netlink/netlink.h>
 #include <netlink/route/addr.h>
 #include <netlink/route/link.h>
-#include <netlink/route/route.h>
 #include <netlink/route/neighbour.h>
+#include <netlink/route/route.h>
 #include <netlink/socket.h>
 }
 
 namespace openr {
 namespace fbnl {
+
+class NlException : public std::runtime_error {
+ public:
+  explicit NlException(const std::string& exception)
+      : std::runtime_error(
+            folly::sformat("Netlink exception: {} ", exception)) {}
+};
 
 const uint8_t DEFAULT_PROTOCOL_ID = 99;
 
@@ -159,7 +167,7 @@ class RouteBuilder {
    * Build route (default: unicast)
    * @required parameter:
    * ProtocolId, Destination, Nexthop
-   * @throw NetlinkException on failed
+   * @throw fbnl::NlException on failed
    */
   Route buildRoute() const;
 
@@ -171,7 +179,7 @@ class RouteBuilder {
    * Build multicast route
    * @required parameter:
    * ProtocolId, Destination, Iface Name, Iface Index
-   * @throw NetlinkException on failed
+   * @throw fbnl::NlException on failed
    */
   Route buildMulticastRoute() const;
 
@@ -179,7 +187,7 @@ class RouteBuilder {
    * Build link route
    * @required parameter:
    * ProtocolId, Destination, Iface Name, Iface Index
-   * @throw NetlinkException on failed
+   * @throw fbnl::NlException on failed
    */
   Route buildLinkRoute() const;
 

@@ -442,7 +442,6 @@ install(FILES
 )
 
 install(FILES
-  nl/NetlinkException.h
   nl/NetlinkSocket.h
   nl/NetlinkTypes.h
   DESTINATION include/openr/nl
