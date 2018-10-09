@@ -121,6 +121,7 @@ NetlinkSocket::~NetlinkSocket() {
   // Manager will release our caches internally
   nl_cache_mngr_free(cacheManager_);
   nl_socket_free(subSock_);
+  nl_close(reqSock_);
   nl_socket_free(reqSock_);
 
   routeCache_ = nullptr;
@@ -152,12 +153,16 @@ void NetlinkSocket::handleRouteEvent(
   }
 
   if (handler_ && runHandler && eventFlags_[ROUTE_EVENT]) {
-    RouteBuilder builder;
-    auto route = builder.buildFromObject(routeObj);
-    std::string ifName =
-        route.getRouteIfName().hasValue() ? route.getRouteIfName().value() : "";
-    EventVariant event = std::move(route);
-    handler_->handleEvent(ifName, action, event);
+    try {
+      RouteBuilder builder;
+      auto route = builder.buildFromObject(routeObj);
+      std::string ifName = route.getRouteIfName().hasValue()
+          ? route.getRouteIfName().value() : "";
+      EventVariant event = std::move(route);
+      handler_->handleEvent(ifName, action, event);
+    } catch (std::exception& e) {
+      LOG(ERROR) << "Handle route event failed: " << folly::exceptionStr(e);
+    }
   }
 }
 

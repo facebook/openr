@@ -483,6 +483,7 @@ main(int argc, char** argv) {
   std::shared_ptr<ThreadManager> thriftThreadMgr;
 
   auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  std::shared_ptr<openr::fbnl::NetlinkSocket> nlSocket;
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
   std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
   std::unique_ptr<std::thread> netlinkFibServerThread;
@@ -498,7 +499,7 @@ main(int argc, char** argv) {
     auto eventPublisher = std::make_shared<PlatformPublisher>(
         context, PlatformPublisherUrl{FLAGS_platform_pub_url});
 
-    auto nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
+    nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
         nlEventLoop.get(), eventPublisher);
     // Subscribe selected network events
     nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
@@ -1059,6 +1060,11 @@ main(int argc, char** argv) {
   if (thriftThreadMgr) {
     thriftThreadMgr->stop();
   }
+
+  if (nlSocket) {
+    nlSocket.reset();
+  }
+
   if (watchdog) {
     watchdog->stop();
     watchdog->waitUntilStopped();
