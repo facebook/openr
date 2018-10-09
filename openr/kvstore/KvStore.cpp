@@ -435,6 +435,8 @@ KvStore::mergeKeyValues(
     //
     if (not value.value.hasValue() and
         kvStoreIt != kvStore.end() and
+        value.version == kvStoreIt->second.version and
+        value.originatorId == kvStoreIt->second.originatorId and
         value.ttlVersion > kvStoreIt->second.ttlVersion) {
       updateTtlNeeded = true;
     }
@@ -1281,9 +1283,14 @@ KvStore::countdownTtl() {
     if (it != kvStore_.end() && it->second.version == top.version &&
         it->second.ttlVersion == top.ttlVersion) {
       expiredKeys.push_back(top.key);
-      kvStore_.erase(it);
-      LOG(WARNING) << "Delete expired key: " << top.key;
+      LOG(WARNING)
+        << "Delete expired (key, version, originatorId, ttlVersion) "
+        << folly::sformat(
+              "({}, {}, {}, {})",
+              top.key, it->second.version,
+              it->second.originatorId, it->second.ttlVersion);
       logKvEvent("KEY_EXPIRE", top.key);
+      kvStore_.erase(it);
     }
     ttlCountdownQueue_.pop();
   }

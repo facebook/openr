@@ -665,9 +665,12 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
         // NOTE: We don't need to advertise the value back
         if (sk != keyTtlBackoffs_.end() and
             sk->second.first.ttlVersion < rcvdValue.ttlVersion) {
-          VLOG(1) << "Bumping TTL version for key " << key << " to "
-                  << (rcvdValue.ttlVersion + 1) << " from "
-                  << setValue.ttlVersion;
+          VLOG(1) << "Bumping TTL version for (key, version, originatorId) "
+                  << folly::sformat(
+                        "({}, {}, {})",
+                        key, rcvdValue.version, rcvdValue.originatorId)
+                  << " to " << (rcvdValue.ttlVersion + 1)
+                  << " from " << setValue.ttlVersion;
           setValue.ttlVersion = rcvdValue.ttlVersion + 1;
         }
       }
@@ -766,17 +769,20 @@ KvStoreClient::advertisePendingKeys() {
 
     // Proceed only if backoff is active
     auto& backoff = backoffs_.at(key);
+    auto const& eventType = backoff.canTryNow() ? "Advertising" : "Skipping";
+    VLOG(1) << eventType << " (key, version, originatorId, ttlVersion) "
+            << folly::sformat(
+                  "({}, {}, {}, {})",
+                  key, thriftValue.version,
+                  thriftValue.originatorId, thriftValue.ttlVersion);
+    VLOG(2) << "With value: " << folly::humanify(thriftValue.value.value());
+
     if (not backoff.canTryNow()) {
-      VLOG(2) << "Skipping key/val: " << key << "/"
-              << folly::humanify(thriftValue.value.value());
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
       continue;
     }
 
     // Apply backoff
-    VLOG(2) << "Advertising key/val: " << key << "/"
-            << folly::humanify(thriftValue.value.value())
-            << " with backoff applied.";
     backoff.reportError();
     timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
@@ -836,10 +842,11 @@ KvStoreClient::advertiseTtlUpdates() {
     // Set in keyVals which is going to be advertised to the kvStore.
     DCHECK(not thriftValue.value);
 
-    VLOG(2) << "Advertising ttl update for key: " << key
-            << ", version: " << thriftValue.version
-            << ", ttlVersion: " << thriftValue.ttlVersion;
-
+    VLOG(1) << "Advertising ttl update (key, version, originatorId, ttlVersion)"
+            << folly::sformat(
+                  " ({}, {}, {}, {})",
+                  key, thriftValue.version,
+                  thriftValue.originatorId, thriftValue.ttlVersion);
     keyVals.emplace(key, thriftValue);
   }
 
@@ -868,6 +875,7 @@ KvStoreClient::setKeysHelper(
   for (auto const& kv : keyVals) {
     VLOG(3) << "Advertising key: " << kv.first
             << ", version: " << kv.second.version
+            << ", originatorId: " << kv.second.originatorId
             << ", ttlVersion: " << kv.second.ttlVersion
             << ", val: " << (kv.second.value.hasValue() ? "valid" : "null");
     if (not kv.second.value.hasValue()) {
