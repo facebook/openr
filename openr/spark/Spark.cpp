@@ -48,7 +48,7 @@ const int kSparkHopLimit = 255;
 const size_t kFastWndSize = 10;
 
 // number of samples in slow sliding window
-const size_t kSlowWndSize = 30;
+const size_t kSlowWndSize = 60;
 
 // lower threshold, in percentage
 const uint8_t kLoThreshold = 2;
