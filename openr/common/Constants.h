@@ -209,7 +209,7 @@ class Constants {
   // int version
   static constexpr int64_t kTtlInfinity{INT32_MIN};
   // min ttl expiry time to qualify for peer sync
-  static constexpr int64_t kTtlThreshold{20};
+  static constexpr std::chrono::milliseconds kTtlThreshold{20};
   // ms version
   static constexpr std::chrono::milliseconds kTtlInfInterval{kTtlInfinity};
 

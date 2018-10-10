@@ -417,7 +417,7 @@ TEST(KvStoreClient, PersistKeyTest) {
   });
 
   // check after few ms if key is deleted,
-  evl.scheduleTimeout(std::chrono::milliseconds(30), [&]() noexcept {
+  evl.scheduleTimeout(std::chrono::milliseconds(60), [&]() noexcept {
     auto maybeVal3 = client1->getKey("test_key3");
     ASSERT_FALSE(maybeVal3.hasValue());
   });

@@ -36,6 +36,7 @@ struct TtlCountdownQueueEntry {
   std::string key;
   int64_t version{0};
   int64_t ttlVersion{0};
+  std::string originatorId;
   bool
   operator>(TtlCountdownQueueEntry other) const {
     return expiryTime > other.expiryTime;
@@ -197,11 +198,15 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // originatorId => optional parameter indicating name of node who originated
   //                 the publication.
   void floodPublication(
-      thrift::Publication const& publication,
+      thrift::Publication&& publication,  // rvalue to enforce optimization
       folly::Optional<std::string> originatorId);
 
   // update Time to expire filed in Publication
-  void updatePublicationTtl(thrift::Publication& thriftPub);
+  // removeAboutToExpire: knob to remove keys which are about to expire
+  // and hence do not want to include them. Constants::kTtlThreshold
+  void updatePublicationTtl(
+      thrift::Publication& thriftPub,
+      bool removeAboutToExpire=false);
 
   // count number of prefixes in kvstore
   int getPrefixCount();

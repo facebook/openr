@@ -488,6 +488,280 @@ TEST(KvStore, MonitorReport) {
   LOG(INFO) << "KvStore thread finished";
 }
 
+/**
+ * Test following with single KvStore.
+ * - TTL propagation is carried out correctly
+ * - Correct TTL reflects back in GET/KEY_DUMP/KEY_HASH
+ * - Applying ttl updates reflects properly
+ */
+TEST(KvStore, TtlVerification) {
+  fbzmq::Context context;
+  const std::chrono::milliseconds testPollTimeout{100};
+  const std::string key{"dummyKey"};
+  const thrift::Value value(
+        apache::thrift::FRAGILE,
+        5, /* version */
+        "node1", /* node id */
+        "dummyValue",
+        0, /* ttl */
+        5 /* ttl version */,
+        0 /* hash */);
+
+  KvStoreWrapper kvStore(
+      context,
+      "test",
+      std::chrono::seconds(1) /* Db Sync Interval */,
+      std::chrono::seconds(100) /* Monitor Submit Interval */,
+      std::unordered_map<std::string, thrift::PeerSpec>{});
+  kvStore.run();
+
+  //
+  // 1. Advertise key-value with 1ms rtt
+  // - This will get added to local KvStore but will never be published
+  //   to other nodes or doesn't show up in GET request
+  {
+    auto thriftValue = value;
+    thriftValue.ttl = 1;
+    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+
+    // KEY_GET
+    EXPECT_FALSE(kvStore.getKey(key).hasValue());
+
+    // KEY_DUMP
+    EXPECT_EQ(0, kvStore.dumpAll().size());
+
+    // HASH_DUMP
+    EXPECT_EQ(0, kvStore.dumpAll().size());
+
+    // We will receive key-expiry publication but no key-advertisement
+    auto publication = kvStore.recvPublication(testPollTimeout);
+    EXPECT_EQ(0, publication.keyVals.size());
+    ASSERT_EQ(1, publication.expiredKeys.size());
+    EXPECT_EQ(key, publication.expiredKeys.at(0));
+  }
+
+  //
+  // 2. Advertise key-value with just below kTtlThreshold.
+  // - Ensure we don't receive it over publication but do in GET request
+  //
+  {
+    auto thriftValue = value;
+    thriftValue.ttl = Constants::kTtlThreshold.count() - 1;
+    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+
+    // KEY_GET
+    auto getRes = kvStore.getKey(key);
+    ASSERT_TRUE(getRes.hasValue());
+    EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
+    getRes->ttl = thriftValue.ttl;
+    getRes->hash = 0;
+    EXPECT_EQ(thriftValue, getRes.value());
+
+    // KEY_DUMP
+    auto dumpRes = kvStore.dumpAll();
+    EXPECT_EQ(1, dumpRes.size());
+    ASSERT_EQ(1, dumpRes.count(key));
+    auto& dumpResValue = dumpRes.at(key);
+    EXPECT_GE(thriftValue.ttl, dumpResValue.ttl + 1);
+    dumpResValue.ttl = thriftValue.ttl;
+    dumpResValue.hash = 0;
+    EXPECT_EQ(thriftValue, dumpResValue);
+
+    // HASH_DUMP
+    auto hashRes = kvStore.dumpHashes();
+    EXPECT_EQ(1, hashRes.size());
+    ASSERT_EQ(1, hashRes.count(key));
+    auto& hashResValue = hashRes.at(key);
+    EXPECT_GE(thriftValue.ttl, hashResValue.ttl + 1);
+    hashResValue.ttl = thriftValue.ttl;
+    hashResValue.hash = 0;
+    hashResValue.value = thriftValue.value;
+    EXPECT_EQ(thriftValue, hashResValue);
+
+    // We will receive key-expiry publication but no key-advertisement
+    auto publication = kvStore.recvPublication(testPollTimeout);
+    EXPECT_EQ(0, publication.keyVals.size());
+    ASSERT_EQ(1, publication.expiredKeys.size());
+    EXPECT_EQ(key, publication.expiredKeys.at(0));
+  }
+
+  //
+  // 3. Advertise key with long enough ttl, so that it doesn't expire
+  // - Ensure we receive publication over pub socket
+  // - Ensure we receive key-value via GET request
+  //
+  {
+    auto thriftValue = value;
+    thriftValue.ttl = 50000;
+    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+
+    // KEY_GET
+    auto getRes = kvStore.getKey(key);
+    ASSERT_TRUE(getRes.hasValue());
+    EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
+    getRes->ttl = thriftValue.ttl;
+    getRes->hash = 0;
+    EXPECT_EQ(thriftValue, getRes.value());
+
+    // KEY_DUMP
+    auto dumpRes = kvStore.dumpAll();
+    EXPECT_EQ(1, dumpRes.size());
+    ASSERT_EQ(1, dumpRes.count(key));
+    auto& dumpResValue = dumpRes.at(key);
+    EXPECT_GE(thriftValue.ttl, dumpResValue.ttl + 1);
+    dumpResValue.ttl = thriftValue.ttl;
+    dumpResValue.hash = 0;
+    EXPECT_EQ(thriftValue, dumpResValue);
+
+    // HASH_DUMP
+    auto hashRes = kvStore.dumpHashes();
+    EXPECT_EQ(1, hashRes.size());
+    ASSERT_EQ(1, hashRes.count(key));
+    auto& hashResValue = hashRes.at(key);
+    EXPECT_GE(thriftValue.ttl, hashResValue.ttl + 1);
+    hashResValue.ttl = thriftValue.ttl;
+    hashResValue.hash = 0;
+    hashResValue.value = thriftValue.value;
+    EXPECT_EQ(thriftValue, hashResValue);
+
+    // We will receive key-advertisement
+    auto publication = kvStore.recvPublication(testPollTimeout);
+    EXPECT_EQ(1, publication.keyVals.size());
+    ASSERT_EQ(0, publication.expiredKeys.size());
+    ASSERT_EQ(1, publication.keyVals.count(key));
+    auto& pubValue = publication.keyVals.at(key);
+    // TTL decremented by 1 before it gets forwarded out
+    EXPECT_GE(thriftValue.ttl, pubValue.ttl + 1);
+    pubValue.ttl = thriftValue.ttl;
+    pubValue.hash = 0;
+    EXPECT_EQ(thriftValue, pubValue);
+  }
+
+  //
+  // 4. Advertise ttl-update to set it to new value
+  //
+  {
+    auto thriftValue = value;
+    thriftValue.value = folly::none;
+    thriftValue.ttl = 30000;
+    thriftValue.ttlVersion += 1;
+    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+
+    // KEY_GET
+    auto getRes = kvStore.getKey(key);
+    ASSERT_TRUE(getRes.hasValue());
+    EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
+    EXPECT_EQ(thriftValue.version, getRes->version);
+    EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
+    EXPECT_EQ(thriftValue.ttlVersion, getRes->ttlVersion);
+    EXPECT_EQ(value.value, getRes->value);
+
+    // We will receive update over PUB socket
+    auto publication = kvStore.recvPublication(testPollTimeout);
+    EXPECT_EQ(1, publication.keyVals.size());
+    ASSERT_EQ(0, publication.expiredKeys.size());
+    ASSERT_EQ(1, publication.keyVals.count(key));
+    auto& pubValue = publication.keyVals.at(key);
+    // TTL decremented by 1 before it gets forwarded out
+    EXPECT_FALSE(pubValue.value.hasValue());
+    EXPECT_GE(thriftValue.ttl, pubValue.ttl + 1);
+    EXPECT_EQ(thriftValue.version, pubValue.version);
+    EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
+    EXPECT_EQ(thriftValue.ttlVersion, pubValue.ttlVersion);
+  }
+
+  //
+  // 5. Set ttl of key to INFINITE
+  //
+  {
+    auto thriftValue = value;
+    thriftValue.value = folly::none;
+    thriftValue.ttl = Constants::kTtlInfinity;
+    thriftValue.ttlVersion += 2;
+    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+
+    // KEY_GET - ttl should remain infinite
+    auto getRes = kvStore.getKey(key);
+    ASSERT_TRUE(getRes.hasValue());
+    EXPECT_EQ(Constants::kTtlInfinity, getRes->ttl);
+    EXPECT_EQ(thriftValue.version, getRes->version);
+    EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
+    EXPECT_EQ(thriftValue.ttlVersion, getRes->ttlVersion);
+    EXPECT_EQ(value.value, getRes->value);
+
+    // We will receive update over PUB socket
+    auto publication = kvStore.recvPublication(testPollTimeout);
+    EXPECT_EQ(1, publication.keyVals.size());
+    ASSERT_EQ(0, publication.expiredKeys.size());
+    ASSERT_EQ(1, publication.keyVals.count(key));
+    auto& pubValue = publication.keyVals.at(key);
+    // TTL should remain infinite
+    EXPECT_FALSE(pubValue.value.hasValue());
+    EXPECT_EQ(Constants::kTtlInfinity, pubValue.ttl);
+    EXPECT_EQ(thriftValue.version, pubValue.version);
+    EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
+    EXPECT_EQ(thriftValue.ttlVersion, pubValue.ttlVersion);
+  }
+
+  //
+  // 5. Set ttl of key back to a fixed value
+  //
+  {
+    auto thriftValue = value;
+    thriftValue.value = folly::none;
+    thriftValue.ttl = 20000;
+    thriftValue.ttlVersion += 3;
+    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+
+    // KEY_GET
+    auto getRes = kvStore.getKey(key);
+    ASSERT_TRUE(getRes.hasValue());
+    EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
+    EXPECT_EQ(thriftValue.version, getRes->version);
+    EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
+    EXPECT_EQ(thriftValue.ttlVersion, getRes->ttlVersion);
+    EXPECT_EQ(value.value, getRes->value);
+
+    // We will receive update over PUB socket
+    auto publication = kvStore.recvPublication(testPollTimeout);
+    EXPECT_EQ(1, publication.keyVals.size());
+    ASSERT_EQ(0, publication.expiredKeys.size());
+    ASSERT_EQ(1, publication.keyVals.count(key));
+    auto& pubValue = publication.keyVals.at(key);
+    // TTL decremented by 1 before it gets forwarded out
+    EXPECT_FALSE(pubValue.value.hasValue());
+    EXPECT_GE(thriftValue.ttl, pubValue.ttl + 1);
+    EXPECT_EQ(thriftValue.version, pubValue.version);
+    EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
+    EXPECT_EQ(thriftValue.ttlVersion, pubValue.ttlVersion);
+  }
+
+  //
+  // 6. Apply old ttl update and see no effect
+  //
+  {
+    auto thriftValue = value;
+    thriftValue.value = folly::none;
+    thriftValue.ttl = 10000;
+    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+
+    // KEY_GET
+    auto getRes = kvStore.getKey(key);
+    ASSERT_TRUE(getRes.hasValue());
+    EXPECT_GE(20000, getRes->ttl);  // Previous ttl was set to 20s
+    EXPECT_LE(10000, getRes->ttl);
+    EXPECT_EQ(value.version, getRes->version);
+    EXPECT_EQ(value.originatorId, getRes->originatorId);
+    EXPECT_EQ(value.ttlVersion + 3, getRes->ttlVersion);
+    EXPECT_EQ(value.value, getRes->value);
+
+    // We will receive update over PUB socket
+    EXPECT_THROW(kvStore.recvPublication(testPollTimeout), std::runtime_error);
+  }
+
+  kvStore.stop();
+}
+
 TEST_F(KvStoreTestFixture, LeafNode) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
@@ -671,7 +945,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
  * 6. Check store1 adds a new key with TTL equal to [default value - 200msec]
  * 7. Check TTL for existing key in store1 does not get updated
  */
-TEST_F(KvStoreTestFixture, PeerSyncTtlExpirey) {
+TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto store0 = createKvStore("store0", emptyPeers);
   auto store1 = createKvStore("store1", emptyPeers);
@@ -707,16 +981,22 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpirey) {
   EXPECT_TRUE(store0->setKey("test1", thriftVal1));
   auto maybeThriftVal = store0->getKey("test1");
   ASSERT_TRUE(maybeThriftVal.hasValue());
+  EXPECT_GE(kTtlMs, maybeThriftVal->ttl);
+  maybeThriftVal->ttl = kTtlMs;
   EXPECT_EQ(thriftVal1, *maybeThriftVal);
 
   EXPECT_TRUE(store0->setKey("test2", thriftVal2));
   maybeThriftVal = store0->getKey("test2");
   ASSERT_TRUE(maybeThriftVal.hasValue());
+  EXPECT_GE(kTtlMs, maybeThriftVal->ttl);
+  maybeThriftVal->ttl = kTtlMs;
   EXPECT_EQ(thriftVal2, *maybeThriftVal);
 
   EXPECT_TRUE(store1->setKey("test2", thriftVal2));
   maybeThriftVal = store1->getKey("test2");
   ASSERT_TRUE(maybeThriftVal.hasValue());
+  EXPECT_GE(kTtlMs, maybeThriftVal->ttl);
+  maybeThriftVal->ttl = kTtlMs;
   EXPECT_EQ(thriftVal2, *maybeThriftVal);
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -726,12 +1006,12 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpirey) {
   // key 'test1' should be added with remaining TTL
   maybeThriftVal = store1->getKey("test1");
   ASSERT_TRUE(maybeThriftVal.hasValue());
-  EXPECT_LE(maybeThriftVal.value().ttl, kTtlMs - 200);
+  EXPECT_GE(kTtlMs - 200, maybeThriftVal.value().ttl);
 
   // key 'test2' should not be updated, it should have kTtlMs
   maybeThriftVal = store1->getKey("test2");
   ASSERT_TRUE(maybeThriftVal.hasValue());
-  EXPECT_EQ(maybeThriftVal.value().ttl, kTtlMs);
+  EXPECT_GE(kTtlMs, maybeThriftVal.value().ttl);
 }
 
 /**
