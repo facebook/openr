@@ -164,7 +164,7 @@ std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::dumpAll(folly::Optional<KvStoreFilters> filters) {
   // Prepare request
   thrift::Request request;
-  request.cmd = thrift::Command::KEY_DUMP_ALL;
+  request.cmd = thrift::Command::KEY_DUMP;
   if (filters.hasValue()) {
     std::string keyPrefix =
       folly::join(",", filters.value().getKeyPrefixes());

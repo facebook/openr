@@ -1002,7 +1002,6 @@ KvStore::processRequest(
         fbzmq::Message::fromThriftObj(thriftPub, serializer_).value());
     break;
   }
-  case thrift::Command::KEY_DUMP_ALL:
   case thrift::Command::KEY_DUMP: {
     if (thriftReq.keyDumpParams.keyValHashes.hasValue()) {
       VLOG(3) << "Dump keys requested along with "
