@@ -350,7 +350,10 @@ Spark::Spark(
       enableV4_(enableV4),
       enableSubnetValidation_(enableSubnetValidation),
       reportUrl_(reportUrl),
-      reportSocket_(zmqContext),
+      reportSocket_(
+          zmqContext,
+          fbzmq::IdentityString{
+              openr::Constants::kSparkReportServerId.toString()}),
       cmdUrl_(cmdUrl),
       cmdSocket_(zmqContext),
       kKvStorePubPort_(kvStorePubPort),
@@ -393,7 +396,16 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
     LOG(FATAL) << "Error connecting to URL '" << cmdUrl_ << "' " << cmd.error();
   }
 
-  // create the socket to inform downstream consumer
+  // enable handover on report socket to new connection for duplicate identities
+  const int handover = 1;
+  const auto reportSockOpt = reportSocket_.setSockOpt(
+      ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
+  if (reportSockOpt.hasError()) {
+    LOG(FATAL) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
+               << reportSockOpt.error();
+  }
+
+  // bind report socket to inform downstream consumer
   const auto rep = reportSocket_.bind(fbzmq::SocketUrl{reportUrl_});
   if (rep.hasError()) {
     LOG(FATAL) << "Error connecting to URL '" << reportUrl_ << "' "
@@ -696,7 +708,14 @@ Spark::processNeighborRttChange(
       originator,
       neighbor.rtt.count(),
       neighbor.label);
-  reportSocket_.sendThriftObj(event, serializer_);
+  auto ret = reportSocket_.sendMultiple(
+      fbzmq::Message::from(
+          openr::Constants::kSparkReportClientId.toString()).value(),
+      fbzmq::Message(),
+      fbzmq::Message::fromThriftObj(event, serializer_).value());
+  if (ret.hasError()) {
+    LOG(ERROR) << "Error sending spark event: " << ret.error();
+  }
 }
 
 void
@@ -730,7 +749,14 @@ Spark::processNeighborHoldTimeout(
         neighbor.info,
         neighbor.rtt.count(),
         neighbor.label);
-    reportSocket_.sendThriftObj(event, serializer_);
+    auto ret = reportSocket_.sendMultiple(
+        fbzmq::Message::from(
+            openr::Constants::kSparkReportClientId.toString()).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(event, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending spark event: " << ret.error();
+    }
   } else {
     VLOG(2) << "Neighbor went down, but was not adjacent, not reporting";
   }
@@ -953,7 +979,15 @@ Spark::processHelloPacket() {
         originator,
         neighbor.rtt.count(),
         neighbor.label);
-    reportSocket_.sendThriftObj(event, serializer_);
+    auto ret = reportSocket_.sendMultiple(
+        fbzmq::Message::from(
+            openr::Constants::kSparkReportClientId.toString()).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(event, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending spark event: " << ret.error();
+    }
+
     return;
   }
 
@@ -994,7 +1028,14 @@ Spark::processHelloPacket() {
         originator,
         neighbor.rtt.count(),
         neighbor.label);
-    reportSocket_.sendThriftObj(event, serializer_);
+    auto ret = reportSocket_.sendMultiple(
+        fbzmq::Message::from(
+            openr::Constants::kSparkReportClientId.toString()).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(event, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending spark event: " << ret.error();
+    }
     neighbor.isAdjacent = true;
 
     // Start hold-timer
@@ -1019,7 +1060,14 @@ Spark::processHelloPacket() {
         originator,
         neighbor.rtt.count(),
         neighbor.label);
-    reportSocket_.sendThriftObj(event, serializer_);
+    auto ret = reportSocket_.sendMultiple(
+        fbzmq::Message::from(
+            openr::Constants::kSparkReportClientId.toString()).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(event, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending spark event: " << ret.error();
+    }
     neighbor.isAdjacent = false;
 
     // Stop hold-timer
@@ -1256,7 +1304,15 @@ Spark::processInterfaceDbUpdate() {
           neighbor.info,
           neighbor.rtt.count(),
           neighbor.label);
-      reportSocket_.sendThriftObj(event, serializer_);
+      auto ret = reportSocket_.sendMultiple(
+          fbzmq::Message::from(
+              openr::Constants::kSparkReportClientId.toString()).value(),
+          fbzmq::Message(),
+          fbzmq::Message::fromThriftObj(event, serializer_).value());
+      if (ret.hasError()) {
+        LOG(ERROR) << "Error sending spark event: " << ret.error();
+      }
+
     }
 
     // unsubscribe the socket from mcast group on this interface

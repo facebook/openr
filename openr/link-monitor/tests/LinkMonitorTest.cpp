@@ -553,7 +553,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   ScopedServerThread systemThriftThread;
 
   fbzmq::Context context{};
-  fbzmq::Socket<ZMQ_PAIR, fbzmq::ZMQ_SERVER> sparkReport{context};
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{context};
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> sparkIfDbResp{context};
   fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_CLIENT> lmCmdSocket{context};
 
@@ -661,6 +661,7 @@ TEST(LinkMonitorTest, PeerDifferenceTest) {
 TEST_F(LinkMonitorTestFixture, BasicOperation) {
   const int linkMetric = 123;
   const int adjMetric = 100;
+  std::string clientId = Constants::kSparkReportClientId.toString();
 
   {
     InSequence dummy;
@@ -820,8 +821,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    EXPECT_NO_THROW(
-        sparkReport.sendThriftObj(neighborEvent, serializer).value());
+    EXPECT_NO_THROW(sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value()));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -958,7 +961,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendThriftObj(neighborEvent, serializer);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -1015,7 +1021,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       LOG(INFO) << "LinkMonitor thread finishing";
     });
     linkMonitor->waitUntilRunning();
-    fbzmq::Socket<ZMQ_PAIR, fbzmq::ZMQ_SERVER> sparkReport{context};
+    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{
+          context,
+          fbzmq::IdentityString{"spark_server_id"},
+          folly::none,
+          fbzmq::NonblockingFlag{true}};
     EXPECT_NO_THROW(
         sparkReport.bind(fbzmq::SocketUrl{"inproc://spark-report2"}).value());
 
@@ -1027,8 +1037,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
           nb2,
           100 /* rtt-us */,
           1 /* label */);
-
-      sparkReport.sendThriftObj(neighborEvent, serializer);
+      sparkReport.sendMultiple(
+          fbzmq::Message::from(clientId).value(),
+          fbzmq::Message(),
+          fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
       LOG(INFO) << "Testing neighbor up event!";
       checkNextAdjPub("adj:node-1");
     }
@@ -1041,7 +1053,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
           nb2,
           100 /* rtt-us */,
           1 /* label */);
-      sparkReport.sendThriftObj(neighborEvent, serializer);
+      sparkReport.sendMultiple(
+          fbzmq::Message::from(clientId).value(),
+          fbzmq::Message(),
+          fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
       LOG(INFO) << "Testing neighbor down event!";
       checkNextAdjPub("adj:node-1");
     }
@@ -1061,6 +1076,7 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
       expectedAdjDbs.push(std::move(adjDb));
     }
   }
+  std::string clientId = Constants::kSparkReportClientId.toString();
 
   // neighbor up
   {
@@ -1070,7 +1086,10 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendThriftObj(neighborEvent, serializer);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
   }
 
   // before throttled function kicks in
@@ -1083,7 +1102,10 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
         nb3,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendThriftObj(neighborEvent, serializer);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
   }
 
   // neighbor 3 down immediately
@@ -1094,7 +1116,10 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
         nb3,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendThriftObj(neighborEvent, serializer);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
   }
 
   checkNextAdjPub("adj:node-1");
@@ -1102,6 +1127,7 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 
 // parallel adjacencies between two nodes via different interfaces
 TEST_F(LinkMonitorTestFixture, ParallelAdj) {
+  std::string clientId = Constants::kSparkReportClientId.toString();
   {
     InSequence dummy;
 
@@ -1134,7 +1160,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendThriftObj(neighborEvent, serializer);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
   }
 
   checkNextAdjPub("adj:node-1");
@@ -1151,7 +1180,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
         nb2,
         100 /* rtt-us */,
         2 /* label */);
-    sparkReport.sendThriftObj(neighborEvent, serializer);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
   }
 
   checkNextAdjPub("adj:node-1");
@@ -1168,7 +1200,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendThriftObj(neighborEvent, serializer);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
   }
 
   checkNextAdjPub("adj:node-1");

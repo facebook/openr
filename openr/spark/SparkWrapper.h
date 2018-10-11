@@ -86,7 +86,7 @@ class SparkWrapper {
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock_;
 
   // ZMQ pair socket for listening realtime updates from Spark
-  fbzmq::Socket<ZMQ_PAIR, fbzmq::ZMQ_CLIENT> reportSock_;
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> reportSock_;
 
   // Spark owned by this wrapper.
   std::shared_ptr<Spark> spark_{nullptr};

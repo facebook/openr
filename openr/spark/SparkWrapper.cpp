@@ -28,7 +28,11 @@ SparkWrapper::SparkWrapper(
     : myNodeName_(myNodeName),
       ioProvider_(std::move(ioProvider)),
       reqSock_(zmqContext),
-      reportSock_(zmqContext) {
+      reportSock_(
+          zmqContext,
+          fbzmq::IdentityString{Constants::kSparkReportClientId.toString()},
+          folly::none,
+          fbzmq::NonblockingFlag{false}) {
   spark_ = std::make_shared<Spark>(
       myDomainName,
       myNodeName,
@@ -115,8 +119,14 @@ SparkWrapper::updateInterfaceDb(
 folly::Expected<thrift::SparkNeighborEvent, Error>
 SparkWrapper::recvNeighborEvent(
     folly::Optional<std::chrono::milliseconds> timeout) {
-  auto maybeMsg = reportSock_.recvThriftObj<thrift::SparkNeighborEvent>(
-      serializer_, timeout);
+  fbzmq::Message requestIdMsg, delimMsg, thriftMsg;
+  const auto ret = reportSock_.recvMultipleTimeout(
+      timeout, requestIdMsg, delimMsg, thriftMsg);
+  if (ret.hasError()) {
+    return folly::makeUnexpected(ret.error());
+  }
+  const auto maybeMsg = thriftMsg.readThriftObj<thrift::SparkNeighborEvent>(
+      serializer_);
   if (maybeMsg.hasError()) {
     return folly::makeUnexpected(maybeMsg.error());
   }

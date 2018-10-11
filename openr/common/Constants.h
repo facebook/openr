@@ -203,6 +203,13 @@ class Constants {
   // ID template for the global SUB socket
   static constexpr folly::StringPiece kGlobalSubIdTemplate{"{}::TCP::SUB"};
 
+  // ID for Spark report server
+  static constexpr folly::StringPiece kSparkReportServerId{
+    "SPARK::ROUTER::SERVER"};
+  // ID for Spark report client
+  static constexpr folly::StringPiece kSparkReportClientId{
+    "SPARK::ROUTER::CLIENT"};
+
   // max interval to update TTL for each key in kvstore w/ finite TTL
   static constexpr std::chrono::milliseconds kMaxTtlUpdateInterval{2h};
   // TTL infinity, never expires

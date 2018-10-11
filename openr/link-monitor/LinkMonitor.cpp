@@ -132,7 +132,11 @@ LinkMonitor::LinkMonitor(
       linkMonitorCmdSock_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       sparkCmdSock_(zmqContext),
-      sparkReportSock_(zmqContext),
+      sparkReportSock_(
+          zmqContext,
+          fbzmq::IdentityString{Constants::kSparkReportClientId.toString()},
+          folly::none,
+          fbzmq::NonblockingFlag{true}),
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff) {
@@ -291,14 +295,36 @@ LinkMonitor::prepare() noexcept {
       [this](int) noexcept {
         VLOG(1) << "LinkMonitor: Spark message received...";
 
-        auto maybeEvent =
-            sparkReportSock_.recvThriftObj<thrift::SparkNeighborEvent>(
-                serializer_, Constants::kReadTimeout);
+        fbzmq::Message requestIdMsg, delimMsg, thriftMsg;
+        const auto ret = sparkReportSock_.recvMultiple(
+          requestIdMsg, delimMsg, thriftMsg);
+
+        if (ret.hasError()) {
+          LOG(ERROR) << "sparkReportSock: Error receiving command: "
+                     << ret.error();
+          return;
+        }
+
+        const auto requestId = requestIdMsg.read<std::string>().value();
+        const auto delim = delimMsg.read<std::string>().value();
+        if (not delimMsg.empty()) {
+          LOG(ERROR) << "sparkReportSock: Non-empty delimiter: " << delim;
+          return;
+        }
+
+        VLOG(3) << "sparkReportSock, got id: `"
+                << folly::backslashify(requestId)
+                << "` and delim: `" << folly::backslashify(delim) << "`";
+
+        const auto maybeEvent =
+            thriftMsg.readThriftObj<thrift::SparkNeighborEvent>(serializer_);
+
         if (maybeEvent.hasError()) {
           LOG(ERROR) << "Error processing Spark event object: "
                      << maybeEvent.error();
           return;
         }
+
         auto event = maybeEvent.value();
 
         auto neighborAddrV4 = event.neighbor.transportAddressV4;

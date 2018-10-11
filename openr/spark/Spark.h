@@ -176,7 +176,7 @@ class Spark final : public fbzmq::ZmqEventLoop {
 
   // this is used to communicate events to downstream consumer
   const std::string reportUrl_{""};
-  fbzmq::Socket<ZMQ_PAIR, fbzmq::ZMQ_SERVER> reportSocket_;
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> reportSocket_;
 
   // this is used to add/remove network interfaces for tracking
   const std::string cmdUrl_{""};

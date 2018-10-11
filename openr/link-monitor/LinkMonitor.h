@@ -320,7 +320,7 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // socket to control the spark
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> sparkCmdSock_;
   // Listen to neighbor events from spark
-  fbzmq::Socket<ZMQ_PAIR, fbzmq::ZMQ_CLIENT> sparkReportSock_;
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> sparkReportSock_;
   // Used to subscribe to netlink events from PlatformPublisher
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> nlEventSub_;
 
