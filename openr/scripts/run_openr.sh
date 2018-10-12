@@ -60,6 +60,7 @@ ENABLE_PERF_MEASUREMENT=true
 ENABLE_PREFIX_ALLOC=false
 ENABLE_RTT_METRIC=true
 ENABLE_SEGMENT_ROUTING=false
+ENABLE_SPARK=true
 ENABLE_V4=false
 ENABLE_WATCHDOG=true
 FIB_HANDLER_PORT=60100
@@ -153,6 +154,7 @@ exec ${OPENR} \
   --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
   --enable_rtt_metric=${ENABLE_RTT_METRIC} \
   --enable_segment_routing=${ENABLE_SEGMENT_ROUTING} \
+  --enable_spark=${ENABLE_SPARK} \
   --enable_v4=${ENABLE_V4} \
   --enable_watchdog=${ENABLE_WATCHDOG} \
   --fib_handler_port=${FIB_HANDLER_PORT} \
