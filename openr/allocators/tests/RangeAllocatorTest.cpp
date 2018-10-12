@@ -169,7 +169,7 @@ TEST_P(RangeAllocatorFixture, DistinctSeed) {
       {start, start + kNumClients - 1},
       initVals,
       [&](int clientId, folly::Optional<uint32_t> newVal) {
-        ASSERT(newVal);
+        DCHECK(newVal);
         CHECK_EQ(clientId + start, newVal.value());
         rcvd++;
         if (rcvd == kNumClients) {

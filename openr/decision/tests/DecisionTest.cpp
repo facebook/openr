@@ -179,7 +179,7 @@ TEST(ShortestPathTest, UnreachableNodes) {
 
   for (string const& node : allNodes) {
     auto routeDb = spfSolver.buildPaths(node);
-    ASSERT(routeDb.hasValue());
+    ASSERT_TRUE(routeDb.hasValue());
     EXPECT_EQ(node, routeDb->thisNodeName);
     EXPECT_EQ(0, routeDb->routes.size());
   }
@@ -207,7 +207,7 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
 
   auto routeDb = spfSolver.buildPaths("1");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->routes.size());
 }
@@ -239,12 +239,12 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   // dump routes for both nodes, expect no routing entries
 
   auto routeDb = spfSolver.buildPaths("1");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->routes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->routes.size());
 }
@@ -297,12 +297,12 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   auto routeDb = spfSolver.buildPaths("1");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->routes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->routes.size());
 
@@ -322,12 +322,12 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   routeDb = spfSolver.buildPaths("1");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->routes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->routes.size());
 
@@ -347,12 +347,12 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   routeDb = spfSolver.buildPaths("1");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->routes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  ASSERT(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->routes.size());
 

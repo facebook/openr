@@ -72,20 +72,20 @@ class NetlinkSocketFixture : public testing::Test {
   SetUp() override {
     // Not handling errors here ...
     link_ = rtnl_link_veth_alloc();
-    ASSERT(link_);
+    ASSERT_TRUE(link_);
 
     socket_ = nl_socket_alloc();
-    ASSERT(socket_);
+    ASSERT_TRUE(socket_);
     nl_connect(socket_, NETLINK_ROUTE);
 
     rtnl_link_alloc_cache(socket_, AF_UNSPEC, &linkCache_);
-    ASSERT(linkCache_);
+    ASSERT_TRUE(linkCache_);
 
     rtnl_addr_alloc_cache(socket_, &addrCache_);
-    ASSERT(addrCache_);
+    ASSERT_TRUE(addrCache_);
 
     rtnl_route_alloc_cache(socket_, AF_UNSPEC, 0, &routeCache_);
-    ASSERT(routeCache_);
+    ASSERT_TRUE(routeCache_);
 
     rtnl_link_set_name(link_, kVethNameX.c_str());
     rtnl_link_set_name(rtnl_link_veth_get_peer(link_), kVethNameY.c_str());
@@ -215,11 +215,11 @@ class NetlinkSocketFixture : public testing::Test {
         addrMask.first.family(),
         (void*)addrMask.first.bytes(),
         addrMask.first.byteCount());
-    ASSERT(nlAddr);
+    ASSERT_TRUE(nlAddr);
     nl_addr_set_prefixlen(nlAddr, addrMask.second);
 
     struct rtnl_addr* addr = rtnl_addr_alloc();
-    ASSERT(addr);
+    ASSERT_TRUE(addr);
 
     rtnl_addr_set_local(addr, nlAddr);
     rtnl_addr_set_ifindex(addr, ifIndex);
