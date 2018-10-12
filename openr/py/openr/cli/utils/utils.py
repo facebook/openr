@@ -630,7 +630,7 @@ def interface_dbs_to_dict(publication, nodes, iter_func):
     return intf_dbs_map
 
 
-def sprint_interface_table(intf_db, print_all):
+def sprint_interface_table(intf_db, print_all=True):
     '''
     @param intf_db: InterfaceDatabase.bunch
     '''

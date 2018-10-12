@@ -634,6 +634,7 @@ class SnoopCmd(KvStoreCmd):
         global_dbs = self.get_snapshot(delta)
         pattern = re.compile(regex)
 
+        print('Subscribing to KvStore updates. Magic begins here ... \n')
         pub_client = kvstore_subscriber.KvStoreSubscriber(
             zmq.Context(),
             "tcp://[{}]:{}".format(self.host, self.kv_pub_port),
@@ -688,21 +689,18 @@ class SnoopCmd(KvStoreCmd):
                 continue
 
             if key.startswith(Consts.ADJ_DB_MARKER):
-                print_timestamp()
                 self.print_adj_delta(key, value, delta,
                                      global_dbs.adjs,
                                      global_dbs.publications)
                 continue
 
             if key.startswith(Consts.PREFIX_DB_MARKER):
-                print_timestamp()
                 self.print_prefix_delta(key, value, delta,
                                         global_dbs.prefixes,
                                         global_dbs.publications)
                 continue
 
             if key.startswith(Consts.INTERFACE_DB_MARKER):
-                print_timestamp()
                 self.print_interface_delta(key, value, delta,
                                            global_dbs.interfaces,
                                            global_dbs.publications)
@@ -721,15 +719,18 @@ class SnoopCmd(KvStoreCmd):
         prefix_db = serializer.deserialize_thrift_object(
             value.value, lsdb_types.PrefixDatabase)
         if delta:
-            lines = utils.sprint_prefixes_db_delta(global_prefix_db, prefix_db)
+            lines = "\n".join(
+                utils.sprint_prefixes_db_delta(global_prefix_db, prefix_db)
+            )
         else:
             lines = utils.sprint_prefixes_db_full(prefix_db)
 
         if lines:
+            print_timestamp()
             print_publication_delta(
                 "{}'s prefixes".format(reported_node_name),
                 utils.sprint_pub_update(global_publication_db, key, value),
-                "\n".join(lines))
+                lines)
 
         utils.update_global_prefix_db(global_prefix_db, prefix_db)
 
@@ -752,6 +753,7 @@ class SnoopCmd(KvStoreCmd):
                                                 new_adj_db, False)
 
         if lines:
+            print_timestamp()
             print_publication_delta(
                 "{}'s adjacencies".format(reported_node_name),
                 utils.sprint_pub_update(global_publication_db, key, value),
@@ -777,6 +779,7 @@ class SnoopCmd(KvStoreCmd):
             lines = utils.sprint_interface_table(new_intf_db)
 
         if lines:
+            print_timestamp()
             print_publication_delta(
                 "{}'s interfaces'".format(node_name),
                 utils.sprint_pub_update(global_publication_db, key, value),
@@ -794,6 +797,7 @@ class SnoopCmd(KvStoreCmd):
         })
 
         if delta:
+            print('Retrieving KvStore snapshot ... ')
             resp = self.client.dump_all_with_prefix()
 
             global_dbs.prefixes = utils.build_global_prefix_db(resp)
@@ -802,6 +806,11 @@ class SnoopCmd(KvStoreCmd):
             for key, value in resp.keyVals.items():
                 global_dbs.publications[key] = (value.version,
                                                 value.originatorId)
+            print(
+                'Done. Loaded {} initial key-values'.format(len(resp.keyVals))
+            )
+        else:
+            print('Skipping retrieval of KvStore snapshot')
         return global_dbs
 
 
