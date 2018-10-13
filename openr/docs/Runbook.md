@@ -241,9 +241,20 @@ names start with these are used for neighbor discovery.
 IFACE_PREFIXES=eth,nic,po
 ```
 
+### MIN_LOG_LEVEL
+
+Log messages at or above this level. Again, the numbers of severity levels INFO,
+WARNING, ERROR, and FATAL are 0, 1, 2, and 3, respectively. Defaults to 0
+
+```
+MIN_LOG_LEVEL=0
+```
+
+
 #### VERBOSITY
 
-Set logging verbosity of OpenR logs
+Show all verbose `VLOG(m)` messages for m less or equal the value of this flag.
+Use higher value for more verbose logging. Defaults to 1
 
 ```
 VERBOSITY=1
@@ -417,7 +428,7 @@ operations of Open/R
 IP_TOS=192
 ```
 
-### MEMORY_LIMIT_MB
+#### MEMORY_LIMIT_MB
 
 Enforce upper limit on amount of memory in mega-bytes that open/r process can
 use. Above this limit watchdog thread will trigger crash. Service can be
@@ -427,4 +438,16 @@ it runs and takes care of slow memory leak kind of issues.
 
 ```
 MEMORY_LIMIT_MB=300
+```
+
+#### KVSTORE_ZMQ_HWM
+
+Set buffering size for KvStore socket communication. Updates to neighbor
+node during flooding can be buffered upto this number. For larger networks where
+burst of updates can be high having high value makes sense. For smaller networks
+where burst of updates are low, having low value makes more sense.
+Defaults to 65536.
+
+```
+KVSTORE_ZMQ_HWM=65536
 ```
