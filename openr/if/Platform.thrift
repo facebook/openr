@@ -147,8 +147,10 @@ enum ServiceStatus {
 //    ClientId: 786 => ProtocolId: 99, Priority: 10
 // For BGP
 //    ClientId: 0 => ProtocolId: 253, Priority: 20
-const map<i16, i16> clientIdtoProtocolId = {786:99, 0:253}
-const map<i16, i16> clientIdtoPriority = {786:10, 0:20}
+// For TG breeze CLI client
+//    ClientId: 64 => ProtocolId: 64, Priority: 11
+const map<i16, i16> clientIdtoProtocolId = {786:99, 0:253, 64:64}
+const map<i16, i16> clientIdtoPriority = {786:10, 0:20, 64:11}
 
 /**
  * Interface to on-box Fib.
