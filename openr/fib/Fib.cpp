@@ -363,11 +363,11 @@ Fib::updateRoutes(
   if (syncRoutesTimer_->isScheduled()) {
     // Check if there's any full sync scheduled,
     // if so, skip partial sync
-    VLOG(1) << "Pending full sync is scheduled, skip delta sync for now...";
+    LOG(INFO) << "Pending full sync is scheduled, skip delta sync for now...";
     return;
   } else if (dirtyRouteDb_) {
     // If previous route programming attempt failed, enforce full sync
-    VLOG(1) << "Previous route programming failed, skip delta sync to enforce"
+    LOG(INFO) << "Previous route programming failed, skip delta sync to enforce"
             << " full fib sync...";
     syncRouteDbDebounced();
     return;
@@ -387,6 +387,7 @@ Fib::updateRoutes(
     }
     dirtyRouteDb_ = false;
     logPerfEvents();
+    LOG(INFO) << "Done processing route add/update";
   } catch (const std::exception& e) {
     tData_.addStatValue("fib.thrift.failure.add_del_route", 1, fbzmq::COUNT);
     client_.reset();
@@ -429,6 +430,7 @@ Fib::syncRouteDb() {
     client_->sync_syncFib(kFibId_, routes);
     dirtyRouteDb_ = false;
     logPerfEvents();
+    LOG(INFO) << "Done syncing latest routeDb with fib-agent";
     return true;
   } catch (std::exception const& e) {
     tData_.addStatValue("fib.thrift.failure.sync_fib", 1, fbzmq::COUNT);
