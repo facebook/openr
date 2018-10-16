@@ -551,6 +551,19 @@ PrefixAllocator::applyMyPrefix() {
 void
 PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   CHECK(allocParams_.hasValue()) << "Alloc parameters are not set.";
+  // replace previously allocated prefix with newly allocated one in
+  // PrefixManager
+  auto ret = prefixManagerClient_->syncPrefixesByType(
+      openr::thrift::PrefixType::PREFIX_ALLOCATOR,
+      {openr::thrift::PrefixEntry(
+          apache::thrift::FRAGILE,
+          toIpPrefix(prefix),
+          openr::thrift::PrefixType::PREFIX_ALLOCATOR,
+          {})});
+  if (ret.hasError()) {
+    LOG(ERROR) << "Announcing new prefix failed: " << ret.error();
+  }
+
   // existing global prefixes
   std::vector<folly::CIDRNetwork> oldPrefixes;
   getIfacePrefixes(loopbackIfaceName_, prefix.first.family(), oldPrefixes);
@@ -602,18 +615,6 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
     syncIfaceAddrs(
       loopbackIfaceName_, prefix.first.family(),
       RT_SCOPE_UNIVERSE, toSyncPrefixes);
-  }
-
-  // replace previously allocated prefix with newly allocated one
-  auto ret = prefixManagerClient_->syncPrefixesByType(
-      openr::thrift::PrefixType::PREFIX_ALLOCATOR,
-      {openr::thrift::PrefixEntry(
-          apache::thrift::FRAGILE,
-          toIpPrefix(prefix),
-          openr::thrift::PrefixType::PREFIX_ALLOCATOR,
-          {})});
-  if (ret.hasError()) {
-    LOG(ERROR) << "Applying new prefix failed: " << ret.error();
   }
 }
 

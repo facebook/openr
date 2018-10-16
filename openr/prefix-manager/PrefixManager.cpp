@@ -12,6 +12,7 @@
 #include <folly/futures/Future.h>
 #include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/kvstore/KvStore.h>
 
 namespace openr {
 
@@ -254,6 +255,9 @@ void
 PrefixManager::addOrUpdatePrefixes(
     const std::vector<thrift::PrefixEntry>& prefixes) {
   for (const auto& prefix : prefixes) {
+    LOG(INFO)
+      << "Advertising prefix " << toString(prefix.prefix) << ", client: "
+      << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(prefix.type);
     prefixMap_[prefix.prefix] = prefix;
   }
 }
@@ -264,6 +268,9 @@ PrefixManager::removePrefixes(
   bool fail{false};
 
   for (const auto& prefix : prefixes) {
+    LOG(INFO)
+      << "Withdrawing prefix " << toString(prefix.prefix) << ", client: "
+      << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(prefix.type);
     fail = prefixMap_.erase(prefix.prefix) > 0 or fail;
   }
   return fail;
