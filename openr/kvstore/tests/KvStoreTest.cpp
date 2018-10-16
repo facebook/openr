@@ -339,9 +339,9 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.version++;
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
-    EXPECT_EQ(deltaPub.keyVals, newStore);
+    EXPECT_EQ(keyVals, newStore);
   }
 
   // update with lower version
@@ -349,9 +349,9 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.version--;
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
-    EXPECT_EQ(deltaPub.keyVals.size(), 0);
+    EXPECT_EQ(keyVals.size(), 0);
   }
 
   // update with higher originatorId
@@ -359,9 +359,9 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.originatorId = "node55";
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
-    EXPECT_EQ(deltaPub.keyVals, newStore);
+    EXPECT_EQ(keyVals, newStore);
   }
 
   // update with lower originatorId
@@ -369,9 +369,9 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.originatorId = "node3";
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
-    EXPECT_EQ(deltaPub.keyVals.size(), 0);
+    EXPECT_EQ(keyVals.size(), 0);
   }
 
   // update larger value
@@ -379,9 +379,9 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value = "dummyValueTest";
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
-    EXPECT_EQ(deltaPub.keyVals, newStore);
+    EXPECT_EQ(keyVals, newStore);
   }
 
   // update smaller value
@@ -389,9 +389,9 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value = "dummy";
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
-    EXPECT_EQ(deltaPub.keyVals.size(), 0);
+    EXPECT_EQ(keyVals.size(), 0);
   }
 
   // update ttl only (new value.value() is none)
@@ -401,8 +401,8 @@ TEST(KvStore, mergeKeyValuesTest) {
     newKvIt->second.value = folly::none;
     newKvIt->second.ttl = 123;
     newKvIt->second.ttlVersion ++;
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
-    auto deltaKvIt = deltaPub.keyVals.find(key);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
+    auto deltaKvIt = keyVals.find(key);
     // new ttl, ttlversion
     EXPECT_EQ(myKvIt->second.ttlVersion, newKvIt->second.ttlVersion);
     EXPECT_EQ(myKvIt->second.ttl, newKvIt->second.ttl);
@@ -421,9 +421,9 @@ TEST(KvStore, mergeKeyValuesTest) {
     newKvIt->second = thriftValue;
     newKvIt->second.ttl = 123;
     newKvIt->second.ttlVersion ++;
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
-    EXPECT_EQ(deltaPub.keyVals, newStore);
+    EXPECT_EQ(keyVals, newStore);
   }
 
   // invalid ttl update (higher ttlVersion, smaller value)
@@ -432,9 +432,9 @@ TEST(KvStore, mergeKeyValuesTest) {
     newKvIt->second = thriftValue;
     newKvIt->second.value = "dummy";
     newKvIt->second.ttlVersion ++;
-    auto deltaPub = KvStore::mergeKeyValues(myStore, newStore);
+    auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
-    EXPECT_EQ(deltaPub.keyVals.size(), 0);
+    EXPECT_EQ(keyVals.size(), 0);
   }
 
   // bogus ttl value (see it should get ignored)
@@ -442,8 +442,8 @@ TEST(KvStore, mergeKeyValuesTest) {
     std::unordered_map<std::string, thrift::Value> emptyStore;
     newKvIt->second = thriftValue;
     newKvIt->second.ttl = -100;
-    auto deltaPub = KvStore::mergeKeyValues(emptyStore, newStore);
-    EXPECT_EQ(deltaPub.keyVals.size(), 0);
+    auto keyVals = KvStore::mergeKeyValues(emptyStore, newStore);
+    EXPECT_EQ(keyVals.size(), 0);
     EXPECT_EQ(emptyStore.size(), 0);
   }
 }
@@ -457,11 +457,15 @@ TEST(KvStore, MonitorReport) {
 
   KvStoreWrapper kvStore(
       context,
-      "test",
+      "node1",
       std::chrono::seconds(1) /* Db Sync Interval */,
       std::chrono::seconds(1) /* Monitor Submit Interval */,
       std::unordered_map<std::string, thrift::PeerSpec>{});
   kvStore.run();
+
+  // Set key in KvStore with loop
+  const std::vector<std::string> nodeIds{"node2", "node3", "node1", "node4"};
+  kvStore.setKey("test-key", thrift::Value(), nodeIds);
 
   // create and bind socket to receive counters
   fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_SERVER> server(context);
@@ -483,6 +487,10 @@ TEST(KvStore, MonitorReport) {
   EXPECT_EQ(1, counters.count("kvstore.num_peers"));
   EXPECT_EQ(1, counters.count("kvstore.pending_full_sync"));
 
+  // Verify looped publication counter
+  ASSERT_EQ(1, counters.count("kvstore.looped_publications.count.0"));
+  EXPECT_EQ(1, counters.at("kvstore.looped_publications.count.0").value);
+
   LOG(INFO) << "Counters received, yo";
   kvStore.stop();
   LOG(INFO) << "KvStore thread finished";
@@ -496,7 +504,7 @@ TEST(KvStore, MonitorReport) {
  */
 TEST(KvStore, TtlVerification) {
   fbzmq::Context context;
-  const std::chrono::milliseconds testPollTimeout{100};
+  const std::chrono::milliseconds testPollTimeout{1000};
   const std::string key{"dummyKey"};
   const thrift::Value value(
         apache::thrift::FRAGILE,
@@ -1401,6 +1409,8 @@ TEST_F(KvStoreTestFixture, BasicSync) {
  * submitting different values at each end of the chain, with same version
  * numbers. We also try injecting lower version number to make sure it does not
  * overwrite anything.
+ *
+ * Also verify the publication propagation via nodeIds attribute
  */
 TEST_F(KvStoreTestFixture, TieBreaking) {
   using namespace folly::gen;
@@ -1414,6 +1424,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   //
   LOG(INFO) << "Preparing and starting stores.";
   std::vector<KvStoreWrapper*> stores;
+  std::vector<std::string> nodeIdsSeq;
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   for (unsigned int i = 0; i < kNumStores; ++i) {
     auto nodeId = getNodeId(kOriginBase, i);
@@ -1421,6 +1432,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     LOG(INFO) << "Preparing store " << nodeId;
     store->run();
     stores.push_back(store);
+    nodeIdsSeq.emplace_back(nodeId);
   }
 
   // Add neighbors to the nodes.
@@ -1486,9 +1498,17 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     ASSERT_EQ(1, pub2.keyVals.count(kKeyName));
     EXPECT_EQ(thriftValFirst, pub1.keyVals.at(kKeyName));
     EXPECT_EQ(thriftValLast, pub2.keyVals.at(kKeyName));
+
+    // Verify nodeIds attribute of publication
+    ASSERT_TRUE(pub1.nodeIds.hasValue());
+    ASSERT_TRUE(pub2.nodeIds.hasValue());
+    EXPECT_EQ(
+      std::vector<std::string>{stores[0]->nodeId}, pub1.nodeIds.value());
+    auto expectedNodeIds = nodeIdsSeq;
+    std::reverse(std::begin(expectedNodeIds), std::end(expectedNodeIds));
+    EXPECT_EQ(expectedNodeIds, pub2.nodeIds.value());
   }
 
-  // python style baby!
   for (auto& store : stores) {
     LOG(INFO) << "Pulling state from " << store->nodeId;
     auto maybeThriftVal = store->getKey(kKeyName);
@@ -1745,7 +1765,6 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
     request.cmd = thrift::Command::KEY_SET;
     request.keySetParams.keyVals.emplace(key2, thriftVal2);
     request.keySetParams.solicitResponse = false;
-    request.keySetParams.originatorId = "test-node2";
 
     // Make ZMQ call and wait for response
     apache::thrift::CompactSerializer serializer;

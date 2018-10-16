@@ -71,8 +71,9 @@ struct KeySetParams {
   // Solicit for an ack. This can be set to false to make requests one-way
   3: bool solicitResponse = 1;
 
-  // Name of node who is originating set key request
-  4: optional string originatorId;
+  // Optional attributes. List of nodes through which this publication has
+  // traversed. Client shouldn't worry about this attribute.
+  5: optional list<string> nodeIds;
 }
 
 // parameters for the KEY_GET command
@@ -131,11 +132,14 @@ struct Request {
 //
 // this is also used to respond to GET requests
 struct Publication {
-  // NOTE: the numbering is on purpose, maintaining
-  // backward compatibility
+  // NOTE: the numbering is on purpose, to maintain backward compatibility
   2: KeyVals keyVals;
   // expired keys
   3: list<string> expiredKeys;
+
+  // Optional attributes. List of nodes through which this publication has
+  // traversed. Client shouldn't worry about this attribute.
+  4: optional list<string> nodeIds;
 }
 
 // Dump of the current peers: sent in

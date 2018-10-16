@@ -215,8 +215,10 @@ class Constants {
   // TTL infinity, never expires
   // int version
   static constexpr int64_t kTtlInfinity{INT32_MIN};
+  // ttl to decrement before re-flooding
+  static constexpr std::chrono::milliseconds kTtlDecrement{1};
   // min ttl expiry time to qualify for peer sync
-  static constexpr std::chrono::milliseconds kTtlThreshold{20};
+  static constexpr std::chrono::milliseconds kTtlThreshold{500};
   // ms version
   static constexpr std::chrono::milliseconds kTtlInfInterval{kTtlInfinity};
 

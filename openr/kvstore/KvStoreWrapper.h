@@ -53,7 +53,10 @@ class KvStoreWrapper {
    * APIs to set key-value into the KvStore. Returns true on success else
    * returns false.
    */
-  bool setKey(std::string key, thrift::Value value);
+  bool setKey(
+      std::string key,
+      thrift::Value value,
+      folly::Optional<std::vector<std::string>> nodeIds = folly::none);
 
   /**
    * API to retrieve an existing key-value from KvStore. Returns empty if none

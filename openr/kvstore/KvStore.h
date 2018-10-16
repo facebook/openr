@@ -124,7 +124,7 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)
   // Return a publication made out of the updated values
-  static thrift::Publication mergeKeyValues(
+  static std::unordered_map<std::string, thrift::Value> mergeKeyValues(
       std::unordered_map<std::string, thrift::Value>& kvStore,
       std::unordered_map<std::string, thrift::Value> const& update,
       folly::Optional<KvStoreFilters> const& filters = folly::none);
@@ -177,6 +177,24 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // and Reschedule ttl expiry timer if needed
   void updateTtlCountdownQueue(const thrift::Publication& publication);
 
+  // periodically count down and purge expired keys from CountdownQueue
+  void cleanupTtlCountdownQueue();
+
+  // Function to flood publication to neighbors
+  // publication => data element to flood
+  void floodPublication(thrift::Publication&& publication);
+
+  // update Time to expire filed in Publication
+  // removeAboutToExpire: knob to remove keys which are about to expire
+  // and hence do not want to include them. Constants::kTtlThreshold
+  void updatePublicationTtl(
+      thrift::Publication& thriftPub,
+      bool removeAboutToExpire=false);
+
+  // Merge received publication with local store and publish out the delta.
+  // @return: Number of KV updates applied
+  size_t mergePublication(thrift::Publication const& rcvdPublication);
+
   // process a request pending on cmdSock socket
   void processRequest(
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
@@ -190,26 +208,8 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // this will poll the sockets listening to the requests
   void attachCallbacks();
 
-  // periodically count down and purge expired keys if any
-  void countdownTtl();
-
-  // Function to flood publication to neighbors
-  // publication => data element to flood
-  // originatorId => optional parameter indicating name of node who originated
-  //                 the publication.
-  void floodPublication(
-      thrift::Publication&& publication,  // rvalue to enforce optimization
-      folly::Optional<std::string> originatorId);
-
-  // update Time to expire filed in Publication
-  // removeAboutToExpire: knob to remove keys which are about to expire
-  // and hence do not want to include them. Constants::kTtlThreshold
-  void updatePublicationTtl(
-      thrift::Publication& thriftPub,
-      bool removeAboutToExpire=false);
-
   // count number of prefixes in kvstore
-  int getPrefixCount();
+  int getPrefixCount() const;
 
   // Extracts the counters and submit them to monitor
   fbzmq::thrift::CounterMap getCounters();

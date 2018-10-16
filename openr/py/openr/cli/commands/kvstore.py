@@ -656,6 +656,9 @@ class SnoopCmd(KvStoreCmd):
 
     def print_expired_keys(self, msg, regex, pattern, global_dbs):
         rows = []
+        if len(msg.expiredKeys):
+            print("Traversal List: {}".format(msg.nodeIds))
+
         for key in msg.expiredKeys:
             if not key.startswith(regex) and not pattern.match(key):
                 continue
@@ -682,6 +685,7 @@ class SnoopCmd(KvStoreCmd):
             if value.value is None:
                 if ttl:
                     print_timestamp()
+                    print("Traversal List: {}".format(msg.nodeIds))
                     print_publication_delta(
                         "Key: {}, ttl update".format(key),
                         "ttl: {}, ttlVersion: {}".format(value.ttl,
@@ -706,12 +710,12 @@ class SnoopCmd(KvStoreCmd):
                                            global_dbs.publications)
                 continue
 
-            if delta:
-                print_timestamp()
-                print_publication_delta(
-                    "Key: {} update".format(key),
-                    utils.sprint_pub_update(global_dbs.publications,
-                                            key, value))
+            print_timestamp()
+            print("Traversal List: {}".format(msg.nodeIds))
+            print_publication_delta(
+                "Key: {} update".format(key),
+                utils.sprint_pub_update(global_dbs.publications,
+                                        key, value))
 
     def print_prefix_delta(self, key, value, delta, global_prefix_db,
                            global_publication_db):
