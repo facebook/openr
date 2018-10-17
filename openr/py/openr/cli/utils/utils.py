@@ -257,7 +257,7 @@ def prefix_entry_to_dict(prefix_entry):
         # Only addrs need string conversion so we udpate them
         prefix_entry_dict.update({
             'prefix': ipnetwork.sprint_prefix(prefix_entry.prefix),
-            'data': str(prefix_entry.data),
+            'data': prefix_entry.data,
         })
 
     return thrift_to_dict(prefix_entry, _update)

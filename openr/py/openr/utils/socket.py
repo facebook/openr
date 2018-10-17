@@ -94,7 +94,7 @@ class Socket(object):
         ''' send binary data on socket '''
 
         try:
-            self._socket.send(str(data))
+            self._socket.send(data)
         except Exception as ex:
             raise Exception("Failed sending message: {}".format(ex))
 
