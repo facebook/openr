@@ -17,7 +17,6 @@ constexpr folly::StringPiece Constants::kGlobalCmdIdTemplate;
 constexpr folly::StringPiece Constants::kGlobalCmdLocalIdTemplate;
 constexpr folly::StringPiece Constants::kGlobalPubIdTemplate;
 constexpr folly::StringPiece Constants::kGlobalSubIdTemplate;
-constexpr folly::StringPiece Constants::kInterfaceDbMarker;
 constexpr folly::StringPiece Constants::kLocalCmdIdTemplate;
 constexpr folly::StringPiece Constants::kNodeLabelRangePrefix;
 constexpr folly::StringPiece Constants::kPeerSyncIdTemplate;

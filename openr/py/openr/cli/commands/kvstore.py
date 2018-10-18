@@ -195,7 +195,6 @@ class KeyValsCmd(KvStoreCmd):
         options = {
             Consts.PREFIX_DB_MARKER: lsdb_types.PrefixDatabase,
             Consts.ADJ_DB_MARKER: lsdb_types.AdjacencyDatabase,
-            Consts.INTERFACE_DB_MARKER: lsdb_types.InterfaceDatabase,
         }
 
         prefix_type = key.split(':')[0] + ":"
@@ -304,18 +303,6 @@ class ShowAdjNodeCmd(KvStoreCmd):
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, True,
                                          self.iter_publication)
         utils.print_adjs_table(adjs_map, self.enable_color, node, interface)
-
-
-class InterfacesCmd(KvStoreCmd):
-    def run(self, nodes, json, print_all):
-        publication = self.client.dump_all_with_prefix(
-            Consts.INTERFACE_DB_MARKER)
-        intfs_map = utils.interface_dbs_to_dict(publication, nodes,
-                                                self.iter_publication)
-        if json:
-            print(utils.json_dumps(intfs_map))
-        else:
-            utils.print_interfaces_table(intfs_map, print_all)
 
 
 class KvCompareCmd(KvStoreCmd):
@@ -670,8 +657,6 @@ class SnoopCmd(KvStoreCmd):
                 global_dbs.adjs.pop(key.split(':')[1], None)
             if key.startswith(Consts.PREFIX_DB_MARKER):
                 global_dbs.prefixes.pop(key.split(':')[1], None)
-            if key.startswith(Consts.INTERFACE_DB_MARKER):
-                global_dbs.interfaces.pop(key.split(':')[1], None)
 
         if rows:
             print_timestamp()
@@ -702,12 +687,6 @@ class SnoopCmd(KvStoreCmd):
                 self.print_prefix_delta(key, value, delta,
                                         global_dbs.prefixes,
                                         global_dbs.publications)
-                continue
-
-            if key.startswith(Consts.INTERFACE_DB_MARKER):
-                self.print_interface_delta(key, value, delta,
-                                           global_dbs.interfaces,
-                                           global_dbs.publications)
                 continue
 
             print_timestamp()
@@ -765,38 +744,11 @@ class SnoopCmd(KvStoreCmd):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def print_interface_delta(self, key, value, delta,
-                              global_intf_db, global_publication_db):
-        _, node_name = key.split(':', 1)
-        new_intf_db = utils.interface_db_to_dict(value)
-
-        if delta:
-            old_intf_db = global_intf_db.get(node_name, None)
-
-            if old_intf_db is None:
-                lines = ["INTERFACE_DB_ADDED: {}".format(node_name)]
-            else:
-                lines = utils.sprint_interface_db_delta(new_intf_db,
-                                                        old_intf_db)
-                lines = '\n'.join(lines)
-        else:
-            lines = utils.sprint_interface_table(new_intf_db)
-
-        if lines:
-            print_timestamp()
-            print_publication_delta(
-                "{}'s interfaces'".format(node_name),
-                utils.sprint_pub_update(global_publication_db, key, value),
-                lines)
-
-        global_intf_db[new_intf_db.thisNodeName] = new_intf_db
-
     def get_snapshot(self, delta):
         # get the active network snapshot first, so we can compute deltas
         global_dbs = bunch.Bunch({
             'prefixes': {},
             'adjs': {},
-            'interfaces': {},
             'publications': {},  # map(key -> (version, originatorId))
         })
 
@@ -806,7 +758,6 @@ class SnoopCmd(KvStoreCmd):
 
             global_dbs.prefixes = utils.build_global_prefix_db(resp)
             global_dbs.adjs = utils.build_global_adj_db(resp)
-            global_dbs.interfaces = utils.build_global_interface_db(resp)
             for key, value in resp.keyVals.items():
                 global_dbs.publications[key] = (value.version,
                                                 value.originatorId)

@@ -39,7 +39,6 @@ BOOST_STRONG_TYPEDEF(std::string, FibCmdUrl);
 
 // markers for some of KvStore keys
 BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
-BOOST_STRONG_TYPEDEF(std::string, InterfaceDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
 

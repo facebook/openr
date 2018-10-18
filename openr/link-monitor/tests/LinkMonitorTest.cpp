@@ -158,21 +158,6 @@ printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
   }
 }
 
-void
-printIntfDb(const thrift::InterfaceDatabase& intfDb) {
-  LOG(INFO) << "Node: " << intfDb.thisNodeName;
-  for (auto const& kv : intfDb.interfaces) {
-    std::vector<std::string> addrs;
-    for (auto const& addr : kv.second.networks) {
-      addrs.emplace_back(toString(addr.prefixAddress));
-    }
-    LOG(INFO) << "  Interface => name: " << kv.first
-              << ", Status: " << kv.second.isUp
-              << ", Index: " << kv.second.ifIndex
-              << ", Addrs: " << folly::join(",", addrs);
-  }
-}
-
 const std::string kTestVethNamePrefix = "vethLMTest";
 const std::vector<uint64_t> kTestVethIfIndex = {1240, 1241, 1242};
 const std::string kConfigStorePath = "/tmp/lm_ut_config_store.bin";
@@ -273,10 +258,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         false /* enable full mesh reduction */,
         false /* enable perf measurement */,
         true /* enable v4 */,
-        true /* advertise interface db */,
         true /* enable segment routing */,
         AdjacencyDbMarker{"adj:"},
-        InterfaceDbMarker{"intf:"},
         SparkCmdUrl{"inproc://spark-req"},
         SparkReportUrl{"inproc://spark-report"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
@@ -499,37 +482,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     EXPECT_EQ(peers.at(nodeName).cmdUrl, peerSpec.cmdUrl);
   }
 
-  void
-  checkNextIntfPub(
-      std::string const& key, thrift::InterfaceDatabase const& expectedIntfDb) {
-    printIntfDb(expectedIntfDb);
-
-    while (true) {
-      thrift::Publication pub;
-
-      folly::Optional<thrift::Value> value;
-      try {
-        value = getPublicationValueForKey(key);
-        if (not value.hasValue()) {
-          continue;
-        }
-      } catch (std::exception const& e) {
-        LOG(ERROR) << "Exception: " << folly::exceptionStr(e);
-        EXPECT_TRUE(false);
-        return;
-      }
-
-      auto intfDb = fbzmq::util::readThriftObjStr<thrift::InterfaceDatabase>(
-          value->value.value(), serializer);
-      printIntfDb(intfDb);
-
-      if (intfDb == expectedIntfDb) {
-        EXPECT_TRUE(true);
-        return;
-      }
-    }
-  }
-
   std::unordered_set<thrift::IpPrefix>
   getNextPrefixDb(std::string const& key) {
     while (true) {
@@ -688,7 +640,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
           },
           thrift::PerfEvents());
       intfDb.perfEvents = folly::none;
-      checkNextIntfPub("intf:node-1", intfDb);
     }
 
     {
@@ -997,10 +948,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         false /* enable full mesh reduction */,
         false /* enable perf measurement */,
         false /* enable v4 */,
-        true /* advertise interface db */,
         true /* enable segment routing */,
         AdjacencyDbMarker{"adj:"},
-        InterfaceDbMarker{"intf:"},
         SparkCmdUrl{"inproc://spark-req2"},
         SparkReportUrl{"inproc://spark-report2"},
         MonitorSubmitUrl{"inproc://monitor-rep2"},
@@ -1252,10 +1201,8 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       false /* enable full mesh reduction */,
       false /* enable perf measurement */,
       true /* enable v4 */,
-      true /* advertise interface db */,
       true /* enable segment routing */,
       AdjacencyDbMarker{"adj:"},
-      InterfaceDbMarker{"intf:"},
       SparkCmdUrl{"inproc://spark-req"},
       SparkReportUrl{"inproc://spark-report"},
       MonitorSubmitUrl{"inproc://monitor-rep"},
@@ -1755,10 +1702,8 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         false /* enable full mesh reduction */,
         false /* enable perf measurement */,
         false /* enable v4 */,
-        true /* advertise interface db */,
         true /* enable segment routing */,
         AdjacencyDbMarker{"adj:"},
-        InterfaceDbMarker{"intf:"},
         SparkCmdUrl{"inproc://spark-req"},
         SparkReportUrl{"inproc://spark-report"},
         MonitorSubmitUrl{"inproc://monitor-rep"},

@@ -81,13 +81,10 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       bool enablePerfMeasurement,
       // is v4 enabled or not
       bool enableV4,
-      // enable interface db
-      bool advertiseInterfaceDb,
       // enable segment routing
       bool enableSegmentRouting,
       // KvStore's adjacency object's key prefix
       AdjacencyDbMarker adjacencyDbMarker,
-      InterfaceDbMarker interfaceDbMarker,
       // URLs for spark, kv-store and monitor
       SparkCmdUrl sparkCmdUrl,
       SparkReportUrl sparkReportUrl,
@@ -267,14 +264,10 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   const bool enablePerfMeasurement_{false};
   // is v4 enabled in OpenR or not
   const bool enableV4_{false};
-  // advertise interface DB or not
-  const bool advertiseInterfaceDb_{false};
   // enable segment routing
   const bool enableSegmentRouting_{false};
   // used to match the adjacency database keys
   const std::string adjacencyDbMarker_;
-  // used to encode interface database key names
-  const std::string interfaceDbMarker_;
   // used to encode interface db information in KvStore
   // URL to send/remove interfaces from spark
   const std::string sparkCmdUrl_;

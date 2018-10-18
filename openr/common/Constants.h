@@ -185,7 +185,6 @@ class Constants {
 
   // KvStore key markers
   static constexpr folly::StringPiece kAdjDbMarker{"adj:"};
-  static constexpr folly::StringPiece kInterfaceDbMarker{"intf:"};
   static constexpr folly::StringPiece kPrefixDbMarker{"prefix:"};
   static constexpr folly::StringPiece kPrefixAllocMarker{"allocprefix:"};
   static constexpr folly::StringPiece kNodeLabelRangePrefix{"nodeLabel:"};

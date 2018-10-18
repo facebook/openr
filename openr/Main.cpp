@@ -320,10 +320,6 @@ DEFINE_bool(
 DEFINE_int32(watchdog_interval_s, 20, "Watchdog thread healthcheck interval");
 DEFINE_int32(watchdog_threshold_s, 300, "Watchdog thread aliveness threshold");
 DEFINE_bool(
-    advertise_interface_db,
-    false,
-    "Flag to optionally advertise interface-DB information in KvStore.");
-DEFINE_bool(
     enable_segment_routing, false, "Flag to disable/enable segment routing");
 DEFINE_bool(set_leaf_node, false, "Flag to enable/disable node as a leaf node");
 DEFINE_string(
@@ -857,10 +853,8 @@ main(int argc, char** argv) {
       FLAGS_enable_full_mesh_reduction,
       FLAGS_enable_perf_measurement,
       FLAGS_enable_v4,
-      FLAGS_advertise_interface_db,
       FLAGS_enable_segment_routing,
       AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-      InterfaceDbMarker{Constants::kInterfaceDbMarker.toString()},
       SparkCmdUrl{FLAGS_spark_cmd_url},
       SparkReportUrl{FLAGS_spark_report_url},
       monitorSubmitUrl,

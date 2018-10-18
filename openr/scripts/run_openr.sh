@@ -40,7 +40,6 @@
 OPENR=openr
 
 # Keep this list in sorted order
-ADVERTISE_INTERFACE_DB=false
 ALLOC_PREFIX_LEN=128
 ASSUME_DRAINED=false
 CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
@@ -136,7 +135,6 @@ fi
 #
 
 exec ${OPENR} \
-  --advertise_interface_db=${ADVERTISE_INTERFACE_DB} \
   --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
   --assume_drained=${ASSUME_DRAINED} \
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \

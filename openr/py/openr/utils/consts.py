@@ -21,7 +21,6 @@ class Consts(object):
     CONST_TTL_INF = -2**31
     IP_TOS = 192
     ADJ_DB_MARKER = 'adj:'
-    INTERFACE_DB_MARKER = 'intf:'
     PREFIX_DB_MARKER = 'prefix:'
 
     SEED_PREFIX_ALLOC_PARAM_KEY = 'e2e-network-prefix'

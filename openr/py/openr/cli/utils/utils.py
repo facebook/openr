@@ -340,25 +340,6 @@ def build_global_prefix_db(resp):
     return global_prefix_db
 
 
-def build_global_interface_db(resp):
-    '''
-    build a map<node-name, InterfaceDatabase.bunch> which is used for tracking
-    changes in interface database of node
-
-    :param resp kv_store_types.Publication: the parsed publication
-
-    :return map<node, InterfaceDatabase.bunch>
-    '''
-
-    global_intf_db = {}
-    for (key, value) in resp.keyVals.items():
-        if not key.startswith(Consts.INTERFACE_DB_MARKER):
-            continue
-        intf_db = interface_db_to_dict(value)
-        global_intf_db[intf_db.thisNodeName] = intf_db
-    return global_intf_db
-
-
 def dump_adj_db_full(global_adj_db, adj_db, bidir):
     ''' given an adjacency database, dump neighbors. Use the
             global adj database to validate bi-dir adjacencies
@@ -628,43 +609,6 @@ def interface_dbs_to_dict(publication, nodes, iter_func):
     intf_dbs_map = {}
     iter_func(intf_dbs_map, publication, nodes, _parse_intf_db)
     return intf_dbs_map
-
-
-def sprint_interface_table(intf_db, print_all=True):
-    '''
-    @param intf_db: InterfaceDatabase.bunch
-    '''
-
-    columns = ['Interface', 'Status', 'ifIndex', 'Addresses']
-    rows = []
-    for intf_name, intf in sorted(intf_db.interfaces.items()):
-        if not (intf.isUp or print_all):
-            continue
-        status = 'UP' if intf.isUp else 'DOWN'
-        rows.append([intf_name, status, intf.ifIndex, ''])
-
-        first_row = True
-        for addr in intf.Addrs:
-            if first_row:
-                first_row = False
-                rows[-1][-1] = addr
-            else:
-                rows.append(['', '', '', addr])
-
-    return printing.render_horizontal_table(rows, columns, None)
-
-
-def print_interfaces_table(intf_map, print_all):
-    '''
-    @param intf_db: map<node-name, InterfaceDatabase.bunch>
-    '''
-
-    lines = []
-    for intf_db in sorted(intf_map.values(), key=lambda x: x.thisNodeName):
-        lines.append('> {}\'s interfaces'.format(intf_db.thisNodeName))
-        lines.append(sprint_interface_table(intf_db, print_all))
-        lines.append('')
-    print('\n'.join(lines))
 
 
 def print_routes_table(route_db, prefixes=None):
@@ -963,51 +907,6 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
         strs.append(printing.render_horizontal_table(rows, tablefmt='plain'))
 
     return strs
-
-
-def sprint_interface_db_delta(new_intf_db, old_intf_db):
-    '''
-    Print delta between new and old interface db
-
-    @param new_intf_db: InterfaceDatabase.bunch
-    @param old_intf_db: InterfaceDatabase.bunch
-    '''
-
-    assert(new_intf_db is not None)
-    assert(old_intf_db is not None)
-
-    new_intfs = set(new_intf_db.interfaces.keys())
-    old_intfs = set(old_intf_db.interfaces.keys())
-
-    added_intfs = new_intfs - old_intfs
-    removed_intfs = old_intfs - new_intfs
-    updated_intfs = new_intfs & old_intfs
-    lines = []
-
-    for intf_name in added_intfs:
-        lines.append('INTERFACE_ADDED: {}\n'.format(intf_name))
-        intf = new_intf_db.interfaces[intf_name]
-        rows = []
-        for k in sorted(intf.keys()):
-            rows.append([k, "", "-->", intf.get(k)])
-        lines.append(printing.render_horizontal_table(rows, tablefmt='plain'))
-
-    for intf_name in removed_intfs:
-        lines.append('INTERFACE_REMOVED: {}\n'.format(intf_name))
-
-    for intf_name in updated_intfs:
-        new_intf = new_intf_db.interfaces[intf_name]
-        old_intf = old_intf_db.interfaces[intf_name]
-        if new_intf == old_intf:
-            continue
-        lines.append('INTERFACE_UPDATED: {}'.format(intf_name))
-        rows = []
-        for k in sorted(new_intf.keys()):
-            if old_intf.get(k) != new_intf.get(k):
-                rows.append([k, old_intf.get(k), "-->", new_intf.get(k)])
-        lines.append(printing.render_horizontal_table(rows, tablefmt='plain'))
-
-    return lines
 
 
 def sprint_prefixes_db_delta(global_prefixes_db, prefix_db):

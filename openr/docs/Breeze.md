@@ -135,10 +135,6 @@ allocprefix:16185099  node1                   1  0:05:00                       5
 allocprefix:2710045   node2                   1  0:05:00                       5
 allocprefix:401583    node3                   1  0:05:00                       5
 allocprefix:6678890   node4                   1  0:05:00                       5
-intf:node1            node1                   1  0:05:00                       5
-intf:node2            node2                   1  0:05:00                       5
-intf:node3            node3                   1  0:05:00                       5
-intf:node4            node4                   1  0:05:00                       5
 nodeLabel:1           node4                   1  0:05:00                       5
 nodeLabel:19385       node2                   1  0:05:00                       5
 nodeLabel:41983       node1                   1  0:05:00                       5
@@ -151,18 +147,7 @@ prefix:node4          node4                   4  0:05:00                       5
 
 - List specific key-values
 ```
-$ breeze kvstore keyvals nodeLabel:1 intf:node4
-
-> intf:node4 ---
-00000000: 18 05 6E 6F 64 65 34 1B  02 8C 08 69 66 5F 34 5F  ..node4....if_4_
-00000010: 32 5F 30 11 16 0E 19 1C  18 04 AC 10 00 05 00 19  2_0.............
-00000020: 1C 18 10 FE 80 00 00 00  00 00 00 9C DB 34 FF FE  .............4..
-00000030: 41 97 90 00 00 08 69 66  5F 34 5F 33 5F 30 11 16  A.....if_4_3_0..
-00000040: 0C 19 1C 18 04 AC 10 00  07 00 19 1C 18 10 FE 80  ................
-00000050: 00 00 00 00 00 00 F4 98  41 FF FE 0C 6C 23 00 00  ........A...l#..
-00000060: 1C 19 1C 18 05 6E 6F 64  65 34 18 0F 49 4E 54 46  .....node4..INTF
-00000070: 5F 44 42 5F 55 50 44 41  54 45 44 16 9A A5 D7 F0  _DB_UPDATED.....
-00000080: F6 57 00 00 00                                    .W...
+$ breeze kvstore keyvals nodeLabel:1
 
 > nodeLabel:1 ---
 00000000: 01 00 00 00                                       ....

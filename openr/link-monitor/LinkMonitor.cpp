@@ -84,10 +84,8 @@ LinkMonitor::LinkMonitor(
     bool enableFullMeshReduction,
     bool enablePerfMeasurement,
     bool enableV4,
-    bool advertiseInterfaceDb,
     bool enableSegmentRouting,
     AdjacencyDbMarker adjacencyDbMarker,
-    InterfaceDbMarker interfaceDbMarker,
     SparkCmdUrl sparkCmdUrl,
     SparkReportUrl sparkReportUrl,
     MonitorSubmitUrl const& monitorSubmitUrl,
@@ -115,10 +113,8 @@ LinkMonitor::LinkMonitor(
       enableFullMeshReduction_(enableFullMeshReduction),
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(enableV4),
-      advertiseInterfaceDb_(advertiseInterfaceDb),
       enableSegmentRouting_(enableSegmentRouting),
       adjacencyDbMarker_(adjacencyDbMarker),
-      interfaceDbMarker_(interfaceDbMarker),
       sparkCmdUrl_(sparkCmdUrl),
       sparkReportUrl_(sparkReportUrl),
       platformPubUrl_(platformPubUrl),
@@ -865,7 +861,7 @@ LinkMonitor::createInterfaceDatabase() {
 
 void
 LinkMonitor::sendInterfaceDatabase() {
-
+  tData_.addStatValue("link_monitor.advertise_links", 1, fbzmq::SUM);
   const auto ifDb = createInterfaceDatabase();
 
   // advertise interface database, prompting FIB to take immediate action
@@ -887,17 +883,6 @@ LinkMonitor::sendInterfaceDatabase() {
   if (result.hasError()) {
     LOG(ERROR) << "Failed updating interface to Spark " << result.error();
   }
-
-  // Return immediately if we are not configured to advertise interface db
-  if (not advertiseInterfaceDb_) {
-    return;
-  }
-
-  // advertise link database in KvStore
-  const auto keyName = interfaceDbMarker_ + nodeId_;
-  std::string intfDbStr = fbzmq::util::writeThriftObjStr(ifDb, serializer_);
-  kvStoreClient_->persistKey(keyName, intfDbStr, Constants::kKvStoreDbTtl);
-  tData_.addStatValue("link_monitor.advertise_links", 1, fbzmq::SUM);
 }
 
 void
