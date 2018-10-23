@@ -5,11 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <gtest/gtest.h>
 #include <glog/logging.h>
+#include <gtest/gtest.h>
 #include <openr/nl/NetlinkTypes.h>
 
 extern "C" {
+#include <linux/if.h>
 #include <netlink/cache.h>
 #include <netlink/netlink.h>
 #include <netlink/route/addr.h>
@@ -17,7 +18,6 @@ extern "C" {
 #include <netlink/route/link/veth.h>
 #include <netlink/route/route.h>
 #include <netlink/socket.h>
-#include <linux/if.h>
 #include <sys/ioctl.h>
 }
 
@@ -33,12 +33,11 @@ class NetlinkTypesFixture : public testing::Test {
   NetlinkTypesFixture() = default;
   ~NetlinkTypesFixture() override = default;
 
-  void SetUp() override {
-  }
+  void
+  SetUp() override {}
 
-  void TearDown() override {
-  }
-
+  void
+  TearDown() override {}
 };
 
 TEST_F(NetlinkTypesFixture, NextHopIfIndexConsTest) {
@@ -74,9 +73,7 @@ TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
   // Create NextHop with gateway
   folly::IPAddress gateway("fc00:cafe:3::3");
   NextHopBuilder builder;
-  auto nh = builder.setGateway(gateway)
-                   .setWeight(kWeight)
-                   .build();
+  auto nh = builder.setGateway(gateway).setWeight(kWeight).build();
   EXPECT_FALSE(nh.getIfIndex().hasValue());
   EXPECT_TRUE(nh.getGateway().hasValue());
   EXPECT_EQ(gateway, nh.getGateway().value());
@@ -88,7 +85,7 @@ TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
   EXPECT_EQ(0, rtnl_route_nh_get_ifindex(object)); // ifIndex's default value
   EXPECT_EQ(kWeight, rtnl_route_nh_get_weight(object));
   struct nl_addr* nl_gw = nl_addr_build(
-    gateway.family(), (void*)gateway.bytes(), gateway.byteCount());
+      gateway.family(), (void*)gateway.bytes(), gateway.byteCount());
   EXPECT_TRUE(nl_addr_cmp(nl_gw, rtnl_route_nh_get_gateway(object)) == 0);
 
   NextHopBuilder newBuilder;
@@ -105,9 +102,9 @@ TEST_F(NetlinkTypesFixture, NexthopGeneralConsTest) {
   folly::IPAddress gateway("fc00:cafe:3::3");
   NextHopBuilder builder;
   auto nh = builder.setGateway(gateway)
-                   .setIfIndex(kIfIndex)
-                   .setWeight(kWeight)
-                   .build();
+                .setIfIndex(kIfIndex)
+                .setWeight(kWeight)
+                .build();
   // Create nextHop with ifIndex and gateway
   EXPECT_TRUE(nh.getIfIndex().hasValue());
   EXPECT_EQ(kIfIndex, nh.getIfIndex().value());
@@ -121,7 +118,7 @@ TEST_F(NetlinkTypesFixture, NexthopGeneralConsTest) {
   EXPECT_EQ(kIfIndex, rtnl_route_nh_get_ifindex(object));
   EXPECT_EQ(kWeight, rtnl_route_nh_get_weight(object));
   struct nl_addr* nl_gw = nl_addr_build(
-    gateway.family(), (void*)gateway.bytes(), gateway.byteCount());
+      gateway.family(), (void*)gateway.bytes(), gateway.byteCount());
   EXPECT_TRUE(nl_addr_cmp(nl_gw, rtnl_route_nh_get_gateway(object)) == 0);
   EXPECT_TRUE(object == nh.fromNetlinkNextHop());
 
@@ -139,9 +136,8 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   RouteBuilder builder;
   // Use default values
-  auto route = builder.setDestination(dst)
-         .setProtocolId(kProtocolId)
-         .buildRoute();
+  auto route =
+      builder.setDestination(dst).setProtocolId(kProtocolId).buildRoute();
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
   EXPECT_EQ(RT_SCOPE_UNIVERSE, route.getScope());
@@ -163,8 +159,8 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   EXPECT_EQ(dst, route.getDestination());
   EXPECT_EQ(RTN_UNICAST, route.getType());
   struct nl_addr* dstObj = nl_addr_build(
-    dst.first.family(), (void*)dst.first.bytes(), dst.first.byteCount());
-    nl_addr_set_prefixlen(dstObj, dst.second);
+      dst.first.family(), (void*)dst.first.bytes(), dst.first.byteCount());
+  nl_addr_set_prefixlen(dstObj, dst.second);
   EXPECT_TRUE(nl_addr_cmp(dstObj, rtnl_route_get_dst(object)) == 0);
   EXPECT_EQ(0, rtnl_route_get_flags(object));
   EXPECT_EQ(0, rtnl_route_get_priority(object));
@@ -191,76 +187,72 @@ TEST_F(NetlinkTypesFixture, RouteEqualTest) {
   auto nh2 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway2).build();
   RouteBuilder builder1;
   auto route1 = builder1.setDestination(dst)
-                      .setType(RTN_UNICAST)
-                      .setProtocolId(kProtocolId)
-                      .setScope(RT_SCOPE_UNIVERSE)
-                      .setRouteTable(RT_TABLE_MAIN)
-                      .setFlags(flags)
-                      .setPriority(priority)
-                      .setTos(tos)
-                      .addNextHop(nh1)
-                      .addNextHop(nh2)
-                      .buildRoute();
+                    .setType(RTN_UNICAST)
+                    .setProtocolId(kProtocolId)
+                    .setScope(RT_SCOPE_UNIVERSE)
+                    .setRouteTable(RT_TABLE_MAIN)
+                    .setFlags(flags)
+                    .setPriority(priority)
+                    .setTos(tos)
+                    .addNextHop(nh1)
+                    .addNextHop(nh2)
+                    .buildRoute();
   RouteBuilder builder2;
   nhBuilder.reset();
   nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
   nhBuilder.reset();
   nh2 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway2).build();
   auto route2 = builder2.setDestination(dst)
-                      .setType(RTN_UNICAST)
-                      .setProtocolId(kProtocolId)
-                      .setScope(RT_SCOPE_UNIVERSE)
-                      .setRouteTable(RT_TABLE_MAIN)
-                      .setFlags(flags)
-                      .setPriority(priority)
-                      .setTos(tos)
-                      .addNextHop(nh2)
-                      .addNextHop(nh1)
-                      .buildRoute();
+                    .setType(RTN_UNICAST)
+                    .setProtocolId(kProtocolId)
+                    .setScope(RT_SCOPE_UNIVERSE)
+                    .setRouteTable(RT_TABLE_MAIN)
+                    .setFlags(flags)
+                    .setPriority(priority)
+                    .setTos(tos)
+                    .addNextHop(nh2)
+                    .addNextHop(nh1)
+                    .buildRoute();
   EXPECT_TRUE(route1 == route2);
   RouteBuilder builder3;
   nhBuilder.reset();
   nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
   auto route3 = builder3.setDestination(dst)
-                      .setType(RTN_UNICAST)
-                      .setProtocolId(kProtocolId)
-                      .setScope(RT_SCOPE_UNIVERSE)
-                      .setRouteTable(RT_TABLE_MAIN)
-                      .setFlags(flags)
-                      .setPriority(priority)
-                      .setTos(tos)
-                      .addNextHop(nh1)
-                      .buildRoute();
+                    .setType(RTN_UNICAST)
+                    .setProtocolId(kProtocolId)
+                    .setScope(RT_SCOPE_UNIVERSE)
+                    .setRouteTable(RT_TABLE_MAIN)
+                    .setFlags(flags)
+                    .setPriority(priority)
+                    .setTos(tos)
+                    .addNextHop(nh1)
+                    .buildRoute();
   EXPECT_FALSE(route2 == route3);
   RouteBuilder builder4;
   nhBuilder.reset();
   nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
   auto nh3 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway3).build();
   auto route4 = builder4.setDestination(dst)
-                      .setType(RTN_UNICAST)
-                      .setProtocolId(kProtocolId)
-                      .setScope(RT_SCOPE_UNIVERSE)
-                      .setRouteTable(RT_TABLE_MAIN)
-                      .setFlags(flags)
-                      .setPriority(priority)
-                      .setTos(tos)
-                      .addNextHop(nh1)
-                      .addNextHop(nh3)
-                      .buildRoute();
+                    .setType(RTN_UNICAST)
+                    .setProtocolId(kProtocolId)
+                    .setScope(RT_SCOPE_UNIVERSE)
+                    .setRouteTable(RT_TABLE_MAIN)
+                    .setFlags(flags)
+                    .setPriority(priority)
+                    .setTos(tos)
+                    .addNextHop(nh1)
+                    .addNextHop(nh3)
+                    .buildRoute();
   EXPECT_FALSE(route2 == route4);
 
   // Add same nexthop
   nhBuilder.reset();
-  auto nh4 =
-    nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
+  auto nh4 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
   nhBuilder.reset();
-  auto nh5 =
-    nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
+  auto nh5 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
   RouteBuilder builder5;
-  auto route5 = builder5.setDestination(dst)
-                        .addNextHop(nh4)
-                        .addNextHop(nh5)
-                        .buildRoute();
+  auto route5 =
+      builder5.setDestination(dst).addNextHop(nh4).addNextHop(nh5).buildRoute();
   EXPECT_EQ(1, route5.getNextHops().size());
   nh5.release();
 }
@@ -275,15 +267,15 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
   auto nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway).build();
   RouteBuilder builder;
   auto route = builder.setDestination(dst)
-                      .setType(RTN_UNICAST)
-                      .setProtocolId(kProtocolId)
-                      .setScope(RT_SCOPE_UNIVERSE)
-                      .setRouteTable(RT_TABLE_MAIN)
-                      .setFlags(flags)
-                      .setPriority(priority)
-                      .setTos(tos)
-                      .addNextHop(nh1)
-                      .buildRoute();
+                   .setType(RTN_UNICAST)
+                   .setProtocolId(kProtocolId)
+                   .setScope(RT_SCOPE_UNIVERSE)
+                   .setRouteTable(RT_TABLE_MAIN)
+                   .setFlags(flags)
+                   .setPriority(priority)
+                   .setTos(tos)
+                   .addNextHop(nh1)
+                   .buildRoute();
 
   struct rtnl_route* p = route.fromNetlinkRoute();
   Route route1(std::move(route));
@@ -342,7 +334,6 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
 }
 
 TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
-
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   uint32_t flags = 0x01;
   uint32_t priority = 3;
@@ -356,17 +347,17 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
   auto nh3 = builder.setIfIndex(kIfIndex).setGateway(gateway).build();
   RouteBuilder rtbuilder;
   auto route = rtbuilder.setDestination(dst)
-                        .setType(RTN_UNICAST)
-                        .setProtocolId(kProtocolId)
-                        .setScope(RT_SCOPE_UNIVERSE)
-                        .setRouteTable(RT_TABLE_MAIN)
-                        .setFlags(flags)
-                        .setPriority(priority)
-                        .setTos(tos)
-                        .addNextHop(nh1)
-                        .addNextHop(nh2)
-                        .addNextHop(nh3)
-                        .buildRoute();
+                   .setType(RTN_UNICAST)
+                   .setProtocolId(kProtocolId)
+                   .setScope(RT_SCOPE_UNIVERSE)
+                   .setRouteTable(RT_TABLE_MAIN)
+                   .setFlags(flags)
+                   .setPriority(priority)
+                   .setTos(tos)
+                   .addNextHop(nh1)
+                   .addNextHop(nh2)
+                   .addNextHop(nh3)
+                   .buildRoute();
 
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
@@ -392,8 +383,8 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
   EXPECT_EQ(dst, route.getDestination());
   EXPECT_EQ(RTN_UNICAST, route.getType());
   struct nl_addr* dstObj = nl_addr_build(
-    dst.first.family(), (void*)dst.first.bytes(), dst.first.byteCount());
-    nl_addr_set_prefixlen(dstObj, dst.second);
+      dst.first.family(), (void*)dst.first.bytes(), dst.first.byteCount());
+  nl_addr_set_prefixlen(dstObj, dst.second);
   EXPECT_TRUE(nl_addr_cmp(dstObj, rtnl_route_get_dst(object)) == 0);
   EXPECT_EQ(flags, rtnl_route_get_flags(object));
   EXPECT_EQ(priority, rtnl_route_get_priority(object));
@@ -411,7 +402,7 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
     if (gatewayObj) {
       folly::IPAddress* dest = reinterpret_cast<folly::IPAddress*>(gw);
       struct nl_addr* destObj = nl_addr_build(
-        dest->family(), (void*)dest->bytes(), dest->byteCount());
+          dest->family(), (void*)dest->bytes(), dest->byteCount());
       EXPECT_TRUE(nl_addr_cmp(destObj, gatewayObj) == 0);
       nl_addr_put(destObj);
     }
@@ -428,10 +419,8 @@ TEST_F(NetlinkTypesFixture, IfAddressMoveConsTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
   uint32_t flags = 0x01;
   IfAddressBuilder builder;
-  auto ifAddr = builder.setPrefix(prefix)
-                       .setIfIndex(kIfIndex)
-                       .setFlags(flags)
-                       .build();
+  auto ifAddr =
+      builder.setPrefix(prefix).setIfIndex(kIfIndex).setFlags(flags).build();
   struct rtnl_addr* p = ifAddr.fromIfAddress();
   IfAddress ifAddr1(std::move(ifAddr));
   EXPECT_TRUE(nullptr == ifAddr.fromIfAddress());
@@ -470,10 +459,8 @@ TEST_F(NetlinkTypesFixture, IfAddressTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
   uint32_t flags = 0x01;
   IfAddressBuilder builder;
-  auto ifAddr = builder.setPrefix(prefix)
-                       .setIfIndex(kIfIndex)
-                       .setFlags(flags)
-                       .build();
+  auto ifAddr =
+      builder.setPrefix(prefix).setIfIndex(kIfIndex).setFlags(flags).build();
   struct rtnl_addr* addr = ifAddr.fromIfAddress();
   EXPECT_TRUE(addr != nullptr);
   EXPECT_EQ(AF_INET6, rtnl_addr_get_family(addr));
@@ -492,10 +479,10 @@ TEST_F(NetlinkTypesFixture, IfAddressTest) {
   folly::CIDRNetwork prefixV4{folly::IPAddress("192.168.0.11"), 32};
   builder.reset();
   auto ifAddr1 = builder.setPrefix(prefixV4)
-                        .setFlags(flags)
-                        .setScope(rtnl_str2scope("site"))
-                        .setIfIndex(kIfIndex)
-                        .build();
+                     .setFlags(flags)
+                     .setScope(rtnl_str2scope("site"))
+                     .setIfIndex(kIfIndex)
+                     .build();
   addr = nullptr;
   addr = ifAddr1.fromIfAddress();
   EXPECT_TRUE(addr != nullptr);
@@ -519,10 +506,10 @@ TEST_F(NetlinkTypesFixture, IfAddressMiscTest) {
   uint32_t flags = 0x01;
   IfAddressBuilder builder;
   auto ifAddr = builder.setPrefix(prefix)
-                       .setIfIndex(kIfIndex)
-                       .setFlags(flags)
-                       .setFamily(AF_INET6) // will be shadowed
-                       .build();
+                    .setIfIndex(kIfIndex)
+                    .setFlags(flags)
+                    .setFamily(AF_INET6) // will be shadowed
+                    .build();
   struct rtnl_addr* addr = ifAddr.fromIfAddress();
   EXPECT_TRUE(addr != nullptr);
   EXPECT_EQ(AF_INET6, rtnl_addr_get_family(addr));
@@ -549,7 +536,8 @@ TEST_F(NetlinkTypesFixture, IfAddressMiscTest) {
   EXPECT_EQ(kIfIndex, ifAddr1.getIfIndex());
 }
 
-int main(int argc, char* argv[]) {
+int
+main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -565,10 +553,10 @@ TEST_F(NetlinkTypesFixture, NeighborTypeTest) {
   folly::MacAddress mac("00:00:00:00:00:00");
   NeighborBuilder builder;
   auto neigh = builder.setIfIndex(kIfIndex)
-                      .setState(NUD_REACHABLE)
-                      .setDestination(dst)
-                      .setLinkAddress(mac)
-                      .build();
+                   .setState(NUD_REACHABLE)
+                   .setDestination(dst)
+                   .setLinkAddress(mac)
+                   .build();
   struct rtnl_neigh* obj = neigh.fromNeighbor();
   EXPECT_TRUE(obj != nullptr);
   struct nl_addr* dstObj = rtnl_neigh_get_dst(obj);
@@ -619,10 +607,10 @@ TEST_F(NetlinkTypesFixture, LinkTypeTest) {
   unsigned int flags = 0x0 | IFF_RUNNING;
 
   LinkBuilder builder;
-  auto link  = builder.setIfIndex(kIfIndex)
-                      .setFlags(flags)
-                      .setLinkName(linkName)
-                      .build();
+  auto link = builder.setIfIndex(kIfIndex)
+                  .setFlags(flags)
+                  .setLinkName(linkName)
+                  .build();
   struct rtnl_link* obj = link.fromLink();
   EXPECT_TRUE(obj != nullptr);
   EXPECT_EQ(kIfIndex, rtnl_link_get_ifindex(obj));

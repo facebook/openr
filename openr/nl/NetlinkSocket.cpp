@@ -23,10 +23,8 @@ namespace openr {
 namespace fbnl {
 
 NetlinkSocket::NetlinkSocket(
-  fbzmq::ZmqEventLoop* evl,
-  std::shared_ptr<EventsHandler> handler)
-  : evl_(evl),
-    handler_(std::move(handler)) {
+    fbzmq::ZmqEventLoop* evl, std::shared_ptr<EventsHandler> handler)
+    : evl_(evl), handler_(std::move(handler)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 
   // Create netlink socket for only notification subscription
@@ -47,9 +45,9 @@ NetlinkSocket::NetlinkSocket(
 
   // Create cache manager using notification socket
   err = nl_cache_mngr_alloc(
-    subSock_, NETLINK_ROUTE, NL_AUTO_PROVIDE, &cacheManager_);
-  CHECK_EQ(err, 0)
-    << "Failed to create cache manager. Error: " << nl_geterror(err);
+      subSock_, NETLINK_ROUTE, NL_AUTO_PROVIDE, &cacheManager_);
+  CHECK_EQ(err, 0) << "Failed to create cache manager. Error: "
+                   << nl_geterror(err);
 
   // Set high buffers on netlink socket (especially on sub socket) so that
   // bulk events can also be received
@@ -62,7 +60,7 @@ NetlinkSocket::NetlinkSocket(
   // route event handler is provided which has this object as opaque data so
   // we can get object state back in this static callback
   err = nl_cache_mngr_add(
-    cacheManager_, kRouteObjectStr.data(), routeCacheCB, this, &routeCache_);
+      cacheManager_, kRouteObjectStr.data(), routeCacheCB, this, &routeCache_);
   if (err != 0 || !routeCache_) {
     CHECK(false) << "Failed to add neighbor cache to manager. Error: "
                  << nl_geterror(err);
@@ -72,24 +70,27 @@ NetlinkSocket::NetlinkSocket(
   err = nl_cache_mngr_add(
       cacheManager_, kLinkObjectStr.data(), linkCacheCB, this, &linkCache_);
   if (err != 0 || !linkCache_) {
-    CHECK(false)
-      << "Failed to add link cache to manager. Error: " << nl_geterror(err);
+    CHECK(false) << "Failed to add link cache to manager. Error: "
+                 << nl_geterror(err);
   }
 
   // Add address cache
   err = nl_cache_mngr_add(
       cacheManager_, kAddrObjectStr.data(), addrCacheCB, this, &addrCache_);
   if (err != 0 || !addrCache_) {
-    CHECK(false)
-      << "Failed to add addr cache to manager. Error: " << nl_geterror(err);
+    CHECK(false) << "Failed to add addr cache to manager. Error: "
+                 << nl_geterror(err);
   }
 
   err = nl_cache_mngr_add(
-      cacheManager_, kNeighborObjectStr.data(),
-      neighCacheCB, this, &neighborCache_);
+      cacheManager_,
+      kNeighborObjectStr.data(),
+      neighCacheCB,
+      this,
+      &neighborCache_);
   if (err != 0 || !neighborCache_) {
-    CHECK(false)
-      << "Failed to add neighbor cache to manager. Error: " << nl_geterror(err);
+    CHECK(false) << "Failed to add neighbor cache to manager. Error: "
+                 << nl_geterror(err);
   }
 
   // Get socket FD to monitor for updates
@@ -102,7 +103,7 @@ NetlinkSocket::NetlinkSocket(
     int lambdaErr = nl_cache_mngr_data_ready(cacheManager_);
     if (lambdaErr < 0) {
       LOG(ERROR) << "Error processing data on netlink socket. Error: "
-      << nl_geterror(lambdaErr);
+                 << nl_geterror(lambdaErr);
     } else {
       VLOG(2) << "Processed " << lambdaErr << " netlink messages.";
     }
@@ -132,13 +133,15 @@ NetlinkSocket::~NetlinkSocket() {
   reqSock_ = nullptr;
 }
 
-void NetlinkSocket::routeCacheCB(
+void
+NetlinkSocket::routeCacheCB(
     struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept {
   CHECK(data) << "Opaque context does not exist in route callback";
   reinterpret_cast<NetlinkSocket*>(data)->handleRouteEvent(obj, action, true);
 }
 
-void NetlinkSocket::handleRouteEvent(
+void
+NetlinkSocket::handleRouteEvent(
     struct nl_object* obj, int action, bool runHandler) noexcept {
   CHECK_NOTNULL(obj);
   if (!checkObjectType(obj, kRouteObjectStr)) {
@@ -157,7 +160,8 @@ void NetlinkSocket::handleRouteEvent(
       RouteBuilder builder;
       auto route = builder.buildFromObject(routeObj);
       std::string ifName = route.getRouteIfName().hasValue()
-          ? route.getRouteIfName().value() : "";
+          ? route.getRouteIfName().value()
+          : "";
       EventVariant event = std::move(route);
       handler_->handleEvent(ifName, action, event);
     } catch (std::exception& e) {
@@ -166,14 +170,16 @@ void NetlinkSocket::handleRouteEvent(
   }
 }
 
-void NetlinkSocket::linkCacheCB(
+void
+NetlinkSocket::linkCacheCB(
     struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept {
   CHECK(data) << "Opaque context does not exist in link callback";
   reinterpret_cast<NetlinkSocket*>(data)->handleLinkEvent(obj, action, true);
 }
 
-void NetlinkSocket::handleLinkEvent(
-     struct nl_object* obj, int action, bool runHandler) noexcept {
+void
+NetlinkSocket::handleLinkEvent(
+    struct nl_object* obj, int action, bool runHandler) noexcept {
   CHECK_NOTNULL(obj);
   if (!checkObjectType(obj, kLinkObjectStr)) {
     return;
@@ -200,7 +206,8 @@ void NetlinkSocket::handleLinkEvent(
   }
 }
 
-void NetlinkSocket::removeNeighborCacheEntries(const std::string& ifName) {
+void
+NetlinkSocket::removeNeighborCacheEntries(const std::string& ifName) {
   for (auto it = neighbors_.begin(); it != neighbors_.end();) {
     if (std::get<0>(it->first) == ifName) {
       it = neighbors_.erase(it);
@@ -210,13 +217,15 @@ void NetlinkSocket::removeNeighborCacheEntries(const std::string& ifName) {
   }
 }
 
-void NetlinkSocket::addrCacheCB(
+void
+NetlinkSocket::addrCacheCB(
     struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept {
   CHECK(data) << "Opaque context does not exist in address callback";
   reinterpret_cast<NetlinkSocket*>(data)->handleAddrEvent(obj, action, true);
 }
 
-void NetlinkSocket::handleAddrEvent(
+void
+NetlinkSocket::handleAddrEvent(
     struct nl_object* obj, int action, bool runHandler) noexcept {
   CHECK_NOTNULL(obj);
   if (!checkObjectType(obj, kAddrObjectStr)) {
@@ -247,15 +256,17 @@ void NetlinkSocket::handleAddrEvent(
   }
 }
 
-void NetlinkSocket::neighCacheCB(
-    struct nl_cache *, struct nl_object *obj, int action, void *data) noexcept {
+void
+NetlinkSocket::neighCacheCB(
+    struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept {
   CHECK(data) << "Opaque context does not exist in neighbor callback";
-  reinterpret_cast<NetlinkSocket*>(data)->
-    handleNeighborEvent(obj, action, true);
+  reinterpret_cast<NetlinkSocket*>(data)->handleNeighborEvent(
+      obj, action, true);
 }
 
-void NetlinkSocket::handleNeighborEvent(
-    nl_object *obj, int action, bool runHandler) noexcept {
+void
+NetlinkSocket::handleNeighborEvent(
+    nl_object* obj, int action, bool runHandler) noexcept {
   CHECK_NOTNULL(obj);
   if (!checkObjectType(obj, kNeighborObjectStr)) {
     return;
@@ -282,7 +293,8 @@ void NetlinkSocket::handleNeighborEvent(
   }
 }
 
-void NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
+void
+NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
   RouteBuilder builder;
   bool isValid = (action != NL_ACT_DEL);
   auto route = builder.loadFromObject(obj).setValid(isValid).buildRoute();
@@ -347,15 +359,15 @@ void NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
   if (NL_ACT_DEL != action) {
     unicastRoutes.erase(prefix);
     unicastRoutes.emplace(std::make_pair(prefix, std::move(route)));
-  }
-  else if (prefix.first.isV4()) {
+  } else if (prefix.first.isV4()) {
     // Only explicitly remove V4 entry from local cache
     // explicit erase of V6 is done in doUpdateRouteCache
     unicastRoutes.erase(prefix);
   }
 }
 
-folly::Future<folly::Unit> NetlinkSocket::addRoute(Route route) {
+folly::Future<folly::Unit>
+NetlinkSocket::addRoute(Route route) {
   auto prefix = route.getDestination();
   VLOG(3) << "NetlinkSocket add route "
           << folly::IPAddress::networkToString(prefix);
@@ -363,36 +375,37 @@ folly::Future<folly::Unit> NetlinkSocket::addRoute(Route route) {
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runImmediatelyOrInEventLoop(
-     [ this, p = std::move(promise),
-       dest = std::move(prefix),
-       r = std::move(route)]() mutable {
-       try {
-         uint8_t type = r.getType();
-         switch (type) {
-           case RTN_UNICAST:
-           case RTN_BLACKHOLE:
-             doAddUpdateUnicastRoute(std::move(r));
-             break;
-           case RTN_MULTICAST:
-             doAddMulticastRoute(std::move(r));
-             break;
-           default:
-             throw fbnl::NlException(
-                 folly::sformat("Unsupported route type {}", (int)type));
-         }
-         p.setValue();
-       } catch (std::exception const& ex) {
-         LOG(ERROR) << "Error adding routes to "
-                    << folly::IPAddress::networkToString(dest)
-                    << ". Exception: " << folly::exceptionStr(ex);
-         p.setException(ex);
-       }
-     });
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     p = std::move(promise),
+                                     dest = std::move(prefix),
+                                     r = std::move(route)]() mutable {
+    try {
+      uint8_t type = r.getType();
+      switch (type) {
+      case RTN_UNICAST:
+      case RTN_BLACKHOLE:
+        doAddUpdateUnicastRoute(std::move(r));
+        break;
+      case RTN_MULTICAST:
+        doAddMulticastRoute(std::move(r));
+        break;
+      default:
+        throw fbnl::NlException(
+            folly::sformat("Unsupported route type {}", (int)type));
+      }
+      p.setValue();
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error adding routes to "
+                 << folly::IPAddress::networkToString(dest)
+                 << ". Exception: " << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
   return future;
 }
 
-void NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
+void
+NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   checkUnicastRoute(route);
 
   const auto& dest = route.getDestination();
@@ -407,8 +420,7 @@ void NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   }
 
   if (isV4) {
-    int err =
-      rtnl_route_add(reqSock_, route.fromNetlinkRoute(), NLM_F_REPLACE);
+    int err = rtnl_route_add(reqSock_, route.fromNetlinkRoute(), NLM_F_REPLACE);
     if (0 != err) {
       throw fbnl::NlException(folly::sformat(
           "Could not add V4 Route to: {} Error: {}",
@@ -424,18 +436,18 @@ void NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     if (iter != unicastRoutes.end()) {
       int err = rtnl_route_delete(reqSock_, iter->second.fromNetlinkRoute(), 0);
       if (0 != err && -NLE_OBJ_NOTFOUND != err) {
-        throw fbnl::NlException(
-          folly::sformat("Failed to delete route {} Error: {}",
-          folly::IPAddress::networkToString(dest),
-          nl_geterror(err)));
+        throw fbnl::NlException(folly::sformat(
+            "Failed to delete route {} Error: {}",
+            folly::IPAddress::networkToString(dest),
+            nl_geterror(err)));
       }
     }
     int err = rtnl_route_add(reqSock_, route.fromNetlinkRoute(), 0);
     if (0 != err) {
-      throw fbnl::NlException(
-        folly::sformat("Could not add V6 Route to: {} Error: {}",
-                       folly::IPAddress::networkToString(dest),
-                       nl_geterror(err)));
+      throw fbnl::NlException(folly::sformat(
+          "Could not add V6 Route to: {} Error: {}",
+          folly::IPAddress::networkToString(dest),
+          nl_geterror(err)));
     }
   }
   // Cache new nexthops in our local-cache if everything is good
@@ -450,47 +462,47 @@ NetlinkSocket::delRoute(Route route) {
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runImmediatelyOrInEventLoop(
-      [ this,
-        p = std::move(promise),
-        r = std::move(route),
-        dest = std::move(prefix)
-      ]() mutable {
-        try {
-          uint8_t type = r.getType();
-          switch (type) {
-            case RTN_UNICAST:
-            case RTN_BLACKHOLE:
-              doDeleteUnicastRoute(std::move(r));
-              break;
-            case RTN_MULTICAST:
-              doDeleteMulticastRoute(std::move(r));
-              break;
-            default:
-              throw fbnl::NlException(
-                  folly::sformat("Unsupported route type {}", (int)type));
-          }
-          p.setValue();
-        } catch (std::exception const& ex) {
-          LOG(ERROR) << "Error deleting routes to "
-                     << folly::IPAddress::networkToString(dest)
-                     << " Error: " << folly::exceptionStr(ex);
-          p.setException(ex);
-        }
-      });
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     p = std::move(promise),
+                                     r = std::move(route),
+                                     dest = std::move(prefix)]() mutable {
+    try {
+      uint8_t type = r.getType();
+      switch (type) {
+      case RTN_UNICAST:
+      case RTN_BLACKHOLE:
+        doDeleteUnicastRoute(std::move(r));
+        break;
+      case RTN_MULTICAST:
+        doDeleteMulticastRoute(std::move(r));
+        break;
+      default:
+        throw fbnl::NlException(
+            folly::sformat("Unsupported route type {}", (int)type));
+      }
+      p.setValue();
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error deleting routes to "
+                 << folly::IPAddress::networkToString(dest)
+                 << " Error: " << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
   return future;
 }
 
-void NetlinkSocket::checkUnicastRoute(const Route &route) {
+void
+NetlinkSocket::checkUnicastRoute(const Route& route) {
   const auto& prefix = route.getDestination();
   if (prefix.first.isMulticast() || prefix.first.isLinkLocal()) {
-    throw fbnl::NlException(
-      folly::sformat("Invalid unicast route type for: {}",
-      folly::IPAddress::networkToString(prefix)));
+    throw fbnl::NlException(folly::sformat(
+        "Invalid unicast route type for: {}",
+        folly::IPAddress::networkToString(prefix)));
   }
 }
 
-void NetlinkSocket::doDeleteUnicastRoute(Route route) {
+void
+NetlinkSocket::doDeleteUnicastRoute(Route route) {
   checkUnicastRoute(route);
 
   const auto& prefix = route.getDestination();
@@ -515,8 +527,8 @@ void NetlinkSocket::doDeleteUnicastRoute(Route route) {
   unicastRoutes.erase(route.getDestination());
 }
 
-void NetlinkSocket::doAddMulticastRoute(Route route) {
-
+void
+NetlinkSocket::doAddMulticastRoute(Route route) {
   checkMulticastRoute(route);
 
   auto& mcastRoutes = mcastRoutesCache_[route.getProtocolId()];
@@ -545,21 +557,23 @@ void NetlinkSocket::doAddMulticastRoute(Route route) {
   mcastRoutes.emplace(key, std::move(route));
 }
 
-void NetlinkSocket::checkMulticastRoute(const Route &route) {
+void
+NetlinkSocket::checkMulticastRoute(const Route& route) {
   auto prefix = route.getDestination();
   if (not prefix.first.isMulticast()) {
-    throw fbnl::NlException(
-      folly::sformat("Invalid multicast address {}",
-      folly::IPAddress::networkToString(prefix)));
+    throw fbnl::NlException(folly::sformat(
+        "Invalid multicast address {}",
+        folly::IPAddress::networkToString(prefix)));
   }
   if (not route.getRouteIfName().hasValue()) {
-    throw fbnl::NlException(
-      folly::sformat("Need set Iface name for multicast address {}",
-      folly::IPAddress::networkToString(prefix)));
+    throw fbnl::NlException(folly::sformat(
+        "Need set Iface name for multicast address {}",
+        folly::IPAddress::networkToString(prefix)));
   }
 }
 
-void NetlinkSocket::doDeleteMulticastRoute(Route route) {
+void
+NetlinkSocket::doDeleteMulticastRoute(Route route) {
   checkMulticastRoute(route);
 
   auto& mcastRoutes = mcastRoutesCache_[route.getProtocolId()];
@@ -597,26 +611,24 @@ NetlinkSocket::syncUnicastRoutes(
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runImmediatelyOrInEventLoop(
-      [ this,
-        p = std::move(promise),
-        syncDb = std::move(newRouteDb),
-        protocolId
-      ]() mutable {
-        try {
-          doSyncUnicastRoutes(protocolId, std::move(syncDb));
-          p.setValue();
-        } catch (std::exception const& ex) {
-          LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
-                     << folly::exceptionStr(ex);
-          p.setException(ex);
-        }
-      });
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     p = std::move(promise),
+                                     syncDb = std::move(newRouteDb),
+                                     protocolId]() mutable {
+    try {
+      doSyncUnicastRoutes(protocolId, std::move(syncDb));
+      p.setValue();
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
+                 << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
   return future;
 }
 
-void NetlinkSocket::doSyncUnicastRoutes(
-    uint8_t protocolId, NlUnicastRoutes syncDb) {
+void
+NetlinkSocket::doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb) {
   auto& unicastRoutes = unicastRoutesCache_[protocolId];
 
   // Go over routes that are not in new routeDb, delete
@@ -639,9 +651,9 @@ void NetlinkSocket::doSyncUnicastRoutes(
           builder.buildFromObject(iter->second.fromNetlinkRoute()));
     } catch (std::exception const& err) {
       throw std::runtime_error(folly::sformat(
-        "Could not del Route to: {} Error: {}",
-        folly::IPAddress::networkToString(prefix),
-        folly::exceptionStr(err)));
+          "Could not del Route to: {} Error: {}",
+          folly::IPAddress::networkToString(prefix),
+          folly::exceptionStr(err)));
     }
   }
 
@@ -666,25 +678,24 @@ NetlinkSocket::syncLinkRoutes(uint8_t protocolId, NlLinkRoutes newRouteDb) {
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runImmediatelyOrInEventLoop(
-      [ this,
-        p = std::move(promise),
-        syncDb = std::move(newRouteDb),
-        protocolId
-      ]() mutable {
-        try {
-          doSyncLinkRoutes(protocolId, std::move(syncDb));
-          p.setValue();
-        } catch (std::exception const& ex) {
-          LOG(ERROR) << "Error syncing link routeDb with Fib: "
-                     << folly::exceptionStr(ex);
-          p.setException(ex);
-        }
-      });
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     p = std::move(promise),
+                                     syncDb = std::move(newRouteDb),
+                                     protocolId]() mutable {
+    try {
+      doSyncLinkRoutes(protocolId, std::move(syncDb));
+      p.setValue();
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error syncing link routeDb with Fib: "
+                 << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
   return future;
 }
 
-void NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
+void
+NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
   auto& linkRoutes = linkRoutesCache_[protocolId];
   std::vector<std::pair<folly::CIDRNetwork, std::string>> toDel;
   for (const auto& route : linkRoutes) {
@@ -731,29 +742,27 @@ NetlinkSocket::getCachedUnicastRoutes(uint8_t protocolId) const {
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-    [this,
-     p = std::move(promise),
-     protocolId]() mutable {
-    try {
-      auto iter = unicastRoutesCache_.find(protocolId);
-      NlUnicastRoutes ret;
-      if (iter != unicastRoutesCache_.end()) {
-        const NlUnicastRoutes& routes = iter->second;
-        RouteBuilder builder;
-        for (const auto& route : routes) {
-          ret.emplace(
-              route.first,
-              builder.buildFromObject(route.second.fromNetlinkRoute()));
-          builder.reset();
+      [this, p = std::move(promise), protocolId]() mutable {
+        try {
+          auto iter = unicastRoutesCache_.find(protocolId);
+          NlUnicastRoutes ret;
+          if (iter != unicastRoutesCache_.end()) {
+            const NlUnicastRoutes& routes = iter->second;
+            RouteBuilder builder;
+            for (const auto& route : routes) {
+              ret.emplace(
+                  route.first,
+                  builder.buildFromObject(route.second.fromNetlinkRoute()));
+              builder.reset();
+            }
+          }
+          p.setValue(std::move(ret));
+        } catch (std::exception const& ex) {
+          LOG(ERROR) << "Error getting unicast route cache: "
+                     << folly::exceptionStr(ex);
+          p.setException(ex);
         }
-      }
-      p.setValue(std::move(ret));
-    } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error getting unicast route cache: "
-                 << folly::exceptionStr(ex);
-      p.setException(ex);
-    }
-  });
+      });
   return future;
 }
 
@@ -765,29 +774,27 @@ NetlinkSocket::getCachedMulticastRoutes(uint8_t protocolId) const {
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-    [this,
-     p = std::move(promise),
-     protocolId]() mutable {
-    try {
-      auto iter = mcastRoutesCache_.find(protocolId);
-      NlMulticastRoutes ret;
-      if (iter != mcastRoutesCache_.end()) {
-        const NlMulticastRoutes& routes = iter->second;
-        RouteBuilder builder;
-        for (const auto& route : routes) {
-          ret.emplace(
-              route.first,
-              builder.buildFromObject(route.second.fromNetlinkRoute()));
-          builder.reset();
+      [this, p = std::move(promise), protocolId]() mutable {
+        try {
+          auto iter = mcastRoutesCache_.find(protocolId);
+          NlMulticastRoutes ret;
+          if (iter != mcastRoutesCache_.end()) {
+            const NlMulticastRoutes& routes = iter->second;
+            RouteBuilder builder;
+            for (const auto& route : routes) {
+              ret.emplace(
+                  route.first,
+                  builder.buildFromObject(route.second.fromNetlinkRoute()));
+              builder.reset();
+            }
+          }
+          p.setValue(std::move(ret));
+        } catch (std::exception const& ex) {
+          LOG(ERROR) << "Error getting mcast route cache: "
+                     << folly::exceptionStr(ex);
+          p.setException(ex);
         }
-      }
-      p.setValue(std::move(ret));
-    } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error getting mcast route cache: "
-                 << folly::exceptionStr(ex);
-      p.setException(ex);
-    }
-  });
+      });
   return future;
 }
 
@@ -800,51 +807,49 @@ NetlinkSocket::getCachedLinkRoutes(uint8_t protocolId) const {
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
-    [this,
-     p = std::move(promise),
-     protocolId]() mutable {
-    try {
-      auto iter = linkRoutesCache_.find(protocolId);
-      NlLinkRoutes ret;
-      if (iter != linkRoutesCache_.end()) {
-        const NlLinkRoutes& routes = iter->second;
-        RouteBuilder builder;
-        for (const auto& route : routes) {
-          ret.emplace(
-              route.first,
-              builder.buildFromObject(route.second.fromNetlinkRoute()));
-          builder.reset();
+      [this, p = std::move(promise), protocolId]() mutable {
+        try {
+          auto iter = linkRoutesCache_.find(protocolId);
+          NlLinkRoutes ret;
+          if (iter != linkRoutesCache_.end()) {
+            const NlLinkRoutes& routes = iter->second;
+            RouteBuilder builder;
+            for (const auto& route : routes) {
+              ret.emplace(
+                  route.first,
+                  builder.buildFromObject(route.second.fromNetlinkRoute()));
+              builder.reset();
+            }
+          }
+          p.setValue(std::move(ret));
+        } catch (std::exception const& ex) {
+          LOG(ERROR) << "Error getting link route cache: "
+                     << folly::exceptionStr(ex);
+          p.setException(ex);
         }
-      }
-      p.setValue(std::move(ret));
-    } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error getting link route cache: "
-                 << folly::exceptionStr(ex);
-      p.setException(ex);
-    }
-  });
+      });
   return future;
 }
 
-folly::Future<int64_t> NetlinkSocket::getRouteCount() const {
+folly::Future<int64_t>
+NetlinkSocket::getRouteCount() const {
   VLOG(3) << "NetlinkSocket get routes number";
 
   folly::Promise<int64_t> promise;
   auto future = promise.getFuture();
 
-  evl_->runImmediatelyOrInEventLoop(
-    [this,
-     p = std::move(promise)]() mutable {
-     int64_t count = 0;
-     for (const auto& routes: unicastRoutesCache_) {
-       count += routes.second.size();
-     }
-     p.setValue(count);
+  evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
+    int64_t count = 0;
+    for (const auto& routes : unicastRoutesCache_) {
+      count += routes.second.size();
+    }
+    p.setValue(count);
   });
   return future;
 }
 
-folly::Future<int> NetlinkSocket::getIfIndex(const std::string& ifName) {
+folly::Future<int>
+NetlinkSocket::getIfIndex(const std::string& ifName) {
   folly::Promise<int> promise;
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop(
@@ -853,28 +858,26 @@ folly::Future<int> NetlinkSocket::getIfIndex(const std::string& ifName) {
           int ifIndex = rtnl_link_name2i(linkCache_, ifStr);
           p.setValue(ifIndex);
         } catch (std::exception const& ex) {
-          LOG(ERROR) << "Error getting ifIndex: "
-                     << folly::exceptionStr(ex);
+          LOG(ERROR) << "Error getting ifIndex: " << folly::exceptionStr(ex);
           p.setException(ex);
         }
       });
   return future;
 }
 
-folly::Future<std::string> NetlinkSocket::getIfName(int ifIndex) const {
+folly::Future<std::string>
+NetlinkSocket::getIfName(int ifIndex) const {
   folly::Promise<std::string> promise;
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), ifIndex]() mutable {
         try {
           std::array<char, IFNAMSIZ> ifNameBuf;
-          std::string ifName(
-            rtnl_link_i2name(
+          std::string ifName(rtnl_link_i2name(
               linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
           p.setValue(ifName);
         } catch (std::exception const& ex) {
-          LOG(ERROR) << "Error getting ifName: "
-                     << folly::exceptionStr(ex);
+          LOG(ERROR) << "Error getting ifName: " << folly::exceptionStr(ex);
           p.setException(ex);
         }
       });
@@ -900,8 +903,8 @@ NetlinkSocket::addIfAddress(IfAddress ifAddress) {
   return future;
 }
 
-void NetlinkSocket::doAddIfAddress(
-  struct rtnl_addr* addr) {
+void
+NetlinkSocket::doAddIfAddress(struct rtnl_addr* addr) {
   if (nullptr == addr) {
     throw fbnl::NlException("Can't get rtnl_addr");
   }
@@ -909,9 +912,8 @@ void NetlinkSocket::doAddIfAddress(
   // NLE_EXIST means duplicated address
   // we treat it as success for backward compatibility
   if (NLE_SUCCESS != err && -NLE_EXIST != err) {
-    throw fbnl::NlException(folly::sformat(
-      "Failed to add address Error: {}",
-      nl_geterror(err)));
+    throw fbnl::NlException(
+        folly::sformat("Failed to add address Error: {}", nl_geterror(err)));
   }
 }
 
@@ -939,25 +941,26 @@ NetlinkSocket::delIfAddress(IfAddress ifAddress) {
   return future;
 }
 
-folly::Future<folly::Unit> NetlinkSocket::syncIfAddress(
-  int ifIndex,
-  std::vector<IfAddress> addresses,
-  int family, int scope) {
+folly::Future<folly::Unit>
+NetlinkSocket::syncIfAddress(
+    int ifIndex, std::vector<IfAddress> addresses, int family, int scope) {
   VLOG(3) << "Netlink sync IfAddress...";
 
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
-  evl_->runImmediatelyOrInEventLoop(
-    [this, p = std::move(promise),
-     addrs = std::move(addresses),
-     ifIndex, family, scope] () mutable {
-      try {
-        doSyncIfAddress(ifIndex, std::move(addrs), family, scope);
-        p.setValue();
-      } catch (const std::exception& ex) {
-        p.setException(ex);
-      }
-    });
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     p = std::move(promise),
+                                     addrs = std::move(addresses),
+                                     ifIndex,
+                                     family,
+                                     scope]() mutable {
+    try {
+      doSyncIfAddress(ifIndex, std::move(addrs), family, scope);
+      p.setValue();
+    } catch (const std::exception& ex) {
+      p.setException(ex);
+    }
+  });
   return future;
 }
 
@@ -968,20 +971,20 @@ NetlinkSocket::getIfAddrs(int ifIndex, int family, int scope) {
   folly::Promise<std::vector<IfAddress>> promise;
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop(
-    [this, p = std::move(promise),
-     ifIndex, family, scope] () mutable {
-      try {
-        std::vector<IfAddress> addrs;
-        doGetIfAddrs(ifIndex, family, scope, addrs);
-        p.setValue(std::move(addrs));
-      } catch (const std::exception& ex) {
-        p.setException(ex);
-      }
-    });
+      [this, p = std::move(promise), ifIndex, family, scope]() mutable {
+        try {
+          std::vector<IfAddress> addrs;
+          doGetIfAddrs(ifIndex, family, scope, addrs);
+          p.setValue(std::move(addrs));
+        } catch (const std::exception& ex) {
+          p.setException(ex);
+        }
+      });
   return future;
 }
 
-void NetlinkSocket::doSyncIfAddress(
+void
+NetlinkSocket::doSyncIfAddress(
     int ifIndex, std::vector<IfAddress> addrs, int family, int scope) {
   // Check ifindex and prefix
   std::vector<folly::CIDRNetwork> newPrefixes;
@@ -1007,10 +1010,12 @@ void NetlinkSocket::doSyncIfAddress(
 
   // get a list of prefixes need to be deleted
   std::vector<folly::CIDRNetwork> toDeletePrefixes;
-  std::set_difference(oldPrefixes.begin(), oldPrefixes.end(),
-                      newPrefixes.begin(), newPrefixes.end(),
-                      std::inserter(toDeletePrefixes,
-                      toDeletePrefixes.begin()));
+  std::set_difference(
+      oldPrefixes.begin(),
+      oldPrefixes.end(),
+      newPrefixes.begin(),
+      newPrefixes.end(),
+      std::inserter(toDeletePrefixes, toDeletePrefixes.begin()));
 
   // Do add first, because in Linux deleting the only IP will cause if down.
   // Add new address, existed addresses will be ignored
@@ -1021,15 +1026,14 @@ void NetlinkSocket::doSyncIfAddress(
   // Delete deprecated addresses
   fbnl::IfAddressBuilder builder;
   for (const auto& toDel : toDeletePrefixes) {
-    auto delAddr = builder.setIfIndex(ifIndex)
-                          .setPrefix(toDel)
-                          .setScope(scope)
-                          .build();
+    auto delAddr =
+        builder.setIfIndex(ifIndex).setPrefix(toDel).setScope(scope).build();
     doDeleteAddr(delAddr.fromIfAddress());
   }
 }
 
-void NetlinkSocket::doDeleteAddr(struct rtnl_addr* addr) {
+void
+NetlinkSocket::doDeleteAddr(struct rtnl_addr* addr) {
   if (nullptr == addr) {
     throw fbnl::NlException("Can't get rtnl_addr");
   }
@@ -1037,26 +1041,25 @@ void NetlinkSocket::doDeleteAddr(struct rtnl_addr* addr) {
   // NLE_NOADDR means delete invalid address
   // we treat it as success for backward compatibility
   if (NLE_SUCCESS != err && -NLE_NOADDR != err) {
-    throw fbnl::NlException(folly::sformat(
-      "Failed to delete address Error: {}",
-      nl_geterror(err)));
+    throw fbnl::NlException(
+        folly::sformat("Failed to delete address Error: {}", nl_geterror(err)));
   }
 }
 
-void NetlinkSocket::doGetIfAddrs(
-  int ifIndex, int family, int scope,
-  std::vector<IfAddress>& addrs) {
+void
+NetlinkSocket::doGetIfAddrs(
+    int ifIndex, int family, int scope, std::vector<IfAddress>& addrs) {
   GetAddrsFuncCtx funcCtx(ifIndex, family, scope);
   auto getFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    GetAddrsFuncCtx* ctx = static_cast<GetAddrsFuncCtx*> (arg);
+    GetAddrsFuncCtx* ctx = static_cast<GetAddrsFuncCtx*>(arg);
     struct rtnl_addr* toAdd = reinterpret_cast<struct rtnl_addr*>(obj);
 
-    if (ctx->family != AF_UNSPEC
-     && ctx->family != rtnl_addr_get_family(toAdd)) {
+    if (ctx->family != AF_UNSPEC &&
+        ctx->family != rtnl_addr_get_family(toAdd)) {
       return;
     }
-    if (ctx->scope != RT_SCOPE_NOWHERE
-     && ctx->scope != rtnl_addr_get_scope(toAdd)) {
+    if (ctx->scope != RT_SCOPE_NOWHERE &&
+        ctx->scope != rtnl_addr_get_scope(toAdd)) {
       return;
     }
     if (ctx->ifIndex != rtnl_addr_get_ifindex(toAdd)) {
@@ -1067,17 +1070,16 @@ void NetlinkSocket::doGetIfAddrs(
       return;
     }
 
-    folly::IPAddress ipAddress =
-      folly::IPAddress::fromBinary(folly::ByteRange(
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
         static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
         nl_addr_get_len(ipaddr)));
     folly::CIDRNetwork prefix =
-      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(toAdd));
+        std::make_pair(ipAddress, rtnl_addr_get_prefixlen(toAdd));
     fbnl::IfAddressBuilder ifBuilder;
     auto tmpAddr = ifBuilder.setPrefix(prefix)
-                            .setIfIndex(ctx->ifIndex)
-                            .setScope(ctx->scope)
-                            .build();
+                       .setIfIndex(ctx->ifIndex)
+                       .setScope(ctx->scope)
+                       .build();
     ctx->addrs.emplace_back(std::move(tmpAddr));
   };
 
@@ -1086,121 +1088,131 @@ void NetlinkSocket::doGetIfAddrs(
   funcCtx.addrs.swap(addrs);
 }
 
-folly::Future<NlLinks> NetlinkSocket::getAllLinks() {
+folly::Future<NlLinks>
+NetlinkSocket::getAllLinks() {
   VLOG(3) << "NetlinkSocket get all links...";
   folly::Promise<NlLinks> promise;
   auto future = promise.getFuture();
-  evl_->runImmediatelyOrInEventLoop(
-    [this, p = std::move(promise)] () mutable {
-      try {
-        updateLinkCache();
-        updateAddrCache();
-        p.setValue(links_);
-      } catch (const std::exception& ex) {
-        p.setException(ex);
-      }
+  evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
+    try {
+      updateLinkCache();
+      updateAddrCache();
+      p.setValue(links_);
+    } catch (const std::exception& ex) {
+      p.setException(ex);
+    }
   });
   return future;
 }
 
-folly::Future<NlNeighbors> NetlinkSocket::getAllReachableNeighbors() {
+folly::Future<NlNeighbors>
+NetlinkSocket::getAllReachableNeighbors() {
   VLOG(3) << "NetlinkSocket get neighbors...";
   folly::Promise<NlNeighbors> promise;
   auto future = promise.getFuture();
-  evl_->runImmediatelyOrInEventLoop(
-    [this, p = std::move(promise)] () mutable {
-      try {
-        //Neighbor need linkcache to map ifIndex to name
-        updateLinkCache();
-        updateAddrCache();
-        updateNeighborCache();
-        p.setValue(std::move(neighbors_));
-      } catch (const std::exception& ex) {
-        p.setException(ex);
-      }
-    });
+  evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
+    try {
+      // Neighbor need linkcache to map ifIndex to name
+      updateLinkCache();
+      updateAddrCache();
+      updateNeighborCache();
+      p.setValue(std::move(neighbors_));
+    } catch (const std::exception& ex) {
+      p.setException(ex);
+    }
+  });
   return future;
 }
 
-bool NetlinkSocket::checkObjectType(
+bool
+NetlinkSocket::checkObjectType(
     struct nl_object* obj, folly::StringPiece expectType) {
   CHECK_NOTNULL(obj);
   const char* objectStr = nl_object_get_type(obj);
   if (objectStr && objectStr != expectType) {
-    LOG(ERROR)
-      << "Invalid nl_object type, expect: "
-      << expectType << ",  actual: " << objectStr;
+    LOG(ERROR) << "Invalid nl_object type, expect: " << expectType
+               << ",  actual: " << objectStr;
     return false;
   }
   return true;
 }
 
-void NetlinkSocket::updateLinkCache() {
+void
+NetlinkSocket::updateLinkCache() {
   auto linkFunc = [](struct nl_object * obj, void* arg) noexcept->void {
     CHECK(arg) << "Opaque context does not exist";
-    reinterpret_cast<NetlinkSocket*>(arg)->
-              handleLinkEvent(obj, NL_ACT_GET, false);
+    reinterpret_cast<NetlinkSocket*>(arg)->handleLinkEvent(
+        obj, NL_ACT_GET, false);
   };
   nl_cache_refill(reqSock_, linkCache_);
   nl_cache_foreach_filter(linkCache_, nullptr, linkFunc, this);
 }
 
-void NetlinkSocket::updateAddrCache() {
+void
+NetlinkSocket::updateAddrCache() {
   auto addrFunc = [](struct nl_object * obj, void* arg) noexcept {
     CHECK(arg) << "Opaque context does not exist";
-    reinterpret_cast<NetlinkSocket*>(arg)->
-              handleAddrEvent(obj, NL_ACT_GET, false);
+    reinterpret_cast<NetlinkSocket*>(arg)->handleAddrEvent(
+        obj, NL_ACT_GET, false);
   };
   nl_cache_refill(reqSock_, addrCache_);
   nl_cache_foreach_filter(addrCache_, nullptr, addrFunc, this);
 }
 
-void NetlinkSocket::updateNeighborCache() {
+void
+NetlinkSocket::updateNeighborCache() {
   auto neighborFunc = [](struct nl_object * obj, void* arg) noexcept {
     CHECK(arg) << "Opaque context does not exist";
-    reinterpret_cast<NetlinkSocket*>(arg)->
-              handleNeighborEvent(obj, NL_ACT_GET, false);
+    reinterpret_cast<NetlinkSocket*>(arg)->handleNeighborEvent(
+        obj, NL_ACT_GET, false);
   };
   nl_cache_foreach_filter(neighborCache_, nullptr, neighborFunc, this);
 }
 
-void NetlinkSocket::updateRouteCache() {
+void
+NetlinkSocket::updateRouteCache() {
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept {
     CHECK(arg) << "Opaque context does not exist";
-    reinterpret_cast<NetlinkSocket*>(arg)->
-              handleRouteEvent(obj, NL_ACT_GET, false);
+    reinterpret_cast<NetlinkSocket*>(arg)->handleRouteEvent(
+        obj, NL_ACT_GET, false);
   };
   nl_cache_foreach_filter(routeCache_, nullptr, routeFunc, this);
 }
 
-void NetlinkSocket::subscribeEvent(NetlinkEventType event) {
+void
+NetlinkSocket::subscribeEvent(NetlinkEventType event) {
   if (event >= MAX_EVENT_TYPE) {
     return;
   }
   eventFlags_.set(event);
 }
 
-void NetlinkSocket::unsubscribeEvent(NetlinkEventType event) {
+void
+NetlinkSocket::unsubscribeEvent(NetlinkEventType event) {
   if (event >= MAX_EVENT_TYPE) {
     return;
   }
   eventFlags_.reset(event);
 }
 
-void NetlinkSocket::subscribeAllEvents() {
+void
+NetlinkSocket::subscribeAllEvents() {
   for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
     eventFlags_.set(i);
   }
 }
 
-void NetlinkSocket::unsubscribeAllEvents() {
+void
+NetlinkSocket::unsubscribeAllEvents() {
   for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
     eventFlags_.reset(i);
   }
 }
 
-void NetlinkSocket::setEventHandler(std::shared_ptr<EventsHandler> handler) {
+void
+NetlinkSocket::setEventHandler(std::shared_ptr<EventsHandler> handler) {
   handler_ = handler;
 }
+
 } // namespace fbnl
 } // namespace openr

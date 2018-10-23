@@ -12,18 +12,15 @@
 #include <thread>
 
 #include <fbzmq/zmq/Zmq.h>
-
 #include <folly/Exception.h>
 #include <folly/Format.h>
+#include <folly/Subprocess.h>
 #include <folly/gen/Base.h>
 #include <folly/gen/Core.h>
 #include <folly/gen/String.h>
-#include <folly/Subprocess.h>
 #include <folly/system/Shell.h>
-
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-
 #include <openr/nl/NetlinkSocket.h>
 
 extern "C" {
@@ -79,62 +76,63 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   MyNetlinkHandler() = default;
   ~MyNetlinkHandler() override = default;
 
-  void linkEventFunc(
-    const std::string& , const openr::fbnl::Link& linkEntry) override {
+  void
+  linkEventFunc(
+      const std::string&, const openr::fbnl::Link& linkEntry) override {
     std::string ifName = linkEntry.getLinkName();
-    LOG(INFO) << "**Link : " << ifName
-              << (linkEntry.isUp() ? " UP" : " DOWN");
+    LOG(INFO) << "**Link : " << ifName << (linkEntry.isUp() ? " UP" : " DOWN");
     LOG(INFO) << "============================================================";
   }
 
-  void addrEventFunc(
-      const std::string& , const openr::fbnl::IfAddress& addrEntry) override {
+  void
+  addrEventFunc(
+      const std::string&, const openr::fbnl::IfAddress& addrEntry) override {
     bool isValid = addrEntry.isValid();
-    LOG(INFO) << "**Address : "
-              << folly::IPAddress::networkToString(
-                          addrEntry.getPrefix().value())
-              << "@IfaceIndex" << addrEntry.getIfIndex()
-              << (isValid ? " ADDED" : " DELETED");
+    LOG(INFO)
+        << "**Address : "
+        << folly::IPAddress::networkToString(addrEntry.getPrefix().value())
+        << "@IfaceIndex" << addrEntry.getIfIndex()
+        << (isValid ? " ADDED" : " DELETED");
     LOG(INFO) << "============================================================";
   }
 
-   void neighborEventFunc(
-       const std::string&,
-       const openr::fbnl::Neighbor& neighborEntry) override {
-     LOG(INFO) << "** Neighbor entry: "
-               << neighborEntry.getDestination().str() << " -> "
-               << neighborEntry.getLinkAddress().value().toString()
-               << (neighborEntry.isReachable()
-                      ? " : Reachable" : " : Unreachable");
+  void
+  neighborEventFunc(
+      const std::string&, const openr::fbnl::Neighbor& neighborEntry) override {
+    LOG(INFO)
+        << "** Neighbor entry: " << neighborEntry.getDestination().str()
+        << " -> " << neighborEntry.getLinkAddress().value().toString()
+        << (neighborEntry.isReachable() ? " : Reachable" : " : Unreachable");
     LOG(INFO) << "============================================================";
-   }
+  }
 
-   void routeEventFunc(
-       const std::string&, const openr::fbnl::Route& routeEntry) override {
-     LOG(INFO) << "** Route entry: " << "Dest : "
-               << folly::IPAddress::networkToString(
-                    routeEntry.getDestination());
+  void
+  routeEventFunc(
+      const std::string&, const openr::fbnl::Route& routeEntry) override {
+    LOG(INFO) << "** Route entry: "
+              << "Dest : "
+              << folly::IPAddress::networkToString(routeEntry.getDestination());
 
-     for (const auto& nh : routeEntry.getNextHops()) {
-       if (!nh.getGateway().hasValue()
-          || !nh.getIfIndex().hasValue()
-          || !nh.getWeight().hasValue()) {
-         continue;
-       }
-       LOG(INFO) << "NextHop: " << nh.getGateway().value().str()
-                 << " IfaceIndex: " << nh.getIfIndex().value()
-                 << " Weight: " << (int)nh.getWeight().value();
-     }
+    for (const auto& nh : routeEntry.getNextHops()) {
+      if (!nh.getGateway().hasValue() || !nh.getIfIndex().hasValue() ||
+          !nh.getWeight().hasValue()) {
+        continue;
+      }
+      LOG(INFO) << "NextHop: " << nh.getGateway().value().str()
+                << " IfaceIndex: " << nh.getIfIndex().value()
+                << " Weight: " << (int)nh.getWeight().value();
+    }
     LOG(INFO) << "============================================================";
-   }
+  }
 
-  private:
-   MyNetlinkHandler(const MyNetlinkHandler&) = delete;
-   MyNetlinkHandler& operator=(const MyNetlinkHandler&) = delete;
+ private:
+  MyNetlinkHandler(const MyNetlinkHandler&) = delete;
+  MyNetlinkHandler& operator=(const MyNetlinkHandler&) = delete;
 };
 
 // Creat virtual interface for testing
-void SetUp() {
+void
+SetUp() {
   auto cmd = "ip link del {}"_shellify(kVethNameX.c_str());
   folly::Subprocess proc(std::move(cmd));
   proc.wait();
@@ -162,7 +160,8 @@ void SetUp() {
   proc3.wait();
 }
 
-void TearDown() {
+void
+TearDown() {
   rtnl_link_delete(kSocket, kLink);
   nl_socket_free(kSocket);
   rtnl_link_veth_release(kLink);
@@ -187,8 +186,8 @@ main(int argc, char* argv[]) {
     zmqLoop.stop();
   });
 
-  std::shared_ptr<MyNetlinkHandler>
-  myHandler = std::make_shared<MyNetlinkHandler>();
+  std::shared_ptr<MyNetlinkHandler> myHandler =
+      std::make_shared<MyNetlinkHandler>();
 
   NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   // By default, NetlinkSocket subscribes no event
@@ -199,9 +198,7 @@ main(int argc, char* argv[]) {
    * execute API calls, otherwise NetlinkSocket will execute in the caller
    * thread
    */
-  std::thread eventThread([&]() {
-    zmqLoop.run();
-  });
+  std::thread eventThread([&]() { zmqLoop.run(); });
   zmqLoop.waitUntilRunning();
 
   // Adding address to interface
@@ -209,17 +206,13 @@ main(int argc, char* argv[]) {
   folly::CIDRNetwork prefixV6{folly::IPAddress("face:b00c::2"), 128};
   IfAddressBuilder builder;
   int ifIndex = netlinkSocket.getIfIndex(kVethNameX).get();
-  auto ifAddr = builder.setPrefix(prefixV6)
-                       .setIfIndex(ifIndex)
-                       .build();
+  auto ifAddr = builder.setPrefix(prefixV6).setIfIndex(ifIndex).build();
   netlinkSocket.addIfAddress(std::move(ifAddr)).get();
   // IPv4
   builder.reset();
   int ifIndex1 = netlinkSocket.getIfIndex(kVethNameY).get();
   const folly::CIDRNetwork prefixV4{folly::IPAddress("192.168.0.11"), 32};
-  auto ifAddr1 = builder.setPrefix(prefixV4)
-                        .setIfIndex(ifIndex1)
-                        .build();
+  auto ifAddr1 = builder.setPrefix(prefixV4).setIfIndex(ifIndex1).build();
   netlinkSocket.addIfAddress(std::move(ifAddr1)).get();
 
   /**
@@ -233,19 +226,15 @@ main(int argc, char* argv[]) {
   fbnl::RouteBuilder rtBuilderV6;
   // Set basic attributes
   rtBuilderV6.setDestination(kPrefix1)
-             .setProtocolId(kAqRouteProtoId)
-             .setScope(RT_SCOPE_UNIVERSE)
-             .setType(RTN_UNICAST)
-             .setRouteTable(RT_TABLE_MAIN);
+      .setProtocolId(kAqRouteProtoId)
+      .setScope(RT_SCOPE_UNIVERSE)
+      .setType(RTN_UNICAST)
+      .setRouteTable(RT_TABLE_MAIN);
   fbnl::NextHopBuilder nhBuilder;
-  nhBuilder.setIfIndex(ifIndex)
-           .setGateway(kNextHopIp1)
-           .setWeight(1);
+  nhBuilder.setIfIndex(ifIndex).setGateway(kNextHopIp1).setWeight(1);
   rtBuilderV6.addNextHop(nhBuilder.build());
   nhBuilder.reset();
-  nhBuilder.setIfIndex(ifIndex)
-           .setGateway(kNextHopIp2)
-           .setWeight(2);
+  nhBuilder.setIfIndex(ifIndex).setGateway(kNextHopIp2).setWeight(2);
   rtBuilderV6.addNextHop(nhBuilder.build());
   netlinkSocket.addRoute(rtBuilderV6.buildRoute()).get();
   /**
@@ -263,19 +252,15 @@ main(int argc, char* argv[]) {
    */
   fbnl::RouteBuilder rtBuilderV4;
   rtBuilderV4.setDestination(kPrefix2)
-             .setProtocolId(kAqRouteProtoId)
-             .setScope(RT_SCOPE_UNIVERSE)
-             .setType(RTN_UNICAST)
-             .setRouteTable(RT_TABLE_MAIN);
+      .setProtocolId(kAqRouteProtoId)
+      .setScope(RT_SCOPE_UNIVERSE)
+      .setType(RTN_UNICAST)
+      .setRouteTable(RT_TABLE_MAIN);
   nhBuilder.reset();
-  nhBuilder.setIfIndex(ifIndex)
-           .setGateway(kNextHopIp3)
-           .setWeight(1);
+  nhBuilder.setIfIndex(ifIndex).setGateway(kNextHopIp3).setWeight(1);
   rtBuilderV4.addNextHop(nhBuilder.build());
   nhBuilder.reset();
-  nhBuilder.setIfIndex(ifIndex)
-           .setGateway(kNextHopIp4)
-           .setWeight(2);
+  nhBuilder.setIfIndex(ifIndex).setGateway(kNextHopIp4).setWeight(2);
   rtBuilderV4.addNextHop(nhBuilder.build());
   netlinkSocket.addRoute(rtBuilderV4.buildRoute()).get();
   /**
