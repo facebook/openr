@@ -285,7 +285,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
             duration_cast<milliseconds>(steady_clock::now() - startTime)
                 .count();
         VLOG(2) << "ttl " << ttl << " vs elapsedTime " << elapsedTime;
-        EXPECT_LE(ttl, elapsedTime);
+        EXPECT_LE(ttl - Constants::kTtlDecrement.count(), elapsedTime);
       }
     } // for `i < kNumIter`
   }
