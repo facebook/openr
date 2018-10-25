@@ -442,7 +442,7 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
             nl_geterror(err)));
       }
     }
-    int err = rtnl_route_add(reqSock_, route.fromNetlinkRoute(), 0);
+    int err = rtnl_route_add(reqSock_, route.fromNetlinkRoute(), NLM_F_REPLACE);
     if (0 != err) {
       throw fbnl::NlException(folly::sformat(
           "Could not add V6 Route to: {} Error: {}",
@@ -722,7 +722,10 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     if (linkRoutes.count(routeToAdd.first)) {
       continue;
     }
-    int err = rtnl_route_add(reqSock_, routeToAdd.second.fromNetlinkRoute(), 0);
+    int err = rtnl_route_add(
+        reqSock_,
+        routeToAdd.second.fromNetlinkRoute(),
+        NLM_F_REPLACE);
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
           "Could not add link Route to: {} dev {} Error: {}",
