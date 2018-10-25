@@ -70,10 +70,6 @@ class NetlinkSocketFixture : public testing::Test {
 
   void
   SetUp() override {
-    // Not handling errors here ...
-    link_ = rtnl_link_veth_alloc();
-    ASSERT_TRUE(link_);
-
     socket_ = nl_socket_alloc();
     ASSERT_TRUE(socket_);
     nl_connect(socket_, NETLINK_ROUTE);
@@ -87,8 +83,13 @@ class NetlinkSocketFixture : public testing::Test {
     rtnl_route_alloc_cache(socket_, AF_UNSPEC, 0, &routeCache_);
     ASSERT_TRUE(routeCache_);
 
+    link_ = rtnl_link_veth_alloc();
+    ASSERT_TRUE(link_);
+    auto peerLink = rtnl_link_veth_get_peer(link_);
     rtnl_link_set_name(link_, kVethNameX.c_str());
-    rtnl_link_set_name(rtnl_link_veth_get_peer(link_), kVethNameY.c_str());
+    rtnl_link_set_name(peerLink, kVethNameY.c_str());
+    nl_object_put(OBJ_CAST(peerLink));
+
     int err = rtnl_link_add(socket_, link_, NLM_F_CREATE);
     ASSERT_EQ(0, err);
 
@@ -219,12 +220,12 @@ class NetlinkSocketFixture : public testing::Test {
 
     struct rtnl_addr* addr = rtnl_addr_alloc();
     ASSERT_TRUE(addr);
-
     rtnl_addr_set_local(addr, nlAddr);
     rtnl_addr_set_ifindex(addr, ifIndex);
-
     int err = rtnl_addr_add(socket_, addr, 0);
     ASSERT_EQ(0, err);
+    nl_addr_put(nlAddr);
+    rtnl_addr_put(addr);
   }
 
   static void

@@ -128,12 +128,15 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
     // Ignore result
     proc.wait();
 
-    // Not handling errors here ...
-    link_ = rtnl_link_veth_alloc();
     socket_ = nl_socket_alloc();
     nl_connect(socket_, NETLINK_ROUTE);
+
+    link_ = rtnl_link_veth_alloc();
+    auto peerLink = rtnl_link_veth_get_peer(link_);
     rtnl_link_set_name(link_, kVethNameX.c_str());
-    rtnl_link_set_name(rtnl_link_veth_get_peer(link_), kVethNameY.c_str());
+    rtnl_link_set_name(peerLink, kVethNameY.c_str());
+    nl_object_put(OBJ_CAST(peerLink));
+
     int err = rtnl_link_add(socket_, link_, NLM_F_CREATE);
     if (err != 0) {
       LOG(ERROR) << "Failed to add veth link: " << nl_geterror(err);
