@@ -169,7 +169,7 @@ class RouteBuilder {
    * ProtocolId, Destination, Nexthop
    * @throw fbnl::NlException on failed
    */
-  Route buildRoute() const;
+  Route build() const;
 
   Route buildFromObject(struct rtnl_route* obj);
 

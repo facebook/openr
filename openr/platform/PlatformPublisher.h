@@ -60,15 +60,15 @@ class PlatformPublisher final : public fbnl::NetlinkSocket::EventsHandler {
   // Override method for NetlinkSocket link/address/neighbor events
   void linkEventFunc(
       const std::string& ifName,
-      const openr::fbnl::Link& linkEntry) override;
+      const openr::fbnl::Link& linkEntry) noexcept override;
 
   void addrEventFunc(
       const std::string& ifName,
-      const openr::fbnl::IfAddress& addrEntry) override;
+      const openr::fbnl::IfAddress& addrEntry) noexcept override;
 
   void neighborEventFunc(
       const std::string& ifName,
-      const openr::fbnl::Neighbor& neighborEntry) override;
+      const openr::fbnl::Neighbor& neighborEntry) noexcept override;
 
   // Publish link events to, e.g., LinkMonitor and Squire
   const std::string platformPubUrl_;

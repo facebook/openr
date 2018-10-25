@@ -22,13 +22,13 @@ isNeighborReachable(int state) {
 }
 
 Route
-RouteBuilder::buildRoute() const {
+RouteBuilder::build() const {
   return Route(*this);
 }
 
 Route
 RouteBuilder::buildFromObject(struct rtnl_route* obj) {
-  return loadFromObject(obj).buildRoute();
+  return loadFromObject(obj).build();
 }
 
 RouteBuilder&
@@ -105,7 +105,7 @@ RouteBuilder::buildMulticastRoute() const {
       .setType(RTN_MULTICAST)
       .setRouteIfName(routeIfName_.value())
       .addNextHop(nhBuilder.build())
-      .buildRoute();
+      .build();
 }
 
 Route
@@ -124,7 +124,7 @@ RouteBuilder::buildLinkRoute() const {
       .setType(RTN_UNICAST)
       .setRouteIfName(routeIfName_.value())
       .addNextHop(nhBuilder.build())
-      .buildRoute();
+      .build();
 }
 
 RouteBuilder&

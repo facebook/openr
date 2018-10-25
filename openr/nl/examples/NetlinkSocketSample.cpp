@@ -78,7 +78,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   linkEventFunc(
-      const std::string&, const openr::fbnl::Link& linkEntry) override {
+      const std::string&,
+      const openr::fbnl::Link& linkEntry) noexcept override {
     std::string ifName = linkEntry.getLinkName();
     LOG(INFO) << "**Link : " << ifName << (linkEntry.isUp() ? " UP" : " DOWN");
     LOG(INFO) << "============================================================";
@@ -86,7 +87,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   addrEventFunc(
-      const std::string&, const openr::fbnl::IfAddress& addrEntry) override {
+      const std::string&,
+      const openr::fbnl::IfAddress& addrEntry) noexcept override {
     bool isValid = addrEntry.isValid();
     LOG(INFO)
         << "**Address : "
@@ -98,7 +100,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   neighborEventFunc(
-      const std::string&, const openr::fbnl::Neighbor& neighborEntry) override {
+      const std::string&,
+      const openr::fbnl::Neighbor& neighborEntry) noexcept override {
     LOG(INFO)
         << "** Neighbor entry: " << neighborEntry.getDestination().str()
         << " -> " << neighborEntry.getLinkAddress().value().toString()
@@ -108,7 +111,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   routeEventFunc(
-      const std::string&, const openr::fbnl::Route& routeEntry) override {
+      const std::string&,
+      const openr::fbnl::Route& routeEntry) noexcept override {
     LOG(INFO) << "** Route entry: "
               << "Dest : "
               << folly::IPAddress::networkToString(routeEntry.getDestination());
@@ -236,7 +240,7 @@ main(int argc, char* argv[]) {
   nhBuilder.reset();
   nhBuilder.setIfIndex(ifIndex).setGateway(kNextHopIp2).setWeight(2);
   rtBuilderV6.addNextHop(nhBuilder.build());
-  netlinkSocket.addRoute(rtBuilderV6.buildRoute()).get();
+  netlinkSocket.addRoute(rtBuilderV6.build()).get();
   /**
    * At this point we can see route has already been added to routing table
    * We can check through cmd ip -6 route, it will show:
@@ -262,7 +266,7 @@ main(int argc, char* argv[]) {
   nhBuilder.reset();
   nhBuilder.setIfIndex(ifIndex).setGateway(kNextHopIp4).setWeight(2);
   rtBuilderV4.addNextHop(nhBuilder.build());
-  netlinkSocket.addRoute(rtBuilderV4.buildRoute()).get();
+  netlinkSocket.addRoute(rtBuilderV4.build()).get();
   /**
    * At this point we can see route has already been added to routing table
    * We can check through cmd ip -4 route, it will show a route with different

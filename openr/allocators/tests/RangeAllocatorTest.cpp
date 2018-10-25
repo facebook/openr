@@ -91,6 +91,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     for (auto& store : stores) {
       store->stop();
     }
+    stores.clear();
   }
 
   static std::string

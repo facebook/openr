@@ -92,7 +92,7 @@ PlatformPublisher::publishPlatformEvent(
 void
 PlatformPublisher::linkEventFunc(
     const std::string& ifName,
-    const openr::fbnl::Link& linkEntry) {
+    const openr::fbnl::Link& linkEntry) noexcept {
   VLOG(4) << "Handling Link Event in NetlinkSystemHandler...";
   publishLinkEvent(thrift::LinkEntry(
       FRAGILE,
@@ -105,7 +105,7 @@ PlatformPublisher::linkEventFunc(
 void
 PlatformPublisher::addrEventFunc(
     const std::string& ifName,
-    const openr::fbnl::IfAddress& addrEntry) {
+    const openr::fbnl::IfAddress& addrEntry) noexcept {
   VLOG(4) << "Handling Address Event in NetlinkSystemHandler...";
   publishAddrEvent(thrift::AddrEntry(
       FRAGILE,
@@ -117,7 +117,7 @@ PlatformPublisher::addrEventFunc(
 void
 PlatformPublisher::neighborEventFunc(
     const std::string& ifName,
-    const openr::fbnl::Neighbor& neighborEntry) {
+    const openr::fbnl::Neighbor& neighborEntry) noexcept {
   VLOG(4) << "Handling Neighbor Event in NetlinkSystemHandler...";
   publishNeighborEvent(thrift::NeighborEntry(
       FRAGILE,

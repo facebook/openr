@@ -85,41 +85,38 @@ class NetlinkSocket {
     // Callback invoked by NetlinkSocket when registered event happens
     void
     handleEvent(
-        const std::string& ifName, int action, const EventVariant& event) {
+        const std::string& ifName,
+        int action,
+        const EventVariant& event) noexcept {
       boost::apply_visitor(EventVisitor(ifName, action, this), event);
     }
 
     virtual void
     linkEventFunc(
-        const std::string& ifName, const openr::fbnl::Link& linkEntry) {
-      VLOG(3) << " Link IfIndex: " << linkEntry.getIfIndex()
-              << ", ifName: " << ifName;
+        const std::string& /* ifName */,
+        const openr::fbnl::Link& /* linkEntry */) noexcept {
+      LOG(FATAL) << "linkEventFunc is not implemented";
     }
 
     virtual void
     neighborEventFunc(
-        const std::string& ifName, const openr::fbnl::Neighbor& neighborEntry) {
-      VLOG(3) << " Neighbor IfIndex: " << neighborEntry.getIfIndex()
-              << ", ifName: " << ifName;
+        const std::string& /* ifName */,
+        const openr::fbnl::Neighbor& /* neighborEntry */) noexcept {
+      LOG(FATAL) << "neighborEventFunc is not implemented";
     }
 
     virtual void
     addrEventFunc(
-        const std::string& ifName, const openr::fbnl::IfAddress& addrEntry) {
-      VLOG(3) << "Address: "
-              << (addrEntry.getPrefix().hasValue()
-                      ? folly::IPAddress::networkToString(
-                            addrEntry.getPrefix().value())
-                      : "")
-              << ", ifName: " << ifName;
+        const std::string& /* ifName */,
+        const openr::fbnl::IfAddress& /* addrEntry */) noexcept {
+      LOG(FATAL) << "addrEventFunc is not implemented";
     }
 
     virtual void
     routeEventFunc(
-        const std::string& ifName, const openr::fbnl::Route& routeEntry) {
-      VLOG(3) << "Destination: "
-              << folly::IPAddress::networkToString(routeEntry.getDestination())
-              << ", ifName: " << ifName;
+        const std::string& /* ifName */,
+        const openr::fbnl::Route& /* routeEntry */) noexcept {
+      LOG(FATAL) << "routeEventFunc is not implemented";
     }
 
    private:
@@ -319,8 +316,6 @@ class NetlinkSocket {
 
   // Unsubscribe all events
   void unsubscribeAllEvents();
-
-  virtual void setEventHandler(std::shared_ptr<EventsHandler> handler);
 
  private:
   // This is the callback we pass into libnl when data is ready on the socket

@@ -188,7 +188,7 @@ NetlinkFibHandler::future_deleteUnicastRoute(
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setDestination(toIPNetwork(*prefix))
            .setProtocolId(protocol.value());
-  return netlinkSocket_->delRoute(rtBuilder.buildRoute());
+  return netlinkSocket_->delRoute(rtBuilder.build());
 }
 
 folly::Future<folly::Unit>
@@ -329,7 +329,7 @@ NetlinkFibHandler::buildRoute(
   // treat empty nexthop as null route
   if (route.nexthops.empty()) {
     rtBuilder.setType(RTN_BLACKHOLE);
-    return rtBuilder.buildRoute();
+    return rtBuilder.build();
   }
 
   // add nexthops
@@ -361,7 +361,7 @@ NetlinkFibHandler::buildRoute(
     rtBuilder.addNextHop(nhBuilder.build());
     nhBuilder.reset();
   }
-  return rtBuilder.buildRoute();
+  return rtBuilder.build();
 }
 
 fbnl::NextHopSet

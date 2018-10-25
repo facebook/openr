@@ -94,7 +94,7 @@ buildRoute(
     rtBuilder.addNextHop(nhBuilder.build());
     nhBuilder.reset();
   }
-  return rtBuilder.buildRoute();
+  return rtBuilder.build();
 }
 
 bool
@@ -174,7 +174,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   linkEventFunc(
-      const std::string&, const openr::fbnl::Link& linkEntry) override {
+      const std::string&,
+      const openr::fbnl::Link& linkEntry) noexcept override {
     std::string ifName = linkEntry.getLinkName();
     VLOG(3) << "**Link : " << ifName << (linkEntry.isUp() ? " UP" : " DOWN");
     if (ifName.find(ifNamePrefix) == std::string::npos) {
@@ -193,7 +194,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   addrEventFunc(
-      const std::string&, const openr::fbnl::IfAddress& addrEntry) override {
+      const std::string&,
+      const openr::fbnl::IfAddress& addrEntry) noexcept override {
     bool isValid = addrEntry.isValid();
     std::string ifName = netlinkSocket->getIfName(addrEntry.getIfIndex()).get();
     VLOG(3) << "**Address : "
@@ -217,7 +219,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   neighborEventFunc(
-      const std::string&, const openr::fbnl::Neighbor& neighborEntry) override {
+      const std::string&,
+      const openr::fbnl::Neighbor& neighborEntry) noexcept override {
     std::string ifName =
         netlinkSocket->getIfName(neighborEntry.getIfIndex()).get();
     VLOG(3)
@@ -249,7 +252,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   routeEventFunc(
-      const std::string&, const openr::fbnl::Route& routeEntry) override {
+      const std::string&,
+      const openr::fbnl::Route& routeEntry) noexcept override {
     VLOG(3) << "** Route entry: "
             << "Dest : "
             << folly::IPAddress::networkToString(routeEntry.getDestination())
@@ -300,10 +304,9 @@ TEST_F(NetlinkSocketSubscribeFixture, DefaultStateTest) {
   ZmqEventLoop zmqLoop;
 
   auto myHandler = std::make_shared<MyNetlinkHandler>();
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   netlinkSocket.subscribeAllEvents();
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
 
   auto links = netlinkSocket.getAllLinks().get();
   auto neighbors = netlinkSocket.getAllReachableNeighbors().get();
@@ -368,9 +371,8 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkFlapTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
   netlinkSocket.subscribeAllEvents();
 
   // Run the zmq event loop in its own thread
@@ -464,10 +466,9 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   netlinkSocket.subscribeAllEvents();
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -616,9 +617,8 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrLinkFlapTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
   netlinkSocket.subscribeAllEvents();
 
   // Run the zmq event loop in its own thread
@@ -729,9 +729,8 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrAddRemoveTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
   netlinkSocket.subscribeAllEvents();
 
   // Run the zmq event loop in its own thread
@@ -878,9 +877,8 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
           "vethTest" /* Filter on test links only */);
 
   // Only enable link event
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
   netlinkSocket.unsubscribeAllEvents();
   netlinkSocket.subscribeEvent(fbnl::LINK_EVENT);
 
@@ -988,9 +986,8 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
   // Only enable neighbor event
   netlinkSocket.unsubscribeAllEvents();
   netlinkSocket.subscribeEvent(fbnl::NEIGH_EVENT);
@@ -1077,9 +1074,8 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
   // Only subscribe addr event
   netlinkSocket.unsubscribeAllEvents();
   netlinkSocket.subscribeEvent(fbnl::ADDR_EVENT);
@@ -1194,9 +1190,8 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
   netlinkSocket.subscribeAllEvents();
 
   // Run the zmq event loop in its own thread
@@ -1324,9 +1319,9 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.setEventHandler(myHandler);
+  // Only subscribe route event
   netlinkSocket.unsubscribeAllEvents();
   netlinkSocket.subscribeEvent(fbnl::ROUTE_EVENT);
 

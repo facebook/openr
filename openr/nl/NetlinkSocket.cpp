@@ -156,17 +156,14 @@ NetlinkSocket::handleRouteEvent(
   }
 
   if (handler_ && runHandler && eventFlags_[ROUTE_EVENT]) {
-    try {
-      RouteBuilder builder;
-      auto route = builder.buildFromObject(routeObj);
-      std::string ifName = route.getRouteIfName().hasValue()
-          ? route.getRouteIfName().value()
-          : "";
-      EventVariant event = std::move(route);
-      handler_->handleEvent(ifName, action, event);
-    } catch (std::exception& e) {
-      LOG(ERROR) << "Handle route event failed: " << folly::exceptionStr(e);
-    }
+    const bool isValid = (action != NL_ACT_DEL);
+    RouteBuilder builder;
+    auto route = builder.loadFromObject(routeObj).setValid(isValid).build();
+    std::string ifName = route.getRouteIfName().hasValue()
+        ? route.getRouteIfName().value()
+        : "";
+    EventVariant event = std::move(route);
+    handler_->handleEvent(ifName, action, event);
   }
 }
 
@@ -186,23 +183,19 @@ NetlinkSocket::handleLinkEvent(
   }
 
   struct rtnl_link* linkObj = reinterpret_cast<struct rtnl_link*>(obj);
-  try {
-    LinkBuilder builder;
-    auto link = builder.buildFromObject(linkObj);
-    const auto linkName = link.getLinkName();
-    auto& linkAttr = links_[linkName];
-    linkAttr.isUp = link.isUp();
-    linkAttr.ifIndex = link.getIfIndex();
-    if (!linkAttr.isUp) {
-      removeNeighborCacheEntries(linkName);
-    }
+  LinkBuilder builder;
+  auto link = builder.buildFromObject(linkObj);
+  const auto linkName = link.getLinkName();
+  auto& linkAttr = links_[linkName];
+  linkAttr.isUp = link.isUp();
+  linkAttr.ifIndex = link.getIfIndex();
+  if (!linkAttr.isUp) {
+    removeNeighborCacheEntries(linkName);
+  }
 
-    if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
-      EventVariant event = std::move(link);
-      handler_->handleEvent(linkName, action, event);
-    }
-  } catch (const std::exception& ex) {
-    LOG(ERROR) << "Handle link event failed: " << folly::exceptionStr(ex);
+  if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
+    EventVariant event = std::move(link);
+    handler_->handleEvent(linkName, action, event);
   }
 }
 
@@ -233,26 +226,22 @@ NetlinkSocket::handleAddrEvent(
   }
 
   struct rtnl_addr* addrObj = reinterpret_cast<struct rtnl_addr*>(obj);
-  try {
-    IfAddressBuilder builder;
-    bool isValid = (action != NL_ACT_DEL);
-    auto ifAddr = builder.loadFromObject(addrObj).setValid(isValid).build();
-    std::string ifName = getIfName(ifAddr.getIfIndex()).get();
-    if (isValid) {
-      links_[ifName].networks.insert(ifAddr.getPrefix().value());
-    } else if (action == NL_ACT_DEL) {
-      auto it = links_.find(ifName);
-      if (it != links_.end()) {
-        it->second.networks.erase(ifAddr.getPrefix().value());
-      }
+  IfAddressBuilder builder;
+  const bool isValid = (action != NL_ACT_DEL);
+  auto ifAddr = builder.loadFromObject(addrObj).setValid(isValid).build();
+  std::string ifName = getIfName(ifAddr.getIfIndex()).get();
+  if (isValid) {
+    links_[ifName].networks.insert(ifAddr.getPrefix().value());
+  } else if (action == NL_ACT_DEL) {
+    auto it = links_.find(ifName);
+    if (it != links_.end()) {
+      it->second.networks.erase(ifAddr.getPrefix().value());
     }
+  }
 
-    if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
-      EventVariant event = std::move(ifAddr);
-      handler_->handleEvent(ifName, action, event);
-    }
-  } catch (const std::exception& ex) {
-    LOG(ERROR) << "Handle addr event failed: " << folly::exceptionStr(ex);
+  if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
+    EventVariant event = std::move(ifAddr);
+    handler_->handleEvent(ifName, action, event);
   }
 }
 
@@ -273,23 +262,19 @@ NetlinkSocket::handleNeighborEvent(
   }
 
   struct rtnl_neigh* neighObj = reinterpret_cast<struct rtnl_neigh*>(obj);
-  try {
-    NeighborBuilder builder;
-    auto neigh = builder.buildFromObject(neighObj, NL_ACT_DEL == action);
-    std::string ifName = getIfName(neigh.getIfIndex()).get();
-    auto key = std::make_pair(ifName, neigh.getDestination());
-    neighbors_.erase(key);
-    if (neigh.isReachable()) {
-      neighbors_.emplace(std::make_pair(key, std::move(neigh)));
-    }
+  NeighborBuilder builder;
+  auto neigh = builder.buildFromObject(neighObj, NL_ACT_DEL == action);
+  std::string ifName = getIfName(neigh.getIfIndex()).get();
+  auto key = std::make_pair(ifName, neigh.getDestination());
+  neighbors_.erase(key);
+  if (neigh.isReachable()) {
+    neighbors_.emplace(std::make_pair(key, std::move(neigh)));
+  }
 
-    if (runHandler && eventFlags_[NEIGH_EVENT]) {
-      NeighborBuilder nhBuilder;
-      EventVariant event = nhBuilder.buildFromObject(neighObj);
-      handler_->handleEvent(ifName, action, event);
-    }
-  } catch (const std::exception& ex) {
-    LOG(ERROR) << "Handle neighbor event failed: " << folly::exceptionStr(ex);
+  if (handler_ && runHandler && eventFlags_[NEIGH_EVENT]) {
+    NeighborBuilder nhBuilder;
+    EventVariant event = nhBuilder.buildFromObject(neighObj);
+    handler_->handleEvent(ifName, action, event);
   }
 }
 
@@ -297,7 +282,7 @@ void
 NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
   RouteBuilder builder;
   bool isValid = (action != NL_ACT_DEL);
-  auto route = builder.loadFromObject(obj).setValid(isValid).buildRoute();
+  auto route = builder.loadFromObject(obj).setValid(isValid).build();
   // Skip cached route entries and any routes not in the main table
   int flags = route.getFlags().hasValue() ? route.getFlags().value() : 0;
   if (route.getRouteTable() != RT_TABLE_MAIN || flags & RTM_F_CLONED) {
@@ -1210,11 +1195,6 @@ NetlinkSocket::unsubscribeAllEvents() {
   for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
     eventFlags_.reset(i);
   }
-}
-
-void
-NetlinkSocket::setEventHandler(std::shared_ptr<EventsHandler> handler) {
-  handler_ = handler;
 }
 
 } // namespace fbnl

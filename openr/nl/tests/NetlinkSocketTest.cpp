@@ -101,8 +101,7 @@ class NetlinkSocketFixture : public testing::Test {
     bringUpIntf(kVethNameY);
 
     // create netlink route socket
-    auto handler = std::make_unique<NetlinkSocket::EventsHandler>();
-    netlinkSocket = std::make_unique<NetlinkSocket>(&evl, std::move(handler));
+    netlinkSocket = std::make_unique<NetlinkSocket>(&evl, nullptr);
 
     // Run the zmq event loop in its own thread
     // We will either timeout if expected events are not received
@@ -147,7 +146,7 @@ class NetlinkSocketFixture : public testing::Test {
     auto route = rtBuilder.setDestination(dest)
                      .setProtocolId(protocolId)
                      .setType(RTN_BLACKHOLE);
-    return rtBuilder.buildRoute();
+    return rtBuilder.build();
   }
 
   Route buildRoute(
@@ -165,7 +164,7 @@ class NetlinkSocketFixture : public testing::Test {
       rtBuilder.addNextHop(nhBuilder.build());
       nhBuilder.reset();
     }
-    return rtBuilder.buildRoute();
+    return rtBuilder.build();
   }
 
   Route buildMCastRoute(

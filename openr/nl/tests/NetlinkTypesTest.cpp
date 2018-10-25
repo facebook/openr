@@ -137,7 +137,7 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   RouteBuilder builder;
   // Use default values
   auto route =
-      builder.setDestination(dst).setProtocolId(kProtocolId).buildRoute();
+      builder.setDestination(dst).setProtocolId(kProtocolId).build();
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
   EXPECT_EQ(RT_SCOPE_UNIVERSE, route.getScope());
@@ -196,7 +196,7 @@ TEST_F(NetlinkTypesFixture, RouteEqualTest) {
                     .setTos(tos)
                     .addNextHop(nh1)
                     .addNextHop(nh2)
-                    .buildRoute();
+                    .build();
   RouteBuilder builder2;
   nhBuilder.reset();
   nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
@@ -212,7 +212,7 @@ TEST_F(NetlinkTypesFixture, RouteEqualTest) {
                     .setTos(tos)
                     .addNextHop(nh2)
                     .addNextHop(nh1)
-                    .buildRoute();
+                    .build();
   EXPECT_TRUE(route1 == route2);
   RouteBuilder builder3;
   nhBuilder.reset();
@@ -226,7 +226,7 @@ TEST_F(NetlinkTypesFixture, RouteEqualTest) {
                     .setPriority(priority)
                     .setTos(tos)
                     .addNextHop(nh1)
-                    .buildRoute();
+                    .build();
   EXPECT_FALSE(route2 == route3);
   RouteBuilder builder4;
   nhBuilder.reset();
@@ -242,7 +242,7 @@ TEST_F(NetlinkTypesFixture, RouteEqualTest) {
                     .setTos(tos)
                     .addNextHop(nh1)
                     .addNextHop(nh3)
-                    .buildRoute();
+                    .build();
   EXPECT_FALSE(route2 == route4);
 
   // Add same nexthop
@@ -252,7 +252,7 @@ TEST_F(NetlinkTypesFixture, RouteEqualTest) {
   auto nh5 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
   RouteBuilder builder5;
   auto route5 =
-      builder5.setDestination(dst).addNextHop(nh4).addNextHop(nh5).buildRoute();
+      builder5.setDestination(dst).addNextHop(nh4).addNextHop(nh5).build();
   EXPECT_EQ(1, route5.getNextHops().size());
   nh5.release();
 }
@@ -275,7 +275,7 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
                    .setPriority(priority)
                    .setTos(tos)
                    .addNextHop(nh1)
-                   .buildRoute();
+                   .build();
 
   struct rtnl_route* p = route.fromNetlinkRoute();
   Route route1(std::move(route));
@@ -357,7 +357,7 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
                    .addNextHop(nh1)
                    .addNextHop(nh2)
                    .addNextHop(nh3)
-                   .buildRoute();
+                   .build();
 
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
