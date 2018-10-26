@@ -35,11 +35,6 @@ NetlinkSocket::NetlinkSocket(
   reqSock_ = nl_socket_alloc();
   CHECK(reqSock_ != nullptr) << "Failed to create netlink socket.";
 
-  SCOPE_FAIL {
-    nl_socket_free(subSock_);
-    nl_socket_free(reqSock_);
-  };
-
   int err = nl_connect(reqSock_, NETLINK_ROUTE);
   CHECK_EQ(err, 0) << "Failed to connect nl socket. Error " << nl_geterror(err);
 

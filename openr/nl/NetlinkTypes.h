@@ -33,9 +33,8 @@ namespace fbnl {
 
 class NlException : public std::runtime_error {
  public:
-  explicit NlException(const std::string& exception)
-      : std::runtime_error(
-            folly::sformat("Netlink exception: {} ", exception)) {}
+  explicit NlException(const std::string& msg)
+      : std::runtime_error(folly::sformat("NlException: {} ", msg)) {}
 };
 
 const uint8_t DEFAULT_PROTOCOL_ID = 99;
@@ -312,10 +311,10 @@ class Route final {
    void init();
    struct nl_addr* buildAddrObject(const folly::CIDRNetwork& addr);
 
-   uint8_t type_;
-   uint8_t routeTable_;
-   uint8_t protocolId_;
-   uint8_t scope_;
+   uint8_t type_{RTN_UNICAST};
+   uint8_t routeTable_{RT_TABLE_MAIN};
+   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
+   uint8_t scope_{RT_SCOPE_UNIVERSE};
    bool isValid_{false};
    folly::Optional<uint32_t> flags_;
    folly::Optional<uint32_t> priority_;

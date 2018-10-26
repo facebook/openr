@@ -501,8 +501,10 @@ main(int argc, char** argv) {
     nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
     nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);
     auto nlEvlThread = std::thread([&nlEventLoop]() {
+      LOG(INFO) << "Starting NetlinkEvl thread ...";
       folly::setThreadName("NetlinkEvl");
       nlEventLoop->run();
+      LOG(INFO) << "NetlinkEvl thread got stopped.";
     });
     nlEventLoop->waitUntilRunning();
     allThreads.emplace_back(std::move(nlEvlThread));

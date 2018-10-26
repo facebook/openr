@@ -34,16 +34,11 @@ RouteBuilder::buildFromObject(struct rtnl_route* obj) {
 RouteBuilder&
 RouteBuilder::loadFromObject(struct rtnl_route* obj) {
   CHECK_NOTNULL(obj);
-  uint32_t scope = rtnl_route_get_scope(obj);
-  uint32_t table = rtnl_route_get_table(obj);
-  uint32_t flags = rtnl_route_get_flags(obj);
-  uint32_t proto = rtnl_route_get_protocol(obj);
-  uint32_t type = rtnl_route_get_type(obj);
-  setScope(scope);
-  setRouteTable(table);
-  setFlags(flags);
-  setProtocolId(proto);
-  setType(type);
+  setScope(rtnl_route_get_scope(obj));
+  setRouteTable(rtnl_route_get_table(obj));
+  setFlags(rtnl_route_get_flags(obj));
+  setProtocolId(rtnl_route_get_protocol(obj));
+  setType(rtnl_route_get_type(obj));
   struct nl_addr* dst = rtnl_route_get_dst(obj);
 
   // Special handling for default routes
@@ -429,17 +424,15 @@ Route::fromNetlinkRoute() const {
 
 void
 Route::init() {
-  VLOG(4) << "Creating route object";
-
   // Only build object once
   if (route_) {
     return;
   }
+
   route_ = rtnl_route_alloc();
   if (route_ == nullptr) {
     throw fbnl::NlException("Cannot allocate route object");
   }
-
   SCOPE_FAIL {
     rtnl_route_put(route_);
     route_ = nullptr;
@@ -964,12 +957,15 @@ IfAddress::init() {
   if (nullptr == ifAddr_) {
     throw fbnl::NlException("Failed to create rtnl_addr object");
   }
+  SCOPE_FAIL {
+    rtnl_addr_put(ifAddr_);
+    ifAddr_ = nullptr;
+  };
   rtnl_addr_set_ifindex(ifAddr_, ifIndex_);
 
   // Get local addr
-  struct nl_addr* localAddr = nullptr;
   if (prefix_.hasValue()) {
-    localAddr = nl_addr_build(
+    struct nl_addr* localAddr = nl_addr_build(
         prefix_->first.family(),
         (void*)(prefix_->first.bytes()),
         prefix_->first.byteCount());
@@ -979,23 +975,11 @@ IfAddress::init() {
     nl_addr_set_prefixlen(localAddr, prefix_->second);
     // Setting the local address will automatically set the address family
     // and the prefix length to the correct values.
+    // rtnl_addr_set_local will increase reference for localAddr so we will
+    // drop our reference afterwards.
     rtnl_addr_set_local(ifAddr_, localAddr);
+    nl_addr_put(localAddr);
   }
-
-  // rtnl_addr_set_local will increase reference for localAddr
-  SCOPE_EXIT {
-    if (localAddr) {
-      nl_addr_put(localAddr);
-    }
-  };
-
-  SCOPE_FAIL {
-    if (localAddr) {
-      nl_addr_put(localAddr);
-    }
-    rtnl_addr_put(ifAddr_);
-    ifAddr_ = nullptr;
-  };
 
   if (family_.hasValue()) {
     rtnl_addr_set_family(ifAddr_, family_.value());
@@ -1202,11 +1186,22 @@ Neighbor::fromNeighbor() const {
 
 void
 Neighbor::init() {
+  if (neigh_) {
+    return;
+  }
+
   neigh_ = rtnl_neigh_alloc();
   if (!neigh_) {
     throw fbnl::NlException("create neighbor object failed");
   }
+  SCOPE_FAIL {
+    rtnl_neigh_put(neigh_);
+  };
+
   rtnl_neigh_set_ifindex(neigh_, ifIndex_);
+  if (state_.hasValue()) {
+    rtnl_neigh_set_state(neigh_, state_.value());
+  }
 
   struct nl_addr* dst = nl_addr_build(
       destination_.family(),
@@ -1215,11 +1210,13 @@ Neighbor::init() {
   if (dst == nullptr) {
     throw fbnl::NlException("Failed to create dst addr");
   }
+  SCOPE_EXIT {
+    nl_addr_put(dst);
+  };
   rtnl_neigh_set_dst(neigh_, dst);
 
-  struct nl_addr* llAddr = nullptr;
   if (linkAddress_.hasValue()) {
-    llAddr = nl_addr_build(
+    struct nl_addr* llAddr = nl_addr_build(
         AF_UNSPEC,
         (void*)linkAddress_.value().bytes(),
         folly::MacAddress::SIZE);
@@ -1227,28 +1224,7 @@ Neighbor::init() {
       throw fbnl::NlException("Failed to create link addr");
     }
     rtnl_neigh_set_lladdr(neigh_, llAddr);
-  }
-
-  // neigh object takes a ref if dst/llAddr is successfully set
-  // Either way, success or failure, we drop our ref
-  SCOPE_EXIT {
-    nl_addr_put(dst);
-    if (llAddr) {
-      nl_addr_put(llAddr);
-    }
-  };
-
-  SCOPE_FAIL {
-    if (dst) {
-      nl_addr_put(dst);
-    }
-    if (llAddr) {
-      nl_addr_put(llAddr);
-    }
-  };
-
-  if (state_.hasValue()) {
-    rtnl_neigh_set_state(neigh_, state_.value());
+    nl_addr_put(llAddr);
   }
 }
 
@@ -1369,6 +1345,10 @@ Link::getFlags() const {
 
 void
 Link::init() {
+  if (link_) {
+    return;
+  }
+
   link_ = rtnl_link_alloc();
   if (!link_) {
     throw fbnl::NlException("Allocate link object failed");
