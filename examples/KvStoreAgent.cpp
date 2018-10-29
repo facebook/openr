@@ -28,13 +28,15 @@ KvStoreAgent::KvStoreAgent(
   // care about
   kvStoreClient_->setKvCallback(
       [this, nodeId]
-      (const std::string& key, const thrift::Value& value) {
+      (const std::string& key, const folly::Optional<thrift::Value>& value) {
         if (0 == key.find(agentKeyPrefix) &&
-            value.originatorId != nodeId &&
-            value.value) {
+            value.value().originatorId != nodeId &&
+            value.value().value) {
           // Lets check out what some other node's value is
-          LOG(INFO) << "Got data from: " << value.originatorId << " Data: "
-                    << value.value.value();
+          LOG(INFO) << "Got data from: "
+                    << value.value().originatorId
+                    << " Data: "
+                    << value.value().value.value();
         }
       });
 

@@ -174,6 +174,9 @@ class Constants {
   // KvStore specific
   //
 
+  // Kvstore timer for flooding pending publication
+  static constexpr std::chrono::milliseconds kFloodPendingPublication{100};
+
   // KvStore database TTLs
   static constexpr std::chrono::milliseconds kKvStoreDbTtl{5min};
 

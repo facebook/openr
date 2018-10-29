@@ -71,7 +71,8 @@ KvStore::KvStore(
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     bool legacyFlooding,
     folly::Optional<KvStoreFilters> filters,
-    int zmqHwm)
+    int zmqHwm,
+    KvStoreFloodRate floodRate)
     : zmqContext_(zmqContext),
       nodeId_(std::move(nodeId)),
       localPubUrl_(std::move(localPubUrl)),
@@ -96,7 +97,8 @@ KvStore::KvStore(
           fbzmq::IdentityString{folly::sformat(
               Constants::kPeerSyncIdTemplate.toString(), nodeId_)},
           folly::none,
-          fbzmq::NonblockingFlag{true}) {
+          fbzmq::NonblockingFlag{true}),
+      floodRate_(floodRate)  {
   CHECK(not nodeId_.empty());
   CHECK(not localPubUrl_.empty());
   CHECK(not globalPubUrl_.empty());
@@ -126,6 +128,22 @@ KvStore::KvStore(
             Constants::kGlobalSubIdTemplate.toString(), nodeId_)},
         folly::none,
         fbzmq::NonblockingFlag{true});
+  }
+
+  if (floodRate_.hasValue()) {
+    floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
+        floodRate_.value().first,    // messages per sec
+        floodRate_.value().second);   // burst size
+    pendingPublicationTimer_ =
+        fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+            if(!floodLimiter_->consume(1)) {
+              pendingPublicationTimer_->scheduleTimeout(
+                  Constants::kFloodPendingPublication,
+                  false);
+                return;
+            }
+            floodBufferedUpdates();
+    });
   }
 
   zmqMonitorClient_ =
@@ -562,7 +580,6 @@ KvStore::getKeyVals(std::vector<std::string> const& keys) {
       thriftPub.keyVals[key] = it->second;
     }
   }
-
   return thriftPub;
 }
 
@@ -1257,11 +1274,11 @@ KvStore::cleanupTtlCountdownQueue() {
         it->second.ttlVersion == top.ttlVersion) {
       expiredKeys.emplace_back(top.key);
       LOG(WARNING)
-        << "Delete expired (key, version, originatorId, ttlVersion) "
+        << "Delete expired (key, version, originatorId, ttlVersion, node) "
         << folly::sformat(
-              "({}, {}, {}, {})",
+              "({}, {}, {}, {}, {})",
               top.key, it->second.version,
-              it->second.originatorId, it->second.ttlVersion);
+              it->second.originatorId, it->second.ttlVersion, nodeId_);
       logKvEvent("KEY_EXPIRE", top.key);
       kvStore_.erase(it);
     }
@@ -1286,8 +1303,56 @@ KvStore::cleanupTtlCountdownQueue() {
   floodPublication(std::move(expiredKeysPub));
 }
 
+void KvStore::bufferPublication(thrift::Publication&& publication) {
+  tData_.addStatValue(
+      "kvstore.rate_limit_suppress", 1, fbzmq::COUNT);
+  tData_.addStatValue(
+      "kvstore.rate_limit_keys", publication.keyVals.size(), fbzmq::AVG);
+  // update or add keys
+  for (auto const& key: publication.keyVals) {
+    publicationBuffer_[key.first] = publication.nodeIds.value();
+  }
+  for (auto const& key: publication.expiredKeys) {
+    if (publication.nodeIds.hasValue()) {
+      publicationBuffer_[key] = publication.nodeIds.value();
+    }
+  }
+}
+
 void
-KvStore::floodPublication(thrift::Publication&& publication) {
+KvStore::floodBufferedUpdates() {
+  if (!publicationBuffer_.size()) {
+    return;
+  }
+  thrift::Publication publication{};
+  for (auto& keyVal: publicationBuffer_) {
+    auto kvStoreIt = kvStore_.find(keyVal.first);
+    if (kvStoreIt != kvStore_.end()) {
+      publication.keyVals.emplace(make_pair(keyVal.first, kvStoreIt->second));
+    } else {
+      publication.expiredKeys.emplace_back(keyVal.first);
+    }
+    publication.nodeIds = keyVal.second;
+  }
+  publicationBuffer_.clear();
+  return floodPublication(std::move(publication), false);
+}
+
+void
+KvStore::floodPublication(thrift::Publication&& publication, bool rateLimit) {
+  // rate limit if configured
+  if (floodLimiter_ && rateLimit && !floodLimiter_->consume(1)) {
+    bufferPublication(std::move(publication));
+    pendingPublicationTimer_->scheduleTimeout(
+        Constants::kFloodPendingPublication,
+        false);
+    return;
+  }
+  // merge with buffered publication and flood
+  if (publicationBuffer_.size()) {
+    bufferPublication(std::move(publication));
+    return floodBufferedUpdates();
+  }
   // Update ttl on keys we are trying to advertise. Also remove keys which
   // are about to expire.
   updatePublicationTtl(publication, true);

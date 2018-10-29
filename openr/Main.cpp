@@ -346,6 +346,14 @@ DEFINE_int32(
     kvstore_zmq_hwm,
     openr::Constants::kHighWaterMark,
     "Max number of packets to hold in kvstore ZMQ socket queue per peer");
+DEFINE_int32(
+    kvstore_flood_msg_per_sec,
+    0,
+    "Rate of Kvstore flooding in number of messages per second");
+DEFINE_int32(
+    kvstore_flood_msg_burst_size,
+    0,
+    "Burst size of Kvstore flooding in number of messages");
 
 // Disable background jemalloc background thread => new jemalloc-5 feature
 const char* malloc_conf = "background_thread:false";
@@ -626,6 +634,14 @@ main(int argc, char** argv) {
     kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
   }
 
+  KvStoreFloodRate kvstoreRate(std::make_pair(
+        FLAGS_kvstore_flood_msg_per_sec,
+        FLAGS_kvstore_flood_msg_burst_size));
+  if (FLAGS_kvstore_flood_msg_per_sec <= 0 ||
+      FLAGS_kvstore_flood_msg_burst_size <= 0) {
+    kvstoreRate = folly::none;
+  }
+
   // Start KVStore
   KvStore store(
       context,
@@ -643,7 +659,8 @@ main(int argc, char** argv) {
       std::unordered_map<std::string, openr::thrift::PeerSpec>{},
       FLAGS_enable_legacy_flooding,
       std::move(kvFilters),
-      FLAGS_kvstore_zmq_hwm);
+      FLAGS_kvstore_zmq_hwm,
+      kvstoreRate);
   std::thread kvStoreThread([&store]() noexcept {
     LOG(INFO) << "Starting KvStore thread...";
     folly::setThreadName("KvStore");

@@ -56,6 +56,7 @@ constexpr int32_t Constants::kSystemAgentPort;
 constexpr int64_t Constants::kDefaultAdjWeight;
 constexpr int64_t Constants::kTtlInfinity;
 constexpr size_t Constants::kNumTimeSeries;
+constexpr std::chrono::milliseconds Constants::kFloodPendingPublication;
 constexpr std::chrono::milliseconds Constants::kHealthCheckInterval;
 constexpr std::chrono::milliseconds Constants::kInitialBackoff;
 constexpr std::chrono::milliseconds Constants::kKvStoreDbTtl;

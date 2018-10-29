@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <thread>
 #include <unordered_set>
+#include <tuple>
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
@@ -91,14 +92,16 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   createKvStore(
       std::string nodeId,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      folly::Optional<KvStoreFilters> filters = folly::none) {
+      folly::Optional<KvStoreFilters> filters = folly::none,
+      KvStoreFloodRate kvStoreRate = folly::none) {
     auto ptr = std::make_unique<KvStoreWrapper>(
         context,
         nodeId,
         kDbSyncInterval,
         kMonitorSubmitInterval,
         std::move(peers),
-        std::move(filters));
+        std::move(filters),
+        kvStoreRate);
     stores_.emplace_back(std::move(ptr));
     return stores_.back().get();
   }
@@ -1778,6 +1781,206 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
 
   // Expect both keys in KvStore
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll());
+}
+
+TEST_F(KvStoreTestFixture, RateLimiter) {
+  fbzmq::Context context;
+
+  const uint32_t messageRate = 10;  // number of messages per second
+  const uint32_t burstSize = 50;   // number of messages
+  KvStoreFloodRate kvStoreRate(std::make_pair(messageRate, burstSize));
+
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto store0 = createKvStore("store0", emptyPeers);
+  auto store1 = createKvStore("store1", emptyPeers, folly::none, kvStoreRate);
+  store0->run();
+  store1->run();
+
+  store0->addPeer(store1->nodeId, store1->getPeerSpec());
+  store1->addPeer(store0->nodeId, store0->getPeerSpec());
+
+ /**
+  * TEST1: install several keys in store0 which is not rate limited
+  * Check number of sent publications should be at least number of
+  * key updates set
+ */
+  auto startTime1 = steady_clock::now();
+  const int duration1 = 5;  // in seconds
+  int i1{0};
+  uint64_t elapsedTime1{0};
+  do {
+    thrift::Value thriftVal(
+        apache::thrift::FRAGILE,
+        1 /* version */,
+        "store1" /* originatorId */,
+        "value" /* value */,
+        300000 /* ttl */,
+        ++i1 /* ttl version */,
+        0 /* hash */);
+    thriftVal.hash = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    EXPECT_TRUE(store0->setKey("key1", thriftVal));
+    elapsedTime1 =
+        duration_cast<seconds>(steady_clock::now() - startTime1).count();
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  } while(elapsedTime1 < duration1);
+
+  auto getNodeCounters = [&]() {
+    std::map<std::string, fbzmq::thrift::CounterMap> nodeCounters;
+    for (auto& store : stores_) {
+      nodeCounters.emplace(store->nodeId, store->getCounters());
+    }
+    return nodeCounters;
+  };
+
+  // sleep to get tokens replenished since store1 also floods keys it receives
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  auto counters1 = getNodeCounters();
+  auto s0Counters1 = counters1["store0"];
+  auto s1Counters1 = counters1["store1"];
+
+  auto s0PubSent1 = s0Counters1["kvstore.sent_publications.count.0"].value;
+  auto s1PubSent1 = s1Counters1["kvstore.sent_publications.count.0"].value;
+
+  // check number of sent publications should be at least number of keys set
+  EXPECT_GE(s0PubSent1 - i1, 0);
+  /**
+   * TEST2: install several keys in store1 which is rate limited. Number of
+   * pulications sent should be (duration * messageRate). e.g. if duration
+   * is 5 secs, and message Rate is 20 msgs/sec, max number of publications
+   * sent should be 5*20 = 100 msgs.
+   *
+   * Also verify the last key set was sent to store0 by checking ttl version
+   */
+  auto startTime2 = steady_clock::now();
+  const int duration2 = 5;  // in seconds
+  const int wait = 2; // in seconds
+  int i2{0};
+  uint64_t elapsedTime2{0};
+  do {
+    thrift::Value thriftVal(
+        apache::thrift::FRAGILE,
+        1 /* version */,
+        "store1" /* originatorId */,
+        "value" /* value */,
+        300000 /* ttl */,
+        ++i2 /* ttl version */,
+        0 /* hash */);
+    thriftVal.hash = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    EXPECT_TRUE(store1->setKey("key2", thriftVal));
+    elapsedTime2 =
+        duration_cast<seconds>(steady_clock::now() - startTime2).count();
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  } while(elapsedTime2 < duration2);
+
+  // wait pending updates
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(wait));
+  // check in store0 the ttl version, this should be the same as latest version
+  auto getRes = store0->getKey("key2");
+  ASSERT_TRUE(getRes.hasValue());
+  EXPECT_EQ(i2, getRes->ttlVersion);
+
+  auto counters2 = getNodeCounters();
+  auto s1Counters2 = counters2["store1"];
+  auto s0Counters2 = counters2["store0"];
+  auto s1PubSent2 = s1Counters2["kvstore.sent_publications.count.0"].value;
+  auto s0KeyNum2 = s0Counters2["kvstore.num_keys"].value;
+
+  // number of messages sent must be around duration * messageRate
+  // + 1 as some messages could have been sent after the counter
+  EXPECT_LT(s1PubSent2 - s1PubSent1, (duration2 + wait + 1) * messageRate);
+
+  /**
+   * TEST3: similar to TEST2, except instead of key ttl version, new keys
+   * are inserted. Some updates will be supressed and merged into a single
+   * publication. Verify that all keys changes are published.
+   */
+  auto startTime3 = steady_clock::now();
+  const int duration3 = 5;  // in seconds
+  int i3{0};
+  uint64_t elapsedTime3{0};
+  do {
+    auto key = folly::sformat("key3{}", ++i3);
+    thrift::Value thriftVal(
+        apache::thrift::FRAGILE,
+        1 /* version */,
+        "store1" /* originatorId */,
+        "value" /* value */,
+        300000/* ttl */,
+        0 /* ttl version */,
+        0 /* hash */);
+    thriftVal.hash = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    EXPECT_TRUE(store1->setKey(key, thriftVal));
+    elapsedTime3 =
+        duration_cast<seconds>(steady_clock::now() - startTime3).count();
+
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  } while(elapsedTime3 < duration3);
+
+  // wait pending updates
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(wait));
+  auto counters3 = getNodeCounters();
+  auto s0Counters3 = counters3["store0"];
+  auto s1Counters3 = counters3["store1"];
+  auto s1PubSent3 = s1Counters3["kvstore.sent_publications.count.0"].value;
+  auto s1Supressed3 = s1Counters3["kvstore.rate_limit_suppress.count.0"].value;
+
+  // number of messages sent must be around duration * messageRate
+  // + 1 as some messages could have been sent after the counter
+  EXPECT_LE(s1PubSent3 - s1PubSent2, (duration3 + wait + 1) * messageRate);
+
+  // check for number of keys in store0 should be equal to number of keys
+  // added in store1.
+  auto s0KeyNum3 = s0Counters3["kvstore.num_keys"].value;
+  EXPECT_EQ(s0KeyNum3 - s0KeyNum2, i3);
+
+  /*
+   * TEST4: Keys expiry test. Add new keys with low ttl, that are
+   * subjected to rate limit. Verify all keys are expired
+   */
+  auto startTime4 = steady_clock::now();
+  const int duration4 = 1;  // in seconds
+  int i4{0};
+  uint64_t elapsedTime4{0};
+  int64_t ttlLow = 50; // in msec
+  do {
+    auto key = folly::sformat("key4{}", ++i4);
+    thrift::Value thriftVal(
+        apache::thrift::FRAGILE,
+        1 /* version */,
+        "store1" /* originatorId */,
+        "value" /* value */,
+        ttlLow /* ttl */,
+        0 /* ttl version */,
+        0 /* hash */);
+    thriftVal.hash = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    EXPECT_TRUE(store1->setKey(key, thriftVal));
+    elapsedTime4 =
+        duration_cast<seconds>(steady_clock::now() - startTime4).count();
+
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  } while(elapsedTime4 < duration4);
+
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(2*ttlLow));
+
+  auto counters4 = getNodeCounters();
+  auto s1Counters4 = counters4["store1"];
+  auto s1Supressed4 = s1Counters4["kvstore.rate_limit_suppress.count.0"].value;
+  // expired keys are not sent (or received). Just check expired keys
+  // were also supressed
+  EXPECT_GE(s1Supressed4 - s1Supressed3, 1);
 }
 
 int

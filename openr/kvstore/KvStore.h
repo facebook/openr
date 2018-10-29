@@ -21,6 +21,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
 #include <folly/io/IOBuf.h>
+#include <folly/TokenBucket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
@@ -49,6 +50,10 @@ using TtlCountdownQueue = boost::heap::priority_queue<
     boost::heap::compare<std::greater<TtlCountdownQueueEntry>>,
     boost::heap::stable<true>
     >;
+
+// Kvstore flooding rate <messages/sec, burst size>
+using KvStoreFloodRate =
+    folly::Optional<std::pair<const size_t, const size_t>>;
 
 class KvStoreFilters {
   public:
@@ -119,7 +124,9 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       // KvStore key filters
       folly::Optional<KvStoreFilters> filters = folly::none,
       // ZMQ high water mark
-      int zmqHwm = Constants::kHighWaterMark);
+      int zmqHwm = Constants::kHighWaterMark,
+      // Kvstore flooding rate
+      KvStoreFloodRate floodRate = folly::none);
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)
@@ -182,7 +189,10 @@ class KvStore final : public fbzmq::ZmqEventLoop {
 
   // Function to flood publication to neighbors
   // publication => data element to flood
-  void floodPublication(thrift::Publication&& publication);
+  // rateLimit => if 'false', publication will not be rate limited
+  void floodPublication(
+      thrift::Publication&& publication,
+      bool rateLimit = true);
 
   // update Time to expire filed in Publication
   // removeAboutToExpire: knob to remove keys which are about to expire
@@ -218,6 +228,11 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // Submit events to monitor
   void logKvEvent(const std::string& event, const std::string& key);
 
+  // buffer publications blocked by the rate limiter
+  void bufferPublication(thrift::Publication&& publication);
+
+  // flood pending update blocked by rate limiter
+  void floodBufferedUpdates(void);
   //
   // Private variables
   //
@@ -327,6 +342,20 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       std::string,
       std::chrono::time_point<std::chrono::steady_clock>>
       latestSentPeerSync_;
+
+  // Kvstore rate limiter
+  std::unique_ptr<folly::BasicTokenBucket<>> floodLimiter_{nullptr};
+
+  // Kvstore flooding rate
+  KvStoreFloodRate floodRate_ = folly::none;
+
+  // timer to send pending kvstore publication
+  std::unique_ptr<fbzmq::ZmqTimeout> pendingPublicationTimer_{nullptr};
+
+  // pending updates
+  std::unordered_map<
+      std::string,
+      folly::Optional<std::vector<std::string>>> publicationBuffer_{};
 };
 
 } // namespace openr
