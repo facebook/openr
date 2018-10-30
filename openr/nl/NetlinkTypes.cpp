@@ -356,21 +356,31 @@ Route::operator=(const Route& other) {
 
 bool
 operator==(const Route& lhs, const Route& rhs) {
-  bool ret = lhs.getType() == rhs.getType() && lhs.getTos() == rhs.getTos() &&
-      lhs.getFlags() == rhs.getFlags() && lhs.getScope() == rhs.getScope() &&
-      lhs.isValid() == rhs.isValid() &&
-      lhs.getDestination() == rhs.getDestination() &&
-      lhs.getPriority() == rhs.getPriority() &&
-      lhs.getNextHops().size() == rhs.getNextHops().size();
+  bool ret = (
+    lhs.getDestination() == rhs.getDestination() &&
+    lhs.getNextHops().size() == rhs.getNextHops().size() &&
+    lhs.getType() == rhs.getType() &&
+    lhs.getRouteTable() == rhs.getRouteTable() &&
+    lhs.getProtocolId() == rhs.getProtocolId() &&
+    lhs.getScope() == rhs.getScope() &&
+    lhs.isValid() == rhs.isValid() &&
+    lhs.getFlags() == rhs.getFlags() &&
+    lhs.getPriority() == rhs.getPriority() &&
+    lhs.getTos() == rhs.getTos() &&
+    lhs.getRouteIfName() == rhs.getRouteIfName()
+  );
 
   if (!ret) {
     return false;
   }
+
+  // Verify all nexthops are in each other (NOTE: size of nexthops are same)
   for (const NextHop& nh : lhs.getNextHops()) {
     if (!rhs.getNextHops().count(nh)) {
       return false;
     }
   }
+
   return true;
 }
 
