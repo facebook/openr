@@ -50,75 +50,71 @@ enum NetlinkEventType {
 class NextHop;
 class NextHopBuilder final {
  public:
-   NextHopBuilder() {}
-   ~NextHopBuilder() {}
+  NextHopBuilder() {}
+  ~NextHopBuilder() {}
 
-   NextHop buildFromObject(struct rtnl_nexthop* obj) const;
-   NextHop build() const;
+  NextHop buildFromObject(struct rtnl_nexthop* obj) const;
+  NextHop build() const;
 
-   void reset();
+  void reset();
 
-   NextHopBuilder& setIfIndex(int ifIndex);
+  NextHopBuilder& setIfIndex(int ifIndex);
 
-   NextHopBuilder& setGateway(const folly::IPAddress& gateway);
+  NextHopBuilder& setGateway(const folly::IPAddress& gateway);
 
-   NextHopBuilder& setWeight(uint8_t weight);
+  NextHopBuilder& setWeight(uint8_t weight);
 
-   folly::Optional<int> getIfIndex() const;
+  folly::Optional<int> getIfIndex() const;
 
-   folly::Optional<folly::IPAddress> getGateway() const;
+  folly::Optional<folly::IPAddress> getGateway() const;
 
-   folly::Optional<uint8_t> getWeight() const;
+  folly::Optional<uint8_t> getWeight() const;
 
  private:
-   folly::Optional<int> ifIndex_;
-   folly::Optional<folly::IPAddress> gateway_;
-   folly::Optional<uint8_t> weight_;
+  folly::Optional<int> ifIndex_;
+  folly::Optional<folly::IPAddress> gateway_;
+  folly::Optional<uint8_t> weight_;
 };
 
 // Wrapper class for rtnl_nexthop
+// NOTE: No special copy+move constructor and assignment operators for this one
 class NextHop final {
  public:
-   explicit NextHop(const NextHopBuilder& builder);
+  explicit NextHop(const NextHopBuilder& builder);
 
-   folly::Optional<int> getIfIndex() const;
+  folly::Optional<int> getIfIndex() const;
 
-   folly::Optional<folly::IPAddress> getGateway() const;
+  folly::Optional<folly::IPAddress> getGateway() const;
 
-   folly::Optional<uint8_t> getWeight() const;
+  folly::Optional<uint8_t> getWeight() const;
 
-   /**
-    * This method Will construct rtnl_nexthop object on the first time call,
-    * then will return the same object pointer. It will just return the pointer.
-    * Usually rtnl_nexthop object will be added to rtnl_route object which Will
-    * manage the nextHop object, caller don't need to free it manually.
-    * Otherwise, caller should use release call to release the object
-    */
-   struct rtnl_nexthop* fromNetlinkNextHop() const;
+  std::string str() const;
 
-   void release();
+  /**
+   * This method Will construct rtnl_nexthop object and return it. Owner is
+   * responsible for freeing it up. Use this method carefully.
+   *
+   * NOTE: This method is different from `getRtnl<>Ref` which all other types
+   * provides. Reason: Usually rtnl_nexthop object will be added to rtnl_route
+   * object which will manage the next-hop object.
+   */
+  struct rtnl_nexthop* getRtnlNexthopObj() const;
 
-   std::string str() const;
+ private:
+  // Nexthop build helpers
+  struct rtnl_nexthop* buildNextHopInternal(
+      int ifIdx, const folly::IPAddress& gateway) const;
 
-  private:
-   void init();
+  struct rtnl_nexthop* buildNextHopInternal(
+      const folly::IPAddress& gateway) const;
 
-   // Nexthop build helper
-   struct rtnl_nexthop* buildNextHopInternal(
-     int ifIdx, const folly::IPAddress& gateway);
+  struct rtnl_nexthop* buildNextHopInternal(int ifIdx) const;
 
-   struct rtnl_nexthop* buildNextHopInternal(
-     const folly::IPAddress& gateway);
-
-   struct rtnl_nexthop* buildNextHopInternal(int ifIdx);
-
-private:
-   folly::Optional<int> ifIndex_;
-   folly::Optional<folly::IPAddress> gateway_;
-   folly::Optional<uint8_t> weight_;
-   struct rtnl_nexthop* nextHop_{nullptr};
+ private:
+  folly::Optional<int> ifIndex_;
+  folly::Optional<folly::IPAddress> gateway_;
+  folly::Optional<uint8_t> weight_;
 };
-
 
 bool operator==(const NextHop& lhs, const NextHop& rhs);
 
@@ -265,12 +261,13 @@ class RouteBuilder {
 class Route final {
  public:
    explicit Route(const RouteBuilder& builder);
-
    ~Route();
 
+   // Copy+Move constructor and assignment operator
    Route(Route&&) noexcept;
-
    Route& operator=(Route&&) noexcept;
+   Route(const Route&);
+   Route& operator=(const Route&);
 
    uint8_t getFamily() const;
 
@@ -302,13 +299,9 @@ class Route final {
     * without increase the ref count. Caller shouldn't do rtnl_route_put
     * without explicit increase of it's ref count
     */
-   struct rtnl_route* fromNetlinkRoute() const;
+   struct rtnl_route* getRtnlRouteRef();
 
  private:
-   Route& operator=(const Route&);
-   Route(const Route&) = default;
-
-   void init();
    struct nl_addr* buildAddrObject(const folly::CIDRNetwork& addr);
 
    uint8_t type_{RTN_UNICAST};
@@ -383,9 +376,11 @@ class IfAddress final {
    explicit IfAddress(const IfAddressBuilder& builder);
    ~IfAddress();
 
+   // Copy+Move constructor and assignment operator
    IfAddress(IfAddress&&) noexcept;
-
    IfAddress& operator=(IfAddress&&) noexcept;
+   IfAddress(const IfAddress&);
+   IfAddress& operator=(const IfAddress&);
 
    // Family will be shadowed if prefix is set
    uint8_t getFamily() const;
@@ -405,15 +400,12 @@ class IfAddress final {
    /**
     * Will construct rtnl_addr object on the first time call, then will return
     * the same object pointer. It will just return the pointer
-    * without increase the ref count. Caller shouldn't do rtnl_route_put
+    * without increase the ref count. Caller shouldn't do rtnl_addr_put
     * without explicit increase of it's ref count
     */
-   struct rtnl_addr* fromIfAddress() const;
+   struct rtnl_addr* getRtnlAddrRef();
 
  private:
-
-   void init();
-
    folly::Optional<folly::CIDRNetwork> prefix_;
    int ifIndex_{0};
    bool isValid_{false};
@@ -422,6 +414,8 @@ class IfAddress final {
    folly::Optional<uint8_t> family_;
    struct rtnl_addr* ifAddr_{nullptr};
 };
+
+bool operator==(const IfAddress& lhs, const IfAddress& rhs);
 
 class Neighbor;
 class NeighborBuilder final {
@@ -485,11 +479,15 @@ class Neighbor final {
    explicit Neighbor(const NeighborBuilder& builder);
    ~Neighbor();
 
+   // Copy+Move constructor and assignment operator
    Neighbor(Neighbor&&) noexcept;
-
    Neighbor& operator=(Neighbor&&) noexcept;
+   Neighbor(const Neighbor&);
+   Neighbor& operator=(const Neighbor&);
 
    int getIfIndex() const;
+
+   bool isReachable() const;
 
    int getFamily() const;
 
@@ -499,17 +497,9 @@ class Neighbor final {
 
    folly::Optional<int> getState() const;
 
-   struct rtnl_neigh* fromNeighbor() const;
-
-   bool isReachable() const;
+   struct rtnl_neigh* getRtnlNeighRef();
 
  private:
-
-   Neighbor(const Neighbor&);
-   Neighbor& operator=(const Neighbor&);
-
-   void init();
-
    int ifIndex_{0};
    bool isReachable_{false};
    folly::IPAddress destination_;
@@ -517,6 +507,8 @@ class Neighbor final {
    folly::Optional<int> state_;
    struct rtnl_neigh* neigh_{nullptr};
 };
+
+bool operator==(const Neighbor& lhs, const Neighbor& rhs);
 
 class Link;
 class LinkBuilder final {
@@ -549,12 +541,13 @@ class LinkBuilder final {
 class Link final {
  public:
    explicit Link(const LinkBuilder& builder);
-
    ~Link();
 
+   // Copy+Move constructor and assignment operator
    Link(Link&&) noexcept;
-
    Link& operator=(Link&&) noexcept;
+   Link(const Link&);
+   Link& operator=(const Link&);
 
    const std::string& getLinkName() const;
 
@@ -564,20 +557,16 @@ class Link final {
 
    bool isUp() const;
 
-   struct rtnl_link* fromLink() const;
+   struct rtnl_link* getRtnlLinkRef();
 
  private:
-
-   void init();
-
-   Link(const Link&);
-   Link& operator=(const Link&);
-
    std::string linkName_;
    int ifIndex_{0};
    uint32_t flags_{0};
    struct rtnl_link* link_{nullptr};
 };
+
+bool operator==(const Link& lhs, const Link& rhs);
 
 // Link helper class that records Link attributes on the fly
 struct LinkAttribute final {

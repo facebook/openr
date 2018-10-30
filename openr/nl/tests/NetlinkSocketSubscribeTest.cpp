@@ -237,11 +237,9 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
       return;
     }
 
-    NeighborBuilder builder;
     auto neighborKey = std::make_pair(ifName, neighborEntry.getDestination());
     if (neighborEntry.isReachable()) {
-      neighbors.emplace(
-          neighborKey, builder.buildFromObject(neighborEntry.fromNeighbor()));
+      neighbors.emplace(neighborKey, neighborEntry);
       neighborAddEventCount++;
     } else {
       neighbors.erase(neighborKey);
@@ -268,10 +266,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
     } else {
       routeAddEventCount++;
       routes.erase(routeEntry.getDestination());
-      RouteBuilder builder;
-      routes.emplace(
-          routeEntry.getDestination(),
-          builder.buildFromObject(routeEntry.fromNetlinkRoute()));
+      routes.emplace(routeEntry.getDestination(), routeEntry);
     }
     if (eventFunc) {
       eventFunc();

@@ -28,19 +28,7 @@ const uint8_t kProtocolId = 99;
 const int kIfIndex = 1;
 const uint8_t kWeight = 4;
 
-class NetlinkTypesFixture : public testing::Test {
- public:
-  NetlinkTypesFixture() = default;
-  ~NetlinkTypesFixture() override = default;
-
-  void
-  SetUp() override {}
-
-  void
-  TearDown() override {}
-};
-
-TEST_F(NetlinkTypesFixture, NextHopIfIndexConsTest) {
+TEST(NetlinkTypes, NextHopIfIndexTest) {
   // Create NextHop with ifindex
   NextHopBuilder builder;
   auto nh = builder.setIfIndex(kIfIndex).build();
@@ -48,7 +36,7 @@ TEST_F(NetlinkTypesFixture, NextHopIfIndexConsTest) {
   EXPECT_EQ(kIfIndex, nh.getIfIndex().value());
   EXPECT_FALSE(nh.getGateway().hasValue());
   EXPECT_FALSE(nh.getWeight().hasValue());
-  struct rtnl_nexthop* object = nh.fromNetlinkNextHop();
+  struct rtnl_nexthop* object = nh.getRtnlNexthopObj();
   EXPECT_TRUE(object != nullptr);
   EXPECT_EQ(kIfIndex, rtnl_route_nh_get_ifindex(object));
   EXPECT_EQ(0, rtnl_route_nh_get_weight(object)); // weight's default value
@@ -56,9 +44,9 @@ TEST_F(NetlinkTypesFixture, NextHopIfIndexConsTest) {
   struct nl_addr* gw = rtnl_route_nh_get_gateway(object);
   EXPECT_TRUE(gw == nullptr);
 
-  // Get multiple times
-  struct rtnl_nexthop* object1 = nh.fromNetlinkNextHop();
-  EXPECT_EQ(object, object1);
+  // Get multiple times and ensure it is different
+  struct rtnl_nexthop* object1 = nh.getRtnlNexthopObj();
+  EXPECT_NE(object, object1);
 
   NextHopBuilder newBuilder;
   auto nhFromObj = newBuilder.buildFromObject(object);
@@ -66,10 +54,10 @@ TEST_F(NetlinkTypesFixture, NextHopIfIndexConsTest) {
 
   // Free object
   rtnl_route_nh_free(object);
-  nhFromObj.release();
+  rtnl_route_nh_free(object1);
 }
 
-TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
+TEST(NetlinkTypes, NextHopGatewayTest) {
   // Create NextHop with gateway
   folly::IPAddress gateway("fc00:cafe:3::3");
   NextHopBuilder builder;
@@ -80,7 +68,7 @@ TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
   EXPECT_TRUE(nh.getWeight().hasValue());
   EXPECT_EQ(kWeight, nh.getWeight().value());
 
-  struct rtnl_nexthop* object = nh.fromNetlinkNextHop();
+  struct rtnl_nexthop* object = nh.getRtnlNexthopObj();
   EXPECT_TRUE(object != nullptr);
   EXPECT_EQ(0, rtnl_route_nh_get_ifindex(object)); // ifIndex's default value
   EXPECT_EQ(kWeight, rtnl_route_nh_get_weight(object));
@@ -95,10 +83,9 @@ TEST_F(NetlinkTypesFixture, NextHopGatewayConsTest) {
   // Free object
   nl_addr_put(nl_gw);
   rtnl_route_nh_free(object);
-  nhFromObj.release();
 }
 
-TEST_F(NetlinkTypesFixture, NexthopGeneralConsTest) {
+TEST(NetlinkTypes, NexthopGeneralTest) {
   folly::IPAddress gateway("fc00:cafe:3::3");
   NextHopBuilder builder;
   auto nh = builder.setGateway(gateway)
@@ -113,14 +100,13 @@ TEST_F(NetlinkTypesFixture, NexthopGeneralConsTest) {
   EXPECT_TRUE(nh.getWeight().hasValue());
   EXPECT_EQ(kWeight, nh.getWeight().value());
 
-  struct rtnl_nexthop* object = nh.fromNetlinkNextHop();
+  struct rtnl_nexthop* object = nh.getRtnlNexthopObj();
   EXPECT_TRUE(object != nullptr);
   EXPECT_EQ(kIfIndex, rtnl_route_nh_get_ifindex(object));
   EXPECT_EQ(kWeight, rtnl_route_nh_get_weight(object));
   struct nl_addr* nl_gw = nl_addr_build(
       gateway.family(), (void*)gateway.bytes(), gateway.byteCount());
   EXPECT_TRUE(nl_addr_cmp(nl_gw, rtnl_route_nh_get_gateway(object)) == 0);
-  EXPECT_TRUE(object == nh.fromNetlinkNextHop());
 
   NextHopBuilder newBuilder;
   auto nhFromObj = newBuilder.buildFromObject(object);
@@ -129,10 +115,9 @@ TEST_F(NetlinkTypesFixture, NexthopGeneralConsTest) {
   // Free object
   nl_addr_put(nl_gw);
   rtnl_route_nh_free(object);
-  nhFromObj.release();
 }
 
-TEST_F(NetlinkTypesFixture, RouteBaseTest) {
+TEST(NetlinkTypes, RouteBaseTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   RouteBuilder builder;
   // Use default values
@@ -149,7 +134,7 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   EXPECT_FALSE(route.getPriority().hasValue());
   EXPECT_FALSE(route.getTos().hasValue());
 
-  struct rtnl_route* object = route.fromNetlinkRoute();
+  struct rtnl_route* object = route.getRtnlRouteRef();
   EXPECT_TRUE(object != nullptr);
 
   EXPECT_EQ(AF_INET6, rtnl_route_get_family(object));
@@ -167,13 +152,13 @@ TEST_F(NetlinkTypesFixture, RouteBaseTest) {
   EXPECT_EQ(0, rtnl_route_get_tos(object));
   EXPECT_EQ(0, rtnl_route_get_nnexthops(object));
 
-  struct rtnl_route* object1 = route.fromNetlinkRoute();
+  struct rtnl_route* object1 = route.getRtnlRouteRef();
   EXPECT_EQ(object, object1);
   // Route will release rtnl_route object
   nl_addr_put(dstObj);
 }
 
-TEST_F(NetlinkTypesFixture, RouteEqualTest) {
+TEST(NetlinkTypes, RouteEqualTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::IPAddress gateway1("face:cafe:3::3");
   folly::IPAddress gateway2("face:cafe:3::4");
@@ -254,10 +239,9 @@ TEST_F(NetlinkTypesFixture, RouteEqualTest) {
   auto route5 =
       builder5.setDestination(dst).addNextHop(nh4).addNextHop(nh5).build();
   EXPECT_EQ(1, route5.getNextHops().size());
-  nh5.release();
 }
 
-TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
+TEST(NetlinkTypes, RouteMoveTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::IPAddress gateway("face:cafe:3::3");
   uint32_t flags = 0x01;
@@ -277,10 +261,12 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
                    .addNextHop(nh1)
                    .build();
 
-  struct rtnl_route* p = route.fromNetlinkRoute();
+  struct rtnl_route* p = route.getRtnlRouteRef();
   Route route1(std::move(route));
-  EXPECT_TRUE(nullptr == route.fromNetlinkRoute());
-  struct rtnl_route* p1 = route1.fromNetlinkRoute();
+  struct rtnl_route* pMove = route.getRtnlRouteRef();
+  EXPECT_TRUE(pMove != nullptr);
+  EXPECT_NE(p, pMove);
+  struct rtnl_route* p1 = route1.getRtnlRouteRef();
   EXPECT_EQ(p, p1);
   EXPECT_EQ(AF_INET6, route1.getFamily());
   EXPECT_EQ(AF_INET6, rtnl_route_get_family(p1));
@@ -307,8 +293,8 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
   EXPECT_EQ(gateway, route1.getNextHops().begin()->getGateway().value());
 
   Route route2 = std::move(route1);
-  EXPECT_TRUE(nullptr == route1.fromNetlinkRoute());
-  struct rtnl_route* p2 = route2.fromNetlinkRoute();
+  EXPECT_TRUE(nullptr != route1.getRtnlRouteRef());
+  struct rtnl_route* p2 = route2.getRtnlRouteRef();
   EXPECT_EQ(p, p2);
   EXPECT_EQ(AF_INET6, route2.getFamily());
   EXPECT_EQ(AF_INET6, rtnl_route_get_family(p2));
@@ -333,7 +319,54 @@ TEST_F(NetlinkTypesFixture, RouteMoveConsTest) {
   EXPECT_EQ(1, route2.getNextHops().size());
 }
 
-TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
+TEST(NetlinkTypes, RouteCopyTest) {
+  folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::IPAddress gateway("face:cafe:3::3");
+  uint32_t flags = 0x01;
+  uint32_t priority = 3;
+  uint8_t tos = 2;
+  NextHopBuilder nhBuilder;
+  auto nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway).build();
+  RouteBuilder builder;
+  auto route = builder.setDestination(dst)
+                   .setType(RTN_UNICAST)
+                   .setProtocolId(kProtocolId)
+                   .setScope(RT_SCOPE_UNIVERSE)
+                   .setRouteTable(RT_TABLE_MAIN)
+                   .setFlags(flags)
+                   .setPriority(priority)
+                   .setTos(tos)
+                   .addNextHop(nh1)
+                   .build();
+  auto nlPtr1 = route.getRtnlRouteRef();
+  EXPECT_TRUE(nlPtr1 != nullptr);
+
+  // Copy constructor
+  fbnl::Route route2(route);
+  EXPECT_EQ(route, route2);
+  auto nlPtr2 = route2.getRtnlRouteRef();
+  EXPECT_TRUE(nlPtr2 != nullptr);
+  EXPECT_NE(nlPtr1, nlPtr2);
+  EXPECT_EQ(nlPtr1, route.getRtnlRouteRef());
+
+  // Increase reference of nlPtr2 so that it doesn't get allocated in the same
+  // memory location after getting destructed by copy asssignment operator
+  nl_object_get(OBJ_CAST(nlPtr2));
+
+  // Copy assignment operator
+  route2 = route;
+  EXPECT_EQ(route, route2);
+  auto nlPtr3 = route2.getRtnlRouteRef();
+  EXPECT_TRUE(nlPtr3 != nullptr);
+  EXPECT_NE(nlPtr1, nlPtr3);
+  EXPECT_NE(nlPtr2, nlPtr3);
+  EXPECT_EQ(nlPtr1, route.getRtnlRouteRef());
+
+  // Put back reference of nlPtr2
+  nl_object_put(OBJ_CAST(nlPtr2));
+}
+
+TEST(NetlinkTypes, RouteOptionalParamTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   uint32_t flags = 0x01;
   uint32_t priority = 3;
@@ -373,7 +406,7 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
   EXPECT_EQ(tos, route.getTos().value());
   EXPECT_EQ(3, route.getNextHops().size());
 
-  struct rtnl_route* object = route.fromNetlinkRoute();
+  struct rtnl_route* object = route.getRtnlRouteRef();
   EXPECT_TRUE(object != nullptr);
 
   EXPECT_EQ(AF_INET6, rtnl_route_get_family(object));
@@ -410,21 +443,21 @@ TEST_F(NetlinkTypesFixture, RouteOptionalParamTest) {
   rtnl_route_foreach_nexthop(object, nextHopFunc, &gateway);
 
   // Only create once
-  struct rtnl_route* object1 = route.fromNetlinkRoute();
+  struct rtnl_route* object1 = route.getRtnlRouteRef();
   EXPECT_EQ(object, object1);
   nl_addr_put(dstObj);
 }
 
-TEST_F(NetlinkTypesFixture, IfAddressMoveConsTest) {
+TEST(NetlinkTypes, IfAddressMoveTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
   uint32_t flags = 0x01;
   IfAddressBuilder builder;
   auto ifAddr =
       builder.setPrefix(prefix).setIfIndex(kIfIndex).setFlags(flags).build();
-  struct rtnl_addr* p = ifAddr.fromIfAddress();
+  struct rtnl_addr* p = ifAddr.getRtnlAddrRef();
   IfAddress ifAddr1(std::move(ifAddr));
-  EXPECT_TRUE(nullptr == ifAddr.fromIfAddress());
-  struct rtnl_addr* p1 = ifAddr1.fromIfAddress();
+  EXPECT_TRUE(nullptr != ifAddr.getRtnlAddrRef());
+  struct rtnl_addr* p1 = ifAddr1.getRtnlAddrRef();
   EXPECT_EQ(p, p1);
   EXPECT_EQ(AF_INET6, rtnl_addr_get_family(p1));
   EXPECT_EQ(AF_INET6, ifAddr1.getFamily());
@@ -439,8 +472,8 @@ TEST_F(NetlinkTypesFixture, IfAddressMoveConsTest) {
   EXPECT_EQ(kIfIndex, ifAddr1.getIfIndex());
 
   IfAddress ifAddr2 = std::move(ifAddr1);
-  struct rtnl_addr* p2 = ifAddr2.fromIfAddress();
-  EXPECT_TRUE(nullptr == ifAddr1.fromIfAddress());
+  struct rtnl_addr* p2 = ifAddr2.getRtnlAddrRef();
+  EXPECT_TRUE(nullptr != ifAddr1.getRtnlAddrRef());
   EXPECT_EQ(p, p2);
   EXPECT_EQ(AF_INET6, rtnl_addr_get_family(p2));
   EXPECT_EQ(AF_INET6, ifAddr2.getFamily());
@@ -455,13 +488,48 @@ TEST_F(NetlinkTypesFixture, IfAddressMoveConsTest) {
   EXPECT_EQ(kIfIndex, ifAddr2.getIfIndex());
 }
 
-TEST_F(NetlinkTypesFixture, IfAddressTest) {
+TEST(NetlinkTypes, IfAddressCopyTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
   uint32_t flags = 0x01;
   IfAddressBuilder builder;
   auto ifAddr =
       builder.setPrefix(prefix).setIfIndex(kIfIndex).setFlags(flags).build();
-  struct rtnl_addr* addr = ifAddr.fromIfAddress();
+
+  auto nlPtr1 = ifAddr.getRtnlAddrRef();
+  EXPECT_TRUE(nlPtr1 != nullptr);
+
+  // Copy constructor
+  fbnl::IfAddress ifAddr2(ifAddr);
+  EXPECT_EQ(ifAddr, ifAddr2);
+  auto nlPtr2 = ifAddr2.getRtnlAddrRef();
+  EXPECT_TRUE(nlPtr2 != nullptr);
+  EXPECT_NE(nlPtr1, nlPtr2);
+  EXPECT_EQ(nlPtr1, ifAddr.getRtnlAddrRef());
+
+  // Increase reference of nlPtr2 so that it doesn't get allocated in the same
+  // memory location after getting destructed by copy asssignment operator
+  nl_object_get(OBJ_CAST(nlPtr2));
+
+  // Copy assignment operator
+  ifAddr2 = ifAddr;
+  EXPECT_EQ(ifAddr, ifAddr2);
+  auto nlPtr3 = ifAddr2.getRtnlAddrRef();
+  EXPECT_TRUE(nlPtr3 != nullptr);
+  EXPECT_NE(nlPtr1, nlPtr3);
+  EXPECT_NE(nlPtr2, nlPtr3);
+  EXPECT_EQ(nlPtr1, ifAddr.getRtnlAddrRef());
+
+  // Put back reference of nlPtr2
+  nl_object_put(OBJ_CAST(nlPtr2));
+}
+
+TEST(NetlinkTypes, IfAddressTest) {
+  folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
+  uint32_t flags = 0x01;
+  IfAddressBuilder builder;
+  auto ifAddr =
+      builder.setPrefix(prefix).setIfIndex(kIfIndex).setFlags(flags).build();
+  struct rtnl_addr* addr = ifAddr.getRtnlAddrRef();
   EXPECT_TRUE(addr != nullptr);
   EXPECT_EQ(AF_INET6, rtnl_addr_get_family(addr));
   EXPECT_EQ(AF_INET6, ifAddr.getFamily());
@@ -474,7 +542,7 @@ TEST_F(NetlinkTypesFixture, IfAddressTest) {
   EXPECT_EQ(flags, ifAddr.getFlags().value());
   EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(addr));
   EXPECT_EQ(kIfIndex, ifAddr.getIfIndex());
-  EXPECT_EQ(addr, ifAddr.fromIfAddress());
+  EXPECT_EQ(addr, ifAddr.getRtnlAddrRef());
 
   folly::CIDRNetwork prefixV4{folly::IPAddress("192.168.0.11"), 32};
   builder.reset();
@@ -484,7 +552,7 @@ TEST_F(NetlinkTypesFixture, IfAddressTest) {
                      .setIfIndex(kIfIndex)
                      .build();
   addr = nullptr;
-  addr = ifAddr1.fromIfAddress();
+  addr = ifAddr1.getRtnlAddrRef();
   EXPECT_TRUE(addr != nullptr);
   EXPECT_EQ(AF_INET, rtnl_addr_get_family(addr));
   EXPECT_EQ(AF_INET, ifAddr1.getFamily());
@@ -498,10 +566,10 @@ TEST_F(NetlinkTypesFixture, IfAddressTest) {
   EXPECT_EQ(flags, ifAddr1.getFlags().value());
   EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(addr));
   EXPECT_EQ(kIfIndex, ifAddr1.getIfIndex());
-  EXPECT_EQ(addr, ifAddr1.fromIfAddress());
+  EXPECT_EQ(addr, ifAddr1.getRtnlAddrRef());
 }
 
-TEST_F(NetlinkTypesFixture, IfAddressMiscTest) {
+TEST(NetlinkTypes, IfAddressMiscTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
   uint32_t flags = 0x01;
   IfAddressBuilder builder;
@@ -510,7 +578,7 @@ TEST_F(NetlinkTypesFixture, IfAddressMiscTest) {
                     .setFlags(flags)
                     .setFamily(AF_INET6) // will be shadowed
                     .build();
-  struct rtnl_addr* addr = ifAddr.fromIfAddress();
+  struct rtnl_addr* addr = ifAddr.getRtnlAddrRef();
   EXPECT_TRUE(addr != nullptr);
   EXPECT_EQ(AF_INET6, rtnl_addr_get_family(addr));
   EXPECT_EQ(AF_INET6, ifAddr.getFamily());
@@ -523,12 +591,12 @@ TEST_F(NetlinkTypesFixture, IfAddressMiscTest) {
   EXPECT_EQ(flags, ifAddr.getFlags().value());
   EXPECT_EQ(kIfIndex, rtnl_addr_get_ifindex(addr));
   EXPECT_EQ(kIfIndex, ifAddr.getIfIndex());
-  EXPECT_EQ(addr, ifAddr.fromIfAddress());
+  EXPECT_EQ(addr, ifAddr.getRtnlAddrRef());
 
   addr = nullptr;
   builder.reset();
   auto ifAddr1 = builder.setFamily(AF_INET).setIfIndex(kIfIndex).build();
-  struct rtnl_addr* addr1 = ifAddr1.fromIfAddress();
+  struct rtnl_addr* addr1 = ifAddr1.getRtnlAddrRef();
   EXPECT_TRUE(addr1 != nullptr);
   EXPECT_EQ(AF_INET, rtnl_addr_get_family(addr1));
   EXPECT_EQ(AF_INET, ifAddr1.getFamily());
@@ -536,19 +604,7 @@ TEST_F(NetlinkTypesFixture, IfAddressMiscTest) {
   EXPECT_EQ(kIfIndex, ifAddr1.getIfIndex());
 }
 
-int
-main(int argc, char* argv[]) {
-  // Parse command line flags
-  testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
-
-  // Run the tests
-  return RUN_ALL_TESTS();
-}
-
-TEST_F(NetlinkTypesFixture, NeighborTypeTest) {
+TEST(NetlinkTypes, NeighborTypeTest) {
   folly::IPAddress dst("fc00:cafe:3::3");
   folly::MacAddress mac("00:00:00:00:00:00");
   NeighborBuilder builder;
@@ -557,7 +613,7 @@ TEST_F(NetlinkTypesFixture, NeighborTypeTest) {
                    .setDestination(dst)
                    .setLinkAddress(mac)
                    .build();
-  struct rtnl_neigh* obj = neigh.fromNeighbor();
+  struct rtnl_neigh* obj = neigh.getRtnlNeighRef();
   EXPECT_TRUE(obj != nullptr);
   struct nl_addr* dstObj = rtnl_neigh_get_dst(obj);
   EXPECT_TRUE(dstObj != nullptr);
@@ -579,8 +635,8 @@ TEST_F(NetlinkTypesFixture, NeighborTypeTest) {
   EXPECT_EQ(AF_INET6, neigh.getFamily());
 
   auto neigh1 = builder.buildFromObject(obj);
-  EXPECT_TRUE(obj != neigh1.fromNeighbor());
-  obj = neigh1.fromNeighbor();
+  EXPECT_TRUE(obj != neigh1.getRtnlNeighRef());
+  obj = neigh1.getRtnlNeighRef();
   EXPECT_TRUE(obj != nullptr);
   dstObj = rtnl_neigh_get_dst(obj);
   EXPECT_TRUE(dstObj != nullptr);
@@ -602,7 +658,71 @@ TEST_F(NetlinkTypesFixture, NeighborTypeTest) {
   EXPECT_EQ(AF_INET6, neigh1.getFamily());
 }
 
-TEST_F(NetlinkTypesFixture, LinkTypeTest) {
+TEST(NetlinkTypes, NeighborMoveTest) {
+  folly::IPAddress dst("fc00:cafe:3::3");
+  folly::MacAddress mac("00:00:00:00:00:00");
+  NeighborBuilder builder;
+  auto neigh = builder.setIfIndex(kIfIndex)
+                   .setState(NUD_REACHABLE)
+                   .setDestination(dst)
+                   .setLinkAddress(mac)
+                   .build();
+
+  auto nlPtr1 = neigh.getRtnlNeighRef();
+  EXPECT_TRUE(nlPtr1 != nullptr);
+
+  // Move constructor
+  fbnl::Neighbor neigh2(std::move(neigh));
+  auto nlPtr2 = neigh2.getRtnlNeighRef();
+  EXPECT_TRUE(nlPtr2 != nullptr);
+
+  // Verify expectations
+  EXPECT_EQ(nlPtr1, nlPtr2);  // pointer gets moved too
+  EXPECT_EQ(kIfIndex, neigh2.getIfIndex());
+  EXPECT_EQ(dst, neigh2.getDestination());
+  EXPECT_EQ(mac, neigh2.getLinkAddress());
+  EXPECT_TRUE(neigh2.isReachable());
+}
+
+TEST(NetlinkTypes, NeighborCopyTest) {
+  folly::IPAddress dst("fc00:cafe:3::3");
+  folly::MacAddress mac("00:00:00:00:00:00");
+  NeighborBuilder builder;
+  auto neigh = builder.setIfIndex(kIfIndex)
+                   .setState(NUD_REACHABLE)
+                   .setDestination(dst)
+                   .setLinkAddress(mac)
+                   .build();
+
+  auto nlPtr1 = neigh.getRtnlNeighRef();
+  EXPECT_TRUE(nlPtr1 != nullptr);
+
+  // Copy constructor
+  fbnl::Neighbor neigh2(neigh);
+  EXPECT_EQ(neigh, neigh2);
+  auto nlPtr2 = neigh2.getRtnlNeighRef();
+  EXPECT_TRUE(nlPtr2 != nullptr);
+  EXPECT_NE(nlPtr1, nlPtr2);
+  EXPECT_EQ(nlPtr1, neigh.getRtnlNeighRef());
+
+  // Increase reference of nlPtr2 so that it doesn't get allocated in the same
+  // memory location after getting destructed by copy asssignment operator
+  nl_object_get(OBJ_CAST(nlPtr2));
+
+  // Copy assignment operator
+  neigh2 = neigh;
+  EXPECT_EQ(neigh, neigh2);
+  auto nlPtr3 = neigh2.getRtnlNeighRef();
+  EXPECT_TRUE(nlPtr3 != nullptr);
+  EXPECT_NE(nlPtr1, nlPtr3);
+  EXPECT_NE(nlPtr2, nlPtr3);
+  EXPECT_EQ(nlPtr1, neigh.getRtnlNeighRef());
+
+  // Put back reference of nlPtr2
+  nl_object_put(OBJ_CAST(nlPtr2));
+}
+
+TEST(NetlinkTypes, LinkTypeTest) {
   std::string linkName("iface");
   unsigned int flags = 0x0 | IFF_RUNNING;
 
@@ -611,7 +731,7 @@ TEST_F(NetlinkTypesFixture, LinkTypeTest) {
                   .setFlags(flags)
                   .setLinkName(linkName)
                   .build();
-  struct rtnl_link* obj = link.fromLink();
+  struct rtnl_link* obj = link.getRtnlLinkRef();
   EXPECT_TRUE(obj != nullptr);
   EXPECT_EQ(kIfIndex, rtnl_link_get_ifindex(obj));
   EXPECT_EQ(kIfIndex, link.getIfIndex());
@@ -622,8 +742,8 @@ TEST_F(NetlinkTypesFixture, LinkTypeTest) {
   EXPECT_TRUE(link.isUp());
 
   auto link1 = builder.buildFromObject(obj);
-  EXPECT_TRUE(obj != link1.fromLink());
-  obj = link1.fromLink();
+  EXPECT_TRUE(obj != link1.getRtnlLinkRef());
+  obj = link1.getRtnlLinkRef();
   EXPECT_TRUE(obj != nullptr);
   EXPECT_EQ(kIfIndex, rtnl_link_get_ifindex(obj));
   EXPECT_EQ(kIfIndex, link1.getIfIndex());
@@ -632,4 +752,79 @@ TEST_F(NetlinkTypesFixture, LinkTypeTest) {
   EXPECT_EQ(flags, rtnl_link_get_flags(obj));
   EXPECT_EQ(flags, link1.getFlags());
   EXPECT_TRUE(link1.isUp());
+}
+
+TEST(NetlinkTypes, LinkMoveTest) {
+  std::string linkName("iface");
+  unsigned int flags = 0x0 | IFF_RUNNING;
+
+  LinkBuilder builder;
+  auto link = builder.setIfIndex(kIfIndex)
+                  .setFlags(flags)
+                  .setLinkName(linkName)
+                  .build();
+  auto nlPtr1 = link.getRtnlLinkRef();
+  EXPECT_TRUE(nlPtr1 != nullptr);
+
+  // Move constructor
+  fbnl::Link link2(std::move(link));
+  auto nlPtr2 = link2.getRtnlLinkRef();
+  EXPECT_TRUE(nlPtr2 != nullptr);
+
+  // Verify expectations from new link object
+  EXPECT_EQ(nlPtr1, nlPtr2);  // Pointer gets moved too
+  EXPECT_EQ(linkName, link2.getLinkName());
+  EXPECT_EQ(kIfIndex, link2.getIfIndex());
+  EXPECT_EQ(flags, link.getFlags());
+  EXPECT_TRUE(link.isUp());
+}
+
+TEST(NetlinkTypes, LinkCopyTest) {
+  std::string linkName("iface");
+  unsigned int flags = 0x0 | IFF_RUNNING;
+
+  LinkBuilder builder;
+  auto link = builder.setIfIndex(kIfIndex)
+                  .setFlags(flags)
+                  .setLinkName(linkName)
+                  .build();
+
+  auto nlPtr1 = link.getRtnlLinkRef();
+  EXPECT_TRUE(nlPtr1 != nullptr);
+
+  // Copy constructor
+  fbnl::Link link2(link);
+  EXPECT_EQ(link, link2);
+  auto nlPtr2 = link2.getRtnlLinkRef();
+  EXPECT_TRUE(nlPtr2 != nullptr);
+  EXPECT_NE(nlPtr1, nlPtr2);
+  EXPECT_EQ(nlPtr1, link.getRtnlLinkRef());
+
+  // Increase reference of nlPtr2 so that it doesn't get allocated in the same
+  // memory location after getting destructed by copy asssignment operator
+  nl_object_get(OBJ_CAST(nlPtr2));
+
+  // Copy assignment operator
+  link2 = link;
+  EXPECT_EQ(link, link2);
+  auto nlPtr3 = link2.getRtnlLinkRef();
+  EXPECT_TRUE(nlPtr3 != nullptr);
+  EXPECT_NE(nlPtr1, nlPtr3);
+  EXPECT_NE(nlPtr2, nlPtr3);
+  EXPECT_EQ(nlPtr1, link.getRtnlLinkRef());
+
+  // Put back reference of nlPtr2
+  nl_object_put(OBJ_CAST(nlPtr2));
+}
+
+int
+main(int argc, char* argv[]) {
+  // Parse command line flags
+  testing::InitGoogleTest(&argc, argv);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
+  google::InitGoogleLogging(argv[0]);
+  google::InstallFailureSignalHandler();
+
+  // Run the tests
+  return RUN_ALL_TESTS();
 }

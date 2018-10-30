@@ -69,16 +69,16 @@ RouteBuilder::loadFromObject(struct rtnl_route* obj) {
     }
   }
   setDestination(prefix);
-  auto nextHopFunc = [](struct rtnl_nexthop * obj, void* ctx) noexcept->void {
-    struct nl_addr* gw = rtnl_route_nh_get_gateway(obj);
-    int ifIndex = rtnl_route_nh_get_ifindex(obj);
+  auto nextHopFunc = [](struct rtnl_nexthop * nhObj, void* ctx) noexcept->void {
+    struct nl_addr* gw = rtnl_route_nh_get_gateway(nhObj);
+    int ifIndex = rtnl_route_nh_get_ifindex(nhObj);
     // One of gateway or ifIndex must be set
     if (!gw && 0 == ifIndex) {
       return;
     }
     RouteBuilder* rtBuilder = reinterpret_cast<RouteBuilder*>(ctx);
     NextHopBuilder nhBuilder;
-    rtBuilder->addNextHop(std::move(nhBuilder.buildFromObject(obj)));
+    rtBuilder->addNextHop(nhBuilder.buildFromObject(nhObj));
   };
   rtnl_route_foreach_nexthop(obj, nextHopFunc, static_cast<void*>(this));
   return *this;
@@ -280,9 +280,7 @@ Route::Route(const RouteBuilder& builder)
       tos_(builder.getTos()),
       nextHops_(builder.getNextHops()),
       dst_(builder.getDestination()),
-      routeIfName_(builder.getRouteIfName()) {
-  init();
-}
+      routeIfName_(builder.getRouteIfName()) {}
 
 Route::~Route() {
   if (route_) {
@@ -291,27 +289,44 @@ Route::~Route() {
   }
 }
 
-Route::Route(Route&& other) noexcept
-    : type_(other.type_),
-      routeTable_(other.routeTable_),
-      protocolId_(other.protocolId_),
-      scope_(other.scope_),
-      isValid_(other.isValid_),
-      flags_(other.flags_),
-      priority_(other.priority_),
-      tos_(other.tos_),
-      nextHops_(other.nextHops_),
-      dst_(other.dst_),
-      routeIfName_(other.routeIfName_) {
-  if (other.route_) {
-    // prevent double release
-    route_ = other.route_;
-    other.route_ = nullptr;
-  }
+Route::Route(Route&& other) noexcept {
+  *this = std::move(other);
 }
 
 Route&
 Route::operator=(Route&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+  type_ = std::move(other.type_);
+  routeTable_ = std::move(other.routeTable_);
+  protocolId_ = std::move(other.protocolId_);
+  scope_ = std::move(other.scope_);
+  isValid_ = std::move(other.isValid_);
+  flags_ = std::move(other.flags_);
+  priority_ = std::move(other.priority_);
+  tos_ = std::move(other.tos_);
+  nextHops_ = std::move(other.nextHops_);
+  dst_ = std::move(other.dst_);
+  routeIfName_ = std::move(other.routeIfName_);
+  if (route_) {
+    rtnl_route_put(route_);
+    route_ = nullptr;
+  }
+  if (other.route_) {
+    route_ = other.route_;
+    other.route_ = nullptr;
+  }
+
+  return *this;
+}
+
+Route::Route(const Route& other) {
+  *this = other;
+}
+
+Route&
+Route::operator=(const Route& other) {
   if (this == &other) {
     return *this;
   }
@@ -326,16 +341,18 @@ Route::operator=(Route&& other) noexcept {
   nextHops_ = other.nextHops_;
   dst_ = other.dst_;
   routeIfName_ = other.routeIfName_;
+  // Free our route_ if any
   if (route_) {
     rtnl_route_put(route_);
     route_ = nullptr;
   }
-  if (other.route_) {
-    route_ = other.route_;
-    other.route_ = nullptr;
-  }
+  // NOTE: We are not copying other.route_ so that this object can be passed
+  // between threads without actually copying underlying netlink object to
+  // other threads
+
   return *this;
 }
+
 
 bool
 operator==(const Route& lhs, const Route& rhs) {
@@ -418,15 +435,10 @@ Route::isValid() const {
 }
 
 struct rtnl_route*
-Route::fromNetlinkRoute() const {
-  return route_;
-}
-
-void
-Route::init() {
+Route::getRtnlRouteRef() {
   // Only build object once
   if (route_) {
-    return;
+    return route_;
   }
 
   route_ = rtnl_route_alloc();
@@ -471,9 +483,6 @@ Route::init() {
         nl_geterror(err)));
   }
 
-  if (nextHops_.empty()) {
-    return;
-  }
   // Add next hops
   // 1. check dst and nexthop's family
   for (const auto& nextHop : nextHops_) {
@@ -485,9 +494,10 @@ Route::init() {
   }
   // 2. build nexthop and add it to route
   for (auto nextHop : nextHops_) {
-    struct rtnl_nexthop* nh = nextHop.fromNetlinkNextHop();
-    rtnl_route_add_nexthop(route_, nh);
+    rtnl_route_add_nexthop(route_, nextHop.getRtnlNexthopObj());
   }
+
+  return route_;
 }
 
 struct nl_addr*
@@ -573,9 +583,7 @@ NextHopBuilder::getWeight() const {
 NextHop::NextHop(const NextHopBuilder& builder)
     : ifIndex_(builder.getIfIndex()),
       gateway_(builder.getGateway()),
-      weight_(builder.getWeight()) {
-  init();
-}
+      weight_(builder.getWeight()) {}
 
 bool
 operator==(const NextHop& lhs, const NextHop& rhs) {
@@ -614,33 +622,6 @@ NextHop::getWeight() const {
   return weight_;
 }
 
-void
-NextHop::init() {
-  if (nextHop_) {
-    return;
-  }
-  if (ifIndex_.hasValue() && gateway_.hasValue()) {
-    nextHop_ = buildNextHopInternal(ifIndex_.value(), gateway_.value());
-  } else if (ifIndex_.hasValue()) {
-    nextHop_ = buildNextHopInternal(ifIndex_.value());
-  } else if (gateway_.hasValue()) {
-    nextHop_ = buildNextHopInternal(gateway_.value());
-  }
-}
-
-struct rtnl_nexthop*
-NextHop::fromNetlinkNextHop() const {
-  return nextHop_;
-}
-
-void
-NextHop::release() {
-  if (nextHop_) {
-    rtnl_route_nh_free(nextHop_);
-    nextHop_ = nullptr;
-  }
-}
-
 std::string
 NextHop::str() const {
   return folly::sformat(
@@ -651,7 +632,19 @@ NextHop::str() const {
 }
 
 struct rtnl_nexthop*
-NextHop::buildNextHopInternal(const int ifIdx) {
+NextHop::getRtnlNexthopObj() const {
+  if (ifIndex_.hasValue() && gateway_.hasValue()) {
+    return buildNextHopInternal(ifIndex_.value(), gateway_.value());
+  } else if (ifIndex_.hasValue()) {
+    return buildNextHopInternal(ifIndex_.value());
+  } else if (gateway_.hasValue()) {
+    return buildNextHopInternal(gateway_.value());
+  }
+  throw NlException("Invalid nexthop");
+}
+
+struct rtnl_nexthop*
+NextHop::buildNextHopInternal(const int ifIdx) const {
   // We create a nextHop oject here but by adding it to route
   // the route object owns it
   // Once we destroy the route object, it will internally free this nextHop
@@ -667,14 +660,13 @@ NextHop::buildNextHopInternal(const int ifIdx) {
 }
 
 struct rtnl_nexthop*
-NextHop::buildNextHopInternal(int ifIdx, const folly::IPAddress& gateway) {
+NextHop::buildNextHopInternal(
+    int ifIdx, const folly::IPAddress& gateway) const {
   struct nl_addr* nlGateway = nl_addr_build(
       gateway.family(), (void*)(gateway.bytes()), gateway.byteCount());
-
   if (nlGateway == nullptr) {
     throw fbnl::NlException("Failed to create nl addr for gateway");
   }
-
   // nextHop object takes a ref if gateway is successfully set
   // Either way, success or failure, we drop our ref
   SCOPE_EXIT {
@@ -703,20 +695,18 @@ NextHop::buildNextHopInternal(int ifIdx, const folly::IPAddress& gateway) {
 
 // build nexthop with nexthop = global ip addresses
 struct rtnl_nexthop*
-NextHop::buildNextHopInternal(const folly::IPAddress& gateway) {
+NextHop::buildNextHopInternal(const folly::IPAddress& gateway) const {
   if (gateway.isLinkLocal()) {
     throw fbnl::NlException(folly::sformat(
-        "Failed to resolve interface name for link local address {}",
+        "Missing interface name for link local nexthop address {}",
         gateway.str()));
   }
 
   struct nl_addr* nlGateway = nl_addr_build(
       gateway.family(), (void*)(gateway.bytes()), gateway.byteCount());
-
   if (nlGateway == nullptr) {
     throw fbnl::NlException("Failed to create nl addr for gateway");
   }
-
   // nextHop object takes a ref if gateway is successfully set
   // Either way, success or failure, we drop our ref
   SCOPE_EXIT {
@@ -850,9 +840,7 @@ IfAddress::IfAddress(const IfAddressBuilder& builder)
       isValid_(builder.isValid()),
       scope_(builder.getScope()),
       flags_(builder.getFlags()),
-      family_(builder.getFamily()) {
-  init();
-}
+      family_(builder.getFamily()) {}
 
 IfAddress::~IfAddress() {
   if (ifAddr_) {
@@ -861,21 +849,41 @@ IfAddress::~IfAddress() {
   }
 }
 
-IfAddress::IfAddress(IfAddress&& other) noexcept
-    : prefix_(other.prefix_),
-      ifIndex_(other.ifIndex_),
-      isValid_(other.isValid_),
-      scope_(other.scope_),
-      flags_(other.flags_),
-      family_(other.family_) {
-  if (other.ifAddr_) {
-    ifAddr_ = other.ifAddr_;
-    other.ifAddr_ = nullptr;
-  }
+IfAddress::IfAddress(IfAddress&& other) noexcept {
+  *this = std::move(other);
 }
 
 IfAddress&
 IfAddress::operator=(IfAddress&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+
+  prefix_ = std::move(other.prefix_);
+  ifIndex_ = std::move(other.ifIndex_);
+  isValid_ = std::move(other.isValid_);
+  scope_ = std::move(other.scope_);
+  flags_ = std::move(other.flags_);
+  family_ = std::move(other.family_);
+  // release old object
+  if (ifAddr_) {
+    rtnl_addr_put(ifAddr_);
+    ifAddr_ = nullptr;
+  }
+  if (other.ifAddr_) {
+    ifAddr_ = other.ifAddr_;
+    other.ifAddr_ = nullptr;
+  }
+
+  return *this;
+}
+
+IfAddress::IfAddress(const IfAddress& other) {
+  *this = other;
+}
+
+IfAddress&
+IfAddress::operator=(const IfAddress& other) {
   if (this == &other) {
     return *this;
   }
@@ -891,10 +899,10 @@ IfAddress::operator=(IfAddress&& other) noexcept {
     rtnl_addr_put(ifAddr_);
     ifAddr_ = nullptr;
   }
-  if (other.ifAddr_) {
-    ifAddr_ = other.ifAddr_;
-    other.ifAddr_ = nullptr;
-  }
+  // NOTE: We are not copying other.ifAddr_ so that this object can be
+  // passed between threads without actually copying underlying netlink object
+  // to other threads
+
   return *this;
 }
 
@@ -943,14 +951,9 @@ IfAddress::getFlags() const {
 // Will construct rtnl_addr object on the first time call, then will return
 // the same object pointer
 struct rtnl_addr*
-IfAddress::fromIfAddress() const {
-  return ifAddr_;
-}
-
-void
-IfAddress::init() {
+IfAddress::getRtnlAddrRef() {
   if (ifAddr_) {
-    return;
+    return ifAddr_;
   }
 
   ifAddr_ = rtnl_addr_alloc();
@@ -990,6 +993,20 @@ IfAddress::init() {
   if (flags_.hasValue()) {
     rtnl_addr_set_flags(ifAddr_, flags_.value());
   }
+
+  return ifAddr_;
+}
+
+bool
+operator==(const IfAddress& lhs, const IfAddress& rhs) {
+  return (
+    lhs.getPrefix() == rhs.getPrefix() &&
+    lhs.getIfIndex() == rhs.getIfIndex() &&
+    lhs.isValid() == rhs.isValid() &&
+    lhs.getScope() == rhs.getScope() &&
+    lhs.getFlags() == rhs.getFlags() &&
+    lhs.getFamily() == rhs.getFamily()
+  );
 }
 
 /*================================Neighbor====================================*/
@@ -1104,9 +1121,7 @@ Neighbor::Neighbor(const NeighborBuilder& builder)
       isReachable_(builder.getIsReachable()),
       destination_(builder.getDestination()),
       linkAddress_(builder.getLinkAddress()),
-      state_(builder.getState()) {
-  init();
-}
+      state_(builder.getState()) {}
 
 Neighbor::~Neighbor() {
   if (neigh_) {
@@ -1115,16 +1130,8 @@ Neighbor::~Neighbor() {
   }
 }
 
-Neighbor::Neighbor(Neighbor&& other) noexcept
-    : ifIndex_(other.ifIndex_),
-      isReachable_(other.isReachable_),
-      destination_(other.destination_),
-      linkAddress_(other.linkAddress_),
-      state_(other.state_) {
-  if (other.neigh_) {
-    neigh_ = other.neigh_;
-    other.neigh_ = nullptr;
-  }
+Neighbor::Neighbor(Neighbor&& other) noexcept {
+  *this = std::move(other);
 }
 
 Neighbor&
@@ -1146,6 +1153,33 @@ Neighbor::operator=(Neighbor&& other) noexcept {
     neigh_ = other.neigh_;
     other.neigh_ = nullptr;
   }
+
+  return *this;
+}
+
+Neighbor::Neighbor(const Neighbor& other) {
+  *this = other;
+}
+
+Neighbor&
+Neighbor::operator=(const Neighbor& other) {
+  if (this == &other) {
+    return *this;
+  }
+
+  ifIndex_ = other.ifIndex_;
+  isReachable_ = other.isReachable_;
+  destination_ = other.destination_;
+  linkAddress_ = other.linkAddress_;
+  state_ = other.state_;
+  if (neigh_) {
+    rtnl_neigh_put(neigh_);
+    neigh_ = nullptr;
+  }
+  // NOTE: We are not copying other.neigh_ so that this object can be
+  // passed between threads without actually copying underlying netlink object
+  // to other threads
+
   return *this;
 }
 
@@ -1180,14 +1214,9 @@ Neighbor::isReachable() const {
 }
 
 struct rtnl_neigh*
-Neighbor::fromNeighbor() const {
-  return neigh_;
-}
-
-void
-Neighbor::init() {
+Neighbor::getRtnlNeighRef() {
   if (neigh_) {
-    return;
+    return neigh_;
   }
 
   neigh_ = rtnl_neigh_alloc();
@@ -1226,6 +1255,19 @@ Neighbor::init() {
     rtnl_neigh_set_lladdr(neigh_, llAddr);
     nl_addr_put(llAddr);
   }
+
+  return neigh_;
+}
+
+bool
+operator==(const Neighbor& lhs, const Neighbor& rhs) {
+  return (
+    lhs.getIfIndex() == rhs.getIfIndex() &&
+    lhs.isReachable() == rhs.isReachable() &&
+    lhs.getDestination() == rhs.getDestination() &&
+    lhs.getLinkAddress() == rhs.getLinkAddress() &&
+    lhs.getState() == rhs.getState()
+  );
 }
 
 /*==================================Link======================================*/
@@ -1284,12 +1326,10 @@ LinkBuilder::getFlags() const {
   return flags_;
 }
 
-Link::Link(const LinkBuilder& builder) {
-  ifIndex_ = builder.getIfIndex();
-  linkName_ = builder.getLinkName();
-  flags_ = builder.getFlags();
-  init();
-}
+Link::Link(const LinkBuilder& builder)
+  : linkName_(builder.getLinkName()),
+    ifIndex_(builder.getIfIndex()),
+    flags_(builder.getFlags()) {}
 
 Link::~Link() {
   if (link_) {
@@ -1298,14 +1338,8 @@ Link::~Link() {
   }
 }
 
-Link::Link(Link&& other) noexcept
-    : linkName_(other.linkName_),
-      ifIndex_(other.ifIndex_),
-      flags_(other.flags_) {
-  if (other.link_) {
-    link_ = other.link_;
-    other.link_ = nullptr;
-  }
+Link::Link(Link&& other) noexcept {
+  *this = std::move(other);
 }
 
 Link&
@@ -1313,10 +1347,10 @@ Link::operator=(Link&& other) noexcept {
   if (this == &other) {
     return *this;
   }
-  linkName_ = other.linkName_;
-  ifIndex_ = other.ifIndex_;
-  flags_ = other.flags_;
 
+  linkName_ = std::move(other.linkName_);
+  ifIndex_ = std::move(other.ifIndex_);
+  flags_ = std::move(other.flags_);
   if (link_) {
     rtnl_link_put(link_);
     link_ = nullptr;
@@ -1325,6 +1359,32 @@ Link::operator=(Link&& other) noexcept {
     link_ = other.link_;
     other.link_ = nullptr;
   }
+
+  return *this;
+}
+
+Link::Link(const Link& other) {
+  *this = other;
+}
+
+Link&
+Link::operator=(const Link& other) {
+  if (this == &other) {
+    return *this;
+  }
+
+  linkName_ = other.linkName_;
+  ifIndex_ = other.ifIndex_;
+  flags_ = other.flags_;
+
+  if (link_) {
+    rtnl_link_put(link_);
+    link_ = nullptr;
+  }
+  // NOTE: We are not copying other.link_ so that this object can be
+  // passed between threads without actually copying underlying netlink object
+  // to other threads
+
   return *this;
 }
 
@@ -1343,10 +1403,10 @@ Link::getFlags() const {
   return flags_;
 }
 
-void
-Link::init() {
+struct rtnl_link*
+Link::getRtnlLinkRef() {
   if (link_) {
-    return;
+    return link_;
   }
 
   link_ = rtnl_link_alloc();
@@ -1356,6 +1416,8 @@ Link::init() {
   rtnl_link_set_ifindex(link_, ifIndex_);
   rtnl_link_set_flags(link_, flags_);
   rtnl_link_set_name(link_, linkName_.c_str());
+
+  return link_;
 }
 
 bool
@@ -1363,9 +1425,13 @@ Link::isUp() const {
   return !!(flags_ & IFF_RUNNING);
 }
 
-struct rtnl_link*
-Link::fromLink() const {
-  return link_;
+bool
+operator==(const Link& lhs, const Link& rhs) {
+  return (
+    lhs.getLinkName() == rhs.getLinkName() &&
+    lhs.getIfIndex() == rhs.getIfIndex() &&
+    lhs.getFlags() == rhs.getFlags()
+  );
 }
 
 } // namespace fbnl
