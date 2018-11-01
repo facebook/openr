@@ -1056,7 +1056,6 @@ main(int argc, char** argv) {
   if (netlinkFibServer) {
     CHECK(netlinkFibServerThread);
     netlinkFibServer->stop();
-    netlinkFibServer->cleanUp();
     netlinkFibServerThread->join();
     netlinkFibServerThread.reset();
     netlinkFibServer.reset();
@@ -1064,7 +1063,6 @@ main(int argc, char** argv) {
   if (netlinkSystemServer) {
     CHECK(netlinkSystemServerThread);
     netlinkSystemServer->stop();
-    netlinkSystemServer->cleanUp();
     netlinkSystemServerThread->join();
     netlinkSystemServerThread.reset();
     netlinkSystemServer.reset();
