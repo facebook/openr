@@ -16,6 +16,7 @@ from builtins import object
 
 from openr.KvStore import ttypes as kv_store_types
 from openr.utils import consts, serializer, socket
+from typing import Dict, List, Optional
 
 import zmq
 
@@ -47,14 +48,25 @@ class KvStoreClient(object):
 
         return self._kv_store_cmd_socket.recv()
 
-    def dump_all_with_prefix(self, prefix="", originator=""):
+    def dump_all_with_filter(
+        self,
+        prefix: str = "",
+        originator_ids: Optional[List[str]] = None,
+        keyval_hash: Optional[Dict[str, kv_store_types.Value]] = None,
+    ):
         '''  dump the entries of kvstore whose key matches the given prefix
              if prefix is an empty string, the full KV store is dumped
         '''
 
         req_msg = kv_store_types.Request(kv_store_types.Command.KEY_DUMP)
         req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
-        req_msg.keyDumpParams.originator = {originator}
+        req_msg.keyDumpParams.originatorIds = []
+        req_msg.keyDumpParams.keyValHashes = None
+        if originator_ids:
+            req_msg.keyDumpParams.originatorIds = originator_ids
+        if keyval_hash:
+            req_msg.keyDumpParams.keyValHashes = keyval_hash
+
         self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
         return self._kv_store_cmd_socket.recv_thrift_obj(
@@ -70,15 +82,10 @@ class KvStoreClient(object):
         self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
         resp = self._kv_store_cmd_socket.recv()
-        if len(resp) == 3 and resp == str('ERR'):
-            # KvStore doesn't support HASH_DUMP API yet. Use full dump
-            # API instead
-            return self.dump_all_with_prefix(prefix)
-        else:
-            return serializer.deserialize_thrift_object(
-                resp,
-                kv_store_types.Publication,
-                self._kv_store_cmd_socket.proto_factory)
+        return serializer.deserialize_thrift_object(
+            resp,
+            kv_store_types.Publication,
+            self._kv_store_cmd_socket.proto_factory)
 
     def dump_peers(self):
         '''  dump the entries of kvstore whose key matches the given prefix

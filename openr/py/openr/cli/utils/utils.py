@@ -263,19 +263,20 @@ def prefix_entry_to_dict(prefix_entry):
     return thrift_to_dict(prefix_entry, _update)
 
 
+def prefix_db_to_dict(prefixes_map, prefix_db):
+    if isinstance(prefix_db, kv_store_types.Value):
+        prefix_db = deserialize_thrift_object(prefix_db.value,
+                                              lsdb_types.PrefixDatabase)
+
+    prefixEntries = list(map(prefix_entry_to_dict, prefix_db.prefixEntries))
+    prefixes_map[prefix_db.thisNodeName] = {'prefixEntries': prefixEntries}
+
+
 def print_prefixes_json(resp, nodes, iter_func):
     ''' print prefixes in json '''
 
-    def _parse_prefixes(prefixes_map, prefix_db):
-        if isinstance(prefix_db, kv_store_types.Value):
-            prefix_db = deserialize_thrift_object(prefix_db.value,
-                                                  lsdb_types.PrefixDatabase)
-
-        prefixEntries = list(map(prefix_entry_to_dict, prefix_db.prefixEntries))
-        prefixes_map[prefix_db.thisNodeName] = {'prefixEntries': prefixEntries}
-
     prefixes_map = {}
-    iter_func(prefixes_map, resp, nodes, _parse_prefixes)
+    iter_func(prefixes_map, resp, nodes, prefix_db_to_dict)
     print(json_dumps(prefixes_map))
 
 
@@ -939,7 +940,7 @@ def dump_node_kvs(node, kv_rep_port):
     client = KvStoreClient(zmq.Context(),
                            "tcp://[{}]:{}".format(node, kv_rep_port))
     try:
-        kv = client.dump_all_with_prefix()
+        kv = client.dump_all_with_filter()
     except zmq.error.Again:
         print('cannot connect to {}\'s kvstore'.format(node))
         return None

@@ -57,7 +57,7 @@ class KVStore(object):
                 publication.keyVals[key] = self._kv_store[key]
         return publication
 
-    def _dump_all_with_prefix(self, request):
+    def _dump_all_with_filter(self, request):
         prefix = request.keyDumpParams.prefix
         publication = kv_store_types.Publication({})
 
@@ -69,7 +69,7 @@ class KVStore(object):
     def process_request(self):
         request = self._kv_store_server_socket.recv_thrift_obj(kv_store_types.Request)
         options = {kv_store_types.Command.KEY_GET: self._get_keys,
-                   kv_store_types.Command.KEY_DUMP: self._dump_all_with_prefix}
+                   kv_store_types.Command.KEY_DUMP: self._dump_all_with_filter}
         publication = options[request.cmd](request)
         self._kv_store_server_socket.send_thrift_obj(publication)
 
@@ -94,19 +94,19 @@ class TestKVStoreClient(unittest.TestCase):
             self.assertEqual(
                 key_values, {'san jose 1': value1, 'san francisco 1': value5})
 
-            publication = kv_store_client_inst.dump_all_with_prefix('san jose 3')
+            publication = kv_store_client_inst.dump_all_with_filter('san jose 3')
             key_values = publication.keyVals
             self.assertEqual(key_values, {'san jose 3': value3})
 
-            publication = kv_store_client_inst.dump_all_with_prefix('san jose')
+            publication = kv_store_client_inst.dump_all_with_filter('san jose')
             key_values = publication.keyVals
             self.assertEqual(len(key_values), 4)
 
-            publication = kv_store_client_inst.dump_all_with_prefix('')
+            publication = kv_store_client_inst.dump_all_with_filter()
             key_values = publication.keyVals
             self.assertEqual(len(key_values), 5)
 
-            publication = kv_store_client_inst.dump_all_with_prefix('virginia')
+            publication = kv_store_client_inst.dump_all_with_filter('virginia')
             key_values = publication.keyVals
             self.assertEqual(len(key_values), 0)
 

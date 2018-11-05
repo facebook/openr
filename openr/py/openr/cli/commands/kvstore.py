@@ -90,7 +90,7 @@ class KvStoreCmd(object):
             node_dict[prefix_db.thisNodeName] = self.get_node_ip(prefix_db)
 
         node_dict = {}
-        resp = self.client.dump_all_with_prefix(Consts.PREFIX_DB_MARKER)
+        resp = self.client.dump_all_with_filter(Consts.PREFIX_DB_MARKER)
         self.iter_publication(node_dict, resp, ['all'], _parse_nodes)
 
         return node_dict
@@ -119,7 +119,7 @@ class KvStoreCmd(object):
 
 class PrefixesCmd(KvStoreCmd):
     def run(self, nodes, json):
-        resp = self.client.dump_all_with_prefix(Consts.PREFIX_DB_MARKER)
+        resp = self.client.dump_all_with_filter(Consts.PREFIX_DB_MARKER)
         if json:
             utils.print_prefixes_json(resp, nodes, self.iter_publication)
         else:
@@ -129,7 +129,7 @@ class PrefixesCmd(KvStoreCmd):
 class KeysCmd(KvStoreCmd):
     def run(self, json_fmt, prefix, originator=None, ttl=False):
         if originator is not None:
-            resp = self.client.dump_all_with_prefix(prefix, originator)
+            resp = self.client.dump_all_with_filter(prefix, originator)
         else:
             resp = self.client.dump_key_with_prefix(prefix)
         self.print_kvstore_keys(resp, ttl, json_fmt)
@@ -241,7 +241,7 @@ class KeyValsCmd(KvStoreCmd):
 
 class NodesCmd(KvStoreCmd):
     def run(self):
-        resp = self.client.dump_all_with_prefix(Consts.PREFIX_DB_MARKER)
+        resp = self.client.dump_all_with_filter(Consts.PREFIX_DB_MARKER)
         host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
         self.print_kvstore_nodes(resp, host_id)
 
@@ -288,7 +288,7 @@ class NodesCmd(KvStoreCmd):
 
 class AdjCmd(KvStoreCmd):
     def run(self, nodes, bidir, json):
-        publication = self.client.dump_all_with_prefix(Consts.ADJ_DB_MARKER)
+        publication = self.client.dump_all_with_filter(Consts.ADJ_DB_MARKER)
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, bidir,
                                          self.iter_publication)
         if json:
@@ -299,7 +299,7 @@ class AdjCmd(KvStoreCmd):
 
 class ShowAdjNodeCmd(KvStoreCmd):
     def run(self, nodes, node, interface):
-        publication = self.client.dump_all_with_prefix(Consts.ADJ_DB_MARKER)
+        publication = self.client.dump_all_with_filter(Consts.ADJ_DB_MARKER)
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, True,
                                          self.iter_publication)
         utils.print_adjs_table(adjs_map, self.enable_color, node, interface)
@@ -316,7 +316,7 @@ class KvCompareCmd(KvStoreCmd):
             if host_id in nodes:
                 nodes.remove(host_id)
 
-            our_kvs = self.client.dump_all_with_prefix().keyVals
+            our_kvs = self.client.dump_all_with_filter().keyVals
             kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips)
             for node in kv_dict:
                 self.compare(our_kvs, kv_dict[node], host_id, node)
@@ -514,7 +514,7 @@ class TopologyCmd(KvStoreCmd):
         rem_str = dict((re.escape(k), v) for k, v in rem_str.items())
         rem_pattern = re.compile("|".join(rem_str.keys()))
 
-        publication = self.client.dump_all_with_prefix(Consts.ADJ_DB_MARKER)
+        publication = self.client.dump_all_with_filter(Consts.ADJ_DB_MARKER)
         nodes = list(self.get_node_to_ips().keys()) if not node else [node]
         adjs_map = utils.adj_dbs_to_dict(publication, nodes, bidir,
                                          self.iter_publication)
@@ -754,7 +754,7 @@ class SnoopCmd(KvStoreCmd):
 
         if delta:
             print('Retrieving KvStore snapshot ... ')
-            resp = self.client.dump_all_with_prefix()
+            resp = self.client.dump_all_with_filter()
 
             global_dbs.prefixes = utils.build_global_prefix_db(resp)
             global_dbs.adjs = utils.build_global_adj_db(resp)

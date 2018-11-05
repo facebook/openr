@@ -117,7 +117,7 @@ class PathCmd(DecisionCmd):
 
         # Get prefix_dbs from KvStore
         self.prefix_dbs = {}
-        pub = self.kvstore_client.dump_all_with_prefix(Consts.PREFIX_DB_MARKER)
+        pub = self.kvstore_client.dump_all_with_filter(Consts.PREFIX_DB_MARKER)
         for v in pub.keyVals.values():
             prefix_db = deserialize_thrift_object(
                 v.value, lsdb_types.PrefixDatabase)
