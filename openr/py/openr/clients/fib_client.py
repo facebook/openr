@@ -7,21 +7,23 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from builtins import object
 
-from openr.Fib import ttypes as fib_types
-from openr.utils import socket, consts
-
 import zmq
+from openr.Fib import ttypes as fib_types
+from openr.utils import consts, socket
 
 
 class FibClient(object):
-    def __init__(self, zmq_ctx, fib_cmd_url, timeout=consts.Consts.TIMEOUT_MS,
-                 proto_factory=consts.Consts.PROTO_FACTORY):
+    def __init__(
+        self,
+        zmq_ctx,
+        fib_cmd_url,
+        timeout=consts.Consts.TIMEOUT_MS,
+        proto_factory=consts.Consts.PROTO_FACTORY,
+    ):
         self._fib_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout, proto_factory)
         self._fib_cmd_socket.connect(fib_cmd_url)
 

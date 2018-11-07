@@ -7,40 +7,41 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from openr.utils import socket
-from openr.clients import kvstore_subscriber
-from openr.KvStore import ttypes as kv_store_types
+import time
+import unittest
+from builtins import object
+from multiprocessing import Process
 
 import zmq
-import unittest
-import time
-from multiprocessing import Process
+from openr.clients import kvstore_subscriber
+from openr.KvStore import ttypes as kv_store_types
+from openr.utils import socket
 
 
 value1 = kv_store_types.Value()
-value1.originatorId = 'san jose 1'
+value1.originatorId = "san jose 1"
 
 value2 = kv_store_types.Value()
-value2.originatorId = 'san jose 2'
+value2.originatorId = "san jose 2"
 
 value3 = kv_store_types.Value()
-value3.originatorId = 'san jose 3'
+value3.originatorId = "san jose 3"
 
 value4 = kv_store_types.Value()
-value4.originatorId = 'san jose 4'
+value4.originatorId = "san jose 4"
 
 value5 = kv_store_types.Value()
-value5.originatorId = 'san francisco 1'
+value5.originatorId = "san francisco 1"
 
-kv_store_cache = {'san jose 1': value1, 'san jose 2': value2,
-                  'san jose 3': value3, 'san jose 4': value4,
-                  'san francisco 1': value5}
+kv_store_cache = {
+    "san jose 1": value1,
+    "san jose 2": value2,
+    "san jose 3": value3,
+    "san jose 4": value4,
+    "san francisco 1": value5,
+}
 publication = kv_store_types.Publication(kv_store_cache)
 
 
@@ -54,7 +55,6 @@ class KvStorePub(object):
 
 
 class TestKVStoreSubscriberClient(unittest.TestCase):
-
     def test(self):
         runtime_second = 1
 
@@ -66,7 +66,8 @@ class TestKVStoreSubscriberClient(unittest.TestCase):
 
         def _kv_store_client():
             kvstore_sub_inst = kvstore_subscriber.KvStoreSubscriber(
-                zmq.Context(), "tcp://localhost:5000")
+                zmq.Context(), "tcp://localhost:5000"
+            )
             while True:
                 resp = kvstore_sub_inst.listen()
                 self.assertEqual(resp, publication)

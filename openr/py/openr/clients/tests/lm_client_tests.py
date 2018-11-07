@@ -7,24 +7,20 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import range
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from openr.utils import socket
-from openr.clients import lm_client
-from openr.LinkMonitor import ttypes as lm_types
+import unittest
+from builtins import object, range
+from multiprocessing import Process
 
 import zmq
-import unittest
-from multiprocessing import Process
+from openr.clients import lm_client
+from openr.LinkMonitor import ttypes as lm_types
+from openr.utils import socket
 
 
 dump_links_cache = lm_types.DumpLinksReply()
-dump_links_cache.thisNodeName = 'san jose 1'
+dump_links_cache.thisNodeName = "san jose 1"
 
 
 class LM(object):
@@ -57,8 +53,7 @@ class TestLMClient(unittest.TestCase):
                 lm_server.process_request()
 
         def _lm_client():
-            lm_client_inst = lm_client.LMClient(
-                zmq.Context(), "tcp://localhost:5000")
+            lm_client_inst = lm_client.LMClient(zmq.Context(), "tcp://localhost:5000")
             self.assertEqual(lm_client_inst.dump_links(), dump_links_cache)
 
         p = Process(target=_lm_server)

@@ -7,34 +7,30 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import range
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from openr.utils import socket
-from openr.clients import decision_client
-from openr.Decision import ttypes as decision_types
-from openr.Lsdb import ttypes as lsdb_types
-from openr.Fib import ttypes as fib_types
+import unittest
+from builtins import object, range
+from multiprocessing import Process
 
 import zmq
-import unittest
-from multiprocessing import Process
+from openr.clients import decision_client
+from openr.Decision import ttypes as decision_types
+from openr.Fib import ttypes as fib_types
+from openr.Lsdb import ttypes as lsdb_types
+from openr.utils import socket
 
 
 route_db_cache = fib_types.RouteDatabase()
-route_db_cache.thisNodeName = 'san jose 1'
+route_db_cache.thisNodeName = "san jose 1"
 
 adj_db = lsdb_types.AdjacencyDatabase()
-adj_db.thisNodeName = 'san jose 1'
-adj_dbs_cache = {'san jose 1': adj_db}
+adj_db.thisNodeName = "san jose 1"
+adj_dbs_cache = {"san jose 1": adj_db}
 
 prefix_db = lsdb_types.PrefixDatabase()
-prefix_db.thisNodeName = 'san jose 1'
-prefix_dbs_cache = {'san jose 1': prefix_db}
+prefix_db.thisNodeName = "san jose 1"
+prefix_dbs_cache = {"san jose 1": prefix_db}
 
 
 class Decision(object):
@@ -59,12 +55,15 @@ class Decision(object):
 
     def process_request(self):
         request = self._decision_server_socket.recv_thrift_obj(
-            decision_types.DecisionRequest)
+            decision_types.DecisionRequest
+        )
 
         reply = decision_types.DecisionReply()
-        options = {decision_types.DecisionCommand.ROUTE_DB_GET: self._get_route_db,
-                   decision_types.DecisionCommand.ADJ_DB_GET: self._get_adj_dbs,
-                   decision_types.DecisionCommand.PREFIX_DB_GET: self._get_prefix_dbs}
+        options = {
+            decision_types.DecisionCommand.ROUTE_DB_GET: self._get_route_db,
+            decision_types.DecisionCommand.ADJ_DB_GET: self._get_adj_dbs,
+            decision_types.DecisionCommand.PREFIX_DB_GET: self._get_prefix_dbs,
+        }
         options[request.cmd](reply)
         self._decision_server_socket.send_thrift_obj(reply)
 
@@ -80,7 +79,8 @@ class TestDecisionClient(unittest.TestCase):
 
         def _decision_client():
             decision_client_inst = decision_client.DecisionClient(
-                zmq.Context(), "tcp://localhost:5000")
+                zmq.Context(), "tcp://localhost:5000"
+            )
 
             self.assertEqual(decision_client_inst.get_route_db(), route_db_cache)
             self.assertEqual(decision_client_inst.get_adj_dbs(), adj_dbs_cache)

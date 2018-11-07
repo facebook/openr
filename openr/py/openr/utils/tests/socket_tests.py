@@ -7,21 +7,17 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import unittest
-import zmq
 from multiprocessing import Process
 
+import zmq
 from openr.Lsdb import ttypes as lsdb_types
 from openr.utils import socket
 
 
 class TestSocket(unittest.TestCase):
-
     def test_req_rep(self):
         zmq_ctx = zmq.Context()
         rep_socket = socket.Socket(zmq_ctx, zmq.REP)
@@ -30,7 +26,7 @@ class TestSocket(unittest.TestCase):
         req_socket.connect("inproc://req_rep_test")
 
         thrift_obj = lsdb_types.PrefixDatabase()
-        thrift_obj.thisNodeName = 'some node'
+        thrift_obj.thisNodeName = "some node"
 
         req_socket.send_thrift_obj(thrift_obj)
         recv_obj = rep_socket.recv_thrift_obj(lsdb_types.PrefixDatabase)
@@ -48,7 +44,7 @@ class TestSocket(unittest.TestCase):
         sub_socket.set_sock_opt(zmq.SUBSCRIBE, b"")
 
         thrift_obj = lsdb_types.PrefixDatabase()
-        thrift_obj.thisNodeName = 'some node'
+        thrift_obj.thisNodeName = "some node"
 
         pub_socket.send_thrift_obj(thrift_obj)
         recv_obj = sub_socket.recv_thrift_obj(lsdb_types.PrefixDatabase)
@@ -62,7 +58,7 @@ class TestSocket(unittest.TestCase):
         d_socket_2.connect("inproc://dealer_test")
 
         thrift_obj = lsdb_types.PrefixDatabase()
-        thrift_obj.thisNodeName = 'some node'
+        thrift_obj.thisNodeName = "some node"
 
         d_socket_1.send_thrift_obj(thrift_obj)
         recv_obj = d_socket_2.recv_thrift_obj(lsdb_types.PrefixDatabase)
@@ -86,7 +82,7 @@ class TestSocket(unittest.TestCase):
     def test_in_multi_processes(self):
 
         thrift_obj = lsdb_types.PrefixDatabase()
-        thrift_obj.thisNodeName = 'some node'
+        thrift_obj.thisNodeName = "some node"
 
         def _send_recv():
             req_socket = socket.Socket(zmq.Context(), zmq.REQ)

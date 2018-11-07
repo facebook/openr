@@ -7,27 +7,24 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import range
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from openr.utils import socket
-from openr.utils.serializer import serialize_thrift_object
-from openr.clients import config_store_client
-from openr.PersistentStore import ttypes as ps_types
-from openr.LinkMonitor import ttypes as lm_types
-
-import zmq
 import unittest
+from builtins import object, range
 from multiprocessing import Process
 
-store_db = {'key1': serialize_thrift_object(lm_types.DumpLinksReply(
-                                            thisNodeName='node1')),
-            'key2': serialize_thrift_object(lm_types.DumpLinksReply(
-                                            thisNodeName='node2'))}
+import zmq
+from openr.clients import config_store_client
+from openr.LinkMonitor import ttypes as lm_types
+from openr.PersistentStore import ttypes as ps_types
+from openr.utils import socket
+from openr.utils.serializer import serialize_thrift_object
+
+
+store_db = {
+    "key1": serialize_thrift_object(lm_types.DumpLinksReply(thisNodeName="node1")),
+    "key2": serialize_thrift_object(lm_types.DumpLinksReply(thisNodeName="node2")),
+}
 
 
 class ConfigStore(object):
@@ -41,8 +38,9 @@ class ConfigStore(object):
 
         if req.requestType == ps_types.StoreRequestType.LOAD:
             if req.key in self._store_db:
-                resp = ps_types.StoreResponse(success=1, key=req.key,
-                                              data=self._store_db[req.key])
+                resp = ps_types.StoreResponse(
+                    success=1, key=req.key, data=self._store_db[req.key]
+                )
             else:
                 resp = ps_types.StoreResponse(success=0, key=req.key)
 
@@ -72,20 +70,22 @@ class TestConfigStoreClient(unittest.TestCase):
 
         def _cs_client():
             cs_client_inst = config_store_client.ConfigStoreClient(
-                ctx, "inproc://openr_config_store_cmd")
+                ctx, "inproc://openr_config_store_cmd"
+            )
 
-            self.assertEqual(cs_client_inst.load('key1'), store_db['key1'])
+            self.assertEqual(cs_client_inst.load("key1"), store_db["key1"])
             with self.assertRaises(Exception):
-                cs_client_inst.load('key3')
+                cs_client_inst.load("key3")
 
-            self.assertTrue(cs_client_inst.erase('key1'))
+            self.assertTrue(cs_client_inst.erase("key1"))
             with self.assertRaises(Exception):
-                cs_client_inst.load('key1')
+                cs_client_inst.load("key1")
 
-            value = serialize_thrift_object(lm_types.DumpLinksReply(
-                thisNodeName='node5'))
-            self.assertTrue(cs_client_inst.store('key5', value))
-            self.assertEqual(cs_client_inst.load('key5'), value)
+            value = serialize_thrift_object(
+                lm_types.DumpLinksReply(thisNodeName="node5")
+            )
+            self.assertTrue(cs_client_inst.store("key5", value))
+            self.assertEqual(cs_client_inst.load("key5"), value)
 
         p = Process(target=_cs_server)
         p.start()

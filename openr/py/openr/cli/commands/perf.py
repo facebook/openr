@@ -7,33 +7,30 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import range
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from openr.clients import perf_client
+from builtins import object, range
 
 import tabulate
+from openr.clients import perf_client
 
 
 class PerfCmd(object):
     def __init__(self, cli_opts):
-        ''' initialize the Perf client '''
+        """ initialize the Perf client """
 
         self.client = perf_client.PerfClient(
             cli_opts.zmq_ctx,
             "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_rep_port),
             cli_opts.timeout,
-            cli_opts.proto_factory)
+            cli_opts.proto_factory,
+        )
 
 
 class ViewFibCmd(PerfCmd):
     def run(self):
         resp = self.client.view_fib()
-        headers = ['Node', 'Events', 'Duration', 'Unix Timestamp']
+        headers = ["Node", "Events", "Duration", "Unix Timestamp"]
         for i in range(len(resp.eventInfo)):
             rows = []
             recent_ts = resp.eventInfo[i].events[0].unixTs
@@ -45,6 +42,6 @@ class ViewFibCmd(PerfCmd):
                 total_duration += duration
                 recent_ts = perf_event.unixTs
                 rows.append([node_name, event_name, duration, recent_ts])
-            print('Perf Event Item: {}, total duration: {}ms'.format(i, total_duration))
+            print("Perf Event Item: {}, total duration: {}ms".format(i, total_duration))
             print(tabulate.tabulate(rows, headers=headers))
             print()

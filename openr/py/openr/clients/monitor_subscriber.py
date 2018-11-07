@@ -7,28 +7,30 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from builtins import object
 
-from fbzmq.Monitor import ttypes as monitor_types
-from openr.utils import socket, consts
-
 import zmq
+from fbzmq.Monitor import ttypes as monitor_types
+from openr.utils import consts, socket
 
 
 class MonitorSubscriber(object):
-    def __init__(self, zmq_ctx, monitor_pub_url, timeout=-1,
-                 proto_factory=consts.Consts.PROTO_FACTORY):
+    def __init__(
+        self,
+        zmq_ctx,
+        monitor_pub_url,
+        timeout=-1,
+        proto_factory=consts.Consts.PROTO_FACTORY,
+    ):
 
         # timeout set as -1 for indefinite blocking
-        self._monitor_sub_socket = socket.Socket(zmq_ctx, zmq.SUB, timeout,
-                                                  proto_factory)
+        self._monitor_sub_socket = socket.Socket(
+            zmq_ctx, zmq.SUB, timeout, proto_factory
+        )
         self._monitor_sub_socket.connect(monitor_pub_url)
         self._monitor_sub_socket.set_sock_opt(zmq.SUBSCRIBE, b"")
 
     def listen(self):
-        return self._monitor_sub_socket.recv_thrift_obj(
-            monitor_types.MonitorPub)
+        return self._monitor_sub_socket.recv_thrift_obj(monitor_types.MonitorPub)

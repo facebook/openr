@@ -7,38 +7,39 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import str
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from openr.KvStore import ttypes as kv_store_types
-from openr.utils import consts, serializer, socket
+from builtins import object, str
 from typing import Dict, List, Optional
 
 import zmq
+from openr.KvStore import ttypes as kv_store_types
+from openr.utils import consts, serializer, socket
 
 
 class KvStoreClient(object):
-    def __init__(self, zmq_ctx, kv_store_cmd_url, timeout=consts.Consts.TIMEOUT_MS,
-                 proto_factory=consts.Consts.PROTO_FACTORY):
-        self._kv_store_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout,
-                                                  proto_factory)
+    def __init__(
+        self,
+        zmq_ctx,
+        kv_store_cmd_url,
+        timeout=consts.Consts.TIMEOUT_MS,
+        proto_factory=consts.Consts.PROTO_FACTORY,
+    ):
+        self._kv_store_cmd_socket = socket.Socket(
+            zmq_ctx, zmq.REQ, timeout, proto_factory
+        )
         self._kv_store_cmd_socket.connect(kv_store_cmd_url)
 
     def get_keys(self, keys):
-        ''' Get values corresponding to keys from KvStore.
+        """ Get values corresponding to keys from KvStore.
             It gets from local snapshot KeyVals of the kvstore.
-        '''
+        """
 
         req_msg = kv_store_types.Request(kv_store_types.Command.KEY_GET)
         req_msg.keyGetParams = kv_store_types.KeyGetParams(keys)
         self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
-        return self._kv_store_cmd_socket.recv_thrift_obj(
-            kv_store_types.Publication)
+        return self._kv_store_cmd_socket.recv_thrift_obj(kv_store_types.Publication)
 
     def set_key(self, keyVals):
 
@@ -54,9 +55,9 @@ class KvStoreClient(object):
         originator_ids: Optional[List[str]] = None,
         keyval_hash: Optional[Dict[str, kv_store_types.Value]] = None,
     ):
-        '''  dump the entries of kvstore whose key matches the given prefix
+        """  dump the entries of kvstore whose key matches the given prefix
              if prefix is an empty string, the full KV store is dumped
-        '''
+        """
 
         req_msg = kv_store_types.Request(kv_store_types.Command.KEY_DUMP)
         req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
@@ -69,13 +70,12 @@ class KvStoreClient(object):
 
         self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
-        return self._kv_store_cmd_socket.recv_thrift_obj(
-            kv_store_types.Publication)
+        return self._kv_store_cmd_socket.recv_thrift_obj(kv_store_types.Publication)
 
     def dump_key_with_prefix(self, prefix=""):
-        '''  dump the hashes of kvstore whose key matches the given prefix
+        """  dump the hashes of kvstore whose key matches the given prefix
              if prefix is an empty string, the full KV hash is dumped
-        '''
+        """
 
         req_msg = kv_store_types.Request(kv_store_types.Command.HASH_DUMP)
         req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
@@ -83,17 +83,15 @@ class KvStoreClient(object):
 
         resp = self._kv_store_cmd_socket.recv()
         return serializer.deserialize_thrift_object(
-            resp,
-            kv_store_types.Publication,
-            self._kv_store_cmd_socket.proto_factory)
+            resp, kv_store_types.Publication, self._kv_store_cmd_socket.proto_factory
+        )
 
     def dump_peers(self):
-        '''  dump the entries of kvstore whose key matches the given prefix
+        """  dump the entries of kvstore whose key matches the given prefix
              if prefix is an empty string, the full KV store is dumped
-        '''
+        """
 
         req_msg = kv_store_types.Request(kv_store_types.Command.PEER_DUMP)
         self._kv_store_cmd_socket.send_thrift_obj(req_msg)
 
-        return self._kv_store_cmd_socket.recv_thrift_obj(
-            kv_store_types.PeerCmdReply)
+        return self._kv_store_cmd_socket.recv_thrift_obj(kv_store_types.PeerCmdReply)

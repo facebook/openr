@@ -7,27 +7,24 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import json
+import os
+import time
 from builtins import object
 
 import tabulate
-import json
-import time
-import os
 import zmq
-
-from openr.cli.utils import utils
-from openr.utils import consts, printing, socket
-from openr.clients import monitor_client, monitor_subscriber
 from fbzmq.Monitor import ttypes as monitor_types
+from openr.cli.utils import utils
+from openr.clients import monitor_client, monitor_subscriber
+from openr.utils import consts, printing, socket
 
 
 class MonitorCmd(object):
     def __init__(self, cli_opts):
-        ''' initialize the Monitor client '''
+        """ initialize the Monitor client """
 
         self.host = cli_opts.host
         self.lm_cmd_port = cli_opts.lm_cmd_port
@@ -38,33 +35,37 @@ class MonitorCmd(object):
             cli_opts.zmq_ctx,
             "tcp://[{}]:{}".format(cli_opts.host, cli_opts.monitor_rep_port),
             cli_opts.timeout,
-            cli_opts.proto_factory)
+            cli_opts.proto_factory,
+        )
 
 
 class CountersCmd(MonitorCmd):
-    def run(self, prefix='', is_json=False):
+    def run(self, prefix="", is_json=False):
 
         resp = self.client.dump_all_counter_data()
         self.print_counters(resp, prefix, is_json)
 
     def print_counters(self, resp, prefix, is_json):
-        ''' print the Kv Store counters '''
+        """ print the Kv Store counters """
 
         host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
-        caption = '{}\'s counters'.format(host_id)
+        caption = "{}'s counters".format(host_id)
 
         rows = []
         for key, counter in sorted(resp.counters.items()):
             if not key.startswith(prefix):
                 continue
-            rows.append([key, ':', counter.value])
+            rows.append([key, ":", counter.value])
 
         if is_json:
             json_data = {k: v for k, _, v in rows}
             print(utils.json_dumps(json_data))
         else:
-            print(printing.render_horizontal_table(rows, caption=caption,
-                                                   tablefmt='plain'))
+            print(
+                printing.render_horizontal_table(
+                    rows, caption=caption, tablefmt="plain"
+                )
+            )
             print()
 
 
@@ -72,27 +73,27 @@ class ForceCrashCmd(MonitorCmd):
     def run(self, yes):
 
         if not yes:
-            yes = utils.yesno('Are you sure to trigger Open/R crash')
+            yes = utils.yesno("Are you sure to trigger Open/R crash")
 
         if not yes:
-            print('Not triggering force crash')
+            print("Not triggering force crash")
             return
 
-        print('Triggering force crash')
+        print("Triggering force crash")
         sock = socket.Socket(self.cli_opts.zmq_ctx, zmq.REQ, timeout=200)
         sock.set_sock_opt(zmq.LINGER, 1000)
         sock.connect(consts.Consts.FORCE_CRASH_SERVER_URL)
-        sock.send('User {} issuing crash command'.format(os.environ['USER']))
+        sock.send("User {} issuing crash command".format(os.environ["USER"]))
         sock.close()
 
 
 def print_log_list_type(llist):
 
     idx = 1
-    str_txt = '{}'.format(''.join(llist[0]) + '\n')
+    str_txt = "{}".format("".join(llist[0]) + "\n")
 
     while idx < len(llist):
-        str_txt += '{:<18} {}'.format('', ''.join(llist[idx]) + '\n')
+        str_txt += "{:<18} {}".format("", "".join(llist[idx]) + "\n")
         idx += 1
 
     return str_txt
@@ -100,20 +101,19 @@ def print_log_list_type(llist):
 
 def print_log_sample(log_sample):
 
-    columns = ['', '']
+    columns = ["", ""]
     rows = []
     for _, value0 in log_sample.items():
         for key, value in value0.items():
 
             if key == "time":
-                value = (time.strftime('%H:%M:%S %Y-%m-%d',
-                            time.localtime(value)))
+                value = time.strftime("%H:%M:%S %Y-%m-%d", time.localtime(value))
             if type(value) is list:
                 value = print_log_list_type(value)
 
-            rows.append(['{:<17}  {}'.format(key, value)])
+            rows.append(["{:<17}  {}".format(key, value)])
 
-    print(tabulate.tabulate(rows, headers=columns, tablefmt='plain'))
+    print(tabulate.tabulate(rows, headers=columns, tablefmt="plain"))
 
 
 class SnoopCmd(MonitorCmd):
@@ -125,7 +125,8 @@ class SnoopCmd(MonitorCmd):
         pub_client = monitor_subscriber.MonitorSubscriber(
             zmq.Context(),
             "tcp://[{}]:{}".format(self.host, self.monitor_pub_port),
-            timeout=1000)
+            timeout=1000,
+        )
 
         start_time = time.time()
         while True:
@@ -141,8 +142,7 @@ class SnoopCmd(MonitorCmd):
                 pass
 
     def print_counter_data(self, delta, counters_data):
-        columns = ['{:<45}'.format('Key'), 'Previous Value',
-                    'Value', 'TimeStamp']
+        columns = ["{:<45}".format("Key"), "Previous Value", "Value", "TimeStamp"]
         rows = []
 
         for key, value in counters_data.counters.items():
@@ -152,18 +152,24 @@ class SnoopCmd(MonitorCmd):
 
             prev_val = self.counters_db[key] if key in self.counters_db else 0
             self.counters_db[key] = value.value
-            rows.append([key, prev_val, '=> {}'.format(value.value),
-                            '(ts={})'.format(value.timestamp)])
+            rows.append(
+                [
+                    key,
+                    prev_val,
+                    "=> {}".format(value.value),
+                    "(ts={})".format(value.timestamp),
+                ]
+            )
 
         if rows:
             print(printing.render_horizontal_table(rows, columns))
 
     def print_event_log_data(self, event_log_data):
-        log_sample = json.loads(' '.join(event_log_data.samples))
+        log_sample = json.loads(" ".join(event_log_data.samples))
         print_log_sample(log_sample)
 
     def print_snoop_data(self, log, counters, delta, resp):
-        ''' print the snoop data'''
+        """ print the snoop data"""
 
         if resp.pubType == monitor_types.PubType.COUNTER_PUB and counters:
             self.print_counter_data(delta, resp.counterPub)
@@ -178,11 +184,12 @@ class LogCmd(MonitorCmd):
         self.print_log_data(resp, json_opt)
 
     def print_log_data(self, resp, json_opt):
-        ''' print the log data'''
+        """ print the log data"""
 
         def update_func(json_obj, thrift_obj):
-            json_obj['eventLogs'] = \
-                [utils.thrift_to_dict(e) for e in thrift_obj.eventLogs]
+            json_obj["eventLogs"] = [
+                utils.thrift_to_dict(e) for e in thrift_obj.eventLogs
+            ]
 
         if json_opt:
             data = utils.thrift_to_dict(resp, update_func)
@@ -198,52 +205,44 @@ class LogCmd(MonitorCmd):
 
 
 class StatisticsCmd(MonitorCmd):
-
     def run(self):
         stats_templates = [
             {
-                'title': 'KvStore Stats',
-                'counters': [
-                    ('KeyVals', 'kvstore.num_keys'),
-                    ('Peering Sessions', 'kvstore.num_peers'),
-                    ('Pending Sync', 'kvstore.pending_full_sync'),
+                "title": "KvStore Stats",
+                "counters": [
+                    ("KeyVals", "kvstore.num_keys"),
+                    ("Peering Sessions", "kvstore.num_peers"),
+                    ("Pending Sync", "kvstore.pending_full_sync"),
                 ],
-                'stats': [
-                    (
-                        'Rcvd Publications',
-                        'kvstore.received_publications.count',
-                    ),
-                    ('Rcvd KeyVals', 'kvstore.received_key_vals.sum'),
-                    ('Updates KeyVals', 'kvstore.updated_key_vals.sum'),
+                "stats": [
+                    ("Rcvd Publications", "kvstore.received_publications.count"),
+                    ("Rcvd KeyVals", "kvstore.received_key_vals.sum"),
+                    ("Updates KeyVals", "kvstore.updated_key_vals.sum"),
                 ],
             },
             {
-                'title': 'LinkMonitor Stats',
-                'counters': [
-                    ('Adjacent Neighbors', 'spark.num_adjacent_neighbors'),
-                    ('Tracked Neighbors', 'spark.num_tracked_neighbors'),
+                "title": "LinkMonitor Stats",
+                "counters": [
+                    ("Adjacent Neighbors", "spark.num_adjacent_neighbors"),
+                    ("Tracked Neighbors", "spark.num_tracked_neighbors"),
                 ],
-                'stats': [
-                    ('Updates AdjDb', 'link_monitor.advertise_adjacencies.sum'),
-                    ('Rcvd Hello Pkts', 'spark.hello_packet_recv.sum'),
-                    ('Sent Hello Pkts', 'spark.hello_packet_sent.sum'),
+                "stats": [
+                    ("Updates AdjDb", "link_monitor.advertise_adjacencies.sum"),
+                    ("Rcvd Hello Pkts", "spark.hello_packet_recv.sum"),
+                    ("Sent Hello Pkts", "spark.hello_packet_sent.sum"),
                 ],
             },
             {
-                'title': 'Decision/Fib Stats',
-                'counters': [
-                ],
-                'stats': [
-                    ('Updates AdjDbs', 'decision.adj_db_update.count'),
-                    ('Updates PrefixDbs', 'decision.prefix_db_update.count'),
-                    ('SPF Runs', 'decision.spf_runs.count'),
-                    ('SPF Avg Duration (ms)', 'decision.spf_duration.avg'),
-                    (
-                        'Convergence Duration (ms)',
-                        'fib.convergence_time_ms.avg',
-                    ),
-                    ('Updates RouteDb', 'fib.process_route_db.count'),
-                    ('Full Route Sync', 'fib.sync_fib_calls.count'),
+                "title": "Decision/Fib Stats",
+                "counters": [],
+                "stats": [
+                    ("Updates AdjDbs", "decision.adj_db_update.count"),
+                    ("Updates PrefixDbs", "decision.prefix_db_update.count"),
+                    ("SPF Runs", "decision.spf_runs.count"),
+                    ("SPF Avg Duration (ms)", "decision.spf_duration.avg"),
+                    ("Convergence Duration (ms)", "fib.convergence_time_ms.avg"),
+                    ("Updates RouteDb", "fib.process_route_db.count"),
+                    ("Full Route Sync", "fib.sync_fib_calls.count"),
                 ],
             },
         ]
@@ -252,38 +251,39 @@ class StatisticsCmd(MonitorCmd):
         self.print_stats(stats_templates, counters)
 
     def print_stats(self, stats_templates, counters):
-        '''
+        """
         Print in pretty format
-        '''
+        """
 
-        suffixes = ['60', '600', '3600', '0']
+        suffixes = ["60", "600", "3600", "0"]
 
         for template in stats_templates:
             counters_rows = []
-            for title, key in template['counters']:
+            for title, key in template["counters"]:
                 val = counters.get(key, None)
-                counters_rows.append([title, 'N/A' if not val else val.value])
+                counters_rows.append([title, "N/A" if not val else val.value])
 
-            stats_cols = ['Stat', '1 min', '10 mins', '1 hour', 'All Time']
+            stats_cols = ["Stat", "1 min", "10 mins", "1 hour", "All Time"]
             stats_rows = []
-            for title, key_prefix in template['stats']:
+            for title, key_prefix in template["stats"]:
                 row = [title]
-                for key in ['{}.{}'.format(key_prefix, s) for s in suffixes]:
+                for key in ["{}.{}".format(key_prefix, s) for s in suffixes]:
                     val = counters.get(key, None)
-                    row.append('N/A' if not val else val.value)
+                    row.append("N/A" if not val else val.value)
                 stats_rows.append(row)
 
-            print('> {} '.format(template['title']))
+            print("> {} ".format(template["title"]))
             if counters_rows:
                 print()
-                print(printing.render_horizontal_table(
-                    counters_rows,
-                    tablefmt='plain',
-                ).strip('\n'))
+                print(
+                    printing.render_horizontal_table(
+                        counters_rows, tablefmt="plain"
+                    ).strip("\n")
+                )
             if stats_rows:
                 print()
-                print(printing.render_horizontal_table(
-                    stats_rows,
-                    column_labels=stats_cols,
-                    tablefmt='simple',
-                ).strip('\n'))
+                print(
+                    printing.render_horizontal_table(
+                        stats_rows, column_labels=stats_cols, tablefmt="simple"
+                    ).strip("\n")
+                )

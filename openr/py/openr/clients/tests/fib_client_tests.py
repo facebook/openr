@@ -7,24 +7,20 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import range
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from openr.utils import socket
-from openr.clients import fib_client
-from openr.Fib import ttypes as fib_types
+import unittest
+from builtins import object, range
+from multiprocessing import Process
 
 import zmq
-import unittest
-from multiprocessing import Process
+from openr.clients import fib_client
+from openr.Fib import ttypes as fib_types
+from openr.utils import socket
 
 
 route_db_cache = fib_types.RouteDatabase()
-route_db_cache.thisNodeName = 'san jose 1'
+route_db_cache.thisNodeName = "san jose 1"
 
 
 class Fib(object):
@@ -49,7 +45,8 @@ class TestFibClient(unittest.TestCase):
 
         def _fib_client():
             fib_client_inst = fib_client.FibClient(
-                zmq.Context(), "tcp://localhost:5000")
+                zmq.Context(), "tcp://localhost:5000"
+            )
             self.assertEqual(fib_client_inst.get_route_db(), route_db_cache)
 
         p = Process(target=_fib_server)

@@ -7,15 +7,13 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import os
-
-from setuptools import setup, find_packages
 from subprocess import check_call
 from sys import version_info
+
+from setuptools import find_packages, setup
 
 
 def create_package_list(base):

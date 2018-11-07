@@ -7,26 +7,30 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
 import subprocess
 import sys
+from builtins import object
 
-from openr.utils.consts import Consts
-from openr.cli.commands import config, decision, fib, kvstore, lm, monitor
-from openr.cli.commands import perf, prefix_mgr
+from openr.cli.commands import (
+    config,
+    decision,
+    fib,
+    kvstore,
+    lm,
+    monitor,
+    perf,
+    prefix_mgr,
+)
 from openr.cli.utils.utils import parse_nodes
+from openr.utils.consts import Consts
 
 
 class TechSupportCmd(object):
-
     def __init__(self, cli_opts):
-        ''' initialize the tech support command '''
+        """ initialize the tech support command """
         self.cli_opts = cli_opts
         # Keep short timeout
         self.cli_opts.timeout = 1000
@@ -36,26 +40,26 @@ class TechSupportCmd(object):
     def run(self, routes):
         self.print_routes = routes
         funcs = [
-            ('openr config file', self.print_config_file),
-            ('openr runtime params', self.print_runtime_params),
-            ('openr version', self.print_openr_version),
-            ('openr build information', self.print_build_info),
-            ('openr config', self.print_config),
-            ('breeze prefixmgr view', self.print_prefixmgr_view),
-            ('breeze lm links', self.print_lm_links),
-            ('breeze kvstore peers', self.print_kvstore_peers),
-            ('breeze kvstore nodes', self.print_kvstore_nodes),
-            ('breeze kvstore adj', self.print_kvstore_adjs),
-            ('breeze kvstore prefixes', self.print_kvstore_prefixes),
-            ('breeze kvstore keys --ttl', self.print_kvstore_keys),
-            ('breeze decision validate', self.print_decision_validate),
-            ('breeze decision routes', self.print_decision_routes),
-            ('breeze fib validate', self.print_fib_validate),
-            ('breeze fib routes-computed', self.print_fib_routes_computed),
-            ('breeze fib routes-installed', self.print_fib_routes_installed),
-            ('breeze perf fib', self.print_perf_fib),
-            ('breeze monitor counters', self.print_monitor_counters),
-            ('breeze monitor logs', self.print_monitor_logs),
+            ("openr config file", self.print_config_file),
+            ("openr runtime params", self.print_runtime_params),
+            ("openr version", self.print_openr_version),
+            ("openr build information", self.print_build_info),
+            ("openr config", self.print_config),
+            ("breeze prefixmgr view", self.print_prefixmgr_view),
+            ("breeze lm links", self.print_lm_links),
+            ("breeze kvstore peers", self.print_kvstore_peers),
+            ("breeze kvstore nodes", self.print_kvstore_nodes),
+            ("breeze kvstore adj", self.print_kvstore_adjs),
+            ("breeze kvstore prefixes", self.print_kvstore_prefixes),
+            ("breeze kvstore keys --ttl", self.print_kvstore_keys),
+            ("breeze decision validate", self.print_decision_validate),
+            ("breeze decision routes", self.print_decision_routes),
+            ("breeze fib validate", self.print_fib_validate),
+            ("breeze fib routes-computed", self.print_fib_routes_computed),
+            ("breeze fib routes-installed", self.print_fib_routes_installed),
+            ("breeze perf fib", self.print_perf_fib),
+            ("breeze monitor counters", self.print_monitor_counters),
+            ("breeze monitor logs", self.print_monitor_logs),
         ]
         failures = []
         for title, func in funcs:
@@ -66,25 +70,26 @@ class TechSupportCmd(object):
                 failures.append(title)
                 print(e, file=sys.stderr)
         if failures:
-            self.print_title('openr-tech-support failures')
-            print('\n'.join(failures))
+            self.print_title("openr-tech-support failures")
+            print("\n".join(failures))
 
         print()
         return -1 if failures else 0
 
     def print_title(self, title):
-        print('\n--------  {}  --------\n'.format(title))
+        print("\n--------  {}  --------\n".format(title))
 
     def print_config_file(self):
         if not os.path.isfile(Consts.OPENR_CONFIG_FILE):
-            print('Missing Config File')
+            print("Missing Config File")
             return
         with open(Consts.OPENR_CONFIG_FILE) as f:
             print(f.read())
 
     def print_runtime_params(self):
         output = subprocess.check_output(
-            ['pgrep', '-a', 'openr'], stderr=subprocess.STDOUT)
+            ["pgrep", "-a", "openr"], stderr=subprocess.STDOUT
+        )
         print(output)
 
     def print_openr_version(self):
@@ -111,13 +116,13 @@ class TechSupportCmd(object):
         kvstore.NodesCmd(self.cli_opts).run()
 
     def print_kvstore_adjs(self):
-        kvstore.AdjCmd(self.cli_opts).run(['all'], False, False)
+        kvstore.AdjCmd(self.cli_opts).run(["all"], False, False)
 
     def print_kvstore_prefixes(self):
-        kvstore.PrefixesCmd(self.cli_opts).run(['all'], False)
+        kvstore.PrefixesCmd(self.cli_opts).run(["all"], False)
 
     def print_kvstore_keys(self):
-        kvstore.KeysCmd(self.cli_opts).run(False, '', originator=None, ttl=True)
+        kvstore.KeysCmd(self.cli_opts).run(False, "", originator=None, ttl=True)
 
     def print_decision_validate(self):
         decision.DecisionValidateCmd(self.cli_opts).run()
@@ -125,7 +130,7 @@ class TechSupportCmd(object):
     def print_decision_routes(self):
         if not self.print_routes:
             return
-        nodes = parse_nodes(self.cli_opts.host, '', self.cli_opts.lm_cmd_port)
+        nodes = parse_nodes(self.cli_opts.host, "", self.cli_opts.lm_cmd_port)
         decision.DecisionRoutesComputedCmd(self.cli_opts).run(nodes, [], False)
 
     def print_fib_validate(self):

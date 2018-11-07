@@ -7,24 +7,20 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
-from builtins import range
-from builtins import object
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from openr.utils import socket
-from openr.clients import monitor_client
-from fbzmq.Monitor import ttypes as monitor_types
+import unittest
+from builtins import object, range
+from multiprocessing import Process
 
 import zmq
-import unittest
-from multiprocessing import Process
+from fbzmq.Monitor import ttypes as monitor_types
+from openr.clients import monitor_client
+from openr.utils import socket
 
 
 monitor_cache = monitor_types.CounterValuesResponse()
-monitor_cache.counters = {'san jose': monitor_types.Counter(value=3.5)}
+monitor_cache.counters = {"san jose": monitor_types.Counter(value=3.5)}
 
 
 class Monitor(object):
@@ -35,7 +31,8 @@ class Monitor(object):
 
     def process_request(self):
         request = self._monitor_server_socket.recv_thrift_obj(
-            monitor_types.MonitorRequest)
+            monitor_types.MonitorRequest
+        )
         if request.cmd == monitor_types.MonitorCommand.DUMP_ALL_COUNTER_DATA:
             self._monitor_server_socket.send_thrift_obj(self._monitor_cache)
 
@@ -51,7 +48,8 @@ class TestMonitorClient(unittest.TestCase):
 
         def _monitor_client():
             monitor_client_inst = monitor_client.MonitorClient(
-                zmq.Context(), "tcp://localhost:5000")
+                zmq.Context(), "tcp://localhost:5000"
+            )
             self.assertEqual(monitor_client_inst.dump_all_counter_data(), monitor_cache)
 
         p = Process(target=_monitor_server)
