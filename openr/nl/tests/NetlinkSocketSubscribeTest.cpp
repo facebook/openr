@@ -302,7 +302,7 @@ TEST_F(NetlinkSocketSubscribeFixture, DefaultStateTest) {
   ZmqEventLoop zmqLoop;
 
   auto myHandler = std::make_shared<MyNetlinkHandler>();
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   netlinkSocket.subscribeAllEvents();
   myHandler->setNetlinkSocket(&netlinkSocket);
 
@@ -369,7 +369,7 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkFlapTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.subscribeAllEvents();
 
@@ -464,7 +464,7 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   netlinkSocket.subscribeAllEvents();
   myHandler->setNetlinkSocket(&netlinkSocket);
 
@@ -615,7 +615,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrLinkFlapTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.subscribeAllEvents();
 
@@ -727,7 +727,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrAddRemoveTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.subscribeAllEvents();
 
@@ -875,7 +875,7 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
           "vethTest" /* Filter on test links only */);
 
   // Only enable link event
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.unsubscribeAllEvents();
   netlinkSocket.subscribeEvent(fbnl::LINK_EVENT);
@@ -984,7 +984,7 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only enable neighbor event
   netlinkSocket.unsubscribeAllEvents();
@@ -1072,7 +1072,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only subscribe addr event
   netlinkSocket.unsubscribeAllEvents();
@@ -1188,7 +1188,7 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.subscribeAllEvents();
 
@@ -1317,7 +1317,7 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only subscribe route event
   netlinkSocket.unsubscribeAllEvents();

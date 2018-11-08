@@ -193,7 +193,7 @@ main(int argc, char* argv[]) {
   std::shared_ptr<MyNetlinkHandler> myHandler =
       std::make_shared<MyNetlinkHandler>();
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler);
+  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
   // By default, NetlinkSocket subscribes no event
   netlinkSocket.subscribeAllEvents();
 

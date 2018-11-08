@@ -61,12 +61,12 @@ main(int argc, char** argv) {
   std::vector<std::thread> allThreads{};
 
   // Create event publisher to handle event subscription
-  auto eventPublisher = std::make_shared<openr::PlatformPublisher>(
+  auto eventPublisher = std::make_unique<openr::PlatformPublisher>(
       context, openr::PlatformPublisherUrl{FLAGS_platform_pub_url});
 
   auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
   auto nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
-      nlEventLoop.get(), eventPublisher);
+      nlEventLoop.get(), eventPublisher.get());
   // Subscribe selected network events
   nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
   nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);
@@ -132,6 +132,12 @@ main(int argc, char** argv) {
   }
   if (FLAGS_enable_netlink_system_handler) {
     systemServiceServer.stop();
+  }
+  if (nlSocket) {
+    nlSocket.reset();
+  }
+  if (eventPublisher) {
+    eventPublisher.reset();
   }
 
   // Wait for threads to finish

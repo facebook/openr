@@ -154,7 +154,7 @@ class NetlinkSocket {
 
   explicit NetlinkSocket(
       fbzmq::ZmqEventLoop* evl,
-      std::shared_ptr<EventsHandler> handler = nullptr);
+      EventsHandler* handler = nullptr);
 
   virtual ~NetlinkSocket();
 
@@ -422,7 +422,7 @@ class NetlinkSocket {
 
   NlLinkRoutesDb linkRoutesCache_;
 
-  std::shared_ptr<EventsHandler> handler_{nullptr};
+  EventsHandler* handler_{nullptr};
 
   /**
    * We keep an internal cache of Neighbor and Link entries

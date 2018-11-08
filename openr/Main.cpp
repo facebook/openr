@@ -493,6 +493,7 @@ main(int argc, char** argv) {
   std::unique_ptr<std::thread> netlinkFibServerThread;
   std::unique_ptr<std::thread> netlinkSystemServerThread;
 
+  std::unique_ptr<PlatformPublisher> eventPublisher{nullptr};
   if (FLAGS_enable_netlink_fib_handler or FLAGS_enable_netlink_system_handler) {
     thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
         2 /* num of threads */, false /* task stats */);
@@ -500,11 +501,11 @@ main(int argc, char** argv) {
     thriftThreadMgr->start();
 
     // Create event publisher to handle event subscription
-    auto eventPublisher = std::make_shared<PlatformPublisher>(
+    eventPublisher = std::make_unique<PlatformPublisher>(
         context, PlatformPublisherUrl{FLAGS_platform_pub_url});
 
     nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
-        nlEventLoop.get(), eventPublisher);
+        nlEventLoop.get(), eventPublisher.get());
     // Subscribe selected network events
     nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
     nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);
@@ -1074,6 +1075,10 @@ main(int argc, char** argv) {
 
   if (nlSocket) {
     nlSocket.reset();
+  }
+
+  if (eventPublisher) {
+    eventPublisher.reset();
   }
 
   if (watchdog) {

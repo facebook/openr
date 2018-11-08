@@ -23,8 +23,8 @@ namespace openr {
 namespace fbnl {
 
 NetlinkSocket::NetlinkSocket(
-    fbzmq::ZmqEventLoop* evl, std::shared_ptr<EventsHandler> handler)
-    : evl_(evl), handler_(std::move(handler)) {
+    fbzmq::ZmqEventLoop* evl, EventsHandler* handler)
+    : evl_(evl), handler_(handler) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 
   // Create netlink socket for only notification subscription
