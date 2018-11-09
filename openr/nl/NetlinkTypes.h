@@ -293,6 +293,8 @@ class Route final {
 
    folly::Optional<std::string> getRouteIfName() const;
 
+   std::string str() const;
+
    /**
     * This method Will construct rtnl_route object on the first time call,
     * then will return the same object pointer. It will just return the pointer
@@ -397,6 +399,8 @@ class IfAddress final {
 
    bool isValid() const;
 
+   std::string str() const;
+
    /**
     * Will construct rtnl_addr object on the first time call, then will return
     * the same object pointer. It will just return the pointer
@@ -497,6 +501,8 @@ class Neighbor final {
 
    folly::Optional<int> getState() const;
 
+   std::string str() const;
+
    struct rtnl_neigh* getRtnlNeighRef();
 
  private:
@@ -556,6 +562,8 @@ class Link final {
    uint32_t getFlags() const;
 
    bool isUp() const;
+
+   std::string str() const;
 
    struct rtnl_link* getRtnlLinkRef();
 

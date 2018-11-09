@@ -444,6 +444,28 @@ Route::isValid() const {
   return isValid_;
 }
 
+std::string
+Route::str() const {
+  std::string result;
+  result += folly::sformat(
+      "route {} proto {}, table {}, valid {}",
+      folly::IPAddress::networkToString(dst_),
+      protocolId_,
+      routeTable_,
+      isValid_ ? "Yes" : "No"
+  );
+  if (priority_) {
+    result += folly::sformat(", priority {}", priority_.value());
+  }
+  if (tos_) {
+    result += folly::sformat(", tos {}", tos_.value());
+  }
+  for (auto const& nextHop : nextHops_) {
+    result += "\n  " + nextHop.str();
+  }
+  return result;
+}
+
 struct rtnl_route*
 Route::getRtnlRouteRef() {
   // Only build object once
@@ -635,10 +657,10 @@ NextHop::getWeight() const {
 std::string
 NextHop::str() const {
   return folly::sformat(
-      "Nexthop Info: Gateway = {}, Interface index = {}, Weight = {}",
-      (getGateway() ? getGateway()->str() : "Null"),
-      (getIfIndex() ? std::to_string(*getIfIndex()) : "Null"),
-      (getWeight() ? std::to_string(*getWeight()) : "Null"));
+      "nexthop via {}, intf-index {}, weight {}",
+      (gateway_ ? gateway_->str() : "n/a"),
+      (ifIndex_ ? std::to_string(*ifIndex_) : "n/a"),
+      (weight_ ? std::to_string(*weight_) : "n/a"));
 }
 
 struct rtnl_nexthop*
@@ -958,6 +980,17 @@ IfAddress::getFlags() const {
   return flags_;
 }
 
+std::string
+IfAddress::str() const {
+  return folly::sformat(
+    "addr {} {} intf-index {}, valid {}",
+    getFamily() == AF_INET ? "inet" : "inet6",
+    prefix_.hasValue() ? folly::IPAddress::networkToString(*prefix_) : "n/a",
+    ifIndex_,
+    isValid_ ? "Yes" : "No"
+  );
+}
+
 // Will construct rtnl_addr object on the first time call, then will return
 // the same object pointer
 struct rtnl_addr*
@@ -1223,6 +1256,25 @@ Neighbor::isReachable() const {
   return isReachable_;
 }
 
+std::string
+Neighbor::str() const {
+  std::string stateStr{"n/a"};
+  if (state_.hasValue()) {
+    std::array<char, 32> buf;
+    rtnl_neigh_state2str(state_.value(), buf.data(), buf.size());
+    stateStr = std::string(buf.data(), buf.size());
+  }
+
+  return folly::sformat(
+    "neighbor {} reachable {}, intf-index {}, lladdr {}, state {}",
+    destination_.str(),
+    isReachable_ ? "Yes" : "No",
+    ifIndex_,
+    linkAddress_.hasValue() ? linkAddress_->toString() : "n/a",
+    stateStr
+  );
+}
+
 struct rtnl_neigh*
 Neighbor::getRtnlNeighRef() {
   if (neigh_) {
@@ -1433,6 +1485,17 @@ Link::getRtnlLinkRef() {
 bool
 Link::isUp() const {
   return !!(flags_ & IFF_RUNNING);
+}
+
+std::string
+Link::str() const {
+  std::array<char, 128> flagsBuf;
+  rtnl_link_flags2str(flags_, flagsBuf.data(), flagsBuf.size());
+
+  return folly::sformat(
+    "link {} intf-index {}, flags {}",
+    linkName_, ifIndex_, std::string(flagsBuf.data(), flagsBuf.size())
+  );
 }
 
 bool

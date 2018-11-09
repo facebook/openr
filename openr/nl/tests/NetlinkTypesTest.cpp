@@ -92,6 +92,8 @@ TEST(NetlinkTypes, NexthopGeneralTest) {
                 .setIfIndex(kIfIndex)
                 .setWeight(kWeight)
                 .build();
+  LOG(INFO) << nh.str();
+
   // Create nextHop with ifIndex and gateway
   EXPECT_TRUE(nh.getIfIndex().hasValue());
   EXPECT_EQ(kIfIndex, nh.getIfIndex().value());
@@ -182,6 +184,8 @@ TEST(NetlinkTypes, RouteEqualTest) {
                     .addNextHop(nh1)
                     .addNextHop(nh2)
                     .build();
+  LOG(INFO) << route1.str();
+
   RouteBuilder builder2;
   nhBuilder.reset();
   nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
@@ -198,6 +202,8 @@ TEST(NetlinkTypes, RouteEqualTest) {
                     .addNextHop(nh2)
                     .addNextHop(nh1)
                     .build();
+  LOG(INFO) << route2.str();
+
   EXPECT_TRUE(route1 == route2);
   RouteBuilder builder3;
   nhBuilder.reset();
@@ -529,6 +535,8 @@ TEST(NetlinkTypes, IfAddressTest) {
   IfAddressBuilder builder;
   auto ifAddr =
       builder.setPrefix(prefix).setIfIndex(kIfIndex).setFlags(flags).build();
+  LOG(INFO) << ifAddr.str();
+
   struct rtnl_addr* addr = ifAddr.getRtnlAddrRef();
   EXPECT_TRUE(addr != nullptr);
   EXPECT_EQ(AF_INET6, rtnl_addr_get_family(addr));
@@ -613,6 +621,8 @@ TEST(NetlinkTypes, NeighborTypeTest) {
                    .setDestination(dst)
                    .setLinkAddress(mac)
                    .build();
+  LOG(INFO) << neigh.str();
+
   struct rtnl_neigh* obj = neigh.getRtnlNeighRef();
   EXPECT_TRUE(obj != nullptr);
   struct nl_addr* dstObj = rtnl_neigh_get_dst(obj);
@@ -731,6 +741,8 @@ TEST(NetlinkTypes, LinkTypeTest) {
                   .setFlags(flags)
                   .setLinkName(linkName)
                   .build();
+  LOG(INFO) << link.str();
+
   struct rtnl_link* obj = link.getRtnlLinkRef();
   EXPECT_TRUE(obj != nullptr);
   EXPECT_EQ(kIfIndex, rtnl_link_get_ifindex(obj));
