@@ -137,7 +137,10 @@ TEST(NetlinkTypes, RouteBaseTest) {
   EXPECT_FALSE(route.getTos().hasValue());
 
   struct rtnl_route* object = route.getRtnlRouteRef();
+  struct rtnl_route* objectKey = route.getRtnlRouteKeyRef();
   EXPECT_TRUE(object != nullptr);
+  EXPECT_TRUE(objectKey != nullptr);
+  EXPECT_NE(object, objectKey);
 
   EXPECT_EQ(AF_INET6, rtnl_route_get_family(object));
   EXPECT_EQ(kProtocolId, rtnl_route_get_protocol(object));
@@ -155,7 +158,9 @@ TEST(NetlinkTypes, RouteBaseTest) {
   EXPECT_EQ(0, rtnl_route_get_nnexthops(object));
 
   struct rtnl_route* object1 = route.getRtnlRouteRef();
+  struct rtnl_route* objectKey1 = route.getRtnlRouteKeyRef();
   EXPECT_EQ(object, object1);
+  EXPECT_EQ(objectKey, objectKey1);
   // Route will release rtnl_route object
   nl_addr_put(dstObj);
 }
@@ -268,12 +273,18 @@ TEST(NetlinkTypes, RouteMoveTest) {
                    .build();
 
   struct rtnl_route* p = route.getRtnlRouteRef();
+  struct rtnl_route* pKey = route.getRtnlRouteKeyRef();
   Route route1(std::move(route));
   struct rtnl_route* pMove = route.getRtnlRouteRef();
+  struct rtnl_route* pKeyMove = route.getRtnlRouteKeyRef();
   EXPECT_TRUE(pMove != nullptr);
+  EXPECT_TRUE(pKeyMove != nullptr);
   EXPECT_NE(p, pMove);
+  EXPECT_NE(pKey, pKeyMove);
   struct rtnl_route* p1 = route1.getRtnlRouteRef();
+  struct rtnl_route* pKey1 = route1.getRtnlRouteKeyRef();
   EXPECT_EQ(p, p1);
+  EXPECT_EQ(pKey, pKey1);
   EXPECT_EQ(AF_INET6, route1.getFamily());
   EXPECT_EQ(AF_INET6, rtnl_route_get_family(p1));
   EXPECT_EQ(kProtocolId, route1.getProtocolId());
@@ -300,8 +311,11 @@ TEST(NetlinkTypes, RouteMoveTest) {
 
   Route route2 = std::move(route1);
   EXPECT_TRUE(nullptr != route1.getRtnlRouteRef());
+  EXPECT_TRUE(nullptr != route1.getRtnlRouteKeyRef());
   struct rtnl_route* p2 = route2.getRtnlRouteRef();
+  struct rtnl_route* pKey2 = route2.getRtnlRouteKeyRef();
   EXPECT_EQ(p, p2);
+  EXPECT_EQ(pKey, pKey2);
   EXPECT_EQ(AF_INET6, route2.getFamily());
   EXPECT_EQ(AF_INET6, rtnl_route_get_family(p2));
   EXPECT_EQ(kProtocolId, route2.getProtocolId());
@@ -345,15 +359,21 @@ TEST(NetlinkTypes, RouteCopyTest) {
                    .addNextHop(nh1)
                    .build();
   auto nlPtr1 = route.getRtnlRouteRef();
+  auto nlPtrKey1 = route.getRtnlRouteKeyRef();
   EXPECT_TRUE(nlPtr1 != nullptr);
+  EXPECT_TRUE(nlPtrKey1 != nullptr);
 
   // Copy constructor
   fbnl::Route route2(route);
   EXPECT_EQ(route, route2);
   auto nlPtr2 = route2.getRtnlRouteRef();
+  auto nlPtrKey2 = route2.getRtnlRouteKeyRef();
   EXPECT_TRUE(nlPtr2 != nullptr);
+  EXPECT_TRUE(nlPtrKey2 != nullptr);
   EXPECT_NE(nlPtr1, nlPtr2);
+  EXPECT_NE(nlPtrKey1, nlPtrKey2);
   EXPECT_EQ(nlPtr1, route.getRtnlRouteRef());
+  EXPECT_EQ(nlPtrKey1, route.getRtnlRouteKeyRef());
 
   // Increase reference of nlPtr2 so that it doesn't get allocated in the same
   // memory location after getting destructed by copy asssignment operator
@@ -363,10 +383,15 @@ TEST(NetlinkTypes, RouteCopyTest) {
   route2 = route;
   EXPECT_EQ(route, route2);
   auto nlPtr3 = route2.getRtnlRouteRef();
+  auto nlPtrKey3 = route2.getRtnlRouteKeyRef();
   EXPECT_TRUE(nlPtr3 != nullptr);
+  EXPECT_TRUE(nlPtrKey3 != nullptr);
   EXPECT_NE(nlPtr1, nlPtr3);
+  EXPECT_NE(nlPtrKey1, nlPtrKey3);
   EXPECT_NE(nlPtr2, nlPtr3);
+  EXPECT_NE(nlPtrKey2, nlPtrKey3);
   EXPECT_EQ(nlPtr1, route.getRtnlRouteRef());
+  EXPECT_EQ(nlPtrKey1, route.getRtnlRouteKeyRef());
 
   // Put back reference of nlPtr2
   nl_object_put(OBJ_CAST(nlPtr2));

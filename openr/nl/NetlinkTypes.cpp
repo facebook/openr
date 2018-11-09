@@ -287,6 +287,10 @@ Route::~Route() {
     rtnl_route_put(route_);
     route_ = nullptr;
   }
+  if (routeKey_) {
+    rtnl_route_put(routeKey_);
+    routeKey_ = nullptr;
+  }
 }
 
 Route::Route(Route&& other) noexcept {
@@ -317,6 +321,14 @@ Route::operator=(Route&& other) noexcept {
     route_ = other.route_;
     other.route_ = nullptr;
   }
+  if (routeKey_) {
+    rtnl_route_put(routeKey_);
+    routeKey_ = nullptr;
+  }
+  if (other.routeKey_) {
+    routeKey_ = other.routeKey_;
+    other.routeKey_ = nullptr;
+  }
 
   return *this;
 }
@@ -346,6 +358,12 @@ Route::operator=(const Route& other) {
     rtnl_route_put(route_);
     route_ = nullptr;
   }
+  // Free our routeKey_ if any
+  if (routeKey_) {
+    rtnl_route_put(routeKey_);
+    routeKey_ = nullptr;
+  }
+
   // NOTE: We are not copying other.route_ so that this object can be passed
   // between threads without actually copying underlying netlink object to
   // other threads
@@ -467,26 +485,52 @@ Route::str() const {
 }
 
 struct rtnl_route*
+Route::createRtnlRouteKey() {
+  auto route = rtnl_route_alloc();
+  if (route == nullptr) {
+    throw fbnl::NlException("Cannot allocate route object");
+  }
+  SCOPE_FAIL {
+    rtnl_route_put(route);
+  };
+
+  rtnl_route_set_scope(route, scope_);
+  rtnl_route_set_type(route, type_);
+  rtnl_route_set_family(route, dst_.first.family());
+  rtnl_route_set_table(route, routeTable_);
+  rtnl_route_set_protocol(route, protocolId_);
+
+  // Set destination
+  struct nl_addr* nlAddr = buildAddrObject(dst_);
+  // route object takes a ref if dst is successfully set
+  // so we should always drop our ref, success or failure
+  SCOPE_EXIT {
+    nl_addr_put(nlAddr);
+  };
+  int err = rtnl_route_set_dst(route, nlAddr);
+  if (err != 0) {
+    throw fbnl::NlException(folly::sformat(
+        "Failed to set dst for route {} : {}",
+        folly::IPAddress::networkToString(dst_),
+        nl_geterror(err)));
+  }
+
+  return route;
+}
+
+
+struct rtnl_route*
 Route::getRtnlRouteRef() {
   // Only build object once
   if (route_) {
     return route_;
   }
 
-  route_ = rtnl_route_alloc();
-  if (route_ == nullptr) {
-    throw fbnl::NlException("Cannot allocate route object");
-  }
+  route_ = createRtnlRouteKey();
   SCOPE_FAIL {
     rtnl_route_put(route_);
     route_ = nullptr;
   };
-
-  rtnl_route_set_scope(route_, scope_);
-  rtnl_route_set_type(route_, type_);
-  rtnl_route_set_family(route_, dst_.first.family());
-  rtnl_route_set_table(route_, routeTable_);
-  rtnl_route_set_protocol(route_, protocolId_);
 
   if (priority_.hasValue()) {
     rtnl_route_set_priority(route_, priority_.value());
@@ -498,21 +542,6 @@ Route::getRtnlRouteRef() {
 
   if (tos_.hasValue()) {
     rtnl_route_set_tos(route_, tos_.value());
-  }
-
-  // Set destination
-  struct nl_addr* nlAddr = buildAddrObject(dst_);
-  // route object takes a ref if dst is successfully set
-  // so we should always drop our ref, success or failure
-  SCOPE_EXIT {
-    nl_addr_put(nlAddr);
-  };
-  int err = rtnl_route_set_dst(route_, nlAddr);
-  if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
-        "Failed to set dst for route {} : {}",
-        folly::IPAddress::networkToString(dst_),
-        nl_geterror(err)));
   }
 
   // Add next hops
@@ -530,6 +559,17 @@ Route::getRtnlRouteRef() {
   }
 
   return route_;
+}
+
+struct rtnl_route*
+Route::getRtnlRouteKeyRef() {
+  // Only build object once
+  if (routeKey_) {
+    return routeKey_;
+  }
+
+  routeKey_ = createRtnlRouteKey();
+  return routeKey_;
 }
 
 struct nl_addr*

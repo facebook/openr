@@ -132,12 +132,16 @@ void
 NetlinkSocket::routeCacheCB(
     struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept {
   CHECK(data) << "Opaque context does not exist in route callback";
-  reinterpret_cast<NetlinkSocket*>(data)->handleRouteEvent(obj, action, true);
+  reinterpret_cast<NetlinkSocket*>(data)->handleRouteEvent(
+      obj, action, true, false);
 }
 
 void
 NetlinkSocket::handleRouteEvent(
-    struct nl_object* obj, int action, bool runHandler) noexcept {
+    struct nl_object* obj,
+    int action,
+    bool runHandler,
+    bool updateUnicastRoute) noexcept {
   CHECK_NOTNULL(obj);
   if (!checkObjectType(obj, kRouteObjectStr)) {
     return;
@@ -145,7 +149,7 @@ NetlinkSocket::handleRouteEvent(
 
   struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
   try {
-    doUpdateRouteCache(routeObj, action);
+    doUpdateRouteCache(routeObj, action, updateUnicastRoute);
   } catch (const std::exception& ex) {
     LOG(ERROR) << "UpdateCacheFailed";
   }
@@ -274,7 +278,8 @@ NetlinkSocket::handleNeighborEvent(
 }
 
 void
-NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
+NetlinkSocket::doUpdateRouteCache(
+    struct rtnl_route* obj, int action, bool updateUnicastRoute) {
   RouteBuilder builder;
   bool isValid = (action != NL_ACT_DEL);
   auto route = builder.loadFromObject(obj).setValid(isValid).build();
@@ -305,7 +310,7 @@ NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
     auto& mcastRoutes = mcastRoutesCache_[protocol];
 
     mcastRoutes.erase(key);
-    if (NL_ACT_DEL != action) {
+    if (route.isValid()) {
       mcastRoutes.emplace(std::make_pair(key, std::move(route)));
     }
     return;
@@ -329,20 +334,19 @@ NetlinkSocket::doUpdateRouteCache(struct rtnl_route* obj, int action) {
     auto& linkRoutes = linkRoutesCache_[protocol];
 
     linkRoutes.erase(key);
-    if (NL_ACT_DEL != action) {
+    if (route.isValid()) {
       linkRoutes.emplace(std::make_pair(key, std::move(route)));
     }
     return;
   }
 
-  auto& unicastRoutes = unicastRoutesCache_[protocol];
-  if (NL_ACT_DEL != action) {
-    unicastRoutes.erase(prefix);
-    unicastRoutes.emplace(std::make_pair(prefix, std::move(route)));
-  } else if (prefix.first.isV4()) {
-    // Only explicitly remove V4 entry from local cache
-    // explicit erase of V6 is done in doUpdateRouteCache
-    unicastRoutes.erase(prefix);
+  if (updateUnicastRoute) {
+    auto& unicastRoutes = unicastRoutesCache_[protocol];
+    if (route.isValid()) {
+      unicastRoutes.erase(prefix);
+      unicastRoutes.emplace(prefix, std::move(route));
+    }
+    // NOTE: We are just updating cache. This called during initialization
   }
 }
 
@@ -392,46 +396,42 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
 
   // Create new set of nexthops to be programmed. Existing + New ones
   auto& unicastRoutes = unicastRoutesCache_[route.getProtocolId()];
-  bool isV4 = dest.first.isV4();
   auto iter = unicastRoutes.find(dest);
   // Same route
   if (iter != unicastRoutes.end() && iter->second == route) {
     return;
   }
 
-  if (isV4) {
-    int err = rtnl_route_add(reqSock_, route.getRtnlRouteRef(), NLM_F_REPLACE);
-    if (0 != err) {
-      throw fbnl::NlException(folly::sformat(
-          "Could not add V4 Route to: {} Error: {}",
-          folly::IPAddress::networkToString(dest),
-          nl_geterror(err)));
-    }
-  } else {
+  if (dest.first.isV6()) {
     // We need to explicitly add new V6 routes & remove old routes
     // With IPv6, if new route being requested has different properties
     // (like gateway or metric or..) the existing one will not be replaced,
     // instead a new route will be created, which may cause underlying kernel
     // crash when releasing netdevices
     if (iter != unicastRoutes.end()) {
-      int err = rtnl_route_delete(reqSock_, iter->second.getRtnlRouteRef(), 0);
+      int err = rtnlRouteDelete(
+        reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
       if (0 != err && -NLE_OBJ_NOTFOUND != err) {
         throw fbnl::NlException(folly::sformat(
-            "Failed to delete route {} Error: {}",
-            folly::IPAddress::networkToString(dest),
-            nl_geterror(err)));
+            "Failed to delete route\n{}\nError: {}",
+            iter->second.str(), nl_geterror(err)));
       }
     }
-    int err = rtnl_route_add(reqSock_, route.getRtnlRouteRef(), NLM_F_REPLACE);
-    if (0 != err) {
-      throw fbnl::NlException(folly::sformat(
-          "Could not add V6 Route to: {} Error: {}",
-          folly::IPAddress::networkToString(dest),
-          nl_geterror(err)));
-    }
   }
-  // Cache new nexthops in our local-cache if everything is good
+
+  // Remove route from cache
   unicastRoutes.erase(dest);
+
+  // Add new route
+  int err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), NLM_F_REPLACE);
+  if (0 != err) {
+    throw fbnl::NlException(folly::sformat(
+        "Could not add route\n{}\nError: {}",
+        route.str(),
+        nl_geterror(err)));
+  }
+
+  // Add route entry in cache on successful addition
   unicastRoutes.emplace(std::make_pair(dest, std::move(route)));
 }
 
@@ -493,7 +493,7 @@ NetlinkSocket::doDeleteUnicastRoute(Route route) {
     return;
   }
 
-  int err = rtnl_route_delete(reqSock_, route.getRtnlRouteRef(), 0);
+  int err = rtnlRouteDelete(reqSock_, route.getRtnlRouteKeyRef(), 0);
   // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
   // some routes when interface goes down
   if (err != 0 && -NLE_OBJ_NOTFOUND != err) {
@@ -527,7 +527,7 @@ NetlinkSocket::doAddMulticastRoute(Route route) {
       << "Adding multicast route: " << folly::IPAddress::networkToString(prefix)
       << " for interface: " << ifName;
 
-  int err = rtnl_route_add(reqSock_, route.getRtnlRouteRef(), 0);
+  int err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), 0);
   if (err != 0) {
     throw fbnl::NlException(folly::sformat(
         "Failed to add multicast route {} Error: {}",
@@ -573,7 +573,7 @@ NetlinkSocket::doDeleteMulticastRoute(Route route) {
           << folly::IPAddress::networkToString(prefix)
           << " for interface: " << ifName;
 
-  int err = rtnl_route_delete(reqSock_, iter->second.getRtnlRouteRef(), 0);
+  int err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
   if (err != 0) {
     throw fbnl::NlException(folly::sformat(
         "Failed to delete multicast route {} Error: {}",
@@ -587,7 +587,6 @@ NetlinkSocket::doDeleteMulticastRoute(Route route) {
 folly::Future<folly::Unit>
 NetlinkSocket::syncUnicastRoutes(
     uint8_t protocolId, NlUnicastRoutes newRouteDb) {
-  VLOG(3) << "Netlink syncing Unicast Routes....";
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
@@ -596,8 +595,10 @@ NetlinkSocket::syncUnicastRoutes(
                                      syncDb = std::move(newRouteDb),
                                      protocolId]() mutable {
     try {
+      LOG(INFO) << "Syncing " << syncDb.size() << " routes";
       doSyncUnicastRoutes(protocolId, std::move(syncDb));
       p.setValue();
+      LOG(INFO) << "Sync done.";
     } catch (std::exception const& ex) {
       LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
                  << folly::exceptionStr(ex);
@@ -625,31 +626,12 @@ NetlinkSocket::doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb) {
     if (iter == unicastRoutes.end()) {
       continue;
     }
-    try {
-      RouteBuilder builder;
-      doDeleteUnicastRoute(
-          builder.buildFromObject(iter->second.getRtnlRouteRef()));
-    } catch (std::exception const& err) {
-      throw std::runtime_error(folly::sformat(
-          "Could not del Route to: {} Error: {}",
-          folly::IPAddress::networkToString(prefix),
-          folly::exceptionStr(err)));
-    }
+    doDeleteUnicastRoute(iter->second);
   }
 
   // Go over routes in new routeDb, update/add
   for (auto& kv : syncDb) {
-    auto const& prefix = kv.first;
-    try {
-      RouteBuilder builder;
-      doAddUpdateUnicastRoute(
-          builder.buildFromObject(kv.second.getRtnlRouteRef()));
-    } catch (std::exception const& err) {
-      throw std::runtime_error(folly::sformat(
-          "Could not update Route to: {} Error: {}",
-          folly::IPAddress::networkToString(prefix),
-          folly::exceptionStr(err)));
-    }
+    doAddUpdateUnicastRoute(kv.second);
   }
 }
 
@@ -688,7 +670,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     if (iter == linkRoutes.end()) {
       continue;
     }
-    int err = rtnl_route_delete(reqSock_, iter->second.getRtnlRouteRef(), 0);
+    int err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
           "Could not del link Route to: {} dev {} Error: {}",
@@ -702,7 +684,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     if (linkRoutes.count(routeToAdd.first)) {
       continue;
     }
-    int err = rtnl_route_add(
+    int err = rtnlRouteAdd(
         reqSock_,
         routeToAdd.second.getRtnlRouteRef(),
         NLM_F_REPLACE);
@@ -1107,7 +1089,7 @@ NetlinkSocket::updateRouteCache() {
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept {
     CHECK(arg) << "Opaque context does not exist";
     reinterpret_cast<NetlinkSocket*>(arg)->handleRouteEvent(
-        obj, NL_ACT_GET, false);
+        obj, NL_ACT_GET, false, true);
   };
   nl_cache_foreach_filter(routeCache_, nullptr, routeFunc, this);
 }
@@ -1139,6 +1121,31 @@ void
 NetlinkSocket::unsubscribeAllEvents() {
   for (size_t i = 0; i < MAX_EVENT_TYPE; ++i) {
     eventFlags_.reset(i);
+  }
+}
+
+int
+NetlinkSocket::rtnlRouteAdd(
+    struct nl_sock* sock,
+    struct rtnl_route* route,
+    int flags) {
+  tickEvent();
+  return rtnl_route_add(sock, route, flags);
+}
+
+int
+NetlinkSocket::rtnlRouteDelete(
+    struct nl_sock* sock,
+    struct rtnl_route* route,
+    int flags) {
+  tickEvent();
+  return rtnl_route_delete(sock, route, flags);
+}
+
+void
+NetlinkSocket::tickEvent() {
+  if (++eventCount_ == 0) {
+    nl_cache_mngr_poll(cacheManager_, 0 /* timeout */);
   }
 }
 

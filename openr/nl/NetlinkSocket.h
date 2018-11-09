@@ -333,7 +333,11 @@ class NetlinkSocket {
   static void neighCacheCB(
       struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
 
-  void handleRouteEvent(nl_object* obj, int action, bool runHandler) noexcept;
+  void handleRouteEvent(
+      nl_object* obj,
+      int action,
+      bool runHandler,
+      bool updateUnicastRoute) noexcept;
 
   void handleLinkEvent(nl_object* obj, int action, bool runHandler) noexcept;
 
@@ -342,7 +346,8 @@ class NetlinkSocket {
   void handleNeighborEvent(
       nl_object* obj, int action, bool runHandler) noexcept;
 
-  void doUpdateRouteCache(struct rtnl_route* obj, int action);
+  void doUpdateRouteCache(
+      struct rtnl_route* obj, int action, bool updateUnicastRoute=false);
 
   void doAddUpdateUnicastRoute(Route route);
 
@@ -383,6 +388,11 @@ class NetlinkSocket {
   bool checkObjectType(struct nl_object* obj, folly::StringPiece expectType);
 
  private:
+  int rtnlRouteAdd(struct nl_sock* sock, struct rtnl_route* route, int flags);
+  int rtnlRouteDelete(
+      struct nl_sock* sock, struct rtnl_route* route, int flags);
+  void tickEvent();
+
   /**
    * Netlink scokets to interact with linux kernel. We deliberately use two
    * sockets as it is a recommended way instead of multiplexing things over
@@ -433,6 +443,13 @@ class NetlinkSocket {
 
   // Indicating to run which event type's handler
   folly::AtomicBitSet<MAX_EVENT_TYPE> eventFlags_;
+
+  // Integer to keep track of route add/del events. When it overflows we perform
+  // polling of pending events. This is useful when we are adding thounsands of
+  // routes in a single sync, which leads to lot of updates from kernel. If we
+  // don't do periodic polling after few hundred route updates (add/remove) we
+  // see netlink "Out of memory" error.
+  uint8_t eventCount_{0};
 };
 
 } // namespace fbnl

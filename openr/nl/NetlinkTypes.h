@@ -300,11 +300,16 @@ class Route final {
     * then will return the same object pointer. It will just return the pointer
     * without increase the ref count. Caller shouldn't do rtnl_route_put
     * without explicit increase of it's ref count
+    * getRtnlRouteRef => Returns full rtnl_route object including nexthops
+    * getRtnlRouteKeyRef => Returns partial rtnl_route object just containining
+    *                       key (prefix) and no nexthhops
     */
    struct rtnl_route* getRtnlRouteRef();
+   struct rtnl_route* getRtnlRouteKeyRef();
 
  private:
    struct nl_addr* buildAddrObject(const folly::CIDRNetwork& addr);
+   struct rtnl_route* createRtnlRouteKey();
 
    uint8_t type_{RTN_UNICAST};
    uint8_t routeTable_{RT_TABLE_MAIN};
@@ -318,6 +323,7 @@ class Route final {
    folly::CIDRNetwork dst_;
    folly::Optional<std::string> routeIfName_;
    struct rtnl_route* route_{nullptr};
+   struct rtnl_route* routeKey_{nullptr};
 };
 
 bool operator==(const Route& lhs, const Route& rhs);
