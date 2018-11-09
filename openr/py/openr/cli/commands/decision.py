@@ -472,8 +472,8 @@ class DecisionValidateCmd(DecisionCmd):
                         printing.render_vertical_table(
                             [
                                 [
-                                    f"node {node_name}'s adj db in Decision out"
-                                    " of sync with KvStore's"
+                                    "node {}'s adj db in Decision out of sync with "
+                                    "KvStore's".format(node_name)
                                 ]
                             ]
                         )
@@ -513,8 +513,8 @@ class DecisionValidateCmd(DecisionCmd):
                     printing.render_vertical_table(
                         [
                             [
-                                f"node {node_name}'s prefix db in Decision out "
-                                "of sync with KvStore's"
+                                "node {}'s prefix db in Decision out of sync with "
+                                "KvStore's".format(node_name)
                             ]
                         ]
                     )
