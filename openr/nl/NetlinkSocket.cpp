@@ -259,8 +259,12 @@ NetlinkSocket::handleNeighborEvent(
   if (!checkObjectType(obj, kNeighborObjectStr)) {
     return;
   }
-
   struct rtnl_neigh* neighObj = reinterpret_cast<struct rtnl_neigh*>(obj);
+  struct nl_addr* dst = rtnl_neigh_get_dst(neighObj);
+  if (!dst) {
+    LOG(WARNING) << "Empty neighbor in netlink neighbor event";
+    return;
+  }
   NeighborBuilder builder;
   auto neigh = builder.buildFromObject(neighObj, NL_ACT_DEL == action);
   std::string ifName = getIfName(neigh.getIfIndex()).get();
