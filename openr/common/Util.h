@@ -86,6 +86,9 @@ int maskToPrefixLen(const struct sockaddr_in6* mask);
 // get prefix length from ipv4 mask
 int maskToPrefixLen(const struct sockaddr_in* mask);
 
+// set value of bit string
+uint32_t bitStrValue(const folly::IPAddress& ip, uint32_t start, uint32_t end);
+
 // report all IPv6/IPv4 prefixes configured on the interface
 std::vector<folly::CIDRNetwork> getIfacePrefixes(
     std::string ifName, sa_family_t afNet);

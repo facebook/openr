@@ -669,6 +669,161 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   evl_.waitUntilStopped();
 }
 
+
+/**
+ * The following test allocates a prefix based on the allocParams, then
+ * static allocation key is inserted with the prefix that's allocated.
+ * When the static allocation key is received, prefix allocator should
+ * detect a collion and reallocate a new prefix.
+ */
+TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
+  // Return immediately if static allocation parameter is set to true
+  if (GetParam()) {
+    return;
+  }
+
+  folly::Synchronized<folly::Optional<folly::CIDRNetwork>> allocPrefix;
+  folly::CIDRNetwork prevAllocPrefix;
+  std::atomic<bool> hasAllocPrefix{false};
+  const uint8_t allocPrefixLen = 64;
+  const std::string subscriptionKey = folly::sformat(
+      "{}{}", openr::Constants::kPrefixDbMarker.toString(), myNodeName_);
+
+  // Set callback
+  kvStoreClient_->subscribeKey(subscriptionKey,
+    [&](const std::string& /* key */,
+        folly::Optional<thrift::Value> value) {
+      // Parse PrefixDb
+      ASSERT_TRUE(value.hasValue());
+      ASSERT_TRUE(value.value().value.hasValue());
+      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+          value.value().value.value(), serializer);
+      auto& prefixes = prefixDb.prefixEntries;
+
+      // Verify some expectations
+      EXPECT_GE(1, prefixes.size());
+      if (prefixes.empty()) {
+        SYNCHRONIZED(allocPrefix) {
+          allocPrefix = folly::none;
+        }
+        LOG(INFO) << "Lost allocated prefix!";
+        hasAllocPrefix.store(false, std::memory_order_relaxed);
+      } else {
+        EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, prefixes[0].type);
+        auto prefix = toIPNetwork(prefixes[0].prefix);
+        EXPECT_EQ(allocPrefixLen, prefix.second);
+        SYNCHRONIZED(allocPrefix) {
+          allocPrefix = prefix;
+        }
+        LOG(INFO) << "Got new prefix allocation!";
+        hasAllocPrefix.store(true, std::memory_order_relaxed);
+      } // if
+    },// callback
+    false);
+
+  // Start main event loop in a new thread
+  threads_.emplace_back([&]() noexcept { evl_.run(); });
+
+  //
+  // 1) Set seed prefix in kvStore and verify that we get an elected prefix
+  //
+  // announce new seed prefix
+  hasAllocPrefix.store(false, std::memory_order_relaxed);
+  std::string ip6{"face:b00c:d00d::/61"};
+  const auto seedPrefix =
+    folly::IPAddress::createNetwork(ip6);
+  auto prefixAllocParam = folly::sformat(
+      "{},{}",
+      folly::IPAddress::networkToString(seedPrefix),
+      allocPrefixLen);
+  auto res = kvStoreClient_->setKey(
+      Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
+  EXPECT_FALSE(res.hasError()) << res.error();
+  // busy loop until we have prefix
+  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+    std::this_thread::yield();
+  }
+  SYNCHRONIZED(allocPrefix) {
+    EXPECT_TRUE(allocPrefix.hasValue());
+    if (allocPrefix.hasValue()) {
+      EXPECT_EQ(allocPrefixLen, allocPrefix->second);
+      EXPECT_TRUE(allocPrefix->first.inSubnet(ip6));
+      prevAllocPrefix = allocPrefix.value();
+    }
+  }
+  LOG(INFO) << "Step-1: Received allocated prefix from KvStore.";
+
+  // now insert e2e-network-allocation with the allocated v6 address.
+  // prefix allocator subscribes to this key and should detect address
+  // collision, and restart the prefix allocator to assign a different address
+
+  thrift::StaticAllocation staticAlloc;
+  hasAllocPrefix.store(false, std::memory_order_relaxed);
+  staticAlloc.nodePrefixes[myNodeName_] =
+      toIpPrefix(folly::IPAddress::networkToString(prevAllocPrefix));
+  auto res0 = kvStoreClient_->setKey(
+      Constants::kStaticPrefixAllocParamKey.toString(),
+      fbzmq::util::writeThriftObjStr(staticAlloc, serializer), 1);
+  EXPECT_FALSE(res0.hasError()) << res0.error();
+
+  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+    std::this_thread::yield();
+  }
+  SYNCHRONIZED(allocPrefix) {
+    EXPECT_TRUE(allocPrefix.hasValue());
+    if (allocPrefix.hasValue()) {
+      EXPECT_EQ(allocPrefixLen, allocPrefix->second);
+      EXPECT_TRUE(allocPrefix->first.inSubnet(ip6));
+      EXPECT_NE(prevAllocPrefix, allocPrefix.value());
+    }
+  }
+  LOG(INFO) << "Step-2: Received allocated prefix from KvStore.";
+
+  // statically all possible v6 addresses except one. Prefix allocator
+  // must assign the one that's left out in the static list
+
+  hasAllocPrefix.store(false, std::memory_order_relaxed);
+  staticAlloc.nodePrefixes["dontcare0"] = toIpPrefix("face:b00c:d00d:0::/64");
+  staticAlloc.nodePrefixes["dontcare1"] = toIpPrefix("face:b00c:d00d:1::/64");
+  staticAlloc.nodePrefixes["dontcare2"] = toIpPrefix("face:b00c:d00d:2::/64");
+  staticAlloc.nodePrefixes["dontcare3"] = toIpPrefix("face:b00c:d00d:3::/64");
+  staticAlloc.nodePrefixes["dontcare4"] = toIpPrefix("face:b00c:d00d:4::/64");
+  staticAlloc.nodePrefixes["dontcare6"] = toIpPrefix("face:b00c:d00d:6::/64");
+  staticAlloc.nodePrefixes["dontcare7"] = toIpPrefix("face:b00c:d00d:7::/64");
+
+  auto res5 = kvStoreClient_->setKey(
+      Constants::kStaticPrefixAllocParamKey.toString(),
+      fbzmq::util::writeThriftObjStr(staticAlloc, serializer), 2);
+  EXPECT_FALSE(res5.hasError()) << res5.error();
+
+  // counter is added to break loop. In case allocated prefix is already
+  // the expected one, there will be no prefix update and hasAllocPrefix
+  // will remain 'false'
+  auto ctr = 1000000;
+  while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
+    std::this_thread::yield();
+    if (ctr-- < 0) {
+      break;
+    }
+  }
+
+  // check the prefix allocated is the only available prefix
+  SYNCHRONIZED(allocPrefix) {
+    EXPECT_TRUE(allocPrefix.hasValue());
+    if (allocPrefix.hasValue()) {
+      EXPECT_EQ(allocPrefixLen, allocPrefix->second);
+      EXPECT_TRUE(allocPrefix->first.inSubnet(ip6));
+      EXPECT_EQ(allocPrefix->first.str(), "face:b00c:d00d:5::");
+    }
+  }
+
+  LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
+  // Stop main eventloop
+  evl_.stop();
+  evl_.waitUntilStopped();
+}
+
+
 /**
  * Tests static allocation mode of PrefixAllocator
  */

@@ -43,14 +43,16 @@ RangeAllocator<T>::RangeAllocator(
     std::function<void(folly::Optional<T>) noexcept> callback,
     const std::chrono::milliseconds minBackoffDur /* = 50ms */,
     const std::chrono::milliseconds maxBackoffDur /* = 2s */,
-    const bool overrideOwner /* = true */)
+    const bool overrideOwner /* = true */,
+    const std::function<bool(T) noexcept> checkValueInUseCb)
     : nodeName_(nodeName),
       keyPrefix_(keyPrefix),
       kvStoreClient_(kvStoreClient),
       eventLoop_(kvStoreClient->getEventLoop()),
       callback_(std::move(callback)),
       overrideOwner_(overrideOwner),
-      backoff_(minBackoffDur, maxBackoffDur) {}
+      backoff_(minBackoffDur, maxBackoffDur),
+      checkValueInUseCb_(std::move(checkValueInUseCb)) {}
 
 template <typename T>
 RangeAllocator<T>::~RangeAllocator() {
@@ -151,7 +153,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   CHECK(!myValue_.hasValue())
       << "We have previously allocated value " << myValue_.value();
 
-  VLOG(2) << "RangeAllocator " << nodeName_ << ": trying to allocate "
+  VLOG(1) << "RangeAllocator " << nodeName_ << ": trying to allocate "
           << newVal;
   timeoutToken_ = folly::none; // Cleanup allocation retry timer
 
@@ -176,8 +178,15 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
 
   // If we cannot own then we should try some other value
   if (!shouldOwnOther && !shouldOwnMine) {
-    VLOG(2) << "RangeAllocator: failed to allocate " << newVal << " bcoz of "
+    VLOG(1) << "RangeAllocator: failed to allocate " << newVal << " bcoz of "
             << maybeThriftVal->originatorId;
+            scheduleAllocate(newVal);
+    return;
+  }
+  // check if prefix index is already in use
+  if (checkValueInUseCb_ and checkValueInUseCb_(newVal)) {
+    VLOG(1) << "RangeAllocator: failed to allocate " << newVal
+            << " as value already exists";
     scheduleAllocate(newVal);
     return;
   }
@@ -252,8 +261,10 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
     const auto it = valOwners.find(newVal);
     // not owned yet or owned by higher originator if override is allowed
     if (it == valOwners.end() or (overrideOwner_ and nodeName_ >= it->second)) {
-      // found
-      break;
+      if (!checkValueInUseCb_ or !checkValueInUseCb_(newVal)) {
+        // found
+        break;
+      }
     }
     // try next
     newVal = (newVal < allocRange_.second) ? (newVal + 1) : allocRange_.first;

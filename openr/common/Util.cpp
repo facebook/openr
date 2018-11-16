@@ -241,6 +241,20 @@ maskToPrefixLen(const struct sockaddr_in* mask) {
   return bits;
 }
 
+// bit position starts from 0
+uint32_t
+bitStrValue(const folly::IPAddress& ip, uint32_t start, uint32_t end) {
+    uint32_t index{0};
+    CHECK_GE(start, 0);
+    CHECK_LE(start, end);
+    // 0 based index
+    for (uint32_t i = start; i <= end; i++) {
+      index <<= 1;
+      index |= ip.getNthMSBit(i);
+    }
+    return index;
+}
+
 std::vector<folly::CIDRNetwork>
 getIfacePrefixes(std::string ifName, sa_family_t afNet) {
   struct ifaddrs* ifaddr{nullptr};

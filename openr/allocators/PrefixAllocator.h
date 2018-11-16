@@ -116,6 +116,12 @@ class PrefixAllocator
   //  Function to process allocation param update from kvstore
   void processAllocParamUpdate(thrift::Value const& value);
 
+  // calculate and save alloc index obtained from e2e-network-allocation
+  void processNetworkAllocationsUpdate(thrift::Value const& value);
+
+  // check if index is already in use by e2e-network-allocations
+  bool checkE2eAllocIndex(uint32_t index);
+
   // get my existing prefix index from kvstore if it's present
   folly::Optional<uint32_t> loadPrefixIndexFromKvStore();
 
@@ -132,7 +138,8 @@ class PrefixAllocator
   // or `folly::none` if seed prefix is no longer valid to withdraw
   // what we had before!
   void startAllocation(
-      folly::Optional<PrefixAllocatorParams> const& allocParams);
+      folly::Optional<PrefixAllocatorParams> const& allocParams,
+      bool checkParams = true);
 
   // use my newly allocated prefix
   void applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex);
@@ -234,6 +241,9 @@ class PrefixAllocator
    * otherwise applys the Optional value to the iface
    */
   std::pair<bool, folly::Optional<folly::CIDRNetwork>> applyState_;
+
+  // save alloc index from e2e-network-alllocation <value version, indices set>
+  std::pair<int64_t, std::unordered_set<uint32_t>> e2eAllocIndex_{-1, {}};
 };
 
 } // namespace openr

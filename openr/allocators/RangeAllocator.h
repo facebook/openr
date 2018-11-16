@@ -55,7 +55,8 @@ class RangeAllocator {
       const std::chrono::milliseconds minBackoffDur =
           std::chrono::milliseconds(50),
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
-      const bool overrideOwner = true);
+      const bool overrideOwner = true,
+      const std::function<bool(T) noexcept> checkValueInUseCb = nullptr);
 
   /**
    * user must call this to start allocation
@@ -166,6 +167,9 @@ class RangeAllocator {
 
   // if allocator has started
   bool hasStarted_{false};
+
+  // callback to check if value already exists
+  const std::function<bool(T) noexcept> checkValueInUseCb_{nullptr};
 };
 
 } // namespace openr

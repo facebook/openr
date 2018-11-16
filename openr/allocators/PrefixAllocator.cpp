@@ -143,6 +143,15 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
       }
     }, false);
 
+  kvStoreClient_->subscribeKey(Constants::kStaticPrefixAllocParamKey.toString(),
+    [&](std::string const& key, folly::Optional<thrift::Value> value) {
+      CHECK_EQ(Constants::kStaticPrefixAllocParamKey.toString(), key);
+      if (value.hasValue()) {
+        processNetworkAllocationsUpdate(value.value());
+      }
+    }, false);
+
+
   // get initial value if missed out in incremental updates (one time only)
   scheduleTimeout(0ms, [this]() noexcept {
     // If we already have received initial value from KvStore then just skip
@@ -310,6 +319,57 @@ PrefixAllocator::processAllocParamUpdate(thrift::Value const& value) {
   }
 }
 
+bool
+PrefixAllocator::checkE2eAllocIndex(uint32_t index) {
+  return (e2eAllocIndex_.second.find(index) != e2eAllocIndex_.second.end());
+}
+
+void
+PrefixAllocator::processNetworkAllocationsUpdate(
+    thrift::Value const& e2eValue) {
+  CHECK(e2eValue.value.hasValue());
+  if (!allocParams_.hasValue()) {
+      return;
+  }
+  uint32_t allocPrefixLen = allocParams_->second;
+  uint32_t prefixLen = allocParams_->first.second;
+
+  thrift::StaticAllocation staticAlloc;
+  try {
+    staticAlloc = fbzmq::util::readThriftObjStr<thrift::StaticAllocation>(
+      *e2eValue.value, serializer_);
+    /* skip if same version */
+    if (e2eAllocIndex_.first == e2eValue.version) {
+      return;
+    }
+    LOG(INFO) << folly::sformat("Updating prefix index from {}",
+                 Constants::kStaticPrefixAllocParamKey.toString());
+    e2eAllocIndex_.second.clear();
+    e2eAllocIndex_.first = e2eValue.version;
+    // extract prefix index from e2e network allocations
+    for (auto const& ip: staticAlloc.nodePrefixes) {
+      const auto pfix = toIPNetwork(ip.second);
+      auto index = bitStrValue(pfix.first, prefixLen, allocPrefixLen-1);
+      e2eAllocIndex_.second.emplace(index);
+    }
+    // collision after the update, restart allocation process
+    if (myPrefixIndex_.hasValue() &&
+        e2eAllocIndex_.second.find(myPrefixIndex_.value()) !=
+        e2eAllocIndex_.second.end()) {
+
+          LOG(INFO) << folly::sformat(
+                       "Index {} exits in {}, restarting prefix allocator",
+                       myPrefixIndex_.value(),
+                       Constants::kStaticPrefixAllocParamKey.toString());
+          startAllocation(allocParams_, false);
+    }
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "Error parsing static prefix allocation value. Error: "
+               << folly::exceptionStr(e);
+    return;
+  }
+}
+
 uint32_t
 PrefixAllocator::getPrefixCount(
     PrefixAllocatorParams const& allocParams) noexcept {
@@ -403,15 +463,17 @@ PrefixAllocator::getInitPrefixIndex() {
 
 void
 PrefixAllocator::startAllocation(
-    folly::Optional<PrefixAllocatorParams> const& allocParams) {
+    folly::Optional<PrefixAllocatorParams> const& allocParams,
+    bool checkParams) {
   // Some informative logging
   if (allocParams_.hasValue() and allocParams.hasValue()) {
-    if (allocParams_ == allocParams) {
+    if (checkParams and allocParams_ == allocParams) {
       LOG(INFO) << "New and old params are same. Skipping";
       return;
     }
     LOG(WARNING)
-      << "Prefix allocation parameters are changing. \n"
+      << " Prefix allocation parameters are changing,"
+      << " or duplicate address detected. \n"
       << "  Old: " << folly::IPAddress::networkToString(allocParams_->first)
       << ", " << static_cast<int16_t>(allocParams_->second) << "\n"
       << "  New: " << folly::IPAddress::networkToString(allocParams->first)
@@ -458,7 +520,10 @@ PrefixAllocator::startAllocation(
       // no need for randomness since "collision" is harmless
       syncInterval_ + 1ms,
       // do not allow override
-      false);
+      false,
+      [this](uint32_t allocIndex) noexcept->bool {
+        return checkE2eAllocIndex(allocIndex);
+      });
 
   // start range allocation
   LOG(INFO)
