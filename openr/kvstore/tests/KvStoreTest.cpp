@@ -1698,24 +1698,24 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
     newThriftVal.value = "why-so-serious";
     newThriftVal.hash = generateHash(
         newThriftVal.version, newThriftVal.originatorId, newThriftVal.value);
-    peerKeyVals[key] = newThriftVal;
-    EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+    peerKeyVals[key] = newThriftVal; // extra key in local
+    EXPECT_EQ(emptyKeyVals, myStore->syncKeyVals(peerKeyVals));
   }
 
   // 3. Query with different originatorID (change originatorID of test-key-0)
   {
     auto newThriftVal = thriftVal;
-    newThriftVal.originatorId = "new_york_city";
-    peerKeyVals[key] = newThriftVal;
-    EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+    newThriftVal.originatorId = "gotham_city_1";
+    peerKeyVals[key] = newThriftVal; // better orginatorId in local
+    EXPECT_EQ(emptyKeyVals, myStore->syncKeyVals(peerKeyVals));
   }
 
   // 4. Query with different ttlVersion (change ttlVersion of test-key-1)
   {
     auto newThriftVal = thriftVal;
     newThriftVal.ttlVersion = 0xb007;
-    peerKeyVals[key] = newThriftVal;
-    EXPECT_EQ(diffKeyVals, myStore->syncKeyVals(peerKeyVals));
+    peerKeyVals[key] = newThriftVal; // better ttlVersion in local
+    EXPECT_EQ(emptyKeyVals, myStore->syncKeyVals(peerKeyVals));
   }
 }
 

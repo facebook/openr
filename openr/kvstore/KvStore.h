@@ -136,6 +136,17 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       std::unordered_map<std::string, thrift::Value> const& update,
       folly::Optional<KvStoreFilters> const& filters = folly::none);
 
+  // compare two thrift::Values to figure out which value is better to
+  // use, it will compare following attributes in order
+  // <version>, <orginatorId>, <value>, <ttl-version>
+  // return 1 if v1 is better,
+  //       -1 if v2 is better,
+  //        0 if equal,
+  //        -2 if unknown
+  // unknown can happen if value is missing (only hash is provided)
+  static int
+  compareValues(const thrift::Value& v1, const thrift::Value& v2);
+
  private:
   // disable copying
   KvStore(KvStore const&) = delete;
@@ -165,8 +176,8 @@ class KvStore final : public fbzmq::ZmqEventLoop {
 
   // dump the keys on which hashes differ from given keyVals
   thrift::Publication dumpDifference(
-      std::unordered_map<std::string, thrift::Value> const& keyVal,
-      std::unordered_map<std::string, thrift::Value> const& keyValHash) const;
+      std::unordered_map<std::string, thrift::Value> const& myKeyVal,
+      std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const;
 
   // add new peers to sync with
   void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
@@ -201,9 +212,20 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       thrift::Publication& thriftPub,
       bool removeAboutToExpire=false);
 
+  // perform last step as a 3-way full-sync request
+  // full-sync initiator sends back key-val to senderId (where we made
+  // full-sync request to) who need to update those keys
+  void finalizeFullSync(
+      const std::vector<std::string>& keys,
+      const std::string& senderId);
+
   // Merge received publication with local store and publish out the delta.
+  // If senderId is set, will build <key:value> map from kvStore_ and
+  // rcvdPublication.tobeUpdatedKeys and send back to senderId to update it
   // @return: Number of KV updates applied
-  size_t mergePublication(thrift::Publication const& rcvdPublication);
+  size_t mergePublication(
+      thrift::Publication const& rcvdPublication,
+      folly::Optional<std::string> senderId=folly::none);
 
   // process a request pending on cmdSock socket
   void processRequest(

@@ -1555,7 +1555,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {});
+      {}, {}, {});
 
   sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
@@ -1579,7 +1579,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {});
+      {}, {}, {});
 
   sendKvPublication(publication);
 
@@ -1626,7 +1626,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   // remove 3
   publication = thrift::Publication(
-      FRAGILE, thrift::KeyVals{}, {"adj:3", "prefix:3"} /* expired keys */, {});
+      FRAGILE, thrift::KeyVals{}, {"adj:3", "prefix:3"} /* expired keys */, {}, {});
 
   sendKvPublication(publication);
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
@@ -1665,7 +1665,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
        {"adj:2", createAdjValue("2", 1, {adj21_1, adj21_2})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {});
+      {}, {}, {});
 
   sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
@@ -1679,7 +1679,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
                 make_pair(toNextHop(adj12_2), 800)}));
 
   publication = thrift::Publication(
-      FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {}, {});
+      FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {}, {}, {});
 
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -1693,7 +1693,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
 
   // restore the original state
   publication = thrift::Publication(
-      FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}}, {}, {});
+      FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}}, {}, {}, {});
 
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -1713,7 +1713,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   publication = thrift::Publication(
       FRAGILE,
       {{"adj:2", createAdjValue("2", 2, {adj21_1_overloaded, adj21_2})}},
-      {}, {});
+      {}, {}, {});
 
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -1744,7 +1744,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {});
+      {}, {}, {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
@@ -1772,7 +1772,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {});
+      {}, {}, {});
 
   sendKvPublication(publication);
 
@@ -1785,7 +1785,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       FRAGILE,
       {{"adj:4", createAdjValue("4", 1, {adj43})},
        {"adj:3", createAdjValue("3", 5, {adj32, adj34})}},
-      {}, {});
+      {}, {}, {});
 
   sendKvPublication(publication);
 
@@ -1803,7 +1803,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 1, {addr4})}},
-      {}, {});
+      {}, {}, {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1822,13 +1822,13 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 2, {addr4, addr5})}},
-      {}, {});
+      {}, {}, {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"adj:2", createAdjValue("2", 5, {adj21})}},
-      {}, {});
+      {}, {}, {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1847,19 +1847,19 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 5, {addr4})}},
-      {}, {});
+      {}, {}, {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 7, {addr4, addr6})}},
-      {}, {});
+      {}, {}, {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 8, {addr4, addr5, addr6})}},
-      {}, {});
+      {}, {}, {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1887,7 +1887,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
        {"adji2:2", createAdjValue("2", 1, {adj21})},
        {"prefix2:1", createPrefixValue("1", 1, {addr1})},
        {"prefix2:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {});
+      {}, {}, {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
@@ -1919,7 +1919,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {});
+      {}, {}, {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.paths_build_requests.count.0"]);
@@ -1982,7 +1982,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {});
+      {}, {}, {});
 
   sendKvPublication(publication);
 
@@ -2045,7 +2045,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
       FRAGILE,
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
-      {}, {});
+      {}, {}, {});
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
@@ -2135,7 +2135,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
        // node3 has same address w/ node2
        {"prefix:3", createPrefixValue("3", 1, {addr2})},
        {"prefix:4", createPrefixValue("4", 1, {addr4})}},
-      {}, {});
+      {}, {}, {});
 
   sendKvPublication(publication);
 
@@ -2199,7 +2199,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
       FRAGILE,
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13, adj14})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
-      {}, {});
+      {}, {}, {});
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);

@@ -140,6 +140,11 @@ struct Publication {
   // Optional attributes. List of nodes through which this publication has
   // traversed. Client shouldn't worry about this attribute.
   4: optional list<string> nodeIds;
+
+  // a list of keys that needs to be updated
+  // this is only used for full-sync respone to tell full-sync initiator to
+  // send back keyVals that need to be updated
+  5: optional list<string> tobeUpdatedKeys;
 }
 
 // Dump of the current peers: sent in

@@ -619,33 +619,93 @@ KvStore::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
   return thriftPub;
 }
 
+/**
+ * Compare two values to find out which value is better
+ * TODO: this function can be leveraged in mergeKeyValues to perform same
+ * logic of which value if better to use
+ */
+int
+KvStore::compareValues(const thrift::Value& v1, const thrift::Value& v2) {
+  // compare version
+  if (v1.version != v2.version) {
+    return v1.version > v2.version ? 1 : -1;
+  }
+
+  // compare orginatorId
+  if (v1.originatorId != v2.originatorId) {
+    return v1.originatorId > v2.originatorId ? 1 : -1;
+  }
+
+  // compare value
+  if (v1.hash.hasValue() and v2.hash.hasValue() and *v1.hash == *v2.hash) {
+    // hashes are same => (version, orginatorId, value are same)
+    // compare ttl-version
+    if (v1.ttlVersion != v2.ttlVersion) {
+      return v1.ttlVersion > v2.ttlVersion ? 1 : -1;
+    } else {
+      return 0;
+    }
+  }
+
+  // can't use hash, either it's missing or they are different
+  // compare values
+  if (v1.value.hasValue() and v2.value.hasValue()) {
+    return (*v1.value).compare(*v2.value);
+  } else {
+    // some value is missing
+    return -2; // unknown
+  }
+}
+
+
 // dump the keys on which hashes differ from given keyVals
+// thriftPub.keyVals: better keys or keys exist only in MY-KEY-VAL
+// thriftPub.tobeUpdatedKeys: better keys or keys exist only in REQ-KEY-VAL
+// this way, full-sync initiator knows what keys need to send back to finish
+// 3-way full-sync
 thrift::Publication
 KvStore::dumpDifference(
-  std::unordered_map<std::string, thrift::Value> const& keyVal,
-  std::unordered_map<std::string, thrift::Value> const& keyValHashes) const {
-    thrift::Publication thriftPub;
-    for (const auto& kv : keyVal) {
-      auto const& key = kv.first;
-      auto const& value = kv.second;
+    std::unordered_map<std::string, thrift::Value> const& myKeyVal,
+    std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const {
+  thrift::Publication thriftPub;
 
-      // if key doesn't exist, add it in Publication response to provide
-      // keyVals for peers to process sync
-      auto kvStoreIt = keyValHashes.find(key);
-      if (kvStoreIt == keyValHashes.end()) {
-        thriftPub.keyVals.emplace(key, value);
-        continue;
-      }
-      if (kvStoreIt->second.hash != value.hash ||
-        kvStoreIt->second.version != value.version ||
-        kvStoreIt->second.originatorId != value.originatorId ||
-        kvStoreIt->second.ttlVersion != value.ttlVersion) {
-          // check for version and originatorId as 2nd check just in case if
-          // hash happens to be colliding
-          thriftPub.keyVals.emplace(key, value);
-      }
+  thriftPub.tobeUpdatedKeys = std::vector<std::string>{};
+  std::unordered_set<std::string> allKeys;
+  for (const auto& kv : myKeyVal) {
+    allKeys.insert(kv.first);
+  }
+  for (const auto& kv : reqKeyVal) {
+    allKeys.insert(kv.first);
+  }
+
+  for (const auto& key : allKeys) {
+    const auto& myKv = myKeyVal.find(key);
+    const auto& reqKv = reqKeyVal.find(key);
+    if (myKv == myKeyVal.end()) {
+      // not exist in myKeyVal
+      thriftPub.tobeUpdatedKeys->emplace_back(key);
+      continue;
     }
-    return thriftPub;
+    if (reqKv == reqKeyVal.end()) {
+      // not exist in reqKeyVal
+      thriftPub.keyVals.emplace(key, myKv->second);
+      continue;
+    }
+    // common key
+    const auto& myVal = myKv->second;
+    const auto& reqVal = reqKv->second;
+    int rc = compareValues(myVal, reqVal);
+    if (rc == 1 or rc == -2) {
+      // myVal is better or unknown
+      thriftPub.keyVals.emplace(key, myVal);
+    }
+    if (rc == -1 or rc == -2) {
+      // reqVal is better or unknown
+      thriftPub.tobeUpdatedKeys->emplace_back(key);
+    }
+  }
+
+  return thriftPub;
 }
 
 // add new peers to subscribe to
@@ -1123,11 +1183,11 @@ KvStore::processSyncResponse() noexcept {
   if (syncPubMsg.size() < 3) {
     auto syncPubStr = syncPubMsg.read<std::string>().value();
     if (syncPubStr == Constants::kErrorResponse) {
-      LOG(ERROR) << "Error processing flooded element on " << requestId;
+      LOG(ERROR) << "Got error for sent publication from " << requestId;
       return;
     }
     if (syncPubStr == Constants::kSuccessResponse) {
-      VLOG(2) << "Got ack for flooded element on " << requestId;
+      VLOG(2) << "Got ack for sent publication on " << requestId;
       return;
     }
   }
@@ -1141,7 +1201,7 @@ KvStore::processSyncResponse() noexcept {
   }
 
   const auto& syncPub = maybeSyncPub.value();
-  const size_t kvUpdateCnt = mergePublication(syncPub);
+  const size_t kvUpdateCnt = mergePublication(syncPub, requestId);
   LOG(INFO) << "Sync response received from " << requestId << " with "
             << syncPub.keyVals.size() << " key value pairs which incured "
             << kvUpdateCnt << " key-value updates";
@@ -1339,6 +1399,42 @@ KvStore::floodBufferedUpdates() {
 }
 
 void
+KvStore::finalizeFullSync(
+    const std::vector<std::string>& keys,
+    const std::string& senderId) {
+  if (keys.empty()) {
+    return;
+  }
+  VLOG(1) << " finalizeFullSync back to: " << senderId << " with keys: "
+          << folly::join(",", keys);
+
+  // build keyval to be sent
+  std::unordered_map<std::string, thrift::Value> keyVals;
+  for (const auto& key : keys) {
+    const auto& it = kvStore_.find(key);
+    if (it != kvStore_.end()) {
+      keyVals.emplace(key, it->second);
+    }
+  }
+
+  thrift::Request updateRequest;
+  updateRequest.cmd = thrift::Command::KEY_SET;
+  updateRequest.keySetParams.keyVals = std::move(keyVals);
+  updateRequest.keySetParams.solicitResponse = false;
+
+  VLOG(1) << "sending finalizeFullSync back to " << senderId;
+  auto const ret = peerSyncSock_.sendMultiple(
+      fbzmq::Message::from(senderId).value(),
+      fbzmq::Message(),
+      fbzmq::Message::fromThriftObj(updateRequest, serializer_).value());
+  if (ret.hasError()) {
+    // this could fail when senderId goes offline
+    LOG(ERROR) << "Failed to send finalizeFullSync to " << senderId
+               << " using id " << senderId;
+  }
+}
+
+void
 KvStore::floodPublication(thrift::Publication&& publication, bool rateLimit) {
   // rate limit if configured
   if (floodLimiter_ && rateLimit && !floodLimiter_->consume(1)) {
@@ -1424,14 +1520,21 @@ KvStore::floodPublication(thrift::Publication&& publication, bool rateLimit) {
 }
 
 size_t
-KvStore::mergePublication(const thrift::Publication& rcvdPublication) {
+KvStore::mergePublication(
+    const thrift::Publication& rcvdPublication,
+    folly::Optional<std::string> senderId) {
   // Add counters
   tData_.addStatValue("kvstore.received_publications", 1, fbzmq::COUNT);
   tData_.addStatValue(
       "kvstore.received_key_vals", rcvdPublication.keyVals.size(), fbzmq::SUM);
 
+  const bool needFinalizeFullSync =
+      senderId.hasValue() and
+      rcvdPublication.tobeUpdatedKeys.hasValue() and
+      not rcvdPublication.tobeUpdatedKeys->empty();
+
   // This can happen when KvStore is emitting expired-key updates
-  if (rcvdPublication.keyVals.empty()) {
+  if (rcvdPublication.keyVals.empty() and not needFinalizeFullSync) {
     return 0;
   }
 
@@ -1448,15 +1551,11 @@ KvStore::mergePublication(const thrift::Publication& rcvdPublication) {
       apache::thrift::FRAGILE,
       mergeKeyValues(kvStore_, rcvdPublication.keyVals, filters_),
       {}  /* expired keys */,
-      {}  /* nodeIds */);
+      {}  /* nodeIds */,
+      {}  /* tobeUpdatedKeys */);
 
-  // If no updates then return
-  if (not deltaPublication.keyVals.size()) {
-    return 0;
-  }
   const size_t kvUpdateCnt = deltaPublication.keyVals.size();
   tData_.addStatValue("kvstore.updated_key_vals", kvUpdateCnt, fbzmq::SUM);
-
 
   // Populate nodeIds and our nodeId_ to the end
   if (rcvdPublication.nodeIds.hasValue()) {
@@ -1467,8 +1566,16 @@ KvStore::mergePublication(const thrift::Publication& rcvdPublication) {
   // Update ttl values of keys
   updateTtlCountdownQueue(deltaPublication);
 
-  // Flood change to all of our neighbors/subscribers
-  floodPublication(std::move(deltaPublication));
+  if (not deltaPublication.keyVals.empty()) {
+    // Flood change to all of our neighbors/subscribers
+    floodPublication(std::move(deltaPublication));
+  }
+
+  // response to senderId with tobeUpdatedKeys + Vals
+  // (last step in 3-way full-sync)
+  if (needFinalizeFullSync) {
+    finalizeFullSync(*rcvdPublication.tobeUpdatedKeys, *senderId);
+  }
 
   return kvUpdateCnt;
 }
@@ -1507,4 +1614,4 @@ KvStore::logKvEvent(const std::string& event, const std::string& key) {
       {sample.toJson()}));
 }
 
-} // namespace openr
+}// namespace openr
