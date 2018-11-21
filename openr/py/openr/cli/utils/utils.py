@@ -731,20 +731,20 @@ def find_adj_list_deltas(old_adj_list, new_adj_list, tags=None):
             oldAdjacency or newAdjacency is None, respectively
     """
     if not tags:
-        tags = "NEIGHBOR_DOWN, NEIGHBOR_UP, NEIGHBOR_UPDATE"
+        tags = ("NEIGHBOR_DOWN", "NEIGHBOR_UP", "NEIGHBOR_UPDATE")
 
-    old_neighbors = set(a.otherNodeName for a in old_adj_list)
-    new_neighbors = set(a.otherNodeName for a in new_adj_list)
+    old_neighbors = {(a.otherNodeName, a.ifName) for a in old_adj_list}
+    new_neighbors = {(a.otherNodeName, a.ifName) for a in new_adj_list}
     delta_list = [
         (tags[0], a, None)
         for a in old_adj_list
-        if a.otherNodeName in old_neighbors - new_neighbors
+        if (a.otherNodeName, a.ifName) in old_neighbors - new_neighbors
     ]
     delta_list.extend(
         [
             (tags[1], None, a)
             for a in new_adj_list
-            if a.otherNodeName in new_neighbors - old_neighbors
+            if (a.otherNodeName, a.ifName) in new_neighbors - old_neighbors
         ]
     )
     delta_list.extend(
@@ -754,7 +754,7 @@ def find_adj_list_deltas(old_adj_list, new_adj_list, tags=None):
             if (
                 a.otherNodeName == b.otherNodeName
                 and a.ifName == b.ifName
-                and a.otherNodeName in new_neighbors & old_neighbors
+                and (a.otherNodeName, a.ifName) in new_neighbors & old_neighbors
                 and a != b
             )
         ]

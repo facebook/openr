@@ -594,7 +594,7 @@ class TopologyCmd(KvStoreCmd):
                     rem_pattern.sub(
                         lambda m: rem_str[re.escape(m.group(0))], adj["otherNodeName"]
                     ),
-                    **adj
+                    **adj,
                 )
 
         # hack to get nice fabric
@@ -791,7 +791,10 @@ class SnoopCmd(KvStoreCmd):
         if delta:
             old_adj_db = global_adj_db.get(new_adj_db.thisNodeName, None)
             if old_adj_db is None:
-                lines = ["ADJ_DB_ADDED: {}".format(new_adj_db.thisNodeName)]
+                lines = (
+                    "ADJ_DB_ADDED: {}\n".format(new_adj_db.thisNodeName)
+                    + utils.sprint_adj_db_full(global_adj_db, new_adj_db, False)[1]
+                )
             else:
                 lines = utils.sprint_adj_db_delta(new_adj_db, old_adj_db)
                 lines = "\n".join(lines)
