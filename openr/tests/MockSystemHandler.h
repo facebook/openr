@@ -1,3 +1,12 @@
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#pragma once
+
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/SystemService.h>
 
@@ -21,4 +30,5 @@ class MockSystemHandler final : public thrift::SystemServiceSvIf {
      std::unique_ptr<std::string> iface,
      std::unique_ptr<std::vector< ::openr::thrift::IpPrefix>> addrs) override;
 };
+
 } // namespace openr

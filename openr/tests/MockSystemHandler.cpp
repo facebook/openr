@@ -1,3 +1,10 @@
+/**
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 #include "MockSystemHandler.h"
 
 #include <openr/common/Util.h>
@@ -21,4 +28,5 @@ void MockSystemHandler::syncIfaceAddresses(
 void MockSystemHandler::removeIfaceAddresses(
   std::unique_ptr<std::string> ,
   std::unique_ptr<std::vector< ::openr::thrift::IpPrefix>> ) {}
+
 } // namespace openr

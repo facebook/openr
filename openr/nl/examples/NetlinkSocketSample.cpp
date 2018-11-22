@@ -1,6 +1,5 @@
 /**
- * Copyright 20__-present, Facebook, Inc.
- * All rights reserved.
+ * Copyright (c) 2014-present, Facebook, Inc.
  *
  * This source code is licensed under the license found in the
  * LICENSE-examples file in the root directory of this source tree.
