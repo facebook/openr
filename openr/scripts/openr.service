@@ -11,7 +11,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/sbin/run_openr.sh /etc/sysconfig/fabric_openr_config
+ExecStart=/usr/sbin/run_openr.sh /etc/sysconfig/openr
 Restart=always
 RestartSec=3
 TimeoutSec=10
