@@ -355,7 +355,11 @@ class LinkState {
   void removeLinksFromNode(const std::string& nodeName) {
     // erase ptrs to these links from other nodes
     for (auto const& link : linkMap_.at(nodeName)) {
-      CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
+      try {
+        CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
+      } catch (std::out_of_range const& e) {
+        LOG(FATAL) << "std::out_of_range for " << nodeName;
+      }
     }
     linkMap_.erase(nodeName);
   }
@@ -677,10 +681,14 @@ SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
   }
 
   for (const auto& prefixEntry : search->second.prefixEntries) {
-    auto& nodeList = prefixes_.at(prefixEntry.prefix);
-    nodeList.erase(nodeName);
-    if (nodeList.empty()) {
-      prefixes_.erase(prefixEntry.prefix);
+    try {
+      auto& nodeList = prefixes_.at(prefixEntry.prefix);
+      nodeList.erase(nodeName);
+      if (nodeList.empty()) {
+        prefixes_.erase(prefixEntry.prefix);
+      }
+    } catch (std::out_of_range const& e) {
+      LOG(FATAL) << "std::out_of_range prefix error for " << nodeName;
     }
   }
 
