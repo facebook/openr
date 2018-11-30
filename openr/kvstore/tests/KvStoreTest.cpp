@@ -93,7 +93,8 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
       std::string nodeId,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       folly::Optional<KvStoreFilters> filters = folly::none,
-      KvStoreFloodRate kvStoreRate = folly::none) {
+      KvStoreFloodRate kvStoreRate = folly::none,
+      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement) {
     auto ptr = std::make_unique<KvStoreWrapper>(
         context,
         nodeId,
@@ -101,7 +102,8 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
         kMonitorSubmitInterval,
         std::move(peers),
         std::move(filters),
-        kvStoreRate);
+        kvStoreRate,
+        ttlDecr);
     stores_.emplace_back(std::move(ptr));
     return stores_.back().get();
   }
@@ -1376,9 +1378,9 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     VLOG(2) << "Verifying counters from " << store->nodeId;
     auto& oldCounters = oldNodeCounters[store->nodeId];
     auto& newCounters = newNodeCounters[store->nodeId];
-    EXPECT_EQ(
-      oldCounters["kvstore.received_publications.count.0"].value + 1,
-      newCounters["kvstore.received_publications.count.0"].value
+    EXPECT_GE(
+      newCounters["kvstore.received_publications.count.0"].value,
+      oldCounters["kvstore.received_publications.count.0"].value + 1
     );
     EXPECT_EQ(
       oldCounters["kvstore.received_key_vals.sum.0"].value + 1,
@@ -1781,6 +1783,78 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
 
   // Expect both keys in KvStore
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll());
+}
+
+/*
+ * check key value is decremented with the TTL decrement value provided,
+ * and is not synced if remaining TTL is < TTL decrement value provided
+ */
+TEST_F(KvStoreTestFixture, TtlDecrementValue) {
+  fbzmq::Context context;
+
+  std::chrono::milliseconds ttlDecr{300};
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto store0 = createKvStore("store0", emptyPeers);
+  auto store1 = createKvStore(
+      "store1", emptyPeers, folly::none, folly::none, ttlDecr);
+  store0->run();
+  store1->run();
+
+  store0->addPeer(store1->nodeId, store1->getPeerSpec());
+  store1->addPeer(store0->nodeId, store0->getPeerSpec());
+
+  /**
+   * check sync works fine, add a key with TTL > ttlDecr in store1,
+   * verify key is synced to store0
+  */
+  int64_t ttl1 = 3000;
+  thrift::Value thriftVal1(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "utest" /* originatorId */,
+      "value" /* value */,
+      ttl1 /* ttl */,
+      1 /* ttl version */,
+      0 /* hash */);
+  thriftVal1.hash = generateHash(
+      thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+  EXPECT_TRUE(store1->setKey("key1", thriftVal1));
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  /* check key is in store1 */
+  auto getRes1 = store1->getKey("key1");
+  ASSERT_TRUE(getRes1.hasValue());
+
+  /* check key synced from store1 has ttl that is reduced by ttlDecr. */
+  auto getRes = store0->getKey("key1");
+  ASSERT_TRUE(getRes.hasValue());
+  EXPECT_LE(getRes->ttl, ttl1 - ttlDecr.count());
+
+  /* Add another key with TTL < ttlDecr, and check it's not synced */
+  int64_t ttl2 = ttlDecr.count() - 1;
+  thrift::Value thriftVal2(
+      apache::thrift::FRAGILE,
+      1 /* version */,
+      "utest" /* originatorId */,
+      "value" /* value */,
+      ttl2 /* ttl */,
+      1 /* ttl version */,
+      0 /* hash */);
+  thriftVal2.hash = generateHash(
+      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+
+  EXPECT_TRUE(store1->setKey("key2", thriftVal2));
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  /* check key is not synced from store1 */
+  auto getRes2 = store0->getKey("key2");
+  ASSERT_FALSE(getRes2.hasValue());
+  /* check key get returns false from store1, but keys exist (key1 and key2)*/
+  auto getRes3 = store1->getKey("key2");
+  ASSERT_FALSE(getRes3.hasValue());
+  auto nodeCounters = store1->getCounters();
+  EXPECT_EQ(nodeCounters["kvstore.num_keys"].value, 2);
 }
 
 TEST_F(KvStoreTestFixture, RateLimiter) {

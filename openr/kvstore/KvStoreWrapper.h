@@ -34,7 +34,8 @@ class KvStoreWrapper {
       std::chrono::seconds monitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       folly::Optional<KvStoreFilters> filters = folly::none,
-      KvStoreFloodRate kvstoreRate = folly::none);
+      KvStoreFloodRate kvstoreRate = folly::none,
+      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement);
 
   ~KvStoreWrapper() {
     stop();

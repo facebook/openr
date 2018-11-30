@@ -71,6 +71,7 @@ IP_TOS=192
 KEY_PREFIX_FILTERS=""
 KVSTORE_FLOOD_MSG_PER_SEC=0
 KVSTORE_FLOOD_MSG_BURST_SIZE=0
+KVSTORE_TTL_DECREMENT_MS=1
 KVSTORE_ZMQ_HWM=65536
 LINK_FLAP_INITIAL_BACKOFF_MS=1000
 LINK_FLAP_MAX_BACKOFF_MS=60000
@@ -168,6 +169,7 @@ exec ${OPENR} \
   --key_prefix_filters=${KEY_PREFIX_FILTERS} \
   --kvstore_flood_msg_per_sec=${KVSTORE_FLOOD_MSG_PER_SEC} \
   --kvstore_flood_msg_burst_size=${KVSTORE_FLOOD_MSG_BURST_SIZE} \
+  --kvstore_ttl_decrement_ms=${KVSTORE_TTL_DECREMENT_MS} \
   --kvstore_zmq_hwm=${KVSTORE_ZMQ_HWM} \
   --link_flap_initial_backoff_ms=${LINK_FLAP_INITIAL_BACKOFF_MS} \
   --link_flap_max_backoff_ms=${LINK_FLAP_MAX_BACKOFF_MS} \

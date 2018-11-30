@@ -72,7 +72,8 @@ KvStore::KvStore(
     bool legacyFlooding,
     folly::Optional<KvStoreFilters> filters,
     int zmqHwm,
-    KvStoreFloodRate floodRate)
+    KvStoreFloodRate floodRate,
+    std::chrono::milliseconds ttlDecr)
     : zmqContext_(zmqContext),
       nodeId_(std::move(nodeId)),
       localPubUrl_(std::move(localPubUrl)),
@@ -83,6 +84,7 @@ KvStore::KvStore(
       monitorSubmitInterval_(monitorSubmitInterval),
       legacyFlooding_(legacyFlooding),
       hwm_(zmqHwm),
+      ttlDecr_(ttlDecr),
       filters_(std::move(filters)),
       // initialize zmq sockets
       localPubSock_{zmqContext},
@@ -937,7 +939,7 @@ KvStore::updatePublicationTtl(
 
     // Compute timeLeft and do sanity check on it
     auto timeLeft = duration_cast<milliseconds>(qE.expiryTime - timeNow);
-    if (timeLeft <= Constants::kTtlDecrement) {
+    if (timeLeft <= ttlDecr_) {
       thriftPub.keyVals.erase(kv);
       continue;
     }
@@ -951,7 +953,7 @@ KvStore::updatePublicationTtl(
     // Set the time-left and decrement it by one so that ttl decrement
     // deterministically whenever it is exchanged between KvStores. This will
     // avoid looping of updates between stores.
-    kv->second.ttl = timeLeft.count() - Constants::kTtlDecrement.count();
+    kv->second.ttl = timeLeft.count() - ttlDecr_.count();
   }
 }
 

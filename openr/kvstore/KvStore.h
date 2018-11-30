@@ -126,7 +126,9 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       // ZMQ high water mark
       int zmqHwm = Constants::kHighWaterMark,
       // Kvstore flooding rate
-      KvStoreFloodRate floodRate = folly::none);
+      KvStoreFloodRate floodRate = folly::none,
+      // TTL decrement factor
+      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement);
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)
@@ -295,7 +297,10 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   const bool legacyFlooding_{true};
 
   // ZMQ high water mark for PUB sockets
-  const int hwm_;
+  const int hwm_{openr::Constants::kHighWaterMark};
+
+  // TTL decrement at flooding publications
+  const std::chrono::milliseconds ttlDecr_{1};
 
   //
   // Mutable state

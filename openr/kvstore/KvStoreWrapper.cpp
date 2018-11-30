@@ -28,7 +28,8 @@ KvStoreWrapper::KvStoreWrapper(
     std::chrono::seconds monitorSubmitInterval,
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     folly::Optional<KvStoreFilters> filters,
-    KvStoreFloodRate kvStoreRate)
+    KvStoreFloodRate kvStoreRate,
+    std::chrono::milliseconds ttlDecr)
     : nodeId(nodeId),
       localCmdUrl(folly::sformat("inproc://{}-kvstore-cmd", nodeId)),
       localPubUrl(folly::sformat("inproc://{}-kvstore-pub", nodeId)),
@@ -55,7 +56,8 @@ KvStoreWrapper::KvStoreWrapper(
       false /* enable legacy flooding */,
       std::move(filters),
       Constants::kHighWaterMark,
-      kvStoreRate);
+      kvStoreRate,
+      ttlDecr);
 }
 
 void

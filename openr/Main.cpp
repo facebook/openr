@@ -354,6 +354,10 @@ DEFINE_int32(
     kvstore_flood_msg_burst_size,
     0,
     "Burst size of Kvstore flooding in number of messages");
+DEFINE_int32(
+    kvstore_ttl_decrement_ms,
+    openr::Constants::kTtlDecrement.count(),
+    "Amount of time to decrement TTL when flooding updates");
 
 // Disable background jemalloc background thread => new jemalloc-5 feature
 const char* malloc_conf = "background_thread:false";
@@ -661,7 +665,8 @@ main(int argc, char** argv) {
       FLAGS_enable_legacy_flooding,
       std::move(kvFilters),
       FLAGS_kvstore_zmq_hwm,
-      kvstoreRate);
+      kvstoreRate,
+      std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms));
   std::thread kvStoreThread([&store]() noexcept {
     LOG(INFO) << "Starting KvStore thread...";
     folly::setThreadName("KvStore");
