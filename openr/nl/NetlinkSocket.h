@@ -317,6 +317,8 @@ class NetlinkSocket {
   // Unsubscribe all events
   void unsubscribeAllEvents();
 
+  void setEventHandler(EventsHandler* handler);
+
  private:
   // This is the callback we pass into libnl when data is ready on the socket
   // The opaque data will contain the user registered EventHandler

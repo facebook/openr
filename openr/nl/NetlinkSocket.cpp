@@ -1128,6 +1128,11 @@ NetlinkSocket::unsubscribeAllEvents() {
   }
 }
 
+void
+NetlinkSocket::setEventHandler(EventsHandler* handler) {
+  handler_ = handler;
+}
+
 int
 NetlinkSocket::rtnlRouteAdd(
     struct nl_sock* sock,
