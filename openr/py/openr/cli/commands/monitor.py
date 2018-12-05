@@ -83,7 +83,9 @@ class ForceCrashCmd(MonitorCmd):
         sock = socket.Socket(self.cli_opts.zmq_ctx, zmq.REQ, timeout=200)
         sock.set_sock_opt(zmq.LINGER, 1000)
         sock.connect(consts.Consts.FORCE_CRASH_SERVER_URL)
-        sock.send("User {} issuing crash command".format(os.environ["USER"]))
+        sock.send(
+            bytes("User {} issuing crash command".format(os.environ["USER"]), "utf-8")
+        )
         sock.close()
 
 
