@@ -892,8 +892,6 @@ KvStore::requestFullSyncFromPeers() {
       timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       ++it;
     } else {
-      tData_.addStatValue(
-          folly::sformat("kvstore.sync_sent_{}", peerName), 1, fbzmq::COUNT);
       // Remove the iterator
       it = peersToSyncWith_.erase(it);
     }
@@ -1212,9 +1210,7 @@ KvStore::processSyncResponse() noexcept {
     auto syncDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - latestSentPeerSync_.at(requestId));
     tData_.addStatValue(
-        folly::sformat("kvstore.sync_time_ms_{}", requestId),
-        syncDuration.count(),
-        fbzmq::AVG);
+        "kvstore.peer_sync_time_ms", syncDuration.count(), fbzmq::AVG);
     VLOG(1) << "It took " << syncDuration.count()
             << " ms to sync with " << requestId;
     latestSentPeerSync_.erase(requestId);
