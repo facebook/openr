@@ -345,7 +345,7 @@ NetlinkFibHandler::buildRoute(
         if (resolvedNh.getGateway().hasValue()) {
           nhBuilder.setGateway(resolvedNh.getGateway().value());
         }
-        rtBuilder.addNextHop(nhBuilder.build());
+        rtBuilder.addNextHop(nhBuilder.setWeight(0).build());
         nhBuilder.reset();
       }
       // This nexthop has been resolved, continue to next
@@ -358,10 +358,10 @@ NetlinkFibHandler::buildRoute(
       nhBuilder.setIfIndex(netlinkSocket_->getIfIndex(nh.ifName.value()).get());
     }
     nhBuilder.setGateway(toIPAddress(nh));
-    rtBuilder.addNextHop(nhBuilder.build());
+    rtBuilder.addNextHop(nhBuilder.setWeight(0).build());
     nhBuilder.reset();
   }
-  return rtBuilder.build();
+  return rtBuilder.setFlags(0).setValid(true).build();
 }
 
 fbnl::NextHopSet

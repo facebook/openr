@@ -537,6 +537,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
       // link to add and advance newIter
       topoChanged = true;
       linkState_.addLink(*newIter);
+      VLOG(1) << "addLink " << newIter->directionalToString(nodeName);
       ++newIter;
       continue;
     }
@@ -546,6 +547,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
       // a link to remove and advance oldIter
       topoChanged = true;
       linkState_.removeLink(**oldIter);
+      VLOG(1) << "removeLink " << (*oldIter)->directionalToString(nodeName);
       ++oldIter;
       continue;
     }
@@ -559,7 +561,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
       (*oldIter)->setMetricFromNode(
           nodeName, newIter->getMetricFromNode(nodeName));
 
-      VLOG(3) << folly::sformat(
+      VLOG(1) << folly::sformat(
           "Metric change on link {}: {} => {}",
           newIter->directionalToString(nodeName),
           (*oldIter)->getMetricFromNode(nodeName),
@@ -575,7 +577,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
       // change the overload value in the link object we already have
       (*oldIter)->setOverloadFromNode(
           nodeName, newIter->getOverloadFromNode(nodeName));
-      VLOG(3) << folly::sformat(
+      VLOG(1) << folly::sformat(
           "Overload change on link {}: {} => {}",
           newIter->directionalToString(nodeName),
           (*oldIter)->getOverloadFromNode(nodeName),
@@ -662,6 +664,13 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
   }
   for (const auto& prefix : prefixesToAdd) {
     prefixes_[prefix].emplace(nodeName);
+  }
+
+  if (not prefixesToAdd.empty()) {
+    VLOG(1) << prefixesToAdd.size() << " prefixesToAdd";
+  }
+  if (not prefixesToRemove.empty()) {
+    VLOG(1) << prefixesToRemove.size() << " prefixesToRemove";
   }
 
   return !(prefixesToAdd.empty() && prefixesToRemove.empty());
