@@ -6,6 +6,8 @@
 Description=Facebook Open Routing Platform
 BindsTo=wedge_agent.service
 After=network-online.target wedge_agent.service
+# Unlimited restarts (no start limit hit within a given time period)
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -13,14 +15,15 @@ ExecStart=/etc/packages/openr/current/openr_wrapper.par
 ExecStartPre=/bin/ln -sf /etc/packages/openr/current/openr /usr/sbin/openr
 ExecStartPost=/bin/ln -sf /etc/packages/openr/current/breeze /usr/sbin/breeze
 Restart=always
-RestartSec=3
-TimeoutSec=10
-TimeoutStartSec=10
-TimeoutStopSec=10
+RestartSec=1
+TimeoutStopSec=5
 LimitNOFILE=10000000
-LimitCORE=2G
+LimitCORE=32G
 SyslogIdentifier=openr
 StandardOutput=syslog
+
+# Place in unrestricted workload.slice
+Slice=workload.slice
 
 [Install]
 WantedBy=multi-user.target wedge_agent.service
