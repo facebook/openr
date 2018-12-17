@@ -88,7 +88,7 @@ NetlinkFibHandler::NetlinkFibHandler(
                 staticRouteCache_ = std::move(res);
                 LOG(INFO) << "Static routes synced.";
               })
-              .onError([](std::exception const& ex) {
+              .thenError<std::runtime_error>([](std::exception const& ex) {
                 LOG(ERROR) << "Failed to get static routes: " << ex.what();
               })
               .onTimeout(std::chrono::seconds(1), []() {
@@ -313,7 +313,7 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
         return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
             toThriftUnicastRoutes(res));
       })
-      .onError([](std::exception const& ex) {
+      .thenError<std::runtime_error>([](std::exception const& ex) {
         LOG(ERROR) << "Failed to get routing table by client: " << ex.what()
                    << ", returning empty table instead";
         return std::make_unique<std::vector<openr::thrift::UnicastRoute>>();
