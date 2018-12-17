@@ -12,8 +12,10 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <chrono>
 
 #include <folly/IPAddress.h>
+#include <folly/SocketAddress.h>
 
 namespace openr {
 
@@ -59,6 +61,32 @@ class IoProvider {
 
   virtual int setsockopt(
       int sockfd, int level, int optname, const void* optval, socklen_t optlen);
+
+  // Utility functions that operate on sockets
+
+  /*
+   * Receive a message on fd, and return its size, interface index,
+   * and the source address
+   */
+  static std::tuple<
+      ssize_t /* size */,
+      int /* ifIndex */,
+      folly::SocketAddress /* srcAddr */,
+      int /* hopLimit */,
+      std::chrono::microseconds /* kernel timestamp */>
+  recvMessage(int fd, unsigned char* buf, int len, IoProvider* ioProvider);
+
+  /*
+   * Send message on fd via given interface to the address provided
+   * We supply socket address, which has dst IPv6 and port
+   */
+  static ssize_t sendMessage(
+      int fd,
+      int ifIndex,
+      folly::IPAddressV6 srcAddr,
+      folly::SocketAddress dstAddr,
+      std::string const& packet,
+      IoProvider* ioProvider);
 
  private:
   IoProvider(IoProvider const&) = delete;
