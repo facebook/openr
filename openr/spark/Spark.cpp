@@ -558,12 +558,6 @@ Spark::validateHelloPacket(
   uint32_t const& remoteVersion =
                           static_cast<uint32_t>(helloPacket.payload.version);
 
-  // in case our own packet has looped
-  if (neighborName == myNodeName_) {
-    LOG(ERROR) << "Ignore packet from self (" << myNodeName_ << ")";
-    tData_.addStatValue("spark.invalid_keepalive.looped_packet", 1, fbzmq::SUM);
-    return PacketValidationResult::FAILURE;
-  }
   // domain check
   if (originator.domainName != myDomainName_) {
     LOG(ERROR) << "Ignoring hello packet from node " << originator.nodeName
@@ -846,6 +840,13 @@ Spark::processHelloPacket() {
         util::readThriftObjStr<thrift::SparkHelloPacket>(readBuf, serializer_);
   } catch (std::exception const& err) {
     LOG(ERROR) << "Failed parsing hello packet " << folly::exceptionStr(err);
+    return;
+  }
+
+  // in case our own packet has looped
+  if (helloPacket.payload.originator.nodeName == myNodeName_) {
+    VLOG(2) << "Ignore packet from self (" << myNodeName_ << ")";
+    tData_.addStatValue("spark.invalid_keepalive.looped_packet", 1, fbzmq::SUM);
     return;
   }
 
@@ -1380,19 +1381,18 @@ Spark::processInterfaceDbUpdate() {
     auto rollFast = rollHelper(fastInitKeepAliveTime_);
     auto timePoint = std::chrono::steady_clock::now();
 
-    // NOTE: we do not send hello packet immediately after adding new interface
+    // NOTE: We do not send hello packet immediately after adding new interface
     // this is due to the fact that it may not have yet configured a link-local
     // address. The hello packet will be sent later and will have good chances
-    // of making it out. This is not a great solution, but it work reasonably
-    // well, and we don't really care to detect neighbor up too fast
+    // of making it out if small delay is introduced.
     auto helloTimer = fbzmq::ZmqTimeout::make(
         this, [this, ifName, timePoint, roll, rollFast]() mutable noexcept {
           VLOG(3) << "Sending hello multicast packet on interface " << ifName;
-          // turn off my own fast init state after myKeepAliveTime_ from
-          // starting yet it is still possible that my neighbor is in fast
-          // init state and I need to react to it.
+          // We will send atleast 3 and atmost 4 packets in fast mode. Only one
+          // packet is enough for discovering neighbors in fast mode, however we
+          // send multiple for redundancy to overcome packet drops and compute
           bool inFastInitState = (std::chrono::steady_clock::now() -
-                                  timePoint) <= myKeepAliveTime_;
+                                  timePoint) <= 3 * fastInitKeepAliveTime_;
           sendHelloPacket(ifName, inFastInitState);
 
           // Schedule next run (add 20% variance)
@@ -1404,7 +1404,7 @@ Spark::processInterfaceDbUpdate() {
         });
 
     // should be in fast init state when the node just starts
-    helloTimer->scheduleTimeout(fastInitKeepAliveTime_);
+    helloTimer->scheduleTimeout(rollFast());
     ifNameToHelloTimers_[ifName] = std::move(helloTimer);
   }
 
