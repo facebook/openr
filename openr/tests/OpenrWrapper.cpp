@@ -23,7 +23,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::milliseconds sparkHoldTime,
     std::chrono::milliseconds sparkKeepAliveTime,
     std::chrono::milliseconds sparkFastInitKeepAliveTime,
-    bool enableFullMeshReduction,
     std::chrono::seconds linkMonitorAdjHoldTime,
     std::chrono::milliseconds linkFlapInitialBackoff,
     std::chrono::milliseconds linkFlapMaxBackoff,
@@ -188,7 +187,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::move(redistRegexList),
       networks,
       false, /* use rtt metric */
-      enableFullMeshReduction, /* enable full mesh reduction */
       false /* enable perf measurement */,
       false /* enable v4 */,
       true /* enable segment routing */,

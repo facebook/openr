@@ -75,8 +75,6 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       // measure and use RTT of adjacencies for link
       // metrics
       bool useRttMetric,
-      // enable full mesh reduction
-      bool enableFullMeshReduction,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
       // is v4 enabled or not
@@ -161,13 +159,7 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   void processPendingPeerAddRequests();
 
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
-  // output peers will be different if FullMeshReduction is enabled.
-  // e.g if I'm the leader, peer all neighbors;
-  //     otherwise, peer with leader only;
   std::unordered_map<std::string, thrift::PeerSpec> getPeersFromAdjacencies();
-
-  // create peers <nodeName : PeerSpec> map for all my neighbors
-  std::unordered_map<std::string, thrift::PeerSpec> getPeersForAllNeighbors();
 
   // handle peer changes e.g remove/add peers if any
   void handlePeerChanges(
@@ -258,8 +250,6 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   const std::vector<thrift::IpPrefix> staticPrefixes_;
   // Use spark measured RTT to neighbor as link metric
   const bool useRttMetric_{true};
-  // enable full mesh reduction to reduce duplicate flooding
-  const bool enableFullMeshReduction_{false};
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
   // is v4 enabled in OpenR or not

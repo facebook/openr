@@ -45,7 +45,6 @@ class OpenrWrapper {
       std::chrono::milliseconds sparkHoldTime,
       std::chrono::milliseconds sparkKeepAliveTime,
       std::chrono::milliseconds sparkFastInitKeepAliveTime,
-      bool enableFullMeshReduction,
       std::chrono::seconds linkMonitorAdjHoldTime,
       std::chrono::milliseconds linkFlapInitialBackoff,
       std::chrono::milliseconds linkFlapMaxBackoff,

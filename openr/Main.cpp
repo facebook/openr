@@ -222,10 +222,6 @@ DEFINE_bool(
     true,
     "Use dynamically learned RTT for interface metric values.");
 DEFINE_bool(
-    enable_full_mesh_reduction,
-    false,
-    "mesh reduction on full mesh topology to avoid duplicate flooding");
-DEFINE_bool(
     enable_v4,
     false,
     "Enable v4 in OpenR for exchanging and programming v4 routes. Works only"
@@ -875,7 +871,6 @@ main(int argc, char** argv) {
       std::move(redistRegexList),
       networks,
       FLAGS_enable_rtt_metric,
-      FLAGS_enable_full_mesh_reduction,
       FLAGS_enable_perf_measurement,
       FLAGS_enable_v4,
       FLAGS_enable_segment_routing,

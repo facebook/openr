@@ -208,7 +208,6 @@ class OpenrFixture : public ::testing::Test {
   createOpenr(
       std::string nodeId,
       bool v4Enabled,
-      bool enableFullMeshReduction,
       uint32_t memLimit = openr::memLimitMB) {
     auto ptr = std::make_unique<OpenrWrapper<CompactSerializer>>(
         context,
@@ -219,7 +218,6 @@ class OpenrFixture : public ::testing::Test {
         kSparkHoldTime,
         kSparkKeepAliveTime,
         kSparkFastInitKeepAliveTime,
-        enableFullMeshReduction,
         kLinkMonitorAdjHoldTime,
         kLinkFlapInitialBackoff,
         kLinkFlapMaxBackoff,
@@ -291,12 +289,10 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   bool v4Enabled(GetParam());
   v4Enabled = false;
 
-  bool enableFullMeshReduction = false;
-
-  auto openr1 = createOpenr("1", v4Enabled, enableFullMeshReduction);
-  auto openr2 = createOpenr("2", v4Enabled, enableFullMeshReduction);
-  auto openr3 = createOpenr("3", v4Enabled, enableFullMeshReduction);
-  auto openr4 = createOpenr("4", v4Enabled, enableFullMeshReduction);
+  auto openr1 = createOpenr("1", v4Enabled);
+  auto openr2 = createOpenr("2", v4Enabled);
+  auto openr3 = createOpenr("3", v4Enabled);
+  auto openr4 = createOpenr("4", v4Enabled);
 
   openr1->run();
   openr2->run();
@@ -452,297 +448,6 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 }
 
 //
-// Full mesh topology:
-//
-// 1--------2
-// |\__  __/|
-// |   \/   |
-// | __/\__ |
-// |/      \|
-// 3--------4
-//
-class FullMeshTopologyFixture : public OpenrFixture,
-                                public ::testing::WithParamInterface<bool> {};
-
-INSTANTIATE_TEST_CASE_P(
-    FullMeshTopologyInstance, FullMeshTopologyFixture, ::testing::Bool());
-
-//
-// Verify each node's peers under full mesh topology
-//
-TEST_P(FullMeshTopologyFixture, FullMeshKvstorePeerTest) {
-  // define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface12, ifIndex12},
-                                    {iface13, ifIndex13},
-                                    {iface14, ifIndex14},
-                                    {iface21, ifIndex21},
-                                    {iface23, ifIndex23},
-                                    {iface24, ifIndex24},
-                                    {iface31, ifIndex31},
-                                    {iface32, ifIndex32},
-                                    {iface34, ifIndex34},
-                                    {iface41, ifIndex41},
-                                    {iface42, ifIndex42},
-                                    {iface43, ifIndex43}});
-  // connect interfaces directly
-  ConnectedIfPairs connectedPairs = {
-      {iface12, {{iface21, 100}}},
-      {iface21, {{iface12, 100}}},
-      {iface24, {{iface42, 100}}},
-      {iface42, {{iface24, 100}}},
-      {iface13, {{iface31, 100}}},
-      {iface31, {{iface13, 100}}},
-      {iface34, {{iface43, 100}}},
-      {iface43, {{iface34, 100}}},
-      {iface14, {{iface41, 100}}},
-      {iface41, {{iface14, 100}}},
-      {iface23, {{iface32, 100}}},
-      {iface32, {{iface23, 100}}},
-  };
-  mockIoProvider->setConnectedPairs(connectedPairs);
-
-  bool enableFullMeshReduction(GetParam());
-
-  bool v4Enabled = false;
-
-  auto openr1 = createOpenr("1", v4Enabled, enableFullMeshReduction);
-  auto openr2 = createOpenr("2", v4Enabled, enableFullMeshReduction);
-  auto openr3 = createOpenr("3", v4Enabled, enableFullMeshReduction);
-  auto openr4 = createOpenr("4", v4Enabled, enableFullMeshReduction);
-
-  openr1->run();
-  openr2->run();
-  openr3->run();
-  openr4->run();
-
-  /* sleep override */
-  // wait until all aquamen got synced on kvstore
-  std::this_thread::sleep_for(kMaxOpenrSyncTime);
-
-  // make sure every openr has a prefix allocated
-  EXPECT_TRUE(openr1->getIpPrefix().hasValue());
-  EXPECT_TRUE(openr2->getIpPrefix().hasValue());
-  EXPECT_TRUE(openr3->getIpPrefix().hasValue());
-  EXPECT_TRUE(openr4->getIpPrefix().hasValue());
-
-  // start tracking iface1
-  EXPECT_TRUE(openr1->sparkUpdateInterfaceDb(
-      {{iface12, ifIndex12, ip1V4, ip1V6},
-       {iface13, ifIndex13, ip1V4, ip1V6},
-       {iface14, ifIndex14, ip1V4, ip1V6}}));
-
-  // start tracking iface2
-  EXPECT_TRUE(openr2->sparkUpdateInterfaceDb(
-      {{iface21, ifIndex21, ip2V4, ip2V6},
-       {iface23, ifIndex23, ip2V4, ip2V6},
-       {iface24, ifIndex24, ip2V4, ip2V6}}));
-
-  // start tracking iface3
-  EXPECT_TRUE(openr3->sparkUpdateInterfaceDb(
-      {{iface31, ifIndex31, ip3V4, ip3V6},
-       {iface32, ifIndex32, ip3V4, ip3V6},
-       {iface34, ifIndex34, ip3V4, ip3V6}}));
-
-  // start tracking iface4
-  EXPECT_TRUE(openr4->sparkUpdateInterfaceDb(
-      {{iface41, ifIndex41, ip4V4, ip4V6},
-       {iface42, ifIndex42, ip4V4, ip4V6},
-       {iface43, ifIndex43, ip4V4, ip4V6}}));
-
-  /* sleep override */
-  // wait until all aquamen got synced on kvstore
-  std::this_thread::sleep_for(kMaxOpenrSyncTime);
-
-  // make sure the kvstores are synced
-  EXPECT_TRUE(openr1->checkKeyExists("prefix:1"));
-  EXPECT_TRUE(openr1->checkKeyExists("prefix:2"));
-  EXPECT_TRUE(openr1->checkKeyExists("prefix:3"));
-  EXPECT_TRUE(openr1->checkKeyExists("prefix:4"));
-  EXPECT_TRUE(openr2->checkKeyExists("prefix:1"));
-  EXPECT_TRUE(openr2->checkKeyExists("prefix:2"));
-  EXPECT_TRUE(openr2->checkKeyExists("prefix:3"));
-  EXPECT_TRUE(openr2->checkKeyExists("prefix:4"));
-  EXPECT_TRUE(openr3->checkKeyExists("prefix:1"));
-  EXPECT_TRUE(openr3->checkKeyExists("prefix:2"));
-  EXPECT_TRUE(openr3->checkKeyExists("prefix:3"));
-  EXPECT_TRUE(openr3->checkKeyExists("prefix:4"));
-  EXPECT_TRUE(openr4->checkKeyExists("prefix:1"));
-  EXPECT_TRUE(openr4->checkKeyExists("prefix:2"));
-  EXPECT_TRUE(openr4->checkKeyExists("prefix:3"));
-  EXPECT_TRUE(openr4->checkKeyExists("prefix:4"));
-
-  const auto addr1 = openr1->getIpPrefix().value();
-  const auto addr2 = openr2->getIpPrefix().value();
-  const auto addr3 = openr3->getIpPrefix().value();
-  const auto addr4 = openr4->getIpPrefix().value();
-  const auto addr1V4 = openr1->getIpPrefix().value();
-  const auto addr2V4 = openr2->getIpPrefix().value();
-  const auto addr3V4 = openr3->getIpPrefix().value();
-  const auto addr4V4 = openr4->getIpPrefix().value();
-
-  // make sure every node has a prefix assigned
-  EXPECT_NE(toString(addr1), "");
-  EXPECT_NE(toString(addr2), "");
-  EXPECT_NE(toString(addr3), "");
-  EXPECT_NE(toString(addr4), "");
-
-  // make sure every prefix is unique
-  EXPECT_NE(toString(addr1), toString(addr2));
-  EXPECT_NE(toString(addr1), toString(addr3));
-  EXPECT_NE(toString(addr1), toString(addr4));
-  EXPECT_NE(toString(addr2), toString(addr3));
-  EXPECT_NE(toString(addr2), toString(addr4));
-  EXPECT_NE(toString(addr3), toString(addr4));
-
-  // validate kvstore peers (node1 is the leader among all nodes)
-
-  // router 1's peers
-  {
-    auto maybePeers = openr1->getKvStorePeers();
-    EXPECT_TRUE(maybePeers.hasValue());
-    EXPECT_EQ(maybePeers->size(), 3);
-    EXPECT_EQ(maybePeers->count("2"), 1);
-    EXPECT_EQ(maybePeers->count("3"), 1);
-    EXPECT_EQ(maybePeers->count("4"), 1);
-  }
-
-  // router 2's peers
-  {
-    auto maybePeers = openr2->getKvStorePeers();
-    EXPECT_TRUE(maybePeers.hasValue());
-    if (enableFullMeshReduction) {
-      EXPECT_EQ(maybePeers->size(), 1);
-      EXPECT_EQ(maybePeers->count("1"), 1);
-    } else {
-      EXPECT_EQ(maybePeers->size(), 3);
-      EXPECT_EQ(maybePeers->count("1"), 1);
-      EXPECT_EQ(maybePeers->count("3"), 1);
-      EXPECT_EQ(maybePeers->count("4"), 1);
-    }
-  }
-
-  // router 3's peers
-  {
-    auto maybePeers = openr3->getKvStorePeers();
-    EXPECT_TRUE(maybePeers.hasValue());
-    if (enableFullMeshReduction) {
-      EXPECT_EQ(maybePeers->size(), 1);
-      EXPECT_EQ(maybePeers->count("1"), 1);
-    } else {
-      EXPECT_EQ(maybePeers->size(), 3);
-      EXPECT_EQ(maybePeers->count("1"), 1);
-      EXPECT_EQ(maybePeers->count("2"), 1);
-      EXPECT_EQ(maybePeers->count("4"), 1);
-    }
-  }
-
-  // router 4's peers
-  {
-    auto maybePeers = openr4->getKvStorePeers();
-    EXPECT_TRUE(maybePeers.hasValue());
-    if (enableFullMeshReduction) {
-      EXPECT_EQ(maybePeers->size(), 1);
-      EXPECT_EQ(maybePeers->count("1"), 1);
-    } else {
-      EXPECT_EQ(maybePeers->size(), 3);
-      EXPECT_EQ(maybePeers->count("1"), 1);
-      EXPECT_EQ(maybePeers->count("2"), 1);
-      EXPECT_EQ(maybePeers->count("3"), 1);
-    }
-  }
-
-  RouteMap routeMap;
-
-  auto routeDb1 = openr1->fibDumpRouteDatabase();
-  auto routeDb2 = openr2->fibDumpRouteDatabase();
-  auto routeDb3 = openr3->fibDumpRouteDatabase();
-  auto routeDb4 = openr4->fibDumpRouteDatabase();
-
-  fillRouteMap("1", routeMap, routeDb1);
-  fillRouteMap("2", routeMap, routeDb2);
-  fillRouteMap("3", routeMap, routeDb3);
-  fillRouteMap("4", routeMap, routeDb4);
-
-  // validate routes
-
-  // validate router 1
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHopsWithMetric({make_pair(toNextHop(adj12, v4Enabled), 1),
-                          make_pair(toNextHop(adj13, v4Enabled), 2),
-                          make_pair(toNextHop(adj14, v4Enabled), 2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHopsWithMetric({make_pair(toNextHop(adj13, v4Enabled), 1),
-                          make_pair(toNextHop(adj12, v4Enabled), 2),
-                          make_pair(toNextHop(adj14, v4Enabled), 2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHopsWithMetric({make_pair(toNextHop(adj14, v4Enabled), 1),
-                          make_pair(toNextHop(adj12, v4Enabled), 2),
-                          make_pair(toNextHop(adj13, v4Enabled), 2)}));
-
-  // validate router 2
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHopsWithMetric({make_pair(toNextHop(adj21, v4Enabled), 1),
-                          make_pair(toNextHop(adj23, v4Enabled), 2),
-                          make_pair(toNextHop(adj24, v4Enabled), 2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHopsWithMetric({make_pair(toNextHop(adj23, v4Enabled), 1),
-                          make_pair(toNextHop(adj21, v4Enabled), 2),
-                          make_pair(toNextHop(adj24, v4Enabled), 2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHopsWithMetric({make_pair(toNextHop(adj24, v4Enabled), 1),
-                          make_pair(toNextHop(adj21, v4Enabled), 2),
-                          make_pair(toNextHop(adj23, v4Enabled), 2)}));
-
-  // validate router 3
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHopsWithMetric({make_pair(toNextHop(adj31, v4Enabled), 1),
-                          make_pair(toNextHop(adj32, v4Enabled), 2),
-                          make_pair(toNextHop(adj34, v4Enabled), 2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHopsWithMetric({make_pair(toNextHop(adj32, v4Enabled), 1),
-                          make_pair(toNextHop(adj31, v4Enabled), 2),
-                          make_pair(toNextHop(adj34, v4Enabled), 2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHopsWithMetric({make_pair(toNextHop(adj34, v4Enabled), 1),
-                          make_pair(toNextHop(adj31, v4Enabled), 2),
-                          make_pair(toNextHop(adj32, v4Enabled), 2)}));
-
-  // validate router 4
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHopsWithMetric({make_pair(toNextHop(adj41, v4Enabled), 1),
-                          make_pair(toNextHop(adj42, v4Enabled), 2),
-                          make_pair(toNextHop(adj43, v4Enabled), 2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHopsWithMetric({make_pair(toNextHop(adj42, v4Enabled), 1),
-                          make_pair(toNextHop(adj41, v4Enabled), 2),
-                          make_pair(toNextHop(adj43, v4Enabled), 2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHopsWithMetric({make_pair(toNextHop(adj43, v4Enabled), 1),
-                          make_pair(toNextHop(adj41, v4Enabled), 2),
-                          make_pair(toNextHop(adj42, v4Enabled), 2)}));
-}
-
-//
 // Verify resource monitor
 //
 TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
@@ -759,14 +464,13 @@ TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
   bool v4Enabled(GetParam());
   v4Enabled = false;
 
-  bool enableFullMeshReduction = false;
   std::string memKey{"process.memory.rss"};
   std::string cpuKey{"process.cpu.pct"};
   uint32_t rssMemInUse{0};
 
   // find out rss memory in use
   {
-    auto openr2 = createOpenr("2", v4Enabled, enableFullMeshReduction);
+    auto openr2 = createOpenr("2", v4Enabled);
     openr2->run();
 
     auto counters2 = openr2->zmqMonitorClient->dumpCounters();
@@ -779,8 +483,7 @@ TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
   }
 
   uint32_t memLimitMB = static_cast<uint32_t>(rssMemInUse) + 500;
-  auto openr1 =
-    createOpenr("1", v4Enabled, enableFullMeshReduction, memLimitMB);
+  auto openr1 = createOpenr("1", v4Enabled, memLimitMB);
   openr1->run();
 
   /* sleep override */

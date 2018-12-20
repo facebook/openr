@@ -255,7 +255,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         std::move(redistRegexList), // redistribute interface name
         std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
         false /* useRttMetric */,
-        false /* enable full mesh reduction */,
         false /* enable perf measurement */,
         true /* enable v4 */,
         true /* enable segment routing */,
@@ -945,7 +944,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         std::move(redistRegexList),
         std::vector<thrift::IpPrefix>{}, // static prefixes
         false /* useRttMetric */,
-        false /* enable full mesh reduction */,
         false /* enable perf measurement */,
         false /* enable v4 */,
         true /* enable segment routing */,
@@ -1198,7 +1196,6 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       std::move(redistRegexList), // redistribute interface name
       std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
       false /* useRttMetric */,
-      false /* enable full mesh reduction */,
       false /* enable perf measurement */,
       true /* enable v4 */,
       true /* enable segment routing */,
@@ -1699,7 +1696,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         std::move(redistRegexList),
         std::vector<thrift::IpPrefix>(),
         false /* useRttMetric */,
-        false /* enable full mesh reduction */,
         false /* enable perf measurement */,
         false /* enable v4 */,
         true /* enable segment routing */,

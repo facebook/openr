@@ -81,7 +81,6 @@ LinkMonitor::LinkMonitor(
     std::unique_ptr<re2::RE2::Set> redistRegexList,
     std::vector<thrift::IpPrefix> const& staticPrefixes,
     bool useRttMetric,
-    bool enableFullMeshReduction,
     bool enablePerfMeasurement,
     bool enableV4,
     bool enableSegmentRouting,
@@ -110,7 +109,6 @@ LinkMonitor::LinkMonitor(
       redistRegexList_(std::move(redistRegexList)),
       staticPrefixes_(staticPrefixes),
       useRttMetric_(useRttMetric),
-      enableFullMeshReduction_(enableFullMeshReduction),
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(enableV4),
       enableSegmentRouting_(enableSegmentRouting),
@@ -660,7 +658,7 @@ LinkMonitor::processPendingPeerAddRequests() {
 }
 
 std::unordered_map<std::string, thrift::PeerSpec>
-LinkMonitor::getPeersForAllNeighbors() {
+LinkMonitor::getPeersFromAdjacencies() {
   std::unordered_map<std::string, thrift::PeerSpec> peers;
 
   for (const auto& adjKv : adjacencies_) {
@@ -675,36 +673,6 @@ LinkMonitor::getPeersForAllNeighbors() {
     }
   }
   return peers;
-}
-
-std::unordered_map<std::string, thrift::PeerSpec>
-LinkMonitor::getPeersFromAdjacencies() {
-  if (enableFullMeshReduction_) {
-    // full mesh reduction
-    std::string leaderName = nodeId_;
-    for (const auto& adjKv : adjacencies_) {
-      // adjkv is {<nodename, ifname> : <PeerSepc, Adjacency>}
-      const auto& nodeName = adjKv.first.first;
-      if (nodeName < leaderName) {
-        leaderName = nodeName;
-      }
-    }
-
-    if (leaderName == nodeId_) {
-      // I am the leader, peer all my neighbors
-      return getPeersForAllNeighbors();
-    } else {
-      std::unordered_map<std::string, thrift::PeerSpec> peers;
-      // peer with leader only
-      const auto& ifNames = nbIfs_.at(leaderName);
-      const auto adjId = std::make_pair(leaderName, *ifNames.begin());
-      peers[leaderName] = adjacencies_.at(adjId).first;
-      return peers;
-    }
-  } else {
-    // no full mesh reduction
-    return getPeersForAllNeighbors();
-  }
 }
 
 void
