@@ -321,6 +321,15 @@ LinkMonitor::prepare() noexcept {
               event.neighbor.nodeName,
               event.ifName,
               event.neighbor.ifName);
+
+          VLOG(2) << "Calling addNlNeighbor!!!!";
+          try {
+              client_->sync_addNlNeighbor(event.ifName, 
+                                          neighborAddrV6.str());
+          } catch (std::exception const& ex) {
+              LOG(ERROR) << "Error in syncing neighbor to kernel";
+          }
+
           neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
           break;
 
@@ -330,6 +339,13 @@ LinkMonitor::prepare() noexcept {
               event.neighbor.nodeName,
               event.ifName,
               event.neighbor.ifName);
+          try {
+              client_->sync_addNlNeighbor(event.ifName,
+                                          neighborAddrV6.str());
+          } catch (std::exception const& ex) {
+              LOG(ERROR) << "Error in syncing neighbor to kernel";
+          }
+
           neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
           break;
 
@@ -339,6 +355,14 @@ LinkMonitor::prepare() noexcept {
               event.neighbor.nodeName,
               event.ifName,
               event.neighbor.ifName);
+
+          try {
+              client_->sync_delNlNeighbor(event.ifName,
+                                          neighborAddrV6.str());
+          } catch (std::exception const& ex) {
+              LOG(ERROR) << "Error in syncing neighbor to kernel";
+          }
+ 
           neighborDownEvent(event.neighbor.nodeName, event.ifName);
           break;
 
@@ -517,6 +541,7 @@ LinkMonitor::neighborUpEvent(
       folly::sformat(
           "Neighbor {} is up on interface {}.", remoteNodeName, ifName)
           .c_str());
+
 
   int64_t weight = 1;
   if (interfaceDb_.count(ifName)) {

@@ -170,6 +170,12 @@ class NetlinkSubscriber final {
   // running. Subscriber method will be invoked in calling thread context
   Neighbors getAllReachableNeighbors();
 
+  int addIpv6Neighbor(std::string ifname,
+                      std::string neigh_dst_addr);
+
+  int delIpv6Neighbor(std::string ifname,
+                      std::string neigh_dst_addr);
+
  private:
   NetlinkSubscriber(const NetlinkSubscriber&) = delete;
   NetlinkSubscriber& operator=(const NetlinkSubscriber&) = delete;

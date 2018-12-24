@@ -102,6 +102,17 @@ service SystemService {
 
   list<NeighborEntry> getAllNeighbors()
     throws (1: PlatformError error)
+
+  void addNlNeighbor(
+    1: string ifName,
+    2: string destAddr,
+  ) throws (1: PlatformError error)
+
+  void delNlNeighbor(
+    1: string ifName,
+    2: string destAddr,
+  ) throws (1: PlatformError error)
+
 }
 
 /**

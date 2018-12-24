@@ -72,7 +72,10 @@ class NetlinkSystemHandler::NLSubscriberImpl final
   folly::Future<std::unique_ptr<std::vector<thrift::NeighborEntry>>>
   getAllNeighbors();
 
+  folly::Future<folly::Unit> addNlNeighbor(const std::string&, const std::string&);
+  folly::Future<folly::Unit> delNlNeighbor(const std::string&, const std::string&);
  private:
+
   void doInitNL();
 
   // Called at init and then at periodic re-sync as a protection
@@ -158,6 +161,76 @@ NetlinkSystemHandler::NLSubscriberImpl::getAllNeighbors() {
       promise.setValue(std::move(neighborDb));
     } catch (std::exception const& ex) {
       LOG(ERROR) << "Error in getting Neighbor Db from Netlink";
+      promise.setException(ex);
+    }
+  });
+
+  return future;
+}
+
+folly::Future<folly::Unit>
+NetlinkSystemHandler::NLSubscriberImpl::addNlNeighbor(const std::string& if_name,
+                                                      const std::string& dest_addr) {
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  VLOG(3) << "Adding Neighbor into the Kernel:"
+          << if_name
+          << dest_addr;
+  
+//  promise.setValue();
+//  return future;
+  // pass params by copy
+  evl_->runInEventLoop([this, promise = std::move(promise), if_name, dest_addr]() mutable {
+    try {
+//      if(!netlinkSubscriber_->addIpv6Neighbor(neighborEntry.ifName,
+//                    toBinaryAddress(neighborEntry.destination),
+//                    neighborEntry.linkAddress.toString(),
+//                    neighborEntry.isReachable)) {
+
+//      if(!netlinkSubscriber_->addIpv6Neighbor("Gi0_0_0_0", "fe80::a00:27ff:fe30:47a7")) {
+      if(!netlinkSubscriber_->addIpv6Neighbor(if_name, dest_addr)) {
+          promise.setValue();
+      } /*else {
+          throw std::runtime_error("Failed to add Neighbor through netlink");
+      }*/
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error while adding Neighbor into the Kernel";
+      promise.setException(ex);
+    }
+  });
+
+  return future;
+}
+
+folly::Future<folly::Unit>
+NetlinkSystemHandler::NLSubscriberImpl::delNlNeighbor(const std::string& if_name,
+                                                      const std::string& dest_addr) {
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  VLOG(3) << "Adding Neighbor into the Kernel:"
+          << if_name
+          << dest_addr;
+
+//  promise.setValue();
+//  return future;
+  // pass params by copy
+  evl_->runInEventLoop([this, promise = std::move(promise), if_name, dest_addr]() mutable {
+    try {
+//      if(!netlinkSubscriber_->addIpv6Neighbor(neighborEntry.ifName,
+//                    toBinaryAddress(neighborEntry.destination),
+//                    neighborEntry.linkAddress.toString(),
+//                    neighborEntry.isReachable)) {
+
+//      if(!netlinkSubscriber_->addIpv6Neighbor("Gi0_0_0_0", "fe80::a00:27ff:fe30:47a7")) {
+        if(!netlinkSubscriber_->delIpv6Neighbor(if_name, dest_addr)) {
+          promise.setValue();
+      } /*else {
+          throw std::runtime_error("Failed to delete Neighbor through netlink");
+      }*/
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error while deleting Neighbor into the Kernel";
       promise.setException(ex);
     }
   });
@@ -289,4 +362,23 @@ NetlinkSystemHandler::future_getAllNeighbors() {
   auto future = nlImpl_->getAllNeighbors();
   return future;
 }
+
+folly::Future<folly::Unit> 
+NetlinkSystemHandler::future_addNlNeighbor(std::unique_ptr<std::string> ifName, 
+                                           std::unique_ptr<std::string> destAddr) {
+  VLOG(3) << "Send a request to add IPv6 neighbor to kernel via Netlink";
+
+  auto future = nlImpl_->addNlNeighbor(*ifName, *destAddr);
+  return future;
+}
+
+folly::Future<folly::Unit>
+NetlinkSystemHandler::future_delNlNeighbor(std::unique_ptr<std::string> ifName,
+                                           std::unique_ptr<std::string> destAddr) {
+  VLOG(3) << "Send a request to delete IPv6 neighbor to kernel via Netlink";
+
+  auto future = nlImpl_->delNlNeighbor(*ifName, *destAddr);
+  return future;
+}
+
 } // namespace openr

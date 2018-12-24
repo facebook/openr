@@ -52,6 +52,13 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   folly::Future<std::unique_ptr<std::vector<thrift::NeighborEntry>>>
   future_getAllNeighbors() override;
 
+  folly::Future<folly::Unit> 
+  future_addNlNeighbor(std::unique_ptr<std::string> ifName, 
+                       std::unique_ptr<std::string> destAddr) override;
+
+  folly::Future<folly::Unit>
+  future_delNlNeighbor(std::unique_ptr<std::string> ifName,
+                       std::unique_ptr<std::string> destAddr) override;
  private:
   void initNetlinkSystemHandler();
 

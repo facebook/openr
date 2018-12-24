@@ -1,0 +1,3 @@
+[console_scripts]
+breeze = openr.cli.breeze:main
+

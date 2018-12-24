@@ -54,6 +54,19 @@ ifIndexToName(struct nl_cache* linkCache, int ifIndex) {
   return ifNameStr;
 }
 
+
+int
+ifNameToIndex(struct nl_cache* linkCache, std::string ifName) {
+  auto ifIndex =
+      rtnl_link_name2i(linkCache, ifName.c_str());
+  if (!ifIndex) {
+    throw openr::NetlinkException(
+        folly::sformat("Unknown interface Name {}", ifName));
+  }
+  return ifIndex;
+}
+
+
 // Helper routine to convert libnl Object into our Link entry
 folly::Optional<openr::LinkEntry>
 buildLink(struct nl_object* obj, bool deleted) {
@@ -333,6 +346,95 @@ NetlinkSubscriber::getAllReachableNeighbors() {
   fillLinkCache();
   fillNeighborCache();
   return neighbors_;
+}
+
+
+int
+NetlinkSubscriber::addIpv6Neighbor(std::string ifname,
+                                   std::string neigh_dst_addr) {
+    // Allocate an empty neighbour handle to be filled out with the attributes
+    // of the new neighbour.
+    struct rtnl_neigh *neigh = rtnl_neigh_alloc();
+
+    struct nl_addr* dst_addr;
+    int addop;
+
+    VLOG(2) << "Ready to add neigh!!: "
+            << "ifname: " << ifname
+            << " dst_addr: " << neigh_dst_addr;
+
+    if (nl_addr_parse(neigh_dst_addr.c_str(), AF_INET6, &dst_addr) < 0) {
+        return -1;
+    }
+
+
+    auto if_index = ifNameToIndex(linkCache_, ifname);
+
+    VLOG(2) << "Filling out the attributes!!";
+
+    // Fill out the attributes of the new neighbour
+    rtnl_neigh_set_ifindex(neigh, if_index);
+    rtnl_neigh_set_dst(neigh, dst_addr);
+    rtnl_neigh_set_state(neigh, rtnl_neigh_str2state("permanent"));
+
+    // Check to see if the neighbor already exists
+    fillLinkCache();
+    fillNeighborCache();
+    struct rtnl_neigh *neigh_in_cache = rtnl_neigh_get(neighborCache_, if_index, dst_addr);
+
+
+    VLOG(2) << "Checking to see if neigh already exists";
+    // Build the netlink message and send it to the kernel, the operation will
+    // block until the operation has been completed.
+    
+    if (neigh_in_cache != NULL) {
+        if(rtnl_neigh_get_state(neigh_in_cache) == NUD_FAILED) {
+            VLOG(2) << "Current state is NUD_FAILED, initiating create";
+            addop = rtnl_neigh_add(sock_, neigh, NLM_F_CREATE);
+        } else {
+            VLOG(2) << "Replace action for existing neighbor";
+            addop = rtnl_neigh_add(sock_, neigh, NLM_F_REPLACE);
+        }
+    } else {
+        VLOG(2) << "Create action for new neighbor";
+        addop = rtnl_neigh_add(sock_, neigh, NLM_F_CREATE);
+    }
+    // Free the memory
+    nl_addr_put(dst_addr);
+    rtnl_neigh_put(neigh);
+
+    return addop;
+}
+
+
+int
+NetlinkSubscriber::delIpv6Neighbor(std::string ifname,
+                                   std::string neigh_dst_addr) {
+    // Allocate an empty neighbour handle to be filled out with the attributes
+    // of the new neighbour.
+    struct rtnl_neigh *neigh = rtnl_neigh_alloc();
+
+    struct nl_addr* dst_addr;
+
+    if (nl_addr_parse(neigh_dst_addr.c_str(), AF_INET6, &dst_addr) < 0) {
+        return -1;
+    }
+
+
+    auto if_index = ifNameToIndex(linkCache_, ifname);
+    // Fill out the attributes of the new neighbour
+    rtnl_neigh_set_ifindex(neigh, if_index);
+    rtnl_neigh_set_dst(neigh, dst_addr);
+
+    // Build the netlink message and send it to the kernel, the operation will
+    // block until the operation has been completed.
+    auto delop = rtnl_neigh_delete(sock_, neigh, 0);
+
+    // Free the memory
+    nl_addr_put(dst_addr);
+    rtnl_neigh_put(neigh);
+
+    return delop;
 }
 
 // Invoked from libnl data processing callback whenver there
