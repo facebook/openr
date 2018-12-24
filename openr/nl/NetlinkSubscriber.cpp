@@ -388,13 +388,13 @@ NetlinkSubscriber::addIpv6Neighbor(std::string ifname,
     // block until the operation has been completed.
     
     if (neigh_in_cache != NULL) {
-        if(rtnl_neigh_get_state(neigh_in_cache) == NUD_FAILED) {
-            VLOG(2) << "Current state is NUD_FAILED, initiating create";
-            addop = rtnl_neigh_add(sock_, neigh, NLM_F_CREATE);
-        } else {
+    //    if(rtnl_neigh_get_state(neigh_in_cache) == NUD_FAILED) {
+    //        VLOG(2) << "Current state is NUD_FAILED, initiating create";
+    //        addop = rtnl_neigh_add(sock_, neigh, NLM_F_CREATE);
+    //    } else {
             VLOG(2) << "Replace action for existing neighbor";
             addop = rtnl_neigh_add(sock_, neigh, NLM_F_REPLACE);
-        }
+    //    }
     } else {
         VLOG(2) << "Create action for new neighbor";
         addop = rtnl_neigh_add(sock_, neigh, NLM_F_CREATE);
