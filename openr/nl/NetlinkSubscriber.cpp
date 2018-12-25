@@ -18,6 +18,7 @@
 #include <folly/Optional.h>
 #include <folly/ScopeGuard.h>
 #include <folly/String.h>
+#include <folly/IPAddressV6.h>
 
 namespace {
 const folly::StringPiece kLinkObjectStr("route/link");
@@ -357,6 +358,7 @@ NetlinkSubscriber::addIpv6Neighbor(std::string ifname,
     struct rtnl_neigh *neigh = rtnl_neigh_alloc();
 
     struct nl_addr* dst_addr;
+    struct nl_addr* lladdr;
     int addop;
 
     VLOG(2) << "Ready to add neigh!!: "
@@ -368,14 +370,28 @@ NetlinkSubscriber::addIpv6Neighbor(std::string ifname,
     }
 
 
+    auto linklocal_ipv6 = 
+              (folly::IPAddressV6::tryFromString(neigh_dst_addr)).value();
+
+    auto lladdr_obj = linklocal_ipv6.getMacAddressFromLinkLocal();
+
+    auto lladdr_str = (lladdr_obj.value()).toString();
+
+    if (nl_addr_parse(lladdr_str.c_str(), AF_LLC, &lladdr) < 0) {
+        return -1;
+    }
     auto if_index = ifNameToIndex(linkCache_, ifname);
 
-    VLOG(2) << "Filling out the attributes!!";
-
+    VLOG(2) << "Filling out the attributes!! "
+            << " " << if_index
+            << " " << neigh_dst_addr
+            << " " << lladdr_str;
+ 
     // Fill out the attributes of the new neighbour
     rtnl_neigh_set_ifindex(neigh, if_index);
     rtnl_neigh_set_dst(neigh, dst_addr);
     rtnl_neigh_set_state(neigh, rtnl_neigh_str2state("permanent"));
+    rtnl_neigh_set_lladdr(neigh, lladdr);
 
     // Check to see if the neighbor already exists
     fillLinkCache();
