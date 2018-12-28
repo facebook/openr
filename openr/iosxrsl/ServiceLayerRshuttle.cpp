@@ -13,7 +13,9 @@
 #include <folly/gen/Base.h>
 #include <folly/gen/Core.h>
 
+//#include "grpc/impl/codegen/connectivity_state.h"
 
+#include  <grpc++/channel.h>
 
 using folly::gen::as;
 using folly::gen::from;
@@ -27,6 +29,23 @@ const int kIpAddrBufSize = 1024;
 
 
 namespace openr {
+
+std::string grpc_connectivity_state_name(grpc_connectivity_state state) {
+  switch (state) {
+    case GRPC_CHANNEL_IDLE:
+      return "IDLE";
+    case GRPC_CHANNEL_CONNECTING:
+      return "CONNECTING";
+    case GRPC_CHANNEL_READY:
+      return "READY";
+    case GRPC_CHANNEL_TRANSIENT_FAILURE:
+      return "TRANSIENT_FAILURE";
+    case GRPC_CHANNEL_FATAL_FAILURE:
+      return "FATAL Failure";
+  }
+  GPR_UNREACHABLE_CODE(return "UNKNOWN");
+}
+
 
 VrfData::VrfData(std::string vrf_name,
             uint8_t admin_distance,
@@ -60,27 +79,107 @@ IosxrslRshuttle::IosxrslRshuttle(
 
     // Let's set up the AsyncNotifChannel to establish
     // connection to IOS-XR Service Layer 
-    asynchandler_ = std::make_unique<AsyncNotifChannel>(Channel);
+   // asynchandler_ = std::make_unique<AsyncNotifChannel>(Channel);
 
 
     // Acquire the init lock, register vrf(s) only after condition variable is activated
     std::unique_lock<std::mutex> initlock(init_mutex);
     
+   // service_layer::SLInitMsg init_msg;
+   // init_msg.set_majorver(service_layer::SL_MAJOR_VERSION);
+  //  init_msg.set_minorver(service_layer::SL_MINOR_VERSION);
+   // init_msg.set_subver(service_layer::SL_SUB_VERSION);
+
+    if(!spawnAsyncInitThread(Channel)) {
+        LOG(ERROR) << "Failed to spawn Async-Init thread for Service Layer";
+    }
+
+    //asynchandler_ = std::make_unique<AsyncNotifChannel>(Channel);
+    //notifThread_ = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, asynchandler_);
+
+    //Populate the init_msg using version VERSION fields in service_layer
+    //service_layer::SLInitMsg init_msg;
+    //init_msg.set_majorver(service_layer::SL_MAJOR_VERSION);
+    //init_msg.set_minorver(service_layer::SL_MINOR_VERSION);
+    //init_msg.set_subver(service_layer::SL_SUB_VERSION);
+
+    //VLOG(2) << "Send init msg";
+    //asynchandler_->SendInitMsg(init_msg);
+
+    std::chrono::seconds delay(10);
+
+    //VLOG(2) << "notif thread spawned";
     // Spawn reader thread that maintains our Notification Channel
-    notifThread_ = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, asynchandler_);
+    //notifThread_ = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, asynchandler_);
 
-    service_layer::SLInitMsg init_msg;
-    init_msg.set_majorver(service_layer::SL_MAJOR_VERSION);
-    init_msg.set_minorver(service_layer::SL_MINOR_VERSION);
-    init_msg.set_subver(service_layer::SL_SUB_VERSION);
+    //VLOG(2) << "grpc channel state: "
+      //      << grpc_connectivity_state_name(Channel->GetState(false));
 
+   // VLOG(2) << "Send init msg";
+   // asynchandler_->SendInitMsg(init_msg);
 
-    asynchandler_->SendInitMsg(init_msg);    
-    
+   // VLOG(2) << "init_success: " << init_success;
+
     // Wait on the mutex lock
     while (!init_success) {
-        init_condVar.wait(initlock);
+        
+        VLOG(2) << "grpc channel state: "
+                << grpc_connectivity_state_name(Channel->GetState(false));
+
+        VLOG(2) << "Wait for conditional variable for 10 seconds";
+        // Wait for 10 (timeout) seconds before retrying
+        init_condVar.wait_for(initlock, delay);
+
+
+        if (grpc_connectivity_state_name(Channel->GetState(false)) != "READY") {
+            VLOG(2) << "GRPC channel not in READY state yet";
+            if (!init_success) {
+                if(!cleanupAsyncInitThread()) {
+                    LOG(ERROR) << "Failed to clean up existing AsyncInit Thread";
+                }
+
+                if(!spawnAsyncInitThread(Channel)) {
+                    LOG(ERROR) << "Failed to spawn a new AsyncInit Thread";
+                }
+           /* try{
+            // Shutdown the existing asynchandler_
+             //   if (!asynchandler_) {
+                    VLOG(4) << "Shutting down the *asynchandler_ object";
+                    asynchandler_->Shutdown();
+                    if (notifThread_.joinable()) {
+                        VLOG(4) << "Joining notifThread_";
+                        notifThread_.join();
+                   }
+                   VLOG(4) << "Clean up the asynchandler_ pointer";
+                  asynchandler_.reset();
+              // }
+            } catch (IosxrslException const& ex) {
+              LOG(ERROR) << "Error cleaning up Async Init object and thread";
+              LOG(ERROR) << ex.what();
+          } catch (std::exception const& ex) {
+              LOG(ERROR) << "Error cleaning up Async Init object and thread";
+              LOG(ERROR) << ex.what();
+           }
+            
+            asynchandler_ = std::make_unique<AsyncNotifChannel>(Channel);
+            notifThread_ = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, asynchandler_);
+      
+            VLOG(2) << "Send init msg";
+            asynchandler_->SendInitMsg(init_msg);
+
+            //VLOG(2) << "spawning thread again";
+            //asynchandler_ = std::make_unique<AsyncNotifChannel>(Channel);
+           // notifThread_ = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, asynchandler_);
+          
+            //VLOG(2) << "Send init msg again";
+            //asynchandler_->SendInitMsg(init_msg);*/
+           }
+        }
     }
+
+
+    VLOG(2) << "grpc channel state: "
+            << grpc_connectivity_state_name(Channel->GetState(false));
 
     iosxrslVrf_ = std::make_unique<IosxrslVrf>(Channel);
     iosxrslRoute_ = std::make_unique<IosxrslRoute>(Channel);
@@ -117,8 +216,84 @@ IosxrslRshuttle::~IosxrslRshuttle()
     iosxrslVrf_->unregisterVrf(AF_INET);
     iosxrslVrf_->unregisterVrf(AF_INET6); 
 
-    asynchandler_->Shutdown();
-    notifThread_.join();
+    //asynchandler_->Shutdown();
+
+    //notifThread_.join();
+
+    if(!cleanupAsyncInitThread()) {
+        LOG(ERROR) << "Failed to clean up the Async Init Thread in final clean up";
+    }
+}
+
+bool
+IosxrslRshuttle::cleanupAsyncInitThread() 
+{
+    //folly::Promise<folly::Unit> promise;
+   // auto future = promise.getFuture();
+
+   //evl_->runInEventLoop(
+    //    [this, promise = std::move(promise), 
+      //     asynchandler = std::move(asynchandler_), 
+        //     notifThread = std::move(notifThread_)]() mutable {
+      try{
+        // Shutdown the existing asynchandler_
+        //if (!asynchandler_) {
+            VLOG(4) << "Shutting down the *asynchandler_ object";
+            asynchandler_->Shutdown();
+            if (notifThread_.joinable()) {
+                VLOG(4) << "Joining notifThread_";
+                notifThread_.join();
+            }
+            VLOG(4) << "Clean up the asynchandler_ pointer";
+            asynchandler_.reset();    
+        //}
+      } catch (IosxrslException const& ex) {
+          LOG(ERROR) << "Error cleaning up Async Init object and thread";
+          LOG(ERROR) << ex.what();
+          return false;
+      } catch (std::exception const& ex) {
+          LOG(ERROR) << "Error cleaning up Async Init object and thread";
+          LOG(ERROR) << ex.what();
+          return false;
+      }
+
+    return true; 
+}
+
+bool
+IosxrslRshuttle::spawnAsyncInitThread(std::shared_ptr<grpc::Channel> Channel)
+{
+    //folly::Promise<folly::Unit> promise;
+    //auto future = promise.getFuture();
+
+   // evl_->runInEventLoop(
+    //    [this, promise = std::move(promise), 
+      //      asynchandler = std::move(asynchandler_), 
+        //      notifThread = std::move(notifThread_),
+          //      Channel]() mutable {
+      VLOG(2) << "Setting up a fresh asynchandler object and notification thread";
+      try {
+          asynchandler_ = std::make_unique<AsyncNotifChannel>(Channel);
+          notifThread_ = std::thread(&AsyncNotifChannel::AsyncCompleteRpc, asynchandler_);
+
+          //Populate the init_msg using version VERSION fields in service_layer
+          service_layer::SLInitMsg init_msg;
+          init_msg.set_majorver(service_layer::SL_MAJOR_VERSION);
+          init_msg.set_minorver(service_layer::SL_MINOR_VERSION);
+          init_msg.set_subver(service_layer::SL_SUB_VERSION);
+
+          VLOG(2) << "Send init msg";
+          asynchandler_->SendInitMsg(init_msg);
+      } catch (IosxrslException const& ex) {
+         LOG(ERROR) << "Failed to set up asynchandler and notification thread";
+         LOG(ERROR) << ex.what();
+         return false;
+      } catch (std::exception const& ex) {
+         LOG(ERROR) << "Failed to set up asynchandler and notification thread";
+         LOG(ERROR) << ex.what();
+         return false;
+     }
+    return true;
 }
 
 

@@ -67,15 +67,21 @@ public:
 
     ~IosxrslRshuttle();
 
+
+  bool cleanupAsyncInitThread();
+
+  bool spawnAsyncInitThread(std::shared_ptr<grpc::Channel>);
+
+
   // If adding multipath nextHops for the same prefix at different times,
   // always provide unique nextHops and not cumulative list.
 
-  folly::Future<folly::Unit> addUnicastRoute(
-      const folly::CIDRNetwork& prefix, const NextHops& nextHops);
+  folly::Future<folly::Unit>
+  addUnicastRoute(const folly::CIDRNetwork& prefix, const NextHops& nextHops);
 
   // Delete all next hops associated with prefix
-  folly::Future<folly::Unit> deleteUnicastRoute(
-      const folly::CIDRNetwork& prefix);
+  folly::Future<folly::Unit>
+  deleteUnicastRoute(const folly::CIDRNetwork& prefix);
 
 
   // Sync route table in IOS-XR RIB  with given route table

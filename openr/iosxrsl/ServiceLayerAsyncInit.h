@@ -20,6 +20,7 @@ namespace openr {
 extern std::mutex init_mutex;
 extern std::condition_variable init_condVar;
 extern bool init_success;
+extern bool notifthread_done;
 
 class AsyncNotifChannel {
 public:
