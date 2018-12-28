@@ -13,10 +13,6 @@
 #include <folly/gen/Base.h>
 #include <folly/gen/Core.h>
 
-//#include "grpc/impl/codegen/connectivity_state.h"
-
-#include  <grpc++/channel.h>
-
 using folly::gen::as;
 using folly::gen::from;
 using folly::gen::mapped;
@@ -34,14 +30,16 @@ std::string grpc_connectivity_state_name(grpc_connectivity_state state) {
   switch (state) {
     case GRPC_CHANNEL_IDLE:
       return "IDLE";
+    case GRPC_CHANNEL_INIT:
+      return "INIT";
     case GRPC_CHANNEL_CONNECTING:
       return "CONNECTING";
     case GRPC_CHANNEL_READY:
       return "READY";
     case GRPC_CHANNEL_TRANSIENT_FAILURE:
       return "TRANSIENT_FAILURE";
-    case GRPC_CHANNEL_FATAL_FAILURE:
-      return "FATAL Failure";
+    case GRPC_CHANNEL_SHUTDOWN:
+      return "SHUTDOWN";
   }
   GPR_UNREACHABLE_CODE(return "UNKNOWN");
 }
