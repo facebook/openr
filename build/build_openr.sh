@@ -38,6 +38,7 @@ install_openr() {
   cd "$BUILD_DIR/../openr/py"
   pip install cffi
   pip install future
+  pip install invoke==1.1.0
   python setup.py build
   python setup.py install
   cd "$BUILD_DIR"

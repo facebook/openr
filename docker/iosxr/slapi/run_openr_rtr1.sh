@@ -64,7 +64,7 @@ HEALTH_CHECKER_PING_INTERVAL_S=3
 IFACE_PREFIXES="Gi,enp,Hg,Tf,Tg"
 
 # Logging verbosity
-VERBOSITY=5
+VERBOSITY=2
 
 # PrefixAllocator parameter
 ENABLE_PREFIX_ALLOC=false # Enable automatic election of prefixes for nodes
