@@ -1,1 +1,0 @@
-docker run -itd  --name openr --cap-add=SYS_ADMIN --cap-add=NET_ADMIN  -v /var/run/netns:/var/run/netns -v /misc/app_host:/root -v /misc/app_host/hosts:/etc/hosts --hostname rtr1 11.11.11.2:5000/openr  /root/run_openr.sh

@@ -29,7 +29,9 @@ DOMAIN=openr
 
 # List of comma separated list of prefixes to announce
 # e.g. "face:cafe::1/128,face:b00c::/64"
-PREFIXES="50.1.1.1/32,face:cafe::10/128,face:b00c::10/128"
+#ROUTE_LIST=$(python /root/increment_ipv4_prefix1.py)
+ROUTE_LIST=
+PREFIXES="50.1.1.1/32,${ROUTE_LIST},face:cafe::10/128,face:b00c::10/128"
 
 # Used to assign elected address if prefix allocator is enabled
 LOOPBACK_IFACE="lo"
@@ -62,7 +64,7 @@ HEALTH_CHECKER_PING_INTERVAL_S=3
 IFACE_PREFIXES="Gi,enp,Hg,Tf,Tg"
 
 # Logging verbosity
-VERBOSITY=2
+VERBOSITY=5
 
 # PrefixAllocator parameter
 ENABLE_PREFIX_ALLOC=false # Enable automatic election of prefixes for nodes
@@ -157,3 +159,4 @@ exec ip netns exec global-vrf ${OPENR} \
   --iosxr_slapi_ip=${IOSXR_SLAPI_IP} \
   --fib_agent_port=${FIB_HANDLER_PORT}
   "$@"
+
