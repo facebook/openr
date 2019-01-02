@@ -83,7 +83,7 @@ SparkWrapper::stop() {
 
 bool
 SparkWrapper::updateInterfaceDb(
-    const std::vector<InterfaceEntry>& interfaceEntries) {
+    const std::vector<SparkInterfaceEntry>& interfaceEntries) {
   thrift::InterfaceDatabase ifDb(
       apache::thrift::FRAGILE, myNodeName_, {}, thrift::PerfEvents());
   ifDb.perfEvents = folly::none;

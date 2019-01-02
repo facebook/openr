@@ -94,9 +94,6 @@ LinkMonitor::LinkMonitor(
     PlatformPublisherUrl const& platformPubUrl,
     LinkMonitorGlobalPubUrl linkMonitorGlobalPubUrl,
     LinkMonitorGlobalCmdUrl linkMonitorGlobalCmdUrl,
-    //
-    // Mutable/transient state initializers
-    //
     std::chrono::seconds adjHoldTime,
     std::chrono::milliseconds flapInitialBackoff,
     std::chrono::milliseconds flapMaxBackoff)
@@ -137,7 +134,8 @@ LinkMonitor::LinkMonitor(
   // Create throttled adjacency advertiser
   advertiseMyAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       this, Constants::kLinkThrottleTimeout, [this]() noexcept {
-        processPendingPeerAddRequests();
+        updateKvStorePeers();
+        advertiseMyAdjacencies();
       });
 
   // Hold-time for not advertising partial adjacencies
@@ -331,7 +329,7 @@ LinkMonitor::prepare() noexcept {
 
         switch (event.eventType) {
         case thrift::SparkNeighborEventType::NEIGHBOR_UP:
-          logEvent(
+          logNeighborEvent(
               "NB_UP",
               event.neighbor.nodeName,
               event.ifName,
@@ -340,7 +338,7 @@ LinkMonitor::prepare() noexcept {
           break;
 
         case thrift::SparkNeighborEventType::NEIGHBOR_RESTART:
-          logEvent(
+          logNeighborEvent(
               "NB_RESTART",
               event.neighbor.nodeName,
               event.ifName,
@@ -349,7 +347,7 @@ LinkMonitor::prepare() noexcept {
           break;
 
         case thrift::SparkNeighborEventType::NEIGHBOR_DOWN:
-          logEvent(
+          logNeighborEvent(
               "NB_DOWN",
               event.neighbor.nodeName,
               event.ifName,
@@ -362,7 +360,7 @@ LinkMonitor::prepare() noexcept {
             break;
           }
 
-          logEvent(
+          logNeighborEvent(
               "NB_RTT_CHANGE",
               event.neighbor.nodeName,
               event.ifName,
@@ -371,23 +369,13 @@ LinkMonitor::prepare() noexcept {
           int32_t newRttMetric = getRttMetric(event.rttUs);
           VLOG(1) << "Metric value changed for neighbor "
                   << event.neighbor.nodeName << " to " << newRttMetric;
-          const auto adjId =
-              std::make_pair(event.neighbor.nodeName, event.ifName);
-          auto it = adjacencies_.find(adjId);
+          auto it = adjacencies_.find({event.neighbor.nodeName, event.ifName});
           if (it != adjacencies_.end()) {
             auto& adj = it->second.second;
             adj.metric = newRttMetric;
             adj.rtt = event.rttUs;
-          } else {
-            // this occurs when a neighbor reports NEIGHBOR_UP but has not been
-            // added into adjacencies bcoz of throttling
-            auto _it = peerAddRequests_.find(adjId);
-            DCHECK(_it != peerAddRequests_.end());
-            auto& adj = _it->second.second;
-            adj.metric = newRttMetric;
-            adj.rtt = event.rttUs;
+            advertiseMyAdjacenciesThrottled_->operator()();
           }
-          advertiseMyAdjacenciesThrottled_->operator()();
           break;
         }
 
@@ -537,8 +525,8 @@ LinkMonitor::neighborUpEvent(
           .c_str());
 
   int64_t weight = 1;
-  if (interfaceDb_.count(ifName)) {
-    weight = interfaceDb_.at(ifName).getWeight();
+  if (interfaces_.count(ifName)) {
+    weight = interfaces_.at(ifName).getWeight();
   }
 
   thrift::Adjacency newAdj(
@@ -578,12 +566,8 @@ LinkMonitor::neighborUpEvent(
   // 1) the min interface changes: the previous min interface's connection will
   // be overridden by KvStoreClient, thus no need to explicitly remove it
   // 2) does not change: the existing connection to a neighbor is retained
-  peerAddRequests_.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(adjId),
-      std::forward_as_tuple(std::make_pair(
-          thrift::PeerSpec(FRAGILE, pubUrl, repUrl),
-          std::move(newAdj))));
+  adjacencies_[adjId] = std::make_pair(
+      thrift::PeerSpec(FRAGILE, pubUrl, repUrl), std::move(newAdj));
 
   // Advertise new adjancies in a throttled fashion
   advertiseMyAdjacenciesThrottled_->operator()();
@@ -603,94 +587,66 @@ LinkMonitor::neighborDownEvent(
           "Neighbor {} is down on interface {}.", remoteNodeName, ifName)
           .c_str());
 
-  // we haven't activated this neighbor, skip updates
-  if (peerAddRequests_.erase(adjId)) {
-    VLOG(2) << "LinkMonitor::sessionDown down for '" << remoteNodeName
-            << "' via interface '" << ifName
-            << "', but has never been announced, ignoring...";
-    return;
-  }
-
-  // take a snapshot of current peers
-  auto oldPeers = getPeersFromAdjacencies();
-
-  // udpate adjacencies_ and nbIfs_
+  // Update adjacencies_
   VLOG(2) << "Session to '" << remoteNodeName << "' via interface '" << ifName
           << "' down, removing immediately..";
   adjacencies_.erase(adjId);
+  updateKvStorePeers();
   advertiseMyAdjacencies();
-
-  auto& ifNames = nbIfs_[remoteNodeName];
-  ifNames.erase(ifName);
-
-  // take a snapshot of new required peers
-  auto newPeers = getPeersFromAdjacencies();
-
-  handlePeerChanges(oldPeers, newPeers);
-}
-
-void
-LinkMonitor::processPendingPeerAddRequests() {
-  LOG(INFO) << "Link Monitor: throttle timer has expired, accumulated "
-            << peerAddRequests_.size() << " peer addition requests";
-  // take a snapshot of current peers
-  auto oldPeers = getPeersFromAdjacencies();
-
-  // udpate adjacencies_ and nbIfs_
-  for (auto const& peerKv : peerAddRequests_) {
-    const auto& adjId = peerKv.first;
-    adjacencies_[adjId] = peerKv.second;
-
-    // adjId.first is node name, adjId.second is interface
-    auto& ifNames = nbIfs_[adjId.first];
-    ifNames.insert(adjId.second);
-  }
-
-  // take a snapshot of new required peers
-  auto newPeers = getPeersFromAdjacencies();
-
-  handlePeerChanges(oldPeers, newPeers);
-
-  // Advertise our adjacencies
-  advertiseMyAdjacencies();
-
-  peerAddRequests_.clear();
 }
 
 std::unordered_map<std::string, thrift::PeerSpec>
-LinkMonitor::getPeersFromAdjacencies() {
-  std::unordered_map<std::string, thrift::PeerSpec> peers;
-
-  for (const auto& adjKv : adjacencies_) {
-    // adjkv is {<nodename, ifname> : <PeerSepc, Adjacency>}
+LinkMonitor::getPeersFromAdjacencies(
+  const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies
+) {
+  std::unordered_map<std::string, std::string> neighborToIface;
+  for (const auto& adjKv : adjacencies) {
     const auto& nodeName = adjKv.first.first;
-    const auto& ifName = adjKv.first.second;
+    const auto& iface = adjKv.first.second;
 
-    const auto& ifNames = nbIfs_[nodeName];
-    if (ifName == *ifNames.begin()) {
-      // min interface
-      peers[nodeName] = adjKv.second.first;
+    // Look up for node
+    auto it = neighborToIface.find(nodeName);
+    if (it == neighborToIface.end()) {
+      // Add nbr-iface if not found
+      neighborToIface.emplace(nodeName, iface);
+    } else if (it->second > iface) {
+      // Update iface if it is smaller (minimum interface)
+      it->second = iface;
     }
+  }
+
+  std::unordered_map<std::string, thrift::PeerSpec> peers;
+  for (const auto& kv : neighborToIface) {
+    peers.emplace(kv.first, adjacencies.at(kv).first);
   }
   return peers;
 }
 
 void
-LinkMonitor::getPeerDifference(
-    const std::unordered_map<std::string, thrift::PeerSpec>& oldPeers,
-    const std::unordered_map<std::string, thrift::PeerSpec>& newPeers,
-    std::vector<std::string>& toDelPeers,
-    std::unordered_map<std::string, thrift::PeerSpec>& toAddPeers) {
-  CHECK(toDelPeers.size() == 0) << "toDelPeers is not empty";
-  CHECK(toAddPeers.size() == 0) << "toAddPeers is not empty";
+LinkMonitor::updateKvStorePeers() {
+  // Get old and new peer list. Also update local state
+  const auto oldPeers = std::move(peers_);
+  peers_ = getPeersFromAdjacencies(adjacencies_);
+  const auto& newPeers = peers_;
 
+  // Get list of peers to delete
+  std::vector<std::string> toDelPeers;
   for (const auto& oldKv : oldPeers) {
     const auto& nodeName = oldKv.first;
     if (newPeers.count(nodeName) == 0) {
       toDelPeers.emplace_back(nodeName);
+      logPeerEvent("DEL_PEER", oldKv.first, oldKv.second);
     }
   }
 
+  // Delete old peers
+  if (toDelPeers.size() > 0) {
+    const auto ret = kvStoreClient_->delPeers(toDelPeers);
+    CHECK(ret) << ret.error();
+  }
+
+  // Get list of peers to add
+  std::unordered_map<std::string, thrift::PeerSpec> toAddPeers;
   for (const auto& newKv : newPeers) {
     const auto& nodeName = newKv.first;
     // Even if nodeName is the same, there is the chance that we are updating
@@ -699,32 +655,14 @@ LinkMonitor::getPeerDifference(
     if (oldPeers.find(nodeName) == oldPeers.end() or
         oldPeers.at(nodeName) != newKv.second) {
       toAddPeers.emplace(nodeName, newKv.second);
+      logPeerEvent("ADD_PEER", newKv.first, newKv.second);
     }
   }
-}
 
-void
-LinkMonitor::handlePeerChanges(
-    const std::unordered_map<std::string, thrift::PeerSpec>& oldPeers,
-    const std::unordered_map<std::string, thrift::PeerSpec>& newPeers) {
-  std::vector<std::string> toDelPeers;
-  std::unordered_map<std::string, thrift::PeerSpec> toAddPeers;
-  getPeerDifference(oldPeers, newPeers, toDelPeers, toAddPeers);
-
-  // del peers in kvstore
-  if (toDelPeers.size() > 0) {
-    const auto ret = kvStoreClient_->delPeers(toDelPeers);
-    CHECK(ret) << ret.error();
-    logPeerEvent("DEL_PEER", toDelPeers);
-  }
-
-  // add peers in kvstore
+  // Add new peers
   if (toAddPeers.size() > 0) {
-    const auto peerNames = folly::gen::from(toAddPeers) | folly::gen::get<0>() |
-        folly::gen::as<std::vector<std::string>>();
     const auto ret = kvStoreClient_->addPeers(std::move(toAddPeers));
     CHECK(ret) << ret.error();
-    logPeerEvent("ADD_PEER", peerNames);
   }
 }
 
@@ -781,12 +719,17 @@ LinkMonitor::advertiseMyAdjacencies() {
 
   // Config is most likely to have changed. Update it in `ConfigStore`
   configStoreClient_->storeThriftObj(kConfigKey, config_);
+
+  // Cancel throttle timeout if scheduled
+  if (advertiseMyAdjacenciesThrottled_->isActive()) {
+    advertiseMyAdjacenciesThrottled_->cancel();
+  }
 }
 
 thrift::InterfaceDatabase
 LinkMonitor::createInterfaceDatabase() {
   auto makeIfThrift =
-      [this](const std::pair<std::string, LinkMonitor::InterfaceEntry>& ifState)
+      [this](const std::pair<std::string, InterfaceEntry>& ifState)
       -> std::pair<std::string, thrift::InterfaceInfo> {
     auto pair =
         std::make_pair(ifState.first, ifState.second.getInterfaceInfo());
@@ -815,7 +758,7 @@ LinkMonitor::createInterfaceDatabase() {
 
   thrift::InterfaceDatabase ifDb;
   ifDb.thisNodeName = nodeId_;
-  ifDb.interfaces = folly::gen::from(interfaceDb_) |
+  ifDb.interfaces = folly::gen::from(interfaces_) |
       folly::gen::map(makeIfThrift) |
       folly::gen::as<std::map<std::string, thrift::InterfaceInfo>>();
   if (enablePerfMeasurement_) {
@@ -965,15 +908,15 @@ LinkMonitor::updateLinkEvent(const thrift::LinkEntry& linkEntry) {
   }
 
   bool isUpdated = false;
-  if (interfaceDb_.count(ifName)) {
-    VLOG(3) << "Updating " << ifName << " : " << interfaceDb_.at(ifName);
-    isUpdated = interfaceDb_.at(ifName).updateEntry(ifIndex, isUp, weight);
+  if (interfaces_.count(ifName)) {
+    VLOG(3) << "Updating " << ifName << " : " << interfaces_.at(ifName);
+    isUpdated = interfaces_.at(ifName).updateEntry(ifIndex, isUp, weight);
     VLOG(3) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
-            << interfaceDb_.at(ifName);
+            << interfaces_.at(ifName);
   } else {
     isUpdated = true;
-    interfaceDb_[ifName] = InterfaceEntry(ifIndex, isUp);
-    VLOG(3) << "Added " << ifName << " : " << interfaceDb_.at(ifName);
+    interfaces_[ifName] = InterfaceEntry(ifIndex, isUp);
+    VLOG(3) << "Added " << ifName << " : " << interfaces_.at(ifName);
   }
 
   return isUpdated;
@@ -984,7 +927,7 @@ LinkMonitor::updateAddrEvent(const thrift::AddrEntry& addrEntry) {
   const std::string& ifName = addrEntry.ifName;
 
   // Add address if it is supposed to be announced
-  if (checkRedistIfNameRegex(ifName)) {
+  if (matchRegexSet(ifName, redistRegexList_)) {
     addDelRedistAddr(ifName, addrEntry.isValid, addrEntry.ipPrefix);
   }
 
@@ -996,7 +939,7 @@ LinkMonitor::updateAddrEvent(const thrift::AddrEntry& addrEntry) {
   bool isUpdated = false;
   auto ipNetwork = toIPNetwork(addrEntry.ipPrefix, false);
   bool isValid = addrEntry.isValid;
-  auto& intf = interfaceDb_.at(ifName);
+  auto& intf = interfaces_.at(ifName);
 
   VLOG(3) << "<addr> event: " << ipNetwork.first.str()
           << "/" << +ipNetwork.second
@@ -1039,12 +982,12 @@ LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
 
   // There is chance that netlink has not sent interface event yet
   // before an address event
-  // If the interface entry doesn't exist, we create one in interfaceDb_ here
+  // If the interface entry doesn't exist, we create one in interfaces_ here
   bool invalidLinkInfo = false;
-  if (!interfaceDb_.count(ifName)) {
+  if (!interfaces_.count(ifName)) {
     LOG(WARNING) << "Received address event before interface up/down event for "
                  << ifName << ". Adding...";
-    interfaceDb_.emplace(ifName, InterfaceEntry(0 /*ifIndex*/, false /*isUp*/));
+    interfaces_.emplace(ifName, InterfaceEntry(0 /*ifIndex*/, false /*isUp*/));
     invalidLinkInfo = true;
   }
 
@@ -1139,7 +1082,7 @@ LinkMonitor::processCommand() {
     }
     LOG(INFO) << "Setting overload bit for node.";
     config_.isOverloaded = true;
-    advertiseMyAdjacencies();
+    advertiseMyAdjacencies();  // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_OVERLOAD:
@@ -1149,11 +1092,11 @@ LinkMonitor::processCommand() {
     }
     LOG(INFO) << "Unsetting overload bit for node.";
     config_.isOverloaded = false;
-    advertiseMyAdjacencies();
+    advertiseMyAdjacencies();  // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::SET_LINK_OVERLOAD:
-    if (0 == interfaceDb_.count(req.interfaceName)) {
+    if (0 == interfaces_.count(req.interfaceName)) {
       LOG(ERROR) << "SET_LINK_OVERLOAD requested for unknown interface: "
                  << req.interfaceName;
       break;
@@ -1164,13 +1107,13 @@ LinkMonitor::processCommand() {
     }
     LOG(INFO) << "Setting overload bit for interface " << req.interfaceName;
     config_.overloadedLinks.insert(req.interfaceName);
-    advertiseMyAdjacencies();
+    advertiseMyAdjacencies();  // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD:
     if (config_.overloadedLinks.erase(req.interfaceName)) {
       LOG(INFO) << "Unsetting overload bit for interface " << req.interfaceName;
-      advertiseMyAdjacencies();
+      advertiseMyAdjacencies();  // TODO: Use throttle here
     } else {
       LOG(WARNING) << "Got unset-overload-bit request for unknown link "
                    << req.interfaceName;
@@ -1178,7 +1121,7 @@ LinkMonitor::processCommand() {
     break;
 
   case thrift::LinkMonitorCommand::SET_LINK_METRIC:
-    if (0 == interfaceDb_.count(req.interfaceName)) {
+    if (0 == interfaces_.count(req.interfaceName)) {
       LOG(ERROR) << "SET_LINK_METRIC requested for unknown interface: "
                  << req.interfaceName;
       break;
@@ -1191,14 +1134,14 @@ LinkMonitor::processCommand() {
     LOG(INFO) << "Overriding metric for interface " << req.interfaceName
               << " to " << req.overrideMetric;
     config_.linkMetricOverrides[req.interfaceName] = req.overrideMetric;
-    advertiseMyAdjacencies();
+    advertiseMyAdjacencies();  // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_METRIC:
     if (config_.linkMetricOverrides.erase(req.interfaceName)) {
       LOG(INFO) << "Removing metric override for interface "
                 << req.interfaceName;
-      advertiseMyAdjacencies();
+      advertiseMyAdjacencies();  // TODO: Use throttle here
     } else {
       LOG(WARNING) << "Got link-metric-unset request for unknown interface "
                    << req.interfaceName;
@@ -1206,11 +1149,11 @@ LinkMonitor::processCommand() {
     break;
 
   case thrift::LinkMonitorCommand::DUMP_LINKS: {
-    VLOG(2) << "Dump Links requested, replying with " << interfaceDb_.size()
+    VLOG(2) << "Dump Links requested, replying with " << interfaces_.size()
             << " links";
 
     auto makeIfDetails =
-        [this](const std::pair<std::string, LinkMonitor::InterfaceEntry>& intf)
+        [this](const std::pair<std::string, InterfaceEntry>& intf)
         -> std::pair<std::string, thrift::InterfaceDetails> {
       auto ifDetails = thrift::InterfaceDetails(
           apache::thrift::FRAGILE,
@@ -1239,7 +1182,7 @@ LinkMonitor::processCommand() {
     reply.thisNodeName = nodeId_;
     reply.isOverloaded = config_.isOverloaded;
     reply.interfaceDetails =
-        folly::gen::from(interfaceDb_) | folly::gen::map(makeIfDetails) |
+        folly::gen::from(interfaces_) | folly::gen::map(makeIfDetails) |
         folly::gen::as<
             std::unordered_map<std::string, thrift::InterfaceDetails>>();
 
@@ -1273,7 +1216,7 @@ LinkMonitor::processCommand() {
       LOG(INFO) << "Overriding metric for adjacency "
                 << req.adjNodeName.value() << " "
                 << req.interfaceName << " to " << req.overrideMetric;
-      advertiseMyAdjacencies();
+      advertiseMyAdjacencies();  // TODO: Use throttle here
 
     } else {
       LOG(WARNING) << "SET_ADJ_METRIC - adjacency is not yet formed for: "
@@ -1298,7 +1241,7 @@ LinkMonitor::processCommand() {
 
         if (adjacencies_.count(std::make_pair(req.adjNodeName.value(),
                                                 req.interfaceName))) {
-          advertiseMyAdjacencies();
+          advertiseMyAdjacencies();  // TODO: Use throttle here
         }
     } else {
       LOG(WARNING) << "Got adj-metric-unset request for unknown adjacency"
@@ -1413,6 +1356,27 @@ LinkMonitor::submitCounters() {
 }
 
 void
+LinkMonitor::logNeighborEvent(
+    const std::string& event,
+    const std::string& neighbor,
+    const std::string& iface,
+    const std::string& remoteIface) {
+  fbzmq::LogSample sample{};
+
+  sample.addString("event", event);
+  sample.addString("entity", "LinkMonitor");
+  sample.addString("node_name", nodeId_);
+  sample.addString("neighbor", neighbor);
+  sample.addString("interface", iface);
+  sample.addString("remote_interface", remoteIface);
+
+  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
+      apache::thrift::FRAGILE,
+      Constants::kEventLogCategory.toString(),
+      {sample.toJson()}));
+}
+
+void
 LinkMonitor::logLinkEvent(const std::string& event, const std::string& iface) {
   fbzmq::LogSample sample{};
 
@@ -1429,72 +1393,17 @@ LinkMonitor::logLinkEvent(const std::string& event, const std::string& iface) {
 
 void
 LinkMonitor::logPeerEvent(
-    const std::string& event, const std::vector<std::string>& peers) {
-  fbzmq::LogSample sample{};
-
-  sample.addString("event", event);
-  sample.addString("entity", "LinkMonitor");
-  sample.addString("node_name", nodeId_);
-  sample.addStringVector("peers", peers);
-
-  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
-}
-
-thrift::InterfaceInfo
-LinkMonitor::InterfaceEntry::getInterfaceInfo() const {
-
-  std::vector<thrift::IpPrefix> networks;
-  for (const auto& network : networks_) {
-    networks.emplace_back(toIpPrefix(network));
-  }
-
-  return thrift::InterfaceInfo(
-      FRAGILE,
-      isUp_,
-      ifIndex_,
-      // TO BE DEPERECATED SOON
-      folly::gen::from(getV4Addrs()) |
-        folly::gen::map(
-          [](const folly::IPAddress& ip) {
-            return toBinaryAddress(ip);
-          }) |
-        folly::gen::as<std::vector>(),
-      // TO BE DEPRECATED SOON
-      folly::gen::from(getV6LinkLocalAddrs()) |
-        folly::gen::map(
-          [](const folly::IPAddress& ip) {
-            return toBinaryAddress(ip);
-          }) |
-        folly::gen::as<std::vector>(),
-      networks);
-}
-
-bool
-LinkMonitor::checkRedistIfNameRegex(const std::string& ifName) {
-  if (!redistRegexList_) {
-    return false;
-  }
-  std::vector<int> matches;
-  return redistRegexList_->Match(ifName, &matches);
-}
-
-void
-LinkMonitor::logEvent(
     const std::string& event,
-    const std::string& neighbor,
-    const std::string& iface,
-    const std::string& remoteIface) {
+    const std::string& peerName,
+    const thrift::PeerSpec& peerSpec) {
   fbzmq::LogSample sample{};
 
   sample.addString("event", event);
   sample.addString("entity", "LinkMonitor");
   sample.addString("node_name", nodeId_);
-  sample.addString("neighbor", neighbor);
-  sample.addString("interface", iface);
-  sample.addString("remote_interface", remoteIface);
+  sample.addString("peer_name", peerName);
+  sample.addString("pub_url", peerSpec.pubUrl);
+  sample.addString("cmd_url", peerSpec.cmdUrl);
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,

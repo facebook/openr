@@ -1074,7 +1074,7 @@ TEST_F(SparkFixture, StressTest) {
   // Add Interfaces to both sparks
   //
 
-  std::vector<InterfaceEntry> interfaceEntries;
+  std::vector<SparkInterfaceEntry> interfaceEntries;
   for (int i = 0; i < ifaceCount; i++) {
     auto ifName = folly::sformat("iface{}", i);
     auto ifIndex = i + 1;
@@ -1088,7 +1088,7 @@ TEST_F(SparkFixture, StressTest) {
 
     mockIoProvider->addIfNameIfIndex({{ifName, ifIndex}});
     interfaceEntries.emplace_back(
-        InterfaceEntry{ifName, ifIndex, v4Addr, v6Addr});
+        SparkInterfaceEntry{ifName, ifIndex, v4Addr, v6Addr});
   }
   EXPECT_TRUE(spark1->updateInterfaceDb(interfaceEntries));
   EXPECT_TRUE(spark2->updateInterfaceDb(interfaceEntries));

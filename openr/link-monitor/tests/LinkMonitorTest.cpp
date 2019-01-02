@@ -274,6 +274,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         std::chrono::milliseconds(8));
 
     linkMonitorThread = std::make_unique<std::thread>([this]() {
+      folly::setThreadName("LinkMonitor");
       LOG(INFO) << "LinkMonitor thread starting";
       linkMonitor->run();
       LOG(INFO) << "LinkMonitor thread finishing";
@@ -289,34 +290,38 @@ class LinkMonitorTestFixture : public ::testing::Test {
   TearDown() override {
     LOG(INFO) << "LinkMonitor test/basic operations is done";
 
+    LOG(INFO) << "Stopping the LinkMonitor thread";
+    linkMonitor->stop();
+    linkMonitorThread->join();
+    LOG(INFO) << "LinkMonitor thread got stopped";
+    sparkReport.close();
+    sparkIfDbResp.close();
+
     LOG(INFO) << "Stopping prefix manager thread";
     prefixManager->stop();
     prefixManagerThread->join();
 
-    // this will be invoked before linkMonitorThread's d-tor
-    LOG(INFO) << "Stopping the linkMonitor thread";
-    linkMonitor->stop();
-    linkMonitorThread->join();
-    sparkReport.close();
-    sparkIfDbResp.close();
-
     // Erase data from config store
+    LOG(INFO) << "Erasing data from config store";
     PersistentStoreClient configStoreClient{PersistentStoreUrl{kConfigStoreUrl},
                                             context};
     configStoreClient.erase("link-monitor-config");
 
     // stop config store
+    LOG(INFO) << "Stopping config store";
     configStore->stop();
     configStoreThread->join();
 
     // stop the kvStore
+    LOG(INFO) << "Stopping KvStoreWrapper";
     kvStoreWrapper->stop();
-    LOG(INFO) << "The test KV store is stopped";
+    LOG(INFO) << "KvStoreWrapper got stopped";
 
     // stop mocked nl platform
+    LOG(INFO) << "Stopping mocked thrift handlers";
     mockNlHandler->stop();
     systemThriftThread.stop();
-    LOG(INFO) << "Mock nl platform is stopped";
+    LOG(INFO) << "Mocked thrift handlers got stopped";
   }
 
   thrift::DumpLinksReply
@@ -526,86 +531,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
   std::queue<thrift::AdjacencyDatabase> expectedAdjDbs;
   std::map<std::string, thrift::InterfaceInfo> sparkIfDb;
 };
-
-//
-// validate getPeerDifference
-//
-TEST(LinkMonitorTest, PeerDifferenceTest) {
-  std::unordered_map<std::string, thrift::PeerSpec> oldPeers;
-  std::unordered_map<std::string, thrift::PeerSpec> newPeers;
-  const std::string peerName1{"peer1"};
-  const std::string peerName2{"peer2"};
-  const std::string peerName3{"peer3"};
-  const std::string peerName4{"peer4"};
-  const std::string peerName5{"peer5"};
-  const thrift::PeerSpec peerSpec1{
-      apache::thrift::FRAGILE,
-      "inproc://fake_pub_url_1",
-      "inproc://fake_cmd_url_1"};
-  const thrift::PeerSpec peerSpec2{
-      apache::thrift::FRAGILE,
-      "inproc://fake_pub_url_2",
-      "inproc://fake_cmd_url_2"};
-  const thrift::PeerSpec peerSpec3{
-      apache::thrift::FRAGILE,
-      "inproc://fake_pub_url_3",
-      "inproc://fake_cmd_url_3"};
-  const thrift::PeerSpec peerSpec4{
-      apache::thrift::FRAGILE,
-      "inproc://fake_pub_url_4",
-      "inproc://fake_cmd_url_4"};
-  const thrift::PeerSpec peerSpec5{
-      apache::thrift::FRAGILE,
-      "inproc://fake_pub_url_5",
-      "inproc://fake_cmd_url_5"};
-
-  oldPeers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName1),
-      std::forward_as_tuple(peerSpec1));
-  oldPeers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName2),
-      std::forward_as_tuple(peerSpec2));
-  oldPeers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName3),
-      std::forward_as_tuple(peerSpec3));
-
-  newPeers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName3),
-      std::forward_as_tuple(peerSpec3));
-  newPeers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName4),
-      std::forward_as_tuple(peerSpec4));
-  newPeers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName5),
-      std::forward_as_tuple(peerSpec5));
-
-  // expected toDelPeers
-  std::vector<std::string> toDelPeersExpected{peerName1, peerName2};
-  std::sort(toDelPeersExpected.begin(), toDelPeersExpected.end());
-  // expected toAddPeers
-  std::unordered_map<std::string, thrift::PeerSpec> toAddPeersExpected;
-  toAddPeersExpected.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName4),
-      std::forward_as_tuple(peerSpec4));
-  toAddPeersExpected.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName5),
-      std::forward_as_tuple(peerSpec5));
-
-  std::vector<std::string> toDelPeers;
-  std::unordered_map<std::string, thrift::PeerSpec> toAddPeers;
-  LinkMonitor::getPeerDifference(oldPeers, newPeers, toDelPeers, toAddPeers);
-  std::sort(toDelPeers.begin(), toDelPeers.end());
-  EXPECT_EQ(toDelPeers, toDelPeersExpected);
-  EXPECT_EQ(toAddPeers, toAddPeersExpected);
-}
 
 // receive neighbor up/down events from "spark"
 // form peer connections and inform KvStore of adjacencies
@@ -1863,6 +1788,71 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
     EXPECT_EQ(1, prefixes.count(staticPrefix1));
     EXPECT_EQ(1, prefixes.count(staticPrefix2));
   }
+}
+
+TEST(LinkMonitor, getPeersFromAdjacencies) {
+  std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies;
+  std::unordered_map<std::string, thrift::PeerSpec> peers;
+
+  const auto peerSpec0 = thrift::PeerSpec(
+      FRAGILE,
+      "tcp://[fe80::2%iface0]:10001",
+      "tcp://[fe80::2%iface0]:10002");
+  const auto peerSpec1 = thrift::PeerSpec(
+      FRAGILE,
+      "tcp://[fe80::2%iface1]:10001",
+      "tcp://[fe80::2%iface1]:10002");
+  const auto peerSpec2 = thrift::PeerSpec(
+      FRAGILE,
+      "tcp://[fe80::2%iface2]:10001",
+      "tcp://[fe80::2%iface2]:10002");
+  const auto peerSpec3 = thrift::PeerSpec(
+      FRAGILE,
+      "tcp://[fe80::2%iface3]:10001",
+      "tcp://[fe80::2%iface3]:10002");
+
+  // Get peer spec
+  adjacencies[{"node1", "iface1"}] = {peerSpec1, thrift::Adjacency()};
+  adjacencies[{"node2", "iface2"}] = {peerSpec2, thrift::Adjacency()};
+  peers["node1"] = peerSpec1;
+  peers["node2"] = peerSpec2;
+  EXPECT_EQ(2, adjacencies.size());
+  EXPECT_EQ(2, peers.size());
+  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+
+  // Add {node2, iface3} to adjacencies and see no changes peers
+  adjacencies[{"node2", "iface3"}] = {peerSpec3, thrift::Adjacency()};
+  EXPECT_EQ(3, adjacencies.size());
+  EXPECT_EQ(2, peers.size());
+  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+
+  // Add {node1, iface0} to adjacencies and see node1 changes to peerSpec0
+  adjacencies[{"node1", "iface0"}] = {peerSpec0, thrift::Adjacency()};
+  peers["node1"] = peerSpec0;
+  EXPECT_EQ(4, adjacencies.size());
+  EXPECT_EQ(2, peers.size());
+  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+
+  // Remove {node2, iface2} from adjacencies and see node2 changes to peerSpec3
+  adjacencies.erase({"node2", "iface2"});
+  peers["node2"] = peerSpec3;
+  EXPECT_EQ(3, adjacencies.size());
+  EXPECT_EQ(2, peers.size());
+  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+
+  // Remove {node2, iface3} from adjacencies and see node2 no longer exists
+  adjacencies.erase({"node2", "iface3"});
+  peers.erase("node2");
+  EXPECT_EQ(2, adjacencies.size());
+  EXPECT_EQ(1, peers.size());
+  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+
+  // Test for empty adjacencies
+  adjacencies.clear();
+  peers.clear();
+  EXPECT_EQ(0, adjacencies.size());
+  EXPECT_EQ(0, peers.size());
+  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
 }
 
 int

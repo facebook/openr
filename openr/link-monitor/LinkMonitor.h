@@ -37,11 +37,16 @@
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStoreClient.h>
+#include <openr/link-monitor/InterfaceEntry.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
 
 namespace openr {
+
+// Pair <remoteNodeName, interface>
+using AdjacencyKey = std::pair<std::string, std::string>;
+using AdjacencyValue = std::pair<thrift::PeerSpec, thrift::Adjacency>;
 
 //
 // This class is responsible for reacting to neighbor
@@ -97,9 +102,6 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       // Link monitor's own URLs
       LinkMonitorGlobalPubUrl linkMonitorPubUrl,
       LinkMonitorGlobalCmdUrl linkMonitorCmdUrl,
-      //
-      // Mutable state initializers
-      //
       // how long to wait before initial adjacency advertisement
       std::chrono::seconds adjHoldTime,
       // link flap backoffs
@@ -116,15 +118,10 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
     mockMode_ = true;
   };
 
-  // calculate peers to be deleted/added from a given oldPeers and newPeers map
-  // we don't really need to worry about updated peers because LM will only
-  // handle neighbor up/down event, if a peer spec ever gets changed, it will
-  // be a down event followed up by a up event.
-  static void getPeerDifference(
-      const std::unordered_map<std::string, thrift::PeerSpec>& oldPeers,
-      const std::unordered_map<std::string, thrift::PeerSpec>& newPeers,
-      std::vector<std::string>& toDelPeers,
-      std::unordered_map<std::string, thrift::PeerSpec>& toAddPeers);
+  // create required peers <nodeName: PeerSpec> map from current adjacencies_
+  static std::unordered_map<std::string, thrift::PeerSpec>
+  getPeersFromAdjacencies(
+    const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies);
 
  private:
   // make no-copy
@@ -154,17 +151,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // Advertise my adjacencies to the KvStore's socket
   void advertiseMyAdjacencies();
 
-  // Invoked when throttle timer expires to aggregate all newly
-  // added/updated peers
-  void processPendingPeerAddRequests();
-
-  // create required peers <nodeName: PeerSpec> map from current adjacencies_
-  std::unordered_map<std::string, thrift::PeerSpec> getPeersFromAdjacencies();
-
   // handle peer changes e.g remove/add peers if any
-  void handlePeerChanges(
-      const std::unordered_map<std::string, thrift::PeerSpec>& oldPeers,
-      const std::unordered_map<std::string, thrift::PeerSpec>& newPeers);
+  void updateKvStorePeers();
 
   // Advertise all adjacencies changes in throttled and asynchronous
   // fashion. Prefer to use this instead of `advertiseMyAdjacencies`
@@ -213,11 +201,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // Sumbmits the counter/stats to monitor
   void submitCounters();
 
-  // helper to check if ifName has a prefix match in redistIfNames_
-  bool checkRedistIfNameRegex(const std::string& ifName);
-
   // submit events to monitor
-  void logEvent(
+  void logNeighborEvent(
       const std::string& event,
       const std::string& neighbor,
       const std::string& iface,
@@ -225,9 +210,12 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
 
   // link events
   void logLinkEvent(const std::string& event, const std::string& iface);
+
   // peer events
   void logPeerEvent(
-      const std::string& event, const std::vector<std::string>& peers);
+      const std::string& event,
+      const std::string& peerName,
+      const thrift::PeerSpec& peerSpec);
 
   //
   // immutable state/invariants
@@ -269,29 +257,22 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   const std::string linkMonitorGlobalPubUrl_;
   // URL to receive commands
   const std::string linkMonitorGlobalCmdUrl_;
+  // Backoff timers
+  const std::chrono::milliseconds flapInitialBackoff_;
+  const std::chrono::milliseconds flapMaxBackoff_;
+
   // The IO primitives provider; this is used for mocking
   // the IO during unit-tests.  It can be passed to other
   // functions hence shared pointer.
   const std::shared_ptr<IoProvider> ioProvider_;
-
-  // KvStore client for setting adjacency key to KvStore
-  // can be shared, e.g., to gmock expetation call
-  std::unique_ptr<KvStoreClient> kvStoreClient_;
-
-  // Thrift client connection to switch SystemService, which we actually use to
-  // manipulate routes.
-  folly::EventBase evb_;
-  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_;
-  std::unique_ptr<thrift::SystemServiceAsyncClient> client_;
 
   //
   // Mutable state
   //
 
   // flag to indicate whether it's running in mock mode or not
+  // TODO: Get rid of mockMode_
   bool mockMode_{false};
-  std::chrono::milliseconds flapInitialBackoff_;
-  std::chrono::milliseconds flapMaxBackoff_;
 
   // LinkMonitor config attributes (defined in LinkMonitor.thrift)
   thrift::LinkMonitorConfig config_;
@@ -307,179 +288,24 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // Used to subscribe to netlink events from PlatformPublisher
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> nlEventSub_;
 
-  // RangAlloctor to get unique nodeLabel for this node
-  std::unique_ptr<RangeAllocator<int32_t>> rangeAllocator_;
-
   // used for communicating over thrift/zmq sockets
   apache::thrift::CompactSerializer serializer_;
-
-  //
-  // local state used for link UP debouncing
-  //
-
-  // pending requests for adding new adjacencies
-  std::unordered_map<
-      std::pair<std::string /* remoteNodeName */, std::string /* interface */>,
-      std::pair<thrift::PeerSpec, thrift::Adjacency>>
-      peerAddRequests_;
 
   // currently active adjacencies
   // an adjacency is uniquely identified by interface and remote node
   // there can be multiple interfaces to a remote node, but at most 1 interface
   // (we use the "min" interface) for tcp connection
-  std::unordered_map<
-      std::pair<std::string /* remoteNodeName */, std::string /* interface */>,
-      std::pair<thrift::PeerSpec, thrift::Adjacency>>
-      adjacencies_;
+  std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies_;
 
-  // currently UP interfaces to each remote node
-  // use ordered set to find the min interface, instead of min heap, to prevent
-  // duplicate interfaces, which can occur, e.g., a neighbor restarts after
-  // reporting up but with no down event
-  std::unordered_map<
-      std::string /* remoteNodeName */,
-      std::set<std::string /* interface */>>
-      nbIfs_;
-
-  // Interface Entry
-  // We hold interface information (isUp and addresses) in this object
-  // We can create objects with both status and addresses together or
-  // only from link status information
-  //
-  // Piecemeal updates in response to link event or address events
-  // are supported
-  // We assume address events can never arrive before a link event
-  //
-  // Interface must always be sent on creation
-  // and on updates (link or address)
-  //
-  // Multicast route addition should be done explicitly when link is up
-
-  class InterfaceEntry final {
-   public:
-    InterfaceEntry() = default;
-    ~InterfaceEntry() = default;
-
-    InterfaceEntry(const InterfaceEntry&) = default;
-    InterfaceEntry(InterfaceEntry&&) = default;
-
-    InterfaceEntry& operator=(const InterfaceEntry&) = default;
-    InterfaceEntry& operator=(InterfaceEntry&&) = default;
-
-    // Creating entries when we have all link information
-    InterfaceEntry(
-        int ifIndex,
-        bool isUp,
-        uint64_t weight,
-        const std::unordered_set<folly::CIDRNetwork>& networks)
-        : ifIndex_(ifIndex),
-          isUp_(isUp),
-          weight_(weight),
-          networks_(networks) {}
-
-    // Creating entries only from link status information
-    InterfaceEntry(int ifIndex, bool isUp) : ifIndex_(ifIndex), isUp_(isUp) {}
-
-    // Update methods for link and address events
-    bool
-    updateEntry(int ifIndex, bool isUp, uint64_t weight) {
-      bool isUpdated = false;
-      isUpdated |= std::exchange(ifIndex_, ifIndex) != ifIndex;
-      isUpdated |= std::exchange(isUp_, isUp) != isUp;
-      isUpdated |= std::exchange(weight_, weight) != weight;
-      return isUpdated;
-    }
-
-    bool
-    updateEntry(const folly::CIDRNetwork& ipNetwork, bool isValid) {
-      bool isUpdated = false;
-      if (isValid) {
-        isUpdated |= (networks_.insert(ipNetwork)).second;
-      } else {
-        isUpdated |= (networks_.erase(ipNetwork) == 1);
-      }
-      return isUpdated;
-    }
-
-    // Used to check for updates if doing a re-sync
-    bool
-    operator==(const InterfaceEntry& interfaceEntry) {
-      return (
-          (ifIndex_ == interfaceEntry.getIfIndex()) &&
-          (isUp_ == interfaceEntry.isUp()) &&
-          (networks_ == interfaceEntry.getNetworks()) &&
-          (weight_ == interfaceEntry.getWeight()));
-    }
-
-    friend std::ostream&
-    operator<<(std::ostream& out, const InterfaceEntry& interfaceEntry) {
-      out << "Interface data: " << (interfaceEntry.isUp() ? "UP" : "DOWN")
-          << " ifIndex: " << interfaceEntry.getIfIndex()
-          << " weight: " << interfaceEntry.getWeight() << " IPv6ll: "
-          << folly::join(", ", interfaceEntry.getV6LinkLocalAddrs())
-          << " IPv4: " << folly::join(", ", interfaceEntry.getV4Addrs());
-      return out;
-    }
-
-    bool
-    isUp() const {
-      return isUp_;
-    }
-    int
-    getIfIndex() const {
-      return ifIndex_;
-    }
-    uint64_t
-    getWeight() const {
-      return weight_;
-    }
-
-    // returns const references for optimization
-    const std::unordered_set<folly::CIDRNetwork>&
-    getNetworks() const {
-      return networks_;
-    }
-
-    std::unordered_set<folly::IPAddress>
-    getV4Addrs() const {
-      std::unordered_set<folly::IPAddress> v4Addrs;
-      for (auto const& ntwk : networks_) {
-        if (ntwk.first.isV4()) {
-          v4Addrs.insert(ntwk.first);
-        }
-      }
-      return v4Addrs;
-    }
-    std::unordered_set<folly::IPAddress>
-    getV6LinkLocalAddrs() const {
-      std::unordered_set<folly::IPAddress> v6Addrs;
-      for (auto const& ntwk : networks_) {
-        if (ntwk.first.isV6() && ntwk.first.isLinkLocal()) {
-            v6Addrs.insert(ntwk.first);
-        }
-      }
-      return v6Addrs;
-    }
-
-    // Create the Interface info for Interface request
-    thrift::InterfaceInfo getInterfaceInfo() const;
-
-   private:
-    int ifIndex_{0};
-    bool isUp_{false};
-    uint64_t weight_{1};
-
-    // We keep the set of IPs and push to Spark
-    // Spark really cares about one, but we let
-    // Spark handle that
-    std::unordered_set<folly::CIDRNetwork> networks_;
-  };
+  // Previously announced KvStore peers
+  std::unordered_map<std::string, thrift::PeerSpec> peers_;
 
   // all interfaces states, including DOWN one
   // Keyed by interface Name
-  std::unordered_map<std::string, InterfaceEntry> interfaceDb_;
+  std::unordered_map<std::string, InterfaceEntry> interfaces_;
 
   // list of all prefixes per redistribute interface
+  // TODO: Get rid of this variable and integrate it with `interfaces_`
   std::unordered_map<std::string, std::unordered_set<thrift::IpPrefix>>
       redistAddrs_;
 
@@ -487,6 +313,7 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // interface with backoff.canTryNow() will be
   // backoff gets penalized if last timestamp interface was flapped is within
   // penalty threshold
+  // TODO: Get rid of this state variable and integrate it with `interfaces_`
   std::unordered_map<
       std::string,
       std::pair<folly::Optional<std::chrono::steady_clock::time_point>,
@@ -510,13 +337,25 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // DS to hold local stats/counters
   fbzmq::ThreadData tData_;
 
-  // client to interact with monitor
+  // Thrift client connection to switch SystemService, which we actually use to
+  // manipulate routes.
+  folly::EventBase evb_;
+  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_;
+  std::unique_ptr<thrift::SystemServiceAsyncClient> client_;
+
+  // client to interact with KvStore
+  std::unique_ptr<KvStoreClient> kvStoreClient_;
+
+  // RangAlloctor to get unique nodeLabel for this node
+  std::unique_ptr<RangeAllocator<int32_t>> rangeAllocator_;
+
+  // client to interact with ZmqMonitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // client to interact with ConfigStore
   std::unique_ptr<PersistentStoreClient> configStoreClient_;
 
-  // client to prefix manager
+  // client to interact with PrefixManager
   std::unique_ptr<PrefixManagerClient> prefixManagerClient_;
 }; // LinkMonitor
 

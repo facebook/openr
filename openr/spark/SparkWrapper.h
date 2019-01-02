@@ -11,7 +11,7 @@
 
 namespace openr {
 
-struct InterfaceEntry {
+struct SparkInterfaceEntry {
   std::string ifName;
   int ifIndex;
   folly::CIDRNetwork v4Network;
@@ -53,7 +53,8 @@ class SparkWrapper {
 
   // add interfaceDb for Spark to tracking
   // return true upon success and false otherwise
-  bool updateInterfaceDb(const std::vector<InterfaceEntry>& interfaceEntries);
+  bool updateInterfaceDb(
+      const std::vector<SparkInterfaceEntry>& interfaceEntries);
 
   // receive spark neighbor event
   folly::Expected<thrift::SparkNeighborEvent, fbzmq::Error> recvNeighborEvent(

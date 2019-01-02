@@ -143,20 +143,27 @@ executeShellCommand(const std::string& command) {
 }
 
 bool
-checkIncludeExcludeRegex(
+matchRegexSet(
     const std::string& name,
-    const std::unique_ptr<re2::RE2::Set>& includeRegexList,
-    const std::unique_ptr<re2::RE2::Set>& excludeRegexList) {
-  if (!includeRegexList) {
-    return false;
-  }
-  std::vector<int> matches;
-  if (excludeRegexList && excludeRegexList->Match(name, &matches)) {
+    const std::unique_ptr<re2::RE2::Set>& regexSet) {
+  if (!regexSet) {
     return false;
   }
 
-  return includeRegexList->Match(name, &matches);
+  std::vector<int> matches;
+  return regexSet->Match(name, &matches);
 }
+
+bool checkIncludeExcludeRegex(
+    const std::string& name,
+    const std::unique_ptr<re2::RE2::Set>& includeRegexSet,
+    const std::unique_ptr<re2::RE2::Set>& excludeRegexSet) {
+  return (
+    not matchRegexSet(name, excludeRegexSet) and
+    matchRegexSet(name, includeRegexSet)
+  );
+}
+
 
 std::vector<std::string>
 splitByComma(const std::string& input) {

@@ -495,7 +495,7 @@ OpenrWrapper<Serializer>::kvStoreDumpAll(std::string const& prefix) {
 template <class Serializer>
 bool
 OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
-    const std::vector<InterfaceEntry>& interfaceEntries) {
+    const std::vector<SparkInterfaceEntry>& interfaceEntries) {
   thrift::InterfaceDatabase ifDb(
       apache::thrift::FRAGILE, nodeId_, {}, thrift::PerfEvents());
   ifDb.perfEvents = folly::none;

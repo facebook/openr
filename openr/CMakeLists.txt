@@ -239,6 +239,7 @@ add_library(openrlib
   kvstore/KvStore.cpp
   kvstore/KvStoreWrapper.cpp
   link-monitor/LinkMonitor.cpp
+  link-monitor/InterfaceEntry.cpp
   nl/NetlinkSocket.cpp
   nl/NetlinkTypes.cpp
   platform/NetlinkFibHandler.cpp
@@ -438,6 +439,7 @@ install(FILES
 
 install(FILES
   link-monitor/LinkMonitor.h
+  link-monitor/InterfaceEntry.h
   DESTINATION include/openr/link-monitor
 )
 

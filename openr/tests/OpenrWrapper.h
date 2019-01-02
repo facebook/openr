@@ -88,7 +88,7 @@ class OpenrWrapper {
    * return true upon success and fasle otherwise
    */
   bool sparkUpdateInterfaceDb(
-      const std::vector<InterfaceEntry>& interfaceEntries);
+      const std::vector<SparkInterfaceEntry>& interfaceEntries);
 
   /**
    * get route databse from fib

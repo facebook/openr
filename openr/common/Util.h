@@ -93,10 +93,14 @@ uint32_t bitStrValue(const folly::IPAddress& ip, uint32_t start, uint32_t end);
 std::vector<folly::CIDRNetwork> getIfacePrefixes(
     std::string ifName, sa_family_t afNet);
 
+bool matchRegexSet(
+    const std::string& name, const std::unique_ptr<re2::RE2::Set>& regexSet);
+
 bool checkIncludeExcludeRegex(
     const std::string& name,
-    const std::unique_ptr<re2::RE2::Set>& includeRegexList,
-    const std::unique_ptr<re2::RE2::Set>& excludeRegexList);
+    const std::unique_ptr<re2::RE2::Set>& includeRegexSet,
+    const std::unique_ptr<re2::RE2::Set>& excludeRegexSet);
+
 
 /**
  * @param prefixIndex subprefix index, starting from 0
