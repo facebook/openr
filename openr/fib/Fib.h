@@ -125,9 +125,6 @@ class Fib final : public fbzmq::ZmqEventLoop {
   // Submit internal state counters to monitor
   void submitCounters();
 
-  // submit events to monitor
-  void logEvent(const std::string& event);
-
   // log perf events
   void logPerfEvents();
 

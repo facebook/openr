@@ -797,7 +797,7 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
   }
 
   auto const& startTime = std::chrono::steady_clock::now();
-  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
+  tData_.addStatValue("decision.path_build_runs", 1, fbzmq::COUNT);
 
   spfResults_.clear();
   spfResults_[myNodeName] = runSpf(myNodeName);
@@ -820,7 +820,7 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "Decision::buildPaths took " << deltaTime.count() << "ms.";
   tData_.addStatValue(
-      "decision.build_paths_ms", deltaTime.count(), fbzmq::AVG);
+      "decision.path_build_ms", deltaTime.count(), fbzmq::AVG);
 
   return buildRouteDb(myNodeName);
 } // buildPaths
@@ -833,7 +833,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   }
 
   const auto startTime = std::chrono::steady_clock::now();
-  tData_.addStatValue("decision.route_build_requests", 1, fbzmq::COUNT);
+  tData_.addStatValue("decision.route_build_runs", 1, fbzmq::COUNT);
   const auto& shortestPathsFromHere = spfResults_.at(myNodeName);
 
   thrift::RouteDatabase routeDb;
@@ -949,7 +949,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "Decision::buildRouteDb took " << deltaTime.count() << "ms.";
   tData_.addStatValue(
-      "decision.spf.buildroute_ms", deltaTime.count(), fbzmq::AVG);
+      "decision.route_build_ms", deltaTime.count(), fbzmq::AVG);
   return routeDb;
 } // buildRouteDb
 
@@ -1389,38 +1389,6 @@ Decision::submitCounters() {
 }
 
 void
-Decision::logRouteEvent(const std::string& event, const int numOfRoutes) {
-  fbzmq::LogSample sample{};
-
-  sample.addString("event", event);
-  sample.addString("entity", "Decision");
-  sample.addString("node_name", myNodeName_);
-  sample.addInt("num_of_routes", numOfRoutes);
-
-  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
-}
-
-void
-Decision::logDebounceEvent(
-    const int numUpdates, const std::chrono::milliseconds debounceTime) {
-  fbzmq::LogSample sample{};
-
-  sample.addString("event", "DECISION_DEBOUNCE");
-  sample.addString("entity", "Decision");
-  sample.addString("node_name", myNodeName_);
-  sample.addInt("updates", numUpdates);
-  sample.addInt("duration_ms", debounceTime.count());
-
-  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
-}
-
-void
 Decision::processPendingUpdates() {
   if (processUpdatesStatus_.adjChanged) {
     processPendingAdjUpdates();
@@ -1456,8 +1424,8 @@ Decision::processPendingAdjUpdates() {
     auto const& eventsCnt = events.size();
     CHECK_LE(2, eventsCnt);
     auto duration = events[eventsCnt - 1].unixTs - events[eventsCnt - 2].unixTs;
-    logDebounceEvent(
-        pendingAdjUpdates_.getCount(), std::chrono::milliseconds(duration));
+    VLOG(1) << "Debounced " << pendingAdjUpdates_.getCount() << " events over "
+            << std::chrono::milliseconds(duration).count() << "ms.";
   }
   pendingAdjUpdates_.clear();
 
@@ -1470,7 +1438,6 @@ Decision::processPendingAdjUpdates() {
   }
 
   auto& routeDb = maybeRouteDb.value();
-  logRouteEvent("ROUTE_CALC", routeDb.routes.size());
   if (maybePerfEvents) {
     addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_SPF");
   }
@@ -1497,7 +1464,6 @@ Decision::processPendingPrefixUpdates() {
   }
 
   auto& routeDb = maybeRouteDb.value();
-  logRouteEvent("ROUTE_CALC", routeDb.routes.size());
   if (maybePerfEvents) {
     addPerfEvent(*maybePerfEvents, myNodeName_, "ROUTE_UPDATE");
   }

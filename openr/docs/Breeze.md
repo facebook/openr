@@ -581,10 +581,10 @@ decision.adj_db_update.count.0 : 16.0
 decision.adj_db_update.count.3600 : 7.0
 decision.adj_db_update.count.60 : 0.0
 decision.adj_db_update.count.600 : 0.0
-decision.paths_build_requests.count.0 : 30.0
-decision.paths_build_requests.count.3600 : 22.0
-decision.paths_build_requests.count.60 : 0.0
-decision.paths_build_requests.count.600 : 0.0
+decision.path_build_runs.count.0 : 30.0
+decision.path_build_runs.count.3600 : 22.0
+decision.path_build_runs.count.60 : 0.0
+decision.path_build_runs.count.600 : 0.0
 decision.prefix_db_update.count.0 : 10.0
 decision.prefix_db_update.count.3600 : 3.0
 decision.prefix_db_update.count.60 : 0.0

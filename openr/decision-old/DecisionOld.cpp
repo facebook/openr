@@ -809,7 +809,7 @@ SpfSolverOld::SpfSolverOldImpl::buildShortestPaths(const std::string& myNodeName
     return routeDb;
   }
 
-  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
+  tData_.addStatValue("decision.path_build_runs", 1, fbzmq::COUNT);
   const auto startTime = std::chrono::steady_clock::now();
 
   prepareGraph();
@@ -895,7 +895,7 @@ SpfSolverOld::SpfSolverOldImpl::buildMultiPaths(const std::string& myNodeName) {
     return routeDb;
   }
 
-  tData_.addStatValue("decision.paths_build_requests", 1, fbzmq::COUNT);
+  tData_.addStatValue("decision.path_build_runs", 1, fbzmq::COUNT);
   auto const& startTime = std::chrono::steady_clock::now();
 
   // reset next-hops info
@@ -997,7 +997,7 @@ thrift::RouteDatabase
 SpfSolverOld::SpfSolverOldImpl::buildRouteDb(const std::string& myNodeName) {
   VLOG(4) << "SpfSolverOld::buildRouteDb for " << myNodeName;
 
-  tData_.addStatValue("decision.route_build_requests", 1, fbzmq::COUNT);
+  tData_.addStatValue("decision.route_build_runs", 1, fbzmq::COUNT);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
@@ -1076,7 +1076,7 @@ SpfSolverOld::SpfSolverOldImpl::buildRouteDb(const std::string& myNodeName) {
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "DecisionOld::buildRouteDb took " << deltaTime.count() << "ms.";
   tData_.addStatValue(
-      "decision.spf.buildroute_ms", deltaTime.count(), fbzmq::AVG);
+      "decision.route_build_ms", deltaTime.count(), fbzmq::AVG);
 
   return routeDb;
 } // buildRouteDb

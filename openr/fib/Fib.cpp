@@ -247,7 +247,6 @@ Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
   routeDb_ = std::move(newRouteDb);
   // Add some counters
   tData_.addStatValue("fib.process_route_db", 1, fbzmq::COUNT);
-  logEvent("ROUTE_UPDATE");
   // Send request to agent
   updateRoutes(routeDelta.first, routeDelta.second);
 }
@@ -255,7 +254,6 @@ Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
 void
 Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
   tData_.addStatValue("fib.process_interface_db", 1, fbzmq::COUNT);
-  logEvent("IFACE_UPDATE");
 
   if (interfaceDb.perfEvents) {
     maybePerfEvents_.assign(std::move(interfaceDb.perfEvents));
@@ -516,20 +514,6 @@ Fib::submitCounters() {
 }
 
 void
-Fib::logEvent(const std::string& event) {
-  fbzmq::LogSample sample{};
-
-  sample.addString("event", event);
-  sample.addString("entity", "Fib");
-  sample.addString("node_name", myNodeName_);
-
-  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
-      apache::thrift::FRAGILE,
-      Constants::kEventLogCategory.toString(),
-      {sample.toJson()}));
-}
-
-void
 Fib::logPerfEvents() {
   if (!maybePerfEvents_ or !maybePerfEvents_->events.size()) {
     return;
@@ -568,7 +552,7 @@ Fib::logPerfEvents() {
   // Log event
   auto eventStrs = sprintPerfEvents(*maybePerfEvents_);
   maybePerfEvents_ = folly::none;
-  VLOG(2) << "OpenR convergence performance. "
+  LOG(INFO) << "OpenR convergence performance. "
             << "Duration=" << totalDuration.count();
   for (auto& str : eventStrs) {
     VLOG(2) << "  " << str;

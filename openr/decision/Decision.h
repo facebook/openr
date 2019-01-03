@@ -253,11 +253,6 @@ class Decision : public fbzmq::ZmqEventLoop {
   // periodically submit counters to monitor thread
   void submitCounters();
 
-  // submit events to monitor
-  void logRouteEvent(const std::string& event, const int numOfRoutes);
-  void logDebounceEvent(
-      const int numUpdates, const std::chrono::milliseconds debounceTime);
-
   // this node's name and the key markers
   const std::string myNodeName_;
   // the prefix we use to find the adjacency database announcements
