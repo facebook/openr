@@ -294,6 +294,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
     linkMonitor->stop();
     linkMonitorThread->join();
     LOG(INFO) << "LinkMonitor thread got stopped";
+
+    LOG(INFO) << "Closing sockets";
     sparkReport.close();
     sparkIfDbResp.close();
 
@@ -531,6 +533,14 @@ class LinkMonitorTestFixture : public ::testing::Test {
   std::queue<thrift::AdjacencyDatabase> expectedAdjDbs;
   std::map<std::string, thrift::InterfaceInfo> sparkIfDb;
 };
+
+// Start LinkMonitor and ensure empty adjacency database and prefixes are
+// received upon initial hold-timeout expiry
+TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
+  // Verify that we receive empty adjacency database
+  expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel));
+  checkNextAdjPub("adj:node-1");
+}
 
 // receive neighbor up/down events from "spark"
 // form peer connections and inform KvStore of adjacencies

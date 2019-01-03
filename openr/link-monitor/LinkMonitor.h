@@ -260,7 +260,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // Backoff timers
   const std::chrono::milliseconds flapInitialBackoff_;
   const std::chrono::milliseconds flapMaxBackoff_;
-
+  // Timepoint used to hold off advertisement of link adjancecy on restart.
+  const std::chrono::steady_clock::time_point adjHoldUntilTimePoint_;
   // The IO primitives provider; this is used for mocking
   // the IO during unit-tests.  It can be passed to other
   // functions hence shared pointer.
@@ -322,10 +323,6 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
 
   // Timer for scheduling when to send interfaceDb to spark
   std::unique_ptr<fbzmq::ZmqTimeout> sendIfDbTimer_;
-
-  // Timepoint used to hold off advertisement of link adjancecy on restart.
-  std::chrono::steady_clock::time_point adjHoldUntilTimePoint_;
-  bool advertiseAdj_{false};
 
   // Timer for submitting to monitor periodically
   std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};

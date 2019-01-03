@@ -115,9 +115,10 @@ LinkMonitor::LinkMonitor(
       platformPubUrl_(platformPubUrl),
       linkMonitorGlobalPubUrl_(linkMonitorGlobalPubUrl),
       linkMonitorGlobalCmdUrl_(linkMonitorGlobalCmdUrl),
-      // mutable states
       flapInitialBackoff_(flapInitialBackoff),
       flapMaxBackoff_(flapMaxBackoff),
+      adjHoldUntilTimePoint_(std::chrono::steady_clock::now() + adjHoldTime),
+      // mutable states
       linkMonitorPubSock_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       linkMonitorCmdSock_(
@@ -137,9 +138,6 @@ LinkMonitor::LinkMonitor(
         updateKvStorePeers();
         advertiseMyAdjacencies();
       });
-
-  // Hold-time for not advertising partial adjacencies
-  adjHoldUntilTimePoint_ = std::chrono::steady_clock::now() + adjHoldTime;
 
   LOG(INFO) << "Loading link-monitor config";
   zmqMonitorClient_ =
@@ -452,14 +450,13 @@ LinkMonitor::prepare() noexcept {
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
   scheduleTimeoutAt(adjHoldUntilTimePoint_, [this]() noexcept {
-    // Advertise adjacencies if not advertised yet
-    if (advertiseAdj_) {
-      advertiseMyAdjacencies();
-      advertiseAdj_ = false;
-    }
-
-    // Advertise addresses
+    // Force advertise peers, adjacencies and addresses after hold-timeout
+    updateKvStorePeers();
+    advertiseMyAdjacencies();
     advertiseRedistAddrs();
+
+    // Cancel throttle as we are publishing latest state
+    advertiseMyAdjacenciesThrottled_->cancel();
   });
 
   // Schedule periodic timer for monitor submission
@@ -514,7 +511,7 @@ LinkMonitor::neighborUpEvent(
           .count();
 
   VLOG(1) << "LinkMonitor::neighborUpEvent called for '"
-          << toString(neighborAddrV6)
+          << toString(neighborAddrV6) << "%" << ifName
           << "', nodeName: '" << remoteNodeName << "'"
           << ", nodeIfName: '" << remoteIfName << "'";
   syslog(
@@ -669,8 +666,8 @@ LinkMonitor::updateKvStorePeers() {
 void
 LinkMonitor::advertiseMyAdjacencies() {
   if (std::chrono::steady_clock::now() < adjHoldUntilTimePoint_) {
-    // Too early for advertising my own adjacencies. Try again after sometime.
-    advertiseAdj_ = true;
+    // Too early for advertising my own adjacencies. Let timeout advertise it
+    // and skip here.
     return;
   }
 
