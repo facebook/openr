@@ -69,10 +69,10 @@ AsyncNotifChannel::Cleanup()
             << "Let's clean up!";
 
     // Finish the Async session
-    call.HandleResponse(false, &cq_);
+    call.HandleResponse(false);
 
     // Shutdown the completion queue
-    call.HandleResponse(false, &cq_);
+    call.HandleResponse(false);
 
     VLOG(1) << "Notifying channel close";
     channel_closed = true;
@@ -109,7 +109,7 @@ AsyncNotifChannel::AsyncCompleteRpc()
              VLOG(2) << "Got event! for Async channel";
              // Verify that the request was completed successfully. Note that "ok"
              // corresponds solely to the request for updates introduced by Finish().
-             call.HandleResponse(ok, &cq_);
+             call.HandleResponse(ok);
              break;
         case grpc::CompletionQueue::SHUTDOWN:
              VLOG(1) << "Shutdown event received for completion queue";
@@ -135,8 +135,7 @@ AsyncNotifChannel::AsyncCompleteRpc()
 AsyncNotifChannel::AsyncClientCall::AsyncClientCall(): callStatus_(CREATE) {}
 
 void 
-AsyncNotifChannel::AsyncClientCall::HandleResponse(bool responseStatus, 
-                                                   grpc::CompletionQueue* pcq_)
+AsyncNotifChannel::AsyncClientCall::HandleResponse(bool responseStatus)
 {
     //The First completion queue entry indicates session creation and shouldn't be processed - Check?
     switch (callStatus_) {
