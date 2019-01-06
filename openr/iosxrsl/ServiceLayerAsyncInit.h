@@ -68,7 +68,7 @@ private:
 
         std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::service_layer::SLGlobalNotif>> response_reader;
 
-        void HandleResponse(bool responseStatus, grpc::CompletionQueue* pcq_);      
+        void HandleResponse(bool responseStatus);      
 
     } call;
 
