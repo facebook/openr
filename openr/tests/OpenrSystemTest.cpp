@@ -185,6 +185,8 @@ class OpenrFixture : public ::testing::Test {
 
     mockServiceHandler_ = std::make_shared<MockSystemHandler>();
     server_ = std::make_shared<apache::thrift::ThriftServer>();
+    server_->setNumIOWorkerThreads(1);
+    server_->setNumAcceptThreads(1);
     server_->setPort(0);
     server_->setInterface(mockServiceHandler_);
 

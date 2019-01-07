@@ -175,6 +175,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         context, "inproc://platform-pub-url");
 
     server = make_shared<ThriftServer>();
+    server->setNumIOWorkerThreads(1);
+    server->setNumAcceptThreads(1);
     server->setPort(0);
     server->setInterface(mockNlHandler);
 

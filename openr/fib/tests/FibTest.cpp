@@ -119,6 +119,8 @@ class FibTestFixture : public ::testing::Test {
     mockFibHandler = std::make_shared<MockNetlinkFibHandler>();
 
     server = make_shared<ThriftServer>();
+    server->setNumIOWorkerThreads(1);
+    server->setNumAcceptThreads(1);
     server->setPort(0);
     server->setInterface(mockFibHandler);
 

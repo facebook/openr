@@ -99,6 +99,8 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     mockServiceHandler_ = std::make_shared<MockSystemServiceHandler>();
     server_ = std::make_shared<apache::thrift::ThriftServer>();
+    server_->setNumIOWorkerThreads(1);
+    server_->setNumAcceptThreads(1);
     server_->setPort(0);
     server_->setInterface(mockServiceHandler_);
 
@@ -218,6 +220,8 @@ class PrefixAllocTest : public ::testing::TestWithParam<bool> {
    void SetUp() override {
     mockServiceHandler_ = std::make_shared<MockSystemServiceHandler>();
     server_ = std::make_shared<apache::thrift::ThriftServer>();
+    server_->setNumIOWorkerThreads(1);
+    server_->setNumAcceptThreads(1);
     server_->setPort(0);
     server_->setInterface(mockServiceHandler_);
 
