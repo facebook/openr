@@ -1384,6 +1384,7 @@ Decision::submitCounters() {
 
   // Prepare for submitting counters
   auto counters = spfSolver_->getCounters();
+  counters["decision.zmq_event_queue_size"] = getEventQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }

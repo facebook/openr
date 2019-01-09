@@ -382,6 +382,15 @@ waitForFibService(const fbzmq::ZmqEventLoop& evl) {
   LOG(INFO) << "FibService up. Waited for " << waitMs << " ms.";
 }
 
+void submitCounters(
+    const ZmqEventLoop& eventLoop,
+    ZmqMonitorClient& monitorClient) {
+  VLOG(3) << "Submitting counters...";
+  std::unordered_map<std::string, int64_t> counters{};
+  counters["main.zmq_event_queue_size"] = eventLoop.getEventQueueSize();
+  monitorClient.setCounters(prepareSubmitCounters(std::move(counters)));
+}
+
 int
 main(int argc, char** argv) {
   // Initialize syslog
@@ -567,6 +576,18 @@ main(int argc, char** argv) {
     }
   }
 
+  const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
+  const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{"inproc://kvstore_cmd_local"};
+  const MonitorSubmitUrl monitorSubmitUrl{
+      folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
+
+  ZmqMonitorClient monitorClient(context, monitorSubmitUrl);
+  auto monitorTimer =
+      fbzmq::ZmqTimeout::make(&mainEventLoop, [&]() noexcept {
+          submitCounters(mainEventLoop, monitorClient);
+  });
+  monitorTimer->scheduleTimeout(Constants::kMonitorSubmitInterval, true);
+
   // Starting main event-loop
   std::thread mainEventLoopThread([&]() noexcept {
     LOG(INFO) << "Starting main event loop...";
@@ -577,11 +598,6 @@ main(int argc, char** argv) {
   mainEventLoop.waitUntilRunning();
 
   waitForFibService(mainEventLoop);
-
-  const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
-  const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{"inproc://kvstore_cmd_local"};
-  const MonitorSubmitUrl monitorSubmitUrl{
-      folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
 
   // Start config-store URL
   PersistentStore configStore(

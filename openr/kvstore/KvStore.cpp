@@ -1587,6 +1587,7 @@ KvStore::getCounters() {
   counters["kvstore.num_keys"] = kvStore_.size();
   counters["kvstore.num_peers"] = peers_.size();
   counters["kvstore.pending_full_sync"] = peersToSyncWith_.size();
+  counters["kvstore.zmq_event_queue_size"] = getEventQueueSize();
 
   return prepareSubmitCounters(std::move(counters));
 }

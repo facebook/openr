@@ -509,6 +509,7 @@ Fib::submitCounters() {
   // Add some more flat counters
   counters["fib.num_routes"] = routeDb_.routes.size();
   counters["fib.require_routedb_sync"] = syncRoutesTimer_->isScheduled();
+  counters["fib.zmq_event_queue_size"] = getEventQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }

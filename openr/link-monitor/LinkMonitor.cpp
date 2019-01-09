@@ -1248,6 +1248,7 @@ LinkMonitor::submitCounters() {
 
   // Add some more flat counters
   counters["link_monitor.adjacencies"] = adjacencies_.size();
+  counters["link_monitor.zmq_event_queue_size"] = getEventQueueSize();
   for (const auto& kv : adjacencies_) {
     auto& adj = kv.second.second;
     counters["link_monitor.metric." + adj.otherNodeName] = adj.metric;

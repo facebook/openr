@@ -219,6 +219,7 @@ PrefixManager::submitCounters() {
 
   // Extract/build counters from thread-data
   auto counters = tData_.getCounters();
+  counters["prefix_manager.zmq_event_queue_size"] = getEventQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }

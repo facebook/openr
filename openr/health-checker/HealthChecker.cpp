@@ -530,6 +530,7 @@ HealthChecker::submitCounters() {
   auto counters = tData_.getCounters();
   counters["health_checker.nodes_to_ping_size"] = nodesToPing_.size();
   counters["health_checker.nodes_info_size"] = nodeInfo_.size();
+  counters["health_checker.zmq_event_queue_size"] = getEventQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }

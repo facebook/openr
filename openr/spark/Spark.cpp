@@ -1346,6 +1346,7 @@ Spark::submitCounters() {
   counters["spark.num_adjacent_neighbors"] = adjacentNeighborCount;
   counters["spark.my_seq_num"] = mySeqNum_;
   counters["spark.pending_timers"] = getNumPendingTimeouts();
+  counters["spark.zmq_event_queue_size"] = getEventQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
