@@ -208,11 +208,16 @@ class LMLinksCmd(LMCmd):
         for (k, v) in sorted(interfaces.items()):
             metric_override = v.metricOverride if v.metricOverride else ""
             if v.info.isUp:
-                backoff_sec = v.linkFlapBackOffMs / 1000
-                state = 'Up' if backoff_sec == 0 else click.style(
-                    'Hold ({} s)'.format(backoff_sec), fg='yellow')
+                backoff_sec = int(
+                    (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0) / 1000
+                )
+                state = (
+                    "Up"
+                    if backoff_sec == 0
+                    else click.style("Hold ({} s)".format(backoff_sec), fg="yellow")
+                )
             else:
-                state = click.style('Down', fg='red')
+                state = click.style("Down", fg="red")
             if v.isOverloaded:
                 metric_override = click.style("Overloaded", fg="red")
             rows.append([k, state, metric_override, ""])

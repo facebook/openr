@@ -132,12 +132,23 @@ LinkMonitor::LinkMonitor(
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff) {
+
   // Create throttled adjacency advertiser
-  advertiseMyAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
+  advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       this, Constants::kLinkThrottleTimeout, [this]() noexcept {
-        updateKvStorePeers();
-        advertiseMyAdjacencies();
+        advertiseKvStorePeers();
+        advertiseAdjacencies();
       });
+
+  // Create throttled interfaces and addresses advertiser
+  advertiseIfaceAddrThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
+      this, Constants::kLinkThrottleTimeout, [this]() noexcept {
+        advertiseIfaceAddr();
+      });
+  // Create timer. Timer is used for immediate or delayed executions.
+  advertiseIfaceAddrTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+    advertiseIfaceAddr();
+  });
 
   LOG(INFO) << "Loading link-monitor config";
   zmqMonitorClient_ =
@@ -181,7 +192,7 @@ LinkMonitor::LinkMonitor(
         kvStoreClient_.get(),
         [&](folly::Optional<int32_t> newVal) noexcept {
           config_.nodeLabel = newVal ? newVal.value() : 0;
-          advertiseMyAdjacencies();
+          advertiseAdjacencies();
         },
         std::chrono::milliseconds(100),
         std::chrono::seconds(2),
@@ -372,7 +383,7 @@ LinkMonitor::prepare() noexcept {
             auto& adj = it->second.second;
             adj.metric = newRttMetric;
             adj.rtt = event.rttUs;
-            advertiseMyAdjacenciesThrottled_->operator()();
+            advertiseAdjacenciesThrottled_->operator()();
           }
           break;
         }
@@ -413,7 +424,17 @@ LinkMonitor::prepare() noexcept {
             const auto linkEvt =
                 fbzmq::util::readThriftObjStr<thrift::LinkEntry>(
                     eventMsg.value().eventData, serializer_);
-            processLinkEvent(linkEvt);
+            auto interfaceEntry = getOrCreateInterfaceEntry(linkEvt.ifName);
+            if (interfaceEntry) {
+              const bool wasUp = interfaceEntry->isUp();
+              interfaceEntry->updateAttrs(
+                  linkEvt.ifIndex, linkEvt.isUp, linkEvt.weight);
+              logLinkEvent(
+                  interfaceEntry->getIfName(),
+                  wasUp,
+                  interfaceEntry->isUp(),
+                  interfaceEntry->getBackoffDuration());
+            }
           } catch (std::exception const& e) {
             LOG(ERROR) << "Error parsing linkEvt. Reason: "
                        << folly::exceptionStr(e);
@@ -426,7 +447,12 @@ LinkMonitor::prepare() noexcept {
             const auto addrEvt =
                 fbzmq::util::readThriftObjStr<thrift::AddrEntry>(
                     eventMsg.value().eventData, serializer_);
-            processAddrEvent(addrEvt);
+            auto interfaceEntry = getOrCreateInterfaceEntry(addrEvt.ifName);
+            if (interfaceEntry) {
+              interfaceEntry->updateAddr(
+                  toIPNetwork(addrEvt.ipPrefix, false /* no masking */),
+                  addrEvt.isValid);
+            }
           } catch (std::exception const& e) {
             LOG(ERROR) << "Error parsing addrEvt. Reason: "
                        << folly::exceptionStr(e);
@@ -450,13 +476,15 @@ LinkMonitor::prepare() noexcept {
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
   scheduleTimeoutAt(adjHoldUntilTimePoint_, [this]() noexcept {
-    // Force advertise peers, adjacencies and addresses after hold-timeout
-    updateKvStorePeers();
-    advertiseMyAdjacencies();
+    LOG(INFO) << "Hold time expired. Advertising adjacencies and addresses";
+    // Advertise adjacencies and addresses after hold-timeout
+    advertiseAdjacencies();
     advertiseRedistAddrs();
 
     // Cancel throttle as we are publishing latest state
-    advertiseMyAdjacenciesThrottled_->cancel();
+    if (advertiseAdjacenciesThrottled_->isActive()) {
+      advertiseAdjacenciesThrottled_->cancel();
+    }
   });
 
   // Schedule periodic timer for monitor submission
@@ -487,9 +515,6 @@ LinkMonitor::prepare() noexcept {
   });
   // schedule immediate with small timeout
   interfaceDbSyncTimer_->scheduleTimeout(std::chrono::milliseconds(100));
-
-  sendIfDbTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { sendIfDbCallback(); });
 }
 
 void
@@ -566,8 +591,11 @@ LinkMonitor::neighborUpEvent(
   adjacencies_[adjId] = std::make_pair(
       thrift::PeerSpec(FRAGILE, pubUrl, repUrl), std::move(newAdj));
 
+  // Advertise KvStore peers immediately
+  advertiseKvStorePeers();
+
   // Advertise new adjancies in a throttled fashion
-  advertiseMyAdjacenciesThrottled_->operator()();
+  advertiseAdjacenciesThrottled_->operator()();
 }
 
 void
@@ -588,8 +616,8 @@ LinkMonitor::neighborDownEvent(
   VLOG(2) << "Session to '" << remoteNodeName << "' via interface '" << ifName
           << "' down, removing immediately..";
   adjacencies_.erase(adjId);
-  updateKvStorePeers();
-  advertiseMyAdjacencies();
+  advertiseKvStorePeers();
+  advertiseAdjacencies();
 }
 
 std::unordered_map<std::string, thrift::PeerSpec>
@@ -620,7 +648,7 @@ LinkMonitor::getPeersFromAdjacencies(
 }
 
 void
-LinkMonitor::updateKvStorePeers() {
+LinkMonitor::advertiseKvStorePeers() {
   // Get old and new peer list. Also update local state
   const auto oldPeers = std::move(peers_);
   peers_ = getPeersFromAdjacencies(adjacencies_);
@@ -664,7 +692,7 @@ LinkMonitor::updateKvStorePeers() {
 }
 
 void
-LinkMonitor::advertiseMyAdjacencies() {
+LinkMonitor::advertiseAdjacencies() {
   if (std::chrono::steady_clock::now() < adjHoldUntilTimePoint_) {
     // Too early for advertising my own adjacencies. Let timeout advertise it
     // and skip here.
@@ -718,59 +746,52 @@ LinkMonitor::advertiseMyAdjacencies() {
   configStoreClient_->storeThriftObj(kConfigKey, config_);
 
   // Cancel throttle timeout if scheduled
-  if (advertiseMyAdjacenciesThrottled_->isActive()) {
-    advertiseMyAdjacenciesThrottled_->cancel();
+  if (advertiseAdjacenciesThrottled_->isActive()) {
+    advertiseAdjacenciesThrottled_->cancel();
   }
-}
-
-thrift::InterfaceDatabase
-LinkMonitor::createInterfaceDatabase() {
-  auto makeIfThrift =
-      [this](const std::pair<std::string, InterfaceEntry>& ifState)
-      -> std::pair<std::string, thrift::InterfaceInfo> {
-    auto pair =
-        std::make_pair(ifState.first, ifState.second.getInterfaceInfo());
-
-    if (linkBackoffs_.count(ifState.first)) {
-       auto& linkBackoff = linkBackoffs_.at(ifState.first);
-
-       if (linkBackoff.second.canTryNow()) {
-         // current timestamp
-         auto timestamp = std::chrono::steady_clock::now();
-         // clear backoff if interface keeps stable longer than threshold
-         if (linkBackoff.first.hasValue() &&
-             std::chrono::duration_cast<std::chrono::milliseconds>(
-                 timestamp - linkBackoff.first.value()) >= flapMaxBackoff_) {
-           linkBackoff.second.reportSuccess();
-         }
-         linkBackoff.first.assign(timestamp);
-       } else {
-         // mark unstable interface as DOWN, don't let spark do
-         // neighbor discovery
-         pair.second.isUp = false;
-       }
-     }
-    return pair;
-  };
-
-  thrift::InterfaceDatabase ifDb;
-  ifDb.thisNodeName = nodeId_;
-  ifDb.interfaces = folly::gen::from(interfaces_) |
-      folly::gen::map(makeIfThrift) |
-      folly::gen::as<std::map<std::string, thrift::InterfaceInfo>>();
-  if (enablePerfMeasurement_) {
-    thrift::PerfEvents perfEvents;
-    addPerfEvent(perfEvents, nodeId_, "INTF_DB_UPDATED");
-    ifDb.perfEvents = std::move(perfEvents);
-  }
-
-  return ifDb;
 }
 
 void
-LinkMonitor::sendInterfaceDatabase() {
+LinkMonitor::advertiseIfaceAddr() {
+  auto retryTime = getRetryTimeOnUnstableInterfaces();
+
+  advertiseInterfaces();
+  advertiseRedistAddrs();
+
+  // Cancel throttle timeout if scheduled
+  if (advertiseIfaceAddrThrottled_->isActive()) {
+    advertiseIfaceAddrThrottled_->cancel();
+  }
+
+  // Schedule new timeout if needed to advertise UP but UNSTABLE interfaces
+  // once their backoff is clear.
+  if (retryTime.count() != 0) {
+    advertiseIfaceAddrTimer_->scheduleTimeout(retryTime);
+    VLOG(2) << "advertiseIfaceAddr timer scheduled in "
+            << retryTime.count() << " ms";
+  }
+}
+
+void
+LinkMonitor::advertiseInterfaces() {
   tData_.addStatValue("link_monitor.advertise_links", 1, fbzmq::SUM);
-  const auto ifDb = createInterfaceDatabase();
+
+  // Create interface database
+  thrift::InterfaceDatabase ifDb;
+  ifDb.thisNodeName = nodeId_;
+  for (auto& kv : interfaces_) {
+    auto& ifName = kv.first;
+    auto& interface = kv.second;
+    // Perform regex match
+    if (not checkIncludeExcludeRegex(
+          ifName, includeRegexList_, excludeRegexList_)) {
+      continue;
+    }
+    // Get interface info and override active status
+    auto interfaceInfo = interface.getInterfaceInfo();
+    interfaceInfo.isUp = interface.isActive();
+    ifDb.interfaces.emplace(ifName, std::move(interfaceInfo));
+  }
 
   // advertise interface database, prompting FIB to take immediate action
   // publish entire interface database
@@ -794,24 +815,90 @@ LinkMonitor::sendInterfaceDatabase() {
 }
 
 void
-LinkMonitor::sendIfDbCallback() {
-  auto retryTime = getRetryTimeOnUnstableInterfaces();
-
-  VLOG(3) << "<linkBackoffs_>:";
-  for (const auto& kv : linkBackoffs_) {
-    VLOG(3) << kv.first << ": "
-            << kv.second.second.getTimeRemainingUntilRetry().count() << " ms";
+LinkMonitor::advertiseRedistAddrs() {
+  if (std::chrono::steady_clock::now() < adjHoldUntilTimePoint_) {
+    // Too early for advertising my own prefixes. Let timeout advertise it
+    // and skip here.
+    return;
   }
 
-  // Send list of currently UP and STABLE interfaces
-  sendInterfaceDatabase();
+  std::vector<thrift::PrefixEntry> prefixes;
 
-  // We will need to advertise UP but UNSTABLE interfaces once their backoff
-  // is clear.
-  if (retryTime.count() != 0) {
-    sendIfDbTimer_->scheduleTimeout(retryTime);
-    VLOG(3) << "sendIfDbTimer_ scheduled in " << retryTime.count() << " ms";
+  // Add static prefixes
+  for (auto const& prefix : staticPrefixes_) {
+    prefixes.emplace_back(thrift::PrefixEntry(
+        apache::thrift::FRAGILE, prefix, thrift::PrefixType::LOOPBACK, ""));
   }
+
+  // Add redistribute addresses
+  for (auto& kv : interfaces_) {
+    auto& interface = kv.second;
+    // Ignore in-active interfaces
+    if (not interface.isActive()) {
+      continue;
+    }
+    // Perform regex match
+    if (not matchRegexSet(interface.getIfName(), redistRegexList_)) {
+      continue;
+    }
+    // Add all prefixes of this interface
+    for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
+      prefixes.emplace_back(std::move(prefix));
+    }
+  }
+
+  // Advertise via prefix manager client
+  prefixManagerClient_->syncPrefixesByType(
+      thrift::PrefixType::LOOPBACK, prefixes);
+}
+
+std::chrono::milliseconds
+LinkMonitor::getRetryTimeOnUnstableInterfaces() {
+  bool hasUnstableInterface = false;
+  std::chrono::milliseconds minRemainMs = flapMaxBackoff_;
+  for (auto& kv : interfaces_) {
+    auto& interface = kv.second;
+    if (interface.isActive()) {
+      continue;
+    }
+
+    const auto& curRemainMs = interface.getBackoffDuration();
+    if (curRemainMs.count() > 0) {
+      VLOG(2) << "Interface " << interface.getIfName()
+              << " is in backoff state for " << curRemainMs.count() << "ms";
+      minRemainMs = std::min(minRemainMs, curRemainMs);
+      hasUnstableInterface = true;
+    }
+  }
+
+  return hasUnstableInterface ? minRemainMs : std::chrono::milliseconds(0);
+}
+
+InterfaceEntry* FOLLY_NULLABLE
+LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
+  // Return null if ifName doesn't quality regex match criteria
+  if (not checkIncludeExcludeRegex(ifName, includeRegexList_, excludeRegexList_)
+      and not matchRegexSet(ifName, redistRegexList_)) {
+    return nullptr;
+  }
+
+  // Return existing element if any
+  auto it = interfaces_.find(ifName);
+  if (it != interfaces_.end()) {
+    return &(it->second);
+  }
+
+  // Create one and return it's reference
+  auto res = interfaces_.emplace(
+      ifName,
+      InterfaceEntry(
+        ifName,
+        flapInitialBackoff_,
+        flapMaxBackoff_,
+        *advertiseIfaceAddrThrottled_,
+        *advertiseIfaceAddrTimer_));
+
+  return &(res.first->second);
 }
 
 void
@@ -847,155 +934,6 @@ LinkMonitor::createNetlinkSystemHandlerClient() {
       std::make_unique<thrift::SystemServiceAsyncClient>(std::move(channel));
 }
 
-std::chrono::milliseconds
-LinkMonitor::getRetryTimeOnUnstableInterfaces() {
-  bool hasUnstableInterface = false;
-  std::chrono::milliseconds minRemainMs = flapMaxBackoff_;
-  for (const auto& kv : linkBackoffs_) {
-    const auto& backoff = kv.second.second;
-    const auto& curRemainMs = backoff.getTimeRemainingUntilRetry();
-    if (curRemainMs.count() > 0) {
-      minRemainMs = std::min(minRemainMs, curRemainMs);
-      hasUnstableInterface = true;
-    }
-  }
-
-  return hasUnstableInterface ? minRemainMs : std::chrono::milliseconds(0);
-}
-
-void
-LinkMonitor::processLinkUpdatedEvent(const std::string& ifName, bool isUp) {
-  VLOG(3) << "<link> update event on " << ifName;
-
-  // send DOWN event immediately and other events in lazy fashion
-  if (!isUp) {
-    sendInterfaceDatabase();
-  }
-
-  if (!linkBackoffs_.count(ifName)) {
-    // add backoff for newly added interface
-    linkBackoffs_.emplace(
-        ifName,
-        std::make_pair(
-          std::chrono::steady_clock::time_point(),
-          ExponentialBackoff<std::chrono::milliseconds>(
-              flapInitialBackoff_, flapMaxBackoff_)));
-  }
-  linkBackoffs_.at(ifName).second.reportError();
-
-  auto retryTime = getRetryTimeOnUnstableInterfaces();
-  sendIfDbTimer_->scheduleTimeout(retryTime);
-  VLOG(3) << "sendIfDbTimer_ scheduled in " << retryTime.count() << " ms";
-}
-
-bool
-LinkMonitor::updateLinkEvent(const thrift::LinkEntry& linkEntry) {
-  const std::string& ifName = linkEntry.ifName;
-  const auto isUp = linkEntry.isUp;
-  const auto ifIndex = linkEntry.ifIndex;
-  const auto weight = linkEntry.weight;
-
-  if (!isUp and redistAddrs_.erase(ifName)) {
-    advertiseRedistAddrs();
-  }
-
-  if (!checkIncludeExcludeRegex(ifName, includeRegexList_, excludeRegexList_)) {
-    VLOG(2) << "Interface " << ifName << " does not match iface regexes";
-    return false;
-  }
-
-  bool isUpdated = false;
-  if (interfaces_.count(ifName)) {
-    VLOG(3) << "Updating " << ifName << " : " << interfaces_.at(ifName);
-    isUpdated = interfaces_.at(ifName).updateEntry(ifIndex, isUp, weight);
-    VLOG(3) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
-            << interfaces_.at(ifName);
-  } else {
-    isUpdated = true;
-    interfaces_[ifName] = InterfaceEntry(ifIndex, isUp);
-    VLOG(3) << "Added " << ifName << " : " << interfaces_.at(ifName);
-  }
-
-  return isUpdated;
-}
-
-bool
-LinkMonitor::updateAddrEvent(const thrift::AddrEntry& addrEntry) {
-  const std::string& ifName = addrEntry.ifName;
-
-  // Add address if it is supposed to be announced
-  if (matchRegexSet(ifName, redistRegexList_)) {
-    addDelRedistAddr(ifName, addrEntry.isValid, addrEntry.ipPrefix);
-  }
-
-  if (!checkIncludeExcludeRegex(ifName, includeRegexList_, excludeRegexList_)) {
-    VLOG(2) << "Interface " << ifName << " does not match iface regexes";
-    return false;
-  }
-
-  bool isUpdated = false;
-  auto ipNetwork = toIPNetwork(addrEntry.ipPrefix, false);
-  bool isValid = addrEntry.isValid;
-  auto& intf = interfaces_.at(ifName);
-
-  VLOG(3) << "<addr> event: " << ipNetwork.first.str()
-          << "/" << +ipNetwork.second
-          << (isValid ? " add" : " delete")
-          << " on " << ifName;
-  VLOG(3) << "Updating " << ifName << " : " << intf;
-  isUpdated = intf.updateEntry(ipNetwork, isValid) && intf.isUp();
-  VLOG(3) << (isUpdated ? "Updated " : "No updates to ") << ifName << " : "
-            << intf;
-
-  return isUpdated;
-}
-
-void
-LinkMonitor::processLinkEvent(const thrift::LinkEntry& linkEntry) {
-  const std::string& ifName = linkEntry.ifName;
-  const auto isUp = linkEntry.isUp;
-  const auto ifIndex = linkEntry.ifIndex;
-  const auto weight = linkEntry.weight;
-
-  VLOG(3) << "<link> event: " << (isUp ? "UP" : "DOWN") << " for " << ifName
-          << ", ifIndex: " << ifIndex << ", weight: " << weight;
-
-  const auto isUpdated = updateLinkEvent(linkEntry);
-
-  if (isUpdated) {
-    syslog(
-        LOG_NOTICE,
-        "%s",
-        folly::sformat("Interface {} is {}.", ifName, (isUp ? "UP" : "DOWN"))
-            .c_str());
-    logLinkEvent((isUp ? "IFACE_UP" : "IFACE_DOWN"), ifName);
-    processLinkUpdatedEvent(ifName, isUp);
-  }
-}
-
-void
-LinkMonitor::processAddrEvent(const thrift::AddrEntry& addrEntry) {
-  const std::string& ifName = addrEntry.ifName;
-
-  // There is chance that netlink has not sent interface event yet
-  // before an address event
-  // If the interface entry doesn't exist, we create one in interfaces_ here
-  bool invalidLinkInfo = false;
-  if (!interfaces_.count(ifName)) {
-    LOG(WARNING) << "Received address event before interface up/down event for "
-                 << ifName << ". Adding...";
-    interfaces_.emplace(ifName, InterfaceEntry(0 /*ifIndex*/, false /*isUp*/));
-    invalidLinkInfo = true;
-  }
-
-  const auto isUpdated = updateAddrEvent(addrEntry);
-
-  if (!invalidLinkInfo and isUpdated) {
-    VLOG(3) << "<addr> event updated on " << ifName;
-    sendInterfaceDatabase();
-  }
-}
-
 bool
 LinkMonitor::syncInterfaces() {
   VLOG(1) << "Syncing Interface DB from Netlink Platform";
@@ -1015,35 +953,43 @@ LinkMonitor::syncInterfaces() {
   }
 
   //
-  // Process received data. We convert received data to link and addr events
-  // and invoke our updateLinkEvent and updateAddrEvent handlers
+  // Process received data and make updates in InterfaceEntry objects
   //
-  bool isUpdated = false;
   for (const auto& link : links) {
-    // Process link entry
-    const thrift::LinkEntry linkEntry(
-        apache::thrift::FRAGILE,
-        link.ifName,
-        link.ifIndex,
-        link.isUp,
-        link.weight);
-    isUpdated |= updateLinkEvent(linkEntry);
-
-    // Process each addr entry
-    for (const auto& network : link.networks) {
-      const thrift::AddrEntry addrEntry(
-          apache::thrift::FRAGILE,
-          link.ifName,
-          network,
-          true /* is valid */);
-      isUpdated |= updateAddrEvent(addrEntry);
+    // Get interface entry
+    auto interfaceEntry = getOrCreateInterfaceEntry(link.ifName);
+    if (not interfaceEntry) {
+      continue;
     }
-  }
 
-  // Send an update only if there is an update
-  if (isUpdated) {
-    VLOG(1) << "Completed sync of Interface DB from netlink";
-    sendInterfaceDatabase();
+    std::unordered_set<folly::CIDRNetwork> newNetworks;
+    for (const auto& network : link.networks) {
+      newNetworks.emplace(toIPNetwork(network, false /* no masking */));
+    }
+    const auto& oldNetworks = interfaceEntry->getNetworks();
+
+    // Update link attributes
+    const bool wasUp = interfaceEntry->isUp();
+    interfaceEntry->updateAttrs(link.ifIndex, link.isUp, link.weight);
+    logLinkEvent(
+        interfaceEntry->getIfName(),
+        wasUp,
+        interfaceEntry->isUp(),
+        interfaceEntry->getBackoffDuration());
+
+    // Remove old addresses if they are not in new
+    for (auto const& oldNetwork : oldNetworks) {
+      if (newNetworks.count(oldNetwork) == 0) {
+        interfaceEntry->updateAddr(oldNetwork, false);
+      }
+    }
+
+    // Add new addresses if they are not in old
+    for (auto const& newNetwork : newNetworks) {
+      if (oldNetworks.count(newNetwork) == 0) {
+        interfaceEntry->updateAddr(newNetwork, true);
+      }
+    }
   }
 
   return true;
@@ -1079,7 +1025,7 @@ LinkMonitor::processCommand() {
     }
     LOG(INFO) << "Setting overload bit for node.";
     config_.isOverloaded = true;
-    advertiseMyAdjacencies();  // TODO: Use throttle here
+    advertiseAdjacencies();  // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_OVERLOAD:
@@ -1089,7 +1035,7 @@ LinkMonitor::processCommand() {
     }
     LOG(INFO) << "Unsetting overload bit for node.";
     config_.isOverloaded = false;
-    advertiseMyAdjacencies();  // TODO: Use throttle here
+    advertiseAdjacencies();  // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::SET_LINK_OVERLOAD:
@@ -1104,13 +1050,13 @@ LinkMonitor::processCommand() {
     }
     LOG(INFO) << "Setting overload bit for interface " << req.interfaceName;
     config_.overloadedLinks.insert(req.interfaceName);
-    advertiseMyAdjacencies();  // TODO: Use throttle here
+    advertiseAdjacencies();  // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD:
     if (config_.overloadedLinks.erase(req.interfaceName)) {
       LOG(INFO) << "Unsetting overload bit for interface " << req.interfaceName;
-      advertiseMyAdjacencies();  // TODO: Use throttle here
+      advertiseAdjacencies();  // TODO: Use throttle here
     } else {
       LOG(WARNING) << "Got unset-overload-bit request for unknown link "
                    << req.interfaceName;
@@ -1131,14 +1077,14 @@ LinkMonitor::processCommand() {
     LOG(INFO) << "Overriding metric for interface " << req.interfaceName
               << " to " << req.overrideMetric;
     config_.linkMetricOverrides[req.interfaceName] = req.overrideMetric;
-    advertiseMyAdjacencies();  // TODO: Use throttle here
+    advertiseAdjacencies();  // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_METRIC:
     if (config_.linkMetricOverrides.erase(req.interfaceName)) {
       LOG(INFO) << "Removing metric override for interface "
                 << req.interfaceName;
-      advertiseMyAdjacencies();  // TODO: Use throttle here
+      advertiseAdjacencies();  // TODO: Use throttle here
     } else {
       LOG(WARNING) << "Got link-metric-unset request for unknown interface "
                    << req.interfaceName;
@@ -1149,39 +1095,39 @@ LinkMonitor::processCommand() {
     VLOG(2) << "Dump Links requested, replying with " << interfaces_.size()
             << " links";
 
-    auto makeIfDetails =
-        [this](const std::pair<std::string, InterfaceEntry>& intf)
-        -> std::pair<std::string, thrift::InterfaceDetails> {
-      auto ifDetails = thrift::InterfaceDetails(
-          apache::thrift::FRAGILE,
-          intf.second.getInterfaceInfo(),
-          config_.overloadedLinks.count(intf.first) > 0,
-          0 /* custom metric value */,
-          0 /* link flap back off time */);
-
-      folly::Optional<int32_t> maybeMetric;
-      if (config_.linkMetricOverrides.count(intf.first) > 0) {
-        maybeMetric.assign(config_.linkMetricOverrides.at(intf.first));
-      }
-      ifDetails.metricOverride = maybeMetric;
-
-      if (linkBackoffs_.count(intf.first) != 0) {
-        ifDetails.linkFlapBackOffMs = linkBackoffs_.at(intf.first)
-                                          .second.getTimeRemainingUntilRetry()
-                                          .count();
-      }
-
-      return std::make_pair(intf.first, ifDetails);
-    };
-
     // reply with the dump of known interfaces and their states
     thrift::DumpLinksReply reply;
     reply.thisNodeName = nodeId_;
     reply.isOverloaded = config_.isOverloaded;
-    reply.interfaceDetails =
-        folly::gen::from(interfaces_) | folly::gen::map(makeIfDetails) |
-        folly::gen::as<
-            std::unordered_map<std::string, thrift::InterfaceDetails>>();
+
+    // Fill interface details
+    for (auto& kv : interfaces_) {
+      auto& ifName = kv.first;
+      auto& interface = kv.second;
+      auto ifDetails = thrift::InterfaceDetails(
+          apache::thrift::FRAGILE,
+          interface.getInterfaceInfo(),
+          config_.overloadedLinks.count(ifName) > 0,
+          0 /* custom metric value */,
+          0 /* link flap back off time */);
+
+      // Add metric override if any
+      folly::Optional<int32_t> maybeMetric;
+      if (config_.linkMetricOverrides.count(ifName) > 0) {
+        maybeMetric.assign(config_.linkMetricOverrides.at(ifName));
+      }
+      ifDetails.metricOverride = maybeMetric;
+
+      // Add link-backoff
+      auto backoffMs = interface.getBackoffDuration();
+      if (backoffMs.count() != 0) {
+        ifDetails.linkFlapBackOffMs = backoffMs.count();
+      } else {
+        ifDetails.linkFlapBackOffMs = folly::none;
+      }
+
+      reply.interfaceDetails.emplace(ifName, std::move(ifDetails));
+    }
 
     auto ret = linkMonitorCmdSock_.sendMultiple(
         clientIdMessage,
@@ -1213,7 +1159,7 @@ LinkMonitor::processCommand() {
       LOG(INFO) << "Overriding metric for adjacency "
                 << req.adjNodeName.value() << " "
                 << req.interfaceName << " to " << req.overrideMetric;
-      advertiseMyAdjacencies();  // TODO: Use throttle here
+      advertiseAdjacencies();  // TODO: Use throttle here
 
     } else {
       LOG(WARNING) << "SET_ADJ_METRIC - adjacency is not yet formed for: "
@@ -1238,7 +1184,7 @@ LinkMonitor::processCommand() {
 
         if (adjacencies_.count(std::make_pair(req.adjNodeName.value(),
                                                 req.interfaceName))) {
-          advertiseMyAdjacencies();  // TODO: Use throttle here
+          advertiseAdjacencies();  // TODO: Use throttle here
         }
     } else {
       LOG(WARNING) << "Got adj-metric-unset request for unknown adjacency"
@@ -1280,62 +1226,6 @@ LinkMonitor::processCommand() {
 }
 
 void
-LinkMonitor::addDelRedistAddr(
-    const std::string& ifName, bool isValid, const thrift::IpPrefix& prefix) {
-  bool isUpdated = false;
-  // NOTE: this will mask the address.
-  auto const ipNetwork = toIPNetwork(prefix);
-  auto const ip = ipNetwork.first;
-  // Ignore irrelevant ip addresses.
-  if (ip.isLoopback() || ip.isLinkLocal() || ip.isMulticast() ||
-      (ip.isV4() && !enableV4_)) {
-    return;
-  }
-
-  auto const prefixToInsert = toIpPrefix(ipNetwork);
-  // If address is invalid then try to remove from list if it exists
-  if (!isValid and redistAddrs_.count(ifName)) {
-    isUpdated |= redistAddrs_.at(ifName).erase(prefixToInsert) > 0;
-    if (!redistAddrs_.at(ifName).size()) {
-      redistAddrs_.erase(ifName);
-    }
-  }
-
-  // If address is valid then add it to list if it doesn't exists
-  if (isValid) {
-    isUpdated = redistAddrs_[ifName].insert(prefixToInsert).second;
-  }
-
-  // Advertise updates if there is any change
-  if (isUpdated) {
-    advertiseRedistAddrs();
-  }
-}
-
-void
-LinkMonitor::advertiseRedistAddrs() {
-  std::vector<thrift::PrefixEntry> prefixes;
-
-  // Add static prefixes
-  for (auto const& prefix : staticPrefixes_) {
-    prefixes.emplace_back(thrift::PrefixEntry(
-        apache::thrift::FRAGILE, prefix, thrift::PrefixType::LOOPBACK, ""));
-  }
-
-  // Add redistribute addresses
-  for (auto const& kv : redistAddrs_) {
-    for (auto const& prefix : kv.second) {
-      prefixes.emplace_back(thrift::PrefixEntry(
-          apache::thrift::FRAGILE, prefix, thrift::PrefixType::LOOPBACK, ""));
-    }
-  }
-
-  // Advertise via prefix manager client
-  prefixManagerClient_->syncPrefixesByType(
-      thrift::PrefixType::LOOPBACK, prefixes);
-}
-
-void
 LinkMonitor::submitCounters() {
   VLOG(3) << "Submitting counters ... ";
 
@@ -1374,18 +1264,40 @@ LinkMonitor::logNeighborEvent(
 }
 
 void
-LinkMonitor::logLinkEvent(const std::string& event, const std::string& iface) {
-  fbzmq::LogSample sample{};
+LinkMonitor::logLinkEvent(
+    const std::string& iface,
+    bool wasUp,
+    bool isUp,
+    std::chrono::milliseconds backoffTime) {
+  // Do not log if no state transition
+  if (wasUp == isUp) {
+    return;
+  }
 
-  sample.addString("event", event);
+  fbzmq::LogSample sample{};
+  const std::string event = isUp ? "UP" : "DOWN";
+
+  sample.addString("event", folly::sformat("IFACE_{}", event));
   sample.addString("entity", "LinkMonitor");
   sample.addString("node_name", nodeId_);
   sample.addString("interface", iface);
+  sample.addInt("backoff_ms", backoffTime.count());
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
       Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
+
+  syslog(
+    LOG_NOTICE,
+    "%s",
+    folly::sformat(
+      "Interface {} is {} and has backoff of {}ms",
+      iface,
+      event,
+      backoffTime.count()
+    ).c_str()
+  );
 }
 
 void

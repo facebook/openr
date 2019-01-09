@@ -72,6 +72,17 @@ class ExponentialBackoff {
    */
   Duration getTimeRemainingUntilRetry() const;
 
+  /**
+   * Get latest error timestamp
+   */
+  std::chrono::steady_clock::time_point getLastErrorTime() const;
+
+  /**
+   * Getters for backoff time
+   */
+  Duration getInitialBackoff() const;
+  Duration getMaxBackoff() const;
+
  private:
   Duration initialBackoff_;
   Duration maxBackoff_;

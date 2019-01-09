@@ -106,6 +106,7 @@ class Constants {
 
   // the time we hold on announcing a link when it comes up
   static constexpr std::chrono::milliseconds kLinkThrottleTimeout{1000};
+  static constexpr std::chrono::milliseconds kLinkImmediateTimeout{1};
 
   // overloaded note metric value
   static constexpr uint64_t kOverloadNodeMetric{1ull << 32};

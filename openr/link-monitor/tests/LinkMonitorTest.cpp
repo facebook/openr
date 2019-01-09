@@ -1148,8 +1148,8 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url2"},
       std::chrono::seconds(1),
       // link flap backoffs, set high backoffs for this test
-      std::chrono::milliseconds(1500),
-      std::chrono::milliseconds(20000));
+      std::chrono::milliseconds(4000),
+      std::chrono::milliseconds(8000));
 
     linkMonitorThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "LinkMonitor thread starting";
@@ -1192,7 +1192,6 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   }
 
   VLOG(2) << "*** start link flaps ***";
-  const std::chrono::milliseconds flapInterval{10};
 
   // Bringing up the interface
   VLOG(2) << "*** bring up 2 interfaces ***";
@@ -1204,16 +1203,14 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
-  // at this point, both interface should have backoff=1.5sec
+
+  // at this point, both interface should have no backoff
   auto links = dumpLinks();
   EXPECT_EQ(2, links.interfaceDetails.size());
   for (const auto& ifName : ifNames) {
-    EXPECT_LE(
-        links.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 1500);
+    EXPECT_FALSE(
+        links.interfaceDetails.at(ifName).linkFlapBackOffMs.hasValue());
   }
-
-  /* sleep override */
-  std::this_thread::sleep_for(flapInterval);
 
   VLOG(2) << "*** bring down 2 interfaces ***";
   mockNlHandler->sendLinkEvent(
@@ -1225,9 +1222,6 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
 
-  /* sleep override */
-  std::this_thread::sleep_for(flapInterval);
-
   VLOG(2) << "*** bring up 2 interfaces ***";
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
@@ -1237,8 +1231,9 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
-  // at this point, both interface should have backoff=6sec
 
+  // at this point, both interface should have backoff=~1s
+  // (1s of debounce + 2s of recvAndReplyIfUpdate)
   {
     // we expect all interfaces are down at this point because backoff hasn't
     // been cleared up yet
@@ -1251,17 +1246,17 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
       EXPECT_GE(
-          links1.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 3000);
+          links1.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 0);
       EXPECT_LE(
-          links1.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 6000);
+          links1.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 4000);
     }
   }
 
-  // expect spark to receive updates in 6 seconds since first flap, at
-  // this point, we consumed 2 seconds (timeout from previous read),
-  // give another 4 seconds to recv commands on spark should be enough
+  // expect spark to receive updates max in 4 seconds since first flap. We
+  // already spent 2s in recvAndReplyIfUpdate before.
   /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(4));
+  std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
   {
     recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
@@ -1291,7 +1286,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
-  // at this point, both interface should have backoff=12sec
+  // at this point, both interface should have backoff=3sec
 
   {
     // expect sparkIfDb to have two interfaces DOWN
@@ -1310,14 +1305,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
       EXPECT_GE(
-          links2.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 6000);
+          links2.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 4000);
       EXPECT_LE(
-          links2.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 12000);
+          links2.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 8000);
     }
   }
-
-  /* sleep override */
-  std::this_thread::sleep_for(flapInterval);
 
   // Bringing up the interfaces
   VLOG(2) << "*** bring up 2 interfaces ***";
@@ -1329,16 +1321,15 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
-  // at this point, both interface should have backoff back to init value
 
-  // make sure to pause long enough to clear out back off timers
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(30));
+  // at this point, both interface should have backoff back to init value
 
   {
     // expect sparkIfDb to have two interfaces UP
-    recvAndReplyIfUpdate();
+    // Make sure to wait long enough to clear out backoff timers
+    recvAndReplyIfUpdate(std::chrono::seconds(8));
     auto res = collateIfUpdates(sparkIfDb);
+
     auto links3 = dumpLinks();
 
     // messages for 2 interfaces
@@ -1351,10 +1342,8 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v4AddrsMinCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
-      EXPECT_GE(
-          links3.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 0);
-      EXPECT_LE(
-          links3.interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 1500);
+      EXPECT_FALSE(
+          links3.interfaceDetails.at(ifName).linkFlapBackOffMs.hasValue());
     }
   }
 }
@@ -1445,7 +1434,6 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
-    EXPECT_EQ(2, res.size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
@@ -1719,11 +1707,15 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   }
 
   //
+  // Send link up event
+  //
+  mockNlHandler->sendLinkEvent("loopback", 101, true);
+
+  //
   // Advertise some dummy and wrong prefixes
   //
 
   // push some invalid loopback addresses
-  mockNlHandler->sendLinkEvent("loopback", 101, true);
   mockNlHandler->sendAddrEvent("loopback", "fe80::1/128", true);
   mockNlHandler->sendAddrEvent("loopback", "fe80::2/64", true);
 
@@ -1735,6 +1727,9 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   // push some valid interface addresses with subnet
   mockNlHandler->sendAddrEvent("loopback", "10.128.241.1/24", true);
   mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", true);
+
+  // Get interface-db and reply to spark
+  recvAndReplyIfUpdate();
 
   // verify
   prefixes.clear();
@@ -1767,6 +1762,9 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   mockNlHandler->sendAddrEvent("loopback", "10.128.241.1/24", false);
   mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", false);
 
+  // Get interface-db and reply to spark
+  recvAndReplyIfUpdate();
+
   // verify
   prefixes.clear();
   while (prefixes.size() != 3) {
@@ -1785,10 +1783,12 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   // Send link down event
   //
 
-  // send link down
   mockNlHandler->sendLinkEvent("loopback", 101, false);
+  recvAndReplyIfUpdate();
 
-  // verify
+  //
+  // Verify all addresses are withdrawn on link down event
+  //
   prefixes.clear();
   while (prefixes.size() != 2) {
     LOG(INFO) << "Testing prefix withdraws";

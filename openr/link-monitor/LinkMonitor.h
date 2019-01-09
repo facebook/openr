@@ -19,6 +19,7 @@
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/CppAttributes.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 #include <folly/io/async/EventBase.h>
@@ -144,56 +145,36 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   void neighborDownEvent(
       const std::string& remoteNodeName, const std::string& ifName);
 
-  // Used for initial interface discovery and periodic sync
+  // Used for initial interface discovery and periodic sync with system handler
   // return true if sync is successful
   bool syncInterfaces();
 
-  // Advertise my adjacencies to the KvStore's socket
-  void advertiseMyAdjacencies();
-
   // handle peer changes e.g remove/add peers if any
-  void updateKvStorePeers();
+  void advertiseKvStorePeers();
 
-  // Advertise all adjacencies changes in throttled and asynchronous
-  // fashion. Prefer to use this instead of `advertiseMyAdjacencies`
-  std::unique_ptr<fbzmq::ZmqThrottle> advertiseMyAdjacenciesThrottled_;
+  // Advertise my adjacencies to the KvStore
+  void advertiseAdjacencies();
 
-  // Helper function to check if there's any link/addr update between
-  // incoming netlink event and local database
-  bool updateLinkEvent(const thrift::LinkEntry& linkEntry);
-  bool updateAddrEvent(const thrift::AddrEntry& addrEntry);
-  // process an interface going up or down - we inform spark
-  // of the new connection and it starts multicasting on new interface
-  // attempting to discover a neighbor
-  void processLinkEvent(const thrift::LinkEntry& linkEntry);
-  void processAddrEvent(const thrift::AddrEntry& addrEntry);
-  thrift::InterfaceDatabase createInterfaceDatabase();
-  void sendInterfaceDatabase();
-
-  // Helper functions to process redistribute addresses
-  void addDelRedistAddr(
-      const std::string& ifName, bool isValid, const thrift::IpPrefix& prefix);
+  // Advertise interfaces and addresses to Spark/Fib and PrefixManager
+  // respectively
+  void advertiseIfaceAddr();
+  void advertiseInterfaces();
   void advertiseRedistAddrs();
-
-  // sendIfDbtimer callback, send all stable (backoff.canTryNow() == True)
-  // interfaces to spark, mark unstable interfaces as DOWN before
-  // sending out to spark
-  void sendIfDbCallback();
-
-  // Utility function to create thrift client connection to NetlinkSystemHandler
-  // Can throw exception if it fails to open transport to client on
-  // specified port.
-  void createNetlinkSystemHandlerClient();
 
   // get next try time, which should be the minimum remaining time among
   // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
   // return 0 if no more unstable interface
   std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
 
-  // process link update event
-  // double up ifName's backoff, and re-schedule timer based on
-  // minimum remaining retry
-  void processLinkUpdatedEvent(const std::string& ifName, bool isUp);
+  // Get or create InterfaceEntry object. Returns nullptr if ifName doesn't
+  // qualify regex match
+  InterfaceEntry* FOLLY_NULLABLE
+  getOrCreateInterfaceEntry(const std::string& ifName);
+
+  // Utility function to create thrift client connection to NetlinkSystemHandler
+  // Can throw exception if it fails to open transport to client on
+  // specified port.
+  void createNetlinkSystemHandlerClient();
 
   // process any command we may receive on cmd socket
   void processCommand();
@@ -209,7 +190,11 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
       const std::string& remoteIface);
 
   // link events
-  void logLinkEvent(const std::string& event, const std::string& iface);
+  void logLinkEvent(
+      const std::string& iface,
+      bool wasUp,
+      bool isUp,
+      std::chrono::milliseconds backoffTime);
 
   // peer events
   void logPeerEvent(
@@ -297,7 +282,6 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // there can be multiple interfaces to a remote node, but at most 1 interface
   // (we use the "min" interface) for tcp connection
   std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies_;
-
   // Previously announced KvStore peers
   std::unordered_map<std::string, thrift::PeerSpec> peers_;
 
@@ -305,24 +289,13 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // Keyed by interface Name
   std::unordered_map<std::string, InterfaceEntry> interfaces_;
 
-  // list of all prefixes per redistribute interface
-  // TODO: Get rid of this variable and integrate it with `interfaces_`
-  std::unordered_map<std::string, std::unordered_set<thrift::IpPrefix>>
-      redistAddrs_;
+  // Throttled versions of "advertise<>" functions. It batches
+  // up multiple calls and send them in one go!
+  std::unique_ptr<fbzmq::ZmqThrottle> advertiseAdjacenciesThrottled_;
+  std::unique_ptr<fbzmq::ZmqThrottle> advertiseIfaceAddrThrottled_;
 
-  // interface name to pair <last flap timestamp, backoff> mapping
-  // interface with backoff.canTryNow() will be
-  // backoff gets penalized if last timestamp interface was flapped is within
-  // penalty threshold
-  // TODO: Get rid of this state variable and integrate it with `interfaces_`
-  std::unordered_map<
-      std::string,
-      std::pair<folly::Optional<std::chrono::steady_clock::time_point>,
-                ExponentialBackoff<std::chrono::milliseconds>>>
-    linkBackoffs_;
-
-  // Timer for scheduling when to send interfaceDb to spark
-  std::unique_ptr<fbzmq::ZmqTimeout> sendIfDbTimer_;
+  // Timer for processing interfaces which are in backoff states
+  std::unique_ptr<fbzmq::ZmqTimeout> advertiseIfaceAddrTimer_;
 
   // Timer for submitting to monitor periodically
   std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};

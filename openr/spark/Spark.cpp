@@ -1242,7 +1242,7 @@ Spark::processInterfaceDbUpdate() {
     auto& newInterface = newInterfaceDb.at(ifName);
 
     if (interface == newInterface) {
-      LOG(INFO) << "No update to iface " << ifName << " in spark tracking";
+      VLOG(3) << "No update to iface " << ifName << " in spark tracking";
       continue;
     }
 

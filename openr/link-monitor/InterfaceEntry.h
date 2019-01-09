@@ -9,73 +9,53 @@
 
 #include <string>
 
+#include <fbzmq/async/ZmqThrottle.h>
+#include <fbzmq/async/ZmqTimeout.h>
 #include <folly/IPAddress.h>
 #include <folly/String.h>
 
+#include <openr/common/ExponentialBackoff.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 
 namespace openr {
 
 /**
- * We hold interface information (status and addresses) in this object.
- * We can create objects with both status and addresses together or only from
- * link status information
+ * Holds interface attributes along with complex information like backoffs. All
+ * updates made into this object is reflected asynchronously via throttled
+ * callback or timers provided in constructor.
  *
- * Piecemeal updates in response to link event or address events are supported
- * We assume address events can never arrive before a link event
- *
- * Interface must always be sent on creation and on updates (link or address)
+ * - Any change will always trigger throttled callback
+ * - Interface transition from Active to Inactive schedules immediate timeout
+ *   for fast reactions to down events.
  */
 class InterfaceEntry final {
  public:
-  InterfaceEntry() = default;
-  ~InterfaceEntry() = default;
 
-  InterfaceEntry(const InterfaceEntry&) = default;
-  InterfaceEntry(InterfaceEntry&&) = default;
-
-  InterfaceEntry& operator=(const InterfaceEntry&) = default;
-  InterfaceEntry& operator=(InterfaceEntry&&) = default;
-
-  // Creating entries when we have all link information
   InterfaceEntry(
-      int ifIndex,
-      bool isUp,
-      uint64_t weight,
-      const std::unordered_set<folly::CIDRNetwork>& networks)
-      : ifIndex_(ifIndex),
-        isUp_(isUp),
-        weight_(weight),
-        networks_(networks) {}
+      std::string const& ifName,
+      std::chrono::milliseconds const& initBackoff,
+      std::chrono::milliseconds const& maxBackoff,
+      fbzmq::ZmqThrottle& updateCallback,
+      fbzmq::ZmqTimeout& updateTimeout);
 
-  // Creating entries only from link status information
-  InterfaceEntry(int ifIndex, bool isUp) : ifIndex_(ifIndex), isUp_(isUp) {}
+  // Update attributes
+  bool updateAttrs(int ifIndex, bool isUp, uint64_t weight);
 
-  // Update methods for link and address events
-  bool
-  updateEntry(int ifIndex, bool isUp, uint64_t weight) {
-    bool isUpdated = false;
-    isUpdated |= std::exchange(ifIndex_, ifIndex) != ifIndex;
-    isUpdated |= std::exchange(isUp_, isUp) != isUp;
-    isUpdated |= std::exchange(weight_, weight) != weight;
-    return isUpdated;
-  }
+  // Update addresses
+  bool updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid);
 
-  bool
-  updateEntry(const folly::CIDRNetwork& ipNetwork, bool isValid) {
-    bool isUpdated = false;
-    if (isValid) {
-      isUpdated |= (networks_.insert(ipNetwork)).second;
-    } else {
-      isUpdated |= (networks_.erase(ipNetwork) == 1);
-    }
-    return isUpdated;
-  }
+  // Is interface active. Interface is active only when it is in UP state and
+  // it's not backed off
+  bool isActive();
+
+  // Get backoff time
+  std::chrono::milliseconds getBackoffDuration() const;
 
   // Used to check for updates if doing a re-sync
   bool
   operator==(const InterfaceEntry& interfaceEntry) {
     return (
+        (ifName_ == interfaceEntry.getIfName()) &&
         (ifIndex_ == interfaceEntry.getIfIndex()) &&
         (isUp_ == interfaceEntry.isUp()) &&
         (networks_ == interfaceEntry.getNetworks()) &&
@@ -92,14 +72,21 @@ class InterfaceEntry final {
     return out;
   }
 
-  bool
-  isUp() const {
-    return isUp_;
+  std::string
+  getIfName() const {
+    return ifName_;
   }
+
   int
   getIfIndex() const {
     return ifIndex_;
   }
+
+  bool
+  isUp() const {
+    return isUp_;
+  }
+
   uint64_t
   getWeight() const {
     return weight_;
@@ -111,39 +98,33 @@ class InterfaceEntry final {
     return networks_;
   }
 
-  std::unordered_set<folly::IPAddress>
-  getV4Addrs() const {
-    std::unordered_set<folly::IPAddress> v4Addrs;
-    for (auto const& ntwk : networks_) {
-      if (ntwk.first.isV4()) {
-        v4Addrs.insert(ntwk.first);
-      }
-    }
-    return v4Addrs;
-  }
-  std::unordered_set<folly::IPAddress>
-  getV6LinkLocalAddrs() const {
-    std::unordered_set<folly::IPAddress> v6Addrs;
-    for (auto const& ntwk : networks_) {
-      if (ntwk.first.isV6() && ntwk.first.isLinkLocal()) {
-          v6Addrs.insert(ntwk.first);
-      }
-    }
-    return v6Addrs;
-  }
+  // Utility function to retrieve v4 addresses
+  std::unordered_set<folly::IPAddress> getV4Addrs() const;
+
+  // Utility function to retrieve v6 link local addresses
+  std::unordered_set<folly::IPAddress> getV6LinkLocalAddrs() const;
+
+  // Utility function to retrieve re-distribute addresses
+  std::vector<thrift::PrefixEntry>
+  getGlobalUnicastNetworks(bool enableV4) const;
 
   // Create the Interface info for Interface request
   thrift::InterfaceInfo getInterfaceInfo() const;
 
  private:
+  // Attributes
+  std::string const ifName_;
   int ifIndex_{0};
   bool isUp_{false};
   uint64_t weight_{1};
-
-  // We keep the set of IPs and push to Spark
-  // Spark really cares about one, but we let
-  // Spark handle that
   std::unordered_set<folly::CIDRNetwork> networks_;
+
+  // Backoff variables
+  ExponentialBackoff<std::chrono::milliseconds> backoff_;
+
+  // Update callback
+  fbzmq::ZmqThrottle& updateCallback_;
+  fbzmq::ZmqTimeout& updateTimeout_;
 };
 
 } // namespace openr

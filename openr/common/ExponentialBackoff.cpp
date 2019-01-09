@@ -69,6 +69,24 @@ ExponentialBackoff<Duration>::getTimeRemainingUntilRetry() const {
   return (res < Duration(0)) ? Duration(0) : res;
 }
 
+template <typename Duration>
+std::chrono::steady_clock::time_point
+ExponentialBackoff<Duration>::getLastErrorTime() const {
+  return lastErrorTime_;
+}
+
+template <typename Duration>
+Duration
+ExponentialBackoff<Duration>::getInitialBackoff() const {
+  return initialBackoff_;
+}
+
+template <typename Duration>
+Duration
+ExponentialBackoff<Duration>::getMaxBackoff() const {
+  return maxBackoff_;
+}
+
 // define template instance for some common usecases
 template class ExponentialBackoff<std::chrono::microseconds>;
 template class ExponentialBackoff<std::chrono::milliseconds>;
