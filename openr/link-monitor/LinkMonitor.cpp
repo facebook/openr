@@ -254,6 +254,19 @@ LinkMonitor::prepare() noexcept {
     LOG(FATAL) << "Error connecting to URL '" << sparkCmdUrl_ << "' "
                << sparkCmd.error();
   }
+  const int relaxed = 1;
+  const auto sparkCmdOptRelaxed = sparkCmdSock_.setSockOpt(
+      ZMQ_REQ_RELAXED, &relaxed, sizeof(int));
+  if (sparkCmdOptRelaxed.hasError()) {
+    LOG(FATAL) << "Error setting ZMQ_REQ_RELAXED option";
+  }
+
+  const int correlate = 1;
+  const auto sparkCmdOptCorrelate = sparkCmdSock_.setSockOpt(
+      ZMQ_REQ_CORRELATE, &correlate, sizeof(int));
+  if (sparkCmdOptCorrelate.hasError()) {
+    LOG(FATAL) << "Error setting ZMQ_REQ_CORRELATE option";
+  }
 
   // Subscribe to events published by Spark for neighbor state changes
   LOG(INFO) << "Connect to Spark for neighbor events";
@@ -808,7 +821,8 @@ LinkMonitor::advertiseInterfaces() {
                << " exception: " << res2.error();
   }
   const auto result =
-      sparkCmdSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(serializer_);
+      sparkCmdSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(
+        serializer_, Constants::kReadTimeout);
   if (result.hasError()) {
     LOG(ERROR) << "Failed updating interface to Spark " << result.error();
   }
