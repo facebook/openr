@@ -61,12 +61,18 @@ class LMLinksCli(object):
         default=False,
         help="Show all links including ones without addresses",
     )
+    @click.option(
+        "--only-suppressed",
+        default=False,
+        is_flag=True,
+        help="Only show suppressed links",
+    )
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
-    def links(cli_opts, all, json):  # noqa: B902
+    def links(cli_opts, all, only_suppressed, json):  # noqa: B902
         """ Dump all known links of the current host """
 
-        lm.LMLinksCmd(cli_opts).run(all, json)
+        lm.LMLinksCmd(cli_opts).run(all, only_suppressed, json)
 
 
 class SetNodeOverloadCli(object):

@@ -126,8 +126,12 @@ class BuildInfoCmd(LMCmd):
 
 
 class LMLinksCmd(LMCmd):
-    def run(self, all, json):
+    def run(self, all, only_suppressed, json):
         links = self.client.dump_links(all)
+        if only_suppressed:
+            links.interfaceDetails = {
+                k: v for k, v in links.interfaceDetails.items() if v.linkFlapBackOffMs
+            }
         if json:
             self.print_links_json(links)
         else:
