@@ -22,14 +22,9 @@ class KvStoreAgent : public fbzmq::ZmqEventLoop {
     std::string kvStoreCmdUrl = "tcp://[::1]:60002",
     std::string kvStorePubUrl = "tcp://[::1]:60001");
 
-  ~KvStoreAgent();
-
   const std::string agentKeyPrefix{"prefixForDataThisAgentDisseminates:"};
 
  private:
-  void
-  processKeyVals(const std::map<std::string, thrift::Value>& keyVals);
-
   std::unique_ptr<KvStoreClient> kvStoreClient_;
   std::unique_ptr<fbzmq::ZmqTimeout> periodicValueChanger_;
 
