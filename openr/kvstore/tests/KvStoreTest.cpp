@@ -1378,11 +1378,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     VLOG(2) << "Verifying counters from " << store->nodeId;
     auto& oldCounters = oldNodeCounters[store->nodeId];
     auto& newCounters = newNodeCounters[store->nodeId];
-    EXPECT_GE(
-      newCounters["kvstore.received_publications.count.0"].value,
-      oldCounters["kvstore.received_publications.count.0"].value + 1
+    EXPECT_LE(
+      oldCounters["kvstore.received_publications.count.0"].value + 1,
+      newCounters["kvstore.received_publications.count.0"].value
     );
-    EXPECT_EQ(
+    EXPECT_LE(
       oldCounters["kvstore.received_key_vals.sum.0"].value + 1,
       newCounters["kvstore.received_key_vals.sum.0"].value
     );
