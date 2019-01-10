@@ -655,7 +655,7 @@ def print_routes_table(route_db, prefixes=None):
 
         paths_str = "\n".join(
             [
-                "via {}@{} metric {}".format(
+                "via {}%{} metric {}".format(
                     ipnetwork.sprint_addr(path.nextHop.addr), path.ifName, path.metric
                 )
                 for path in route.paths
@@ -1248,7 +1248,7 @@ def ip_nexthop_to_str(nh, ignore_v4_iface=False):
     Convert ttypes.BinaryAddress to string representation of a nexthop
     """
 
-    ifName = "@{}".format(nh.ifName) if nh.ifName else ""
+    ifName = "%{}".format(nh.ifName) if nh.ifName else ""
     if len(nh.addr) == 4 and ignore_v4_iface:
         ifName = ""
 
