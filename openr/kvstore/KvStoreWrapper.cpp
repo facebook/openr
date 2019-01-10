@@ -156,7 +156,7 @@ KvStoreWrapper::getKey(std::string key) {
   auto maybeMsg = reqSock_.recvThriftObj<thrift::Publication>(serializer_);
   if (maybeMsg.hasError()) {
     LOG(ERROR) << "getKey recv response failed: " << maybeMsg.error();
-    return nullptr;
+    return folly::none;
   }
   auto publication = maybeMsg.value();
 

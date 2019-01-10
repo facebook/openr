@@ -190,7 +190,7 @@ createRoute(
   auto addr = toIPAddress(prefix.prefixAddress);
   if (addr.isV4() and !enableV4) {
     LOG(ERROR) << "Received v4 prefix while v4 is not enabled.";
-    return nullptr;
+    return folly::none;
   }
 
   thrift::Path path(
@@ -213,11 +213,11 @@ createRouteMulti(
   auto addr = toIPAddress(prefix.prefixAddress);
   if (addr.isV4() and !enableV4) {
     LOG(ERROR) << "Received v4 prefix while v4 is not enabled.";
-    return nullptr;
+    return folly::none;
   }
 
   if (adjacencies.empty()) {
-    return nullptr;
+    return folly::none;
   }
 
   std::set<thrift::Path> paths;
