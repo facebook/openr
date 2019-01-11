@@ -13,6 +13,7 @@ from builtins import object
 
 import click
 from openr.cli.commands import prefix_mgr
+from openr.cli.utils.options import breeze_option
 
 
 class PrefixMgrCli(object):
@@ -23,15 +24,11 @@ class PrefixMgrCli(object):
         self.prefixmgr.add_command(SyncCli().sync)
 
     @click.group()
-    @click.option(
-        "--prefix_mgr_cmd_port", default=None, type=int, help="Prefix Manager port"
-    )
+    @breeze_option("--prefix_mgr_cmd_port", type=int, help="Prefix Manager port")
     @click.pass_context
     def prefixmgr(ctx, prefix_mgr_cmd_port):  # noqa: B902
         """ CLI tool to peek into Prefix Manager module. """
-
-        if prefix_mgr_cmd_port:
-            ctx.obj.prefix_mgr_cmd_port = prefix_mgr_cmd_port
+        pass
 
 
 class WithdrawCli(object):

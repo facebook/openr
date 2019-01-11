@@ -13,6 +13,7 @@ from builtins import object
 
 import click
 from openr.cli.commands import perf
+from openr.cli.utils.options import breeze_option
 
 
 class PerfCli(object):
@@ -20,13 +21,11 @@ class PerfCli(object):
         self.perf.add_command(ViewFibCli().fib)
 
     @click.group()
-    @click.option("--fib_rep_port", default=None, type=int, help="Fib rep port")
+    @breeze_option("--fib_rep_port", type=int, help="Fib rep port")
     @click.pass_context
     def perf(ctx, fib_rep_port):  # noqa: B902
         """ CLI tool to view latest perf log of each module. """
-
-        if fib_rep_port:
-            ctx.obj.fib_rep_port = fib_rep_port
+        pass
 
 
 class ViewFibCli(object):

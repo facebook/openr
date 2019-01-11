@@ -13,6 +13,7 @@ from builtins import object
 
 import click
 from openr.cli.commands import monitor
+from openr.cli.utils.options import breeze_option
 
 
 class MonitorCli(object):
@@ -24,13 +25,11 @@ class MonitorCli(object):
         self.monitor.add_command(MonitorStatistics().statistics)
 
     @click.group()
-    @click.option("--monitor_rep_port", default=None, type=int, help="Monitor rep port")
+    @breeze_option("--monitor_rep_port", type=int, help="Monitor rep port")
     @click.pass_context
     def monitor(ctx, monitor_rep_port):  # noqa: B902
         """ CLI tool to peek into Monitor module. """
-
-        if monitor_rep_port:
-            ctx.obj.monitor_rep_port = monitor_rep_port
+        pass
 
 
 class CountersCli(object):

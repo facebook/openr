@@ -13,13 +13,12 @@ from builtins import object
 
 import click
 from openr.cli.commands.tech_support import TechSupportCmd
+from openr.cli.utils.options import breeze_option
 
 
 class TechSupportCli(object):
     @click.command(name="tech-support")
-    @click.option(
-        "--fib_agent_port", default=None, type=int, help="Fib thrift server port"
-    )
+    @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
     @click.option(
         "--routes", is_flag=True, default=True, help="Show routes in techsupport output"
     )
@@ -32,8 +31,5 @@ class TechSupportCli(object):
 
         - Recent perf events
         """
-
-        if fib_agent_port:
-            ctx.obj.fib_agent_port = fib_agent_port
 
         TechSupportCmd(ctx.obj).run(routes)

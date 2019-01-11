@@ -14,6 +14,7 @@ from builtins import object
 
 import click
 from openr.cli.commands import fib
+from openr.cli.utils.options import breeze_option
 
 
 class FibCli(object):
@@ -33,21 +34,13 @@ class FibCli(object):
         self.fib.add_command(FibValidateRoutesCli().validate)
 
     @click.group()
-    @click.option("--fib_rep_port", default=None, type=int, help="Fib rep port")
-    @click.option(
-        "--fib_agent_port", default=None, type=int, help="Fib thrift server port"
-    )
-    @click.option("--client-id", default=None, type=int, help="FIB Client ID")
+    @breeze_option("--fib_rep_port", type=int, help="Fib rep port")
+    @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
+    @breeze_option("--client-id", type=int, help="FIB Client ID")
     @click.pass_context
     def fib(ctx, fib_rep_port, fib_agent_port, client_id):  # noqa: B902
         """ CLI tool to peek into Fib module. """
-
-        if fib_rep_port:
-            ctx.obj.fib_rep_port = fib_rep_port
-        if fib_agent_port:
-            ctx.obj.fib_agent_port = fib_agent_port
-        if client_id:
-            ctx.obj.client_id = client_id
+        pass
 
 
 class FibCountersCli(object):

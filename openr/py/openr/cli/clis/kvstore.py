@@ -13,6 +13,7 @@ from builtins import object
 
 import click
 from openr.cli.commands import kvstore
+from openr.cli.utils.options import breeze_option
 from openr.cli.utils.utils import parse_nodes
 from openr.utils.consts import Consts
 
@@ -37,16 +38,12 @@ class KvStoreCli(object):
         self.kvstore.add_command(AllocationsCli().unset, name="alloc-unset")
 
     @click.group()
-    @click.option("--kv_rep_port", default=None, type=int, help="KV store rep port")
-    @click.option("--kv_pub_port", default=None, type=int, help="KV store pub port")
+    @breeze_option("--kv_rep_port", type=int, help="KV store rep port")
+    @breeze_option("--kv_pub_port", type=int, help="KV store pub port")
     @click.pass_context
     def kvstore(ctx, kv_rep_port, kv_pub_port):  # noqa: B902
         """ CLI tool to peek into KvStore module. """
-
-        if kv_pub_port:
-            ctx.obj.kv_pub_port = kv_pub_port
-        if kv_rep_port:
-            ctx.obj.kv_rep_port = kv_rep_port
+        pass
 
 
 class PrefixesCli(object):

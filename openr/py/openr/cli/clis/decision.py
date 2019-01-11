@@ -14,6 +14,7 @@ from builtins import object
 
 import click
 from openr.cli.commands import decision
+from openr.cli.utils.options import breeze_option
 from openr.cli.utils.utils import parse_nodes
 
 
@@ -31,13 +32,11 @@ class DecisionCli(object):
         self.decision.add_command(DecisionValidateCli().validate)
 
     @click.group()
-    @click.option("--decision_rep_port", default=None, type=int, help="Decision port")
+    @breeze_option("--decision_rep_port", type=int, help="Decision port")
     @click.pass_context
     def decision(ctx, decision_rep_port):  # noqa: B902
         """ CLI tool to peek into Decision module. """
-
-        if decision_rep_port:
-            ctx.obj.decision_rep_port = decision_rep_port
+        pass
 
 
 class PathCli(object):

@@ -13,6 +13,7 @@ from builtins import object
 
 import click
 from openr.cli.commands import health_checker
+from openr.cli.utils.options import breeze_option
 
 
 class HealthCheckerCli(object):
@@ -20,15 +21,11 @@ class HealthCheckerCli(object):
         self.healthchecker.add_command(PeekCli().peek)
 
     @click.group()
-    @click.option(
-        "--health_checker_cmd_port", default=None, type=int, help="Health Checker port"
-    )
+    @breeze_option("--health_checker_cmd_port", type=int, help="Health Checker port")
     @click.pass_context
     def healthchecker(ctx, health_checker_cmd_port):  # noqa: B902
         """ CLI tool to peek into Health Checker module. """
-
-        if health_checker_cmd_port:
-            ctx.obj.health_checker_cmd_port = health_checker_cmd_port
+        pass
 
 
 class PeekCli(object):

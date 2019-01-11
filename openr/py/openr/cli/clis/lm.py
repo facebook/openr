@@ -14,6 +14,7 @@ from builtins import object
 import click
 from openr.cli.commands import kvstore, lm
 from openr.cli.utils import utils
+from openr.cli.utils.options import breeze_option
 from openr.cli.utils.utils import parse_nodes
 
 
@@ -45,13 +46,11 @@ class LMCli(object):
         self.lm.add_command(BuildInfoCli().build_info, name="build-info")
 
     @click.group()
-    @click.option("--lm_cmd_port", default=None, type=int, help="Link Monitor port")
+    @breeze_option("--lm_cmd_port", type=int, help="Link Monitor port")
     @click.pass_context
     def lm(ctx, lm_cmd_port):  # noqa: B902
         """ CLI tool to peek into Link Monitor module. """
-
-        if lm_cmd_port:
-            ctx.obj.lm_cmd_port = lm_cmd_port
+        pass
 
 
 class LMLinksCli(object):

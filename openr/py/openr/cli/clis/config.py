@@ -13,6 +13,7 @@ from builtins import object
 
 import click
 from openr.cli.commands import config
+from openr.cli.utils.options import breeze_option
 
 
 class ConfigCli(object):
@@ -31,13 +32,11 @@ class ConfigCli(object):
         self.config.add_command(ConfigStoreCli().config_store, name="store")
 
     @click.group()
-    @click.option("--config_store_url", default=None, help="Config Store IPC URL")
+    @breeze_option("--config_store_url", help="Config Store IPC URL")
     @click.pass_context
     def config(ctx, config_store_url):  # noqa: B902
         """ CLI tool to peek into Config Store module. """
-
-        if config_store_url:
-            ctx.obj.config_store_url = config_store_url
+        pass
 
 
 class ConfigPrefixAllocatorCli(object):
