@@ -18,7 +18,7 @@ from openr.clients import decision_client
 from openr.Decision import ttypes as decision_types
 from openr.Fib import ttypes as fib_types
 from openr.Lsdb import ttypes as lsdb_types
-from openr.utils import socket
+from openr.utils import zmq_socket
 
 
 route_db_cache = fib_types.RouteDatabase()
@@ -35,7 +35,7 @@ prefix_dbs_cache = {"san jose 1": prefix_db}
 
 class Decision(object):
     def __init__(self, zmq_ctx, url):
-        self._decision_server_socket = socket.Socket(zmq_ctx, zmq.REP)
+        self._decision_server_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REP)
         self._decision_server_socket.bind(url)
         self._route_db_cache = route_db_cache
         self._adj_db_cachee = adj_dbs_cache

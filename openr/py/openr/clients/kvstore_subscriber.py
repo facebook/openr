@@ -13,7 +13,7 @@ from builtins import object
 
 import zmq
 from openr.KvStore import ttypes as kv_store_types
-from openr.utils import consts, socket
+from openr.utils import consts, zmq_socket
 
 
 class KvStoreSubscriber(object):
@@ -26,7 +26,7 @@ class KvStoreSubscriber(object):
     ):
 
         # timeout set as -1 for indefinite blocking
-        self._kv_store_sub_socket = socket.Socket(
+        self._kv_store_sub_socket = zmq_socket.ZmqSocket(
             zmq_ctx, zmq.SUB, timeout, proto_factory
         )
         self._kv_store_sub_socket.connect(kv_store_pub_url)

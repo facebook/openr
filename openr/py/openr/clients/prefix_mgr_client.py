@@ -14,7 +14,7 @@ from builtins import object
 import zmq
 from openr.Lsdb import ttypes as lsdb_types
 from openr.PrefixManager import ttypes as prefix_mgr_types
-from openr.utils import consts, ipnetwork, socket
+from openr.utils import consts, ipnetwork, zmq_socket
 
 
 class PrefixMgrClient(object):
@@ -25,7 +25,7 @@ class PrefixMgrClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._prefix_mgr_cmd_socket = socket.Socket(
+        self._prefix_mgr_cmd_socket = zmq_socket.ZmqSocket(
             zmq_ctx, zmq.REQ, timeout, proto_factory
         )
         self._prefix_mgr_cmd_socket.connect(prefix_mgr_cmd_url)

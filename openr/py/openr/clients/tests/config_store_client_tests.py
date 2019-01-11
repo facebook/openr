@@ -17,7 +17,7 @@ import zmq
 from openr.clients import config_store_client
 from openr.LinkMonitor import ttypes as lm_types
 from openr.PersistentStore import ttypes as ps_types
-from openr.utils import socket
+from openr.utils import zmq_socket
 from openr.utils.serializer import serialize_thrift_object
 
 
@@ -29,7 +29,7 @@ store_db = {
 
 class ConfigStore(object):
     def __init__(self, zmq_ctx, url):
-        self._cs_server_socket = socket.Socket(zmq_ctx, zmq.REP)
+        self._cs_server_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REP)
         self._cs_server_socket.bind(url)
         self._store_db = store_db
 

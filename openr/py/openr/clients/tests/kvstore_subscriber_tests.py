@@ -17,7 +17,7 @@ from multiprocessing import Process
 import zmq
 from openr.clients import kvstore_subscriber
 from openr.KvStore import ttypes as kv_store_types
-from openr.utils import socket
+from openr.utils import zmq_socket
 
 
 value1 = kv_store_types.Value()
@@ -47,7 +47,7 @@ publication = kv_store_types.Publication(kv_store_cache)
 
 class KvStorePub(object):
     def __init__(self, zmq_ctx, url):
-        self._kv_store_publisher_socket = socket.Socket(zmq_ctx, zmq.PUB)
+        self._kv_store_publisher_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.PUB)
         self._kv_store_publisher_socket.bind(url)
 
     def publish(self):

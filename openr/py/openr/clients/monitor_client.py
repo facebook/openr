@@ -13,7 +13,7 @@ from builtins import object
 
 import zmq
 from fbzmq.Monitor import ttypes as monitor_types
-from openr.utils import consts, socket
+from openr.utils import consts, zmq_socket
 
 
 class MonitorClient(object):
@@ -24,7 +24,7 @@ class MonitorClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._monitor_cmd_socket = socket.Socket(
+        self._monitor_cmd_socket = zmq_socket.ZmqSocket(
             zmq_ctx, zmq.DEALER, timeout, proto_factory
         )
         self._monitor_cmd_socket.connect(monitor_cmd_url)

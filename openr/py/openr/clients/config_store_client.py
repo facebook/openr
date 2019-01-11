@@ -13,7 +13,7 @@ from builtins import object
 
 import zmq
 from openr.PersistentStore import ttypes as ps_types
-from openr.utils import consts, socket
+from openr.utils import consts, zmq_socket
 
 
 class ConfigStoreClient(object):
@@ -24,7 +24,9 @@ class ConfigStoreClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._cs_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout, proto_factory)
+        self._cs_cmd_socket = zmq_socket.ZmqSocket(
+            zmq_ctx, zmq.REQ, timeout, proto_factory
+        )
         self._cs_cmd_socket.connect(cs_cmd_url)
 
     def _send_req(self, req_msg):

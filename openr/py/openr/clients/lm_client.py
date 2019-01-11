@@ -13,7 +13,7 @@ from builtins import object
 
 import zmq
 from openr.LinkMonitor import ttypes as lm_types
-from openr.utils import consts, socket
+from openr.utils import consts, zmq_socket
 
 
 class LMClient(object):
@@ -24,7 +24,9 @@ class LMClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._lm_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout, proto_factory)
+        self._lm_cmd_socket = zmq_socket.ZmqSocket(
+            zmq_ctx, zmq.REQ, timeout, proto_factory
+        )
         self._lm_cmd_socket.connect(lm_cmd_url)
 
     def dump_links(self, all=True):

@@ -13,7 +13,7 @@ from builtins import object
 
 import zmq
 from openr.Fib import ttypes as fib_types
-from openr.utils import consts, socket
+from openr.utils import consts, zmq_socket
 
 
 class PerfClient(object):
@@ -24,7 +24,9 @@ class PerfClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._fib_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout, proto_factory)
+        self._fib_cmd_socket = zmq_socket.ZmqSocket(
+            zmq_ctx, zmq.REQ, timeout, proto_factory
+        )
         self._fib_cmd_socket.connect(fib_rep_port)
 
     def view_fib(self):

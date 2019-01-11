@@ -16,7 +16,7 @@ from multiprocessing import Process
 import zmq
 from fbzmq.Monitor import ttypes as monitor_types
 from openr.clients import monitor_client
-from openr.utils import socket
+from openr.utils import zmq_socket
 
 
 monitor_cache = monitor_types.CounterValuesResponse()
@@ -25,7 +25,7 @@ monitor_cache.counters = {"san jose": monitor_types.Counter(value=3.5)}
 
 class Monitor(object):
     def __init__(self, zmq_ctx, url):
-        self._monitor_server_socket = socket.Socket(zmq_ctx, zmq.DEALER)
+        self._monitor_server_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.DEALER)
         self._monitor_server_socket.bind(url)
         self._monitor_cache = monitor_cache
 

@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 
 import zmq
 from openr.KvStore import ttypes as kv_store_types
-from openr.utils import consts, serializer, socket
+from openr.utils import consts, serializer, zmq_socket
 
 
 class KvStoreClient(object):
@@ -25,7 +25,7 @@ class KvStoreClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._kv_store_cmd_socket = socket.Socket(
+        self._kv_store_cmd_socket = zmq_socket.ZmqSocket(
             zmq_ctx, zmq.REQ, timeout, proto_factory
         )
         self._kv_store_cmd_socket.connect(kv_store_cmd_url)

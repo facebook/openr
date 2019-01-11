@@ -20,7 +20,7 @@ class SocketStatus(object):
     connected, binded, idle = list(range(3))
 
 
-class Socket(object):
+class ZmqSocket(object):
     def __init__(
         self,
         zmq_ctx,

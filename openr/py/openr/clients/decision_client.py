@@ -13,7 +13,7 @@ from builtins import object
 
 import zmq
 from openr.Decision import ttypes as decision_types
-from openr.utils import consts, socket
+from openr.utils import consts, zmq_socket
 
 
 class DecisionClient(object):
@@ -24,7 +24,7 @@ class DecisionClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._decision_cmd_socket = socket.Socket(
+        self._decision_cmd_socket = zmq_socket.ZmqSocket(
             zmq_ctx, zmq.REQ, timeout, proto_factory
         )
         self._decision_cmd_socket.connect(decision_cmd_url)

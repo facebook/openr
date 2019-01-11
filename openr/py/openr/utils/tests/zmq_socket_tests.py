@@ -14,15 +14,15 @@ from multiprocessing import Process
 
 import zmq
 from openr.Lsdb import ttypes as lsdb_types
-from openr.utils import socket
+from openr.utils import zmq_socket
 
 
 class TestSocket(unittest.TestCase):
     def test_req_rep(self):
         zmq_ctx = zmq.Context()
-        rep_socket = socket.Socket(zmq_ctx, zmq.REP)
+        rep_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REP)
         rep_socket.bind("inproc://req_rep_test")
-        req_socket = socket.Socket(zmq_ctx, zmq.REQ)
+        req_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REQ)
         req_socket.connect("inproc://req_rep_test")
 
         thrift_obj = lsdb_types.PrefixDatabase()
@@ -37,9 +37,9 @@ class TestSocket(unittest.TestCase):
 
     def test_pub_sub(self):
         zmq_ctx = zmq.Context()
-        pub_socket = socket.Socket(zmq_ctx, zmq.PUB)
+        pub_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.PUB)
         pub_socket.bind("inproc://req_rep_test")
-        sub_socket = socket.Socket(zmq_ctx, zmq.SUB)
+        sub_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.SUB)
         sub_socket.connect("inproc://req_rep_test")
         sub_socket.set_sock_opt(zmq.SUBSCRIBE, b"")
 
@@ -52,9 +52,9 @@ class TestSocket(unittest.TestCase):
 
     def test_dealer_dealer(self):
         zmq_ctx = zmq.Context()
-        d_socket_1 = socket.Socket(zmq_ctx, zmq.DEALER)
+        d_socket_1 = zmq_socket.ZmqSocket(zmq_ctx, zmq.DEALER)
         d_socket_1.bind("inproc://dealer_test")
-        d_socket_2 = socket.Socket(zmq_ctx, zmq.DEALER)
+        d_socket_2 = zmq_socket.ZmqSocket(zmq_ctx, zmq.DEALER)
         d_socket_2.connect("inproc://dealer_test")
 
         thrift_obj = lsdb_types.PrefixDatabase()
@@ -69,12 +69,12 @@ class TestSocket(unittest.TestCase):
 
     def test_status_conflicts(self):
         zmq_ctx = zmq.Context()
-        bind_socket = socket.Socket(zmq_ctx, zmq.REP)
+        bind_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REP)
         bind_socket.bind("inproc://status_test")
         with self.assertRaises(Exception):
             bind_socket.connect("inproc://status_test")
 
-        connect_socket = socket.Socket(zmq_ctx, zmq.REP)
+        connect_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REP)
         connect_socket.connect("inproc://status_test")
         with self.assertRaises(Exception):
             connect_socket.bind("inproc://status_test")
@@ -85,7 +85,7 @@ class TestSocket(unittest.TestCase):
         thrift_obj.thisNodeName = "some node"
 
         def _send_recv():
-            req_socket = socket.Socket(zmq.Context(), zmq.REQ)
+            req_socket = zmq_socket.ZmqSocket(zmq.Context(), zmq.REQ)
             req_socket.connect("tcp://localhost:5000")
             req_socket.send_thrift_obj(thrift_obj)
             print("request sent")
@@ -94,7 +94,7 @@ class TestSocket(unittest.TestCase):
             self.assertEqual(thrift_obj, recv_obj)
 
         def _recv_send():
-            rep_socket = socket.Socket(zmq.Context(), zmq.REP)
+            rep_socket = zmq_socket.ZmqSocket(zmq.Context(), zmq.REP)
             rep_socket.bind("tcp://*:5000")
             recv_obj = rep_socket.recv_thrift_obj(lsdb_types.PrefixDatabase)
             print("request received")

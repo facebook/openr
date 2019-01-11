@@ -17,7 +17,7 @@ import zmq
 from openr.clients import prefix_mgr_client
 from openr.Lsdb import ttypes as lsdb_types
 from openr.PrefixManager import ttypes as prefix_mgr_types
-from openr.utils import socket
+from openr.utils import zmq_socket
 from openr.utils.ipnetwork import ip_str_to_prefix, sprint_prefix
 
 
@@ -39,7 +39,7 @@ prefix_entry3 = lsdb_types.PrefixEntry(
 
 class PrefixMgr(object):
     def __init__(self, zmq_ctx, url):
-        self._prefix_mgr_server_socket = socket.Socket(zmq_ctx, zmq.REP)
+        self._prefix_mgr_server_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REP)
         self._prefix_mgr_server_socket.bind(url)
         self._prefix_map = {
             sprint_prefix(prefix_entry1.prefix): prefix_entry1,

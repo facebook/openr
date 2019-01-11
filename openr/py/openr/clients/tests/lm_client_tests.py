@@ -16,7 +16,7 @@ from multiprocessing import Process
 import zmq
 from openr.clients import lm_client
 from openr.LinkMonitor import ttypes as lm_types
-from openr.utils import socket
+from openr.utils import zmq_socket
 
 
 dump_links_cache = lm_types.DumpLinksReply()
@@ -25,7 +25,7 @@ dump_links_cache.thisNodeName = "san jose 1"
 
 class LM(object):
     def __init__(self, zmq_ctx, url):
-        self._lm_server_socket = socket.Socket(zmq_ctx, zmq.DEALER)
+        self._lm_server_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.DEALER)
         self._lm_server_socket.bind(url)
         self._dump_links_cache = dump_links_cache
 

@@ -16,7 +16,7 @@ from multiprocessing import Process
 import zmq
 from openr.clients import kvstore_client
 from openr.KvStore import ttypes as kv_store_types
-from openr.utils import socket
+from openr.utils import zmq_socket
 
 
 value1 = kv_store_types.Value()
@@ -45,7 +45,7 @@ kv_store_cache = {
 
 class KVStore(object):
     def __init__(self, zmq_ctx, url):
-        self._kv_store_server_socket = socket.Socket(zmq_ctx, zmq.REP)
+        self._kv_store_server_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REP)
         self._kv_store_server_socket.bind(url)
         self._kv_store = kv_store_cache
 

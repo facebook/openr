@@ -16,7 +16,7 @@ from multiprocessing import Process
 import zmq
 from openr.clients import fib_client
 from openr.Fib import ttypes as fib_types
-from openr.utils import socket
+from openr.utils import zmq_socket
 
 
 route_db_cache = fib_types.RouteDatabase()
@@ -25,7 +25,7 @@ route_db_cache.thisNodeName = "san jose 1"
 
 class Fib(object):
     def __init__(self, zmq_ctx, url):
-        self._fib_server_socket = socket.Socket(zmq_ctx, zmq.REP)
+        self._fib_server_socket = zmq_socket.ZmqSocket(zmq_ctx, zmq.REP)
         self._fib_server_socket.bind(url)
         self._route_db_cache = route_db_cache
 

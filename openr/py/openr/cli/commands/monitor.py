@@ -19,7 +19,7 @@ import zmq
 from fbzmq.Monitor import ttypes as monitor_types
 from openr.cli.utils import utils
 from openr.clients import monitor_client, monitor_subscriber
-from openr.utils import consts, printing, socket
+from openr.utils import consts, printing, zmq_socket
 
 
 class MonitorCmd(object):
@@ -80,7 +80,7 @@ class ForceCrashCmd(MonitorCmd):
             return
 
         print("Triggering force crash")
-        sock = socket.Socket(self.cli_opts.zmq_ctx, zmq.REQ, timeout=200)
+        sock = zmq_socket.ZmqSocket(self.cli_opts.zmq_ctx, zmq.REQ, timeout=200)
         sock.set_sock_opt(zmq.LINGER, 1000)
         sock.connect(consts.Consts.FORCE_CRASH_SERVER_URL)
         sock.send(

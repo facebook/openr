@@ -13,7 +13,7 @@ from builtins import object
 
 import zmq
 from openr.HealthChecker import ttypes as health_checker_types
-from openr.utils import consts, socket
+from openr.utils import consts, zmq_socket
 
 
 class HealthCheckerClient(object):
@@ -24,7 +24,7 @@ class HealthCheckerClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._health_checker_cmd_socket = socket.Socket(
+        self._health_checker_cmd_socket = zmq_socket.ZmqSocket(
             zmq_ctx, zmq.REQ, timeout, proto_factory
         )
         self._health_checker_cmd_socket.connect(health_checker_cmd_port)
