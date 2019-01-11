@@ -18,3 +18,15 @@ enum OpenrModuleType {
   PREFIX_MANAGER = 7,
   SPARK = 8,
 }
+
+exception OpenrError {
+  1: string message
+} ( message = "message" )
+
+service OpenrCtrl {
+  binary command(1: OpenrModuleType module, 2: binary request)
+    throws (1: OpenrError error)
+
+  bool hasModule(1: OpenrModuleType module)
+    throws (1: OpenrError error)
+}

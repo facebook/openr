@@ -411,7 +411,7 @@ ENABLE_SEGMENT_ROUTING=false
 
 Set type of service (TOS) value with which every control plane packet from
 Open/R will be marked with. This marking can be used to prioritize control plane
-traffic (as compared to data plane) so that congention in network doesn't affect
+traffic (as compared to data plane) so that congestion in network doesn't affect
 operations of Open/R
 
 ```
@@ -441,3 +441,55 @@ Defaults to 65536.
 ```
 KVSTORE_ZMQ_HWM=65536
 ```
+
+### TLS Related Flags
+
+We are in the process of adding TLS for all openr traffic. This will be
+implemented with secure [Thrift](https://github.com/facebook/fbthrift).
+
+The following flags allow you to enable TLS for your openr network.
+Note: for a time while we transition, the plaintext zmq endpoints will remain
+reachable.
+
+To enable security, please pass the flags detailed below. For authentication,
+set AUTHENTICATE_PEER_COMMON_NAME and specify acceptable common names via
+TLS_ACCEPTABLE_PEERS
+
+#### ENABLE_SECURE_THRIFT_SERVER
+
+Flag to enable TLS for our thrift server. Disable this for plaintext thrift.
+
+#### AUTHENTICATE_PEER_COMMON_NAME
+
+Flag to enable checking peers against the list of acceptable common names
+provided by the flag "tls_acceptable_peers"
+
+#### X509_CERT_PATH
+
+If we are running an SSL thrift server, this option specifies the certificate
+path for the associated wangle::SSLContextConfig
+
+#### X509_KEY_PATH
+
+If we are running an SSL thrift server, this option specifies the key path for
+the associated wangle::SSLContextConfig
+
+#### X509_CA_PATH
+
+If we are running an SSL thrift server, this option specifies the certificate
+authority path for verifying peers
+
+#### TLS_TICKET_SEED_PATH
+
+If we are running an SSL thrift server, this option specifies the TLS ticket
+seed file path to use for client session resumption
+
+#### ECC_CURVE_NAME
+
+If we are running an SSL thrift server, this option specifies the eccCurveName
+for the associated wangle::SSLContextConfig
+
+#### TLS_ACCEPTABLE_PEERS
+
+A comma separated list of strings. Strings are x509 common names to accept SSL
+connections from.

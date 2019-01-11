@@ -42,6 +42,7 @@ OPENR=openr
 # Keep this list in sorted order
 ALLOC_PREFIX_LEN=128
 ASSUME_DRAINED=false
+AUTHENTICATE_PEER_COMMON_NAME=false
 CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
 DECISION_DEBOUNCE_MAX_MS=250
 DECISION_DEBOUNCE_MIN_MS=10
@@ -58,6 +59,7 @@ ENABLE_OLD_DECISION_MODULE=false
 ENABLE_PERF_MEASUREMENT=true
 ENABLE_PREFIX_ALLOC=false
 ENABLE_RTT_METRIC=true
+ENABLE_SECURE_THRIFT_SERVER=false
 ENABLE_SEGMENT_ROUTING=false
 ENABLE_SPARK=true
 ENABLE_V4=false
@@ -71,6 +73,7 @@ IP_TOS=192
 KEY_PREFIX_FILTERS=""
 KVSTORE_FLOOD_MSG_PER_SEC=0
 KVSTORE_FLOOD_MSG_BURST_SIZE=0
+KVSTORE_FLOOD_MSG_PER_SEC=0
 KVSTORE_TTL_DECREMENT_MS=1
 KVSTORE_ZMQ_HWM=65536
 LINK_FLAP_INITIAL_BACKOFF_MS=1000
@@ -88,7 +91,13 @@ SPARK_FASTINIT_KEEPALIVE_TIME_MS=100
 SPARK_HOLD_TIME_S=30
 SPARK_KEEPALIVE_TIME_S=3
 STATIC_PREFIX_ALLOC=false
+TLS_ACCEPTABLE_PEERS=""
+TLS_ECC_CURVE_NAME="prime256v1"
+TLS_TICKET_SEED_PATH=""
 VERBOSITY=1
+X509_CA_PATH=""
+X509_CERT_PATH=""
+X509_KEY_PATH=""
 
 #
 # Some sanity checks before we start OpenR
@@ -140,6 +149,7 @@ fi
 exec ${OPENR} \
   --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
   --assume_drained=${ASSUME_DRAINED} \
+  --authenticate_peer_common_name=${AUTHENTICATE_PEER_COMMON_NAME} \
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \
   --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \
   --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
@@ -156,6 +166,7 @@ exec ${OPENR} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
   --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
   --enable_rtt_metric=${ENABLE_RTT_METRIC} \
+  --enable_secure_thrift_server=${ENABLE_SECURE_THRIFT_SERVER} \
   --enable_segment_routing=${ENABLE_SEGMENT_ROUTING} \
   --enable_spark=${ENABLE_SPARK} \
   --enable_v4=${ENABLE_V4} \
@@ -165,10 +176,12 @@ exec ${OPENR} \
   --ifname_prefix=${IFACE_PREFIXES} \
   --iface_regex_exclude=${IFACE_REGEX_EXCLUDE} \
   --iface_regex_include=${IFACE_REGEX_INCLUDE} \
+  --ifname_prefix=${IFACE_PREFIXES} \
   --ip_tos=${IP_TOS} \
   --key_prefix_filters=${KEY_PREFIX_FILTERS} \
   --kvstore_flood_msg_per_sec=${KVSTORE_FLOOD_MSG_PER_SEC} \
   --kvstore_flood_msg_burst_size=${KVSTORE_FLOOD_MSG_BURST_SIZE} \
+  --kvstore_flood_msg_per_sec=${KVSTORE_FLOOD_MSG_PER_SEC} \
   --kvstore_ttl_decrement_ms=${KVSTORE_TTL_DECREMENT_MS} \
   --kvstore_zmq_hwm=${KVSTORE_ZMQ_HWM} \
   --link_flap_initial_backoff_ms=${LINK_FLAP_INITIAL_BACKOFF_MS} \
@@ -181,12 +194,19 @@ exec ${OPENR} \
   --prefixes="${PREFIXES}" \
   --redistribute_ifaces=${REDISTRIBUTE_IFACES} \
   --seed_prefix=${SEED_PREFIX} \
+  --set_leaf_node=${SET_LEAF_NODE} \
   --set_loopback_address=${SET_LOOPBACK_ADDR} \
   --spark_fastinit_keepalive_time_ms=${SPARK_FASTINIT_KEEPALIVE_TIME_MS} \
   --spark_hold_time_s=${SPARK_HOLD_TIME_S} \
   --spark_keepalive_time_s=${SPARK_KEEPALIVE_TIME_S} \
   --set_leaf_node=${SET_LEAF_NODE} \
   --static_prefix_alloc=${STATIC_PREFIX_ALLOC} \
+  --tls_acceptable_peers=${TLS_ACCEPTABLE_PEERS} \
+  --tls_ecc_curve_name=${TLS_ECC_CURVE_NAME} \
+  --tls_ticket_seed_path=${TLS_TICKET_SEED_PATH} \
+  --x509_ca_path=${X509_CA_PATH} \
+  --x509_cert_path=${X509_CERT_PATH} \
+  --x509_key_path=${X509_KEY_PATH} \
   --logbufsecs=0 \
   --logtostderr \
   --max_log_size=1 \

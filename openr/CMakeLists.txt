@@ -82,7 +82,7 @@ thrift_object(
 
 thrift_object(
   "OpenrCtrl" #file_name
-  "" #services
+  "OpenrCtrl" #services
   "cpp2" #language
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/if" #file_path
@@ -246,6 +246,7 @@ add_library(openrlib
   common/Constants.cpp
   config-store/PersistentStore.cpp
   config-store/PersistentStoreClient.cpp
+  ctrl-server/OpenrCtrlHandler.cpp
   decision/Decision.cpp
   decision-old/DecisionOld.cpp
   fib/Fib.cpp
@@ -429,6 +430,11 @@ install(FILES
   config-store/PersistentStore.h
   config-store/PersistentStoreClient.h
   DESTINATION include/openr/config-store
+)
+
+install(FILES
+  ctrl-server/OpenrCtrlHandler.h
+  DESTINATION include/openr/ctrl-server
 )
 
 install(FILES

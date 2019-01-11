@@ -31,6 +31,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
+#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision-old/DecisionOld.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
@@ -80,6 +81,11 @@ const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
 
 } // namespace
 
+
+DEFINE_int32(
+    openr_ctrl_port,
+    openr::Constants::kOpenrCtrlPort,
+    "Port for the OpenR ctrl thrift service");
 DEFINE_int32(
     kvstore_pub_port,
     openr::Constants::kKvStorePubPort,
@@ -355,6 +361,46 @@ DEFINE_int32(
     kvstore_ttl_decrement_ms,
     openr::Constants::kTtlDecrement.count(),
     "Amount of time to decrement TTL when flooding updates");
+DEFINE_bool(
+    enable_secure_thrift_server,
+    false,
+    "Flag to enable TLS for our thrift server");
+DEFINE_bool(
+    authenticate_peer_common_name,
+    false,
+    "Flag to enable checking peers against the list of acceptable common names"
+    " provided by the flag \"tls_acceptable_peers\"");
+DEFINE_string(
+    x509_cert_path,
+    "",
+    "If we are running an SSL thrift server, this option specifies the "
+    "certificate path for the associated wangle::SSLContextConfig");
+DEFINE_string(
+    x509_key_path,
+    "",
+    "If we are running an SSL thrift server, this option specifies the "
+    "key path for the associated wangle::SSLContextConfig. If unspecified, "
+    "will use x509_cert_path");
+DEFINE_string(
+    x509_ca_path,
+    "",
+    "If we are running an SSL thrift server, this option specifies the "
+    "certificate authority path for verifying peers");
+DEFINE_string(
+    tls_ticket_seed_path,
+    "",
+    "If we are running an SSL thrift server, this option specifies the "
+    "TLS ticket seed file path to use for client session resumption");
+DEFINE_string(
+    tls_ecc_curve_name,
+    "prime256v1",
+    "If we are running an SSL thrift server, this option specifies the "
+    "eccCurveName for the associated wangle::SSLContextConfig");
+DEFINE_string(
+    tls_acceptable_peers,
+    "",
+    "A comma separated list of strings. Strings are x509 common names to "
+    "accept SSL connections from.");
 
 // Disable background jemalloc background thread => new jemalloc-5 feature
 const char* malloc_conf = "background_thread:false";
@@ -999,10 +1045,72 @@ main(int argc, char** argv) {
         context));
   }
 
+  apache::thrift::ThriftServer thriftCtrlServer;
+
+  // setup the SSL policy
+  if (FLAGS_enable_secure_thrift_server) {
+    CHECK(fileExists(FLAGS_x509_ca_path));
+    CHECK(fileExists(FLAGS_x509_cert_path));
+    auto& keyPath = FLAGS_x509_key_path;
+    if (!keyPath.empty()) {
+      CHECK(fileExists(keyPath));
+    } else {
+      keyPath = FLAGS_x509_cert_path;
+    }
+    // TODO Change to REQUIRED after we have evryone using certs
+    thriftCtrlServer.setSSLPolicy(apache::thrift::SSLPolicy::PERMITTED);
+    auto sslContext = std::make_shared<wangle::SSLContextConfig>();
+    sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
+    sslContext->clientCAFile = FLAGS_x509_ca_path;
+    sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
+    sslContext->setNextProtocols(Constants::getNextProtocolsForThriftServers());
+    // TODO Change to VERIFY_REQ_CLIENT_CERT after we have evryone using certs
+    sslContext->clientVerification =
+      folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
+    sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
+    thriftCtrlServer.setSSLConfig(sslContext);
+    if (fileExists(FLAGS_tls_ticket_seed_path)) {
+      thriftCtrlServer.watchTicketPathForChanges(
+          FLAGS_tls_ticket_seed_path, true);
+    }
+  }
+  // set the port and interface
+  thriftCtrlServer.setPort(FLAGS_openr_ctrl_port);
+
+  std::vector<std::string> acceptableNames;
+  folly::split(",", FLAGS_tls_acceptable_peers, acceptableNames, true);
+  const std::unordered_set<std::string> acceptableNamesSet{
+      acceptableNames.begin(), acceptableNames.end()};
+
+  if (!FLAGS_enable_secure_thrift_server) {
+    CHECK(!FLAGS_authenticate_peer_common_name);
+  }
+  auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
+      FLAGS_node_name,
+      FLAGS_authenticate_peer_common_name,
+      acceptableNamesSet,
+      moduleTypeToEvl,
+      monitorSubmitUrl,
+      context);
+
+  thriftCtrlServer.setInterface(ctrlHandler);
+  thriftCtrlServer.setNumIOWorkerThreads(1);
+  thriftCtrlServer.setNumCPUWorkerThreads(1);
+
+  // serve
+  allThreads.emplace_back(std::thread([&thriftCtrlServer]() noexcept {
+    LOG(INFO) << "Starting thriftCtrlServer thread ...";
+    folly::setThreadName("thriftCtrlServer");
+    thriftCtrlServer.serve();
+    LOG(INFO) << "thriftCtrlServer thread got stopped.";
+  }));
+
   // Wait for main-event loop to return
   mainEventLoopThread.join();
 
   // Stop all threads (in reverse order of their creation)
+  thriftCtrlServer.stop();
+
   for (auto riter = orderedEventLoops.rbegin();
       orderedEventLoops.rend() != riter; ++riter) {
     (*riter)->stop();

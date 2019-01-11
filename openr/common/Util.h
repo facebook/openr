@@ -160,6 +160,8 @@ void addPerfEvent(
 // util for parsing lists from the command line
 std::vector<std::string> splitByComma(const std::string& input);
 
+bool fileExists(const std::string& path);
+
 /**
  * Print perf event and return total convergence time
  */

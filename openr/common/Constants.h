@@ -8,6 +8,7 @@
 #pragma once
 
 #include <chrono>
+#include <list>
 #include <string>
 
 #include <folly/IPAddress.h>
@@ -209,6 +210,8 @@ class Constants {
   static constexpr folly::StringPiece kSparkReportClientId{
     "SPARK::ROUTER::CLIENT"};
 
+  static constexpr folly::StringPiece kOpenrCtrlSessionContext{"OpenrCtrl"};
+
   // max interval to update TTL for each key in kvstore w/ finite TTL
   static constexpr std::chrono::milliseconds kMaxTtlUpdateInterval{2h};
   // TTL infinity, never expires
@@ -229,6 +232,9 @@ class Constants {
   static constexpr std::chrono::seconds kConvergenceMaxDuration{3s};
 
   // OpenR ports
+
+  // Openr Ctrl thrift server port
+  static constexpr int32_t kOpenrCtrlPort{2018};
 
   // KvStore publisher port for emitting realtime key-value deltas
   static constexpr int32_t kKvStorePubPort{60001};
@@ -283,6 +289,19 @@ class Constants {
 
   // Threshold time in secs to crash after reaching critical memory
   static constexpr std::chrono::seconds kMemoryThresholdTime{600};
+
+  static const std::list<std::string>& getNextProtocolsForThriftServers() {
+    static const std::list<std::string> result{
+        "thrift",
+        "h2",
+        // "http" is not a legit specifier but need to include it for
+        // legacy.  Thrift's HTTP2RoutingHandler uses this, and clients
+        // may be sending it.
+        "http",
+        "rs"};
+    return result;
+  }
+
 };
 
 } // namespace openr

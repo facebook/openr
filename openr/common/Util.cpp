@@ -11,6 +11,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace std {
@@ -171,6 +172,15 @@ splitByComma(const std::string& input) {
   folly::split(",", input, output);
 
   return output;
+}
+
+// TODO remove once transitioned to cpp17
+bool fileExists(const std::string& path) {
+  int fd = ::open(path.c_str(), O_RDONLY);
+  SCOPE_EXIT {
+    ::close(fd);
+  };
+  return 0 <= fd;
 }
 
 folly::IPAddress
