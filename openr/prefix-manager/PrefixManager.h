@@ -24,12 +24,11 @@
 
 namespace openr {
 
-class PrefixManager final : public fbzmq::ZmqEventLoop {
+class PrefixManager final : public OpenrEventLoop {
  public:
   PrefixManager(
       const std::string& nodeId,
       const PrefixManagerGlobalCmdUrl& globalCmdUrl,
-      const PrefixManagerLocalCmdUrl& localCmdUrl,
       const PersistentStoreUrl& persistentStoreUrl,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
@@ -51,7 +50,9 @@ class PrefixManager final : public fbzmq::ZmqEventLoop {
 
  private:
   void persistPrefixDb();
-  void processRequest(fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock);
+
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& request) override;
 
   // helpers to modify prefix db, returns true if the db is modified
   void addOrUpdatePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
@@ -70,10 +71,6 @@ class PrefixManager final : public fbzmq::ZmqEventLoop {
 
   // this node name
   const std::string nodeId_;
-
-  // Command Sockets to listen from requests
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock_;
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> localCmdSock_;
 
   // client to interact with ConfigStore
   PersistentStoreClient configStoreClient_;

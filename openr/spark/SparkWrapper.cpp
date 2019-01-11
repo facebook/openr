@@ -20,7 +20,6 @@ SparkWrapper::SparkWrapper(
     bool enableV4,
     bool enableSubnetValidation,
     SparkReportUrl const& reportUrl,
-    SparkCmdUrl const& cmdUrl,
     MonitorSubmitUrl const& monitorCmdUrl,
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
@@ -44,7 +43,6 @@ SparkWrapper::SparkWrapper(
       enableV4,
       enableSubnetValidation,
       reportUrl,
-      cmdUrl,
       monitorCmdUrl,
       KvStorePubPort{10001},
       KvStoreCmdPort{10002},
@@ -54,7 +52,7 @@ SparkWrapper::SparkWrapper(
   // start spark
   run();
 
-  reqSock_.connect(fbzmq::SocketUrl{cmdUrl});
+  reqSock_.connect(fbzmq::SocketUrl{spark_->inprocCmdUrl});
 
   reportSock_.connect(fbzmq::SocketUrl{reportUrl});
 }

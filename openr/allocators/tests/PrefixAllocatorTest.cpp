@@ -113,7 +113,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     prefixManager_ = std::make_unique<PrefixManager>(
         myNodeName_,
         PrefixManagerGlobalCmdUrl{pfxMgrGlobalUrl_},
-        PrefixManagerLocalCmdUrl{pfxMgrLocalUrl_},
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
@@ -144,7 +143,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         myNodeName_,
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
-        PrefixManagerLocalCmdUrl{pfxMgrLocalUrl_},
+        PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
         kAllocPrefixMarker,
         GetParam()
@@ -194,7 +193,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   const std::string myNodeName_{"test-node"};
   const std::string pfxMgrGlobalUrl_{"inproc://prefix-manager-global"};
-  const std::string pfxMgrLocalUrl_{"inproc://prefix-manager-local-{}"};
   std::string tempFileName_;
 
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
@@ -420,12 +418,9 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // spin up prefix manager
       const auto pfxMgrGlobalUrl =
           folly::sformat("inproc://prefix-manager-global-{}", myNodeName);
-      const auto pfxMgrLocalUrl =
-          folly::sformat("inproc://prefix-manager-local-{}", myNodeName);
       auto prefixManager = std::make_unique<PrefixManager>(
           myNodeName,
           PrefixManagerGlobalCmdUrl{pfxMgrGlobalUrl},
-          PrefixManagerLocalCmdUrl{pfxMgrLocalUrl},
           PersistentStoreUrl{kConfigStoreUrl + myNodeName + "temp"},
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
@@ -443,7 +438,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           myNodeName,
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
-          PrefixManagerLocalCmdUrl{pfxMgrLocalUrl},
+          PrefixManagerLocalCmdUrl{prefixManagers.back()->inprocCmdUrl},
           MonitorSubmitUrl{"inproc://monitor_submit"},
           kAllocPrefixMarker,
           maybeAllocParams.hasValue()

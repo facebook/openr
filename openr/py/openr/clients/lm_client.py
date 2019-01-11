@@ -24,7 +24,7 @@ class LMClient(object):
         timeout=consts.Consts.TIMEOUT_MS,
         proto_factory=consts.Consts.PROTO_FACTORY,
     ):
-        self._lm_cmd_socket = socket.Socket(zmq_ctx, zmq.DEALER, timeout, proto_factory)
+        self._lm_cmd_socket = socket.Socket(zmq_ctx, zmq.REQ, timeout, proto_factory)
         self._lm_cmd_socket.connect(lm_cmd_url)
 
     def dump_links(self, all=True):
@@ -58,6 +58,8 @@ class LMClient(object):
 
         req_msg = lm_types.LinkMonitorRequest(command, interface, metric, node)
         self._lm_cmd_socket.send_thrift_obj(req_msg)
+        # consume the reply
+        self._lm_cmd_socket.recv()
 
         return self.dump_links()
 

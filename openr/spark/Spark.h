@@ -27,6 +27,7 @@
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Spark_types.h>
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/spark/IoProvider.h>
 
 namespace openr {
@@ -47,7 +48,7 @@ enum class PacketValidationResult {
 // and starts hello process on those interfaces.
 //
 
-class Spark final : public fbzmq::ZmqEventLoop {
+class Spark final : public OpenrEventLoop {
  public:
   Spark(
       std::string const& myDomainName,
@@ -60,7 +61,6 @@ class Spark final : public fbzmq::ZmqEventLoop {
       bool enableV4,
       bool enableSubnetValidation,
       SparkReportUrl const& reportUrl,
-      SparkCmdUrl const& cmdUrl,
       MonitorSubmitUrl const& monitorSubmitUrl,
       KvStorePubPort kvStorePubPort,
       KvStoreCmdPort kvStoreCmdPort,
@@ -115,9 +115,8 @@ class Spark final : public fbzmq::ZmqEventLoop {
   // originate my hello packet on given interface
   void sendHelloPacket(std::string const& ifName, bool inFastInitState = false);
 
-  // process interfaceDb update from LinkMonitor
-  // iface add/remove , join/leave iface for UDP mcasting
-  void processInterfaceDbUpdate();
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& request) override;
 
   // find an interface name in the interfaceDb given an ifIndex
   folly::Optional<std::string> findInterfaceFromIfindex(int ifIndex);
@@ -177,10 +176,6 @@ class Spark final : public fbzmq::ZmqEventLoop {
   // this is used to communicate events to downstream consumer
   const std::string reportUrl_{""};
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> reportSocket_;
-
-  // this is used to add/remove network interfaces for tracking
-  const std::string cmdUrl_{""};
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> cmdSocket_;
 
   // this is used to inform peers about my kvstore tcp ports
   const uint16_t kKvStorePubPort_;

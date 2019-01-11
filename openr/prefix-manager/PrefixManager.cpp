@@ -28,7 +28,6 @@ const std::string kErrorUnknownCommand{"Unknown command"};
 PrefixManager::PrefixManager(
     const std::string& nodeId,
     const PrefixManagerGlobalCmdUrl& globalCmdUrl,
-    const PrefixManagerLocalCmdUrl& localCmdUrl,
     const PersistentStoreUrl& persistentStoreUrl,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
@@ -36,32 +35,14 @@ PrefixManager::PrefixManager(
     bool enablePerfMeasurement,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : nodeId_{nodeId},
-      globalCmdSock_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      localCmdSock_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
+    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::PREFIX_MANAGER,
+        zmqContext, std::string{globalCmdUrl}),
+      nodeId_(nodeId),
       configStoreClient_{persistentStoreUrl, zmqContext},
       prefixDbMarker_{prefixDbMarker},
       enablePerfMeasurement_{enablePerfMeasurement},
       kvStoreClient_{
           zmqContext, this, nodeId_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl} {
-  CHECK(globalCmdSock_.bind(fbzmq::SocketUrl{globalCmdUrl}));
-  CHECK(localCmdSock_.bind(fbzmq::SocketUrl{localCmdUrl}));
-
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*globalCmdSock_},
-      ZMQ_POLLIN,
-      [this](int) noexcept {
-        VLOG(2) << "PrefixManager: received request on global cmd socket";
-        processRequest(globalCmdSock_);
-      });
-
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*localCmdSock_}, ZMQ_POLLIN, [this](int) noexcept {
-        VLOG(2) << "PrefixManager: received request on local cmd socket";
-        processRequest(localCmdSock_);
-      });
 
   // pick up prefixes from disk
   auto maybePrefixDb =
@@ -118,29 +99,14 @@ PrefixManager::persistPrefixDb() {
   kvStoreClient_.persistKey(prefixDbKey, prefixDbVal, Constants::kKvStoreDbTtl);
 }
 
-void
-PrefixManager::processRequest(
-    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) {
-  fbzmq::Message requestIdMsg, delimMsg, thriftReqMsg;
-
-  const auto ret = cmdSock.recvMultiple(requestIdMsg, delimMsg, thriftReqMsg);
-
-  if (ret.hasError()) {
-    LOG(ERROR) << "processRequest: Error receiving command: " << ret.error();
-    return;
-  }
-
-  if (not delimMsg.empty()) {
-    LOG(ERROR) << "processRequest: Non-empty delimiter";
-    return;
-  }
-
+folly::Expected<fbzmq::Message, fbzmq::Error>
+PrefixManager::processRequestMsg(fbzmq::Message&& request) {
   const auto maybeThriftReq =
-      thriftReqMsg.readThriftObj<thrift::PrefixManagerRequest>(serializer_);
+      request.readThriftObj<thrift::PrefixManagerRequest>(serializer_);
   if (maybeThriftReq.hasError()) {
     LOG(ERROR) << "processRequest: failed reading thrift::PrefixRequest "
                << maybeThriftReq.error();
-    return;
+    return folly::makeUnexpected(fbzmq::Error());
   }
 
   const auto& thriftReq = maybeThriftReq.value();
@@ -204,13 +170,8 @@ PrefixManager::processRequest(
   }
   }
 
-  auto sndRet = cmdSock.sendMultiple(
-      requestIdMsg,
-      delimMsg,
-      fbzmq::Message::fromThriftObj(response, serializer_).value());
-  if (sndRet.hasError()) {
-    LOG(ERROR) << "Error sending response. " << sndRet.error();
-  }
+  return fbzmq::Message::fromThriftObj(response, serializer_);
+
 }
 
 void

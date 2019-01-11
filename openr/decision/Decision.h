@@ -171,7 +171,7 @@ class SpfSolver {
 // the AdjacencyDatabase of router1 and PrefixDatabase of router2
 //
 
-class Decision : public fbzmq::ZmqEventLoop {
+class Decision : public OpenrEventLoop {
  public:
   Decision(
       std::string myNodeName,
@@ -198,8 +198,8 @@ class Decision : public fbzmq::ZmqEventLoop {
 
   void prepare(fbzmq::Context& zmqContext) noexcept;
 
-  // process request
-  void processRequest();
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& request) override;
 
   // process publication from KvStore
   ProcessPublicationResult processPublication(
@@ -263,11 +263,9 @@ class Decision : public fbzmq::ZmqEventLoop {
   // URLs for the sockets
   const std::string storeCmdUrl_;
   const std::string storePubUrl_;
-  const std::string decisionCmdUrl_;
   const std::string decisionPubUrl_;
 
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> storeSub_;
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> decisionRep_;
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> decisionPub_;
 
   // the pointer to the SPF path calculator

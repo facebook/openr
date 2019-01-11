@@ -97,7 +97,9 @@ LinkMonitor::LinkMonitor(
     std::chrono::seconds adjHoldTime,
     std::chrono::milliseconds flapInitialBackoff,
     std::chrono::milliseconds flapMaxBackoff)
-    : nodeId_(nodeId),
+    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::LINK_MONITOR, zmqContext,
+          std::string{linkMonitorGlobalCmdUrl}),
+      nodeId_(nodeId),
       platformThriftPort_(platformThriftPort),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
@@ -114,14 +116,11 @@ LinkMonitor::LinkMonitor(
       sparkReportUrl_(sparkReportUrl),
       platformPubUrl_(platformPubUrl),
       linkMonitorGlobalPubUrl_(linkMonitorGlobalPubUrl),
-      linkMonitorGlobalCmdUrl_(linkMonitorGlobalCmdUrl),
       flapInitialBackoff_(flapInitialBackoff),
       flapMaxBackoff_(flapMaxBackoff),
       adjHoldUntilTimePoint_(std::chrono::steady_clock::now() + adjHoldTime),
       // mutable states
       linkMonitorPubSock_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      linkMonitorCmdSock_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       sparkCmdSock_(zmqContext),
       sparkReportSock_(
@@ -225,25 +224,6 @@ LinkMonitor::prepare() noexcept {
   if (lmPub.hasError()) {
     LOG(FATAL) << "Error binding to URL '" << linkMonitorGlobalPubUrl_ << "' "
                << lmPub.error();
-  }
-
-  // enable handover to new connection for duplicate identities
-  const int handover = 1;
-  const auto linkMonOpt = linkMonitorCmdSock_.setSockOpt(
-      ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
-  if (linkMonOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
-               << linkMonOpt.error();
-  }
-
-  // bind link monitor command socket
-  VLOG(2) << "LinkMonitor: Binding linkMonitorGlobalCmdUrl_: '"
-          << linkMonitorGlobalCmdUrl_ << "'";
-  const auto lmCmd =
-      linkMonitorCmdSock_.bind(fbzmq::SocketUrl{linkMonitorGlobalCmdUrl_});
-  if (lmCmd.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << linkMonitorGlobalCmdUrl_ << "' "
-               << lmCmd.error();
   }
 
   VLOG(2) << "Connect to Spark to send commands on " << sparkCmdUrl_;
@@ -476,15 +456,6 @@ LinkMonitor::prepare() noexcept {
           LOG(ERROR) << "Wrong eventType received on " << nodeId_
                      << ", eventType: " << static_cast<uint16_t>(eventType);
         }
-      });
-
-  // Add callback for processing link-monitor requests on command socket
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*linkMonitorCmdSock_},
-      ZMQ_POLLIN,
-      [this](int) noexcept {
-        VLOG(2) << "LinkMonitor: processing LinkMonitor command";
-        processCommand();
       });
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
@@ -1009,23 +980,14 @@ LinkMonitor::syncInterfaces() {
   return true;
 }
 
-void
-LinkMonitor::processCommand() {
-  // read the request id supplied by router socket
-  auto maybeClientIdMessage = linkMonitorCmdSock_.recvOne();
-  if (maybeClientIdMessage.hasError()) {
-    LOG(ERROR) << maybeClientIdMessage.error();
-    return;
-  }
-  auto clientIdMessage = maybeClientIdMessage.value();
 
-  // read actual request
+folly::Expected<fbzmq::Message, fbzmq::Error>
+LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
   const auto maybeReq =
-      linkMonitorCmdSock_.recvThriftObj<thrift::LinkMonitorRequest>(
-          serializer_);
+      request.readThriftObj<thrift::LinkMonitorRequest>(serializer_);
   if (maybeReq.hasError()) {
     LOG(ERROR) << "Error receiving LinkMonitorRequest: " << maybeReq.error();
-    return;
+    return folly::makeUnexpected(fbzmq::Error());
   }
 
   // NOTE: add commands which set/unset overload bit or metric values will
@@ -1143,13 +1105,7 @@ LinkMonitor::processCommand() {
       reply.interfaceDetails.emplace(ifName, std::move(ifDetails));
     }
 
-    auto ret = linkMonitorCmdSock_.sendMultiple(
-        clientIdMessage,
-        fbzmq::Message::fromThriftObj(reply, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending response. " << ret.error();
-    }
-    break;
+    return fbzmq::Message::fromThriftObj(reply, serializer_);
   }
 
   case thrift::LinkMonitorCommand::SET_ADJ_METRIC: {
@@ -1212,31 +1168,21 @@ LinkMonitor::processCommand() {
     thrift::OpenrVersions openrVersion(apache::thrift::FRAGILE,
               Constants::kOpenrVersion, Constants::kOpenrSupportedVersion);
 
-    auto ret = linkMonitorCmdSock_.sendMultiple(
-        clientIdMessage,
-        fbzmq::Message::fromThriftObj(openrVersion, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending version response. " << ret.error();
-    }
-    break;
+    return fbzmq::Message::fromThriftObj(openrVersion, serializer_);
   }
 
   case thrift::LinkMonitorCommand::GET_BUILD_INFO: {
     auto buildInfo = getBuildInfoThrift();
-    auto ret = linkMonitorCmdSock_.sendMultiple(
-        clientIdMessage,
-        fbzmq::Message::fromThriftObj(buildInfo, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending version response. " << ret.error();
-    }
-    break;
+    return fbzmq::Message::fromThriftObj(buildInfo, serializer_);
   }
 
   default:
     LOG(ERROR) << "Link Monitor received unknown command: "
                << static_cast<int>(req.cmd);
-    break;
+    return folly::makeUnexpected(fbzmq::Error());
   }
+  return fbzmq::Message::from(Constants::kSuccessResponse.toString());
+
 }
 
 void

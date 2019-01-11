@@ -33,16 +33,17 @@ HealthChecker::HealthChecker(
     const HealthCheckerCmdUrl& healthCheckerCmdUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : myNodeName_(myNodeName),
+    : OpenrEventLoop(
+          myNodeName, thrift::OpenrModuleType::HEALTH_CHECKER, zmqContext,
+          std::string{healthCheckerCmdUrl}),
+      myNodeName_(myNodeName),
       healthCheckOption_(healthCheckOption),
       healthCheckPct_(healthCheckPct),
       udpPingPort_(udpPingPort),
       pingInterval_(pingInterval),
       adjacencyDbMarker_(adjacencyDbMarker),
       prefixDbMarker_(prefixDbMarker),
-      maybeIpTos_(maybeIpTos),
-      repSock_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
+      maybeIpTos_(maybeIpTos) {
   // Sanity check on healthCheckPct validation
   if (healthCheckPct_ > 100) {
     LOG(FATAL) << "Invalid healthCheckPct value: " << healthCheckPct_
@@ -53,12 +54,6 @@ HealthChecker::HealthChecker(
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
   kvStoreClient_ = std::make_unique<KvStoreClient>(
       zmqContext, this, myNodeName, storeCmdUrl, storePubUrl);
-
-  const auto repBind = repSock_.bind(fbzmq::SocketUrl{healthCheckerCmdUrl});
-  if (repBind.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << std::string(healthCheckerCmdUrl)
-               << "' " << repBind.error();
-  }
 
   // Initialize sockets in event loop
   scheduleTimeout(std::chrono::seconds(0), [this]() noexcept { prepare(); });
@@ -86,13 +81,6 @@ HealthChecker::prepare() noexcept {
       folly::Optional<thrift::Value> thriftVal) noexcept {
         processKeyVal(key, thriftVal);
   });
-
-  // Listen for request on health checker cmd socket
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*repSock_}, ZMQ_POLLIN, [this](int) noexcept {
-        VLOG(2) << "HealthChecker: received request on cmd socket";
-        processRequest();
-      });
 
   // Schedule periodic timer for sending pings
   pingTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
@@ -472,14 +460,14 @@ HealthChecker::processMessage() {
   }
 }
 
-void
-HealthChecker::processRequest() {
-  auto maybeThriftReq = repSock_.recvThriftObj<thrift::HealthCheckerRequest>(
+folly::Expected<fbzmq::Message, fbzmq::Error>
+HealthChecker::processRequestMsg(fbzmq::Message&& msg) {
+  auto maybeThriftReq = msg.readThriftObj<thrift::HealthCheckerRequest>(
       serializer_);
   if (maybeThriftReq.hasError()) {
     LOG(ERROR) << "HealthChecker: Error processing request on REP socket: "
                << maybeThriftReq.error();
-    return;
+    return folly::makeUnexpected(maybeThriftReq.error());
   }
 
   auto thriftReq = maybeThriftReq.value();
@@ -501,14 +489,11 @@ HealthChecker::processRequest() {
   default: {
     LOG(ERROR) << "Health Checker received unknown command: "
                << static_cast<int>(thriftReq.cmd);
-    return;
+    return folly::makeUnexpected(fbzmq::Error());
   }
   }
 
-  auto sendRc = repSock_.sendThriftObj(reply, serializer_);
-  if (sendRc.hasError()) {
-    LOG(ERROR) << "Error sending response: " << sendRc.error();
-  }
+  return fbzmq::Message::fromThriftObj(reply, serializer_);
 }
 
 void

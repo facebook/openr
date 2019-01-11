@@ -1079,17 +1079,16 @@ Decision::Decision(
     const DecisionPubUrl& decisionPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
+    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::DECISION,
+        zmqContext, std::string{decisionCmdUrl}),
+      processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       myNodeName_(myNodeName),
       adjacencyDbMarker_(adjacencyDbMarker),
       prefixDbMarker_(prefixDbMarker),
       storeCmdUrl_(storeCmdUrl),
       storePubUrl_(storePubUrl),
-      decisionCmdUrl_(decisionCmdUrl),
       decisionPubUrl_(decisionPubUrl),
       storeSub_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      decisionRep_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       decisionPub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
@@ -1106,13 +1105,6 @@ Decision::Decision(
 
 void
 Decision::prepare(fbzmq::Context& zmqContext) noexcept {
-  VLOG(2) << "Decision: Binding cmdUrl '" << decisionCmdUrl_ << "'";
-  const auto repBind = decisionRep_.bind(fbzmq::SocketUrl{decisionCmdUrl_});
-  if (repBind.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << decisionCmdUrl_ << "' "
-               << repBind.error();
-  }
-
   VLOG(2) << "Decision: Binding pubUrl '" << decisionPubUrl_ << "'";
   const auto pubBind = decisionPub_.bind(fbzmq::SocketUrl{decisionPubUrl_});
   if (pubBind.hasError()) {
@@ -1176,13 +1168,6 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
         }
       });
 
-  // Attach callback for processing requests on REP socket
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*decisionRep_}, ZMQ_POLLIN, [this](int) noexcept {
-        VLOG(3) << "Decision: request received...";
-        processRequest();
-      });
-
   auto zmqContextPtr = &zmqContext;
   scheduleTimeout(
       std::chrono::milliseconds(0),
@@ -1190,14 +1175,14 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
   );
 }
 
-void
-Decision::processRequest() {
-  auto maybeThriftReq = decisionRep_.recvThriftObj<thrift::DecisionRequest>(
-      serializer_);
+folly::Expected<fbzmq::Message, fbzmq::Error>
+Decision::processRequestMsg(fbzmq::Message&& request) {
+  auto maybeThriftReq = request.readThriftObj<thrift::DecisionRequest>(
+    serializer_);
   if (maybeThriftReq.hasError()) {
     LOG(ERROR) << "Decision: Error processing request on REP socket: "
                << maybeThriftReq.error();
-    return;
+    return folly::makeUnexpected(fbzmq::Error());
   }
 
   auto thriftReq = maybeThriftReq.value();
@@ -1236,14 +1221,11 @@ Decision::processRequest() {
                       thrift::_DecisionCommand_VALUES_TO_NAMES,
                       thriftReq.cmd,
                       "UNKNOWN");
-    return;
+    return folly::makeUnexpected(fbzmq::Error());
   }
   }
 
-  auto sendRc = decisionRep_.sendThriftObj(reply, serializer_);
-  if (sendRc.hasError()) {
-    LOG(ERROR) << "Error sending response: " << sendRc.error();
-  }
+  return fbzmq::Message::fromThriftObj(reply, serializer_);
 }
 
 std::unordered_map<std::string, int64_t>

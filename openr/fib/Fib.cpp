@@ -32,14 +32,14 @@ Fib::Fib(
     const LinkMonitorGlobalPubUrl& linkMonPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : myNodeName_(std::move(myNodeName)),
+    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::FIB, zmqContext,
+          std::string{fibRepUrl}),
+      myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),
       enableFibSync_(enableFibSync),
       coldStartDuration_(coldStartDuration),
       decisionSub_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      fibRep_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       linkMonSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
@@ -123,13 +123,6 @@ Fib::prepare() noexcept {
                << " " << decisionSubOpt.error();
   }
 
-  VLOG(2) << "Fib: Binding to rep url '" << fibRepUrl_ << "'";
-  const auto repBind = fibRep_.bind(fbzmq::SocketUrl{fibRepUrl_});
-  if (repBind.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << fibRepUrl_ << "' "
-               << repBind.error();
-  }
-
   VLOG(2) << "Fib: Subscribing to Link Monitor module pub url '"
           << linkMonPubUrl_ << "'";
   const auto lmSubConnect =
@@ -174,37 +167,6 @@ Fib::prepare() noexcept {
         }
       });
 
-  // Received FibRequest
-  addSocket(fbzmq::RawZmqSocketPtr{*fibRep_}, ZMQ_POLLIN, [this](int) noexcept {
-    auto maybeThriftObj = fibRep_.recvThriftObj<thrift::FibRequest>(
-        serializer_, Constants::kReadTimeout);
-    if (maybeThriftObj.hasError()) {
-      LOG(ERROR) << "Error processing Fib Request: " << maybeThriftObj.error();
-      fibRep_.sendOne(fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
-      return;
-    }
-
-    auto& thriftReq = maybeThriftObj.value();
-    VLOG(1) << "Fib: Request command: `"
-            << apache::thrift::TEnumTraits<thrift::FibCommand>::findName(
-                   thriftReq.cmd)
-            << "` received";
-    switch (thriftReq.cmd) {
-    case thrift::FibCommand::ROUTE_DB_GET:
-      VLOG(2) << "Fib: RouteDb requested";
-      // send the thrift::RouteDatabase
-      fibRep_.sendThriftObj(routeDb_, serializer_);
-      break;
-    case thrift::FibCommand::PERF_DB_GET:
-      VLOG(2) << "Fib: PerfDb requested";
-      // send the thrift::PerfDatabase
-      fibRep_.sendThriftObj(dumpPerfDb(), serializer_);
-      break;
-    default:
-      LOG(ERROR) << "Unknown command received";
-      fibRep_.sendOne(fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
-    }
-  });
 
   // We have received Interface status publication from LinkMonitor
   addSocket(
@@ -227,6 +189,37 @@ Fib::prepare() noexcept {
           processInterfaceDb(std::move(thriftInterfaceDb));
         }
       });
+}
+
+// Received FibRequest
+folly::Expected<fbzmq::Message, fbzmq::Error>
+Fib::processRequestMsg(fbzmq::Message&& request) {
+  auto maybeThriftObj = request.readThriftObj<thrift::FibRequest>(serializer_);
+  if (maybeThriftObj.hasError()) {
+    LOG(ERROR) << "Error processing Fib Request: " << maybeThriftObj.error();
+    return folly::makeUnexpected(fbzmq::Error());
+  }
+
+  auto& thriftReq = maybeThriftObj.value();
+  VLOG(1) << "Fib: Request command: `"
+          << apache::thrift::TEnumTraits<thrift::FibCommand>::findName(
+                 thriftReq.cmd)
+          << "` received";
+  switch (thriftReq.cmd) {
+  case thrift::FibCommand::ROUTE_DB_GET:
+    VLOG(2) << "Fib: RouteDb requested";
+    // send the thrift::RouteDatabase
+    return fbzmq::Message::fromThriftObj(routeDb_, serializer_);
+    break;
+  case thrift::FibCommand::PERF_DB_GET:
+    VLOG(2) << "Fib: PerfDb requested";
+    // send the thrift::PerfDatabase
+    return fbzmq::Message::fromThriftObj(dumpPerfDb(), serializer_);
+    break;
+  default:
+    LOG(ERROR) << "Unknown command received";
+    return folly::makeUnexpected(fbzmq::Error());
+  }
 }
 
 void

@@ -58,7 +58,7 @@ using PrefixAllocatorMode = boost::variant<
  *   => elects subprefix from prefix allocator params
  */
 class PrefixAllocator
-  : public fbzmq::ZmqEventLoop, public boost::static_visitor<> {
+  : public OpenrEventLoop, public boost::static_visitor<> {
  public:
   PrefixAllocator(
       const std::string& myNodeName,
@@ -109,6 +109,9 @@ class PrefixAllocator
   //
   // Private methods
   //
+
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& /* not used */) override;
 
   // Function to process static allocation update from kvstore
   void processStaticPrefixAllocUpdate(thrift::Value const& value);

@@ -208,7 +208,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
         PrefixManagerGlobalCmdUrl{"inproc://prefix-manager-global-url"},
-        PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -266,7 +265,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         MonitorSubmitUrl{"inproc://monitor-rep"},
         PersistentStoreUrl{kConfigStoreUrl},
         false,
-        PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
+        PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url"},
         LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url"},
@@ -295,6 +294,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Stopping the LinkMonitor thread";
     linkMonitor->stop();
     linkMonitorThread->join();
+    linkMonitor.reset();
     LOG(INFO) << "LinkMonitor thread got stopped";
 
     LOG(INFO) << "Closing sockets";
@@ -515,7 +515,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   fbzmq::Context context{};
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{context};
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> sparkIfDbResp{context};
-  fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_CLIENT> lmCmdSocket{context};
+  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> lmCmdSocket{context};
 
   unique_ptr<PersistentStore> configStore;
   unique_ptr<std::thread> configStoreThread;
@@ -733,6 +733,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         0 /* interface-metric */,
         "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(setOverloadRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing set node overload command!";
     checkNextAdjPub("adj:node-1");
 
@@ -750,6 +751,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         linkMetric /* interface-metric */,
         "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(setMetricRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing set link metric command!";
     checkNextAdjPub("adj:node-1");
 
@@ -760,6 +762,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         0 /* interface-metric */,
         "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(setLinkOverloadRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing set link overload command!";
     checkNextAdjPub("adj:node-1");
 
@@ -777,6 +780,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         0 /* interface-metric */,
         "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(unsetOverloadRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing unset node overload command!";
     checkNextAdjPub("adj:node-1");
 
@@ -794,6 +798,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         0 /* interface-metric */,
         "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(unsetLinkOverloadRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing unset link overload command!";
     checkNextAdjPub("adj:node-1");
 
@@ -804,6 +809,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         0 /* interface-metric */,
         "" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(unsetMetricRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing unset link metric command!";
     checkNextAdjPub("adj:node-1");
 
@@ -815,9 +821,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
     // 8/9. Set overload bit and link metric value
     lmCmdSocket.sendThriftObj(setOverloadRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing set node overload command!";
     checkNextAdjPub("adj:node-1");
     lmCmdSocket.sendThriftObj(setMetricRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing set link metric command!";
     checkNextAdjPub("adj:node-1");
   }
@@ -831,11 +839,13 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     adjMetric /* adjacency-metric */,
     "node-2" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(setAdjMetricRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing set adj metric command!";
     checkNextAdjPub("adj:node-1");
 
     setAdjMetricRequest.cmd = thrift::LinkMonitorCommand::UNSET_ADJ_METRIC;
     lmCmdSocket.sendThriftObj(setAdjMetricRequest, serializer);
+    lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing unset adj metric command!";
     checkNextAdjPub("adj:node-1");
   }
@@ -856,97 +866,93 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
   }
 
-  {
-    // mock "restarting" link monitor with existing config store
-    // use different endpoints for sockets
-    // simply close() and bind/connect again do not work
+  // mock "restarting" link monitor with existing config store
 
-    std::string regexErr;
-    auto includeRegexList =
-        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
-    includeRegexList->Compile();
-    std::unique_ptr<re2::RE2::Set> excludeRegexList;
-    std::unique_ptr<re2::RE2::Set> redistRegexList;
+  std::string regexErr;
+  auto includeRegexList =
+      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+  includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
+  includeRegexList->Compile();
+  std::unique_ptr<re2::RE2::Set> excludeRegexList;
+  std::unique_ptr<re2::RE2::Set> redistRegexList;
 
-    auto linkMonitor = make_shared<LinkMonitor>(
+  linkMonitor->stop();
+  linkMonitorThread->join();
+  linkMonitor.reset();
+  linkMonitor = make_shared<LinkMonitor>(
+      context,
+      "node-1",
+      port, // platform pub port
+      KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
+      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+      std::move(includeRegexList),
+      std::move(excludeRegexList),
+      // redistribute interface names
+      std::move(redistRegexList),
+      std::vector<thrift::IpPrefix>{}, // static prefixes
+      false /* useRttMetric */,
+      false /* enable perf measurement */,
+      false /* enable v4 */,
+      true /* enable segment routing */,
+      AdjacencyDbMarker{"adj:"},
+      SparkCmdUrl{"inproc://spark-req2"},
+      SparkReportUrl{"inproc://spark-report2"},
+      MonitorSubmitUrl{"inproc://monitor-rep2"},
+      PersistentStoreUrl{kConfigStoreUrl}, /* same config store */
+      false,
+      PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
+      PlatformPublisherUrl{"inproc://platform-pub-url2"},
+      LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
+      LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url2"},
+      std::chrono::seconds(1),
+      // link flap backoffs, set low to keep UT runtime low
+      std::chrono::milliseconds(1),
+      std::chrono::milliseconds(8));
+
+  linkMonitorThread = std::make_unique<std::thread>([this]() {
+    LOG(INFO) << "LinkMonitor thread starting";
+    linkMonitor->run();
+    LOG(INFO) << "LinkMonitor thread finishing";
+  });
+  linkMonitor->waitUntilRunning();
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{
         context,
-        "node-1",
-        port, // platform pub port
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        std::move(includeRegexList),
-        std::move(excludeRegexList),
-        // redistribute interface names
-        std::move(redistRegexList),
-        std::vector<thrift::IpPrefix>{}, // static prefixes
-        false /* useRttMetric */,
-        false /* enable perf measurement */,
-        false /* enable v4 */,
-        true /* enable segment routing */,
-        AdjacencyDbMarker{"adj:"},
-        SparkCmdUrl{"inproc://spark-req2"},
-        SparkReportUrl{"inproc://spark-report2"},
-        MonitorSubmitUrl{"inproc://monitor-rep2"},
-        PersistentStoreUrl{kConfigStoreUrl}, /* same config store */
-        false,
-        PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
-        PlatformPublisherUrl{"inproc://platform-pub-url2"},
-        LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
-        LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url2"},
-        std::chrono::seconds(1),
-        // link flap backoffs, set low to keep UT runtime low
-        std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8));
+        fbzmq::IdentityString{"spark_server_id"},
+        folly::none,
+        fbzmq::NonblockingFlag{true}};
+  EXPECT_NO_THROW(
+      sparkReport.bind(fbzmq::SocketUrl{"inproc://spark-report2"}).value());
 
-    auto linkMonitorThread = std::make_unique<std::thread>([linkMonitor]() {
-      LOG(INFO) << "LinkMonitor thread starting";
-      linkMonitor->run();
-      LOG(INFO) << "LinkMonitor thread finishing";
-    });
-    linkMonitor->waitUntilRunning();
-    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{
-          context,
-          fbzmq::IdentityString{"spark_server_id"},
-          folly::none,
-          fbzmq::NonblockingFlag{true}};
-    EXPECT_NO_THROW(
-        sparkReport.bind(fbzmq::SocketUrl{"inproc://spark-report2"}).value());
+  // 12. neighbor up
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    LOG(INFO) << "Testing neighbor up event!";
+    checkNextAdjPub("adj:node-1");
+  }
 
-    // 12. neighbor up
-    {
-      auto neighborEvent = createNeighborEvent(
-          thrift::SparkNeighborEventType::NEIGHBOR_UP,
-          "iface_2_1",
-          nb2,
-          100 /* rtt-us */,
-          1 /* label */);
-      sparkReport.sendMultiple(
-          fbzmq::Message::from(clientId).value(),
-          fbzmq::Message(),
-          fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
-      LOG(INFO) << "Testing neighbor up event!";
-      checkNextAdjPub("adj:node-1");
-    }
-
-    // 13. neighbor down
-    {
-      auto neighborEvent = createNeighborEvent(
-          thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-          "iface_2_1",
-          nb2,
-          100 /* rtt-us */,
-          1 /* label */);
-      sparkReport.sendMultiple(
-          fbzmq::Message::from(clientId).value(),
-          fbzmq::Message(),
-          fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
-      LOG(INFO) << "Testing neighbor down event!";
-      checkNextAdjPub("adj:node-1");
-    }
-
-    linkMonitor->stop();
-    linkMonitorThread->join();
+  // 13. neighbor down
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    LOG(INFO) << "Testing neighbor down event!";
+    checkNextAdjPub("adj:node-1");
   }
 }
 
@@ -1142,7 +1148,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       MonitorSubmitUrl{"inproc://monitor-rep"},
       PersistentStoreUrl{kConfigStoreUrl},
       false,
-      PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
+      PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url"},
       LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
       LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url2"},
@@ -1630,7 +1636,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         MonitorSubmitUrl{"inproc://monitor-rep"},
         PersistentStoreUrl{kConfigStoreUrl},
         false,
-        PrefixManagerLocalCmdUrl{"inproc://prefix-manager-local-url"},
+        PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{
             folly::sformat("inproc://link-monitor-pub-url{}", i + 1)},

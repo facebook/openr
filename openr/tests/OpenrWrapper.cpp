@@ -36,17 +36,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       configStoreUrl_(folly::sformat("inproc://{}-store-url", nodeId_)),
       monitorSubmitUrl_(folly::sformat("inproc://{}-monitor-submit", nodeId_)),
       monitorPubUrl_(folly::sformat("inproc://{}-monitor-pub", nodeId_)),
-      kvStoreLocalCmdUrl_(folly::sformat("inproc://{}-kvstore-cmd", nodeId_)),
       kvStoreLocalPubUrl_(folly::sformat("inproc://{}-kvstore-pub", nodeId_)),
       kvStoreGlobalCmdUrl_(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
       kvStoreGlobalPubUrl_(
           folly::sformat("inproc://{}-kvstore-pub-global", nodeId_)),
-      prefixManagerLocalCmdUrl_(
-          folly::sformat("inproc://{}-prefix_manager_cmd_local", nodeId_)),
       prefixManagerGlobalCmdUrl_(
           folly::sformat("inproc://{}-prefix_manager_cmd_global", nodeId_)),
-      sparkCmdUrl_(folly::sformat("inproc://{}-spark-cmd", nodeId_)),
       sparkReportUrl_(folly::sformat("inproc://{}-spark-report", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
       linkMonitorGlobalCmdUrl_(
@@ -86,7 +82,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nodeId_,
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       KvStoreGlobalPubUrl{kvStoreGlobalPubUrl_},
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       folly::none /* ip-tos */,
@@ -96,8 +91,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /* enable legacy flooding */,
       std::move(filters));
 
+  kvStoreLocalCmdUrl_ = kvStore_->inprocCmdUrl;
   // kvstore client socket
-  kvStoreReqSock_.connect(fbzmq::SocketUrl{kvStoreLocalCmdUrl_}).value();
+  kvStoreReqSock_.connect(fbzmq::SocketUrl{kvStore_->inprocCmdUrl}).value();
 
   // kvstore client
   kvStoreClient_ = std::make_unique<KvStoreClient>(
@@ -149,7 +145,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       v4Enabled, // enable v4
       true, // enable subnet validation
       SparkReportUrl{sparkReportUrl_},
-      SparkCmdUrl{sparkCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStorePubPort{0}, // these port numbers won't be used
       KvStoreCmdPort{0},
@@ -158,7 +153,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       context_);
 
   // spark client socket
-  sparkReqSock_.connect(fbzmq::SocketUrl{sparkCmdUrl_}).value();
+  sparkReqSock_.connect(
+      fbzmq::SocketUrl{spark_->inprocCmdUrl}).value();
 
   //
   // create link monitor
@@ -174,6 +170,21 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   includeRegexList->Compile();
   std::unique_ptr<re2::RE2::Set> excludeRegexList;
   std::unique_ptr<re2::RE2::Set> redistRegexList;
+
+  // start prefix manager
+  prefixManager_ = std::make_unique<PrefixManager>(
+      nodeId_,
+      PrefixManagerGlobalCmdUrl{prefixManagerGlobalCmdUrl_},
+      PersistentStoreUrl{configStoreUrl_},
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      PrefixDbMarker{"prefix:"},
+      false /* prefix-mananger perf measurement */,
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      context_);
+
+  prefixManagerClient_ = std::make_unique<PrefixManagerClient>(
+      PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl}, context_);
 
   linkMonitor_ = std::make_unique<LinkMonitor>(
       context_,
@@ -191,12 +202,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /* enable v4 */,
       true /* enable segment routing */,
       AdjacencyDbMarker{"adj:"},
-      SparkCmdUrl{sparkCmdUrl_},
+      SparkCmdUrl{spark_->inprocCmdUrl},
       SparkReportUrl{sparkReportUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       PersistentStoreUrl{configStoreUrl_},
       false,
-      PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_},
+      PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
       PlatformPublisherUrl{platformPubUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
       LinkMonitorGlobalCmdUrl{linkMonitorGlobalCmdUrl_},
@@ -283,22 +294,6 @@ OpenrWrapper<Serializer>::run() {
   kvStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(kvStoreThread));
 
-  // start prefix manager
-  prefixManager_ = std::make_unique<PrefixManager>(
-      nodeId_,
-      PrefixManagerGlobalCmdUrl{prefixManagerGlobalCmdUrl_},
-      PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_},
-      PersistentStoreUrl{configStoreUrl_},
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      PrefixDbMarker{"prefix:"},
-      false /* prefix-mananger perf measurement */,
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      context_);
-
-  prefixManagerClient_ = std::make_unique<PrefixManagerClient>(
-      PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_}, context_);
-
   try {
     // bind out publisher socket
     VLOG(2) << "Platform Publisher: Binding pub url '" << platformPubUrl_
@@ -338,7 +333,7 @@ OpenrWrapper<Serializer>::run() {
       nodeId_,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      PrefixManagerLocalCmdUrl{prefixManagerLocalCmdUrl_},
+      PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
       MonitorSubmitUrl{monitorSubmitUrl_},
       AllocPrefixMarker{"allocprefix:"}, // alloc_prefix_marker
       std::make_pair(seedPrefix, allocPrefixLen),

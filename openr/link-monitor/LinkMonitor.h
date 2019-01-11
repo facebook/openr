@@ -39,6 +39,7 @@
 #include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/InterfaceEntry.h>
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
@@ -56,7 +57,7 @@ using AdjacencyValue = std::pair<thrift::PeerSpec, thrift::Adjacency>;
 // as an adjacency.
 //
 
-class LinkMonitor final : public fbzmq::ZmqEventLoop {
+class LinkMonitor final : public OpenrEventLoop {
  public:
   LinkMonitor(
       //
@@ -176,8 +177,8 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   // specified port.
   void createNetlinkSystemHandlerClient();
 
-  // process any command we may receive on cmd socket
-  void processCommand();
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& request) override;
 
   // Sumbmits the counter/stats to monitor
   void submitCounters();
@@ -240,8 +241,6 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
   const std::string platformPubUrl_;
   // Publish our events to Fib and others
   const std::string linkMonitorGlobalPubUrl_;
-  // URL to receive commands
-  const std::string linkMonitorGlobalCmdUrl_;
   // Backoff timers
   const std::chrono::milliseconds flapInitialBackoff_;
   const std::chrono::milliseconds flapMaxBackoff_;
@@ -265,8 +264,6 @@ class LinkMonitor final : public fbzmq::ZmqEventLoop {
 
   // publish our own events (interfaces up/down)
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> linkMonitorPubSock_;
-  // the socket we use to respond to commands
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> linkMonitorCmdSock_;
   // socket to control the spark
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> sparkCmdSock_;
   // Listen to neighbor events from spark

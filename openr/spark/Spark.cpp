@@ -160,13 +160,13 @@ Spark::Spark(
     bool enableV4,
     bool enableSubnetValidation,
     SparkReportUrl const& reportUrl,
-    SparkCmdUrl const& cmdUrl,
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStorePubPort kvStorePubPort,
     KvStoreCmdPort kvStoreCmdPort,
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext)
-    : myDomainName_(myDomainName),
+    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::SPARK, zmqContext),
+      myDomainName_(myDomainName),
       myNodeName_(myNodeName),
       udpMcastPort_(udpMcastPort),
       myHoldTime_(myHoldTime),
@@ -179,8 +179,6 @@ Spark::Spark(
           zmqContext,
           fbzmq::IdentityString{
               openr::Constants::kSparkReportServerId.toString()}),
-      cmdUrl_(cmdUrl),
-      cmdSocket_(zmqContext),
       kKvStorePubPort_(kvStorePubPort),
       kKvStoreCmdPort_(kvStoreCmdPort),
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
@@ -214,12 +212,6 @@ Spark::Spark(
 void
 Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
   VLOG(1) << "Constructing Spark server for node " << myNodeName_;
-
-  // bind socket for adding/removing interfaces
-  const auto cmd = cmdSocket_.bind(fbzmq::SocketUrl{cmdUrl_});
-  if (cmd.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << cmdUrl_ << "' " << cmd.error();
-  }
 
   // enable handover on report socket to new connection for duplicate identities
   const int handover = 1;
@@ -352,17 +344,6 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
   monitorTimer_ =
       fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
-
-  // We received an interface add/remove request
-  addSocket(RawZmqSocketPtr{*cmdSocket_}, ZMQ_POLLIN, [this](int) noexcept {
-    VLOG(2) << "Spark: interface Db received";
-    try {
-      processInterfaceDbUpdate();
-    } catch (std::exception const& err) {
-      LOG(ERROR) << "Error processing interface command "
-                 << folly::exceptionStr(err);
-    }
-  });
 
   // Listen for incoming messages on multicast FD
   addSocketFd(mcastFd_, ZMQ_POLLIN, [this](int) noexcept {
@@ -998,25 +979,19 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
   VLOG(4) << "Sent " << bytesSent << " bytes in hello packet";
 }
 
-void
-Spark::processInterfaceDbUpdate() {
-  SCOPE_SUCCESS {
-    thrift::SparkIfDbUpdateResult result;
-    result.isSuccess = true;
-    cmdSocket_.sendThriftObj(result, serializer_);
-  };
-
+folly::Expected<fbzmq::Message, fbzmq::Error>
+Spark::processRequestMsg(fbzmq::Message&& request) {
   SCOPE_FAIL {
     thrift::SparkIfDbUpdateResult result;
     result.isSuccess = false;
-    cmdSocket_.sendThriftObj(result, serializer_);
+    return fbzmq::Message::fromThriftObj(result, serializer_);
   };
 
-  auto maybeMsg = cmdSocket_.recvThriftObj<thrift::InterfaceDatabase>(
-      serializer_, Constants::kReadTimeout);
+  auto maybeMsg = request.readThriftObj<thrift::InterfaceDatabase>(
+      serializer_);
   if (maybeMsg.hasError()) {
     LOG(ERROR) << "processInterfaceDbUpdate recv failed: " << maybeMsg.error();
-    return;
+    folly::makeUnexpected(fbzmq::Error());
   }
   auto ifDb = maybeMsg.value();
 
@@ -1284,6 +1259,9 @@ Spark::processInterfaceDbUpdate() {
 
     interface = std::move(newInterface);
   }
+  thrift::SparkIfDbUpdateResult result;
+  result.isSuccess = true;
+  return fbzmq::Message::fromThriftObj(result, serializer_);
 }
 
 folly::Optional<std::string>

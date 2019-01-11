@@ -37,7 +37,6 @@ class SparkWrapper {
       bool enableV4,
       bool enableSubnetValidation,
       SparkReportUrl const& reportUrl,
-      SparkCmdUrl const& cmdUrl,
       MonitorSubmitUrl const& monitorCmdUrl,
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
@@ -72,9 +71,6 @@ class SparkWrapper {
 
   // this is used to communicate events to downstream consumer
   const std::string reportUrl_{""};
-
-  // this is used to add/remove network interfaces for tracking
-  const std::string cmdUrl_{""};
 
   // DEALER socket for submitting our monitor
   const std::string monitorCmdUrl_{""};

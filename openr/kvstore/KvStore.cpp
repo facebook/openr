@@ -61,7 +61,6 @@ KvStore::KvStore(
     std::string nodeId,
     KvStoreLocalPubUrl localPubUrl,
     KvStoreGlobalPubUrl globalPubUrl,
-    KvStoreLocalCmdUrl localCmdUrl,
     KvStoreGlobalCmdUrl globalCmdUrl,
     MonitorSubmitUrl monitorSubmitUrl,
     folly::Optional<int> maybeIpTos,
@@ -74,12 +73,13 @@ KvStore::KvStore(
     int zmqHwm,
     KvStoreFloodRate floodRate,
     std::chrono::milliseconds ttlDecr)
-    : zmqContext_(zmqContext),
+    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::KVSTORE, zmqContext,
+          std::string{globalCmdUrl}, folly::none /* ipcUrl */, maybeIpTos,
+          zmqHwm),
+      zmqContext_(zmqContext),
       nodeId_(std::move(nodeId)),
       localPubUrl_(std::move(localPubUrl)),
       globalPubUrl_(std::move(globalPubUrl)),
-      localCmdUrl_(std::move(localCmdUrl)),
-      globalCmdUrl_(std::move(globalCmdUrl)),
       dbSyncInterval_(dbSyncInterval),
       monitorSubmitInterval_(monitorSubmitInterval),
       legacyFlooding_(legacyFlooding),
@@ -88,12 +88,6 @@ KvStore::KvStore(
       filters_(std::move(filters)),
       // initialize zmq sockets
       localPubSock_{zmqContext},
-      localCmdSock_(
-          zmqContext,
-          fbzmq::IdentityString{folly::sformat(
-              Constants::kLocalCmdIdTemplate.toString(), nodeId_)},
-          folly::none,
-          fbzmq::NonblockingFlag{true}),
       peerSyncSock_(
           zmqContext,
           fbzmq::IdentityString{folly::sformat(
@@ -104,22 +98,12 @@ KvStore::KvStore(
   CHECK(not nodeId_.empty());
   CHECK(not localPubUrl_.empty());
   CHECK(not globalPubUrl_.empty());
-  CHECK(not localCmdUrl_.empty());
-  CHECK(not globalCmdUrl_.empty());
 
   // allocate new global pub socket if not provided
   globalPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
       zmqContext,
       fbzmq::IdentityString{
           folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId_)},
-      folly::none,
-      fbzmq::NonblockingFlag{true});
-
-  // allocate new global cmd socket if not provided
-  globalCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
-      zmqContext,
-      fbzmq::IdentityString{
-          folly::sformat(Constants::kGlobalCmdIdTemplate.toString(), nodeId_)},
       folly::none,
       fbzmq::NonblockingFlag{true});
 
@@ -175,35 +159,11 @@ KvStore::KvStore(
                << globalPubHwm.error();
   }
 
-  const auto localCmdSndHwm =
-      localCmdSock_.setSockOpt(ZMQ_SNDHWM, &hwm_, sizeof(hwm_));
-  if (localCmdSndHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
-               << localCmdSndHwm.error();
-  }
-  const auto globalCmdSndHwm =
-      globalCmdSock_.setSockOpt(ZMQ_SNDHWM, &hwm_, sizeof(hwm_));
-  if (globalCmdSndHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
-               << globalCmdSndHwm.error();
-  }
   const auto peersSyncSndHwm =
       peerSyncSock_.setSockOpt(ZMQ_SNDHWM, &hwm_, sizeof(hwm_));
   if (peersSyncSndHwm.hasError()) {
     LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
                << peersSyncSndHwm.error();
-  }
-  const auto localCmdRcvHwm =
-      localCmdSock_.setSockOpt(ZMQ_RCVHWM, &hwm_, sizeof(hwm_));
-  if (localCmdRcvHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
-               << localCmdRcvHwm.error();
-  }
-  const auto globalCmdRcvHwm =
-      globalCmdSock_.setSockOpt(ZMQ_RCVHWM, &hwm_, sizeof(hwm_));
-  if (globalCmdRcvHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << hwm_ << " "
-               << globalCmdRcvHwm.error();
   }
   const auto peerSyncRcvHwm =
       peerSyncSock_.setSockOpt(ZMQ_RCVHWM, &hwm_, sizeof(hwm_));
@@ -212,33 +172,8 @@ KvStore::KvStore(
                << peerSyncRcvHwm.error();
   }
 
-  // Set send timeout to avoid sockets from being in hanging state forever.
-  const int sendTimeout = 1000;  // 1s
-  {
-    const auto sockOptRet =
-        globalCmdSock_.setSockOpt(ZMQ_SNDTIMEO, &sendTimeout, sizeof(int));
-    if (sockOptRet.hasError()) {
-      LOG(FATAL) << "Error setting ZMQ_SNDTIMEO to " << sendTimeout << " "
-                 << sockOptRet.error();
-    }
-  }
-  {
-    const auto sockOptRet =
-        localCmdSock_.setSockOpt(ZMQ_SNDTIMEO, &sendTimeout, sizeof(int));
-    if (sockOptRet.hasError()) {
-      LOG(FATAL) << "Error setting ZMQ_SNDTIMEO to " << sendTimeout << " "
-                 << sockOptRet.error();
-    }
-  }
-
   // enable handover for inter process router socket
   const int handover = 1;
-  const auto globalCmdHandover =
-      globalCmdSock_.setSockOpt(ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
-  if (globalCmdHandover.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
-               << globalCmdHandover.error();
-  }
   const auto peerSyncHandover =
       peerSyncSock_.setSockOpt(ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
   if (peerSyncHandover.hasError()) {
@@ -247,14 +182,6 @@ KvStore::KvStore(
   }
 
   // set keep-alive to retire old flows
-  const auto globalCmdKeepAlive = globalCmdSock_.setKeepAlive(
-      Constants::kKeepAliveEnable,
-      Constants::kKeepAliveTime.count(),
-      Constants::kKeepAliveCnt,
-      Constants::kKeepAliveIntvl.count());
-  if (globalCmdKeepAlive.hasError()) {
-    LOG(FATAL) << "Error setting KeepAlive " << globalCmdKeepAlive.error();
-  }
   const auto peerSyncKeepAlive = peerSyncSock_.setKeepAlive(
       Constants::kKeepAliveEnable,
       Constants::kKeepAliveTime.count(),
@@ -271,12 +198,6 @@ KvStore::KvStore(
     if (globalPubTos.hasError()) {
       LOG(FATAL) << "Error setting ZMQ_TOS to " << ipTos << " "
                  << globalPubTos.error();
-    }
-    const auto globalCmdTos =
-        globalCmdSock_.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
-    if (globalCmdTos.hasError()) {
-      LOG(FATAL) << "Error setting ZMQ_TOS to " << ipTos << " "
-                 << globalCmdTos.error();
     }
     const auto peerSyncTos =
         peerSyncSock_.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
@@ -313,21 +234,6 @@ KvStore::KvStore(
   if (globalPubBind.hasError()) {
     LOG(FATAL) << "Error binding to URL '" << globalPubUrl_ << "' "
                << globalPubBind.error();
-  }
-
-  VLOG(2) << "KvStore: Binding localCmdUrl '" << localCmdUrl_ << "'";
-  const auto localCmdBind = localCmdSock_.bind(fbzmq::SocketUrl{localCmdUrl_});
-  if (localCmdBind.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << localCmdUrl_ << "' "
-               << localCmdBind.error();
-  }
-
-  VLOG(2) << "KvStore: Binding globalCmdUrl '" << globalCmdUrl_ << "'";
-  const auto globalCmdBind =
-      globalCmdSock_.bind(fbzmq::SocketUrl{globalCmdUrl_});
-  if (globalCmdBind.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << globalCmdUrl_ << "' "
-               << globalCmdBind.error();
   }
 
 
@@ -955,36 +861,17 @@ KvStore::updatePublicationTtl(
   }
 }
 
-// process a request pending on cmd_ socket
-void
-KvStore::processRequest(
-    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept {
-  fbzmq::Message requestIdMsg, delimMsg, thriftReqMsg;
-
-  const auto ret = cmdSock.recvMultiple(requestIdMsg, delimMsg, thriftReqMsg);
-
-  if (ret.hasError()) {
-    LOG(ERROR) << "processRequest: Error receiving command: " << ret.error();
-    return;
-  }
-
-  const auto requestId = requestIdMsg.read<std::string>().value();
-  const auto delim = delimMsg.read<std::string>().value();
-
-  if (not delimMsg.empty()) {
-    LOG(ERROR) << "processRequest: Non-empty delimiter: " << delim;
-    return;
-  }
-
-  VLOG(4) << "processRequest, got id: `" << folly::backslashify(requestId)
-          << "` and delim: `" << folly::backslashify(delim) << "`";
+// process a request
+folly::Expected<fbzmq::Message, fbzmq::Error>
+KvStore::processRequestMsg(fbzmq::Message&& request) {
 
   auto maybeThriftReq =
-      thriftReqMsg.readThriftObj<thrift::Request>(serializer_);
+      request.readThriftObj<thrift::Request>(serializer_);
+
   if (maybeThriftReq.hasError()) {
     LOG(ERROR) << "processRequest: failed reading thrift::Request "
                << maybeThriftReq.error();
-    return;
+    return folly::makeUnexpected(fbzmq::Error());
   }
   auto& thriftReq = maybeThriftReq.value();
 
@@ -993,18 +880,6 @@ KvStore::processRequest(
       << apache::thrift::TEnumTraits<thrift::Command>::findName(thriftReq.cmd)
       << "` received";
 
-  // send back the id and the delimiter for all cases except when KEY_SET
-  // is requested with solicitRequest=false
-  if (thriftReq.cmd != thrift::Command::KEY_SET ||
-      thriftReq.keySetParams.solicitResponse) {
-    auto ret = cmdSock.sendMultipleMore(requestIdMsg, delimMsg);
-    if (ret.hasError()) {
-      LOG(ERROR) << "Failed to send first two parts of the message. "
-                 << ret.error();
-      return;
-    }
-  }
-
   std::vector<std::string> keys;
   switch (thriftReq.cmd) {
   case thrift::Command::KEY_SET: {
@@ -1012,9 +887,7 @@ KvStore::processRequest(
     tData_.addStatValue("kvstore.cmd_key_set", 1, fbzmq::COUNT);
     if (thriftReq.keySetParams.keyVals.empty()) {
       LOG(ERROR) << "Malformed set request, ignoring";
-      cmdSock.sendOne(
-          fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
-      return;
+      return folly::makeUnexpected(fbzmq::Error());
     }
 
     // Update hash for key-values
@@ -1034,10 +907,11 @@ KvStore::processRequest(
 
     // respond to the client
     if (thriftReq.keySetParams.solicitResponse) {
-      cmdSock.sendOne(
-          fbzmq::Message::from(Constants::kSuccessResponse.toString()).value());
+      return fbzmq::Message::from(
+          Constants::kSuccessResponse.toString());
+    } else {
+      return folly::makeUnexpected(fbzmq::Error(0, "Solicit response not set"));
     }
-    break;
   }
   case thrift::Command::KEY_GET: {
     VLOG(3) << "Get key-values requested";
@@ -1045,9 +919,7 @@ KvStore::processRequest(
 
     auto thriftPub = getKeyVals(thriftReq.keyGetParams.keys);
     updatePublicationTtl(thriftPub);
-    cmdSock.sendOne(
-        fbzmq::Message::fromThriftObj(thriftPub, serializer_).value());
-    break;
+    return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
   case thrift::Command::KEY_DUMP: {
     if (thriftReq.keyDumpParams.keyValHashes.hasValue()) {
@@ -1061,10 +933,8 @@ KvStore::processRequest(
               << " Originator IDs:"
               << folly::join(",", thriftReq.keyDumpParams.originatorIds);
     }
-    tData_.addStatValue(
-      folly::sformat("kvstore.cmd_key_dump_{}", requestId.c_str()),
-      1,
-      fbzmq::COUNT);
+    // TODO, add per request id counters in thrift server
+    tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
 
     std::vector<std::string> keyPrefixList;
     folly::split(",", thriftReq.keyDumpParams.prefix, keyPrefixList, true);
@@ -1077,12 +947,7 @@ KvStore::processRequest(
         thriftReq.keyDumpParams.keyValHashes.value());
     }
     updatePublicationTtl(thriftPub);
-    const auto retPub = cmdSock.sendOne(
-        fbzmq::Message::fromThriftObj(thriftPub, serializer_).value());
-    if (retPub.hasError()) {
-      LOG(ERROR) << "Cannot send full dump: " << retPub.error();
-    }
-    break;
+    return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
   case thrift::Command::HASH_DUMP: {
     VLOG(3) << "Dump all hashes requested";
@@ -1093,64 +958,46 @@ KvStore::processRequest(
     KvStoreFilters kvFilters{keyPrefixList, originator};
     auto hashDump = dumpHashWithFilters(kvFilters);
     updatePublicationTtl(hashDump);
-    const auto request = cmdSock.sendOne(
-        fbzmq::Message::fromThriftObj(hashDump, serializer_).value());
-    if (request.hasError()) {
-      LOG(ERROR) << "Cannot send hash dump: " << request.error();
-    }
-    break;
+    return fbzmq::Message::fromThriftObj(hashDump, serializer_);
   }
   case thrift::Command::COUNTERS_GET: {
     VLOG(3) << "Counters are requested";
     fbzmq::thrift::CounterValuesResponse counters{
       apache::thrift::FRAGILE,
       getCounters()};
-    cmdSock.sendOne(
-        fbzmq::Message::fromThriftObj(counters, serializer_).value());
-    break;
+    return fbzmq::Message::fromThriftObj(counters, serializer_);
   }
-  case thrift::Command::PEER_ADD:
+  case thrift::Command::PEER_ADD: {
     VLOG(2) << "Peer addition requested";
     tData_.addStatValue("kvstore.cmd_peer_add", 1, fbzmq::COUNT);
 
     if (thriftReq.peerAddParams.peers.empty()) {
       LOG(ERROR) << "Malformed peer-add request, ignoring";
-      cmdSock.sendOne(
-          fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
-      return;
+      return folly::makeUnexpected(fbzmq::Error());
     }
     addPeers(thriftReq.peerAddParams.peers);
-    cmdSock.sendOne(
-        fbzmq::Message::fromThriftObj(dumpPeers(), serializer_).value());
-    break;
-
-  case thrift::Command::PEER_DEL:
+    return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
+  }
+  case thrift::Command::PEER_DEL: {
     VLOG(2) << "Peer deletion requested";
     tData_.addStatValue("kvstore.cmd_per_del", 1, fbzmq::COUNT);
 
     if (thriftReq.peerDelParams.peerNames.empty()) {
       LOG(ERROR) << "Malformed peer-del request, ignoring";
-      cmdSock.sendOne(
-          fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
-      return;
+      return folly::makeUnexpected(fbzmq::Error());
     }
     delPeers(thriftReq.peerDelParams.peerNames);
-    cmdSock.sendOne(
-        fbzmq::Message::fromThriftObj(dumpPeers(), serializer_).value());
-    break;
-
-  case thrift::Command::PEER_DUMP:
+    return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
+  }
+  case thrift::Command::PEER_DUMP: {
     VLOG(2) << "Peer dump requested";
     tData_.addStatValue("kvstore.cmd_peer_dump", 1, fbzmq::COUNT);
-    cmdSock.sendOne(
-        fbzmq::Message::fromThriftObj(dumpPeers(), serializer_).value());
-    break;
-
-  default:
+    return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
+  }
+  default: {
     LOG(ERROR) << "Unknown command received";
-    cmdSock.sendOne(
-        fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
-    break;
+    return folly::makeUnexpected(fbzmq::Error());
+  }
   }
 }
 
@@ -1279,22 +1126,6 @@ KvStore::attachCallbacks() {
         }
       });
   }
-
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*localCmdSock_}, ZMQ_POLLIN, [this](int) noexcept {
-        // we received a command from local threads
-        VLOG(3) << "KvStore " << nodeId_ << " : Command received... (locally)";
-        processRequest(localCmdSock_);
-      });
-
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*globalCmdSock_},
-      ZMQ_POLLIN,
-      [this](int) noexcept {
-        // we received a command from external peer
-        VLOG(3) << "KvStore " << nodeId_ << " : Command received... (globally)";
-        processRequest(globalCmdSock_);
-      });
 
   addSocket(
       fbzmq::RawZmqSocketPtr{*peerSyncSock_}, ZMQ_POLLIN, [this](int) noexcept {

@@ -152,7 +152,6 @@ class SparkFixture : public testing::Test {
         true /* enable v4 */,
         true /* enable subnet validation */,
         SparkReportUrl{folly::sformat("{}-{}", kSparkReportUrl, sparkNum)},
-        SparkCmdUrl{folly::sformat("{}-{}", kSparkCmdUrl, sparkNum)},
         MonitorSubmitUrl{
             folly::sformat("{}-{}", kSparkCounterCmdUrl, sparkNum)},
         version,
@@ -329,10 +328,7 @@ TEST_F(SparkFixture, GracefulRestart) {
 
   LOG(INFO) << "Killing and restarting node-2";
 
-  // We have to use different URL to bind/connect here. ZMQ socket close is
-  // async operation and `socket->close()` call returns immediately. There are
-  // chances that bind-address might still be in use if ZMQ Reaper thread hasn't
-  // cleaned it up.
+  spark2.reset();
   spark2 = createSpark(
       kDomainName,
       "node-2",
@@ -1393,10 +1389,7 @@ TEST_F(SparkFixture, FastInitTest) {
   LOG(INFO) << "Killing and restarting node-2";
   startTime = steady_clock::now();
 
-  // We have to use different URL to bind/connect here. ZMQ socket close is
-  // async operation and `socket->close()` call returns immediately. There are
-  // chances that bind-address might still be in use if ZMQ Reaper thread hasn't
-  // cleaned it up.
+  spark2.reset();
   spark2 = createSpark(
       kDomainName,
       "node-2",

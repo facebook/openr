@@ -23,7 +23,6 @@ namespace {
 
 const std::string kConfigStoreUrl = "inproc://pm_ut_config_store";
 const std::string kPrefixManagerGlobalCmdUrl = "inproc://pm_ut_global_cmd_url";
-const std::string kPrefixManagerLocalCmdUrl = "inproc://pm_ut_local_cmd_url";
 
 const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto addr2 = toIpPrefix("::ffff:10.2.2.2/128");
@@ -92,7 +91,6 @@ class PrefixManagerTestFixture : public ::testing::Test {
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
         PrefixManagerGlobalCmdUrl{kPrefixManagerGlobalCmdUrl},
-        PrefixManagerLocalCmdUrl{kPrefixManagerLocalCmdUrl},
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -109,7 +107,7 @@ class PrefixManagerTestFixture : public ::testing::Test {
     prefixManager->waitUntilRunning();
 
     prefixManagerClient = std::make_unique<PrefixManagerClient>(
-        PrefixManagerLocalCmdUrl{kPrefixManagerLocalCmdUrl}, context);
+        PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl}, context);
   }
 
   void
@@ -262,9 +260,8 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
   prefixManagerClient->addPrefixes({prefixEntry2});
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
-      "node-1",
+      "node-2",
       PrefixManagerGlobalCmdUrl{kPrefixManagerGlobalCmdUrl + "2"},
-      PrefixManagerLocalCmdUrl{kPrefixManagerLocalCmdUrl + "2"},
       PersistentStoreUrl{kConfigStoreUrl},
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -281,7 +278,7 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
   prefixManager2->waitUntilRunning();
 
   auto prefixManagerClient2 = std::make_unique<PrefixManagerClient>(
-      PrefixManagerLocalCmdUrl{kPrefixManagerLocalCmdUrl + "2"}, context);
+      PrefixManagerLocalCmdUrl{prefixManager2->inprocCmdUrl}, context);
 
   // verify that the new manager has what the first manager had
   EXPECT_TRUE(prefixManagerClient2->withdrawPrefixes({addr1}).value().success);

@@ -80,6 +80,16 @@ thrift_object(
   "${THRIFT_PREFIX}" #include_prefix
 )
 
+thrift_object(
+  "OpenrCtrl" #file_name
+  "" #services
+  "cpp2" #language
+  "json,optionals" #options
+  "${CMAKE_SOURCE_DIR}/if" #file_path
+  "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
+)
+
 add_dependencies(
   Lsdb-cpp2-obj
   IpPrefix-cpp2-obj
@@ -231,6 +241,7 @@ add_library(openrlib
   allocators/PrefixAllocator.cpp
   common/BuildInfo.cpp
   common/ExponentialBackoff.cpp
+  common/OpenrEventLoop.cpp
   common/Util.cpp
   common/Constants.cpp
   config-store/PersistentStore.cpp
@@ -263,6 +274,7 @@ add_library(openrlib
   $<TARGET_OBJECTS:KvStore-cpp2-obj>
   $<TARGET_OBJECTS:LinkMonitor-cpp2-obj>
   $<TARGET_OBJECTS:Lsdb-cpp2-obj>
+  $<TARGET_OBJECTS:OpenrCtrl-cpp2-obj>
   $<TARGET_OBJECTS:PersistentStore-cpp2-obj>
   $<TARGET_OBJECTS:Platform-cpp2-obj>
   $<TARGET_OBJECTS:PrefixManager-cpp2-obj>
@@ -406,6 +418,7 @@ install(FILES
   common/BuildInfo.h
   common/Constants.h
   common/ExponentialBackoff.h
+  common/OpenrEventLoop.h
   common/StepDetector.h
   common/Types.h
   common/Util.h

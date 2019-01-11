@@ -25,10 +25,11 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
-#include <openr/common/Util.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Types.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/common/OpenrEventLoop.h>
 
 namespace openr {
 
@@ -90,7 +91,7 @@ class KvStoreFilters {
 // SUB socket, and publishes to peers via PUB socket. The configuration
 // is passed via constructor arguments.
 
-class KvStore final : public fbzmq::ZmqEventLoop {
+class KvStore final : public OpenrEventLoop {
  public:
   KvStore(
       // the zmq context to use for IO
@@ -103,9 +104,6 @@ class KvStore final : public fbzmq::ZmqEventLoop {
       // the url we use to publish our updates to
       // any subscriber (often encrypted)
       KvStoreGlobalPubUrl globalPubUrl,
-      // the url to receive commands from local
-      // clients (same host)
-      KvStoreLocalCmdUrl localCmdUrl,
       // the url to receive command from local and
       // non local clients (often encrypted channel)
       KvStoreGlobalCmdUrl globalCmdUrl,
@@ -233,6 +231,9 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   void processRequest(
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
 
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& msg) override;
+
   // process received KV_DUMP from one of our neighbor
   void processSyncResponse() noexcept;
 
@@ -280,7 +281,6 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   const std::string globalPubUrl_;
 
   // The ZMQ URL we'll be listening for commands on
-  const std::string localCmdUrl_;
   const std::string globalCmdUrl_;
 
   // base interval to run syncs with (jitter will be added)
@@ -324,10 +324,6 @@ class KvStore final : public fbzmq::ZmqEventLoop {
   // KvStores.
   // the socket we use to subscribe to other KvStores
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> peerSubSock_;
-
-  // the socket we listen for commands on
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> localCmdSock_;
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock_;
 
   // zmq ROUTER socket for requesting full dumps from peers
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;

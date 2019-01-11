@@ -31,7 +31,6 @@ KvStoreWrapper::KvStoreWrapper(
     KvStoreFloodRate kvStoreRate,
     std::chrono::milliseconds ttlDecr)
     : nodeId(nodeId),
-      localCmdUrl(folly::sformat("inproc://{}-kvstore-cmd", nodeId)),
       localPubUrl(folly::sformat("inproc://{}-kvstore-pub", nodeId)),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
       globalPubUrl(folly::sformat("inproc://{}-kvstore-global-pub", nodeId)),
@@ -46,7 +45,6 @@ KvStoreWrapper::KvStoreWrapper(
       nodeId,
       KvStoreLocalPubUrl{localPubUrl},
       KvStoreGlobalPubUrl{globalPubUrl},
-      KvStoreLocalCmdUrl{localCmdUrl},
       KvStoreGlobalCmdUrl{globalCmdUrl},
       MonitorSubmitUrl{monitorSubmitUrl},
       folly::none /* ip-tos */,
@@ -58,6 +56,8 @@ KvStoreWrapper::KvStoreWrapper(
       Constants::kHighWaterMark,
       kvStoreRate,
       ttlDecr);
+
+  localCmdUrl = kvStore_->inprocCmdUrl;
 }
 
 void

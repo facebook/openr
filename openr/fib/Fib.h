@@ -23,6 +23,8 @@
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
+#include <openr/common/OpenrEventLoop.h>
+
 
 namespace openr {
 
@@ -46,7 +48,7 @@ namespace openr {
  * nexthops.
  *
  */
-class Fib final : public fbzmq::ZmqEventLoop {
+class Fib final : public OpenrEventLoop {
  public:
   Fib(std::string myNodeName,
       int32_t thriftPort,
@@ -88,6 +90,9 @@ class Fib final : public fbzmq::ZmqEventLoop {
    * routes associated with interface if we detect that it just went down.
    */
   void processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb);
+
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& request) override;
 
   /**
    * Convert local perfDb_ into PerfDataBase
@@ -165,7 +170,6 @@ class Fib final : public fbzmq::ZmqEventLoop {
 
   // ZMQ sockets for communication with Decision and LinkMonitor modules
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> decisionSub_;
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> fibRep_;
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> linkMonSub_;
 
   // ZMQ socket urls

@@ -53,7 +53,9 @@ PrefixAllocator::PrefixAllocator(
     PersistentStoreUrl const& configStoreUrl,
     fbzmq::Context& zmqContext,
     int32_t systemServicePort)
-    : myNodeName_(myNodeName),
+    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::PREFIX_ALLOCATOR,
+                     zmqContext),
+      myNodeName_(myNodeName),
       allocPrefixMarker_(allocPrefixMarker),
       setLoopbackAddress_(setLoopbackAddress),
       overrideGlobalAddress_(overrideGlobalAddress),
@@ -73,6 +75,11 @@ PrefixAllocator::PrefixAllocator(
 
   // Let the magic begin. Start allocation as per allocMode
   boost::apply_visitor(*this, allocMode);
+}
+
+folly::Expected<fbzmq::Message, fbzmq::Error>
+PrefixAllocator::processRequestMsg(fbzmq::Message&& /* not used */) {
+  return folly::makeUnexpected(fbzmq::Error());
 }
 
 void

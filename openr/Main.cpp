@@ -54,6 +54,7 @@ using namespace folly::gen;
 using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 using apache::thrift::concurrency::ThreadManager;
+using openr::thrift::OpenrModuleType;
 
 namespace {
 //
@@ -391,6 +392,36 @@ void submitCounters(
   monitorClient.setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
+void
+startEventLoop(
+    std::vector<std::thread>& allThreads,
+    std::vector<std::shared_ptr<OpenrEventLoop>>& orderedEventLoops,
+    std::unordered_map<
+        OpenrModuleType,
+        std::shared_ptr<OpenrEventLoop>>& moduleTypeToEvl,
+    std::unique_ptr<Watchdog>& watchdog,
+    std::shared_ptr<OpenrEventLoop> evl) {
+  const auto type = evl->moduleType;
+  // enforce at most one module of each type
+  CHECK_EQ(0, moduleTypeToEvl.count(type));
+
+  allThreads.emplace_back(std::thread([evl]() noexcept {
+    LOG(INFO) << "Starting " << evl->moduleName << " thread ...";
+    folly::setThreadName(evl->moduleName);
+    evl->run();
+    LOG(INFO) << evl->moduleName << " thread got stopped.";
+  }));
+
+  evl->waitUntilRunning();
+
+  if (watchdog) {
+    watchdog->addEvl(evl.get(), evl->moduleName);
+  }
+
+  orderedEventLoops.emplace_back(evl);
+  moduleTypeToEvl.emplace(type, orderedEventLoops.back());
+}
+
 int
 main(int argc, char** argv) {
   // Initialize syslog
@@ -444,8 +475,6 @@ main(int argc, char** argv) {
     maybeIpTos = FLAGS_ip_tos;
   }
 
-  std::vector<std::thread> allThreads{};
-
   // change directory after the config has been loaded
   ::chdir(FLAGS_chdir.c_str());
 
@@ -473,8 +502,15 @@ main(int argc, char** argv) {
   // Set main thread name
   folly::setThreadName("openr");
 
-  // Watchdog thread to monitor thread aliveness
+  // structures to organize our modules
+  std::vector<std::thread> allThreads;
+  std::vector<std::shared_ptr<OpenrEventLoop>> orderedEventLoops;
+  std::unordered_map<
+      OpenrModuleType,
+      std::shared_ptr<OpenrEventLoop>> moduleTypeToEvl;
   std::unique_ptr<Watchdog> watchdog{nullptr};
+
+  // Watchdog thread to monitor thread aliveness
   if (FLAGS_enable_watchdog) {
     watchdog = std::make_unique<Watchdog>(
         FLAGS_node_name,
@@ -491,6 +527,7 @@ main(int argc, char** argv) {
     }));
     watchdog->waitUntilRunning();
   }
+
 
   // Create ThreadManager for thrift services
   std::shared_ptr<ThreadManager> thriftThreadMgr;
@@ -576,8 +613,6 @@ main(int argc, char** argv) {
     }
   }
 
-  const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
-  const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{"inproc://kvstore_cmd_local"};
   const MonitorSubmitUrl monitorSubmitUrl{
       folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
 
@@ -659,14 +694,15 @@ main(int argc, char** argv) {
     kvstoreRate = folly::none;
   }
 
+  const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
   // Start KVStore
-  KvStore store(
+  startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
+    std::make_shared<KvStore>(
       context,
       FLAGS_node_name,
       kvStoreLocalPubUrl,
       KvStoreGlobalPubUrl{folly::sformat(
           "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_pub_port)},
-      kvStoreLocalCmdUrl,
       KvStoreGlobalCmdUrl{folly::sformat(
           "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
       monitorSubmitUrl,
@@ -678,42 +714,28 @@ main(int argc, char** argv) {
       std::move(kvFilters),
       FLAGS_kvstore_zmq_hwm,
       kvstoreRate,
-      std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms));
-  std::thread kvStoreThread([&store]() noexcept {
-    LOG(INFO) << "Starting KvStore thread...";
-    folly::setThreadName("KvStore");
-    store.run();
-    LOG(INFO) << "KvStore thread got stopped.";
-  });
-  store.waitUntilRunning();
-  allThreads.emplace_back(std::move(kvStoreThread));
-  watchdog->addEvl(&store, "KvStore");
+      std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms)));
+
+  const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{
+    moduleTypeToEvl.at(OpenrModuleType::KVSTORE)->inprocCmdUrl};
 
   // start prefix manager
-  PrefixManager prefixManager(
+  startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
+    std::make_shared<PrefixManager>(
       FLAGS_node_name,
       PrefixManagerGlobalCmdUrl{
           folly::sformat("tcp://*:{}", FLAGS_prefix_manager_cmd_port)},
-      kPrefixManagerLocalCmdUrl,
       kConfigStoreUrl,
       kvStoreLocalCmdUrl,
       kvStoreLocalPubUrl,
       PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
       FLAGS_enable_perf_measurement,
       monitorSubmitUrl,
-      context);
+      context));
 
-  allThreads.emplace_back(std::thread([&prefixManager]() noexcept {
-    LOG(INFO) << "Starting the PrefixManager thread...";
-    folly::setThreadName("PrefixManager");
-    prefixManager.run();
-    LOG(INFO) << "PrefixManager thread got stopped.";
-  }));
-  watchdog->addEvl(&prefixManager, "PrefixManager");
-  prefixManager.waitUntilRunning();
-
+  const PrefixManagerLocalCmdUrl prefixManagerLocalCmdUrl{
+    moduleTypeToEvl.at(OpenrModuleType::PREFIX_MANAGER)->inprocCmdUrl};
   // Prefix Allocator to automatically allocate prefixes for nodes
-  std::unique_ptr<PrefixAllocator> prefixAllocator;
   if (FLAGS_enable_prefix_alloc) {
     // start prefix allocator
     PrefixAllocatorMode allocMode;
@@ -726,11 +748,12 @@ main(int argc, char** argv) {
     } else {
       allocMode = PrefixAllocatorModeSeeded();
     }
-    prefixAllocator = std::make_unique<PrefixAllocator>(
+    startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
+      std::make_shared<PrefixAllocator>(
         FLAGS_node_name,
         kvStoreLocalCmdUrl,
         kvStoreLocalPubUrl,
-        kPrefixManagerLocalCmdUrl,
+        prefixManagerLocalCmdUrl,
         monitorSubmitUrl,
         AllocPrefixMarker{Constants::kPrefixAllocMarker.toString()},
         allocMode,
@@ -740,24 +763,16 @@ main(int argc, char** argv) {
         Constants::kPrefixAllocatorSyncInterval,
         kConfigStoreUrl,
         context,
-        FLAGS_system_agent_port);
-    // Spawn a PrefixAllocator thread
-    allThreads.emplace_back(std::thread([&prefixAllocator]() noexcept {
-      LOG(INFO) << "Starting PrefixAllocator thread ...";
-      folly::setThreadName("PrefixAllocator");
-      prefixAllocator->run();
-      LOG(INFO) << "PrefixAllocator thread got stopped.";
-    }));
-    watchdog->addEvl(prefixAllocator.get(), "PrefixAllocator");
-    prefixAllocator->waitUntilRunning();
+        FLAGS_system_agent_port));
   }
 
   //
-  // Start the spark service. For now, use random key-pair
+  // If enabled, start the spark service.
   //
-  std::unique_ptr<Spark> spark;
+
   if (FLAGS_enable_spark) {
-    spark = std::make_unique<Spark>(
+    startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
+      std::make_shared<Spark>(
         FLAGS_domain, // My domain
         FLAGS_node_name, // myNodeName
         static_cast<uint16_t>(FLAGS_spark_mcast_port),
@@ -768,23 +783,13 @@ main(int argc, char** argv) {
         FLAGS_enable_v4,
         FLAGS_enable_subnet_validation,
         SparkReportUrl{FLAGS_spark_report_url},
-        SparkCmdUrl{FLAGS_spark_cmd_url},
         monitorSubmitUrl,
         KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
         KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
-        std::make_pair(
-            Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-        context);
-    // Spawn a Spark thread
-    allThreads.emplace_back(std::thread([&spark]() noexcept {
-      LOG(INFO) << "Starting the spark thread...";
-      folly::setThreadName("Spark");
-      spark->run();
-      LOG(INFO) << "Spark thread got stopped.";
-    }));
-    watchdog->addEvl(spark.get(), "Spark");
-    spark->waitUntilRunning();
-  }
+        std::make_pair(Constants::kOpenrVersion,
+                       Constants::kOpenrSupportedVersion),
+        context));
+    }
 
   // Static list of prefixes to announce into the network as long as OpenR is
   // running.
@@ -876,7 +881,8 @@ main(int argc, char** argv) {
   }
 
   // Create link monitor instance.
-  LinkMonitor linkMonitor(
+  startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
+    std::make_shared<LinkMonitor>(
       context,
       FLAGS_node_name,
       FLAGS_system_agent_port,
@@ -891,12 +897,14 @@ main(int argc, char** argv) {
       FLAGS_enable_v4,
       FLAGS_enable_segment_routing,
       AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-      SparkCmdUrl{FLAGS_spark_cmd_url},
+      SparkCmdUrl{FLAGS_enable_spark ?
+        moduleTypeToEvl.at(OpenrModuleType::SPARK)->inprocCmdUrl :
+        FLAGS_spark_cmd_url},
       SparkReportUrl{FLAGS_spark_report_url},
       monitorSubmitUrl,
       kConfigStoreUrl,
       FLAGS_assume_drained,
-      kPrefixManagerLocalCmdUrl,
+      prefixManagerLocalCmdUrl,
       PlatformPublisherUrl{FLAGS_platform_pub_url},
       LinkMonitorGlobalPubUrl{
           folly::sformat("tcp://*:{}", FLAGS_link_monitor_pub_port)},
@@ -904,25 +912,13 @@ main(int argc, char** argv) {
           folly::sformat("tcp://*:{}", FLAGS_link_monitor_cmd_port)},
       std::chrono::seconds(2 * FLAGS_spark_keepalive_time_s),
       std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
-      std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms));
-
-  // start link monitor thread
-  std::thread linkMonitorThread([&linkMonitor]() noexcept {
-    LOG(INFO) << "Starting LinkMonitor thread...";
-    folly::setThreadName("LinkMonitor");
-    linkMonitor.run();
-    LOG(INFO) << "LinkMonitor thread got stopped.";
-  });
-  linkMonitor.waitUntilRunning();
-  allThreads.emplace_back(std::move(linkMonitorThread));
-  watchdog->addEvl(&linkMonitor, "LinkMonitor");
+      std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms)));
 
   // Wait for the above two threads to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module
   // receives itself as one of the nodes before running the spf.
 
   // Start Decision Module
-  std::unique_ptr<Decision> decision{nullptr};
   std::unique_ptr<DecisionOld> decisionOld{nullptr};
   if (FLAGS_enable_old_decision_module) {
     decisionOld = std::make_unique<DecisionOld>(
@@ -949,7 +945,8 @@ main(int argc, char** argv) {
     allThreads.emplace_back(std::move(decisionThread));
     watchdog->addEvl(decisionOld.get(), "Decision");
   } else {
-    decision = std::make_unique<Decision>(
+    startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
+      std::make_shared<Decision>(
         FLAGS_node_name,
         FLAGS_enable_v4,
         FLAGS_enable_lfa,
@@ -963,20 +960,12 @@ main(int argc, char** argv) {
             "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_rep_port)},
         kDecisionPubUrl,
         monitorSubmitUrl,
-        context);
-    std::thread decisionThread([&decision]() noexcept {
-      LOG(INFO) << "Starting Decision thread...";
-      folly::setThreadName("Decision");
-      decision->run();
-      LOG(INFO) << "Decision thread got stopped.";
-    });
-    decision->waitUntilRunning();
-    allThreads.emplace_back(std::move(decisionThread));
-    watchdog->addEvl(decision.get(), "Decision");
+        context));
   }
 
   // Define and start Fib Module
-  Fib fib(
+  startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
+    std::make_shared<Fib>(
       FLAGS_node_name,
       FLAGS_fib_handler_port,
       FLAGS_dryrun,
@@ -988,22 +977,12 @@ main(int argc, char** argv) {
       LinkMonitorGlobalPubUrl{
           folly::sformat("tcp://[::1]:{}", FLAGS_link_monitor_pub_port)},
       monitorSubmitUrl,
-      context);
-
-  // Spawn a FIB thread
-  allThreads.emplace_back(std::thread([&fib]() noexcept {
-    LOG(INFO) << "Starting FIB thread ...";
-    folly::setThreadName("Fib");
-    fib.run();
-    LOG(INFO) << "FIB thread got stopped.";
-  }));
-  fib.waitUntilRunning();
-  watchdog->addEvl(&fib, "Fib");
+      context));
 
   // Define and start HealthChecker
-  std::unique_ptr<HealthChecker> healthChecker{nullptr};
   if (FLAGS_enable_health_checker) {
-    healthChecker = std::make_unique<HealthChecker>(
+    startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
+      std::make_shared<HealthChecker>(
         FLAGS_node_name,
         openr::thrift::HealthCheckOption(FLAGS_health_check_option),
         FLAGS_health_check_pct,
@@ -1017,49 +996,22 @@ main(int argc, char** argv) {
         HealthCheckerCmdUrl{folly::sformat(
             "tcp://{}:{}", FLAGS_listen_addr, FLAGS_health_checker_rep_port)},
         monitorSubmitUrl,
-        context);
-    // Spawn a HealthChecker thread
-    allThreads.emplace_back(std::thread([&healthChecker]() noexcept {
-      LOG(INFO) << "Starting HealthChecker thread ...";
-      folly::setThreadName("HealthChecker");
-      healthChecker->run();
-      LOG(INFO) << "HealthChecker thread got stopped.";
-    }));
-    healthChecker->waitUntilRunning();
-    watchdog->addEvl(healthChecker.get(), "HealthChecker");
+        context));
   }
 
   // Wait for main-event loop to return
   mainEventLoopThread.join();
 
   // Stop all threads (in reverse order of their creation)
-  if (healthChecker) {
-    healthChecker->stop();
-    healthChecker->waitUntilStopped();
+  for (auto riter = orderedEventLoops.rbegin();
+      orderedEventLoops.rend() != riter; ++riter) {
+    (*riter)->stop();
+    (*riter)->waitUntilStopped();
   }
-  fib.stop();
-  fib.waitUntilStopped();
-  if (decision) {
-    decision->stop();
-    decision->waitUntilStopped();
-  } else {
+  if (decisionOld) {
     decisionOld->stop();
     decisionOld->waitUntilStopped();
   }
-  linkMonitor.stop();
-  linkMonitor.waitUntilStopped();
-  if (spark) {
-    spark->stop();
-    spark->waitUntilStopped();
-  }
-  if (prefixAllocator) {
-    prefixAllocator->stop();
-    prefixAllocator->waitUntilStopped();
-  }
-  prefixManager.stop();
-  prefixManager.waitUntilStopped();
-  store.stop();
-  store.waitUntilStopped();
   monitor.stop();
   monitor.waitUntilStopped();
   configStore.stop();

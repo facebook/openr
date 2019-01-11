@@ -29,10 +29,11 @@
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClient.h>
+#include <openr/common/OpenrEventLoop.h>
 
 namespace openr {
 
-class HealthChecker final : public fbzmq::ZmqEventLoop {
+class HealthChecker final : public OpenrEventLoop {
  public:
   HealthChecker(
       std::string const& myNodeName,
@@ -85,6 +86,10 @@ class HealthChecker final : public fbzmq::ZmqEventLoop {
       int64_t seqNum);
   void processMessage();
   void processRequest();
+
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& msg) override;
+
   void printInfo();
   void submitCounters();
 
@@ -108,9 +113,6 @@ class HealthChecker final : public fbzmq::ZmqEventLoop {
   apache::thrift::CompactSerializer serializer_;
 
   folly::Optional<int> pingSocketFd_;
-
-  // Command Sockets to listen from requests
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> repSock_;
 
   // clients to interact with monitor and local kvStore
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
