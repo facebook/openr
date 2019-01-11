@@ -21,7 +21,7 @@ docker run -itd \             >>> Allow interactive shells to be opened up into 
            -v /misc/app_host:/root \     >>>  Mount /misc/app_host and all relevant files to /root of container (or any folder of choice)
            -v /misc/app_host/hosts_rtr1:/etc/hosts \  >>> Mount hosts_<> file from /misc/app_host into /etc/hosts for Open/R hellos
            --hostname rtr1 \         >>>  Specify the same hostname that you set up in the hosts file for Open/R
-           11.11.11.2:5000/openr \   >>  Specify the name of the pulled Open/R image.
+           akshshar/openr-xr \   >>  Specify the name of the pulled Open/R image.
            bash -c "/root/run_openr_rtr1.sh > /root/openr.log 2>&1"   >>> Launch the Open/R binary using the run_openr_<> script and redirect logs to /root (and therefore to /misc/app_host on XR based on the earlier mount)
 
 ```
