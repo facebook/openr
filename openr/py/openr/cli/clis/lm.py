@@ -163,7 +163,7 @@ class SetAdjMetricCli(object):
             return
 
         lm.SetAdjMetricCmd(cli_opts).run(node, interface, metric, yes)
-        nodes = parse_nodes(cli_opts.host, "", cli_opts.lm_cmd_port)
+        nodes = parse_nodes(cli_opts, "")
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
 
 
@@ -184,7 +184,7 @@ class UnsetAdjMetricCli(object):
             return
 
         lm.UnsetAdjMetricCmd(cli_opts).run(node, interface, yes)
-        nodes = parse_nodes(cli_opts.host, "", cli_opts.lm_cmd_port)
+        nodes = parse_nodes(cli_opts, "")
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
 
 

@@ -59,7 +59,7 @@ class PrefixesCli(object):
     def prefixes(cli_opts, nodes, json):  # noqa: B902
         """ show the prefixes in the network """
 
-        nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
+        nodes = parse_nodes(cli_opts, nodes)
         kvstore.PrefixesCmd(cli_opts).run(nodes, json)
 
 
@@ -113,7 +113,7 @@ class AdjCli(object):
     def adj(cli_opts, nodes, bidir, json):  # noqa: B902
         """ dump the link-state adjacencies """
 
-        nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
+        nodes = parse_nodes(cli_opts, nodes)
         kvstore.AdjCmd(cli_opts).run(nodes, bidir, json)
 
 
@@ -136,7 +136,7 @@ class InterfacesCli(object):
     def interfaces(cli_opts, nodes, json, all):  # noqa: B902
         """ dump interface information """
 
-        nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
+        nodes = parse_nodes(cli_opts, nodes)
         kvstore.InterfacesCmd(cli_opts).run(nodes, json, all)
 
 

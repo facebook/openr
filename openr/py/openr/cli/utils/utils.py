@@ -143,25 +143,25 @@ def get_fib_agent_client(
     return client
 
 
-def get_connected_node_name(host, lm_cmd_port):
+def get_connected_node_name(cli_opts):
     """ get the identity of the connected node by querying link monitor"""
 
-    client = LMClient(zmq.Context(), "tcp://{}:{}".format(host, lm_cmd_port))
+    client = LMClient(cli_opts)
 
     try:
         return client.get_identity()
     except zmq.error.Again:
-        return host
+        return cli_opts.host
 
 
-def parse_nodes(host, nodes, lm_cmd_port):
+def parse_nodes(cli_opts, nodes):
     """ parse nodes from user input
 
         :return set: the set of nodes
     """
 
     if not nodes:
-        nodes = get_connected_node_name(host, lm_cmd_port)
+        nodes = get_connected_node_name(cli_opts)
     nodes = set(nodes.strip().split(","))
 
     return nodes
@@ -989,12 +989,12 @@ def sprint_prefixes_db_delta(global_prefixes_db, prefix_db):
     return strs
 
 
-def dump_node_kvs(node, kv_rep_port):
-    client = KvStoreClient(zmq.Context(), "tcp://[{}]:{}".format(node, kv_rep_port))
+def dump_node_kvs(cli_opts, host):
+    client = KvStoreClient(cli_opts, host=host)
     try:
         kv = client.dump_all_with_filter()
     except zmq.error.Again:
-        print("cannot connect to {}'s kvstore".format(node))
+        print("cannot connect to {}'s kvstore".format(host))
         return None
     return kv
 

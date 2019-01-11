@@ -30,11 +30,11 @@ class Monitor(object):
         self._monitor_cache = monitor_cache
 
     def process_request(self):
-        request = self._monitor_server_socket.recv_thrift_obj(
+        request = self._monitor_server_zmq_socket.recv_thrift_obj(
             monitor_types.MonitorRequest
         )
         if request.cmd == monitor_types.MonitorCommand.DUMP_ALL_COUNTER_DATA:
-            self._monitor_server_socket.send_thrift_obj(self._monitor_cache)
+            self._monitor_server_zmq_socket.send_thrift_obj(self._monitor_cache)
 
 
 class TestMonitorClient(unittest.TestCase):

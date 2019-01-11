@@ -12,29 +12,24 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object
 
 import zmq
+from openr.clients.openr_client import OpenrClient
 from openr.HealthChecker import ttypes as health_checker_types
+from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.utils import consts, zmq_socket
 
 
-class HealthCheckerClient(object):
-    def __init__(
-        self,
-        zmq_ctx,
-        health_checker_cmd_port,
-        timeout=consts.Consts.TIMEOUT_MS,
-        proto_factory=consts.Consts.PROTO_FACTORY,
-    ):
-        self._health_checker_cmd_socket = zmq_socket.ZmqSocket(
-            zmq_ctx, zmq.REQ, timeout, proto_factory
+class HealthCheckerClient(OpenrClient):
+    def __init__(self, cli_opts):
+        super(HealthCheckerClient, self).__init__(
+            OpenrModuleType.HEALTH_CHECKER,
+            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.health_checker_cmd_port),
+            cli_opts,
         )
-        self._health_checker_cmd_socket.connect(health_checker_cmd_port)
 
     def peek(self):
         req_msg = health_checker_types.HealthCheckerRequest()
         req_msg.cmd = health_checker_types.HealthCheckerCmd.PEEK
 
-        self._health_checker_cmd_socket.send_thrift_obj(req_msg)
-
-        return self._health_checker_cmd_socket.recv_thrift_obj(
-            health_checker_types.HealthCheckerPeekReply
+        return self.send_and_recv_thrift_obj(
+            req_msg, health_checker_types.HealthCheckerPeekReply
         )

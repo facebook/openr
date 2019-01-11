@@ -12,22 +12,19 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object
 
 import zmq
+from openr.clients.openr_client import OpenrClient
 from openr.Decision import ttypes as decision_types
+from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.utils import consts, zmq_socket
 
 
-class DecisionClient(object):
-    def __init__(
-        self,
-        zmq_ctx,
-        decision_cmd_url,
-        timeout=consts.Consts.TIMEOUT_MS,
-        proto_factory=consts.Consts.PROTO_FACTORY,
-    ):
-        self._decision_cmd_socket = zmq_socket.ZmqSocket(
-            zmq_ctx, zmq.REQ, timeout, proto_factory
+class DecisionClient(OpenrClient):
+    def __init__(self, cli_opts):
+        super(DecisionClient, self).__init__(
+            OpenrModuleType.DECISION,
+            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.decision_rep_port),
+            cli_opts,
         )
-        self._decision_cmd_socket.connect(decision_cmd_url)
 
     def _get_db(self, db_type, node_name=""):
 
@@ -35,8 +32,7 @@ class DecisionClient(object):
         req_msg.cmd = db_type
         req_msg.nodeName = node_name
 
-        self._decision_cmd_socket.send_thrift_obj(req_msg)
-        return self._decision_cmd_socket.recv_thrift_obj(decision_types.DecisionReply)
+        return self.send_and_recv_thrift_obj(req_msg, decision_types.DecisionReply)
 
     def get_route_db(self, node_name=""):
 

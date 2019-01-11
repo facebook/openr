@@ -19,12 +19,7 @@ class PerfCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Perf client """
 
-        self.client = perf_client.PerfClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_rep_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.client = perf_client.PerfClient(cli_opts)
 
 
 class ViewFibCmd(PerfCmd):

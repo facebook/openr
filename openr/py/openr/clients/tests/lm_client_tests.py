@@ -13,6 +13,7 @@ import unittest
 from builtins import object, range
 from multiprocessing import Process
 
+import bunch
 import zmq
 from openr.clients import lm_client
 from openr.LinkMonitor import ttypes as lm_types
@@ -34,13 +35,15 @@ class LM(object):
         return self._dump_links_cache
 
     def process_request(self):
-        request = self._lm_server_socket.recv_thrift_obj(lm_types.LinkMonitorRequest)
+        request = self._lm_server_zmq_socket.recv_thrift_obj(
+            lm_types.LinkMonitorRequest
+        )
 
         # more options will be covered in the future
         options = {lm_types.LinkMonitorCommand.DUMP_LINKS: self._dump_links}
         reply = options[request.cmd](request)
 
-        self._lm_server_socket.send_thrift_obj(reply)
+        self._lm_server_zmq_socket.send_thrift_obj(reply)
 
 
 class TestLMClient(unittest.TestCase):
@@ -53,7 +56,11 @@ class TestLMClient(unittest.TestCase):
                 lm_server.process_request()
 
         def _lm_client():
-            lm_client_inst = lm_client.LMClient(zmq.Context(), "tcp://localhost:5000")
+            lm_client_inst = lm_client.LMClient(
+                bunch.Bunch(
+                    {"ctx": zmq.Context(), "host": "localhost", "lm_cmd_port": 5000}
+                )
+            )
             self.assertEqual(lm_client_inst.dump_links(), dump_links_cache)
 
         p = Process(target=_lm_server)

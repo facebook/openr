@@ -12,23 +12,20 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object
 
 import zmq
+from openr.clients.openr_client import OpenrClient
 from openr.Lsdb import ttypes as lsdb_types
+from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.PrefixManager import ttypes as prefix_mgr_types
 from openr.utils import consts, ipnetwork, zmq_socket
 
 
-class PrefixMgrClient(object):
-    def __init__(
-        self,
-        zmq_ctx,
-        prefix_mgr_cmd_url,
-        timeout=consts.Consts.TIMEOUT_MS,
-        proto_factory=consts.Consts.PROTO_FACTORY,
-    ):
-        self._prefix_mgr_cmd_socket = zmq_socket.ZmqSocket(
-            zmq_ctx, zmq.REQ, timeout, proto_factory
+class PrefixMgrClient(OpenrClient):
+    def __init__(self, cli_opts):
+        super(PrefixMgrClient, self).__init__(
+            OpenrModuleType.PREFIX_MANAGER,
+            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.prefix_mgr_cmd_port),
+            cli_opts,
         )
-        self._prefix_mgr_cmd_socket.connect(prefix_mgr_cmd_url)
 
     def send_cmd_to_prefix_mgr(self, cmd, prefixes=None, prefix_type="BREEZE"):
         """ Send the given cmd to prefix manager and return resp """
@@ -54,10 +51,8 @@ class PrefixMgrClient(object):
                     )
                 )
 
-        self._prefix_mgr_cmd_socket.send_thrift_obj(req_msg)
-
-        return self._prefix_mgr_cmd_socket.recv_thrift_obj(
-            prefix_mgr_types.PrefixManagerResponse
+        return self.send_and_recv_thrift_obj(
+            req_msg, prefix_mgr_types.PrefixManagerResponse
         )
 
     def add_prefix(self, prefixes, prefix_type):

@@ -22,12 +22,7 @@ class LMCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Link Monitor client """
 
-        self.client = lm_client.LMClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.lm_cmd_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.client = lm_client.LMClient(cli_opts)
         self.enable_color = cli_opts.enable_color
 
 

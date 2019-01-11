@@ -51,7 +51,7 @@ class KvStorePub(object):
         self._kv_store_publisher_socket.bind(url)
 
     def publish(self):
-        self._kv_store_publisher_socket.send_thrift_obj(publication)
+        self._kv_store_publisher_zmq_socket.send_thrift_obj(publication)
 
 
 class TestKVStoreSubscriberClient(unittest.TestCase):

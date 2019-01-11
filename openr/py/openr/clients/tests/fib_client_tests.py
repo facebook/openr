@@ -13,6 +13,7 @@ import unittest
 from builtins import object, range
 from multiprocessing import Process
 
+import bunch
 import zmq
 from openr.clients import fib_client
 from openr.Fib import ttypes as fib_types
@@ -30,8 +31,8 @@ class Fib(object):
         self._route_db_cache = route_db_cache
 
     def process_request(self):
-        self._fib_server_socket.recv_thrift_obj(fib_types.FibRequest)
-        self._fib_server_socket.send_thrift_obj(self._route_db_cache)
+        self._fib_server_zmq_socket.recv_thrift_obj(fib_types.FibRequest)
+        self._fib_server_zmq_socket.send_thrift_obj(self._route_db_cache)
 
 
 class TestFibClient(unittest.TestCase):
@@ -45,7 +46,9 @@ class TestFibClient(unittest.TestCase):
 
         def _fib_client():
             fib_client_inst = fib_client.FibClient(
-                zmq.Context(), "tcp://localhost:5000"
+                bunch.Bunch(
+                    {"ctx": zmq.Context(), "host": "localhost", "fib_rep_port": 5000}
+                )
             )
             self.assertEqual(fib_client_inst.get_route_db(), route_db_cache)
 

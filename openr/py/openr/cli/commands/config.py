@@ -26,12 +26,7 @@ class ConfigCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Config Store client """
 
-        self.client = config_store_client.ConfigStoreClient(
-            cli_opts.zmq_ctx,
-            cli_opts.config_store_url,
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.client = config_store_client.ConfigStoreClient(cli_opts)
 
 
 class ConfigPrefixAllocatorCmd(ConfigCmd):

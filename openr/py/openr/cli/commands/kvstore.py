@@ -60,16 +60,10 @@ class KvStoreCmd(object):
 
         self.host = cli_opts.host
         self.kv_pub_port = cli_opts.kv_pub_port
-        self.kv_rep_port = cli_opts.kv_rep_port
-        self.lm_cmd_port = cli_opts.lm_cmd_port
+        self.cli_opts = cli_opts
         self.enable_color = cli_opts.enable_color
 
-        self.client = kvstore_client.KvStoreClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.kv_rep_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.client = kvstore_client.KvStoreClient(cli_opts)
 
     def iter_publication(self, container, publication, nodes, parse_func):
         """ parse dumped publication
@@ -262,8 +256,8 @@ class KeyValsCmd(KvStoreCmd):
 
 class NodesCmd(KvStoreCmd):
     def run(self):
-        resp = self.client.dump_all_with_filter(Consts.PREFIX_DB_MARKER)
-        host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
+        resp = self.client.dump_all_with_filter(prefix=Consts.PREFIX_DB_MARKER)
+        host_id = utils.get_connected_node_name(self.cli_opts)
         self.print_kvstore_nodes(resp, host_id)
 
     def print_kvstore_nodes(self, resp, host_id):
@@ -340,7 +334,7 @@ class KvCompareCmd(KvStoreCmd):
             nodes = set(nodes.strip().split(","))
             if "all" in nodes:
                 nodes = list(all_nodes_to_ips.keys())
-            host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
+            host_id = utils.get_connected_node_name(self.cli_opts)
             if host_id in nodes:
                 nodes.remove(host_id)
 
@@ -436,7 +430,7 @@ class KvCompareCmd(KvStoreCmd):
         kv_dict = {}
         for node in nodes:
             node_ip = all_nodes_to_ips.get(node, node)
-            kv = utils.dump_node_kvs(node_ip, self.kv_rep_port)
+            kv = utils.dump_node_kvs(self.cli_opts, node_ip)
             if kv is not None:
                 kv_dict[node] = kv.keyVals
                 print("dumped kv from {}".format(node))
@@ -451,7 +445,7 @@ class PeersCmd(KvStoreCmd):
     def print_peers(self, peers_reply):
         """ print the Kv Store peers """
 
-        host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
+        host_id = utils.get_connected_node_name(self.cli_opts)
         caption = "{}'s peers".format(host_id)
 
         rows = []

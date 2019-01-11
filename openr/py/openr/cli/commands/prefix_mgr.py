@@ -18,13 +18,7 @@ from openr.utils import ipnetwork, printing
 class PrefixMgrCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Prefix Manager client """
-
-        self.client = prefix_mgr_client.PrefixMgrClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.prefix_mgr_cmd_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.client = prefix_mgr_client.PrefixMgrClient(cli_opts)
 
 
 class WithdrawCmd(PrefixMgrCmd):

@@ -13,6 +13,7 @@ import unittest
 from builtins import object, range
 from multiprocessing import Process
 
+import bunch
 import zmq
 from openr.clients import config_store_client
 from openr.LinkMonitor import ttypes as lm_types
@@ -34,7 +35,7 @@ class ConfigStore(object):
         self._store_db = store_db
 
     def process_request(self):
-        req = self._cs_server_socket.recv_thrift_obj(ps_types.StoreRequest)
+        req = self._cs_server_zmq_socket.recv_thrift_obj(ps_types.StoreRequest)
 
         if req.requestType == ps_types.StoreRequestType.LOAD:
             if req.key in self._store_db:
@@ -55,7 +56,7 @@ class ConfigStore(object):
             store_db[req.key] = req.data
             resp = ps_types.StoreResponse(success=1, key=req.key)
 
-        self._cs_server_socket.send_thrift_obj(resp)
+        self._cs_server_zmq_socket.send_thrift_obj(resp)
 
 
 class TestConfigStoreClient(unittest.TestCase):
@@ -70,7 +71,12 @@ class TestConfigStoreClient(unittest.TestCase):
 
         def _cs_client():
             cs_client_inst = config_store_client.ConfigStoreClient(
-                ctx, "inproc://openr_config_store_cmd"
+                bunch.Bunch(
+                    {
+                        "config_store_url": "inproc://openr_config_store_cmd",
+                        "zmq_ctx": ctx,
+                    }
+                )
             )
 
             self.assertEqual(cs_client_inst.load("key1"), store_db["key1"])

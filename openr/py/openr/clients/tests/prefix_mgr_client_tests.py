@@ -13,6 +13,7 @@ import unittest
 from builtins import object, range
 from multiprocessing import Process
 
+import bunch
 import zmq
 from openr.clients import prefix_mgr_client
 from openr.Lsdb import ttypes as lsdb_types
@@ -48,14 +49,14 @@ class PrefixMgr(object):
         }
 
     def process_request(self):
-        req = self._prefix_mgr_server_socket.recv_thrift_obj(
+        req = self._prefix_mgr_server_zmq_socket.recv_thrift_obj(
             prefix_mgr_types.PrefixManagerRequest
         )
 
         if req.cmd == prefix_mgr_types.PrefixManagerCommand.ADD_PREFIXES:
             for prefix_entry in req.prefixes:
                 self._prefix_map[sprint_prefix(prefix_entry.prefix)] = prefix_entry
-            self._prefix_mgr_server_socket.send_thrift_obj(
+            self._prefix_mgr_server_zmq_socket.send_thrift_obj(
                 prefix_mgr_types.PrefixManagerResponse(success=True)
             )
 
@@ -66,7 +67,7 @@ class PrefixMgr(object):
                 if prefix_str in self._prefix_map:
                     del self._prefix_map[prefix_str]
                     success = True
-            self._prefix_mgr_server_socket.send_thrift_obj(
+            self._prefix_mgr_server_zmq_socket.send_thrift_obj(
                 prefix_mgr_types.PrefixManagerResponse(success=success)
             )
 
@@ -74,23 +75,28 @@ class PrefixMgr(object):
             resp = prefix_mgr_types.PrefixManagerResponse()
             resp.prefixes = list(self._prefix_map.values())
             resp.success = True
-            self._prefix_mgr_server_socket.send_thrift_obj(resp)
+            self._prefix_mgr_server_zmq_socket.send_thrift_obj(resp)
 
 
 class TestPrefixMgrClient(unittest.TestCase):
     def test(self):
-        socket_url = "inproc://prefix-manager-url"
-        PrefixMgr(zmq.Context(), socket_url)
+        zmq_socket_url = "tcp://*:5000"
         num_req = 5
 
         def _prefix_mgr_server():
-            prefix_mgr_server = PrefixMgr(zmq.Context(), socket_url)
+            prefix_mgr_server = PrefixMgr(zmq.Context(), zmq_socket_url)
             for _ in range(num_req):
                 prefix_mgr_server.process_request()
 
         def _prefix_mgr_client():
             prefix_mgr_client_inst = prefix_mgr_client.PrefixMgrClient(
-                zmq.Context(), socket_url
+                bunch.Bunch(
+                    {
+                        "ctx": zmq.Context(),
+                        "host": "localhost",
+                        "prefix_mgr_cmd_port": 5000,
+                    }
+                )
             )
 
             resp = prefix_mgr_client_inst.add_prefix(

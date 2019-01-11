@@ -77,7 +77,7 @@ class DecisionRoutesComputedCli(object):
     def routes(cli_opts, nodes, prefixes, json):  # noqa: B902
         """ Request the routing table from Decision module """
 
-        nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
+        nodes = parse_nodes(cli_opts, nodes)
         decision.DecisionRoutesComputedCmd(cli_opts).run(nodes, prefixes, json)
 
 
@@ -94,7 +94,7 @@ class DecisionPrefixesCli(object):
     def prefixes(cli_opts, nodes, json):  # noqa: B902
         """ show the prefixes from Decision module """
 
-        nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
+        nodes = parse_nodes(cli_opts, nodes)
         decision.DecisionPrefixesCmd(cli_opts).run(nodes, json)
 
 
@@ -112,7 +112,7 @@ class DecisionAdjCli(object):
     def adj(cli_opts, nodes, bidir, json):  # noqa: B902
         """ dump the link-state adjacencies from Decision module """
 
-        nodes = parse_nodes(cli_opts.host, nodes, cli_opts.lm_cmd_port)
+        nodes = parse_nodes(cli_opts, nodes)
         decision.DecisionAdjCmd(cli_opts).run(nodes, bidir, json)
 
 

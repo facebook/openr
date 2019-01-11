@@ -13,6 +13,7 @@ import unittest
 from builtins import object, range
 from multiprocessing import Process
 
+import bunch
 import zmq
 from openr.clients import decision_client
 from openr.Decision import ttypes as decision_types
@@ -54,7 +55,7 @@ class Decision(object):
         reply.prefixDbs = self._prefix_db_cache
 
     def process_request(self):
-        request = self._decision_server_socket.recv_thrift_obj(
+        request = self._decision_server_zmq_socket.recv_thrift_obj(
             decision_types.DecisionRequest
         )
 
@@ -65,7 +66,7 @@ class Decision(object):
             decision_types.DecisionCommand.PREFIX_DB_GET: self._get_prefix_dbs,
         }
         options[request.cmd](reply)
-        self._decision_server_socket.send_thrift_obj(reply)
+        self._decision_server_zmq_socket.send_thrift_obj(reply)
 
 
 class TestDecisionClient(unittest.TestCase):
@@ -79,7 +80,13 @@ class TestDecisionClient(unittest.TestCase):
 
         def _decision_client():
             decision_client_inst = decision_client.DecisionClient(
-                zmq.Context(), "tcp://localhost:5000"
+                bunch.Bunch(
+                    {
+                        "ctx": zmq.Context(),
+                        "host": "localhost",
+                        "decision_rep_port": 5000,
+                    }
+                )
             )
 
             self.assertEqual(decision_client_inst.get_route_db(), route_db_cache)

@@ -13,6 +13,7 @@ import unittest
 from builtins import object, range
 from multiprocessing import Process
 
+import bunch
 import zmq
 from openr.clients import kvstore_client
 from openr.KvStore import ttypes as kv_store_types
@@ -73,7 +74,7 @@ class KVStore(object):
             kv_store_types.Command.KEY_DUMP: self._dump_all_with_filter,
         }
         publication = options[request.cmd](request)
-        self._kv_store_server_socket.send_thrift_obj(publication)
+        self._kv_store_server_zmq_socket.send_thrift_obj(publication)
 
 
 class TestKVStoreClient(unittest.TestCase):
@@ -87,7 +88,13 @@ class TestKVStoreClient(unittest.TestCase):
 
         def _kv_store_client():
             kv_store_client_inst = kvstore_client.KvStoreClient(
-                zmq.Context(), "tcp://localhost:5000"
+                bunch.Bunch(
+                    {
+                        "ctx": zmq.Context(),
+                        "host": "localhost",
+                        "kv_store_rep_port": 5000,
+                    }
+                )
             )
 
             publication = kv_store_client_inst.get_keys(

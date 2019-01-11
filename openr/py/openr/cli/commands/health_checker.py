@@ -20,12 +20,7 @@ class HealthCheckerCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Health Checker client """
 
-        self.client = health_checker_client.HealthCheckerClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.health_checker_cmd_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.client = health_checker_client.HealthCheckerClient(cli_opts)
 
 
 class PeekCmd(HealthCheckerCmd):

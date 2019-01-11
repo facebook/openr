@@ -130,7 +130,7 @@ class TechSupportCmd(object):
     def print_decision_routes(self):
         if not self.print_routes:
             return
-        nodes = parse_nodes(self.cli_opts.host, "", self.cli_opts.lm_cmd_port)
+        nodes = parse_nodes(self.cli_opts, "")
         decision.DecisionRoutesComputedCmd(self.cli_opts).run(nodes, [], False)
 
     def print_fib_validate(self):

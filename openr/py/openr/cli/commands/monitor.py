@@ -27,7 +27,6 @@ class MonitorCmd(object):
         """ initialize the Monitor client """
 
         self.host = cli_opts.host
-        self.lm_cmd_port = cli_opts.lm_cmd_port
         self.cli_opts = cli_opts
         self.monitor_pub_port = cli_opts.monitor_pub_port
 
@@ -48,7 +47,7 @@ class CountersCmd(MonitorCmd):
     def print_counters(self, resp, prefix, is_json):
         """ print the Kv Store counters """
 
-        host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
+        host_id = utils.get_connected_node_name(self.cli_opts)
         caption = "{}'s counters".format(host_id)
 
         rows = []

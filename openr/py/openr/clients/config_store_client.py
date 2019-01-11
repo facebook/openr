@@ -12,26 +12,19 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object
 
 import zmq
+from openr.clients.openr_client import OpenrClient
 from openr.PersistentStore import ttypes as ps_types
 from openr.utils import consts, zmq_socket
 
 
-class ConfigStoreClient(object):
-    def __init__(
-        self,
-        zmq_ctx,
-        cs_cmd_url,
-        timeout=consts.Consts.TIMEOUT_MS,
-        proto_factory=consts.Consts.PROTO_FACTORY,
-    ):
-        self._cs_cmd_socket = zmq_socket.ZmqSocket(
-            zmq_ctx, zmq.REQ, timeout, proto_factory
+class ConfigStoreClient(OpenrClient):
+    def __init__(self, cli_opts):
+        super(ConfigStoreClient, self).__init__(
+            None, cli_opts.config_store_url, cli_opts
         )
-        self._cs_cmd_socket.connect(cs_cmd_url)
 
     def _send_req(self, req_msg):
-        self._cs_cmd_socket.send_thrift_obj(req_msg)
-        return self._cs_cmd_socket.recv_thrift_obj(ps_types.StoreResponse)
+        return self.send_and_recv_thrift_obj(req_msg, ps_types.StoreResponse)
 
     def erase(self, key):
         req_msg = ps_types.StoreRequest(

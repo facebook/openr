@@ -28,23 +28,12 @@ class DecisionCmd(object):
 
         self.host = cli_opts.host
         self.timeout = cli_opts.timeout
-        self.lm_cmd_port = cli_opts.lm_cmd_port
-        self.kv_rep_port = cli_opts.kv_rep_port
+        self.cli_opts = cli_opts
         self.fib_agent_port = cli_opts.fib_agent_port
         self.enable_color = cli_opts.enable_color
 
-        self.client = decision_client.DecisionClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.decision_rep_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
-        self.kvstore_client = kvstore_client.KvStoreClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.kv_rep_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.client = decision_client.DecisionClient(cli_opts)
+        self.kvstore_client = kvstore_client.KvStoreClient(cli_opts)
 
     def iter_dbs(self, container, dbs, nodes, parse_func):
         """ parse prefix databases from decision module
@@ -110,7 +99,7 @@ class DecisionAdjCmd(DecisionCmd):
 class PathCmd(DecisionCmd):
     def run(self, src, dst, max_hop):
         if not src or not dst:
-            host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
+            host_id = utils.get_connected_node_name(self.cli_opts)
             src = src or host_id
             dst = dst or host_id
 
@@ -423,7 +412,7 @@ class DecisionValidateCmd(DecisionCmd):
         decision_prefix_dbs = self.client.get_prefix_dbs()
 
         # get LSDB from KvStore
-        kvstore_keyvals = utils.dump_node_kvs(self.host, self.kv_rep_port).keyVals
+        kvstore_keyvals = self.kvstore_client.dump_all_with_filter().keyVals
 
         return decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals
 

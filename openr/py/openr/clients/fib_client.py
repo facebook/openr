@@ -12,25 +12,20 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object
 
 import zmq
+from openr.clients.openr_client import OpenrClient
 from openr.Fib import ttypes as fib_types
+from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.utils import consts, zmq_socket
 
 
-class FibClient(object):
-    def __init__(
-        self,
-        zmq_ctx,
-        fib_cmd_url,
-        timeout=consts.Consts.TIMEOUT_MS,
-        proto_factory=consts.Consts.PROTO_FACTORY,
-    ):
-        self._fib_cmd_socket = zmq_socket.ZmqSocket(
-            zmq_ctx, zmq.REQ, timeout, proto_factory
+class FibClient(OpenrClient):
+    def __init__(self, cli_opts):
+        super(FibClient, self).__init__(
+            OpenrModuleType.FIB,
+            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_rep_port),
+            cli_opts,
         )
-        self._fib_cmd_socket.connect(fib_cmd_url)
 
     def get_route_db(self):
-
         req_msg = fib_types.FibRequest(fib_types.FibCommand.ROUTE_DB_GET)
-        self._fib_cmd_socket.send_thrift_obj(req_msg)
-        return self._fib_cmd_socket.recv_thrift_obj(fib_types.RouteDatabase)
+        return self.send_and_recv_thrift_obj(req_msg, fib_types.RouteDatabase)

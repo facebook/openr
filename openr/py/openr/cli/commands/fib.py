@@ -22,21 +22,14 @@ class FibCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Fib client """
 
-        self.lm_cmd_port = cli_opts.lm_cmd_port
-
-        self.client = fib_client.FibClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_rep_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.client = fib_client.FibClient(cli_opts)
 
 
 class FibAgentCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Fib agent client """
 
-        self.lm_cmd_port = cli_opts.lm_cmd_port
+        self.cli_opts = cli_opts
         self.decision_rep_port = cli_opts.decision_rep_port
         try:
             self.client = utils.get_fib_agent_client(
@@ -78,7 +71,7 @@ class FibCountersCmd(FibAgentCmd):
     def print_counters(self, counters, json_opt):
         """ print the Fib counters """
 
-        host_id = utils.get_connected_node_name(self.client.host, self.lm_cmd_port)
+        host_id = utils.get_connected_node_name(self.cli_opts)
         caption = "{}'s Fib counters".format(host_id)
 
         if json_opt:
@@ -104,7 +97,7 @@ class FibRoutesInstalledCmd(FibAgentCmd):
             print("Exception: {}".format(e))
             return 1
 
-        host_id = utils.get_connected_node_name(self.client.host, self.lm_cmd_port)
+        host_id = utils.get_connected_node_name(self.cli_opts)
         client_id = self.client.client_id
 
         if json_opt:
@@ -190,26 +183,13 @@ class FibValidateRoutesCmd(FibAgentCmd):
         return 0 if res1 and res2 and res3 else -1
 
     def get_fib_route_db(self, cli_opts):
-        client = fib_client.FibClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_rep_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        client = fib_client.FibClient(cli_opts)
         return utils.get_shortest_routes(client.get_route_db())
 
     def get_decision_route_db(self, cli_opts):
-        self.decision_client = decision_client.DecisionClient(
-            zmq.Context(),
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.decision_rep_port),
-        )
+        self.decision_client = decision_client.DecisionClient(cli_opts)
         return utils.get_shortest_routes(self.decision_client.get_route_db())
 
     def get_lm_link_db(self, cli_opts):
-        self.lm_client = lm_client.LMClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.lm_cmd_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+        self.lm_client = lm_client.LMClient(cli_opts)
         return self.lm_client.dump_links()
