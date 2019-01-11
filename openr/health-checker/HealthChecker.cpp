@@ -30,12 +30,12 @@ HealthChecker::HealthChecker(
     const PrefixDbMarker& prefixDbMarker,
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
-    const HealthCheckerCmdUrl& healthCheckerCmdUrl,
+    const folly::Optional<std::string>& healthCheckerCmdUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
     : OpenrEventLoop(
           myNodeName, thrift::OpenrModuleType::HEALTH_CHECKER, zmqContext,
-          std::string{healthCheckerCmdUrl}),
+          healthCheckerCmdUrl),
       myNodeName_(myNodeName),
       healthCheckOption_(healthCheckOption),
       healthCheckPct_(healthCheckPct),

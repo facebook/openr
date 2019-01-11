@@ -769,8 +769,7 @@ main(int argc, char** argv) {
   startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
     std::make_shared<PrefixManager>(
       FLAGS_node_name,
-      PrefixManagerGlobalCmdUrl{
-          folly::sformat("tcp://*:{}", FLAGS_prefix_manager_cmd_port)},
+      maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_prefix_manager_cmd_port),
       kConfigStoreUrl,
       kvStoreLocalCmdUrl,
       kvStoreLocalPubUrl,
@@ -954,8 +953,7 @@ main(int argc, char** argv) {
       PlatformPublisherUrl{FLAGS_platform_pub_url},
       LinkMonitorGlobalPubUrl{
           folly::sformat("tcp://*:{}", FLAGS_link_monitor_pub_port)},
-      LinkMonitorGlobalCmdUrl{
-          folly::sformat("tcp://*:{}", FLAGS_link_monitor_cmd_port)},
+      maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_link_monitor_cmd_port),
       std::chrono::seconds(2 * FLAGS_spark_keepalive_time_s),
       std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
       std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms)));
@@ -1002,8 +1000,7 @@ main(int argc, char** argv) {
         std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
         kvStoreLocalCmdUrl,
         kvStoreLocalPubUrl,
-        DecisionCmdUrl{folly::sformat(
-            "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_rep_port)},
+        maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_decision_rep_port),
         kDecisionPubUrl,
         monitorSubmitUrl,
         context));
@@ -1018,8 +1015,7 @@ main(int argc, char** argv) {
       FLAGS_enable_fib_sync,
       std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
       kDecisionPubUrl,
-      FibCmdUrl{
-          folly::sformat("tcp://{}:{}", FLAGS_listen_addr, FLAGS_fib_rep_port)},
+      maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_fib_rep_port),
       LinkMonitorGlobalPubUrl{
           folly::sformat("tcp://[::1]:{}", FLAGS_link_monitor_pub_port)},
       monitorSubmitUrl,
@@ -1039,8 +1035,7 @@ main(int argc, char** argv) {
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         kvStoreLocalCmdUrl,
         kvStoreLocalPubUrl,
-        HealthCheckerCmdUrl{folly::sformat(
-            "tcp://{}:{}", FLAGS_listen_addr, FLAGS_health_checker_rep_port)},
+        maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_health_checker_rep_port),
         monitorSubmitUrl,
         context));
   }

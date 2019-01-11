@@ -207,7 +207,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
-        PrefixManagerGlobalCmdUrl{"inproc://prefix-manager-global-url"},
+        std::string{"inproc://prefix-manager-global-url"},
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -268,7 +268,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url"},
-        LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url"},
+        std::string{"inproc://link-monitor-cmd-url"},
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
         std::chrono::milliseconds(1),
@@ -903,7 +903,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url2"},
       LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
-      LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url2"},
+      std::string{"inproc://link-monitor-cmd-url2"},
       std::chrono::seconds(1),
       // link flap backoffs, set low to keep UT runtime low
       std::chrono::milliseconds(1),
@@ -1151,7 +1151,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url"},
       LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
-      LinkMonitorGlobalCmdUrl{"inproc://link-monitor-cmd-url2"},
+      std::string{"inproc://link-monitor-cmd-url2"},
       std::chrono::seconds(1),
       // link flap backoffs, set high backoffs for this test
       std::chrono::milliseconds(4000),
@@ -1640,7 +1640,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{
             folly::sformat("inproc://link-monitor-pub-url{}", i + 1)},
-        LinkMonitorGlobalCmdUrl{
+        std::string{
             folly::sformat("inproc://link-monitor-cmd-url{}", i + 1)},
         std::chrono::seconds(1),
         std::chrono::milliseconds(1),

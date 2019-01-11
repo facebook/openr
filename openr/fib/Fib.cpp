@@ -28,12 +28,12 @@ Fib::Fib(
     bool enableFibSync,
     std::chrono::seconds coldStartDuration,
     const DecisionPubUrl& decisionPubUrl,
-    const FibCmdUrl& fibRepUrl,
+    const folly::Optional<std::string>& fibRepUrl,
     const LinkMonitorGlobalPubUrl& linkMonPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
     : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::FIB, zmqContext,
-          std::string{fibRepUrl}),
+          fibRepUrl),
       myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),
@@ -44,7 +44,6 @@ Fib::Fib(
       linkMonSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       decisionPubUrl_(std::move(decisionPubUrl)),
-      fibRepUrl_(std::move(fibRepUrl)),
       linkMonPubUrl_(std::move(linkMonPubUrl)),
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)) {

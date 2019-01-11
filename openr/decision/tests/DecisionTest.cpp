@@ -1384,7 +1384,7 @@ class DecisionTestFixture : public ::testing::Test {
         std::chrono::milliseconds(500),
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
-        DecisionCmdUrl{"inproc://decision-rep"},
+        std::string{"inproc://decision-rep"},
         DecisionPubUrl{"inproc://decision-pub"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);

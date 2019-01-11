@@ -103,7 +103,7 @@ class LinkMonitor final : public OpenrEventLoop {
       PlatformPublisherUrl const& platformPubUrl,
       // Link monitor's own URLs
       LinkMonitorGlobalPubUrl linkMonitorPubUrl,
-      LinkMonitorGlobalCmdUrl linkMonitorCmdUrl,
+      folly::Optional<std::string> linkMonitorCmdUrl,
       // how long to wait before initial adjacency advertisement
       std::chrono::seconds adjHoldTime,
       // link flap backoffs

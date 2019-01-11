@@ -90,7 +90,7 @@ class PrefixManagerTestFixture : public ::testing::Test {
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
-        PrefixManagerGlobalCmdUrl{kPrefixManagerGlobalCmdUrl},
+        std::string{kPrefixManagerGlobalCmdUrl},
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -261,7 +261,7 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
-      PrefixManagerGlobalCmdUrl{kPrefixManagerGlobalCmdUrl + "2"},
+      std::string{kPrefixManagerGlobalCmdUrl + "2"},
       PersistentStoreUrl{kConfigStoreUrl},
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},

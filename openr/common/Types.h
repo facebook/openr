@@ -34,9 +34,6 @@ BOOST_STRONG_TYPEDEF(std::string, PersistentStoreUrl);
 BOOST_STRONG_TYPEDEF(std::string, DecisionCmdUrl);
 BOOST_STRONG_TYPEDEF(std::string, DecisionPubUrl);
 
-// Fib URL
-BOOST_STRONG_TYPEDEF(std::string, FibCmdUrl);
-
 // markers for some of KvStore keys
 BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
@@ -49,18 +46,13 @@ BOOST_STRONG_TYPEDEF(std::string, NetlinkAgentLocalPubUrl);
 BOOST_STRONG_TYPEDEF(std::string, PlatformPublisherUrl);
 
 // PrefixManager URL
-BOOST_STRONG_TYPEDEF(std::string, PrefixManagerGlobalCmdUrl);
 BOOST_STRONG_TYPEDEF(std::string, PrefixManagerLocalCmdUrl);
 
 // LinkMonitor Urls (right now we use global for everything)
 BOOST_STRONG_TYPEDEF(std::string, LinkMonitorGlobalPubUrl);
-BOOST_STRONG_TYPEDEF(std::string, LinkMonitorGlobalCmdUrl);
 
 // Spark Urls
 BOOST_STRONG_TYPEDEF(std::string, SparkCmdUrl);
 BOOST_STRONG_TYPEDEF(std::string, SparkReportUrl);
-
-// HealthChecker Urls
-BOOST_STRONG_TYPEDEF(std::string, HealthCheckerCmdUrl);
 
 } // namespace openr

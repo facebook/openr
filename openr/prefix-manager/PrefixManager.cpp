@@ -27,7 +27,7 @@ const std::string kErrorUnknownCommand{"Unknown command"};
 
 PrefixManager::PrefixManager(
     const std::string& nodeId,
-    const PrefixManagerGlobalCmdUrl& globalCmdUrl,
+    const folly::Optional<std::string>& globalCmdUrl,
     const PersistentStoreUrl& persistentStoreUrl,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
@@ -36,7 +36,7 @@ PrefixManager::PrefixManager(
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
     : OpenrEventLoop(nodeId, thrift::OpenrModuleType::PREFIX_MANAGER,
-        zmqContext, std::string{globalCmdUrl}),
+        zmqContext, globalCmdUrl),
       nodeId_(nodeId),
       configStoreClient_{persistentStoreUrl, zmqContext},
       prefixDbMarker_{prefixDbMarker},

@@ -56,7 +56,7 @@ class Fib final : public OpenrEventLoop {
       bool enableFibSync,
       std::chrono::seconds coldStartDuration,
       const DecisionPubUrl& decisionPubUrl,
-      const FibCmdUrl& fibRepUrl,
+      const folly::Optional<std::string>& fibRepUrl,
       const LinkMonitorGlobalPubUrl& linkMonPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
@@ -174,7 +174,6 @@ class Fib final : public OpenrEventLoop {
 
   // ZMQ socket urls
   const std::string decisionPubUrl_;
-  const std::string fibRepUrl_;
   const std::string linkMonPubUrl_;
 
   apache::thrift::CompactSerializer serializer_;

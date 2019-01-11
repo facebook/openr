@@ -112,7 +112,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     //
     prefixManager_ = std::make_unique<PrefixManager>(
         myNodeName_,
-        PrefixManagerGlobalCmdUrl{pfxMgrGlobalUrl_},
+        std::string{pfxMgrGlobalUrl_},
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
@@ -420,7 +420,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           folly::sformat("inproc://prefix-manager-global-{}", myNodeName);
       auto prefixManager = std::make_unique<PrefixManager>(
           myNodeName,
-          PrefixManagerGlobalCmdUrl{pfxMgrGlobalUrl},
+          std::string{pfxMgrGlobalUrl},
           PersistentStoreUrl{kConfigStoreUrl + myNodeName + "temp"},
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},

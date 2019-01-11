@@ -174,7 +174,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // start prefix manager
   prefixManager_ = std::make_unique<PrefixManager>(
       nodeId_,
-      PrefixManagerGlobalCmdUrl{prefixManagerGlobalCmdUrl_},
+      std::string{prefixManagerGlobalCmdUrl_},
       PersistentStoreUrl{configStoreUrl_},
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
@@ -210,7 +210,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
       PlatformPublisherUrl{platformPubUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
-      LinkMonitorGlobalCmdUrl{linkMonitorGlobalCmdUrl_},
+      std::string{linkMonitorGlobalCmdUrl_},
       linkMonitorAdjHoldTime,
       linkFlapInitialBackoff,
       linkFlapMaxBackoff);
@@ -228,7 +228,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::chrono::milliseconds(250),
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      DecisionCmdUrl{decisionCmdUrl_},
+      decisionCmdUrl_,
       DecisionPubUrl{decisionPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       context_);
@@ -243,7 +243,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false, // periodic sync
       fibColdStartDuration,
       DecisionPubUrl{decisionPubUrl_},
-      FibCmdUrl{fibCmdUrl_},
+      std::string{fibCmdUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       context_);

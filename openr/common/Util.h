@@ -16,6 +16,7 @@
 #include <folly/FileUtil.h>
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>
+#include <folly/Optional.h>
 #include <folly/String.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <re2/re2.h>
@@ -214,5 +215,8 @@ thrift::BuildInfo getBuildInfoThrift() noexcept;
 
 folly::IPAddress
 toIPAddress(const thrift::fbbinary& binAddr);
+
+folly::Optional<std::string> maybeGetTcpEndpoint(
+    const std::string& addr, const int32_t port);
 
 } // namespace openr

@@ -571,4 +571,10 @@ toIPAddress(const thrift::fbbinary& binAddr) {
       reinterpret_cast<const uint8_t*>(binAddr.data()), binAddr.size()));
 }
 
+folly::Optional<std::string> maybeGetTcpEndpoint(
+    const std::string& addr, const int32_t port) {
+  return (-1 == port) ? folly::none : folly::Optional<std::string>{
+    folly::sformat("tcp://{}:{}", addr, port)};
+}
+
 } // namespace openr

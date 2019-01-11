@@ -46,7 +46,7 @@ class HealthChecker final : public OpenrEventLoop {
       const PrefixDbMarker& prefixDbMarker,
       const KvStoreLocalCmdUrl& storeCmdUrl,
       const KvStoreLocalPubUrl& storePubUrl,
-      const HealthCheckerCmdUrl& healthCheckerCmdUrl,
+      const folly::Optional<std::string>& healthCheckerCmdUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
 

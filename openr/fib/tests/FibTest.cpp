@@ -142,7 +142,7 @@ class FibTestFixture : public ::testing::Test {
         true, /* periodic syncFib */
         std::chrono::seconds(2),
         DecisionPubUrl{"inproc://decision-pub"},
-        FibCmdUrl{"inproc://fib-cmd"},
+        std::string{"inproc://fib-cmd"},
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
         context);

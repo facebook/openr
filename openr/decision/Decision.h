@@ -183,7 +183,7 @@ class Decision : public OpenrEventLoop {
       std::chrono::milliseconds debounceMaxDur,
       const KvStoreLocalCmdUrl& storeCmdUrl,
       const KvStoreLocalPubUrl& storePubUrl,
-      const DecisionCmdUrl& decisionCmdUrl,
+      const folly::Optional<std::string>& decisionCmdUrl,
       const DecisionPubUrl& decisionPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
