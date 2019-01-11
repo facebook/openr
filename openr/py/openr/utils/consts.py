@@ -24,6 +24,7 @@ class Consts(object):
     SEED_PREFIX_ALLOC_PARAM_KEY = "e2e-network-prefix"
     STATIC_PREFIX_ALLOC_PARAM_KEY = "e2e-network-allocations"
 
+    CTRL_PORT = 2018
     KVSTORE_REP_PORT = 60002
     KVSTORE_PUB_PORT = 60001
     DECISION_REP_PORT = 60004

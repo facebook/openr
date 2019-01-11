@@ -20,6 +20,9 @@ from openr.utils.consts import Consts
 
 OPTIONS = bunch.Bunch(
     {
+        "acceptable_peer_name": "",
+        "ca_file": "",
+        "cert_file": "",
         "client_id": platform_types.FibClient.OPENR,
         "color": True,
         "config_store_url": Consts.CONFIG_STORE_URL,
@@ -29,11 +32,14 @@ OPTIONS = bunch.Bunch(
         "fib_rep_port": Consts.FIB_REP_PORT,
         "health_checker_cmd_port": Consts.HEALTH_CHECKER_CMD_PORT,
         "host": "localhost",
+        "key_file": "",
         "kv_pub_port": Consts.KVSTORE_PUB_PORT,
         "kv_rep_port": Consts.KVSTORE_REP_PORT,
         "lm_cmd_port": Consts.LINK_MONITOR_CMD_PORT,
         "monitor_pub_port": Consts.MONITOR_PUB_PORT,
         "monitor_rep_port": Consts.MONITOR_REP_PORT,
+        "openr_ctrl_port": Consts.CTRL_PORT,
+        "prefer_zmq": False,
         "prefix_mgr_cmd_port": Consts.PREFIX_MGR_CMD_PORT,
         "proto_factory": Consts.PROTO_FACTORY,
         "ssl": True,

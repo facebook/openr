@@ -65,8 +65,47 @@ locale.getpreferredencoding = getpreferredencoding
     help="DEPRECATED Perfer setting in openr.cli.utils.default_option_overrides"
     ". JSON file for ports config",
 )
+@breeze_option("--ssl/--no-ssl", help="Prefer SSL thrift to connect to OpenR")
+@breeze_option(
+    "--prefer-zmq/--no-prefer-zmq",
+    help="Prefer zmq to connect to OpenR. Skip trying to connect "
+    "with thrift all together",
+)
+@breeze_option(
+    "--cert-file",
+    help="If we are connecting to an SSL server, this points at the "
+    "certfile we will present",
+)
+@breeze_option(
+    "--key-file",
+    help="If we are connecting to an SSL server, this points at the "
+    "keyfile associated with the certificate will present",
+)
+@breeze_option(
+    "--ca-file",
+    help="If we are connecting to an SSL server, this points at the "
+    "certificate authority we will use to verify peers",
+)
+@breeze_option(
+    "--acceptable-peer-name",
+    help="If we are connecting to an SSL server, this is the common "
+    "name we deem acceptable to connect to.",
+)
 @click.pass_context
-def cli(ctx, host, timeout, ports_config_file, color, verbose):
+def cli(
+    ctx,
+    host,
+    timeout,
+    ports_config_file,
+    color,
+    ssl,
+    prefer_zmq,
+    cert_file,
+    key_file,
+    ca_file,
+    acceptable_peer_name,
+    verbose,
+):
     """ Command line tools for Open/R. """
 
     # Default config options
