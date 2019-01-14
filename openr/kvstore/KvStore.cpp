@@ -909,9 +909,8 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     if (thriftReq.keySetParams.solicitResponse) {
       return fbzmq::Message::from(
           Constants::kSuccessResponse.toString());
-    } else {
-      return folly::makeUnexpected(fbzmq::Error(0, "Solicit response not set"));
     }
+    return fbzmq::Message();
   }
   case thrift::Command::KEY_GET: {
     VLOG(3) << "Get key-values requested";

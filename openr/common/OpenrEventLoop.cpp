@@ -128,9 +128,11 @@ OpenrEventLoop::processCmdSocketRequest(
       fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
   }
 
-  auto sndRet = cmdSock.sendMultiple(req);
-  if (sndRet.hasError()) {
-    LOG(ERROR) << "Error sending response. " << sndRet.error();
+  if (!(thrift::OpenrModuleType::KVSTORE == moduleType && req.back().empty())) {
+    auto sndRet = cmdSock.sendMultiple(req);
+    if (sndRet.hasError()) {
+      LOG(ERROR) << "Error sending response. " << sndRet.error();
+    }
   }
 
   return;
