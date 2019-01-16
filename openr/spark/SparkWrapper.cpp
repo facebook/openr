@@ -123,8 +123,8 @@ SparkWrapper::recvNeighborEvent(
   if (ret.hasError()) {
     return folly::makeUnexpected(ret.error());
   }
-  const auto maybeMsg = thriftMsg.readThriftObj<thrift::SparkNeighborEvent>(
-      serializer_);
+  const auto maybeMsg =
+      thriftMsg.readThriftObj<thrift::SparkNeighborEvent>(serializer_);
   if (maybeMsg.hasError()) {
     return folly::makeUnexpected(maybeMsg.error());
   }

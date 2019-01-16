@@ -29,8 +29,7 @@ class PersistentStoreClient {
 
   template <typename ThriftType>
   folly::Expected<bool, fbzmq::Error>
-  storeThriftObj(std::string const& key, ThriftType const& value)
-      noexcept {
+  storeThriftObj(std::string const& key, ThriftType const& value) noexcept {
     auto msg = fbzmq::Message::fromThriftObj(value, serializer_);
     return storeInternal(
         key,

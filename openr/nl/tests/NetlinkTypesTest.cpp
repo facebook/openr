@@ -5,9 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <openr/nl/NetlinkTypes.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <openr/nl/NetlinkTypes.h>
 
 extern "C" {
 #include <linux/if.h>
@@ -123,8 +123,7 @@ TEST(NetlinkTypes, RouteBaseTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   RouteBuilder builder;
   // Use default values
-  auto route =
-      builder.setDestination(dst).setProtocolId(kProtocolId).build();
+  auto route = builder.setDestination(dst).setProtocolId(kProtocolId).build();
   EXPECT_EQ(AF_INET6, route.getFamily());
   EXPECT_EQ(kProtocolId, route.getProtocolId());
   EXPECT_EQ(RT_SCOPE_UNIVERSE, route.getScope());
@@ -712,7 +711,7 @@ TEST(NetlinkTypes, NeighborMoveTest) {
   EXPECT_TRUE(nlPtr2 != nullptr);
 
   // Verify expectations
-  EXPECT_EQ(nlPtr1, nlPtr2);  // pointer gets moved too
+  EXPECT_EQ(nlPtr1, nlPtr2); // pointer gets moved too
   EXPECT_EQ(kIfIndex, neigh2.getIfIndex());
   EXPECT_EQ(dst, neigh2.getDestination());
   EXPECT_EQ(mac, neigh2.getLinkAddress());
@@ -809,7 +808,7 @@ TEST(NetlinkTypes, LinkMoveTest) {
   EXPECT_TRUE(nlPtr2 != nullptr);
 
   // Verify expectations from new link object
-  EXPECT_EQ(nlPtr1, nlPtr2);  // Pointer gets moved too
+  EXPECT_EQ(nlPtr1, nlPtr2); // Pointer gets moved too
   EXPECT_EQ(linkName, link2.getLinkName());
   EXPECT_EQ(kIfIndex, link2.getIfIndex());
   EXPECT_EQ(flags, link.getFlags());

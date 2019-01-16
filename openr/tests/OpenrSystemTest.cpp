@@ -25,13 +25,12 @@
 #include <sodium.h>
 
 #include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
-
+#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/AddressUtil.h>
@@ -237,10 +236,10 @@ class OpenrFixture : public ::testing::Test {
   std::unique_ptr<std::thread> mockIoProviderThread{nullptr};
 
  protected:
-   std::shared_ptr<MockSystemHandler> mockServiceHandler_;
-   int32_t port_{0};
-   std::shared_ptr<apache::thrift::ThriftServer> server_;
-   apache::thrift::util::ScopedServerThread systemThriftThread_;
+  std::shared_ptr<MockSystemHandler> mockServiceHandler_;
+  int32_t port_{0};
+  std::shared_ptr<apache::thrift::ThriftServer> server_;
+  apache::thrift::util::ScopedServerThread systemThriftThread_;
 
  private:
   std::vector<std::unique_ptr<OpenrWrapper<CompactSerializer>>> aquamen_{};
@@ -312,24 +311,24 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   EXPECT_TRUE(openr4->getIpPrefix().hasValue());
 
   // start tracking iface1
-  EXPECT_TRUE(openr1->sparkUpdateInterfaceDb(
-      {{iface12, ifIndex12, ip1V4, ip1V6},
-       {iface13, ifIndex13, ip1V4, ip1V6}}));
+  EXPECT_TRUE(
+      openr1->sparkUpdateInterfaceDb({{iface12, ifIndex12, ip1V4, ip1V6},
+                                      {iface13, ifIndex13, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(openr2->sparkUpdateInterfaceDb(
-      {{iface21, ifIndex21, ip2V4, ip2V6},
-       {iface24, ifIndex24, ip2V4, ip2V6}}));
+  EXPECT_TRUE(
+      openr2->sparkUpdateInterfaceDb({{iface21, ifIndex21, ip2V4, ip2V6},
+                                      {iface24, ifIndex24, ip2V4, ip2V6}}));
 
   // start tracking iface3
-  EXPECT_TRUE(openr3->sparkUpdateInterfaceDb(
-      {{iface31, ifIndex31, ip3V4, ip3V6},
-       {iface34, ifIndex34, ip3V4, ip3V6}}));
+  EXPECT_TRUE(
+      openr3->sparkUpdateInterfaceDb({{iface31, ifIndex31, ip3V4, ip3V6},
+                                      {iface34, ifIndex34, ip3V4, ip3V6}}));
 
   // start tracking iface4
-  EXPECT_TRUE(openr4->sparkUpdateInterfaceDb(
-      {{iface42, ifIndex42, ip4V4, ip4V6},
-       {iface43, ifIndex43, ip4V4, ip4V6}}));
+  EXPECT_TRUE(
+      openr4->sparkUpdateInterfaceDb({{iface42, ifIndex42, ip4V4, ip4V6},
+                                      {iface43, ifIndex43, ip4V4, ip4V6}}));
 
   /* sleep override */
   // wait until all aquamen got synced on kvstore
@@ -454,8 +453,8 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 //
 TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
   // define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface12, ifIndex12},
-                                    {iface21, ifIndex21}});
+  mockIoProvider->addIfNameIfIndex(
+      {{iface12, ifIndex12}, {iface21, ifIndex21}});
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
       {iface12, {{iface21, 100}}},
@@ -514,7 +513,7 @@ TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
 
     LOG(INFO) << "Allocating:" << allocMem << ", Mem in use:" << memUsage
               << ", Memory limit:" << memLimitMB << "MB";
-    vector<int8_t> v((allocMem) * 0x100000);
+    vector<int8_t> v((allocMem)*0x100000);
     fill(v.begin(), v.end(), 1);
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds(5));

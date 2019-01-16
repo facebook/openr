@@ -52,48 +52,44 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   future_getAllNeighbors() override;
 
   folly::Future<folly::Unit> future_addIfaceAddresses(
-    std::unique_ptr<std::string> iface,
-    std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+      std::unique_ptr<std::string> iface,
+      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
 
   folly::Future<folly::Unit> future_removeIfaceAddresses(
-    std::unique_ptr<std::string> iface,
-    std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+      std::unique_ptr<std::string> iface,
+      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
 
   folly::Future<folly::Unit> future_syncIfaceAddresses(
-    std::unique_ptr<std::string> iface,
-    int16_t family, int16_t scope,
-    std::unique_ptr<std::vector<thrift::IpPrefix>> addrs) override;
+      std::unique_ptr<std::string> iface,
+      int16_t family,
+      int16_t scope,
+      std::unique_ptr<std::vector<thrift::IpPrefix>> addrs) override;
 
   folly::Future<std::unique_ptr<std::vector<thrift::IpPrefix>>>
   future_getIfaceAddresses(
-    std::unique_ptr<std::string> iface, int16_t family, int16_t scope) override;
-
+      std::unique_ptr<std::string> iface,
+      int16_t family,
+      int16_t scope) override;
 
  private:
   void initNetlinkSystemHandler();
 
   void doAddIfaceAddr(
-    const std::string& ifName,
-    const folly::CIDRNetwork& prefix);
+      const std::string& ifName, const folly::CIDRNetwork& prefix);
 
   void doRemoveIfaceAddr(
-    const std::string& ifName,
-    const folly::CIDRNetwork& prefix);
+      const std::string& ifName, const folly::CIDRNetwork& prefix);
 
   void doSyncIfaceAddrs(
-    const std::string& ifName,
-    int16_t family,
-    int16_t scope,
-    const std::vector<::openr::thrift::IpPrefix>& addrs);
+      const std::string& ifName,
+      int16_t family,
+      int16_t scope,
+      const std::vector<::openr::thrift::IpPrefix>& addrs);
 
-  std::unique_ptr<std::vector<openr::thrift::IpPrefix>>
-  doGetIfaceAddrs(
-    const std::string& iface,
-    int16_t family,
-    int16_t scope);
+  std::unique_ptr<std::vector<openr::thrift::IpPrefix>> doGetIfaceAddrs(
+      const std::string& iface, int16_t family, int16_t scope);
 
-  std::unique_ptr<std::vector<openr::thrift::Link>>
-  doGetAllLinks();
+  std::unique_ptr<std::vector<openr::thrift::Link>> doGetAllLinks();
 
   std::unique_ptr<std::vector<openr::thrift::NeighborEntry>>
   doGetAllNeighbors();

@@ -8,8 +8,8 @@
 #include <sodium.h>
 #include <cstdlib>
 #include <thread>
-#include <unordered_set>
 #include <tuple>
+#include <unordered_set>
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
@@ -405,7 +405,7 @@ TEST(KvStore, mergeKeyValuesTest) {
     newKvIt->second = thriftValue;
     newKvIt->second.value = folly::none;
     newKvIt->second.ttl = 123;
-    newKvIt->second.ttlVersion ++;
+    newKvIt->second.ttlVersion++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     auto deltaKvIt = keyVals.find(key);
     // new ttl, ttlversion
@@ -425,7 +425,7 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.ttl = 123;
-    newKvIt->second.ttlVersion ++;
+    newKvIt->second.ttlVersion++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -436,7 +436,7 @@ TEST(KvStore, mergeKeyValuesTest) {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
     newKvIt->second.value = "dummy";
-    newKvIt->second.ttlVersion ++;
+    newKvIt->second.ttlVersion++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -512,13 +512,13 @@ TEST(KvStore, TtlVerification) {
   const std::chrono::milliseconds testPollTimeout{1000};
   const std::string key{"dummyKey"};
   const thrift::Value value(
-        apache::thrift::FRAGILE,
-        5, /* version */
-        "node1", /* node id */
-        "dummyValue",
-        0, /* ttl */
-        5 /* ttl version */,
-        0 /* hash */);
+      apache::thrift::FRAGILE,
+      5, /* version */
+      "node1", /* node id */
+      "dummyValue",
+      0, /* ttl */
+      5 /* ttl version */,
+      0 /* hash */);
 
   KvStoreWrapper kvStore(
       context,
@@ -761,7 +761,7 @@ TEST(KvStore, TtlVerification) {
     // KEY_GET
     auto getRes = kvStore.getKey(key);
     ASSERT_TRUE(getRes.hasValue());
-    EXPECT_GE(20000, getRes->ttl);  // Previous ttl was set to 20s
+    EXPECT_GE(20000, getRes->ttl); // Previous ttl was set to 20s
     EXPECT_LE(10000, getRes->ttl);
     EXPECT_EQ(value.version, getRes->version);
     EXPECT_EQ(value.originatorId, getRes->originatorId);
@@ -778,8 +778,8 @@ TEST(KvStore, TtlVerification) {
 TEST_F(KvStoreTestFixture, LeafNode) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
-  folly::Optional<KvStoreFilters>
-      kvFilters0{KvStoreFilters({"e2e"}, {"store0"})};
+  folly::Optional<KvStoreFilters> kvFilters0{
+      KvStoreFilters({"e2e"}, {"store0"})};
   auto store0 = createKvStore("store0", emptyPeers, std::move(kvFilters0));
   auto store1 = createKvStore("store1", emptyPeers);
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
@@ -800,8 +800,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
 
-  thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash =
+      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
   EXPECT_TRUE(store0->setKey("test1", thriftVal));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("test1", thriftVal));
@@ -823,7 +823,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal2.hash = generateHash(
-        thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
   EXPECT_TRUE(store0->setKey("test2", thriftVal2));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("test2", thriftVal2));
@@ -845,7 +845,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal3.hash = generateHash(
-        thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
+      thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
   EXPECT_TRUE(store0->setKey("e2exyz", thriftVal3));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2exyz", thriftVal3));
@@ -867,7 +867,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal4.hash = generateHash(
-        thriftVal4.version, thriftVal4.originatorId, thriftVal4.value);
+      thriftVal4.version, thriftVal4.originatorId, thriftVal4.value);
   EXPECT_TRUE(store0->setKey("e2e", thriftVal4));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2e", thriftVal4));
@@ -889,7 +889,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal5.hash = generateHash(
-        thriftVal5.version, thriftVal5.originatorId, thriftVal5.value);
+      thriftVal5.version, thriftVal5.originatorId, thriftVal5.value);
   EXPECT_TRUE(store0->setKey("e2", thriftVal5));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2", thriftVal5));
@@ -909,7 +909,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal6.hash = generateHash(
-        thriftVal6.version, thriftVal6.originatorId, thriftVal6.value);
+      thriftVal6.version, thriftVal6.originatorId, thriftVal6.value);
   EXPECT_TRUE(store1->setKey("test3", thriftVal6));
   expectedKeyVals["test3"] = thriftVal6;
   expectedOrignatorVals["test3"] = thriftVal6;
@@ -924,8 +924,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
 
   // Request dumpAll from store1 with a originator prefix provided,
   // must return 2 keys
-  folly::Optional<KvStoreFilters>
-      kvFilters2{KvStoreFilters({""}, {"store0"})};
+  folly::Optional<KvStoreFilters> kvFilters2{KvStoreFilters({""}, {"store0"})};
   EXPECT_EQ(expectedOrignatorVals, store1->dumpAll(std::move(kvFilters2)));
 
   expectedOrignatorVals["e2exyz"] = thriftVal2;
@@ -933,17 +932,16 @@ TEST_F(KvStoreTestFixture, LeafNode) {
 
   // Request dumpAll from store1 with a key prefix and
   // originator prefix provided, must return 4 keys
-  folly::Optional<KvStoreFilters>
-      kvFilters3{KvStoreFilters({"e2e"}, {"store0"})};
+  folly::Optional<KvStoreFilters> kvFilters3{
+      KvStoreFilters({"e2e"}, {"store0"})};
   EXPECT_EQ(expectedOrignatorVals, store1->dumpAll(std::move(kvFilters3)));
 
   // try dumpAll with multiple key and originator prefix
   expectedOrignatorVals["test3"] = thriftVal6;
   expectedOrignatorVals["e2"] = thriftVal5;
-  folly::Optional<KvStoreFilters>
-      kvFilters4{KvStoreFilters({"e2e","test3"}, {"store0","storex"})};
-  EXPECT_EQ(
-        expectedOrignatorVals, store1->dumpAll(std::move(kvFilters4)));
+  folly::Optional<KvStoreFilters> kvFilters4{
+      KvStoreFilters({"e2e", "test3"}, {"store0", "storex"})};
+  EXPECT_EQ(expectedOrignatorVals, store1->dumpAll(std::move(kvFilters4)));
 }
 
 /**
@@ -974,9 +972,8 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
       0 /* ttl version */,
       0 /* hash */);
 
-  thriftVal1.hash =
-      generateHash(
-        thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+  thriftVal1.hash = generateHash(
+      thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
 
   thrift::Value thriftVal2(
       apache::thrift::FRAGILE,
@@ -987,9 +984,8 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
       0 /* ttl version */,
       0 /* hash */);
 
-  thriftVal2.hash =
-      generateHash(
-        thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+  thriftVal2.hash = generateHash(
+      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
 
   EXPECT_TRUE(store0->setKey("test1", thriftVal1));
   auto maybeThriftVal = store0->getKey("test1");
@@ -1379,17 +1375,14 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     auto& oldCounters = oldNodeCounters[store->nodeId];
     auto& newCounters = newNodeCounters[store->nodeId];
     EXPECT_LE(
-      oldCounters["kvstore.received_publications.count.0"].value + 1,
-      newCounters["kvstore.received_publications.count.0"].value
-    );
+        oldCounters["kvstore.received_publications.count.0"].value + 1,
+        newCounters["kvstore.received_publications.count.0"].value);
     EXPECT_LE(
-      oldCounters["kvstore.received_key_vals.sum.0"].value + 1,
-      newCounters["kvstore.received_key_vals.sum.0"].value
-    );
+        oldCounters["kvstore.received_key_vals.sum.0"].value + 1,
+        newCounters["kvstore.received_key_vals.sum.0"].value);
     EXPECT_EQ(
-      oldCounters["kvstore.updated_key_vals.sum.0"].value + 1,
-      newCounters["kvstore.updated_key_vals.sum.0"].value
-    );
+        oldCounters["kvstore.updated_key_vals.sum.0"].value + 1,
+        newCounters["kvstore.updated_key_vals.sum.0"].value);
     int sentOffset = 0;
     if (store->nodeId == peerStores[0]->nodeId) {
       sentOffset = 1;
@@ -1398,13 +1391,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
       sentOffset = 15;
     }
     EXPECT_EQ(
-      oldCounters["kvstore.sent_publications.count.0"].value + sentOffset,
-      newCounters["kvstore.sent_publications.count.0"].value
-    );
+        oldCounters["kvstore.sent_publications.count.0"].value + sentOffset,
+        newCounters["kvstore.sent_publications.count.0"].value);
     EXPECT_EQ(
-      oldCounters["kvstore.sent_key_vals.sum.0"].value + sentOffset,
-      newCounters["kvstore.sent_key_vals.sum.0"].value
-    );
+        oldCounters["kvstore.sent_key_vals.sum.0"].value + sentOffset,
+        newCounters["kvstore.sent_key_vals.sum.0"].value);
   }
 }
 
@@ -1508,7 +1499,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     ASSERT_TRUE(pub1.nodeIds.hasValue());
     ASSERT_TRUE(pub2.nodeIds.hasValue());
     EXPECT_EQ(
-      std::vector<std::string>{stores[0]->nodeId}, pub1.nodeIds.value());
+        std::vector<std::string>{stores[0]->nodeId}, pub1.nodeIds.value());
     auto expectedNodeIds = nodeIdsSeq;
     std::reverse(std::begin(expectedNodeIds), std::end(expectedNodeIds));
     EXPECT_EQ(expectedNodeIds, pub2.nodeIds.value());
@@ -1690,9 +1681,7 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   peerKeyVals[key] = thriftVal;
 
   // 2. Query with same snapshot. Expect no changes
-  {
-    EXPECT_EQ(emptyKeyVals, myStore->syncKeyVals(peerKeyVals));
-  }
+  { EXPECT_EQ(emptyKeyVals, myStore->syncKeyVals(peerKeyVals)); }
 
   // 3. Query with different value (change value/hash of test-key-0)
   {
@@ -1795,8 +1784,8 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   std::chrono::milliseconds ttlDecr{300};
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto store0 = createKvStore("store0", emptyPeers);
-  auto store1 = createKvStore(
-      "store1", emptyPeers, folly::none, folly::none, ttlDecr);
+  auto store1 =
+      createKvStore("store1", emptyPeers, folly::none, folly::none, ttlDecr);
   store0->run();
   store1->run();
 
@@ -1806,7 +1795,7 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   /**
    * check sync works fine, add a key with TTL > ttlDecr in store1,
    * verify key is synced to store0
-  */
+   */
   int64_t ttl1 = 3000;
   thrift::Value thriftVal1(
       apache::thrift::FRAGILE,
@@ -1860,8 +1849,8 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
 TEST_F(KvStoreTestFixture, RateLimiter) {
   fbzmq::Context context;
 
-  const uint32_t messageRate = 10;  // number of messages per second
-  const uint32_t burstSize = 50;   // number of messages
+  const uint32_t messageRate = 10; // number of messages per second
+  const uint32_t burstSize = 50; // number of messages
   KvStoreFloodRate kvStoreRate(std::make_pair(messageRate, burstSize));
 
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
@@ -1873,13 +1862,13 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   store0->addPeer(store1->nodeId, store1->getPeerSpec());
   store1->addPeer(store0->nodeId, store0->getPeerSpec());
 
- /**
-  * TEST1: install several keys in store0 which is not rate limited
-  * Check number of sent publications should be at least number of
-  * key updates set
- */
+  /**
+   * TEST1: install several keys in store0 which is not rate limited
+   * Check number of sent publications should be at least number of
+   * key updates set
+   */
   auto startTime1 = steady_clock::now();
-  const int duration1 = 5;  // in seconds
+  const int duration1 = 5; // in seconds
   int i1{0};
   uint64_t elapsedTime1{0};
   do {
@@ -1898,7 +1887,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         duration_cast<seconds>(steady_clock::now() - startTime1).count();
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-  } while(elapsedTime1 < duration1);
+  } while (elapsedTime1 < duration1);
 
   auto getNodeCounters = [&]() {
     std::map<std::string, fbzmq::thrift::CounterMap> nodeCounters;
@@ -1930,7 +1919,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
    * Also verify the last key set was sent to store0 by checking ttl version
    */
   auto startTime2 = steady_clock::now();
-  const int duration2 = 5;  // in seconds
+  const int duration2 = 5; // in seconds
   const int wait = 2; // in seconds
   int i2{0};
   uint64_t elapsedTime2{0};
@@ -1950,7 +1939,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         duration_cast<seconds>(steady_clock::now() - startTime2).count();
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-  } while(elapsedTime2 < duration2);
+  } while (elapsedTime2 < duration2);
 
   // wait pending updates
   /* sleep override */
@@ -1976,7 +1965,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
    * publication. Verify that all keys changes are published.
    */
   auto startTime3 = steady_clock::now();
-  const int duration3 = 5;  // in seconds
+  const int duration3 = 5; // in seconds
   int i3{0};
   uint64_t elapsedTime3{0};
   do {
@@ -1986,7 +1975,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         1 /* version */,
         "store1" /* originatorId */,
         "value" /* value */,
-        300000/* ttl */,
+        300000 /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
     thriftVal.hash = generateHash(
@@ -1997,7 +1986,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
 
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-  } while(elapsedTime3 < duration3);
+  } while (elapsedTime3 < duration3);
 
   // wait pending updates
   /* sleep override */
@@ -2022,7 +2011,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
    * subjected to rate limit. Verify all keys are expired
    */
   auto startTime4 = steady_clock::now();
-  const int duration4 = 1;  // in seconds
+  const int duration4 = 1; // in seconds
   int i4{0};
   uint64_t elapsedTime4{0};
   int64_t ttlLow = 50; // in msec
@@ -2044,10 +2033,10 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
 
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
-  } while(elapsedTime4 < duration4);
+  } while (elapsedTime4 < duration4);
 
   /* sleep override */
-  std::this_thread::sleep_for(std::chrono::milliseconds(2*ttlLow));
+  std::this_thread::sleep_for(std::chrono::milliseconds(2 * ttlLow));
 
   auto counters4 = getNodeCounters();
   auto s1Counters4 = counters4["store1"];

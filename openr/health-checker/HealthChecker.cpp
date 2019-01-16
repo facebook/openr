@@ -34,7 +34,9 @@ HealthChecker::HealthChecker(
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
     : OpenrEventLoop(
-          myNodeName, thrift::OpenrModuleType::HEALTH_CHECKER, zmqContext,
+          myNodeName,
+          thrift::OpenrModuleType::HEALTH_CHECKER,
+          zmqContext,
           healthCheckerCmdUrl),
       myNodeName_(myNodeName),
       healthCheckOption_(healthCheckOption),
@@ -79,7 +81,7 @@ HealthChecker::prepare() noexcept {
   kvStoreClient_->setKvCallback([this](
       const std::string& key,
       folly::Optional<thrift::Value> thriftVal) noexcept {
-        processKeyVal(key, thriftVal);
+    processKeyVal(key, thriftVal);
   });
 
   // Schedule periodic timer for sending pings
@@ -125,8 +127,7 @@ HealthChecker::createPingSocket() noexcept {
   // make v6 only
   const int v6Only = 1;
   if (setsockopt(
-        socketFd, IPPROTO_IPV6, IPV6_V6ONLY,
-        &v6Only, sizeof(v6Only)) != 0) {
+          socketFd, IPPROTO_IPV6, IPV6_V6ONLY, &v6Only, sizeof(v6Only)) != 0) {
     LOG(ERROR) << "Failed making the socket v6 only: "
                << folly::errnoStr(errno);
     close(socketFd);
@@ -137,8 +138,7 @@ HealthChecker::createPingSocket() noexcept {
   if (maybeIpTos_) {
     const int ipTos = *maybeIpTos_;
     if (::setsockopt(
-            socketFd, IPPROTO_IPV6, IPV6_TCLASS,
-            &ipTos, sizeof(int)) != 0) {
+            socketFd, IPPROTO_IPV6, IPV6_TCLASS, &ipTos, sizeof(int)) != 0) {
       LOG(ERROR) << "Failed setting ip-tos value on socket. Error: "
                  << folly::errnoStr(errno);
       close(socketFd);
@@ -152,8 +152,8 @@ HealthChecker::createPingSocket() noexcept {
   pingSockAddr.getAddress(&addrStorage);
   sockaddr* saddr = reinterpret_cast<sockaddr*>(&addrStorage);
   if (::bind(socketFd, saddr, pingSockAddr.getActualSize()) != 0) {
-    LOG(ERROR) << "Failed binding the socket: " << folly::errnoStr(errno)
-               << " " << myLoopbackAddr.str();
+    LOG(ERROR) << "Failed binding the socket: " << folly::errnoStr(errno) << " "
+               << myLoopbackAddr.str();
     close(socketFd);
     return;
   }
@@ -227,14 +227,14 @@ HealthChecker::processKeyVal(
     VLOG(4) << "HealthChecker: key expired:" << key << " node:" << nodeName;
 
     if (nodeInfo_.find(nodeName) == nodeInfo_.end()) {
-        return;
+      return;
     }
     if (key.find(adjacencyDbMarker_) == 0) {
       nodeInfo_[nodeName].neighbors.clear();
     }
     if (key.find(prefixDbMarker_) == 0) {
-      nodeInfo_[nodeName].ipAddress = toBinaryAddress(
-            std::move(folly::IPAddress{}));
+      nodeInfo_[nodeName].ipAddress =
+          toBinaryAddress(std::move(folly::IPAddress{}));
     }
     if (nodeInfo_[nodeName].neighbors.empty() &&
         nodeInfo_[nodeName].ipAddress.addr.empty()) {
@@ -462,8 +462,8 @@ HealthChecker::processMessage() {
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
 HealthChecker::processRequestMsg(fbzmq::Message&& msg) {
-  auto maybeThriftReq = msg.readThriftObj<thrift::HealthCheckerRequest>(
-      serializer_);
+  auto maybeThriftReq =
+      msg.readThriftObj<thrift::HealthCheckerRequest>(serializer_);
   if (maybeThriftReq.hasError()) {
     LOG(ERROR) << "HealthChecker: Error processing request on REP socket: "
                << maybeThriftReq.error();

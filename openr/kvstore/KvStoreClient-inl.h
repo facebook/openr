@@ -21,7 +21,7 @@ KvStoreClient::parseThriftValue(thrift::Value const& value) {
   DCHECK(value.value.hasValue());
 
   auto buf =
-    folly::IOBuf::wrapBufferAsValue(value.value->data(), value.value->size());
+      folly::IOBuf::wrapBufferAsValue(value.value->data(), value.value->size());
   return fbzmq::util::readThriftObj<ThriftType>(buf, serializer);
 }
 
@@ -35,7 +35,7 @@ KvStoreClient::parseThriftValues(
   for (auto const& kv : keyVals) {
     // Here: kv.first is the key string, kv.second is thrift::Value
     result.emplace(
-          kv.first, KvStoreClient::parseThriftValue<ThriftType>(kv.second));
+        kv.first, KvStoreClient::parseThriftValue<ThriftType>(kv.second));
   } // for
 
   return result;

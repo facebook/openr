@@ -26,12 +26,12 @@
 #include <re2/re2.h>
 #include <re2/set.h>
 #include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/AddressUtil.h>
 #include <openr/if/gen-cpp2/IpPrefix_types.h>
@@ -43,13 +43,13 @@
 using namespace std;
 using namespace openr;
 
-using ::testing::InSequence;
-using ::testing::InvokeWithoutArgs;
-using ::testing::_;
 using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 using apache::thrift::ThriftServer;
 using apache::thrift::util::ScopedServerThread;
+using ::testing::_;
+using ::testing::InSequence;
+using ::testing::InvokeWithoutArgs;
 
 // node-1 connects node-2 via interface iface_2_1 and iface_2_2, node-3 via
 // interface iface_3_1
@@ -389,8 +389,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         const auto& ipNetwork = toIPNetwork(network);
         if (ipNetwork.first.isV4()) {
           v4AddrsCount++;
-        }
-        else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
+        } else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
           v6LinkLocalAddrsCount++;
         }
       }
@@ -480,7 +479,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
   }
 
   // kvstore shall reveive cmd to add/del peers
-  void checkPeerDump(std::string const& nodeName, thrift::PeerSpec peerSpec) {
+  void
+  checkPeerDump(std::string const& nodeName, thrift::PeerSpec peerSpec) {
     auto const peers = kvStoreWrapper->getPeers();
     EXPECT_EQ(peers.count(nodeName), 1);
     if (!peers.count(nodeName)) {
@@ -833,11 +833,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // 10. set and unset adjacency metric
   {
     auto setAdjMetricRequest = thrift::LinkMonitorRequest(
-    FRAGILE,
-    thrift::LinkMonitorCommand::SET_ADJ_METRIC,
-    "iface_2_1" /* interface-name */,
-    adjMetric /* adjacency-metric */,
-    "node-2" /* adjacency-node */);
+        FRAGILE,
+        thrift::LinkMonitorCommand::SET_ADJ_METRIC,
+        "iface_2_1" /* interface-name */,
+        adjMetric /* adjacency-metric */,
+        "node-2" /* adjacency-node */);
     lmCmdSocket.sendThriftObj(setAdjMetricRequest, serializer);
     lmCmdSocket.recvOne().value();
     LOG(INFO) << "Testing set adj metric command!";
@@ -916,10 +916,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   });
   linkMonitor->waitUntilRunning();
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{
-        context,
-        fbzmq::IdentityString{"spark_server_id"},
-        folly::none,
-        fbzmq::NonblockingFlag{true}};
+      context,
+      fbzmq::IdentityString{"spark_server_id"},
+      folly::none,
+      fbzmq::NonblockingFlag{true}};
   EXPECT_NO_THROW(
       sparkReport.bind(fbzmq::SocketUrl{"inproc://spark-report2"}).value());
 
@@ -1157,18 +1157,17 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       std::chrono::milliseconds(4000),
       std::chrono::milliseconds(8000));
 
-    linkMonitorThread = std::make_unique<std::thread>([this]() {
-      LOG(INFO) << "LinkMonitor thread starting";
-      linkMonitor->run();
-      LOG(INFO) << "LinkMonitor thread finishing";
-    });
-    linkMonitor->waitUntilRunning();
+  linkMonitorThread = std::make_unique<std::thread>([this]() {
+    LOG(INFO) << "LinkMonitor thread starting";
+    linkMonitor->run();
+    LOG(INFO) << "LinkMonitor thread finishing";
+  });
+  linkMonitor->waitUntilRunning();
 
-    // connect cmd socket to updated url
-    EXPECT_NO_THROW(
-        lmCmdSocket.connect(fbzmq::SocketUrl{"inproc://link-monitor-cmd-url2"})
-            .value());
-
+  // connect cmd socket to updated url
+  EXPECT_NO_THROW(
+      lmCmdSocket.connect(fbzmq::SocketUrl{"inproc://link-monitor-cmd-url2"})
+          .value());
 
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
@@ -1640,8 +1639,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{
             folly::sformat("inproc://link-monitor-pub-url{}", i + 1)},
-        std::string{
-            folly::sformat("inproc://link-monitor-cmd-url{}", i + 1)},
+        std::string{folly::sformat("inproc://link-monitor-cmd-url{}", i + 1)},
         std::chrono::seconds(1),
         std::chrono::milliseconds(1),
         std::chrono::milliseconds(8));
@@ -1813,21 +1811,13 @@ TEST(LinkMonitor, getPeersFromAdjacencies) {
   std::unordered_map<std::string, thrift::PeerSpec> peers;
 
   const auto peerSpec0 = thrift::PeerSpec(
-      FRAGILE,
-      "tcp://[fe80::2%iface0]:10001",
-      "tcp://[fe80::2%iface0]:10002");
+      FRAGILE, "tcp://[fe80::2%iface0]:10001", "tcp://[fe80::2%iface0]:10002");
   const auto peerSpec1 = thrift::PeerSpec(
-      FRAGILE,
-      "tcp://[fe80::2%iface1]:10001",
-      "tcp://[fe80::2%iface1]:10002");
+      FRAGILE, "tcp://[fe80::2%iface1]:10001", "tcp://[fe80::2%iface1]:10002");
   const auto peerSpec2 = thrift::PeerSpec(
-      FRAGILE,
-      "tcp://[fe80::2%iface2]:10001",
-      "tcp://[fe80::2%iface2]:10002");
+      FRAGILE, "tcp://[fe80::2%iface2]:10001", "tcp://[fe80::2%iface2]:10002");
   const auto peerSpec3 = thrift::PeerSpec(
-      FRAGILE,
-      "tcp://[fe80::2%iface3]:10001",
-      "tcp://[fe80::2%iface3]:10002");
+      FRAGILE, "tcp://[fe80::2%iface3]:10001", "tcp://[fe80::2%iface3]:10002");
 
   // Get peer spec
   adjacencies[{"node1", "iface1"}] = {peerSpec1, thrift::Adjacency()};

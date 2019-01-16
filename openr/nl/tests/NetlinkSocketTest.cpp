@@ -14,14 +14,15 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Exception.h>
 #include <folly/Format.h>
-#include <folly/gen/Base.h>
 #include <folly/MacAddress.h>
+#include <folly/gen/Base.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <openr/nl/NetlinkSocket.h>
 
 extern "C" {
+#include <linux/if.h>
 #include <netlink/cache.h>
 #include <netlink/netlink.h>
 #include <netlink/route/addr.h>
@@ -29,7 +30,6 @@ extern "C" {
 #include <netlink/route/link/veth.h>
 #include <netlink/route/route.h>
 #include <netlink/socket.h>
-#include <linux/if.h>
 #include <sys/ioctl.h>
 }
 
@@ -54,7 +54,6 @@ const uint8_t kAqRouteProtoId1 = 159;
 // which the UT can use to add routes (via interface)
 class NetlinkSocketFixture : public testing::Test {
  public:
-
   struct RouteCallbackContext {
     struct nl_cache* routeCache{nullptr};
     std::vector<Route> results;
@@ -133,10 +132,9 @@ class NetlinkSocketFixture : public testing::Test {
   }
 
  protected:
-
-  void rtnlCacheCB(
-     void(*cb)(struct nl_object*, void*),
-     void* arg, struct nl_cache* cache) {
+  void
+  rtnlCacheCB(
+      void (*cb)(struct nl_object*, void*), void* arg, struct nl_cache* cache) {
     nl_cache_refill(socket_, cache);
     nl_cache_foreach_filter(cache, nullptr, cb, arg);
   }
@@ -150,15 +148,14 @@ class NetlinkSocketFixture : public testing::Test {
     return rtBuilder.build();
   }
 
-  Route buildRoute(
-    int ifIndex,
-    int protocolId,
-    const std::vector<folly::IPAddress>& nexthops,
-    const folly::CIDRNetwork& dest) {
-
+  Route
+  buildRoute(
+      int ifIndex,
+      int protocolId,
+      const std::vector<folly::IPAddress>& nexthops,
+      const folly::CIDRNetwork& dest) {
     fbnl::RouteBuilder rtBuilder;
-    auto route = rtBuilder.setDestination(dest)
-                          .setProtocolId(protocolId);
+    auto route = rtBuilder.setDestination(dest).setProtocolId(protocolId);
     fbnl::NextHopBuilder nhBuilder;
     for (const auto& nh : nexthops) {
       nhBuilder.setIfIndex(ifIndex).setGateway(nh);
@@ -168,29 +165,31 @@ class NetlinkSocketFixture : public testing::Test {
     return rtBuilder.build();
   }
 
-  Route buildMCastRoute(
-    int ifIndex,
-    int protocolId,
-    const std::string& ifName,
-    const folly::CIDRNetwork& dest) {
+  Route
+  buildMCastRoute(
+      int ifIndex,
+      int protocolId,
+      const std::string& ifName,
+      const folly::CIDRNetwork& dest) {
     fbnl::RouteBuilder builder;
     builder.setRouteIfIndex(ifIndex)
-           .setProtocolId(protocolId)
-           .setDestination(dest)
-           .setRouteIfName(ifName);
+        .setProtocolId(protocolId)
+        .setDestination(dest)
+        .setRouteIfName(ifName);
     return builder.buildMulticastRoute();
   }
 
-  Route buildLinkRoute(
-    int ifIndex,
-    int protocolId,
-    const std::string& ifName,
-    const folly::CIDRNetwork& dest) {
+  Route
+  buildLinkRoute(
+      int ifIndex,
+      int protocolId,
+      const std::string& ifName,
+      const folly::CIDRNetwork& dest) {
     fbnl::RouteBuilder builder;
     builder.setRouteIfIndex(ifIndex)
-           .setProtocolId(protocolId)
-           .setDestination(dest)
-           .setRouteIfName(ifName);
+        .setProtocolId(protocolId)
+        .setDestination(dest)
+        .setRouteIfName(ifName);
     return builder.buildLinkRoute();
   }
 
@@ -250,8 +249,8 @@ class NetlinkSocketFixture : public testing::Test {
   }
 
  protected:
-  bool CompareNextHops(
-      std::vector<folly::IPAddress>& nexthops, const Route& route) {
+  bool
+  CompareNextHops(std::vector<folly::IPAddress>& nexthops, const Route& route) {
     std::vector<folly::IPAddress> actual;
     for (const auto& nh : route.getNextHops()) {
       if (!nh.getGateway().hasValue()) {
@@ -264,15 +263,16 @@ class NetlinkSocketFixture : public testing::Test {
     return nexthops == actual;
   }
 
-  void doUpdateRouteTest(bool isV4) {
+  void
+  doUpdateRouteTest(bool isV4) {
     // - Add a route
     // - Verify it is added
     // - Add another path (nexthop) to the same route
     // - Verify the route is updated with 2 paths
     // - Delete it and then verify it is deleted
     folly::CIDRNetwork prefix1 = isV4
-                ? std::make_pair(folly::IPAddress("192.168.0.11"), 32)
-                : std::make_pair(folly::IPAddress("fc00:cafe:3::3"), 128);
+        ? std::make_pair(folly::IPAddress("192.168.0.11"), 32)
+        : std::make_pair(folly::IPAddress("fc00:cafe:3::3"), 128);
     std::vector<folly::IPAddress> nexthops;
     if (isV4) {
       nexthops.emplace_back(folly::IPAddress("169.254.0.1"));
@@ -282,7 +282,7 @@ class NetlinkSocketFixture : public testing::Test {
     int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
     auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-      RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+      RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
       struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
       RouteBuilder builder;
       if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
@@ -291,11 +291,11 @@ class NetlinkSocketFixture : public testing::Test {
     };
 
     // Add a route with single nextHop
-    netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix1)).get();
+    netlinkSocket
+        ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix1))
+        .get();
 
-    auto routes =
-      netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+    auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
     EXPECT_EQ(1, routes.size());
     ASSERT_EQ(1, routes.count(prefix1));
     const Route& rt = routes.at(prefix1);
@@ -307,10 +307,10 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     int count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
-       && r.getNextHops().size() == 1
-       && r.getNextHops().begin()->getGateway() == nexthops[0]) {
-         count++;
+      if (r.getDestination() == prefix1 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+          r.getNextHops().begin()->getGateway() == nexthops[0]) {
+        count++;
       }
     }
     EXPECT_EQ(1, count);
@@ -324,8 +324,9 @@ class NetlinkSocketFixture : public testing::Test {
     }
 
     // Update the same route with new nextHop nh2
-    netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix1)).get();
+    netlinkSocket
+        ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix1))
+        .get();
 
     // The route should now have only nh2
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
@@ -342,8 +343,9 @@ class NetlinkSocketFixture : public testing::Test {
       nexthops.emplace_back(folly::IPAddress("fe80::1"));
     }
     // Update the same route with new nextHop nh1
-    netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix1)).get();
+    netlinkSocket
+        ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix1))
+        .get();
 
     // The route should now have both nh1 and nh2
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
@@ -357,19 +359,19 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix1
-      && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 2) {
+      if (r.getDestination() == prefix1 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 2) {
         count++;
       }
     }
     EXPECT_EQ(1, count);
 
     // Delete the route via both nextHops
-    netlinkSocket->delRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix1)).get();
-      routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-      EXPECT_EQ(0, routes.size());
+    netlinkSocket
+        ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix1))
+        .get();
+    routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+    EXPECT_EQ(0, routes.size());
 
     // - Add a route with 2 paths (nextHops)
     // - Verify it is added
@@ -377,12 +379,13 @@ class NetlinkSocketFixture : public testing::Test {
     // - Verify the route is updated with 1 path
     // - Delete it and then verify it is deleted
     folly::CIDRNetwork prefix2 = isV4
-                ? std::make_pair(folly::IPAddress("192.168.0.12"), 32)
-                : std::make_pair(folly::IPAddress("fc00:cafe:3::4"), 128);
+        ? std::make_pair(folly::IPAddress("192.168.0.12"), 32)
+        : std::make_pair(folly::IPAddress("fc00:cafe:3::4"), 128);
 
     // Add a route with 2 nextHops
-    netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix2)).get();
+    netlinkSocket
+        ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix2))
+        .get();
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
     EXPECT_EQ(1, routes.size());
@@ -392,8 +395,9 @@ class NetlinkSocketFixture : public testing::Test {
 
     // Remove 1 of nextHops from the route
     nexthops.pop_back();
-    netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix2)).get();
+    netlinkSocket
+        ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix2))
+        .get();
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
     EXPECT_EQ(1, routes.size());
@@ -407,16 +411,17 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
-       && r.getNextHops().size() == 1
-       && r.getNextHops().begin()->getGateway() == nexthops[0]) {
-         count++;
+      if (r.getDestination() == prefix2 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+          r.getNextHops().begin()->getGateway() == nexthops[0]) {
+        count++;
       }
     }
     EXPECT_EQ(1, count);
     // Delete the same route
-    netlinkSocket->delRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix2)).get();
+    netlinkSocket
+        ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix2))
+        .get();
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
     EXPECT_EQ(0, routes.size());
 
@@ -424,19 +429,20 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
-       && r.getNextHops().size() == 1
-       && r.getNextHops().begin()->getGateway() == nexthops[0]) {
-         count++;
+      if (r.getDestination() == prefix2 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+          r.getNextHops().begin()->getGateway() == nexthops[0]) {
+        count++;
       }
     }
     EXPECT_EQ(0, count);
   }
 
-  void doUpdateMultiRouteTest(bool isV4) {
+  void
+  doUpdateMultiRouteTest(bool isV4) {
     folly::CIDRNetwork prefix = isV4
-                ? std::make_pair(folly::IPAddress("192.168.0.11"), 32)
-                : std::make_pair(folly::IPAddress("fc00:cafe:3::3"), 128);
+        ? std::make_pair(folly::IPAddress("192.168.0.11"), 32)
+        : std::make_pair(folly::IPAddress("fc00:cafe:3::3"), 128);
     std::vector<folly::IPAddress> nexthops;
     if (isV4) {
       nexthops.emplace_back(folly::IPAddress("169.254.0.1"));
@@ -450,7 +456,7 @@ class NetlinkSocketFixture : public testing::Test {
     int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
     auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-      RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+      RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
       struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
       RouteBuilder builder;
       if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
@@ -458,10 +464,10 @@ class NetlinkSocketFixture : public testing::Test {
       }
     };
     // Add a route with 3 nextHops
-    netlinkSocket->addRoute(
-    buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
-    auto routes =
-      netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+    netlinkSocket
+        ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix))
+        .get();
+    auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
     EXPECT_EQ(1, routes.size());
     EXPECT_EQ(1, routes.count(prefix));
@@ -473,8 +479,8 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     int count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 3) {
+      if (r.getDestination() == prefix &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 3) {
         count++;
       }
     }
@@ -489,8 +495,9 @@ class NetlinkSocketFixture : public testing::Test {
       nexthops.emplace_back(folly::IPAddress("fe80::1"));
       nexthops.emplace_back(folly::IPAddress("fe80::2"));
     }
-    netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
+    netlinkSocket
+        ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix))
+        .get();
 
     // The route now has nextHop 1 and nextHop 2
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
@@ -504,8 +511,8 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 2) {
+      if (r.getDestination() == prefix &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 2) {
         count++;
       }
     }
@@ -516,10 +523,11 @@ class NetlinkSocketFixture : public testing::Test {
     } else {
       nexthops.emplace_back(folly::IPAddress("fe80::4"));
     }
-    netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
+    netlinkSocket
+        ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix))
+        .get();
 
-     // The route now has nextHop 1, 2, and 4
+    // The route now has nextHop 1, 2, and 4
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
     EXPECT_EQ(1, routes.size());
     ASSERT_EQ(1, routes.count(prefix));
@@ -531,16 +539,17 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 3) {
+      if (r.getDestination() == prefix &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 3) {
         count++;
       }
     }
     EXPECT_EQ(1, count);
 
     // Delete the route
-    netlinkSocket->delRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
+    netlinkSocket
+        ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix))
+        .get();
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
     EXPECT_EQ(0, routes.size());
 
@@ -548,22 +557,23 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 3) {
+      if (r.getDestination() == prefix &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 3) {
         count++;
       }
     }
     EXPECT_EQ(0, count);
   }
 
-  void doSyncRouteTest(bool isV4) {
+  void
+  doSyncRouteTest(bool isV4) {
     NlUnicastRoutes routeDb;
     folly::CIDRNetwork prefix1 = isV4
-                ? std::make_pair(folly::IPAddress("192.168.0.11"), 32)
-                : std::make_pair(folly::IPAddress("fc00:cafe:3::"), 64);
+        ? std::make_pair(folly::IPAddress("192.168.0.11"), 32)
+        : std::make_pair(folly::IPAddress("fc00:cafe:3::"), 64);
     folly::CIDRNetwork prefix2 = isV4
-                ? std::make_pair(folly::IPAddress("192.168.0.12"), 32)
-                : std::make_pair(folly::IPAddress("fc00:cafe:4::"), 64);
+        ? std::make_pair(folly::IPAddress("192.168.0.12"), 32)
+        : std::make_pair(folly::IPAddress("fc00:cafe:4::"), 64);
     std::vector<folly::IPAddress> nexthops1;
     std::vector<folly::IPAddress> nexthops2;
     if (isV4) {
@@ -577,7 +587,7 @@ class NetlinkSocketFixture : public testing::Test {
     }
     int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
     auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-      RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+      RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
       struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
       RouteBuilder builder;
       if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
@@ -586,26 +596,25 @@ class NetlinkSocketFixture : public testing::Test {
     };
 
     routeDb.emplace(
-      prefix1, buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1));
+        prefix1, buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1));
     routeDb.emplace(
-      prefix2, buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2));
+        prefix2, buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2));
 
     // Sync routeDb
     netlinkSocket->syncUnicastRoutes(kAqRouteProtoId, std::move(routeDb)).get();
-    auto routes =
-      netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+    auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
     // Check in kernel
     RouteCallbackContext ctx;
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     int count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 2) {
+      if (r.getDestination() == prefix1 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 2) {
         count++;
       }
-      if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 1) {
+      if (r.getDestination() == prefix2 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1) {
         count++;
       }
     }
@@ -629,9 +638,9 @@ class NetlinkSocketFixture : public testing::Test {
     }
     routeDb.clear();
     routeDb.emplace(
-      prefix1, buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1));
+        prefix1, buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1));
     routeDb.emplace(
-      prefix2, buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2));
+        prefix2, buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2));
 
     // Sync routeDb
     netlinkSocket->syncUnicastRoutes(kAqRouteProtoId, std::move(routeDb)).get();
@@ -641,12 +650,12 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 1) {
+      if (r.getDestination() == prefix1 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1) {
         count++;
       }
-      if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 2) {
+      if (r.getDestination() == prefix2 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 2) {
         count++;
       }
     }
@@ -664,7 +673,7 @@ class NetlinkSocketFixture : public testing::Test {
     // Remove prefixes
     routeDb.clear();
     routeDb.emplace(
-      prefix2, buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2));
+        prefix2, buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2));
     // Sync routeDb
     netlinkSocket->syncUnicastRoutes(kAqRouteProtoId, std::move(routeDb)).get();
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
@@ -673,12 +682,12 @@ class NetlinkSocketFixture : public testing::Test {
     rtnlCacheCB(routeFunc, &ctx, routeCache_);
     count = 0;
     for (const auto& r : ctx.results) {
-      if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 1) {
+      if (r.getDestination() == prefix1 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1) {
         count++;
       }
-      if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
-      && r.getNextHops().size() == 2) {
+      if (r.getDestination() == prefix2 &&
+          r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 2) {
         count++;
       }
     }
@@ -690,8 +699,9 @@ class NetlinkSocketFixture : public testing::Test {
     EXPECT_TRUE(CompareNextHops(nexthops2, rt5));
 
     // Delete the remaining route
-    netlinkSocket->delRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2)).get();
+    netlinkSocket
+        ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2))
+        .get();
     routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
     EXPECT_EQ(0, routes.size());
   }
@@ -713,7 +723,7 @@ TEST_F(NetlinkSocketFixture, SingleRouteTest) {
   int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
@@ -725,8 +735,9 @@ TEST_F(NetlinkSocketFixture, SingleRouteTest) {
   int before = ctx.results.size();
 
   // Add a route
-  netlinkSocket->addRoute(
-    buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix))
+      .get();
 
   // Check in Kernel
   ctx.results.clear();
@@ -734,15 +745,14 @@ TEST_F(NetlinkSocketFixture, SingleRouteTest) {
   EXPECT_EQ(before + 1, ctx.results.size());
   int count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 1
-     && r.getNextHops().begin()->getGateway() == nexthops[0]) {
-       count++;
+    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 1 &&
+        r.getNextHops().begin()->getGateway() == nexthops[0]) {
+      count++;
     }
   }
   EXPECT_EQ(1, count);
-  auto routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
   EXPECT_EQ(1, routes.size());
   ASSERT_EQ(1, routes.count(prefix));
@@ -753,8 +763,9 @@ TEST_F(NetlinkSocketFixture, SingleRouteTest) {
   EXPECT_EQ(nexthops[0], rt.getNextHops().begin()->getGateway());
 
   // Delete the same route
-  netlinkSocket->delRoute(
-    buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
 }
@@ -765,7 +776,7 @@ TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
   int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
@@ -777,8 +788,9 @@ TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
   int before = ctx.results.size();
 
   // Add a route
-  netlinkSocket->addRoute(
-    buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix))
+      .get();
 
   // Check in Kernel
   ctx.results.clear();
@@ -786,15 +798,14 @@ TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
   EXPECT_EQ(before + 1, ctx.results.size());
   int count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 1
-     && r.getNextHops().begin()->getGateway() == nexthops[0]) {
-       count++;
+    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 1 &&
+        r.getNextHops().begin()->getGateway() == nexthops[0]) {
+      count++;
     }
   }
   EXPECT_EQ(1, count);
-  auto routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
   EXPECT_EQ(1, routes.size());
   ASSERT_EQ(1, routes.count(prefix));
@@ -805,8 +816,9 @@ TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
   EXPECT_EQ(nexthops[0], rt.getNextHops().begin()->getGateway());
 
   // Delete the same route
-  netlinkSocket->delRoute(
-    buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops, prefix))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
 }
@@ -966,13 +978,13 @@ TEST_F(NetlinkSocketFixture, ModifyMulticastRouteTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("ff00::"), 8};
   int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
   // Add a route which is added to system
-  netlinkSocket->addRoute(
-    buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix)).get();
-  auto routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  netlinkSocket
+      ->addRoute(buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix))
+      .get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
   auto mcastRoutes =
-    netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
+      netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(1, mcastRoutes.size());
 
   SCOPE_EXIT {
@@ -983,7 +995,7 @@ TEST_F(NetlinkSocketFixture, ModifyMulticastRouteTest) {
 
   // Check kernel
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
@@ -1001,20 +1013,21 @@ TEST_F(NetlinkSocketFixture, ModifyMulticastRouteTest) {
   EXPECT_EQ(1, count);
 
   // Try adding it back now, (it will not be added to system)
-  netlinkSocket->addRoute(
-    buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix)).get();
+  netlinkSocket
+      ->addRoute(buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
   EXPECT_EQ(0, routes.size());
 
   // Try deleting it
-  netlinkSocket->delRoute(
-    buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix)).get();
+  netlinkSocket
+      ->delRoute(buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
 
-  mcastRoutes =
-    netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
+  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, mcastRoutes.size());
 }
 
@@ -1035,10 +1048,10 @@ TEST_F(NetlinkSocketFixture, MultiPathTest) {
   int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
   // Add a route1
-  netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1)).get();
-  auto routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1))
+      .get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
   SCOPE_EXIT {
     EXPECT_EQ(0, routes.size());
@@ -1051,8 +1064,9 @@ TEST_F(NetlinkSocketFixture, MultiPathTest) {
   EXPECT_TRUE(CompareNextHops(nexthops1, rt));
 
   // Add a route2
-  netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2)).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(2, routes.size());
   EXPECT_EQ(1, routes.count(prefix1));
@@ -1066,7 +1080,7 @@ TEST_F(NetlinkSocketFixture, MultiPathTest) {
 
   // Check kernel
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
@@ -1077,28 +1091,30 @@ TEST_F(NetlinkSocketFixture, MultiPathTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   int count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 2) {
+    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 2) {
       count++;
     }
-    if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 2) {
+    if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 2) {
       count++;
     }
   }
   EXPECT_EQ(2, count);
 
   // Delete the routes
-  netlinkSocket->delRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(1, routes.count(prefix2));
   const Route& rt4 = routes.at(prefix2);
   EXPECT_EQ(2, rt4.getNextHops().size());
   EXPECT_TRUE(CompareNextHops(nexthops2, rt4));
 
-  netlinkSocket->delRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops2, prefix2))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
 
@@ -1106,12 +1122,12 @@ TEST_F(NetlinkSocketFixture, MultiPathTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 2) {
+    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 2) {
       count++;
     }
-    if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 2) {
+    if (r.getDestination() == prefix2 && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 2) {
       count++;
     }
   }
@@ -1130,17 +1146,17 @@ TEST_F(NetlinkSocketFixture, DeleteNonExistingRouteTest) {
   int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
   // Add a route via a single nextHop nh1
-  netlinkSocket->addRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1)).get();
-  auto routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1))
+      .get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
   SCOPE_EXIT {
     EXPECT_EQ(0, routes.size());
   };
 
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     if (rtnl_route_get_protocol(routeObj) == kAqRouteProtoId) {
@@ -1155,8 +1171,9 @@ TEST_F(NetlinkSocketFixture, DeleteNonExistingRouteTest) {
   EXPECT_TRUE(CompareNextHops(nexthops1, rt));
 
   // Try deleting the route with a non existing prefix2
-  netlinkSocket->delRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix2)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix2))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(1, routes.size());
 
@@ -1165,16 +1182,17 @@ TEST_F(NetlinkSocketFixture, DeleteNonExistingRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   int count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 1) {
+    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 1) {
       count++;
     }
   }
   EXPECT_EQ(1, count);
 
   // Delete the route
-  netlinkSocket->delRoute(
-      buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndex, kAqRouteProtoId, nexthops1, prefix1))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
 
@@ -1182,8 +1200,8 @@ TEST_F(NetlinkSocketFixture, DeleteNonExistingRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 1) {
+    if (r.getDestination() == prefix1 && r.getProtocolId() == kAqRouteProtoId &&
+        r.getNextHops().size() == 1) {
       count++;
     }
   }
@@ -1211,7 +1229,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   std::vector<folly::IPAddress> nextHopsV6{nh1V6};
 
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     int protocol = rtnl_route_get_protocol(routeObj);
@@ -1221,12 +1239,13 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   };
 
   // Add routes with single nextHop for protocol 99
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6)).get();
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6)).get();
-  auto routes =
-      netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6))
+      .get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6))
+      .get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(2, routes.size());
   ASSERT_EQ(1, routes.count(prefix1V6));
   ASSERT_EQ(1, routes.count(prefix2V6));
@@ -1239,10 +1258,12 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
 
   // Adde routes for protocol 159
   std::vector<folly::IPAddress> nextHops1V4{nh1V4};
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix1V4)).get();
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix2V4)).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix1V4))
+      .get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix2V4))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(2, routes.size());
   ASSERT_EQ(1, routes.count(prefix1V4));
@@ -1259,20 +1280,20 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   int count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix1V6 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 1) {
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1) {
       count++;
     }
-    if (r.getDestination() == prefix2V6 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 1) {
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1) {
       count++;
     }
-    if (r.getDestination() == prefix1V4 && r.getProtocolId() == kAqRouteProtoId1
-     && r.getNextHops().size() == 1) {
+    if (r.getDestination() == prefix1V4 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1) {
       count++;
     }
-    if (r.getDestination() == prefix2V4 && r.getProtocolId() == kAqRouteProtoId1
-     && r.getNextHops().size() == 1) {
+    if (r.getDestination() == prefix2V4 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1) {
       count++;
     }
   }
@@ -1283,8 +1304,9 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   nextHopsV6.push_back(nh2V6);
 
   // Update the same route with new nextHop nh2 for protocol 99
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6)).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6))
+      .get();
 
   // The route should now have only nh2
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
@@ -1297,8 +1319,9 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   // Update the same route with new nextHop nh2 for protocol 159
   nextHops1V4.clear();
   nextHops1V4.push_back(nh2V4);
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix2V4)).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix2V4))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(2, routes.size());
   ASSERT_EQ(1, routes.count(prefix2V4));
@@ -1309,8 +1332,9 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   // Add back nexthop nh1
   nextHopsV6.push_back(nh1V6);
   // Update the same route with new nextHop nh1
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6)).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6))
+      .get();
 
   // The route should now have both nh1 and nh2
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
@@ -1323,8 +1347,9 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   // Add back nexthop nh3
   nextHops1V4.push_back(nh1V4);
   // Update the same route with new nextHop nh3
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix1V4)).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix1V4))
+      .get();
 
   // The route should now have both nh3 and nh4
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
@@ -1338,46 +1363,50 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix1V6 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 1) {
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1) {
       count++;
     }
-    if (r.getDestination() == prefix2V6 && r.getProtocolId() == kAqRouteProtoId
-     && r.getNextHops().size() == 2) {
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 2) {
       count++;
     }
-    if (r.getDestination() == prefix1V4 && r.getProtocolId() == kAqRouteProtoId1
-     && r.getNextHops().size() == 2) {
+    if (r.getDestination() == prefix1V4 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 2) {
       count++;
     }
-    if (r.getDestination() == prefix2V4 && r.getProtocolId() == kAqRouteProtoId1
-     && r.getNextHops().size() == 1) {
+    if (r.getDestination() == prefix2V4 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1) {
       count++;
     }
   }
   EXPECT_EQ(4, count);
 
   // Delete the route
-  netlinkSocket->delRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(1, routes.size());
-  netlinkSocket->delRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
 
   nextHops1V4.clear();
   nextHops1V4.push_back(nh2V4);
   nextHops1V4.push_back(nh1V4);
-  netlinkSocket->delRoute(
-    buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix1V4)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix1V4))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(1, routes.size());
   nextHops1V4.clear();
   nextHops1V4.push_back(nh2V4);
-  netlinkSocket->delRoute(
-    buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix2V4)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V4, prefix2V4))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(0, routes.size());
 
@@ -1385,8 +1414,8 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6
-     || r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) {
+    if (r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6 ||
+        r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) {
       count++;
     }
   }
@@ -1404,7 +1433,7 @@ TEST_F(NetlinkSocketFixture, MutiProtocolMulticastRouteTest) {
   int ifIndexY = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     int protocol = rtnl_route_get_protocol(routeObj);
@@ -1414,36 +1443,37 @@ TEST_F(NetlinkSocketFixture, MutiProtocolMulticastRouteTest) {
   };
 
   // Add routes for different protocols
-  netlinkSocket->addRoute(
-    buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix)).get();
-  netlinkSocket->addRoute(
-    buildMCastRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix)).get();
+  netlinkSocket
+      ->addRoute(buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix))
+      .get();
+  netlinkSocket
+      ->addRoute(
+          buildMCastRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix))
+      .get();
 
-  auto routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
-  routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
+  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(0, routes.size());
 
   auto mcastRoutes =
-    netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
+      netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(1, mcastRoutes.size());
-  mcastRoutes =
-    netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
+  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(1, mcastRoutes.size());
 
   // Try adding it back now, (it will not be added to system)
-  netlinkSocket->addRoute(
-    buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix)).get();
-  mcastRoutes =
-    netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
+  netlinkSocket
+      ->addRoute(buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix))
+      .get();
+  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(1, mcastRoutes.size());
 
-  netlinkSocket->addRoute(
-    buildMCastRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix)).get();
-  mcastRoutes =
-    netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
+  netlinkSocket
+      ->addRoute(
+          buildMCastRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix))
+      .get();
+  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(1, mcastRoutes.size());
 
   // Check kernel
@@ -1461,16 +1491,17 @@ TEST_F(NetlinkSocketFixture, MutiProtocolMulticastRouteTest) {
   EXPECT_EQ(2, count);
 
   // Try deleting it
-  netlinkSocket->delRoute(
-    buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix)).get();
-  mcastRoutes =
-    netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
+  netlinkSocket
+      ->delRoute(buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix))
+      .get();
+  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, mcastRoutes.size());
 
-  netlinkSocket->delRoute(
-    buildMCastRoute(ifIndexY, kAqRouteProtoId1, kVethNameX, prefix)).get();
-  mcastRoutes =
-    netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
+  netlinkSocket
+      ->delRoute(
+          buildMCastRoute(ifIndexY, kAqRouteProtoId1, kVethNameX, prefix))
+      .get();
+  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(0, mcastRoutes.size());
 
   // Check kernel
@@ -1493,7 +1524,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   int ifIndexY = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     int protocol = rtnl_route_get_protocol(routeObj);
@@ -1514,15 +1545,15 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   std::vector<folly::IPAddress> nextHops1V6{nh1V6, nh2V6};
   std::vector<folly::IPAddress> nextHops2V6{nh3V6};
   routeDbV6.emplace(
-    prefix1V6, buildRoute(ifIndexX, kAqRouteProtoId, nextHops1V6, prefix1V6));
+      prefix1V6, buildRoute(ifIndexX, kAqRouteProtoId, nextHops1V6, prefix1V6));
   routeDbV6.emplace(
-    prefix2V6, buildRoute(ifIndexY, kAqRouteProtoId, nextHops2V6, prefix2V6));
+      prefix2V6, buildRoute(ifIndexY, kAqRouteProtoId, nextHops2V6, prefix2V6));
 
   // Pre-add unicast routes
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHops2V6, prefix1V6)).get();
-  auto routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHops2V6, prefix1V6))
+      .get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(1, routes.size());
   EXPECT_EQ(1, routes.count(prefix1V6));
 
@@ -1537,15 +1568,17 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   std::vector<folly::IPAddress> nextHops1V4{nh1V4, nh2V4};
   std::vector<folly::IPAddress> nextHops2V4{nh3V4};
   routeDbV4.emplace(
-    prefix1V4, buildRoute(ifIndexX, kAqRouteProtoId1, nextHops1V4, prefix1V4));
+      prefix1V4,
+      buildRoute(ifIndexX, kAqRouteProtoId1, nextHops1V4, prefix1V4));
   routeDbV4.emplace(
-    prefix2V4, buildRoute(ifIndexY, kAqRouteProtoId1, nextHops2V4, prefix2V4));
+      prefix2V4,
+      buildRoute(ifIndexY, kAqRouteProtoId1, nextHops2V4, prefix2V4));
 
   // Pre-add unicast routes
-  netlinkSocket->addRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId1, nextHops2V4, prefix1V4)).get();
-  routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId1, nextHops2V4, prefix1V4))
+      .get();
+  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(1, routes.size());
   EXPECT_EQ(1, routes.count(prefix1V4));
 
@@ -1554,12 +1587,12 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   int count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix1V6
-     && r.getProtocolId() == kAqRouteProtoId) {
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId) {
       count++;
     }
-    if (r.getDestination() == prefix1V4
-     && r.getProtocolId() == kAqRouteProtoId1) {
+    if (r.getDestination() == prefix1V4 &&
+        r.getProtocolId() == kAqRouteProtoId1) {
       count++;
     }
   }
@@ -1567,8 +1600,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
 
   // Sync routeDb
   netlinkSocket->syncUnicastRoutes(kAqRouteProtoId, std::move(routeDbV6)).get();
-  routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(2, routes.size());
   EXPECT_EQ(1, routes.count(prefix1V6));
   EXPECT_EQ(1, routes.count(prefix2V6));
@@ -1579,10 +1611,9 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   EXPECT_TRUE(CompareNextHops(nextHops1V6, rt1));
   EXPECT_TRUE(CompareNextHops(nextHops2V6, rt2));
 
-  netlinkSocket->syncUnicastRoutes(
-    kAqRouteProtoId1, std::move(routeDbV4)).get();
-  routes =
-    netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
+  netlinkSocket->syncUnicastRoutes(kAqRouteProtoId1, std::move(routeDbV4))
+      .get();
+  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(2, routes.size());
   EXPECT_EQ(1, routes.count(prefix1V4));
   EXPECT_EQ(1, routes.count(prefix2V4));
@@ -1598,12 +1629,12 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   count = 0;
   for (const auto& r : ctx.results) {
-    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6)
-     && r.getProtocolId() == kAqRouteProtoId) {
+    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6) &&
+        r.getProtocolId() == kAqRouteProtoId) {
       count++;
     }
-    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4)
-     && r.getProtocolId() == kAqRouteProtoId1) {
+    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) &&
+        r.getProtocolId() == kAqRouteProtoId1) {
       count++;
     }
   }
@@ -1613,13 +1644,12 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   nextHops2V6.push_back(nh4V6);
   routeDbV6.clear();
   routeDbV6.emplace(
-    prefix1V6, buildRoute(ifIndexX, kAqRouteProtoId, nextHops1V6, prefix1V6));
+      prefix1V6, buildRoute(ifIndexX, kAqRouteProtoId, nextHops1V6, prefix1V6));
   routeDbV6.emplace(
-    prefix2V6, buildRoute(ifIndexY, kAqRouteProtoId, nextHops2V6, prefix2V6));
+      prefix2V6, buildRoute(ifIndexY, kAqRouteProtoId, nextHops2V6, prefix2V6));
 
   // Sync routeDb V6
-  netlinkSocket->
-    syncUnicastRoutes(kAqRouteProtoId, std::move(routeDbV6)).get();
+  netlinkSocket->syncUnicastRoutes(kAqRouteProtoId, std::move(routeDbV6)).get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
 
   EXPECT_EQ(2, routes.size());
@@ -1637,13 +1667,15 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   nextHops2V4.push_back(nh4V4);
   routeDbV4.clear();
   routeDbV4.emplace(
-    prefix1V4, buildRoute(ifIndexX, kAqRouteProtoId1, nextHops1V4, prefix1V4));
+      prefix1V4,
+      buildRoute(ifIndexX, kAqRouteProtoId1, nextHops1V4, prefix1V4));
   routeDbV4.emplace(
-    prefix2V4, buildRoute(ifIndexY, kAqRouteProtoId1, nextHops2V4, prefix2V4));
+      prefix2V4,
+      buildRoute(ifIndexY, kAqRouteProtoId1, nextHops2V4, prefix2V4));
 
   // Sync routeDb V4
-  netlinkSocket->
-    syncUnicastRoutes(kAqRouteProtoId1, std::move(routeDbV4)).get();
+  netlinkSocket->syncUnicastRoutes(kAqRouteProtoId1, std::move(routeDbV4))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
 
   EXPECT_EQ(2, routes.size());
@@ -1659,7 +1691,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   // Remove V6 prefixes
   routeDbV6.clear();
   routeDbV6.emplace(
-    prefix2V6, buildRoute(ifIndexY, kAqRouteProtoId, nextHops2V6, prefix2V6));
+      prefix2V6, buildRoute(ifIndexY, kAqRouteProtoId, nextHops2V6, prefix2V6));
   // Sync routeDb
   netlinkSocket->syncUnicastRoutes(kAqRouteProtoId, std::move(routeDbV6)).get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
@@ -1675,32 +1707,36 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   count = 0;
   for (const auto& r : ctx.results) {
-    if (r.getDestination() == prefix2V6
-     && r.getProtocolId() == kAqRouteProtoId) {
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId) {
       count++;
     }
   }
   EXPECT_EQ(1, count);
 
   // Delete V4 route
-  netlinkSocket->delRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId1, nextHops1V4, prefix1V4)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId1, nextHops1V4, prefix1V4))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(1, routes.size());
   nextHops2V4.clear();
-  netlinkSocket->delRoute(
-    buildRoute(ifIndexY, kAqRouteProtoId1, nextHops2V4, prefix2V4)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops2V4, prefix2V4))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(0, routes.size());
 
   // Delete V6 route
-  netlinkSocket->delRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHops1V6, prefix1V6)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHops1V6, prefix1V6))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(1, routes.size());
   nextHops2V6.clear();
-  netlinkSocket->delRoute(
-    buildRoute(ifIndexX, kAqRouteProtoId, nextHops2V6, prefix2V6)).get();
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHops2V6, prefix2V6))
+      .get();
   routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(0, routes.size());
 
@@ -1709,12 +1745,12 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   count = 0;
   for (const auto& r : ctx.results) {
-    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6)
-     && r.getProtocolId() == kAqRouteProtoId) {
+    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6) &&
+        r.getProtocolId() == kAqRouteProtoId) {
       count++;
     }
-    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4)
-     && r.getProtocolId() == kAqRouteProtoId1) {
+    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) &&
+        r.getProtocolId() == kAqRouteProtoId1) {
       count++;
     }
   }
@@ -1723,7 +1759,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
 
 TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*> (arg);
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
     RouteBuilder builder;
     int protocol = rtnl_route_get_protocol(routeObj);
@@ -1738,31 +1774,33 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
   folly::CIDRNetwork prefix2V6{folly::IPAddress("fc00:cafe:4::"), 64};
   int ifIndexX = rtnl_link_name2i(linkCache_, kVethNameX.c_str());
   int ifIndexY = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
-  routeDbV6.emplace(std::make_pair(prefix1V6, kVethNameX),
-    buildLinkRoute(ifIndexX, kAqRouteProtoId, kVethNameX, prefix1V6));
-  routeDbV6.emplace(std::make_pair(prefix2V6, kVethNameY),
-    buildLinkRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix2V6));
+  routeDbV6.emplace(
+      std::make_pair(prefix1V6, kVethNameX),
+      buildLinkRoute(ifIndexX, kAqRouteProtoId, kVethNameX, prefix1V6));
+  routeDbV6.emplace(
+      std::make_pair(prefix2V6, kVethNameY),
+      buildLinkRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix2V6));
 
   // V4
   NlLinkRoutes routeDbV4;
   folly::CIDRNetwork prefix1V4{folly::IPAddress("192.168.0.11"), 32};
   folly::CIDRNetwork prefix2V4{folly::IPAddress("192.168.0.12"), 32};
-  routeDbV4.emplace(std::make_pair(prefix1V4, kVethNameX),
-    buildLinkRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix1V4));
-  routeDbV4.emplace(std::make_pair(prefix2V4, kVethNameY),
-    buildLinkRoute(ifIndexY, kAqRouteProtoId1, kVethNameY, prefix2V4));
+  routeDbV4.emplace(
+      std::make_pair(prefix1V4, kVethNameX),
+      buildLinkRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix1V4));
+  routeDbV4.emplace(
+      std::make_pair(prefix2V4, kVethNameY),
+      buildLinkRoute(ifIndexY, kAqRouteProtoId1, kVethNameY, prefix2V4));
 
   // Sync routeDb
   netlinkSocket->syncLinkRoutes(kAqRouteProtoId, std::move(routeDbV6)).get();
-  auto routes =
-    netlinkSocket->getCachedLinkRoutes(kAqRouteProtoId).get();
+  auto routes = netlinkSocket->getCachedLinkRoutes(kAqRouteProtoId).get();
   EXPECT_EQ(2, routes.size());
   EXPECT_EQ(1, routes.count(std::make_pair(prefix1V6, kVethNameX)));
   EXPECT_EQ(1, routes.count(std::make_pair(prefix2V6, kVethNameY)));
 
   netlinkSocket->syncLinkRoutes(kAqRouteProtoId1, std::move(routeDbV4)).get();
-  routes =
-    netlinkSocket->getCachedLinkRoutes(kAqRouteProtoId1).get();
+  routes = netlinkSocket->getCachedLinkRoutes(kAqRouteProtoId1).get();
   EXPECT_EQ(2, routes.size());
   EXPECT_EQ(1, routes.count(std::make_pair(prefix1V4, kVethNameX)));
   EXPECT_EQ(1, routes.count(std::make_pair(prefix2V4, kVethNameY)));
@@ -1772,12 +1810,12 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   int count = 0;
   for (const auto& r : ctx.results) {
-    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6)
-     && r.getProtocolId() == kAqRouteProtoId) {
+    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6) &&
+        r.getProtocolId() == kAqRouteProtoId) {
       count++;
     }
-    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4)
-     && r.getProtocolId() == kAqRouteProtoId1) {
+    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) &&
+        r.getProtocolId() == kAqRouteProtoId1) {
       count++;
     }
   }
@@ -1798,14 +1836,13 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   count = 0;
   for (const auto& r : ctx.results) {
-    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6)
-     && r.getProtocolId() == kAqRouteProtoId
-     && r.getScope() == RT_SCOPE_LINK) {
+    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6) &&
+        r.getProtocolId() == kAqRouteProtoId && r.getScope() == RT_SCOPE_LINK) {
       count++;
     }
-    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4)
-     && r.getProtocolId() == kAqRouteProtoId1
-     && r.getScope() == RT_SCOPE_LINK) {
+    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) &&
+        r.getProtocolId() == kAqRouteProtoId1 &&
+        r.getScope() == RT_SCOPE_LINK) {
       count++;
     }
   }
@@ -1815,14 +1852,14 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
 TEST_F(NetlinkSocketFixture, IfNametoIfIndexTest) {
   int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
   std::array<char, IFNAMSIZ> ifNameBuf;
-  std::string ifName(
-    rtnl_link_i2name(linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+  std::string ifName(rtnl_link_i2name(
+      linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
   EXPECT_EQ(rtnl_link_name2i(linkCache_, kVethNameX.c_str()), ifIndex);
   EXPECT_EQ(ifName, netlinkSocket->getIfName(ifIndex).get());
 
   ifIndex = netlinkSocket->getIfIndex(kVethNameY).get();
-  std::string ifName1(
-    rtnl_link_i2name(linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+  std::string ifName1(rtnl_link_i2name(
+      linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
   EXPECT_EQ(rtnl_link_name2i(linkCache_, kVethNameY.c_str()), ifIndex);
   EXPECT_EQ(ifName1, netlinkSocket->getIfName(ifIndex).get());
 }
@@ -1833,19 +1870,15 @@ TEST_F(NetlinkSocketFixture, AddDelIfAddressBaseTest) {
 
   int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
   ASSERT_NE(0, ifIndex);
-  auto ifAddr = builder.setPrefix(prefixV6)
-                       .setIfIndex(ifIndex)
-                       .build();
+  auto ifAddr = builder.setPrefix(prefixV6).setIfIndex(ifIndex).build();
 
   builder.reset();
   int ifIndex1 = netlinkSocket->getIfIndex(kVethNameY).get();
   const folly::CIDRNetwork prefixV4{folly::IPAddress("192.168.0.11"), 32};
-  auto ifAddr1 = builder.setPrefix(prefixV4)
-                        .setIfIndex(ifIndex1)
-                        .build();
+  auto ifAddr1 = builder.setPrefix(prefixV4).setIfIndex(ifIndex1).build();
 
   auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*>(arg);
     struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
     struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
     if (!ipaddr) {
@@ -1855,11 +1888,11 @@ TEST_F(NetlinkSocketFixture, AddDelIfAddressBaseTest) {
         static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
         nl_addr_get_len(ipaddr)));
     folly::CIDRNetwork prefix =
-      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+        std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
     IfAddressBuilder ifBuilder;
     auto tmpAddr = ifBuilder.setPrefix(prefix)
-                            .setIfIndex(rtnl_addr_get_ifindex(addr))
-                            .build();
+                       .setIfIndex(rtnl_addr_get_ifindex(addr))
+                       .build();
     ctx->results.emplace_back(std::move(tmpAddr));
   };
   AddressCallbackContext ctx;
@@ -1879,21 +1912,16 @@ TEST_F(NetlinkSocketFixture, AddDelIfAddressBaseTest) {
   for (const auto& ret : ctx.results) {
     if (ret.getPrefix() == prefixV6 && ret.getIfIndex() == ifIndex) {
       cnt++;
-    } else if (ret.getPrefix() == prefixV4
-            && ret.getIfIndex() == ifIndex1) {
+    } else if (ret.getPrefix() == prefixV4 && ret.getIfIndex() == ifIndex1) {
       cnt++;
     }
   }
   EXPECT_EQ(2, cnt);
 
   // delete addresses
-  ifAddr = builder.setPrefix(prefixV6)
-                  .setIfIndex(ifIndex)
-                  .build();
+  ifAddr = builder.setPrefix(prefixV6).setIfIndex(ifIndex).build();
   builder.reset();
-  ifAddr1 = builder.setPrefix(prefixV4)
-                   .setIfIndex(ifIndex1)
-                   .build();
+  ifAddr1 = builder.setPrefix(prefixV4).setIfIndex(ifIndex1).build();
   netlinkSocket->delIfAddress(std::move(ifAddr)).get();
   netlinkSocket->delIfAddress(std::move(ifAddr1)).get();
 
@@ -1905,12 +1933,12 @@ TEST_F(NetlinkSocketFixture, AddDelIfAddressBaseTest) {
   bool found = false;
   for (const auto& ret : ctx.results) {
     // No more added address
-    if ((ret.getPrefix() == prefixV6 && ret.getIfIndex() == ifIndex)
-    || (ret.getPrefix() == prefixV4 && ret.getIfIndex() == ifIndex1)) {
-       found = true;
-     }
-   }
-   EXPECT_FALSE(found);
+    if ((ret.getPrefix() == prefixV6 && ret.getIfIndex() == ifIndex) ||
+        (ret.getPrefix() == prefixV4 && ret.getIfIndex() == ifIndex1)) {
+      found = true;
+    }
+  }
+  EXPECT_FALSE(found);
 }
 
 TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
@@ -1919,16 +1947,12 @@ TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
 
   int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
   ASSERT_NE(0, ifIndex);
-  auto ifAddr = builder.setPrefix(prefix)
-                       .setIfIndex(ifIndex)
-                       .build();
+  auto ifAddr = builder.setPrefix(prefix).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr1 = builder.setPrefix(prefix)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr1 = builder.setPrefix(prefix).setIfIndex(ifIndex).build();
 
   auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*>(arg);
     struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
     struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
     if (!ipaddr) {
@@ -1938,11 +1962,11 @@ TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
         static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
         nl_addr_get_len(ipaddr)));
     folly::CIDRNetwork tmpPrefix =
-      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+        std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
     IfAddressBuilder ifBuilder;
     auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
-                            .setIfIndex(rtnl_addr_get_ifindex(addr))
-                            .build();
+                       .setIfIndex(rtnl_addr_get_ifindex(addr))
+                       .build();
     ctx->results.emplace_back(std::move(tmpAddr));
   };
   AddressCallbackContext ctx;
@@ -1962,20 +1986,16 @@ TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
 
   int cnt = 0;
   for (const auto& ret : ctx.results) {
-    if (ret.getPrefix() == prefix&& ret.getIfIndex() == ifIndex) {
+    if (ret.getPrefix() == prefix && ret.getIfIndex() == ifIndex) {
       cnt++;
     }
   }
   EXPECT_EQ(1, cnt);
 
   // delete addresses
-  ifAddr = builder.setPrefix(prefix)
-                  .setIfIndex(ifIndex)
-                  .build();
+  ifAddr = builder.setPrefix(prefix).setIfIndex(ifIndex).build();
   builder.reset();
-  ifAddr1 = builder.setPrefix(prefix)
-                   .setIfIndex(ifIndex)
-                   .build();
+  ifAddr1 = builder.setPrefix(prefix).setIfIndex(ifIndex).build();
   netlinkSocket->delIfAddress(std::move(ifAddr)).get();
   // double delete
   netlinkSocket->delIfAddress(std::move(ifAddr1)).get();
@@ -1989,10 +2009,10 @@ TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
   for (const auto& ret : ctx.results) {
     // No more added address
     if ((ret.getPrefix() == prefix && ret.getIfIndex() == ifIndex)) {
-       found = true;
-     }
-   }
-   EXPECT_FALSE(found);
+      found = true;
+    }
+  }
+  EXPECT_FALSE(found);
 }
 
 TEST_F(NetlinkSocketFixture, AddressSyncTest) {
@@ -2005,24 +2025,16 @@ TEST_F(NetlinkSocketFixture, AddressSyncTest) {
 
   int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
   ASSERT_NE(0, ifIndex);
-  auto ifAddr1 = builder.setPrefix(prefix1)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr1 = builder.setPrefix(prefix1).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr2 = builder.setPrefix(prefix2)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr2 = builder.setPrefix(prefix2).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr3 = builder.setPrefix(prefix3)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr3 = builder.setPrefix(prefix3).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr4 = builder.setPrefix(prefix4)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr4 = builder.setPrefix(prefix4).setIfIndex(ifIndex).build();
 
   auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*>(arg);
     struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
     struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
     if (!ipaddr) {
@@ -2032,12 +2044,12 @@ TEST_F(NetlinkSocketFixture, AddressSyncTest) {
         static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
         nl_addr_get_len(ipaddr)));
     folly::CIDRNetwork tmpPrefix =
-      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+        std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
     IfAddressBuilder ifBuilder;
     auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
-                            .setIfIndex(rtnl_addr_get_ifindex(addr))
-                            .setScope(rtnl_addr_get_scope(addr))
-                            .build();
+                       .setIfIndex(rtnl_addr_get_ifindex(addr))
+                       .setScope(rtnl_addr_get_scope(addr))
+                       .build();
     ctx->results.emplace_back(std::move(tmpAddr));
   };
 
@@ -2073,40 +2085,43 @@ TEST_F(NetlinkSocketFixture, AddressSyncTest) {
   // Different ifindex will throw exception
   builder.reset();
   addrs.emplace_back(
-    builder.setIfIndex(ifIndex + 1).setPrefix(prefix1).build());
-  addrs.emplace_back(
-    builder.setIfIndex(ifIndex).setPrefix(prefix2).build());
-  EXPECT_THROW(netlinkSocket->
-    syncIfAddress(ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE).get(),
-    std::exception);
+      builder.setIfIndex(ifIndex + 1).setPrefix(prefix1).build());
+  addrs.emplace_back(builder.setIfIndex(ifIndex).setPrefix(prefix2).build());
+  EXPECT_THROW(
+      netlinkSocket
+          ->syncIfAddress(
+              ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE)
+          .get(),
+      std::exception);
 
   // Prefix not set will throw exception
   builder.reset();
   addrs.clear();
-  addrs.emplace_back(
-    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  addrs.emplace_back(builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
   builder.reset();
-  addrs.emplace_back(
-    builder.setIfIndex(ifIndex).build());
-  EXPECT_THROW(netlinkSocket->
-    syncIfAddress(ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE).get(),
-    std::exception);
+  addrs.emplace_back(builder.setIfIndex(ifIndex).build());
+  EXPECT_THROW(
+      netlinkSocket
+          ->syncIfAddress(
+              ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE)
+          .get(),
+      std::exception);
 
   // Sync v6 address
   builder.reset();
   addrs.clear();
-  addrs.emplace_back(
-    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
-  netlinkSocket->syncIfAddress(
-    ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE).get();
+  addrs.emplace_back(builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  netlinkSocket
+      ->syncIfAddress(ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE)
+      .get();
 
   // Sync v4 address
   builder.reset();
   addrs.clear();
-  addrs.emplace_back(
-    builder.setIfIndex(ifIndex).setPrefix(prefix4).build());
-  netlinkSocket->syncIfAddress(
-    ifIndex, std::move(addrs), AF_INET, RT_SCOPE_NOWHERE).get();
+  addrs.emplace_back(builder.setIfIndex(ifIndex).setPrefix(prefix4).build());
+  netlinkSocket
+      ->syncIfAddress(ifIndex, std::move(addrs), AF_INET, RT_SCOPE_NOWHERE)
+      .get();
 
   ctx.results.clear();
   rtnlCacheCB(addrFunc, &ctx, addrCache_);
@@ -2130,24 +2145,19 @@ TEST_F(NetlinkSocketFixture, AddressSyncTest) {
   EXPECT_TRUE(p4);
 
   builder.reset();
-  ifAddr2 = builder.setPrefix(prefix2)
-                   .setIfIndex(ifIndex)
-                   .build();
+  ifAddr2 = builder.setPrefix(prefix2).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr5 = builder.setPrefix(prefix5)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr5 = builder.setPrefix(prefix5).setIfIndex(ifIndex).build();
   netlinkSocket->addIfAddress(std::move(ifAddr2)).get();
   netlinkSocket->addIfAddress(std::move(ifAddr5)).get();
 
   builder.reset();
   addrs.clear();
-  addrs.emplace_back(
-    builder.setIfIndex(ifIndex).setPrefix(prefix5).build());
-  addrs.emplace_back(
-    builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
-  netlinkSocket->syncIfAddress(
-    ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE).get();
+  addrs.emplace_back(builder.setIfIndex(ifIndex).setPrefix(prefix5).build());
+  addrs.emplace_back(builder.setIfIndex(ifIndex).setPrefix(prefix1).build());
+  netlinkSocket
+      ->syncIfAddress(ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE)
+      .get();
 
   ctx.results.clear();
   rtnlCacheCB(addrFunc, &ctx, addrCache_);
@@ -2183,24 +2193,16 @@ TEST_F(NetlinkSocketFixture, AddressFlushTest) {
 
   int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
   ASSERT_NE(0, ifIndex);
-  auto ifAddr1 = builder.setPrefix(prefix1)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr1 = builder.setPrefix(prefix1).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr2 = builder.setPrefix(prefix2)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr2 = builder.setPrefix(prefix2).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr3 = builder.setPrefix(prefix3)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr3 = builder.setPrefix(prefix3).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr4 = builder.setPrefix(prefix4)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr4 = builder.setPrefix(prefix4).setIfIndex(ifIndex).build();
 
   auto addrFunc = [](struct nl_object * obj, void* arg) noexcept->void {
-    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*> (arg);
+    AddressCallbackContext* ctx = static_cast<AddressCallbackContext*>(arg);
     struct rtnl_addr* addr = reinterpret_cast<struct rtnl_addr*>(obj);
     struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
     if (!ipaddr) {
@@ -2210,12 +2212,12 @@ TEST_F(NetlinkSocketFixture, AddressFlushTest) {
         static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
         nl_addr_get_len(ipaddr)));
     folly::CIDRNetwork tmpPrefix =
-      std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
+        std::make_pair(ipAddress, rtnl_addr_get_prefixlen(addr));
     IfAddressBuilder ifBuilder;
     auto tmpAddr = ifBuilder.setPrefix(tmpPrefix)
-                            .setIfIndex(rtnl_addr_get_ifindex(addr))
-                            .setScope(rtnl_addr_get_scope(addr))
-                            .build();
+                       .setIfIndex(rtnl_addr_get_ifindex(addr))
+                       .setScope(rtnl_addr_get_scope(addr))
+                       .build();
     ctx->results.emplace_back(std::move(tmpAddr));
   };
 
@@ -2240,8 +2242,9 @@ TEST_F(NetlinkSocketFixture, AddressFlushTest) {
 
   // delete IPV6 address family
   std::vector<IfAddress> addrs;
-  netlinkSocket->
-    syncIfAddress(ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE).get();
+  netlinkSocket
+      ->syncIfAddress(ifIndex, std::move(addrs), AF_INET6, RT_SCOPE_NOWHERE)
+      .get();
   ctx.results.clear();
   rtnlCacheCB(addrFunc, &ctx, addrCache_);
 
@@ -2251,18 +2254,19 @@ TEST_F(NetlinkSocketFixture, AddressFlushTest) {
     // No more added address
     if (ret.getFamily() == AF_INET && ret.getIfIndex() == ifIndex) {
       actualV4cnt++;
-     }
-    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex
-      && ret.getScope().value() == RT_SCOPE_UNIVERSE) {
+    }
+    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex &&
+        ret.getScope().value() == RT_SCOPE_UNIVERSE) {
       actualV6cnt++;
-     }
+    }
   }
   EXPECT_EQ(ipV4cnt, actualV4cnt);
   EXPECT_EQ(0, actualV6cnt);
 
   addrs.clear();
-  netlinkSocket->syncIfAddress(
-    ifIndex, std::move(addrs), AF_INET, RT_SCOPE_NOWHERE).get();
+  netlinkSocket
+      ->syncIfAddress(ifIndex, std::move(addrs), AF_INET, RT_SCOPE_NOWHERE)
+      .get();
 
   // No v4 address
   ctx.results.clear();
@@ -2272,11 +2276,11 @@ TEST_F(NetlinkSocketFixture, AddressFlushTest) {
     // No more added address
     if (ret.getFamily() == AF_INET && ret.getIfIndex() == ifIndex) {
       actualV4cnt++;
-     }
-    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex
-     && ret.getScope().value() == RT_SCOPE_UNIVERSE) {
+    }
+    if (ret.getFamily() == AF_INET6 && ret.getIfIndex() == ifIndex &&
+        ret.getScope().value() == RT_SCOPE_UNIVERSE) {
       actualV6cnt++;
-     }
+    }
   }
   EXPECT_EQ(0, actualV4cnt);
   EXPECT_EQ(0, actualV6cnt);
@@ -2291,26 +2295,19 @@ TEST_F(NetlinkSocketFixture, GetAddrsTest) {
 
   int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
   ASSERT_NE(0, ifIndex);
-  auto ifAddr1 = builder.setPrefix(prefix1)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr1 = builder.setPrefix(prefix1).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr2 = builder.setPrefix(prefix2)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr2 = builder.setPrefix(prefix2).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr3 = builder.setPrefix(prefix3)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr3 = builder.setPrefix(prefix3).setIfIndex(ifIndex).build();
   builder.reset();
-  auto ifAddr4 = builder.setPrefix(prefix4)
-                        .setIfIndex(ifIndex)
-                        .build();
+  auto ifAddr4 = builder.setPrefix(prefix4).setIfIndex(ifIndex).build();
 
   // Cleaup all address
   std::vector<IfAddress> addrs;
-  netlinkSocket->
-    syncIfAddress(ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE).get();
+  netlinkSocket
+      ->syncIfAddress(ifIndex, std::move(addrs), AF_UNSPEC, RT_SCOPE_NOWHERE)
+      .get();
 
   // Add new address
   netlinkSocket->addIfAddress(std::move(ifAddr1)).get();
@@ -2319,8 +2316,8 @@ TEST_F(NetlinkSocketFixture, GetAddrsTest) {
   netlinkSocket->addIfAddress(std::move(ifAddr4)).get();
 
   // Check get V6 address
-  auto v6Addrs = netlinkSocket->
-    getIfAddrs(ifIndex, AF_INET6, RT_SCOPE_NOWHERE).get();
+  auto v6Addrs =
+      netlinkSocket->getIfAddrs(ifIndex, AF_INET6, RT_SCOPE_NOWHERE).get();
   EXPECT_EQ(2, v6Addrs.size());
   bool p1 = false, p2 = false;
   for (const auto& addr : v6Addrs) {
@@ -2335,8 +2332,8 @@ TEST_F(NetlinkSocketFixture, GetAddrsTest) {
   EXPECT_TRUE(p2);
 
   // Check get V4 address
-  auto v4Addrs = netlinkSocket->
-    getIfAddrs(ifIndex, AF_INET, RT_SCOPE_NOWHERE).get();
+  auto v4Addrs =
+      netlinkSocket->getIfAddrs(ifIndex, AF_INET, RT_SCOPE_NOWHERE).get();
   EXPECT_EQ(2, v4Addrs.size());
   bool p3 = false, p4 = false;
   for (const auto& addr : v4Addrs) {
@@ -2351,8 +2348,8 @@ TEST_F(NetlinkSocketFixture, GetAddrsTest) {
   EXPECT_TRUE(p4);
 
   // CHeck get all address
-  auto allAddrs = netlinkSocket->
-    getIfAddrs(ifIndex, AF_UNSPEC, RT_SCOPE_NOWHERE).get();
+  auto allAddrs =
+      netlinkSocket->getIfAddrs(ifIndex, AF_UNSPEC, RT_SCOPE_NOWHERE).get();
   EXPECT_EQ(4, allAddrs.size());
   p1 = false, p2 = false, p3 = false, p4 = false;
   for (const auto& addr : allAddrs) {
@@ -2375,7 +2372,8 @@ TEST_F(NetlinkSocketFixture, GetAddrsTest) {
   EXPECT_TRUE(p4);
 }
 
-int main(int argc, char* argv[]) {
+int
+main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);

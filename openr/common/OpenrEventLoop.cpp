@@ -21,28 +21,23 @@ OpenrEventLoop::OpenrEventLoop(
     int socketHwm)
     : moduleType(type),
       moduleName(apache::thrift::TEnumTraits<thrift::OpenrModuleType>::findName(
-        moduleType)),
+          moduleType)),
       inprocCmdUrl(
-        folly::sformat("inproc://{}_{}_local_cmd", nodeName, moduleName)),
+          folly::sformat("inproc://{}_{}_local_cmd", nodeName, moduleName)),
       tcpCmdUrl(tcpUrl),
       ipcCmdUrl(ipcUrl),
       inprocCmdSock_(
-        zmqContext,
-        folly::none,
-        folly::none,
-        fbzmq::NonblockingFlag{true}) {
-
-  runInEventLoop([this, &zmqContext, nodeName, maybeIpTos, socketHwm] () {
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
+  runInEventLoop([this, &zmqContext, nodeName, maybeIpTos, socketHwm]() {
     std::vector<std::pair<int, int>> socketOptions{
-      {ZMQ_SNDHWM, socketHwm},
-      {ZMQ_RCVHWM, socketHwm},
-      {ZMQ_SNDTIMEO, Constants::kReadTimeout.count()},
-      {ZMQ_ROUTER_HANDOVER, 1},
-      {ZMQ_TCP_KEEPALIVE, Constants::kKeepAliveEnable},
-      {ZMQ_TCP_KEEPALIVE_IDLE, Constants::kKeepAliveTime.count()},
-      {ZMQ_TCP_KEEPALIVE_CNT, Constants::kKeepAliveCnt},
-      {ZMQ_TCP_KEEPALIVE_INTVL, Constants::kKeepAliveIntvl.count()}
-    };
+        {ZMQ_SNDHWM, socketHwm},
+        {ZMQ_RCVHWM, socketHwm},
+        {ZMQ_SNDTIMEO, Constants::kReadTimeout.count()},
+        {ZMQ_ROUTER_HANDOVER, 1},
+        {ZMQ_TCP_KEEPALIVE, Constants::kKeepAliveEnable},
+        {ZMQ_TCP_KEEPALIVE_IDLE, Constants::kKeepAliveTime.count()},
+        {ZMQ_TCP_KEEPALIVE_CNT, Constants::kKeepAliveCnt},
+        {ZMQ_TCP_KEEPALIVE_INTVL, Constants::kKeepAliveIntvl.count()}};
 
     if (maybeIpTos) {
       socketOptions.emplace_back(ZMQ_TOS, maybeIpTos.value());
@@ -55,13 +50,10 @@ OpenrEventLoop::OpenrEventLoop(
     if (tcpCmdUrl) {
       folly::Optional<fbzmq::IdentityString> id;
       if (thrift::OpenrModuleType::KVSTORE == moduleType) {
-        id = fbzmq::IdentityString{folly::sformat("{}::TCP::CMD",nodeName)};
+        id = fbzmq::IdentityString{folly::sformat("{}::TCP::CMD", nodeName)};
       }
       tcpCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
-          zmqContext,
-          id,
-          folly::none,
-          fbzmq::NonblockingFlag{true});
+          zmqContext, id, folly::none, fbzmq::NonblockingFlag{true});
       prepareSocket(tcpCmdSock_.value(), tcpCmdUrl.value(), socketOptions);
     }
 
@@ -79,7 +71,6 @@ OpenrEventLoop::prepareSocket(
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
     std::string url,
     const std::vector<std::pair<int, int>>& socketOptions) {
-
   for (const auto& pair : socketOptions) {
     const auto opt = pair.first;
     const auto val = pair.second;
@@ -98,14 +89,12 @@ OpenrEventLoop::prepareSocket(
   addSocket(
       fbzmq::RawZmqSocketPtr{*socket},
       ZMQ_POLLIN,
-      [this, &socket](int) noexcept {processCmdSocketRequest(socket);});
-
+      [this, &socket](int) noexcept { processCmdSocketRequest(socket); });
 }
 
 void
 OpenrEventLoop::processCmdSocketRequest(
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept {
-
   auto maybeReq = cmdSock.recvMultiple();
 
   if (maybeReq.hasError()) {
@@ -125,7 +114,7 @@ OpenrEventLoop::processCmdSocketRequest(
     req.emplace_back(std::move(maybeReply.value()));
   } else {
     req.emplace_back(
-      fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
+        fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
   }
 
   if (!(thrift::OpenrModuleType::KVSTORE == moduleType && req.back().empty())) {

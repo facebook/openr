@@ -65,13 +65,14 @@ TEST(InterfaceEntry, GetSetTest) {
 
   // 3. Add and validate addresses
   std::unordered_set<folly::CIDRNetwork> addresses = {
-    folly::IPAddress::createNetwork("169.254.0.1/16", -1, false),  // link-local
-    folly::IPAddress::createNetwork("1.2.3.4/24", -1, false),
-    folly::IPAddress::createNetwork("232.0.0.1/8", -1, false),  // multicast
-    folly::IPAddress::createNetwork("fe80::1/64", -1, false),  // link-local
-    folly::IPAddress::createNetwork("ff02::1/64", -1, false),  // multicast
-    folly::IPAddress::createNetwork("24:db:21:6048:face:0:1b:0/64", -1, false)
-  };
+      folly::IPAddress::createNetwork(
+          "169.254.0.1/16", -1, false), // link-local
+      folly::IPAddress::createNetwork("1.2.3.4/24", -1, false),
+      folly::IPAddress::createNetwork("232.0.0.1/8", -1, false), // multicast
+      folly::IPAddress::createNetwork("fe80::1/64", -1, false), // link-local
+      folly::IPAddress::createNetwork("ff02::1/64", -1, false), // multicast
+      folly::IPAddress::createNetwork(
+          "24:db:21:6048:face:0:1b:0/64", -1, false)};
   for (auto& addr : addresses) {
     EXPECT_TRUE(interface.updateAddr(addr, true));
   }
@@ -81,27 +82,25 @@ TEST(InterfaceEntry, GetSetTest) {
 
   // Validate v4 addresses
   std::unordered_set<folly::IPAddress> v4Addrs = {
-    folly::IPAddress("169.254.0.1"),  // link-local
-    folly::IPAddress("1.2.3.4"),
-    folly::IPAddress("232.0.0.1"),  // multicast
+      folly::IPAddress("169.254.0.1"), // link-local
+      folly::IPAddress("1.2.3.4"),
+      folly::IPAddress("232.0.0.1"), // multicast
   };
   EXPECT_EQ(v4Addrs, interface.getV4Addrs());
 
   // Validate v6 link-local addresses
   std::unordered_set<folly::IPAddress> v6LinkLocalAddrs = {
-    folly::IPAddress("fe80::1"),  // link-local
+      folly::IPAddress("fe80::1"), // link-local
   };
   EXPECT_EQ(v6LinkLocalAddrs, interface.getV6LinkLocalAddrs());
 
   // Validate redistriubte prefixes (link-local and multicast addrs will
   // be ignored)
   std::unordered_set<folly::CIDRNetwork> redistAddrsAll = {
-    folly::IPAddress::createNetwork("1.2.3.4/24"),
-    folly::IPAddress::createNetwork("24:db:21:6048:face:0:1b:0/64")
-  };
+      folly::IPAddress::createNetwork("1.2.3.4/24"),
+      folly::IPAddress::createNetwork("24:db:21:6048:face:0:1b:0/64")};
   std::unordered_set<folly::CIDRNetwork> redistAddrsV6 = {
-    folly::IPAddress::createNetwork("24:db:21:6048:face:0:1b:0/64")
-  };
+      folly::IPAddress::createNetwork("24:db:21:6048:face:0:1b:0/64")};
   EXPECT_EQ(
       redistAddrsAll,
       toCIDRNetworkSet(interface.getGlobalUnicastNetworks(true)));
@@ -109,7 +108,6 @@ TEST(InterfaceEntry, GetSetTest) {
       redistAddrsV6,
       toCIDRNetworkSet(interface.getGlobalUnicastNetworks(false)));
 }
-
 
 /**
  * Test exponential backoff functionality of InterfaceEntry

@@ -14,14 +14,14 @@
 #include <vector>
 
 #include <fbzmq/async/ZmqTimeout.h>
-#include <folly/futures/Future.h>
 #include <folly/Expected.h>
+#include <folly/futures/Future.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 
 #include <openr/common/AddressUtil.h>
 #include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/FibService.h>
+#include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/nl/NetlinkSocket.h>
 #include <openr/nl/NetlinkTypes.h>
 
@@ -33,8 +33,8 @@ namespace openr {
 class NetlinkFibHandler final : public thrift::FibServiceSvIf {
  public:
   explicit NetlinkFibHandler(
-    fbzmq::ZmqEventLoop* zmqEventLoop,
-    std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket);
+      fbzmq::ZmqEventLoop* zmqEventLoop,
+      std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket);
   ~NetlinkFibHandler() override {}
 
   folly::Future<folly::Unit> future_addUnicastRoute(
@@ -70,12 +70,12 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
   NetlinkFibHandler(const NetlinkFibHandler&) = delete;
   NetlinkFibHandler& operator=(const NetlinkFibHandler&) = delete;
 
-  template<class A>
-  folly::Expected<int16_t, bool>
-  getProtocol(folly::Promise<A>& promise, int16_t clientId);
+  template <class A>
+  folly::Expected<int16_t, bool> getProtocol(
+      folly::Promise<A>& promise, int16_t clientId);
 
-  std::vector<thrift::UnicastRoute>
-  toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb);
+  std::vector<thrift::UnicastRoute> toThriftUnicastRoutes(
+      const fbnl::NlUnicastRoutes& routeDb);
 
   fbnl::Route buildRoute(const thrift::UnicastRoute& route, int protocol) const
       noexcept;

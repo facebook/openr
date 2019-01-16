@@ -97,7 +97,10 @@ LinkMonitor::LinkMonitor(
     std::chrono::seconds adjHoldTime,
     std::chrono::milliseconds flapInitialBackoff,
     std::chrono::milliseconds flapMaxBackoff)
-    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::LINK_MONITOR, zmqContext,
+    : OpenrEventLoop(
+          nodeId,
+          thrift::OpenrModuleType::LINK_MONITOR,
+          zmqContext,
           linkMonitorGlobalCmdUrl),
       nodeId_(nodeId),
       platformThriftPort_(platformThriftPort),
@@ -131,7 +134,6 @@ LinkMonitor::LinkMonitor(
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff) {
-
   // Create throttled adjacency advertiser
   advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       this, Constants::kLinkThrottleTimeout, [this]() noexcept {
@@ -145,9 +147,8 @@ LinkMonitor::LinkMonitor(
         advertiseIfaceAddr();
       });
   // Create timer. Timer is used for immediate or delayed executions.
-  advertiseIfaceAddrTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
-    advertiseIfaceAddr();
-  });
+  advertiseIfaceAddrTimer_ = fbzmq::ZmqTimeout::make(
+      this, [this]() noexcept { advertiseIfaceAddr(); });
 
   LOG(INFO) << "Loading link-monitor config";
   zmqMonitorClient_ =
@@ -165,8 +166,10 @@ LinkMonitor::LinkMonitor(
       printLinkMonitorConfig(config_);
     } else {
       config_.isOverloaded = assumeDrained;
-      LOG(WARNING) << folly::sformat("Failed to load link-monitor config. "
-          "Setting node as {}", assumeDrained ? "DRAINED" : "UNDRAINED");
+      LOG(WARNING) << folly::sformat(
+          "Failed to load link-monitor config. "
+          "Setting node as {}",
+          assumeDrained ? "DRAINED" : "UNDRAINED");
     }
   });
 
@@ -235,15 +238,15 @@ LinkMonitor::prepare() noexcept {
                << sparkCmd.error();
   }
   const int relaxed = 1;
-  const auto sparkCmdOptRelaxed = sparkCmdSock_.setSockOpt(
-      ZMQ_REQ_RELAXED, &relaxed, sizeof(int));
+  const auto sparkCmdOptRelaxed =
+      sparkCmdSock_.setSockOpt(ZMQ_REQ_RELAXED, &relaxed, sizeof(int));
   if (sparkCmdOptRelaxed.hasError()) {
     LOG(FATAL) << "Error setting ZMQ_REQ_RELAXED option";
   }
 
   const int correlate = 1;
-  const auto sparkCmdOptCorrelate = sparkCmdSock_.setSockOpt(
-      ZMQ_REQ_CORRELATE, &correlate, sizeof(int));
+  const auto sparkCmdOptCorrelate =
+      sparkCmdSock_.setSockOpt(ZMQ_REQ_CORRELATE, &correlate, sizeof(int));
   if (sparkCmdOptCorrelate.hasError()) {
     LOG(FATAL) << "Error setting ZMQ_REQ_CORRELATE option";
   }
@@ -290,8 +293,8 @@ LinkMonitor::prepare() noexcept {
         VLOG(1) << "LinkMonitor: Spark message received...";
 
         fbzmq::Message requestIdMsg, delimMsg, thriftMsg;
-        const auto ret = sparkReportSock_.recvMultiple(
-          requestIdMsg, delimMsg, thriftMsg);
+        const auto ret =
+            sparkReportSock_.recvMultiple(requestIdMsg, delimMsg, thriftMsg);
 
         if (ret.hasError()) {
           LOG(ERROR) << "sparkReportSock: Error receiving command: "
@@ -307,8 +310,8 @@ LinkMonitor::prepare() noexcept {
         }
 
         VLOG(3) << "sparkReportSock, got id: `"
-                << folly::backslashify(requestId)
-                << "` and delim: `" << folly::backslashify(delim) << "`";
+                << folly::backslashify(requestId) << "` and delim: `"
+                << folly::backslashify(delim) << "`";
 
         const auto maybeEvent =
             thriftMsg.readThriftObj<thrift::SparkNeighborEvent>(serializer_);
@@ -520,8 +523,8 @@ LinkMonitor::neighborUpEvent(
           .count();
 
   VLOG(1) << "LinkMonitor::neighborUpEvent called for '"
-          << toString(neighborAddrV6) << "%" << ifName
-          << "', nodeName: '" << remoteNodeName << "'"
+          << toString(neighborAddrV6) << "%" << ifName << "', nodeName: '"
+          << remoteNodeName << "'"
           << ", nodeIfName: '" << remoteIfName << "'";
   syslog(
       LOG_NOTICE,
@@ -606,8 +609,7 @@ LinkMonitor::neighborDownEvent(
 
 std::unordered_map<std::string, thrift::PeerSpec>
 LinkMonitor::getPeersFromAdjacencies(
-  const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies
-) {
+    const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies) {
   std::unordered_map<std::string, std::string> neighborToIface;
   for (const auto& adjKv : adjacencies) {
     const auto& nodeName = adjKv.first.first;
@@ -751,8 +753,8 @@ LinkMonitor::advertiseIfaceAddr() {
   // once their backoff is clear.
   if (retryTime.count() != 0) {
     advertiseIfaceAddrTimer_->scheduleTimeout(retryTime);
-    VLOG(2) << "advertiseIfaceAddr timer scheduled in "
-            << retryTime.count() << " ms";
+    VLOG(2) << "advertiseIfaceAddr timer scheduled in " << retryTime.count()
+            << " ms";
   }
 }
 
@@ -768,7 +770,7 @@ LinkMonitor::advertiseInterfaces() {
     auto& interface = kv.second;
     // Perform regex match
     if (not checkIncludeExcludeRegex(
-          ifName, includeRegexList_, excludeRegexList_)) {
+            ifName, includeRegexList_, excludeRegexList_)) {
       continue;
     }
     // Get interface info and override active status
@@ -793,7 +795,7 @@ LinkMonitor::advertiseInterfaces() {
   }
   const auto result =
       sparkCmdSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(
-        serializer_, Constants::kReadTimeout);
+          serializer_, Constants::kReadTimeout);
   if (result.hasError()) {
     LOG(ERROR) << "Failed updating interface to Spark " << result.error();
   }
@@ -862,8 +864,9 @@ LinkMonitor::getRetryTimeOnUnstableInterfaces() {
 InterfaceEntry* FOLLY_NULLABLE
 LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
   // Return null if ifName doesn't quality regex match criteria
-  if (not checkIncludeExcludeRegex(ifName, includeRegexList_, excludeRegexList_)
-      and not matchRegexSet(ifName, redistRegexList_)) {
+  if (not checkIncludeExcludeRegex(
+          ifName, includeRegexList_, excludeRegexList_) and
+      not matchRegexSet(ifName, redistRegexList_)) {
     return nullptr;
   }
 
@@ -877,11 +880,11 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
   auto res = interfaces_.emplace(
       ifName,
       InterfaceEntry(
-        ifName,
-        flapInitialBackoff_,
-        flapMaxBackoff_,
-        *advertiseIfaceAddrThrottled_,
-        *advertiseIfaceAddrTimer_));
+          ifName,
+          flapInitialBackoff_,
+          flapMaxBackoff_,
+          *advertiseIfaceAddrThrottled_,
+          *advertiseIfaceAddrTimer_));
 
   return &(res.first->second);
 }
@@ -980,7 +983,6 @@ LinkMonitor::syncInterfaces() {
   return true;
 }
 
-
 folly::Expected<fbzmq::Message, fbzmq::Error>
 LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
   const auto maybeReq =
@@ -1001,7 +1003,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     }
     LOG(INFO) << "Setting overload bit for node.";
     config_.isOverloaded = true;
-    advertiseAdjacencies();  // TODO: Use throttle here
+    advertiseAdjacencies(); // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_OVERLOAD:
@@ -1011,7 +1013,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     }
     LOG(INFO) << "Unsetting overload bit for node.";
     config_.isOverloaded = false;
-    advertiseAdjacencies();  // TODO: Use throttle here
+    advertiseAdjacencies(); // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::SET_LINK_OVERLOAD:
@@ -1026,13 +1028,13 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     }
     LOG(INFO) << "Setting overload bit for interface " << req.interfaceName;
     config_.overloadedLinks.insert(req.interfaceName);
-    advertiseAdjacencies();  // TODO: Use throttle here
+    advertiseAdjacencies(); // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD:
     if (config_.overloadedLinks.erase(req.interfaceName)) {
       LOG(INFO) << "Unsetting overload bit for interface " << req.interfaceName;
-      advertiseAdjacencies();  // TODO: Use throttle here
+      advertiseAdjacencies(); // TODO: Use throttle here
     } else {
       LOG(WARNING) << "Got unset-overload-bit request for unknown link "
                    << req.interfaceName;
@@ -1053,14 +1055,14 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     LOG(INFO) << "Overriding metric for interface " << req.interfaceName
               << " to " << req.overrideMetric;
     config_.linkMetricOverrides[req.interfaceName] = req.overrideMetric;
-    advertiseAdjacencies();  // TODO: Use throttle here
+    advertiseAdjacencies(); // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_METRIC:
     if (config_.linkMetricOverrides.erase(req.interfaceName)) {
       LOG(INFO) << "Removing metric override for interface "
                 << req.interfaceName;
-      advertiseAdjacencies();  // TODO: Use throttle here
+      advertiseAdjacencies(); // TODO: Use throttle here
     } else {
       LOG(WARNING) << "Got link-metric-unset request for unknown interface "
                    << req.interfaceName;
@@ -1124,16 +1126,15 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     adjKey.nodeName = req.adjNodeName.value();
     config_.adjMetricOverrides[adjKey] = req.overrideMetric;
 
-    if (adjacencies_.count(std::make_pair(req.adjNodeName.value(),
-                                                req.interfaceName))) {
-      LOG(INFO) << "Overriding metric for adjacency "
-                << req.adjNodeName.value() << " "
-                << req.interfaceName << " to " << req.overrideMetric;
-      advertiseAdjacencies();  // TODO: Use throttle here
+    if (adjacencies_.count(
+            std::make_pair(req.adjNodeName.value(), req.interfaceName))) {
+      LOG(INFO) << "Overriding metric for adjacency " << req.adjNodeName.value()
+                << " " << req.interfaceName << " to " << req.overrideMetric;
+      advertiseAdjacencies(); // TODO: Use throttle here
 
     } else {
       LOG(WARNING) << "SET_ADJ_METRIC - adjacency is not yet formed for: "
-                 << req.adjNodeName.value() << " " << req.interfaceName;
+                   << req.adjNodeName.value() << " " << req.interfaceName;
     }
     break;
   }
@@ -1152,21 +1153,22 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
       LOG(INFO) << "Removing metric override for adjacency "
                 << req.adjNodeName.value() << " " << req.interfaceName;
 
-        if (adjacencies_.count(std::make_pair(req.adjNodeName.value(),
-                                                req.interfaceName))) {
-          advertiseAdjacencies();  // TODO: Use throttle here
-        }
+      if (adjacencies_.count(
+              std::make_pair(req.adjNodeName.value(), req.interfaceName))) {
+        advertiseAdjacencies(); // TODO: Use throttle here
+      }
     } else {
       LOG(WARNING) << "Got adj-metric-unset request for unknown adjacency"
-                    << req.adjNodeName.value() << " " << req.interfaceName;
+                   << req.adjNodeName.value() << " " << req.interfaceName;
     }
     break;
   }
 
   case thrift::LinkMonitorCommand::GET_VERSION: {
-
-    thrift::OpenrVersions openrVersion(apache::thrift::FRAGILE,
-              Constants::kOpenrVersion, Constants::kOpenrSupportedVersion);
+    thrift::OpenrVersions openrVersion(
+        apache::thrift::FRAGILE,
+        Constants::kOpenrVersion,
+        Constants::kOpenrSupportedVersion);
 
     return fbzmq::Message::fromThriftObj(openrVersion, serializer_);
   }
@@ -1182,7 +1184,6 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     return folly::makeUnexpected(fbzmq::Error());
   }
   return fbzmq::Message::from(Constants::kSuccessResponse.toString());
-
 }
 
 void
@@ -1250,15 +1251,14 @@ LinkMonitor::logLinkEvent(
       {sample.toJson()}));
 
   syslog(
-    LOG_NOTICE,
-    "%s",
-    folly::sformat(
-      "Interface {} is {} and has backoff of {}ms",
-      iface,
-      event,
-      backoffTime.count()
-    ).c_str()
-  );
+      LOG_NOTICE,
+      "%s",
+      folly::sformat(
+          "Interface {} is {} and has backoff of {}ms",
+          iface,
+          event,
+          backoffTime.count())
+          .c_str());
 }
 
 void

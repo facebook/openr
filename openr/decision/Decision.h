@@ -107,8 +107,9 @@ class SpfSolver {
   //
 
   // update adjacencies for the given router
-  std::pair<bool /* topology has changed*/,
-            bool /* local nextHop addrs have changed */>
+  std::pair<
+      bool /* topology has changed*/,
+      bool /* local nextHop addrs have changed */>
   updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
 
   // delete a node's adjacency database
@@ -198,8 +199,8 @@ class Decision : public OpenrEventLoop {
 
   void prepare(fbzmq::Context& zmqContext) noexcept;
 
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& request) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& request) override;
 
   // process publication from KvStore
   ProcessPublicationResult processPublication(

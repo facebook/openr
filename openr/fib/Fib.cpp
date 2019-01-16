@@ -32,8 +32,8 @@ Fib::Fib(
     const LinkMonitorGlobalPubUrl& linkMonPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::FIB, zmqContext,
-          fibRepUrl),
+    : OpenrEventLoop(
+          myNodeName, thrift::OpenrModuleType::FIB, zmqContext, fibRepUrl),
       myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),
@@ -166,7 +166,6 @@ Fib::prepare() noexcept {
         }
       });
 
-
   // We have received Interface status publication from LinkMonitor
   addSocket(
       fbzmq::RawZmqSocketPtr{*linkMonSub_}, ZMQ_POLLIN, [this](int) noexcept {
@@ -282,7 +281,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     // Find best paths
     auto const& bestValidPaths = getBestPaths(validPaths);
     std::vector<thrift::BinaryAddress> bestNexthops;
-    for (auto const& path: bestValidPaths) {
+    for (auto const& path : bestValidPaths) {
       bestNexthops.push_back(path.nextHop);
       auto& nexthop = bestNexthops.back();
       nexthop.ifName = path.ifName;
@@ -296,7 +295,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
               << ", old: " << currBestPaths.size()
               << ", new: " << bestValidPaths.size();
       routesToUpdate.emplace_back(thrift::UnicastRoute(
-        apache::thrift::FRAGILE, it->prefix, bestNexthops));
+          apache::thrift::FRAGILE, it->prefix, bestNexthops));
     }
     it->paths = validPaths;
 
@@ -326,8 +325,8 @@ Fib::dumpPerfDb() const {
 
 void
 Fib::updateRoutes(
-  const std::vector<thrift::UnicastRoute>& routesToUpdate,
-  const std::vector<thrift::IpPrefix>& prefixesToRemove) {
+    const std::vector<thrift::UnicastRoute>& routesToUpdate,
+    const std::vector<thrift::IpPrefix>& prefixesToRemove) {
   LOG(INFO) << "Processing route add/update for " << routesToUpdate.size()
             << " routes, and route delete for " << prefixesToRemove.size()
             << " prefixes";
@@ -335,8 +334,7 @@ Fib::updateRoutes(
   if (dryrun_) {
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
     for (auto const& route : routesToUpdate) {
-      VLOG(1) << "> " << toString(route.dest) << ", "
-              << route.nexthops.size();
+      VLOG(1) << "> " << toString(route.dest) << ", " << route.nexthops.size();
       for (auto const& nh : route.nexthops) {
         VLOG(1) << "  via " << toString(nh);
       }
@@ -358,7 +356,7 @@ Fib::updateRoutes(
   } else if (dirtyRouteDb_) {
     // If previous route programming attempt failed, enforce full sync
     LOG(INFO) << "Previous route programming failed, skip delta sync to enforce"
-            << " full fib sync...";
+              << " full fib sync...";
     syncRouteDbDebounced();
     return;
   }
@@ -397,8 +395,7 @@ Fib::syncRouteDb() {
   if (dryrun_) {
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
     for (auto const& route : routeDb_.routes) {
-      VLOG(1) << "> " << toString(route.prefix) << ", "
-              << route.paths.size();
+      VLOG(1) << "> " << toString(route.prefix) << ", " << route.paths.size();
       for (auto const& path : getBestPaths(route.paths)) {
         VLOG(1) << "  via " << toString(path.nextHop);
       }
@@ -457,10 +454,11 @@ Fib::keepAliveCheck() {
 }
 
 void
-Fib::createFibClient(folly::EventBase& evb,
-std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
-std::unique_ptr<thrift::FibServiceAsyncClient>& client,
-int32_t port) {
+Fib::createFibClient(
+    folly::EventBase& evb,
+    std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+    std::unique_ptr<thrift::FibServiceAsyncClient>& client,
+    int32_t port) {
   // Reset client if channel is not good
   if (socket && (!socket->good() || socket->hangup())) {
     client.reset();
@@ -567,6 +565,5 @@ Fib::logPerfEvents() {
       Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
-
 
 } // namespace openr

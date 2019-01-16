@@ -12,24 +12,24 @@
 #include <memory>
 #include <string>
 
-#include <boost/serialization/strong_typedef.hpp>
 #include <boost/heap/priority_queue.hpp>
+#include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
-#include <folly/io/IOBuf.h>
 #include <folly/TokenBucket.h>
+#include <folly/io/IOBuf.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/common/OpenrEventLoop.h>
 
 namespace openr {
 
@@ -49,41 +49,37 @@ using TtlCountdownQueue = boost::heap::priority_queue<
     TtlCountdownQueueEntry,
     // Always returns smallest first
     boost::heap::compare<std::greater<TtlCountdownQueueEntry>>,
-    boost::heap::stable<true>
-    >;
+    boost::heap::stable<true>>;
 
 // Kvstore flooding rate <messages/sec, burst size>
-using KvStoreFloodRate =
-    folly::Optional<std::pair<const size_t, const size_t>>;
+using KvStoreFloodRate = folly::Optional<std::pair<const size_t, const size_t>>;
 
 class KvStoreFilters {
-  public:
-    // takes the list of comma separated key prefixes to match,
-    // and the list of originator IDs to match in the value
-    explicit KvStoreFilters(std::vector<std::string> const& keyPrefix,
-                      std::set<std::string> const& originatorIds);
+ public:
+  // takes the list of comma separated key prefixes to match,
+  // and the list of originator IDs to match in the value
+  explicit KvStoreFilters(
+      std::vector<std::string> const& keyPrefix,
+      std::set<std::string> const& originatorIds);
 
-    // Check if key matches the filters
-    bool keyMatch(
-      std::string const& key,
-      thrift::Value const& value
-    ) const;
+  // Check if key matches the filters
+  bool keyMatch(std::string const& key, thrift::Value const& value) const;
 
-    // return comma separeated string prefix
-    std::vector<std::string> getKeyPrefixes() const;
+  // return comma separeated string prefix
+  std::vector<std::string> getKeyPrefixes() const;
 
-    // return set of origninator IDs
-    std::set<std::string> getOrigniatorIdList() const;
+  // return set of origninator IDs
+  std::set<std::string> getOrigniatorIdList() const;
 
-  private:
-    // list of string prefixes, empty list matches all keys
-    std::vector<std::string> keyPrefixList_{};
+ private:
+  // list of string prefixes, empty list matches all keys
+  std::vector<std::string> keyPrefixList_{};
 
-    // set of node IDs to match, empty set matches all nodes
-    std::set<std::string> originatorIds_{};
+  // set of node IDs to match, empty set matches all nodes
+  std::set<std::string> originatorIds_{};
 
-    // keyPrefix class to create RE2 set and to match keys
-    std::unique_ptr<KeyPrefix> keyPrefixObjList_{};
+  // keyPrefix class to create RE2 set and to match keys
+  std::unique_ptr<KeyPrefix> keyPrefixObjList_{};
 };
 
 // The class represent a server that stores KV pairs in internal map.
@@ -144,8 +140,7 @@ class KvStore final : public OpenrEventLoop {
   //        0 if equal,
   //        -2 if unknown
   // unknown can happen if value is missing (only hash is provided)
-  static int
-  compareValues(const thrift::Value& v1, const thrift::Value& v2);
+  static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
  private:
   // disable copying
@@ -166,8 +161,7 @@ class KvStore final : public OpenrEventLoop {
 
   // dump the entries of my KV store whose keys match the given prefix
   // if prefix is the empty sting, the full KV store is dumped
-  thrift::Publication dumpAllWithFilters(
-      KvStoreFilters const& kvFilters) const;
+  thrift::Publication dumpAllWithFilters(KvStoreFilters const& kvFilters) const;
 
   // dump the hashes of my KV store whose keys match the given prefix
   // if prefix is the empty sting, the full hash store is dumped
@@ -202,22 +196,19 @@ class KvStore final : public OpenrEventLoop {
   // publication => data element to flood
   // rateLimit => if 'false', publication will not be rate limited
   void floodPublication(
-      thrift::Publication&& publication,
-      bool rateLimit = true);
+      thrift::Publication&& publication, bool rateLimit = true);
 
   // update Time to expire filed in Publication
   // removeAboutToExpire: knob to remove keys which are about to expire
   // and hence do not want to include them. Constants::kTtlThreshold
   void updatePublicationTtl(
-      thrift::Publication& thriftPub,
-      bool removeAboutToExpire=false);
+      thrift::Publication& thriftPub, bool removeAboutToExpire = false);
 
   // perform last step as a 3-way full-sync request
   // full-sync initiator sends back key-val to senderId (where we made
   // full-sync request to) who need to update those keys
   void finalizeFullSync(
-      const std::vector<std::string>& keys,
-      const std::string& senderId);
+      const std::vector<std::string>& keys, const std::string& senderId);
 
   // Merge received publication with local store and publish out the delta.
   // If senderId is set, will build <key:value> map from kvStore_ and
@@ -225,14 +216,14 @@ class KvStore final : public OpenrEventLoop {
   // @return: Number of KV updates applied
   size_t mergePublication(
       thrift::Publication const& rcvdPublication,
-      folly::Optional<std::string> senderId=folly::none);
+      folly::Optional<std::string> senderId = folly::none);
 
   // process a request pending on cmdSock socket
   void processRequest(
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
 
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& msg) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& msg) override;
 
   // process received KV_DUMP from one of our neighbor
   void processSyncResponse() noexcept;
@@ -310,8 +301,9 @@ class KvStore final : public OpenrEventLoop {
   // peerAddCounter_ to uniquely identify a peering session's socket-id.
   uint64_t peerAddCounter_{0};
   std::unordered_map<
-    std::string /* node-name */,
-    std::pair<thrift::PeerSpec, std::string /* socket-id */ >> peers_;
+      std::string /* node-name */,
+      std::pair<thrift::PeerSpec, std::string /* socket-id */>>
+      peers_;
 
   // key/value filters
   folly::Optional<KvStoreFilters> filters_;
@@ -376,9 +368,8 @@ class KvStore final : public OpenrEventLoop {
   std::unique_ptr<fbzmq::ZmqTimeout> pendingPublicationTimer_{nullptr};
 
   // pending updates
-  std::unordered_map<
-      std::string,
-      folly::Optional<std::vector<std::string>>> publicationBuffer_{};
+  std::unordered_map<std::string, folly::Optional<std::vector<std::string>>>
+      publicationBuffer_{};
 };
 
 } // namespace openr

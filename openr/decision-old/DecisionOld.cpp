@@ -104,7 +104,7 @@ struct NodeData {
         << "call updateAdjacencyDb on wrong node!";
     // Check if there's any node/adjcency overload, if so trigger SPF
     bool triggerSpf = (isOverloaded != adjacencyDb.isOverloaded) or
-      (nodeLabel != adjacencyDb.nodeLabel);
+        (nodeLabel != adjacencyDb.nodeLabel);
 
     std::unordered_set<
         std::pair<std::string /* remote interface */, std::string /* node */>>
@@ -124,23 +124,25 @@ struct NodeData {
           VLOG(3) << "Adjacency exsists and is found updated";
           it = adj;
           toUpdate.push_back(
-            std::make_tuple(adj.ifName, adj.otherIfName, adj.otherNodeName));
+              std::make_tuple(adj.ifName, adj.otherIfName, adj.otherNodeName));
         }
       } else {
         // Update cached adjDb
-        VLOG(3) << "Adjacency between " << nodeName
-                << " and " << adj.otherNodeName
-                << " on interface " << remoteIfName << " is freshly inserted";
+        VLOG(3) << "Adjacency between " << nodeName << " and "
+                << adj.otherNodeName << " on interface " << remoteIfName
+                << " is freshly inserted";
         adjDb.emplace(std::make_pair(remoteIfName, adj.otherNodeName), adj);
         toUpdate.push_back(
-          std::make_tuple(adj.ifName, adj.otherIfName, adj.otherNodeName));
+            std::make_tuple(adj.ifName, adj.otherIfName, adj.otherNodeName));
       }
     }
 
     for (auto it = adjDb.begin(); it != adjDb.end();) {
       if (newAdj.count(it->first) == 0) {
         toDel.push_back(std::make_tuple(
-          it->second.ifName, it->second.otherIfName, it->second.otherNodeName));
+            it->second.ifName,
+            it->second.otherIfName,
+            it->second.otherNodeName));
         // Update cahced adjDb
         it = adjDb.erase(it);
       } else {
@@ -381,8 +383,8 @@ SpfSolverOld::SpfSolverOldImpl::updateAdjacencyDatabase(
   tData_.addStatValue("decision.adj_db_update", 1, fbzmq::COUNT);
 
   for (auto const& adj : adjacencyDb.adjacencies) {
-    VLOG(3) << "  nbr: " << adj.otherNodeName << ", remoteIfName: "
-            << getRemoteIfName(adj)
+    VLOG(3) << "  nbr: " << adj.otherNodeName
+            << ", remoteIfName: " << getRemoteIfName(adj)
             << ", ifName: " << adj.ifName << ", metric: " << adj.metric
             << ", overloaded: " << adj.isOverloaded << ", rtt: " << adj.rtt;
   }
@@ -400,11 +402,13 @@ SpfSolverOld::SpfSolverOldImpl::updateAdjacencyDatabase(
   std::vector<std::tuple<
       std::string /* local intf */,
       std::string /* remote intf */,
-      std::string /* remote node */>> toUpdate;
+      std::string /* remote node */>>
+      toUpdate;
   std::vector<std::tuple<
       std::string /* local intf */,
       std::string /* remote intf */,
-      std::string /* remote node */>> toDel;
+      std::string /* remote node */>>
+      toDel;
   // Check if there's any node/adjcency overload, if so trigger SPF
   // updateAdjacencyDb only returns true if both ends of the adjacencies are
   // bidirectionally verified
@@ -495,7 +499,8 @@ SpfSolverOld::SpfSolverOldImpl::bidirectionalAdjacencyCheck(
 }
 
 bool
-SpfSolverOld::SpfSolverOldImpl::deleteAdjacencyDatabase(const std::string& nodeName) {
+SpfSolverOld::SpfSolverOldImpl::deleteAdjacencyDatabase(
+    const std::string& nodeName) {
   auto nodeIt = nodeData_.find(nodeName);
 
   if (nodeIt == nodeData_.end()) {
@@ -557,7 +562,8 @@ SpfSolverOld::SpfSolverOldImpl::updatePrefixDatabase(
 }
 
 bool
-SpfSolverOld::SpfSolverOldImpl::deletePrefixDatabase(const std::string& nodeName) {
+SpfSolverOld::SpfSolverOldImpl::deletePrefixDatabase(
+    const std::string& nodeName) {
   auto nodeIt = nodeData_.find(nodeName);
   if (nodeIt == nodeData_.end()) {
     LOG(INFO) << "Trying to delete prefix db for nonexisting node " << nodeName;
@@ -667,8 +673,8 @@ SpfSolverOld::SpfSolverOldImpl::prepareGraph() {
           std::make_pair(otherNodeName, thisNodeName));
       if (!isBidir and !compatibleIsBidir) {
         VLOG(2) << "Failed to find matching adjacency for `" << thisNodeName
-                << "' in `" << otherNodeName
-                << "' thru interface " << thisIfName;
+                << "' in `" << otherNodeName << "' thru interface "
+                << thisIfName;
         continue;
       }
 
@@ -798,7 +804,8 @@ SpfSolverOld::SpfSolverOldImpl::runSpf(const std::string& myNodeName) {
 }
 
 thrift::RouteDatabase
-SpfSolverOld::SpfSolverOldImpl::buildShortestPaths(const std::string& myNodeName) {
+SpfSolverOld::SpfSolverOldImpl::buildShortestPaths(
+    const std::string& myNodeName) {
   VLOG(4) << "SpfSolverOld::buildShortestPaths for " << myNodeName;
 
   thrift::RouteDatabase routeDb;
@@ -821,10 +828,8 @@ SpfSolverOld::SpfSolverOldImpl::buildShortestPaths(const std::string& myNodeName
   // the smallest from them for loop-free routing
   unordered_map<
       thrift::IpPrefix, /* prefix */
-      multiset<
-          std::pair<thrift::Adjacency, Weight>,
-          NexthopAdjComparator>
-          /* adjacencies ordered by non-descreasing metric */>
+      multiset<std::pair<thrift::Adjacency, Weight>, NexthopAdjComparator>
+      /* adjacencies ordered by non-descreasing metric */>
       prefixToNextHops;
 
   for (auto const& kv : nodeData_) {
@@ -900,16 +905,17 @@ SpfSolverOld::SpfSolverOldImpl::buildMultiPaths(const std::string& myNodeName) {
 
   // reset next-hops info
   std::unordered_map<
-    std::string /* destination-node */,
-    std::map<
-        std::string /* nexthop node */,
-        Weight /* metric value from nexthop-node to destination-node */>>
-    nodeDist;
+      std::string /* destination-node */,
+      std::map<
+          std::string /* nexthop node */,
+          Weight /* metric value from nexthop-node to destination-node */>>
+      nodeDist;
 
   prepareGraph();
   auto prepareTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "DecisionOld::prepareGraph took " << prepareTime.count() << "ms.";
+  LOG(INFO) << "DecisionOld::prepareGraph took " << prepareTime.count()
+            << "ms.";
 
   auto mySpfPaths = runSpf(myNodeName);
 
@@ -982,7 +988,8 @@ SpfSolverOld::SpfSolverOldImpl::buildMultiPaths(const std::string& myNodeName) {
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "DecisionOld::buildMultiPaths took " << deltaTime.count() << "ms.";
+  LOG(INFO) << "DecisionOld::buildMultiPaths took " << deltaTime.count()
+            << "ms.";
   tData_.addStatValue(
       "decision.spf.multipath_ms", deltaTime.count(), fbzmq::AVG);
 
@@ -1075,8 +1082,7 @@ SpfSolverOld::SpfSolverOldImpl::buildRouteDb(const std::string& myNodeName) {
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "DecisionOld::buildRouteDb took " << deltaTime.count() << "ms.";
-  tData_.addStatValue(
-      "decision.route_build_ms", deltaTime.count(), fbzmq::AVG);
+  tData_.addStatValue("decision.route_build_ms", deltaTime.count(), fbzmq::AVG);
 
   return routeDb;
 } // buildRouteDb
@@ -1238,8 +1244,8 @@ DecisionOld::prepare(fbzmq::Context& zmqContext) noexcept {
       fbzmq::RawZmqSocketPtr{*storeSub_}, ZMQ_POLLIN, [this](int) noexcept {
         VLOG(3) << "DecisionOld: publication received...";
 
-        auto maybeThriftPub = storeSub_.recvThriftObj<thrift::Publication>(
-            serializer_);
+        auto maybeThriftPub =
+            storeSub_.recvThriftObj<thrift::Publication>(serializer_);
         if (maybeThriftPub.hasError()) {
           LOG(ERROR) << "Error processing KvStore publication: "
                      << maybeThriftPub.error();
@@ -1270,16 +1276,15 @@ DecisionOld::prepare(fbzmq::Context& zmqContext) noexcept {
       });
 
   auto zmqContextPtr = &zmqContext;
-  scheduleTimeout(
-      std::chrono::milliseconds(500),
-      [this, zmqContextPtr] { initialSync(*zmqContextPtr); }
-  );
+  scheduleTimeout(std::chrono::milliseconds(500), [this, zmqContextPtr] {
+    initialSync(*zmqContextPtr);
+  });
 }
 
 void
 DecisionOld::processRequest() {
-  auto maybeThriftReq = decisionRep_.recvThriftObj<thrift::DecisionRequest>(
-      serializer_);
+  auto maybeThriftReq =
+      decisionRep_.recvThriftObj<thrift::DecisionRequest>(serializer_);
   if (maybeThriftReq.hasError()) {
     LOG(ERROR) << "DecisionOld: Error processing request on REP socket: "
                << maybeThriftReq.error();
@@ -1348,7 +1353,8 @@ DecisionOld::processPublication(thrift::Publication const& thriftPub) {
     const auto& key = kv.first;
     const auto& rawVal = kv.second;
     std::string prefix, nodeName;
-    folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+    folly::split(
+        Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
 
     if (not rawVal.value.hasValue()) {
       // skip TTL update
@@ -1390,7 +1396,8 @@ DecisionOld::processPublication(thrift::Publication const& thriftPub) {
   // LSDB deletion
   for (const auto& key : thriftPub.expiredKeys) {
     std::string prefix, nodeName;
-    folly::split(Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+    folly::split(
+        Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
 
     if (key.find(adjacencyDbMarker_) == 0) {
       if (spfSolver_->deleteAdjacencyDatabase(nodeName)) {

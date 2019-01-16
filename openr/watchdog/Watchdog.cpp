@@ -7,8 +7,8 @@
 
 #include "Watchdog.h"
 
-#include <openr/common/Util.h>
 #include <openr/common/Constants.h>
+#include <openr/common/Util.h>
 #include <syslog.h>
 
 using apache::thrift::FRAGILE;
@@ -25,23 +25,20 @@ Watchdog::Watchdog(
       healthCheckThreshold_(healthCheckThreshold),
       previousStatus_(true),
       criticalMemoryMB_(criticalMemoryMB) {
-
   // Schedule periodic timer for checking thread health
   watchdogTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
     updateCounters();
     monitorMemory();
   });
-  watchdogTimer_->scheduleTimeout(
-    healthCheckInterval_, true /* isPeriodic */);
+  watchdogTimer_->scheduleTimeout(healthCheckInterval_, true /* isPeriodic */);
 }
 
 void
-Watchdog::addEvl(
-  ZmqEventLoop* evl, const std::string& name) {
-    runImmediatelyOrInEventLoop([&, evl, name]() {
-      CHECK_EQ(allEvls_.count(evl), 0);
-      allEvls_[evl] = name;
-    });
+Watchdog::addEvl(ZmqEventLoop* evl, const std::string& name) {
+  runImmediatelyOrInEventLoop([&, evl, name]() {
+    CHECK_EQ(allEvls_.count(evl), 0);
+    allEvls_[evl] = name;
+  });
 }
 
 void
@@ -61,9 +58,9 @@ void
 Watchdog::monitorMemory() {
   auto memInUse_ = resourceMonitor_.getRSSMemBytes();
   if (not memInUse_.hasValue()) {
-     return;
+    return;
   }
-  if (memInUse_.value()/1e6 > criticalMemoryMB_) {
+  if (memInUse_.value() / 1e6 > criticalMemoryMB_) {
     LOG(WARNING) << "Memory usage critical:" << memInUse_.value() << " bytes,"
                  << " Memory limit:" << criticalMemoryMB_ << " MB";
     if (not memExceedTime_.hasValue()) {
@@ -72,17 +69,19 @@ Watchdog::monitorMemory() {
     }
     // check for sustained critical memory usage
     if (std::chrono::steady_clock::now() - memExceedTime_.value() >
-      Constants::kMemoryThresholdTime) {
-          std::string msg = folly::sformat(
+        Constants::kMemoryThresholdTime) {
+      std::string msg = folly::sformat(
           "Memory limit exceeded the permitted limit."
           " Mem used:{}."
-          " Mem Limit:{}", memInUse_.value(), criticalMemoryMB_);
+          " Mem Limit:{}",
+          memInUse_.value(),
+          criticalMemoryMB_);
       fireCrash(msg);
     }
     return;
   }
   if (memExceedTime_.hasValue()) {
-   memExceedTime_ = folly::none;
+    memExceedTime_ = folly::none;
   }
 }
 
@@ -113,7 +112,9 @@ Watchdog::updateCounters() {
   if (stuckThreads.size() and !previousStatus_) {
     std::string msg = folly::sformat(
         "OpenR DeadThreadDetector: Thread {} on {} is detected dead. "
-        "Triggering crash.", folly::join(", ", stuckThreads), myNodeName_);
+        "Triggering crash.",
+        folly::join(", ", stuckThreads),
+        myNodeName_);
     fireCrash(msg);
   }
 
@@ -125,7 +126,7 @@ Watchdog::updateCounters() {
 }
 
 void
-Watchdog::fireCrash(const std::string &msg) {
+Watchdog::fireCrash(const std::string& msg) {
   LOG(WARNING) << msg;
   syslog(LOG_ALERT, "%s", msg.c_str());
   // hell ya!

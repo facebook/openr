@@ -153,8 +153,7 @@ class NetlinkSocket {
   };
 
   explicit NetlinkSocket(
-      fbzmq::ZmqEventLoop* evl,
-      EventsHandler* handler = nullptr);
+      fbzmq::ZmqEventLoop* evl, EventsHandler* handler = nullptr);
 
   virtual ~NetlinkSocket();
 
@@ -349,7 +348,7 @@ class NetlinkSocket {
       nl_object* obj, int action, bool runHandler) noexcept;
 
   void doUpdateRouteCache(
-      struct rtnl_route* obj, int action, bool updateUnicastRoute=false);
+      struct rtnl_route* obj, int action, bool updateUnicastRoute = false);
 
   void doAddUpdateUnicastRoute(Route route);
 

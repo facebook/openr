@@ -1,9 +1,9 @@
 /**
-* Copyright (c) 2014-present, Facebook, Inc.
-*
-* This source code is licensed under the MIT license found in the
-* LICENSE file in the root directory of this source tree.
-*/
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #pragma once
 
@@ -12,7 +12,6 @@
 #include <folly/Expected.h>
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
-
 
 namespace openr {
 
@@ -29,11 +28,11 @@ namespace openr {
 
 class OpenrEventLoop : public fbzmq::ZmqEventLoop {
  public:
-   const thrift::OpenrModuleType moduleType;
-   const std::string moduleName;
-   const std::string inprocCmdUrl;
-   const folly::Optional<std::string> tcpCmdUrl;
-   const folly::Optional<std::string> ipcCmdUrl;
+  const thrift::OpenrModuleType moduleType;
+  const std::string moduleName;
+  const std::string inprocCmdUrl;
+  const folly::Optional<std::string> tcpCmdUrl;
+  const folly::Optional<std::string> ipcCmdUrl;
 
  protected:
   OpenrEventLoop(
@@ -50,18 +49,16 @@ class OpenrEventLoop : public fbzmq::ZmqEventLoop {
   OpenrEventLoop(OpenrEventLoop const&) = delete;
   OpenrEventLoop& operator=(OpenrEventLoop const&) = delete;
 
-  void
-  prepareSocket(
+  void prepareSocket(
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
       std::string url,
       const std::vector<std::pair<int, int>>& socketOptions);
 
-  void
-  processCmdSocketRequest(
+  void processCmdSocketRequest(
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
 
-  virtual folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& request) = 0;
+  virtual folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& request) = 0;
 
   // For backward compatibility, we are preserving the endpoints that the
   // modules previously had. All had inproc sockets while some also had tpc or

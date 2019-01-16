@@ -16,44 +16,36 @@
 namespace openr {
 
 KvStoreAgent::KvStoreAgent(
-  fbzmq::Context& zmqContext,
-  std::string nodeId,
-  std::string kvStoreCmdUrl,
-  std::string kvStorePubUrl) {
-
+    fbzmq::Context& zmqContext,
+    std::string nodeId,
+    std::string kvStoreCmdUrl,
+    std::string kvStorePubUrl) {
   kvStoreClient_ = std::make_unique<KvStoreClient>(
       zmqContext, this, nodeId, kvStoreCmdUrl, kvStorePubUrl);
 
   // set a call back so we can keep track of other keys with the prefix we
   // care about
   kvStoreClient_->setKvCallback(
-      [this, nodeId]
-      (const std::string& key, const folly::Optional<thrift::Value>& value) {
+      [this, nodeId](
+          const std::string& key, const folly::Optional<thrift::Value>& value) {
         if (0 == key.find(agentKeyPrefix) &&
-            value.value().originatorId != nodeId &&
-            value.value().value) {
+            value.value().originatorId != nodeId && value.value().value) {
           // Lets check out what some other node's value is
-          LOG(INFO) << "Got data from: "
-                    << value.value().originatorId
-                    << " Data: "
-                    << value.value().value.value();
+          LOG(INFO) << "Got data from: " << value.value().originatorId
+                    << " Data: " << value.value().value.value();
         }
       });
 
   // every once in a while, we need to change our value
-  periodicValueChanger_ = fbzmq::ZmqTimeout::make(
-    this,
-    [this, nodeId]() noexcept {
-      std::srand(std::time(0));
-      this->kvStoreClient_->persistKey(
-        agentKeyPrefix + nodeId,
-        std::to_string(std::rand()));
-    });
+  periodicValueChanger_ =
+      fbzmq::ZmqTimeout::make(this, [this, nodeId]() noexcept {
+        std::srand(std::time(0));
+        this->kvStoreClient_->persistKey(
+            agentKeyPrefix + nodeId, std::to_string(std::rand()));
+      });
 
   periodicValueChanger_->scheduleTimeout(
-    std::chrono::seconds(60), true /* isPeriodic */);
-
+      std::chrono::seconds(60), true /* isPeriodic */);
 }
-
 
 } // namespace openr

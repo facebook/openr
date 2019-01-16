@@ -180,7 +180,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   if (!shouldOwnOther && !shouldOwnMine) {
     VLOG(1) << "RangeAllocator: failed to allocate " << newVal << " bcoz of "
             << maybeThriftVal->originatorId;
-            scheduleAllocate(newVal);
+    scheduleAllocate(newVal);
     return;
   }
   // check if prefix index is already in use
@@ -224,12 +224,14 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   // Subscribe to updates of this newKey
   kvStoreClient_->subscribeKey(
       newKey,
-      [this](const std::string& key,
+      [this](
+          const std::string& key,
           folly::Optional<thrift::Value> thriftVal) noexcept {
         if (thriftVal.hasValue()) {
           keyValUpdated(key, thriftVal.value());
         }
-      }, false);
+      },
+      false);
 }
 
 template <typename T>

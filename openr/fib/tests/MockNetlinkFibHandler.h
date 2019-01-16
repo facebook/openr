@@ -21,8 +21,8 @@
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/FibService.h>
+#include <openr/if/gen-cpp2/Fib_types.h>
 
 namespace openr {
 

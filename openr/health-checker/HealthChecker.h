@@ -23,13 +23,13 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/HealthChecker_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClient.h>
-#include <openr/common/OpenrEventLoop.h>
 
 namespace openr {
 
@@ -87,8 +87,8 @@ class HealthChecker final : public OpenrEventLoop {
   void processMessage();
   void processRequest();
 
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& msg) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& msg) override;
 
   void printInfo();
   void submitCounters();

@@ -22,12 +22,12 @@
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Spark_types.h>
-#include <openr/common/OpenrEventLoop.h>
 #include <openr/spark/IoProvider.h>
 
 namespace openr {
@@ -115,8 +115,8 @@ class Spark final : public OpenrEventLoop {
   // originate my hello packet on given interface
   void sendHelloPacket(std::string const& ifName, bool inFastInitState = false);
 
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& request) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& request) override;
 
   // find an interface name in the interfaceDb given an ifIndex
   folly::Optional<std::string> findInterfaceFromIfindex(int ifIndex);
@@ -193,7 +193,8 @@ class Spark final : public OpenrEventLoop {
         int ifIndex,
         const folly::CIDRNetwork& v4Network,
         const folly::CIDRNetwork& v6LinkLocalNetwork)
-        : ifIndex(ifIndex), v4Network(v4Network),
+        : ifIndex(ifIndex),
+          v4Network(v4Network),
           v6LinkLocalNetwork(v6LinkLocalNetwork) {}
 
     bool

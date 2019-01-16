@@ -5,11 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <folly/ExceptionString.h>
 #include <folly/io/async/SSLContext.h>
 #include <folly/io/async/ssl/OpenSSLUtils.h>
 #include <openr/common/Constants.h>
-#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 namespace openr {
@@ -27,7 +27,6 @@ OpenrCtrlHandler::OpenrCtrlHandler(
       autheticatePeerCommonName_(autheticatePeerCommonName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
       moduleTypeToEvl_(moduleTypeToEvl) {
-
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(context, monitorSubmitUrl);
 
@@ -35,10 +34,10 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     auto moduleType = kv.first;
     auto& inprocUrl = kv.second->inprocCmdUrl;
     auto result = moduleSockets_.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(moduleType),
-      std::forward_as_tuple(
-        context, folly::none, folly::none, fbzmq::NonblockingFlag{false}));
+        std::piecewise_construct,
+        std::forward_as_tuple(moduleType),
+        std::forward_as_tuple(
+            context, folly::none, folly::none, fbzmq::NonblockingFlag{false}));
     auto& sock = result.first->second;
     int enabled = 1;
     // if we do not get a reply within the timeout, we reset the state
@@ -67,9 +66,9 @@ OpenrCtrlHandler::authenticateConnection() {
     sample.addString("node_name", nodeName_);
 
     auto header = connContext->getHeader();
-    sample.addString("client_name",
+    sample.addString(
+        "client_name",
         nullptr == header ? "unknown" : header->getPeerIdentity());
-
 
     zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
         apache::thrift::FRAGILE,
@@ -97,9 +96,11 @@ OpenrCtrlHandler::command(
   try {
     auto& sock = moduleSockets_.at(type);
     sock.sendOne(fbzmq::Message::from(*request).value()).value();
-    response =
-      sock.recvOne(Constants::kReadTimeout).value().read<std::string>().value();
-  } catch(const std::out_of_range& e) {
+    response = sock.recvOne(Constants::kReadTimeout)
+                   .value()
+                   .read<std::string>()
+                   .value();
+  } catch (const std::out_of_range& e) {
     auto error = folly::sformat("Unknown module: {}", static_cast<int>(type));
     LOG(ERROR) << error;
     throw thrift::OpenrError(error);

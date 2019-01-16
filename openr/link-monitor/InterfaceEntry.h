@@ -30,7 +30,6 @@ namespace openr {
  */
 class InterfaceEntry final {
  public:
-
   InterfaceEntry(
       std::string const& ifName,
       std::chrono::milliseconds const& initBackoff,
@@ -105,8 +104,8 @@ class InterfaceEntry final {
   std::unordered_set<folly::IPAddress> getV6LinkLocalAddrs() const;
 
   // Utility function to retrieve re-distribute addresses
-  std::vector<thrift::PrefixEntry>
-  getGlobalUnicastNetworks(bool enableV4) const;
+  std::vector<thrift::PrefixEntry> getGlobalUnicastNetworks(
+      bool enableV4) const;
 
   // Create the Interface info for Interface request
   thrift::InterfaceInfo getInterfaceInfo() const;

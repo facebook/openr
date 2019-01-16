@@ -56,7 +56,6 @@ class PlatformPublisher final : public fbnl::NetlinkSocket::EventsHandler {
   void stop();
 
  private:
-
   // Override method for NetlinkSocket link/address/neighbor events
   void linkEventFunc(
       const std::string& ifName,

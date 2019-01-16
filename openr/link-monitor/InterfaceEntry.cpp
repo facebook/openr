@@ -18,8 +18,8 @@ InterfaceEntry::InterfaceEntry(
     std::chrono::milliseconds const& initBackoff,
     std::chrono::milliseconds const& maxBackoff,
     fbzmq::ZmqThrottle& updateCallback,
-    fbzmq::ZmqTimeout& updateTimeout):
-      ifName_(ifName),
+    fbzmq::ZmqTimeout& updateTimeout)
+    : ifName_(ifName),
       backoff_(initBackoff, maxBackoff),
       updateCallback_(updateCallback),
       updateTimeout_(updateTimeout) {}
@@ -83,8 +83,8 @@ InterfaceEntry::updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid) {
   if (isUpdated) {
     VLOG(1) << (isValid ? "Adding " : "Deleting ")
             << folly::sformat("{}/{}", ipNetwork.first.str(), ipNetwork.second)
-            << " on interface " << ifName_ << ", status: "
-            << (isUp() ? "UP" : "DOWN");
+            << " on interface " << ifName_
+            << ", status: " << (isUp() ? "UP" : "DOWN");
   }
 
   if (isUpdated and isActive()) {
@@ -110,7 +110,7 @@ InterfaceEntry::getV6LinkLocalAddrs() const {
   std::unordered_set<folly::IPAddress> v6Addrs;
   for (auto const& ntwk : networks_) {
     if (ntwk.first.isV6() && ntwk.first.isLinkLocal()) {
-        v6Addrs.insert(ntwk.first);
+      v6Addrs.insert(ntwk.first);
     }
   }
   return v6Addrs;
@@ -132,10 +132,10 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
     }
 
     prefixes.emplace_back(
-      apache::thrift::FRAGILE,
-      toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second)),
-      thrift::PrefixType::LOOPBACK,
-      "");
+        apache::thrift::FRAGILE,
+        toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second)),
+        thrift::PrefixType::LOOPBACK,
+        "");
   }
 
   return prefixes;
@@ -143,7 +143,6 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
 
 thrift::InterfaceInfo
 InterfaceEntry::getInterfaceInfo() const {
-
   std::vector<thrift::IpPrefix> networks;
   for (const auto& network : networks_) {
     networks.emplace_back(toIpPrefix(network));
@@ -155,18 +154,14 @@ InterfaceEntry::getInterfaceInfo() const {
       ifIndex_,
       // TO BE DEPERECATED SOON
       folly::gen::from(getV4Addrs()) |
-        folly::gen::map(
-          [](const folly::IPAddress& ip) {
-            return toBinaryAddress(ip);
-          }) |
-        folly::gen::as<std::vector>(),
+          folly::gen::map(
+              [](const folly::IPAddress& ip) { return toBinaryAddress(ip); }) |
+          folly::gen::as<std::vector>(),
       // TO BE DEPRECATED SOON
       folly::gen::from(getV6LinkLocalAddrs()) |
-        folly::gen::map(
-          [](const folly::IPAddress& ip) {
-            return toBinaryAddress(ip);
-          }) |
-        folly::gen::as<std::vector>(),
+          folly::gen::map(
+              [](const folly::IPAddress& ip) { return toBinaryAddress(ip); }) |
+          folly::gen::as<std::vector>(),
       networks);
 }
 

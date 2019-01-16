@@ -51,8 +51,8 @@ class PrefixManager final : public OpenrEventLoop {
  private:
   void persistPrefixDb();
 
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& request) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& request) override;
 
   // helpers to modify prefix db, returns true if the db is modified
   void addOrUpdatePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
@@ -66,7 +66,7 @@ class PrefixManager final : public OpenrEventLoop {
   // Submit internal state counters to monitor
   void submitCounters();
 
-  //prefix counter for a given key
+  // prefix counter for a given key
   int64_t getCounter(const std::string& key);
 
   // this node name

@@ -64,10 +64,10 @@ KeyPrefix::KeyPrefix(std::vector<std::string> const& keyPrefixList) {
   re2::RE2::Options re2Options;
   re2Options.set_case_sensitive(true);
   keyPrefix_ =
-    std::make_unique<re2::RE2::Set>(re2Options, re2::RE2::ANCHOR_START);
+      std::make_unique<re2::RE2::Set>(re2Options, re2::RE2::ANCHOR_START);
   std::string re2AddError{};
 
-  for (auto const& keyPrefix: keyPrefixList) {
+  for (auto const& keyPrefix : keyPrefixList) {
     if (keyPrefix_->Add(keyPrefix, &re2AddError) < 0) {
       LOG(FATAL) << "Failed to add prefixes to RE2 set: '" << keyPrefix << "', "
                  << "error: '" << re2AddError << "'";
@@ -75,13 +75,14 @@ KeyPrefix::KeyPrefix(std::vector<std::string> const& keyPrefixList) {
     }
   }
   if (!keyPrefix_->Compile()) {
-    LOG(FATAL) << "Failed to compile re2 set" ;
+    LOG(FATAL) << "Failed to compile re2 set";
     keyPrefix_.reset();
   }
 }
 
 // match the key with the list of prefixes
-bool KeyPrefix::keyMatch(std::string const& key) const {
+bool
+KeyPrefix::keyMatch(std::string const& key) const {
   if (!keyPrefix_) {
     return true;
   }
@@ -145,8 +146,7 @@ executeShellCommand(const std::string& command) {
 
 bool
 matchRegexSet(
-    const std::string& name,
-    const std::unique_ptr<re2::RE2::Set>& regexSet) {
+    const std::string& name, const std::unique_ptr<re2::RE2::Set>& regexSet) {
   if (!regexSet) {
     return false;
   }
@@ -155,16 +155,15 @@ matchRegexSet(
   return regexSet->Match(name, &matches);
 }
 
-bool checkIncludeExcludeRegex(
+bool
+checkIncludeExcludeRegex(
     const std::string& name,
     const std::unique_ptr<re2::RE2::Set>& includeRegexSet,
     const std::unique_ptr<re2::RE2::Set>& excludeRegexSet) {
   return (
-    not matchRegexSet(name, excludeRegexSet) and
-    matchRegexSet(name, includeRegexSet)
-  );
+      not matchRegexSet(name, excludeRegexSet) and
+      matchRegexSet(name, includeRegexSet));
 }
-
 
 std::vector<std::string>
 splitByComma(const std::string& input) {
@@ -175,7 +174,8 @@ splitByComma(const std::string& input) {
 }
 
 // TODO remove once transitioned to cpp17
-bool fileExists(const std::string& path) {
+bool
+fileExists(const std::string& path) {
   int fd = ::open(path.c_str(), O_RDONLY);
   SCOPE_EXIT {
     ::close(fd);
@@ -190,10 +190,10 @@ createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept {
   // Set last bit to `1` if prefix length is not full
   if (prefix.second != prefix.first.bitCount()) {
     auto bytes = std::string(
-      reinterpret_cast<const char*>(addr.bytes()), addr.byteCount());
-    bytes[bytes.size() - 1] |= 0x01;    // Set last bit to 1
+        reinterpret_cast<const char*>(addr.bytes()), addr.byteCount());
+    bytes[bytes.size() - 1] |= 0x01; // Set last bit to 1
     addr = folly::IPAddress::fromBinary(folly::ByteRange(
-      reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()));
+        reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()));
   }
 
   return addr;
@@ -261,15 +261,15 @@ maskToPrefixLen(const struct sockaddr_in* mask) {
 // bit position starts from 0
 uint32_t
 bitStrValue(const folly::IPAddress& ip, uint32_t start, uint32_t end) {
-    uint32_t index{0};
-    CHECK_GE(start, 0);
-    CHECK_LE(start, end);
-    // 0 based index
-    for (uint32_t i = start; i <= end; i++) {
-      index <<= 1;
-      index |= ip.getNthMSBit(i);
-    }
-    return index;
+  uint32_t index{0};
+  CHECK_GE(start, 0);
+  CHECK_LE(start, end);
+  // 0 based index
+  for (uint32_t i = start; i <= end; i++) {
+    index <<= 1;
+    index |= ip.getNthMSBit(i);
+  }
+  return index;
 }
 
 std::vector<folly::CIDRNetwork>
@@ -293,8 +293,7 @@ getIfacePrefixes(std::string ifName, sa_family_t afNet) {
   int prefixLength{0};
 
   for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
-    if (::strcmp(ifName.c_str(), ifa->ifa_name) ||
-        ifa->ifa_addr == nullptr ||
+    if (::strcmp(ifName.c_str(), ifa->ifa_name) || ifa->ifa_addr == nullptr ||
         (afNet != AF_UNSPEC && ifa->ifa_addr->sa_family != afNet)) {
       continue;
     }
@@ -308,8 +307,7 @@ getIfacePrefixes(std::string ifName, sa_family_t afNet) {
       if (ifaceAddr.isLoopback() or ifaceAddr.isLinkLocal()) {
         continue;
       }
-      results.emplace_back(
-          folly::CIDRNetwork{ifaceAddr, prefixLength});
+      results.emplace_back(folly::CIDRNetwork{ifaceAddr, prefixLength});
     }
     if (ifa->ifa_addr->sa_family == AF_INET) {
       struct in_addr ip;
@@ -322,8 +320,7 @@ getIfacePrefixes(std::string ifName, sa_family_t afNet) {
       if (ifaceAddr.isLoopback()) {
         continue;
       }
-      results.emplace_back(
-          folly::CIDRNetwork{ifaceAddr, prefixLength});
+      results.emplace_back(folly::CIDRNetwork{ifaceAddr, prefixLength});
     }
   }
   return results;
@@ -337,8 +334,8 @@ getNthPrefix(
   // get underlying byte array representing IP
   const uint32_t bitCount = seedPrefix.first.bitCount();
   auto ipBytes = std::string(
-    reinterpret_cast<const char*>(seedPrefix.first.bytes()),
-    seedPrefix.first.byteCount());
+      reinterpret_cast<const char*>(seedPrefix.first.bytes()),
+      seedPrefix.first.byteCount());
 
   // host number bit length
   // in seed prefix
@@ -347,8 +344,8 @@ getNthPrefix(
   const uint32_t allocHostBitLen = bitCount - allocPrefixLen;
 
   // sanity check
-  const int32_t allocBits = std::min(
-      32, static_cast<int32_t>(seedHostBitLen - allocHostBitLen));
+  const int32_t allocBits =
+      std::min(32, static_cast<int32_t>(seedHostBitLen - allocHostBitLen));
   if (allocBits < 0) {
     throw std::invalid_argument("Alloc prefix is bigger than seed prefix.");
   }
@@ -376,7 +373,7 @@ getNthPrefix(
 
   // convert back to CIDR
   auto allocPrefixIp = folly::IPAddress::fromBinary(folly::ByteRange(
-        reinterpret_cast<const uint8_t*>(ipBytes.data()), ipBytes.size()));
+      reinterpret_cast<const uint8_t*>(ipBytes.data()), ipBytes.size()));
   return {allocPrefixIp.mask(allocPrefixLen), allocPrefixLen};
 }
 
@@ -483,8 +480,7 @@ getBestPaths(std::vector<thrift::Path> const& paths) {
 }
 
 std::vector<thrift::UnicastRoute>
-createUnicastRoutes(
-    const std::vector<thrift::Route>& routes) {
+createUnicastRoutes(const std::vector<thrift::Route>& routes) {
   // Build routes to be programmed.
   std::vector<thrift::UnicastRoute> newRoutes;
 
@@ -506,24 +502,28 @@ createUnicastRoutes(
 
 std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
 findDeltaRoutes(
-  const thrift::RouteDatabase& newRouteDb,
-  const thrift::RouteDatabase& oldRouteDb) {
-  std::pair<
-    std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>> res;
+    const thrift::RouteDatabase& newRouteDb,
+    const thrift::RouteDatabase& oldRouteDb) {
+  std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
+      res;
 
   DCHECK(newRouteDb.thisNodeName == oldRouteDb.thisNodeName);
 
   // Find new routes to be added/updated/removed
   std::vector<thrift::Route> routesToAddUpdate;
   std::set_difference(
-    newRouteDb.routes.begin(), newRouteDb.routes.end(),
-    oldRouteDb.routes.begin(), oldRouteDb.routes.end(),
-    std::inserter(routesToAddUpdate, routesToAddUpdate.begin()));
+      newRouteDb.routes.begin(),
+      newRouteDb.routes.end(),
+      oldRouteDb.routes.begin(),
+      oldRouteDb.routes.end(),
+      std::inserter(routesToAddUpdate, routesToAddUpdate.begin()));
   std::vector<thrift::Route> routesToRemoveOrUpdate;
   std::set_difference(
-    oldRouteDb.routes.begin(), oldRouteDb.routes.end(),
-    newRouteDb.routes.begin(), newRouteDb.routes.end(),
-    std::inserter(routesToRemoveOrUpdate, routesToRemoveOrUpdate.begin()));
+      oldRouteDb.routes.begin(),
+      oldRouteDb.routes.end(),
+      newRouteDb.routes.begin(),
+      newRouteDb.routes.end(),
+      std::inserter(routesToRemoveOrUpdate, routesToRemoveOrUpdate.begin()));
 
   // Find entry of prefix to be removed
   std::set<thrift::IpPrefix> prefixesToRemove;
@@ -543,26 +543,25 @@ findDeltaRoutes(
 
 thrift::BuildInfo
 getBuildInfoThrift() noexcept {
- return thrift::BuildInfo(
-   apache::thrift::FRAGILE,
-   BuildInfo::getBuildUser(),
-   BuildInfo::getBuildTime(),
-   static_cast<int64_t>(BuildInfo::getBuildTimeUnix()),
-   BuildInfo::getBuildHost(),
-   BuildInfo::getBuildPath(),
-   BuildInfo::getBuildRevision(),
-   static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix()),
-   BuildInfo::getBuildUpstreamRevision(),
-   BuildInfo::getBuildUpstreamRevisionCommitTimeUnix(),
-   BuildInfo::getBuildPackageName(),
-   BuildInfo::getBuildPackageVersion(),
-   BuildInfo::getBuildPackageRelease(),
-   BuildInfo::getBuildPlatform(),
-   BuildInfo::getBuildRule(),
-   BuildInfo::getBuildType(),
-   BuildInfo::getBuildTool(),
-   BuildInfo::getBuildMode()
- );
+  return thrift::BuildInfo(
+      apache::thrift::FRAGILE,
+      BuildInfo::getBuildUser(),
+      BuildInfo::getBuildTime(),
+      static_cast<int64_t>(BuildInfo::getBuildTimeUnix()),
+      BuildInfo::getBuildHost(),
+      BuildInfo::getBuildPath(),
+      BuildInfo::getBuildRevision(),
+      static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix()),
+      BuildInfo::getBuildUpstreamRevision(),
+      BuildInfo::getBuildUpstreamRevisionCommitTimeUnix(),
+      BuildInfo::getBuildPackageName(),
+      BuildInfo::getBuildPackageVersion(),
+      BuildInfo::getBuildPackageRelease(),
+      BuildInfo::getBuildPlatform(),
+      BuildInfo::getBuildRule(),
+      BuildInfo::getBuildType(),
+      BuildInfo::getBuildTool(),
+      BuildInfo::getBuildMode());
 }
 
 folly::IPAddress
@@ -571,10 +570,11 @@ toIPAddress(const thrift::fbbinary& binAddr) {
       reinterpret_cast<const uint8_t*>(binAddr.data()), binAddr.size()));
 }
 
-folly::Optional<std::string> maybeGetTcpEndpoint(
-    const std::string& addr, const int32_t port) {
-  return (-1 == port) ? folly::none : folly::Optional<std::string>{
-    folly::sformat("tcp://{}:{}", addr, port)};
+folly::Optional<std::string>
+maybeGetTcpEndpoint(const std::string& addr, const int32_t port) {
+  return (-1 == port)
+      ? folly::none
+      : folly::Optional<std::string>{folly::sformat("tcp://{}:{}", addr, port)};
 }
 
 } // namespace openr

@@ -35,15 +35,17 @@ PrefixManager::PrefixManager(
     bool enablePerfMeasurement,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::PREFIX_MANAGER,
-        zmqContext, globalCmdUrl),
+    : OpenrEventLoop(
+          nodeId,
+          thrift::OpenrModuleType::PREFIX_MANAGER,
+          zmqContext,
+          globalCmdUrl),
       nodeId_(nodeId),
       configStoreClient_{persistentStoreUrl, zmqContext},
       prefixDbMarker_{prefixDbMarker},
       enablePerfMeasurement_{enablePerfMeasurement},
       kvStoreClient_{
           zmqContext, this, nodeId_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl} {
-
   // pick up prefixes from disk
   auto maybePrefixDb =
       configStoreClient_.loadThriftObj<thrift::PrefixDatabase>(kConfigKey);
@@ -64,7 +66,6 @@ PrefixManager::PrefixManager(
   monitorTimer_ =
       fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
-
 }
 
 void
@@ -171,7 +172,6 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
   }
 
   return fbzmq::Message::fromThriftObj(response, serializer_);
-
 }
 
 void
@@ -217,9 +217,10 @@ void
 PrefixManager::addOrUpdatePrefixes(
     const std::vector<thrift::PrefixEntry>& prefixes) {
   for (const auto& prefix : prefixes) {
-    LOG(INFO)
-      << "Advertising prefix " << toString(prefix.prefix) << ", client: "
-      << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(prefix.type);
+    LOG(INFO) << "Advertising prefix " << toString(prefix.prefix)
+              << ", client: "
+              << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
+                     prefix.type);
     prefixMap_[prefix.prefix] = prefix;
   }
 }
@@ -230,9 +231,10 @@ PrefixManager::removePrefixes(
   bool fail{false};
 
   for (const auto& prefix : prefixes) {
-    LOG(INFO)
-      << "Withdrawing prefix " << toString(prefix.prefix) << ", client: "
-      << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(prefix.type);
+    LOG(INFO) << "Withdrawing prefix " << toString(prefix.prefix)
+              << ", client: "
+              << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
+                     prefix.type);
     fail = prefixMap_.erase(prefix.prefix) > 0 or fail;
   }
   return fail;

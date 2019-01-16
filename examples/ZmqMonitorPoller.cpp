@@ -14,12 +14,12 @@
 namespace openr {
 
 ZmqMonitorPoller::ZmqMonitorPoller(
-  std::vector<fbzmq::SocketUrl>& counterUrls,
-  std::vector<fbzmq::SocketUrl>& logSubscriberUrls,
-  fbzmq::Context& zmqContext)
-: counterUrls_(counterUrls),
-  zmqContext_(zmqContext),
-  zmqSubscriber_(zmqContext) {
+    std::vector<fbzmq::SocketUrl>& counterUrls,
+    std::vector<fbzmq::SocketUrl>& logSubscriberUrls,
+    fbzmq::Context& zmqContext)
+    : counterUrls_(counterUrls),
+      zmqContext_(zmqContext),
+      zmqSubscriber_(zmqContext) {
   // set up listener for log publications
   for (const auto& url : logSubscriberUrls) {
     auto rc = zmqSubscriber_.connect(url);
@@ -31,29 +31,24 @@ ZmqMonitorPoller::ZmqMonitorPoller(
   // subscribe
   zmqSubscriber_.setSockOpt(ZMQ_SUBSCRIBE, "", 0).value();
   addSocket(
-    fbzmq::RawZmqSocketPtr{*zmqSubscriber_},
-    ZMQ_POLLIN,
-    [this](int /* revents */) noexcept {
-      recvPublication();
-    }
-  );
+      fbzmq::RawZmqSocketPtr{*zmqSubscriber_},
+      ZMQ_POLLIN,
+      [this](int /* revents */) noexcept { recvPublication(); });
 
   // set periodic timer to collect counters
-  periodicCounterTimeout_ =
-    fbzmq::ZmqTimeout::make(this, [this]() noexcept {
-      for (const auto& url: counterUrls_) {
-        getZmqMonitorCounters(url);
-      }
-    });
+  periodicCounterTimeout_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+    for (const auto& url : counterUrls_) {
+      getZmqMonitorCounters(url);
+    }
+  });
 
   periodicCounterTimeout_->scheduleTimeout(
-    std::chrono::seconds(60), true /* isPeriodic */);
+      std::chrono::seconds(60), true /* isPeriodic */);
 }
 
 void
 ZmqMonitorPoller::recvPublication() {
-  auto maybePub =
-    zmqSubscriber_.recvThriftObj<fbzmq::thrift::MonitorPub>(
+  auto maybePub = zmqSubscriber_.recvThriftObj<fbzmq::thrift::MonitorPub>(
       compactSerializer_);
   if (maybePub.hasError()) {
     LOG(ERROR) << "Failed to recv publication on zmqSubscriber_: "
@@ -85,8 +80,9 @@ ZmqMonitorPoller::getZmqMonitorCounters(const fbzmq::SocketUrl& zmqUrl) {
   request.cmd = fbzmq::thrift::MonitorCommand::DUMP_ALL_COUNTER_DATA;
   dealerSock.sendThriftObj(request, compactSerializer_);
 
-  auto maybeResult = dealerSock.recvThriftObj<
-    fbzmq::thrift::CounterValuesResponse>(compactSerializer_);
+  auto maybeResult =
+      dealerSock.recvThriftObj<fbzmq::thrift::CounterValuesResponse>(
+          compactSerializer_);
   if (maybeResult.hasError()) {
     LOG(ERROR) << "Failed getting counters from openr. Error: "
                << maybeResult.error();

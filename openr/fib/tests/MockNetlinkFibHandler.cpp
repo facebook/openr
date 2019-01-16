@@ -60,9 +60,8 @@ MockNetlinkFibHandler::deleteUnicastRoute(
     int16_t, std::unique_ptr<openr::thrift::IpPrefix> prefix) {
   SYNCHRONIZED(unicastRouteDb_) {
     VLOG(3) << "Deleting routes of prefix" << toString(*prefix);
-    auto myPrefix =
-        std::make_pair(
-          toIPAddress((*prefix).prefixAddress), (*prefix).prefixLength);
+    auto myPrefix = std::make_pair(
+        toIPAddress((*prefix).prefixAddress), (*prefix).prefixLength);
 
     unicastRouteDb_.erase(myPrefix);
   }
@@ -70,8 +69,7 @@ MockNetlinkFibHandler::deleteUnicastRoute(
 
 void
 MockNetlinkFibHandler::addUnicastRoutes(
-    int16_t,
-    std::unique_ptr<std::vector<openr::thrift::UnicastRoute>> routes) {
+    int16_t, std::unique_ptr<std::vector<openr::thrift::UnicastRoute>> routes) {
   SYNCHRONIZED(unicastRouteDb_) {
     for (auto const& route : *routes) {
       auto prefix = std::make_pair(
@@ -93,8 +91,7 @@ MockNetlinkFibHandler::addUnicastRoutes(
 
 void
 MockNetlinkFibHandler::deleteUnicastRoutes(
-    int16_t,
-    std::unique_ptr<std::vector<openr::thrift::IpPrefix>> prefixes) {
+    int16_t, std::unique_ptr<std::vector<openr::thrift::IpPrefix>> prefixes) {
   SYNCHRONIZED(unicastRouteDb_) {
     for (auto const& prefix : *prefixes) {
       auto myPrefix = std::make_pair(
@@ -110,11 +107,10 @@ MockNetlinkFibHandler::deleteUnicastRoutes(
 
 void
 MockNetlinkFibHandler::syncFib(
-    int16_t,
-    std::unique_ptr<std::vector<openr::thrift::UnicastRoute>> routes) {
+    int16_t, std::unique_ptr<std::vector<openr::thrift::UnicastRoute>> routes) {
   SYNCHRONIZED(unicastRouteDb_) {
-    VLOG(3) << "MockNetlinkFibHandler: Sync Fib.... "
-            << (*routes).size() << " entries";
+    VLOG(3) << "MockNetlinkFibHandler: Sync Fib.... " << (*routes).size()
+            << " entries";
     unicastRouteDb_.clear();
     for (auto const& route : *routes) {
       auto prefix = std::make_pair(
@@ -201,7 +197,6 @@ MockNetlinkFibHandler::getDelRoutesCount() {
   }
   return res;
 }
-
 
 void
 MockNetlinkFibHandler::stop() {

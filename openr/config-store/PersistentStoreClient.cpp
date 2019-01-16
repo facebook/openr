@@ -13,8 +13,7 @@ namespace openr {
 
 PersistentStoreClient::PersistentStoreClient(
     const PersistentStoreUrl& socketUrl, fbzmq::Context& context)
-    : context_(context),
-      reqSocketUrl_(socketUrl) {}
+    : context_(context), reqSocketUrl_(socketUrl) {}
 
 folly::Expected<bool, fbzmq::Error>
 PersistentStoreClient::erase(std::string const& key) noexcept {

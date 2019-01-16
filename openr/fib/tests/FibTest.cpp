@@ -23,12 +23,12 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/AddressUtil.h>
 #include <openr/fib/Fib.h>
@@ -39,13 +39,13 @@
 using namespace std;
 using namespace openr;
 
-using ::testing::InSequence;
-using ::testing::InvokeWithoutArgs;
-using ::testing::_;
 using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 using apache::thrift::ThriftServer;
 using apache::thrift::util::ScopedServerThread;
+using ::testing::_;
+using ::testing::InSequence;
+using ::testing::InvokeWithoutArgs;
 
 const int16_t kFibId{static_cast<int16_t>(thrift::FibClient::OPENR)};
 
@@ -260,8 +260,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   routeDb.routes.clear();
   routeDb.routes.emplace_back(
       thrift::Route(FRAGILE, prefix2, {path1_2_2, path1_2_3}));
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix3, {path1_3_2}));
+  routeDb.routes.emplace_back(thrift::Route(FRAGILE, prefix3, {path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
   // syncFib debounce
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
@@ -273,7 +272,6 @@ TEST_F(FibTestFixture, processRouteDb) {
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
   EXPECT_TRUE(checkEqualRoutes(routeDb, getRouteDb()));
-
 }
 
 TEST_F(FibTestFixture, processInterfaceDb) {
@@ -399,7 +397,6 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
-
 }
 
 TEST_F(FibTestFixture, basicAddAndDelete) {

@@ -371,22 +371,18 @@ Route::operator=(const Route& other) {
   return *this;
 }
 
-
 bool
 operator==(const Route& lhs, const Route& rhs) {
-  bool ret = (
-    lhs.getDestination() == rhs.getDestination() &&
-    lhs.getNextHops().size() == rhs.getNextHops().size() &&
-    lhs.getType() == rhs.getType() &&
-    lhs.getRouteTable() == rhs.getRouteTable() &&
-    lhs.getProtocolId() == rhs.getProtocolId() &&
-    lhs.getScope() == rhs.getScope() &&
-    lhs.isValid() == rhs.isValid() &&
-    lhs.getFlags() == rhs.getFlags() &&
-    lhs.getPriority() == rhs.getPriority() &&
-    lhs.getTos() == rhs.getTos() &&
-    lhs.getRouteIfName() == rhs.getRouteIfName()
-  );
+  bool ret =
+      (lhs.getDestination() == rhs.getDestination() &&
+       lhs.getNextHops().size() == rhs.getNextHops().size() &&
+       lhs.getType() == rhs.getType() &&
+       lhs.getRouteTable() == rhs.getRouteTable() &&
+       lhs.getProtocolId() == rhs.getProtocolId() &&
+       lhs.getScope() == rhs.getScope() && lhs.isValid() == rhs.isValid() &&
+       lhs.getFlags() == rhs.getFlags() &&
+       lhs.getPriority() == rhs.getPriority() && lhs.getTos() == rhs.getTos() &&
+       lhs.getRouteIfName() == rhs.getRouteIfName());
 
   if (!ret) {
     return false;
@@ -470,8 +466,7 @@ Route::str() const {
       folly::IPAddress::networkToString(dst_),
       protocolId_,
       routeTable_,
-      isValid_ ? "Yes" : "No"
-  );
+      isValid_ ? "Yes" : "No");
   if (priority_) {
     result += folly::sformat(", priority {}", priority_.value());
   }
@@ -517,7 +512,6 @@ Route::createRtnlRouteKey() {
 
   return route;
 }
-
 
 struct rtnl_route*
 Route::getRtnlRouteRef() {
@@ -1023,12 +1017,11 @@ IfAddress::getFlags() const {
 std::string
 IfAddress::str() const {
   return folly::sformat(
-    "addr {} {} intf-index {}, valid {}",
-    getFamily() == AF_INET ? "inet" : "inet6",
-    prefix_.hasValue() ? folly::IPAddress::networkToString(*prefix_) : "n/a",
-    ifIndex_,
-    isValid_ ? "Yes" : "No"
-  );
+      "addr {} {} intf-index {}, valid {}",
+      getFamily() == AF_INET ? "inet" : "inet6",
+      prefix_.hasValue() ? folly::IPAddress::networkToString(*prefix_) : "n/a",
+      ifIndex_,
+      isValid_ ? "Yes" : "No");
 }
 
 // Will construct rtnl_addr object on the first time call, then will return
@@ -1083,13 +1076,10 @@ IfAddress::getRtnlAddrRef() {
 bool
 operator==(const IfAddress& lhs, const IfAddress& rhs) {
   return (
-    lhs.getPrefix() == rhs.getPrefix() &&
-    lhs.getIfIndex() == rhs.getIfIndex() &&
-    lhs.isValid() == rhs.isValid() &&
-    lhs.getScope() == rhs.getScope() &&
-    lhs.getFlags() == rhs.getFlags() &&
-    lhs.getFamily() == rhs.getFamily()
-  );
+      lhs.getPrefix() == rhs.getPrefix() &&
+      lhs.getIfIndex() == rhs.getIfIndex() && lhs.isValid() == rhs.isValid() &&
+      lhs.getScope() == rhs.getScope() && lhs.getFlags() == rhs.getFlags() &&
+      lhs.getFamily() == rhs.getFamily());
 }
 
 /*================================Neighbor====================================*/
@@ -1306,13 +1296,12 @@ Neighbor::str() const {
   }
 
   return folly::sformat(
-    "neighbor {} reachable {}, intf-index {}, lladdr {}, state {}",
-    destination_.str(),
-    isReachable_ ? "Yes" : "No",
-    ifIndex_,
-    linkAddress_.hasValue() ? linkAddress_->toString() : "n/a",
-    stateStr
-  );
+      "neighbor {} reachable {}, intf-index {}, lladdr {}, state {}",
+      destination_.str(),
+      isReachable_ ? "Yes" : "No",
+      ifIndex_,
+      linkAddress_.hasValue() ? linkAddress_->toString() : "n/a",
+      stateStr);
 }
 
 struct rtnl_neigh*
@@ -1364,12 +1353,11 @@ Neighbor::getRtnlNeighRef() {
 bool
 operator==(const Neighbor& lhs, const Neighbor& rhs) {
   return (
-    lhs.getIfIndex() == rhs.getIfIndex() &&
-    lhs.isReachable() == rhs.isReachable() &&
-    lhs.getDestination() == rhs.getDestination() &&
-    lhs.getLinkAddress() == rhs.getLinkAddress() &&
-    lhs.getState() == rhs.getState()
-  );
+      lhs.getIfIndex() == rhs.getIfIndex() &&
+      lhs.isReachable() == rhs.isReachable() &&
+      lhs.getDestination() == rhs.getDestination() &&
+      lhs.getLinkAddress() == rhs.getLinkAddress() &&
+      lhs.getState() == rhs.getState());
 }
 
 /*==================================Link======================================*/
@@ -1429,9 +1417,9 @@ LinkBuilder::getFlags() const {
 }
 
 Link::Link(const LinkBuilder& builder)
-  : linkName_(builder.getLinkName()),
-    ifIndex_(builder.getIfIndex()),
-    flags_(builder.getFlags()) {}
+    : linkName_(builder.getLinkName()),
+      ifIndex_(builder.getIfIndex()),
+      flags_(builder.getFlags()) {}
 
 Link::~Link() {
   if (link_) {
@@ -1533,18 +1521,17 @@ Link::str() const {
   rtnl_link_flags2str(flags_, flagsBuf.data(), flagsBuf.size());
 
   return folly::sformat(
-    "link {} intf-index {}, flags {}",
-    linkName_, ifIndex_, std::string(flagsBuf.data(), flagsBuf.size())
-  );
+      "link {} intf-index {}, flags {}",
+      linkName_,
+      ifIndex_,
+      std::string(flagsBuf.data(), flagsBuf.size()));
 }
 
 bool
 operator==(const Link& lhs, const Link& rhs) {
   return (
-    lhs.getLinkName() == rhs.getLinkName() &&
-    lhs.getIfIndex() == rhs.getIfIndex() &&
-    lhs.getFlags() == rhs.getFlags()
-  );
+      lhs.getLinkName() == rhs.getLinkName() &&
+      lhs.getIfIndex() == rhs.getIfIndex() && lhs.getFlags() == rhs.getFlags());
 }
 
 } // namespace fbnl

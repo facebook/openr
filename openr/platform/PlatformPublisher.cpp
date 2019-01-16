@@ -91,8 +91,7 @@ PlatformPublisher::publishPlatformEvent(
 
 void
 PlatformPublisher::linkEventFunc(
-    const std::string& ifName,
-    const openr::fbnl::Link& linkEntry) noexcept {
+    const std::string& ifName, const openr::fbnl::Link& linkEntry) noexcept {
   VLOG(4) << "Handling Link Event in NetlinkSystemHandler...";
   publishLinkEvent(thrift::LinkEntry(
       FRAGILE,

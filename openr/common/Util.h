@@ -18,9 +18,9 @@
 #include <folly/Memory.h>
 #include <folly/Optional.h>
 #include <folly/String.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <re2/re2.h>
 #include <re2/set.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/AddressUtil.h>
 #include <openr/common/BuildInfo.h>
@@ -66,7 +66,7 @@ namespace openr {
 /**
  * Class to store re2 objects, provides API to match string with regex
  */
-class KeyPrefix{
+class KeyPrefix {
  public:
   explicit KeyPrefix(std::vector<std::string> const& keyPrefixList);
   bool keyMatch(std::string const& key) const;
@@ -102,7 +102,6 @@ bool checkIncludeExcludeRegex(
     const std::unique_ptr<re2::RE2::Set>& includeRegexSet,
     const std::unique_ptr<re2::RE2::Set>& excludeRegexSet);
 
-
 /**
  * @param prefixIndex subprefix index, starting from 0
  * @return n-th subprefix of allocated length in seed prefix
@@ -118,11 +117,10 @@ folly::CIDRNetwork getNthPrefix(
  * Ideally any address in the block is valid address, in this case we just set
  * last bit of network block to `1`
  */
-folly::IPAddress
-createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept;
+folly::IPAddress createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept;
 
-folly::CIDRNetwork
-createLoopbackPrefix(const folly::CIDRNetwork& prefix) noexcept;
+folly::CIDRNetwork createLoopbackPrefix(
+    const folly::CIDRNetwork& prefix) noexcept;
 
 std::unordered_map<std::string, fbzmq::thrift::Counter> prepareSubmitCounters(
     const std::unordered_map<std::string, int64_t>& counters);
@@ -186,8 +184,7 @@ int64_t generateHash(
  * This is only applicable when remoteIfName is empty from peer adjacency update
  * It returns remoteIfName if it is there else constructs one from localIfName
  */
-std::string getRemoteIfName(
-  const thrift::Adjacency& adj);
+std::string getRemoteIfName(const thrift::Adjacency& adj);
 
 /**
  * Given list of paths returns the list of best paths (paths with lowest
@@ -213,8 +210,7 @@ findDeltaRoutes(
 
 thrift::BuildInfo getBuildInfoThrift() noexcept;
 
-folly::IPAddress
-toIPAddress(const thrift::fbbinary& binAddr);
+folly::IPAddress toIPAddress(const thrift::fbbinary& binAddr);
 
 folly::Optional<std::string> maybeGetTcpEndpoint(
     const std::string& addr, const int32_t port);

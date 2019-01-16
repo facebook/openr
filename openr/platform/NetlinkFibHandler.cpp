@@ -59,8 +59,8 @@ getClientName(const int16_t clientId) {
 } // namespace
 
 NetlinkFibHandler::NetlinkFibHandler(
-  fbzmq::ZmqEventLoop* zmqEventLoop,
-  std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket)
+    fbzmq::ZmqEventLoop* zmqEventLoop,
+    std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket)
     : netlinkSocket_(netlinkSocket),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
@@ -106,13 +106,13 @@ NetlinkFibHandler::NetlinkFibHandler(
   });
 }
 
-template<class A>
+template <class A>
 folly::Expected<int16_t, bool>
 NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
   auto ret = thrift::Platform_constants::clientIdtoProtocolId().find(clientId);
   if (ret == thrift::Platform_constants::clientIdtoProtocolId().end()) {
     auto ex =
-      fbnl::NlException(folly::sformat("Invalid ClientId : {}", clientId));
+        fbnl::NlException(folly::sformat("Invalid ClientId : {}", clientId));
     promise.setException(ex);
     return folly::makeUnexpected(false);
   }
@@ -126,8 +126,7 @@ NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
 }
 
 std::vector<thrift::UnicastRoute>
-NetlinkFibHandler::toThriftUnicastRoutes(
-  const fbnl::NlUnicastRoutes& routeDb) {
+NetlinkFibHandler::toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb) {
   std::vector<thrift::UnicastRoute> routes;
 
   for (auto const& kv : routeDb) {
@@ -153,7 +152,7 @@ NetlinkFibHandler::toThriftUnicastRoutes(
             toBinaryAddress(prefix.first),
             static_cast<int16_t>(prefix.second)),
         std::vector<thrift::BinaryAddress>(
-          binaryNextHops.begin(), binaryNextHops.end())));
+            binaryNextHops.begin(), binaryNextHops.end())));
   }
   return routes;
 }
@@ -187,7 +186,7 @@ NetlinkFibHandler::future_deleteUnicastRoute(
 
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setDestination(toIPNetwork(*prefix))
-           .setProtocolId(protocol.value());
+      .setProtocolId(protocol.value());
   return netlinkSocket_->delRoute(rtBuilder.build());
 }
 
@@ -201,24 +200,23 @@ NetlinkFibHandler::future_addUnicastRoutes(
   auto future = promise.getFuture();
 
   // Run all route updates in a single eventloop
-  evl_->runImmediatelyOrInEventLoop(
-    [ this, clientId,
-      promise = std::move(promise),
-      routes = std::move(routes)
-    ]() mutable {
-      for (auto& route : *routes) {
-        auto ptr = folly::make_unique<thrift::UnicastRoute>(std::move(route));
-        try {
-          // This is going to be synchronous call as we are invoking from
-          // within event loop
-          future_addUnicastRoute(clientId, std::move(ptr)).get();
-        } catch (std::exception const& e) {
-          promise.setException(e);
-          return;
-        }
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     clientId,
+                                     promise = std::move(promise),
+                                     routes = std::move(routes)]() mutable {
+    for (auto& route : *routes) {
+      auto ptr = folly::make_unique<thrift::UnicastRoute>(std::move(route));
+      try {
+        // This is going to be synchronous call as we are invoking from
+        // within event loop
+        future_addUnicastRoute(clientId, std::move(ptr)).get();
+      } catch (std::exception const& e) {
+        promise.setException(e);
+        return;
       }
-      promise.setValue();
-    });
+    }
+    promise.setValue();
+  });
 
   return future;
 }
@@ -231,22 +229,21 @@ NetlinkFibHandler::future_deleteUnicastRoutes(
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
-  evl_->runImmediatelyOrInEventLoop(
-    [ this, clientId,
-      promise = std::move(promise),
-      prefixes = std::move(prefixes)
-    ]() mutable {
-      for (auto& prefix : *prefixes) {
-        auto ptr = folly::make_unique<thrift::IpPrefix>(std::move(prefix));
-        try {
-          future_deleteUnicastRoute(clientId, std::move(ptr)).get();
-        } catch (std::exception const& e) {
-          promise.setException(e);
-          return;
-        }
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     clientId,
+                                     promise = std::move(promise),
+                                     prefixes = std::move(prefixes)]() mutable {
+    for (auto& prefix : *prefixes) {
+      auto ptr = folly::make_unique<thrift::IpPrefix>(std::move(prefix));
+      try {
+        future_deleteUnicastRoute(clientId, std::move(ptr)).get();
+      } catch (std::exception const& e) {
+        promise.setException(e);
+        return;
       }
-      promise.setValue();
-    });
+    }
+    promise.setValue();
+  });
 
   return future;
 }
@@ -272,8 +269,8 @@ NetlinkFibHandler::future_syncFib(
         toIPNetwork(route.dest), buildRoute(route, protocol.value()));
   }
 
-  return netlinkSocket_->
-            syncUnicastRoutes(protocol.value(), std::move(newRoutes));
+  return netlinkSocket_->syncUnicastRoutes(
+      protocol.value(), std::move(newRoutes));
 }
 
 folly::Future<int64_t>
@@ -300,8 +297,8 @@ folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
 NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
   LOG(INFO) << "Get routes from FIB for clientId " << clientId;
 
-  folly::Promise<
-      std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>> promise;
+  folly::Promise<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
+      promise;
   auto future = promise.getFuture();
   auto protocol = getProtocol(promise, clientId);
   if (protocol.hasError()) {

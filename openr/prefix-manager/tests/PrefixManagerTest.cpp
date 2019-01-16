@@ -330,7 +330,6 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
   EXPECT_EQ(0, resp4.value().prefixes.size());
 }
 
-
 TEST_F(PrefixManagerTestFixture, PrefixAddCount) {
   auto count0 = prefixManager->getPrefixAddCounter();
   EXPECT_EQ(0, count0);
@@ -379,7 +378,6 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawCount) {
   prefixManagerClient->withdrawPrefixes({addr2});
   auto count5 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(2, count5);
-
 }
 
 int

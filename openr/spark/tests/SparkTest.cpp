@@ -47,11 +47,11 @@ const int ifIndex2{2};
 const int ifIndex3{3};
 
 const folly::CIDRNetwork ip1V4 =
-  folly::IPAddress::createNetwork("192.168.0.1", 24, false /* apply mask */);
+    folly::IPAddress::createNetwork("192.168.0.1", 24, false /* apply mask */);
 const folly::CIDRNetwork ip2V4 =
-  folly::IPAddress::createNetwork("192.168.0.2", 24, false /* apply mask */);
+    folly::IPAddress::createNetwork("192.168.0.2", 24, false /* apply mask */);
 const folly::CIDRNetwork ip3V4 =
-  folly::IPAddress::createNetwork("192.168.0.3", 24, false /* apply mask */);
+    folly::IPAddress::createNetwork("192.168.0.3", 24, false /* apply mask */);
 
 const folly::CIDRNetwork ip1V6 = folly::IPAddress::createNetwork("fe80::1/128");
 const folly::CIDRNetwork ip2V6 = folly::IPAddress::createNetwork("fe80::2/128");
@@ -140,9 +140,8 @@ class SparkFixture : public testing::Test {
       std::chrono::milliseconds holdTime = kHoldTime,
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
-      std::pair<uint32_t, uint32_t> version =
-                       std::make_pair(Constants::kOpenrVersion,
-                       Constants::kOpenrSupportedVersion)) {
+      std::pair<uint32_t, uint32_t> version = std::make_pair(
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion)) {
     return std::make_unique<SparkWrapper>(
         domainName,
         myNodeName,
@@ -200,8 +199,7 @@ TEST_F(SparkFixture, UnidirectionalTest) {
   EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
@@ -298,12 +296,10 @@ TEST_F(SparkFixture, GracefulRestart) {
       std::chrono::milliseconds(200) /* my keep alive time */);
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
@@ -339,8 +335,7 @@ TEST_F(SparkFixture, GracefulRestart) {
   LOG(INFO) << "Adding iface2 to node-2";
 
   // re-add interface
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   // node-1 should report node-2 as restarting because of sequence number
   // wrapping
@@ -391,12 +386,10 @@ TEST_F(SparkFixture, HoldTimerExpired) {
   auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
@@ -437,8 +430,7 @@ TEST_F(SparkFixture, HoldTimerExpired) {
   LOG(INFO) << "Adding iface2 to node-2";
 
   // re-add interface
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   // node-1 should report node-2 as down because of hold timer expired
   {
@@ -493,12 +485,10 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   //
   // Now wait for sparks to NOT report anything
@@ -545,12 +535,10 @@ TEST_F(SparkFixture, IfaceRemovalTest) {
   auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
@@ -608,8 +596,7 @@ TEST_F(SparkFixture, IfaceRemovalTest) {
 
   LOG(INFO) << "Bringing iface1 back up...";
 
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   //
   // Wait for UP event from both neighbors
@@ -663,12 +650,10 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
@@ -698,8 +683,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   auto spark3 = createSpark(kDomainName, "node-3", 3);
 
   // start tracking iface3
-  EXPECT_TRUE(spark3->updateInterfaceDb(
-      {{iface3, ifIndex3, ip3V4, ip3V6}}));
+  EXPECT_TRUE(spark3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
 
   //
   // Spark1 should hear from spark-3
@@ -820,14 +804,12 @@ TEST_F(SparkFixture, HubAndSpoke) {
   const string iface1_3{"iface1_3"};
   const int ifIndex1_2{12};
   const int ifIndex1_3{13};
-  auto ip1V4_2 =
-    folly::IPAddress::createNetwork("192.168.0.12", 24, false /* apply mask */);
-  auto ip1V4_3 =
-    folly::IPAddress::createNetwork("192.168.0.13", 24, false /* apply mask */);
-  auto ip1V6_2 =
-    folly::IPAddress::createNetwork("fe80::12:1/128");
-  auto ip1V6_3 =
-    folly::IPAddress::createNetwork("fe80::13:1/128");
+  auto ip1V4_2 = folly::IPAddress::createNetwork(
+      "192.168.0.12", 24, false /* apply mask */);
+  auto ip1V4_3 = folly::IPAddress::createNetwork(
+      "192.168.0.13", 24, false /* apply mask */);
+  auto ip1V6_2 = folly::IPAddress::createNetwork("fe80::12:1/128");
+  auto ip1V6_3 = folly::IPAddress::createNetwork("fe80::13:1/128");
 
   //
   // Define interface names for the test
@@ -853,15 +835,13 @@ TEST_F(SparkFixture, HubAndSpoke) {
   auto spark3 = createSpark(kDomainName, "node-3", 3);
 
   // tell spark1 to start hello on two interfaces
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1_2, ifIndex1_2, ip1V4_2, ip1V6_2},
-       {iface1_3, ifIndex1_3, ip1V4_3, ip1V6_3}}));
+  EXPECT_TRUE(
+      spark1->updateInterfaceDb({{iface1_2, ifIndex1_2, ip1V4_2, ip1V6_2},
+                                 {iface1_3, ifIndex1_3, ip1V4_3, ip1V6_3}}));
 
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
-  EXPECT_TRUE(spark3->updateInterfaceDb(
-      {{iface3, ifIndex3, ip3V4, ip3V6}}));
+  EXPECT_TRUE(spark3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
 
   //
   // node-1 should hear from both node-2 and node-3
@@ -963,12 +943,10 @@ TEST_F(SparkFixture, RttTest) {
   auto spark2 = createSpark(kDomainName, "node-2", 2);
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
@@ -1075,12 +1053,11 @@ TEST_F(SparkFixture, StressTest) {
     auto ifName = folly::sformat("iface{}", i);
     auto ifIndex = i + 1;
     auto v4Addr = folly::IPAddress::createNetwork(
-      folly::sformat("192.168.{}.{}", i / 256, i % 256),
-      16,
-      false /* apply mask */);
+        folly::sformat("192.168.{}.{}", i / 256, i % 256),
+        16,
+        false /* apply mask */);
     auto v6Addr = folly::IPAddress::createNetwork(
-      folly::sformat("fe80::{}:{}", i / 256, i % 256),
-      64);
+        folly::sformat("fe80::{}:{}", i / 256, i % 256), 64);
 
     mockIoProvider->addIfNameIfIndex({{ifName, ifIndex}});
     interfaceEntries.emplace_back(
@@ -1140,12 +1117,9 @@ TEST_F(SparkFixture, DomainTest) {
     auto ifaceName = folly::sformat("iface{}", i);
     auto ifIndex = i + 1;
     auto ipv4 = folly::IPAddress::createNetwork(
-      folly::sformat("192.168.0.{}", i),
-      24,
-      false /* apply mask */);
-    auto ipv6 = folly::IPAddress::createNetwork(
-      folly::sformat("fe80::{}", i),
-      128);
+        folly::sformat("192.168.0.{}", i), 24, false /* apply mask */);
+    auto ipv6 =
+        folly::IPAddress::createNetwork(folly::sformat("fe80::{}", i), 128);
 
     mockIoProvider->addIfNameIfIndex({{ifaceName, ifIndex}});
     EXPECT_TRUE(
@@ -1254,14 +1228,13 @@ TEST_F(SparkFixture, SubnetTest) {
     auto ifaceName = folly::sformat("iface{}", i);
     auto ifIndex = i + 1;
     // assign v4 addr in different /24 subnets for even and odd nodes
-    auto const& network = folly::sformat("192.168.{}", i % 2? 0 : 255);
+    auto const& network = folly::sformat("192.168.{}", i % 2 ? 0 : 255);
     auto ipv4 = folly::IPAddress::createNetwork(
         folly::sformat("{}.{}", network, i),
         24, /* prefix len */
         false /* apply mask*/);
-    auto ipv6 = folly::IPAddress::createNetwork(
-        folly::sformat("fe80::{}", i),
-        128);
+    auto ipv6 =
+        folly::IPAddress::createNetwork(folly::sformat("fe80::{}", i), 128);
     mockIoProvider->addIfNameIfIndex({{ifaceName, ifIndex}});
     EXPECT_TRUE(
         sparks[i]->updateInterfaceDb({{ifaceName, ifIndex, ipv4, ipv6}}));
@@ -1348,12 +1321,10 @@ TEST_F(SparkFixture, FastInitTest) {
   auto startTime = steady_clock::now();
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
@@ -1401,8 +1372,7 @@ TEST_F(SparkFixture, FastInitTest) {
   LOG(INFO) << "Adding iface2 to node-2";
 
   // re-add interface
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   //
   // node-2 will eventually report node-1 as up
@@ -1483,12 +1453,10 @@ TEST_F(SparkFixture, dropPacketsTest) {
       10ms /* fast keep alive time */);
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
@@ -1521,13 +1489,13 @@ TEST_F(SparkFixture, dropPacketsTest) {
   auto spark1Counters = zmqMonitorClient1->dumpCounters();
   // Hack to wait for counters to be submitted
   while (spark1Counters.find("spark.hello_packet_recv.sum.0") ==
-      spark1Counters.end()) {
+         spark1Counters.end()) {
     spark1Counters = zmqMonitorClient1->dumpCounters();
   }
 
   auto spark2Counters = zmqMonitorClient2->dumpCounters();
   while (spark2Counters.find("spark.hello_packet_recv.sum.0") ==
-      spark2Counters.end()) {
+         spark2Counters.end()) {
     spark2Counters = zmqMonitorClient2->dumpCounters();
   }
 
@@ -1579,8 +1547,8 @@ TEST_F(SparkFixture, VersionTest) {
   //
   // Define interface names for the test
   //
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2},
-                                   {iface3, ifIndex3}});
+  mockIoProvider->addIfNameIfIndex(
+      {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
@@ -1599,8 +1567,8 @@ TEST_F(SparkFixture, VersionTest) {
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,
       milliseconds(2000) /* keep alive time */,
-      std::make_pair(Constants::kOpenrVersion,
-                    Constants::kOpenrSupportedVersion));
+      std::make_pair(
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion));
   auto spark2 = createSpark(
       kDomainName,
       "node-2",
@@ -1608,16 +1576,15 @@ TEST_F(SparkFixture, VersionTest) {
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,
       milliseconds(2000) /* keep alive time */,
-      std::make_pair(Constants::kOpenrSupportedVersion,
-                    Constants::kOpenrSupportedVersion));
+      std::make_pair(
+          Constants::kOpenrSupportedVersion,
+          Constants::kOpenrSupportedVersion));
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb(
-      {{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb(
-      {{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Preparing to receive the messages from sparks";
   //
@@ -1648,14 +1615,14 @@ TEST_F(SparkFixture, VersionTest) {
       milliseconds(6000) /* hold time */,
       milliseconds(2000) /* my keep alive time */,
       milliseconds(2000) /* fast keep alive time */,
-      std::make_pair(Constants::kOpenrSupportedVersion - 1,
-                    Constants::kOpenrSupportedVersion));
+      std::make_pair(
+          Constants::kOpenrSupportedVersion - 1,
+          Constants::kOpenrSupportedVersion));
 
   LOG(INFO) << "Adding iface3 to node-3";
 
   // add interface
-  EXPECT_TRUE(spark3->updateInterfaceDb(
-      {{iface3, ifIndex3, ip3V4, ip3V6}}));
+  EXPECT_TRUE(spark3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
 
   auto maybeEvent = spark1->recvNeighborEvent(kHoldTime * 100);
 

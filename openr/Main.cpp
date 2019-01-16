@@ -81,7 +81,6 @@ const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
 
 } // namespace
 
-
 DEFINE_int32(
     openr_ctrl_port,
     openr::Constants::kOpenrCtrlPort,
@@ -429,9 +428,8 @@ waitForFibService(const fbzmq::ZmqEventLoop& evl) {
   LOG(INFO) << "FibService up. Waited for " << waitMs << " ms.";
 }
 
-void submitCounters(
-    const ZmqEventLoop& eventLoop,
-    ZmqMonitorClient& monitorClient) {
+void
+submitCounters(const ZmqEventLoop& eventLoop, ZmqMonitorClient& monitorClient) {
   VLOG(3) << "Submitting counters...";
   std::unordered_map<std::string, int64_t> counters{};
   counters["main.zmq_event_queue_size"] = eventLoop.getEventQueueSize();
@@ -442,9 +440,8 @@ void
 startEventLoop(
     std::vector<std::thread>& allThreads,
     std::vector<std::shared_ptr<OpenrEventLoop>>& orderedEventLoops,
-    std::unordered_map<
-        OpenrModuleType,
-        std::shared_ptr<OpenrEventLoop>>& moduleTypeToEvl,
+    std::unordered_map<OpenrModuleType, std::shared_ptr<OpenrEventLoop>>&
+        moduleTypeToEvl,
     std::unique_ptr<Watchdog>& watchdog,
     std::shared_ptr<OpenrEventLoop> evl) {
   const auto type = evl->moduleType;
@@ -551,9 +548,8 @@ main(int argc, char** argv) {
   // structures to organize our modules
   std::vector<std::thread> allThreads;
   std::vector<std::shared_ptr<OpenrEventLoop>> orderedEventLoops;
-  std::unordered_map<
-      OpenrModuleType,
-      std::shared_ptr<OpenrEventLoop>> moduleTypeToEvl;
+  std::unordered_map<OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
+      moduleTypeToEvl;
   std::unique_ptr<Watchdog> watchdog{nullptr};
 
   // Watchdog thread to monitor thread aliveness
@@ -573,7 +569,6 @@ main(int argc, char** argv) {
     }));
     watchdog->waitUntilRunning();
   }
-
 
   // Create ThreadManager for thrift services
   std::shared_ptr<ThreadManager> thriftThreadMgr;
@@ -663,9 +658,8 @@ main(int argc, char** argv) {
       folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
 
   ZmqMonitorClient monitorClient(context, monitorSubmitUrl);
-  auto monitorTimer =
-      fbzmq::ZmqTimeout::make(&mainEventLoop, [&]() noexcept {
-          submitCounters(mainEventLoop, monitorClient);
+  auto monitorTimer = fbzmq::ZmqTimeout::make(&mainEventLoop, [&]() noexcept {
+    submitCounters(mainEventLoop, monitorClient);
   });
   monitorTimer->scheduleTimeout(Constants::kMonitorSubmitInterval, true);
 
@@ -733,8 +727,7 @@ main(int argc, char** argv) {
   }
 
   KvStoreFloodRate kvstoreRate(std::make_pair(
-        FLAGS_kvstore_flood_msg_per_sec,
-        FLAGS_kvstore_flood_msg_burst_size));
+      FLAGS_kvstore_flood_msg_per_sec, FLAGS_kvstore_flood_msg_burst_size));
   if (FLAGS_kvstore_flood_msg_per_sec <= 0 ||
       FLAGS_kvstore_flood_msg_burst_size <= 0) {
     kvstoreRate = folly::none;
@@ -742,44 +735,52 @@ main(int argc, char** argv) {
 
   const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
   // Start KVStore
-  startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
-    std::make_shared<KvStore>(
-      context,
-      FLAGS_node_name,
-      kvStoreLocalPubUrl,
-      KvStoreGlobalPubUrl{folly::sformat(
-          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_pub_port)},
-      KvStoreGlobalCmdUrl{folly::sformat(
-          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
-      monitorSubmitUrl,
-      maybeIpTos,
-      Constants::kStoreSyncInterval,
-      Constants::kMonitorSubmitInterval,
-      std::unordered_map<std::string, openr::thrift::PeerSpec>{},
-      FLAGS_enable_legacy_flooding,
-      std::move(kvFilters),
-      FLAGS_kvstore_zmq_hwm,
-      kvstoreRate,
-      std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms)));
+  startEventLoop(
+      allThreads,
+      orderedEventLoops,
+      moduleTypeToEvl,
+      watchdog,
+      std::make_shared<KvStore>(
+          context,
+          FLAGS_node_name,
+          kvStoreLocalPubUrl,
+          KvStoreGlobalPubUrl{folly::sformat(
+              "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_pub_port)},
+          KvStoreGlobalCmdUrl{folly::sformat(
+              "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
+          monitorSubmitUrl,
+          maybeIpTos,
+          Constants::kStoreSyncInterval,
+          Constants::kMonitorSubmitInterval,
+          std::unordered_map<std::string, openr::thrift::PeerSpec>{},
+          FLAGS_enable_legacy_flooding,
+          std::move(kvFilters),
+          FLAGS_kvstore_zmq_hwm,
+          kvstoreRate,
+          std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms)));
 
   const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{
-    moduleTypeToEvl.at(OpenrModuleType::KVSTORE)->inprocCmdUrl};
+      moduleTypeToEvl.at(OpenrModuleType::KVSTORE)->inprocCmdUrl};
 
   // start prefix manager
-  startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
-    std::make_shared<PrefixManager>(
-      FLAGS_node_name,
-      maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_prefix_manager_cmd_port),
-      kConfigStoreUrl,
-      kvStoreLocalCmdUrl,
-      kvStoreLocalPubUrl,
-      PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-      FLAGS_enable_perf_measurement,
-      monitorSubmitUrl,
-      context));
+  startEventLoop(
+      allThreads,
+      orderedEventLoops,
+      moduleTypeToEvl,
+      watchdog,
+      std::make_shared<PrefixManager>(
+          FLAGS_node_name,
+          maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_prefix_manager_cmd_port),
+          kConfigStoreUrl,
+          kvStoreLocalCmdUrl,
+          kvStoreLocalPubUrl,
+          PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+          FLAGS_enable_perf_measurement,
+          monitorSubmitUrl,
+          context));
 
   const PrefixManagerLocalCmdUrl prefixManagerLocalCmdUrl{
-    moduleTypeToEvl.at(OpenrModuleType::PREFIX_MANAGER)->inprocCmdUrl};
+      moduleTypeToEvl.at(OpenrModuleType::PREFIX_MANAGER)->inprocCmdUrl};
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (FLAGS_enable_prefix_alloc) {
     // start prefix allocator
@@ -793,22 +794,26 @@ main(int argc, char** argv) {
     } else {
       allocMode = PrefixAllocatorModeSeeded();
     }
-    startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
-      std::make_shared<PrefixAllocator>(
-        FLAGS_node_name,
-        kvStoreLocalCmdUrl,
-        kvStoreLocalPubUrl,
-        prefixManagerLocalCmdUrl,
-        monitorSubmitUrl,
-        AllocPrefixMarker{Constants::kPrefixAllocMarker.toString()},
-        allocMode,
-        FLAGS_set_loopback_address,
-        FLAGS_override_loopback_addr,
-        FLAGS_loopback_iface,
-        Constants::kPrefixAllocatorSyncInterval,
-        kConfigStoreUrl,
-        context,
-        FLAGS_system_agent_port));
+    startEventLoop(
+        allThreads,
+        orderedEventLoops,
+        moduleTypeToEvl,
+        watchdog,
+        std::make_shared<PrefixAllocator>(
+            FLAGS_node_name,
+            kvStoreLocalCmdUrl,
+            kvStoreLocalPubUrl,
+            prefixManagerLocalCmdUrl,
+            monitorSubmitUrl,
+            AllocPrefixMarker{Constants::kPrefixAllocMarker.toString()},
+            allocMode,
+            FLAGS_set_loopback_address,
+            FLAGS_override_loopback_addr,
+            FLAGS_loopback_iface,
+            Constants::kPrefixAllocatorSyncInterval,
+            kConfigStoreUrl,
+            context,
+            FLAGS_system_agent_port));
   }
 
   //
@@ -816,25 +821,29 @@ main(int argc, char** argv) {
   //
 
   if (FLAGS_enable_spark) {
-    startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
-      std::make_shared<Spark>(
-        FLAGS_domain, // My domain
-        FLAGS_node_name, // myNodeName
-        static_cast<uint16_t>(FLAGS_spark_mcast_port),
-        std::chrono::seconds(FLAGS_spark_hold_time_s),
-        std::chrono::seconds(FLAGS_spark_keepalive_time_s),
-        std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
-        maybeIpTos,
-        FLAGS_enable_v4,
-        FLAGS_enable_subnet_validation,
-        SparkReportUrl{FLAGS_spark_report_url},
-        monitorSubmitUrl,
-        KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
-        KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
-        std::make_pair(Constants::kOpenrVersion,
-                       Constants::kOpenrSupportedVersion),
-        context));
-    }
+    startEventLoop(
+        allThreads,
+        orderedEventLoops,
+        moduleTypeToEvl,
+        watchdog,
+        std::make_shared<Spark>(
+            FLAGS_domain, // My domain
+            FLAGS_node_name, // myNodeName
+            static_cast<uint16_t>(FLAGS_spark_mcast_port),
+            std::chrono::seconds(FLAGS_spark_hold_time_s),
+            std::chrono::seconds(FLAGS_spark_keepalive_time_s),
+            std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
+            maybeIpTos,
+            FLAGS_enable_v4,
+            FLAGS_enable_subnet_validation,
+            SparkReportUrl{FLAGS_spark_report_url},
+            monitorSubmitUrl,
+            KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
+            KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
+            std::make_pair(
+                Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
+            context));
+  }
 
   // Static list of prefixes to announce into the network as long as OpenR is
   // running.
@@ -926,37 +935,42 @@ main(int argc, char** argv) {
   }
 
   // Create link monitor instance.
-  startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
-    std::make_shared<LinkMonitor>(
-      context,
-      FLAGS_node_name,
-      FLAGS_system_agent_port,
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl},
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl},
-      std::move(includeRegexList),
-      std::move(excludeRegexList),
-      std::move(redistRegexList),
-      networks,
-      FLAGS_enable_rtt_metric,
-      FLAGS_enable_perf_measurement,
-      FLAGS_enable_v4,
-      FLAGS_enable_segment_routing,
-      AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-      SparkCmdUrl{FLAGS_enable_spark ?
-        moduleTypeToEvl.at(OpenrModuleType::SPARK)->inprocCmdUrl :
-        FLAGS_spark_cmd_url},
-      SparkReportUrl{FLAGS_spark_report_url},
-      monitorSubmitUrl,
-      kConfigStoreUrl,
-      FLAGS_assume_drained,
-      prefixManagerLocalCmdUrl,
-      PlatformPublisherUrl{FLAGS_platform_pub_url},
-      LinkMonitorGlobalPubUrl{
-          folly::sformat("tcp://*:{}", FLAGS_link_monitor_pub_port)},
-      maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_link_monitor_cmd_port),
-      std::chrono::seconds(2 * FLAGS_spark_keepalive_time_s),
-      std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
-      std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms)));
+  startEventLoop(
+      allThreads,
+      orderedEventLoops,
+      moduleTypeToEvl,
+      watchdog,
+      std::make_shared<LinkMonitor>(
+          context,
+          FLAGS_node_name,
+          FLAGS_system_agent_port,
+          KvStoreLocalCmdUrl{kvStoreLocalCmdUrl},
+          KvStoreLocalPubUrl{kvStoreLocalPubUrl},
+          std::move(includeRegexList),
+          std::move(excludeRegexList),
+          std::move(redistRegexList),
+          networks,
+          FLAGS_enable_rtt_metric,
+          FLAGS_enable_perf_measurement,
+          FLAGS_enable_v4,
+          FLAGS_enable_segment_routing,
+          AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
+          SparkCmdUrl{
+              FLAGS_enable_spark
+                  ? moduleTypeToEvl.at(OpenrModuleType::SPARK)->inprocCmdUrl
+                  : FLAGS_spark_cmd_url},
+          SparkReportUrl{FLAGS_spark_report_url},
+          monitorSubmitUrl,
+          kConfigStoreUrl,
+          FLAGS_assume_drained,
+          prefixManagerLocalCmdUrl,
+          PlatformPublisherUrl{FLAGS_platform_pub_url},
+          LinkMonitorGlobalPubUrl{
+              folly::sformat("tcp://*:{}", FLAGS_link_monitor_pub_port)},
+          maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_link_monitor_cmd_port),
+          std::chrono::seconds(2 * FLAGS_spark_keepalive_time_s),
+          std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
+          std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms)));
 
   // Wait for the above two threads to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module
@@ -989,55 +1003,68 @@ main(int argc, char** argv) {
     allThreads.emplace_back(std::move(decisionThread));
     watchdog->addEvl(decisionOld.get(), "Decision");
   } else {
-    startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
-      std::make_shared<Decision>(
-        FLAGS_node_name,
-        FLAGS_enable_v4,
-        FLAGS_enable_lfa,
-        AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-        std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
-        std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
-        kvStoreLocalCmdUrl,
-        kvStoreLocalPubUrl,
-        maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_decision_rep_port),
-        kDecisionPubUrl,
-        monitorSubmitUrl,
-        context));
+    startEventLoop(
+        allThreads,
+        orderedEventLoops,
+        moduleTypeToEvl,
+        watchdog,
+        std::make_shared<Decision>(
+            FLAGS_node_name,
+            FLAGS_enable_v4,
+            FLAGS_enable_lfa,
+            AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
+            PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+            std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
+            std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
+            kvStoreLocalCmdUrl,
+            kvStoreLocalPubUrl,
+            maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_decision_rep_port),
+            kDecisionPubUrl,
+            monitorSubmitUrl,
+            context));
   }
 
   // Define and start Fib Module
-  startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
-    std::make_shared<Fib>(
-      FLAGS_node_name,
-      FLAGS_fib_handler_port,
-      FLAGS_dryrun,
-      FLAGS_enable_fib_sync,
-      std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
-      kDecisionPubUrl,
-      maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_fib_rep_port),
-      LinkMonitorGlobalPubUrl{
-          folly::sformat("tcp://[::1]:{}", FLAGS_link_monitor_pub_port)},
-      monitorSubmitUrl,
-      context));
+  startEventLoop(
+      allThreads,
+      orderedEventLoops,
+      moduleTypeToEvl,
+      watchdog,
+      std::make_shared<Fib>(
+          FLAGS_node_name,
+          FLAGS_fib_handler_port,
+          FLAGS_dryrun,
+          FLAGS_enable_fib_sync,
+          std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
+          kDecisionPubUrl,
+          maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_fib_rep_port),
+          LinkMonitorGlobalPubUrl{
+              folly::sformat("tcp://[::1]:{}", FLAGS_link_monitor_pub_port)},
+          monitorSubmitUrl,
+          context));
 
   // Define and start HealthChecker
   if (FLAGS_enable_health_checker) {
-    startEventLoop(allThreads, orderedEventLoops, moduleTypeToEvl, watchdog,
-      std::make_shared<HealthChecker>(
-        FLAGS_node_name,
-        openr::thrift::HealthCheckOption(FLAGS_health_check_option),
-        FLAGS_health_check_pct,
-        static_cast<uint16_t>(FLAGS_health_checker_port),
-        std::chrono::seconds(FLAGS_health_checker_ping_interval_s),
-        maybeIpTos,
-        AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-        kvStoreLocalCmdUrl,
-        kvStoreLocalPubUrl,
-        maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_health_checker_rep_port),
-        monitorSubmitUrl,
-        context));
+    startEventLoop(
+        allThreads,
+        orderedEventLoops,
+        moduleTypeToEvl,
+        watchdog,
+        std::make_shared<HealthChecker>(
+            FLAGS_node_name,
+            openr::thrift::HealthCheckOption(FLAGS_health_check_option),
+            FLAGS_health_check_pct,
+            static_cast<uint16_t>(FLAGS_health_checker_port),
+            std::chrono::seconds(FLAGS_health_checker_ping_interval_s),
+            maybeIpTos,
+            AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
+            PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+            kvStoreLocalCmdUrl,
+            kvStoreLocalPubUrl,
+            maybeGetTcpEndpoint(
+                FLAGS_listen_addr, FLAGS_health_checker_rep_port),
+            monitorSubmitUrl,
+            context));
   }
 
   apache::thrift::ThriftServer thriftCtrlServer;
@@ -1061,7 +1088,7 @@ main(int argc, char** argv) {
     sslContext->setNextProtocols(Constants::getNextProtocolsForThriftServers());
     // TODO Change to VERIFY_REQ_CLIENT_CERT after we have evryone using certs
     sslContext->clientVerification =
-      folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
+        folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
     sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
     thriftCtrlServer.setSSLConfig(sslContext);
     if (fileExists(FLAGS_tls_ticket_seed_path)) {
@@ -1107,7 +1134,8 @@ main(int argc, char** argv) {
   thriftCtrlServer.stop();
 
   for (auto riter = orderedEventLoops.rbegin();
-      orderedEventLoops.rend() != riter; ++riter) {
+       orderedEventLoops.rend() != riter;
+       ++riter) {
     (*riter)->stop();
     (*riter)->waitUntilStopped();
   }

@@ -40,9 +40,8 @@ TEST(UtilTest, getNthPrefix) {
   // v6 allocation parameters
   const uint32_t seedPrefixLen = 32;
   const uint32_t allocPrefixLen = seedPrefixLen + 5;
-  const folly::CIDRNetwork seedPrefix{
-      folly::IPAddress{"face:b00c::1"},
-      seedPrefixLen};
+  const folly::CIDRNetwork seedPrefix{folly::IPAddress{"face:b00c::1"},
+                                      seedPrefixLen};
 
   // v6
   EXPECT_EQ(
@@ -72,11 +71,9 @@ TEST(UtilTest, getNthPrefix) {
 
   // Some error cases
   // 1. prefixIndex is out of range
-  EXPECT_THROW(
-      getNthPrefix(v4SeedPrefix, 24, 256), std::invalid_argument);
+  EXPECT_THROW(getNthPrefix(v4SeedPrefix, 24, 256), std::invalid_argument);
   // 2. alloc block is bigger than seed prefix block
-  EXPECT_THROW(
-      getNthPrefix(v4SeedPrefix, 15, 0), std::invalid_argument);
+  EXPECT_THROW(getNthPrefix(v4SeedPrefix, 15, 0), std::invalid_argument);
 }
 
 TEST(UtilTest, checkIncludeExcludeRegex) {
@@ -296,14 +293,13 @@ TEST(UtilTest, getTotalPerfEventsDurationTest) {
 
   {
     thrift::PerfEvents perfEvents;
-    thrift::PerfEvent event1{
-      apache::thrift::FRAGILE, "node1", "LINK_UP", 100};
+    thrift::PerfEvent event1{apache::thrift::FRAGILE, "node1", "LINK_UP", 100};
     perfEvents.events.emplace_back(std::move(event1));
     thrift::PerfEvent event2{
-      apache::thrift::FRAGILE, "node1", "DECISION_RECVD", 200};
+        apache::thrift::FRAGILE, "node1", "DECISION_RECVD", 200};
     perfEvents.events.emplace_back(std::move(event2));
     thrift::PerfEvent event3{
-      apache::thrift::FRAGILE, "node1", "SPF_CALCULATE", 300};
+        apache::thrift::FRAGILE, "node1", "SPF_CALCULATE", 300};
     perfEvents.events.emplace_back(std::move(event3));
     auto duration = getTotalPerfEventsDuration(perfEvents);
     EXPECT_EQ(duration.count(), 200);
@@ -314,20 +310,20 @@ TEST(UtilTest, getBestPaths) {
   auto bestPaths = getBestPaths({path1_2_1, path1_2_2});
   EXPECT_EQ(bestPaths.size(), 1);
   EXPECT_EQ(bestPaths.at(0).ifName, "iface_1_2_1");
-  EXPECT_EQ(bestPaths.at(0).nextHop,
-            toBinaryAddress(folly::IPAddress("fe80::2")));
+  EXPECT_EQ(
+      bestPaths.at(0).nextHop, toBinaryAddress(folly::IPAddress("fe80::2")));
   EXPECT_EQ(bestPaths.at(0).metric, 1);
 
   bestPaths = getBestPaths({path1_2_1, path1_2_2, path1_2_3});
   EXPECT_EQ(bestPaths.size(), 2);
   sort(bestPaths.begin(), bestPaths.end());
   EXPECT_EQ(bestPaths.at(0).ifName, "iface_1_2_1");
-  EXPECT_EQ(bestPaths.at(0).nextHop,
-            toBinaryAddress(folly::IPAddress("fe80::2")));
+  EXPECT_EQ(
+      bestPaths.at(0).nextHop, toBinaryAddress(folly::IPAddress("fe80::2")));
   EXPECT_EQ(bestPaths.at(0).metric, 1);
   EXPECT_EQ(bestPaths.at(1).ifName, "iface_1_2_3");
-  EXPECT_EQ(bestPaths.at(1).nextHop,
-            toBinaryAddress(folly::IPAddress("fe80::2")));
+  EXPECT_EQ(
+      bestPaths.at(1).nextHop, toBinaryAddress(folly::IPAddress("fe80::2")));
   EXPECT_EQ(bestPaths.at(1).metric, 1);
 }
 

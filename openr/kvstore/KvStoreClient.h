@@ -40,9 +40,8 @@ using namespace std::chrono_literals;
  */
 class KvStoreClient {
  public:
-  using KeyCallback =
-      folly::Function<void(std::string const&,
-                folly::Optional<thrift::Value>) noexcept>;
+  using KeyCallback = folly::Function<void(
+      std::string const&, folly::Optional<thrift::Value>) noexcept>;
 
   /**
    * Creates and initializes all necessary sockets for communicating with
@@ -54,8 +53,8 @@ class KvStoreClient {
       std::string const& nodeId,
       std::string const& kvStoreLocalCmdUrl,
       std::string const& kvStoreLocalPubUrl,
-      folly::Optional<std::chrono::milliseconds>
-                      checkPersistKeyPeriod = 60000ms,
+      folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod =
+          60000ms,
       folly::Optional<std::chrono::milliseconds> recvTimeout = 3000ms);
 
   ~KvStoreClient();
@@ -193,8 +192,10 @@ class KvStoreClient {
    * @param callback - callback API to invoke when key update is received
    * @param fetchInitValue - returns key value from KvStore if set to 'true'
    */
-  folly::Optional<thrift::Value> subscribeKey(std::string const& key,
-          KeyCallback callback, bool fetchInitValue = false);
+  folly::Optional<thrift::Value> subscribeKey(
+      std::string const& key,
+      KeyCallback callback,
+      bool fetchInitValue = false);
   void unsubscribeKey(std::string const& key);
 
   // Set callback for all kv publications

@@ -215,8 +215,8 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
 
   // enable handover on report socket to new connection for duplicate identities
   const int handover = 1;
-  const auto reportSockOpt = reportSocket_.setSockOpt(
-      ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
+  const auto reportSockOpt =
+      reportSocket_.setSockOpt(ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
   if (reportSockOpt.hasError()) {
     LOG(FATAL) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
                << reportSockOpt.error();
@@ -362,15 +362,14 @@ Spark::validateHelloPacket(
   auto const& originator = helloPacket.payload.originator;
   auto const& neighborName = originator.nodeName;
   uint32_t const& remoteVersion =
-                          static_cast<uint32_t>(helloPacket.payload.version);
+      static_cast<uint32_t>(helloPacket.payload.version);
 
   // domain check
   if (originator.domainName != myDomainName_) {
     LOG(ERROR) << "Ignoring hello packet from node " << originator.nodeName
                << " on interface " << originator.ifName
                << " because it's from different domain "
-               << originator.domainName
-               << ". My domain is " << myDomainName_;
+               << originator.domainName << ". My domain is " << myDomainName_;
     tData_.addStatValue(
         "spark.invalid_keepalive.different_domain", 1, fbzmq::SUM);
     return PacketValidationResult::FAILURE;
@@ -378,8 +377,8 @@ Spark::validateHelloPacket(
   // version check
   if (remoteVersion < static_cast<uint32_t>(kVersion_.lowestSupportedVersion)) {
     LOG(ERROR) << "Unsupported version: " << neighborName << " "
-               << remoteVersion << ", must be >= "
-               << kVersion_.lowestSupportedVersion;
+               << remoteVersion
+               << ", must be >= " << kVersion_.lowestSupportedVersion;
     tData_.addStatValue(
         "spark.invalid_keepalive.invalid_version", 1, fbzmq::SUM);
     return PacketValidationResult::FAILURE;
@@ -397,7 +396,7 @@ Spark::validateHelloPacket(
     } catch (const folly::IPAddressFormatException& ex) {
       LOG(ERROR) << "Neighbor V4 address is not known";
       tData_.addStatValue(
-        "spark.invalid_keepalive.missing_v4_addr", 1, fbzmq::SUM);
+          "spark.invalid_keepalive.missing_v4_addr", 1, fbzmq::SUM);
       return PacketValidationResult::FAILURE;
     }
 
@@ -509,8 +508,8 @@ Spark::processNeighborRttChange(
       neighbor.rtt.count(),
       neighbor.label);
   auto ret = reportSocket_.sendMultiple(
-      fbzmq::Message::from(
-          openr::Constants::kSparkReportClientId.toString()).value(),
+      fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
+          .value(),
       fbzmq::Message(),
       fbzmq::Message::fromThriftObj(event, serializer_).value());
   if (ret.hasError()) {
@@ -550,8 +549,8 @@ Spark::processNeighborHoldTimeout(
         neighbor.rtt.count(),
         neighbor.label);
     auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(
-            openr::Constants::kSparkReportClientId.toString()).value(),
+        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
+            .value(),
         fbzmq::Message(),
         fbzmq::Message::fromThriftObj(event, serializer_).value());
     if (ret.hasError()) {
@@ -787,8 +786,8 @@ Spark::processHelloPacket() {
         neighbor.rtt.count(),
         neighbor.label);
     auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(
-            openr::Constants::kSparkReportClientId.toString()).value(),
+        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
+            .value(),
         fbzmq::Message(),
         fbzmq::Message::fromThriftObj(event, serializer_).value());
     if (ret.hasError()) {
@@ -836,8 +835,8 @@ Spark::processHelloPacket() {
         neighbor.rtt.count(),
         neighbor.label);
     auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(
-            openr::Constants::kSparkReportClientId.toString()).value(),
+        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
+            .value(),
         fbzmq::Message(),
         fbzmq::Message::fromThriftObj(event, serializer_).value());
     if (ret.hasError()) {
@@ -868,8 +867,8 @@ Spark::processHelloPacket() {
         neighbor.rtt.count(),
         neighbor.label);
     auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(
-            openr::Constants::kSparkReportClientId.toString()).value(),
+        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
+            .value(),
         fbzmq::Message(),
         fbzmq::Message::fromThriftObj(event, serializer_).value());
     if (ret.hasError()) {
@@ -958,8 +957,7 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
 
   // send the payload
   folly::SocketAddress dstAddr(
-      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
-      udpMcastPort_);
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
 
   if (kMinIpv6Mtu < packet.size()) {
     LOG(ERROR) << "Hello packet is too big, cannot sent!";
@@ -987,8 +985,7 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
     return fbzmq::Message::fromThriftObj(result, serializer_);
   };
 
-  auto maybeMsg = request.readThriftObj<thrift::InterfaceDatabase>(
-      serializer_);
+  auto maybeMsg = request.readThriftObj<thrift::InterfaceDatabase>(serializer_);
   if (maybeMsg.hasError()) {
     LOG(ERROR) << "processInterfaceDbUpdate recv failed: " << maybeMsg.error();
     folly::makeUnexpected(fbzmq::Error());
@@ -1019,8 +1016,7 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
       const auto& ipNetwork = toIPNetwork(ntwk, false);
       if (ipNetwork.first.isV4()) {
         v4Networks.emplace_back(ipNetwork);
-      }
-      else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
+      } else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
         v6LinkLocalNetworks.emplace_back(ipNetwork);
       }
     }
@@ -1046,8 +1042,8 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
     }
     folly::CIDRNetwork v6LinkLocalNetwork = v6LinkLocalNetworks.front();
 
-    newInterfaceDb.emplace(ifName,
-      Interface(ifIndex, v4Network, v6LinkLocalNetwork));
+    newInterfaceDb.emplace(
+        ifName, Interface(ifIndex, v4Network, v6LinkLocalNetwork));
   }
 
   auto newIfaces = folly::gen::from(newInterfaceDb) | folly::gen::get<0>() |
@@ -1107,13 +1103,13 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
           neighbor.label);
       auto ret = reportSocket_.sendMultiple(
           fbzmq::Message::from(
-              openr::Constants::kSparkReportClientId.toString()).value(),
+              openr::Constants::kSparkReportClientId.toString())
+              .value(),
           fbzmq::Message(),
           fbzmq::Message::fromThriftObj(event, serializer_).value());
       if (ret.hasError()) {
         LOG(ERROR) << "Error sending spark event: " << ret.error();
       }
-
     }
 
     // unsubscribe the socket from mcast group on this interface
@@ -1248,14 +1244,13 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
             "Failed joining multicast group: {}", folly::errnoStr(errno)));
       }
     }
-    LOG(INFO)
-        << "Updating iface " << ifName << " in spark tracking from "
-        << "(ifindex " << interface.ifIndex << ", addrs "
-        << interface.v6LinkLocalNetwork.first << " , "
-        << interface.v4Network.first << ") to "
-        << "(ifindex " << newInterface.ifIndex << ", addrs "
-        << newInterface.v6LinkLocalNetwork.first << " , "
-        << newInterface.v4Network.first << ")";
+    LOG(INFO) << "Updating iface " << ifName << " in spark tracking from "
+              << "(ifindex " << interface.ifIndex << ", addrs "
+              << interface.v6LinkLocalNetwork.first << " , "
+              << interface.v4Network.first << ") to "
+              << "(ifindex " << newInterface.ifIndex << ", addrs "
+              << newInterface.v6LinkLocalNetwork.first << " , "
+              << newInterface.v4Network.first << ")";
 
     interface = std::move(newInterface);
   }

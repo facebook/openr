@@ -37,8 +37,6 @@ KvStoreWrapper::KvStoreWrapper(
       monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
       reqSock_(zmqContext),
       subSock_(zmqContext) {
-
-
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
@@ -175,8 +173,7 @@ KvStoreWrapper::dumpAll(folly::Optional<KvStoreFilters> filters) {
   thrift::Request request;
   request.cmd = thrift::Command::KEY_DUMP;
   if (filters.hasValue()) {
-    std::string keyPrefix =
-      folly::join(",", filters.value().getKeyPrefixes());
+    std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
     request.keyDumpParams.prefix = keyPrefix;
     request.keyDumpParams.originatorIds = filters.value().getOrigniatorIdList();
   }
@@ -252,8 +249,8 @@ KvStoreWrapper::getCounters() {
 
   // Make ZMQ call and wait for response
   reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<fbzmq::thrift::CounterValuesResponse>(
-      serializer_);
+  auto maybeMsg =
+      reqSock_.recvThriftObj<fbzmq::thrift::CounterValuesResponse>(serializer_);
   if (maybeMsg.hasError()) {
     LOG(FATAL) << "getCounters recv response failed: " << maybeMsg.error();
   }

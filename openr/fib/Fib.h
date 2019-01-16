@@ -1,4 +1,4 @@
-    /**
+/**
  * Copyright (c) 2014-present, Facebook, Inc.
  *
  * This source code is licensed under the MIT license found in the
@@ -18,13 +18,12 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/common/OpenrEventLoop.h>
-
 
 namespace openr {
 
@@ -67,10 +66,10 @@ class Fib final : public OpenrEventLoop {
    * It will return immediately if healthy client connection already exists.
    */
   static void createFibClient(
-    folly::EventBase& evb,
-    std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
-    std::unique_ptr<thrift::FibServiceAsyncClient>& client,
-    int32_t port);
+      folly::EventBase& evb,
+      std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+      std::unique_ptr<thrift::FibServiceAsyncClient>& client,
+      int32_t port);
 
  private:
   // No-copy
@@ -91,8 +90,8 @@ class Fib final : public OpenrEventLoop {
    */
   void processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb);
 
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& request) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& request) override;
 
   /**
    * Convert local perfDb_ into PerfDataBase
@@ -105,8 +104,8 @@ class Fib final : public OpenrEventLoop {
    * on failure invokes syncRouteDbDebounced
    */
   void updateRoutes(
-    const std::vector<thrift::UnicastRoute>& affectedRoutes,
-    const std::vector<thrift::IpPrefix>& prefixesToRemove);
+      const std::vector<thrift::UnicastRoute>& affectedRoutes,
+      const std::vector<thrift::IpPrefix>& prefixesToRemove);
 
   /**
    * Sync the current routeDb_ with the switch agent.

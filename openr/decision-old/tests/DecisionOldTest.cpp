@@ -11,8 +11,8 @@
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
 #include <folly/Random.h>
-#include <gmock/gmock.h>
 #include <gflags/gflags.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -480,8 +480,9 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
 
   EXPECT_THAT(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      AnyOf(Eq(NextHops({make_pair(toNextHop(adj12, v4Enabled), 20)})),
-            Eq(NextHops({make_pair(toNextHop(adj13, v4Enabled), 20)}))));
+      AnyOf(
+          Eq(NextHops({make_pair(toNextHop(adj12, v4Enabled), 20)})),
+          Eq(NextHops({make_pair(toNextHop(adj13, v4Enabled), 20)}))));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
@@ -919,8 +920,9 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
 
   EXPECT_THAT(
       routeMap[make_pair("1", toString(addr4))],
-      AnyOf(Eq(NextHops({make_pair(toNextHop(adj12_2), 20)})),
-            Eq(NextHops({make_pair(toNextHop(adj13_1), 20)}))));
+      AnyOf(
+          Eq(NextHops({make_pair(toNextHop(adj12_2), 20)})),
+          Eq(NextHops({make_pair(toNextHop(adj13_1), 20)}))));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
@@ -928,8 +930,9 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
 
   EXPECT_THAT(
       routeMap[make_pair("1", toString(addr2))],
-      AnyOf(Eq(NextHops({make_pair(toNextHop(adj12_2), 10)})),
-            Eq(NextHops({make_pair(toNextHop(adj12_1), 10)}))));
+      AnyOf(
+          Eq(NextHops({make_pair(toNextHop(adj12_2), 10)})),
+          Eq(NextHops({make_pair(toNextHop(adj12_1), 10)}))));
 
   // validate router 2
 
@@ -939,13 +942,15 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
 
   EXPECT_THAT(
       routeMap[make_pair("2", toString(addr3))],
-      AnyOf(Eq(NextHops({make_pair(toNextHop(adj21_2), 20)})),
-            Eq(NextHops({make_pair(toNextHop(adj24_1), 20)}))));
+      AnyOf(
+          Eq(NextHops({make_pair(toNextHop(adj21_2), 20)})),
+          Eq(NextHops({make_pair(toNextHop(adj24_1), 20)}))));
 
   EXPECT_THAT(
       routeMap[make_pair("2", toString(addr1))],
-      AnyOf(Eq(NextHops({make_pair(toNextHop(adj21_2), 10)})),
-            Eq(NextHops({make_pair(toNextHop(adj21_1), 10)}))));
+      AnyOf(
+          Eq(NextHops({make_pair(toNextHop(adj21_2), 10)})),
+          Eq(NextHops({make_pair(toNextHop(adj21_1), 10)}))));
 
   // validate router 3
 
@@ -955,8 +960,9 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
 
   EXPECT_THAT(
       routeMap[make_pair("3", toString(addr2))],
-      AnyOf(Eq(NextHops({make_pair(toNextHop(adj31_1), 20)})),
-            Eq(NextHops({make_pair(toNextHop(adj34_1), 20)}))));
+      AnyOf(
+          Eq(NextHops({make_pair(toNextHop(adj31_1), 20)})),
+          Eq(NextHops({make_pair(toNextHop(adj34_1), 20)}))));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
@@ -974,8 +980,9 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
 
   EXPECT_THAT(
       routeMap[make_pair("4", toString(addr1))],
-      AnyOf(Eq(NextHops({make_pair(toNextHop(adj42_1), 20)})),
-            Eq(NextHops({make_pair(toNextHop(adj43_1), 20)}))));
+      AnyOf(
+          Eq(NextHops({make_pair(toNextHop(adj42_1), 20)})),
+          Eq(NextHops({make_pair(toNextHop(adj43_1), 20)}))));
 }
 
 //
@@ -1411,11 +1418,15 @@ TEST_F(DecisionOldTestFixture, BasicOperations) {
 
   auto publication = thrift::Publication(
       FRAGILE,
-      {{"adj:1", createAdjValue("1", 1, {adj12})},
-       {"adj:2", createAdjValue("2", 1, {adj21})},
-       {"prefix:1", createPrefixValue("1", 1, {addr1})},
-       {"prefix:2", createPrefixValue("2", 1, {addr2})},},
-      {}, {}, {});
+      {
+          {"adj:1", createAdjValue("1", 1, {adj12})},
+          {"adj:2", createAdjValue("2", 1, {adj21})},
+          {"prefix:1", createPrefixValue("1", 1, {addr1})},
+          {"prefix:2", createPrefixValue("2", 1, {addr2})},
+      },
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
@@ -1440,7 +1451,9 @@ TEST_F(DecisionOldTestFixture, BasicOperations) {
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -1487,7 +1500,11 @@ TEST_F(DecisionOldTestFixture, BasicOperations) {
 
   // remove 3
   publication = thrift::Publication(
-      FRAGILE, thrift::KeyVals{}, {"adj:3", "prefix:3"} /* expired keys */, {}, {});
+      FRAGILE,
+      thrift::KeyVals{},
+      {"adj:3", "prefix:3"} /* expired keys */,
+      {},
+      {});
 
   sendKvPublication(publication);
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
@@ -1526,7 +1543,9 @@ TEST_F(DecisionOldTestFixture, ParallelLinks) {
        {"adj:2", createAdjValue("2", 1, {adj21_1, adj21_2})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
@@ -1571,7 +1590,9 @@ TEST_F(DecisionOldTestFixture, PubDebouncing) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -1599,7 +1620,9 @@ TEST_F(DecisionOldTestFixture, PubDebouncing) {
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -1612,7 +1635,9 @@ TEST_F(DecisionOldTestFixture, PubDebouncing) {
       FRAGILE,
       {{"adj:4", createAdjValue("4", 1, {adj43})},
        {"adj:3", createAdjValue("3", 5, {adj32, adj34})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -1628,9 +1653,7 @@ TEST_F(DecisionOldTestFixture, PubDebouncing) {
   // Only publish prefix updates
   //
   publication = thrift::Publication(
-      FRAGILE,
-      {{"prefix:4", createPrefixValue("4", 1, {addr4})}},
-      {}, {}, {});
+      FRAGILE, {{"prefix:4", createPrefixValue("4", 1, {addr4})}}, {}, {}, {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1649,13 +1672,13 @@ TEST_F(DecisionOldTestFixture, PubDebouncing) {
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 2, {addr4, addr5})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
-      FRAGILE,
-      {{"adj:2", createAdjValue("2", 5, {adj21})}},
-      {}, {}, {});
+      FRAGILE, {{"adj:2", createAdjValue("2", 5, {adj21})}}, {}, {}, {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1672,21 +1695,23 @@ TEST_F(DecisionOldTestFixture, PubDebouncing) {
   // Some tricks here; we need to bump the time-stamp on router 4's data, so
   // it can override existing;
   publication = thrift::Publication(
-      FRAGILE,
-      {{"prefix:4", createPrefixValue("4", 5, {addr4})}},
-      {}, {}, {});
+      FRAGILE, {{"prefix:4", createPrefixValue("4", 5, {addr4})}}, {}, {}, {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 7, {addr4, addr6})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 8, {addr4, addr5, addr6})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1714,7 +1739,9 @@ TEST_F(DecisionOldTestFixture, NoSpfOnIrrelevantPublication) {
        {"adji2:2", createAdjValue("2", 1, {adj21})},
        {"prefix2:1", createPrefixValue("1", 1, {addr1})},
        {"prefix2:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -1746,7 +1773,9 @@ TEST_F(DecisionOldTestFixture, NoSpfOnDuplicatePublication) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -1809,7 +1838,9 @@ TEST_F(DecisionOldTestFixture, LoopFreeAlternatePaths) {
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -1872,7 +1903,9 @@ TEST_F(DecisionOldTestFixture, LoopFreeAlternatePaths) {
       FRAGILE,
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   // Send same publication again to DecisionOld using pub socket
   sendKvPublication(publication);
@@ -1962,7 +1995,9 @@ TEST_F(DecisionOldTestFixture, DuplicatePrefixes) {
        // node3 has same address w/ node2
        {"prefix:3", createPrefixValue("3", 1, {addr2})},
        {"prefix:4", createPrefixValue("4", 1, {addr4})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -2026,7 +2061,9 @@ TEST_F(DecisionOldTestFixture, DuplicatePrefixes) {
       FRAGILE,
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13, adj14})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   // Send same publication again to DecisionOld using pub socket
   sendKvPublication(publication);
@@ -2122,10 +2159,10 @@ TEST_F(DecisionOldTestFixture, DecisionOldSubReliability) {
   sendKvPublication(initialPub);
 
   //
-  // Hammer DecisionOld with lot of duplicate publication for 2 * ThrottleTimeout
-  // We want to ensure that we hammer DecisionOld for atleast once during it's
-  // SPF run. This will cause lot of pending publications on DecisionOld. This
-  // is not going to cause any SPF computation
+  // Hammer DecisionOld with lot of duplicate publication for 2 *
+  // ThrottleTimeout We want to ensure that we hammer DecisionOld for atleast
+  // once during it's SPF run. This will cause lot of pending publications on
+  // DecisionOld. This is not going to cause any SPF computation
   //
   thrift::Publication duplicatePub;
   duplicatePub.keyVals["prefix:1"] = initialPub.keyVals.at("prefix:1");

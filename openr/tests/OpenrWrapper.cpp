@@ -129,7 +129,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
             ipPrefix_ = folly::none;
           }
         }
-    }, false);
+      },
+      false);
 
   //
   // create spark
@@ -148,13 +149,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStorePubPort{0}, // these port numbers won't be used
       KvStoreCmdPort{0},
-      std::make_pair(Constants::kOpenrVersion,
-                     Constants::kOpenrSupportedVersion),
+      std::make_pair(
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       context_);
 
   // spark client socket
-  sparkReqSock_.connect(
-      fbzmq::SocketUrl{spark_->inprocCmdUrl}).value();
+  sparkReqSock_.connect(fbzmq::SocketUrl{spark_->inprocCmdUrl}).value();
 
   //
   // create link monitor
@@ -253,13 +253,10 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(
-     nodeId_,
-     std::chrono::seconds(1),
-     std::chrono::seconds(60),
-     memLimit);
+      nodeId_, std::chrono::seconds(1), std::chrono::seconds(60), memLimit);
 
   // Zmq monitor client to get counters
-   zmqMonitorClient = std::make_unique<fbzmq::ZmqMonitorClient> (
+  zmqMonitorClient = std::make_unique<fbzmq::ZmqMonitorClient>(
       context_,
       MonitorSubmitUrl{folly::sformat("inproc://{}-monitor-submit", nodeId_)});
 }
@@ -326,8 +323,8 @@ OpenrWrapper<Serializer>::run() {
     }
   });
 
-  const auto seedPrefix = folly::IPAddress::createNetwork(
-      "fc00:cafe:babe::/62");
+  const auto seedPrefix =
+      folly::IPAddress::createNetwork("fc00:cafe:babe::/62");
   const uint8_t allocPrefixLen = 64;
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
       nodeId_,

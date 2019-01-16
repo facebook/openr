@@ -30,6 +30,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/allocators/RangeAllocator.h>
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config-store/PersistentStoreClient.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
@@ -39,7 +40,6 @@
 #include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/InterfaceEntry.h>
-#include <openr/common/OpenrEventLoop.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
@@ -123,7 +123,7 @@ class LinkMonitor final : public OpenrEventLoop {
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
   static std::unordered_map<std::string, thrift::PeerSpec>
   getPeersFromAdjacencies(
-    const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies);
+      const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies);
 
  private:
   // make no-copy
@@ -177,8 +177,8 @@ class LinkMonitor final : public OpenrEventLoop {
   // specified port.
   void createNetlinkSystemHandlerClient();
 
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& request) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& request) override;
 
   // Sumbmits the counter/stats to monitor
   void submitCounters();

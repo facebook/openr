@@ -22,8 +22,7 @@ const size_t kNlSockRecvBuf{2 * 1024 * 1024};
 namespace openr {
 namespace fbnl {
 
-NetlinkSocket::NetlinkSocket(
-    fbzmq::ZmqEventLoop* evl, EventsHandler* handler)
+NetlinkSocket::NetlinkSocket(fbzmq::ZmqEventLoop* evl, EventsHandler* handler)
     : evl_(evl), handler_(handler) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 
@@ -158,9 +157,8 @@ NetlinkSocket::handleRouteEvent(
     const bool isValid = (action != NL_ACT_DEL);
     RouteBuilder builder;
     auto route = builder.loadFromObject(routeObj).setValid(isValid).build();
-    std::string ifName = route.getRouteIfName().hasValue()
-        ? route.getRouteIfName().value()
-        : "";
+    std::string ifName =
+        route.getRouteIfName().hasValue() ? route.getRouteIfName().value() : "";
     EventVariant event = std::move(route);
     handler_->handleEvent(ifName, action, event);
   }
@@ -413,12 +411,12 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     // instead a new route will be created, which may cause underlying kernel
     // crash when releasing netdevices
     if (iter != unicastRoutes.end()) {
-      int err = rtnlRouteDelete(
-        reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+      int err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
       if (0 != err && -NLE_OBJ_NOTFOUND != err) {
         throw fbnl::NlException(folly::sformat(
             "Failed to delete route\n{}\nError: {}",
-            iter->second.str(), nl_geterror(err)));
+            iter->second.str(),
+            nl_geterror(err)));
       }
     }
   }
@@ -430,9 +428,7 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   int err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), NLM_F_REPLACE);
   if (0 != err) {
     throw fbnl::NlException(folly::sformat(
-        "Could not add route\n{}\nError: {}",
-        route.str(),
-        nl_geterror(err)));
+        "Could not add route\n{}\nError: {}", route.str(), nl_geterror(err)));
   }
 
   // Add route entry in cache on successful addition
@@ -689,9 +685,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
       continue;
     }
     int err = rtnlRouteAdd(
-        reqSock_,
-        routeToAdd.second.getRtnlRouteRef(),
-        NLM_F_REPLACE);
+        reqSock_, routeToAdd.second.getRtnlRouteRef(), NLM_F_REPLACE);
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
           "Could not add link Route to: {} dev {} Error: {}",
@@ -1135,18 +1129,14 @@ NetlinkSocket::setEventHandler(EventsHandler* handler) {
 
 int
 NetlinkSocket::rtnlRouteAdd(
-    struct nl_sock* sock,
-    struct rtnl_route* route,
-    int flags) {
+    struct nl_sock* sock, struct rtnl_route* route, int flags) {
   tickEvent();
   return rtnl_route_add(sock, route, flags);
 }
 
 int
 NetlinkSocket::rtnlRouteDelete(
-    struct nl_sock* sock,
-    struct rtnl_route* route,
-    int flags) {
+    struct nl_sock* sock, struct rtnl_route* route, int flags) {
   tickEvent();
   return rtnl_route_delete(sock, route, flags);
 }

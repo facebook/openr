@@ -111,10 +111,7 @@ MockNetlinkSystemHandler::sendAddrEvent(
       FRAGILE,
       ifName,
       thrift::IpPrefix(
-          FRAGILE,
-          toBinaryAddress(ipNetwork.first),
-          ipNetwork.second
-      ),
+          FRAGILE, toBinaryAddress(ipNetwork.first), ipNetwork.second),
       isValid));
 }
 

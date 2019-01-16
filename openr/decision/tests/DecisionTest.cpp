@@ -11,8 +11,8 @@
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
 #include <folly/Random.h>
-#include <gmock/gmock.h>
 #include <gflags/gflags.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -162,7 +162,7 @@ TEST(ShortestPathTest, UnreachableNodes) {
 
   std::string nodeName("1");
   SpfSolver spfSolver(
-    nodeName, false /* disable v4 */, false /* disable LFA */);
+      nodeName, false /* disable v4 */, false /* disable LFA */);
 
   EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
   EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb2).first);
@@ -195,7 +195,7 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
 
   std::string nodeName("1");
   SpfSolver spfSolver(
-    nodeName, false /* disable v4 */, false /* disable LFA */);
+      nodeName, false /* disable v4 */, false /* disable LFA */);
 
   //
   // Feed SPF solver with R1's AdjDb and all prefixes, but do not
@@ -224,7 +224,7 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
 
   std::string nodeName("1");
   SpfSolver spfSolver(
-    nodeName, false /* disable v4 */, false /* disable LFA */);
+      nodeName, false /* disable v4 */, false /* disable LFA */);
 
   //
   // Feed SPF solver with R1's AdjDb and all prefixes, but do not
@@ -255,7 +255,7 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
 TEST(ShortestPathTest, UnknownNode) {
   std::string nodeName("1");
   SpfSolver spfSolver(
-    nodeName, false /* disable v4 */, false /* disable LFA */);
+      nodeName, false /* disable v4 */, false /* disable LFA */);
 
   auto routeDb = spfSolver.buildPaths("1");
   EXPECT_FALSE(routeDb.hasValue());
@@ -273,7 +273,7 @@ TEST(SpfSolver, AdjacencyUpdate) {
 
   std::string nodeName("1");
   SpfSolver spfSolver(
-    nodeName, false /* disable v4 */, false /* disable LFA */);
+      nodeName, false /* disable v4 */, false /* disable LFA */);
 
   //
   // Feed SPF solver with R1 and R2's adjacency + prefix dbs
@@ -355,7 +355,6 @@ TEST(SpfSolver, AdjacencyUpdate) {
   ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->routes.size());
-
 }
 
 //
@@ -380,13 +379,13 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
 
   std::string nodeName("1");
   SpfSolver spfSolver(
-    nodeName, false /* disable v4 */, false /* disable LFA */);
+      nodeName, false /* disable v4 */, false /* disable LFA */);
 
   EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  EXPECT_EQ(!partitioned,
-      spfSolver.updateAdjacencyDatabase(adjacencyDb2).first);
-  EXPECT_EQ(!partitioned,
-      spfSolver.updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_EQ(
+      !partitioned, spfSolver.updateAdjacencyDatabase(adjacencyDb2).first);
+  EXPECT_EQ(
+      !partitioned, spfSolver.updateAdjacencyDatabase(adjacencyDb3).first);
 
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
@@ -419,7 +418,7 @@ INSTANTIATE_TEST_CASE_P(
 TEST(ConnectivityTest, OverloadNodeTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(
-    nodeName, false /* disable v4 */, false /* disable LFA */);
+      nodeName, false /* disable v4 */, false /* disable LFA */);
 
   // Add all adjacency DBs
   auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
@@ -480,7 +479,7 @@ TEST(ConnectivityTest, OverloadNodeTest) {
 TEST(ConnectivityTest, CompatibilityNodeTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(
-    nodeName, false /* disable v4 */, false /* disable LFA */);
+      nodeName, false /* disable v4 */, false /* disable LFA */);
 
   // Add all adjacency DBs
   auto adjacencyDb1 = createAdjDb("1", {adj12_old_1}, 0);
@@ -1217,7 +1216,12 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
 
 // add adjacencies to neighbor at grid(i, j)
 void
-addAdj(int i, int j, string ifName, vector<thrift::Adjacency>& adjs, int n,
+addAdj(
+    int i,
+    int j,
+    string ifName,
+    vector<thrift::Adjacency>& adjs,
+    int n,
     string otherIfName) {
   if (i < 0 || i >= n || j < 0 || j >= n) {
     return;
@@ -1555,7 +1559,9 @@ TEST_F(DecisionTestFixture, BasicOperations) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
@@ -1579,7 +1585,9 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -1626,7 +1634,11 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   // remove 3
   publication = thrift::Publication(
-      FRAGILE, thrift::KeyVals{}, {"adj:3", "prefix:3"} /* expired keys */, {}, {});
+      FRAGILE,
+      thrift::KeyVals{},
+      {"adj:3", "prefix:3"} /* expired keys */,
+      {},
+      {});
 
   sendKvPublication(publication);
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
@@ -1665,7 +1677,9 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
        {"adj:2", createAdjValue("2", 1, {adj21_1, adj21_2})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
@@ -1693,7 +1707,11 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
 
   // restore the original state
   publication = thrift::Publication(
-      FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}}, {}, {}, {});
+      FRAGILE,
+      {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}},
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -1713,7 +1731,9 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   publication = thrift::Publication(
       FRAGILE,
       {{"adj:2", createAdjValue("2", 2, {adj21_1_overloaded, adj21_2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -1744,7 +1764,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -1772,7 +1794,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -1785,7 +1809,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       FRAGILE,
       {{"adj:4", createAdjValue("4", 1, {adj43})},
        {"adj:3", createAdjValue("3", 5, {adj32, adj34})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -1801,9 +1827,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // Only publish prefix updates
   //
   publication = thrift::Publication(
-      FRAGILE,
-      {{"prefix:4", createPrefixValue("4", 1, {addr4})}},
-      {}, {}, {});
+      FRAGILE, {{"prefix:4", createPrefixValue("4", 1, {addr4})}}, {}, {}, {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1822,13 +1846,13 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 2, {addr4, addr5})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
-      FRAGILE,
-      {{"adj:2", createAdjValue("2", 5, {adj21})}},
-      {}, {}, {});
+      FRAGILE, {{"adj:2", createAdjValue("2", 5, {adj21})}}, {}, {}, {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1845,21 +1869,23 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // Some tricks here; we need to bump the time-stamp on router 4's data, so
   // it can override existing;
   publication = thrift::Publication(
-      FRAGILE,
-      {{"prefix:4", createPrefixValue("4", 5, {addr4})}},
-      {}, {}, {});
+      FRAGILE, {{"prefix:4", createPrefixValue("4", 5, {addr4})}}, {}, {}, {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 7, {addr4, addr6})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
   sendKvPublication(publication);
 
   publication = thrift::Publication(
       FRAGILE,
       {{"prefix:4", createPrefixValue("4", 8, {addr4, addr5, addr6})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
   sendKvPublication(publication);
 
   /* sleep override */
@@ -1887,7 +1913,9 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
        {"adji2:2", createAdjValue("2", 1, {adj21})},
        {"prefix2:1", createPrefixValue("1", 1, {addr1})},
        {"prefix2:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -1919,7 +1947,9 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -1982,7 +2012,9 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -2045,7 +2077,9 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
       FRAGILE,
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
@@ -2135,7 +2169,9 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
        // node3 has same address w/ node2
        {"prefix:3", createPrefixValue("3", 1, {addr2})},
        {"prefix:4", createPrefixValue("4", 1, {addr4})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   sendKvPublication(publication);
 
@@ -2199,7 +2235,9 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
       FRAGILE,
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13, adj14})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
-      {}, {}, {});
+      {},
+      {},
+      {});
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
@@ -2241,8 +2279,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   EXPECT_EQ(2, routeMapList["4"].routes.size());
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
-      NextHops(
-          {make_pair(toNextHop(adj41), 15)}));
+      NextHops({make_pair(toNextHop(adj41), 15)}));
 }
 
 /**

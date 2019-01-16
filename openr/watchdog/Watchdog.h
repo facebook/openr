@@ -44,13 +44,12 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
   bool memoryLimitExceeded() const;
 
  private:
-
   void updateCounters();
 
   // monitor memory usage
   void monitorMemory();
 
-  void fireCrash(const std::string &msg);
+  void fireCrash(const std::string& msg);
 
   const std::string myNodeName_;
 

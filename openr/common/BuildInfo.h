@@ -17,7 +17,6 @@ namespace openr {
  */
 class BuildInfo {
  public:
-
   /**
    * Unix name of the user that built this binary
    */
@@ -97,8 +96,8 @@ class BuildInfo {
   static const char* getBuildType();
 
   /**
-  * The build tool that built this binary
-  */
+   * The build tool that built this binary
+   */
   static const char* getBuildTool();
 
   /**
@@ -112,7 +111,7 @@ class BuildInfo {
   static void log(std::ostream& os);
 
  private:
-  BuildInfo() {};
+  BuildInfo(){};
 };
 
 } // namespace openr

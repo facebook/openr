@@ -41,9 +41,9 @@ enum class PrefixAllocatorModeSeeded {};
 
 using PrefixAllocatorParams = std::pair<folly::CIDRNetwork, uint8_t>;
 using PrefixAllocatorMode = boost::variant<
-  PrefixAllocatorModeStatic,
-  PrefixAllocatorModeSeeded,
-  PrefixAllocatorParams>;
+    PrefixAllocatorModeStatic,
+    PrefixAllocatorModeSeeded,
+    PrefixAllocatorParams>;
 
 /**
  * The class assigns local node unique prefixes from a given seed prefix in
@@ -57,8 +57,7 @@ using PrefixAllocatorMode = boost::variant<
  * > PrefixAllocatorParams
  *   => elects subprefix from prefix allocator params
  */
-class PrefixAllocator
-  : public OpenrEventLoop, public boost::static_visitor<> {
+class PrefixAllocator : public OpenrEventLoop, public boost::static_visitor<> {
  public:
   PrefixAllocator(
       const std::string& myNodeName,
@@ -92,7 +91,6 @@ class PrefixAllocator
   void operator()(PrefixAllocatorModeSeeded const&);
   void operator()(PrefixAllocatorParams const&);
 
-
   // Thread safe API for testing only
   folly::Optional<uint32_t> getMyPrefixIndex();
 
@@ -110,8 +108,8 @@ class PrefixAllocator
   // Private methods
   //
 
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& /* not used */) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& /* not used */) override;
 
   // Function to process static allocation update from kvstore
   void processStaticPrefixAllocUpdate(thrift::Value const& value);
@@ -162,25 +160,25 @@ class PrefixAllocator
       folly::Optional<PrefixAllocatorParams> const& newParams = folly::none);
 
   void syncIfaceAddrs(
-    const std::string& ifName,
-    int family,
-    int scope,
-    const std::vector<folly::CIDRNetwork>& prefixes);
+      const std::string& ifName,
+      int family,
+      int scope,
+      const std::vector<folly::CIDRNetwork>& prefixes);
 
   void delIfaceAddr(
-    const std::string& ifName,
-    const folly::CIDRNetwork& prefix);
+      const std::string& ifName, const folly::CIDRNetwork& prefix);
 
   void getIfacePrefixes(
-    const std::string& iface, int family,
-    std::vector<folly::CIDRNetwork>& addrs);
+      const std::string& iface,
+      int family,
+      std::vector<folly::CIDRNetwork>& addrs);
 
   // Create client when necessary
   void createThriftClient(
-    folly::EventBase& evb,
-    std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
-    std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
-    int32_t port);
+      folly::EventBase& evb,
+      std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+      std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
+      int32_t port);
 
   //
   // Const private variables

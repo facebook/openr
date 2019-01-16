@@ -81,7 +81,7 @@ KvStoreClient::KvStoreClient(
 
   if (checkPersistKeyPeriod_.hasValue()) {
     checkPersistKeyTimer_ = fbzmq::ZmqTimeout::make(
-      eventLoop_, [this]() noexcept { checkPersistKeyInStore(); });
+        eventLoop_, [this]() noexcept { checkPersistKeyInStore(); });
 
     checkPersistKeyTimer_->scheduleTimeout(checkPersistKeyPeriod_.value());
   }
@@ -132,7 +132,7 @@ KvStoreClient::checkPersistKeyInStore() {
     return;
   }
 
-  for (auto const& key: persistedKeyVals_) {
+  for (auto const& key : persistedKeyVals_) {
     request.keyGetParams.keys.push_back(key.first);
   }
   // Send request
@@ -154,10 +154,10 @@ KvStoreClient::checkPersistKeyInStore() {
 
   auto& publication = *maybePublication;
   std::unordered_map<std::string, thrift::Value> keyVals;
-  for (auto const& key: persistedKeyVals_) {
-    auto rxkey  = publication.keyVals.find(key.first);
+  for (auto const& key : persistedKeyVals_) {
+    auto rxkey = publication.keyVals.find(key.first);
     if (rxkey == publication.keyVals.end()) {
-       keyVals.emplace(key.first, persistedKeyVals_[key.first]);
+      keyVals.emplace(key.first, persistedKeyVals_[key.first]);
     }
   }
   // Advertise to KvStore
@@ -507,8 +507,8 @@ KvStoreClient::dumpAllWithPrefix(const std::string& prefix /* = "" */) {
 }
 
 folly::Optional<thrift::Value>
-KvStoreClient::subscribeKey(std::string const& key, KeyCallback callback,
-        bool fetchKeyValue) {
+KvStoreClient::subscribeKey(
+    std::string const& key, KeyCallback callback, bool fetchKeyValue) {
   VLOG(3) << "KvStoreClient: subscribeKey called for key " << key;
   CHECK(bool(callback)) << "Callback function for " << key << " is empty";
   keyCallbacks_[key] = std::move(callback);
@@ -610,7 +610,6 @@ KvStoreClient::getPeers() {
 
 void
 KvStoreClient::processExpiredKeys(thrift::Publication const& publication) {
-
   auto const& expiredKeys = publication.expiredKeys;
 
   for (auto const& key : expiredKeys) {
@@ -667,10 +666,12 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
             sk->second.first.ttlVersion < rcvdValue.ttlVersion) {
           VLOG(1) << "Bumping TTL version for (key, version, originatorId) "
                   << folly::sformat(
-                        "({}, {}, {})",
-                        key, rcvdValue.version, rcvdValue.originatorId)
-                  << " to " << (rcvdValue.ttlVersion + 1)
-                  << " from " << setValue.ttlVersion;
+                         "({}, {}, {})",
+                         key,
+                         rcvdValue.version,
+                         rcvdValue.originatorId)
+                  << " to " << (rcvdValue.ttlVersion + 1) << " from "
+                  << setValue.ttlVersion;
           setValue.ttlVersion = rcvdValue.ttlVersion + 1;
         }
       }
@@ -772,9 +773,11 @@ KvStoreClient::advertisePendingKeys() {
     auto const& eventType = backoff.canTryNow() ? "Advertising" : "Skipping";
     VLOG(1) << eventType << " (key, version, originatorId, ttlVersion) "
             << folly::sformat(
-                  "({}, {}, {}, {})",
-                  key, thriftValue.version,
-                  thriftValue.originatorId, thriftValue.ttlVersion);
+                   "({}, {}, {}, {})",
+                   key,
+                   thriftValue.version,
+                   thriftValue.originatorId,
+                   thriftValue.ttlVersion);
     VLOG(2) << "With value: " << folly::humanify(thriftValue.value.value());
 
     if (not backoff.canTryNow()) {
@@ -844,9 +847,11 @@ KvStoreClient::advertiseTtlUpdates() {
 
     VLOG(1) << "Advertising ttl update (key, version, originatorId, ttlVersion)"
             << folly::sformat(
-                  " ({}, {}, {}, {})",
-                  key, thriftValue.version,
-                  thriftValue.originatorId, thriftValue.ttlVersion);
+                   " ({}, {}, {}, {})",
+                   key,
+                   thriftValue.version,
+                   thriftValue.originatorId,
+                   thriftValue.ttlVersion);
     keyVals.emplace(key, thriftValue);
   }
 

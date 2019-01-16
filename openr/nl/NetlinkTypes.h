@@ -119,7 +119,7 @@ class NextHop final {
 bool operator==(const NextHop& lhs, const NextHop& rhs);
 
 struct NextHopHash {
-  size_t operator() (const openr::fbnl::NextHop& nh) const;
+  size_t operator()(const openr::fbnl::NextHop& nh) const;
 };
 
 using NextHopSet = std::unordered_set<NextHop, NextHopHash>;
@@ -260,70 +260,70 @@ class RouteBuilder {
 // Wrapper class for rtnl_route
 class Route final {
  public:
-   explicit Route(const RouteBuilder& builder);
-   ~Route();
+  explicit Route(const RouteBuilder& builder);
+  ~Route();
 
-   // Copy+Move constructor and assignment operator
-   Route(Route&&) noexcept;
-   Route& operator=(Route&&) noexcept;
-   Route(const Route&);
-   Route& operator=(const Route&);
+  // Copy+Move constructor and assignment operator
+  Route(Route&&) noexcept;
+  Route& operator=(Route&&) noexcept;
+  Route(const Route&);
+  Route& operator=(const Route&);
 
-   uint8_t getFamily() const;
+  uint8_t getFamily() const;
 
-   const folly::CIDRNetwork& getDestination() const;
+  const folly::CIDRNetwork& getDestination() const;
 
-   uint8_t getType() const;
+  uint8_t getType() const;
 
-   uint8_t getRouteTable() const;
+  uint8_t getRouteTable() const;
 
-   uint8_t getProtocolId() const;
+  uint8_t getProtocolId() const;
 
-   uint8_t getScope() const;
+  uint8_t getScope() const;
 
-   folly::Optional<uint32_t> getFlags() const;
+  folly::Optional<uint32_t> getFlags() const;
 
-   folly::Optional<uint32_t> getPriority() const;
+  folly::Optional<uint32_t> getPriority() const;
 
-   folly::Optional<uint8_t> getTos() const;
+  folly::Optional<uint8_t> getTos() const;
 
-   const NextHopSet& getNextHops() const;
+  const NextHopSet& getNextHops() const;
 
-   bool isValid() const;
+  bool isValid() const;
 
-   folly::Optional<std::string> getRouteIfName() const;
+  folly::Optional<std::string> getRouteIfName() const;
 
-   std::string str() const;
+  std::string str() const;
 
-   /**
-    * This method Will construct rtnl_route object on the first time call,
-    * then will return the same object pointer. It will just return the pointer
-    * without increase the ref count. Caller shouldn't do rtnl_route_put
-    * without explicit increase of it's ref count
-    * getRtnlRouteRef => Returns full rtnl_route object including nexthops
-    * getRtnlRouteKeyRef => Returns partial rtnl_route object just containining
-    *                       key (prefix) and no nexthhops
-    */
-   struct rtnl_route* getRtnlRouteRef();
-   struct rtnl_route* getRtnlRouteKeyRef();
+  /**
+   * This method Will construct rtnl_route object on the first time call,
+   * then will return the same object pointer. It will just return the pointer
+   * without increase the ref count. Caller shouldn't do rtnl_route_put
+   * without explicit increase of it's ref count
+   * getRtnlRouteRef => Returns full rtnl_route object including nexthops
+   * getRtnlRouteKeyRef => Returns partial rtnl_route object just containining
+   *                       key (prefix) and no nexthhops
+   */
+  struct rtnl_route* getRtnlRouteRef();
+  struct rtnl_route* getRtnlRouteKeyRef();
 
  private:
-   struct nl_addr* buildAddrObject(const folly::CIDRNetwork& addr);
-   struct rtnl_route* createRtnlRouteKey();
+  struct nl_addr* buildAddrObject(const folly::CIDRNetwork& addr);
+  struct rtnl_route* createRtnlRouteKey();
 
-   uint8_t type_{RTN_UNICAST};
-   uint8_t routeTable_{RT_TABLE_MAIN};
-   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
-   uint8_t scope_{RT_SCOPE_UNIVERSE};
-   bool isValid_{false};
-   folly::Optional<uint32_t> flags_;
-   folly::Optional<uint32_t> priority_;
-   folly::Optional<uint8_t> tos_;
-   NextHopSet nextHops_;
-   folly::CIDRNetwork dst_;
-   folly::Optional<std::string> routeIfName_;
-   struct rtnl_route* route_{nullptr};
-   struct rtnl_route* routeKey_{nullptr};
+  uint8_t type_{RTN_UNICAST};
+  uint8_t routeTable_{RT_TABLE_MAIN};
+  uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
+  uint8_t scope_{RT_SCOPE_UNIVERSE};
+  bool isValid_{false};
+  folly::Optional<uint32_t> flags_;
+  folly::Optional<uint32_t> priority_;
+  folly::Optional<uint8_t> tos_;
+  NextHopSet nextHops_;
+  folly::CIDRNetwork dst_;
+  folly::Optional<std::string> routeIfName_;
+  struct rtnl_route* route_{nullptr};
+  struct rtnl_route* routeKey_{nullptr};
 };
 
 bool operator==(const Route& lhs, const Route& rhs);
@@ -331,98 +331,98 @@ bool operator==(const Route& lhs, const Route& rhs);
 class IfAddress;
 class IfAddressBuilder final {
  public:
-   IfAddressBuilder() {}
-   ~IfAddressBuilder() {}
+  IfAddressBuilder() {}
+  ~IfAddressBuilder() {}
 
-   IfAddress build() const;
+  IfAddress build() const;
 
-   IfAddress buildFromObject(struct rtnl_addr* addr);
+  IfAddress buildFromObject(struct rtnl_addr* addr);
 
-   IfAddressBuilder& loadFromObject(struct rtnl_addr* addr);
+  IfAddressBuilder& loadFromObject(struct rtnl_addr* addr);
 
-   // Required
-   IfAddressBuilder& setIfIndex(int ifIndex);
+  // Required
+  IfAddressBuilder& setIfIndex(int ifIndex);
 
-   int getIfIndex() const;
+  int getIfIndex() const;
 
-   IfAddressBuilder& setPrefix(const folly::CIDRNetwork& prefix);
+  IfAddressBuilder& setPrefix(const folly::CIDRNetwork& prefix);
 
-   folly::Optional<folly::CIDRNetwork> getPrefix() const;
+  folly::Optional<folly::CIDRNetwork> getPrefix() const;
 
-   IfAddressBuilder& setFamily(uint8_t family);
+  IfAddressBuilder& setFamily(uint8_t family);
 
-   // Family will be shadowed if prefix is set
-   folly::Optional<uint8_t> getFamily() const;
+  // Family will be shadowed if prefix is set
+  folly::Optional<uint8_t> getFamily() const;
 
-   IfAddressBuilder& setScope(uint8_t scope);
+  IfAddressBuilder& setScope(uint8_t scope);
 
-   folly::Optional<uint8_t> getScope() const;
+  folly::Optional<uint8_t> getScope() const;
 
-   IfAddressBuilder& setFlags(uint8_t flags);
+  IfAddressBuilder& setFlags(uint8_t flags);
 
-   folly::Optional<uint8_t> getFlags() const;
+  folly::Optional<uint8_t> getFlags() const;
 
-   IfAddressBuilder& setValid(bool isValid);
+  IfAddressBuilder& setValid(bool isValid);
 
-   bool isValid() const;
+  bool isValid() const;
 
-   // Reset builder, all the required fields need to be set again
-   void reset();
+  // Reset builder, all the required fields need to be set again
+  void reset();
 
  private:
-   folly::Optional<folly::CIDRNetwork> prefix_;
-   int ifIndex_{0};
-   bool isValid_{false};
-   folly::Optional<uint8_t> scope_;
-   folly::Optional<uint8_t> flags_;
-   folly::Optional<uint8_t> family_;
+  folly::Optional<folly::CIDRNetwork> prefix_;
+  int ifIndex_{0};
+  bool isValid_{false};
+  folly::Optional<uint8_t> scope_;
+  folly::Optional<uint8_t> flags_;
+  folly::Optional<uint8_t> family_;
 };
 
 // Wrapper class fo rtnl_addr
 class IfAddress final {
  public:
-   explicit IfAddress(const IfAddressBuilder& builder);
-   ~IfAddress();
+  explicit IfAddress(const IfAddressBuilder& builder);
+  ~IfAddress();
 
-   // Copy+Move constructor and assignment operator
-   IfAddress(IfAddress&&) noexcept;
-   IfAddress& operator=(IfAddress&&) noexcept;
-   IfAddress(const IfAddress&);
-   IfAddress& operator=(const IfAddress&);
+  // Copy+Move constructor and assignment operator
+  IfAddress(IfAddress&&) noexcept;
+  IfAddress& operator=(IfAddress&&) noexcept;
+  IfAddress(const IfAddress&);
+  IfAddress& operator=(const IfAddress&);
 
-   // Family will be shadowed if prefix is set
-   uint8_t getFamily() const;
+  // Family will be shadowed if prefix is set
+  uint8_t getFamily() const;
 
-   uint8_t getPrefixLen() const;
+  uint8_t getPrefixLen() const;
 
-   int getIfIndex() const;
+  int getIfIndex() const;
 
-   folly::Optional<folly::CIDRNetwork> getPrefix() const;
+  folly::Optional<folly::CIDRNetwork> getPrefix() const;
 
-   folly::Optional<uint8_t> getScope() const;
+  folly::Optional<uint8_t> getScope() const;
 
-   folly::Optional<uint8_t> getFlags() const;
+  folly::Optional<uint8_t> getFlags() const;
 
-   bool isValid() const;
+  bool isValid() const;
 
-   std::string str() const;
+  std::string str() const;
 
-   /**
-    * Will construct rtnl_addr object on the first time call, then will return
-    * the same object pointer. It will just return the pointer
-    * without increase the ref count. Caller shouldn't do rtnl_addr_put
-    * without explicit increase of it's ref count
-    */
-   struct rtnl_addr* getRtnlAddrRef();
+  /**
+   * Will construct rtnl_addr object on the first time call, then will return
+   * the same object pointer. It will just return the pointer
+   * without increase the ref count. Caller shouldn't do rtnl_addr_put
+   * without explicit increase of it's ref count
+   */
+  struct rtnl_addr* getRtnlAddrRef();
 
  private:
-   folly::Optional<folly::CIDRNetwork> prefix_;
-   int ifIndex_{0};
-   bool isValid_{false};
-   folly::Optional<uint8_t> scope_;
-   folly::Optional<uint8_t> flags_;
-   folly::Optional<uint8_t> family_;
-   struct rtnl_addr* ifAddr_{nullptr};
+  folly::Optional<folly::CIDRNetwork> prefix_;
+  int ifIndex_{0};
+  bool isValid_{false};
+  folly::Optional<uint8_t> scope_;
+  folly::Optional<uint8_t> flags_;
+  folly::Optional<uint8_t> family_;
+  struct rtnl_addr* ifAddr_{nullptr};
 };
 
 bool operator==(const IfAddress& lhs, const IfAddress& rhs);
@@ -430,94 +430,94 @@ bool operator==(const IfAddress& lhs, const IfAddress& rhs);
 class Neighbor;
 class NeighborBuilder final {
  public:
-   NeighborBuilder() {}
-   ~NeighborBuilder() {}
+  NeighborBuilder() {}
+  ~NeighborBuilder() {}
 
-   // Only support V6 neighbor
-   Neighbor buildFromObject(struct rtnl_neigh* obj, bool deleted=false) const;
+  // Only support V6 neighbor
+  Neighbor buildFromObject(struct rtnl_neigh* obj, bool deleted = false) const;
 
-   /**
-    * Build Neighbor object to add/del neighbors
-    * Add Neighbor:
-    *   IfIndex, destination, state must be set
-    * Del Neighbor:
-    *   Neighbours are uniquely identified by their interface index and
-    *   destination address, you may fill out other attributes but they
-    *   will have no influence.
-    */
-   Neighbor build() const;
+  /**
+   * Build Neighbor object to add/del neighbors
+   * Add Neighbor:
+   *   IfIndex, destination, state must be set
+   * Del Neighbor:
+   *   Neighbours are uniquely identified by their interface index and
+   *   destination address, you may fill out other attributes but they
+   *   will have no influence.
+   */
+  Neighbor build() const;
 
-   NeighborBuilder& setIfIndex(int ifIndex);
+  NeighborBuilder& setIfIndex(int ifIndex);
 
-   int getIfIndex() const;
+  int getIfIndex() const;
 
-   NeighborBuilder& setDestination(const folly::IPAddress& dest);
+  NeighborBuilder& setDestination(const folly::IPAddress& dest);
 
-   folly::IPAddress getDestination() const;
+  folly::IPAddress getDestination() const;
 
-   NeighborBuilder& setLinkAddress(const folly::MacAddress& linkAddress);
+  NeighborBuilder& setLinkAddress(const folly::MacAddress& linkAddress);
 
-   folly::Optional<folly::MacAddress> getLinkAddress() const;
+  folly::Optional<folly::MacAddress> getLinkAddress() const;
 
-   bool getIsReachable() const;
+  bool getIsReachable() const;
 
-   /**
-    * NUD_INCOMPLETE
-    * NUD_REACHABLE
-    * NUD_STALE
-    * NUD_DELAY
-    * NUD_PROBE
-    * NUD_FAILED
-    * NUD_NOARP
-    * NUD_PERMANENT
-    */
-   NeighborBuilder& setState(int state, bool deleted=false);
+  /**
+   * NUD_INCOMPLETE
+   * NUD_REACHABLE
+   * NUD_STALE
+   * NUD_DELAY
+   * NUD_PROBE
+   * NUD_FAILED
+   * NUD_NOARP
+   * NUD_PERMANENT
+   */
+  NeighborBuilder& setState(int state, bool deleted = false);
 
-   folly::Optional<int> getState() const;
+  folly::Optional<int> getState() const;
 
  private:
-   int ifIndex_{0};
-   bool isReachable_{false};
-   folly::IPAddress destination_;
-   folly::Optional<folly::MacAddress> linkAddress_;
-   folly::Optional<int> state_;
+  int ifIndex_{0};
+  bool isReachable_{false};
+  folly::IPAddress destination_;
+  folly::Optional<folly::MacAddress> linkAddress_;
+  folly::Optional<int> state_;
 };
 
 // Wrapper class for rtnl_neigh
 class Neighbor final {
  public:
-   explicit Neighbor(const NeighborBuilder& builder);
-   ~Neighbor();
+  explicit Neighbor(const NeighborBuilder& builder);
+  ~Neighbor();
 
-   // Copy+Move constructor and assignment operator
-   Neighbor(Neighbor&&) noexcept;
-   Neighbor& operator=(Neighbor&&) noexcept;
-   Neighbor(const Neighbor&);
-   Neighbor& operator=(const Neighbor&);
+  // Copy+Move constructor and assignment operator
+  Neighbor(Neighbor&&) noexcept;
+  Neighbor& operator=(Neighbor&&) noexcept;
+  Neighbor(const Neighbor&);
+  Neighbor& operator=(const Neighbor&);
 
-   int getIfIndex() const;
+  int getIfIndex() const;
 
-   bool isReachable() const;
+  bool isReachable() const;
 
-   int getFamily() const;
+  int getFamily() const;
 
-   folly::IPAddress getDestination() const;
+  folly::IPAddress getDestination() const;
 
-   folly::Optional<folly::MacAddress> getLinkAddress() const;
+  folly::Optional<folly::MacAddress> getLinkAddress() const;
 
-   folly::Optional<int> getState() const;
+  folly::Optional<int> getState() const;
 
-   std::string str() const;
+  std::string str() const;
 
-   struct rtnl_neigh* getRtnlNeighRef();
+  struct rtnl_neigh* getRtnlNeighRef();
 
  private:
-   int ifIndex_{0};
-   bool isReachable_{false};
-   folly::IPAddress destination_;
-   folly::Optional<folly::MacAddress> linkAddress_;
-   folly::Optional<int> state_;
-   struct rtnl_neigh* neigh_{nullptr};
+  int ifIndex_{0};
+  bool isReachable_{false};
+  folly::IPAddress destination_;
+  folly::Optional<folly::MacAddress> linkAddress_;
+  folly::Optional<int> state_;
+  struct rtnl_neigh* neigh_{nullptr};
 };
 
 bool operator==(const Neighbor& lhs, const Neighbor& rhs);
@@ -525,59 +525,59 @@ bool operator==(const Neighbor& lhs, const Neighbor& rhs);
 class Link;
 class LinkBuilder final {
  public:
-   LinkBuilder() {}
-   ~LinkBuilder() {}
+  LinkBuilder() {}
+  ~LinkBuilder() {}
 
-   Link buildFromObject(struct rtnl_link* link) const;
+  Link buildFromObject(struct rtnl_link* link) const;
 
-   Link build() const;
+  Link build() const;
 
-   LinkBuilder& setLinkName(const std::string& linkName);
+  LinkBuilder& setLinkName(const std::string& linkName);
 
-   const std::string& getLinkName() const;
+  const std::string& getLinkName() const;
 
-   LinkBuilder& setIfIndex(int ifIndex);
+  LinkBuilder& setIfIndex(int ifIndex);
 
-   int getIfIndex() const;
+  int getIfIndex() const;
 
-   LinkBuilder& setFlags(uint32_t flags);
+  LinkBuilder& setFlags(uint32_t flags);
 
-   uint32_t getFlags() const;
+  uint32_t getFlags() const;
 
  private:
-   std::string linkName_;
-   int ifIndex_{0};
-   uint32_t flags_{0};
+  std::string linkName_;
+  int ifIndex_{0};
+  uint32_t flags_{0};
 };
 
 class Link final {
  public:
-   explicit Link(const LinkBuilder& builder);
-   ~Link();
+  explicit Link(const LinkBuilder& builder);
+  ~Link();
 
-   // Copy+Move constructor and assignment operator
-   Link(Link&&) noexcept;
-   Link& operator=(Link&&) noexcept;
-   Link(const Link&);
-   Link& operator=(const Link&);
+  // Copy+Move constructor and assignment operator
+  Link(Link&&) noexcept;
+  Link& operator=(Link&&) noexcept;
+  Link(const Link&);
+  Link& operator=(const Link&);
 
-   const std::string& getLinkName() const;
+  const std::string& getLinkName() const;
 
-   int getIfIndex() const;
+  int getIfIndex() const;
 
-   uint32_t getFlags() const;
+  uint32_t getFlags() const;
 
-   bool isUp() const;
+  bool isUp() const;
 
-   std::string str() const;
+  std::string str() const;
 
-   struct rtnl_link* getRtnlLinkRef();
+  struct rtnl_link* getRtnlLinkRef();
 
  private:
-   std::string linkName_;
-   int ifIndex_{0};
-   uint32_t flags_{0};
-   struct rtnl_link* link_{nullptr};
+  std::string linkName_;
+  int ifIndex_{0};
+  uint32_t flags_{0};
+  struct rtnl_link* link_{nullptr};
 };
 
 bool operator==(const Link& lhs, const Link& rhs);
@@ -600,14 +600,14 @@ using NlUnicastRoutesDb = std::unordered_map<uint8_t, NlUnicastRoutes>;
  * key => (destination, ifName)
  * value => route object
  */
-using NlMulticastRoutes = std::unordered_map<
-    std::pair<folly::CIDRNetwork, std::string>, Route>;
+using NlMulticastRoutes =
+    std::unordered_map<std::pair<folly::CIDRNetwork, std::string>, Route>;
 
 // protocolId => routes
 using NlMulticastRoutesDb = std::unordered_map<uint8_t, NlMulticastRoutes>;
 
-using NlLinkRoutes = std::unordered_map<
-    std::pair<folly::CIDRNetwork, std::string>, Route>;
+using NlLinkRoutes =
+    std::unordered_map<std::pair<folly::CIDRNetwork, std::string>, Route>;
 
 // protocolId => routes
 using NlLinkRoutesDb = std::unordered_map<uint8_t, NlLinkRoutes>;
@@ -617,8 +617,8 @@ using NlLinkRoutesDb = std::unordered_map<uint8_t, NlLinkRoutes>;
  * Map of neighbors that are reachable
  * link name, destination IP and link Address
  */
-using NlNeighbors = std::unordered_map<
-    std::pair<std::string, folly::IPAddress>, Neighbor>;
+using NlNeighbors =
+    std::unordered_map<std::pair<std::string, folly::IPAddress>, Neighbor>;
 
 // keyed by link name
 using NlLinks = std::unordered_map<std::string, LinkAttribute>;

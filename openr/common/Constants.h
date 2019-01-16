@@ -56,9 +56,9 @@ class Constants {
 
   // Segment Routing namespace constants. Local and Global ranges are exclusive
   static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-    kSrGlobalRange{1, 49999};
+      kSrGlobalRange{1, 49999};
   static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-    kSrLocalRange{50000, 59999};
+      kSrLocalRange{50000, 59999};
 
   // IP TOS to be used for all control IP packets in network flowing across
   // the nodes
@@ -93,13 +93,11 @@ class Constants {
   // kvstore key for prefix allocator parameters indicating seed prefix and
   // allocation prefix length
   static constexpr folly::StringPiece kSeedPrefixAllocParamKey{
-    "e2e-network-prefix"
-  };
+      "e2e-network-prefix"};
 
   // kvstore key for prefix allocator parameters indicating static allocation
   static constexpr folly::StringPiece kStaticPrefixAllocParamKey{
-    "e2e-network-allocations"
-  };
+      "e2e-network-allocations"};
 
   //
   // LinkMonitor specific
@@ -205,10 +203,10 @@ class Constants {
 
   // ID for Spark report server
   static constexpr folly::StringPiece kSparkReportServerId{
-    "SPARK::ROUTER::SERVER"};
+      "SPARK::ROUTER::SERVER"};
   // ID for Spark report client
   static constexpr folly::StringPiece kSparkReportClientId{
-    "SPARK::ROUTER::CLIENT"};
+      "SPARK::ROUTER::CLIENT"};
 
   static constexpr folly::StringPiece kOpenrCtrlSessionContext{"OpenrCtrl"};
 
@@ -290,7 +288,8 @@ class Constants {
   // Threshold time in secs to crash after reaching critical memory
   static constexpr std::chrono::seconds kMemoryThresholdTime{600};
 
-  static const std::list<std::string>& getNextProtocolsForThriftServers() {
+  static const std::list<std::string>&
+  getNextProtocolsForThriftServers() {
     static const std::list<std::string> result{
         "thrift",
         "h2",
@@ -301,7 +300,6 @@ class Constants {
         "rs"};
     return result;
   }
-
 };
 
 } // namespace openr
