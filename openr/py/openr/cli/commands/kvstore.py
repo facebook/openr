@@ -470,7 +470,7 @@ class EraseKeyCmd(KvStoreCmd):
         # Get and modify the key
         val = publication.keyVals.get(key)
         val.value = None
-        val.ttl = 1  # set new ttl to 0
+        val.ttl = 256  # set new ttl to 256ms (its decremented 1ms on every hop)
         val.ttlVersion += 1  # bump up ttl version
 
         print(publication.keyVals)
