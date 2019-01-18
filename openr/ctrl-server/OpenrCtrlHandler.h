@@ -16,9 +16,12 @@
 namespace openr {
 class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf {
  public:
+  /**
+   * NOTE: If acceptablePeerCommonNames is empty then check for peerName is
+   *       skipped
+   */
   OpenrCtrlHandler(
       const std::string& nodeName,
-      bool autheticatePeerCommonName,
       const std::unordered_set<std::string>& acceptablePeerCommonNames,
       std::unordered_map<
           thrift::OpenrModuleType,
@@ -36,7 +39,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf {
  private:
   void authenticateConnection();
   const std::string nodeName_;
-  const bool autheticatePeerCommonName_{false};
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
   std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
       moduleTypeToEvl_;

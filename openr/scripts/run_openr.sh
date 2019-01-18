@@ -42,7 +42,6 @@ OPENR=openr
 # Keep this list in sorted order
 ALLOC_PREFIX_LEN=128
 ASSUME_DRAINED=false
-AUTHENTICATE_PEER_COMMON_NAME=false
 CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
 DECISION_DEBOUNCE_MAX_MS=250
 DECISION_DEBOUNCE_MIN_MS=10
@@ -154,7 +153,6 @@ fi
 exec ${OPENR} \
   --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
   --assume_drained=${ASSUME_DRAINED} \
-  --authenticate_peer_common_name=${AUTHENTICATE_PEER_COMMON_NAME} \
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \
   --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \
   --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \

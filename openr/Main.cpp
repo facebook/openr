@@ -364,11 +364,6 @@ DEFINE_bool(
     enable_secure_thrift_server,
     false,
     "Flag to enable TLS for our thrift server");
-DEFINE_bool(
-    authenticate_peer_common_name,
-    false,
-    "Flag to enable checking peers against the list of acceptable common names"
-    " provided by the flag \"tls_acceptable_peers\"");
 DEFINE_string(
     x509_cert_path,
     "",
@@ -1099,17 +1094,16 @@ main(int argc, char** argv) {
   // set the port and interface
   thriftCtrlServer.setPort(FLAGS_openr_ctrl_port);
 
-  std::vector<std::string> acceptableNames;
-  folly::split(",", FLAGS_tls_acceptable_peers, acceptableNames, true);
-  const std::unordered_set<std::string> acceptableNamesSet{
-      acceptableNames.begin(), acceptableNames.end()};
-
-  if (!FLAGS_enable_secure_thrift_server) {
-    CHECK(!FLAGS_authenticate_peer_common_name);
+  std::unordered_set<std::string> acceptableNamesSet; // empty set by default
+  if (FLAGS_enable_secure_thrift_server) {
+    std::vector<std::string> acceptableNames;
+    folly::split(",", FLAGS_tls_acceptable_peers, acceptableNames, true);
+    acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
+    CHECK(acceptableNamesSet.size()); // Set must not be empty
   }
+
   auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
       FLAGS_node_name,
-      FLAGS_authenticate_peer_common_name,
       acceptableNamesSet,
       moduleTypeToEvl,
       monitorSubmitUrl,

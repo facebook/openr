@@ -16,7 +16,6 @@ namespace openr {
 
 OpenrCtrlHandler::OpenrCtrlHandler(
     const std::string& nodeName,
-    bool autheticatePeerCommonName,
     const std::unordered_set<std::string>& acceptablePeerCommonNames,
     std::unordered_map<
         thrift::OpenrModuleType,
@@ -24,7 +23,6 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     MonitorSubmitUrl const& monitorSubmitUrl,
     fbzmq::Context& context)
     : nodeName_(nodeName),
-      autheticatePeerCommonName_(autheticatePeerCommonName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
       moduleTypeToEvl_(moduleTypeToEvl) {
   zmqMonitorClient_ =
@@ -79,11 +77,11 @@ OpenrCtrlHandler::authenticateConnection() {
     return;
   }
 
-  if (autheticatePeerCommonName_) {
-    auto peerName = connContext->getPeerCommonName();
-    if (!acceptablePeerCommonNames_.count(peerName)) {
-      throw thrift::OpenrError("Peer name unacceptable");
-    }
+  auto peerName = connContext->getPeerCommonName();
+  if (acceptablePeerCommonNames_.size() and
+      !acceptablePeerCommonNames_.count(peerName)) {
+    throw thrift::OpenrError(
+        folly::sformat("Peer name {} is unacceptable", peerName));
   }
 }
 

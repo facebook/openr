@@ -452,17 +452,11 @@ Note: for a time while we transition, the plaintext zmq endpoints will remain
 reachable.
 
 To enable security, please pass the flags detailed below. For authentication,
-set AUTHENTICATE_PEER_COMMON_NAME and specify acceptable common names via
-TLS_ACCEPTABLE_PEERS
+specify acceptable common names via TLS_ACCEPTABLE_PEERS
 
 #### ENABLE_SECURE_THRIFT_SERVER
 
 Flag to enable TLS for our thrift server. Disable this for plaintext thrift.
-
-#### AUTHENTICATE_PEER_COMMON_NAME
-
-Flag to enable checking peers against the list of acceptable common names
-provided by the flag "tls_acceptable_peers"
 
 #### X509_CERT_PATH
 
