@@ -94,9 +94,10 @@ class PrefixManagerTestFixture : public ::testing::Test {
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{"prefix:"},
         false /* prefix-mananger perf measurement */,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
+        std::chrono::seconds{0},
         context);
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
@@ -265,9 +266,10 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
       PersistentStoreUrl{kConfigStoreUrl},
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+      MonitorSubmitUrl{"inproc://monitor_submit"},
       PrefixDbMarker{"prefix:"},
       false /* prefix-mananger perf measurement */,
-      MonitorSubmitUrl{"inproc://monitor_submit"},
+      std::chrono::seconds(0),
       context);
 
   auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
@@ -378,6 +380,73 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawCount) {
   prefixManagerClient->withdrawPrefixes({addr2});
   auto count5 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(2, count5);
+}
+
+TEST(PrefixManagerTest, HoldTimeout) {
+  fbzmq::Context context;
+
+  // spin up a config store
+  auto configStore = std::make_unique<PersistentStore>(
+      folly::sformat(
+          "/tmp/pm_ut_config_store.bin.{}",
+          std::hash<std::thread::id>{}(std::this_thread::get_id())),
+      PersistentStoreUrl{kConfigStoreUrl},
+      context);
+  std::thread configStoreThread([&]() noexcept {
+    LOG(INFO) << "ConfigStore thread starting";
+    configStore->run();
+    LOG(INFO) << "ConfigStore thread finishing";
+  });
+  configStore->waitUntilRunning();
+
+  // spin up a kvstore
+  auto kvStoreWrapper = std::make_unique<KvStoreWrapper>(
+      context,
+      "test_store1",
+      std::chrono::seconds(1) /* db sync interval */,
+      std::chrono::seconds(600) /* counter submit interval */,
+      std::unordered_map<std::string, thrift::PeerSpec>{});
+  kvStoreWrapper->run();
+  LOG(INFO) << "The test KV store is running";
+
+  // start a prefix manager with timeout
+  const std::chrono::seconds holdTime{2};
+  const auto startTime = std::chrono::steady_clock::now();
+  auto prefixManager = std::make_unique<PrefixManager>(
+      "node-1",
+      std::string{kPrefixManagerGlobalCmdUrl},
+      PersistentStoreUrl{kConfigStoreUrl},
+      KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
+      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+      MonitorSubmitUrl{"inproc://monitor_submit"},
+      PrefixDbMarker{"prefix:"},
+      false /* prefix-mananger perf measurement */,
+      holdTime,
+      context);
+  std::thread prefixManagerThread([&]() {
+    LOG(INFO) << "PrefixManager thread starting";
+    prefixManager->run();
+    LOG(INFO) << "PrefixManager thread finishing";
+  });
+  prefixManager->waitUntilRunning();
+
+  // We must receive publication after holdTime
+  auto publication = kvStoreWrapper->recvPublication(holdTime * 2);
+  const auto elapsedTime =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - startTime);
+  CHECK_GE(
+      elapsedTime.count(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(holdTime).count());
+  CHECK_EQ(1, publication.keyVals.size());
+  CHECK_EQ(1, publication.keyVals.count("prefix:node-1"));
+
+  // Stop the test
+  prefixManager->stop();
+  prefixManagerThread.join();
+  kvStoreWrapper->stop();
+  configStore->stop();
+  configStoreThread.join();
 }
 
 int

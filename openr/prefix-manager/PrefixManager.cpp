@@ -31,9 +31,10 @@ PrefixManager::PrefixManager(
     const PersistentStoreUrl& persistentStoreUrl,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
+    const MonitorSubmitUrl& monitorSubmitUrl,
     const PrefixDbMarker& prefixDbMarker,
     bool enablePerfMeasurement,
-    const MonitorSubmitUrl& monitorSubmitUrl,
+    const std::chrono::seconds prefixHoldTime,
     fbzmq::Context& zmqContext)
     : OpenrEventLoop(
           nodeId,
@@ -44,19 +45,25 @@ PrefixManager::PrefixManager(
       configStoreClient_{persistentStoreUrl, zmqContext},
       prefixDbMarker_{prefixDbMarker},
       enablePerfMeasurement_{enablePerfMeasurement},
+      prefixHoldUntilTimePoint_(
+          std::chrono::steady_clock::now() + prefixHoldTime),
       kvStoreClient_{
           zmqContext, this, nodeId_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl} {
   // pick up prefixes from disk
   auto maybePrefixDb =
       configStoreClient_.loadThriftObj<thrift::PrefixDatabase>(kConfigKey);
-  if (maybePrefixDb) {
-    LOG(INFO) << "Successfully loaded prefixes from disk";
+  if (maybePrefixDb.hasValue()) {
+    LOG(INFO) << "Successfully loaded " << maybePrefixDb->prefixEntries.size()
+              << " prefixes from disk";
     for (const auto& entry : maybePrefixDb.value().prefixEntries) {
-      LOG(INFO) << "Loading Prefix: " << toString(entry.prefix);
+      LOG(INFO) << "  > " << toString(entry.prefix);
       prefixMap_[entry.prefix] = entry;
     }
-    persistPrefixDb();
+    // Prefixes will be advertised after prefixHoldUntilTimePoint_
   }
+
+  // Create throttled version of persistPrefixDbThrottled_
+  scheduleTimeoutAt(prefixHoldUntilTimePoint_, [this]() { persistPrefixDb(); });
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
@@ -70,6 +77,12 @@ PrefixManager::PrefixManager(
 
 void
 PrefixManager::persistPrefixDb() {
+  if (std::chrono::steady_clock::now() < prefixHoldUntilTimePoint_) {
+    // Too early for advertising my own prefixes. Let timeout advertise it
+    // and skip here.
+    return;
+  }
+
   // our prefixDb has changed, save the newest to disk
   thrift::PrefixDatabase prefixDb;
   prefixDb.thisNodeName = nodeId_;

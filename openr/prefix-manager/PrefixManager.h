@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include <boost/serialization/strong_typedef.hpp>
+#include <fbzmq/async/ZmqThrottle.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
@@ -32,10 +33,11 @@ class PrefixManager final : public OpenrEventLoop {
       const PersistentStoreUrl& persistentStoreUrl,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
+      const MonitorSubmitUrl& monitorSubmitUrl,
       const PrefixDbMarker& prefixDbMarker,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
-      const MonitorSubmitUrl& monitorSubmitUrl,
+      const std::chrono::seconds prefixHoldTime,
       fbzmq::Context& zmqContext);
 
   // disable copying
@@ -79,6 +81,10 @@ class PrefixManager final : public OpenrEventLoop {
 
   // enable convergence performance measurement for Adjacencies update
   const bool enablePerfMeasurement_{false};
+
+  // Hold timepoint. Prefix database will not be advertised until we pass this
+  // timepoint.
+  std::chrono::steady_clock::time_point prefixHoldUntilTimePoint_;
 
   // kvStoreClient for persisting our prefix db
   KvStoreClient kvStoreClient_;

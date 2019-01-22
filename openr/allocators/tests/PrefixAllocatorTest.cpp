@@ -113,9 +113,10 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
+        MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{"prefix:"},
         false /* prefix-manager perf measurement */,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
+        std::chrono::seconds(0),
         zmqContext_);
     threads_.emplace_back([&]() noexcept { prefixManager_->run(); });
     prefixManager_->waitUntilRunning();
@@ -424,9 +425,10 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           PersistentStoreUrl{kConfigStoreUrl + myNodeName + "temp"},
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
+          MonitorSubmitUrl{"inproc://monitor_submit"},
           PrefixDbMarker{"prefix:"},
           false /* prefix-manager perf measurement */,
-          MonitorSubmitUrl{"inproc://monitor_submit"},
+          std::chrono::seconds(0),
           zmqContext);
       threads.emplace_back([&prefixManager]() noexcept {
         prefixManager->run();

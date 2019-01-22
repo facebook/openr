@@ -513,6 +513,9 @@ main(int argc, char** argv) {
     maybeIpTos = FLAGS_ip_tos;
   }
 
+  // Hold time for advertising Prefix/Adj keys into KvStore
+  const std::chrono::seconds kvHoldTime{2 * FLAGS_spark_keepalive_time_s};
+
   // change directory after the config has been loaded
   ::chdir(FLAGS_chdir.c_str());
 
@@ -769,9 +772,10 @@ main(int argc, char** argv) {
           kConfigStoreUrl,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
+          monitorSubmitUrl,
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
           FLAGS_enable_perf_measurement,
-          monitorSubmitUrl,
+          kvHoldTime,
           context));
 
   const PrefixManagerLocalCmdUrl prefixManagerLocalCmdUrl{
@@ -963,7 +967,7 @@ main(int argc, char** argv) {
           LinkMonitorGlobalPubUrl{
               folly::sformat("tcp://*:{}", FLAGS_link_monitor_pub_port)},
           maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_link_monitor_cmd_port),
-          std::chrono::seconds(2 * FLAGS_spark_keepalive_time_s),
+          kvHoldTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms)));
 

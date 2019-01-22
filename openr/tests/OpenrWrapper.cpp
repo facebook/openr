@@ -178,9 +178,10 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       PersistentStoreUrl{configStoreUrl_},
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      MonitorSubmitUrl{monitorSubmitUrl_},
       PrefixDbMarker{"prefix:"},
       false /* prefix-mananger perf measurement */,
-      MonitorSubmitUrl{monitorSubmitUrl_},
+      std::chrono::seconds(0),
       context_);
 
   prefixManagerClient_ = std::make_unique<PrefixManagerClient>(

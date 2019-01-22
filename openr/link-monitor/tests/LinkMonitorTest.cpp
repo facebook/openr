@@ -211,9 +211,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
         PersistentStoreUrl{kConfigStoreUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         false,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
+        std::chrono::seconds(0),
         context);
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";
