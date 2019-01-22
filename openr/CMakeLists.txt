@@ -19,6 +19,7 @@ find_library(CONCURRENCY concurrency PATHS)
 find_library(DOUBLE-CONVERSION double-conversion)
 find_library(FBZMQ fbzmq)
 find_library(FOLLY folly PATHS)
+find_library(FOLLY_EXCEPTION_TRACER folly_exception_tracer PATHS)
 find_library(FIZZ fizz PATHS)
 find_library(GFLAGS gflags)
 find_library(GLOG glog)
@@ -35,6 +36,11 @@ find_library(TRANSPORT transport PATHS)
 find_library(ZMQ zmq)
 find_library(SIGAR sigar)
 find_library(ZSTD zstd)
+
+# FOLLY_EXCEPTION_TRACER may not be found
+if(NOT FOLLY_EXCEPTION_TRACER)
+  set(FOLLY_EXCEPTION_TRACER "")
+endif()
 
 find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
 
@@ -306,6 +312,7 @@ target_link_libraries(openrlib
   ${CONCURRENCY}
   ${ZSTD}
   ${FOLLY}
+  ${FOLLY_EXCEPTION_TRACER}
   ${SODIUM}
   ${SIGAR}
   ${RE2}
@@ -346,6 +353,7 @@ target_link_libraries(openr
   ${CONCURRENCY}
   ${THRIFTPROTOCOL}
   ${FOLLY}
+  ${FOLLY_EXCEPTION_TRACER}
   ${SODIUM}
   ${SIGAR}
   -lboost_system
@@ -376,6 +384,7 @@ target_link_libraries(platform_linux
   ${GLOG}
   ${GFLAGS}
   ${FOLLY}
+  ${FOLLY_EXCEPTION_TRACER}
   ${THRIFT}
   ${ZSTD}
   ${THRIFTCPP2}
@@ -535,6 +544,7 @@ if(BUILD_TESTS)
     ${GLOG}
     ${GFLAGS}
     ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
     -lpthread
     ${NLROUTE3}
     ${NL3}
@@ -569,6 +579,7 @@ if(BUILD_TESTS)
     ${THRIFTPROTOCOL}
     ${ZSTD}
     ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
     ${SODIUM}
     ${SIGAR}
     ${GMOCK}

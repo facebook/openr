@@ -20,6 +20,9 @@
 #include <folly/Memory.h>
 #include <folly/Optional.h>
 #include <folly/String.h>
+#if FOLLY_USE_SYMBOLIZER
+#include <folly/experimental/exception_tracer/ExceptionTracer.h>
+#endif
 #include <gflags/gflags.h>
 
 #include <openr/common/AddressUtil.h>
@@ -1189,7 +1192,20 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
         }
 
         // Apply publication and update stored update status
-        auto const& res = processPublication(maybeThriftPub.value());
+        ProcessPublicationResult res; // default initialized to false
+        try {
+          res = processPublication(maybeThriftPub.value());
+        } catch (const std::exception& e) {
+#if FOLLY_USE_SYMBOLIZER
+          // collect stack strace then fail the process
+          for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
+            LOG(ERROR) << exInfo;
+          }
+#endif
+          // FATAL to produce core dump
+          LOG(FATAL) << "Exception occured in Decision::processPublication - "
+                     << folly::exceptionStr(e);
+        }
         processUpdatesStatus_.adjChanged |= res.adjChanged;
         processUpdatesStatus_.prefixesChanged |= res.prefixesChanged;
         // compute routes with exponential backoff timer if needed
