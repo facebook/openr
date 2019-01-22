@@ -57,11 +57,11 @@ class PrefixManager final : public OpenrEventLoop {
       fbzmq::Message&& request) override;
 
   // helpers to modify prefix db, returns true if the db is modified
-  void addOrUpdatePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool addOrUpdatePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
   bool removePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
   bool removePrefixesByType(thrift::PrefixType type);
   // replace all prefixes of @type w/ @prefixes
-  void syncPrefixesByType(
+  bool syncPrefixesByType(
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
 

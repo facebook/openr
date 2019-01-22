@@ -168,13 +168,13 @@ TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   auto resp16 = prefixManagerClient->withdrawPrefixes({addr4});
   EXPECT_FALSE(resp1.value().success);
   EXPECT_TRUE(resp2.value().success);
-  EXPECT_TRUE(resp3.value().success);
+  EXPECT_FALSE(resp3.value().success);
   EXPECT_TRUE(resp4.value().success);
   EXPECT_FALSE(resp5.value().success);
   EXPECT_TRUE(resp6.value().success);
   EXPECT_TRUE(resp7.value().success);
   EXPECT_TRUE(resp8.value().success);
-  EXPECT_TRUE(resp9.value().success);
+  EXPECT_FALSE(resp9.value().success);
   EXPECT_TRUE(resp10.value().success);
   EXPECT_TRUE(resp11.value().success);
   EXPECT_TRUE(resp12.value().success);
@@ -223,8 +223,15 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_FALSE(resp11.value().success);
   // update all allocated prefixes
   prefixManagerClient->addPrefixes({prefixEntry2, prefixEntry4});
-  prefixManagerClient->syncPrefixesByType(
+
+  // Test sync logic
+  auto resp12 = prefixManagerClient->syncPrefixesByType(
       thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry6, prefixEntry8});
+  auto resp13 = prefixManagerClient->syncPrefixesByType(
+      thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry6, prefixEntry8});
+  EXPECT_TRUE(resp12.value().success);
+  EXPECT_FALSE(resp13.value().success);
+
   EXPECT_FALSE(prefixManagerClient->withdrawPrefixes({addr2}).value().success);
   EXPECT_FALSE(prefixManagerClient->withdrawPrefixes({addr4}).value().success);
   EXPECT_TRUE(prefixManagerClient->withdrawPrefixes({addr6}).value().success);

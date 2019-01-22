@@ -20,6 +20,7 @@ namespace {
 // key for the persist config on disk
 const std::string kConfigKey{"prefix-manager-config"};
 // various error messages
+const std::string kErrorNoChanges{"No changes in prefixes to be advertised"};
 const std::string kErrorNoPrefixToRemove{"No prefix to remove"};
 const std::string kErrorNoPrefixesOfType{"No prefixes of type"};
 const std::string kErrorUnknownCommand{"Unknown command"};
@@ -128,9 +129,14 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
   switch (thriftReq.cmd) {
   case thrift::PrefixManagerCommand::ADD_PREFIXES: {
     tData_.addStatValue("prefix_manager.add_prefixes", 1, fbzmq::COUNT);
-    addOrUpdatePrefixes(thriftReq.prefixes);
-    persistPrefixDb();
-    response.success = true;
+    if (addOrUpdatePrefixes(thriftReq.prefixes)) {
+      persistPrefixDb();
+      response.success = true;
+    } else {
+      response.success = false;
+      response.message = kErrorNoChanges;
+    }
+
     break;
   }
   case thrift::PrefixManagerCommand::WITHDRAW_PREFIXES: {
@@ -155,9 +161,13 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
     break;
   }
   case thrift::PrefixManagerCommand::SYNC_PREFIXES_BY_TYPE: {
-    syncPrefixesByType(thriftReq.type, thriftReq.prefixes);
-    persistPrefixDb();
-    response.success = true;
+    if (syncPrefixesByType(thriftReq.type, thriftReq.prefixes)) {
+      persistPrefixDb();
+      response.success = true;
+    } else {
+      response.success = false;
+      response.message = kErrorNoChanges;
+    }
     break;
   }
   case thrift::PrefixManagerCommand::GET_ALL_PREFIXES: {
@@ -226,16 +236,27 @@ PrefixManager::getPrefixWithdrawCounter() {
 }
 
 // helpers for modifying our Prefix Db
-void
+bool
 PrefixManager::addOrUpdatePrefixes(
     const std::vector<thrift::PrefixEntry>& prefixes) {
+  bool updated{false};
   for (const auto& prefix : prefixes) {
     LOG(INFO) << "Advertising prefix " << toString(prefix.prefix)
               << ", client: "
               << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
                      prefix.type);
-    prefixMap_[prefix.prefix] = prefix;
+    auto it = prefixMap_.find(prefix.prefix);
+    if (it == prefixMap_.end()) {
+      // Add missing prefix
+      prefixMap_.emplace(prefix.prefix, prefix);
+      updated = true;
+    } else if (it->second != prefix) {
+      it->second = prefix;
+      updated = true;
+    }
   }
+
+  return updated;
 }
 
 bool
@@ -253,12 +274,29 @@ PrefixManager::removePrefixes(
   return fail;
 }
 
-void
+bool
 PrefixManager::syncPrefixesByType(
     thrift::PrefixType type, const std::vector<thrift::PrefixEntry>& prefixes) {
-  // remove all prefixes of this type
-  removePrefixesByType(type);
-  addOrUpdatePrefixes(prefixes);
+  bool updated{false};
+
+  // Remove old prefixes
+  std::unordered_set<thrift::IpPrefix> newPrefixes;
+  for (auto const& prefix : prefixes) {
+    newPrefixes.emplace(prefix.prefix);
+  }
+  for (auto it = prefixMap_.begin(); it != prefixMap_.end();) {
+    if (it->second.type == type and newPrefixes.count(it->first) == 0) {
+      it = prefixMap_.erase(it);
+      updated = true;
+    } else {
+      ++it;
+    }
+  }
+
+  // Add/update new prefixes
+  updated |= addOrUpdatePrefixes(prefixes);
+
+  return updated;
 }
 
 bool
