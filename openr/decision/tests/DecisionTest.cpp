@@ -1584,6 +1584,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       FRAGILE,
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
+       {"adj:4", createAdjValue("4", 1, {})}, // No adjacencies
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
       {},
       {},
@@ -1636,7 +1637,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   publication = thrift::Publication(
       FRAGILE,
       thrift::KeyVals{},
-      {"adj:3", "prefix:3"} /* expired keys */,
+      {"adj:3", "prefix:3", "adj:4"} /* expired keys */,
       {},
       {});
 

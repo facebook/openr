@@ -391,15 +391,21 @@ class LinkState {
 
   void
   removeLinksFromNode(const std::string& nodeName) {
+    auto search = linkMap_.find(nodeName);
+    if (search == linkMap_.end()) {
+      // No links were added (addition of empty adjacency db can cause this)
+      return;
+    }
+
     // erase ptrs to these links from other nodes
-    for (auto const& link : linkMap_.at(nodeName)) {
+    for (auto const& link : search->second) {
       try {
         CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
       } catch (std::out_of_range const& e) {
         LOG(FATAL) << "std::out_of_range for " << nodeName;
       }
     }
-    linkMap_.erase(nodeName);
+    linkMap_.erase(search);
   }
 
   const LinkSet&
