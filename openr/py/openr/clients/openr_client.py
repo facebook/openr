@@ -8,6 +8,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import ssl
+import sys
 
 import zmq
 from openr.OpenrCtrl import OpenrCtrl
@@ -88,7 +89,8 @@ class OpenrClient(object):
                 except Exception as e:
                     print(
                         "Tried to connect via secure thrift but could not. "
-                        "Exception: {}.".format(e)
+                        "Exception: {}.".format(e),
+                        file=sys.stderr,
                     )
             if resp is None:
                 try:
@@ -96,7 +98,8 @@ class OpenrClient(object):
                 except Exception as e:
                     print(
                         "Tried to connect via plaintext thrift but could not. "
-                        "Exception: {}.".format(e)
+                        "Exception: {}.".format(e),
+                        file=sys.stderr,
                     )
 
         if resp is None:
