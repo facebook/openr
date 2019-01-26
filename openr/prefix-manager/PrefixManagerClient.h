@@ -7,6 +7,9 @@
 
 #pragma once
 
+#include <folly/Optional.h>
+#include <chrono>
+
 #include <fbzmq/zmq/Zmq.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -19,7 +22,9 @@ namespace openr {
 class PrefixManagerClient final {
  public:
   PrefixManagerClient(
-      const PrefixManagerLocalCmdUrl& localCmdUrl, fbzmq::Context& context);
+      const PrefixManagerLocalCmdUrl& localCmdUrl,
+      fbzmq::Context& context,
+      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none);
 
   folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error> addPrefixes(
       const std::vector<thrift::PrefixEntry>& prefixes);
@@ -47,6 +52,9 @@ class PrefixManagerClient final {
   // Dealer socket to talk with prefix manager
   fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_CLIENT> prefixManagerCmdSock_;
   apache::thrift::CompactSerializer serializer_;
+
+  // Recv Timeout to be used
+  folly::Optional<std::chrono::milliseconds> recvTimeout_;
 }; // PrefixManager
 
 } // namespace openr

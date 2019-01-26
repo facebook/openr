@@ -15,8 +15,10 @@
 namespace openr {
 
 PrefixManagerClient::PrefixManagerClient(
-    const PrefixManagerLocalCmdUrl& localCmdUrl, fbzmq::Context& context)
-    : prefixManagerCmdSock_{context} {
+    const PrefixManagerLocalCmdUrl& localCmdUrl,
+    fbzmq::Context& context,
+    folly::Optional<std::chrono::milliseconds> recvTimeout)
+    : prefixManagerCmdSock_{context}, recvTimeout_{recvTimeout} {
   CHECK(prefixManagerCmdSock_.connect(fbzmq::SocketUrl{localCmdUrl}));
 }
 
@@ -92,7 +94,8 @@ PrefixManagerClient::sendRequest(const thrift::PrefixManagerRequest& request) {
 
   // Receive response
   fbzmq::Message delimMsg, thriftRepMsg;
-  const auto ret = prefixManagerCmdSock_.recvMultiple(delimMsg, thriftRepMsg);
+  const auto ret = prefixManagerCmdSock_.recvMultipleTimeout(
+      recvTimeout_, delimMsg, thriftRepMsg);
 
   if (ret.hasError()) {
     LOG(ERROR) << "processRequest: Error receiving command: " << ret.error();
