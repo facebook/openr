@@ -375,7 +375,6 @@ class LinkState {
   // and not the object address
   using LinkSet =
       std::unordered_set<std::shared_ptr<Link>, LinkPtrHash, LinkPtrEqual>;
-  using OrderedLinkSet = std::set<std::shared_ptr<Link>, LinkPtrLess>;
 
   void
   addLink(const Link& link) {
@@ -421,16 +420,17 @@ class LinkState {
     return defaultEmptySet;
   }
 
-  OrderedLinkSet
+  std::vector<std::shared_ptr<Link>>
   orderedLinksFromNode(const std::string& nodeName) {
-    OrderedLinkSet set;
-    auto search = linkMap_.find(nodeName);
-    if (search != linkMap_.end()) {
-      for (auto const& link : search->second) {
-        set.emplace(link);
-      }
+    std::vector<std::shared_ptr<Link>> links;
+    if (linkMap_.count(nodeName)) {
+      links.insert(
+          links.begin(),
+          linkMap_.at(nodeName).begin(),
+          linkMap_.at(nodeName).end());
+      std::sort(links.begin(), links.end(), LinkPtrLess{});
     }
-    return set;
+    return links;
   }
 
  private:
@@ -498,14 +498,15 @@ class SpfSolver::SpfSolverImpl {
       pair<Metric, unordered_set<string /* nextHopNodeName */>>>
   runSpf(const std::string& nodeName);
 
-  std::set<Link> getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb);
+  std::vector<std::shared_ptr<Link>> getOrderedLinkSet(
+      const thrift::AdjacencyDatabase& adjDb);
 
   Metric findMinDistToNeighbor(
       const std::string& myNodeName, const std::string& neighborName);
 
   // returns Link object if the reverse adjancency is present in
   // adjacencyDatabases_.at(adj.otherNodeName), else returns folly::none
-  folly::Optional<Link> maybeMakeLink(
+  std::shared_ptr<Link> maybeMakeLink(
       const std::string& nodeName, const thrift::Adjacency& adj);
 
   std::unordered_map<std::string, thrift::AdjacencyDatabase>
@@ -580,17 +581,17 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
   auto oldIter = oldLinks.begin();
   while (newIter != newLinks.end() || oldIter != oldLinks.end()) {
     if (newIter != newLinks.end() &&
-        (oldIter == oldLinks.end() || *newIter < **oldIter)) {
+        (oldIter == oldLinks.end() || **newIter < **oldIter)) {
       // newIter is pointing at a Link not currently present, record this as a
       // link to add and advance newIter
       topoChanged = true;
-      linkState_.addLink(*newIter);
-      VLOG(1) << "addLink " << newIter->directionalToString(nodeName);
+      linkState_.addLink(**newIter);
+      VLOG(1) << "addLink " << (*newIter)->directionalToString(nodeName);
       ++newIter;
       continue;
     }
     if (oldIter != oldLinks.end() &&
-        (newIter == newLinks.end() || **oldIter < *newIter)) {
+        (newIter == newLinks.end() || **oldIter < **newIter)) {
       // oldIter is pointing at a Link that is no longer present, record this as
       // a link to remove and advance oldIter
       topoChanged = true;
@@ -602,44 +603,45 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     // The newIter and oldIter point to the same link. This link did not go up
     // or down. The topology may still have changed though if the link overlaod
     // or metric changed
-    if (newIter->getMetricFromNode(nodeName) !=
-        (*oldIter)->getMetricFromNode(nodeName)) {
+    auto& newLink = **newIter;
+    auto& oldLink = **oldIter;
+    if (newLink.getMetricFromNode(nodeName) !=
+        oldLink.getMetricFromNode(nodeName)) {
       topoChanged = true;
       // change the metric on the link object we already have
-      (*oldIter)->setMetricFromNode(
-          nodeName, newIter->getMetricFromNode(nodeName));
+      oldLink.setMetricFromNode(nodeName, newLink.getMetricFromNode(nodeName));
 
       VLOG(1) << folly::sformat(
           "Metric change on link {}: {} => {}",
-          newIter->directionalToString(nodeName),
-          (*oldIter)->getMetricFromNode(nodeName),
-          newIter->getMetricFromNode(nodeName));
+          newLink.directionalToString(nodeName),
+          oldLink.getMetricFromNode(nodeName),
+          newLink.getMetricFromNode(nodeName));
     }
-    if (newIter->getOverloadFromNode(nodeName) !=
-        (*oldIter)->getOverloadFromNode(nodeName)) {
+    if (newLink.getOverloadFromNode(nodeName) !=
+        oldLink.getOverloadFromNode(nodeName)) {
       // for spf, we do not consider simplex overloading, so there is no need to
       // rerun unless this is true
-      topoChanged |= newIter->isOverloaded() != (*oldIter)->isOverloaded();
+      topoChanged |= newLink.isOverloaded() != oldLink.isOverloaded();
 
       // change the overload value in the link object we already have
-      (*oldIter)->setOverloadFromNode(
-          nodeName, newIter->getOverloadFromNode(nodeName));
+      oldLink.setOverloadFromNode(
+          nodeName, newLink.getOverloadFromNode(nodeName));
       VLOG(1) << folly::sformat(
           "Overload change on link {}: {} => {}",
-          newIter->directionalToString(nodeName),
-          (*oldIter)->getOverloadFromNode(nodeName),
-          newIter->getOverloadFromNode(nodeName));
+          newLink.directionalToString(nodeName),
+          oldLink.getOverloadFromNode(nodeName),
+          newLink.getOverloadFromNode(nodeName));
     }
     // check if local nextHops Changed
-    if (newIter->getNhV4FromNode(nodeName) !=
-        (*oldIter)->getNhV4FromNode(nodeName)) {
+    if (newLink.getNhV4FromNode(nodeName) !=
+        oldLink.getNhV4FromNode(nodeName)) {
       localNextHopsChanged = myNodeName_ == nodeName;
-      (*oldIter)->setNhV4FromNode(nodeName, newIter->getNhV4FromNode(nodeName));
+      oldLink.setNhV4FromNode(nodeName, newLink.getNhV4FromNode(nodeName));
     }
-    if (newIter->getNhV6FromNode(nodeName) !=
-        (*oldIter)->getNhV6FromNode(nodeName)) {
+    if (newLink.getNhV6FromNode(nodeName) !=
+        oldLink.getNhV6FromNode(nodeName)) {
       localNextHopsChanged = myNodeName_ == nodeName;
-      (*oldIter)->setNhV6FromNode(nodeName, newIter->getNhV6FromNode(nodeName));
+      oldLink.setNhV6FromNode(nodeName, newLink.getNhV6FromNode(nodeName));
     }
     ++newIter;
     ++oldIter;
@@ -1010,7 +1012,7 @@ SpfSolver::SpfSolverImpl::findMinDistToNeighbor(
   return min;
 }
 
-folly::Optional<Link>
+std::shared_ptr<Link>
 SpfSolver::SpfSolverImpl::maybeMakeLink(
     const std::string& nodeName, const thrift::Adjacency& adj) {
   // only return Link if it is bidirectional.
@@ -1020,23 +1022,27 @@ SpfSolver::SpfSolverImpl::maybeMakeLink(
       if (nodeName == otherAdj.otherNodeName &&
           adj.otherIfName == otherAdj.ifName &&
           adj.ifName == otherAdj.otherIfName) {
-        return Link(nodeName, adj, adj.otherNodeName, otherAdj);
+        return std::make_shared<Link>(
+            nodeName, adj, adj.otherNodeName, otherAdj);
       }
     }
   }
-  return folly::none;
+  return nullptr;
 }
 
-std::set<Link>
+std::vector<std::shared_ptr<Link>>
 SpfSolver::SpfSolverImpl::getOrderedLinkSet(
     const thrift::AdjacencyDatabase& adjDb) {
-  std::set<Link> links;
+  std::vector<std::shared_ptr<Link>> links;
+  links.reserve(adjDb.adjacencies.size());
   for (const auto& adj : adjDb.adjacencies) {
     auto maybeLink = maybeMakeLink(adjDb.thisNodeName, adj);
     if (maybeLink) {
-      links.emplace(maybeLink.value());
+      links.emplace_back(maybeLink);
     }
   }
+  links.shrink_to_fit();
+  std::sort(links.begin(), links.end(), LinkState::LinkPtrLess{});
   return links;
 }
 
