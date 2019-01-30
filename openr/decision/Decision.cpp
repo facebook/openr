@@ -225,7 +225,10 @@ class Link {
 
   bool
   operator<(const Link& other) const {
-    return this->hash < other.hash;
+    if (this->hash != other.hash) {
+      return this->hash < other.hash;
+    }
+    return this->orderedNames < other.orderedNames;
   }
 
   bool
