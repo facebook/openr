@@ -24,9 +24,28 @@ class OpenrClient(object):
         self.module_type = module_type
         self.zmq_endpoint = zmq_endpoint
         self.cli_opts = cli_opts
-        self.thrift_has_module = (
-            not self.cli_opts.prefer_zmq and self.check_for_module()
-        )
+        self.thrift_client = None
+        self.thrift_transport = None
+        self.zmq_client = None
+
+        if not self.cli_opts.prefer_zmq:
+            if self.cli_opts.ssl:
+                self.try_get_thrift_client(True)
+            if self.thrift_client is None:
+                self.try_get_thrift_client(False)
+
+        if self.thrift_client is None:
+            self.zmq_client = self.get_zmq_client()
+
+    def __del__(self):
+        self.cleanup_thrift()
+
+    def check_for_module(self):
+        assert self.thrift_client is not None
+        try:
+            return self.thrift_client.hasModule(self.module_type)
+        except Exception:
+            return False
 
     def get_thrift_client(self, use_ssl):
         socket = (
@@ -50,18 +69,23 @@ class OpenrClient(object):
         protocol = THeaderProtocol.THeaderProtocol(transport)
 
         transport.open()
-        return OpenrCtrl.Client(protocol)
+        self.thrift_transport = transport
+        self.thrift_client = OpenrCtrl.Client(protocol)
 
-    def check_for_module(self):
-        if self.cli_opts.ssl:
-            try:
-                return self.get_thrift_client(True).hasModule(self.module_type)
-            except Exception:
-                pass
+    def cleanup_thrift(self):
+        if self.thrift_transport is not None:
+            self.thrift_transport.close()
+            self.thrift_transport = None
+        if self.thrift_client is not None:
+            self.thrift_client = None
+
+    def try_get_thrift_client(self, use_ssl):
         try:
-            return self.get_thrift_client(False).hasModule(self.module_type)
+            self.get_thrift_client(use_ssl)
+            if not self.check_for_module():
+                self.cleanup_thrift()
         except Exception:
-            return False
+            self.cleanup_thrift()
 
     def get_zmq_client(self, type=zmq.REQ):
         s = zmq_socket.ZmqSocket(
@@ -79,40 +103,25 @@ class OpenrClient(object):
         )
 
         resp = None
-        if self.thrift_has_module:
-            # we should be able to connect to this module via the thriftCtrl
-            # server. if we think SSL is enabled on the server, lets try that
-            # first
-            if self.cli_opts.ssl:
-                try:
-                    resp = self.get_thrift_client(True).command(self.module_type, req)
-                except Exception as e:
-                    print(
-                        "Tried to connect via secure thrift but could not. "
-                        "Exception: {}.".format(e),
-                        file=sys.stderr,
-                    )
-            if resp is None:
-                try:
-                    resp = self.get_thrift_client(False).command(self.module_type, req)
-                except Exception as e:
-                    print(
-                        "Tried to connect via plaintext thrift but could not. "
-                        "Exception: {}.".format(e),
-                        file=sys.stderr,
-                    )
-
-        if resp is None:
+        if self.thrift_client:
             try:
-                zmq_client = self.get_zmq_client()
-                zmq_client.send(req)
-                resp = zmq_client.recv()
+                resp = self.thrift_client.command(self.module_type, req)
+            except Exception as e:
+                print(
+                    "Tried to connect via thrift but could not. "
+                    "Exception: {}.".format(e),
+                    file=sys.stderr,
+                )
+        else:
+            try:
+                self.zmq_client.send(req)
+                resp = self.zmq_client.recv()
             # TODO: remove after Link monitor socket is changed to ROUTER everywhere
             except Exception as e:
                 if OpenrModuleType.LINK_MONITOR == self.module_type:
-                    zmq_client = self.get_zmq_client(zmq.DEALER)
-                    zmq_client.send(req)
-                    resp = zmq_client.recv()
+                    dealer_client = self.get_zmq_client(zmq.DEALER)
+                    dealer_client.send(req)
+                    resp = dealer_client.recv()
                 else:
                     raise e
 
