@@ -27,233 +27,19 @@
 
 #include <openr/common/AddressUtil.h>
 #include <openr/common/Util.h>
+#include <openr/decision/LinkState.h>
 
 using namespace std;
 
 using apache::thrift::FRAGILE;
 
-using Metric = uint64_t;
+using Metric = openr::Link::Metric;
 
 namespace {
 
 // Default HWM is 1k. We set it to 0 to buffer all received messages.
 const int kStoreSubReceiveHwm{0};
 
-//
-// Why define Link and LinkState? Isn't link state fully captured by something
-// like std::unordered_map<std::string, thrift::AdjacencyDatabase>?
-// It is, but these classes provide a few major benefits over that simple
-// structure:
-//
-// 1. Only stores bidirectional links. i.e. for a link, the node at both ends
-// is advertising the adjancecy
-//
-// 2. Defines a hash and comparators that operate on the essential property of a
-// network link: the tuple: unorderedPair<orderedPair<nodeName, ifName>,
-//                                orderedPair<nodeName, ifName>>
-//
-// 3. For each unique link in the network, holds a single object that can be
-// quickly accessed and modified via the nodeName of either end of the link.
-//
-// 4. Provides useful apis to read and write link state.
-//
-
-class Link {
- public:
-  Link(
-      const std::string& nodeName1,
-      const openr::thrift::Adjacency& adj1,
-      const std::string& nodeName2,
-      const openr::thrift::Adjacency& adj2)
-      : n1_(nodeName1),
-        n2_(nodeName2),
-        if1_(adj1.ifName),
-        if2_(adj2.ifName),
-        metric1_(adj1.metric),
-        metric2_(adj2.metric),
-        overload1_(adj1.isOverloaded),
-        overload2_(adj2.isOverloaded),
-        nhV41_(adj1.nextHopV4),
-        nhV42_(adj2.nextHopV4),
-        nhV61_(adj1.nextHopV6),
-        nhV62_(adj2.nextHopV6),
-        orderedNames(
-            std::minmax(std::make_pair(n1_, if1_), std::make_pair(n2_, if2_))),
-        hash(std::hash<std::pair<
-                 std::pair<std::string, std::string>,
-                 std::pair<std::string, std::string>>>()(orderedNames)) {}
-
- private:
-  const std::string n1_, n2_, if1_, if2_;
-  Metric metric1_{1}, metric2_{1};
-  bool overload1_{false}, overload2_{false};
-  openr::thrift::BinaryAddress nhV41_, nhV42_, nhV61_, nhV62_;
-  const std::pair<
-      std::pair<std::string, std::string>,
-      std::pair<std::string, std::string>>
-      orderedNames;
-
- public:
-  const size_t hash{0};
-
-  const std::string&
-  getOtherNodeName(const std::string& nodeName) const {
-    if (n1_ == nodeName) {
-      return n2_;
-    }
-    if (n2_ == nodeName) {
-      return n1_;
-    }
-    throw std::invalid_argument(nodeName);
-  }
-
-  const std::string&
-  firstNodeName() const {
-    return orderedNames.first.first;
-  }
-
-  const std::string&
-  secondNodeName() const {
-    return orderedNames.second.first;
-  }
-
-  const std::string&
-  getIfaceFromNode(const std::string& nodeName) const {
-    if (n1_ == nodeName) {
-      return if1_;
-    }
-    if (n2_ == nodeName) {
-      return if2_;
-    }
-    throw std::invalid_argument(nodeName);
-  }
-
-  Metric
-  getMetricFromNode(const std::string& nodeName) const {
-    if (n1_ == nodeName) {
-      return metric1_;
-    }
-    if (n2_ == nodeName) {
-      return metric2_;
-    }
-    throw std::invalid_argument(nodeName);
-  }
-
-  bool
-  getOverloadFromNode(const std::string& nodeName) const {
-    if (n1_ == nodeName) {
-      return overload1_;
-    }
-    if (n2_ == nodeName) {
-      return overload2_;
-    }
-    throw std::invalid_argument(nodeName);
-  }
-
-  bool
-  isOverloaded() const {
-    return overload1_ || overload2_;
-  }
-
-  const openr::thrift::BinaryAddress&
-  getNhV4FromNode(const std::string& nodeName) const {
-    if (n1_ == nodeName) {
-      return nhV41_;
-    }
-    if (n2_ == nodeName) {
-      return nhV42_;
-    }
-    throw std::invalid_argument(nodeName);
-  }
-
-  const openr::thrift::BinaryAddress&
-  getNhV6FromNode(const std::string& nodeName) const {
-    if (n1_ == nodeName) {
-      return nhV61_;
-    }
-    if (n2_ == nodeName) {
-      return nhV62_;
-    }
-    throw std::invalid_argument(nodeName);
-  }
-
-  void
-  setNhV4FromNode(
-      const std::string& nodeName, const openr::thrift::BinaryAddress& nhV4) {
-    if (n1_ == nodeName) {
-      nhV41_ = nhV4;
-    } else if (n2_ == nodeName) {
-      nhV42_ = nhV4;
-    } else {
-      throw std::invalid_argument(nodeName);
-    }
-  }
-
-  void
-  setNhV6FromNode(
-      const std::string& nodeName, const openr::thrift::BinaryAddress& nhV6) {
-    if (n1_ == nodeName) {
-      nhV61_ = nhV6;
-    } else if (n2_ == nodeName) {
-      nhV62_ = nhV6;
-    } else {
-      throw std::invalid_argument(nodeName);
-    }
-  }
-
-  void
-  setMetricFromNode(const std::string& nodeName, Metric d) {
-    if (n1_ == nodeName) {
-      metric1_ = d;
-    } else if (n2_ == nodeName) {
-      metric2_ = d;
-    } else {
-      throw std::invalid_argument(nodeName);
-    }
-  }
-
-  void
-  setOverloadFromNode(const std::string& nodeName, bool overload) {
-    if (n1_ == nodeName) {
-      overload1_ = overload;
-    } else if (n2_ == nodeName) {
-      overload2_ = overload;
-    } else {
-      throw std::invalid_argument(nodeName);
-    }
-  }
-
-  bool
-  operator<(const Link& other) const {
-    if (this->hash != other.hash) {
-      return this->hash < other.hash;
-    }
-    return this->orderedNames < other.orderedNames;
-  }
-
-  bool
-  operator==(const Link& other) const {
-    if (this->hash != other.hash) {
-      return false;
-    }
-    return this->orderedNames == other.orderedNames;
-  }
-
-  std::string
-  toString() const {
-    return folly::sformat("{}%{} <---> {}%{}", n1_, if1_, n2_, if2_);
-  }
-
-  std::string
-  directionalToString(const std::string& fromNode) const {
-    return folly::sformat(
-        "{}%{} ---> {}%{}",
-        fromNode,
-        getIfaceFromNode(fromNode),
-        getOtherNodeName(fromNode),
-        getIfaceFromNode(getOtherNodeName(fromNode)));
-  }
-}; // class Link
 
 // Classes needed for running Dijkstra
 class DijkstraQNode {
@@ -326,118 +112,6 @@ class DijkstraQ {
   }
 };
 
-} // anonymous namespace
-
-namespace std {
-
-// needed for certain containers
-
-template <>
-struct hash<Link> {
-  size_t
-  operator()(Link const& link) const {
-    return link.hash;
-  }
-};
-
-} // namespace std
-
-namespace {
-
-class LinkState {
- public:
-  struct LinkPtrHash {
-    bool
-    operator()(const std::shared_ptr<Link>& l) const {
-      return l->hash;
-    }
-  };
-
-  struct LinkPtrLess {
-    bool
-    operator()(
-        const std::shared_ptr<Link>& lhs,
-        const std::shared_ptr<Link>& rhs) const {
-      return *lhs < *rhs;
-    }
-  };
-
-  struct LinkPtrEqual {
-    bool
-    operator()(
-        const std::shared_ptr<Link>& lhs,
-        const std::shared_ptr<Link>& rhs) const {
-      return *lhs == *rhs;
-    }
-  };
-
-  // for both these cotainers, we want to compare the actual link being stored
-  // and not the object address
-  using LinkSet =
-      std::unordered_set<std::shared_ptr<Link>, LinkPtrHash, LinkPtrEqual>;
-
-  void
-  addLink(const Link& link) {
-    auto key = std::make_shared<Link>(link);
-    CHECK(linkMap_[link.firstNodeName()].insert(key).second);
-    CHECK(linkMap_[link.secondNodeName()].insert(key).second);
-  }
-
-  // throws std::out_of_range if links are not present
-  void
-  removeLink(const Link& link) {
-    auto key = std::make_shared<Link>(link);
-    CHECK(linkMap_.at(link.firstNodeName()).erase(key));
-    CHECK(linkMap_.at(link.secondNodeName()).erase(key));
-  }
-
-  void
-  removeLinksFromNode(const std::string& nodeName) {
-    auto search = linkMap_.find(nodeName);
-    if (search == linkMap_.end()) {
-      // No links were added (addition of empty adjacency db can cause this)
-      return;
-    }
-
-    // erase ptrs to these links from other nodes
-    for (auto const& link : search->second) {
-      try {
-        CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
-      } catch (std::out_of_range const& e) {
-        LOG(FATAL) << "std::out_of_range for " << nodeName;
-      }
-    }
-    linkMap_.erase(search);
-  }
-
-  const LinkSet&
-  linksFromNode(const std::string& nodeName) {
-    static const LinkSet defaultEmptySet;
-    auto search = linkMap_.find(nodeName);
-    if (search != linkMap_.end()) {
-      return search->second;
-    }
-    return defaultEmptySet;
-  }
-
-  std::vector<std::shared_ptr<Link>>
-  orderedLinksFromNode(const std::string& nodeName) {
-    std::vector<std::shared_ptr<Link>> links;
-    if (linkMap_.count(nodeName)) {
-      links.insert(
-          links.begin(),
-          linkMap_.at(nodeName).begin(),
-          linkMap_.at(nodeName).end());
-      std::sort(links.begin(), links.end(), LinkPtrLess{});
-    }
-    return links;
-  }
-
- private:
-  // this stores the same link object accessible from either nodeName
-  std::unordered_map<std::string /* nodeName */, LinkSet> linkMap_;
-
-}; // class LinkState
 } // anonymous namespace
 
 namespace openr {
@@ -585,7 +259,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
       // newIter is pointing at a Link not currently present, record this as a
       // link to add and advance newIter
       topoChanged = true;
-      linkState_.addLink(**newIter);
+      linkState_.addLink(*newIter);
       VLOG(1) << "addLink " << (*newIter)->directionalToString(nodeName);
       ++newIter;
       continue;
@@ -595,7 +269,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
       // oldIter is pointing at a Link that is no longer present, record this as
       // a link to remove and advance oldIter
       topoChanged = true;
-      linkState_.removeLink(**oldIter);
+      linkState_.removeLink(*oldIter);
       VLOG(1) << "removeLink " << (*oldIter)->directionalToString(nodeName);
       ++oldIter;
       continue;

@@ -254,6 +254,7 @@ add_library(openrlib
   config-store/PersistentStoreClient.cpp
   ctrl-server/OpenrCtrlHandler.cpp
   decision/Decision.cpp
+  decision/LinkState.cpp
   decision-old/DecisionOld.cpp
   fib/Fib.cpp
   health-checker/HealthChecker.cpp
@@ -448,6 +449,7 @@ install(FILES
 
 install(FILES
   decision/Decision.h
+  decision/LinkState.h
   DESTINATION include/openr/decision
 )
 
@@ -710,6 +712,25 @@ if(BUILD_TESTS)
 
   install(TARGETS
     decision_test
+    DESTINATION sbin/tests/openr/decision
+  )
+
+  add_executable(link_state_test
+    decision/tests/LinkStateTest.cpp
+  )
+
+  target_link_libraries(link_state_test
+    openrlib
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+  )
+
+  add_test(LinkStateTest link_state_test)
+
+  install(TARGETS
+    link_state_test
     DESTINATION sbin/tests/openr/decision
   )
 
