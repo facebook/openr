@@ -454,6 +454,87 @@ TEST(KvStore, mergeKeyValuesTest) {
 }
 
 //
+// Test compareValues method
+//
+TEST(KvStore, compareValuesTest) {
+  thrift::Value refValue(
+      apache::thrift::FRAGILE,
+      5, /* version */
+      "node5", /* node id */
+      "dummyValue",
+      3600, /* ttl */
+      123 /* ttl version */,
+      112233 /* hash */);
+  thrift::Value v1;
+  thrift::Value v2;
+
+  // diff version
+  v1 = refValue;
+  v2 = refValue;
+  v1.version++;
+  {
+    int rc = KvStore::compareValues(v1, v2);
+    EXPECT_EQ(rc, 1); // v1 is better
+  }
+
+  // diff originatorId
+  v1 = refValue;
+  v2 = refValue;
+  v2.originatorId = "node6";
+  {
+    int rc = KvStore::compareValues(v1, v2);
+    EXPECT_EQ(rc, -1); // v2 is better
+  }
+
+  // diff ttlVersion
+  v1 = refValue;
+  v2 = refValue;
+  v1.ttlVersion++;
+  {
+    int rc = KvStore::compareValues(v1, v2);
+    EXPECT_EQ(rc, 1); // v1 is better
+  }
+
+  // same values
+  v1 = refValue;
+  v2 = refValue;
+  {
+    int rc = KvStore::compareValues(v1, v2);
+    EXPECT_EQ(rc, 0); // same
+  }
+
+  // hash and value are different
+  v1 = refValue;
+  v2 = refValue;
+  v1.value = "dummyValue1";
+  v1.hash = 445566;
+  {
+    int rc = KvStore::compareValues(v1, v2);
+    EXPECT_EQ(rc, 1); // v1 is better
+  }
+
+  // v2.hash is missing, values are different
+  v1 = refValue;
+  v2 = refValue;
+  v1.value = "dummyValue1";
+  v2.hash = folly::none;
+  {
+    int rc = KvStore::compareValues(v1, v2);
+    EXPECT_EQ(rc, 1); // v1 is better
+  }
+
+  // v1.hash and v1.value are missing
+  v1 = refValue;
+  v2 = refValue;
+  v1.value = folly::none;
+  v1.hash = folly::none;
+  {
+    int rc = KvStore::compareValues(v1, v2);
+    EXPECT_EQ(rc, -2); // unknown
+  }
+}
+
+//
 // Test counter reporting
 //
 TEST(KvStore, MonitorReport) {

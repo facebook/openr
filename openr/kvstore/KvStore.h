@@ -138,7 +138,7 @@ class KvStore final : public OpenrEventLoop {
   // return 1 if v1 is better,
   //       -1 if v2 is better,
   //        0 if equal,
-  //        -2 if unknown
+  //       -2 if unknown
   // unknown can happen if value is missing (only hash is provided)
   static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
