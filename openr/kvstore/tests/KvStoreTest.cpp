@@ -2127,6 +2127,98 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   EXPECT_GE(s1Supressed4 - s1Supressed3, 1);
 }
 
+/**
+ * this is to verify correctness of 3-way full-sync
+ * tuple represents (key, value-version, value)
+ * storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+ * storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+ * Let A do init a full-sync with B
+ * we expect both storeA and storeB have:
+ *           (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+ */
+TEST_F(KvStoreTestFixture, FullSync) {
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto storeA = createKvStore("storeA", emptyPeers);
+  auto storeB = createKvStore("storeB", emptyPeers);
+  storeA->run();
+  storeB->run();
+
+  const std::string k0{"key0"};
+  const std::string k1{"key1"};
+  const std::string k2{"key2"};
+  const std::string k3{"key3"};
+  const std::string k4{"key4"};
+  std::vector<std::string> allKeys = {k0, k1, k2, k3, k4};
+  std::vector<std::pair<std::string, int>> keyVersionAs = {
+      {k0, 5}, {k1, 1}, {k2, 9}, {k3, 1}};
+  std::vector<std::pair<std::string, int>> keyVersionBs = {
+      {k1, 1}, {k2, 1}, {k3, 9}, {k4, 6}};
+
+  // set key vals in storeA
+  for (const auto& keyVer : keyVersionAs) {
+    thrift::Value val(
+        apache::thrift::FRAGILE,
+        keyVer.second /* version */,
+        "storeA" /* originatorId */,
+        "a" /* value */,
+        30000 /* ttl */,
+        99 /* ttl version */,
+        0 /* hash*/);
+    val.hash = generateHash(val.version, val.originatorId, val.value);
+    EXPECT_TRUE(storeA->setKey(keyVer.first, val));
+  }
+
+  // set key vals in storeB
+  for (const auto& keyVer : keyVersionBs) {
+    thrift::Value val(
+        apache::thrift::FRAGILE,
+        keyVer.second /* version */,
+        "storeA" /* originatorId */,
+        "b" /* value */,
+        30000 /* ttl */,
+        99 /* ttl version */,
+        0 /* hash*/);
+    if (keyVer.first == k1) {
+      val.value = "a"; // set same value for k1
+    }
+    val.hash = generateHash(val.version, val.originatorId, val.value);
+    EXPECT_TRUE(storeB->setKey(keyVer.first, val));
+  }
+
+  // storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+  // storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+  // let A sends a full sync request to B and wait for completion
+  storeA->addPeer("storeB", storeB->getPeerSpec());
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+  // after full-sync, we expect both A and B have:
+  // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+  for (const auto& key : allKeys) {
+    auto valA = storeA->getKey(key);
+    auto valB = storeB->getKey(key);
+    EXPECT_TRUE(valA.hasValue());
+    EXPECT_TRUE(valB.hasValue());
+    EXPECT_EQ(valA->value.value(), valB->value.value());
+    EXPECT_EQ(valA->version, valB->version);
+  }
+  auto v0 = storeA->getKey(k0);
+  EXPECT_EQ(v0->version, 5);
+  EXPECT_EQ(v0->value.value(), "a");
+  auto v1 = storeA->getKey(k1);
+  EXPECT_EQ(v1->version, 1);
+  EXPECT_EQ(v1->value.value(), "a");
+  auto v2 = storeA->getKey(k2);
+  EXPECT_EQ(v2->version, 9);
+  EXPECT_EQ(v2->value.value(), "a");
+  auto v3 = storeA->getKey(k3);
+  EXPECT_EQ(v3->version, 9);
+  EXPECT_EQ(v3->value.value(), "b");
+  auto v4 = storeA->getKey(k4);
+  EXPECT_EQ(v4->version, 6);
+  EXPECT_EQ(v4->value.value(), "b");
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
