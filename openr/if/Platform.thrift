@@ -8,7 +8,7 @@
 namespace cpp2 openr.thrift
 namespace py openr.Platform
 
-include "IpPrefix.thrift"
+include "Network.thrift"
 /**
  * We provide simple API to publish link/address/neighbor updating events
  * through PUB-SUB mechanism to all of its subscriber modules in OpenR
@@ -22,13 +22,13 @@ struct LinkEntry {
 
 struct AddrEntry {
   1: string ifName;
-  2: IpPrefix.IpPrefix ipPrefix;
+  2: Network.IpPrefix ipPrefix;
   3: bool isValid;
 }
 
 struct NeighborEntry {
   1: string ifName;
-  2: IpPrefix.BinaryAddress destination;
+  2: Network.BinaryAddress destination;
   3: string linkAddr;
   4: bool isReachable;
 }
@@ -36,7 +36,7 @@ struct NeighborEntry {
 struct Link {
   1: i64 ifIndex;
   2: bool isUp;
-  3: list<IpPrefix.IpPrefix> networks;
+  3: list<Network.IpPrefix> networks;
   4: string ifName;
   5: i64 weight = 1; // used for weighted ecmp
 }
@@ -110,22 +110,22 @@ service SystemService {
    */
   void addIfaceAddresses(
     1: string iface,
-    2: list<IpPrefix.IpPrefix> addrs)
+    2: list<Network.IpPrefix> addrs)
     throws (1: PlatformError error)
 
   void removeIfaceAddresses(
     1: string iface,
-    2: list<IpPrefix.IpPrefix> addrs)
+    2: list<Network.IpPrefix> addrs)
     throws (1: PlatformError error)
 
   void syncIfaceAddresses(
     1: string iface,
     2: i16 family,
     3: i16 scope,
-    4: list<IpPrefix.IpPrefix> addrs)
+    4: list<Network.IpPrefix> addrs)
     throws (1: PlatformError error)
 
-  list<IpPrefix.IpPrefix> getIfaceAddresses(
+  list<Network.IpPrefix> getIfaceAddresses(
     1: string iface, 2: i16 family, 3: i16 scope)
     throws (1: PlatformError error)
 }
@@ -158,27 +158,27 @@ const map<i16, i16> clientIdtoPriority = {786:10, 0:20, 64:11}
 service FibService {
   void addUnicastRoute(
     1: i16 clientId,
-    2: IpPrefix.UnicastRoute route,
+    2: Network.UnicastRoute route,
   ) throws (1: PlatformError error)
 
   void deleteUnicastRoute(
     1: i16 clientId,
-    2: IpPrefix.IpPrefix prefix,
+    2: Network.IpPrefix prefix,
   ) throws (1: PlatformError error)
 
   void addUnicastRoutes(
     1: i16 clientId,
-    2: list<IpPrefix.UnicastRoute> routes,
+    2: list<Network.UnicastRoute> routes,
   ) throws (1: PlatformError error)
 
   void deleteUnicastRoutes(
     1: i16 clientId,
-    2: list<IpPrefix.IpPrefix> prefixes,
+    2: list<Network.IpPrefix> prefixes,
   ) throws (1: PlatformError error)
 
   void syncFib(
     1: i16 clientId,
-    2: list<IpPrefix.UnicastRoute> routes,
+    2: list<Network.UnicastRoute> routes,
   ) throws (1: PlatformError error)
 
   /**
@@ -205,7 +205,7 @@ service FibService {
   map<string, i64> getCounters()
 
   // Retreive list of routes per client
-  list<IpPrefix.UnicastRoute> getRouteTableByClient(
+  list<Network.UnicastRoute> getRouteTableByClient(
     1: i16 clientId
   ) throws (1: PlatformError error)
 }

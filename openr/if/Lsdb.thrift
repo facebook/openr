@@ -9,7 +9,7 @@ namespace cpp2 openr.thrift
 namespace py openr.Lsdb
 namespace php OpenR_Lsdb
 
-include "IpPrefix.thrift"
+include "Network.thrift"
 
 //
 // Performance measurement related structs
@@ -42,11 +42,11 @@ struct InterfaceInfo {
   1: required bool isUp
   2: required i64 ifIndex
   // TO BE DEPRECATED SOON
-  3: required list<IpPrefix.BinaryAddress> v4Addrs
+  3: required list<Network.BinaryAddress> v4Addrs
   // TO BE DEPRECATED SOON
-  4: required list<IpPrefix.BinaryAddress> v6LinkLocalAddrs
+  4: required list<Network.BinaryAddress> v6LinkLocalAddrs
   // ip prefixes of all v4 and v6 link local addresses
-  5: list<IpPrefix.IpPrefix> networks
+  5: list<Network.IpPrefix> networks
 }
 
 //
@@ -74,8 +74,8 @@ struct Adjacency {
   2: string ifName
 
   // peer's link-local addresses
-  3: IpPrefix.BinaryAddress nextHopV6
-  5: IpPrefix.BinaryAddress nextHopV4
+  3: Network.BinaryAddress nextHopV6
+  5: Network.BinaryAddress nextHopV4
 
   // metric to reach to the neighbor
   4: i32 metric
@@ -143,7 +143,7 @@ enum PrefixType {
 }
 
 struct PrefixEntry {
-  1: IpPrefix.IpPrefix prefix
+  1: Network.IpPrefix prefix
   2: PrefixType type
   // optional additional metadata (encoding depends on PrefixType)
   3: binary data

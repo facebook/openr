@@ -25,7 +25,7 @@
 #include <folly/String.h>
 #include <gflags/gflags.h>
 
-#include <openr/common/AddressUtil.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 
 using namespace std;

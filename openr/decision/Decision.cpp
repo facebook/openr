@@ -25,7 +25,7 @@
 #endif
 #include <gflags/gflags.h>
 
-#include <openr/common/AddressUtil.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
 

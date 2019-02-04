@@ -21,11 +21,11 @@
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
-#include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/IpPrefix_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
+#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/spark/Spark.h>
 
 using apache::thrift::FRAGILE;

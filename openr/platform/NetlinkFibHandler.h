@@ -18,7 +18,7 @@
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 
-#include <openr/common/AddressUtil.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>

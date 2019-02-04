@@ -17,8 +17,8 @@
 #include <glog/logging.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/AddressUtil.h>
-#include <openr/if/gen-cpp2/IpPrefix_types.h>
+#include <openr/common/NetworkUtil.h>
+#include <openr/if/gen-cpp2/Network_types.h>
 
 using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;

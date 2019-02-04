@@ -33,9 +33,9 @@
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
-#include <openr/common/AddressUtil.h>
-#include <openr/if/gen-cpp2/IpPrefix_types.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
+#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/platform/PlatformPublisher.h>

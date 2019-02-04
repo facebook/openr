@@ -9,7 +9,7 @@ namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.Fib
 
-include "IpPrefix.thrift"
+include "Network.thrift"
 include "Lsdb.thrift"
 
 //
@@ -21,7 +21,7 @@ include "Lsdb.thrift"
 // Loop free path
 //
 struct Path {
-  1: IpPrefix.BinaryAddress nextHop
+  1: Network.BinaryAddress nextHop
   2: string ifName
   3: i32 metric
 }
@@ -31,7 +31,7 @@ struct Path {
 // them are guaranteed to be loop-free, that is,
 // all could be used in multipath fashion
 struct Route {
-  1: IpPrefix.IpPrefix prefix
+  1: Network.IpPrefix prefix
   // in theory, the same path may repeat multiple times
   // and this could be used for weighted load-sharing..
   2: list<Path> paths

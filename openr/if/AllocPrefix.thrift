@@ -8,11 +8,11 @@
 namespace cpp2 openr.thrift
 namespace py openr.AllocPrefix
 
-include "IpPrefix.thrift"
+include "Network.thrift"
 
 struct AllocPrefix {
   // prefix to allocate prefixes from
-  1: IpPrefix.IpPrefix seedPrefix
+  1: Network.IpPrefix seedPrefix
   // allocated prefix length
   2: i64 allocPrefixLen
   // my allocated prefix, i.e., index within seed prefix
@@ -20,5 +20,5 @@ struct AllocPrefix {
 }
 
 struct StaticAllocation {
-  1: map<string /* node-name */, IpPrefix.IpPrefix> nodePrefixes;
+  1: map<string /* node-name */, Network.IpPrefix> nodePrefixes;
 }

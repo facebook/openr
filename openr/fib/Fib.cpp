@@ -15,8 +15,8 @@
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
-#include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 
 namespace openr {

@@ -9,7 +9,7 @@ namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.Spark
 
-include "IpPrefix.thrift"
+include "Network.thrift"
 
 //
 // The below uses "required" a lot. This helps with
@@ -35,8 +35,8 @@ struct SparkNeighbor {
   3: binary publicKey = ""
 
   // our transport addresses (right now - link local)
-  4: IpPrefix.BinaryAddress transportAddressV6
-  5: IpPrefix.BinaryAddress transportAddressV4
+  4: Network.BinaryAddress transportAddressV6
+  5: Network.BinaryAddress transportAddressV4
 
   // neighbor's kvstore global pub/cmd ports
   7: required i32 kvStorePubPort

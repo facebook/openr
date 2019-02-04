@@ -24,8 +24,8 @@
 #include <sodium.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/spark/IoProvider.h>
 #include <openr/spark/SparkWrapper.h>

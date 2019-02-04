@@ -24,9 +24,9 @@ import zmq
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.kvstore_client import KvStoreClient
 from openr.clients.lm_client import LMClient
-from openr.IpPrefix import ttypes as ip_types
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
+from openr.Network import ttypes as network_types
 from openr.Platform import FibService, ttypes as platform_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
@@ -1014,7 +1014,7 @@ def build_routes(prefixes, nexthops):
     :param prefixes: List of prefixes in string representation
     :param nexthops: List of nexthops ip addresses in string presentation
 
-    :returns: list ip_types.UnicastRoute (structured routes)
+    :returns: list network_types.UnicastRoute (structured routes)
     :rtype: list
     """
 
@@ -1032,14 +1032,14 @@ def build_routes(prefixes, nexthops):
         nexthop = ipnetwork.ip_str_to_addr(addr)
         nexthop.ifName = iface
         nhs.append(nexthop)
-    return [ip_types.UnicastRoute(dest=p, nexthops=nhs) for p in prefixes]
+    return [network_types.UnicastRoute(dest=p, nexthops=nhs) for p in prefixes]
 
 
 def get_route_as_dict(routes):
     """
     Convert a routeDb into a dict representing routes in str format
 
-    :param routes: list ip_types.UnicastRoute (structured routes)
+    :param routes: list network_types.UnicastRoute (structured routes)
 
     :returns: dict of routes {prefix: [nexthops]}
     :rtype: dict
@@ -1062,10 +1062,10 @@ def routes_difference(lhs, rhs):
     """
     Get routeDb delta between provided inputs
 
-    :param lhs: list ip_types.UnicastRoute (structured routes)
-    :param rhs: list ip_types.UnicastRoute (structured routes)
+    :param lhs: list network_types.UnicastRoute (structured routes)
+    :param rhs: list network_types.UnicastRoute (structured routes)
 
-    :returns: list ip_types.UnicastRoute (structured routes)
+    :returns: list network_types.UnicastRoute (structured routes)
     :rtype: list
     """
 
@@ -1087,8 +1087,8 @@ def prefixes_with_different_nexthops(lhs, rhs):
     """
     Get prefixes common to both routeDbs with different nexthops
 
-    :param lhs: list ip_types.UnicastRoute (structured routes)
-    :param rhs: list ip_types.UnicastRoute (structured routes)
+    :param lhs: list network_types.UnicastRoute (structured routes)
+    :param rhs: list network_types.UnicastRoute (structured routes)
 
     :returns: list str of IpPrefix common to lhs and rhs but
               have different nexthops
@@ -1168,7 +1168,7 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=Fal
     """
     Validate between fib routes and lm interfaces
 
-    :param routes: list ip_types.UnicastRoute (structured routes)
+    :param routes: list network_types.UnicastRoute (structured routes)
     :param interfaces: dict<interface-name, InterfaceDetail>
     """
 
@@ -1317,7 +1317,7 @@ def get_shortest_routes(route_db):
                 nexthops[-1].ifName = path.ifName
 
         shortest_routes.append(
-            ip_types.UnicastRoute(dest=route.prefix, nexthops=nexthops)
+            network_types.UnicastRoute(dest=route.prefix, nexthops=nexthops)
         )
 
     return shortest_routes

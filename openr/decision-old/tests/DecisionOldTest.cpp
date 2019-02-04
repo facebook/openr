@@ -17,8 +17,8 @@
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/decision-old/DecisionOld.h>
 
 DEFINE_bool(stress_test, false, "pass this to run the stress test");

@@ -6,8 +6,8 @@
  */
 
 namespace cpp2 openr.thrift
-namespace py openr.IpPrefix
-namespace php OpenR_IpPrefix
+namespace py openr.Network
+namespace php Openr
 
 # fbstring uses the small internal buffer to store the data
 # if the data is small enough (< 24 bytes).

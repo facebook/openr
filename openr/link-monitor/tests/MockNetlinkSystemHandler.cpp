@@ -23,7 +23,7 @@
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
-#include <openr/common/AddressUtil.h>
+#include <openr/common/NetworkUtil.h>
 
 using namespace fbzmq;
 using apache::thrift::FRAGILE;

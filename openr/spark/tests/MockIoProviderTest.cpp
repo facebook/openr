@@ -17,8 +17,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 
 #include "MockIoProvider.h"
 

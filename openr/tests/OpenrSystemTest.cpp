@@ -33,8 +33,8 @@
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/allocators/PrefixAllocator.h>
-#include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>

@@ -13,8 +13,36 @@
 
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
-#include <openr/if/gen-cpp2/IpPrefix_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/Network_types.h>
+
+namespace std {
+
+/**
+ * Make IpPrefix hashable
+ */
+template <>
+struct hash<openr::thrift::IpPrefix> {
+  size_t operator()(openr::thrift::IpPrefix const&) const;
+};
+
+/**
+ * Make BinaryAddress hashable
+ */
+template <>
+struct hash<openr::thrift::BinaryAddress> {
+  size_t operator()(openr::thrift::BinaryAddress const&) const;
+};
+
+/**
+ * Make UnicastRoute hashable
+ */
+template <>
+struct hash<openr::thrift::UnicastRoute> {
+  size_t operator()(openr::thrift::UnicastRoute const&) const;
+};
+
+} // namespace std
 
 namespace openr {
 
@@ -45,6 +73,12 @@ toIPAddress(const T& input) {
   return input.type != decltype(input.type)::VUNSPEC
       ? folly::IPAddress(input.addr)
       : folly::IPAddress();
+}
+
+inline folly::IPAddress
+toIPAddress(const thrift::fbbinary& binAddr) {
+  return folly::IPAddress::fromBinary(folly::ByteRange(
+      reinterpret_cast<const uint8_t*>(binAddr.data()), binAddr.size()));
 }
 
 inline folly::IPAddress
@@ -80,71 +114,6 @@ inline std::string
 toString(const thrift::IpPrefix& ipPrefix) {
   return folly::sformat(
       "{}/{}", toString(ipPrefix.prefixAddress), ipPrefix.prefixLength);
-}
-
-inline thrift::Adjacency
-createAdjacency(
-    const std::string& nodeName,
-    const std::string& ifName,
-    const std::string& remoteIfName,
-    const std::string& nextHopV6,
-    const std::string& nextHopV4,
-    int32_t metric,
-    int32_t adjLabel,
-    int64_t weight = Constants::kDefaultAdjWeight) {
-  auto now = std::chrono::system_clock::now();
-  int64_t timestamp =
-      std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
-          .count();
-  return thrift::Adjacency(
-      apache::thrift::FRAGILE,
-      nodeName,
-      ifName,
-      toBinaryAddress(folly::IPAddress(nextHopV6)),
-      toBinaryAddress(folly::IPAddress(nextHopV4)),
-      metric,
-      adjLabel,
-      false /* overload bit status */,
-      metric * 100,
-      timestamp,
-      weight,
-      remoteIfName);
-}
-
-inline thrift::AdjacencyDatabase
-createAdjDb(
-    const std::string& nodeName,
-    const std::vector<thrift::Adjacency>& adjs,
-    int32_t nodeLabel) {
-  auto adjDb = thrift::AdjacencyDatabase(
-      apache::thrift::FRAGILE,
-      nodeName,
-      false /* overload bit status */,
-      adjs,
-      nodeLabel,
-      thrift::PerfEvents());
-  adjDb.perfEvents = folly::none;
-  return adjDb;
-}
-
-inline thrift::PrefixDatabase
-createPrefixDb(
-    const std::string& nodeName,
-    const std::vector<thrift::PrefixEntry>& prefixEntries) {
-  thrift::PrefixDatabase prefixDb;
-  prefixDb.thisNodeName = nodeName;
-  prefixDb.prefixEntries = prefixEntries;
-  return prefixDb;
-}
-
-inline thrift::Path
-createPath(
-    thrift::BinaryAddress addr, const std::string& ifName, int32_t metric) {
-  thrift::Path path;
-  path.nextHop = addr;
-  path.ifName = ifName;
-  path.metric = metric;
-  return path;
 }
 
 } // namespace openr

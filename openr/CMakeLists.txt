@@ -98,11 +98,11 @@ thrift_object(
 
 add_dependencies(
   Lsdb-cpp2-obj
-  IpPrefix-cpp2-obj
+  Network-cpp2-obj
 )
 
 thrift_object(
-  "IpPrefix" #file_name
+  "Network" #file_name
   "" #services
   "cpp2" #language
   "json,optionals" #options
@@ -123,7 +123,7 @@ thrift_object(
 
 add_dependencies(
   Fib-cpp2-obj
-  IpPrefix-cpp2-obj
+  Network-cpp2-obj
   Lsdb-cpp2-obj
 )
 
@@ -139,7 +139,7 @@ thrift_object(
 
 add_dependencies(
   HealthChecker-cpp2-obj
-  IpPrefix-cpp2-obj
+  Network-cpp2-obj
 )
 
 thrift_object(
@@ -170,7 +170,7 @@ thrift_object(
 
 add_dependencies(
   Platform-cpp2-obj
-  IpPrefix-cpp2-obj
+  Network-cpp2-obj
 )
 
 thrift_object(
@@ -185,7 +185,7 @@ thrift_object(
 
 add_dependencies(
   Spark-cpp2-obj
-  IpPrefix-cpp2-obj
+  Network-cpp2-obj
 )
 
 thrift_object(
@@ -200,7 +200,7 @@ thrift_object(
 
 add_dependencies(
   AllocPrefix-cpp2-obj
-  IpPrefix-cpp2-obj
+  Network-cpp2-obj
 )
 
 thrift_object(
@@ -236,7 +236,7 @@ add_dependencies(
 
 install(FILES
   ${CMAKE_SOURCE_DIR}/if/Lsdb.thrift
-  ${CMAKE_SOURCE_DIR}/if/IpPrefix.thrift
+  ${CMAKE_SOURCE_DIR}/if/Network.thrift
   ${CMAKE_SOURCE_DIR}/if/Fib.thrift
   ${CMAKE_SOURCE_DIR}/if/Platform.thrift
   ${CMAKE_SOURCE_DIR}/if/Decision.thrift
@@ -247,6 +247,7 @@ add_library(openrlib
   allocators/PrefixAllocator.cpp
   common/BuildInfo.cpp
   common/ExponentialBackoff.cpp
+  common/NetworkUtil.cpp
   common/OpenrEventLoop.cpp
   common/Util.cpp
   common/Constants.cpp
@@ -278,10 +279,10 @@ add_library(openrlib
   $<TARGET_OBJECTS:Decision-cpp2-obj>
   $<TARGET_OBJECTS:Fib-cpp2-obj>
   $<TARGET_OBJECTS:HealthChecker-cpp2-obj>
-  $<TARGET_OBJECTS:IpPrefix-cpp2-obj>
   $<TARGET_OBJECTS:KvStore-cpp2-obj>
   $<TARGET_OBJECTS:LinkMonitor-cpp2-obj>
   $<TARGET_OBJECTS:Lsdb-cpp2-obj>
+  $<TARGET_OBJECTS:Network-cpp2-obj>
   $<TARGET_OBJECTS:OpenrCtrl-cpp2-obj>
   $<TARGET_OBJECTS:PersistentStore-cpp2-obj>
   $<TARGET_OBJECTS:Platform-cpp2-obj>
@@ -425,7 +426,7 @@ install(FILES
 )
 
 install(FILES
-  common/AddressUtil.h
+  common/NetworkUtil.h
   common/BuildInfo.h
   common/Constants.h
   common/ExponentialBackoff.h

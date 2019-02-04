@@ -10,8 +10,8 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <folly/futures/Future.h>
-#include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/kvstore/KvStore.h>
 
 namespace openr {

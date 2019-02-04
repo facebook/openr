@@ -9,7 +9,7 @@
 
 #include <folly/gen/Base.h>
 
-#include <openr/common/AddressUtil.h>
+#include <openr/common/NetworkUtil.h>
 
 namespace openr {
 

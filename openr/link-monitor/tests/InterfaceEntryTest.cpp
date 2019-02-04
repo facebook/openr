@@ -12,7 +12,7 @@
 #include <re2/re2.h>
 #include <re2/set.h>
 
-#include <openr/common/AddressUtil.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/link-monitor/InterfaceEntry.h>
 
 namespace openr {

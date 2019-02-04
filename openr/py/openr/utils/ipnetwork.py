@@ -12,8 +12,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import ipaddress
 import socket
 
-from openr.IpPrefix import ttypes as ip_types
 from openr.Lsdb import ttypes as lsdb_types
+from openr.Network import ttypes as network_types
 
 
 def sprint_addr(addr):
@@ -27,7 +27,7 @@ def sprint_addr(addr):
 
 def sprint_prefix(prefix):
     """
-    :param prefix: ip_types.IpPrefix representing an CIDR network
+    :param prefix: network_types.IpPrefix representing an CIDR network
 
     :returns: string representation of prefix (CIDR network)
     :rtype: str or unicode
@@ -41,19 +41,19 @@ def ip_str_to_addr(addr_str):
     :param addr_str: ip address in string representation
 
     :returns: thrift struct BinaryAddress
-    :rtype: ip_types.BinaryAddress
+    :rtype: network_types.BinaryAddress
     """
 
     # Try v4
     try:
         addr = socket.inet_pton(socket.AF_INET, addr_str)
-        return ip_types.BinaryAddress(addr=addr)
+        return network_types.BinaryAddress(addr=addr)
     except socket.error:
         pass
 
     # Try v6
     addr = socket.inet_pton(socket.AF_INET6, addr_str)
-    return ip_types.BinaryAddress(addr=addr)
+    return network_types.BinaryAddress(addr=addr)
 
 
 def ip_str_to_prefix(prefix_str):
@@ -61,11 +61,11 @@ def ip_str_to_prefix(prefix_str):
     :param prefix_str: string representing a prefix (CIDR network)
 
     :returns: thrift struct IpPrefix
-    :rtype: ip_types.IpPrefix
+    :rtype: network_types.IpPrefix
     """
 
     ip_str, ip_len_str = prefix_str.split("/")
-    return ip_types.IpPrefix(
+    return network_types.IpPrefix(
         prefixAddress=ip_str_to_addr(ip_str), prefixLength=int(ip_len_str)
     )
 

@@ -12,7 +12,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <openr/common/AddressUtil.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/health-checker/HealthChecker.h>
 
 using namespace openr;

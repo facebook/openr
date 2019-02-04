@@ -27,8 +27,8 @@
 #include <folly/String.h>
 #include <folly/gen/Base.h>
 
-#include <openr/common/AddressUtil.h>
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
 
 #include "IoProvider.h"
 

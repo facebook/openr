@@ -8,7 +8,7 @@
 namespace cpp2 openr.thrift
 namespace py openr.HealthChecker
 
-include "IpPrefix.thrift"
+include "Network.thrift"
 
 enum HealthCheckerMessageType {
   PING = 0,
@@ -42,7 +42,7 @@ struct HealthCheckerRequest {
 
 struct NodeHealthInfo {
   1: list<string>  neighbors
-  2: IpPrefix.BinaryAddress ipAddress
+  2: Network.BinaryAddress ipAddress
   3: i64 lastValSent
   4: i64 lastAckFromNode
   5: i64 lastAckToNode
