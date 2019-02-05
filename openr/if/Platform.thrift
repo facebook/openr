@@ -156,6 +156,11 @@ const map<i16, i16> clientIdtoPriority = {786:10, 0:20, 64:11}
  * Interface to on-box Fib.
  */
 service FibService {
+
+  //
+  // Unicast Routes API
+  //
+
   void addUnicastRoute(
     1: i16 clientId,
     2: Network.UnicastRoute route,
@@ -181,6 +186,37 @@ service FibService {
     2: list<Network.UnicastRoute> routes,
   ) throws (1: PlatformError error)
 
+  // Retreive list of routes per client
+  list<Network.UnicastRoute> getRouteTableByClient(
+    1: i16 clientId
+  ) throws (1: PlatformError error)
+
+  //
+  // MPLS routes API
+  //
+
+  void addMplsRoutes(
+    1: i16 clientId,
+    2: list<Network.MplsRoute> routes,
+  ) throws (1: PlatformError error)
+
+  void deleteMplsRoutes(
+    1: i16 clientId,
+    2: list<i32> topLabels,
+  ) throws (1: PlatformError error)
+
+  // Flush previous routes and install new routes without disturbing
+  // traffic. Similar to syncFib API
+  void syncMplsFib(
+    1: i16 clientId,
+    2: list<Network.MplsRoute> routes,
+  ) throws (1: PlatformError error)
+
+  // Retrieve list of MPLS routes per client
+  list<Network.MplsRoute> getMplsRouteTableByClient(
+    1: i16 clientId
+  ) throws (1: PlatformError error)
+
   /**
    * DEPRECATED ... Use `aliveSince` API instead
    * openr should periodically call this to let Fib know that it is alive
@@ -203,9 +239,4 @@ service FibService {
    * Get number of routes
    */
   map<string, i64> getCounters()
-
-  // Retreive list of routes per client
-  list<Network.UnicastRoute> getRouteTableByClient(
-    1: i16 clientId
-  ) throws (1: PlatformError error)
 }

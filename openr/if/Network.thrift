@@ -24,6 +24,19 @@ enum AdminDistance {
   MAX_ADMIN_DISTANCE = 255
 }
 
+enum MplsActionCode {
+  PUSH = 0
+  SWAP = 1
+  PHP = 2      # Pen-ultimate hop popping => POP and FORWARD
+  POP_AND_LOOKUP = 3
+}
+
+struct MplsAction {
+  1: MplsActionCode action;
+  2: optional i32 swapLabel;          // Required if action == SWAP
+  3: optional list<i32> pushLabels;   // Required if action == PUSH
+}
+
 struct BinaryAddress {
   1: required fbbinary addr
   3: optional string ifName
@@ -46,11 +59,19 @@ struct NextHopThrift {
   //    0 being populated even with strange behavior in the client language
   //    which is consistent with C++
   2: i32 weight = 0
+  // MPLS encapsulation information for IP->MPLS and MPLS routes
+  3: optional MplsAction mplsAction
+}
+
+struct MplsRoute {
+  1: required i32 topLabel
+  3: optional AdminDistance adminDistance
+  4: list<NextHopThrift> nextHops
 }
 
 struct UnicastRoute {
   1: required IpPrefix dest
-  2: list<BinaryAddress> nexthops
+  2: list<BinaryAddress> nexthops   # DEPRECATED - Use nextHops instead
   3: optional AdminDistance adminDistance
   4: list<NextHopThrift> nextHops
 }
