@@ -160,13 +160,10 @@ MockNetlinkFibHandler::getRouteTableByClient(
                             }) |
           as<std::vector>();
 
-      routes.emplace_back(thrift::UnicastRoute(
-          apache::thrift::FRAGILE,
-          thrift::IpPrefix(
-              apache::thrift::FRAGILE,
-              toBinaryAddress(prefix.first),
-              static_cast<int16_t>(prefix.second)),
-          std::move(binaryNextHops)));
+      thrift::UnicastRoute route;
+      route.dest = toIpPrefix(prefix);
+      route.nexthops = std::move(binaryNextHops);
+      routes.emplace_back(std::move(route));
     }
   }
 }

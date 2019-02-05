@@ -145,14 +145,11 @@ NetlinkFibHandler::toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb) {
       binaryNextHops.insert(binaryAddr);
     }
 
-    routes.emplace_back(thrift::UnicastRoute(
-        apache::thrift::FRAGILE,
-        thrift::IpPrefix(
-            apache::thrift::FRAGILE,
-            toBinaryAddress(prefix.first),
-            static_cast<int16_t>(prefix.second)),
-        std::vector<thrift::BinaryAddress>(
-            binaryNextHops.begin(), binaryNextHops.end())));
+    thrift::UnicastRoute route;
+    route.dest = toIpPrefix(prefix);
+    route.nexthops.insert(
+        route.nexthops.end(), binaryNextHops.begin(), binaryNextHops.end());
+    routes.emplace_back(std::move(route));
   }
   return routes;
 }

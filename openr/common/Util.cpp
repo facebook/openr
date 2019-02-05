@@ -422,8 +422,10 @@ createUnicastRoutes(const std::vector<thrift::Route>& routes) {
     }
 
     // Create thrift::UnicastRoute object in-place
-    newRoutes.emplace_back(
-        apache::thrift::FRAGILE, route.prefix, std::move(nexthops));
+    thrift::UnicastRoute thriftRoute;
+    thriftRoute.dest = route.prefix;
+    thriftRoute.nexthops = std::move(nexthops);
+    newRoutes.emplace_back(std::move(thriftRoute));
   } // for ... routes
 
   return newRoutes;

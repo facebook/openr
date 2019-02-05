@@ -294,8 +294,10 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
       VLOG(1) << "bestPaths group resize for prefix: " << toString(it->prefix)
               << ", old: " << currBestPaths.size()
               << ", new: " << bestValidPaths.size();
-      routesToUpdate.emplace_back(thrift::UnicastRoute(
-          apache::thrift::FRAGILE, it->prefix, bestNexthops));
+      thrift::UnicastRoute route;
+      route.dest = it->prefix;
+      route.nexthops = std::move(bestNexthops);
+      routesToUpdate.emplace_back(std::move(route));
     }
     it->paths = validPaths;
 
