@@ -7,6 +7,7 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import copy
 import re
 from typing import Any, Callable, Tuple
 
@@ -48,6 +49,18 @@ OPTIONS = bunch.Bunch(
         "zmq_ctx": zmq.Context(),
     }
 )
+
+
+def getDefaultOptions(host: str) -> bunch.Bunch:
+    """
+    get all default options for a given host
+    """
+
+    options = copy.deepcopy(OPTIONS)
+    options.host = host
+    for k in options:
+        options[k] = getDefaultOption(options, k)
+    return options
 
 
 def nameFromOpt(opt: str) -> str:
