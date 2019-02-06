@@ -24,6 +24,7 @@
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 
 using apache::thrift::FRAGILE;
 using folly::gen::as;
@@ -46,8 +47,9 @@ MockNetlinkFibHandler::addUnicastRoute(
         toIPAddress((*route).dest.prefixAddress), (*route).dest.prefixLength);
 
     auto newNextHops =
-        from((*route).nexthops) | mapped([](const thrift::BinaryAddress& addr) {
-          return std::make_pair(addr.ifName.value(), toIPAddress(addr));
+        from((*route).nextHops) | mapped([](const thrift::NextHopThrift& nh) {
+          return std::make_pair(
+              nh.address.ifName.value(), toIPAddress(nh.address));
         }) |
         as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
@@ -76,8 +78,9 @@ MockNetlinkFibHandler::addUnicastRoutes(
           toIPAddress(route.dest.prefixAddress), route.dest.prefixLength);
 
       auto newNextHops =
-          from(route.nexthops) | mapped([](const thrift::BinaryAddress& addr) {
-            return std::make_pair(addr.ifName.value(), toIPAddress(addr));
+          from(route.nextHops) | mapped([](const thrift::NextHopThrift& nh) {
+            return std::make_pair(
+                nh.address.ifName.value(), toIPAddress(nh.address));
           }) |
           as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
@@ -117,8 +120,9 @@ MockNetlinkFibHandler::syncFib(
           toIPAddress(route.dest.prefixAddress), route.dest.prefixLength);
 
       auto newNextHops =
-          from(route.nexthops) | mapped([](const thrift::BinaryAddress& addr) {
-            return std::make_pair(addr.ifName.value(), toIPAddress(addr));
+          from(route.nextHops) | mapped([](const thrift::NextHopThrift& nh) {
+            return std::make_pair(
+                nh.address.ifName.value(), toIPAddress(nh.address));
           }) |
           as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
@@ -149,20 +153,23 @@ MockNetlinkFibHandler::getRouteTableByClient(
       auto const& prefix = kv.first;
       auto const& nextHops = kv.second;
 
-      auto binaryNextHops = from(nextHops) |
+      auto thriftNextHops = from(nextHops) |
           mapped([](const std::pair<std::string, folly::IPAddress>& nextHop) {
                               VLOG(2)
                                   << "mapping next-hop " << nextHop.second.str()
                                   << " dev " << nextHop.first;
-                              auto binaryAddr = toBinaryAddress(nextHop.second);
-                              binaryAddr.ifName = nextHop.first;
-                              return binaryAddr;
+                              thrift::NextHopThrift thriftNextHop;
+                              thriftNextHop.address =
+                                  toBinaryAddress(nextHop.second);
+                              thriftNextHop.address.ifName = nextHop.first;
+                              return thriftNextHop;
                             }) |
           as<std::vector>();
 
       thrift::UnicastRoute route;
       route.dest = toIpPrefix(prefix);
-      route.nexthops = std::move(binaryNextHops);
+      route.nextHops = std::move(thriftNextHops);
+      route.deprecatedNexthops = createDeprecatedNexthops(route.nextHops);
       routes.emplace_back(std::move(route));
     }
   }

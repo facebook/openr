@@ -35,6 +35,14 @@ struct hash<openr::thrift::BinaryAddress> {
 };
 
 /**
+ * Make MplsAction hashable
+ */
+template <>
+struct hash<openr::thrift::MplsAction> {
+  size_t operator()(openr::thrift::MplsAction const&) const;
+};
+
+/**
  * Make UnicastRoute hashable
  */
 template <>
@@ -114,6 +122,15 @@ inline std::string
 toString(const thrift::IpPrefix& ipPrefix) {
   return folly::sformat(
       "{}/{}", toString(ipPrefix.prefixAddress), ipPrefix.prefixLength);
+}
+
+inline std::string
+toString(const thrift::NextHopThrift& nextHop) {
+  return folly::sformat(
+      "via {} dev {} weight {}",
+      toIPAddress(nextHop.address).str(),
+      nextHop.address.ifName.value_or("N/A"),
+      nextHop.weight);
 }
 
 } // namespace openr

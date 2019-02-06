@@ -408,23 +408,36 @@ getBestPaths(std::vector<thrift::Path> const& paths) {
   return ret;
 }
 
+std::vector<thrift::BinaryAddress>
+createDeprecatedNexthops(const std::vector<thrift::NextHopThrift>& nextHops) {
+  std::vector<thrift::BinaryAddress> deprecatedNexthops;
+  for (auto const& nextHop : nextHops) {
+    deprecatedNexthops.emplace_back(nextHop.address);
+  }
+  return deprecatedNexthops;
+}
+
 std::vector<thrift::UnicastRoute>
 createUnicastRoutes(const std::vector<thrift::Route>& routes) {
   // Build routes to be programmed.
   std::vector<thrift::UnicastRoute> newRoutes;
 
   for (auto const& route : routes) {
-    std::vector<thrift::BinaryAddress> nexthops;
+    std::vector<thrift::NextHopThrift> nextHops;
     for (auto const& path : getBestPaths(route.paths)) {
-      nexthops.push_back(path.nextHop);
-      auto& nexthop = nexthops.back();
-      nexthop.ifName = path.ifName;
+      thrift::NextHopThrift nextHop;
+      nextHop.address = path.nextHop;
+      nextHop.address.ifName = path.ifName;
+      nextHops.emplace_back(std::move(nextHop));
     }
 
     // Create thrift::UnicastRoute object in-place
     thrift::UnicastRoute thriftRoute;
     thriftRoute.dest = route.prefix;
-    thriftRoute.nexthops = std::move(nexthops);
+    thriftRoute.nextHops = std::move(nextHops);
+    // DEPRECATED - For backward compatibility
+    thriftRoute.deprecatedNexthops =
+        createDeprecatedNexthops(thriftRoute.nextHops);
     newRoutes.emplace_back(std::move(thriftRoute));
   } // for ... routes
 

@@ -133,22 +133,25 @@ NetlinkFibHandler::toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb) {
     auto const& prefix = kv.first;
     auto const& nextHops = kv.second.getNextHops();
 
-    std::unordered_set<thrift::BinaryAddress> binaryNextHops;
+    std::vector<thrift::NextHopThrift> thriftNextHops;
 
     for (auto const& nh : nextHops) {
       CHECK(nh.getGateway().hasValue());
       const auto& ifName = nh.getIfIndex().hasValue()
           ? netlinkSocket_->getIfName(nh.getIfIndex().value()).get()
           : "";
-      auto binaryAddr = toBinaryAddress(nh.getGateway().value());
-      binaryAddr.ifName = ifName;
-      binaryNextHops.insert(binaryAddr);
+      thrift::NextHopThrift nextHop;
+      nextHop.address = toBinaryAddress(nh.getGateway().value());
+      nextHop.address.ifName = ifName;
+      thriftNextHops.emplace_back(std::move(nextHop));
     }
 
     thrift::UnicastRoute route;
     route.dest = toIpPrefix(prefix);
-    route.nexthops.insert(
-        route.nexthops.end(), binaryNextHops.begin(), binaryNextHops.end());
+    route.nextHops.insert(
+        route.nextHops.end(), thriftNextHops.begin(), thriftNextHops.end());
+    // DEPRECATED - Only for backward compatibility
+    route.deprecatedNexthops = createDeprecatedNexthops(route.nextHops);
     routes.emplace_back(std::move(route));
   }
   return routes;
@@ -321,17 +324,17 @@ NetlinkFibHandler::buildRoute(
   rtBuilder.setDestination(toIPNetwork(route.dest)).setProtocolId(protocol);
 
   // treat empty nexthop as null route
-  if (route.nexthops.empty()) {
+  if (route.nextHops.empty()) {
     rtBuilder.setType(RTN_BLACKHOLE);
     return rtBuilder.build();
   }
 
   // add nexthops
   fbnl::NextHopBuilder nhBuilder;
-  for (const auto& nh : route.nexthops) {
+  for (const auto& nh : route.nextHops) {
     // if recursive lookup is enabled, try resolve nexthop first
     if (FLAGS_enable_recursive_lookup) {
-      const auto& resolvedNhSet = lookupNexthop(nh);
+      const auto& resolvedNhSet = lookupNexthop(nh.address);
       for (const auto& resolvedNh : resolvedNhSet) {
         if (resolvedNh.getIfIndex().hasValue()) {
           nhBuilder.setIfIndex(resolvedNh.getIfIndex().value());
@@ -348,10 +351,11 @@ NetlinkFibHandler::buildRoute(
       }
     }
     // recursive lookup is not enabled, or nexthop is not resolved
-    if (nh.ifName.hasValue()) {
-      nhBuilder.setIfIndex(netlinkSocket_->getIfIndex(nh.ifName.value()).get());
+    if (nh.address.ifName.hasValue()) {
+      nhBuilder.setIfIndex(
+          netlinkSocket_->getIfIndex(nh.address.ifName.value()).get());
     }
-    nhBuilder.setGateway(toIPAddress(nh));
+    nhBuilder.setGateway(toIPAddress(nh.address));
     rtBuilder.addNextHop(nhBuilder.setWeight(0).build());
     nhBuilder.reset();
   }

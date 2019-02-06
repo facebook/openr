@@ -280,11 +280,12 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
 
     // Find best paths
     auto const& bestValidPaths = getBestPaths(validPaths);
-    std::vector<thrift::BinaryAddress> bestNexthops;
+    std::vector<thrift::NextHopThrift> bestNexthops;
     for (auto const& path : bestValidPaths) {
-      bestNexthops.push_back(path.nextHop);
-      auto& nexthop = bestNexthops.back();
-      nexthop.ifName = path.ifName;
+      thrift::NextHopThrift nextHop;
+      nextHop.address = path.nextHop;
+      nextHop.address.ifName = path.ifName;
+      bestNexthops.emplace_back(std::move(nextHop));
     }
 
     // Add to affected routes only if best path has changed and also reflect
@@ -296,7 +297,9 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
               << ", new: " << bestValidPaths.size();
       thrift::UnicastRoute route;
       route.dest = it->prefix;
-      route.nexthops = std::move(bestNexthops);
+      route.nextHops = std::move(bestNexthops);
+      // For backward compatibility
+      route.deprecatedNexthops = createDeprecatedNexthops(route.nextHops);
       routesToUpdate.emplace_back(std::move(route));
     }
     it->paths = validPaths;
@@ -304,7 +307,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     // Remove route if no valid paths
     if (validPaths.size() == 0) {
       VLOG(1) << "Removing prefix " << toString(it->prefix)
-              << " because of no valid nexthops.";
+              << " because of no valid nextHops.";
       prefixesToRemove.push_back(it->prefix);
       it = routeDb_.routes.erase(it);
     } else {
@@ -336,9 +339,9 @@ Fib::updateRoutes(
   if (dryrun_) {
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
     for (auto const& route : routesToUpdate) {
-      VLOG(1) << "> " << toString(route.dest) << ", " << route.nexthops.size();
-      for (auto const& nh : route.nexthops) {
-        VLOG(1) << "  via " << toString(nh);
+      VLOG(1) << "> " << toString(route.dest) << ", " << route.nextHops.size();
+      for (auto const& nh : route.nextHops) {
+        VLOG(1) << "  " << toString(nh);
       }
       VLOG(1) << "";
       logPerfEvents();

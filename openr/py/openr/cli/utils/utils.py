@@ -17,6 +17,7 @@ import sys
 from builtins import chr, input, map
 from collections import defaultdict
 from itertools import product
+from typing import List
 
 import bunch
 import click
@@ -152,6 +153,20 @@ def get_connected_node_name(cli_opts):
         return client.get_identity()
     except zmq.error.Again:
         return cli_opts.host
+
+
+def get_route_nexthops(
+    route: network_types.UnicastRoute
+) -> List[network_types.NextHopThrift]:
+    """
+    DEPRECATED: this function is meant to keep backward functionality with old
+    vs new way of expressing route nexthops
+    """
+
+    if len(route.nextHops):
+        return route.nextHops
+
+    return [network_types.NextHopThrift(address=nh) for nh in route.deprecatedNexthops]
 
 
 def parse_nodes(cli_opts, nodes):
@@ -974,9 +989,9 @@ def sprint_prefixes_db_delta(global_prefixes_db, prefix_db):
     """
 
     this_node_name = prefix_db.thisNodeName
-    prev_prefixes = global_prefixes_db.get(this_node_name, set([]))
+    prev_prefixes = global_prefixes_db.get(this_node_name, set())
 
-    cur_prefixes = set([])
+    cur_prefixes = set()
     for prefix_entry in prefix_db.prefixEntries:
         cur_prefixes.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
 
@@ -1032,7 +1047,14 @@ def build_routes(prefixes, nexthops):
         nexthop = ipnetwork.ip_str_to_addr(addr)
         nexthop.ifName = iface
         nhs.append(nexthop)
-    return [network_types.UnicastRoute(dest=p, nexthops=nhs) for p in prefixes]
+    return [
+        network_types.UnicastRoute(
+            dest=p,
+            deprecatedNexthops=nhs,
+            nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs],
+        )
+        for p in prefixes
+    ]
 
 
 def get_route_as_dict(routes):
@@ -1050,7 +1072,7 @@ def get_route_as_dict(routes):
     # dict of prefixes(str) : nexthops(str)
     routes_dict = {
         ipnetwork.sprint_prefix(route.dest): sorted(
-            ip_nexthop_to_str(nh, True) for nh in route.nexthops
+            ip_nexthop_to_str(nh, True) for nh in get_route_nexthops(route)
         )
         for route in routes
     }
@@ -1187,9 +1209,10 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=Fal
         dest = ipnetwork.sprint_prefix(route.dest)
         # record invalid nexthops in dict<error, list<nexthops>>
         invalid_nexthop = defaultdict(list)
-        for nh in route.nexthops:
+        for nextHop in get_route_nexthops(route):
+            nh = nextHop.address
             if nh.ifName not in interfaces or not interfaces[nh.ifName].info.isUp:
-                invalid_nexthop[MISSING_NEXTHOP].append(ip_nexthop_to_str(nh))
+                invalid_nexthop[MISSING_NEXTHOP].append(ip_nexthop_to_str(nextHop))
                 continue
             # if nexthop addr is v4, make sure it belongs to same subnets as
             # interface addr
@@ -1204,12 +1227,14 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=Fal
                     ) == 4 and not ipnetwork.is_same_subnet(
                         nh.addr, prefix.prefixAddress.addr, "31"
                     ):
-                        invalid_nexthop[INVALID_SUBNET].append(ip_nexthop_to_str(nh))
+                        invalid_nexthop[INVALID_SUBNET].append(
+                            ip_nexthop_to_str(nextHop)
+                        )
             # if nexthop addr is v6, make sure it's a link local addr
             elif ipnetwork.ip_version(nh.addr) == 6 and not ipnetwork.is_link_local(
                 nh.addr
             ):
-                invalid_nexthop[INVALID_LINK_LOCAL].append(ip_nexthop_to_str(nh))
+                invalid_nexthop[INVALID_LINK_LOCAL].append(ip_nexthop_to_str(nextHop))
 
         # build routes per error type
         for k, v in invalid_nexthop.items():
@@ -1243,16 +1268,41 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=Fal
     return False, error_msg
 
 
-def ip_nexthop_to_str(nh, ignore_v4_iface=False):
+def mpls_action_to_str(mpls_action: network_types.MplsAction) -> str:
     """
-    Convert ttypes.BinaryAddress to string representation of a nexthop
+    Convert Network.MplsAction to string representation
     """
 
+    action_str = network_types.MplsActionCode._VALUES_TO_NAMES.get(
+        mpls_action.action, ""
+    )
+    label_str = ""
+    if mpls_action.swapLabel is not None:
+        label_str = str(mpls_action.swapLabel)
+    if mpls_action.pushLabels is not None:
+        label_str = "/".join(str(l) for l in mpls_action.pushLabels)
+    return f"mpls {action_str} {label_str}"
+
+
+def ip_nexthop_to_str(
+    nextHop: network_types.NextHopThrift, ignore_v4_iface: bool = False
+) -> str:
+    """
+    Convert Network.BinaryAddress to string representation of a nexthop
+    """
+
+    nh = nextHop.address
     ifName = "%{}".format(nh.ifName) if nh.ifName else ""
     if len(nh.addr) == 4 and ignore_v4_iface:
         ifName = ""
 
-    return "{}{}".format(ipnetwork.sprint_addr(nh.addr), ifName)
+    mpls_action_str = (
+        f"{mpls_action_to_str(nextHop.mplsAction)} "
+        if nextHop.mplsAction is not None
+        else ""
+    )
+
+    return "{}{}{}".format(mpls_action_str, ipnetwork.sprint_addr(nh.addr), ifName)
 
 
 def print_routes(caption, routes, prefixes=None):
@@ -1268,7 +1318,7 @@ def print_routes(caption, routes, prefixes=None):
             continue
 
         paths_str = "\n".join(
-            ["via {}".format(ip_nexthop_to_str(nh)) for nh in route.nexthops]
+            ["via {}".format(ip_nexthop_to_str(nh)) for nh in get_route_nexthops(route)]
         )
         route_strs.append((dest, paths_str))
 
@@ -1289,7 +1339,7 @@ def get_routes_json(host, client, routes, prefixes=None):
             continue
         route_data = {
             "dest": dest,
-            "nexthops": [ip_nexthop_to_str(nh) for nh in route.nexthops],
+            "nexthops": [ip_nexthop_to_str(nh) for nh in get_route_nexthops(route)],
         }
         data["routes"].append(route_data)
 
@@ -1317,7 +1367,11 @@ def get_shortest_routes(route_db):
                 nexthops[-1].ifName = path.ifName
 
         shortest_routes.append(
-            network_types.UnicastRoute(dest=route.prefix, nexthops=nexthops)
+            network_types.UnicastRoute(
+                dest=route.prefix,
+                deprecatedNexthops=nexthops,
+                nextHops=[network_types.NextHopThrift(address=nh) for nh in nexthops],
+            )
         )
 
     return shortest_routes

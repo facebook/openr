@@ -165,6 +165,12 @@ std::string getRemoteIfName(const thrift::Adjacency& adj);
 std::vector<thrift::Path> getBestPaths(std::vector<thrift::Path> const& paths);
 
 /**
+ * Create deprecated nexthops
+ */
+std::vector<thrift::BinaryAddress> createDeprecatedNexthops(
+    std::vector<thrift::NextHopThrift> const& nextHops);
+
+/**
  * Transform `thrift::Route` object to `thrift::UnicastRoute` object
  * Only best nexthops are retained
  */

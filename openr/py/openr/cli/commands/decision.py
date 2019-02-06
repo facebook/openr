@@ -255,7 +255,10 @@ class PathCmd(DecisionCmd):
             return []
         for route in routes:
             if ipnetwork.sprint_prefix(route.dest) == dst_prefix:
-                return route.nexthops
+                if len(route.nextHops):
+                    return [nh.address for nh in route.nextHops]
+                else:
+                    return route.deprecatedNexthops
         return []
 
     def get_paths(self, src, dst, max_hop):

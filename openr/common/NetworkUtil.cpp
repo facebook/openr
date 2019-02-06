@@ -33,14 +33,36 @@ hash<openr::thrift::BinaryAddress>::operator()(
 }
 
 /**
+ * Make MplsAction hashable
+ */
+size_t
+hash<openr::thrift::MplsAction>::operator()(
+    openr::thrift::MplsAction const& mplsAction) const {
+  size_t res = hash<int8_t>()(static_cast<int8_t>(mplsAction.action));
+  if (mplsAction.swapLabel.hasValue()) {
+    res += hash<int32_t>()(mplsAction.swapLabel.value());
+  }
+  if (mplsAction.pushLabels.hasValue()) {
+    for (auto const& pushLabel : mplsAction.pushLabels.value()) {
+      res += hash<int32_t>()(pushLabel);
+    }
+  }
+  return res;
+}
+
+/**
  * Make UnicastRoute hashable
  */
 size_t
 hash<openr::thrift::UnicastRoute>::operator()(
     openr::thrift::UnicastRoute const& route) const {
   size_t res = hash<openr::thrift::IpPrefix>()(route.dest);
-  for (const auto& nh : route.nexthops) {
-    res += hash<openr::thrift::BinaryAddress>()(nh);
+  for (const auto& nh : route.nextHops) {
+    res += hash<openr::thrift::BinaryAddress>()(nh.address);
+    res += hash<int32_t>()(nh.weight);
+    if (nh.mplsAction.hasValue()) {
+      res += hash<openr::thrift::MplsAction>()(nh.mplsAction.value());
+    }
   }
   return res;
 }
