@@ -268,8 +268,11 @@ class PathCmd(DecisionCmd):
         try:
             ipaddress.ip_address(dst_addr)
         except ValueError:
-            print("node name or ip address not valid.")
-            sys.exit(1)
+            try:
+                dst_addr = str(ipaddress.ip_network(dst, strict=False).network_address)
+            except ValueError:
+                print("node name or ip address not valid.")
+                sys.exit(1)
 
         adj_dbs = self.client.get_adj_dbs()
         if2node = self.get_if2node_map(adj_dbs)
