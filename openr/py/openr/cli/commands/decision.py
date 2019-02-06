@@ -147,10 +147,10 @@ class PathCmd(DecisionCmd):
         self.iter_dbs(loopback_set, self.prefix_dbs, node, _parse)
         return loopback_set.pop() if len(loopback_set) > 0 else None
 
-    def get_node_prefixes(self, node):
+    def get_node_prefixes(self, node, ipv4=False):
         def _parse(prefix_set, prefix_db):
             for prefix_entry in prefix_db.prefixEntries:
-                if len(prefix_entry.prefix.prefixAddress.addr) == 16:
+                if len(prefix_entry.prefix.prefixAddress.addr) == (4 if ipv4 else 16):
                     prefix_set.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
 
         prefix_set = set()
@@ -202,7 +202,8 @@ class PathCmd(DecisionCmd):
 
         cur_lpm_len = 0
         dst_addr = ipaddress.ip_address(dst_addr)
-        for cur_prefix in self.get_node_prefixes(node):
+        is_ipv4 = isinstance(dst_addr, ipaddress.IPv4Address)
+        for cur_prefix in self.get_node_prefixes(node, is_ipv4):
             if dst_addr in ipaddress.ip_network(cur_prefix):
                 cur_len = int(cur_prefix.split("/")[1])
                 cur_lpm_len = max(cur_lpm_len, cur_len)
@@ -219,6 +220,7 @@ class PathCmd(DecisionCmd):
         is_initialized = fib_routes[route_db.thisNodeName]
 
         lpm_route = self.get_lpm_route(route_db, dst_addr)
+        is_ipv4 = isinstance(ipaddress.ip_address(dst_addr), ipaddress.IPv4Address)
         if lpm_route and lpm_route.prefix.prefixLength >= cur_lpm_len:
             if in_fib and not is_initialized:
                 fib_routes[route_db.thisNodeName].extend(
@@ -231,7 +233,7 @@ class PathCmd(DecisionCmd):
                 )
             min_cost = min(p.metric for p in lpm_route.paths)
             for path in [p for p in lpm_route.paths if p.metric == min_cost]:
-                if len(path.nextHop.addr) == 16:
+                if len(path.nextHop.addr) == (4 if is_ipv4 else 16):
                     nh_addr = ipnetwork.sprint_addr(path.nextHop.addr)
                     next_hop_node_name = if2node[route_db.thisNodeName][
                         (path.ifName, nh_addr)
