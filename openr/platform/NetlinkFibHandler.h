@@ -55,8 +55,6 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) override;
 
-  folly::Future<int64_t> future_periodicKeepAlive(int16_t clientId) override;
-
   int64_t aliveSince() override;
 
   thrift::ServiceStatus getStatus() override;
@@ -91,10 +89,6 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   // Used to interact with Linux kernel routing table
   std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket_;
-
-  // Monotonic ID from periodicKeepAlive
-  // Fib push whenever the ID has not incremented since last pull...
-  int64_t keepAliveId_{0};
 
   // Time when service started, in number of seconds, since epoch
   const int64_t startTime_{0};

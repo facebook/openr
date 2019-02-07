@@ -219,14 +219,6 @@ service FibService {
   ) throws (1: PlatformError error)
 
   /**
-   * DEPRECATED ... Use `aliveSince` API instead
-   * openr should periodically call this to let Fib know that it is alive
-   */
-  i64 periodicKeepAlive(
-    1: i16 clientId,
-  )
-
-  /**
    * Returns the unix time that the service has been running since
    */
   i64 aliveSince() (priority = 'IMPORTANT')

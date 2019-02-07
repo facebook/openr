@@ -273,13 +273,6 @@ NetlinkFibHandler::future_syncFib(
       protocol.value(), std::move(newRoutes));
 }
 
-folly::Future<int64_t>
-NetlinkFibHandler::future_periodicKeepAlive(int16_t /* clientId */) {
-  VLOG(3) << "Received KeepAlive from OpenR";
-  recentKeepAliveTs_ = std::chrono::steady_clock::now();
-  return folly::makeFuture(keepAliveId_++);
-}
-
 int64_t
 NetlinkFibHandler::aliveSince() {
   VLOG(3) << "Received KeepAlive from OpenR";
