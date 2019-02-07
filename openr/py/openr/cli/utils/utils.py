@@ -163,7 +163,7 @@ def get_route_nexthops(
     vs new way of expressing route nexthops
     """
 
-    if len(route.nextHops):
+    if route.nextHops:  # Checks for both null and empty list
         return route.nextHops
 
     return [network_types.NextHopThrift(address=nh) for nh in route.deprecatedNexthops]
