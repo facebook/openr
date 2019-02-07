@@ -5,13 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Network
 namespace php Openr
-
-# fbstring uses the small internal buffer to store the data
-# if the data is small enough (< 24 bytes).
-typedef binary (cpp.type = "::folly::fbstring") fbbinary
 
 // Using the defaults from here:
 // https://en.wikipedia.org/wiki/Administrative_distance
@@ -38,7 +35,7 @@ struct MplsAction {
 }
 
 struct BinaryAddress {
-  1: required fbbinary addr
+  1: required binary addr
   3: optional string ifName
 }
 

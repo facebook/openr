@@ -84,7 +84,7 @@ toIPAddress(const T& input) {
 }
 
 inline folly::IPAddress
-toIPAddress(const thrift::fbbinary& binAddr) {
+toIPAddress(const std::string& binAddr) {
   return folly::IPAddress::fromBinary(folly::ByteRange(
       reinterpret_cast<const uint8_t*>(binAddr.data()), binAddr.size()));
 }

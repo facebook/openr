@@ -15,8 +15,7 @@ namespace std {
 size_t
 hash<openr::thrift::IpPrefix>::operator()(
     openr::thrift::IpPrefix const& ipPrefix) const {
-  return hash<string>()(ipPrefix.prefixAddress.addr.toStdString()) +
-      ipPrefix.prefixLength;
+  return hash<string>()(ipPrefix.prefixAddress.addr) + ipPrefix.prefixLength;
 }
 
 /**
@@ -25,7 +24,7 @@ hash<openr::thrift::IpPrefix>::operator()(
 size_t
 hash<openr::thrift::BinaryAddress>::operator()(
     openr::thrift::BinaryAddress const& addr) const {
-  size_t res = hash<string>()(addr.addr.toStdString());
+  size_t res = hash<string>()(addr.addr);
   if (addr.ifName.hasValue()) {
     res += hash<string>()(addr.ifName.value());
   }

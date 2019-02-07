@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Platform
 

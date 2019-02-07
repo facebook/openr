@@ -5,16 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.KvStore
-
-typedef map<string, Value>
-  (cpp.type = "std::unordered_map<std::string, Value>") KeyVals
-
-typedef map<string, PeerSpec>
-  (cpp.type = "std::unordered_map<std::string, PeerSpec>") PeersMap
-
 
 // a value as reported in get replies/publications
 struct Value {
@@ -38,6 +32,10 @@ struct Value {
   // operation.
   6: optional i64 hash;
 }
+
+typedef map<string, Value>
+  (cpp.type = "std::unordered_map<std::string, Value>") KeyVals
+
 
 enum Command {
   // NOTE: key-10 has been used in past
@@ -99,6 +97,9 @@ struct PeerSpec {
   1: string pubUrl
   2: string cmdUrl
 }
+
+typedef map<string, PeerSpec>
+  (cpp.type = "std::unordered_map<std::string, PeerSpec>") PeersMap
 
 // parameters for peer addition
 struct PeerAddParams {
