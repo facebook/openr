@@ -22,6 +22,9 @@ LimitCORE=32G
 SyslogIdentifier=openr
 StandardOutput=syslog
 
+# Disable swap for this unit file (cgroup) - See D14078530 for more info
+MemorySwapMax=0
+
 # Place in unrestricted workload.slice
 Slice=workload.slice
 
