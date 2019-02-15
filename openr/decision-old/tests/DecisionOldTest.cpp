@@ -120,15 +120,16 @@ fillRouteMap(
     const string& node,
     RouteMap& routeMap,
     const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : routeDb.routes) {
-    auto prefix = toString(route.prefix);
-    for (const auto& path : route.paths) {
-      const auto nextHop = toIPAddress(path.nextHop);
+  for (auto const& route : routeDb.unicastRoutes) {
+    auto prefix = toString(route.dest);
+    for (const auto& nextHop : route.nextHops) {
+      const auto nextHopAddr = toIPAddress(nextHop.address);
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << path.ifName << " : " << nextHop << " (" << path.metric << ")";
+              << nextHop.address.ifName.value() << " : " << nextHopAddr << " ("
+              << nextHop.metric << ")";
 
       routeMap[make_pair(node, prefix)].insert(
-          {{path.ifName, nextHop}, path.metric});
+          {{nextHop.address.ifName.value(), nextHopAddr}, nextHop.metric});
     }
   }
 }
@@ -170,7 +171,7 @@ TEST(ShortestPathTest, UnreachableNodes) {
 
   unordered_map<
       pair<string /* node name */, string /* ip prefix */>,
-      thrift::Route>
+      thrift::UnicastRoute>
       routeMap;
 
   vector<string> allNodes = {"1", "2"};
@@ -178,7 +179,7 @@ TEST(ShortestPathTest, UnreachableNodes) {
   for (string const& node : allNodes) {
     auto routeDb = spfSolver.buildShortestPaths(node);
     EXPECT_EQ(node, routeDb.thisNodeName);
-    EXPECT_EQ(0, routeDb.routes.size());
+    EXPECT_EQ(0, routeDb.unicastRoutes.size());
   }
 }
 
@@ -203,7 +204,7 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
 
   auto routeDb = spfSolver.buildShortestPaths("1");
   EXPECT_EQ("1", routeDb.thisNodeName);
-  EXPECT_EQ(0, routeDb.routes.size());
+  EXPECT_EQ(0, routeDb.unicastRoutes.size());
 }
 
 //
@@ -232,11 +233,11 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
 
   auto routeDb = spfSolver.buildShortestPaths("1");
   EXPECT_EQ("1", routeDb.thisNodeName);
-  EXPECT_EQ(0, routeDb.routes.size());
+  EXPECT_EQ(0, routeDb.unicastRoutes.size());
 
   routeDb = spfSolver.buildShortestPaths("2");
   EXPECT_EQ("2", routeDb.thisNodeName);
-  EXPECT_EQ(0, routeDb.routes.size());
+  EXPECT_EQ(0, routeDb.unicastRoutes.size());
 }
 
 //
@@ -272,8 +273,8 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   // route from 1 to 3
   auto routeDb = spfSolver.buildShortestPaths("1");
   bool foundRouteV6 = false;
-  for (auto const& route : routeDb.routes) {
-    if (route.prefix == addr3) {
+  for (auto const& route : routeDb.unicastRoutes) {
+    if (route.dest == addr3) {
       foundRouteV6 = true;
       break;
     }
@@ -1430,7 +1431,7 @@ TEST_F(DecisionOldTestFixture, BasicOperations) {
 
   sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(1, routeDb.routes.size());
+  EXPECT_EQ(1, routeDb.unicastRoutes.size());
   RouteMap routeMap;
   fillRouteMap("1", routeMap, routeDb);
 
@@ -1461,7 +1462,7 @@ TEST_F(DecisionOldTestFixture, BasicOperations) {
 
   // receive my local DecisionOld routeDb publication
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
-  EXPECT_EQ(2, routeDb.routes.size());
+  EXPECT_EQ(2, routeDb.unicastRoutes.size());
   fillRouteMap("1", routeMap, routeDb);
   // 1
   EXPECT_EQ(
@@ -1474,8 +1475,8 @@ TEST_F(DecisionOldTestFixture, BasicOperations) {
 
   // dump other nodes' routeDB
   auto routeDbMap = dumpRouteDatabase(decisionReq, {"2", "3"}, serializer);
-  EXPECT_EQ(2, routeDbMap["2"].routes.size());
-  EXPECT_EQ(2, routeDbMap["3"].routes.size());
+  EXPECT_EQ(2, routeDbMap["2"].unicastRoutes.size());
+  EXPECT_EQ(2, routeDbMap["3"].unicastRoutes.size());
   for (auto kv : routeDbMap) {
     fillRouteMap(kv.first, routeMap, kv.second);
   }
@@ -1508,7 +1509,7 @@ TEST_F(DecisionOldTestFixture, BasicOperations) {
 
   sendKvPublication(publication);
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
-  EXPECT_EQ(1, routeDb.routes.size());
+  EXPECT_EQ(1, routeDb.unicastRoutes.size());
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
@@ -1549,7 +1550,7 @@ TEST_F(DecisionOldTestFixture, ParallelLinks) {
 
   sendKvPublication(publication);
   auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(1, routeDb.routes.size());
+  EXPECT_EQ(1, routeDb.unicastRoutes.size());
   RouteMap routeMap;
   fillRouteMap("1", routeMap, routeDb);
 
@@ -1564,7 +1565,7 @@ TEST_F(DecisionOldTestFixture, ParallelLinks) {
   sendKvPublication(publication);
   // receive my local DecisionOld routeDb publication
   routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
-  EXPECT_EQ(1, routeDb.routes.size());
+  EXPECT_EQ(1, routeDb.unicastRoutes.size());
   routeMap.clear();
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
@@ -2016,26 +2017,26 @@ TEST_F(DecisionOldTestFixture, DuplicatePrefixes) {
   }
 
   // 1
-  EXPECT_EQ(2, routeMapList["1"].routes.size());
+  EXPECT_EQ(2, routeMapList["1"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops(
           {make_pair(toNextHop(adj12), 10), make_pair(toNextHop(adj13), 10)}));
 
   // 2
-  EXPECT_EQ(2, routeMapList["2"].routes.size());
+  EXPECT_EQ(2, routeMapList["2"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
       NextHops({make_pair(toNextHop(adj21), 10)}));
 
   // 3
-  EXPECT_EQ(2, routeMapList["3"].routes.size());
+  EXPECT_EQ(2, routeMapList["3"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
       NextHops({make_pair(toNextHop(adj31), 10)}));
 
   // 4
-  EXPECT_EQ(2, routeMapList["4"].routes.size());
+  EXPECT_EQ(2, routeMapList["4"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
       NextHops({make_pair(toNextHop(adj41), 15)}));
@@ -2083,26 +2084,26 @@ TEST_F(DecisionOldTestFixture, DuplicatePrefixes) {
   }
 
   // 1
-  EXPECT_EQ(2, routeMapList["1"].routes.size());
+  EXPECT_EQ(2, routeMapList["1"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops(
           {make_pair(toNextHop(adj13), 10), make_pair(toNextHop(adj12), 100)}));
 
   // 2
-  EXPECT_EQ(2, routeMapList["2"].routes.size());
+  EXPECT_EQ(2, routeMapList["2"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
       NextHops({make_pair(toNextHop(adj21), 100)}));
 
   // 3
-  EXPECT_EQ(2, routeMapList["3"].routes.size());
+  EXPECT_EQ(2, routeMapList["3"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
       NextHops({make_pair(toNextHop(adj31), 10)}));
 
   // 4
-  EXPECT_EQ(2, routeMapList["4"].routes.size());
+  EXPECT_EQ(2, routeMapList["4"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
       NextHops(
@@ -2182,7 +2183,8 @@ TEST_F(DecisionOldTestFixture, DecisionOldSubReliability) {
 
   // Receive RouteUpdate from DecisionOld
   auto routes1 = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(999, routes1.routes.size()); // Route to all nodes except mine
+  EXPECT_EQ(999, routes1.unicastRoutes.size()); // Route to all nodes except
+                                                // mine
 
   //
   // Wait until all pending updates are finished
@@ -2201,7 +2203,8 @@ TEST_F(DecisionOldTestFixture, DecisionOldSubReliability) {
   sendKvPublication(newPub);
   // Receive RouteUpdate from DecisionOld
   auto routes2 = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(999, routes2.routes.size()); // Route to all nodes except mine
+  EXPECT_EQ(999, routes2.unicastRoutes.size()); // Route to all nodes except
+                                                // mine
   //
   // Verify counters information
   //

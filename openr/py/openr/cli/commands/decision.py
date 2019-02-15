@@ -178,14 +178,14 @@ class PathCmd(DecisionCmd):
         max_prefix_len = -1
         lpm_route = None
         dst_addr = ipaddress.ip_address(dst_addr)
-        for route in route_db.routes:
-            prefix = ipaddress.ip_network(ipnetwork.sprint_prefix(route.prefix))
+        for route in route_db.unicastRoutes:
+            prefix = ipaddress.ip_network(ipnetwork.sprint_prefix(route.dest))
             if dst_addr in prefix:
-                next_hop_prefix_len = route.prefix.prefixLength
+                next_hop_prefix_len = route.dest.prefixLength
                 if next_hop_prefix_len == max_prefix_len:
                     raise Exception(
                         "Duplicate prefix found in routing table {}".format(
-                            ipnetwork.sprint_prefix(route.prefix)
+                            ipnetwork.sprint_prefix(route.dest)
                         )
                     )
                 elif next_hop_prefix_len > max_prefix_len:
@@ -221,25 +221,30 @@ class PathCmd(DecisionCmd):
 
         lpm_route = self.get_lpm_route(route_db, dst_addr)
         is_ipv4 = isinstance(ipaddress.ip_address(dst_addr), ipaddress.IPv4Address)
-        if lpm_route and lpm_route.prefix.prefixLength >= cur_lpm_len:
+        if lpm_route and lpm_route.dest.prefixLength >= cur_lpm_len:
             if in_fib and not is_initialized:
                 fib_routes[route_db.thisNodeName].extend(
                     self.get_fib_path(
                         route_db.thisNodeName,
-                        ipnetwork.sprint_prefix(lpm_route.prefix),
+                        ipnetwork.sprint_prefix(lpm_route.dest),
                         self.fib_agent_port,
                         self.timeout,
                     )
                 )
-            min_cost = min(p.metric for p in lpm_route.paths)
-            for path in [p for p in lpm_route.paths if p.metric == min_cost]:
-                if len(path.nextHop.addr) == (4 if is_ipv4 else 16):
-                    nh_addr = ipnetwork.sprint_addr(path.nextHop.addr)
+            min_cost = min(p.metric for p in lpm_route.nextHops)
+            for nextHop in [p for p in lpm_route.nextHops if p.metric == min_cost]:
+                if len(nextHop.address.addr) == (4 if is_ipv4 else 16):
+                    nh_addr = ipnetwork.sprint_addr(nextHop.address.addr)
                     next_hop_node_name = if2node[route_db.thisNodeName][
-                        (path.ifName, nh_addr)
+                        (nextHop.address.ifName, nh_addr)
                     ]
                     next_hop_nodes.append(
-                        [next_hop_node_name, path.ifName, path.metric, nh_addr]
+                        [
+                            next_hop_node_name,
+                            nextHop.address.ifName,
+                            nextHop.metric,
+                            nh_addr,
+                        ]
                     )
         return next_hop_nodes
 
@@ -262,7 +267,8 @@ class PathCmd(DecisionCmd):
         return []
 
     def get_paths(self, src, dst, max_hop):
-        """ calc paths from src to dst using backtracking. can add memoization to
+        """
+        calc paths from src to dst using backtracking. can add memoization to
         convert to dynamic programming for better scalability when network is large.
         """
 

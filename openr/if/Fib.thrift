@@ -12,37 +12,10 @@ namespace py openr.Fib
 include "Network.thrift"
 include "Lsdb.thrift"
 
-//
-// The following is used to publish routes
-// computed for the FIB module
-//
-
-//
-// Loop free path
-//
-struct Path {
-  1: Network.BinaryAddress nextHop
-  2: string ifName
-  3: i32 metric
-}
-
-// There could be multiple routes to same prefix
-// with different next-hops and metrics. All of
-// them are guaranteed to be loop-free, that is,
-// all could be used in multipath fashion
-struct Route {
-  1: Network.IpPrefix prefix
-  // in theory, the same path may repeat multiple times
-  // and this could be used for weighted load-sharing..
-  2: list<Path> paths
-} (no_default_comparators)
-
-// announced under keys starting with "routes:"
 struct RouteDatabase {
-  // must match the name in the key
   1: string thisNodeName
-  2: list<Route> routes
   3: optional Lsdb.PerfEvents perfEvents;
+  4: list<Network.UnicastRoute> unicastRoutes
 }
 
 // Perf log buffer maintained by Fib

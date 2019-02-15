@@ -150,15 +150,16 @@ fillRouteMap(
     const string& node,
     RouteMap& routeMap,
     const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : routeDb.routes) {
-    auto prefix = toString(route.prefix);
-    for (const auto& path : route.paths) {
-      const auto nextHop = toIPAddress(path.nextHop);
+  for (auto const& route : routeDb.unicastRoutes) {
+    auto prefix = toString(route.dest);
+    for (const auto& nextHop : route.nextHops) {
+      const auto nextHopAddr = toIPAddress(nextHop.address);
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << path.ifName << " : " << nextHop << " (" << path.metric << ")";
+              << nextHop.address.ifName.value() << " : " << nextHopAddr << " ("
+              << nextHop.metric << ")";
 
       routeMap[make_pair(node, prefix)].insert(
-          {{path.ifName, nextHop}, path.metric});
+          {{nextHop.address.ifName.value(), nextHopAddr}, nextHop.metric});
     }
   }
 }

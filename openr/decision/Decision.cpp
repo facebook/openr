@@ -40,7 +40,6 @@ namespace {
 // Default HWM is 1k. We set it to 0 to buffer all received messages.
 const int kStoreSubReceiveHwm{0};
 
-
 // Classes needed for running Dijkstra
 class DijkstraQNode {
  public:
@@ -644,7 +643,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       }
     }
 
-    std::vector<thrift::Path> paths;
+    std::vector<thrift::NextHopThrift> nextHops;
     for (const auto& link : linkState_.linksFromNode(myNodeName)) {
       const auto search = nextHopNodes.find(link->getOtherNodeName(myNodeName));
       if (search != nextHopNodes.end() && !link->isOverloaded()) {
@@ -653,17 +652,16 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
         if (computeLfaPaths_ || distOverLink == prefixMetric) {
           // if we are computing LFA paths, any nexthop to the node will do
           // otherwise, we only want those nexthops along a shortest path
-          paths.emplace_back(
-              apache::thrift::FRAGILE,
+          nextHops.emplace_back(createNextHop(
               isV4Prefix ? link->getNhV4FromNode(myNodeName)
                          : link->getNhV6FromNode(myNodeName),
               link->getIfaceFromNode(myNodeName),
-              distOverLink);
+              distOverLink));
         }
       }
     }
-    routeDb.routes.emplace_back(
-        apache::thrift::FRAGILE, prefix, std::move(paths));
+    routeDb.unicastRoutes.emplace_back(
+        createUnicastRoute(prefix, std::move(nextHops)));
   } // for prefixes_
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(

@@ -183,7 +183,7 @@ struct NodeData {
 /**
  * Create a route with single path.
  */
-folly::Optional<thrift::Route>
+folly::Optional<thrift::UnicastRoute>
 createRoute(
     const thrift::IpPrefix& prefix,
     const thrift::Adjacency& adjacency,
@@ -195,19 +195,18 @@ createRoute(
     return folly::none;
   }
 
-  thrift::Path path(
-      FRAGILE,
+  auto nextHop = createNextHop(
       addr.isV4() ? adjacency.nextHopV4 : adjacency.nextHopV6,
       adjacency.ifName,
       metric);
-  return thrift::Route(FRAGILE, prefix, {std::move(path)});
+  return createUnicastRoute(prefix, {std::move(nextHop)});
 }
 
 /**
  * Create multi-path route, prefix with set of loop-free next-hops. If any
  * error occurs then the returned value will be empty and error will be logged.
  */
-folly::Optional<thrift::Route>
+folly::Optional<thrift::UnicastRoute>
 createRouteMulti(
     const thrift::IpPrefix& prefix,
     const vector<pair<thrift::Adjacency, Weight>>& adjacencies,
@@ -222,18 +221,17 @@ createRouteMulti(
     return folly::none;
   }
 
-  std::set<thrift::Path> paths;
+  std::set<thrift::NextHopThrift> nextHops;
   for (auto const& kv : adjacencies) {
     auto const& adjacency = kv.first;
-    paths.insert(thrift::Path(
-        FRAGILE,
+    nextHops.insert(createNextHop(
         addr.isV4() ? adjacency.nextHopV4 : adjacency.nextHopV6,
         adjacency.ifName,
         kv.second /* metric */));
   }
 
-  return thrift::Route(
-      FRAGILE, prefix, vector<thrift::Path>(paths.begin(), paths.end()));
+  return createUnicastRoute(
+      prefix, vector<thrift::NextHopThrift>(nextHops.begin(), nextHops.end()));
 }
 
 } // anonymous namespace
@@ -874,7 +872,7 @@ SpfSolverOld::SpfSolverOldImpl::buildShortestPaths(
     auto route =
         createRoute(prefix, nhAdj.first, nhAdj.second /* metric */, enableV4_);
     if (route) {
-      routeDb.routes.emplace_back(std::move(*route));
+      routeDb.unicastRoutes.emplace_back(std::move(*route));
     }
   }
 
@@ -1075,7 +1073,7 @@ SpfSolverOld::SpfSolverOldImpl::buildRouteDb(const std::string& myNodeName) {
     auto const& adjs = kv.second;
     auto route = createRouteMulti(prefix, adjs, enableV4_);
     if (route) {
-      routeDb.routes.emplace_back(std::move(*route));
+      routeDb.unicastRoutes.emplace_back(std::move(*route));
     }
   }
 
@@ -1545,7 +1543,7 @@ DecisionOld::processPendingAdjUpdates() {
   // run SPF once for all updates received
   LOG(INFO) << "DecisionOld: computing new paths.";
   auto routeDb = spfSolver_->buildMultiPaths(myNodeName_);
-  logRouteEvent("ROUTE_CALC", routeDb.routes.size());
+  logRouteEvent("ROUTE_CALC", routeDb.unicastRoutes.size());
   if (maybePerfEvents) {
     addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_SPF");
   }
@@ -1566,7 +1564,7 @@ DecisionOld::processPendingPrefixUpdates() {
   // update routeDb once for all updates received
   LOG(INFO) << "DecisionOld: updating new routeDb.";
   auto routeDb = spfSolver_->buildRouteDb(myNodeName_);
-  logRouteEvent("ROUTE_CALC", routeDb.routes.size());
+  logRouteEvent("ROUTE_CALC", routeDb.unicastRoutes.size());
   if (maybePerfEvents) {
     addPerfEvent(*maybePerfEvents, myNodeName_, "ROUTE_UPDATE");
   }

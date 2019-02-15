@@ -50,18 +50,6 @@ KeyPrefix::keyMatch(std::string const& key) const {
   return keyPrefix_->Match(key, &matches);
 }
 
-bool
-thrift::Route::operator<(const openr::thrift::Route& other) const {
-  if (prefix != other.prefix) {
-    return prefix < other.prefix;
-  }
-  auto myPaths = paths;
-  auto otherPaths = other.paths;
-  std::sort(myPaths.begin(), myPaths.end());
-  std::sort(otherPaths.begin(), otherPaths.end());
-  return myPaths < otherPaths;
-}
-
 int
 executeShellCommand(const std::string& command) {
   int ret = system(command.c_str());
@@ -389,23 +377,23 @@ getRemoteIfName(const thrift::Adjacency& adj) {
   return folly::sformat("neigh-{}", adj.ifName);
 }
 
-std::vector<thrift::Path>
-getBestPaths(std::vector<thrift::Path> const& paths) {
+std::vector<thrift::NextHopThrift>
+getBestNextHops(std::vector<thrift::NextHopThrift> const& allNextHops) {
   // Find minimum cost
   int32_t minCost = std::numeric_limits<int32_t>::max();
-  for (auto const& path : paths) {
-    minCost = std::min(minCost, path.metric);
+  for (auto const& nextHop : allNextHops) {
+    minCost = std::min(minCost, nextHop.metric);
   }
 
-  // Find paths with the minimum cost
-  std::vector<thrift::Path> ret;
-  for (auto const& path : paths) {
-    if (path.metric == minCost) {
-      ret.push_back(path);
+  // Find nextHops with the minimum cost
+  std::vector<thrift::NextHopThrift> bestNextHops;
+  for (auto const& nextHop : allNextHops) {
+    if (nextHop.metric == minCost) {
+      bestNextHops.emplace_back(nextHop);
     }
   }
 
-  return ret;
+  return bestNextHops;
 }
 
 std::vector<thrift::BinaryAddress>
@@ -415,33 +403,6 @@ createDeprecatedNexthops(const std::vector<thrift::NextHopThrift>& nextHops) {
     deprecatedNexthops.emplace_back(nextHop.address);
   }
   return deprecatedNexthops;
-}
-
-std::vector<thrift::UnicastRoute>
-createUnicastRoutes(const std::vector<thrift::Route>& routes) {
-  // Build routes to be programmed.
-  std::vector<thrift::UnicastRoute> newRoutes;
-
-  for (auto const& route : routes) {
-    std::vector<thrift::NextHopThrift> nextHops;
-    for (auto const& path : getBestPaths(route.paths)) {
-      thrift::NextHopThrift nextHop;
-      nextHop.address = path.nextHop;
-      nextHop.address.ifName = path.ifName;
-      nextHops.emplace_back(std::move(nextHop));
-    }
-
-    // Create thrift::UnicastRoute object in-place
-    thrift::UnicastRoute thriftRoute;
-    thriftRoute.dest = route.prefix;
-    thriftRoute.nextHops = std::move(nextHops);
-    // DEPRECATED - For backward compatibility
-    thriftRoute.deprecatedNexthops =
-        createDeprecatedNexthops(thriftRoute.nextHops);
-    newRoutes.emplace_back(std::move(thriftRoute));
-  } // for ... routes
-
-  return newRoutes;
 }
 
 std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
@@ -454,32 +415,32 @@ findDeltaRoutes(
   DCHECK(newRouteDb.thisNodeName == oldRouteDb.thisNodeName);
 
   // Find new routes to be added/updated/removed
-  std::vector<thrift::Route> routesToAddUpdate;
+  std::vector<thrift::UnicastRoute> routesToAddUpdate;
   std::set_difference(
-      newRouteDb.routes.begin(),
-      newRouteDb.routes.end(),
-      oldRouteDb.routes.begin(),
-      oldRouteDb.routes.end(),
+      newRouteDb.unicastRoutes.begin(),
+      newRouteDb.unicastRoutes.end(),
+      oldRouteDb.unicastRoutes.begin(),
+      oldRouteDb.unicastRoutes.end(),
       std::inserter(routesToAddUpdate, routesToAddUpdate.begin()));
-  std::vector<thrift::Route> routesToRemoveOrUpdate;
+  std::vector<thrift::UnicastRoute> routesToRemoveOrUpdate;
   std::set_difference(
-      oldRouteDb.routes.begin(),
-      oldRouteDb.routes.end(),
-      newRouteDb.routes.begin(),
-      newRouteDb.routes.end(),
+      oldRouteDb.unicastRoutes.begin(),
+      oldRouteDb.unicastRoutes.end(),
+      newRouteDb.unicastRoutes.begin(),
+      newRouteDb.unicastRoutes.end(),
       std::inserter(routesToRemoveOrUpdate, routesToRemoveOrUpdate.begin()));
 
   // Find entry of prefix to be removed
   std::set<thrift::IpPrefix> prefixesToRemove;
   for (const auto& route : routesToRemoveOrUpdate) {
-    prefixesToRemove.emplace(route.prefix);
+    prefixesToRemove.emplace(route.dest);
   }
   for (const auto& route : routesToAddUpdate) {
-    prefixesToRemove.erase(route.prefix);
+    prefixesToRemove.erase(route.dest);
   }
 
   // Build routes to be programmed.
-  res.first = createUnicastRoutes(routesToAddUpdate);
+  res.first = std::move(routesToAddUpdate);
   res.second = {prefixesToRemove.begin(), prefixesToRemove.end()};
 
   return res;

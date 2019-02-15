@@ -58,6 +58,9 @@ struct NextHopThrift {
   2: i32 weight = 0
   // MPLS encapsulation information for IP->MPLS and MPLS routes
   3: optional MplsAction mplsAction
+
+  // Metric (aka cost) associated with this nexthop
+  51: i32 metric = 0
 }
 
 struct MplsRoute {

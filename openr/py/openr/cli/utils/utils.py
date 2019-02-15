@@ -17,7 +17,7 @@ import sys
 from builtins import chr, input, map
 from collections import defaultdict
 from itertools import product
-from typing import List
+from typing import Any, Dict, List
 
 import bunch
 import click
@@ -663,17 +663,21 @@ def print_routes_table(route_db, prefixes=None):
         networks = [ipaddress.ip_network(p) for p in prefixes]
 
     route_strs = []
-    for route in sorted(route_db.routes, key=lambda x: x.prefix.prefixAddress.addr):
-        prefix_str = ipnetwork.sprint_prefix(route.prefix)
+    for route in sorted(
+        route_db.unicastRoutes, key=lambda x: x.dest.prefixAddress.addr
+    ):
+        prefix_str = ipnetwork.sprint_prefix(route.dest)
         if not ipnetwork.contain_any_prefix(prefix_str, networks):
             continue
 
         paths_str = "\n".join(
             [
                 "via {}%{} metric {}".format(
-                    ipnetwork.sprint_addr(path.nextHop.addr), path.ifName, path.metric
+                    ipnetwork.sprint_addr(nextHop.address.addr),
+                    nextHop.address.ifName,
+                    nextHop.metric,
                 )
-                for path in route.paths
+                for nextHop in route.nextHops
             ]
         )
         route_strs.append((prefix_str, paths_str))
@@ -684,13 +688,19 @@ def print_routes_table(route_db, prefixes=None):
     print(printing.render_vertical_table(route_strs, caption=caption))
 
 
-def path_to_dict(path):
-    """ convert path from thrift instance into a dict in strings """
+def next_hop_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
+    """ convert nextHop from thrift instance into a dict in strings """
 
-    def _update(path_dict, path):
-        path_dict.update({"nextHop": ipnetwork.sprint_addr(path.nextHop.addr)})
+    def _update(next_hop_dict, nextHop):
+        next_hop_dict.update(
+            {
+                "address": ipnetwork.sprint_addr(nextHop.address.addr),
+                "nextHop": ipnetwork.sprint_addr(nextHop.address.addr),
+                "ifName": nextHop.address.ifName,
+            }
+        )
 
-    return thrift_to_dict(path, _update)
+    return thrift_to_dict(nextHop, _update)
 
 
 def route_to_dict(route):
@@ -699,8 +709,9 @@ def route_to_dict(route):
     def _update(route_dict, route):
         route_dict.update(
             {
-                "prefix": ipnetwork.sprint_prefix(route.prefix),
-                "paths": list(map(path_to_dict, route.paths)),
+                "prefix": ipnetwork.sprint_prefix(route.dest),
+                "dest": ipnetwork.sprint_prefix(route.dest),
+                "nextHops": [next_hop_to_dict(nh) for nh in route.nextHops],
             }
         )
 
@@ -710,7 +721,9 @@ def route_to_dict(route):
 def route_db_to_dict(route_db):
     """ convert route from thrift instance into a dict in strings """
 
-    return {"routes": list(map(route_to_dict, route_db.routes))}
+    ret = {"routes": [route_to_dict(r) for r in route_db.unicastRoutes]}
+    print(ret)
+    return ret
 
 
 def print_routes_json(route_db_dict, prefixes=None):
@@ -1355,22 +1368,19 @@ def get_shortest_routes(route_db):
     """
 
     shortest_routes = []
-    for route in sorted(route_db.routes, key=lambda x: x.prefix.prefixAddress.addr):
-        if not route.paths:
+    for route in sorted(
+        route_db.unicastRoutes, key=lambda x: x.dest.prefixAddress.addr
+    ):
+        if not route.nextHops:
             continue
 
-        min_metric = min(route.paths, key=lambda x: x.metric).metric
-        nexthops = []
-        for path in route.paths:
-            if path.metric == min_metric:
-                nexthops.append(path.nextHop)
-                nexthops[-1].ifName = path.ifName
-
+        min_metric = min(route.nextHops, key=lambda x: x.metric).metric
+        nextHops = [nh for nh in route.nextHops if nh.metric == min_metric]
         shortest_routes.append(
             network_types.UnicastRoute(
-                dest=route.prefix,
-                deprecatedNexthops=nexthops,
-                nextHops=[network_types.NextHopThrift(address=nh) for nh in nexthops],
+                dest=route.dest,
+                deprecatedNexthops=[nh.address for nh in nextHops],
+                nextHops=nextHops,
             )
         )
 

@@ -159,23 +159,17 @@ int64_t generateHash(
 std::string getRemoteIfName(const thrift::Adjacency& adj);
 
 /**
- * Given list of paths returns the list of best paths (paths with lowest
- * metric value).
+ * Given list of nextHops returns the list of best nextHops (nextHops with
+ * lowest metric value).
  */
-std::vector<thrift::Path> getBestPaths(std::vector<thrift::Path> const& paths);
+std::vector<thrift::NextHopThrift> getBestNextHops(
+    std::vector<thrift::NextHopThrift> const& nextHops);
 
 /**
  * Create deprecated nexthops
  */
 std::vector<thrift::BinaryAddress> createDeprecatedNexthops(
     std::vector<thrift::NextHopThrift> const& nextHops);
-
-/**
- * Transform `thrift::Route` object to `thrift::UnicastRoute` object
- * Only best nexthops are retained
- */
-std::vector<thrift::UnicastRoute> createUnicastRoutes(
-    const std::vector<thrift::Route>& routes);
 
 /**
  * Find delta between two route databases
@@ -246,14 +240,39 @@ createPrefixDb(
   return prefixDb;
 }
 
-inline thrift::Path
-createPath(
+inline thrift::NextHopThrift
+createNextHop(
     thrift::BinaryAddress addr, const std::string& ifName, int32_t metric) {
-  thrift::Path path;
-  path.nextHop = addr;
-  path.ifName = ifName;
-  path.metric = metric;
-  return path;
+  thrift::NextHopThrift nextHop;
+  nextHop.address = addr;
+  nextHop.address.ifName = ifName;
+  nextHop.metric = metric;
+  return nextHop;
+}
+
+inline thrift::UnicastRoute
+createUnicastRoute(
+    thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops) {
+  thrift::UnicastRoute unicastRoute;
+  unicastRoute.dest = std::move(dest);
+  unicastRoute.nextHops = std::move(nextHops);
+  return unicastRoute;
+}
+
+inline std::vector<thrift::UnicastRoute>
+createUnicastRoutesWithBestNexthops(
+    const std::vector<thrift::UnicastRoute>& routes) {
+  // Build routes to be programmed
+  std::vector<thrift::UnicastRoute> newRoutes;
+
+  for (auto const& route : routes) {
+    auto newRoute =
+        createUnicastRoute(route.dest, getBestNextHops(route.nextHops));
+    newRoute.deprecatedNexthops = createDeprecatedNexthops(newRoute.nextHops);
+    newRoutes.emplace_back(std::move(newRoute));
+  }
+
+  return newRoutes;
 }
 
 } // namespace openr

@@ -54,41 +54,45 @@ const auto prefix2 = toIpPrefix("::ffff:10.2.2.2/128");
 const auto prefix3 = toIpPrefix("::ffff:10.3.3.3/128");
 const auto prefix4 = toIpPrefix("::ffff:10.4.4.4/128");
 
-const auto path1_2_1 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_1", 1);
-const auto path1_2_2 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_2", 2);
-const auto path1_2_3 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_3", 1);
-const auto path1_3_1 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_1", 2);
-const auto path1_3_2 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_2", 2);
-const auto path3_2_1 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_3_2_1", 1);
-const auto path3_2_2 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::2")), "iface_3_2_2", 2);
-const auto path3_4_1 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::4")), "iface_3_4_1", 2);
-const auto path3_4_2 =
-    createPath(toBinaryAddress(folly::IPAddress("fe80::4")), "iface_3_4_2", 2);
+const auto path1_2_1 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_1", 1);
+const auto path1_2_2 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_2", 2);
+const auto path1_2_3 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_3", 1);
+const auto path1_3_1 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_1", 2);
+const auto path1_3_2 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_2", 2);
+const auto path3_2_1 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_3_2_1", 1);
+const auto path3_2_2 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_3_2_2", 2);
+const auto path3_4_1 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::4")), "iface_3_4_1", 2);
+const auto path3_4_2 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::4")), "iface_3_4_2", 2);
 
 bool
 checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
-  if (lhs.routes.size() != rhs.routes.size()) {
+  if (lhs.unicastRoutes.size() != rhs.unicastRoutes.size()) {
     return false;
   }
-  std::unordered_map<thrift::IpPrefix, std::set<thrift::Path>> lhsRoutes;
-  std::unordered_map<thrift::IpPrefix, std::set<thrift::Path>> rhsRoutes;
-  for (auto const& route : lhs.routes) {
+  std::unordered_map<thrift::IpPrefix, std::set<thrift::NextHopThrift>>
+      lhsRoutes;
+  std::unordered_map<thrift::IpPrefix, std::set<thrift::NextHopThrift>>
+      rhsRoutes;
+  for (auto const& route : lhs.unicastRoutes) {
     lhsRoutes.emplace(
-        route.prefix,
-        std::set<thrift::Path>(route.paths.begin(), route.paths.end()));
+        route.dest,
+        std::set<thrift::NextHopThrift>(
+            route.nextHops.begin(), route.nextHops.end()));
   }
-  for (auto const& route : rhs.routes) {
+  for (auto const& route : rhs.unicastRoutes) {
     rhsRoutes.emplace(
-        route.prefix,
-        std::set<thrift::Path>(route.paths.begin(), route.paths.end()));
+        route.dest,
+        std::set<thrift::NextHopThrift>(
+            route.nextHops.begin(), route.nextHops.end()));
   }
 
   for (auto const& kv : lhsRoutes) {
@@ -220,8 +224,8 @@ TEST_F(FibTestFixture, processRouteDb) {
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = "node-1";
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix2, {path1_2_1, path1_2_2}));
+  routeDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
   int64_t countAdd = mockFibHandler->getAddRoutesCount();
@@ -240,8 +244,8 @@ TEST_F(FibTestFixture, processRouteDb) {
   // Update routes
   countAdd = mockFibHandler->getAddRoutesCount();
   int64_t countDel = mockFibHandler->getDelRoutesCount();
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix3, {path1_3_1, path1_3_2}));
+  routeDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
   // syncFib debounce
@@ -257,10 +261,10 @@ TEST_F(FibTestFixture, processRouteDb) {
 
   // Update routes by removing some nextHop
   countAdd = mockFibHandler->getAddRoutesCount();
-  routeDb.routes.clear();
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix2, {path1_2_2, path1_2_3}));
-  routeDb.routes.emplace_back(thrift::Route(FRAGILE, prefix3, {path1_3_2}));
+  routeDb.unicastRoutes.clear();
+  routeDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix2, {path1_2_2, path1_2_3}));
+  routeDb.unicastRoutes.emplace_back(createUnicastRoute(prefix3, {path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
   // syncFib debounce
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
@@ -293,7 +297,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       "node-1",
       {
           {
-              path1_2_1.ifName,
+              path1_2_1.address.ifName.value(),
               thrift::InterfaceInfo(
                   FRAGILE,
                   true, // isUp
@@ -304,7 +308,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
                   ),
           },
           {
-              path1_2_2.ifName,
+              path1_2_2.address.ifName.value(),
               thrift::InterfaceInfo(
                   FRAGILE,
                   true, // isUp
@@ -322,8 +326,8 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = "node-1";
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix2, {path1_2_1, path1_2_2}));
+  routeDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
   int64_t countAdd = mockFibHandler->getAddRoutesCount();
@@ -339,7 +343,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       "node-1",
       {
           {
-              path1_2_1.ifName,
+              path1_2_1.address.ifName.value(),
               thrift::InterfaceInfo(
                   FRAGILE,
                   false, // isUp
@@ -372,7 +376,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       "node-1",
       {
           {
-              path1_2_2.ifName,
+              path1_2_2.address.ifName.value(),
               thrift::InterfaceInfo(
                   FRAGILE,
                   false, // isUp
@@ -415,10 +419,10 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = "node-1";
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix1, {path1_2_1, path1_2_2}));
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix3, {path1_3_1, path1_3_2}));
+  routeDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
+  routeDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
   int64_t countAdd = mockFibHandler->getAddRoutesCount();
@@ -437,7 +441,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   EXPECT_EQ(countDel, 0);
 
   // delete one route
-  routeDb.routes.pop_back();
+  routeDb.unicastRoutes.pop_back();
   decisionPub.sendThriftObj(routeDb, serializer).value();
   while (mockFibHandler->getDelRoutesCount() <= countDel) {
     /* sleep override */
@@ -451,8 +455,8 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   EXPECT_EQ(routes.size(), 1);
   EXPECT_EQ(routes.front().dest, prefix1);
   // add back that route
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix3, {path1_3_1, path1_3_2}));
+  routeDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
   while (mockFibHandler->getAddRoutesCount() <= countAdd) {
     /* sleep override */
@@ -476,8 +480,8 @@ TEST_F(FibTestFixture, fibRestart) {
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = "node-1";
-  routeDb.routes.emplace_back(
-      thrift::Route(FRAGILE, prefix1, {path1_2_1, path1_2_2}));
+  routeDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
 
   decisionPub.sendThriftObj(routeDb, serializer).value();
 

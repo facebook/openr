@@ -166,7 +166,8 @@ class FibValidateRoutesCmd(FibAgentCmd):
         except Exception as e:
             print("Failed to validate Fib routes.")
             print("Exception: {}".format(e))
-            return 1
+            raise e
+            # return 1
 
         res1, _ = utils.compare_route_db(
             decision_routes,

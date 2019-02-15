@@ -81,16 +81,9 @@ Fib::Fib(
   }
 
   syncFibTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
-    try {
-      // Build routes to be programmed.
-      const auto& routes = createUnicastRoutes(routeDb_.routes);
-      createFibClient(evb_, socket_, client_, thriftPort_);
-      client_->sync_syncFib(kFibId_, routes);
-    } catch (std::exception const& e) {
-      tData_.addStatValue("fib.thrift.failure.syncFib", 1, fbzmq::COUNT);
-      client_.reset();
-      LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
-                 << folly::exceptionStr(e);
+    if (!syncRoutesTimer_->isScheduled()) {
+      // Trigger immediate run
+      syncRouteDb();
     }
   });
 
@@ -222,7 +215,7 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
 
 void
 Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
-  VLOG(2) << "Processing route database ... " << newRouteDb.routes.size()
+  VLOG(2) << "Processing route database ... " << newRouteDb.unicastRoutes.size()
           << " entries";
 
   // Update perfEvents_ .. We replace existing perf events with new one as
@@ -269,51 +262,47 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
   std::vector<thrift::UnicastRoute> routesToUpdate;
   std::vector<thrift::IpPrefix> prefixesToRemove;
 
-  for (auto it = routeDb_.routes.begin(); it != routeDb_.routes.end();) {
+  for (auto it = routeDb_.unicastRoutes.begin();
+       it != routeDb_.unicastRoutes.end();) {
     // Find valid paths
-    std::vector<thrift::Path> validPaths;
-    for (auto const& path : it->paths) {
-      if (affectedInterfaces.count(path.ifName) == 0) {
-        validPaths.push_back(path);
+    std::vector<thrift::NextHopThrift> validNextHops;
+    for (auto const& nextHop : it->nextHops) {
+      CHECK(nextHop.address.ifName.hasValue());
+      if (affectedInterfaces.count(nextHop.address.ifName.value()) == 0) {
+        validNextHops.emplace_back(nextHop);
       }
     } // end for ... kv.second
 
-    // Find best paths
-    auto const& bestValidPaths = getBestPaths(validPaths);
-    std::vector<thrift::NextHopThrift> bestNexthops;
-    for (auto const& path : bestValidPaths) {
-      thrift::NextHopThrift nextHop;
-      nextHop.address = path.nextHop;
-      nextHop.address.ifName = path.ifName;
-      bestNexthops.emplace_back(std::move(nextHop));
-    }
-
     // Add to affected routes only if best path has changed and also reflect
     // changes in routeDb_
-    auto const& currBestPaths = getBestPaths(it->paths);
-    if (bestValidPaths.size() && bestValidPaths != currBestPaths) {
-      VLOG(1) << "bestPaths group resize for prefix: " << toString(it->prefix)
-              << ", old: " << currBestPaths.size()
-              << ", new: " << bestValidPaths.size();
+    auto prevBestNextHops = getBestNextHops(it->nextHops);
+
+    // Find best paths
+    auto validBestNextHops = getBestNextHops(validNextHops);
+
+    // Update valid nexthops
+    it->nextHops = std::move(validNextHops);
+
+    if (validBestNextHops.size() && validBestNextHops != prevBestNextHops) {
+      VLOG(1) << "bestPaths group resize for prefix: " << toString(it->dest)
+              << ", old: " << prevBestNextHops.size()
+              << ", new: " << validBestNextHops.size();
       thrift::UnicastRoute route;
-      route.dest = it->prefix;
-      route.nextHops = std::move(bestNexthops);
-      // For backward compatibility
-      route.deprecatedNexthops = createDeprecatedNexthops(route.nextHops);
+      route.dest = it->dest;
+      route.nextHops = std::move(validBestNextHops);
       routesToUpdate.emplace_back(std::move(route));
     }
-    it->paths = validPaths;
 
     // Remove route if no valid paths
-    if (validPaths.size() == 0) {
-      VLOG(1) << "Removing prefix " << toString(it->prefix)
+    if (it->nextHops.size() == 0) {
+      VLOG(1) << "Removing prefix " << toString(it->dest)
               << " because of no valid nextHops.";
-      prefixesToRemove.push_back(it->prefix);
-      it = routeDb_.routes.erase(it);
+      prefixesToRemove.emplace_back(it->dest);
+      it = routeDb_.unicastRoutes.erase(it);
     } else {
       ++it;
     }
-  } // end for ... routeDb_.routes
+  } // end for ... routeDb_.unicastRoutes
 
   updateRoutes(routesToUpdate, prefixesToRemove);
 }
@@ -366,6 +355,11 @@ Fib::updateRoutes(
     return;
   }
 
+  // Only for backward compatibility
+  // NOTE: remove after UnicastRoute.deprecatedNexthops is removed
+  auto const& patchedRoutesToUpdate =
+      createUnicastRoutesWithBestNexthops(routesToUpdate);
+
   // Make thrift calls to do real programming
   try {
     if (maybePerfEvents_) {
@@ -375,8 +369,8 @@ Fib::updateRoutes(
     if (prefixesToRemove.size()) {
       client_->sync_deleteUnicastRoutes(kFibId_, prefixesToRemove);
     }
-    if (routesToUpdate.size()) {
-      client_->sync_addUnicastRoutes(kFibId_, routesToUpdate);
+    if (patchedRoutesToUpdate.size()) {
+      client_->sync_addUnicastRoutes(kFibId_, patchedRoutesToUpdate);
     }
     dirtyRouteDb_ = false;
     logPerfEvents();
@@ -394,15 +388,15 @@ Fib::updateRoutes(
 bool
 Fib::syncRouteDb() {
   LOG(INFO) << "Syncing latest routeDb with fib-agent with "
-            << routeDb_.routes.size() << " routes";
+            << routeDb_.unicastRoutes.size() << " routes";
 
   // In dry run we just print the routes. No real action
   if (dryrun_) {
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
-    for (auto const& route : routeDb_.routes) {
-      VLOG(1) << "> " << toString(route.prefix) << ", " << route.paths.size();
-      for (auto const& path : getBestPaths(route.paths)) {
-        VLOG(1) << "  via " << toString(path.nextHop);
+    for (auto const& route : routeDb_.unicastRoutes) {
+      VLOG(1) << "> " << toString(route.dest) << ", " << route.nextHops.size();
+      for (auto const& nextHop : getBestNextHops(route.nextHops)) {
+        VLOG(1) << "  via " << toString(nextHop.address);
       }
       VLOG(1) << "";
     }
@@ -411,7 +405,8 @@ Fib::syncRouteDb() {
   }
 
   // Build routes to be programmed.
-  const auto& routes = createUnicastRoutes(routeDb_.routes);
+  const auto& routes =
+      createUnicastRoutesWithBestNexthops(routeDb_.unicastRoutes);
 
   try {
     if (maybePerfEvents_) {
@@ -502,7 +497,7 @@ Fib::submitCounters() {
   auto counters = tData_.getCounters();
 
   // Add some more flat counters
-  counters["fib.num_routes"] = routeDb_.routes.size();
+  counters["fib.num_routes"] = routeDb_.unicastRoutes.size();
   counters["fib.require_routedb_sync"] = syncRoutesTimer_->isScheduled();
   counters["fib.zmq_event_queue_size"] = getEventQueueSize();
 
