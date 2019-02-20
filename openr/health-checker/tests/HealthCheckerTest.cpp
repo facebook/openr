@@ -129,7 +129,11 @@ class HealthCheckerTestFixture : public ::testing::Test {
     std::vector<thrift::PrefixEntry> prefixEntries;
     for (const auto& prefix : prefixes) {
       prefixEntries.emplace_back(
-          apache::thrift::FRAGILE, prefix, thrift::PrefixType::LOOPBACK, "");
+          apache::thrift::FRAGILE,
+          prefix,
+          thrift::PrefixType::LOOPBACK,
+          "",
+          thrift::PrefixForwardingType::IP);
     }
 
     thrift::PrefixDatabase prefixDb;

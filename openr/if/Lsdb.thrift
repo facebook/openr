@@ -143,11 +143,20 @@ enum PrefixType {
   TYPE_5 = 25,
 }
 
+enum PrefixForwardingType {
+  IP = 0, # Default
+  SR_MPLS = 1,
+}
+
 struct PrefixEntry {
   1: Network.IpPrefix prefix
   2: PrefixType type
   // optional additional metadata (encoding depends on PrefixType)
   3: binary data
+  // Default mode of forwarding for prefix is IP. If `forwardingType` is
+  // set then IP -> MPLS route will be programmed at LERs and LSR will perform
+  // label forwarding until packet reaches destination.
+  4: PrefixForwardingType forwardingType = 0
 }
 
 // all prefixes that are bound to a given router

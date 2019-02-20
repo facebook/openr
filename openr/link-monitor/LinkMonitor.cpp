@@ -814,7 +814,11 @@ LinkMonitor::advertiseRedistAddrs() {
   // Add static prefixes
   for (auto const& prefix : staticPrefixes_) {
     prefixes.emplace_back(thrift::PrefixEntry(
-        apache::thrift::FRAGILE, prefix, thrift::PrefixType::LOOPBACK, ""));
+        apache::thrift::FRAGILE,
+        prefix,
+        thrift::PrefixType::LOOPBACK,
+        "",
+        thrift::PrefixForwardingType::IP));
   }
 
   // Add redistribute addresses

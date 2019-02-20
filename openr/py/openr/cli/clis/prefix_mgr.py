@@ -50,11 +50,16 @@ class AdvertiseCli(object):
         default="BREEZE",
         help="Type or client-ID associated with prefix.",
     )
+    @click.option(
+        "--forwarding-type",
+        default="IP",
+        help="Use label forwarding instead of IP forwarding in data path",
+    )
     @click.pass_obj
-    def advertise(cli_opts, prefixes, prefix_type):  # noqa: B902
+    def advertise(cli_opts, prefixes, prefix_type, forwarding_type):  # noqa: B902
         """ Advertise the prefixes from this node with specific type """
 
-        prefix_mgr.AdvertiseCmd(cli_opts).run(prefixes, prefix_type)
+        prefix_mgr.AdvertiseCmd(cli_opts).run(prefixes, prefix_type, forwarding_type)
 
 
 class SyncCli(object):
@@ -66,11 +71,16 @@ class SyncCli(object):
         default="BREEZE",
         help="Type or client-ID associated with prefix.",
     )
+    @click.option(
+        "--forwarding-type",
+        default="IP",
+        help="Use label forwarding instead of IP forwarding in data path",
+    )
     @click.pass_obj
-    def sync(cli_opts, prefixes, prefix_type):  # noqa: B902
+    def sync(cli_opts, prefixes, prefix_type, forwarding_type):  # noqa: B902
         """ Sync the prefixes from this node with specific type """
 
-        prefix_mgr.SyncCmd(cli_opts).run(prefixes, prefix_type)
+        prefix_mgr.SyncCmd(cli_opts).run(prefixes, prefix_type, forwarding_type)
 
 
 class ViewCli(object):

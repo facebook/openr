@@ -78,6 +78,14 @@ def sprint_prefix_type(prefix_type):
     return lsdb_types.PrefixType._VALUES_TO_NAMES.get(prefix_type, None)
 
 
+def sprint_prefix_forwarding_type(forwarding_type):
+    """
+    :param forwarding_type: lsdb_types.PrefixForwardingType
+    """
+
+    return lsdb_types.PrefixForwardingType._VALUES_TO_NAMES.get(forwarding_type)
+
+
 def ip_version(addr):
     """ return ip addr version
     """

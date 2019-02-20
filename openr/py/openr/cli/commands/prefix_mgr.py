@@ -12,6 +12,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object
 
 from openr.clients import prefix_mgr_client
+from openr.Lsdb import ttypes as lsdb_types
 from openr.utils import ipnetwork, printing
 
 
@@ -32,8 +33,8 @@ class WithdrawCmd(PrefixMgrCmd):
 
 
 class AdvertiseCmd(PrefixMgrCmd):
-    def run(self, prefixes, prefix_type):
-        resp = self.client.add_prefix(prefixes, prefix_type)
+    def run(self, prefixes, prefix_type, forwarding_type):
+        resp = self.client.add_prefix(prefixes, prefix_type, forwarding_type)
 
         if not resp.success:
             print("Could not advertise. Error {}".format(resp.message))
@@ -44,8 +45,8 @@ class AdvertiseCmd(PrefixMgrCmd):
 
 
 class SyncCmd(PrefixMgrCmd):
-    def run(self, prefixes, prefix_type):
-        resp = self.client.sync_prefix(prefixes, prefix_type)
+    def run(self, prefixes, prefix_type, forwarding_type):
+        resp = self.client.sync_prefix(prefixes, prefix_type, forwarding_type)
 
         if not resp.success:
             print("Could not sync prefixes. Error {}".format(resp.message))
@@ -60,6 +61,14 @@ class ViewCmd(PrefixMgrCmd):
         for prefix_entry in resp.prefixes:
             prefix_str = ipnetwork.sprint_prefix(prefix_entry.prefix)
             prefix_type = ipnetwork.sprint_prefix_type(prefix_entry.type)
-            rows.append((prefix_type, prefix_str))
-        print("\n", printing.render_horizontal_table(rows, ["Type", "Prefix"]))
+            forwarding_type = ipnetwork.sprint_prefix_forwarding_type(
+                prefix_entry.forwardingType
+            )
+            rows.append((prefix_type, prefix_str, forwarding_type))
+        print(
+            "\n",
+            printing.render_horizontal_table(
+                rows, ["Type", "Prefix", "Forwarding Type"]
+            ),
+        )
         print()

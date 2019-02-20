@@ -9,14 +9,11 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from builtins import object
-
-import zmq
 from openr.clients.openr_client import OpenrClient
 from openr.Lsdb import ttypes as lsdb_types
 from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.PrefixManager import ttypes as prefix_mgr_types
-from openr.utils import consts, ipnetwork, zmq_socket
+from openr.utils import ipnetwork
 
 
 class PrefixMgrClient(OpenrClient):
@@ -27,27 +24,38 @@ class PrefixMgrClient(OpenrClient):
             cli_opts,
         )
 
-    def send_cmd_to_prefix_mgr(self, cmd, prefixes=None, prefix_type="BREEZE"):
+    def send_cmd_to_prefix_mgr(
+        self, cmd, prefixes=None, prefix_type="BREEZE", forwarding_type="IP"
+    ):
         """ Send the given cmd to prefix manager and return resp """
 
-        TYPE_TO_VALUES = lsdb_types.PrefixType._NAMES_TO_VALUES
-        if prefix_type not in TYPE_TO_VALUES:
+        PREFIX_TYPE_TO_VALUES = lsdb_types.PrefixType._NAMES_TO_VALUES
+        if prefix_type not in PREFIX_TYPE_TO_VALUES:
             raise Exception(
                 "Unknown type {}. Use any of {}".format(
-                    prefix_type, ", ".join(TYPE_TO_VALUES.keys())
+                    prefix_type, ", ".join(PREFIX_TYPE_TO_VALUES.keys())
+                )
+            )
+
+        FORWARDING_TYPE_TO_VALUES = lsdb_types.PrefixForwardingType._NAMES_TO_VALUES
+        if forwarding_type not in FORWARDING_TYPE_TO_VALUES:
+            raise Exception(
+                "Unknown forwarding type {}. Use any of {}".format(
+                    forwarding_type, ", ".join(FORWARDING_TYPE_TO_VALUES.keys())
                 )
             )
 
         req_msg = prefix_mgr_types.PrefixManagerRequest()
         req_msg.cmd = cmd
-        req_msg.type = TYPE_TO_VALUES[prefix_type]
+        req_msg.type = PREFIX_TYPE_TO_VALUES[prefix_type]
         req_msg.prefixes = []
         if prefixes is not None:
             for prefix in prefixes:
                 req_msg.prefixes.append(
                     lsdb_types.PrefixEntry(
                         prefix=ipnetwork.ip_str_to_prefix(prefix),
-                        type=TYPE_TO_VALUES[prefix_type],
+                        type=PREFIX_TYPE_TO_VALUES[prefix_type],
+                        forwardingType=FORWARDING_TYPE_TO_VALUES[forwarding_type],
                     )
                 )
 
@@ -55,16 +63,20 @@ class PrefixMgrClient(OpenrClient):
             req_msg, prefix_mgr_types.PrefixManagerResponse
         )
 
-    def add_prefix(self, prefixes, prefix_type):
+    def add_prefix(self, prefixes, prefix_type, forwarding_type=False):
         return self.send_cmd_to_prefix_mgr(
-            prefix_mgr_types.PrefixManagerCommand.ADD_PREFIXES, prefixes, prefix_type
+            prefix_mgr_types.PrefixManagerCommand.ADD_PREFIXES,
+            prefixes,
+            prefix_type,
+            forwarding_type,
         )
 
-    def sync_prefix(self, prefixes, prefix_type):
+    def sync_prefix(self, prefixes, prefix_type, forwarding_type=False):
         return self.send_cmd_to_prefix_mgr(
             prefix_mgr_types.PrefixManagerCommand.SYNC_PREFIXES_BY_TYPE,
             prefixes,
             prefix_type,
+            forwarding_type,
         )
 
     def withdraw_prefix(self, prefixes):

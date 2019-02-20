@@ -25,16 +25,19 @@ from openr.utils.ipnetwork import ip_str_to_prefix, sprint_prefix
 prefix_entry1 = lsdb_types.PrefixEntry(
     prefix=ip_str_to_prefix("2620:0:1cff:dead:bef1:ffff:ffff:1/128"),
     type=lsdb_types.PrefixType.LOOPBACK,
+    forwardingType=lsdb_types.PrefixForwardingType.IP,
 )
 
 prefix_entry2 = lsdb_types.PrefixEntry(
     prefix=ip_str_to_prefix("2620:0:1cff:dead:bef1:ffff:ffff:2/128"),
     type=lsdb_types.PrefixType.LOOPBACK,
+    forwardingType=lsdb_types.PrefixForwardingType.IP,
 )
 
 prefix_entry3 = lsdb_types.PrefixEntry(
     prefix=ip_str_to_prefix("2620:0:1cff:dead:bef1:ffff:ffff:3/128"),
     type=lsdb_types.PrefixType.LOOPBACK,
+    forwardingType=lsdb_types.PrefixForwardingType.IP,
 )
 
 

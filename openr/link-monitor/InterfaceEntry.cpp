@@ -135,7 +135,8 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
         apache::thrift::FRAGILE,
         toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second)),
         thrift::PrefixType::LOOPBACK,
-        "");
+        "",
+        thrift::PrefixForwardingType::IP);
   }
 
   return prefixes;

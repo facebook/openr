@@ -36,11 +36,15 @@ PrefixManagerClient::withdrawPrefixes(
     const std::vector<thrift::IpPrefix>& prefixes) {
   thrift::PrefixManagerRequest req;
   req.cmd = thrift::PrefixManagerCommand::WITHDRAW_PREFIXES;
-  req.prefixes =
-      folly::gen::from(prefixes) |
+  req.prefixes = folly::gen::from(prefixes) |
       folly::gen::mapped([](const thrift::IpPrefix& prefix) {
-        return thrift::PrefixEntry(apache::thrift::FRAGILE, prefix, {}, {});
-      }) |
+                   return thrift::PrefixEntry(
+                       apache::thrift::FRAGILE,
+                       prefix,
+                       {},
+                       {},
+                       thrift::PrefixForwardingType::IP);
+                 }) |
       folly::gen::as<std::vector<thrift::PrefixEntry>>();
   return sendRequest(req);
 }

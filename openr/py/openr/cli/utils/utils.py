@@ -204,10 +204,13 @@ def sprint_prefixes_db_full(prefix_db, loopback_only=False):
             [
                 ipnetwork.sprint_prefix(prefix_entry.prefix),
                 ipnetwork.sprint_prefix_type(prefix_entry.type),
+                ipnetwork.sprint_prefix_forwarding_type(prefix_entry.forwardingType),
             ]
         )
 
-    return printing.render_horizontal_table(prefix_strs, ["Prefix", "Type"])
+    return printing.render_horizontal_table(
+        prefix_strs, ["Prefix", "Client Type", "Forwarding Type"]
+    )
 
 
 def alloc_prefix_to_loopback_ip_str(prefix):

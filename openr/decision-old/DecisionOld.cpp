@@ -593,7 +593,11 @@ SpfSolverOld::SpfSolverOldImpl::getPrefixDatabases() {
     prefixDb.thisNodeName = nodeName;
     for (auto const& prefix : prefixes) {
       prefixDb.prefixEntries.emplace_back(
-          apache::thrift::FRAGILE, prefix, thrift::PrefixType::LOOPBACK, "");
+          apache::thrift::FRAGILE,
+          prefix,
+          thrift::PrefixType::LOOPBACK,
+          "",
+          thrift::PrefixForwardingType::IP);
     }
   }
 

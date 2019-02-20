@@ -34,21 +34,53 @@ const auto addr7 = toIpPrefix("ffff:10:3:7::/64");
 const auto addr8 = toIpPrefix("ffff:10:4:8::/64");
 
 const auto prefixEntry1 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE, addr1, thrift::PrefixType::DEFAULT, {});
+    apache::thrift::FRAGILE,
+    addr1,
+    thrift::PrefixType::DEFAULT,
+    {},
+    thrift::PrefixForwardingType::IP);
 const auto prefixEntry2 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE, addr2, thrift::PrefixType::PREFIX_ALLOCATOR, {});
+    apache::thrift::FRAGILE,
+    addr2,
+    thrift::PrefixType::PREFIX_ALLOCATOR,
+    {},
+    thrift::PrefixForwardingType::IP);
 const auto prefixEntry3 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE, addr3, thrift::PrefixType::DEFAULT, {});
+    apache::thrift::FRAGILE,
+    addr3,
+    thrift::PrefixType::DEFAULT,
+    {},
+    thrift::PrefixForwardingType::IP);
 const auto prefixEntry4 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE, addr4, thrift::PrefixType::PREFIX_ALLOCATOR, {});
+    apache::thrift::FRAGILE,
+    addr4,
+    thrift::PrefixType::PREFIX_ALLOCATOR,
+    {},
+    thrift::PrefixForwardingType::IP);
 const auto prefixEntry5 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE, addr5, thrift::PrefixType::DEFAULT, {});
+    apache::thrift::FRAGILE,
+    addr5,
+    thrift::PrefixType::DEFAULT,
+    {},
+    thrift::PrefixForwardingType::IP);
 const auto prefixEntry6 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE, addr6, thrift::PrefixType::PREFIX_ALLOCATOR, {});
+    apache::thrift::FRAGILE,
+    addr6,
+    thrift::PrefixType::PREFIX_ALLOCATOR,
+    {},
+    thrift::PrefixForwardingType::IP);
 const auto prefixEntry7 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE, addr7, thrift::PrefixType::DEFAULT, {});
+    apache::thrift::FRAGILE,
+    addr7,
+    thrift::PrefixType::DEFAULT,
+    {},
+    thrift::PrefixForwardingType::IP);
 const auto prefixEntry8 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE, addr8, thrift::PrefixType::PREFIX_ALLOCATOR, {});
+    apache::thrift::FRAGILE,
+    addr8,
+    thrift::PrefixType::PREFIX_ALLOCATOR,
+    {},
+    thrift::PrefixForwardingType::IP);
 
 } // namespace
 
