@@ -110,11 +110,7 @@ HealthChecker::createPingSocket() noexcept {
     LOG(WARNING) << "Can't create ping socket because of no known v6 address.";
     return;
   }
-  const auto myLoopbackAddr = toIPAddress(myNodeIt->second.ipAddress);
-  if (not myLoopbackAddr.isV6()) {
-    LOG(WARNING) << "Can't create ping socket because of no known v6 address.";
-    return;
-  }
+  const auto myAddr = folly::IPAddress("::");
 
   // prepare and bind udp ping socket
   VLOG(2) << "Preparing and binding UDP socket to receive health check pings";
@@ -147,13 +143,13 @@ HealthChecker::createPingSocket() noexcept {
   }
 
   // Set source address
-  const auto pingSockAddr = folly::SocketAddress(myLoopbackAddr, udpPingPort_);
+  const auto pingSockAddr = folly::SocketAddress(myAddr, udpPingPort_);
   sockaddr_storage addrStorage;
   pingSockAddr.getAddress(&addrStorage);
   sockaddr* saddr = reinterpret_cast<sockaddr*>(&addrStorage);
   if (::bind(socketFd, saddr, pingSockAddr.getActualSize()) != 0) {
     LOG(ERROR) << "Failed binding the socket: " << folly::errnoStr(errno) << " "
-               << myLoopbackAddr.str();
+               << myAddr.str();
     close(socketFd);
     return;
   }
@@ -170,7 +166,7 @@ HealthChecker::createPingSocket() noexcept {
 
   // Assign socketFd to state variable
   LOG(INFO) << "Created new ping socket with fd " << socketFd
-            << " with source address " << myLoopbackAddr.str();
+            << " with source address " << myAddr.str();
   pingSocketFd_ = socketFd;
 }
 
