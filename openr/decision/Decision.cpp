@@ -130,7 +130,7 @@ class SpfSolver::SpfSolverImpl {
 
   std::pair<
       bool /* topology has changed*/,
-      bool /* local nextHop addrs have changed */>
+      bool /* route attributes has changed (nexthop addr, node/adj label */>
   updateAdjacencyDatabase(thrift::AdjacencyDatabase const& newAdjacencyDb);
 
   // returns true if the AdjacencyDatabase existed
@@ -215,11 +215,11 @@ class SpfSolver::SpfSolverImpl {
 
 std::pair<
     bool /* topology has changed*/,
-    bool /* local nextHop addrs have changed */>
+    bool /* route attributes has changed (nexthop addr, node/adj label */>
 SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb) {
   auto const& nodeName = newAdjacencyDb.thisNodeName;
-  VLOG(2) << "Updating adjacency database for node " << nodeName;
+  VLOG(1) << "Updating adjacency database for node " << nodeName;
   tData_.addStatValue("decision.adj_db_update", 1, fbzmq::COUNT);
 
   for (auto const& adj : newAdjacencyDb.adjacencies) {
@@ -248,7 +248,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
   bool topoChanged =
       newAdjacencyDb.isOverloaded != priorAdjacencyDb.isOverloaded;
 
-  bool localNextHopsChanged = false;
+  bool routeAttrChanged = false;
 
   auto newIter = newLinks.begin();
   auto oldIter = oldLinks.begin();
@@ -278,20 +278,30 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     // or metric changed
     auto& newLink = **newIter;
     auto& oldLink = **oldIter;
+
+    // Check if link metric value has changed or not
     if (newLink.getMetricFromNode(nodeName) !=
         oldLink.getMetricFromNode(nodeName)) {
-      topoChanged = true;
-      // change the metric on the link object we already have
-      oldLink.setMetricFromNode(nodeName, newLink.getMetricFromNode(nodeName));
-
       VLOG(1) << folly::sformat(
           "Metric change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           oldLink.getMetricFromNode(nodeName),
           newLink.getMetricFromNode(nodeName));
+
+      topoChanged = true;
+      // change the metric on the link object we already have
+      oldLink.setMetricFromNode(nodeName, newLink.getMetricFromNode(nodeName));
     }
+
+    // Check if node overload has changed
     if (newLink.getOverloadFromNode(nodeName) !=
         oldLink.getOverloadFromNode(nodeName)) {
+      VLOG(1) << folly::sformat(
+          "Overload change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getOverloadFromNode(nodeName),
+          newLink.getOverloadFromNode(nodeName));
+
       // for spf, we do not consider simplex overloading, so there is no need to
       // rerun unless this is true
       topoChanged |= newLink.isOverloaded() != oldLink.isOverloaded();
@@ -299,32 +309,58 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
       // change the overload value in the link object we already have
       oldLink.setOverloadFromNode(
           nodeName, newLink.getOverloadFromNode(nodeName));
-      VLOG(1) << folly::sformat(
-          "Overload change on link {}: {} => {}",
-          newLink.directionalToString(nodeName),
-          oldLink.getOverloadFromNode(nodeName),
-          newLink.getOverloadFromNode(nodeName));
     }
+
+    // Check if adjacency label has changed
+    if (newLink.getAdjLabelFromNode(nodeName) !=
+        oldLink.getAdjLabelFromNode(nodeName)) {
+      VLOG(1) << folly::sformat(
+          "AdjLabel change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getAdjLabelFromNode(nodeName),
+          newLink.getAdjLabelFromNode(nodeName));
+
+      // Route attribute changes only when adjLabel has changed for current node
+      routeAttrChanged |= nodeName == myNodeName_;
+
+      // change the adjLabel on the link object we already have
+      oldLink.setAdjLabelFromNode(
+          nodeName, newLink.getAdjLabelFromNode(nodeName));
+    }
+
     // check if local nextHops Changed
     if (newLink.getNhV4FromNode(nodeName) !=
         oldLink.getNhV4FromNode(nodeName)) {
-      localNextHopsChanged = myNodeName_ == nodeName;
+      VLOG(1) << folly::sformat(
+          "V4-NextHop address change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          toString(oldLink.getNhV4FromNode(nodeName)),
+          toString(newLink.getNhV4FromNode(nodeName)));
+
+      routeAttrChanged |= myNodeName_ == nodeName;
       oldLink.setNhV4FromNode(nodeName, newLink.getNhV4FromNode(nodeName));
     }
     if (newLink.getNhV6FromNode(nodeName) !=
         oldLink.getNhV6FromNode(nodeName)) {
-      localNextHopsChanged = myNodeName_ == nodeName;
+      VLOG(1) << folly::sformat(
+          "V4-NextHop address change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          toString(oldLink.getNhV6FromNode(nodeName)),
+          toString(newLink.getNhV6FromNode(nodeName)));
+
+      routeAttrChanged |= myNodeName_ == nodeName;
       oldLink.setNhV6FromNode(nodeName, newLink.getNhV6FromNode(nodeName));
     }
     ++newIter;
     ++oldIter;
   }
 
-  return std::make_pair(topoChanged, localNextHopsChanged);
+  return std::make_pair(topoChanged, routeAttrChanged);
 }
 
 bool
 SpfSolver::SpfSolverImpl::deleteAdjacencyDatabase(const std::string& nodeName) {
+  VLOG(1) << "Deleting adjacency database for node " << nodeName;
   auto search = adjacencyDatabases_.find(nodeName);
 
   if (search == adjacencyDatabases_.end()) {
@@ -346,7 +382,7 @@ bool
 SpfSolver::SpfSolverImpl::updatePrefixDatabase(
     thrift::PrefixDatabase const& prefixDb) {
   auto const& nodeName = prefixDb.thisNodeName;
-  VLOG(2) << "Updating prefix database for node " << nodeName;
+  VLOG(1) << "Updating prefix database for node " << nodeName;
   tData_.addStatValue("decision.prefix_db_update", 1, fbzmq::COUNT);
 
   std::set<thrift::IpPrefix> oldPrefixSet;
@@ -378,6 +414,8 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
       std::inserter(prefixesToAdd, prefixesToAdd.begin()));
 
   for (const auto& prefix : prefixesToRemove) {
+    VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
+            << nodeName;
     auto& nodeList = prefixes_.at(prefix);
     nodeList.erase(nodeName);
     if (nodeList.empty()) {
@@ -386,13 +424,8 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
   }
   for (const auto& prefix : prefixesToAdd) {
     prefixes_[prefix].emplace(nodeName);
-  }
-
-  if (not prefixesToAdd.empty()) {
-    VLOG(1) << prefixesToAdd.size() << " prefixesToAdd";
-  }
-  if (not prefixesToRemove.empty()) {
-    VLOG(1) << prefixesToRemove.size() << " prefixesToRemove";
+    VLOG(1) << "Prefix " << toString(prefix) << " has been advertised by node "
+            << nodeName;
   }
 
   return !(prefixesToAdd.empty() && prefixesToRemove.empty());
@@ -400,6 +433,7 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
 
 bool
 SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
+  VLOG(1) << "Deleting prefix database for node " << nodeName;
   auto search = prefixDatabases_.find(nodeName);
   if (search == prefixDatabases_.end() ||
       search->second.prefixEntries.empty()) {
@@ -415,6 +449,8 @@ SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
     try {
       auto& nodeList = prefixes_.at(prefixEntry.prefix);
       nodeList.erase(nodeName);
+      VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
+              << " has been withdrawn by " << nodeName;
       if (nodeList.empty()) {
         prefixes_.erase(prefixEntry.prefix);
       }
@@ -737,7 +773,7 @@ SpfSolver::~SpfSolver() {}
 // update adjacencies for the given router; everything is replaced
 std::pair<
     bool /* topology has changed*/,
-    bool /* local nextHop addrs have changed */>
+    bool /* route attributes has changed (nexthop addr, node/adj label */>
 SpfSolver::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb) {
   return impl_->updateAdjacencyDatabase(newAdjacencyDb);

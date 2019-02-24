@@ -31,6 +31,8 @@ Link::Link(
       if2_(adj2.ifName),
       metric1_(adj1.metric),
       metric2_(adj2.metric),
+      adjLabel1_(adj1.adjLabel),
+      adjLabel2_(adj2.adjLabel),
       overload1_(adj1.isOverloaded),
       overload2_(adj2.isOverloaded),
       nhV41_(adj1.nextHopV4),
@@ -82,6 +84,17 @@ Link::getMetricFromNode(const std::string& nodeName) const {
   }
   if (n2_ == nodeName) {
     return metric2_;
+  }
+  throw std::invalid_argument(nodeName);
+}
+
+int32_t
+Link::getAdjLabelFromNode(const std::string& nodeName) const {
+  if (n1_ == nodeName) {
+    return adjLabel1_;
+  }
+  if (n2_ == nodeName) {
+    return adjLabel2_;
   }
   throw std::invalid_argument(nodeName);
 }
@@ -154,6 +167,17 @@ Link::setMetricFromNode(const std::string& nodeName, Metric d) {
     metric1_ = d;
   } else if (n2_ == nodeName) {
     metric2_ = d;
+  } else {
+    throw std::invalid_argument(nodeName);
+  }
+}
+
+void
+Link::setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel) {
+  if (n1_ == nodeName) {
+    adjLabel1_ = adjLabel;
+  } else if (n2_ == nodeName) {
+    adjLabel2_ = adjLabel;
   } else {
     throw std::invalid_argument(nodeName);
   }

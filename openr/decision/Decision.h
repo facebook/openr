@@ -108,8 +108,8 @@ class SpfSolver {
 
   // update adjacencies for the given router
   std::pair<
-      bool /* topology has changed*/,
-      bool /* local nextHop addrs have changed */>
+      bool /* topology has changed */,
+      bool /* route attributes has changed (nexthop addr, node/adj label */>
   updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
 
   // delete a node's adjacency database

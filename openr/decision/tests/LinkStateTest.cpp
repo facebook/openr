@@ -18,7 +18,7 @@ TEST(LinkTest, BasicOperation) {
       openr::createAdjacency(n1, "if1", "if2", "fe80::2", "10.0.0.2", 1, 1, 1);
   std::string n2 = "node2";
   auto adj2 =
-      openr::createAdjacency(n2, "if2", "if1", "fe80::1", "10.0.0.1", 1, 1, 1);
+      openr::createAdjacency(n2, "if2", "if1", "fe80::1", "10.0.0.1", 1, 2, 1);
 
   openr::Link l1(n1, adj1, n2, adj2);
   EXPECT_EQ(n2, l1.getOtherNodeName(n1));
@@ -32,6 +32,10 @@ TEST(LinkTest, BasicOperation) {
   EXPECT_EQ(adj1.metric, l1.getMetricFromNode(n1));
   EXPECT_EQ(adj2.metric, l1.getMetricFromNode(n2));
   EXPECT_THROW(l1.getMetricFromNode("node3"), std::invalid_argument);
+
+  EXPECT_EQ(adj1.adjLabel, l1.getAdjLabelFromNode(n1));
+  EXPECT_EQ(adj2.adjLabel, l1.getAdjLabelFromNode(n2));
+  EXPECT_THROW(l1.getAdjLabelFromNode("node3"), std::invalid_argument);
 
   EXPECT_FALSE(l1.getOverloadFromNode(n1));
   EXPECT_FALSE(l1.getOverloadFromNode(n2));

@@ -33,40 +33,40 @@ using apache::thrift::FRAGILE;
 namespace {
 /// R1 -> R2, R3
 const auto adj12 =
-    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 0);
+    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 2);
 const auto adj13 =
-    createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 0);
+    createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 3);
 const auto adj12_old_1 =
-    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 0);
+    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 21);
 const auto adj12_old_2 =
-    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 20, 0);
+    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 20, 22);
 const auto adj13_old =
-    createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 0);
+    createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 31);
 // R2 -> R1, R3, R4
 const auto adj21 =
-    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 0);
+    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 1);
 const auto adj21_old_1 =
-    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 0);
+    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 11);
 const auto adj21_old_2 =
-    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 20, 0);
+    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 20, 12);
 const auto adj23 =
-    createAdjacency("3", "2/3", "3/2", "fe80::3", "192.168.0.3", 10, 0);
+    createAdjacency("3", "2/3", "3/2", "fe80::3", "192.168.0.3", 10, 3);
 const auto adj24 =
-    createAdjacency("4", "2/4", "4/2", "fe80::4", "192.168.0.4", 10, 0);
+    createAdjacency("4", "2/4", "4/2", "fe80::4", "192.168.0.4", 10, 4);
 // R3 -> R1, R2, R4
 const auto adj31 =
-    createAdjacency("1", "3/1", "1/3", "fe80::1", "192.168.0.1", 10, 0);
+    createAdjacency("1", "3/1", "1/3", "fe80::1", "192.168.0.1", 10, 1);
 const auto adj31_old =
-    createAdjacency("1", "3/1", "1/3", "fe80::1", "192.168.0.1", 10, 0);
+    createAdjacency("1", "3/1", "1/3", "fe80::1", "192.168.0.1", 10, 11);
 const auto adj32 =
-    createAdjacency("2", "3/2", "2/3", "fe80::2", "192.168.0.2", 10, 0);
+    createAdjacency("2", "3/2", "2/3", "fe80::2", "192.168.0.2", 10, 2);
 const auto adj34 =
-    createAdjacency("4", "3/4", "4/3", "fe80::4", "192.168.0.4", 10, 0);
+    createAdjacency("4", "3/4", "4/3", "fe80::4", "192.168.0.4", 10, 4);
 // R4 -> R2, R3
 const auto adj42 =
-    createAdjacency("2", "4/2", "2/4", "fe80::2", "192.168.0.2", 10, 0);
+    createAdjacency("2", "4/2", "2/4", "fe80::2", "192.168.0.2", 10, 2);
 const auto adj43 =
-    createAdjacency("3", "4/3", "3/4", "fe80::3", "192.168.0.3", 10, 0);
+    createAdjacency("3", "4/3", "3/4", "fe80::3", "192.168.0.3", 10, 3);
 
 const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto addr2 = toIpPrefix("::ffff:10.2.2.2/128");
@@ -396,6 +396,26 @@ TEST(SpfSolver, AdjacencyUpdate) {
   ASSERT_TRUE(routeDb.hasValue());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
+
+  //
+  // Change adjLabel. This should report route-attribute change only for node1
+  // and not for node2's adjLabel change
+  // XXX: MplsRoute validation (based on adjLabel) will come next
+  //
+
+  adjacencyDb1.adjacencies[0].adjLabel = 111;
+  {
+    auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb1);
+    EXPECT_FALSE(res.first);
+    EXPECT_TRUE(res.second);
+  }
+
+  adjacencyDb2.adjacencies[0].adjLabel = 222;
+  {
+    auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb2);
+    EXPECT_FALSE(res.first);
+    EXPECT_FALSE(res.second);
+  }
 }
 
 //
