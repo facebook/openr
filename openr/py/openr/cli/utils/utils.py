@@ -25,6 +25,7 @@ import zmq
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.kvstore_client import KvStoreClient
 from openr.clients.lm_client import LMClient
+from openr.Fib import ttypes as fib_types
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
@@ -658,40 +659,7 @@ def interface_dbs_to_dict(publication, nodes, iter_func):
     return intf_dbs_map
 
 
-def print_routes_table(route_db, prefixes=None):
-    """ print the the routes from Decision/Fib module """
-
-    networks = None
-    if prefixes:
-        networks = [ipaddress.ip_network(p) for p in prefixes]
-
-    route_strs = []
-    for route in sorted(
-        route_db.unicastRoutes, key=lambda x: x.dest.prefixAddress.addr
-    ):
-        prefix_str = ipnetwork.sprint_prefix(route.dest)
-        if not ipnetwork.contain_any_prefix(prefix_str, networks):
-            continue
-
-        paths_str = "\n".join(
-            [
-                "via {}%{} metric {}".format(
-                    ipnetwork.sprint_addr(nextHop.address.addr),
-                    nextHop.address.ifName,
-                    nextHop.metric,
-                )
-                for nextHop in route.nextHops
-            ]
-        )
-        route_strs.append((prefix_str, paths_str))
-
-    caption = "Routes for {}".format(route_db.thisNodeName)
-    if not route_strs:
-        route_strs.append(["No routes found."])
-    print(printing.render_vertical_table(route_strs, caption=caption))
-
-
-def next_hop_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
+def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
     """ convert nextHop from thrift instance into a dict in strings """
 
     def _update(next_hop_dict, nextHop):
@@ -702,49 +670,107 @@ def next_hop_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
                 "ifName": nextHop.address.ifName,
             }
         )
+        if nextHop.mplsAction:
+            next_hop_dict.update({"mplsAction": thrift_to_dict(nextHop.mplsAction)})
 
     return thrift_to_dict(nextHop, _update)
 
 
-def route_to_dict(route):
+def unicast_route_to_dict(route):
     """ convert route from thrift instance into a dict in strings """
 
     def _update(route_dict, route):
         route_dict.update(
             {
-                "prefix": ipnetwork.sprint_prefix(route.dest),
                 "dest": ipnetwork.sprint_prefix(route.dest),
-                "nextHops": [next_hop_to_dict(nh) for nh in route.nextHops],
+                "nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops],
             }
         )
 
     return thrift_to_dict(route, _update)
 
 
-def route_db_to_dict(route_db):
-    """ convert route from thrift instance into a dict in strings """
+def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
+    """
+    Convert MPLS route to json serializable dict object
+    """
 
-    ret = {"routes": [route_to_dict(r) for r in route_db.unicastRoutes]}
-    print(ret)
+    def _update(route_dict, route: network_types.MplsRoute):
+        route_dict.update(
+            {"nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops]}
+        )
+
+    return thrift_to_dict(route, _update)
+
+
+def route_db_to_dict(route_db: fib_types.RouteDatabase) -> Dict[str, Any]:
+    """
+    Convert route from thrift instance into a dict in strings
+    """
+
+    ret = {
+        "unicastRoutes": [unicast_route_to_dict(r) for r in route_db.unicastRoutes],
+        "mplsRoutes": [mpls_route_to_dict(r) for r in route_db.mplsRoutes],
+    }
     return ret
 
 
-def print_routes_json(route_db_dict, prefixes=None):
+def print_routes_json(
+    route_db_dict, prefixes: List[str] = None, labels: List[int] = None
+):
+    """
+    Print json representation of routes. Takes prefixes and labels to
+    filter
+    """
 
     networks = None
     if prefixes:
         networks = [ipaddress.ip_network(p) for p in prefixes]
 
-    # Filter out all routes based on prefixes!
+    # Filter out all routes based on prefixes and labels
     for routes in route_db_dict.values():
-        filtered_routes = []
-        for route in routes["routes"]:
-            if not ipnetwork.contain_any_prefix(route["prefix"], networks):
-                continue
-            filtered_routes.append(route)
-        routes["routes"] = filtered_routes
+        filtered_unicast_routes = []
+        for route in routes["unicastRoutes"]:
+            if labels or networks:
+                if networks and ipnetwork.contain_any_prefix(route["dest"], networks):
+                    filtered_unicast_routes.append(route)
+            else:
+                filtered_unicast_routes.append(route)
+        routes["unicastRoutes"] = filtered_unicast_routes
+
+        filtered_mpls_routes = []
+        for route in routes["mplsRoutes"]:
+            if labels or prefixes:
+                if labels and int(route["topLabel"]) in labels:
+                    filtered_mpls_routes.append(route)
+            else:
+                filtered_mpls_routes.append(route)
+        routes["mplsRoutes"] = filtered_mpls_routes
+
+    # Filter
 
     print(json_dumps(route_db_dict))
+
+
+def print_route_db(
+    route_db: fib_types.RouteDatabase,
+    prefixes: List[str] = None,
+    labels: List[int] = None,
+) -> None:
+    """ print the the routes from Decision/Fib module """
+
+    if prefixes or not labels:
+        print_unicast_routes(
+            "Unicast Routes for {}".format(route_db.thisNodeName),
+            route_db.unicastRoutes,
+            prefixes=prefixes,
+        )
+    if labels or not prefixes:
+        print_mpls_routes(
+            "MPLS Routes for {}".format(route_db.thisNodeName),
+            route_db.mplsRoutes,
+            labels=labels,
+        )
 
 
 def find_adj_list_deltas(old_adj_list, new_adj_list, tags=None):
@@ -1176,14 +1202,14 @@ def compare_route_db(routes_a, routes_b, sources, enable_color, quiet=False):
     if extra_routes_in_a:
         caption = "Routes in {} but not in {}".format(*sources)
         if not quiet:
-            print_routes(caption, extra_routes_in_a)
+            print_unicast_routes(caption, extra_routes_in_a)
         else:
             error_msg.append(caption)
 
     if extra_routes_in_b:
         caption = "Routes in {} but not in {}".format(*reversed(sources))
         if not quiet:
-            print_routes(caption, extra_routes_in_b)
+            print_unicast_routes(caption, extra_routes_in_b)
         else:
             error_msg.append(caption)
 
@@ -1277,7 +1303,7 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=Fal
     for err, route_db in invalid_routes.items():
         caption = "Error: {}".format(err)
         if not quiet:
-            print_routes(caption, route_db)
+            print_unicast_routes(caption, route_db)
         else:
             error_msg.append(caption)
 
@@ -1321,14 +1347,21 @@ def ip_nexthop_to_str(
     return "{}{}{}".format(mpls_action_str, ipnetwork.sprint_addr(nh.addr), ifName)
 
 
-def print_routes(caption, routes, prefixes=None):
+def print_unicast_routes(
+    caption: str,
+    unicast_routes: List[network_types.UnicastRoute],
+    prefixes: List[str] = None,
+):
+    """
+    Print unicast routes. Subset specified by prefixes will be printed if specified
+    """
 
     networks = None
     if prefixes:
         networks = [ipaddress.ip_network(p) for p in prefixes]
 
-    route_strs = []
-    for route in routes:
+    route_strs: List[List[str]] = []
+    for route in unicast_routes:
         dest = ipnetwork.sprint_prefix(route.dest)
         if not ipnetwork.contain_any_prefix(dest, networks):
             continue
@@ -1336,7 +1369,27 @@ def print_routes(caption, routes, prefixes=None):
         paths_str = "\n".join(
             ["via {}".format(ip_nexthop_to_str(nh)) for nh in get_route_nexthops(route)]
         )
-        route_strs.append((dest, paths_str))
+        route_strs.append([dest, paths_str])
+
+    print(printing.render_vertical_table(route_strs, caption=caption))
+
+
+def print_mpls_routes(
+    caption: str, mpls_routes: List[network_types.MplsRoute], labels: List[int] = None
+):
+    """
+    List mpls routes. Subset specified by labels will be printed if specified
+    """
+
+    route_strs: List[List[str]] = []
+    for route in mpls_routes:
+        if labels and route.topLabel not in labels:
+            continue
+
+        paths_str = "\n".join(
+            ["via {}".format(ip_nexthop_to_str(nh)) for nh in route.nextHops]
+        )
+        route_strs.append([str(route.topLabel), paths_str])
 
     print(printing.render_vertical_table(route_strs, caption=caption))
 

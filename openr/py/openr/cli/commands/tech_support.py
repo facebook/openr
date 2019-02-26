@@ -131,7 +131,7 @@ class TechSupportCmd(object):
         if not self.print_routes:
             return
         nodes = parse_nodes(self.cli_opts, "")
-        decision.DecisionRoutesComputedCmd(self.cli_opts).run(nodes, [], False)
+        decision.DecisionRoutesComputedCmd(self.cli_opts).run(nodes, [], [], False)
 
     def print_fib_validate(self):
         fib.FibValidateRoutesCmd(self.cli_opts).run(self.cli_opts)
@@ -139,7 +139,7 @@ class TechSupportCmd(object):
     def print_fib_routes_computed(self):
         if not self.print_routes:
             return
-        fib.FibRoutesComputedCmd(self.cli_opts).run([], False)
+        fib.FibRoutesComputedCmd(self.cli_opts).run([], [], False)
 
     def print_fib_routes_installed(self):
         if not self.print_routes:

@@ -60,7 +60,7 @@ class DecisionPrefixesCmd(DecisionCmd):
 
 
 class DecisionRoutesComputedCmd(DecisionCmd):
-    def run(self, nodes, prefixes, json):
+    def run(self, nodes, prefixes, labels, json):
         if "all" in nodes:
             nodes = self._get_all_nodes()
         if json:
@@ -68,11 +68,11 @@ class DecisionRoutesComputedCmd(DecisionCmd):
             for node in nodes:
                 route_db = self.client.get_route_db(node)
                 route_db_dict[node] = utils.route_db_to_dict(route_db)
-            utils.print_routes_json(route_db_dict, prefixes)
+            utils.print_routes_json(route_db_dict, prefixes, labels)
         else:
             for node in nodes:
                 route_db = self.client.get_route_db(node)
-                utils.print_routes_table(route_db, prefixes)
+                utils.print_route_db(route_db, prefixes, labels)
 
     def _get_all_nodes(self):
         """ return all the nodes' name in the network """

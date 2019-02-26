@@ -59,7 +59,7 @@ class FibRoutesInstalledCli(object):
     @click.option(
         "--prefixes",
         "-p",
-        default="",
+        type=click.STRING,
         multiple=True,
         help="Get route for specific IPs or Prefixes.",
     )
@@ -81,12 +81,19 @@ class FibRoutesComputedCli(object):
         multiple=True,
         help="Get route for specific IPs or Prefixes.",
     )
+    @click.option(
+        "--labels",
+        "-l",
+        type=click.INT,
+        multiple=True,
+        help="Get route for specific labels.",
+    )
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
-    def routes(cli_opts, prefixes, json):  # noqa: B902
+    def routes(cli_opts, prefixes, labels, json):  # noqa: B902
         """ Request routing table of the current host """
 
-        fib.FibRoutesComputedCmd(cli_opts).run(prefixes, json)
+        fib.FibRoutesComputedCmd(cli_opts).run(prefixes, labels, json)
 
 
 class FibAddRoutesCli(object):

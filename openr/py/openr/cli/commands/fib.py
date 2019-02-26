@@ -9,10 +9,8 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import sys
 from builtins import object
 
-import zmq
 from openr.cli.utils import utils
 from openr.clients import decision_client, fib_client, lm_client
 from openr.utils import ipnetwork, printing
@@ -49,13 +47,13 @@ class FibAgentCmd(object):
 
 
 class FibRoutesComputedCmd(FibCmd):
-    def run(self, prefixes, json):
+    def run(self, prefixes, labels, json):
         route_db = self.client.get_route_db()
         if json:
             route_db_dict = {route_db.thisNodeName: utils.route_db_to_dict(route_db)}
-            utils.print_routes_json(route_db_dict, prefixes)
+            utils.print_routes_json(route_db_dict, prefixes, labels)
         else:
-            utils.print_routes_table(route_db, prefixes)
+            utils.print_route_db(route_db, prefixes, labels)
 
 
 class FibCountersCmd(FibAgentCmd):
@@ -106,7 +104,7 @@ class FibRoutesInstalledCmd(FibAgentCmd):
             )
         else:
             caption = "{}'s FIB routes by client {}".format(host_id, client_id)
-            utils.print_routes(caption, routes, prefixes)
+            utils.print_unicast_routes(caption, routes, prefixes)
 
         return 0
 
