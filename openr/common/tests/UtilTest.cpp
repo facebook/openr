@@ -367,6 +367,85 @@ TEST(UtilTest, findDeltaRoutes) {
   EXPECT_EQ(res3.second.at(0), prefix2);
 }
 
+TEST(UtilTest, MplsLabelValidate) {
+  EXPECT_TRUE(isMplsLabelValid(0));
+  EXPECT_TRUE(isMplsLabelValid(1132));
+  EXPECT_TRUE(isMplsLabelValid((1 << 20) - 1));
+  EXPECT_FALSE(isMplsLabelValid(1 << 20));
+  EXPECT_FALSE(isMplsLabelValid(1 << 30));
+}
+
+TEST(UtilTest, MplsActionValidate) {
+  //
+  // PHP
+  //
+  {
+    thrift::MplsAction mplsAction;
+    mplsAction.action = thrift::MplsActionCode::PHP;
+    EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
+
+    mplsAction.swapLabel = 1;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.swapLabel = folly::none;
+
+    mplsAction.pushLabels = std::vector<int32_t>();
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.pushLabels = folly::none;
+  }
+
+  //
+  // POP_AND_LOOKUP
+  //
+  {
+    thrift::MplsAction mplsAction;
+    mplsAction.action = thrift::MplsActionCode::POP_AND_LOOKUP;
+    EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
+
+    mplsAction.swapLabel = 1;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.swapLabel = folly::none;
+
+    mplsAction.pushLabels = std::vector<int32_t>();
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.pushLabels = folly::none;
+  }
+
+  //
+  // SWAP
+  //
+  {
+    thrift::MplsAction mplsAction;
+    mplsAction.action = thrift::MplsActionCode::SWAP;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+
+    mplsAction.swapLabel = 1;
+    EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
+
+    mplsAction.pushLabels = std::vector<int32_t>();
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.pushLabels = folly::none;
+  }
+
+  //
+  // PUSH
+  //
+  {
+    thrift::MplsAction mplsAction;
+    mplsAction.action = thrift::MplsActionCode::PUSH;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+
+    mplsAction.swapLabel = 1;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.swapLabel = folly::none;
+
+    mplsAction.pushLabels = std::vector<int32_t>();
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+
+    mplsAction.pushLabels->push_back(1);
+    EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

@@ -594,6 +594,10 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
+
+  //
+  // Create unicastRoutes - IP and IP2MPLS routes
+  //
   for (const auto& kv : prefixes_) {
     const auto& prefix = kv.first;
     const auto& nodesWithPrefix = kv.second;
@@ -699,6 +703,31 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     routeDb.unicastRoutes.emplace_back(
         createUnicastRoute(prefix, std::move(nextHops)));
   } // for prefixes_
+
+  //
+  // Create MPLS routes for all of our adjacencies
+  //
+  for (const auto& link : linkState_.linksFromNode(myNodeName)) {
+    const auto topLabel = link->getAdjLabelFromNode(myNodeName);
+    // Top label is not set => Non-SR mode
+    if (topLabel == 0) {
+      continue;
+    }
+
+    // If mpls label is not valid then ignore it
+    if (not isMplsLabelValid(topLabel)) {
+      LOG(ERROR) << "Ignoring invalid adjacency label " << topLabel
+                 << " of link " << link->directionalToString(myNodeName);
+      continue;
+    }
+
+    auto nh = createNextHop(
+        link->getNhV6FromNode(myNodeName),
+        link->getIfaceFromNode(myNodeName),
+        link->getMetricFromNode(myNodeName),
+        createMplsAction(thrift::MplsActionCode::PHP));
+    routeDb.mplsRoutes.emplace_back(createMplsRoute(topLabel, {std::move(nh)}));
+  }
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);

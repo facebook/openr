@@ -16,6 +16,7 @@ struct RouteDatabase {
   1: string thisNodeName
   3: optional Lsdb.PerfEvents perfEvents;
   4: list<Network.UnicastRoute> unicastRoutes
+  5: list<Network.MplsRoute> mplsRoutes
 }
 
 // Perf log buffer maintained by Fib

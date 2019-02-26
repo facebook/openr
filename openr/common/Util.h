@@ -185,6 +185,50 @@ thrift::BuildInfo getBuildInfoThrift() noexcept;
 folly::Optional<std::string> maybeGetTcpEndpoint(
     const std::string& addr, const int32_t port);
 
+/**
+ * Validates that label is 20 bit only and other bits are not set
+ * XXX: We can do more validation - e.g. reserved range, global vs local range
+ */
+inline bool
+isMplsLabelValid(int32_t const mplsLabel) {
+  return (mplsLabel & 0xfff00000) == 0;
+}
+
+/**
+ * Validates mplsAction object and fatals
+ */
+inline void
+checkMplsAction(thrift::MplsAction const& mplsAction) {
+  switch (mplsAction.action) {
+  case thrift::MplsActionCode::PUSH:
+    // Swap label shouldn't be set
+    CHECK(not mplsAction.swapLabel.hasValue());
+    // Push labels should be set
+    CHECK(mplsAction.pushLabels.hasValue());
+    // there should be atleast one push label
+    CHECK(not mplsAction.pushLabels->empty());
+    for (auto const& label : mplsAction.pushLabels.value()) {
+      CHECK(isMplsLabelValid(label));
+    }
+    break;
+  case thrift::MplsActionCode::SWAP:
+    // Swap label should be set
+    CHECK(mplsAction.swapLabel.hasValue());
+    CHECK(isMplsLabelValid(mplsAction.swapLabel.value()));
+    // Push labels shouldn't be set
+    CHECK(not mplsAction.pushLabels.hasValue());
+    break;
+  case thrift::MplsActionCode::PHP:
+  case thrift::MplsActionCode::POP_AND_LOOKUP:
+    // Swap label should not be set
+    CHECK(not mplsAction.swapLabel.hasValue());
+    CHECK(not mplsAction.pushLabels.hasValue());
+    break;
+  default:
+    CHECK(false) << "Unknown action code";
+  }
+}
+
 inline thrift::Adjacency
 createAdjacency(
     const std::string& nodeName,
@@ -242,12 +286,29 @@ createPrefixDb(
 
 inline thrift::NextHopThrift
 createNextHop(
-    thrift::BinaryAddress addr, const std::string& ifName, int32_t metric) {
+    thrift::BinaryAddress addr,
+    const std::string& ifName,
+    int32_t metric,
+    folly::Optional<thrift::MplsAction> maybeMplsAction = folly::none) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
   nextHop.address.ifName = ifName;
   nextHop.metric = metric;
+  nextHop.mplsAction = maybeMplsAction;
   return nextHop;
+}
+
+inline thrift::MplsAction
+createMplsAction(
+    thrift::MplsActionCode const mplsActionCode,
+    folly::Optional<int32_t> maybeSwapLabel = folly::none,
+    folly::Optional<std::vector<int32_t>> maybePushLabels = folly::none) {
+  thrift::MplsAction mplsAction;
+  mplsAction.action = mplsActionCode;
+  mplsAction.swapLabel = maybeSwapLabel;
+  mplsAction.pushLabels = maybePushLabels;
+  checkMplsAction(mplsAction); // sanity checks
+  return mplsAction;
 }
 
 inline thrift::UnicastRoute
@@ -257,6 +318,20 @@ createUnicastRoute(
   unicastRoute.dest = std::move(dest);
   unicastRoute.nextHops = std::move(nextHops);
   return unicastRoute;
+}
+
+inline thrift::MplsRoute
+createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
+  // Sanity checks
+  CHECK(isMplsLabelValid(topLabel));
+  for (auto const& nextHop : nextHops) {
+    CHECK(nextHop.mplsAction.hasValue());
+  }
+
+  thrift::MplsRoute mplsRoute;
+  mplsRoute.topLabel = topLabel;
+  mplsRoute.nextHops = std::move(nextHops);
+  return mplsRoute;
 }
 
 inline std::vector<thrift::UnicastRoute>

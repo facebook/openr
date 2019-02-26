@@ -400,7 +400,6 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
   // Change adjLabel. This should report route-attribute change only for node1
   // and not for node2's adjLabel change
-  // XXX: MplsRoute validation (based on adjLabel) will come next
   //
 
   adjacencyDb1.adjacencies[0].adjLabel = 111;
@@ -526,6 +525,76 @@ TEST(ConnectivityTest, OverloadNodeTest) {
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
       NextHops({make_pair(toNextHop(adj32, false), 10)}));
+}
+
+//
+// Node-1 connects to 2 but 2 doesn't report bi-directionality
+// Node-2 and Node-3 are bi-directionally connected
+//
+TEST(MplsRoutes, AdjacencyLabels) {
+  const std::string nodeName("1");
+  SpfSolver spfSolver(
+      nodeName, false /* disable v4 */, false /* disable LFA */);
+
+  // Add all adjacency DBs
+  auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
+  auto adjacencyDb2 = createAdjDb("2", {adj23}, 0);
+  auto adjacencyDb3 = createAdjDb("3", {adj32}, 0);
+
+  EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb2).first);
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb3).first);
+
+  // Validate 1's routes
+  {
+    const auto routeDb = spfSolver.buildPaths("1");
+    ASSERT_TRUE(routeDb.hasValue());
+    EXPECT_EQ(0, routeDb->mplsRoutes.size());
+  }
+
+  // Validate 2's routes
+  {
+    const auto routeDb = spfSolver.buildPaths("2");
+    ASSERT_TRUE(routeDb.hasValue());
+    EXPECT_EQ(1, routeDb->mplsRoutes.size());
+
+    const auto& mplsRoute = routeDb->mplsRoutes.at(0);
+    EXPECT_EQ(adj23.adjLabel, mplsRoute.topLabel);
+    ASSERT_EQ(1, mplsRoute.nextHops.size());
+
+    const auto& nextHop = mplsRoute.nextHops.at(0);
+    EXPECT_EQ(adj23.nextHopV6.addr, nextHop.address.addr);
+    EXPECT_EQ(adj23.ifName, nextHop.address.ifName);
+    EXPECT_EQ(adj23.metric, nextHop.metric);
+    ASSERT_TRUE(nextHop.mplsAction.hasValue());
+
+    const auto& mplsAction = nextHop.mplsAction.value();
+    EXPECT_EQ(thrift::MplsActionCode::PHP, mplsAction.action);
+    EXPECT_FALSE(mplsAction.swapLabel.hasValue());
+    EXPECT_FALSE(mplsAction.pushLabels.hasValue());
+  }
+
+  // Validate 3's routes
+  {
+    const auto routeDb = spfSolver.buildPaths("3");
+    ASSERT_TRUE(routeDb.hasValue());
+    EXPECT_EQ(1, routeDb->mplsRoutes.size());
+
+    const auto& mplsRoute = routeDb->mplsRoutes.at(0);
+    EXPECT_EQ(adj32.adjLabel, mplsRoute.topLabel);
+    ASSERT_EQ(1, mplsRoute.nextHops.size());
+
+    const auto& nextHop = mplsRoute.nextHops.at(0);
+    EXPECT_EQ(adj32.nextHopV6.addr, nextHop.address.addr);
+    EXPECT_EQ(adj32.ifName, nextHop.address.ifName);
+    EXPECT_EQ(adj32.metric, nextHop.metric);
+    ASSERT_TRUE(nextHop.mplsAction.hasValue());
+
+    const auto& mplsAction = nextHop.mplsAction.value();
+    EXPECT_EQ(thrift::MplsActionCode::PHP, mplsAction.action);
+    EXPECT_FALSE(mplsAction.swapLabel.hasValue());
+    EXPECT_FALSE(mplsAction.pushLabels.hasValue());
+  }
 }
 
 //
