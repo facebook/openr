@@ -1360,7 +1360,7 @@ def print_unicast_routes(
     if prefixes:
         networks = [ipaddress.ip_network(p) for p in prefixes]
 
-    route_strs: List[List[str]] = []
+    route_strs = []
     for route in unicast_routes:
         dest = ipnetwork.sprint_prefix(route.dest)
         if not ipnetwork.contain_any_prefix(dest, networks):
@@ -1381,7 +1381,7 @@ def print_mpls_routes(
     List mpls routes. Subset specified by labels will be printed if specified
     """
 
-    route_strs: List[List[str]] = []
+    route_strs = []
     for route in mpls_routes:
         if labels and route.topLabel not in labels:
             continue
