@@ -131,7 +131,7 @@ class LinkState {
 
   void removeLinksFromNode(const std::string& nodeName);
 
-  const LinkSet& linksFromNode(const std::string& nodeName);
+  const LinkSet& linksFromNode(const std::string& nodeName) const;
 
   std::vector<std::shared_ptr<Link>> orderedLinksFromNode(
       const std::string& nodeName);

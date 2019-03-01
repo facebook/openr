@@ -275,7 +275,7 @@ LinkState::removeLinksFromNode(const std::string& nodeName) {
 }
 
 const LinkState::LinkSet&
-LinkState::linksFromNode(const std::string& nodeName) {
+LinkState::linksFromNode(const std::string& nodeName) const {
   static const LinkState::LinkSet defaultEmptySet;
   auto search = linkMap_.find(nodeName);
   if (search != linkMap_.end()) {

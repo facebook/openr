@@ -174,8 +174,28 @@ class SpfSolver::SpfSolverImpl {
   std::vector<std::shared_ptr<Link>> getOrderedLinkSet(
       const thrift::AdjacencyDatabase& adjDb);
 
+  // Give source node-name and dstNodeNames, this function returns the set of
+  // nexthops (along with LFA if enabled) towards these set of dstNodeNames
+  std::pair<
+      Metric /* minimum metric to destination */,
+      std::unordered_map<
+          std::string /* nextHopNodeName */,
+          Metric /* the distance from the nexthop to the dest */>>
+  getNextHopsWithMetric(
+      const std::string& srcNodeName,
+      const std::set<std::string>& dstNodeNames) const;
+
+  // This function converts best nexthop nodes to best nexthop adjacencies
+  // which can then be passed to FIB for programming. It considers LFA and
+  // parallel link logic (tested by our UT)
+  std::vector<thrift::NextHopThrift> getNextHopsThrift(
+      const std::string& myNodeName,
+      bool isV4,
+      const Metric minMetric,
+      std::unordered_map<std::string, Metric> nextHopNodes) const;
+
   Metric findMinDistToNeighbor(
-      const std::string& myNodeName, const std::string& neighborName);
+      const std::string& myNodeName, const std::string& neighborName) const;
 
   // returns Link object if the reverse adjancency is present in
   // adjacencyDatabases_.at(adj.otherNodeName), else returns folly::none
@@ -599,7 +619,6 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
 
   const auto startTime = std::chrono::steady_clock::now();
   tData_.addStatValue("decision.route_build_runs", 1, fbzmq::COUNT);
-  const auto& shortestPathsFromHere = spfResults_.at(myNodeName);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
@@ -609,11 +628,13 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   //
   for (const auto& kv : prefixes_) {
     const auto& prefix = kv.first;
-    const auto& nodePrefixes = kv.second;
-    if (nodePrefixes.count(myNodeName)) {
-      // skip adding route for prefixes advertised by this node
+
+    // skip adding route for prefixes advertised by this node
+    if (kv.second.count(myNodeName)) {
       continue;
     }
+
+    // Check for enabledV4_
     auto prefixStr = prefix.prefixAddress.addr;
     bool isV4Prefix = prefixStr.size() == folly::IPAddressV4::byteCount();
     if (isV4Prefix && !enableV4_) {
@@ -621,101 +642,25 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       continue;
     }
 
-    Metric prefixMetric = std::numeric_limits<Metric>::max();
-
-    // find the set of the closest nodes that advertise this prefix
-    std::unordered_set<std::string> minCostNodes;
-    for (const auto& nodePrefix : nodePrefixes) {
-      try {
-        const auto nodeDistance =
-            shortestPathsFromHere.at(nodePrefix.first).first;
-        if (prefixMetric >= nodeDistance) {
-          if (prefixMetric > nodeDistance) {
-            prefixMetric = nodeDistance;
-            minCostNodes.clear();
-          }
-          minCostNodes.emplace(nodePrefix.first);
-        }
-      } catch (std::out_of_range const& e) {
-        LOG(WARNING) << "No path to " << nodePrefix.first << " from "
-                     << myNodeName << " for prefix: " << toString(prefix);
-      }
+    // Prepare list of nodes announcing the prefix
+    std::set<std::string> prefixNodes;
+    for (auto const& nodePrefix : kv.second) {
+      prefixNodes.emplace(nodePrefix.first);
     }
 
-    if (minCostNodes.empty()) {
-      std::vector<std::string> prefixNodes;
-      for (auto const& nodePrefix : nodePrefixes) {
-        prefixNodes.emplace_back(nodePrefix.first);
-      }
+    const auto metricNhs = getNextHopsWithMetric(myNodeName, prefixNodes);
+    if (metricNhs.second.empty()) {
       LOG(WARNING) << "No route to prefix " << toString(prefix)
                    << ", advertised by: " << folly::join(", ", prefixNodes);
       tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
       continue;
     }
 
-    // build up next hop nodes both nodes that are along a shortest path to the
-    // prefix and, if enabled, those with an LFA path to the prefix
-    std::unordered_map<
-        std::string /* nextHopNodeName */,
-        Metric /* the distance from the nexthop to the dest */>
-        nextHopNodes;
-
-    // add neighbors with shortest path to the prefix
-    for (const auto& node : minCostNodes) {
-      for (const auto& nhName : shortestPathsFromHere.at(node).second) {
-        nextHopNodes[nhName] =
-            prefixMetric - findMinDistToNeighbor(myNodeName, nhName);
-      }
-    }
-
-    // add any other neighbors that have LFA paths to the prefix
-    if (computeLfaPaths_) {
-      for (const auto& kv2 : spfResults_) {
-        const auto& neighborName = kv2.first;
-        const auto& shortestPathsFromNeighbor = kv2.second;
-        if (neighborName == myNodeName ||
-            nextHopNodes.find(neighborName) != nextHopNodes.end()) {
-          continue;
-        }
-        Metric distanceFromNeighbor = std::numeric_limits<Metric>::max();
-        for (const auto& nodePrefix : nodePrefixes) {
-          try {
-            const auto d = shortestPathsFromNeighbor.at(nodePrefix.first).first;
-            if (distanceFromNeighbor > d) {
-              distanceFromNeighbor = d;
-            }
-          } catch (std::out_of_range const& e) {
-            LOG(WARNING) << "No path to " << nodePrefix.first
-                         << " from neighbor " << neighborName;
-          }
-        }
-        Metric neighborToHere = shortestPathsFromNeighbor.at(myNodeName).first;
-        // This is the LFA condition per RFC 5286
-        if (distanceFromNeighbor < prefixMetric + neighborToHere) {
-          nextHopNodes[neighborName] = distanceFromNeighbor;
-        }
-      }
-    }
-
-    std::vector<thrift::NextHopThrift> nextHops;
-    for (const auto& link : linkState_.linksFromNode(myNodeName)) {
-      const auto search = nextHopNodes.find(link->getOtherNodeName(myNodeName));
-      if (search != nextHopNodes.end() && !link->isOverloaded()) {
-        Metric distOverLink =
-            link->getMetricFromNode(myNodeName) + search->second;
-        if (computeLfaPaths_ || distOverLink == prefixMetric) {
-          // if we are computing LFA paths, any nexthop to the node will do
-          // otherwise, we only want those nexthops along a shortest path
-          nextHops.emplace_back(createNextHop(
-              isV4Prefix ? link->getNhV4FromNode(myNodeName)
-                         : link->getNhV6FromNode(myNodeName),
-              link->getIfaceFromNode(myNodeName),
-              distOverLink));
-        }
-      }
-    }
-    routeDb.unicastRoutes.emplace_back(
-        createUnicastRoute(prefix, std::move(nextHops)));
+    // Convert list of neighbor nodes to nexthops (considering adjacencies)
+    routeDb.unicastRoutes.emplace_back(createUnicastRoute(
+        prefix,
+        getNextHopsThrift(
+            myNodeName, isV4Prefix, metricNhs.first, metricNhs.second)));
   } // for prefixes_
 
   //
@@ -750,9 +695,125 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   return routeDb;
 } // buildRouteDb
 
+std::pair<
+    Metric /* min metric to destination */,
+    std::unordered_map<
+        std::string /* nextHopNodeName */,
+        Metric /* the distance from the nexthop to the dest */>>
+SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
+    const std::string& myNodeName,
+    const std::set<std::string>& dstNodeNames) const {
+  auto& shortestPathsFromHere = spfResults_.at(myNodeName);
+  Metric shortestMetric = std::numeric_limits<Metric>::max();
+
+  // find the set of the closest nodes in our destination
+  std::unordered_set<std::string> minCostNodes;
+  for (const auto& dstNode : dstNodeNames) {
+    auto it = shortestPathsFromHere.find(dstNode);
+    if (it == shortestPathsFromHere.end()) {
+      continue;
+    }
+    const auto nodeDistance = it->second.first;
+    if (shortestMetric >= nodeDistance) {
+      if (shortestMetric > nodeDistance) {
+        shortestMetric = nodeDistance;
+        minCostNodes.clear();
+      }
+      minCostNodes.emplace(dstNode);
+    }
+  }
+
+  // build up next hop nodes both nodes that are along a shortest path to the
+  // prefix and, if enabled, those with an LFA path to the prefix
+  std::unordered_map<
+      std::string /* nextHopNodeName */,
+      Metric /* the distance from the nexthop to the dest */>
+      nextHopNodes;
+
+  // If no node is reachable then return
+  if (minCostNodes.empty()) {
+    return std::make_pair(shortestMetric, nextHopNodes);
+  }
+
+  // Add neighbors with shortest path to the prefix
+  for (const auto& node : minCostNodes) {
+    for (const auto& nhName : shortestPathsFromHere.at(node).second) {
+      nextHopNodes[nhName] =
+          shortestMetric - findMinDistToNeighbor(myNodeName, nhName);
+    }
+  }
+
+  // add any other neighbors that have LFA paths to the prefix
+  if (computeLfaPaths_) {
+    for (const auto& kv2 : spfResults_) {
+      const auto& neighborName = kv2.first;
+      const auto& shortestPathsFromNeighbor = kv2.second;
+      if (neighborName == myNodeName ||
+          nextHopNodes.find(neighborName) != nextHopNodes.end()) {
+        continue;
+      }
+      Metric distanceFromNeighbor = std::numeric_limits<Metric>::max();
+      for (const auto& dstNode : dstNodeNames) {
+        try {
+          const auto d = shortestPathsFromNeighbor.at(dstNode).first;
+          if (distanceFromNeighbor > d) {
+            distanceFromNeighbor = d;
+          }
+        } catch (std::out_of_range const& e) {
+          LOG(WARNING) << "No path to " << dstNode << " from neighbor "
+                       << neighborName;
+        }
+      }
+      Metric neighborToHere = shortestPathsFromNeighbor.at(myNodeName).first;
+      // This is the LFA condition per RFC 5286
+      if (distanceFromNeighbor < shortestMetric + neighborToHere) {
+        nextHopNodes[neighborName] = distanceFromNeighbor;
+      }
+    }
+  }
+
+  return std::make_pair(shortestMetric, nextHopNodes);
+}
+
+std::vector<thrift::NextHopThrift>
+SpfSolver::SpfSolverImpl::getNextHopsThrift(
+    const std::string& myNodeName,
+    bool isV4,
+    const Metric minMetric,
+    std::unordered_map<std::string, Metric> nextHopNodes) const {
+  CHECK(not nextHopNodes.empty());
+
+  std::vector<thrift::NextHopThrift> nextHops;
+  for (const auto& link : linkState_.linksFromNode(myNodeName)) {
+    const auto search = nextHopNodes.find(link->getOtherNodeName(myNodeName));
+
+    // Ignore overloaded links or nexthops
+    if (search == nextHopNodes.end() or link->isOverloaded()) {
+      continue;
+    }
+
+    // Ignore nexthops that are not shortest if lfa is disabled. All links
+    // towards the nexthop on shortest path are LFA routes.
+    Metric distOverLink = link->getMetricFromNode(myNodeName) + search->second;
+    if (not computeLfaPaths_ and distOverLink != minMetric) {
+      continue;
+    }
+
+    // if we are computing LFA paths, any nexthop to the node will do
+    // otherwise, we only want those nexthops along a shortest path
+    nextHops.emplace_back(createNextHop(
+        isV4 ? link->getNhV4FromNode(myNodeName)
+             : link->getNhV6FromNode(myNodeName),
+        link->getIfaceFromNode(myNodeName),
+        distOverLink));
+  }
+
+  return nextHops;
+}
+
 Metric
 SpfSolver::SpfSolverImpl::findMinDistToNeighbor(
-    const std::string& myNodeName, const std::string& neighborName) {
+    const std::string& myNodeName, const std::string& neighborName) const {
   Metric min = std::numeric_limits<Metric>::max();
   for (const auto& link : linkState_.linksFromNode(myNodeName)) {
     if (!link->isOverloaded() &&
