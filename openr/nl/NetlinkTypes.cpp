@@ -7,8 +7,6 @@
 
 #include <set>
 
-#include <glog/logging.h>
-
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr {

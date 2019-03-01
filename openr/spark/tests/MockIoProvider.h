@@ -15,7 +15,6 @@
 #include <set>
 #include <string>
 #include <thread>
-#include <vector>
 
 #include <folly/IPAddress.h>
 

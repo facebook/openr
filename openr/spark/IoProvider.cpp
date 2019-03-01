@@ -9,8 +9,6 @@
 
 #include <net/if.h>
 
-#include <glog/logging.h>
-
 #include <folly/Format.h>
 #include <folly/SocketAddress.h>
 
