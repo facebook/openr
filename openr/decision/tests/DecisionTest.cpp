@@ -140,19 +140,24 @@ const auto prefixDb4V4 = createPrefixDb(
 // (i.e. spf recalculation, route rebuild) finished
 const std::chrono::milliseconds debounceTimeout{500};
 
-using NextHop = pair<string /* ifname */, folly::IPAddress /* nexthop ip */>;
+thrift::NextHopThrift
+createNextHopFromAdj(
+    thrift::Adjacency adj,
+    bool isV4,
+    int32_t metric,
+    folly::Optional<thrift::MplsAction> mplsAction = folly::none) {
+  return createNextHop(
+      isV4 ? adj.nextHopV4 : adj.nextHopV6,
+      adj.ifName,
+      metric,
+      std::move(mplsAction));
+}
+
 // Note: use unordered_set bcoz paths in a route can be in arbitrary order
-using NextHops =
-    unordered_set<pair<NextHop /* nexthop */, int32_t /* path metric */>>;
+using NextHops = unordered_set<thrift::NextHopThrift>;
 using RouteMap = unordered_map<
     pair<string /* node name */, string /* ip prefix */>,
     NextHops>;
-
-// disable V4 by default
-NextHop
-toNextHop(thrift::Adjacency adj, bool isV4 = false) {
-  return {adj.ifName, toIPAddress(isV4 ? adj.nextHopV4 : adj.nextHopV6)};
-}
 
 // Note: routeMap will be modified
 void
@@ -163,13 +168,11 @@ fillRouteMap(
   for (auto const& route : routeDb.unicastRoutes) {
     auto prefix = toString(route.dest);
     for (const auto& nextHop : route.nextHops) {
-      const auto nextHopAddr = toIPAddress(nextHop.address);
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << nextHop.address.ifName.value() << " : " << nextHopAddr << " ("
-              << nextHop.metric << ")";
+              << nextHop.address.ifName.value() << " : "
+              << toString(nextHop.address) << " (" << nextHop.metric << ")";
 
-      routeMap[make_pair(node, prefix)].insert(
-          {{nextHop.address.ifName.value(), nextHopAddr}, nextHop.metric});
+      routeMap[make_pair(node, prefix)].emplace(nextHop);
     }
   }
 }
@@ -534,23 +537,23 @@ TEST(ConnectivityTest, OverloadNodeTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12, false), 10)}));
+      NextHops({createNextHopFromAdj(adj12, false, 10)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj23, false), 10)}));
+      NextHops({createNextHopFromAdj(adj23, false, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj21, false), 10)}));
+      NextHops({createNextHopFromAdj(adj21, false, 10)}));
 
   // validate router 3
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj32, false), 10)}));
+      NextHops({createNextHopFromAdj(adj32, false, 10)}));
 }
 
 //
@@ -668,31 +671,31 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12_old_2, false), 20),
-                make_pair(toNextHop(adj13_old, false), 20)}));
+      NextHops({createNextHopFromAdj(adj12_old_2, false, 20),
+                createNextHopFromAdj(adj13_old, false, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj13, false), 10)}));
+      NextHops({createNextHopFromAdj(adj13, false, 10)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj23, false), 10)}));
+      NextHops({createNextHopFromAdj(adj23, false, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj21, false), 10)}));
+      NextHops({createNextHopFromAdj(adj21, false, 10)}));
 
   // validate router 3
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj32, false), 10)}));
+      NextHops({createNextHopFromAdj(adj32, false, 10)}));
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj31, false), 10)}));
+      NextHops({createNextHopFromAdj(adj31, false, 10)}));
 
   // adjacency update (remove adjacency) for node1
   adjacencyDb1 = createAdjDb("1", {adj12_old_2}, 0);
@@ -765,61 +768,61 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
 
   EXPECT_THAT(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 20),
-                make_pair(toNextHop(adj13, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 20),
+                createNextHopFromAdj(adj13, v4Enabled, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj13, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj13, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 10)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj24, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj24, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj21, v4Enabled), 20),
-                make_pair(toNextHop(adj24, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj21, v4Enabled, 20),
+                createNextHopFromAdj(adj24, v4Enabled, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj21, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj21, v4Enabled, 10)}));
 
   // validate router 3
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj34, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj34, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj31, v4Enabled), 20),
-                make_pair(toNextHop(adj34, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 20),
+                createNextHopFromAdj(adj34, v4Enabled, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj31, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 10)}));
 
   // validate router 4
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj43, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj43, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 20),
-                make_pair(toNextHop(adj43, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 20),
+                createNextHopFromAdj(adj43, v4Enabled, 20)}));
 }
 
 //
@@ -833,61 +836,61 @@ TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 20),
-                make_pair(toNextHop(adj13, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 20),
+                createNextHopFromAdj(adj13, v4Enabled, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj13, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj13, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 10)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj24, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj24, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj21, v4Enabled), 20),
-                make_pair(toNextHop(adj24, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj21, v4Enabled, 20),
+                createNextHopFromAdj(adj24, v4Enabled, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj21, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj21, v4Enabled, 10)}));
 
   // validate router 3
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj34, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj34, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj31, v4Enabled), 20),
-                make_pair(toNextHop(adj34, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 20),
+                createNextHopFromAdj(adj34, v4Enabled, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj31, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 10)}));
 
   // validate router 4
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj43, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj43, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 20),
-                make_pair(toNextHop(adj43, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 20),
+                createNextHopFromAdj(adj43, v4Enabled, 20)}));
 }
 
 //
@@ -939,15 +942,15 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("2", defaultRoutePrefix)],
-      NextHops({make_pair(toNextHop(adj21, v4Enabled), 10),
-                make_pair(toNextHop(adj24, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj21, v4Enabled, 10),
+                createNextHopFromAdj(adj24, v4Enabled, 10)}));
 
   // validate router 3
 
   EXPECT_EQ(
       routeMap[make_pair("3", defaultRoutePrefix)],
-      NextHops({make_pair(toNextHop(adj31, v4Enabled), 10),
-                make_pair(toNextHop(adj34, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 10),
+                createNextHopFromAdj(adj34, v4Enabled, 10)}));
 
   // validate router 4
   // no default route boz it's attached
@@ -974,49 +977,49 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj13, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj13, v4Enabled, 10)}));
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 10)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj24, v4Enabled), 10)})); // No LFA
+      NextHops({createNextHopFromAdj(adj24, v4Enabled, 10)})); // No LFA
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr3V4 : addr3))],
       NextHops({
-          make_pair(toNextHop(adj21, v4Enabled), 20),
-          make_pair(toNextHop(adj24, v4Enabled), 20),
+          createNextHopFromAdj(adj21, v4Enabled, 20),
+          createNextHopFromAdj(adj24, v4Enabled, 20),
       }));
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj21, v4Enabled), 10)})); // No LFA
+      NextHops({createNextHopFromAdj(adj21, v4Enabled, 10)})); // No LFA
 
   // validate router 3
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj34, v4Enabled), 10)})); // No LFA
+      NextHops({createNextHopFromAdj(adj34, v4Enabled, 10)})); // No LFA
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr2V4 : addr2))],
       NextHops({
-          make_pair(toNextHop(adj31, v4Enabled), 20),
-          make_pair(toNextHop(adj34, v4Enabled), 20),
+          createNextHopFromAdj(adj31, v4Enabled, 20),
+          createNextHopFromAdj(adj34, v4Enabled, 20),
       }));
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj31, v4Enabled), 10)})); // No LFA
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 10)})); // No LFA
 
   // validate router 4
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj43, v4Enabled), 10)})); // No LFA
+      NextHops({createNextHopFromAdj(adj43, v4Enabled, 10)})); // No LFA
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 10)})); // No LFA
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 10)})); // No LFA
 }
 
 //
@@ -1036,48 +1039,48 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 20)}));
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 30)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 30)}));
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 10)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj24, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj24, v4Enabled, 10)}));
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj24, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj24, v4Enabled, 20)}));
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj21, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj21, v4Enabled, 10)}));
 
   // validate router 3
   // no routes for router 3
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj34, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj34, v4Enabled, 10)}));
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj34, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj34, v4Enabled, 20)}));
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj34, v4Enabled), 30)}));
+      NextHops({createNextHopFromAdj(adj34, v4Enabled, 30)}));
 
   // validate router 4
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({make_pair(toNextHop(adj43, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj43, v4Enabled, 10)}));
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 10)}));
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 20)}));
 
   // Now also make adj34 overloaded which will disconnect the node-3
   adjacencyDb3.adjacencies[1].isOverloaded = true;
@@ -1090,19 +1093,19 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 20)}));
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj12, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 10)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops({make_pair(toNextHop(adj24, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj24, v4Enabled, 10)}));
   EXPECT_EQ(
       routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj21, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj21, v4Enabled, 10)}));
 
   // validate router 3
   // no routes for router 3
@@ -1110,10 +1113,10 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
   // validate router 4
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 10)}));
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 10)}));
   EXPECT_EQ(
       routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops({make_pair(toNextHop(adj42, v4Enabled), 20)}));
+      NextHops({createNextHopFromAdj(adj42, v4Enabled, 20)}));
 }
 
 /* add this block comment to suppress multiline breaker "\"s below
@@ -1225,65 +1228,65 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
 
   EXPECT_THAT(
       routeMap[make_pair("1", toString(addr4))],
-      NextHops({make_pair(toNextHop(adj12_2), 22),
-                make_pair(toNextHop(adj13_1), 22),
-                make_pair(toNextHop(adj12_1), 22)}));
+      NextHops({createNextHopFromAdj(adj12_2, false, 22),
+                createNextHopFromAdj(adj13_1, false, 22),
+                createNextHopFromAdj(adj12_1, false, 22)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj13_1), 11)}));
+      NextHops({createNextHopFromAdj(adj13_1, false, 11)}));
 
   EXPECT_THAT(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12_2), 11),
-                make_pair(toNextHop(adj12_1), 11)}));
+      NextHops({createNextHopFromAdj(adj12_2, false, 11),
+                createNextHopFromAdj(adj12_1, false, 11)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr4))],
-      NextHops({make_pair(toNextHop(adj24_1), 11)}));
+      NextHops({createNextHopFromAdj(adj24_1, false, 11)}));
 
   EXPECT_THAT(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj21_2), 22),
-                make_pair(toNextHop(adj21_1), 22),
-                make_pair(toNextHop(adj24_1), 22)}));
+      NextHops({createNextHopFromAdj(adj21_2, false, 22),
+                createNextHopFromAdj(adj21_1, false, 22),
+                createNextHopFromAdj(adj24_1, false, 22)}));
 
   EXPECT_THAT(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj21_2), 11),
-                make_pair(toNextHop(adj21_1), 11)}));
+      NextHops({createNextHopFromAdj(adj21_2, false, 11),
+                createNextHopFromAdj(adj21_1, false, 11)}));
 
   // validate router 3
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr4))],
-      NextHops({make_pair(toNextHop(adj34_1), 11)}));
+      NextHops({createNextHopFromAdj(adj34_1, false, 11)}));
 
   EXPECT_THAT(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj31_1), 22),
-                make_pair(toNextHop(adj34_1), 22)}));
+      NextHops({createNextHopFromAdj(adj31_1, false, 22),
+                createNextHopFromAdj(adj34_1, false, 22)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj31_1), 11)}));
+      NextHops({createNextHopFromAdj(adj31_1, false, 11)}));
 
   // validate router 4
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj43_1), 11)}));
+      NextHops({createNextHopFromAdj(adj43_1, false, 11)}));
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj42_1), 11)}));
+      NextHops({createNextHopFromAdj(adj42_1, false, 11)}));
 
   EXPECT_THAT(
       routeMap[make_pair("4", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj42_1), 22),
-                make_pair(toNextHop(adj43_1), 22)}));
+      NextHops({createNextHopFromAdj(adj42_1, false, 22),
+                createNextHopFromAdj(adj43_1, false, 22)}));
 }
 
 //
@@ -1298,77 +1301,77 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
   // adj "2/3" is also selected in spite of large metric
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr4))],
-      NextHops({make_pair(toNextHop(adj12_1), 22),
-                make_pair(toNextHop(adj12_2), 22),
-                make_pair(toNextHop(adj12_3), 31),
-                make_pair(toNextHop(adj13_1), 22)}));
+      NextHops({createNextHopFromAdj(adj12_1, false, 22),
+                createNextHopFromAdj(adj12_2, false, 22),
+                createNextHopFromAdj(adj12_3, false, 31),
+                createNextHopFromAdj(adj13_1, false, 22)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj13_1), 11)}));
+      NextHops({createNextHopFromAdj(adj13_1, false, 11)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12_1), 11),
-                make_pair(toNextHop(adj12_2), 11),
-                make_pair(toNextHop(adj12_3), 20)}));
+      NextHops({createNextHopFromAdj(adj12_1, false, 11),
+                createNextHopFromAdj(adj12_2, false, 11),
+                createNextHopFromAdj(adj12_3, false, 20)}));
 
   // validate router 2
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr4))],
-      NextHops({make_pair(toNextHop(adj24_1), 11)}));
+      NextHops({createNextHopFromAdj(adj24_1, false, 11)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj21_1), 22),
-                make_pair(toNextHop(adj21_2), 22),
-                make_pair(toNextHop(adj21_3), 31),
-                make_pair(toNextHop(adj24_1), 22)}));
+      NextHops({createNextHopFromAdj(adj21_1, false, 22),
+                createNextHopFromAdj(adj21_2, false, 22),
+                createNextHopFromAdj(adj21_3, false, 31),
+                createNextHopFromAdj(adj24_1, false, 22)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj21_1), 11),
-                make_pair(toNextHop(adj21_2), 11),
-                make_pair(toNextHop(adj21_3), 20)}));
+      NextHops({createNextHopFromAdj(adj21_1, false, 11),
+                createNextHopFromAdj(adj21_2, false, 11),
+                createNextHopFromAdj(adj21_3, false, 20)}));
 
   // validate router 3
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr4))],
-      NextHops({make_pair(toNextHop(adj34_1), 11),
-                make_pair(toNextHop(adj34_2), 20),
-                make_pair(toNextHop(adj34_3), 20)}));
+      NextHops({createNextHopFromAdj(adj34_1, false, 11),
+                createNextHopFromAdj(adj34_2, false, 20),
+                createNextHopFromAdj(adj34_3, false, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj31_1), 22),
-                make_pair(toNextHop(adj34_1), 22),
-                make_pair(toNextHop(adj34_2), 31),
-                make_pair(toNextHop(adj34_3), 31)}));
+      NextHops({createNextHopFromAdj(adj31_1, false, 22),
+                createNextHopFromAdj(adj34_1, false, 22),
+                createNextHopFromAdj(adj34_2, false, 31),
+                createNextHopFromAdj(adj34_3, false, 31)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj31_1), 11)}));
+      NextHops({createNextHopFromAdj(adj31_1, false, 11)}));
 
   // validate router 4
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj43_1), 11),
-                make_pair(toNextHop(adj43_2), 20),
-                make_pair(toNextHop(adj43_3), 20)}));
+      NextHops({createNextHopFromAdj(adj43_1, false, 11),
+                createNextHopFromAdj(adj43_2, false, 20),
+                createNextHopFromAdj(adj43_3, false, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj42_1), 11)}));
+      NextHops({createNextHopFromAdj(adj42_1, false, 11)}));
 
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj42_1), 22),
-                make_pair(toNextHop(adj43_1), 22),
-                make_pair(toNextHop(adj43_2), 31),
-                make_pair(toNextHop(adj43_3), 31)}));
+      NextHops({createNextHopFromAdj(adj42_1, false, 22),
+                createNextHopFromAdj(adj43_1, false, 22),
+                createNextHopFromAdj(adj43_2, false, 31),
+                createNextHopFromAdj(adj43_3, false, 31)}));
 }
 
 //
@@ -1502,7 +1505,7 @@ TEST_P(GridTopologyFixture, ShortestPathTest) {
             << gridDistance(src, dst, n);
   nextHops =
       routeMap[make_pair(folly::sformat("{}", src), nodeToPrefixV6(dst))];
-  EXPECT_EQ(gridDistance(src, dst, n), nextHops.begin()->second);
+  EXPECT_EQ(gridDistance(src, dst, n), nextHops.begin()->metric);
 
   // secondary diagnal
   src = n - 1;
@@ -1511,7 +1514,7 @@ TEST_P(GridTopologyFixture, ShortestPathTest) {
             << gridDistance(src, dst, n);
   nextHops =
       routeMap[make_pair(folly::sformat("{}", src), nodeToPrefixV6(dst))];
-  EXPECT_EQ(gridDistance(src, dst, n), nextHops.begin()->second);
+  EXPECT_EQ(gridDistance(src, dst, n), nextHops.begin()->metric);
 
   // 2) from origin (i.e., node 0) to random inner node
   src = 0;
@@ -1520,7 +1523,7 @@ TEST_P(GridTopologyFixture, ShortestPathTest) {
             << gridDistance(src, dst, n);
   nextHops =
       routeMap[make_pair(folly::sformat("{}", src), nodeToPrefixV6(dst))];
-  EXPECT_EQ(gridDistance(src, dst, n), nextHops.begin()->second);
+  EXPECT_EQ(gridDistance(src, dst, n), nextHops.begin()->metric);
 
   // 3) from one random node to another
   src = folly::Random::rand32() % (n * n);
@@ -1530,7 +1533,7 @@ TEST_P(GridTopologyFixture, ShortestPathTest) {
             << gridDistance(src, dst, n);
   nextHops =
       routeMap[make_pair(folly::sformat("{}", src), nodeToPrefixV6(dst))];
-  EXPECT_EQ(gridDistance(src, dst, n), nextHops.begin()->second);
+  EXPECT_EQ(gridDistance(src, dst, n), nextHops.begin()->metric);
 }
 
 // measure SPF execution time for large networks
@@ -1752,7 +1755,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12), 10)}));
+      NextHops({createNextHopFromAdj(adj12, false, 10)}));
   //
   // publish the link state info to KvStore via the KvStore pub socket
   // we simulate adding a new router R3
@@ -1782,11 +1785,11 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   // 1
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12), 10)}));
+      NextHops({createNextHopFromAdj(adj12, false, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj12), 20)}));
+      NextHops({createNextHopFromAdj(adj12, false, 20)}));
 
   // dump other nodes' routeDB
   auto routeDbMap = dumpRouteDatabase(decisionReq, {"2", "3"}, serializer);
@@ -1799,20 +1802,20 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   // 2
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj21), 10)}));
+      NextHops({createNextHopFromAdj(adj21, false, 10)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops({make_pair(toNextHop(adj23), 10)}));
+      NextHops({createNextHopFromAdj(adj23, false, 10)}));
 
   // 3
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj32), 20)}));
+      NextHops({createNextHopFromAdj(adj32, false, 20)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj32), 10)}));
+      NextHops({createNextHopFromAdj(adj32, false, 10)}));
 
   // remove 3
   publication = thrift::Publication(
@@ -1828,7 +1831,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12), 10)}));
+      NextHops({createNextHopFromAdj(adj12, false, 10)}));
 }
 
 // The following topology is used:
@@ -1871,8 +1874,8 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12_1), 100),
-                make_pair(toNextHop(adj12_2), 800)}));
+      NextHops({createNextHopFromAdj(adj12_1, false, 100),
+                createNextHopFromAdj(adj12_2, false, 800)}));
 
   publication = thrift::Publication(
       FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {}, {}, {});
@@ -1885,7 +1888,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12_2), 800)}));
+      NextHops({createNextHopFromAdj(adj12_2, false, 800)}));
 
   // restore the original state
   publication = thrift::Publication(
@@ -1903,8 +1906,8 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12_1), 100),
-                make_pair(toNextHop(adj12_2), 800)}));
+      NextHops({createNextHopFromAdj(adj12_1, false, 100),
+                createNextHopFromAdj(adj12_2, false, 800)}));
 
   // overload the least cost link
   auto adj21_1_overloaded = adj21_1;
@@ -1925,7 +1928,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj12_2), 800)}));
+      NextHops({createNextHopFromAdj(adj12_2, false, 800)}));
 }
 
 // The following topology is used:
@@ -2214,35 +2217,35 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
   // 1
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops(
-          {make_pair(toNextHop(adj12), 10), make_pair(toNextHop(adj13), 17)}));
+      NextHops({createNextHopFromAdj(adj12, false, 10),
+                createNextHopFromAdj(adj13, false, 17)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
-      NextHops(
-          {make_pair(toNextHop(adj12), 19), make_pair(toNextHop(adj13), 8)}));
+      NextHops({createNextHopFromAdj(adj12, false, 19),
+                createNextHopFromAdj(adj13, false, 8)}));
 
   // 2
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops(
-          {make_pair(toNextHop(adj21), 10), make_pair(toNextHop(adj23), 17)}));
+      NextHops({createNextHopFromAdj(adj21, false, 10),
+                createNextHopFromAdj(adj23, false, 17)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops(
-          {make_pair(toNextHop(adj21), 18), make_pair(toNextHop(adj23), 9)}));
+      NextHops({createNextHopFromAdj(adj21, false, 18),
+                createNextHopFromAdj(adj23, false, 9)}));
 
   // 3
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops(
-          {make_pair(toNextHop(adj31), 8), make_pair(toNextHop(adj32), 19)}));
+      NextHops({createNextHopFromAdj(adj31, false, 8),
+                createNextHopFromAdj(adj32, false, 19)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops(
-          {make_pair(toNextHop(adj31), 18), make_pair(toNextHop(adj32), 9)}));
+      NextHops({createNextHopFromAdj(adj31, false, 18),
+                createNextHopFromAdj(adj32, false, 9)}));
 
   /**
    * Increase the distance between node-1 and node-2 to 100. Now we won't have
@@ -2281,33 +2284,33 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
   // 1
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops(
-          {make_pair(toNextHop(adj12), 100), make_pair(toNextHop(adj13), 17)}));
+      NextHops({createNextHopFromAdj(adj12, false, 100),
+                createNextHopFromAdj(adj13, false, 17)}));
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
-      NextHops(
-          {make_pair(toNextHop(adj12), 109), make_pair(toNextHop(adj13), 8)}));
+      NextHops({createNextHopFromAdj(adj12, false, 109),
+                createNextHopFromAdj(adj13, false, 8)}));
 
   // 2
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops(
-          {make_pair(toNextHop(adj21), 100), make_pair(toNextHop(adj23), 17)}));
+      NextHops({createNextHopFromAdj(adj21, false, 100),
+                createNextHopFromAdj(adj23, false, 17)}));
 
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
-      NextHops(
-          {make_pair(toNextHop(adj21), 108), make_pair(toNextHop(adj23), 9)}));
+      NextHops({createNextHopFromAdj(adj21, false, 108),
+                createNextHopFromAdj(adj23, false, 9)}));
 
   // 3
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj31), 8)}));
+      NextHops({createNextHopFromAdj(adj31, false, 8)}));
 
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj32), 9)}));
+      NextHops({createNextHopFromAdj(adj32, false, 9)}));
 }
 
 /**
@@ -2375,26 +2378,26 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   EXPECT_EQ(2, routeMapList["1"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops(
-          {make_pair(toNextHop(adj12), 10), make_pair(toNextHop(adj13), 10)}));
+      NextHops({createNextHopFromAdj(adj12, false, 10),
+                createNextHopFromAdj(adj13, false, 10)}));
 
   // 2
   EXPECT_EQ(2, routeMapList["2"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj21), 10)}));
+      NextHops({createNextHopFromAdj(adj21, false, 10)}));
 
   // 3
   EXPECT_EQ(2, routeMapList["3"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj31), 10)}));
+      NextHops({createNextHopFromAdj(adj31, false, 10)}));
 
   // 4
   EXPECT_EQ(2, routeMapList["4"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj41), 15)}));
+      NextHops({createNextHopFromAdj(adj41, false, 15)}));
 
   /**
    * Increase the distance between node-1 and node-2 to 100. Now we on node-1
@@ -2442,26 +2445,26 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   EXPECT_EQ(2, routeMapList["1"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops(
-          {make_pair(toNextHop(adj13), 10), make_pair(toNextHop(adj12), 100)}));
+      NextHops({createNextHopFromAdj(adj13, false, 10),
+                createNextHopFromAdj(adj12, false, 100)}));
 
   // 2
   EXPECT_EQ(2, routeMapList["2"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj21), 100)}));
+      NextHops({createNextHopFromAdj(adj21, false, 100)}));
 
   // 3
   EXPECT_EQ(2, routeMapList["3"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr1))],
-      NextHops({make_pair(toNextHop(adj31), 10)}));
+      NextHops({createNextHopFromAdj(adj31, false, 10)}));
 
   // 4
   EXPECT_EQ(2, routeMapList["4"].unicastRoutes.size());
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
-      NextHops({make_pair(toNextHop(adj41), 15)}));
+      NextHops({createNextHopFromAdj(adj41, false, 15)}));
 }
 
 /**

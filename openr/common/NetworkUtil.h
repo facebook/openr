@@ -43,6 +43,14 @@ struct hash<openr::thrift::MplsAction> {
 };
 
 /**
+ * Make NextHopThrift hashable
+ */
+template <>
+struct hash<openr::thrift::NextHopThrift> {
+  size_t operator()(openr::thrift::NextHopThrift const&) const;
+};
+
+/**
  * Make UnicastRoute hashable
  */
 template <>

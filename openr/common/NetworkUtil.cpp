@@ -50,6 +50,21 @@ hash<openr::thrift::MplsAction>::operator()(
 }
 
 /**
+ * Make NextHopThrift hashable
+ */
+size_t
+hash<openr::thrift::NextHopThrift>::operator()(
+    openr::thrift::NextHopThrift const& nextHop) const {
+  size_t res = hash<openr::thrift::BinaryAddress>()(nextHop.address);
+  res += hash<int32_t>()(nextHop.weight);
+  res += hash<int32_t>()(nextHop.metric);
+  if (nextHop.mplsAction.hasValue()) {
+    res += hash<openr::thrift::MplsAction>()(nextHop.mplsAction.value());
+  }
+  return res;
+}
+
+/**
  * Make UnicastRoute hashable
  */
 size_t
