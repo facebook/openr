@@ -197,9 +197,11 @@ class SpfSolver::SpfSolverImpl {
       spfResults_;
 
   // For each prefix in the network, stores a set of nodes that advertise it
-  std::unordered_map<thrift::IpPrefix, std::unordered_set<std::string>>
+  std::unordered_map<
+      thrift::IpPrefix,
+      std::unordered_map<std::string, thrift::PrefixEntry>>
       prefixes_;
-  std::unordered_map<std::string, thrift::PrefixDatabase> prefixDatabases_;
+  std::unordered_map<std::string, std::set<thrift::IpPrefix>> nodeToPrefixes_;
 
   // track some stats
   fbzmq::ThreadData tData_;
@@ -385,87 +387,94 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
   VLOG(1) << "Updating prefix database for node " << nodeName;
   tData_.addStatValue("decision.prefix_db_update", 1, fbzmq::COUNT);
 
-  std::set<thrift::IpPrefix> oldPrefixSet;
-  for (const auto& prefixEntry : prefixDatabases_[nodeName].prefixEntries) {
-    oldPrefixSet.emplace(prefixEntry.prefix);
-  }
+  // Get old and new set of prefixes - NOTE explicit copy
+  const std::set<thrift::IpPrefix> oldPrefixSet = nodeToPrefixes_[nodeName];
 
   // update the entry
-  prefixDatabases_[nodeName] = prefixDb;
-  std::set<thrift::IpPrefix> newPrefixSet;
+  auto& newPrefixSet = nodeToPrefixes_[nodeName];
+  newPrefixSet.clear();
   for (const auto& prefixEntry : prefixDb.prefixEntries) {
     newPrefixSet.emplace(prefixEntry.prefix);
   }
 
-  std::set<thrift::IpPrefix> prefixesToRemove;
-  std::set_difference(
-      oldPrefixSet.begin(),
-      oldPrefixSet.end(),
-      newPrefixSet.begin(),
-      newPrefixSet.end(),
-      std::inserter(prefixesToRemove, prefixesToRemove.begin()));
+  // Boolean to indicate update in prefix entry
+  bool isUpdated{false};
 
-  std::set<thrift::IpPrefix> prefixesToAdd;
-  std::set_difference(
-      newPrefixSet.begin(),
-      newPrefixSet.end(),
-      oldPrefixSet.begin(),
-      oldPrefixSet.end(),
-      std::inserter(prefixesToAdd, prefixesToAdd.begin()));
-
-  for (const auto& prefix : prefixesToRemove) {
+  // Remove old prefixes first
+  for (const auto& prefix : oldPrefixSet) {
+    if (newPrefixSet.count(prefix)) {
+      continue;
+    }
     VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
             << nodeName;
     auto& nodeList = prefixes_.at(prefix);
     nodeList.erase(nodeName);
+    isUpdated = true;
     if (nodeList.empty()) {
       prefixes_.erase(prefix);
     }
   }
-  for (const auto& prefix : prefixesToAdd) {
-    prefixes_[prefix].emplace(nodeName);
-    VLOG(1) << "Prefix " << toString(prefix) << " has been advertised by node "
-            << nodeName;
+  for (const auto& prefixEntry : prefixDb.prefixEntries) {
+    auto& nodeList = prefixes_[prefixEntry.prefix];
+    auto nodePrefixIt = nodeList.find(nodeName);
+    if (nodePrefixIt == nodeList.end()) {
+      VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
+              << " has been advertised by node " << nodeName;
+      nodeList.emplace(nodeName, prefixEntry);
+      isUpdated = true;
+    } else if (nodePrefixIt->second != prefixEntry) {
+      VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
+              << " has been updated by node " << nodeName;
+      nodeList[nodeName] = prefixEntry;
+      isUpdated = true;
+    }
   }
 
-  return !(prefixesToAdd.empty() && prefixesToRemove.empty());
+  return isUpdated;
 }
 
 bool
 SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
   VLOG(1) << "Deleting prefix database for node " << nodeName;
-  auto search = prefixDatabases_.find(nodeName);
-  if (search == prefixDatabases_.end() ||
-      search->second.prefixEntries.empty()) {
-    LOG(INFO) << "Trying to delete empty or non-existent prefix db for node "
+  auto search = nodeToPrefixes_.find(nodeName);
+  if (search == nodeToPrefixes_.end()) {
+    LOG(INFO) << "Trying to delete non-existent prefix db for node "
               << nodeName;
-    if (search != prefixDatabases_.end()) {
-      prefixDatabases_.erase(search);
-    }
     return false;
   }
 
-  for (const auto& prefixEntry : search->second.prefixEntries) {
+  bool isUpdated = false;
+  for (const auto& prefix : search->second) {
     try {
-      auto& nodeList = prefixes_.at(prefixEntry.prefix);
+      auto& nodeList = prefixes_.at(prefix);
       nodeList.erase(nodeName);
-      VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
-              << " has been withdrawn by " << nodeName;
+      isUpdated = true;
+      VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
+              << nodeName;
       if (nodeList.empty()) {
-        prefixes_.erase(prefixEntry.prefix);
+        prefixes_.erase(prefix);
       }
     } catch (std::out_of_range const& e) {
       LOG(FATAL) << "std::out_of_range prefix error for " << nodeName;
     }
   }
 
-  prefixDatabases_.erase(search);
-  return true;
+  nodeToPrefixes_.erase(search);
+  return isUpdated;
 }
 
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
 SpfSolver::SpfSolverImpl::getPrefixDatabases() {
-  return prefixDatabases_;
+  std::unordered_map<std::string, thrift::PrefixDatabase> prefixDatabases;
+  for (auto const& kv : nodeToPrefixes_) {
+    thrift::PrefixDatabase prefixDb;
+    prefixDb.thisNodeName = kv.first;
+    for (auto const& prefix : kv.second) {
+      prefixDb.prefixEntries.emplace_back(prefixes_.at(prefix).at(kv.first));
+    }
+    prefixDatabases.emplace(kv.first, std::move(prefixDb));
+  }
+  return prefixDatabases;
 }
 
 /**
@@ -600,8 +609,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   //
   for (const auto& kv : prefixes_) {
     const auto& prefix = kv.first;
-    const auto& nodesWithPrefix = kv.second;
-    if (nodesWithPrefix.count(myNodeName)) {
+    const auto& nodePrefixes = kv.second;
+    if (nodePrefixes.count(myNodeName)) {
       // skip adding route for prefixes advertised by this node
       continue;
     }
@@ -616,25 +625,30 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
 
     // find the set of the closest nodes that advertise this prefix
     std::unordered_set<std::string> minCostNodes;
-    for (const auto& node : nodesWithPrefix) {
+    for (const auto& nodePrefix : nodePrefixes) {
       try {
-        const auto nodeDistance = shortestPathsFromHere.at(node).first;
+        const auto nodeDistance =
+            shortestPathsFromHere.at(nodePrefix.first).first;
         if (prefixMetric >= nodeDistance) {
           if (prefixMetric > nodeDistance) {
             prefixMetric = nodeDistance;
             minCostNodes.clear();
           }
-          minCostNodes.emplace(node);
+          minCostNodes.emplace(nodePrefix.first);
         }
       } catch (std::out_of_range const& e) {
-        LOG(WARNING) << "No path to " << node << " from " << myNodeName
-                     << " for prefix: " << toString(prefix);
+        LOG(WARNING) << "No path to " << nodePrefix.first << " from "
+                     << myNodeName << " for prefix: " << toString(prefix);
       }
     }
 
     if (minCostNodes.empty()) {
+      std::vector<std::string> prefixNodes;
+      for (auto const& nodePrefix : nodePrefixes) {
+        prefixNodes.emplace_back(nodePrefix.first);
+      }
       LOG(WARNING) << "No route to prefix " << toString(prefix)
-                   << ", advertised by: " << folly::join(", ", nodesWithPrefix);
+                   << ", advertised by: " << folly::join(", ", prefixNodes);
       tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
       continue;
     }
@@ -664,15 +678,15 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
           continue;
         }
         Metric distanceFromNeighbor = std::numeric_limits<Metric>::max();
-        for (const auto& node : nodesWithPrefix) {
+        for (const auto& nodePrefix : nodePrefixes) {
           try {
-            const auto d = shortestPathsFromNeighbor.at(node).first;
+            const auto d = shortestPathsFromNeighbor.at(nodePrefix.first).first;
             if (distanceFromNeighbor > d) {
               distanceFromNeighbor = d;
             }
           } catch (std::out_of_range const& e) {
-            LOG(WARNING) << "No path to " << node << " from neighbor "
-                         << neighborName;
+            LOG(WARNING) << "No path to " << nodePrefix.first
+                         << " from neighbor " << neighborName;
           }
         }
         Metric neighborToHere = shortestPathsFromNeighbor.at(myNodeName).first;

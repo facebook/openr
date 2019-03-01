@@ -306,6 +306,32 @@ TEST(ShortestPathTest, UnknownNode) {
 }
 
 /**
+ * Test to verify prefixDatabase update
+ */
+TEST(SpfSolver, PrefixUpdate) {
+  std::string nodeName("1");
+  SpfSolver spfSolver(
+      nodeName, false /* disable v4 */, false /* disable LFA */);
+
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
+  EXPECT_FALSE(spfSolver.updatePrefixDatabase(prefixDb1));
+  EXPECT_EQ(prefixDb1, spfSolver.getPrefixDatabases().at(nodeName));
+
+  auto prefixDb1Updated = prefixDb1;
+  prefixDb1Updated.prefixEntries.at(0).type = thrift::PrefixType::BREEZE;
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1Updated));
+  EXPECT_FALSE(spfSolver.updatePrefixDatabase(prefixDb1Updated));
+  EXPECT_EQ(prefixDb1Updated, spfSolver.getPrefixDatabases().at(nodeName));
+
+  prefixDb1Updated = prefixDb1;
+  prefixDb1Updated.prefixEntries.at(0).forwardingType =
+      thrift::PrefixForwardingType::SR_MPLS;
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1Updated));
+  EXPECT_FALSE(spfSolver.updatePrefixDatabase(prefixDb1Updated));
+  EXPECT_EQ(prefixDb1Updated, spfSolver.getPrefixDatabases().at(nodeName));
+}
+
+/**
  * Test to verify adjacencyDatabase update
  */
 TEST(SpfSolver, AdjacencyUpdate) {
