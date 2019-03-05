@@ -9,6 +9,7 @@
 
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/Thrift.h>
 
 #include <openr/common/Constants.h>
@@ -133,12 +134,24 @@ toString(const thrift::IpPrefix& ipPrefix) {
 }
 
 inline std::string
+toString(const thrift::MplsAction& mplsAction) {
+  return folly::sformat(
+      "mpls {} {}{}",
+      apache::thrift::util::enumNameSafe(mplsAction.action),
+      mplsAction.swapLabel ? std::to_string(*mplsAction.swapLabel) : "",
+      mplsAction.pushLabels ? folly::join("/", *mplsAction.pushLabels) : "");
+}
+
+inline std::string
 toString(const thrift::NextHopThrift& nextHop) {
   return folly::sformat(
-      "via {} dev {} weight {}",
+      "via {} dev {} weight {} metric {} {}",
       toIPAddress(nextHop.address).str(),
       nextHop.address.ifName.value_or("N/A"),
-      nextHop.weight);
+      nextHop.weight,
+      nextHop.metric,
+      nextHop.mplsAction.hasValue() ? toString(nextHop.mplsAction.value())
+                                    : "");
 }
 
 } // namespace openr
