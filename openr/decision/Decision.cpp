@@ -188,11 +188,15 @@ class SpfSolver::SpfSolverImpl {
   // This function converts best nexthop nodes to best nexthop adjacencies
   // which can then be passed to FIB for programming. It considers LFA and
   // parallel link logic (tested by our UT)
+  // If swap label is provided then it will be used to associate SWAP or PHP
+  // mpls action
   std::vector<thrift::NextHopThrift> getNextHopsThrift(
       const std::string& myNodeName,
+      const std::set<std::string>& dstNodeNames,
       bool isV4,
       const Metric minMetric,
-      std::unordered_map<std::string, Metric> nextHopNodes) const;
+      std::unordered_map<std::string, Metric> nextHopNodes,
+      folly::Optional<int32_t> swapLabel) const;
 
   Metric findMinDistToNeighbor(
       const std::string& myNodeName, const std::string& neighborName) const;
@@ -271,6 +275,12 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
       newAdjacencyDb.isOverloaded != priorAdjacencyDb.isOverloaded;
 
   bool routeAttrChanged = false;
+
+  // Check for nodeLabel change for myself. If changed we will need to update
+  // POP route for local node
+  if (myNodeName_ == nodeName) {
+    routeAttrChanged |= priorAdjacencyDb.nodeLabel != newAdjacencyDb.nodeLabel;
+  }
 
   auto newIter = newLinks.begin();
   auto oldIter = oldLinks.begin();
@@ -660,8 +670,64 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     routeDb.unicastRoutes.emplace_back(createUnicastRoute(
         prefix,
         getNextHopsThrift(
-            myNodeName, isV4Prefix, metricNhs.first, metricNhs.second)));
+            myNodeName,
+            prefixNodes,
+            isV4Prefix,
+            metricNhs.first,
+            metricNhs.second,
+            folly::none)));
   } // for prefixes_
+
+  //
+  // Create MPLS routes for all nodeLabel
+  //
+  for (const auto& kv : adjacencyDatabases_) {
+    const auto& adjDb = kv.second;
+    const auto topLabel = adjDb.nodeLabel;
+    // Top label is not set => Non-SR mode
+    if (topLabel == 0) {
+      continue;
+    }
+    // If mpls label is not valid then ignore it
+    if (not isMplsLabelValid(topLabel)) {
+      LOG(ERROR) << "Ignoring invalid node label " << topLabel << " of node "
+                 << adjDb.thisNodeName;
+      continue;
+    }
+
+    // Install POP_AND_LOOKUP for next layer
+    if (adjDb.thisNodeName == myNodeName) {
+      thrift::NextHopThrift nh;
+      nh.address = toBinaryAddress(folly::IPAddressV6("::"));
+      nh.mplsAction = createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+      routeDb.mplsRoutes.emplace_back(
+          createMplsRoute(topLabel, {std::move(nh)}));
+      continue;
+    }
+
+    // Get best nexthop towards the node
+    auto metricNhs = getNextHopsWithMetric(myNodeName, {adjDb.thisNodeName});
+    if (metricNhs.second.empty()) {
+      LOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
+                   << " of node " << adjDb.thisNodeName;
+      tData_.addStatValue("decision.no_route_to_label", 1, fbzmq::COUNT);
+      continue;
+    }
+
+    // Create nexthops with appropriate MplsAction (PHP and SWAP). Note that all
+    // nexthops are valid for routing without loops. Fib is responsible for
+    // installing these routes by making sure it programs least cost nexthops
+    // first and of same action type (based on HW limitations)
+    auto nextHopsThrift = getNextHopsThrift(
+        myNodeName,
+        {adjDb.thisNodeName},
+        false,
+        metricNhs.first,
+        metricNhs.second,
+        topLabel);
+    routeDb.mplsRoutes.emplace_back(
+        createMplsRoute(topLabel, std::move(nextHopsThrift)));
+  }
 
   //
   // Create MPLS routes for all of our adjacencies
@@ -672,7 +738,6 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     if (topLabel == 0) {
       continue;
     }
-
     // If mpls label is not valid then ignore it
     if (not isMplsLabelValid(topLabel)) {
       LOG(ERROR) << "Ignoring invalid adjacency label " << topLabel
@@ -778,9 +843,11 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
 std::vector<thrift::NextHopThrift>
 SpfSolver::SpfSolverImpl::getNextHopsThrift(
     const std::string& myNodeName,
+    const std::set<std::string>& dstNodeNames,
     bool isV4,
     const Metric minMetric,
-    std::unordered_map<std::string, Metric> nextHopNodes) const {
+    std::unordered_map<std::string, Metric> nextHopNodes,
+    folly::Optional<int32_t> swapLabel) const {
   CHECK(not nextHopNodes.empty());
 
   std::vector<thrift::NextHopThrift> nextHops;
@@ -799,13 +866,25 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
       continue;
     }
 
+    // Create associated mpls action if swapLabel is provided
+    folly::Optional<thrift::MplsAction> mplsAction;
+    if (swapLabel.hasValue()) {
+      const bool isNextHopAlsoDst =
+          dstNodeNames.count(link->getOtherNodeName(myNodeName));
+      mplsAction = createMplsAction(
+          isNextHopAlsoDst ? thrift::MplsActionCode::PHP
+                           : thrift::MplsActionCode::SWAP,
+          isNextHopAlsoDst ? folly::none : swapLabel);
+    }
+
     // if we are computing LFA paths, any nexthop to the node will do
     // otherwise, we only want those nexthops along a shortest path
     nextHops.emplace_back(createNextHop(
         isV4 ? link->getNhV4FromNode(myNodeName)
              : link->getNhV6FromNode(myNodeName),
         link->getIfaceFromNode(myNodeName),
-        distOverLink));
+        distOverLink,
+        mplsAction));
   }
 
   return nextHops;
