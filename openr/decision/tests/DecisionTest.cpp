@@ -148,6 +148,8 @@ const thrift::MplsAction labelSwapAction3{
     createMplsAction(thrift::MplsActionCode::SWAP, 3)};
 const thrift::MplsAction labelSwapAction4{
     createMplsAction(thrift::MplsActionCode::SWAP, 4)};
+const thrift::MplsAction labelSwapAction5{
+    createMplsAction(thrift::MplsActionCode::SWAP, 5)};
 
 const thrift::NextHopThrift labelPopNextHop{
     apache::thrift::FRAGILE,
@@ -1886,6 +1888,314 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
 
   validatePopLabelRoute(routeMap, "4", adjacencyDb4.nodeLabel);
   validateAdjLabelRoutes(routeMap, "4", adjacencyDb4.adjacencies);
+}
+
+/**
+ * Topology
+ *        R2 - - - - - - R4
+ *      //   \   10      /
+ *    // 10   \        /
+ *  //         \10   / 20
+ * R1            \  /
+ *   \           /
+ *     \ 10    /  \
+ *       \   /      \
+ *        R3 - - - - R5
+ *              10
+ *
+ * Node-4, Node-5 announces the default route. We validates following
+ * - IP2MPLS routes for prefixes announced from each node
+ * - MPLS routes for each node
+ * - No adjacency routes were accounted
+ */
+TEST(DecisionTest, Ip2MplsRoutes) {
+  std::string nodeName("1");
+  auto spfSolver = std::make_unique<SpfSolver>(nodeName, false, true);
+
+  // R1
+  auto adj12_1 =
+      createAdjacency("2", "2/1", "1/1", "fe80::2", "192.168.1.2", 10, 0);
+  auto adj12_2 =
+      createAdjacency("2", "2/2", "1/2", "fe80::2", "192.168.1.2", 10, 0);
+  auto adj13 =
+      createAdjacency("3", "3/1", "1/1", "fe80::3", "192.168.1.3", 10, 0);
+  // R2
+  auto adj21_1 =
+      createAdjacency("1", "1/1", "2/1", "fe80::1", "192.168.1.1", 10, 0);
+  auto adj21_2 =
+      createAdjacency("1", "1/2", "2/2", "fe80::1", "192.168.1.1", 10, 0);
+  auto adj24 =
+      createAdjacency("4", "4/1", "2/1", "fe80::4", "192.168.1.4", 10, 0);
+  auto adj25 =
+      createAdjacency("5", "5/1", "2/1", "fe80::5", "192.168.1.5", 10, 0);
+  // R3
+  auto adj31 =
+      createAdjacency("1", "1/1", "3/1", "fe80::1", "192.168.1.1", 10, 0);
+  auto adj34 =
+      createAdjacency("4", "4/1", "3/1", "fe80::4", "192.168.1.4", 20, 0);
+  auto adj35 =
+      createAdjacency("5", "5/1", "3/1", "fe80::5", "192.168.1.5", 10, 0);
+  // R4
+  auto adj42 =
+      createAdjacency("2", "2/1", "4/1", "fe80::2", "192.168.1.2", 10, 0);
+  auto adj43 =
+      createAdjacency("3", "3/1", "4/1", "fe80::3", "192.168.1.3", 20, 0);
+  // R5
+  auto adj52 =
+      createAdjacency("2", "2/1", "5/1", "fe80::2", "192.168.1.2", 10, 0);
+  auto adj53 =
+      createAdjacency("3", "3/1", "5/1", "fe80::3", "192.168.1.3", 10, 0);
+
+  auto adjacencyDb1 = createAdjDb("1", {adj12_1, adj12_2, adj13}, 1);
+  auto adjacencyDb2 = createAdjDb("2", {adj21_1, adj21_2, adj24, adj25}, 2);
+  auto adjacencyDb3 = createAdjDb("3", {adj31, adj34, adj35}, 3);
+  auto adjacencyDb4 = createAdjDb("4", {adj42, adj43}, 4);
+  auto adjacencyDb5 = createAdjDb("5", {adj52, adj53}, 5);
+
+  // Adjacency db's
+  EXPECT_FALSE(spfSolver->updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb2).first);
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb3).first);
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb4).first);
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb5).first);
+
+  // Prefix db's
+  const auto defaultPrefixV6 = toIpPrefix("::/0");
+  const auto prefixDb1_ = createPrefixDb(
+      "1",
+      {{FRAGILE,
+        addr1,
+        thrift::PrefixType::LOOPBACK,
+        {},
+        thrift::PrefixForwardingType::SR_MPLS}});
+  EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb1_));
+  const auto prefixDb2_ = createPrefixDb(
+      "2",
+      {{FRAGILE,
+        addr2,
+        thrift::PrefixType::LOOPBACK,
+        {},
+        thrift::PrefixForwardingType::SR_MPLS}});
+  EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb2_));
+  const auto prefixDb3_ = createPrefixDb(
+      "3",
+      {{FRAGILE,
+        addr3,
+        thrift::PrefixType::LOOPBACK,
+        {},
+        thrift::PrefixForwardingType::SR_MPLS}});
+  EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb3_));
+  const auto prefixDb4_ = createPrefixDb(
+      "4",
+      {{FRAGILE,
+        defaultPrefixV6,
+        thrift::PrefixType::LOOPBACK,
+        {},
+        thrift::PrefixForwardingType::SR_MPLS}});
+  EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb4_));
+  const auto prefixDb5_ = createPrefixDb(
+      "5",
+      {{FRAGILE,
+        defaultPrefixV6,
+        thrift::PrefixType::LOOPBACK,
+        {},
+        thrift::PrefixForwardingType::SR_MPLS}});
+  EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb5_));
+
+  // Some actions
+  auto const labelPush1 = createMplsAction(
+      thrift::MplsActionCode::PUSH, folly::none, std::vector<int32_t>{1});
+  auto const labelPush2 = createMplsAction(
+      thrift::MplsActionCode::PUSH, folly::none, std::vector<int32_t>{2});
+  auto const labelPush3 = createMplsAction(
+      thrift::MplsActionCode::PUSH, folly::none, std::vector<int32_t>{3});
+  auto const labelPush4 = createMplsAction(
+      thrift::MplsActionCode::PUSH, folly::none, std::vector<int32_t>{4});
+  auto const labelPush5 = createMplsAction(
+      thrift::MplsActionCode::PUSH, folly::none, std::vector<int32_t>{5});
+
+  //
+  // Get route-map
+  //
+  auto routeMap = getRouteMap(*spfSolver, {"1", "2", "3", "4", "5"});
+
+  // Unicast routes => 15 (5 * 3)
+  // Node label routes => 5 * 5 = 25
+  // Adj label routes => 0
+  EXPECT_EQ(40, routeMap.size());
+
+  // Validate router-1
+
+  validatePopLabelRoute(routeMap, "1", adjacencyDb1.nodeLabel);
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2))],
+      NextHops({createNextHopFromAdj(adj12_1, false, 10),
+                createNextHopFromAdj(adj12_2, false, 10)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr3))],
+      NextHops({createNextHopFromAdj(adj13, false, 10)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", "::/0")],
+      NextHops({createNextHopFromAdj(adj13, false, 30, labelPush4),
+                createNextHopFromAdj(adj13, false, 20, labelPush5),
+                createNextHopFromAdj(adj12_2, false, 20, labelPush4),
+                createNextHopFromAdj(adj12_2, false, 20, labelPush5),
+                createNextHopFromAdj(adj12_1, false, 20, labelPush4),
+                createNextHopFromAdj(adj12_1, false, 20, labelPush5)}));
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", std::to_string(adjacencyDb2.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj12_1, false, 10, labelPhpAction),
+                createNextHopFromAdj(adj12_2, false, 10, labelPhpAction)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", std::to_string(adjacencyDb3.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj13, false, 10, labelPhpAction)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", std::to_string(adjacencyDb4.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj12_1, false, 20, labelSwapAction4),
+                createNextHopFromAdj(adj12_2, false, 20, labelSwapAction4),
+                createNextHopFromAdj(adj13, false, 30, labelSwapAction4)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", std::to_string(adjacencyDb5.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj12_1, false, 20, labelSwapAction5),
+                createNextHopFromAdj(adj12_2, false, 20, labelSwapAction5),
+                createNextHopFromAdj(adj13, false, 20, labelSwapAction5)}));
+
+  // Validate router-2
+  validatePopLabelRoute(routeMap, "2", adjacencyDb2.nodeLabel);
+
+  EXPECT_EQ(
+      routeMap[make_pair("2", toString(addr1))],
+      NextHops({createNextHopFromAdj(adj21_1, false, 10),
+                createNextHopFromAdj(adj21_2, false, 10)}));
+  EXPECT_EQ(
+      routeMap[make_pair("2", toString(addr3))],
+      NextHops({createNextHopFromAdj(adj21_1, false, 20, labelPush3),
+                createNextHopFromAdj(adj21_2, false, 20, labelPush3),
+                createNextHopFromAdj(adj25, false, 20, labelPush3),
+                createNextHopFromAdj(adj24, false, 30, labelPush3)}));
+  EXPECT_EQ(
+      routeMap[make_pair("2", "::/0")],
+      NextHops({createNextHopFromAdj(adj24, false, 10),
+                createNextHopFromAdj(adj25, false, 10)}));
+
+  EXPECT_EQ(
+      routeMap[make_pair("2", std::to_string(adjacencyDb1.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj21_1, false, 10, labelPhpAction),
+                createNextHopFromAdj(adj21_2, false, 10, labelPhpAction)}));
+  EXPECT_EQ(
+      routeMap[make_pair("2", std::to_string(adjacencyDb3.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj21_1, false, 20, labelSwapAction3),
+                createNextHopFromAdj(adj21_2, false, 20, labelSwapAction3),
+                createNextHopFromAdj(adj25, false, 20, labelSwapAction3),
+                createNextHopFromAdj(adj24, false, 30, labelSwapAction3)}));
+
+  EXPECT_EQ(
+      routeMap[make_pair("2", std::to_string(adjacencyDb4.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj24, false, 10, labelPhpAction)}));
+  EXPECT_EQ(
+      routeMap[make_pair("2", std::to_string(adjacencyDb5.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj25, false, 10, labelPhpAction)}));
+
+  // Validate router-3
+  validatePopLabelRoute(routeMap, "3", adjacencyDb3.nodeLabel);
+
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(addr1))],
+      NextHops({createNextHopFromAdj(adj31, false, 10),
+                createNextHopFromAdj(adj34, false, 40, labelPush1)}));
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(addr2))],
+      NextHops({createNextHopFromAdj(adj31, false, 20, labelPush2),
+                createNextHopFromAdj(adj35, false, 20, labelPush2),
+                createNextHopFromAdj(adj34, false, 30, labelPush2)}));
+  EXPECT_EQ(
+      routeMap[make_pair("3", "::/0")],
+      NextHops({createNextHopFromAdj(adj34, false, 20),
+                createNextHopFromAdj(adj35, false, 10)}));
+
+  EXPECT_EQ(
+      routeMap[make_pair("3", std::to_string(adjacencyDb1.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj31, false, 10, labelPhpAction),
+                createNextHopFromAdj(adj34, false, 40, labelSwapAction1)}));
+  EXPECT_EQ(
+      routeMap[make_pair("3", std::to_string(adjacencyDb2.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj31, false, 20, labelSwapAction2),
+                createNextHopFromAdj(adj35, false, 20, labelSwapAction2),
+                createNextHopFromAdj(adj34, false, 30, labelSwapAction2)}));
+  EXPECT_EQ(
+      routeMap[make_pair("3", std::to_string(adjacencyDb4.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj34, false, 20, labelPhpAction),
+                createNextHopFromAdj(adj31, false, 30, labelSwapAction4),
+                createNextHopFromAdj(adj35, false, 30, labelSwapAction4)}));
+  EXPECT_EQ(
+      routeMap[make_pair("3", std::to_string(adjacencyDb5.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj35, false, 10, labelPhpAction),
+                createNextHopFromAdj(adj34, false, 40, labelSwapAction5)}));
+
+  // Validate router-4
+
+  validatePopLabelRoute(routeMap, "4", adjacencyDb4.nodeLabel);
+
+  EXPECT_EQ(
+      routeMap[make_pair("4", toString(addr1))],
+      NextHops({createNextHopFromAdj(adj42, false, 20, labelPush1),
+                createNextHopFromAdj(adj43, false, 30, labelPush1)}));
+  EXPECT_EQ(
+      routeMap[make_pair("4", toString(addr2))],
+      NextHops({createNextHopFromAdj(adj42, false, 10),
+                createNextHopFromAdj(adj43, false, 40, labelPush2)}));
+  EXPECT_EQ(
+      routeMap[make_pair("4", toString(addr3))],
+      NextHops({createNextHopFromAdj(adj43, false, 20),
+                createNextHopFromAdj(adj42, false, 30, labelPush3)}));
+
+  EXPECT_EQ(
+      routeMap[make_pair("4", std::to_string(adjacencyDb1.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj42, false, 20, labelSwapAction1),
+                createNextHopFromAdj(adj43, false, 30, labelSwapAction1)}));
+  EXPECT_EQ(
+      routeMap[make_pair("4", std::to_string(adjacencyDb2.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj42, false, 10, labelPhpAction),
+                createNextHopFromAdj(adj43, false, 40, labelSwapAction2)}));
+  EXPECT_EQ(
+      routeMap[make_pair("4", std::to_string(adjacencyDb3.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj43, false, 20, labelPhpAction),
+                createNextHopFromAdj(adj42, false, 30, labelSwapAction3)}));
+  EXPECT_EQ(
+      routeMap[make_pair("4", std::to_string(adjacencyDb5.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj42, false, 20, labelSwapAction5),
+                createNextHopFromAdj(adj43, false, 30, labelSwapAction5)}));
+
+  // Validate router-5
+  validatePopLabelRoute(routeMap, "5", adjacencyDb5.nodeLabel);
+
+  EXPECT_EQ(
+      routeMap[make_pair("5", toString(addr1))],
+      NextHops({createNextHopFromAdj(adj52, false, 20, labelPush1),
+                createNextHopFromAdj(adj53, false, 20, labelPush1)}));
+  EXPECT_EQ(
+      routeMap[make_pair("5", toString(addr2))],
+      NextHops({createNextHopFromAdj(adj52, false, 10)}));
+  EXPECT_EQ(
+      routeMap[make_pair("5", toString(addr3))],
+      NextHops({createNextHopFromAdj(adj53, false, 10)}));
+
+  EXPECT_EQ(
+      routeMap[make_pair("5", std::to_string(adjacencyDb1.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj52, false, 20, labelSwapAction1),
+                createNextHopFromAdj(adj53, false, 20, labelSwapAction1)}));
+  EXPECT_EQ(
+      routeMap[make_pair("5", std::to_string(adjacencyDb2.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj52, false, 10, labelPhpAction)}));
+  EXPECT_EQ(
+      routeMap[make_pair("5", std::to_string(adjacencyDb3.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj53, false, 10, labelPhpAction)}));
+  EXPECT_EQ(
+      routeMap[make_pair("5", std::to_string(adjacencyDb4.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj52, false, 20, labelSwapAction4),
+                createNextHopFromAdj(adj53, false, 30, labelSwapAction4)}));
 }
 
 //

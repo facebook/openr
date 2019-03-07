@@ -476,4 +476,16 @@ maybeGetTcpEndpoint(const std::string& addr, const int32_t port) {
       : folly::Optional<std::string>{folly::sformat("tcp://{}:{}", addr, port)};
 }
 
+thrift::PrefixForwardingType
+getPrefixForwardingType(
+    const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes) {
+  for (auto const& kv : nodePrefixes) {
+    if (kv.second.forwardingType == thrift::PrefixForwardingType::IP) {
+      return thrift::PrefixForwardingType::IP;
+    }
+    DCHECK(kv.second.forwardingType == thrift::PrefixForwardingType::SR_MPLS);
+  }
+  return thrift::PrefixForwardingType::SR_MPLS;
+}
+
 } // namespace openr

@@ -186,6 +186,16 @@ folly::Optional<std::string> maybeGetTcpEndpoint(
     const std::string& addr, const int32_t port);
 
 /**
+ * Get forwarding type from list of prefixes. We're taking map as input for
+ * efficiency purpose.
+ * It is feasible that multiple nodes will advertise a same prefix and will ask
+ * to forward on different modes. We will make sure that MPLS is used if and
+ * only if everyone says MPLS else forwarding type will be IP.
+ */
+thrift::PrefixForwardingType getPrefixForwardingType(
+    const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes);
+
+/**
  * Validates that label is 20 bit only and other bits are not set
  * XXX: We can do more validation - e.g. reserved range, global vs local range
  */

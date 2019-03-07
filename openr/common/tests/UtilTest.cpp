@@ -446,6 +446,43 @@ TEST(UtilTest, MplsActionValidate) {
   }
 }
 
+TEST(UtilTest, getPrefixForwardingType) {
+  std::unordered_map<std::string, thrift::PrefixEntry> prefixes;
+  prefixes["node1"] = thrift::PrefixEntry(
+      apache::thrift::FRAGILE,
+      toIpPrefix("10.0.0.0/8"),
+      thrift::PrefixType::LOOPBACK,
+      "",
+      thrift::PrefixForwardingType::IP);
+  prefixes["node2"] = thrift::PrefixEntry(
+      apache::thrift::FRAGILE,
+      toIpPrefix("10.0.0.0/8"),
+      thrift::PrefixType::LOOPBACK,
+      "",
+      thrift::PrefixForwardingType::IP);
+  prefixes["node3"] = thrift::PrefixEntry(
+      apache::thrift::FRAGILE,
+      toIpPrefix("10.0.0.0/8"),
+      thrift::PrefixType::LOOPBACK,
+      "",
+      thrift::PrefixForwardingType::IP);
+
+  EXPECT_EQ(
+      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+
+  prefixes["node3"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  EXPECT_EQ(
+      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+
+  prefixes["node2"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  EXPECT_EQ(
+      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+
+  prefixes["node1"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  EXPECT_EQ(
+      thrift::PrefixForwardingType::SR_MPLS, getPrefixForwardingType(prefixes));
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
