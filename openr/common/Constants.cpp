@@ -77,7 +77,6 @@ constexpr std::chrono::milliseconds Constants::kTtlThreshold;
 constexpr std::chrono::seconds Constants::kConvergenceMaxDuration;
 constexpr std::chrono::seconds Constants::kKeepAliveIntvl;
 constexpr std::chrono::seconds Constants::kKeepAliveTime;
-constexpr std::chrono::seconds Constants::kMaxKeepAliveInterval;
 constexpr std::chrono::seconds Constants::kMemoryThresholdTime;
 constexpr std::chrono::seconds Constants::kMonitorSubmitInterval;
 constexpr std::chrono::seconds Constants::kNetlinkSyncThrottleInterval;
@@ -88,7 +87,6 @@ constexpr std::pair<int32_t, int32_t> Constants::kSrGlobalRange;
 constexpr std::pair<int32_t, int32_t> Constants::kSrLocalRange;
 constexpr uint16_t Constants::kPerfBufferSize;
 constexpr uint32_t Constants::kMaxAllowedPps;
-constexpr uint32_t Constants::kNumRecvSendRetries;
 constexpr uint64_t Constants::kOverloadNodeMetric;
 constexpr uint8_t Constants::kAqRouteProtoId;
 

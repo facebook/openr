@@ -19,7 +19,7 @@ include "Network.thrift"
 //
 
 //
-// Describe a single neighbors
+// Describe a single neighbor
 //
 struct SparkNeighbor {
   // the name of the domain to which this neighbor belongs to
@@ -47,7 +47,7 @@ struct SparkNeighbor {
 }
 
 //
-// Describe time-stamp information about send/recv of hello
+// Describe timestamp information about send/recv of hello
 // packets. We use this to determine RTT of a node
 //
 struct ReflectedNeighborInfo {
@@ -76,10 +76,10 @@ struct SparkPayload {
 
   1: required SparkNeighbor originator
 
-  // the senders sequence number, inremented on each hello
+  // the senders sequence number, incremented on each hello
   3: required i64 seqNum
 
-  // neighbor to hello packet time-stamp information
+  // neighbor to hello packet timestamp information
   4: required map<string, ReflectedNeighborInfo> neighborInfos;
 
   // current timestamp of this packet. This will be reflected back to neighbor

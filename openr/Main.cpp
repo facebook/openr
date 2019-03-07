@@ -108,7 +108,7 @@ DEFINE_int32(
 DEFINE_int32(
     link_monitor_cmd_port,
     openr::Constants::kLinkMonitorCmdPort,
-    "The port link monitor listens for commands on ");
+    "The port link monitor listens for commands on");
 DEFINE_int32(
     monitor_pub_port,
     openr::Constants::kMonitorPubPort,
@@ -230,26 +230,26 @@ DEFINE_bool(
 DEFINE_bool(
     enable_v4,
     false,
-    "Enable v4 in OpenR for exchanging and programming v4 routes. Works only"
+    "Enable v4 in OpenR for exchanging and programming v4 routes. Works only "
     "when Switch FIB Agent is used for FIB programming. No NSS/Linux.");
 DEFINE_bool(
     enable_subnet_validation,
     true,
-    "Enable subnet validation on adjacencies to avoid mis-cabling of v4 address"
-    "on different subnets on each end.");
+    "Enable subnet validation on adjacencies to avoid mis-cabling of v4 "
+    "address on different subnets on each end.");
 DEFINE_bool(
     enable_lfa, false, "Enable LFA computation for quick reroute per RFC 5286");
 DEFINE_bool(enable_spark, true, "If set, enables Spark for neighbor discovery");
 DEFINE_int32(
     spark_hold_time_s,
     18,
-    "How long (in seconds) to keep neighbor adjacency without receiving any"
+    "How long (in seconds) to keep neighbor adjacency without receiving any "
     "hello packets.");
 DEFINE_int32(
     spark_keepalive_time_s,
     2,
-    "Keep-alive message interval (in seconds) for spark hello message"
-    "exchanges. At most 2 hello message exchanges are required for graceful"
+    "Keep-alive message interval (in seconds) for spark hello message "
+    "exchanges. At most 2 hello message exchanges are required for graceful "
     "restart.");
 DEFINE_int32(
     spark_fastinit_keepalive_time_ms,
@@ -260,13 +260,13 @@ DEFINE_string(spark_cmd_url, kSparkCmdUrl, "Spark Cmd URL");
 DEFINE_int32(
     health_checker_ping_interval_s,
     10,
-    "Time interval (in seconds) to send health check pings to other nodes in"
+    "Time interval (in seconds) to send health check pings to other nodes in "
     "the network.");
 DEFINE_bool(
     enable_health_checker,
     false,
-    "If set, will send pings to other nodes in network at interval specified by"
-    "health_checker_ping_interval flag");
+    "If set, will send pings to other nodes in network at interval specified "
+    "by health_checker_ping_interval flag");
 DEFINE_bool(enable_fib_sync, false, "Enable periodic syncFib to FibAgent");
 DEFINE_int32(
     health_check_option,
@@ -342,7 +342,7 @@ DEFINE_int32(memory_limit_mb, 300, "Memory limit in MB");
 DEFINE_bool(
     enable_legacy_flooding,
     true,
-    "Legacy flooding is not optimized but can be enabled to keep compatibility"
+    "Legacy flooding is not optimized but can be enabled to keep compatibility "
     "with old KvStore which doesn't support new flooding mechanism");
 DEFINE_int32(
     kvstore_zmq_hwm,

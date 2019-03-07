@@ -61,7 +61,7 @@ class OpenrEventLoop : public fbzmq::ZmqEventLoop {
       fbzmq::Message&& request) = 0;
 
   // For backward compatibility, we are preserving the endpoints that the
-  // modules previously had. All had inproc sockets while some also had tpc or
+  // modules previously had. All had inproc sockets while some also had tcp or
   // ipc sockets. going foraward, we will hopefully remove the tcp and ipc
   // sockets and shift any requests coming from outside the process to use
   // secure thrift

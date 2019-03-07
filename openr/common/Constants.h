@@ -114,12 +114,6 @@ class Constants {
   // Spark specific
   //
 
-  // the maximun keep-alive interval for spark messages
-  static constexpr std::chrono::seconds kMaxKeepAliveInterval{3};
-
-  // how many times to retry send or receive before failing
-  static constexpr uint32_t kNumRecvSendRetries{3};
-
   // the multicast address used by Spark
   static constexpr folly::StringPiece kSparkMcastAddr{"ff02::1"};
 
@@ -132,7 +126,7 @@ class Constants {
   static constexpr uint32_t kMaxAllowedPps{50};
 
   // Number of BucketedTimeSeries to spread potential neighbors across
-  // for the prurpose of limiting the number of packets per second processed
+  // for the purpose of limiting the number of packets per second processed
   static constexpr size_t kNumTimeSeries{1024};
 
   //

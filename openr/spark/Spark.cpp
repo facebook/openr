@@ -61,7 +61,7 @@ const int64_t kAbsThreshold = 500;
 
 //
 // Function to get current timestamp in microseconds using steady clock
-// NOTE: we use non-monitonic clock since kernel time-stamps do not support
+// NOTE: we use non-monotonic clock since kernel time-stamps do not support
 // monotonic timer :(
 //
 std::chrono::microseconds
@@ -110,7 +110,7 @@ toggleMcastGroup(
 
   if (ioProvider->setsockopt(
           fd, IPPROTO_IPV6, IPV6_LEAVE_GROUP, &mreq, sizeof(mreq)) != 0) {
-    LOG(ERROR) << "setsockopt ipv6_join_group failed "
+    LOG(ERROR) << "setsockopt ipv6_leave_group failed "
                << folly::errnoStr(errno);
     return false;
   }
@@ -190,7 +190,7 @@ Spark::Spark(
   CHECK(fastInitKeepAliveTime > std::chrono::milliseconds(0))
       << "fast-init-keep-alive-time can't be 0";
   CHECK(fastInitKeepAliveTime <= myKeepAliveTime)
-      << "fast-init-keep-alive-time must not bigger than keep-alive-time";
+      << "fast-init-keep-alive-time must not be bigger than keep-alive-time";
 
   // Initialize list of BucketedTimeSeries
   const std::chrono::seconds sec{1};
@@ -615,8 +615,8 @@ Spark::processHelloPacket() {
   tData_.addStatValue("spark.hello_packet_recv", 1, fbzmq::SUM);
 
   if (!shouldProcessHelloPacket(ifName, clientAddr.getIPAddress())) {
-    VLOG(3) << "Spark: dropping hello packet on iface: " << ifName
-            << " from addr: " << clientAddr.getAddressStr();
+    VLOG(3) << "Spark: dropping hello packet due to rate limiting on iface: "
+            << ifName << " from addr: " << clientAddr.getAddressStr();
     tData_.addStatValue("spark.hello_packet_dropped", 1, fbzmq::SUM);
     return;
   }
@@ -706,7 +706,7 @@ Spark::processHelloPacket() {
                 << " from iface " << originator.ifName << " over interface "
                 << ifName << " as " << rtt.count() / 1000.0 << "ms.";
         // Mask off to millisecond accuracy!
-        // Reason => Relying on microsecond accuracy is too inacurate. For
+        // Reason => Relying on microsecond accuracy is too inaccurate. For
         // practical scenarios like Backbone network having accuracy upto
         // milliseconds is sufficient. Further load on system can heavily
         // infuence rtt at microseconds but not much at milliseconds and hence
@@ -798,7 +798,7 @@ Spark::processHelloPacket() {
   }
 
   // NOTE: means we only use the data for neighbor from initial packet.
-  // all the other messages serves as confirmation of hold time refersh.
+  // all the other messages serves as confirmation of hold time refresh.
   if (foundSelf && isAdjacent) {
     VLOG(3) << "Already adjacent neighbor " << originator.nodeName
             << " from iface " << originator.ifName << " on iface " << ifName
