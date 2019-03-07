@@ -19,6 +19,14 @@ struct RouteDatabase {
   5: list<Network.MplsRoute> mplsRoutes
 }
 
+struct RouteDatabaseDelta {
+  1: string thisNodeName
+  2: list<Network.UnicastRoute> unicastRoutesToUpdate
+  3: list<Network.IpPrefix> unicastRoutesToDelete;
+  4: list<Network.MplsRoute> mplsRoutesToUpdate
+  5: list<i32> mplsRoutesToDelete
+}
+
 // Perf log buffer maintained by Fib
 struct PerfDatabase {
   1: string thisNodeName

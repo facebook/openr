@@ -173,10 +173,8 @@ std::vector<thrift::BinaryAddress> createDeprecatedNexthops(
 
 /**
  * Find delta between two route databases
- * Return type is a pair of <RoutesToBeUpdate, routesToRemove>
  */
-std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
-findDeltaRoutes(
+thrift::RouteDatabaseDelta findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,
     const thrift::RouteDatabase& oldRouteDb);
 

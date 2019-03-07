@@ -405,13 +405,10 @@ createDeprecatedNexthops(const std::vector<thrift::NextHopThrift>& nextHops) {
   return deprecatedNexthops;
 }
 
-std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
+thrift::RouteDatabaseDelta
 findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,
     const thrift::RouteDatabase& oldRouteDb) {
-  std::pair<std::vector<thrift::UnicastRoute>, std::vector<thrift::IpPrefix>>
-      res;
-
   DCHECK(newRouteDb.thisNodeName == oldRouteDb.thisNodeName);
 
   // Find new routes to be added/updated/removed
@@ -440,10 +437,13 @@ findDeltaRoutes(
   }
 
   // Build routes to be programmed.
-  res.first = std::move(routesToAddUpdate);
-  res.second = {prefixesToRemove.begin(), prefixesToRemove.end()};
+  thrift::RouteDatabaseDelta routeDbDelta;
+  routeDbDelta.thisNodeName = newRouteDb.thisNodeName;
+  routeDbDelta.unicastRoutesToUpdate = std::move(routesToAddUpdate);
+  routeDbDelta.unicastRoutesToDelete = {prefixesToRemove.begin(),
+                                        prefixesToRemove.end()};
 
-  return res;
+  return routeDbDelta;
 }
 
 thrift::BuildInfo

@@ -215,8 +215,9 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
 
 void
 Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
-  VLOG(2) << "Processing route database ... " << newRouteDb.unicastRoutes.size()
-          << " entries";
+  VLOG(2) << "Processing new routes from Decision. "
+          << newRouteDb.unicastRoutes.size() << " unicast routes and "
+          << newRouteDb.mplsRoutes.size() << " mpls routes";
 
   // Update perfEvents_ .. We replace existing perf events with new one as
   // convergence is going to be based on new data, not the old.
@@ -232,7 +233,7 @@ Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
   // Add some counters
   tData_.addStatValue("fib.process_route_db", 1, fbzmq::COUNT);
   // Send request to agent
-  updateRoutes(routeDelta.first, routeDelta.second);
+  updateRoutes(routeDelta);
 }
 
 void
@@ -259,8 +260,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     }
   }
 
-  std::vector<thrift::UnicastRoute> routesToUpdate;
-  std::vector<thrift::IpPrefix> prefixesToRemove;
+  thrift::RouteDatabaseDelta routeDbDelta;
 
   for (auto it = routeDb_.unicastRoutes.begin();
        it != routeDb_.unicastRoutes.end();) {
@@ -290,21 +290,21 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
       thrift::UnicastRoute route;
       route.dest = it->dest;
       route.nextHops = std::move(validBestNextHops);
-      routesToUpdate.emplace_back(std::move(route));
+      routeDbDelta.unicastRoutesToUpdate.emplace_back(std::move(route));
     }
 
     // Remove route if no valid paths
     if (it->nextHops.size() == 0) {
       VLOG(1) << "Removing prefix " << toString(it->dest)
               << " because of no valid nextHops.";
-      prefixesToRemove.emplace_back(it->dest);
+      routeDbDelta.unicastRoutesToDelete.emplace_back(it->dest);
       it = routeDb_.unicastRoutes.erase(it);
     } else {
       ++it;
     }
   } // end for ... routeDb_.unicastRoutes
 
-  updateRoutes(routesToUpdate, prefixesToRemove);
+  updateRoutes(routeDbDelta);
 }
 
 thrift::PerfDatabase
@@ -318,16 +318,17 @@ Fib::dumpPerfDb() const {
 }
 
 void
-Fib::updateRoutes(
-    const std::vector<thrift::UnicastRoute>& routesToUpdate,
-    const std::vector<thrift::IpPrefix>& prefixesToRemove) {
-  LOG(INFO) << "Processing route add/update for " << routesToUpdate.size()
-            << " routes, and route delete for " << prefixesToRemove.size()
-            << " prefixes";
+Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
+  LOG(INFO) << "Processing route add/update for "
+            << routeDbDelta.unicastRoutesToUpdate.size() << " unicast, "
+            << routeDbDelta.mplsRoutesToUpdate.size() << " mpls, "
+            << "and route delete for "
+            << routeDbDelta.unicastRoutesToDelete.size() << "-unicast, "
+            << routeDbDelta.mplsRoutesToDelete.size() << "-mpls, ";
   // Do not program routes in case of dryrun
   if (dryrun_) {
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
-    for (auto const& route : routesToUpdate) {
+    for (auto const& route : routeDbDelta.unicastRoutesToUpdate) {
       VLOG(1) << "> " << toString(route.dest) << ", " << route.nextHops.size();
       for (auto const& nh : route.nextHops) {
         VLOG(1) << "  " << toString(nh);
@@ -336,7 +337,7 @@ Fib::updateRoutes(
       logPerfEvents();
     }
 
-    for (auto const& prefix : prefixesToRemove) {
+    for (auto const& prefix : routeDbDelta.unicastRoutesToDelete) {
       VLOG(1) << "> " << toString(prefix);
     }
     return;
@@ -358,7 +359,7 @@ Fib::updateRoutes(
   // Only for backward compatibility
   // NOTE: remove after UnicastRoute.deprecatedNexthops is removed
   auto const& patchedRoutesToUpdate =
-      createUnicastRoutesWithBestNexthops(routesToUpdate);
+      createUnicastRoutesWithBestNexthops(routeDbDelta.unicastRoutesToUpdate);
 
   // Make thrift calls to do real programming
   try {
@@ -366,8 +367,9 @@ Fib::updateRoutes(
       addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_DEBOUNCE");
     }
     createFibClient(evb_, socket_, client_, thriftPort_);
-    if (prefixesToRemove.size()) {
-      client_->sync_deleteUnicastRoutes(kFibId_, prefixesToRemove);
+    if (routeDbDelta.unicastRoutesToDelete.size()) {
+      client_->sync_deleteUnicastRoutes(
+          kFibId_, routeDbDelta.unicastRoutesToDelete);
     }
     if (patchedRoutesToUpdate.size()) {
       client_->sync_addUnicastRoutes(kFibId_, patchedRoutesToUpdate);

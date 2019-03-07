@@ -103,9 +103,7 @@ class Fib final : public OpenrEventLoop {
    * on success no action needed
    * on failure invokes syncRouteDbDebounced
    */
-  void updateRoutes(
-      const std::vector<thrift::UnicastRoute>& affectedRoutes,
-      const std::vector<thrift::IpPrefix>& prefixesToRemove);
+  void updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta);
 
   /**
    * Sync the current routeDb_ with the switch agent.
@@ -155,7 +153,7 @@ class Fib final : public OpenrEventLoop {
   const std::string myNodeName_;
 
   // Switch agent thrift server port
-  const int32_t thriftPort_;
+  const int32_t thriftPort_{0};
 
   // In dry run we do not make actual thrift call to manipulate routes
   bool dryrun_{true};

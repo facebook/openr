@@ -344,9 +344,9 @@ TEST(UtilTest, findDeltaRoutes) {
   const auto& res1 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
 
-  EXPECT_EQ(res1.first.size(), 1);
-  EXPECT_EQ(res1.first, newRouteDb.unicastRoutes);
-  EXPECT_EQ(res1.second.size(), 0);
+  EXPECT_EQ(res1.unicastRoutesToUpdate.size(), 1);
+  EXPECT_EQ(res1.unicastRoutesToUpdate, newRouteDb.unicastRoutes);
+  EXPECT_EQ(res1.unicastRoutesToDelete.size(), 0);
 
   // add more unicastRoutes in newRouteDb
   newRouteDb.unicastRoutes.emplace_back(
@@ -354,17 +354,17 @@ TEST(UtilTest, findDeltaRoutes) {
 
   const auto& res2 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
-  EXPECT_EQ(res2.first.size(), 2);
-  EXPECT_EQ(res2.first, newRouteDb.unicastRoutes);
-  EXPECT_EQ(res2.second.size(), 0);
+  EXPECT_EQ(res2.unicastRoutesToUpdate.size(), 2);
+  EXPECT_EQ(res2.unicastRoutesToUpdate, newRouteDb.unicastRoutes);
+  EXPECT_EQ(res2.unicastRoutesToDelete.size(), 0);
 
   // empty out newRouteDb
   newRouteDb.unicastRoutes.clear();
   const auto& res3 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
-  EXPECT_EQ(res3.first.size(), 0);
-  EXPECT_EQ(res3.second.size(), 1);
-  EXPECT_EQ(res3.second.at(0), prefix2);
+  EXPECT_EQ(res3.unicastRoutesToUpdate.size(), 0);
+  EXPECT_EQ(res3.unicastRoutesToDelete.size(), 1);
+  EXPECT_EQ(res3.unicastRoutesToDelete.at(0), prefix2);
 }
 
 TEST(UtilTest, MplsLabelValidate) {
