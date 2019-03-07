@@ -11,6 +11,8 @@
 #include <cerrno>
 #include <chrono>
 
+#include <glog/logging.h>
+
 #include <folly/Exception.h>
 #include <folly/ScopeGuard.h>
 #include <folly/SocketAddress.h>
