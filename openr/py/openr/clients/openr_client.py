@@ -112,6 +112,8 @@ class OpenrClient(object):
                     "Exception: {}.".format(e),
                     file=sys.stderr,
                 )
+                self.cleanup_thrift()
+                raise e
         else:
             try:
                 self.zmq_client.send(req)
