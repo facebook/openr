@@ -471,11 +471,15 @@ main(int argc, char** argv) {
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   syslog(LOG_NOTICE, "Starting OpenR daemon.");
 
+  std::stringstream ss;
+  BuildInfo::log(ss);
+  gflags::SetVersionString(ss.str());
+
   // Initialize all params
   folly::init(&argc, &argv);
 
   // Log build information
-  BuildInfo::log(LOG(INFO));
+  LOG(INFO) << ss.str();
 
   // start signal handler before any thread
   ZmqEventLoop mainEventLoop;
