@@ -79,9 +79,11 @@ class PrefixMgrClient(OpenrClient):
             forwarding_type,
         )
 
-    def withdraw_prefix(self, prefixes):
+    def withdraw_prefix(self, prefixes, prefix_type="BREEZE"):
         return self.send_cmd_to_prefix_mgr(
-            prefix_mgr_types.PrefixManagerCommand.WITHDRAW_PREFIXES, prefixes
+            prefix_mgr_types.PrefixManagerCommand.WITHDRAW_PREFIXES,
+            prefixes,
+            prefix_type,
         )
 
     def view_prefix(self):

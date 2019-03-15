@@ -262,16 +262,27 @@ PrefixManager::addOrUpdatePrefixes(
 bool
 PrefixManager::removePrefixes(
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  bool fail{false};
+  // Verify all prefixes exist
+  for (const auto& prefix : prefixes) {
+    auto it = prefixMap_.find(prefix.prefix);
+    if ((it == prefixMap_.end()) or (it->second.type != prefix.type)) {
+      // Missing prefix or invalid type
+      LOG(INFO) << "Cannot withdraw prefix " << toString(prefix.prefix)
+                << ", client: "
+                << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
+                       prefix.type);
+      return false;
+    }
+  }
 
   for (const auto& prefix : prefixes) {
     LOG(INFO) << "Withdrawing prefix " << toString(prefix.prefix)
               << ", client: "
               << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
                      prefix.type);
-    fail = prefixMap_.erase(prefix.prefix) > 0 or fail;
+    prefixMap_.erase(prefix.prefix);
   }
-  return fail;
+  return true;
 }
 
 bool

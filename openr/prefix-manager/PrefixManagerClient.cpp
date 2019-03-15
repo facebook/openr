@@ -33,19 +33,10 @@ PrefixManagerClient::addPrefixes(
 
 folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
 PrefixManagerClient::withdrawPrefixes(
-    const std::vector<thrift::IpPrefix>& prefixes) {
+    const std::vector<thrift::PrefixEntry>& prefixes) {
   thrift::PrefixManagerRequest req;
   req.cmd = thrift::PrefixManagerCommand::WITHDRAW_PREFIXES;
-  req.prefixes = folly::gen::from(prefixes) |
-      folly::gen::mapped([](const thrift::IpPrefix& prefix) {
-                   return thrift::PrefixEntry(
-                       apache::thrift::FRAGILE,
-                       prefix,
-                       {},
-                       {},
-                       thrift::PrefixForwardingType::IP);
-                 }) |
-      folly::gen::as<std::vector<thrift::PrefixEntry>>();
+  req.prefixes = prefixes;
   return sendRequest(req);
 }
 

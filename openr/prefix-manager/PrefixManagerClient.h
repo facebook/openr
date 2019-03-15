@@ -30,7 +30,7 @@ class PrefixManagerClient final {
       const std::vector<thrift::PrefixEntry>& prefixes);
 
   folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error> withdrawPrefixes(
-      const std::vector<thrift::IpPrefix>& prefixes);
+      const std::vector<thrift::PrefixEntry>& prefixes);
 
   folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
   withdrawPrefixesByType(thrift::PrefixType type);

@@ -181,23 +181,25 @@ class PrefixManagerTestFixture : public ::testing::Test {
 };
 
 TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
-  auto resp1 = prefixManagerClient->withdrawPrefixes({addr1});
+  auto resp1 = prefixManagerClient->withdrawPrefixes({prefixEntry1});
   auto resp2 = prefixManagerClient->addPrefixes({prefixEntry1});
   auto resp3 = prefixManagerClient->addPrefixes({prefixEntry1});
-  auto resp4 = prefixManagerClient->withdrawPrefixes({addr1});
-  auto resp5 = prefixManagerClient->withdrawPrefixes({addr3});
+  auto resp4 = prefixManagerClient->withdrawPrefixes({prefixEntry1});
+  auto resp5 = prefixManagerClient->withdrawPrefixes({prefixEntry3});
   auto resp6 = prefixManagerClient->addPrefixes({prefixEntry2});
   auto resp7 = prefixManagerClient->addPrefixes({prefixEntry3});
   auto resp8 = prefixManagerClient->addPrefixes({prefixEntry4});
   auto resp9 = prefixManagerClient->addPrefixes({prefixEntry3});
-  auto resp10 = prefixManagerClient->withdrawPrefixes({addr2});
-  auto resp11 = prefixManagerClient->withdrawPrefixes({addr3});
-  auto resp12 = prefixManagerClient->withdrawPrefixes({addr4});
+  auto resp10 = prefixManagerClient->withdrawPrefixes({prefixEntry2});
+  auto resp11 = prefixManagerClient->withdrawPrefixes({prefixEntry3});
+  auto resp12 = prefixManagerClient->withdrawPrefixes({prefixEntry4});
   auto resp13 = prefixManagerClient->addPrefixes(
       {prefixEntry1, prefixEntry2, prefixEntry3});
-  auto resp14 = prefixManagerClient->withdrawPrefixes({addr1, addr2});
-  auto resp15 = prefixManagerClient->withdrawPrefixes({addr1, addr2});
-  auto resp16 = prefixManagerClient->withdrawPrefixes({addr4});
+  auto resp14 =
+      prefixManagerClient->withdrawPrefixes({prefixEntry1, prefixEntry2});
+  auto resp15 =
+      prefixManagerClient->withdrawPrefixes({prefixEntry1, prefixEntry2});
+  auto resp16 = prefixManagerClient->withdrawPrefixes({prefixEntry4});
   EXPECT_FALSE(resp1.value().success);
   EXPECT_TRUE(resp2.value().success);
   EXPECT_FALSE(resp3.value().success);
@@ -225,7 +227,7 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   prefixManagerClient->addPrefixes({prefixEntry6});
   prefixManagerClient->addPrefixes({prefixEntry7});
   prefixManagerClient->addPrefixes({prefixEntry8});
-  auto resp1 = prefixManagerClient->withdrawPrefixes({addr1});
+  auto resp1 = prefixManagerClient->withdrawPrefixes({prefixEntry1});
   EXPECT_TRUE(resp1.value().success);
   auto resp2 =
       prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
@@ -235,20 +237,20 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
       prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
   EXPECT_FALSE(resp3.value().success);
   // all the DEFAULT type should be gone
-  auto resp4 = prefixManagerClient->withdrawPrefixes({addr3});
+  auto resp4 = prefixManagerClient->withdrawPrefixes({prefixEntry3});
   EXPECT_FALSE(resp4.value().success);
-  auto resp5 = prefixManagerClient->withdrawPrefixes({addr5});
+  auto resp5 = prefixManagerClient->withdrawPrefixes({prefixEntry5});
   EXPECT_FALSE(resp5.value().success);
-  auto resp6 = prefixManagerClient->withdrawPrefixes({addr7});
+  auto resp6 = prefixManagerClient->withdrawPrefixes({prefixEntry7});
   EXPECT_FALSE(resp6.value().success);
   // The PREFIX_ALLOCATOR type should still be there to be withdrawed
-  auto resp7 = prefixManagerClient->withdrawPrefixes({addr2});
+  auto resp7 = prefixManagerClient->withdrawPrefixes({prefixEntry2});
   EXPECT_TRUE(resp7.value().success);
-  auto resp8 = prefixManagerClient->withdrawPrefixes({addr4});
+  auto resp8 = prefixManagerClient->withdrawPrefixes({prefixEntry4});
   EXPECT_TRUE(resp8.value().success);
-  auto resp9 = prefixManagerClient->withdrawPrefixes({addr6});
+  auto resp9 = prefixManagerClient->withdrawPrefixes({prefixEntry6});
   EXPECT_TRUE(resp9.value().success);
-  auto resp10 = prefixManagerClient->withdrawPrefixes({addr8});
+  auto resp10 = prefixManagerClient->withdrawPrefixes({prefixEntry8});
   EXPECT_TRUE(resp10.value().success);
   auto resp11 = prefixManagerClient->withdrawPrefixesByType(
       thrift::PrefixType::PREFIX_ALLOCATOR);
@@ -264,10 +266,42 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_TRUE(resp12.value().success);
   EXPECT_FALSE(resp13.value().success);
 
-  EXPECT_FALSE(prefixManagerClient->withdrawPrefixes({addr2}).value().success);
-  EXPECT_FALSE(prefixManagerClient->withdrawPrefixes({addr4}).value().success);
-  EXPECT_TRUE(prefixManagerClient->withdrawPrefixes({addr6}).value().success);
-  EXPECT_TRUE(prefixManagerClient->withdrawPrefixes({addr8}).value().success);
+  EXPECT_FALSE(
+      prefixManagerClient->withdrawPrefixes({prefixEntry2}).value().success);
+  EXPECT_FALSE(
+      prefixManagerClient->withdrawPrefixes({prefixEntry4}).value().success);
+  EXPECT_TRUE(
+      prefixManagerClient->withdrawPrefixes({prefixEntry6}).value().success);
+  EXPECT_TRUE(
+      prefixManagerClient->withdrawPrefixes({prefixEntry8}).value().success);
+}
+
+TEST_F(PrefixManagerTestFixture, RemoveInvalidType) {
+  EXPECT_TRUE(prefixManagerClient->addPrefixes({prefixEntry1}).value().success);
+  EXPECT_TRUE(prefixManagerClient->addPrefixes({prefixEntry2}).value().success);
+
+  // Verify that prefix type has to match for withdrawing prefix
+  auto prefixEntryError = prefixEntry1;
+  prefixEntryError.type = thrift::PrefixType::PREFIX_ALLOCATOR;
+
+  auto resp1 =
+      prefixManagerClient->withdrawPrefixes({prefixEntryError, prefixEntry2});
+  EXPECT_FALSE(resp1.value().success);
+
+  // Verify that all prefixes are still present
+  auto resp2 = prefixManagerClient->getPrefixes();
+  EXPECT_TRUE(resp2.value().success);
+  EXPECT_EQ(2, resp2.value().prefixes.size());
+
+  // Verify withdrawing of multiple prefixes
+  auto resp3 =
+      prefixManagerClient->withdrawPrefixes({prefixEntry1, prefixEntry2});
+  EXPECT_TRUE(resp3.value().success);
+
+  // Verify that there are no prefixes
+  auto resp4 = prefixManagerClient->getPrefixes();
+  EXPECT_TRUE(resp4.value().success);
+  EXPECT_EQ(0, resp4.value().prefixes.size());
 }
 
 TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
@@ -322,8 +356,10 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
       PrefixManagerLocalCmdUrl{prefixManager2->inprocCmdUrl}, context);
 
   // verify that the new manager has what the first manager had
-  EXPECT_TRUE(prefixManagerClient2->withdrawPrefixes({addr1}).value().success);
-  EXPECT_TRUE(prefixManagerClient2->withdrawPrefixes({addr2}).value().success);
+  EXPECT_TRUE(
+      prefixManagerClient2->withdrawPrefixes({prefixEntry1}).value().success);
+  EXPECT_TRUE(
+      prefixManagerClient2->withdrawPrefixes({prefixEntry2}).value().success);
   // cleanup
   prefixManager2->stop();
   prefixManagerThread2->join();
@@ -387,7 +423,7 @@ TEST_F(PrefixManagerTestFixture, PrefixAddCount) {
   auto count2 = prefixManager->getPrefixAddCounter();
   EXPECT_EQ(5, count2);
 
-  prefixManagerClient->withdrawPrefixes({addr1});
+  prefixManagerClient->withdrawPrefixes({prefixEntry1});
   auto count3 = prefixManager->getPrefixAddCounter();
   EXPECT_EQ(5, count3);
 }
@@ -396,7 +432,7 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawCount) {
   auto count0 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(0, count0);
 
-  prefixManagerClient->withdrawPrefixes({addr1});
+  prefixManagerClient->withdrawPrefixes({prefixEntry1});
   auto count1 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(0, count1);
 
@@ -407,16 +443,16 @@ TEST_F(PrefixManagerTestFixture, PrefixWithdrawCount) {
   auto count2 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(0, count2);
 
-  prefixManagerClient->withdrawPrefixes({addr1});
+  prefixManagerClient->withdrawPrefixes({prefixEntry1});
   auto count3 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(1, count3);
 
-  prefixManagerClient->withdrawPrefixes({addr4});
+  prefixManagerClient->withdrawPrefixes({prefixEntry4});
   auto count4 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(1, count4);
 
-  prefixManagerClient->withdrawPrefixes({addr1});
-  prefixManagerClient->withdrawPrefixes({addr2});
+  prefixManagerClient->withdrawPrefixes({prefixEntry1});
+  prefixManagerClient->withdrawPrefixes({prefixEntry2});
   auto count5 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(2, count5);
 }

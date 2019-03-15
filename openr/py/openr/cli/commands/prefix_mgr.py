@@ -12,7 +12,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object
 
 from openr.clients import prefix_mgr_client
-from openr.Lsdb import ttypes as lsdb_types
 from openr.utils import ipnetwork, printing
 
 
