@@ -131,17 +131,19 @@ PersistentStore::processRequest() {
 
 bool
 PersistentStore::saveDatabaseToDisk() noexcept {
-  // Write `databse_` to ioBuf
+  // Write database_ to ioBuf
   auto queue = folly::IOBufQueue();
   serializer_.serialize(database_, &queue);
   auto ioBuf = queue.move();
   ioBuf->coalesce();
 
-  // Write ioBuf to disk
-  auto fileData = ioBuf->moveToFbString();
-  if (not folly::writeFile(fileData, storageFilePath_.c_str())) {
-    LOG(ERROR) << "Failed to write data to file '" << storageFilePath_
-               << "'. Error (" << errno << "): " << strerror(errno);
+  try {
+    // Write ioBuf to disk atomically
+    auto fileData = ioBuf->moveToFbString().toStdString();
+    folly::writeFileAtomic(storageFilePath_, fileData, 0666);
+  } catch (std::exception const& err) {
+    LOG(ERROR) << "Failed to write data to file '" << storageFilePath_ << "'. "
+               << folly::exceptionStr(err);
     return false;
   }
 
