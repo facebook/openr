@@ -162,7 +162,14 @@ std::string getRemoteIfName(const thrift::Adjacency& adj);
  * Given list of nextHops returns the list of best nextHops (nextHops with
  * lowest metric value).
  */
-std::vector<thrift::NextHopThrift> getBestNextHops(
+std::vector<thrift::NextHopThrift> getBestNextHopsUnicast(
+    std::vector<thrift::NextHopThrift> const& nextHops);
+
+/**
+ * Given list of nextHops for mpls route, validate nexthops and return nextHops
+ * with lowest metric value and of same MplsActionCode.
+ */
+std::vector<thrift::NextHopThrift> getBestNextHopsMpls(
     std::vector<thrift::NextHopThrift> const& nextHops);
 
 /**
@@ -350,9 +357,23 @@ createUnicastRoutesWithBestNexthops(
 
   for (auto const& route : routes) {
     auto newRoute =
-        createUnicastRoute(route.dest, getBestNextHops(route.nextHops));
+        createUnicastRoute(route.dest, getBestNextHopsUnicast(route.nextHops));
+    // NOTE: remove after UnicastRoute.deprecatedNexthops is removed
     newRoute.deprecatedNexthops = createDeprecatedNexthops(newRoute.nextHops);
     newRoutes.emplace_back(std::move(newRoute));
+  }
+
+  return newRoutes;
+}
+
+inline std::vector<thrift::MplsRoute>
+createMplsRoutesWithBestNextHops(const std::vector<thrift::MplsRoute>& routes) {
+  // Build routes to be programmed
+  std::vector<thrift::MplsRoute> newRoutes;
+
+  for (auto const& route : routes) {
+    newRoutes.emplace_back(
+        createMplsRoute(route.topLabel, getBestNextHopsMpls(route.nextHops)));
   }
 
   return newRoutes;

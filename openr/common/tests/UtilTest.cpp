@@ -29,11 +29,69 @@ const auto path1_2_1 = createNextHop(
 const auto path1_2_2 = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_2", 2);
 const auto path1_2_3 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_3", 1);
+    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_3", 3);
 const auto path1_3_1 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_1", 2);
+    toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_1", 1);
 const auto path1_3_2 = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_2", 2);
+
+const auto path1_2_1_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    "iface_1_2_1",
+    1,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+const auto path1_2_2_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    "iface_1_2_2",
+    2,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+const auto path1_2_3_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    "iface_1_2_3",
+    3,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+const auto path1_3_1_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    "iface_1_3_1",
+    1,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+const auto path1_3_2_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    "iface_1_3_2",
+    2,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+
+const auto path1_2_1_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    "iface_1_2_1",
+    1,
+    createMplsAction(thrift::MplsActionCode::PHP));
+const auto path1_2_2_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    "iface_1_2_2",
+    2,
+    createMplsAction(thrift::MplsActionCode::PHP));
+const auto path1_2_3_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    "iface_1_2_3",
+    3,
+    createMplsAction(thrift::MplsActionCode::PHP));
+const auto path1_3_1_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    "iface_1_3_1",
+    1,
+    createMplsAction(thrift::MplsActionCode::PHP));
+const auto path1_3_2_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    "iface_1_3_2",
+    2,
+    createMplsAction(thrift::MplsActionCode::PHP));
+
+const auto path1_2_2_pop = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    "iface_1_2_1",
+    2,
+    createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP));
 
 // test getNthPrefix()
 TEST(UtilTest, getNthPrefix) {
@@ -306,8 +364,8 @@ TEST(UtilTest, getTotalPerfEventsDurationTest) {
   }
 }
 
-TEST(UtilTest, getBestNextHops) {
-  auto bestNextHops = getBestNextHops({path1_2_1, path1_2_2});
+TEST(UtilTest, getBestNextHopsUnicast) {
+  auto bestNextHops = getBestNextHopsUnicast({path1_2_1, path1_2_2});
   EXPECT_EQ(bestNextHops.size(), 1);
   EXPECT_EQ(bestNextHops.at(0).address.ifName, "iface_1_2_1");
   EXPECT_EQ(
@@ -315,19 +373,58 @@ TEST(UtilTest, getBestNextHops) {
       toBinaryAddress(folly::IPAddress("fe80::2")).addr);
   EXPECT_EQ(bestNextHops.at(0).metric, 1);
 
-  bestNextHops = getBestNextHops({path1_2_1, path1_2_2, path1_2_3});
-  EXPECT_EQ(bestNextHops.size(), 2);
-  sort(bestNextHops.begin(), bestNextHops.end());
-  EXPECT_EQ(bestNextHops.at(0).address.ifName, "iface_1_2_1");
+  bestNextHops =
+      getBestNextHopsUnicast({path1_2_1, path1_2_2, path1_2_3, path1_3_1});
   EXPECT_EQ(
-      bestNextHops.at(0).address.addr,
-      toBinaryAddress(folly::IPAddress("fe80::2")).addr);
-  EXPECT_EQ(bestNextHops.at(0).metric, 1);
-  EXPECT_EQ(bestNextHops.at(1).address.ifName, "iface_1_2_3");
+      bestNextHops, std::vector<thrift::NextHopThrift>({path1_2_1, path1_3_1}));
+}
+
+TEST(UtilTest, getBestNextHopsMpls) {
+  // Validate pop route
+  auto bestNextHops = getBestNextHopsMpls({path1_2_2_pop});
+  EXPECT_EQ(bestNextHops, std::vector<thrift::NextHopThrift>({path1_2_2_pop}));
+
+  // Validate all swap routes (choose min metric)
+  bestNextHops = getBestNextHopsMpls({
+      path1_2_1_swap,
+      path1_2_2_swap,
+      path1_2_3_swap,
+      path1_3_1_swap,
+      path1_3_2_swap,
+  });
   EXPECT_EQ(
-      bestNextHops.at(1).address.addr,
-      toBinaryAddress(folly::IPAddress("fe80::2")).addr);
-  EXPECT_EQ(bestNextHops.at(1).metric, 1);
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>({path1_2_1_swap, path1_3_1_swap}));
+
+  // Validate all php routes (choose min metric)
+  bestNextHops = getBestNextHopsMpls({
+      path1_2_1_php,
+      path1_2_2_php,
+      path1_2_3_php,
+      path1_3_1_php,
+      path1_3_2_php,
+  });
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>({path1_2_1_php, path1_3_1_php}));
+
+  // Choose min metric in mix of swap and php
+  bestNextHops = getBestNextHopsMpls(
+      {path1_2_1_swap, path1_2_2_php, path1_3_1_swap, path1_3_2_php});
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>({path1_2_1_swap, path1_3_1_swap}));
+
+  // Choose min metric in mix of swap and php
+  bestNextHops = getBestNextHopsMpls(
+      {path1_2_1_php, path1_2_2_swap, path1_3_1_php, path1_3_2_swap});
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>({path1_2_1_php, path1_3_1_php}));
+
+  // Prefer PHP over SWAP for metric tie
+  bestNextHops = getBestNextHopsMpls({path1_2_1_swap, path1_3_1_php});
+  EXPECT_EQ(bestNextHops, std::vector<thrift::NextHopThrift>({path1_3_1_php}));
 }
 
 TEST(UtilTest, findDeltaRoutes) {
@@ -335,11 +432,15 @@ TEST(UtilTest, findDeltaRoutes) {
   oldRouteDb.thisNodeName = "node-1";
   oldRouteDb.unicastRoutes.emplace_back(
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
+  oldRouteDb.mplsRoutes.emplace_back(
+      createMplsRoute(2, {path1_2_1_swap, path1_2_2_swap}));
 
   thrift::RouteDatabase newRouteDb;
   newRouteDb.thisNodeName = "node-1";
   newRouteDb.unicastRoutes.emplace_back(
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2, path1_2_3}));
+  newRouteDb.mplsRoutes.emplace_back(
+      createMplsRoute(2, {path1_2_1_swap, path1_2_2_swap, path1_2_3_swap}));
 
   const auto& res1 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
@@ -347,24 +448,36 @@ TEST(UtilTest, findDeltaRoutes) {
   EXPECT_EQ(res1.unicastRoutesToUpdate.size(), 1);
   EXPECT_EQ(res1.unicastRoutesToUpdate, newRouteDb.unicastRoutes);
   EXPECT_EQ(res1.unicastRoutesToDelete.size(), 0);
+  EXPECT_EQ(res1.mplsRoutesToUpdate.size(), 1);
+  EXPECT_EQ(res1.mplsRoutesToUpdate, newRouteDb.mplsRoutes);
+  EXPECT_EQ(res1.mplsRoutesToDelete.size(), 0);
 
   // add more unicastRoutes in newRouteDb
   newRouteDb.unicastRoutes.emplace_back(
       createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
+  newRouteDb.mplsRoutes.emplace_back(
+      createMplsRoute(3, {path1_3_1_swap, path1_3_2_swap}));
 
   const auto& res2 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
   EXPECT_EQ(res2.unicastRoutesToUpdate.size(), 2);
   EXPECT_EQ(res2.unicastRoutesToUpdate, newRouteDb.unicastRoutes);
   EXPECT_EQ(res2.unicastRoutesToDelete.size(), 0);
+  EXPECT_EQ(res2.mplsRoutesToUpdate.size(), 2);
+  EXPECT_EQ(res2.mplsRoutesToUpdate, newRouteDb.mplsRoutes);
+  EXPECT_EQ(res2.mplsRoutesToDelete.size(), 0);
 
   // empty out newRouteDb
   newRouteDb.unicastRoutes.clear();
+  newRouteDb.mplsRoutes.clear();
   const auto& res3 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
   EXPECT_EQ(res3.unicastRoutesToUpdate.size(), 0);
   EXPECT_EQ(res3.unicastRoutesToDelete.size(), 1);
   EXPECT_EQ(res3.unicastRoutesToDelete.at(0), prefix2);
+  EXPECT_EQ(res3.mplsRoutesToUpdate.size(), 0);
+  EXPECT_EQ(res3.mplsRoutesToDelete.size(), 1);
+  EXPECT_EQ(res3.mplsRoutesToDelete.at(0), 2);
 }
 
 TEST(UtilTest, MplsLabelValidate) {

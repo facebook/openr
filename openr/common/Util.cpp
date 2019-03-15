@@ -378,7 +378,11 @@ getRemoteIfName(const thrift::Adjacency& adj) {
 }
 
 std::vector<thrift::NextHopThrift>
-getBestNextHops(std::vector<thrift::NextHopThrift> const& allNextHops) {
+getBestNextHopsUnicast(std::vector<thrift::NextHopThrift> const& allNextHops) {
+  // Optimization
+  if (allNextHops.size() <= 1) {
+    return allNextHops;
+  }
   // Find minimum cost
   int32_t minCost = std::numeric_limits<int32_t>::max();
   for (auto const& nextHop : allNextHops) {
@@ -389,6 +393,42 @@ getBestNextHops(std::vector<thrift::NextHopThrift> const& allNextHops) {
   std::vector<thrift::NextHopThrift> bestNextHops;
   for (auto const& nextHop : allNextHops) {
     if (nextHop.metric == minCost) {
+      bestNextHops.emplace_back(nextHop);
+    }
+  }
+
+  return bestNextHops;
+}
+
+std::vector<thrift::NextHopThrift>
+getBestNextHopsMpls(std::vector<thrift::NextHopThrift> const& allNextHops) {
+  // Optimization for single nexthop case
+  if (allNextHops.size() <= 1) {
+    return allNextHops;
+  }
+  // Find minimum cost and mpls action
+  int32_t minCost = std::numeric_limits<int32_t>::max();
+  thrift::MplsActionCode mplsActionCode{thrift::MplsActionCode::SWAP};
+  for (auto const& nextHop : allNextHops) {
+    CHECK(nextHop.mplsAction.hasValue());
+    // Action can't be push (we don't push labels in MPLS routes)
+    // or POP with multiple nexthops
+    CHECK(thrift::MplsActionCode::PUSH != nextHop.mplsAction->action);
+    CHECK(thrift::MplsActionCode::POP_AND_LOOKUP != nextHop.mplsAction->action);
+
+    if (nextHop.metric <= minCost) {
+      minCost = nextHop.metric;
+      if (nextHop.mplsAction->action == thrift::MplsActionCode::PHP) {
+        mplsActionCode = thrift::MplsActionCode::PHP;
+      }
+    }
+  }
+
+  // Find nextHops with the minimum cost and required mpls action
+  std::vector<thrift::NextHopThrift> bestNextHops;
+  for (auto const& nextHop : allNextHops) {
+    if (nextHop.metric == minCost and
+        nextHop.mplsAction->action == mplsActionCode) {
       bestNextHops.emplace_back(nextHop);
     }
   }
@@ -411,37 +451,65 @@ findDeltaRoutes(
     const thrift::RouteDatabase& oldRouteDb) {
   DCHECK(newRouteDb.thisNodeName == oldRouteDb.thisNodeName);
 
-  // Find new routes to be added/updated/removed
-  std::vector<thrift::UnicastRoute> routesToAddUpdate;
+  // Find unicast routes to be added/updated or removed
+  std::vector<thrift::UnicastRoute> unicastRoutesToUpdate;
   std::set_difference(
       newRouteDb.unicastRoutes.begin(),
       newRouteDb.unicastRoutes.end(),
       oldRouteDb.unicastRoutes.begin(),
       oldRouteDb.unicastRoutes.end(),
-      std::inserter(routesToAddUpdate, routesToAddUpdate.begin()));
-  std::vector<thrift::UnicastRoute> routesToRemoveOrUpdate;
+      std::inserter(unicastRoutesToUpdate, unicastRoutesToUpdate.begin()));
+  std::vector<thrift::UnicastRoute> unicastRoutesToDelete;
   std::set_difference(
       oldRouteDb.unicastRoutes.begin(),
       oldRouteDb.unicastRoutes.end(),
       newRouteDb.unicastRoutes.begin(),
       newRouteDb.unicastRoutes.end(),
-      std::inserter(routesToRemoveOrUpdate, routesToRemoveOrUpdate.begin()));
+      std::inserter(unicastRoutesToDelete, unicastRoutesToDelete.begin()));
+
+  // Find mpls routes to be added/updated or removed
+  std::vector<thrift::MplsRoute> mplsRoutesToUpdate;
+  std::set_difference(
+      newRouteDb.mplsRoutes.begin(),
+      newRouteDb.mplsRoutes.end(),
+      oldRouteDb.mplsRoutes.begin(),
+      oldRouteDb.mplsRoutes.end(),
+      std::inserter(mplsRoutesToUpdate, mplsRoutesToUpdate.begin()));
+  std::vector<thrift::MplsRoute> mplsRoutesToDelete;
+  std::set_difference(
+      oldRouteDb.mplsRoutes.begin(),
+      oldRouteDb.mplsRoutes.end(),
+      newRouteDb.mplsRoutes.begin(),
+      newRouteDb.mplsRoutes.end(),
+      std::inserter(mplsRoutesToDelete, mplsRoutesToDelete.begin()));
 
   // Find entry of prefix to be removed
   std::set<thrift::IpPrefix> prefixesToRemove;
-  for (const auto& route : routesToRemoveOrUpdate) {
+  for (const auto& route : unicastRoutesToDelete) {
     prefixesToRemove.emplace(route.dest);
   }
-  for (const auto& route : routesToAddUpdate) {
+  for (const auto& route : unicastRoutesToUpdate) {
     prefixesToRemove.erase(route.dest);
+  }
+
+  // Find labels to be removed
+  std::set<int32_t> labelsToRemove;
+  for (const auto& route : mplsRoutesToDelete) {
+    labelsToRemove.emplace(route.topLabel);
+  }
+  for (const auto& route : mplsRoutesToUpdate) {
+    labelsToRemove.erase(route.topLabel);
   }
 
   // Build routes to be programmed.
   thrift::RouteDatabaseDelta routeDbDelta;
   routeDbDelta.thisNodeName = newRouteDb.thisNodeName;
-  routeDbDelta.unicastRoutesToUpdate = std::move(routesToAddUpdate);
+  routeDbDelta.unicastRoutesToUpdate = std::move(unicastRoutesToUpdate);
   routeDbDelta.unicastRoutesToDelete = {prefixesToRemove.begin(),
                                         prefixesToRemove.end()};
+  routeDbDelta.mplsRoutesToUpdate = std::move(mplsRoutesToUpdate);
+  routeDbDelta.mplsRoutesToDelete = {labelsToRemove.begin(),
+                                     labelsToRemove.end()};
 
   return routeDbDelta;
 }
