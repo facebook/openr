@@ -133,7 +133,8 @@ class HealthCheckerTestFixture : public ::testing::Test {
           prefix,
           thrift::PrefixType::LOOPBACK,
           "",
-          thrift::PrefixForwardingType::IP);
+          thrift::PrefixForwardingType::IP,
+          false);
     }
 
     thrift::PrefixDatabase prefixDb;

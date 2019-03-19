@@ -63,11 +63,12 @@ class ViewCmd(PrefixMgrCmd):
             forwarding_type = ipnetwork.sprint_prefix_forwarding_type(
                 prefix_entry.forwardingType
             )
-            rows.append((prefix_type, prefix_str, forwarding_type))
+            is_ephemeral_str = ipnetwork.sprint_prefix_is_ephemeral(prefix_entry)
+            rows.append((prefix_type, prefix_str, forwarding_type, is_ephemeral_str))
         print(
             "\n",
             printing.render_horizontal_table(
-                rows, ["Type", "Prefix", "Forwarding Type"]
+                rows, ["Type", "Prefix", "Forwarding Type", "Ephemeral"]
             ),
         )
         print()

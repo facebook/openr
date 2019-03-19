@@ -85,56 +85,64 @@ const auto prefixDb1 = createPrefixDb(
       addr1,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb2 = createPrefixDb(
     "2",
     {{FRAGILE,
       addr2,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb3 = createPrefixDb(
     "3",
     {{FRAGILE,
       addr3,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb4 = createPrefixDb(
     "4",
     {{FRAGILE,
       addr4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb1V4 = createPrefixDb(
     "1",
     {{FRAGILE,
       addr1V4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb2V4 = createPrefixDb(
     "2",
     {{FRAGILE,
       addr2V4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb3V4 = createPrefixDb(
     "3",
     {{FRAGILE,
       addr3V4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb4V4 = createPrefixDb(
     "4",
     {{FRAGILE,
       addr4V4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 
 // timeout to wait until decision debounce
 // (i.e. spf recalculation, route rebuild) finished
@@ -658,24 +666,28 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
         addr1,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::IP},
+        thrift::PrefixForwardingType::IP,
+        false},
        {FRAGILE,
         defaultRoute,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::IP}});
+        thrift::PrefixForwardingType::IP,
+        false}});
   auto prefixDb4 = createPrefixDb(
       "4",
       {{FRAGILE,
         addr4,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::IP},
+        thrift::PrefixForwardingType::IP,
+        false},
        {FRAGILE,
         defaultRoute,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::IP}});
+        thrift::PrefixForwardingType::IP,
+        false}});
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb4));
 
@@ -1199,7 +1211,8 @@ createGrid(SpfSolverOld& spfSolver, int n) {
             addrV6,
             thrift::PrefixType::LOOPBACK,
             {},
-            thrift::PrefixForwardingType::IP}}));
+            thrift::PrefixForwardingType::IP,
+            false}}));
     }
   }
 }
@@ -1432,7 +1445,8 @@ class DecisionOldTestFixture : public ::testing::Test {
           prefix,
           thrift::PrefixType::LOOPBACK,
           "",
-          thrift::PrefixForwardingType::IP);
+          thrift::PrefixForwardingType::IP,
+          false);
     }
     return thrift::Value(
         FRAGILE,

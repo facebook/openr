@@ -157,6 +157,11 @@ struct PrefixEntry {
   // set then IP -> MPLS route will be programmed at LERs and LSR will perform
   // label forwarding until packet reaches destination.
   4: PrefixForwardingType forwardingType = 0
+  // Indicates if the prefix entry is ephemeral or persistent.
+  // If optional value is not present, then entry is persistent.
+  // Ephemeral entries are not saved into persistent store(file) and will be
+  // lost with restart, if not refreshed before cold start time.
+  5: optional bool ephemeral
 }
 
 // all prefixes that are bound to a given router

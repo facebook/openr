@@ -818,7 +818,8 @@ LinkMonitor::advertiseRedistAddrs() {
         prefix,
         thrift::PrefixType::LOOPBACK,
         "",
-        thrift::PrefixForwardingType::IP));
+        thrift::PrefixForwardingType::IP,
+        false));
   }
 
   // Add redistribute addresses

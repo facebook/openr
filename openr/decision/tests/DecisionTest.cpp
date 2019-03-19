@@ -85,56 +85,64 @@ const auto prefixDb1 = createPrefixDb(
       addr1,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb2 = createPrefixDb(
     "2",
     {{FRAGILE,
       addr2,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb3 = createPrefixDb(
     "3",
     {{FRAGILE,
       addr3,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb4 = createPrefixDb(
     "4",
     {{FRAGILE,
       addr4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb1V4 = createPrefixDb(
     "1",
     {{FRAGILE,
       addr1V4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb2V4 = createPrefixDb(
     "2",
     {{FRAGILE,
       addr2V4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb3V4 = createPrefixDb(
     "3",
     {{FRAGILE,
       addr3V4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 const auto prefixDb4V4 = createPrefixDb(
     "4",
     {{FRAGILE,
       addr4V4,
       thrift::PrefixType::LOOPBACK,
       {},
-      thrift::PrefixForwardingType::IP}});
+      thrift::PrefixForwardingType::IP,
+      false}});
 
 const thrift::MplsAction labelPopAction{
     createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP)};
@@ -1162,24 +1170,28 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
         addr1,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::IP},
+        thrift::PrefixForwardingType::IP,
+        false},
        {FRAGILE,
         defaultRoute,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::IP}});
+        thrift::PrefixForwardingType::IP,
+        false}});
   auto prefixDb4 = createPrefixDb(
       "4",
       {{FRAGILE,
         addr4,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::IP},
+        thrift::PrefixForwardingType::IP,
+        false},
        {FRAGILE,
         defaultRoute,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::IP}});
+        thrift::PrefixForwardingType::IP,
+        false}});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb1));
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb4));
 
@@ -1967,7 +1979,8 @@ TEST(DecisionTest, Ip2MplsRoutes) {
         addr1,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::SR_MPLS}});
+        thrift::PrefixForwardingType::SR_MPLS,
+        false}});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb1_));
   const auto prefixDb2_ = createPrefixDb(
       "2",
@@ -1975,7 +1988,8 @@ TEST(DecisionTest, Ip2MplsRoutes) {
         addr2,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::SR_MPLS}});
+        thrift::PrefixForwardingType::SR_MPLS,
+        false}});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb2_));
   const auto prefixDb3_ = createPrefixDb(
       "3",
@@ -1983,7 +1997,8 @@ TEST(DecisionTest, Ip2MplsRoutes) {
         addr3,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::SR_MPLS}});
+        thrift::PrefixForwardingType::SR_MPLS,
+        false}});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb3_));
   const auto prefixDb4_ = createPrefixDb(
       "4",
@@ -1991,7 +2006,8 @@ TEST(DecisionTest, Ip2MplsRoutes) {
         defaultPrefixV6,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::SR_MPLS}});
+        thrift::PrefixForwardingType::SR_MPLS,
+        false}});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb4_));
   const auto prefixDb5_ = createPrefixDb(
       "5",
@@ -1999,7 +2015,8 @@ TEST(DecisionTest, Ip2MplsRoutes) {
         defaultPrefixV6,
         thrift::PrefixType::LOOPBACK,
         {},
-        thrift::PrefixForwardingType::SR_MPLS}});
+        thrift::PrefixForwardingType::SR_MPLS,
+        false}});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb5_));
 
   // Some actions
@@ -2276,7 +2293,8 @@ createGrid(SpfSolver& spfSolver, int n) {
             addrV6,
             thrift::PrefixType::LOOPBACK,
             {},
-            thrift::PrefixForwardingType::IP}}));
+            thrift::PrefixForwardingType::IP,
+            false}}));
     }
   }
 }
@@ -2517,7 +2535,8 @@ class DecisionTestFixture : public ::testing::Test {
           prefix,
           thrift::PrefixType::LOOPBACK,
           "",
-          thrift::PrefixForwardingType::IP);
+          thrift::PrefixForwardingType::IP,
+          false);
     }
     return thrift::Value(
         FRAGILE,

@@ -32,56 +32,93 @@ const auto addr5 = toIpPrefix("ffff:10:1:5::/64");
 const auto addr6 = toIpPrefix("ffff:10:2:6::/64");
 const auto addr7 = toIpPrefix("ffff:10:3:7::/64");
 const auto addr8 = toIpPrefix("ffff:10:4:8::/64");
+const auto addr9 = toIpPrefix("ffff:10:4:9::/64");
+const auto addr10 = toIpPrefix("ffff:10:4:10::/64");
 
 const auto prefixEntry1 = thrift::PrefixEntry(
     apache::thrift::FRAGILE,
     addr1,
     thrift::PrefixType::DEFAULT,
     {},
-    thrift::PrefixForwardingType::IP);
+    thrift::PrefixForwardingType::IP,
+    false);
 const auto prefixEntry2 = thrift::PrefixEntry(
     apache::thrift::FRAGILE,
     addr2,
     thrift::PrefixType::PREFIX_ALLOCATOR,
     {},
-    thrift::PrefixForwardingType::IP);
+    thrift::PrefixForwardingType::IP,
+    false);
 const auto prefixEntry3 = thrift::PrefixEntry(
     apache::thrift::FRAGILE,
     addr3,
     thrift::PrefixType::DEFAULT,
     {},
-    thrift::PrefixForwardingType::IP);
+    thrift::PrefixForwardingType::IP,
+    false);
 const auto prefixEntry4 = thrift::PrefixEntry(
     apache::thrift::FRAGILE,
     addr4,
     thrift::PrefixType::PREFIX_ALLOCATOR,
     {},
-    thrift::PrefixForwardingType::IP);
+    thrift::PrefixForwardingType::IP,
+    false);
 const auto prefixEntry5 = thrift::PrefixEntry(
     apache::thrift::FRAGILE,
     addr5,
     thrift::PrefixType::DEFAULT,
     {},
-    thrift::PrefixForwardingType::IP);
+    thrift::PrefixForwardingType::IP,
+    false);
 const auto prefixEntry6 = thrift::PrefixEntry(
     apache::thrift::FRAGILE,
     addr6,
     thrift::PrefixType::PREFIX_ALLOCATOR,
     {},
-    thrift::PrefixForwardingType::IP);
+    thrift::PrefixForwardingType::IP,
+    false);
 const auto prefixEntry7 = thrift::PrefixEntry(
     apache::thrift::FRAGILE,
     addr7,
     thrift::PrefixType::DEFAULT,
     {},
-    thrift::PrefixForwardingType::IP);
+    thrift::PrefixForwardingType::IP,
+    false);
 const auto prefixEntry8 = thrift::PrefixEntry(
     apache::thrift::FRAGILE,
     addr8,
     thrift::PrefixType::PREFIX_ALLOCATOR,
     {},
-    thrift::PrefixForwardingType::IP);
-
+    thrift::PrefixForwardingType::IP,
+    false);
+const auto ephemeralPrefixEntry9 = thrift::PrefixEntry(
+    apache::thrift::FRAGILE,
+    addr9,
+    thrift::PrefixType::BGP,
+    {},
+    thrift::PrefixForwardingType::IP,
+    true);
+const auto persistentPrefixEntry9 = thrift::PrefixEntry(
+    apache::thrift::FRAGILE,
+    addr9,
+    thrift::PrefixType::BGP,
+    {},
+    thrift::PrefixForwardingType::IP,
+    false);
+const auto ephemeralPrefixEntry10 = thrift::PrefixEntry(
+    apache::thrift::FRAGILE,
+    addr10,
+    thrift::PrefixType::BGP,
+    {},
+    thrift::PrefixForwardingType::IP,
+    true);
+const auto persistentPrefixEntry10 = thrift::PrefixEntry(
+    apache::thrift::FRAGILE,
+    addr10,
+    thrift::PrefixType::BGP,
+    {},
+    thrift::PrefixForwardingType::IP,
+    false);
 } // namespace
 
 class PrefixManagerTestFixture : public ::testing::Test {
@@ -89,12 +126,15 @@ class PrefixManagerTestFixture : public ::testing::Test {
   void
   SetUp() override {
     // spin up a config store
+    storageFilePath = folly::sformat(
+        "/tmp/pm_ut_config_store.bin.{}",
+        std::hash<std::thread::id>{}(std::this_thread::get_id()));
     configStore = std::make_unique<PersistentStore>(
-        folly::sformat(
-            "/tmp/pm_ut_config_store.bin.{}",
-            std::hash<std::thread::id>{}(std::this_thread::get_id())),
+        storageFilePath,
         PersistentStoreUrl{kConfigStoreUrl},
-        context);
+        context,
+        std::chrono::milliseconds(0),
+        std::chrono::milliseconds(0));
 
     configStoreThread = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "ConfigStore thread starting";
@@ -168,6 +208,7 @@ class PrefixManagerTestFixture : public ::testing::Test {
 
   fbzmq::ZmqEventLoop evl;
 
+  std::string storageFilePath;
   std::unique_ptr<PersistentStore> configStore;
   std::unique_ptr<std::thread> configStoreThread;
 
@@ -200,6 +241,8 @@ TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   auto resp15 =
       prefixManagerClient->withdrawPrefixes({prefixEntry1, prefixEntry2});
   auto resp16 = prefixManagerClient->withdrawPrefixes({prefixEntry4});
+  auto resp17 = prefixManagerClient->addPrefixes({ephemeralPrefixEntry9});
+  auto resp18 = prefixManagerClient->withdrawPrefixes({ephemeralPrefixEntry9});
   EXPECT_FALSE(resp1.value().success);
   EXPECT_TRUE(resp2.value().success);
   EXPECT_FALSE(resp3.value().success);
@@ -216,6 +259,8 @@ TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   EXPECT_TRUE(resp14.value().success);
   EXPECT_FALSE(resp15.value().success);
   EXPECT_FALSE(resp16.value().success);
+  EXPECT_TRUE(resp17.value().success);
+  EXPECT_TRUE(resp18.value().success);
 }
 
 TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
@@ -332,6 +377,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
 TEST_F(PrefixManagerTestFixture, CheckReload) {
   prefixManagerClient->addPrefixes({prefixEntry1});
   prefixManagerClient->addPrefixes({prefixEntry2});
+  prefixManagerClient->addPrefixes({ephemeralPrefixEntry9});
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
@@ -355,11 +401,15 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
   auto prefixManagerClient2 = std::make_unique<PrefixManagerClient>(
       PrefixManagerLocalCmdUrl{prefixManager2->inprocCmdUrl}, context);
 
-  // verify that the new manager has what the first manager had
+  // verify that the new manager has only persistent prefixes.
+  // Ephemeral prefixes will not be reloaded.
   EXPECT_TRUE(
       prefixManagerClient2->withdrawPrefixes({prefixEntry1}).value().success);
   EXPECT_TRUE(
       prefixManagerClient2->withdrawPrefixes({prefixEntry2}).value().success);
+  EXPECT_FALSE(prefixManagerClient2->withdrawPrefixes({ephemeralPrefixEntry9})
+                   .value()
+                   .success);
   // cleanup
   prefixManager2->stop();
   prefixManagerThread2->join();
@@ -522,6 +572,86 @@ TEST(PrefixManagerTest, HoldTimeout) {
   kvStoreWrapper->stop();
   configStore->stop();
   configStoreThread.join();
+}
+
+// Verify that persist store is updated only when
+// non-ephemeral types are effected
+TEST_F(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
+  ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
+  // Verify that any action on persistent entries leads to update of store
+  prefixManagerClient->addPrefixes({prefixEntry1, prefixEntry2, prefixEntry3});
+  // 3 prefixes leads to 1 write
+  ASSERT_EQ(1, configStore->getNumOfDbWritesToDisk());
+
+  prefixManagerClient->withdrawPrefixes({prefixEntry1});
+  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
+
+  prefixManagerClient->syncPrefixesByType(
+      thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry2, prefixEntry4});
+  ASSERT_EQ(3, configStore->getNumOfDbWritesToDisk());
+
+  prefixManagerClient->withdrawPrefixesByType(
+      thrift::PrefixType::PREFIX_ALLOCATOR);
+  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
+
+  // Verify that any actions on ephemeral entries does not lead to update of
+  // store
+  prefixManagerClient->addPrefixes(
+      {ephemeralPrefixEntry9, ephemeralPrefixEntry10});
+  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
+
+  prefixManagerClient->withdrawPrefixes({ephemeralPrefixEntry9});
+  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
+
+  prefixManagerClient->syncPrefixesByType(
+      thrift::PrefixType::BGP, {ephemeralPrefixEntry10});
+  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
+
+  prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::BGP);
+  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
+}
+
+// Verify that persist store is update properly when both persistent
+// and ephemeral entries are mixed for same prefix type
+TEST_F(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
+  ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
+  // Verify that any action on persistent entries leads to update of store
+  prefixManagerClient->addPrefixes(
+      {persistentPrefixEntry9, ephemeralPrefixEntry10});
+  ASSERT_EQ(1, configStore->getNumOfDbWritesToDisk());
+
+  // Change persistance characterstic. Expect disk update
+  prefixManagerClient->syncPrefixesByType(
+      thrift::PrefixType::BGP,
+      {ephemeralPrefixEntry9, persistentPrefixEntry10});
+  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
+
+  // Only ephemeral entry withdrawn, so no update to disk
+  prefixManagerClient->withdrawPrefixes({ephemeralPrefixEntry9});
+  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
+
+  // Persistent entry withdrawn, expect update to disk
+  prefixManagerClient->withdrawPrefixes({persistentPrefixEntry10});
+  ASSERT_EQ(3, configStore->getNumOfDbWritesToDisk());
+
+  // Restore the state to mix of ephemeral and persistent of a type
+  prefixManagerClient->addPrefixes(
+      {persistentPrefixEntry9, ephemeralPrefixEntry10});
+  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
+
+  // Verify that withdraw by type, updates disk
+  prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::BGP);
+  ASSERT_EQ(5, configStore->getNumOfDbWritesToDisk());
+
+  // Restore the state to mix of ephemeral and persistent of a type
+  prefixManagerClient->addPrefixes(
+      {persistentPrefixEntry9, ephemeralPrefixEntry10});
+  ASSERT_EQ(6, configStore->getNumOfDbWritesToDisk());
+
+  // Verify that entry in DB being deleted is persistent so file is update
+  prefixManagerClient->syncPrefixesByType(
+      thrift::PrefixType::BGP, {ephemeralPrefixEntry10});
+  ASSERT_EQ(7, configStore->getNumOfDbWritesToDisk());
 }
 
 int

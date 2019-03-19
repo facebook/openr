@@ -566,19 +566,22 @@ TEST(UtilTest, getPrefixForwardingType) {
       toIpPrefix("10.0.0.0/8"),
       thrift::PrefixType::LOOPBACK,
       "",
-      thrift::PrefixForwardingType::IP);
+      thrift::PrefixForwardingType::IP,
+      false);
   prefixes["node2"] = thrift::PrefixEntry(
       apache::thrift::FRAGILE,
       toIpPrefix("10.0.0.0/8"),
       thrift::PrefixType::LOOPBACK,
       "",
-      thrift::PrefixForwardingType::IP);
+      thrift::PrefixForwardingType::IP,
+      false);
   prefixes["node3"] = thrift::PrefixEntry(
       apache::thrift::FRAGILE,
       toIpPrefix("10.0.0.0/8"),
       thrift::PrefixType::LOOPBACK,
       "",
-      thrift::PrefixForwardingType::IP);
+      thrift::PrefixForwardingType::IP,
+      false);
 
   EXPECT_EQ(
       thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));

@@ -19,11 +19,12 @@ using namespace std::chrono_literals;
 PersistentStore::PersistentStore(
     const std::string& storageFilePath,
     const PersistentStoreUrl& socketUrl,
-    fbzmq::Context& context)
+    fbzmq::Context& context,
+    std::chrono::milliseconds saveInitialBackoff,
+    std::chrono::milliseconds saveMaxBackoff)
     : storageFilePath_(storageFilePath),
       repSocket_(
-          context, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      saveDbTimerBackoff_(100ms, 5s) {
+          context, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
   // Bind rep socket
   VLOG(3) << "PersistentStore: Binding server socket on url "
           << static_cast<std::string>(socketUrl);
@@ -38,16 +39,23 @@ PersistentStore::PersistentStore(
       ZMQ_POLLIN,
       [this](int /* revents */) noexcept { processRequest(); });
 
-  saveDbTimer_ = fbzmq::ZmqTimeout::make(&eventLoop_, [this]() noexcept {
-    if (saveDatabaseToDisk()) {
-      saveDbTimerBackoff_.reportSuccess();
-    } else {
-      // Report error and schedule next-try
-      saveDbTimerBackoff_.reportError();
-      saveDbTimer_->scheduleTimeout(
-          saveDbTimerBackoff_.getTimeRemainingUntilRetry());
-    }
-  });
+  if (saveInitialBackoff != 0ms or saveMaxBackoff != 0ms) {
+    // Create timer and backoff mechanism only if backoff is requested
+    saveDbTimerBackoff_ =
+        std::make_unique<ExponentialBackoff<std::chrono::milliseconds>>(
+            saveInitialBackoff, saveMaxBackoff);
+
+    saveDbTimer_ = fbzmq::ZmqTimeout::make(&eventLoop_, [this]() noexcept {
+      if (saveDatabaseToDisk()) {
+        saveDbTimerBackoff_->reportSuccess();
+      } else {
+        // Report error and schedule next-try
+        saveDbTimerBackoff_->reportError();
+        saveDbTimer_->scheduleTimeout(
+            saveDbTimerBackoff_->getTimeRemainingUntilRetry());
+      }
+    });
+  }
 
   // Load initial database. On failure we will just report error and continue
   // with empty database
@@ -116,16 +124,23 @@ PersistentStore::processRequest() {
   }
   }
 
+  // Schedule database save
+  if (response.success and
+      (request->requestType != thrift::StoreRequestType::LOAD)) {
+    if (not saveDbTimerBackoff_) {
+      // This is primarily used for unit testing to save DB immediately
+      // Block the response till file is saved
+      saveDatabaseToDisk();
+    } else if (not saveDbTimer_->isScheduled()) {
+      saveDbTimer_->scheduleTimeout(
+          saveDbTimerBackoff_->getTimeRemainingUntilRetry());
+    }
+  }
+
   // Send response
   auto ret = repSocket_.sendThriftObj(response, serializer_);
   if (ret.hasError()) {
     LOG(ERROR) << "Error while sending response " << ret.error();
-  }
-
-  // Schedule database save
-  if (response.success and not saveDbTimer_->isScheduled()) {
-    saveDbTimer_->scheduleTimeout(
-        saveDbTimerBackoff_.getTimeRemainingUntilRetry());
   }
 }
 
@@ -141,6 +156,7 @@ PersistentStore::saveDatabaseToDisk() noexcept {
     // Write ioBuf to disk atomically
     auto fileData = ioBuf->moveToFbString().toStdString();
     folly::writeFileAtomic(storageFilePath_, fileData, 0666);
+    numOfWritesToDisk_++;
   } catch (std::exception const& err) {
     LOG(ERROR) << "Failed to write data to file '" << storageFilePath_ << "'. "
                << folly::exceptionStr(err);

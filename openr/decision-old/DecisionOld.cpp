@@ -597,7 +597,8 @@ SpfSolverOld::SpfSolverOldImpl::getPrefixDatabases() {
           prefix,
           thrift::PrefixType::LOOPBACK,
           "",
-          thrift::PrefixForwardingType::IP);
+          thrift::PrefixForwardingType::IP,
+          false);
     }
   }
 

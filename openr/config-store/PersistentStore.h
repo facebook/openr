@@ -16,6 +16,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
@@ -42,7 +43,12 @@ class PersistentStore : public fbzmq::Runnable {
   PersistentStore(
       const std::string& storageFilePath,
       const PersistentStoreUrl& socketUrl,
-      fbzmq::Context& context);
+      fbzmq::Context& context,
+      // persistent store DB saving backoffs
+      std::chrono::milliseconds saveInitialBackoff =
+          Constants::kPersistentStoreInitialBackoff,
+      std::chrono::milliseconds saveMaxBackoff =
+          Constants::kPersistentStoreMaxBackoff);
 
   // Destructor will try to save DB to disk before destroying the object
   ~PersistentStore() override;
@@ -69,6 +75,11 @@ class PersistentStore : public fbzmq::Runnable {
     eventLoop_.waitUntilStopped();
   }
 
+  uint64_t
+  getNumOfDbWritesToDisk() const {
+    return numOfWritesToDisk_;
+  }
+
  private:
   // Function to process pending request on reqSocket_
   void processRequest();
@@ -77,6 +88,9 @@ class PersistentStore : public fbzmq::Runnable {
   // else false. Doesn't throw exception.
   bool saveDatabaseToDisk() noexcept;
   bool loadDatabaseFromDisk() noexcept;
+
+  // Keeps track of number of writes of Database to disk
+  std::atomic<std::uint64_t> numOfWritesToDisk_{0};
 
   // Location on disk where data will be synced up. A file will be created
   // if doesn't exists.
@@ -88,7 +102,8 @@ class PersistentStore : public fbzmq::Runnable {
 
   // Timer for saving database to disk
   std::unique_ptr<fbzmq::ZmqTimeout> saveDbTimer_;
-  ExponentialBackoff<std::chrono::milliseconds> saveDbTimerBackoff_;
+  std::unique_ptr<ExponentialBackoff<std::chrono::milliseconds>>
+      saveDbTimerBackoff_;
 
   // Database to store config data. It is synced up on a persistent storage
   // layer (disk) in a file.

@@ -63,8 +63,15 @@ PrefixManager::PrefixManager(
     // Prefixes will be advertised after prefixHoldUntilTimePoint_
   }
 
-  // Create throttled version of persistPrefixDbThrottled_
-  scheduleTimeoutAt(prefixHoldUntilTimePoint_, [this]() { persistPrefixDb(); });
+  // Create a timer to update all prefixes after HoldTime (2 * KA) during
+  // initial start up
+  // Holdtime zero is used during testing to do inline without delay
+  if (prefixHoldTime != std::chrono::seconds(0)) {
+    scheduleTimeoutAt(prefixHoldUntilTimePoint_, [this]() {
+      persistPrefixDb();
+      updateKvStore();
+    });
+  }
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
@@ -79,30 +86,50 @@ PrefixManager::PrefixManager(
 void
 PrefixManager::persistPrefixDb() {
   if (std::chrono::steady_clock::now() < prefixHoldUntilTimePoint_) {
-    // Too early for advertising my own prefixes. Let timeout advertise it
-    // and skip here.
+    // Too early for updating persistent file. Let timeout handle it
     return;
   }
 
-  // our prefixDb has changed, save the newest to disk
-  thrift::PrefixDatabase prefixDb;
-  prefixDb.thisNodeName = nodeId_;
+  // prefixDb persistent entries have changed,
+  // save the newest persistent entries to disk.
+  thrift::PrefixDatabase persistentPrefixDb;
+  persistentPrefixDb.thisNodeName = nodeId_;
   for (const auto& kv : prefixMap_) {
-    prefixDb.prefixEntries.emplace_back(kv.second);
+    if ((not kv.second.ephemeral.hasValue()) ||
+        (not kv.second.ephemeral.value())) {
+      persistentPrefixDb.prefixEntries.emplace_back(kv.second);
+    }
   }
 
   // Add perf information if enabled
   if (enablePerfMeasurement_) {
     thrift::PerfEvents perfEvents;
     addPerfEvent(perfEvents, nodeId_, "PREFIX_DB_UPDATED");
-    prefixDb.perfEvents = perfEvents;
+    persistentPrefixDb.perfEvents = perfEvents;
   } else {
-    DCHECK(!prefixDb.perfEvents.hasValue());
+    DCHECK(!persistentPrefixDb.perfEvents.hasValue());
   }
 
-  auto ret = configStoreClient_.storeThriftObj(kConfigKey, prefixDb);
+  auto ret = configStoreClient_.storeThriftObj(kConfigKey, persistentPrefixDb);
   if (ret.hasError()) {
-    LOG(ERROR) << "Error saving prefixDb to file";
+    LOG(ERROR) << "Error saving persistent prefixDb to file";
+  }
+}
+
+void
+PrefixManager::updateKvStore() {
+  if (std::chrono::steady_clock::now() < prefixHoldUntilTimePoint_) {
+    // Too early for advertising my own prefixes. Let timeout advertise it
+    // and skip here.
+    return;
+  }
+
+  // prefixDb has changed.
+  // Update the kvstore with both persistent and ephemeral entries
+  thrift::PrefixDatabase prefixDb;
+  prefixDb.thisNodeName = nodeId_;
+  for (const auto& kv : prefixMap_) {
+    prefixDb.prefixEntries.emplace_back(kv.second);
   }
 
   const auto prefixDbVal =
@@ -126,11 +153,15 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
 
   const auto& thriftReq = maybeThriftReq.value();
   thrift::PrefixManagerResponse response;
+  bool persistentEntryChange = false;
   switch (thriftReq.cmd) {
   case thrift::PrefixManagerCommand::ADD_PREFIXES: {
     tData_.addStatValue("prefix_manager.add_prefixes", 1, fbzmq::COUNT);
+    if (isAnyInputPrefixPersistent(thriftReq.prefixes)) {
+      persistentEntryChange = true;
+    }
     if (addOrUpdatePrefixes(thriftReq.prefixes)) {
-      persistPrefixDb();
+      updateKvStore();
       response.success = true;
     } else {
       response.success = false;
@@ -140,8 +171,11 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
     break;
   }
   case thrift::PrefixManagerCommand::WITHDRAW_PREFIXES: {
+    if (isAnyExistingPrefixPersistent(thriftReq.prefixes)) {
+      persistentEntryChange = true;
+    }
     if (removePrefixes(thriftReq.prefixes)) {
-      persistPrefixDb();
+      updateKvStore();
       response.success = true;
       tData_.addStatValue("prefix_manager.withdraw_prefixes", 1, fbzmq::COUNT);
     } else {
@@ -151,8 +185,11 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
     break;
   }
   case thrift::PrefixManagerCommand::WITHDRAW_PREFIXES_BY_TYPE: {
+    if (isAnyExistingPrefixPersistentByType(thriftReq.type)) {
+      persistentEntryChange = true;
+    }
     if (removePrefixesByType(thriftReq.type)) {
-      persistPrefixDb();
+      updateKvStore();
       response.success = true;
     } else {
       response.success = false;
@@ -161,8 +198,12 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
     break;
   }
   case thrift::PrefixManagerCommand::SYNC_PREFIXES_BY_TYPE: {
+    if (isAnyExistingPrefixPersistentByType(thriftReq.type) or
+        isAnyInputPrefixPersistent(thriftReq.prefixes)) {
+      persistentEntryChange = true;
+    }
     if (syncPrefixesByType(thriftReq.type, thriftReq.prefixes)) {
-      persistPrefixDb();
+      updateKvStore();
       response.success = true;
     } else {
       response.success = false;
@@ -192,6 +233,10 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
     response.message = kErrorUnknownCommand;
     break;
   }
+  }
+
+  if (response.success and persistentEntryChange) {
+    persistPrefixDb();
   }
 
   return fbzmq::Message::fromThriftObj(response, serializer_);
@@ -322,6 +367,47 @@ PrefixManager::removePrefixesByType(thrift::PrefixType type) {
     }
   }
   return changed;
+}
+
+bool
+PrefixManager::isAnyInputPrefixPersistent(
+    const std::vector<thrift::PrefixEntry>& prefixes) const {
+  for (const auto& prefix : prefixes) {
+    if ((not prefix.ephemeral.hasValue()) || (not prefix.ephemeral.value())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool
+PrefixManager::isAnyExistingPrefixPersistentByType(
+    thrift::PrefixType type) const {
+  for (const auto& kv : prefixMap_) {
+    if (kv.second.type != type) {
+      continue;
+    }
+    if ((not kv.second.ephemeral.hasValue()) ||
+        (not kv.second.ephemeral.value())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool
+PrefixManager::isAnyExistingPrefixPersistent(
+    const std::vector<thrift::PrefixEntry>& prefixes) const {
+  for (const auto& prefix : prefixes) {
+    auto iter = prefixMap_.find(prefix.prefix);
+    if (iter != prefixMap_.end()) {
+      if ((not iter->second.ephemeral.hasValue()) ||
+          (not iter->second.ephemeral.value())) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 } // namespace openr

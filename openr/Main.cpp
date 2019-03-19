@@ -295,11 +295,11 @@ DEFINE_int32(
 DEFINE_int32(
     link_flap_initial_backoff_ms,
     1000,
-    "initial backoff to dampen link flaps (in milliseconds)");
+    "Initial backoff to dampen link flaps (in milliseconds)");
 DEFINE_int32(
     link_flap_max_backoff_ms,
     60000,
-    "max backoff to dampen link flaps (in millseconds)");
+    "Max backoff to dampen link flaps (in millseconds)");
 DEFINE_bool(
     enable_perf_measurement,
     true,
@@ -395,6 +395,14 @@ DEFINE_string(
     "",
     "A comma separated list of strings. Strings are x509 common names to "
     "accept SSL connections from.");
+DEFINE_int32(
+    persistent_store_initial_backoff_ms,
+    openr::Constants::kPersistentStoreInitialBackoff.count(),
+    "Initial backoff to save DB to file (in milliseconds)");
+DEFINE_int32(
+    persistent_store_max_backoff_ms,
+    openr::Constants::kPersistentStoreMaxBackoff.count(),
+    "Max backoff to save DB to file (in millseconds)");
 
 // Disable background jemalloc background thread => new jemalloc-5 feature
 const char* malloc_conf = "background_thread:false";
@@ -678,7 +686,11 @@ main(int argc, char** argv) {
 
   // Start config-store URL
   PersistentStore configStore(
-      FLAGS_config_store_filepath, kConfigStoreUrl, context);
+      FLAGS_config_store_filepath,
+      kConfigStoreUrl,
+      context,
+      std::chrono::milliseconds(FLAGS_persistent_store_initial_backoff_ms),
+      std::chrono::milliseconds(FLAGS_persistent_store_max_backoff_ms));
   std::thread configStoreThread([&configStore]() noexcept {
     LOG(INFO) << "Starting ConfigStore thread...";
     folly::setThreadName("ConfigStore");

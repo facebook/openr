@@ -75,6 +75,11 @@ class Constants {
   static constexpr std::chrono::milliseconds kInitialBackoff{64};
   static constexpr std::chrono::milliseconds kMaxBackoff{8192};
 
+  // Persistent store specific
+  static constexpr std::chrono::milliseconds kPersistentStoreInitialBackoff{
+      100};
+  static constexpr std::chrono::milliseconds kPersistentStoreMaxBackoff{5000};
+
   //
   // KvStore specific
 

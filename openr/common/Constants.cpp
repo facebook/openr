@@ -64,6 +64,8 @@ constexpr std::chrono::milliseconds Constants::kLinkImmediateTimeout;
 constexpr std::chrono::milliseconds Constants::kLinkThrottleTimeout;
 constexpr std::chrono::milliseconds Constants::kMaxBackoff;
 constexpr std::chrono::milliseconds Constants::kMaxTtlUpdateInterval;
+constexpr std::chrono::milliseconds Constants::kPersistentStoreInitialBackoff;
+constexpr std::chrono::milliseconds Constants::kPersistentStoreMaxBackoff;
 constexpr std::chrono::milliseconds Constants::kPlatformConnTimeout;
 constexpr std::chrono::milliseconds Constants::kPlatformProcTimeout;
 constexpr std::chrono::milliseconds Constants::kPollTimeout;

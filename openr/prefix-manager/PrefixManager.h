@@ -51,7 +51,10 @@ class PrefixManager final : public OpenrEventLoop {
   int64_t getPrefixWithdrawCounter();
 
  private:
+  // Update persistent store with non-ephemeral prefix entries
   void persistPrefixDb();
+  // Update kvstore with both ephemeral and non-ephemeral prefixes
+  void updateKvStore();
 
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& request) override;
@@ -64,6 +67,18 @@ class PrefixManager final : public OpenrEventLoop {
   bool syncPrefixesByType(
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
+
+  // Determine if any prefix entry is persistent (non-ephemeral) in input
+  bool isAnyInputPrefixPersistent(
+      const std::vector<thrift::PrefixEntry>& prefixes) const;
+
+  // Determine if any prefix entry is persistent (non-ephemeral) in prefixMap_
+  bool isAnyExistingPrefixPersistent(
+      const std::vector<thrift::PrefixEntry>& prefixes) const;
+
+  // Determine if any prefix entry is persistent (non-ephemeral) by type in
+  // prefixMap_
+  bool isAnyExistingPrefixPersistentByType(thrift::PrefixType type) const;
 
   // Submit internal state counters to monitor
   void submitCounters();

@@ -639,7 +639,8 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
           toIpPrefix(prefix),
           openr::thrift::PrefixType::PREFIX_ALLOCATOR,
           {},
-          thrift::PrefixForwardingType::IP)});
+          thrift::PrefixForwardingType::IP,
+          false)});
   if (ret.hasError()) {
     LOG(ERROR) << "Announcing new prefix failed: " << ret.error();
   }
