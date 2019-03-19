@@ -101,6 +101,10 @@ class PrefixManager final : public OpenrEventLoop {
   // timepoint.
   std::chrono::steady_clock::time_point prefixHoldUntilTimePoint_;
 
+  // Throttled version of updateKvStore. It batches up multiple calls and
+  // send them in one go!
+  std::unique_ptr<fbzmq::ZmqThrottle> updateKvStoreThrottled_;
+
   // kvStoreClient for persisting our prefix db
   KvStoreClient kvStoreClient_;
 

@@ -71,6 +71,7 @@ constexpr std::chrono::milliseconds Constants::kPlatformProcTimeout;
 constexpr std::chrono::milliseconds Constants::kPollTimeout;
 constexpr std::chrono::milliseconds Constants::kPrefixAllocatorRetryInterval;
 constexpr std::chrono::milliseconds Constants::kPrefixAllocatorSyncInterval;
+constexpr std::chrono::milliseconds Constants::kPrefixMgrKvThrottleTimeout;
 constexpr std::chrono::milliseconds Constants::kRangeAllocTtl;
 constexpr std::chrono::milliseconds Constants::kReadTimeout;
 constexpr std::chrono::milliseconds Constants::kTtlDecrement;

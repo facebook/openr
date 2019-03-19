@@ -228,6 +228,13 @@ class Constants {
   static constexpr uint16_t kPerfBufferSize{10};
   static constexpr std::chrono::seconds kConvergenceMaxDuration{3s};
 
+  //
+  // Prefix manager specific
+  //
+
+  // the time we hold on to announce to KvStore
+  static constexpr std::chrono::milliseconds kPrefixMgrKvThrottleTimeout{250};
+
   // OpenR ports
 
   // Openr Ctrl thrift server port

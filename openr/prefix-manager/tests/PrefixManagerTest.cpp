@@ -351,6 +351,17 @@ TEST_F(PrefixManagerTestFixture, RemoveInvalidType) {
 
 TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
   prefixManagerClient->addPrefixes({prefixEntry1});
+
+  // Wait for throttled update to announce to kvstore
+  std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
+  auto maybeValue = kvStoreClient->getKey("prefix:node-1");
+  EXPECT_FALSE(maybeValue.hasError());
+  auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+      maybeValue.value().value.value(), serializer);
+  EXPECT_EQ(db.thisNodeName, "node-1");
+  EXPECT_EQ(db.prefixEntries.size(), 1);
+
+  prefixManagerClient->withdrawPrefixes({prefixEntry1});
   prefixManagerClient->addPrefixes({prefixEntry2});
   prefixManagerClient->addPrefixes({prefixEntry3});
   prefixManagerClient->addPrefixes({prefixEntry4});
@@ -358,20 +369,37 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
   prefixManagerClient->addPrefixes({prefixEntry6});
   prefixManagerClient->addPrefixes({prefixEntry7});
   prefixManagerClient->addPrefixes({prefixEntry8});
-  auto maybeValue = kvStoreClient->getKey("prefix:node-1");
-  EXPECT_FALSE(maybeValue.hasError());
-  auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-      maybeValue.value().value.value(), serializer);
-  EXPECT_EQ(db.thisNodeName, "node-1");
-  EXPECT_EQ(db.prefixEntries.size(), 8);
-  // now make a change and check again
-  prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
+  prefixManagerClient->addPrefixes({ephemeralPrefixEntry9});
+
+  /* Verify that before throttle expires, we don't see any update */
+  std::this_thread::sleep_for(Constants::kPrefixMgrKvThrottleTimeout / 2);
+  auto maybeValue1 = kvStoreClient->getKey("prefix:node-1");
+  EXPECT_FALSE(maybeValue1.hasError());
+  auto db1 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+      maybeValue1.value().value.value(), serializer);
+  EXPECT_EQ(db1.thisNodeName, "node-1");
+  EXPECT_EQ(db1.prefixEntries.size(), 1);
+
+  // Wait for throttled update to announce to kvstore
+  std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
   auto maybeValue2 = kvStoreClient->getKey("prefix:node-1");
-  EXPECT_FALSE(maybeValue.hasError());
+  EXPECT_FALSE(maybeValue2.hasError());
   auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue2.value().value.value(), serializer);
   EXPECT_EQ(db2.thisNodeName, "node-1");
-  EXPECT_EQ(db2.prefixEntries.size(), 4);
+  EXPECT_EQ(db2.prefixEntries.size(), 8);
+
+  // now make a change and check again
+  prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
+
+  // Wait for throttled update to announce to kvstore
+  std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
+  auto maybeValue3 = kvStoreClient->getKey("prefix:node-1");
+  EXPECT_FALSE(maybeValue3.hasError());
+  auto db3 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+      maybeValue3.value().value.value(), serializer);
+  EXPECT_EQ(db3.thisNodeName, "node-1");
+  EXPECT_EQ(db3.prefixEntries.size(), 5);
 }
 
 TEST_F(PrefixManagerTestFixture, CheckReload) {

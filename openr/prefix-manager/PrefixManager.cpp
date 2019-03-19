@@ -63,6 +63,12 @@ PrefixManager::PrefixManager(
     // Prefixes will be advertised after prefixHoldUntilTimePoint_
   }
 
+  // Create throttled updateKvStore
+  updateKvStoreThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
+      this, Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
+        updateKvStore();
+      });
+
   // Create a timer to update all prefixes after HoldTime (2 * KA) during
   // initial start up
   // Holdtime zero is used during testing to do inline without delay
@@ -71,6 +77,11 @@ PrefixManager::PrefixManager(
       persistPrefixDb();
       updateKvStore();
     });
+
+    // Cancel throttle as we are publishing latest state
+    if (updateKvStoreThrottled_->isActive()) {
+      updateKvStoreThrottled_->cancel();
+    }
   }
 
   zmqMonitorClient_ =
@@ -154,6 +165,7 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
   const auto& thriftReq = maybeThriftReq.value();
   thrift::PrefixManagerResponse response;
   bool persistentEntryChange = false;
+  bool kvStoreChange = false;
   switch (thriftReq.cmd) {
   case thrift::PrefixManagerCommand::ADD_PREFIXES: {
     tData_.addStatValue("prefix_manager.add_prefixes", 1, fbzmq::COUNT);
@@ -161,7 +173,7 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
       persistentEntryChange = true;
     }
     if (addOrUpdatePrefixes(thriftReq.prefixes)) {
-      updateKvStore();
+      kvStoreChange = true;
       response.success = true;
     } else {
       response.success = false;
@@ -175,7 +187,7 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
       persistentEntryChange = true;
     }
     if (removePrefixes(thriftReq.prefixes)) {
-      updateKvStore();
+      kvStoreChange = true;
       response.success = true;
       tData_.addStatValue("prefix_manager.withdraw_prefixes", 1, fbzmq::COUNT);
     } else {
@@ -189,7 +201,7 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
       persistentEntryChange = true;
     }
     if (removePrefixesByType(thriftReq.type)) {
-      updateKvStore();
+      kvStoreChange = true;
       response.success = true;
     } else {
       response.success = false;
@@ -203,7 +215,7 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
       persistentEntryChange = true;
     }
     if (syncPrefixesByType(thriftReq.type, thriftReq.prefixes)) {
-      updateKvStore();
+      kvStoreChange = true;
       response.success = true;
     } else {
       response.success = false;
@@ -235,8 +247,16 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
   }
   }
 
-  if (response.success and persistentEntryChange) {
-    persistPrefixDb();
+  if (response.success) {
+    if (persistentEntryChange) {
+      persistPrefixDb();
+    }
+    if ((kvStoreChange) and
+        (std::chrono::steady_clock::now() >= prefixHoldUntilTimePoint_)) {
+      // Update kv store only after holdtime. All updates before holdtime
+      // will be updated one shot by holdtimer
+      updateKvStoreThrottled_->operator()();
+    }
   }
 
   return fbzmq::Message::fromThriftObj(response, serializer_);
