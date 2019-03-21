@@ -553,6 +553,10 @@ TEST(KvStore, MonitorReport) {
   const std::vector<std::string> nodeIds{"node2", "node3", "node1", "node4"};
   kvStore.setKey("test-key", thrift::Value(), nodeIds);
 
+  // Set same key with different path
+  const std::vector<std::string> nodeIds2{"node5"};
+  kvStore.setKey("test-key", thrift::Value(), nodeIds2);
+
   // create and bind socket to receive counters
   fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_SERVER> server(context);
   server.bind(fbzmq::SocketUrl{kvStore.monitorSubmitUrl}).value();
@@ -576,6 +580,12 @@ TEST(KvStore, MonitorReport) {
   // Verify looped publication counter
   ASSERT_EQ(1, counters.count("kvstore.looped_publications.count.0"));
   EXPECT_EQ(1, counters.at("kvstore.looped_publications.count.0").value);
+
+  // Verify redundant publication counter
+  ASSERT_EQ(
+      1, counters.count("kvstore.received_redundant_publications.count.0"));
+  EXPECT_EQ(
+      1, counters.at("kvstore.received_redundant_publications.count.0").value);
 
   LOG(INFO) << "Counters received, yo";
   kvStore.stop();

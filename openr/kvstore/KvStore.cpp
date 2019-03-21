@@ -1377,6 +1377,10 @@ KvStore::mergePublication(
   if (not deltaPublication.keyVals.empty()) {
     // Flood change to all of our neighbors/subscribers
     floodPublication(std::move(deltaPublication));
+  } else {
+    // Keep track of received publications which din't update any field
+    tData_.addStatValue(
+        "kvstore.received_redundant_publications", 1, fbzmq::COUNT);
   }
 
   // response to senderId with tobeUpdatedKeys + Vals
