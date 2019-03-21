@@ -82,3 +82,10 @@ class KvStoreClient(OpenrClient):
 
         req_msg = kv_store_types.Request(kv_store_types.Command.PEER_DUMP)
         return self.send_and_recv_thrift_obj(req_msg, kv_store_types.PeerCmdReply)
+
+    def get_spt_infos(self):
+        """ get all spanning tree infos
+        """
+
+        req_msg = kv_store_types.Request(kv_store_types.Command.FLOOD_TOPO_GET)
+        return self.send_and_recv_thrift_obj(req_msg, kv_store_types.SptInfos)
