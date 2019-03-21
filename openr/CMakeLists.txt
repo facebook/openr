@@ -333,6 +333,7 @@ install(TARGETS
 
 add_executable(openr
   Main.cpp
+  common/Flags.cpp
 )
 
 target_include_directories(openr
@@ -430,6 +431,7 @@ install(FILES
   common/BuildInfo.h
   common/Constants.h
   common/ExponentialBackoff.h
+  common/Flags.h
   common/OpenrEventLoop.h
   common/StepDetector.h
   common/Types.h
