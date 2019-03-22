@@ -128,6 +128,47 @@ struct AdjacencyDatabase {
 // Prefixes
 //
 
+// How to compare two MetricEntity
+enum CompareType {
+  // if present only in one metric vector, route with this type will win
+  WIN_IF_PRESENT = 1,
+  // if present only in one metric vector, route without this type will win
+  WIN_IF_NOT_PRESENT = 2,
+  // if present only in one metric vector,
+  // this type will be ignored from comparision and fall through to next
+  IGNORE_IF_NOT_PRESENT = 3,
+}
+
+struct MetricEntity {
+  // Type identifying each entity. (Used only for identification)
+  1: i64 type
+
+  // Priority fields. Initially priorities are assigned as
+  // 10000, 9000, 8000, 7000 etc, this enables us to add any priorities
+  // in between two fields.
+  2: i64 priority
+
+  // Compare type defines how to handle cases of backward compatibility and
+  // scenario's where some fields are not populated
+  3: CompareType op
+
+  // All fields without this set will be used for multipath selection
+  // Field/fields with this set will be used for best path tie breaking only
+  4: bool isBestPathTieBreaker
+
+  // List of uint32's. Always > win's. -ve numbers will represent < wins
+  5: list<i64> metric
+}
+
+// Expected to be sorted on priority
+struct MetricVector {
+  // Only two metric vectors of same version will be compared.
+  // If we want to come up with new scheme for metric vector at a later date.
+  1: i64 version
+
+  2: list<MetricEntity> metrics
+}
+
 enum PrefixType {
   LOOPBACK = 1,
   DEFAULT = 2,
