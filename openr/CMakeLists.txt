@@ -87,6 +87,16 @@ thrift_object(
 )
 
 thrift_object(
+  "Dual" #file_name
+  "" #services
+  "cpp2" #language
+  "json,optionals" #options
+  "${CMAKE_SOURCE_DIR}/if" #file_path
+  "${THRIFT_DIR}" #output_path
+  "${THRIFT_PREFIX}" #include_prefix
+)
+
+thrift_object(
   "OpenrCtrl" #file_name
   "OpenrCtrl" #services
   "cpp2" #language
@@ -236,6 +246,7 @@ add_dependencies(
 
 install(FILES
   ${CMAKE_SOURCE_DIR}/if/Lsdb.thrift
+  ${CMAKE_SOURCE_DIR}/if/Dual.thrift
   ${CMAKE_SOURCE_DIR}/if/Network.thrift
   ${CMAKE_SOURCE_DIR}/if/Fib.thrift
   ${CMAKE_SOURCE_DIR}/if/Platform.thrift
@@ -257,6 +268,7 @@ add_library(openrlib
   decision/Decision.cpp
   decision/LinkState.cpp
   decision-old/DecisionOld.cpp
+  dual/Dual.cpp
   fib/Fib.cpp
   health-checker/HealthChecker.cpp
   kvstore/KvStoreClient.cpp
@@ -282,6 +294,7 @@ add_library(openrlib
   $<TARGET_OBJECTS:KvStore-cpp2-obj>
   $<TARGET_OBJECTS:LinkMonitor-cpp2-obj>
   $<TARGET_OBJECTS:Lsdb-cpp2-obj>
+  $<TARGET_OBJECTS:Dual-cpp2-obj>
   $<TARGET_OBJECTS:Network-cpp2-obj>
   $<TARGET_OBJECTS:OpenrCtrl-cpp2-obj>
   $<TARGET_OBJECTS:PersistentStore-cpp2-obj>
@@ -459,6 +472,11 @@ install(FILES
 install(FILES
   decision-old/DecisionOld.h
   DESTINATION include/openr/decision-old
+)
+
+install(FILES
+  dual/Dual.h
+  DESTINATION include/openr/dual
 )
 
 install(FILES
@@ -716,6 +734,25 @@ if(BUILD_TESTS)
   install(TARGETS
     decision_test
     DESTINATION sbin/tests/openr/decision
+  )
+
+  add_executable(dual_test
+    dual/tests/DualTest.cpp
+  )
+
+  target_link_libraries(dual_test
+    openrlib
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+  )
+
+  add_test(DualTest dual_test)
+
+  install(TARGETS
+    dual_test
+    DESTINATION sbin/tests/openr/dual
   )
 
   add_executable(link_state_test
