@@ -96,6 +96,8 @@ struct KeyDumpParams {
 struct PeerSpec {
   1: string pubUrl
   2: string cmdUrl
+  // support flood optimization or not
+  3: bool supportFloodOptimization = 0
 }
 
 typedef map<string, PeerSpec>

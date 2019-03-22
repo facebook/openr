@@ -330,3 +330,4 @@ DEFINE_int32(
     persistent_store_max_backoff_ms,
     openr::Constants::kPersistentStoreMaxBackoff.count(),
     "Max backoff to save DB to file (in millseconds)");
+DEFINE_bool(enable_flood_optimization, false, "Enable flooding optimization");

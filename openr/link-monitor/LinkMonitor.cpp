@@ -576,7 +576,8 @@ LinkMonitor::neighborUpEvent(
   // be overridden by KvStoreClient, thus no need to explicitly remove it
   // 2) does not change: the existing connection to a neighbor is retained
   adjacencies_[adjId] = std::make_pair(
-      thrift::PeerSpec(FRAGILE, pubUrl, repUrl), std::move(newAdj));
+      thrift::PeerSpec(FRAGILE, pubUrl, repUrl, event.supportFloodOptimization),
+      std::move(newAdj));
 
   // Advertise KvStore peers immediately
   advertiseKvStorePeers();

@@ -164,7 +164,8 @@ Spark::Spark(
     KvStorePubPort kvStorePubPort,
     KvStoreCmdPort kvStoreCmdPort,
     std::pair<uint32_t, uint32_t> version,
-    fbzmq::Context& zmqContext)
+    fbzmq::Context& zmqContext,
+    bool enableFloodOptimization)
     : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::SPARK, zmqContext),
       myDomainName_(myDomainName),
       myNodeName_(myNodeName),
@@ -182,6 +183,7 @@ Spark::Spark(
       kKvStorePubPort_(kvStorePubPort),
       kKvStoreCmdPort_(kvStoreCmdPort),
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
+      enableFloodOptimization_(enableFloodOptimization),
       ioProvider_(std::make_shared<IoProvider>()) {
   CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
       << "Keep-alive-time must be less than hold-time.";
@@ -506,7 +508,8 @@ Spark::processNeighborRttChange(
       ifName,
       originator,
       neighbor.rtt.count(),
-      neighbor.label);
+      neighbor.label,
+      false /* supportFloodOptimization: doesn't matter in RTT event*/);
   auto ret = reportSocket_.sendMultiple(
       fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
           .value(),
@@ -547,7 +550,8 @@ Spark::processNeighborHoldTimeout(
         ifName,
         neighbor.info,
         neighbor.rtt.count(),
-        neighbor.label);
+        neighbor.label,
+        false /* supportFloodOptimization: doesn't matter in DOWN event*/);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -772,6 +776,10 @@ Spark::processHelloPacket() {
     });
   }
 
+  // check if neighbor support flood optimization or not
+  const auto& supportFloodOptimization =
+      helloPacket.payload.supportFloodOptimization;
+
   if (isAdjacent &&
       validationResult == PacketValidationResult::NEIGHBOR_RESTART) {
     LOG(INFO) << "Adjacent neighbor " << originator.nodeName << " from iface "
@@ -784,7 +792,8 @@ Spark::processHelloPacket() {
         ifName,
         originator,
         neighbor.rtt.count(),
-        neighbor.label);
+        neighbor.label,
+        supportFloodOptimization);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -833,7 +842,8 @@ Spark::processHelloPacket() {
         ifName,
         originator,
         neighbor.rtt.count(),
-        neighbor.label);
+        neighbor.label,
+        supportFloodOptimization);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -865,7 +875,8 @@ Spark::processHelloPacket() {
         ifName,
         originator,
         neighbor.rtt.count(),
-        neighbor.label);
+        neighbor.label,
+        false /* supportFloodOptimization: doesn't matter in DOWN event*/);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -931,7 +942,8 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
       mySeqNum_,
       std::map<std::string, thrift::ReflectedNeighborInfo>{},
       getCurrentTimeInUs().count(),
-      inFastInitState);
+      inFastInitState,
+      enableFloodOptimization_);
 
   // add all neighbors we have heard from on this interface
   for (const auto& kv : neighbors_.at(ifName)) {
@@ -1100,7 +1112,8 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
           ifName,
           neighbor.info,
           neighbor.rtt.count(),
-          neighbor.label);
+          neighbor.label,
+          false /* supportFloodOptimization: doesn't matter in DOWN event*/);
       auto ret = reportSocket_.sendMultiple(
           fbzmq::Message::from(
               openr::Constants::kSparkReportClientId.toString())

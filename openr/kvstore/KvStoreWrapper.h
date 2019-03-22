@@ -115,7 +115,7 @@ class KvStoreWrapper {
   thrift::PeerSpec
   getPeerSpec() const {
     return thrift::PeerSpec(
-        apache::thrift::FRAGILE, globalPubUrl, globalCmdUrl);
+        apache::thrift::FRAGILE, globalPubUrl, globalCmdUrl, false);
   }
 
  public:

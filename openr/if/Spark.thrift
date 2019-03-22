@@ -88,6 +88,9 @@ struct SparkPayload {
 
   // solicit for an immediate hello packet back cause I am in fast initial state
   6: bool solicitResponse = 0;
+
+  // support flood optimization or not
+  8: bool supportFloodOptimization = 0;
 }
 
 //
@@ -114,6 +117,8 @@ struct SparkNeighborEvent {
   3: required SparkNeighbor neighbor
   4: required i64 rttUs
   5: required i32 label   // Derived based off of ifIndex (local per node)
+  // support flood optimization or not
+  6: bool supportFloodOptimization = 0
 }
 
 //

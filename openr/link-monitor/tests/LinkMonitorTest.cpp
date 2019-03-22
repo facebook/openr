@@ -60,12 +60,14 @@ re2::RE2::Options regexOpts;
 const auto peerSpec_2_1 = thrift::PeerSpec(
     FRAGILE,
     "tcp://[fe80::2%iface_2_1]:10001",
-    "tcp://[fe80::2%iface_2_1]:10002");
+    "tcp://[fe80::2%iface_2_1]:10002",
+    false);
 
 const auto peerSpec_2_2 = thrift::PeerSpec(
     FRAGILE,
     "tcp://[fe80::2%iface_2_2]:10001",
-    "tcp://[fe80::2%iface_2_2]:10002");
+    "tcp://[fe80::2%iface_2_2]:10002",
+    false);
 
 const auto nb2 = thrift::SparkNeighbor(
     FRAGILE,
@@ -133,7 +135,7 @@ createNeighborEvent(
     int64_t rttUs,
     int32_t label) {
   return thrift::SparkNeighborEvent(
-      FRAGILE, eventType, ifName, neighbor, rttUs, label);
+      FRAGILE, eventType, ifName, neighbor, rttUs, label, false);
 }
 
 thrift::AdjacencyDatabase
@@ -1812,13 +1814,25 @@ TEST(LinkMonitor, getPeersFromAdjacencies) {
   std::unordered_map<std::string, thrift::PeerSpec> peers;
 
   const auto peerSpec0 = thrift::PeerSpec(
-      FRAGILE, "tcp://[fe80::2%iface0]:10001", "tcp://[fe80::2%iface0]:10002");
+      FRAGILE,
+      "tcp://[fe80::2%iface0]:10001",
+      "tcp://[fe80::2%iface0]:10002",
+      false);
   const auto peerSpec1 = thrift::PeerSpec(
-      FRAGILE, "tcp://[fe80::2%iface1]:10001", "tcp://[fe80::2%iface1]:10002");
+      FRAGILE,
+      "tcp://[fe80::2%iface1]:10001",
+      "tcp://[fe80::2%iface1]:10002",
+      false);
   const auto peerSpec2 = thrift::PeerSpec(
-      FRAGILE, "tcp://[fe80::2%iface2]:10001", "tcp://[fe80::2%iface2]:10002");
+      FRAGILE,
+      "tcp://[fe80::2%iface2]:10001",
+      "tcp://[fe80::2%iface2]:10002",
+      false);
   const auto peerSpec3 = thrift::PeerSpec(
-      FRAGILE, "tcp://[fe80::2%iface3]:10001", "tcp://[fe80::2%iface3]:10002");
+      FRAGILE,
+      "tcp://[fe80::2%iface3]:10001",
+      "tcp://[fe80::2%iface3]:10002",
+      false);
 
   // Get peer spec
   adjacencies[{"node1", "iface1"}] = {peerSpec1, thrift::Adjacency()};

@@ -65,7 +65,8 @@ class Spark final : public OpenrEventLoop {
       KvStorePubPort kvStorePubPort,
       KvStoreCmdPort kvStoreCmdPort,
       std::pair<uint32_t, uint32_t> version,
-      fbzmq::Context& zmqContext);
+      fbzmq::Context& zmqContext,
+      bool enableFloodOptimization = false);
 
   ~Spark() override = default;
 
@@ -183,6 +184,9 @@ class Spark final : public OpenrEventLoop {
 
   // current version and supported version
   const thrift::OpenrVersions kVersion_;
+
+  // enable dual or not
+  const bool enableFloodOptimization_{false};
 
   //
   // Interface tracking

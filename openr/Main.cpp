@@ -526,7 +526,8 @@ main(int argc, char** argv) {
             KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
             std::make_pair(
                 Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-            context));
+            context,
+            FLAGS_enable_flood_optimization));
   }
 
   // Static list of prefixes to announce into the network as long as OpenR is

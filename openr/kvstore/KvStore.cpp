@@ -620,6 +620,7 @@ KvStore::addPeers(
         Constants::kGlobalCmdLocalIdTemplate.toString(),
         peerName,
         peerAddCounter_);
+    const auto& supportFloodOptimization = newPeerSpec.supportFloodOptimization;
 
     try {
       auto it = peers_.find(peerName);
@@ -627,7 +628,9 @@ KvStore::addPeers(
       bool cmdUrlUpdated{false};
 
       if (it != peers_.end()) {
-        LOG(INFO) << "Updating existing peer " << peerName;
+        LOG(INFO)
+            << "Updating existing peer " << peerName
+            << ", support-flood-optimization: " << supportFloodOptimization;
         auto& peerSpec = it->second.first;
 
         if (legacyFlooding_ && peerSpec.pubUrl != newPeerSpec.pubUrl) {
@@ -656,7 +659,9 @@ KvStore::addPeers(
         it->second.first = newPeerSpec;
         it->second.second = newPeerId;
       } else {
-        LOG(INFO) << "Adding new peer " << peerName;
+        LOG(INFO)
+            << "Adding new peer " << peerName
+            << ", support-flood-optimization: " << supportFloodOptimization;
         pubUrlUpdated = true;
         cmdUrlUpdated = true;
         std::tie(it, std::ignore) =

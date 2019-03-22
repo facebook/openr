@@ -286,7 +286,7 @@ class Constants {
   static constexpr int32_t kSparkMcastPort{6666};
 
   // Current OpenR version
-  static constexpr int32_t kOpenrVersion{20180307};
+  static constexpr int32_t kOpenrVersion{20190228};
 
   // Lowest Supported OpenR version
   static constexpr int32_t kOpenrSupportedVersion{20180307};
