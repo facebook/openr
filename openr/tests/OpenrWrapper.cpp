@@ -182,6 +182,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       PrefixDbMarker{"prefix:"},
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0),
+      Constants::kKvStoreDbTtl,
       context_);
 
   prefixManagerClient_ = std::make_unique<PrefixManagerClient>(
@@ -214,7 +215,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::string{linkMonitorGlobalCmdUrl_},
       linkMonitorAdjHoldTime,
       linkFlapInitialBackoff,
-      linkFlapMaxBackoff);
+      linkFlapMaxBackoff,
+      Constants::kKvStoreDbTtl);
 
   //
   // create decision

@@ -284,6 +284,10 @@ DEFINE_int32(
     0,
     "Burst size of Kvstore flooding in number of messages");
 DEFINE_int32(
+    kvstore_key_ttl_ms,
+    openr::Constants::kKvStoreDbTtl.count(), // 5 min
+    "TTL of a key (in ms) in the Kvstore");
+DEFINE_int32(
     kvstore_ttl_decrement_ms,
     openr::Constants::kTtlDecrement.count(),
     "Amount of time to decrement TTL when flooding updates");

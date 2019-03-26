@@ -38,6 +38,7 @@ class PrefixManager final : public OpenrEventLoop {
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
       const std::chrono::seconds prefixHoldTime,
+      const std::chrono::milliseconds ttlKeyInKvStore,
       fbzmq::Context& zmqContext);
 
   // disable copying
@@ -104,6 +105,9 @@ class PrefixManager final : public OpenrEventLoop {
   // Throttled version of updateKvStore. It batches up multiple calls and
   // send them in one go!
   std::unique_ptr<fbzmq::ZmqThrottle> updateKvStoreThrottled_;
+
+  // TTL for a key in the key value store
+  const std::chrono::milliseconds ttlKeyInKvStore_;
 
   // kvStoreClient for persisting our prefix db
   KvStoreClient kvStoreClient_;

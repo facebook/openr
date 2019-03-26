@@ -108,7 +108,9 @@ class LinkMonitor final : public OpenrEventLoop {
       std::chrono::seconds adjHoldTime,
       // link flap backoffs
       std::chrono::milliseconds flapInitalBackoff,
-      std::chrono::milliseconds flapMaxBackoff);
+      std::chrono::milliseconds flapMaxBackoff,
+      // ttl for a key in the keyvalue store
+      std::chrono::milliseconds ttlKeyInKvStore);
 
   ~LinkMonitor() override = default;
 
@@ -244,6 +246,8 @@ class LinkMonitor final : public OpenrEventLoop {
   // Backoff timers
   const std::chrono::milliseconds flapInitialBackoff_;
   const std::chrono::milliseconds flapMaxBackoff_;
+  // ttl for kvstore
+  const std::chrono::milliseconds ttlKeyInKvStore_;
   // Timepoint used to hold off advertisement of link adjancecy on restart.
   const std::chrono::steady_clock::time_point adjHoldUntilTimePoint_;
   // The IO primitives provider; this is used for mocking

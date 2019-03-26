@@ -117,6 +117,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         PrefixDbMarker{"prefix:"},
         false /* prefix-manager perf measurement */,
         std::chrono::seconds(0),
+        Constants::kKvStoreDbTtl,
         zmqContext_);
     threads_.emplace_back([&]() noexcept { prefixManager_->run(); });
     prefixManager_->waitUntilRunning();
@@ -429,6 +430,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           PrefixDbMarker{"prefix:"},
           false /* prefix-manager perf measurement */,
           std::chrono::seconds(0),
+          Constants::kKvStoreDbTtl,
           zmqContext);
       threads.emplace_back([&prefixManager]() noexcept {
         prefixManager->run();

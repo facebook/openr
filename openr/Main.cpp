@@ -461,6 +461,7 @@ main(int argc, char** argv) {
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
           FLAGS_enable_perf_measurement,
           kvHoldTime,
+          std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms),
           context));
 
   const PrefixManagerLocalCmdUrl prefixManagerLocalCmdUrl{
@@ -655,7 +656,8 @@ main(int argc, char** argv) {
           maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_link_monitor_cmd_port),
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
-          std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms)));
+          std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms),
+          std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms)));
 
   // Wait for the above two threads to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module

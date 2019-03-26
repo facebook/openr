@@ -36,6 +36,7 @@ PrefixManager::PrefixManager(
     const PrefixDbMarker& prefixDbMarker,
     bool enablePerfMeasurement,
     const std::chrono::seconds prefixHoldTime,
+    const std::chrono::milliseconds ttlKeyInKvStore,
     fbzmq::Context& zmqContext)
     : OpenrEventLoop(
           nodeId,
@@ -48,6 +49,7 @@ PrefixManager::PrefixManager(
       enablePerfMeasurement_{enablePerfMeasurement},
       prefixHoldUntilTimePoint_(
           std::chrono::steady_clock::now() + prefixHoldTime),
+      ttlKeyInKvStore_(ttlKeyInKvStore),
       kvStoreClient_{
           zmqContext, this, nodeId_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl} {
   // pick up prefixes from disk
@@ -149,7 +151,7 @@ PrefixManager::updateKvStore() {
       "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_);
 
   LOG(INFO) << "writing my prefix to KvStore " << prefixDbKey;
-  kvStoreClient_.persistKey(prefixDbKey, prefixDbVal, Constants::kKvStoreDbTtl);
+  kvStoreClient_.persistKey(prefixDbKey, prefixDbVal, ttlKeyInKvStore_);
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>

@@ -429,6 +429,16 @@ it runs and takes care of slow memory leak kind of issues.
 ```
 MEMORY_LIMIT_MB=300
 ```
+#### KVSTORE_KEY_TTL_MS
+
+Set the TTL (in ms) of a key in the KvStore. For larger networks where burst of
+updates can be high having high value makes sense. For smaller networks where
+burst of updates are low, having low value makes more sense.
+Defaults to 300000 (5 min).
+
+```
+KVSTORE_KEY_TTL_MS=300000
+```
 
 #### KVSTORE_ZMQ_HWM
 

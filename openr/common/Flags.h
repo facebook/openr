@@ -110,6 +110,7 @@ DECLARE_bool(enable_legacy_flooding);
 DECLARE_int32(kvstore_zmq_hwm);
 DECLARE_int32(kvstore_flood_msg_per_sec);
 DECLARE_int32(kvstore_flood_msg_burst_size);
+DECLARE_int32(kvstore_key_ttl_ms);
 DECLARE_int32(kvstore_ttl_decrement_ms);
 
 DECLARE_bool(enable_secure_thrift_server);

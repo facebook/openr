@@ -217,6 +217,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         false,
         std::chrono::seconds(0),
+        Constants::kKvStoreDbTtl,
         context);
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";
@@ -275,7 +276,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
         std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8));
+        std::chrono::milliseconds(8),
+        Constants::kKvStoreDbTtl);
 
     linkMonitorThread = std::make_unique<std::thread>([this]() {
       folly::setThreadName("LinkMonitor");
@@ -910,7 +912,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       std::chrono::seconds(1),
       // link flap backoffs, set low to keep UT runtime low
       std::chrono::milliseconds(1),
-      std::chrono::milliseconds(8));
+      std::chrono::milliseconds(8),
+      Constants::kKvStoreDbTtl);
 
   linkMonitorThread = std::make_unique<std::thread>([this]() {
     LOG(INFO) << "LinkMonitor thread starting";
@@ -1158,7 +1161,8 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       std::chrono::seconds(1),
       // link flap backoffs, set high backoffs for this test
       std::chrono::milliseconds(4000),
-      std::chrono::milliseconds(8000));
+      std::chrono::milliseconds(8000),
+      Constants::kKvStoreDbTtl);
 
   linkMonitorThread = std::make_unique<std::thread>([this]() {
     LOG(INFO) << "LinkMonitor thread starting";
@@ -1645,7 +1649,8 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         std::string{folly::sformat("inproc://link-monitor-cmd-url{}", i + 1)},
         std::chrono::seconds(1),
         std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8));
+        std::chrono::milliseconds(8),
+        Constants::kKvStoreDbTtl);
     linkMonitors.emplace_back(std::move(lm));
 
     auto lmThread = std::make_unique<std::thread>([&linkMonitors]() {

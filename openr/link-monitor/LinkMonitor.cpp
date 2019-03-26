@@ -96,7 +96,8 @@ LinkMonitor::LinkMonitor(
     folly::Optional<std::string> linkMonitorGlobalCmdUrl,
     std::chrono::seconds adjHoldTime,
     std::chrono::milliseconds flapInitialBackoff,
-    std::chrono::milliseconds flapMaxBackoff)
+    std::chrono::milliseconds flapMaxBackoff,
+    std::chrono::milliseconds ttlKeyInKvStore)
     : OpenrEventLoop(
           nodeId,
           thrift::OpenrModuleType::LINK_MONITOR,
@@ -121,6 +122,7 @@ LinkMonitor::LinkMonitor(
       linkMonitorGlobalPubUrl_(linkMonitorGlobalPubUrl),
       flapInitialBackoff_(flapInitialBackoff),
       flapMaxBackoff_(flapMaxBackoff),
+      ttlKeyInKvStore_(ttlKeyInKvStore),
       adjHoldUntilTimePoint_(std::chrono::steady_clock::now() + adjHoldTime),
       // mutable states
       linkMonitorPubSock_(
@@ -726,7 +728,7 @@ LinkMonitor::advertiseAdjacencies() {
             << adjDb.adjacencies.size() << " entries.";
   const auto keyName = adjacencyDbMarker_ + nodeId_;
   std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
-  kvStoreClient_->persistKey(keyName, adjDbStr, Constants::kKvStoreDbTtl);
+  kvStoreClient_->persistKey(keyName, adjDbStr, ttlKeyInKvStore_);
   tData_.addStatValue("link_monitor.advertise_adjacencies", 1, fbzmq::SUM);
 
   // Config is most likely to have changed. Update it in `ConfigStore`

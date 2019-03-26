@@ -170,6 +170,7 @@ class PrefixManagerTestFixture : public ::testing::Test {
         PrefixDbMarker{"prefix:"},
         false /* prefix-mananger perf measurement */,
         std::chrono::seconds{0},
+        Constants::kKvStoreDbTtl,
         context);
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
@@ -417,6 +418,7 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
       PrefixDbMarker{"prefix:"},
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0),
+      Constants::kKvStoreDbTtl,
       context);
 
   auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
@@ -575,6 +577,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
       PrefixDbMarker{"prefix:"},
       false /* prefix-mananger perf measurement */,
       holdTime,
+      Constants::kKvStoreDbTtl,
       context);
   std::thread prefixManagerThread([&]() {
     LOG(INFO) << "PrefixManager thread starting";
