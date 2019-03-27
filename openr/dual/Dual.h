@@ -190,21 +190,15 @@ class Dual {
     }
   };
 
-  // dual exchange message counters
-  struct DualCounters {
-    uint64_t querySent{0};
-    uint64_t queryRecv{0};
-    uint64_t replySent{0};
-    uint64_t replyRecv{0};
-    uint64_t updateSent{0};
-    uint64_t updateRecv{0};
-  };
-
   // get current route-info
   const RouteInfo& getInfo() const noexcept;
 
   // get status string (includes route-info and dual-counters)
   std::string getStatusString() const noexcept;
+
+  // get map<root-id: DualPerRootCounters>
+  std::unordered_map<std::string, thrift::DualPerRootCounters> getCounters()
+      const noexcept;
 
   // my node id
   const std::string nodeId;
@@ -264,7 +258,7 @@ class Dual {
   std::unordered_map<std::string, int64_t> localDistances_;
 
   // dual messages counters map<neighbor: dual-counters>
-  std::unordered_map<std::string, DualCounters> counters_;
+  std::unordered_map<std::string, thrift::DualPerRootCounters> counters_;
 };
 
 /**
@@ -323,11 +317,15 @@ class DualNode {
   std::string getStatusString(const std::string& rootId) const noexcept;
 
   // get status for all discovered roots
-  std::unordered_map<std::string, std::string> getStatusStrings() const
-      noexcept;
+  // return pair<this-node-level-status, map<root-id: root-level-status>>
+  std::pair<std::string, std::unordered_map<std::string, std::string>>
+  getStatusStrings() const noexcept;
 
   // check if a neighbor is up or not
-  bool neighborUp(const std::string& neighbor);
+  bool neighborUp(const std::string& neighbor) const noexcept;
+
+  // get dual related counters
+  thrift::DualCounters getCounters() const noexcept;
 
   // myRootId
   const std::string nodeId;
@@ -345,6 +343,9 @@ class DualNode {
 
   // map<root-id: Dual-object>
   std::unordered_map<std::string, Dual> duals_;
+
+  // map<neighbor-id: counters>
+  std::unordered_map<std::string, thrift::DualPerNeighborCounters> counters_;
 };
 
 } // namespace openr

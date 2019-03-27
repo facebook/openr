@@ -175,6 +175,7 @@ Dual::floodUpdates(
     }
     msgsToSend[neighbor].messages.emplace_back(msg);
     counters_[neighbor].updateSent++;
+    counters_[neighbor].totalSent++;
   }
 }
 
@@ -223,6 +224,7 @@ Dual::diffusingComputation(
 
     msgsToSend[neighbor].messages.emplace_back(msg);
     counters_[neighbor].querySent++;
+    counters_[neighbor].totalSent++;
     info_.neighborInfos[neighbor].expectReply = true;
     success = true;
   }
@@ -279,21 +281,28 @@ Dual::getStatusString() const noexcept {
     const auto& neighbor = kv.first;
     const auto& counters = kv.second;
     counterStrs.emplace_back(folly::sformat(
-        "{}: Q ({}, {}), R ({}, {}), U ({}, {})",
+        "{}: Q ({}, {}), R ({}, {}), U ({}, {}), total ({}, {})",
         neighbor,
         counters.querySent,
         counters.queryRecv,
         counters.replySent,
         counters.replyRecv,
         counters.updateSent,
-        counters.updateRecv));
+        counters.updateRecv,
+        counters.totalSent,
+        counters.totalRecv));
   }
   return folly::sformat(
-      "{}::{}: {}\n{}",
+      "root({})::{}: {}\n{}",
       rootId,
       nodeId,
       info_.toString(),
       folly::join("\n", counterStrs));
+}
+
+std::unordered_map<std::string, thrift::DualPerRootCounters>
+Dual::getCounters() const noexcept {
+  return counters_;
 }
 
 bool
@@ -357,6 +366,7 @@ Dual::peerUp(
   msg.type = thrift::DualMessageType::UPDATE;
   msgsToSend[neighbor].messages.emplace_back(std::move(msg));
   counters_[neighbor].updateSent++;
+  counters_[neighbor].totalSent++;
 
   if (info_.neighborInfos[neighbor].needToReply) {
     info_.neighborInfos.at(neighbor).needToReply = false;
@@ -367,6 +377,7 @@ Dual::peerUp(
     reply.type = thrift::DualMessageType::REPLY;
     msgsToSend[neighbor].messages.emplace_back(std::move(reply));
     counters_[neighbor].replySent++;
+    counters_[neighbor].totalSent++;
   }
 }
 
@@ -441,6 +452,7 @@ Dual::processUpdate(
   VLOG(2) << rootId << "::" << nodeId << ": received UPDATE from (" << neighbor
           << ", " << rd << ")";
   counters_[neighbor].updateRecv++;
+  counters_[neighbor].totalRecv++;
 
   // update report-distance
   info_.neighborInfos[neighbor].reportDistance = rd;
@@ -490,6 +502,7 @@ Dual::sendReply(
 
   msgsToSend[dstNode].messages.emplace_back(std::move(msg));
   counters_[dstNode].replySent++;
+  counters_[dstNode].totalSent++;
 }
 
 void
@@ -505,6 +518,7 @@ Dual::processQuery(
   VLOG(2) << rootId << "::" << nodeId << ": received QUERY from (" << neighbor
           << ", " << rd << ")";
   counters_[neighbor].queryRecv++;
+  counters_[neighbor].totalRecv++;
 
   // update report-distance
   info_.neighborInfos[neighbor].reportDistance = rd;
@@ -542,6 +556,7 @@ Dual::processReply(
   VLOG(2) << rootId << "::" << nodeId << ": received REPLY from (" << neighbor
           << ", " << reportDistance << ")";
   counters_[neighbor].replyRecv++;
+  counters_[neighbor].totalRecv++;
 
   if (not info_.neighborInfos[neighbor].expectReply) {
     // received a reply when I don't expect to receive a reply from it
@@ -660,6 +675,9 @@ DualNode::processDualMessages(const thrift::DualMessages& messages) {
   std::unordered_map<std::string, thrift::DualMessages> msgsToSend;
   const auto& neighbor = messages.srcId;
 
+  counters_[neighbor].pktRecv++;
+  counters_[neighbor].msgRecv += messages.messages.size();
+
   for (const auto& msg : messages.messages) {
     const auto& rootId = msg.dstId;
     // emplace a new Dual for this rootId if not exist
@@ -714,32 +732,67 @@ DualNode::getStatusString(const std::string& rootId) const noexcept {
   return duals_.at(rootId).getStatusString();
 }
 
-std::unordered_map<std::string, std::string>
+std::pair<std::string, std::unordered_map<std::string, std::string>>
 DualNode::getStatusStrings() const noexcept {
+  std::vector<std::string> strs;
+  for (const auto& kv : counters_) {
+    const auto& neighbor = kv.first;
+    const auto& counters = kv.second;
+    strs.emplace_back(folly::sformat(
+        "{}: pkt ({}, {}), msg ({}, {})",
+        neighbor,
+        counters.pktSent,
+        counters.pktRecv,
+        counters.msgSent,
+        counters.msgRecv));
+  }
+
   std::unordered_map<std::string, std::string> allStatus;
   for (const auto& kv : duals_) {
     allStatus.emplace(kv.first, kv.second.getStatusString());
   }
-  return allStatus;
+  return std::make_pair(
+      folly::sformat("=== {} status ===\n{}", nodeId, folly::join("\n", strs)),
+      allStatus);
 }
 
 bool
-DualNode::neighborUp(const std::string& neighbor) {
+DualNode::neighborUp(const std::string& neighbor) const noexcept {
   if (localDistances_.count(neighbor) == 0) {
     return false;
   }
   return localDistances_.at(neighbor) != std::numeric_limits<int64_t>::max();
 }
 
+thrift::DualCounters
+DualNode::getCounters() const noexcept {
+  thrift::DualCounters counters;
+  counters.neighborCounters = counters_;
+  for (const auto& kv : duals_) {
+    counters.rootCounters.emplace(kv.first, kv.second.getCounters());
+  }
+  return counters;
+}
+
 void
 DualNode::sendAllDualMessages(
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
   for (auto& kv : msgsToSend) {
-    // set srcId = myNodeId
-    kv.second.srcId = nodeId;
-    if (not sendDualMessages(kv.first, kv.second)) {
-      LOG(ERROR) << "failed to send dual messages to " << kv.first;
+    const auto& neighbor = kv.first;
+    auto& msgs = kv.second;
+    if (msgs.messages.empty()) {
+      // ignore empty messages
+      continue;
     }
+
+    // set srcId = myNodeId
+    msgs.srcId = nodeId;
+    if (not sendDualMessages(neighbor, msgs)) {
+      LOG(ERROR) << "failed to send dual messages to " << kv.first;
+      continue;
+    }
+    counters_[neighbor].pktSent++;
+    counters_[neighbor].msgSent += msgs.messages.size();
   }
 }
 

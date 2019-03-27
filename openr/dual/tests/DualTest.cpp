@@ -21,7 +21,7 @@ using namespace openr;
 using namespace folly;
 
 // sync time-ms to wait for all DUAL nodes to converge
-const std::chrono::milliseconds syncms{50};
+const std::chrono::milliseconds syncms{100};
 
 // I/O response delay to mimic real senario
 // e.g one link-up-event might result in different ack time on each end.
@@ -59,6 +59,9 @@ using PredecessorMap = boost::iterator_property_map<
     VertexDescriptor&>;
 using DistanceMap =
     boost::iterator_property_map<Weight*, IndexMap, Weight, Weight&>;
+
+using StatusStrings =
+    std::pair<std::string, std::unordered_map<std::string, std::string>>;
 
 // handy funtion to return a random delay in ms
 uint32_t
@@ -238,8 +241,11 @@ class DualTestNode final : public DualNode {
     auto& otherNode = nodes_.at(neighbor);
     CHECK(neighborUp(neighbor))
         << nodeId << ": sending dual msgs to down neighbor " << neighbor;
+    CHECK(msgs.messages.size()) << " send empty messages";
+
     evb_->runInEventBaseThread(
         [&, otherNode, msgs]() { otherNode->processDualMessages(msgs); });
+
     return true;
   }
 
@@ -427,27 +433,31 @@ class DualBaseFixture : public ::testing::Test {
   // print all nodes status according to given root
   static void
   printStatus(
-      const std::unordered_map<
-          std::string,
-          std::unordered_map<std::string, std::string>>& status,
+      const std::unordered_map<std::string, StatusStrings>& status,
       folly::Optional<std::string> rootId = folly::none) {
     for (const auto& kv : status) {
       const auto& node = kv.first;
+      // node level status
+      const auto& nodeStatus = kv.second.first;
+      // root level status
+      const auto& rootsStatus = kv.second.second;
       if (rootId.hasValue()) {
         // print specific root status
-        if (kv.second.count(*rootId) == 0) {
+        if (rootsStatus.count(*rootId) == 0) {
           LOG(ERROR) << "node: " << node << " has no root " << *rootId
                      << "info";
           continue;
         }
-        LOG(INFO) << *rootId << "::" << node << " status:";
-        LOG(INFO) << kv.second.at(*rootId);
+        LOG(INFO)
+            << folly::sformat("{}\n{}", nodeStatus, rootsStatus.at(*rootId));
       } else {
         // print all roots status
-        for (const auto& rootStr : kv.second) {
-          LOG(INFO) << rootStr.first << "::" << node << " status:";
-          LOG(INFO) << rootStr.second;
+        std::vector<std::string> strs;
+        for (const auto& rootStr : rootsStatus) {
+          strs.emplace_back(rootStr.second);
         }
+        LOG(INFO)
+            << folly::sformat("{}\n{}", nodeStatus, folly::join("\n", strs));
       }
     }
   }
@@ -610,9 +620,7 @@ class DualBaseFixture : public ::testing::Test {
         std::string,
         std::unordered_map<std::string, Dual::RouteInfo>>
         infos;
-    std::
-        unordered_map<std::string, std::unordered_map<std::string, std::string>>
-            status;
+    std::unordered_map<std::string, StatusStrings> status;
     getResults(infos, status);
 
     if (rootIds.empty()) {
@@ -809,9 +817,7 @@ class DualBaseFixture : public ::testing::Test {
       std::unordered_map<
           std::string,
           std::unordered_map<std::string, Dual::RouteInfo>>& infos,
-      std::unordered_map<
-          std::string,
-          std::unordered_map<std::string, std::string>>& status) {
+      std::unordered_map<std::string, StatusStrings>& status) {
     CHECK(infos.empty());
     CHECK(status.empty());
 
@@ -893,12 +899,12 @@ TEST_P(DualFixture, CircularTest) {
 }
 
 /**
- *  Fabric Topology (4 X 12)
+ *  Fabric Topology (4 X 8)
  *  n0 n1 n2 n3
  *  |\        /\
  *  | \ ...  /  \
  *  |  \    /    \
- *  n4 n5 n6 .. n15
+ *  n4 n5 n6 .. n11
  */
 TEST_P(DualFixture, FabricTest) {
   const auto& param = GetParam();
@@ -906,13 +912,13 @@ TEST_P(DualFixture, FabricTest) {
   const auto& flap = param.flap;
   VLOG(1) << "test params: " << totalRoots << ", " << flap;
 
-  for (int i = 0; i < 16; ++i) {
+  for (int i = 0; i < 12; ++i) {
     bool isRoot = i < totalRoots;
     addNode(folly::sformat("n{}", i), isRoot);
   }
 
   for (int i = 0; i < 4; ++i) {
-    for (int j = 4; j < 16; ++j) {
+    for (int j = 4; j < 12; ++j) {
       addLink(folly::sformat("n{}", i), folly::sformat("n{}", j), 1);
     }
   }
@@ -935,7 +941,7 @@ TEST_P(DualFixture, FullMeshTest) {
   const auto& flap = param.flap;
   VLOG(1) << "test params: " << totalRoots << ", " << flap;
 
-  int numNodes = 10;
+  int numNodes = 6;
   // add nodes
   for (int i = 0; i < numNodes; ++i) {
     bool isRoot = i < totalRoots;
