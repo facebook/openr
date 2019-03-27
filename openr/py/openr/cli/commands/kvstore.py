@@ -17,6 +17,7 @@ import sys
 import time
 from builtins import object, str
 from itertools import combinations
+from typing import List
 
 import bunch
 import hexdump
@@ -316,6 +317,12 @@ class AdjCmd(KvStoreCmd):
             utils.print_json(adjs_map)
         else:
             utils.print_adjs_table(adjs_map, self.enable_color)
+
+
+class FloodCmd(KvStoreCmd):
+    def run(self, roots: List[str]) -> None:
+        spt_infos = self.client.get_spt_infos()
+        utils.print_spt_infos(spt_infos, roots)
 
 
 class ShowAdjNodeCmd(KvStoreCmd):

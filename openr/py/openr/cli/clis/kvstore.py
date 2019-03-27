@@ -12,6 +12,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object
 
 import click
+from bunch import Bunch
 from openr.cli.commands import kvstore
 from openr.cli.utils.options import breeze_option
 from openr.cli.utils.utils import parse_nodes
@@ -22,6 +23,7 @@ class KvStoreCli(object):
     def __init__(self):
         self.kvstore.add_command(PrefixesCli().prefixes)
         self.kvstore.add_command(AdjCli().adj)
+        self.kvstore.add_command(FloodCli().flood)
         self.kvstore.add_command(InterfacesCli().interfaces)
         self.kvstore.add_command(NodesCli().nodes)
         self.kvstore.add_command(KeysCli().keys)
@@ -115,6 +117,23 @@ class AdjCli(object):
 
         nodes = parse_nodes(cli_opts, nodes)
         kvstore.AdjCmd(cli_opts).run(nodes, bidir, json)
+
+
+class FloodCli(object):
+    @click.command()
+    @click.option(
+        "--roots",
+        default=None,
+        help="Get flooding topology information for given comma separated "
+        "root-id(s), get information for all roots if no root specified",
+    )
+    @click.pass_obj
+    def flood(cli_opts: Bunch, roots: str) -> None:  # noqa: B902
+        """ dump the flooding-topology information """
+
+        if roots is not None:
+            roots = roots.split(",")
+        kvstore.FloodCmd(cli_opts).run(roots)
 
 
 class InterfacesCli(object):

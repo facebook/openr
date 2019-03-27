@@ -1441,3 +1441,66 @@ def get_shortest_routes(route_db):
         )
 
     return shortest_routes
+
+
+def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> None:
+    """
+    print spanning tree information
+    """
+
+    output = []
+
+    # step1. print neighbor level counters
+    caption = "Neighbor DUAL Counters"
+    column_labels = ["Neighbor", "Pkt(Tx/Rx)", "Msg(Tx/Rx)"]
+    neighbor_counters = spt_infos.counters.neighborCounters
+    rows = []
+    for nb, counters in neighbor_counters.items():
+        rows.append(
+            [
+                nb,
+                "{}/{}".format(counters.pktSent, counters.pktRecv),
+                "{}/{}".format(counters.msgSent, counters.msgRecv),
+            ]
+        )
+    seg = printing.render_horizontal_table(rows, column_labels, tablefmt="plain")
+    output.append([caption, seg])
+
+    # step2. print root level counters
+    root_counters = spt_infos.counters.rootCounters
+    column_labels = [
+        "Neighbor",
+        "Query(Tx/Rx)",
+        "Reply(Tx/Rx)",
+        "Update(Tx/Rx)",
+        "Total(Tx/Rx)",
+    ]
+    for root, info in spt_infos.infos.items():
+        if roots is not None and root not in roots:
+            continue
+        if info.passive:
+            state = click.style("PASSIVE", fg="green")
+        else:
+            state = click.style("ACTIVE", fg="red")
+        cap = "root@{}[{}]: parent: {}, cost: {}, ({})children: {}".format(
+            root,
+            state,
+            info.parent,
+            info.cost,
+            len(info.children),
+            ",".join(info.children),
+        )
+        rows = []
+        for nb, counters in root_counters.get(root).items():
+            rows.append(
+                [
+                    nb,
+                    "{}/{}".format(counters.querySent, counters.queryRecv),
+                    "{}/{}".format(counters.replySent, counters.replyRecv),
+                    "{}/{}".format(counters.updateSent, counters.updateRecv),
+                    "{}/{}".format(counters.totalSent, counters.totalRecv),
+                ]
+            )
+        seg = printing.render_horizontal_table(rows, column_labels, tablefmt="plain")
+        output.append([cap, seg])
+    print(printing.render_vertical_table(output))
