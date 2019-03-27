@@ -29,6 +29,8 @@
 #include <openr/common/OpenrEventLoop.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
+#include <openr/dual/Dual.h>
+#include <openr/if/gen-cpp2/Dual_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace openr {
@@ -87,7 +89,7 @@ class KvStoreFilters {
 // SUB socket, and publishes to peers via PUB socket. The configuration
 // is passed via constructor arguments.
 
-class KvStore final : public OpenrEventLoop {
+class KvStore final : public OpenrEventLoop, public DualNode {
  public:
   KvStore(
       // the zmq context to use for IO
@@ -122,7 +124,10 @@ class KvStore final : public OpenrEventLoop {
       // Kvstore flooding rate
       KvStoreFloodRate floodRate = folly::none,
       // TTL decrement factor
-      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement);
+      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
+      bool enableFloodOptimization = false,
+      bool isFloodRoot = false,
+      bool useFloodOptimization = false);
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)
@@ -141,6 +146,11 @@ class KvStore final : public OpenrEventLoop {
   //       -2 if unknown
   // unknown can happen if value is missing (only hash is provided)
   static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
+
+  // send dual messages over syncSock
+  bool sendDualMessages(
+      const std::string& neighbor,
+      const thrift::DualMessages& msgs) noexcept override;
 
  private:
   // disable copying
@@ -292,6 +302,11 @@ class KvStore final : public OpenrEventLoop {
 
   // TTL decrement at flooding publications
   const std::chrono::milliseconds ttlDecr_{1};
+
+  // Dual parameters
+  const bool enableFloodOptimization_{false};
+  const bool isFloodRoot_{false};
+  const bool useFloodOptimization_{false};
 
   //
   // Mutable state

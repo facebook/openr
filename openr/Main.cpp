@@ -440,7 +440,10 @@ main(int argc, char** argv) {
           std::move(kvFilters),
           FLAGS_kvstore_zmq_hwm,
           kvstoreRate,
-          std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms)));
+          std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms),
+          FLAGS_enable_flood_optimization,
+          FLAGS_is_flood_root,
+          FLAGS_use_flood_optimization));
 
   const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{
       moduleTypeToEvl.at(OpenrModuleType::KVSTORE)->inprocCmdUrl};

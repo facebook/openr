@@ -10,6 +10,8 @@ namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.KvStore
 
+include "Dual.thrift"
+
 // a value as reported in get replies/publications
 struct Value {
   // current version of this value
@@ -46,6 +48,7 @@ enum Command {
   KEY_DUMP  = 3,
   HASH_DUMP = 7,
   COUNTERS_GET = 9,   // Return object will be Monitor::CounterMap
+  DUAL      = 10, // DUAL message
 
   // operations on the store peers
   PEER_ADD  = 4,
@@ -128,6 +131,7 @@ struct Request {
   6: KeyDumpParams keyDumpParams
   4: PeerAddParams peerAddParams
   5: PeerDelParams peerDelParams
+  9: optional Dual.DualMessages dualMessages
 }
 
 //

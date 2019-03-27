@@ -71,7 +71,10 @@ KvStore::KvStore(
     folly::Optional<KvStoreFilters> filters,
     int zmqHwm,
     KvStoreFloodRate floodRate,
-    std::chrono::milliseconds ttlDecr)
+    std::chrono::milliseconds ttlDecr,
+    bool enableFloodOptimization,
+    bool isFloodRoot,
+    bool useFloodOptimization)
     : OpenrEventLoop(
           nodeId,
           thrift::OpenrModuleType::KVSTORE,
@@ -80,6 +83,7 @@ KvStore::KvStore(
           folly::none /* ipcUrl */,
           maybeIpTos,
           zmqHwm),
+      DualNode(nodeId, isFloodRoot),
       zmqContext_(zmqContext),
       nodeId_(std::move(nodeId)),
       localPubUrl_(std::move(localPubUrl)),
@@ -89,6 +93,9 @@ KvStore::KvStore(
       legacyFlooding_(legacyFlooding),
       hwm_(zmqHwm),
       ttlDecr_(ttlDecr),
+      enableFloodOptimization_(enableFloodOptimization),
+      isFloodRoot_(isFloodRoot),
+      useFloodOptimization_(useFloodOptimization),
       filters_(std::move(filters)),
       // initialize zmq sockets
       localPubSock_{zmqContext},
@@ -613,6 +620,7 @@ void
 KvStore::addPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   ++peerAddCounter_;
+  std::vector<std::string> dualPeersToAdd;
   for (auto const& kv : peers) {
     auto const& peerName = kv.first;
     auto const& newPeerSpec = kv.second;
@@ -662,6 +670,9 @@ KvStore::addPeers(
         LOG(INFO)
             << "Adding new peer " << peerName
             << ", support-flood-optimization: " << supportFloodOptimization;
+        if (supportFloodOptimization) {
+          dualPeersToAdd.emplace_back(peerName);
+        }
         pubUrlUpdated = true;
         cmdUrlUpdated = true;
         std::tie(it, std::ignore) =
@@ -704,11 +715,20 @@ KvStore::addPeers(
     }
   }
   fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+
+  // add dual peers if any
+  if (enableFloodOptimization_) {
+    for (const auto& peer : dualPeersToAdd) {
+      LOG(INFO) << "dual peer up : " << peer;
+      DualNode::peerUp(peer, 1 /* link-cost */); // use hop count as metric
+    }
+  }
 }
 
 // delete some peers we are subscribed to
 void
 KvStore::delPeers(std::vector<std::string> const& peers) {
+  std::vector<std::string> dualPeersToRemove;
   for (auto const& peerName : peers) {
     // not currently subscribed
     auto it = peers_.find(peerName);
@@ -717,7 +737,10 @@ KvStore::delPeers(std::vector<std::string> const& peers) {
       continue;
     }
 
-    auto const& peerSpec = it->second.first;
+    const auto& peerSpec = it->second.first;
+    if (peerSpec.supportFloodOptimization) {
+      dualPeersToRemove.emplace_back(peerName);
+    }
 
     if (legacyFlooding_) {
       LOG(INFO) << "Unsubscribing from: " << peerSpec.pubUrl;
@@ -727,7 +750,9 @@ KvStore::delPeers(std::vector<std::string> const& peers) {
       }
     }
 
-    LOG(INFO) << "Detaching from: " << peerSpec.cmdUrl;
+    LOG(INFO) << "Detaching from: " << peerSpec.cmdUrl
+              << ", support-flood-optimization: "
+              << peerSpec.supportFloodOptimization;
     auto syncRes = peerSyncSock_.disconnect(fbzmq::SocketUrl{peerSpec.cmdUrl});
     if (syncRes.hasError()) {
       LOG(ERROR) << "Failed to detach. " << syncRes.error();
@@ -735,6 +760,14 @@ KvStore::delPeers(std::vector<std::string> const& peers) {
 
     peersToSyncWith_.erase(peerName);
     peers_.erase(it);
+  }
+
+  // remove dual peers if any
+  if (enableFloodOptimization_) {
+    for (const auto& peer : dualPeersToRemove) {
+      LOG(INFO) << "dual peer down : " << peer;
+      DualNode::peerDown(peer);
+    }
   }
 }
 
@@ -979,6 +1012,20 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     VLOG(2) << "Peer dump requested";
     tData_.addStatValue("kvstore.cmd_peer_dump", 1, fbzmq::COUNT);
     return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
+  }
+  case thrift::Command::DUAL: {
+    VLOG(2) << "DUAL messages received";
+    if (not thriftReq.dualMessages.hasValue()) {
+      LOG(ERROR) << "received none dualMessages";
+      return fbzmq::Message(); // ignore it
+    }
+    if (thriftReq.dualMessages->messages.empty()) {
+      LOG(ERROR) << "received empty dualMessages";
+      return fbzmq::Message(); // ignore it
+    }
+    tData_.addStatValue("kvstore.received_dual_messages", 1, fbzmq::COUNT);
+    DualNode::processDualMessages(std::move(*thriftReq.dualMessages));
+    return fbzmq::Message();
   }
   default: {
     LOG(ERROR) << "Unknown command received";
@@ -1430,6 +1477,32 @@ KvStore::logKvEvent(const std::string& event, const std::string& key) {
       apache::thrift::FRAGILE,
       Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
+}
+
+bool
+KvStore::sendDualMessages(
+    const std::string& neighbor, const thrift::DualMessages& msgs) noexcept {
+  if (peers_.count(neighbor) == 0) {
+    LOG(ERROR) << "fail to send dual messages to " << neighbor << ", not exist";
+    return false;
+  }
+  const auto& neighborCmdSocketId = peers_.at(neighbor).second;
+  thrift::Request dualRequest;
+  dualRequest.cmd = thrift::Command::DUAL;
+  dualRequest.dualMessages = msgs;
+  const auto ret = peerSyncSock_.sendMultiple(
+      fbzmq::Message::from(neighborCmdSocketId).value(),
+      fbzmq::Message(),
+      fbzmq::Message::fromThriftObj(dualRequest, serializer_).value());
+  // TODO: for dual.query, we need to use a blocking socket to get a ack
+  // from destination node to know if it receives or not
+  // due to zmq async fashion, ret here is always true even on failure
+  if (ret.hasError()) {
+    LOG(ERROR) << "failed to send dual messages to " << neighbor << " using id "
+               << neighborCmdSocketId;
+    return false;
+  }
+  return true;
 }
 
 } // namespace openr

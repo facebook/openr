@@ -77,6 +77,11 @@ thrift_object(
   "${THRIFT_PREFIX}" #include_prefix
 )
 
+add_dependencies(
+  KvStore-cpp2-obj
+  Dual-cpp2-obj
+)
+
 thrift_object(
   "Lsdb" #file_name
   "" #services

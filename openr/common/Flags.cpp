@@ -335,3 +335,10 @@ DEFINE_int32(
     openr::Constants::kPersistentStoreMaxBackoff.count(),
     "Max backoff to save DB to file (in millseconds)");
 DEFINE_bool(enable_flood_optimization, false, "Enable flooding optimization");
+DEFINE_bool(is_flood_root, false, "set myself as flooding root or not");
+// TODO this option will be deprecated in near future, this is just for safely
+// rollout purpose
+DEFINE_bool(
+    use_flood_optimization,
+    false,
+    "Enable this to use formed flooding topology to flood updates");
