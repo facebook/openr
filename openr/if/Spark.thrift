@@ -91,6 +91,9 @@ struct SparkPayload {
 
   // support flood optimization or not
   8: bool supportFloodOptimization = 0;
+
+  // indicating I'm going to restart gracefully
+  9: optional bool restarting = 0;
 }
 
 //
@@ -104,8 +107,9 @@ struct SparkHelloPacket {
 enum SparkNeighborEventType {
   NEIGHBOR_UP         = 1,
   NEIGHBOR_DOWN       = 2,
-  NEIGHBOR_RESTART    = 3,
+  NEIGHBOR_RESTARTED  = 3,
   NEIGHBOR_RTT_CHANGE = 4,
+  NEIGHBOR_RESTARTING = 5,
 }
 
 //

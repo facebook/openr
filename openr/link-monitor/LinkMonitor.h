@@ -48,7 +48,16 @@ namespace openr {
 
 // Pair <remoteNodeName, interface>
 using AdjacencyKey = std::pair<std::string, std::string>;
-using AdjacencyValue = std::pair<thrift::PeerSpec, thrift::Adjacency>;
+
+struct AdjacencyValue {
+  thrift::PeerSpec peerSpec;
+  thrift::Adjacency adjacency;
+  bool isRestarting{false};
+  AdjacencyValue() {}
+  AdjacencyValue(
+      thrift::PeerSpec spec, thrift::Adjacency adj, bool restarting = false)
+      : peerSpec(spec), adjacency(adj), isRestarting(restarting) {}
+};
 
 //
 // This class is responsible for reacting to neighbor
@@ -145,6 +154,9 @@ class LinkMonitor final : public OpenrEventLoop {
       const thrift::BinaryAddress& neighborAddrV6,
       const thrift::SparkNeighborEvent& event);
 
+  void neighborRestartingEvent(
+      const std::string& remoteNodeName, const std::string& ifName);
+
   void neighborDownEvent(
       const std::string& remoteNodeName, const std::string& ifName);
 
@@ -152,10 +164,11 @@ class LinkMonitor final : public OpenrEventLoop {
   // return true if sync is successful
   bool syncInterfaces();
 
+  // derive peer-spec info from current adjacencies_
   // handle peer changes e.g remove/add peers if any
   void advertiseKvStorePeers();
 
-  // Advertise my adjacencies to the KvStore
+  // Advertise my report-adjacencies_ to the KvStore
   void advertiseAdjacencies();
 
   // Advertise interfaces and addresses to Spark/Fib and PrefixManager
@@ -283,6 +296,7 @@ class LinkMonitor final : public OpenrEventLoop {
   // there can be multiple interfaces to a remote node, but at most 1 interface
   // (we use the "min" interface) for tcp connection
   std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies_;
+
   // Previously announced KvStore peers
   std::unordered_map<std::string, thrift::PeerSpec> peers_;
 

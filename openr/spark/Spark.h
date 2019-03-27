@@ -76,6 +76,9 @@ class Spark final : public OpenrEventLoop {
     ioProvider_ = std::move(ioProvider);
   }
 
+  // override eventloop stop()
+  void stop() override;
+
  private:
   // Spark is non-copyable
   Spark(Spark const&) = delete;
@@ -114,7 +117,10 @@ class Spark final : public OpenrEventLoop {
   void processHelloPacket();
 
   // originate my hello packet on given interface
-  void sendHelloPacket(std::string const& ifName, bool inFastInitState = false);
+  void sendHelloPacket(
+      std::string const& ifName,
+      bool inFastInitState = false,
+      bool restarting = false);
 
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& request) override;
@@ -261,6 +267,9 @@ class Spark final : public OpenrEventLoop {
     // Do we have adjacency with this neighbor. We use this to see if an UP/DOWN
     // notification is needed
     bool isAdjacent{false};
+
+    // counters to track number of restarting packets received
+    int numRecvRestarting{0};
 
     // Currently RTT value being used to neighbor. Must be initialized to zero
     std::chrono::microseconds rtt{0};

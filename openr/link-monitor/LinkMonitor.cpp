@@ -335,7 +335,7 @@ LinkMonitor::prepare() noexcept {
                 << (enableV4_ ? toString(neighborAddrV4) : "");
 
         switch (event.eventType) {
-        case thrift::SparkNeighborEventType::NEIGHBOR_UP:
+        case thrift::SparkNeighborEventType::NEIGHBOR_UP: {
           logNeighborEvent(
               "NB_UP",
               event.neighbor.nodeName,
@@ -343,17 +343,29 @@ LinkMonitor::prepare() noexcept {
               event.neighbor.ifName);
           neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
           break;
+        }
 
-        case thrift::SparkNeighborEventType::NEIGHBOR_RESTART:
+        case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING: {
           logNeighborEvent(
-              "NB_RESTART",
+              "NB_RESTARTING",
+              event.neighbor.nodeName,
+              event.ifName,
+              event.neighbor.ifName);
+          neighborRestartingEvent(event.neighbor.nodeName, event.ifName);
+          break;
+        }
+
+        case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
+          logNeighborEvent(
+              "NB_RESTARTED",
               event.neighbor.nodeName,
               event.ifName,
               event.neighbor.ifName);
           neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
           break;
+        }
 
-        case thrift::SparkNeighborEventType::NEIGHBOR_DOWN:
+        case thrift::SparkNeighborEventType::NEIGHBOR_DOWN: {
           logNeighborEvent(
               "NB_DOWN",
               event.neighbor.nodeName,
@@ -361,6 +373,7 @@ LinkMonitor::prepare() noexcept {
               event.neighbor.ifName);
           neighborDownEvent(event.neighbor.nodeName, event.ifName);
           break;
+        }
 
         case thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE: {
           if (!useRttMetric_) {
@@ -378,7 +391,7 @@ LinkMonitor::prepare() noexcept {
                   << event.neighbor.nodeName << " to " << newRttMetric;
           auto it = adjacencies_.find({event.neighbor.nodeName, event.ifName});
           if (it != adjacencies_.end()) {
-            auto& adj = it->second.second;
+            auto& adj = it->second.adjacency;
             adj.metric = newRttMetric;
             adj.rtt = event.rttUs;
             advertiseAdjacenciesThrottled_->operator()();
@@ -577,7 +590,7 @@ LinkMonitor::neighborUpEvent(
   // 1) the min interface changes: the previous min interface's connection will
   // be overridden by KvStoreClient, thus no need to explicitly remove it
   // 2) does not change: the existing connection to a neighbor is retained
-  adjacencies_[adjId] = std::make_pair(
+  adjacencies_[adjId] = AdjacencyValue(
       thrift::PeerSpec(FRAGILE, pubUrl, repUrl, event.supportFloodOptimization),
       std::move(newAdj));
 
@@ -594,7 +607,7 @@ LinkMonitor::neighborDownEvent(
   const auto adjId = std::make_pair(remoteNodeName, ifName);
 
   VLOG(1) << "LinkMonitor::neighborDownEvent called for nodeName: '"
-          << remoteNodeName << "', interface: '" << ifName << "'";
+          << remoteNodeName << "', interface: '" << ifName << "'.";
   syslog(
       LOG_NOTICE,
       "%s",
@@ -602,12 +615,33 @@ LinkMonitor::neighborDownEvent(
           "Neighbor {} is down on interface {}.", remoteNodeName, ifName)
           .c_str());
 
-  // Update adjacencies_
-  VLOG(2) << "Session to '" << remoteNodeName << "' via interface '" << ifName
-          << "' down, removing immediately..";
+  // remove such adjacencies
   adjacencies_.erase(adjId);
+
+  // advertise both peers and adjacencies
   advertiseKvStorePeers();
   advertiseAdjacencies();
+}
+
+void
+LinkMonitor::neighborRestartingEvent(
+    const std::string& remoteNodeName, const std::string& ifName) {
+  const auto adjId = std::make_pair(remoteNodeName, ifName);
+
+  VLOG(1) << "LinkMonitor::neighborRestartingEvent called for nodeName: '"
+          << remoteNodeName << "', interface: '" << ifName << "'";
+  syslog(
+      LOG_NOTICE,
+      "%s",
+      folly::sformat(
+          "Neighbor {} is restarting on interface {}.", remoteNodeName, ifName)
+          .c_str());
+
+  // update adjacencies_ restarting-bit and advertise peers
+  if (adjacencies_.count(adjId)) {
+    adjacencies_.at(adjId).isRestarting = true;
+  }
+  advertiseKvStorePeers();
 }
 
 std::unordered_map<std::string, thrift::PeerSpec>
@@ -615,6 +649,10 @@ LinkMonitor::getPeersFromAdjacencies(
     const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies) {
   std::unordered_map<std::string, std::string> neighborToIface;
   for (const auto& adjKv : adjacencies) {
+    if (adjKv.second.isRestarting) {
+      // ignore restarting adj
+      continue;
+    }
     const auto& nodeName = adjKv.first.first;
     const auto& iface = adjKv.first.second;
 
@@ -631,7 +669,7 @@ LinkMonitor::getPeersFromAdjacencies(
 
   std::unordered_map<std::string, thrift::PeerSpec> peers;
   for (const auto& kv : neighborToIface) {
-    peers.emplace(kv.first, adjacencies.at(kv).first);
+    peers.emplace(kv.first, adjacencies.at(kv).peerSpec);
   }
   return peers;
 }
@@ -696,7 +734,7 @@ LinkMonitor::advertiseAdjacencies() {
   for (const auto& adjKv : adjacencies_) {
     // 'second.second' is the adj object for this peer
     // NOTE: copy on purpose
-    auto adj = adjKv.second.second;
+    auto adj = adjKv.second.adjacency;
 
     // Set link overload bit
     adj.isOverloaded = config_.overloadedLinks.count(adj.ifName) > 0;
@@ -1205,7 +1243,7 @@ LinkMonitor::submitCounters() {
   counters["link_monitor.adjacencies"] = adjacencies_.size();
   counters["link_monitor.zmq_event_queue_size"] = getEventQueueSize();
   for (const auto& kv : adjacencies_) {
-    auto& adj = kv.second.second;
+    auto& adj = kv.second.adjacency;
     counters["link_monitor.metric." + adj.otherNodeName] = adj.metric;
   }
 

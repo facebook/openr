@@ -340,8 +340,8 @@ TEST_F(SparkFixture, GracefulRestart) {
   // node-1 should report node-2 as restarting because of sequence number
   // wrapping
   {
-    auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_RESTART);
+    auto event = waitForEvent(
+        spark1, thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported node-2 as RESTARTING";
   }
@@ -902,12 +902,14 @@ TEST_F(SparkFixture, HubAndSpoke) {
     event = events["node-2"];
 
     EXPECT_EQ(iface1_2, event.ifName);
-    EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_DOWN, event.eventType);
+    EXPECT_EQ(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, event.eventType);
     EXPECT_EQ("node-2", event.neighbor.nodeName);
 
     event = events["node-3"];
 
-    EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_DOWN, event.eventType);
+    EXPECT_EQ(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING, event.eventType);
     EXPECT_EQ(iface1_3, event.ifName);
     EXPECT_EQ("node-3", event.neighbor.nodeName);
 

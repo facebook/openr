@@ -59,6 +59,9 @@ const uint8_t kHiThreshold = 5;
 // absolute step threshold, in microseconds
 const int64_t kAbsThreshold = 500;
 
+// number of restarting packets to send out per interface before I'm going down
+const int kNumRestartingPktSent = 3;
+
 //
 // Function to get current timestamp in microseconds using steady clock
 // NOTE: we use non-monotonic clock since kernel time-stamps do not support
@@ -209,6 +212,24 @@ Spark::Spark(
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
+}
+
+void
+Spark::stop() {
+  // send out restarting packets for all interfaces before I'm going down
+  // here we are sending duplicate restarting packets (3 times per interface)
+  // in case some packets get lost
+  for (int i = 0; i < kNumRestartingPktSent; ++i) {
+    for (const auto& kv : interfaceDb_) {
+      const auto& ifName = kv.first;
+      sendHelloPacket(
+          ifName, false /* inFastInitState */, true /* restarting */);
+    }
+  }
+
+  LOG(INFO)
+      << "I have sent all restarting packets to my neighbors, ready to go down";
+  ZmqEventLoop::stop();
 }
 
 void
@@ -538,7 +559,7 @@ Spark::processNeighborHoldTimeout(
     ifNeighbors.erase(neighborName);
   };
 
-  // check if the neighbor was adjacent. if so, report it as DOWN
+  // check if the neighbor was adjacent. if so, report it as neighbor-down
   if (neighbor.isAdjacent) {
     LOG(INFO) << "Neighbor " << neighborName
               << " was adjacent, reporting as DOWN";
@@ -551,7 +572,7 @@ Spark::processNeighborHoldTimeout(
         neighbor.info,
         neighbor.rtt.count(),
         neighbor.label,
-        false /* supportFloodOptimization: doesn't matter in DOWN event*/);
+        false /* supportFloodOptimization: doesn't matter in GR-expired event*/);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -676,6 +697,39 @@ Spark::processHelloPacket() {
   neighbor.neighborTimestamp = nbrSentTime;
   neighbor.localTimestamp = myRecvTime;
 
+  // check if it's a restarting packet
+  if (helloPacket.payload.restarting.hasValue() and
+      *helloPacket.payload.restarting) {
+    // this neighbor informed us that it's restarting
+    neighbor.numRecvRestarting += 1;
+    if (neighbor.numRecvRestarting > 1) {
+      // duplicate restarting packet, we already known this neighbor is
+      // restarting
+      return;
+    }
+    LOG(INFO) << "neighbor " << originator.nodeName << " from iface "
+              << originator.ifName << " on iface" << ifName << " is restarting";
+
+    thrift::SparkNeighborEvent event(
+        apache::thrift::FRAGILE,
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
+        ifName,
+        originator,
+        neighbor.rtt.count(),
+        neighbor.label,
+        false /* supportDual: doesn't matter in DOWN event*/);
+    auto ret = reportSocket_.sendMultiple(
+        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
+            .value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(event, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << "Error sending spark event: " << ret.error();
+    }
+
+    return;
+  }
+
   // Try to deduce RTT for this neighbor and update timestamps for recvd hello
   auto it = helloPacket.payload.neighborInfos.find(myNodeName_);
   if (it != helloPacket.payload.neighborInfos.end()) {
@@ -788,12 +842,13 @@ Spark::processHelloPacket() {
 
     thrift::SparkNeighborEvent event(
         apache::thrift::FRAGILE,
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTART,
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
         ifName,
         originator,
         neighbor.rtt.count(),
         neighbor.label,
         supportFloodOptimization);
+    neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -844,6 +899,7 @@ Spark::processHelloPacket() {
         neighbor.rtt.count(),
         neighbor.label,
         supportFloodOptimization);
+    neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -895,7 +951,8 @@ Spark::processHelloPacket() {
 }
 
 void
-Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
+Spark::sendHelloPacket(
+    std::string const& ifName, bool inFastInitState, bool restarting) {
   VLOG(3) << "Send hello packet called for " << ifName;
 
   if (interfaceDb_.count(ifName) == 0) {
@@ -943,7 +1000,8 @@ Spark::sendHelloPacket(std::string const& ifName, bool inFastInitState) {
       std::map<std::string, thrift::ReflectedNeighborInfo>{},
       getCurrentTimeInUs().count(),
       inFastInitState,
-      enableFloodOptimization_);
+      enableFloodOptimization_,
+      restarting);
 
   // add all neighbors we have heard from on this interface
   for (const auto& kv : neighbors_.at(ifName)) {

@@ -1109,6 +1109,161 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   checkPeerDump(adj_2_2.otherNodeName, peerSpec_2_2);
 }
 
+// Verify neighbor-restarting event (including parallel case)
+TEST_F(LinkMonitorTestFixture, NeighborRestart) {
+  std::string clientId = Constants::kSparkReportClientId.toString();
+
+  /* Single link case */
+  // neighbor up
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+  }
+
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+
+  // neighbor restart
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+  }
+
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  // peers should be gone
+  EXPECT_TRUE(kvStoreWrapper->getPeers().empty());
+
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+  }
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+
+  /* Parallel case */
+  // neighbor up on another interface
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP,
+        "iface_2_2",
+        nb2,
+        100 /* rtt-us */,
+        2 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+  }
+
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+
+  // neighbor restarting on iface_2_1
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+  }
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_2.otherNodeName, peerSpec_2_2);
+
+  // neighbor restarted
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+  }
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+
+  // neighbor restarting iface_2_2
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
+        "iface_2_2",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+  }
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+
+  // neighbor restarting iface_2_1
+  {
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+  }
+  // wait for this peer change to propogate
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  // peers should be gone
+  EXPECT_TRUE(kvStoreWrapper->getPeers().empty());
+}
+
 TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
