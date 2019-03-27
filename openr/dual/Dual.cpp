@@ -64,8 +64,14 @@ DualStateMachine::processEvent(DualEvent event, bool fc) {
 Dual::Dual(
     const std::string& nodeId,
     const std::string& rootId,
-    const std::unordered_map<std::string, int64_t>& localDistance)
-    : nodeId(nodeId), rootId(rootId), localDistances_(localDistance) {
+    const std::unordered_map<std::string, int64_t>& localDistance,
+    std::function<void(
+        const folly::Optional<std::string>& oldNh,
+        const folly::Optional<std::string>& newNh)> nexthopChangeCb)
+    : nodeId(nodeId),
+      rootId(rootId),
+      localDistances_(localDistance),
+      nexthopCb_(std::move(nexthopChangeCb)) {
   // set distance to 0 if I'm the root, otherwise default to inf
   if (rootId == nodeId) {
     info_.distance = 0;
@@ -186,7 +192,12 @@ Dual::localComputation(
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
   bool sameRd = newDistance == info_.reportDistance;
   // perform local update
-  info_.nexthop = newNexthop;
+  if (info_.nexthop != newNexthop) {
+    if (nexthopCb_) {
+      nexthopCb_(info_.nexthop, newNexthop);
+    }
+    info_.nexthop = newNexthop;
+  }
   info_.distance = newDistance;
   info_.reportDistance = newDistance;
   info_.feasibleDistance = newDistance;
@@ -269,6 +280,9 @@ Dual::tryLocalOrDiffusing(
       info_.sm.processEvent(event, false);
     } else {
       // can't send even one query out -> my current successor is down
+      if (nexthopCb_) {
+        nexthopCb_(info_.nexthop, folly::none);
+      }
       info_.nexthop = folly::none;
     }
   }
@@ -303,6 +317,29 @@ Dual::getStatusString() const noexcept {
 std::unordered_map<std::string, thrift::DualPerRootCounters>
 Dual::getCounters() const noexcept {
   return counters_;
+}
+
+void
+Dual::addChild(const std::string& child) noexcept {
+  if (children_.count(child)) {
+    LOG(WARNING) << rootId << ": adding an existing child " << child;
+    return;
+  }
+  children_.emplace(child);
+}
+
+void
+Dual::removeChild(const std::string& child) noexcept {
+  if (!children_.count(child)) {
+    LOG(WARNING) << rootId << ": removing an non-existing child " << child;
+    return;
+  }
+  children_.erase(child);
+}
+
+std::unordered_set<std::string>
+Dual::children() const noexcept {
+  return children_;
 }
 
 bool
@@ -605,7 +642,12 @@ Dual::processReply(
   info_.distance = dmin;
   info_.reportDistance = dmin;
   info_.feasibleDistance = dmin;
-  info_.nexthop = newNh;
+  if (info_.nexthop != newNh) {
+    if (nexthopCb_) {
+      nexthopCb_(info_.nexthop, newNh);
+    }
+    info_.nexthop = newNh;
+  }
   if (not sameRd) {
     floodUpdates(msgsToSend);
   }
@@ -624,7 +666,7 @@ Dual::processReply(
 DualNode::DualNode(const std::string& nodeId, bool isRoot)
     : nodeId(nodeId), isRoot(isRoot) {
   if (isRoot) {
-    duals_.emplace(nodeId, Dual(nodeId, nodeId, localDistances_));
+    addDual(nodeId);
   }
 }
 
@@ -651,6 +693,7 @@ DualNode::peerDown(const std::string& neighbor) {
 
   for (auto& kv : duals_) {
     kv.second.peerDown(neighbor, msgsToSend);
+    kv.second.removeChild(neighbor);
   }
 
   sendAllDualMessages(msgsToSend);
@@ -670,6 +713,24 @@ DualNode::peerCostChange(const std::string& neighbor, int64_t cost) {
   sendAllDualMessages(msgsToSend);
 }
 
+bool
+DualNode::hasDual(const std::string& rootId) {
+  if (duals_.count(rootId)) {
+    return true;
+  }
+  return false;
+}
+
+Dual&
+DualNode::getDual(const std::string& rootId) {
+  return duals_.at(rootId);
+}
+
+std::unordered_map<std::string, Dual>&
+DualNode::getDuals() {
+  return duals_;
+}
+
 void
 DualNode::processDualMessages(const thrift::DualMessages& messages) {
   std::unordered_map<std::string, thrift::DualMessages> msgsToSend;
@@ -680,8 +741,7 @@ DualNode::processDualMessages(const thrift::DualMessages& messages) {
 
   for (const auto& msg : messages.messages) {
     const auto& rootId = msg.dstId;
-    // emplace a new Dual for this rootId if not exist
-    duals_.emplace(rootId, Dual(nodeId, rootId, localDistances_));
+    addDual(rootId);
     auto& dual = duals_.at(rootId);
     switch (msg.type) {
     case thrift::DualMessageType::UPDATE: {
@@ -794,6 +854,20 @@ DualNode::sendAllDualMessages(
     counters_[neighbor].pktSent++;
     counters_[neighbor].msgSent += msgs.messages.size();
   }
+}
+
+void
+DualNode::addDual(const std::string& rootId) {
+  if (duals_.count(rootId) != 0) {
+    return;
+  }
+
+  auto nexthopCb = [this, rootId](
+                       const folly::Optional<std::string>& oldNh,
+                       const folly::Optional<std::string>& newNh) {
+    processNexthopChange(rootId, oldNh, newNh);
+  };
+  duals_.emplace(rootId, Dual(nodeId, rootId, localDistances_, nexthopCb));
 }
 
 } // namespace openr

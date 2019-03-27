@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <functional>
 #include <limits>
 #include <stack>
 #include <unordered_map>
@@ -70,7 +71,10 @@ class Dual {
   Dual(
       const std::string& nodeId,
       const std::string& rootId,
-      const std::unordered_map<std::string, int64_t>& localDistance);
+      const std::unordered_map<std::string, int64_t>& localDistance,
+      std::function<void(
+          const folly::Optional<std::string>& oldNh,
+          const folly::Optional<std::string>& newNh)> nexthopChangeCb);
 
   // peer up event
   // input: (neighbor-id, link-metric)
@@ -200,6 +204,15 @@ class Dual {
   std::unordered_map<std::string, thrift::DualPerRootCounters> getCounters()
       const noexcept;
 
+  // add a spt child
+  void addChild(const std::string& child) noexcept;
+
+  // remove a spt child
+  void removeChild(const std::string& child) noexcept;
+
+  // get current spt children
+  std::unordered_set<std::string> children() const noexcept;
+
   // my node id
   const std::string nodeId;
 
@@ -259,6 +272,15 @@ class Dual {
 
   // dual messages counters map<neighbor: dual-counters>
   std::unordered_map<std::string, thrift::DualPerRootCounters> counters_;
+
+  // callback when nexthop changed
+  const std::function<void(
+      const folly::Optional<std::string>& oldNh,
+      const folly::Optional<std::string>& newNh)>
+      nexthopCb_{nullptr};
+
+  // spt children
+  std::unordered_set<std::string> children_;
 };
 
 /**
@@ -293,6 +315,13 @@ class DualNode {
       const std::string& neighbor,
       const thrift::DualMessages& msgs) noexcept = 0;
 
+  // subclass needs to override this api to perform actions when nexthop changes
+  // for a given root-id
+  virtual void processNexthopChange(
+      const std::string& rootId,
+      const folly::Optional<std::string>& oldNh,
+      const folly::Optional<std::string>& newNh) noexcept = 0;
+
   // link up from neighbor at link-metric cost
   void peerUp(const std::string& neighbor, int64_t cost);
 
@@ -304,6 +333,15 @@ class DualNode {
 
   // process dual messages
   void processDualMessages(const thrift::DualMessages& messages);
+
+  // check if a given root-id is discovered or not
+  bool hasDual(const std::string& rootId);
+
+  // get reference to dual for a given root-id
+  Dual& getDual(const std::string& rootId);
+
+  // get all discovered duals reference as map<root-id: Dual>
+  std::unordered_map<std::string, Dual>& getDuals();
 
   // get route-info for a given root-id
   // return none if root-id is not discoveried yet
@@ -337,6 +375,9 @@ class DualNode {
   // send out dual messages for a given <neighbor: dual-messages>
   void sendAllDualMessages(
       std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+
+  // add Dual for a given root-id if not exist yet
+  void addDual(const std::string& rootId);
 
   // local distances map<neighbor: distance>
   std::unordered_map<std::string, int64_t> localDistances_;

@@ -249,6 +249,18 @@ class DualTestNode final : public DualNode {
     return true;
   }
 
+  void
+  processNexthopChange(
+      const std::string& rootId,
+      const folly::Optional<std::string>& oldNh,
+      const folly::Optional<std::string>& newNh) noexcept override {
+    std::string oldNhStr = oldNh.hasValue() ? *oldNh : "none";
+    std::string newNhStr = newNh.hasValue() ? *newNh : "none";
+    VLOG(1) << "node: " << nodeId << " at root: " << rootId << " nexthop"
+            << " change " << oldNhStr << " -> " << newNhStr;
+    return;
+  }
+
   // event base loop
   std::shared_ptr<folly::EventBase> evb_;
   // reference to map<node-id: DualTestNode*>

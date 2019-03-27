@@ -29,14 +29,17 @@ KvStoreWrapper::KvStoreWrapper(
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     folly::Optional<KvStoreFilters> filters,
     KvStoreFloodRate kvStoreRate,
-    std::chrono::milliseconds ttlDecr)
+    std::chrono::milliseconds ttlDecr,
+    bool enableFloodOptimization,
+    bool isFloodRoot)
     : nodeId(nodeId),
       localPubUrl(folly::sformat("inproc://{}-kvstore-pub", nodeId)),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
       globalPubUrl(folly::sformat("inproc://{}-kvstore-global-pub", nodeId)),
       monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
       reqSock_(zmqContext),
-      subSock_(zmqContext) {
+      subSock_(zmqContext),
+      enableFloodOptimization_(enableFloodOptimization) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
@@ -53,7 +56,9 @@ KvStoreWrapper::KvStoreWrapper(
       std::move(filters),
       Constants::kHighWaterMark,
       kvStoreRate,
-      ttlDecr);
+      ttlDecr,
+      enableFloodOptimization,
+      isFloodRoot);
 
   localCmdUrl = kvStore_->inprocCmdUrl;
 }
@@ -256,6 +261,22 @@ KvStoreWrapper::getCounters() {
   }
 
   return std::move(maybeMsg->counters);
+}
+
+thrift::SptInfos
+KvStoreWrapper::getFloodTopo() {
+  // Prepare request
+  thrift::Request request;
+  request.cmd = thrift::Command::FLOOD_TOPO_GET;
+
+  // Make ZMQ call and wait for response
+  reqSock_.sendThriftObj(request, serializer_);
+  auto maybeMsg = reqSock_.recvThriftObj<thrift::SptInfos>(serializer_);
+  if (maybeMsg.hasError()) {
+    LOG(FATAL) << "getCounters recv response failed: " << maybeMsg.error();
+  }
+
+  return std::move(maybeMsg.value());
 }
 
 bool

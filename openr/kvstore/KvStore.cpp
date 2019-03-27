@@ -1036,6 +1036,10 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     processFloodTopoSet(std::move(*thriftReq.floodTopoSetParams));
     return fbzmq::Message();
   }
+  case thrift::Command::FLOOD_TOPO_GET: {
+    VLOG(3) << "FLOOD_TOPO_GET command requested";
+    return fbzmq::Message::fromThriftObj(processFloodTopoGet(), serializer_);
+  }
   default: {
     LOG(ERROR) << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());
@@ -1043,15 +1047,119 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
   }
 }
 
+thrift::SptInfos
+KvStore::processFloodTopoGet() noexcept {
+  thrift::SptInfos sptInfos;
+  const auto& duals = DualNode::getDuals();
+
+  // set spt-infos
+  for (const auto& kv : duals) {
+    const auto& rootId = kv.first;
+    const auto& info = kv.second.getInfo();
+    thrift::SptInfo sptInfo;
+    sptInfo.passive = info.sm.state == DualState::PASSIVE;
+    sptInfo.cost = info.distance;
+    sptInfo.parent = info.nexthop;
+    sptInfo.children = kv.second.children();
+    sptInfos.infos.emplace(rootId, sptInfo);
+  }
+
+  // set counters
+  sptInfos.counters = DualNode::getCounters();
+  return sptInfos;
+}
+
 void
 KvStore::processFloodTopoSet(
     const thrift::FloodTopoSetParams& setParams) noexcept {
+  if (not DualNode::hasDual(setParams.rootId)) {
+    LOG(ERROR) << "processFloodTopoSet unknown root-id: " << setParams.rootId;
+    return;
+  }
+  auto& dual = DualNode::getDual(setParams.rootId);
+  const auto& child = setParams.srcId;
   if (setParams.setChild) {
+    // set child command
     VLOG(1) << "flood topo set child on root-id: " << setParams.rootId
-            << " from " << setParams.srcId;
+            << " , child: " << setParams.srcId;
+    dual.addChild(child);
   } else {
+    // unset child command
     VLOG(1) << "flood topo unset child on root-id: " << setParams.rootId
-            << " from " << setParams.srcId;
+            << " , child: " << setParams.srcId;
+    dual.removeChild(child);
+  }
+}
+
+void
+KvStore::processNexthopChange(
+    const std::string& rootId,
+    const folly::Optional<std::string>& oldNh,
+    const folly::Optional<std::string>& newNh) noexcept {
+  // sanity check
+  std::string oldNhStr = oldNh.hasValue() ? *oldNh : "none";
+  std::string newNhStr = newNh.hasValue() ? *newNh : "none";
+  CHECK(oldNh != newNh)
+      << rootId
+      << ": callback invoked while nexthop does not change: " << oldNhStr;
+  // root should NEVER change its nexthop (nexthop always equal to myself)
+  CHECK_NE(nodeId_, rootId);
+  LOG(INFO) << "dual root-id (" << rootId << ") nexhop change: " << oldNhStr
+            << " -> " << newNhStr;
+  // // unset old parent if any
+  if (oldNh.hasValue()) {
+    if (peers_.count(*oldNh) == 0) {
+      // old spt parent is gone already, do nothing;
+      return;
+    }
+    CHECK_NE(nodeId_, *oldNh) << "old nexthop was myself";
+    // unset it
+    const auto& dstCmdSocketId = peers_.at(*oldNh).second;
+    thrift::Request request;
+    request.cmd = thrift::Command::FLOOD_TOPO_SET;
+
+    thrift::FloodTopoSetParams setParams;
+    setParams.rootId = rootId;
+    setParams.srcId = nodeId_;
+    setParams.setChild = false; // unset
+    request.floodTopoSetParams = setParams;
+
+    const auto ret = peerSyncSock_.sendMultiple(
+        fbzmq::Message::from(dstCmdSocketId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(request, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << rootId << ": failed to unset spt-parent " << *oldNh;
+    }
+  }
+
+  // set new parent if any
+  if (newNh.hasValue()) {
+    // peers_ MUST have this new parent
+    // if peers_ does not have this peer, that means KvStore already recevied
+    // NEIGHBOR-DOWN event (so does dual), but dual still think I should have
+    // this neighbor as nexthop, then something is wrong with DUAL
+    CHECK(peers_.count(*newNh))
+        << rootId << ": trying to set new spt-parent who does not exist "
+        << *newNh;
+    CHECK_NE(nodeId_, *newNh) << "new nexthop is myself";
+    const auto& dstCmdSocketId = peers_.at(*newNh).second;
+    thrift::Request request;
+    request.cmd = thrift::Command::FLOOD_TOPO_SET;
+
+    thrift::FloodTopoSetParams setParams;
+    setParams.rootId = rootId;
+    setParams.srcId = nodeId_;
+    setParams.setChild = true; // set
+    request.floodTopoSetParams = setParams;
+
+    const auto ret = peerSyncSock_.sendMultiple(
+        fbzmq::Message::from(dstCmdSocketId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(request, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << rootId << ": failed to set spt-parent " << *newNh;
+    }
   }
 }
 

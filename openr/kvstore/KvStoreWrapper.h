@@ -35,7 +35,9 @@ class KvStoreWrapper {
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       folly::Optional<KvStoreFilters> filters = folly::none,
       KvStoreFloodRate kvstoreRate = folly::none,
-      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement);
+      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
+      bool enableFloodOptimization = false,
+      bool isFloodRoot = false);
 
   ~KvStoreWrapper() {
     stop();
@@ -97,6 +99,11 @@ class KvStoreWrapper {
    */
   fbzmq::thrift::CounterMap getCounters();
 
+  /*
+   * Get flooding topology information
+   */
+  thrift::SptInfos getFloodTopo();
+
   /**
    * APIs to manage (add/remove) KvStore peers. Returns true on success else
    * returns false.
@@ -115,7 +122,10 @@ class KvStoreWrapper {
   thrift::PeerSpec
   getPeerSpec() const {
     return thrift::PeerSpec(
-        apache::thrift::FRAGILE, globalPubUrl, globalCmdUrl, false);
+        apache::thrift::FRAGILE,
+        globalPubUrl,
+        globalCmdUrl,
+        enableFloodOptimization_);
   }
 
  public:
@@ -154,6 +164,9 @@ class KvStoreWrapper {
 
   // Thread in which KvStore will be running.
   std::thread kvStoreThread_;
+
+  // enable flood optimization or not
+  const bool enableFloodOptimization_{false};
 };
 
 } // namespace openr

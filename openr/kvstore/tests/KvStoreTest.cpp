@@ -94,7 +94,9 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       folly::Optional<KvStoreFilters> filters = folly::none,
       KvStoreFloodRate kvStoreRate = folly::none,
-      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement) {
+      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
+      bool enableFloodOptimization = false,
+      bool isFloodRoot = false) {
     auto ptr = std::make_unique<KvStoreWrapper>(
         context,
         nodeId,
@@ -103,7 +105,9 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
         std::move(peers),
         std::move(filters),
         kvStoreRate,
-        ttlDecr);
+        ttlDecr,
+        enableFloodOptimization,
+        isFloodRoot);
     stores_.emplace_back(std::move(ptr));
     return stores_.back().get();
   }
@@ -1198,6 +1202,254 @@ TEST_F(KvStoreTestFixture, PeerAddRemove) {
   // Remove store2 and verify that there are no more peers
   store0->delPeer("store2");
   EXPECT_EQ(emptyPeers, store0->getPeers());
+}
+
+/**
+ * 2 x 2 Fabric topology
+ * r0, r1 are root nodes
+ * n0, n1 are non-root nodes
+ * r0    r1
+ * | \   /|
+ * |  \_/ |
+ * | /  \ |
+ * n0    n1
+ * verify flooding-topology information on each node (parent, children, cost)
+ */
+TEST_F(KvStoreTestFixture, DualTest) {
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+
+  auto r0 = createKvStore(
+      "r0",
+      emptyPeers,
+      folly::none,
+      folly::none,
+      Constants::kTtlDecrement,
+      true,
+      true /* isRoot */);
+  auto r1 = createKvStore(
+      "r1",
+      emptyPeers,
+      folly::none,
+      folly::none,
+      Constants::kTtlDecrement,
+      true,
+      true /* isRoot */);
+  auto n0 = createKvStore(
+      "n0",
+      emptyPeers,
+      folly::none,
+      folly::none,
+      Constants::kTtlDecrement,
+      true,
+      false /* isRoot */);
+  auto n1 = createKvStore(
+      "n1",
+      emptyPeers,
+      folly::none,
+      folly::none,
+      Constants::kTtlDecrement,
+      true,
+      false /* isRoot */);
+
+  // Start stores in their respective threads.
+  r0->run();
+  r1->run();
+  n0->run();
+  n1->run();
+
+  //
+  // Add peers to all stores
+  EXPECT_TRUE(r0->addPeer(n0->nodeId, n0->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n1->nodeId, n1->getPeerSpec()));
+
+  EXPECT_TRUE(r1->addPeer(n0->nodeId, n0->getPeerSpec()));
+  EXPECT_TRUE(r1->addPeer(n1->nodeId, n1->getPeerSpec()));
+
+  EXPECT_TRUE(n0->addPeer(r0->nodeId, r0->getPeerSpec()));
+  EXPECT_TRUE(n0->addPeer(r1->nodeId, r1->getPeerSpec()));
+
+  EXPECT_TRUE(n1->addPeer(r0->nodeId, r0->getPeerSpec()));
+  EXPECT_TRUE(n1->addPeer(r1->nodeId, r1->getPeerSpec()));
+
+  // let kvstore dual sync
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // validate r0
+  {
+    const auto& sptInfos = r0->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, 0);
+    EXPECT_EQ(sptInfo0.parent, "r0");
+    EXPECT_EQ(sptInfo0.children.size(), 2);
+    EXPECT_EQ(sptInfo0.children.count("n0"), 1);
+    EXPECT_EQ(sptInfo0.children.count("n1"), 1);
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 2);
+    EXPECT_TRUE(sptInfo1.parent == "n0" or sptInfo1.parent == "n1");
+    EXPECT_EQ(sptInfo1.children.size(), 0);
+  }
+
+  // validate r1
+  {
+    const auto& sptInfos = r1->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 0);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.children.size(), 2);
+    EXPECT_EQ(sptInfo1.children.count("n0"), 1);
+    EXPECT_EQ(sptInfo1.children.count("n1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, 2);
+    EXPECT_TRUE(sptInfo0.parent == "n0" or sptInfo0.parent == "n1");
+    EXPECT_EQ(sptInfo0.children.size(), 0);
+  }
+
+  // validate n0
+  {
+    const auto& sptInfos = n0->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, 1);
+    EXPECT_EQ(sptInfo0.parent, "r0");
+    EXPECT_LE(sptInfo0.children.size(), 1);
+    if (sptInfo0.children.size() == 1) {
+      EXPECT_EQ(sptInfo0.children.count("r1"), 1);
+    }
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 1);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_LE(sptInfo1.children.size(), 1);
+    if (sptInfo1.children.size() == 1) {
+      EXPECT_EQ(sptInfo1.children.count("r0"), 1);
+    }
+  }
+
+  // validate n1
+  {
+    const auto& sptInfos = n1->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, 1);
+    EXPECT_EQ(sptInfo0.parent, "r0");
+    EXPECT_LE(sptInfo0.children.size(), 1);
+    if (sptInfo0.children.size() == 1) {
+      EXPECT_EQ(sptInfo0.children.count("r1"), 1);
+    }
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 1);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_LE(sptInfo1.children.size(), 1);
+    if (sptInfo1.children.size() == 1) {
+      EXPECT_EQ(sptInfo1.children.count("r0"), 1);
+    }
+  }
+
+  // bring down r0
+  r0->stop();
+  n0->delPeer("r0");
+  n1->delPeer("r0");
+
+  // let kvstore dual sync
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // validate r1
+  {
+    const auto& sptInfos = r1->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 0);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.children.size(), 2);
+    EXPECT_EQ(sptInfo1.children.count("n0"), 1);
+    EXPECT_EQ(sptInfo1.children.count("n1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, std::numeric_limits<int64_t>::max());
+    EXPECT_EQ(sptInfo0.children.size(), 0);
+  }
+
+  // validate n0
+  {
+    const auto& sptInfos = n0->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, std::numeric_limits<int64_t>::max());
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 1);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.children.size(), 0);
+  }
+
+  // validate n1
+  {
+    const auto& sptInfos = n1->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, std::numeric_limits<int64_t>::max());
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 1);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.children.size(), 0);
+  }
 }
 
 /**

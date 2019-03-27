@@ -147,11 +147,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // unknown can happen if value is missing (only hash is provided)
   static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
-  // send dual messages over syncSock
-  bool sendDualMessages(
-      const std::string& neighbor,
-      const thrift::DualMessages& msgs) noexcept override;
-
  private:
   // disable copying
   KvStore(KvStore const&) = delete;
@@ -160,6 +155,17 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   //
   // Private methods
   //
+
+  // send dual messages over syncSock
+  bool sendDualMessages(
+      const std::string& neighbor,
+      const thrift::DualMessages& msgs) noexcept override;
+
+  // callbacks when nexthop changed for a given root-id
+  void processNexthopChange(
+      const std::string& rootId,
+      const folly::Optional<std::string>& oldNh,
+      const folly::Optional<std::string>& newNh) noexcept override;
 
   // consume a publication pending on sub_ socket
   // (i.e. announced by some of our peers)
@@ -238,6 +244,9 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // process spanning-tree-set command to set/unset a child for a given root
   void processFloodTopoSet(
       const thrift::FloodTopoSetParams& setParams) noexcept;
+
+  // get current snapshot of SPT(s) information
+  thrift::SptInfos processFloodTopoGet() noexcept;
 
   // process received KV_DUMP from one of our neighbor
   void processSyncResponse() noexcept;

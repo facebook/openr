@@ -50,6 +50,7 @@ enum Command {
   COUNTERS_GET = 9,   // Return object will be Monitor::CounterMap
   DUAL = 10, // DUAL message
   FLOOD_TOPO_SET = 11, // set or unset flooding-topo child
+  FLOOD_TOPO_GET = 12; // get flood-topology information
 
   // operations on the store peers
   PEER_ADD  = 4,
@@ -128,6 +129,31 @@ struct FloodTopoSetParams {
   2: string srcId
   // set/unset a spanning tree child
   3: bool setChild
+}
+
+typedef set<string>
+  (cpp.type = "std::unordered_set<std::string>") SptChildrenSet
+
+// single spanning tree information
+struct SptInfo {
+  // passive state or not
+  1: bool passive
+  // metric cost towards root
+  2: i64 cost
+  // optional parent if any (aka nexthop)
+  3: optional string parent
+  // a set of spt children
+  4: SptChildrenSet children
+}
+
+// map<root-id: SPT-info>
+typedef map<string, SptInfo>
+  (cpp.type = "std::unordered_map<std::string, SptInfo>") SptInfoMap
+
+// all spanning tree(s) information
+struct SptInfos {
+  1: SptInfoMap infos
+  2: Dual.DualCounters counters
 }
 
 //
