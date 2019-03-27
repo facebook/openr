@@ -235,6 +235,10 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& msg) override;
 
+  // process spanning-tree-set command to set/unset a child for a given root
+  void processFloodTopoSet(
+      const thrift::FloodTopoSetParams& setParams) noexcept;
+
   // process received KV_DUMP from one of our neighbor
   void processSyncResponse() noexcept;
 

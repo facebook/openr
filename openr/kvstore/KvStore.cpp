@@ -1027,10 +1027,31 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     DualNode::processDualMessages(std::move(*thriftReq.dualMessages));
     return fbzmq::Message();
   }
+  case thrift::Command::FLOOD_TOPO_SET: {
+    VLOG(2) << "FLOOD_TOPO_SET command requested";
+    if (not thriftReq.floodTopoSetParams.hasValue()) {
+      LOG(ERROR) << "received none floodTopoSetParams";
+      return fbzmq::Message(); // ignore it
+    }
+    processFloodTopoSet(std::move(*thriftReq.floodTopoSetParams));
+    return fbzmq::Message();
+  }
   default: {
     LOG(ERROR) << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());
   }
+  }
+}
+
+void
+KvStore::processFloodTopoSet(
+    const thrift::FloodTopoSetParams& setParams) noexcept {
+  if (setParams.setChild) {
+    VLOG(1) << "flood topo set child on root-id: " << setParams.rootId
+            << " from " << setParams.srcId;
+  } else {
+    VLOG(1) << "flood topo unset child on root-id: " << setParams.rootId
+            << " from " << setParams.srcId;
   }
 }
 

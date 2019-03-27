@@ -48,7 +48,8 @@ enum Command {
   KEY_DUMP  = 3,
   HASH_DUMP = 7,
   COUNTERS_GET = 9,   // Return object will be Monitor::CounterMap
-  DUAL      = 10, // DUAL message
+  DUAL = 10, // DUAL message
+  FLOOD_TOPO_SET = 11, // set or unset flooding-topo child
 
   // operations on the store peers
   PEER_ADD  = 4,
@@ -119,6 +120,16 @@ struct PeerDelParams {
   1: list<string> peerNames
 }
 
+// set/unset flood-topo child
+struct FloodTopoSetParams {
+  // spanning tree root-id
+  1: string rootId
+  // from node-id
+  2: string srcId
+  // set/unset a spanning tree child
+  3: bool setChild
+}
+
 //
 // Request specification
 //
@@ -132,6 +143,7 @@ struct Request {
   4: PeerAddParams peerAddParams
   5: PeerDelParams peerDelParams
   9: optional Dual.DualMessages dualMessages
+  10: optional FloodTopoSetParams floodTopoSetParams
 }
 
 //
