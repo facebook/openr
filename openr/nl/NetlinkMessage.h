@@ -29,7 +29,6 @@ constexpr uint16_t kMaxNlPayloadSize{2048};
 constexpr uint16_t kMaxNhopPayloadSize{1024};
 constexpr uint32_t kNetlinkSockRecvBuf{1 * 1024 * 1024};
 
-// timer for programming route  s
 constexpr uint32_t kMaxNlMessageQueue{126001};
 constexpr size_t kMaxIovMsg{500};
 constexpr std::chrono::milliseconds kNlMessageSendTimer{10};
