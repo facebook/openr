@@ -11,6 +11,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import sys
 from builtins import object
+from typing import Any, Dict, List
 
 import click
 from openr.cli.utils import utils
@@ -137,12 +138,16 @@ class LMLinksCmd(LMCmd):
                     fg=overload_color,
                 )
                 caption = "Node Overload: {}".format(overload_status)
-                self.print_links_table(links.interfaceDetails, caption)
+                self.print_links_table(
+                    links.interfaceDetails, caption, self.enable_color
+                )
             else:
                 caption = "Node Overload: {}".format(
                     "YES" if links.isOverloaded else "NO"
                 )
-                self.print_links_table(links.interfaceDetails, caption)
+                self.print_links_table(
+                    links.interfaceDetails, caption, self.enable_color
+                )
 
     def interface_info_to_dict(self, interface_info):
         def _update(interface_info_dict, interface_info):
@@ -194,40 +199,55 @@ class LMLinksCmd(LMCmd):
         links_dict = {links.thisNodeName: self.links_to_dict(links)}
         print(utils.json_dumps(links_dict))
 
+    @classmethod
+    def build_table_rows(
+        cls, interfaces: Dict[str, object], stylish: bool = False
+    ) -> List[List[str]]:
+        rows = []
+        for (k, v) in sorted(interfaces.items()):
+            raw_row = cls.build_table_row(k, v, stylish)
+            addrs = raw_row[3]
+            raw_row[3] = ""
+            rows.append(raw_row)
+            for addrStr in addrs:
+                rows.append(["", "", "", addrStr])
+        return rows
+
     @staticmethod
-    def print_links_table(interfaces, caption=None):
+    def build_table_row(k: str, v: object, stylish: bool = False) -> List[Any]:
+        metric_override = v.metricOverride if v.metricOverride else ""
+        if v.info.isUp:
+            backoff_sec = int(
+                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0) / 1000
+            )
+            if backoff_sec == 0:
+                state = "Up"
+            elif not stylish:
+                state = backoff_sec
+            else:
+                state = click.style("Hold ({} s)".format(backoff_sec), fg="yellow")
+        else:
+            state = click.style("Down", fg="red") if stylish else "Down"
+        if v.isOverloaded:
+            metric_override = (
+                click.style("Overloaded", fg="red") if stylish else "Overloaded"
+            )
+        addrs = []
+        for prefix in v.info.networks:
+            addrStr = ipnetwork.sprint_addr(prefix.prefixAddress.addr)
+            addrs.append(addrStr)
+        row = [k, state, metric_override, addrs]
+        return row
+
+    @classmethod
+    def print_links_table(cls, interfaces, caption=None, stylish=False):
         """
         @param interfaces: dict<interface-name, InterfaceDetail>
         @param caption: Caption to show on table name
         """
 
-        rows = []
         columns = ["Interface", "Status", "Metric Override", "Addresses"]
-
-        for (k, v) in sorted(interfaces.items()):
-            metric_override = v.metricOverride if v.metricOverride else ""
-            if v.info.isUp:
-                backoff_sec = int(
-                    (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0) / 1000
-                )
-                state = (
-                    "Up"
-                    if backoff_sec == 0
-                    else click.style("Hold ({} s)".format(backoff_sec), fg="yellow")
-                )
-            else:
-                state = click.style("Down", fg="red")
-            if v.isOverloaded:
-                metric_override = click.style("Overloaded", fg="red")
-            rows.append([k, state, metric_override, ""])
-            firstAddr = True
-            for prefix in v.info.networks:
-                addrStr = ipnetwork.sprint_addr(prefix.prefixAddress.addr)
-                if firstAddr:
-                    rows[-1][3] = addrStr
-                    firstAddr = False
-                else:
-                    rows.append(["", "", "", addrStr])
+        rows = cls.build_table_rows(interfaces, stylish)
 
         print(printing.render_horizontal_table(rows, columns, caption))
         print()
