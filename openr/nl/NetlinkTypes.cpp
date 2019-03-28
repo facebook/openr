@@ -127,12 +127,25 @@ RouteBuilder::buildLinkRoute() const {
 RouteBuilder&
 RouteBuilder::setDestination(const folly::CIDRNetwork& dst) {
   dst_ = dst;
+  family_ = std::get<0>(dst).family();
   return *this;
 }
 
 const folly::CIDRNetwork&
 RouteBuilder::getDestination() const {
   return dst_;
+}
+
+RouteBuilder&
+RouteBuilder::setMplsLabel(uint32_t mplsLabel) {
+  mplsLabel_ = mplsLabel;
+  family_ = AF_MPLS;
+  return *this;
+}
+
+folly::Optional<uint32_t>
+RouteBuilder::getMplsLabel() const {
+  return mplsLabel_;
 }
 
 RouteBuilder&
@@ -246,6 +259,11 @@ RouteBuilder::getNextHops() const {
   return nextHops_;
 }
 
+uint8_t
+RouteBuilder::getFamily() const {
+  return family_;
+}
+
 RouteBuilder&
 RouteBuilder::setValid(bool isValid) {
   isValid_ = isValid;
@@ -276,13 +294,15 @@ Route::Route(const RouteBuilder& builder)
       routeTable_(builder.getRouteTable()),
       protocolId_(builder.getProtocolId()),
       scope_(builder.getScope()),
+      family_(builder.getFamily()),
       isValid_(builder.isValid()),
       flags_(builder.getFlags()),
       priority_(builder.getPriority()),
       tos_(builder.getTos()),
       nextHops_(builder.getNextHops()),
       dst_(builder.getDestination()),
-      routeIfName_(builder.getRouteIfName()) {}
+      routeIfName_(builder.getRouteIfName()),
+      mplsLabel_(builder.getMplsLabel()) {}
 
 Route::~Route() {
   if (route_) {
@@ -315,6 +335,8 @@ Route::operator=(Route&& other) noexcept {
   nextHops_ = std::move(other.nextHops_);
   dst_ = std::move(other.dst_);
   routeIfName_ = std::move(other.routeIfName_);
+  family_ = std::move(other.family_);
+  mplsLabel_ = std::move(other.mplsLabel_);
   if (route_) {
     rtnl_route_put(route_);
     route_ = nullptr;
@@ -355,6 +377,8 @@ Route::operator=(const Route& other) {
   nextHops_ = other.nextHops_;
   dst_ = other.dst_;
   routeIfName_ = other.routeIfName_;
+  family_ = other.family_;
+  mplsLabel_ = other.mplsLabel_;
   // Free our route_ if any
   if (route_) {
     rtnl_route_put(route_);
@@ -377,6 +401,7 @@ bool
 operator==(const Route& lhs, const Route& rhs) {
   bool ret =
       (lhs.getDestination() == rhs.getDestination() &&
+       lhs.getMplsLabel() == rhs.getMplsLabel() &&
        lhs.getNextHops().size() == rhs.getNextHops().size() &&
        lhs.getType() == rhs.getType() &&
        lhs.getRouteTable() == rhs.getRouteTable() &&
@@ -384,7 +409,8 @@ operator==(const Route& lhs, const Route& rhs) {
        lhs.getScope() == rhs.getScope() && lhs.isValid() == rhs.isValid() &&
        lhs.getFlags() == rhs.getFlags() &&
        lhs.getPriority() == rhs.getPriority() && lhs.getTos() == rhs.getTos() &&
-       lhs.getRouteIfName() == rhs.getRouteIfName());
+       lhs.getRouteIfName() == rhs.getRouteIfName() &&
+       lhs.getFamily() == rhs.getFamily());
 
   if (!ret) {
     return false;
@@ -402,7 +428,7 @@ operator==(const Route& lhs, const Route& rhs) {
 
 uint8_t
 Route::getFamily() const {
-  return dst_.first.family();
+  return family_;
 }
 
 uint8_t
@@ -413,6 +439,11 @@ Route::getType() const {
 const folly::CIDRNetwork&
 Route::getDestination() const {
   return dst_;
+}
+
+folly::Optional<uint32_t>
+Route::getMplsLabel() const {
+  return mplsLabel_;
 }
 
 folly::Optional<uint8_t>
@@ -463,12 +494,21 @@ Route::isValid() const {
 std::string
 Route::str() const {
   std::string result;
+  if (family_ == AF_MPLS) {
+    if (mplsLabel_.hasValue()) {
+      result += folly::sformat("label {} ", mplsLabel_.value());
+    }
+  } else {
+    result +=
+        folly::sformat("route {} ", folly::IPAddress::networkToString(dst_));
+  }
   result += folly::sformat(
-      "route {} proto {}, table {}, valid {}",
-      folly::IPAddress::networkToString(dst_),
+      " proto {}, table {}, valid {}, family {}",
       protocolId_,
       routeTable_,
-      isValid_ ? "Yes" : "No");
+      isValid_ ? "Yes" : "No",
+      static_cast<int>(family_));
+
   if (priority_) {
     result += folly::sformat(", priority {}", priority_.value());
   }
@@ -633,6 +673,24 @@ NextHopBuilder::setWeight(uint8_t weight) {
   return *this;
 }
 
+NextHopBuilder&
+NextHopBuilder::setLabelAction(int action) {
+  labelAction_ = action;
+  return *this;
+}
+
+NextHopBuilder&
+NextHopBuilder::setSwapLabel(uint32_t swapLabel) {
+  swapLabel_ = swapLabel;
+  return *this;
+}
+
+NextHopBuilder&
+NextHopBuilder::setPushLabels(const std::vector<uint32_t>& pushLabels) {
+  pushLabels_ = pushLabels;
+  return *this;
+}
+
 folly::Optional<int>
 NextHopBuilder::getIfIndex() const {
   return ifIndex_;
@@ -648,16 +706,47 @@ NextHopBuilder::getWeight() const {
   return weight_;
 }
 
+folly::Optional<int>
+NextHopBuilder::getLabelAction() const {
+  return labelAction_;
+}
+
+folly::Optional<uint32_t>
+NextHopBuilder::getSwapLabel() const {
+  return swapLabel_;
+}
+
+folly::Optional<std::vector<uint32_t>>
+NextHopBuilder::getPushLabels() const {
+  return pushLabels_;
+}
+
+uint8_t
+NextHopBuilder::getFamily() const {
+  if (gateway_.hasValue()) {
+    return gateway_.value().family();
+  }
+  return AF_UNSPEC;
+}
+
 NextHop::NextHop(const NextHopBuilder& builder)
     : ifIndex_(builder.getIfIndex()),
       gateway_(builder.getGateway()),
-      weight_(builder.getWeight()) {}
+      weight_(builder.getWeight()),
+      labelAction_(builder.getLabelAction()),
+      swapLabel_(builder.getSwapLabel()),
+      pushLabels_(builder.getPushLabels()),
+      family_(builder.getFamily()) {}
 
 bool
 operator==(const NextHop& lhs, const NextHop& rhs) {
   return lhs.getIfIndex() == rhs.getIfIndex() &&
       lhs.getGateway() == rhs.getGateway() &&
-      lhs.getWeight() == rhs.getWeight();
+      lhs.getWeight() == rhs.getWeight() &&
+      lhs.getLabelAction() == rhs.getLabelAction() &&
+      lhs.getSwapLabel() == rhs.getSwapLabel() &&
+      lhs.getPushLabels() == rhs.getPushLabels() &&
+      lhs.getFamily() == rhs.getFamily();
 }
 
 size_t
@@ -690,13 +779,50 @@ NextHop::getWeight() const {
   return weight_;
 }
 
+folly::Optional<int>
+NextHop::getLabelAction() const {
+  return labelAction_;
+}
+
+folly::Optional<uint32_t>
+NextHop::getSwapLabel() const {
+  return swapLabel_;
+}
+
+folly::Optional<std::vector<uint32_t>>
+NextHop::getPushLabels() const {
+  return pushLabels_;
+}
+
+uint8_t
+NextHop::getFamily() const {
+  if (gateway_.hasValue()) {
+    return gateway_.value().family();
+  }
+  return AF_UNSPEC;
+}
+
 std::string
 NextHop::str() const {
-  return folly::sformat(
+  std::string result;
+  result += folly::sformat(
       "nexthop via {}, intf-index {}, weight {}",
       (gateway_ ? gateway_->str() : "n/a"),
       (ifIndex_ ? std::to_string(*ifIndex_) : "n/a"),
       (weight_ ? std::to_string(*weight_) : "n/a"));
+  if (labelAction_.hasValue()) {
+    result += folly::sformat(" Label action {}", labelAction_.value());
+  }
+  if (swapLabel_.hasValue()) {
+    result += folly::sformat(" Swap label {}", swapLabel_.value());
+  }
+  if (pushLabels_.hasValue()) {
+    result += " Push Labels: ";
+    for (const auto& label : pushLabels_.value()) {
+      result += folly::sformat(" {} ", label);
+    }
+  }
+  return result;
 }
 
 struct rtnl_nexthop*

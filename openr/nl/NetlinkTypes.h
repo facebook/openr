@@ -64,16 +64,34 @@ class NextHopBuilder final {
 
   NextHopBuilder& setWeight(uint8_t weight);
 
+  NextHopBuilder& setLabelAction(int action);
+
+  NextHopBuilder& setSwapLabel(uint32_t swapLabel);
+
+  NextHopBuilder& setPushLabels(const std::vector<uint32_t>& pushLabels);
+
   folly::Optional<int> getIfIndex() const;
 
   folly::Optional<folly::IPAddress> getGateway() const;
 
   folly::Optional<uint8_t> getWeight() const;
 
+  folly::Optional<int> getLabelAction() const;
+
+  folly::Optional<uint32_t> getSwapLabel() const;
+
+  folly::Optional<std::vector<uint32_t>> getPushLabels() const;
+
+  uint8_t getFamily() const;
+
  private:
   folly::Optional<int> ifIndex_;
   folly::Optional<folly::IPAddress> gateway_;
   folly::Optional<uint8_t> weight_;
+  folly::Optional<int> labelAction_;
+  folly::Optional<uint32_t> swapLabel_;
+  folly::Optional<std::vector<uint32_t>> pushLabels_;
+  folly::Optional<uint8_t> family_;
 };
 
 // Wrapper class for rtnl_nexthop
@@ -90,6 +108,13 @@ class NextHop final {
 
   std::string str() const;
 
+  folly::Optional<int> getLabelAction() const;
+
+  folly::Optional<uint32_t> getSwapLabel() const;
+
+  folly::Optional<std::vector<uint32_t>> getPushLabels() const;
+
+  uint8_t getFamily() const;
   /**
    * This method Will construct rtnl_nexthop object and return it. Owner is
    * responsible for freeing it up. Use this method carefully.
@@ -114,6 +139,10 @@ class NextHop final {
   folly::Optional<int> ifIndex_;
   folly::Optional<folly::IPAddress> gateway_;
   folly::Optional<uint8_t> weight_;
+  folly::Optional<int> labelAction_;
+  folly::Optional<uint32_t> swapLabel_;
+  folly::Optional<std::vector<uint32_t>> pushLabels_;
+  folly::Optional<uint8_t> family_;
 };
 
 bool operator==(const NextHop& lhs, const NextHop& rhs);
@@ -191,6 +220,9 @@ class RouteBuilder {
 
   const folly::CIDRNetwork& getDestination() const;
 
+  RouteBuilder& setMplsLabel(uint32_t mplsLabel);
+
+  folly::Optional<uint32_t> getMplsLabel() const;
   // Required, default RTN_UNICAST
   RouteBuilder& setType(uint8_t type = RTN_UNICAST);
 
@@ -240,6 +272,8 @@ class RouteBuilder {
 
   const NextHopSet& getNextHops() const;
 
+  uint8_t getFamily() const;
+
   void reset();
 
  private:
@@ -247,6 +281,7 @@ class RouteBuilder {
   uint8_t routeTable_{RT_TABLE_MAIN};
   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
   uint8_t scope_{RT_SCOPE_UNIVERSE};
+  uint8_t family_{AF_UNSPEC};
   bool isValid_{false};
   folly::Optional<uint32_t> flags_;
   folly::Optional<uint32_t> priority_;
@@ -255,6 +290,7 @@ class RouteBuilder {
   folly::CIDRNetwork dst_;
   folly::Optional<int> routeIfIndex_; // for multicast or link route
   folly::Optional<std::string> routeIfName_; // for multicast or linkroute
+  folly::Optional<uint32_t> mplsLabel_;
 };
 
 // Wrapper class for rtnl_route
@@ -272,6 +308,8 @@ class Route final {
   uint8_t getFamily() const;
 
   const folly::CIDRNetwork& getDestination() const;
+
+  folly::Optional<uint32_t> getMplsLabel() const;
 
   uint8_t getType() const;
 
@@ -315,6 +353,7 @@ class Route final {
   uint8_t routeTable_{RT_TABLE_MAIN};
   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
   uint8_t scope_{RT_SCOPE_UNIVERSE};
+  uint8_t family_{AF_UNSPEC};
   bool isValid_{false};
   folly::Optional<uint32_t> flags_;
   folly::Optional<uint32_t> priority_;
@@ -324,6 +363,7 @@ class Route final {
   folly::Optional<std::string> routeIfName_;
   struct rtnl_route* route_{nullptr};
   struct rtnl_route* routeKey_{nullptr};
+  folly::Optional<uint32_t> mplsLabel_;
 };
 
 bool operator==(const Route& lhs, const Route& rhs);
