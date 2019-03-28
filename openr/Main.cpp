@@ -58,6 +58,9 @@ using apache::thrift::FRAGILE;
 using apache::thrift::concurrency::ThreadManager;
 using openr::thrift::OpenrModuleType;
 
+extern void pluginStart();
+extern void pluginStop();
+
 namespace {
 //
 // Local constants
@@ -816,6 +819,9 @@ main(int argc, char** argv) {
     LOG(INFO) << "thriftCtrlServer thread got stopped.";
   }));
 
+  // Call external module for platform specific implementations
+  pluginStart();
+
   // Wait for main-event loop to return
   mainEventLoopThread.join();
 
@@ -878,6 +884,9 @@ main(int argc, char** argv) {
   for (auto& t : allThreads) {
     t.join();
   }
+
+  // Call external module for platform specific implementations
+  pluginStop();
 
   // Close syslog connection (this is optional)
   syslog(LOG_NOTICE, "Stopping OpenR daemon.");

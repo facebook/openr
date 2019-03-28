@@ -287,6 +287,7 @@ add_library(openrlib
   platform/NetlinkFibHandler.cpp
   platform/NetlinkSystemHandler.cpp
   platform/PlatformPublisher.cpp
+  plugin/Plugin.cpp
   prefix-manager/PrefixManager.cpp
   prefix-manager/PrefixManagerClient.cpp
   spark/IoProvider.cpp
@@ -515,6 +516,11 @@ install(FILES
   platform/PlatformPublisher.h
   platform/NetlinkFibHandler.h
   DESTINATION include/openr/platform
+)
+
+install(FILES
+  plugin/Plugin.h
+  DESTINATION include/openr/plugin
 )
 
 install(FILES
