@@ -17,7 +17,7 @@ import sys
 from builtins import chr, input, map
 from collections import defaultdict
 from itertools import product
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import bunch
 import click
@@ -1362,16 +1362,28 @@ def print_unicast_routes(
 
     route_strs = []
     for route in unicast_routes:
-        dest = ipnetwork.sprint_prefix(route.dest)
-        if not ipnetwork.contain_any_prefix(dest, networks):
-            continue
-
-        paths_str = "\n".join(
-            ["via {}".format(ip_nexthop_to_str(nh)) for nh in get_route_nexthops(route)]
-        )
-        route_strs.append([dest, paths_str])
+        entry = build_unicast_route(route, filter_for_networks=networks)
+        if entry:
+            dest, nexthops = entry
+            paths_str = "\n".join(["via {}".format(nh) for nh in nexthops])
+            route_strs.append([dest, paths_str])
 
     print(printing.render_vertical_table(route_strs, caption=caption))
+
+
+def build_unicast_route(
+    route: object,
+    filter_for_networks: Optional[
+        List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]
+    ] = None,
+) -> Tuple[str, List[str]]:
+    dest = ipnetwork.sprint_prefix(route.dest)
+    if filter_for_networks and not ipnetwork.contain_any_prefix(
+        dest, filter_for_networks
+    ):
+        return None
+    nexthops = [ip_nexthop_to_str(nh) for nh in get_route_nexthops(route)]
+    return dest, nexthops
 
 
 def print_mpls_routes(
