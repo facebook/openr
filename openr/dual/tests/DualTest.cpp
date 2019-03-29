@@ -460,7 +460,7 @@ class DualBaseFixture : public ::testing::Test {
                      << "info";
           continue;
         }
-        LOG(INFO)
+        LOG(ERROR)
             << folly::sformat("{}\n{}", nodeStatus, rootsStatus.at(*rootId));
       } else {
         // print all roots status
@@ -468,7 +468,7 @@ class DualBaseFixture : public ::testing::Test {
         for (const auto& rootStr : rootsStatus) {
           strs.emplace_back(rootStr.second);
         }
-        LOG(INFO)
+        LOG(ERROR)
             << folly::sformat("{}\n{}", nodeStatus, folly::join("\n", strs));
       }
     }
@@ -871,8 +871,8 @@ INSTANTIATE_TEST_CASE_P(
         TestParam(0, true),
         TestParam(1, false),
         TestParam(1, true),
-        TestParam(4, false),
-        TestParam(4, true)));
+        TestParam(2, false),
+        TestParam(2, true)));
 
 /**
  *  Circular Topology
@@ -889,7 +889,7 @@ TEST_P(DualFixture, CircularTest) {
   const auto& flap = param.flap;
   VLOG(1) << "test params: " << totalRoots << ", " << flap;
 
-  int numNodes = 10;
+  int numNodes = 6;
   // add nodes
   for (int i = 0; i < numNodes; ++i) {
     bool isRoot = i < totalRoots;
@@ -911,12 +911,12 @@ TEST_P(DualFixture, CircularTest) {
 }
 
 /**
- *  Fabric Topology (4 X 8)
- *  n0 n1 n2 n3
+ *  Fabric Topology (2 X 4)
+ *  n0        n1
  *  |\        /\
  *  | \ ...  /  \
  *  |  \    /    \
- *  n4 n5 n6 .. n11
+ *  n2 n3 n4    n5
  */
 TEST_P(DualFixture, FabricTest) {
   const auto& param = GetParam();
@@ -924,13 +924,16 @@ TEST_P(DualFixture, FabricTest) {
   const auto& flap = param.flap;
   VLOG(1) << "test params: " << totalRoots << ", " << flap;
 
-  for (int i = 0; i < 12; ++i) {
+  int m = 2;
+  int n = 4;
+
+  for (int i = 0; i < m + n; ++i) {
     bool isRoot = i < totalRoots;
     addNode(folly::sformat("n{}", i), isRoot);
   }
 
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 4; j < 12; ++j) {
+  for (int i = 0; i < m; ++i) {
+    for (int j = m; j < m + n; ++j) {
       addLink(folly::sformat("n{}", i), folly::sformat("n{}", j), 1);
     }
   }
@@ -953,7 +956,7 @@ TEST_P(DualFixture, FullMeshTest) {
   const auto& flap = param.flap;
   VLOG(1) << "test params: " << totalRoots << ", " << flap;
 
-  int numNodes = 6;
+  int numNodes = 4;
   // add nodes
   for (int i = 0; i < numNodes; ++i) {
     bool isRoot = i < totalRoots;
@@ -988,8 +991,8 @@ TEST_P(DualFixture, GridTest) {
   const auto& flap = param.flap;
   VLOG(1) << "test params: " << totalRoots << ", " << flap;
 
-  int m = 5;
-  int n = 5;
+  int m = 2;
+  int n = 3;
   // add nodes
   for (int i = 0; i < m * n; ++i) {
     bool isRoot = i < totalRoots;
