@@ -62,8 +62,7 @@ typedef map<string, DualPerNeighborCounters>
 
 typedef map<string, map<string, DualPerRootCounters>>
   (cpp.type =
-    "std::unordered_map<std::string, /* root */
-     std::unordered_map<std::string /* neighbor */, DualPerRootCounters>>")
+    "std::unordered_map<std::string, /* root */ std::unordered_map<std::string /* neighbor */, DualPerRootCounters>>")
   RootCounters
 
 // all DUAL related counters
