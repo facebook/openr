@@ -96,11 +96,12 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
       KvStoreFloodRate kvStoreRate = folly::none,
       std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
       bool enableFloodOptimization = false,
-      bool isFloodRoot = false) {
+      bool isFloodRoot = false,
+      std::chrono::seconds dbSyncInterval = kDbSyncInterval) {
     auto ptr = std::make_unique<KvStoreWrapper>(
         context,
         nodeId,
-        kDbSyncInterval,
+        dbSyncInterval,
         kMonitorSubmitInterval,
         std::move(peers),
         std::move(filters),
@@ -2187,6 +2188,101 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   ASSERT_FALSE(getRes3.hasValue());
   auto nodeCounters = store1->getCounters();
   EXPECT_EQ(nodeCounters["kvstore.num_keys"].value, 2);
+}
+
+/**
+ * Test kvstore-consistency with rate-limiter enabled
+ * linear topology, intentionlly increate db-sync interval from 1s -> 60s so
+ * we can check kvstore is synced without replying on periodic peer-sync.
+ * s0 -- s1 (rate-limited) -- s2
+ * let s0 set ONLY one key, while s2 sets thousands of keys within 5 seconds.
+ * Make sure all stores have same amount of keys at the end
+ */
+TEST_F(KvStoreTestFixture, RateLimiterSync) {
+  fbzmq::Context context;
+
+  const uint32_t messageRate = 10; // number of messages per second
+  const uint32_t burstSize = 50; // number of messages
+  KvStoreFloodRate kvStoreRate(std::make_pair(messageRate, burstSize));
+
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto store0 = createKvStore(
+      "store0",
+      emptyPeers,
+      folly::none,
+      folly::none, /* rate-limited */
+      Constants::kTtlDecrement,
+      false, /* flood-optimization */
+      false, /* is-root */
+      60s /* db-sync-interval */);
+  auto store1 = createKvStore(
+      "store1",
+      emptyPeers,
+      folly::none,
+      kvStoreRate, /* rate-limited */
+      Constants::kTtlDecrement,
+      false, /* flood-optimization */
+      false, /* is-root */
+      60s /* db-sync-interval */);
+  auto store2 = createKvStore(
+      "store2",
+      emptyPeers,
+      folly::none,
+      folly::none, /* rate-limited */
+      Constants::kTtlDecrement,
+      false, /* flood-optimization */
+      false, /* is-root */
+      60s /* db-sync-interval */);
+  store0->run();
+  store1->run();
+  store2->run();
+
+  store0->addPeer(store1->nodeId, store1->getPeerSpec());
+  store1->addPeer(store0->nodeId, store0->getPeerSpec());
+
+  store1->addPeer(store2->nodeId, store2->getPeerSpec());
+  store2->addPeer(store1->nodeId, store1->getPeerSpec());
+
+  auto startTime1 = steady_clock::now();
+  const int duration1 = 5; // in seconds
+  int expectNumKeys{0};
+  uint64_t elapsedTime1{0};
+  do {
+    thrift::Value thriftVal(
+        apache::thrift::FRAGILE,
+        1 /* version */,
+        "store1" /* originatorId */,
+        "value" /* value */,
+        300000 /* ttl */,
+        1 /* ttl version */,
+        0 /* hash */);
+    std::string key = folly::sformat("key{}", ++expectNumKeys);
+    thriftVal.hash = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    if (expectNumKeys == 10) {
+      // we should be able to set thousands of keys wihtin 5 seconds,
+      // pick one of them and let it be set by store0, all others set by store2
+      thriftVal.originatorId = "store0";
+      EXPECT_TRUE(store0->setKey(key, thriftVal));
+    } else {
+      thriftVal.originatorId = "store2";
+      EXPECT_TRUE(store2->setKey(key, thriftVal));
+    }
+
+    elapsedTime1 =
+        duration_cast<seconds>(steady_clock::now() - startTime1).count();
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  } while (elapsedTime1 < duration1);
+
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  auto kv0 = store0->dumpAll();
+  auto kv1 = store1->dumpAll();
+  auto kv2 = store2->dumpAll();
+  EXPECT_EQ(expectNumKeys, kv0.size());
+  EXPECT_EQ(expectNumKeys, kv1.size());
+  EXPECT_EQ(expectNumKeys, kv2.size());
 }
 
 TEST_F(KvStoreTestFixture, RateLimiter) {

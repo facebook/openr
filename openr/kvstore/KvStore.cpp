@@ -1364,13 +1364,11 @@ KvStore::bufferPublication(thrift::Publication&& publication) {
   tData_.addStatValue(
       "kvstore.rate_limit_keys", publication.keyVals.size(), fbzmq::AVG);
   // update or add keys
-  for (auto const& key : publication.keyVals) {
-    publicationBuffer_[key.first] = publication.nodeIds.value();
+  for (auto const& kv : publication.keyVals) {
+    publicationBuffer_.emplace(kv.first);
   }
   for (auto const& key : publication.expiredKeys) {
-    if (publication.nodeIds.hasValue()) {
-      publicationBuffer_[key] = publication.nodeIds.value();
-    }
+    publicationBuffer_.emplace(key);
   }
 }
 
@@ -1380,15 +1378,16 @@ KvStore::floodBufferedUpdates() {
     return;
   }
   thrift::Publication publication{};
-  for (auto& keyVal : publicationBuffer_) {
-    auto kvStoreIt = kvStore_.find(keyVal.first);
+  for (const auto& key : publicationBuffer_) {
+    auto kvStoreIt = kvStore_.find(key);
     if (kvStoreIt != kvStore_.end()) {
-      publication.keyVals.emplace(make_pair(keyVal.first, kvStoreIt->second));
+      publication.keyVals.emplace(make_pair(key, kvStoreIt->second));
     } else {
-      publication.expiredKeys.emplace_back(keyVal.first);
+      publication.expiredKeys.emplace_back(key);
     }
-    publication.nodeIds = keyVal.second;
   }
+  // publication.nodeIds is set to default-none here
+  // I'm the initiator of this merged-publication
   publicationBuffer_.clear();
   return floodPublication(std::move(publication), false);
 }

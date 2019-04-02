@@ -395,9 +395,8 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // timer to send pending kvstore publication
   std::unique_ptr<fbzmq::ZmqTimeout> pendingPublicationTimer_{nullptr};
 
-  // pending updates
-  std::unordered_map<std::string, folly::Optional<std::vector<std::string>>>
-      publicationBuffer_{};
+  // pending keys to flood publication
+  std::unordered_set<std::string> publicationBuffer_{};
 };
 
 } // namespace openr
