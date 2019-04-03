@@ -19,6 +19,7 @@
 #include <folly/Subprocess.h>
 #include <folly/gen/Base.h>
 #include <folly/system/Shell.h>
+#include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -84,6 +85,11 @@ class NlMessageFixture : public ::testing::Test {
 
   void
   SetUp() override {
+    if (getuid()) {
+      SKIP() << "Must run this test as root";
+      return;
+    }
+
     // cleanup old interfaces in any
     auto cmd = "ip link del {} 2>/dev/null"_shellify(kVethNameX.c_str());
     folly::Subprocess proc(std::move(cmd));
@@ -141,6 +147,11 @@ class NlMessageFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    if (getuid()) {
+      // Nothing to cleanup if not-root
+      return;
+    }
+
     if (evl.isRunning()) {
       evl.stop();
       eventThread.join();

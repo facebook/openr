@@ -16,6 +16,7 @@
 #include <folly/Format.h>
 #include <folly/MacAddress.h>
 #include <folly/gen/Base.h>
+#include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -69,6 +70,11 @@ class NetlinkSocketFixture : public testing::Test {
 
   void
   SetUp() override {
+    if (getuid()) {
+      SKIP() << "Must run this test as root";
+      return;
+    }
+
     socket_ = nl_socket_alloc();
     ASSERT_TRUE(socket_);
     nl_connect(socket_, NETLINK_ROUTE);
@@ -116,6 +122,11 @@ class NetlinkSocketFixture : public testing::Test {
 
   void
   TearDown() override {
+    if (getuid()) {
+      // Nothing to cleanup if not-root
+      return;
+    }
+
     if (evl.isRunning()) {
       evl.stop();
       eventThread.join();

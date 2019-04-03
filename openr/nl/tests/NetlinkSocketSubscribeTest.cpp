@@ -13,6 +13,7 @@
 #include <folly/ScopeGuard.h>
 #include <folly/Subprocess.h>
 #include <folly/system/Shell.h>
+#include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -122,6 +123,11 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
 
   void
   SetUp() override {
+    if (getuid()) {
+      SKIP() << "Must run this test as root";
+      return;
+    }
+
     // cleanup old interfaces in any
     auto cmd = "ip link del {}"_shellify(kVethNameX.c_str());
     folly::Subprocess proc(std::move(cmd));
@@ -145,6 +151,11 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
 
   void
   TearDown() override {
+    if (getuid()) {
+      // Nothing to cleanup if not-root
+      return;
+    }
+
     rtnl_link_delete(socket_, link_);
     nl_socket_free(socket_);
     rtnl_link_veth_release(link_);
