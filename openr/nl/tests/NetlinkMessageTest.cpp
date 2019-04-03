@@ -28,7 +28,7 @@
 #include "openr/nl/NetlinkTypes.h"
 
 extern "C" {
-#include <linux/if.h>
+#include <net/if.h>
 #include <netlink/cache.h>
 #include <netlink/netlink.h>
 #include <netlink/route/addr.h>
