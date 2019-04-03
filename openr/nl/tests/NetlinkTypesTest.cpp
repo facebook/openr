@@ -134,6 +134,8 @@ TEST(NetlinkTypes, RouteBaseTest) {
   EXPECT_TRUE(route.getNextHops().empty());
   EXPECT_FALSE(route.getPriority().hasValue());
   EXPECT_FALSE(route.getTos().hasValue());
+  EXPECT_FALSE(route.getMtu().hasValue());
+  EXPECT_FALSE(route.getAdvMss().hasValue());
 
   struct rtnl_route* object = route.getRtnlRouteRef();
   struct rtnl_route* objectKey = route.getRtnlRouteKeyRef();
@@ -154,6 +156,10 @@ TEST(NetlinkTypes, RouteBaseTest) {
   EXPECT_EQ(0, rtnl_route_get_flags(object));
   EXPECT_EQ(0, rtnl_route_get_priority(object));
   EXPECT_EQ(0, rtnl_route_get_tos(object));
+  EXPECT_EQ(
+      -NLE_OBJ_NOTFOUND, rtnl_route_get_metric(object, RTAX_MTU, nullptr));
+  EXPECT_EQ(
+      -NLE_OBJ_NOTFOUND, rtnl_route_get_metric(object, RTAX_ADVMSS, nullptr));
   EXPECT_EQ(0, rtnl_route_get_nnexthops(object));
 
   struct rtnl_route* object1 = route.getRtnlRouteRef();
@@ -172,6 +178,8 @@ TEST(NetlinkTypes, RouteEqualTest) {
   uint32_t flags = 0x01;
   uint32_t priority = 3;
   uint8_t tos = 2;
+  uint32_t mtu = 4;
+  uint32_t advMss = 5;
   NextHopBuilder nhBuilder;
   auto nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway1).build();
   nhBuilder.reset();
@@ -185,6 +193,8 @@ TEST(NetlinkTypes, RouteEqualTest) {
                     .setFlags(flags)
                     .setPriority(priority)
                     .setTos(tos)
+                    .setMtu(mtu)
+                    .setAdvMss(advMss)
                     .addNextHop(nh1)
                     .addNextHop(nh2)
                     .build();
@@ -203,6 +213,8 @@ TEST(NetlinkTypes, RouteEqualTest) {
                     .setFlags(flags)
                     .setPriority(priority)
                     .setTos(tos)
+                    .setMtu(mtu)
+                    .setAdvMss(advMss)
                     .addNextHop(nh2)
                     .addNextHop(nh1)
                     .build();
@@ -220,6 +232,8 @@ TEST(NetlinkTypes, RouteEqualTest) {
                     .setFlags(flags)
                     .setPriority(priority)
                     .setTos(tos)
+                    .setMtu(mtu)
+                    .setAdvMss(advMss)
                     .addNextHop(nh1)
                     .build();
   EXPECT_FALSE(route2 == route3);
@@ -235,6 +249,8 @@ TEST(NetlinkTypes, RouteEqualTest) {
                     .setFlags(flags)
                     .setPriority(priority)
                     .setTos(tos)
+                    .setMtu(mtu)
+                    .setAdvMss(advMss)
                     .addNextHop(nh1)
                     .addNextHop(nh3)
                     .build();
@@ -257,6 +273,8 @@ TEST(NetlinkTypes, RouteMoveTest) {
   uint32_t flags = 0x01;
   uint32_t priority = 3;
   uint8_t tos = 2;
+  uint32_t mtu = 4;
+  uint32_t advMss = 5;
   NextHopBuilder nhBuilder;
   auto nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway).build();
   RouteBuilder builder;
@@ -268,6 +286,8 @@ TEST(NetlinkTypes, RouteMoveTest) {
                    .setFlags(flags)
                    .setPriority(priority)
                    .setTos(tos)
+                   .setMtu(mtu)
+                   .setAdvMss(advMss)
                    .addNextHop(nh1)
                    .build();
 
@@ -304,6 +324,15 @@ TEST(NetlinkTypes, RouteMoveTest) {
   EXPECT_TRUE(route1.getTos().hasValue());
   EXPECT_EQ(tos, route1.getTos().value());
   EXPECT_EQ(tos, rtnl_route_get_tos(p1));
+  EXPECT_TRUE(route1.getMtu().hasValue());
+  EXPECT_EQ(mtu, route1.getMtu().value());
+  uint32_t val;
+  rtnl_route_get_metric(p1, RTAX_MTU, &val);
+  EXPECT_EQ(mtu, val);
+  EXPECT_TRUE(route1.getAdvMss().hasValue());
+  EXPECT_EQ(advMss, route1.getAdvMss().value());
+  rtnl_route_get_metric(p1, RTAX_ADVMSS, &val);
+  EXPECT_EQ(advMss, val);
   EXPECT_EQ(1, route1.getNextHops().size());
   EXPECT_TRUE(route1.getNextHops().begin()->getGateway().hasValue());
   EXPECT_EQ(gateway, route1.getNextHops().begin()->getGateway().value());
@@ -335,6 +364,14 @@ TEST(NetlinkTypes, RouteMoveTest) {
   EXPECT_TRUE(route2.getTos().hasValue());
   EXPECT_EQ(tos, route2.getTos().value());
   EXPECT_EQ(tos, rtnl_route_get_tos(p2));
+  EXPECT_TRUE(route2.getMtu().hasValue());
+  EXPECT_EQ(mtu, route2.getMtu().value());
+  rtnl_route_get_metric(p2, RTAX_MTU, &val);
+  EXPECT_EQ(mtu, val);
+  EXPECT_TRUE(route2.getAdvMss().hasValue());
+  EXPECT_EQ(advMss, route2.getAdvMss().value());
+  rtnl_route_get_metric(p2, RTAX_ADVMSS, &val);
+  EXPECT_EQ(advMss, val);
   EXPECT_EQ(1, route2.getNextHops().size());
 }
 
@@ -344,6 +381,8 @@ TEST(NetlinkTypes, RouteCopyTest) {
   uint32_t flags = 0x01;
   uint32_t priority = 3;
   uint8_t tos = 2;
+  uint32_t mtu = 4;
+  uint32_t advMss = 5;
   NextHopBuilder nhBuilder;
   auto nh1 = nhBuilder.setIfIndex(kIfIndex).setGateway(gateway).build();
   RouteBuilder builder;
@@ -355,6 +394,8 @@ TEST(NetlinkTypes, RouteCopyTest) {
                    .setFlags(flags)
                    .setPriority(priority)
                    .setTos(tos)
+                   .setMtu(mtu)
+                   .setAdvMss(advMss)
                    .addNextHop(nh1)
                    .build();
   auto nlPtr1 = route.getRtnlRouteRef();
@@ -401,6 +442,8 @@ TEST(NetlinkTypes, RouteOptionalParamTest) {
   uint32_t flags = 0x01;
   uint32_t priority = 3;
   uint8_t tos = 2;
+  uint32_t mtu = 4;
+  uint32_t advMss = 5;
   folly::IPAddress gateway("face:cafe:3::3");
   NextHopBuilder builder;
   auto nh1 = builder.setIfIndex(kIfIndex).build();
@@ -417,6 +460,8 @@ TEST(NetlinkTypes, RouteOptionalParamTest) {
                    .setFlags(flags)
                    .setPriority(priority)
                    .setTos(tos)
+                   .setMtu(mtu)
+                   .setAdvMss(advMss)
                    .addNextHop(nh1)
                    .addNextHop(nh2)
                    .addNextHop(nh3)
@@ -434,6 +479,10 @@ TEST(NetlinkTypes, RouteOptionalParamTest) {
   EXPECT_EQ(priority, route.getPriority().value());
   EXPECT_TRUE(route.getTos().hasValue());
   EXPECT_EQ(tos, route.getTos().value());
+  EXPECT_TRUE(route.getMtu().hasValue());
+  EXPECT_EQ(mtu, route.getMtu().value());
+  EXPECT_TRUE(route.getAdvMss().hasValue());
+  EXPECT_EQ(advMss, route.getAdvMss().value());
   EXPECT_EQ(3, route.getNextHops().size());
 
   struct rtnl_route* object = route.getRtnlRouteRef();
@@ -452,6 +501,11 @@ TEST(NetlinkTypes, RouteOptionalParamTest) {
   EXPECT_EQ(flags, rtnl_route_get_flags(object));
   EXPECT_EQ(priority, rtnl_route_get_priority(object));
   EXPECT_EQ(tos, rtnl_route_get_tos(object));
+  uint32_t val;
+  rtnl_route_get_metric(object, RTAX_MTU, &val);
+  EXPECT_EQ(mtu, val);
+  rtnl_route_get_metric(object, RTAX_ADVMSS, &val);
+  EXPECT_EQ(advMss, val);
   EXPECT_EQ(3, rtnl_route_get_nnexthops(object));
 
   auto nextHopFunc = [](struct rtnl_nexthop * obj, void* gw) noexcept->void {

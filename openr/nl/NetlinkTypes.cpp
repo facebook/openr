@@ -227,6 +227,28 @@ RouteBuilder::getTos() const {
 }
 
 RouteBuilder&
+RouteBuilder::setMtu(uint32_t mtu) {
+  mtu_ = mtu;
+  return *this;
+}
+
+folly::Optional<uint32_t>
+RouteBuilder::getMtu() const {
+  return mtu_;
+}
+
+RouteBuilder&
+RouteBuilder::setAdvMss(uint32_t advMss) {
+  advMss_ = advMss;
+  return *this;
+}
+
+folly::Optional<uint32_t>
+RouteBuilder::getAdvMss() const {
+  return advMss_;
+}
+
+RouteBuilder&
 RouteBuilder::setRouteIfName(const std::string& ifName) {
   routeIfName_ = ifName;
   return *this;
@@ -285,6 +307,8 @@ RouteBuilder::reset() {
   flags_.clear();
   priority_.clear();
   tos_.clear();
+  mtu_.clear();
+  advMss_.clear();
   nextHops_.clear();
   routeIfName_.clear();
 }
@@ -299,6 +323,8 @@ Route::Route(const RouteBuilder& builder)
       flags_(builder.getFlags()),
       priority_(builder.getPriority()),
       tos_(builder.getTos()),
+      mtu_(builder.getMtu()),
+      advMss_(builder.getAdvMss()),
       nextHops_(builder.getNextHops()),
       dst_(builder.getDestination()),
       routeIfName_(builder.getRouteIfName()),
@@ -332,6 +358,8 @@ Route::operator=(Route&& other) noexcept {
   flags_ = std::move(other.flags_);
   priority_ = std::move(other.priority_);
   tos_ = std::move(other.tos_);
+  mtu_ = std::move(other.mtu_);
+  advMss_ = std::move(other.advMss_);
   nextHops_ = std::move(other.nextHops_);
   dst_ = std::move(other.dst_);
   routeIfName_ = std::move(other.routeIfName_);
@@ -374,6 +402,8 @@ Route::operator=(const Route& other) {
   flags_ = other.flags_;
   priority_ = other.priority_;
   tos_ = other.tos_;
+  mtu_ = other.mtu_;
+  advMss_ = other.advMss_;
   nextHops_ = other.nextHops_;
   dst_ = other.dst_;
   routeIfName_ = other.routeIfName_;
@@ -409,6 +439,7 @@ operator==(const Route& lhs, const Route& rhs) {
        lhs.getScope() == rhs.getScope() && lhs.isValid() == rhs.isValid() &&
        lhs.getFlags() == rhs.getFlags() &&
        lhs.getPriority() == rhs.getPriority() && lhs.getTos() == rhs.getTos() &&
+       lhs.getMtu() == rhs.getMtu() && lhs.getAdvMss() == rhs.getAdvMss() &&
        lhs.getRouteIfName() == rhs.getRouteIfName() &&
        lhs.getFamily() == rhs.getFamily());
 
@@ -449,6 +480,16 @@ Route::getMplsLabel() const {
 folly::Optional<uint8_t>
 Route::getTos() const {
   return tos_;
+}
+
+folly::Optional<uint32_t>
+Route::getMtu() const {
+  return mtu_;
+}
+
+folly::Optional<uint32_t>
+Route::getAdvMss() const {
+  return advMss_;
 }
 
 uint8_t
@@ -515,6 +556,12 @@ Route::str() const {
   if (tos_) {
     result += folly::sformat(", tos {}", tos_.value());
   }
+  if (mtu_) {
+    result += folly::sformat(", mtu {}", mtu_.value());
+  }
+  if (advMss_) {
+    result += folly::sformat(", advmss {}", advMss_.value());
+  }
   for (auto const& nextHop : nextHops_) {
     result += "\n  " + nextHop.str();
   }
@@ -578,6 +625,14 @@ Route::getRtnlRouteRef() {
 
   if (tos_.hasValue()) {
     rtnl_route_set_tos(route_, tos_.value());
+  }
+
+  if (mtu_.hasValue()) {
+    rtnl_route_set_metric(route_, RTAX_MTU, mtu_.value());
+  }
+
+  if (advMss_.hasValue()) {
+    rtnl_route_set_metric(route_, RTAX_ADVMSS, advMss_.value());
   }
 
   // Add next hops

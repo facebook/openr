@@ -259,6 +259,14 @@ class RouteBuilder {
 
   folly::Optional<uint8_t> getTos() const;
 
+  RouteBuilder& setMtu(uint32_t mtu);
+
+  folly::Optional<uint32_t> getMtu() const;
+
+  RouteBuilder& setAdvMss(uint32_t tos);
+
+  folly::Optional<uint32_t> getAdvMss() const;
+
   RouteBuilder& addNextHop(const NextHop& nextHop);
 
   RouteBuilder& setRouteIfName(const std::string& ifName);
@@ -286,6 +294,8 @@ class RouteBuilder {
   folly::Optional<uint32_t> flags_;
   folly::Optional<uint32_t> priority_;
   folly::Optional<uint8_t> tos_;
+  folly::Optional<uint32_t> mtu_;
+  folly::Optional<uint32_t> advMss_;
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
   folly::Optional<int> routeIfIndex_; // for multicast or link route
@@ -325,6 +335,10 @@ class Route final {
 
   folly::Optional<uint8_t> getTos() const;
 
+  folly::Optional<uint32_t> getMtu() const;
+
+  folly::Optional<uint32_t> getAdvMss() const;
+
   const NextHopSet& getNextHops() const;
 
   bool isValid() const;
@@ -358,6 +372,8 @@ class Route final {
   folly::Optional<uint32_t> flags_;
   folly::Optional<uint32_t> priority_;
   folly::Optional<uint8_t> tos_;
+  folly::Optional<uint32_t> mtu_;
+  folly::Optional<uint32_t> advMss_;
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
   folly::Optional<std::string> routeIfName_;
