@@ -131,13 +131,14 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
       continue;
     }
 
-    prefixes.emplace_back(
-        apache::thrift::FRAGILE,
-        toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second)),
-        thrift::PrefixType::LOOPBACK,
-        "",
-        thrift::PrefixForwardingType::IP,
-        false);
+    auto prefixEntry = openr::thrift::PrefixEntry();
+    prefixEntry.prefix =
+        toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second));
+    prefixEntry.type = thrift::PrefixType::LOOPBACK;
+    prefixEntry.data = "";
+    prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
+    prefixEntry.ephemeral = folly::none;
+    prefixes.push_back(prefixEntry);
   }
 
   return prefixes;

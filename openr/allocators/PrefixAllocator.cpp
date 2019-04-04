@@ -632,15 +632,15 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   CHECK(allocParams_.hasValue()) << "Alloc parameters are not set.";
   // replace previously allocated prefix with newly allocated one in
   // PrefixManager
+
+  auto prefixEntry = openr::thrift::PrefixEntry();
+  prefixEntry.prefix = toIpPrefix(prefix);
+  prefixEntry.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  prefixEntry.data = {};
+  prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
+  prefixEntry.ephemeral = folly::none;
   auto ret = prefixManagerClient_->syncPrefixesByType(
-      openr::thrift::PrefixType::PREFIX_ALLOCATOR,
-      {openr::thrift::PrefixEntry(
-          apache::thrift::FRAGILE,
-          toIpPrefix(prefix),
-          openr::thrift::PrefixType::PREFIX_ALLOCATOR,
-          {},
-          thrift::PrefixForwardingType::IP,
-          false)});
+      openr::thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry});
   if (ret.hasError()) {
     LOG(ERROR) << "Announcing new prefix failed: " << ret.error();
   }

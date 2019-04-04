@@ -854,13 +854,13 @@ LinkMonitor::advertiseRedistAddrs() {
 
   // Add static prefixes
   for (auto const& prefix : staticPrefixes_) {
-    prefixes.emplace_back(thrift::PrefixEntry(
-        apache::thrift::FRAGILE,
-        prefix,
-        thrift::PrefixType::LOOPBACK,
-        "",
-        thrift::PrefixForwardingType::IP,
-        false));
+    auto prefixEntry = openr::thrift::PrefixEntry();
+    prefixEntry.prefix = prefix;
+    prefixEntry.type = thrift::PrefixType::LOOPBACK;
+    prefixEntry.data = "";
+    prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
+    prefixEntry.ephemeral = folly::none;
+    prefixes.push_back(prefixEntry);
   }
 
   // Add redistribute addresses
