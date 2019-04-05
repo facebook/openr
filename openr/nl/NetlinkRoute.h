@@ -41,7 +41,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   NetlinkRouteMessage();
 
   // initiallize with default params
-  void init(int type, uint32_t flags);
+  void init(int type, uint32_t flags, const openr::fbnl::Route& route);
 
   friend std::ostream&
   operator<<(std::ostream& out, NetlinkRouteMessage const& msg) {
@@ -84,10 +84,13 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   // pointer to route meesage header
   struct rtmsg* rtmsg_{nullptr};
 
+  // add set of nexthops
+  ResultCode addNextHops(const openr::fbnl::Route& route);
+
   // Add ECMP paths
   ResultCode addMultiPathNexthop(
       std::array<char, kMaxNhopPayloadSize>& nhop,
-      const openr::fbnl::NextHopSet& paths) const;
+      const openr::fbnl::Route& route) const;
 
   // Add label encap
   ResultCode addLabelNexthop(
@@ -111,7 +114,8 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   ResultCode addIpNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path) const;
+      const openr::fbnl::NextHop& path,
+      const openr::fbnl::Route& route) const;
 
   // pointer to the netlink message header
   struct nlmsghdr* msghdr_{nullptr};

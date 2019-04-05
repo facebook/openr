@@ -9,6 +9,7 @@
 
 #include <queue>
 
+#include <limits.h>
 #include <linux/lwtunnel.h>
 #include <linux/mpls.h>
 #include <linux/rtnetlink.h>
@@ -62,19 +63,22 @@ class NetlinkMessage {
   std::array<char, kMaxNlPayloadSize> msg = {};
 
   // update size of message received
-  void updateBytesReceived(uint32_t bytes);
+  void updateBytesReceived(uint16_t bytes);
 
  protected:
   // add TLV attributes, specify the length and size of data
   // returns false if enough buffer is not available. Also updates the
   // length field in NLMSG header
   ResultCode addAttributes(
-      int type, const char* const data, int len, struct nlmsghdr* const msghdr);
+      int type,
+      const char* const data,
+      uint32_t len,
+      struct nlmsghdr* const msghdr);
 
   // add a sub RTA inside an RTA. The length of sub RTA will not be added into
   // the NLMSG header, but will be added to the parent RTA.
   struct rtattr* addSubAttributes(
-      struct rtattr* rta, int type, const void* data, int len) const;
+      struct rtattr* rta, int type, const void* data, uint32_t len) const;
 
  private:
   // disable copy, assign constructores
@@ -86,7 +90,7 @@ class NetlinkMessage {
 
   // size available for adding messages,
   // in case of rx message, it contains bytes received
-  int32_t size_{kMaxNlPayloadSize};
+  uint32_t size_{kMaxNlPayloadSize};
 };
 
 class NetlinkProtocolSocket {
@@ -106,7 +110,7 @@ class NetlinkProtocolSocket {
 
   // process message
   void processMessage(
-      const std::array<char, kMaxNlPayloadSize>& rxMsg, int bytesRead);
+      const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead);
 
   // add route and nexthop paths
   ResultCode addRoute(const openr::fbnl::Route& route);
@@ -159,7 +163,7 @@ class NetlinkProtocolSocket {
   int nlSock_{-1};
 
   // PID Of the endpoint
-  int pid_{-1};
+  uint32_t pid_{UINT_MAX};
 
   // source addr
   struct sockaddr_nl saddr_;

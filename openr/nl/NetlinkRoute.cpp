@@ -17,14 +17,19 @@ NetlinkRouteMessage::NetlinkRouteMessage() {
 }
 
 void
-NetlinkRouteMessage::init(int type, uint32_t flags) {
+NetlinkRouteMessage::init(
+    int type, uint32_t rtFlags, const openr::fbnl::Route& route) {
   // initialize netlink header
   msghdr_->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
   msghdr_->nlmsg_type = type;
-  msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_MULTI | flags;
+  msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_MULTI;
 
   if (type != RTM_DELROUTE) {
     msghdr_->nlmsg_flags |= NLM_F_CREATE;
+  }
+
+  if (route.getType() != RTN_MULTICAST) {
+    msghdr_->nlmsg_flags |= NLM_F_REPLACE;
   }
 
   // intialize the route meesage header
@@ -32,12 +37,17 @@ NetlinkRouteMessage::init(int type, uint32_t flags) {
   rtmsg_ = (struct rtmsg*)((char*)msghdr_ + nlmsgAlen);
 
   rtmsg_->rtm_table = RT_TABLE_MAIN;
-  rtmsg_->rtm_protocol = RTPROT_BOOT;
+  rtmsg_->rtm_protocol = route.getProtocolId();
   rtmsg_->rtm_scope = RT_SCOPE_UNIVERSE;
-  rtmsg_->rtm_type = RTN_UNICAST;
+  rtmsg_->rtm_type = route.getType();
   rtmsg_->rtm_src_len = 0;
   rtmsg_->rtm_tos = 0;
-  rtmsg_->rtm_flags = 0;
+  rtmsg_->rtm_flags = rtFlags;
+
+  auto rtFlag = route.getFlags();
+  if (rtFlag.hasValue()) {
+    rtmsg_->rtm_flags |= rtFlag.value();
+  }
 }
 
 void
@@ -78,7 +88,8 @@ ResultCode
 NetlinkRouteMessage::addIpNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
-    const openr::fbnl::NextHop& path) const {
+    const openr::fbnl::NextHop& path,
+    const openr::fbnl::Route& route) const {
   rtnh->rtnh_len = sizeof(*rtnh);
   rtnh->rtnh_ifindex = path.getIfIndex().value();
   rtnh->rtnh_flags = 0;
@@ -87,6 +98,9 @@ NetlinkRouteMessage::addIpNexthop(
   // RTA_GATEWAY
   auto const via = path.getGateway();
   if (!via.hasValue()) {
+    if (route.getType() == RTN_MULTICAST || route.getScope() == RT_SCOPE_LINK) {
+      return ResultCode::SUCCESS;
+    }
     LOG(ERROR) << "Nexthop IP not provided";
     return ResultCode::NO_NEXTHOP_IP;
   }
@@ -200,7 +214,7 @@ NetlinkRouteMessage::addLabelNexthop(
 
   // MPLS_IP_TUNNEL_DST sub attribute
   std::array<struct mpls_label, kMaxLabels> mplsLabel;
-  int i = 0;
+  size_t i = 0;
   auto labels = path.getPushLabels();
   if (!labels.hasValue()) {
     LOG(ERROR) << "Labels not provided for PUSH action";
@@ -248,9 +262,30 @@ NetlinkRouteMessage::addLabelNexthop(
 }
 
 ResultCode
+NetlinkRouteMessage::addNextHops(const openr::fbnl::Route& route) {
+  ResultCode status{ResultCode::SUCCESS};
+  std::array<char, kMaxNhopPayloadSize> nhop = {};
+  if (route.getNextHops().size()) {
+    if ((status = addMultiPathNexthop(nhop, route)) != ResultCode::SUCCESS) {
+      return status;
+    };
+
+    // copy the encap info into NLMSG payload
+    const char* const data = reinterpret_cast<const char* const>(
+        RTA_DATA(reinterpret_cast<struct rtattr*>(nhop.data())));
+    int payloadLen = RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(nhop.data()));
+    if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_)) !=
+        ResultCode::SUCCESS) {
+      return status;
+    };
+  }
+  return status;
+}
+
+ResultCode
 NetlinkRouteMessage::addMultiPathNexthop(
     std::array<char, kMaxNhopPayloadSize>& nhop,
-    const openr::fbnl::NextHopSet& paths) const {
+    const openr::fbnl::Route& route) const {
   // Add [RTA_MULTIPATH - label, via, dev][RTA_ENCAP][RTA_ENCAP_TYPE]
   struct rtattr* rta = reinterpret_cast<struct rtattr*>(nhop.data());
 
@@ -260,6 +295,7 @@ NetlinkRouteMessage::addMultiPathNexthop(
   struct rtnexthop* rtnh = reinterpret_cast<struct rtnexthop*>(RTA_DATA(rta));
   ResultCode result{ResultCode::SUCCESS};
 
+  const auto& paths = route.getNextHops();
   for (const auto& path : paths) {
     VLOG(3) << path.str();
     rtnh->rtnh_len = sizeof(*rtnh);
@@ -286,7 +322,7 @@ NetlinkRouteMessage::addMultiPathNexthop(
         return ResultCode::UNKNOWN_LABEL_ACTION;
       }
     } else {
-      result = addIpNexthop(rta, rtnh, path);
+      result = addIpNexthop(rta, rtnh, path, route);
     }
 
     if (result != ResultCode::SUCCESS) {
@@ -355,7 +391,7 @@ NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
     return ResultCode::INVALID_ADDRESS_FAMILY;
   }
 
-  init(RTM_NEWROUTE, RTM_F_NOTIFY);
+  init(RTM_NEWROUTE, RTM_F_NOTIFY, route);
 
   rtmsg_->rtm_family = addressFamily;
   rtmsg_->rtm_dst_len = plen; /* netmask */
@@ -366,20 +402,7 @@ NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
     return status;
   };
 
-  // add next hop [labels, out if, LL v6]
-  std::array<char, kMaxNhopPayloadSize> nhop = {};
-  addMultiPathNexthop(nhop, route.getNextHops());
-
-  // copy the encap info into NLMSG payload
-  const char* const data = reinterpret_cast<const char* const>(
-      RTA_DATA(reinterpret_cast<struct rtattr*>(nhop.data())));
-  int payloadLen = RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(nhop.data()));
-  if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_)) !=
-      ResultCode::SUCCESS) {
-    return status;
-  };
-
-  return status;
+  return addNextHops(route);
 }
 
 ResultCode
@@ -391,7 +414,7 @@ NetlinkRouteMessage::deleteRoute(const openr::fbnl::Route& route) {
   if (addressFamily != AF_INET && addressFamily != AF_INET6) {
     return ResultCode::INVALID_ADDRESS_FAMILY;
   }
-  init(RTM_DELROUTE, RTM_F_NOTIFY);
+  init(RTM_DELROUTE, RTM_F_NOTIFY, route);
 
   auto plen = std::get<1>(pfix);
   auto ip = std::get<0>(pfix);
@@ -408,7 +431,7 @@ NetlinkRouteMessage::deleteRoute(const openr::fbnl::Route& route) {
 
 ResultCode
 NetlinkRouteMessage::addLabelRoute(const openr::fbnl::Route& route) {
-  init(RTM_NEWROUTE, 0);
+  init(RTM_NEWROUTE, 0, route);
   rtmsg_->rtm_family = AF_MPLS;
   rtmsg_->rtm_dst_len = kLabelSizeBits;
   rtmsg_->rtm_flags = 0;
@@ -434,25 +457,12 @@ NetlinkRouteMessage::addLabelRoute(const openr::fbnl::Route& route) {
     return status;
   };
 
-  // add next hop [labels, out if, LL v6]
-  std::array<char, kMaxNhopPayloadSize> nhop = {};
-  addMultiPathNexthop(nhop, route.getNextHops());
-
-  // copy the encap info into NLMSG payload
-  const char* const data = reinterpret_cast<const char* const>(
-      RTA_DATA(reinterpret_cast<struct rtattr*>(nhop.data())));
-  int payloadLen = RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(nhop.data()));
-  if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_)) !=
-      ResultCode::SUCCESS) {
-    return status;
-  };
-
-  return status;
+  return addNextHops(route);
 }
 
 ResultCode
 NetlinkRouteMessage::deleteLabelRoute(const openr::fbnl::Route& route) {
-  init(RTM_DELROUTE, 0);
+  init(RTM_DELROUTE, 0, route);
   rtmsg_->rtm_family = AF_MPLS;
   rtmsg_->rtm_dst_len = kLabelSizeBits;
   rtmsg_->rtm_flags = 0;

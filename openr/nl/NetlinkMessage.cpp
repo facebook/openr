@@ -27,7 +27,7 @@ NetlinkMessage::getMessagePtr() {
 }
 
 void
-NetlinkMessage::updateBytesReceived(uint32_t bytes) {
+NetlinkMessage::updateBytesReceived(uint16_t bytes) {
   size_ = bytes;
 }
 
@@ -38,8 +38,8 @@ NetlinkMessage::getDataLength() const {
 
 struct rtattr*
 NetlinkMessage::addSubAttributes(
-    struct rtattr* rta, int type, const void* data, int len) const {
-  size_t subRtaLen = RTA_LENGTH(len);
+    struct rtattr* rta, int type, const void* data, uint32_t len) const {
+  uint32_t subRtaLen = RTA_LENGTH(len);
 
   if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > size_) {
     VLOG(1) << "Space not available to add sub attribute type " << type;
@@ -64,9 +64,12 @@ NetlinkMessage::addSubAttributes(
 
 ResultCode
 NetlinkMessage::addAttributes(
-    int type, const char* const data, int len, struct nlmsghdr* const msghdr) {
-  auto rtaLen = RTA_LENGTH(len);
-  auto nlmsgAlen = NLMSG_ALIGN((msghdr)->nlmsg_len);
+    int type,
+    const char* const data,
+    uint32_t len,
+    struct nlmsghdr* const msghdr) {
+  uint32_t rtaLen = (RTA_LENGTH(len));
+  uint32_t nlmsgAlen = NLMSG_ALIGN((msghdr)->nlmsg_len);
 
   if (nlmsgAlen + RTA_ALIGN(rtaLen) > size_) {
     VLOG(1) << "Space not available to add attribute type " << type;
@@ -179,9 +182,10 @@ NetlinkProtocolSocket::sendMessageHeader() {
 void
 NetlinkProtocolSocket::sendNetlinkMessage() {
   evl_->runImmediatelyOrInEventLoop([this]() {
-    struct sockaddr_nl nladdr = {.nl_family = AF_NETLINK};
-    size_t count{0};
-    int iovSize = std::min(msgQueue_.size(), kMaxIovMsg);
+    struct sockaddr_nl nladdr = {
+        .nl_family = AF_NETLINK, .nl_pad = 0, .nl_pid = pid_, .nl_groups = 0};
+    uint32_t count{0};
+    uint32_t iovSize = std::min(msgQueue_.size(), kMaxIovMsg);
 
     if (!iovSize) {
       return;
@@ -199,7 +203,7 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
       iov[count].iov_len = m->getDataLength();
 
       // fill sequence number and PID
-      auto len = iov[count].iov_len;
+      uint32_t len = iov[count].iov_len;
       do {
         if (!NLMSG_OK(nlmsg_hdr, len)) {
           break;
@@ -227,7 +231,7 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
 
 void
 NetlinkProtocolSocket::processMessage(
-    const std::array<char, kMaxNlPayloadSize>& rxMsg, int bytesRead) {
+    const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead) {
   // first netlink message header
   struct nlmsghdr* nlh = (struct nlmsghdr*)rxMsg.data();
 
@@ -277,7 +281,7 @@ NetlinkProtocolSocket::recvNetlinkMessage() {
   // messages buffer
   std::array<char, kMaxNlPayloadSize> recvMsg = {};
 
-  auto bytesRead = ::recv(nlSock_, recvMsg.data(), kMaxNlPayloadSize, 0);
+  int32_t bytesRead = ::recv(nlSock_, recvMsg.data(), kMaxNlPayloadSize, 0);
   VLOG(4) << "Message received with size: " << bytesRead;
 
   if (bytesRead < 0) {
@@ -288,7 +292,7 @@ NetlinkProtocolSocket::recvNetlinkMessage() {
               << " err: " << folly::errnoStr(std::abs(errno));
     return;
   }
-  processMessage(recvMsg, bytesRead);
+  processMessage(recvMsg, static_cast<uint32_t>(bytesRead));
 }
 
 uint32_t

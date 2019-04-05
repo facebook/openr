@@ -344,3 +344,7 @@ DEFINE_bool(
     use_flood_optimization,
     false,
     "Enable this to use formed flooding topology to flood updates");
+DEFINE_bool(
+    use_netlink_message,
+    false,
+    "Use netlink protocol instead of libnl to program routes");

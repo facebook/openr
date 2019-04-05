@@ -13,6 +13,7 @@
 #include <folly/IPAddress.h>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
+#include <openr/nl/NetlinkMessage.h>
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr {
@@ -153,7 +154,9 @@ class NetlinkSocket {
   };
 
   explicit NetlinkSocket(
-      fbzmq::ZmqEventLoop* evl, EventsHandler* handler = nullptr);
+      fbzmq::ZmqEventLoop* evl,
+      EventsHandler* handler = nullptr,
+      bool useNetlinkMessage = false);
 
   virtual ~NetlinkSocket();
 
@@ -435,6 +438,8 @@ class NetlinkSocket {
 
   EventsHandler* handler_{nullptr};
 
+  bool useNetlinkMessage_{false};
+
   /**
    * We keep an internal cache of Neighbor and Link entries
    * These are used in the getAllLinks/getAllReachableNeighbors methods
@@ -451,6 +456,8 @@ class NetlinkSocket {
   // don't do periodic polling after few hundred route updates (add/remove) we
   // see netlink "Out of memory" error.
   uint8_t eventCount_{0};
+
+  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock_{nullptr};
 };
 
 } // namespace fbnl

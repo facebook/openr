@@ -53,7 +53,7 @@ const uint8_t kAqRouteProtoId1 = 159;
 
 // This fixture creates virtual interface (veths)
 // which the UT can use to add routes (via interface)
-class NetlinkSocketFixture : public testing::Test {
+class NetlinkSocketFixture : public testing::TestWithParam<bool> {
  public:
   struct RouteCallbackContext {
     struct nl_cache* routeCache{nullptr};
@@ -107,7 +107,7 @@ class NetlinkSocketFixture : public testing::Test {
     bringUpIntf(kVethNameY);
 
     // create netlink route socket
-    netlinkSocket = std::make_unique<NetlinkSocket>(&evl, nullptr);
+    netlinkSocket = std::make_unique<NetlinkSocket>(&evl, nullptr, GetParam());
 
     // Run the zmq event loop in its own thread
     // We will either timeout if expected events are not received
@@ -718,7 +718,10 @@ class NetlinkSocketFixture : public testing::Test {
   }
 };
 
-TEST_F(NetlinkSocketFixture, EmptyRouteTest) {
+INSTANTIATE_TEST_CASE_P(
+    NetlinkSocketInstance, NetlinkSocketFixture, ::testing::Bool());
+
+TEST_P(NetlinkSocketFixture, EmptyRouteTest) {
   auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId);
   SCOPE_EXIT {
     EXPECT_EQ(0, std::move(routes).get().size());
@@ -728,7 +731,7 @@ TEST_F(NetlinkSocketFixture, EmptyRouteTest) {
 // - Add a route
 // - verify it is added,
 // - Delete it and then verify it is deleted
-TEST_F(NetlinkSocketFixture, SingleRouteTest) {
+TEST_P(NetlinkSocketFixture, SingleRouteTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
   std::vector<folly::IPAddress> nexthops{folly::IPAddress("fe80::1")};
   int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
@@ -781,7 +784,7 @@ TEST_F(NetlinkSocketFixture, SingleRouteTest) {
   EXPECT_EQ(0, routes.size());
 }
 
-TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
+TEST_P(NetlinkSocketFixture, SingleRouteTestV4) {
   const folly::CIDRNetwork prefix{folly::IPAddress("192.168.0.11"), 32};
   std::vector<folly::IPAddress> nexthops{folly::IPAddress("169.254.0.1")};
   int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
@@ -837,7 +840,7 @@ TEST_F(NetlinkSocketFixture, SingleRouteTestV4) {
 // - Add a null route (nexthops empty)
 // - verify it is added,
 // - Delete it and then verify it is deleted
-TEST_F(NetlinkSocketFixture, NullRouteTest) {
+TEST_P(NetlinkSocketFixture, NullRouteTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:4::4"), 128};
 
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
@@ -852,7 +855,7 @@ TEST_F(NetlinkSocketFixture, NullRouteTest) {
   rtnlCacheCB(routeFunc, &ctx, routeCache_);
   int before = ctx.results.size();
 
-  // Add a route
+  // Add a routet
   netlinkSocket->addRoute(buildNullRoute(kAqRouteProtoId, prefix)).get();
 
   // Check in Kernel
@@ -876,10 +879,7 @@ TEST_F(NetlinkSocketFixture, NullRouteTest) {
   const Route& rt = routes.at(prefix);
   EXPECT_EQ(prefix, rt.getDestination());
   EXPECT_EQ(kAqRouteProtoId, rt.getProtocolId());
-  EXPECT_EQ(1, rt.getNextHops().size());
-  EXPECT_EQ(
-      netlinkSocket->getIfIndex("lo").get(),
-      *rt.getNextHops().begin()->getIfIndex());
+  EXPECT_EQ(0, rt.getNextHops().size());
   EXPECT_EQ(RTN_BLACKHOLE, rt.getType());
 
   std::array<char, 100> name;
@@ -894,7 +894,7 @@ TEST_F(NetlinkSocketFixture, NullRouteTest) {
 // - Add a null route (nexthops empty)
 // - verify it is added,
 // - Delete it and then verify it is deleted
-TEST_F(NetlinkSocketFixture, NullRouteV4Test) {
+TEST_P(NetlinkSocketFixture, NullRouteV4Test) {
   folly::CIDRNetwork prefix{folly::IPAddress("192.168.0.11"), 32};
 
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
@@ -945,11 +945,11 @@ TEST_F(NetlinkSocketFixture, NullRouteV4Test) {
   EXPECT_EQ(0, routes.size());
 }
 
-TEST_F(NetlinkSocketFixture, UpdateRouteTest) {
+TEST_P(NetlinkSocketFixture, UpdateRouteTest) {
   doUpdateRouteTest(false);
 }
 
-TEST_F(NetlinkSocketFixture, UpdateRouteTestV4) {
+TEST_P(NetlinkSocketFixture, UpdateRouteTestV4) {
   doUpdateRouteTest(true);
 }
 
@@ -961,22 +961,22 @@ TEST_F(NetlinkSocketFixture, UpdateRouteTestV4) {
 // - verify that the route again has 3 paths
 // - Delete the paths one by one to finally delete the route
 // - verify it is deleted
-TEST_F(NetlinkSocketFixture, UpdateMultiRouteTest) {
+TEST_P(NetlinkSocketFixture, UpdateMultiRouteTest) {
   doUpdateMultiRouteTest(false);
 }
 
-TEST_F(NetlinkSocketFixture, UpdateMultiRouteTestV4) {
+TEST_P(NetlinkSocketFixture, UpdateMultiRouteTestV4) {
   doUpdateMultiRouteTest(true);
 }
 
 // Create unicast routes database
 // Modify route database in various ways: change nexthops, remove prefixes.. etc
 // Verify netlinkSocket sync up with route db correctly
-TEST_F(NetlinkSocketFixture, SyncRouteTest) {
+TEST_P(NetlinkSocketFixture, SyncRouteTest) {
   doSyncRouteTest(false);
 }
 
-TEST_F(NetlinkSocketFixture, SyncRouteTestV4) {
+TEST_P(NetlinkSocketFixture, SyncRouteTestV4) {
   doSyncRouteTest(true);
 }
 
@@ -985,7 +985,7 @@ TEST_F(NetlinkSocketFixture, SyncRouteTestV4) {
 // - try adding it again
 // - verify that duplicate route is not added
 // - try deleting it
-TEST_F(NetlinkSocketFixture, ModifyMulticastRouteTest) {
+TEST_P(NetlinkSocketFixture, ModifyMulticastRouteTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("ff00::"), 8};
   int ifIndex = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
   // Add a route which is added to system
@@ -1047,7 +1047,7 @@ TEST_F(NetlinkSocketFixture, ModifyMulticastRouteTest) {
 // - Add another unicast route with 2 paths (nextHops)
 // - verify it is added
 // - delete both routes and verify they were deleted
-TEST_F(NetlinkSocketFixture, MultiPathTest) {
+TEST_P(NetlinkSocketFixture, MultiPathTest) {
   folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::"), 64};
   folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:1::3"), 128};
   std::vector<folly::IPAddress> nexthops1;
@@ -1150,7 +1150,7 @@ TEST_F(NetlinkSocketFixture, MultiPathTest) {
 // - Try deleting route but with an invalid path
 // - Verify this return error
 // - Now delete correct route and verify it is deleted
-TEST_F(NetlinkSocketFixture, DeleteNonExistingRouteTest) {
+TEST_P(NetlinkSocketFixture, DeleteNonExistingRouteTest) {
   folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
   std::vector<folly::IPAddress> nexthops1{folly::IPAddress("fe80::1")};
@@ -1223,7 +1223,7 @@ TEST_F(NetlinkSocketFixture, DeleteNonExistingRouteTest) {
 // - Verify it is added,
 // - Update nh and then verify it is updated
 // - Delete it and then verify it is deleted
-TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
+TEST_P(NetlinkSocketFixture, MultiProtocolUnicastTest) {
   // V6 routes for protocol 99
   folly::CIDRNetwork prefix1V6{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::CIDRNetwork prefix2V6{folly::IPAddress("fc00:cafe:3::4"), 128};
@@ -1438,7 +1438,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTest) {
 // - Verify it is added,
 // - Update nh and then verify it is updated
 // - Delete it and then verify it is deleted
-TEST_F(NetlinkSocketFixture, MutiProtocolMulticastRouteTest) {
+TEST_P(NetlinkSocketFixture, MutiProtocolMulticastRouteTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("ff00::"), 8};
   int ifIndexX = rtnl_link_name2i(linkCache_, kVethNameX.c_str());
   int ifIndexY = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
@@ -1530,7 +1530,7 @@ TEST_F(NetlinkSocketFixture, MutiProtocolMulticastRouteTest) {
   EXPECT_EQ(0, count);
 }
 
-TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
+TEST_P(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   int ifIndexX = rtnl_link_name2i(linkCache_, kVethNameX.c_str());
   int ifIndexY = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
 
@@ -1768,7 +1768,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   EXPECT_EQ(0, count);
 }
 
-TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
+TEST_P(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
   auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
     RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
     struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
@@ -1860,7 +1860,7 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
   EXPECT_EQ(0, count);
 }
 
-TEST_F(NetlinkSocketFixture, IfNametoIfIndexTest) {
+TEST_P(NetlinkSocketFixture, IfNametoIfIndexTest) {
   int ifIndex = netlinkSocket->getIfIndex(kVethNameX).get();
   std::array<char, IFNAMSIZ> ifNameBuf;
   std::string ifName(rtnl_link_i2name(
@@ -1875,7 +1875,7 @@ TEST_F(NetlinkSocketFixture, IfNametoIfIndexTest) {
   EXPECT_EQ(ifName1, netlinkSocket->getIfName(ifIndex).get());
 }
 
-TEST_F(NetlinkSocketFixture, AddDelIfAddressBaseTest) {
+TEST_P(NetlinkSocketFixture, AddDelIfAddressBaseTest) {
   folly::CIDRNetwork prefixV6{folly::IPAddress("fc00:cafe:3::3"), 128};
   IfAddressBuilder builder;
 
@@ -1952,7 +1952,7 @@ TEST_F(NetlinkSocketFixture, AddDelIfAddressBaseTest) {
   EXPECT_FALSE(found);
 }
 
-TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
+TEST_P(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
   folly::CIDRNetwork prefix{folly::IPAddress("fc00:cafe:3::3"), 128};
   IfAddressBuilder builder;
 
@@ -2026,7 +2026,7 @@ TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
   EXPECT_FALSE(found);
 }
 
-TEST_F(NetlinkSocketFixture, AddressSyncTest) {
+TEST_P(NetlinkSocketFixture, AddressSyncTest) {
   folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
   folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};
@@ -2195,7 +2195,7 @@ TEST_F(NetlinkSocketFixture, AddressSyncTest) {
   EXPECT_TRUE(p5);
 }
 
-TEST_F(NetlinkSocketFixture, AddressFlushTest) {
+TEST_P(NetlinkSocketFixture, AddressFlushTest) {
   folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
   folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};
@@ -2297,7 +2297,7 @@ TEST_F(NetlinkSocketFixture, AddressFlushTest) {
   EXPECT_EQ(0, actualV6cnt);
 }
 
-TEST_F(NetlinkSocketFixture, GetAddrsTest) {
+TEST_P(NetlinkSocketFixture, GetAddrsTest) {
   folly::CIDRNetwork prefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::CIDRNetwork prefix2{folly::IPAddress("fc00:cafe:3::4"), 128};
   folly::CIDRNetwork prefix3{folly::IPAddress("192.168.0.11"), 32};

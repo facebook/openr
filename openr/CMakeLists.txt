@@ -282,6 +282,8 @@ add_library(openrlib
   kvstore/KvStoreWrapper.cpp
   link-monitor/LinkMonitor.cpp
   link-monitor/InterfaceEntry.cpp
+  nl/NetlinkMessage.cpp
+  nl/NetlinkRoute.cpp
   nl/NetlinkSocket.cpp
   nl/NetlinkTypes.cpp
   platform/NetlinkFibHandler.cpp
@@ -506,6 +508,8 @@ install(FILES
 )
 
 install(FILES
+  nl/NetlinkMessage.h
+  nl/NetlinkRoute.h
   nl/NetlinkSocket.h
   nl/NetlinkTypes.h
   DESTINATION include/openr/nl
@@ -890,6 +894,9 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/fib
   )
 
+  add_executable(netlink_message_test
+    nl/tests/NetlinkMessageTest.cpp
+  )
   add_executable(netlink_types_test
     nl/tests/NetlinkTypesTest.cpp
   )
@@ -905,6 +912,10 @@ if(BUILD_TESTS)
     ${LIBNL3-HEADERS}/libnl3
   )
   target_include_directories(netlink_socket_test
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+  target_include_directories(netlink_message_test
     PRIVATE
     ${LIBNL3-HEADERS}/libnl3
   )
@@ -927,6 +938,13 @@ if(BUILD_TESTS)
     ${GTEST}
     ${GTEST_MAIN}
   )
+  target_link_libraries(netlink_message_test
+    openrlib
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+  )
   target_link_libraries(netlink_socket_subscribe_test
     openrlib
     ${GMOCK}
@@ -939,6 +957,7 @@ if(BUILD_TESTS)
   if(ADD_ROOT_TESTS)
     # these tests must be run by root user
     add_test(NetlinkSocketTest netlink_socket_test)
+    add_test(NetlinkMessageTest netlink_message_test)
     add_test(NetlinkSocketTest netlink_socket_subscribe_test)
   endif()
 

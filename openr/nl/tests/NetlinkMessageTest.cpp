@@ -24,9 +24,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include "openr/nl/NetlinkMessage.h"
-#include "openr/nl/NetlinkRoute.h"
-#include "openr/nl/NetlinkTypes.h"
+#include <openr/nl/NetlinkMessage.h>
+#include <openr/nl/NetlinkRoute.h>
 
 extern "C" {
 #include <net/if.h>
@@ -555,7 +554,7 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   });
 
   evlTest.scheduleTimeout(std::chrono::milliseconds(250), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
+    EXPECT_EQ(1, nlSock->getErrorCount());
     // deleting 2 routes but should have received only 1 ack
     EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
     evlTest.stop();

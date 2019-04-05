@@ -543,12 +543,18 @@ Route::str() const {
     result +=
         folly::sformat("route {} ", folly::IPAddress::networkToString(dst_));
   }
+  uint32_t flags = 0;
+  if (flags_.hasValue()) {
+    flags = flags_.value();
+  }
   result += folly::sformat(
-      " proto {}, table {}, valid {}, family {}",
+      " proto {}, table {}, valid {}, family {}, flags {}, type {}",
       protocolId_,
       routeTable_,
       isValid_ ? "Yes" : "No",
-      static_cast<int>(family_));
+      static_cast<int>(family_),
+      flags,
+      static_cast<int>(type_));
 
   if (priority_) {
     result += folly::sformat(", priority {}", priority_.value());

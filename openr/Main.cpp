@@ -274,7 +274,7 @@ main(int argc, char** argv) {
         context, PlatformPublisherUrl{FLAGS_platform_pub_url});
 
     nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
-        nlEventLoop.get(), eventPublisher.get());
+        nlEventLoop.get(), eventPublisher.get(), FLAGS_use_netlink_message);
     // Subscribe selected network events
     nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
     nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);

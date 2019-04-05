@@ -22,8 +22,9 @@ const size_t kNlSockRecvBuf{2 * 1024 * 1024};
 namespace openr {
 namespace fbnl {
 
-NetlinkSocket::NetlinkSocket(fbzmq::ZmqEventLoop* evl, EventsHandler* handler)
-    : evl_(evl), handler_(handler) {
+NetlinkSocket::NetlinkSocket(
+    fbzmq::ZmqEventLoop* evl, EventsHandler* handler, bool useNetlinkMessage)
+    : evl_(evl), handler_(handler), useNetlinkMessage_(useNetlinkMessage) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 
   // Create netlink socket for only notification subscription
@@ -49,6 +50,16 @@ NetlinkSocket::NetlinkSocket(fbzmq::ZmqEventLoop* evl, EventsHandler* handler)
   CHECK_EQ(err, 0) << "Failed to set socket buffer on reqSock_";
   err = nl_socket_set_buffer_size(subSock_, kNlSockRecvBuf, 0);
   CHECK_EQ(err, 0) << "Failed to set socket buffer on subSock_";
+
+  // create netlink protocol object
+  if (useNetlinkMessage_) {
+    auto tid = static_cast<int>(
+        std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    nlSock_ =
+        std::make_unique<openr::Netlink::NetlinkProtocolSocket>(evl_, tid);
+    CHECK(nlSock_ != nullptr) << "Missing event loop.";
+    nlSock_->init();
+  }
 
   // Request a route cache to be created and registered with cache manager
   // route event handler is provided which has this object as opaque data so
@@ -411,12 +422,15 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     // instead a new route will be created, which may cause underlying kernel
     // crash when releasing netdevices
     if (iter != unicastRoutes.end()) {
-      int err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+      int err{0};
+      if (useNetlinkMessage_) {
+        err = static_cast<int>(nlSock_->deleteRoute(iter->second));
+      } else {
+        err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+      }
       if (0 != err && -NLE_OBJ_NOTFOUND != err) {
         throw fbnl::NlException(folly::sformat(
-            "Failed to delete route\n{}\nError: {}",
-            iter->second.str(),
-            nl_geterror(err)));
+            "Failed to delete route\n{}\nError: {}", iter->second.str(), err));
       }
     }
   }
@@ -425,10 +439,15 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   unicastRoutes.erase(dest);
 
   // Add new route
-  int err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), NLM_F_REPLACE);
+  int err{0};
+  if (useNetlinkMessage_) {
+    err = static_cast<int>(nlSock_->addRoute(route));
+  } else {
+    err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), NLM_F_REPLACE);
+  }
   if (0 != err) {
-    throw fbnl::NlException(folly::sformat(
-        "Could not add route\n{}\nError: {}", route.str(), nl_geterror(err)));
+    throw fbnl::NlException(
+        folly::sformat("Could not add route\n{}\nError: {}", route.str(), err));
   }
 
   // Add route entry in cache on successful addition
@@ -493,14 +512,19 @@ NetlinkSocket::doDeleteUnicastRoute(Route route) {
     return;
   }
 
-  int err = rtnlRouteDelete(reqSock_, route.getRtnlRouteKeyRef(), 0);
+  int err{0};
+  if (useNetlinkMessage_) {
+    err = static_cast<int>(nlSock_->deleteRoute(route));
+  } else {
+    err = rtnlRouteDelete(reqSock_, route.getRtnlRouteKeyRef(), 0);
+  }
   // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
   // some routes when interface goes down
   if (err != 0 && -NLE_OBJ_NOTFOUND != err) {
     throw fbnl::NlException(folly::sformat(
         "Failed to delete route {} Error: {}",
         folly::IPAddress::networkToString(route.getDestination()),
-        nl_geterror(err)));
+        err));
   }
 
   // Update local cache with removed prefix
@@ -527,12 +551,17 @@ NetlinkSocket::doAddMulticastRoute(Route route) {
       << "Adding multicast route: " << folly::IPAddress::networkToString(prefix)
       << " for interface: " << ifName;
 
-  int err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), 0);
+  int err{0};
+  if (useNetlinkMessage_) {
+    err = static_cast<int>(nlSock_->addRoute(route));
+  } else {
+    err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), 0);
+  }
   if (err != 0) {
     throw fbnl::NlException(folly::sformat(
         "Failed to add multicast route {} Error: {}",
         folly::IPAddress::networkToString(prefix),
-        nl_geterror(err)));
+        err));
   }
   mcastRoutes.emplace(key, std::move(route));
 }
@@ -573,12 +602,17 @@ NetlinkSocket::doDeleteMulticastRoute(Route route) {
           << folly::IPAddress::networkToString(prefix)
           << " for interface: " << ifName;
 
-  int err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+  int err{0};
+  if (useNetlinkMessage_) {
+    err = static_cast<int>(nlSock_->deleteRoute(iter->second));
+  } else {
+    err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+  }
   if (err != 0) {
     throw fbnl::NlException(folly::sformat(
         "Failed to delete multicast route {} Error: {}",
         folly::IPAddress::networkToString(prefix),
-        nl_geterror(err)));
+        err));
   }
 
   mcastRoutes.erase(iter);
@@ -670,13 +704,19 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     if (iter == linkRoutes.end()) {
       continue;
     }
-    int err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+
+    int err{0};
+    if (useNetlinkMessage_) {
+      err = static_cast<int>(nlSock_->deleteRoute(iter->second));
+    } else {
+      err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+    }
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
           "Could not del link Route to: {} dev {} Error: {}",
           folly::IPAddress::networkToString(routeToDel.first),
           routeToDel.second,
-          nl_geterror(err)));
+          err));
     }
   }
 
@@ -684,14 +724,20 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     if (linkRoutes.count(routeToAdd.first)) {
       continue;
     }
-    int err = rtnlRouteAdd(
-        reqSock_, routeToAdd.second.getRtnlRouteRef(), NLM_F_REPLACE);
+
+    int err{0};
+    if (useNetlinkMessage_) {
+      err = static_cast<int>(nlSock_->addRoute(routeToAdd.second));
+    } else {
+      err = rtnlRouteAdd(
+          reqSock_, routeToAdd.second.getRtnlRouteRef(), NLM_F_REPLACE);
+    }
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
           "Could not add link Route to: {} dev {} Error: {}",
           folly::IPAddress::networkToString(routeToAdd.first.first),
           routeToAdd.first.second,
-          nl_geterror(err)));
+          err));
     }
   }
   linkRoutes.swap(syncDb);
@@ -1096,6 +1142,9 @@ void
 NetlinkSocket::subscribeEvent(NetlinkEventType event) {
   if (event >= MAX_EVENT_TYPE) {
     return;
+  }
+  if (event == ROUTE_EVENT) {
+    CHECK(!useNetlinkMessage_);
   }
   eventFlags_.set(event);
 }
