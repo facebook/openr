@@ -27,6 +27,8 @@ DEFINE_int32(
     decision_rep_port,
     openr::Constants::kDecisionRepPort,
     "The port Decision replier listens on");
+// Flag to enable or disable plugin module.
+DEFINE_bool(enable_plugin, false, "Enable plugin module");
 DEFINE_int32(
     link_monitor_pub_port,
     openr::Constants::kLinkMonitorPubPort,

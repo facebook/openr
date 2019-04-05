@@ -20,6 +20,8 @@ DECLARE_int32(kvstore_rep_port);
 DECLARE_int32(decision_pub_port);
 DECLARE_int32(decision_rep_port);
 
+DECLARE_bool(enable_plugin);
+
 DECLARE_int32(link_monitor_pub_port);
 DECLARE_int32(link_monitor_cmd_port);
 

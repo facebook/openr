@@ -820,7 +820,9 @@ main(int argc, char** argv) {
   }));
 
   // Call external module for platform specific implementations
-  pluginStart();
+  if (FLAGS_enable_plugin) {
+    pluginStart();
+  }
 
   // Wait for main-event loop to return
   mainEventLoopThread.join();
@@ -886,7 +888,9 @@ main(int argc, char** argv) {
   }
 
   // Call external module for platform specific implementations
-  pluginStop();
+  if (FLAGS_enable_plugin) {
+    pluginStop();
+  }
 
   // Close syslog connection (this is optional)
   syslog(LOG_NOTICE, "Stopping OpenR daemon.");
