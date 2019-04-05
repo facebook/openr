@@ -7,7 +7,6 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 from openr.clients.openr_client import OpenrClient
 from openr.Lsdb import ttypes as lsdb_types

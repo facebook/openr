@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -5,7 +7,6 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import ssl
 import sys
@@ -108,8 +109,7 @@ class OpenrClient(object):
                 resp = self.thrift_client.command(self.module_type, req)
             except Exception as e:
                 print(
-                    "Tried to connect via thrift but could not. "
-                    "Exception: {}.".format(e),
+                    f"Tried to connect via thrift but could not. Exception: {e}",
                     file=sys.stderr,
                 )
                 self.cleanup_thrift()

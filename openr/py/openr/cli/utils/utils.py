@@ -7,7 +7,6 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
 import datetime
@@ -33,7 +32,6 @@ from openr.Platform import FibService, ttypes as platform_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
-from six import PY3, binary_type
 from thrift.protocol import TBinaryProtocol
 from thrift.transport import TSocket, TTransport
 
@@ -81,10 +79,7 @@ def json_dumps(data):
         :return: decode of bytes to a str
         """
 
-        if PY3 and isinstance(obj, binary_type):
-            return obj.decode("utf-8")
-
-        raise TypeError("{} is not JSON serializable".format(obj))
+        return obj.decode("utf-8")
 
     return json.dumps(
         data, default=make_serializable, sort_keys=True, indent=2, ensure_ascii=False

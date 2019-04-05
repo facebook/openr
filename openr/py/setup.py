@@ -7,7 +7,6 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import, division, print_function
 
 import os
 from subprocess import check_call
@@ -51,7 +50,7 @@ def generate_thrift_files():
 generate_thrift_files()
 
 # Have different install_requires for Python 2 + 3
-INSTALL_REQUIRES = ["bunch", "click", "hexdump", "networkx", "pyzmq", "six", "tabulate"]
+INSTALL_REQUIRES = ["bunch", "click", "hexdump", "networkx", "pyzmq", "tabulate"]
 # Python 2 always needs these dependencies
 if version_info.major < 3:
     INSTALL_REQUIRES.extend(["futures", "ipaddress", "typing"])
