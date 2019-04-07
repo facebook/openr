@@ -109,7 +109,8 @@ class OpenrClient(object):
                 resp = self.thrift_client.command(self.module_type, req)
             except Exception as e:
                 print(
-                    f"Tried to connect via thrift but could not. Exception: {e}",
+                    "Tried to connect via thrift but could not. Exception: "
+                    "{}".format(e),
                     file=sys.stderr,
                 )
                 self.cleanup_thrift()
