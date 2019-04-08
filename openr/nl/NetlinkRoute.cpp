@@ -137,7 +137,7 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
     if (addSubAttributes(
             rta,
             RTA_NEWDST,
-            reinterpret_cast<const char* const>(&swapLabel),
+            reinterpret_cast<const char*>(&swapLabel),
             sizeof(swapLabel)) == nullptr) {
       return ResultCode::NO_MESSAGE_BUFFER;
     }
@@ -154,9 +154,9 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
     viaLen = sizeof(nextHopV4);
   }
   memcpy(
-      via.ip, reinterpret_cast<const char* const>(gw.bytes()), gw.byteCount());
+      via.ip, reinterpret_cast<const char*>(gw.bytes()), gw.byteCount());
   if (addSubAttributes(
-          rta, RTA_VIA, reinterpret_cast<const char* const>(&via), viaLen) ==
+          rta, RTA_VIA, reinterpret_cast<const char*>(&via), viaLen) ==
       nullptr) {
     return ResultCode::NO_MESSAGE_BUFFER;
   }
@@ -179,10 +179,8 @@ NetlinkRouteMessage::addPopNexthop(
 
   int oif = path.getIfIndex().value();
   if (addSubAttributes(
-          rta,
-          RTA_OIF,
-          reinterpret_cast<const char* const>(&oif),
-          sizeof(oif)) == nullptr) {
+          rta, RTA_OIF, reinterpret_cast<const char*>(&oif), sizeof(oif)) ==
+      nullptr) {
     return ResultCode::NO_MESSAGE_BUFFER;
   }
 
@@ -271,7 +269,7 @@ NetlinkRouteMessage::addNextHops(const openr::fbnl::Route& route) {
     };
 
     // copy the encap info into NLMSG payload
-    const char* const data = reinterpret_cast<const char* const>(
+    const char* const data = reinterpret_cast<const char*>(
         RTA_DATA(reinterpret_cast<struct rtattr*>(nhop.data())));
     int payloadLen = RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(nhop.data()));
     if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_)) !=
@@ -451,7 +449,7 @@ NetlinkRouteMessage::addLabelRoute(const openr::fbnl::Route& route) {
   ResultCode status{ResultCode::SUCCESS};
   if ((status = addAttributes(
            RTA_DST,
-           reinterpret_cast<const char* const>(&mlabel),
+           reinterpret_cast<const char*>(&mlabel),
            sizeof(mpls_label),
            msghdr_)) != ResultCode::SUCCESS) {
     return status;
@@ -477,7 +475,7 @@ NetlinkRouteMessage::deleteLabelRoute(const openr::fbnl::Route& route) {
   ResultCode status{ResultCode::SUCCESS};
   if ((status = addAttributes(
            RTA_DST,
-           reinterpret_cast<const char* const>(&mlabel),
+           reinterpret_cast<const char*>(&mlabel),
            sizeof(mpls_label),
            msghdr_)) != ResultCode::SUCCESS) {
     return status;

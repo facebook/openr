@@ -12,10 +12,10 @@ namespace Netlink {
 uint32_t gSequenceNumber{0};
 
 NetlinkMessage::NetlinkMessage()
-    : msghdr(reinterpret_cast<struct nlmsghdr* const>(msg.data())) {}
+    : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())) {}
 
 NetlinkMessage::NetlinkMessage(int type)
-    : msghdr(reinterpret_cast<struct nlmsghdr* const>(msg.data())) {
+    : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())) {
   // initialize netlink header
   msghdr->nlmsg_len = NLMSG_LENGTH(0);
   msghdr->nlmsg_type = type;
