@@ -167,6 +167,12 @@ class KvStore final : public OpenrEventLoop, public DualNode {
       const folly::Optional<std::string>& oldNh,
       const folly::Optional<std::string>& newNh) noexcept override;
 
+  // get flooding peers for a given spt-root-id
+  // if rootId is none => flood to all physical peers
+  // else only flood to formed SPT-peers for rootId
+  std::unordered_set<std::string> getFloodPeers(
+      const folly::Optional<std::string>& rootId);
+
   // consume a publication pending on sub_ socket
   // (i.e. announced by some of our peers)
   // relays the original publication if needed
@@ -211,8 +217,11 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // Function to flood publication to neighbors
   // publication => data element to flood
   // rateLimit => if 'false', publication will not be rate limited
+  // setFloodRoot => if 'false', floodRootId will not be set
   void floodPublication(
-      thrift::Publication&& publication, bool rateLimit = true);
+      thrift::Publication&& publication,
+      bool rateLimit = true,
+      bool setFloodRoot = true);
 
   // update Time to expire filed in Publication
   // removeAboutToExpire: knob to remove keys which are about to expire
@@ -396,7 +405,11 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   std::unique_ptr<fbzmq::ZmqTimeout> pendingPublicationTimer_{nullptr};
 
   // pending keys to flood publication
-  std::unordered_set<std::string> publicationBuffer_{};
+  // map<flood-root-id: set<keys>>
+  std::unordered_map<
+      folly::Optional<std::string>,
+      std::unordered_set<std::string>>
+      publicationBuffer_{};
 };
 
 } // namespace openr

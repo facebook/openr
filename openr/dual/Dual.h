@@ -197,6 +197,9 @@ class Dual {
   // get current route-info
   const RouteInfo& getInfo() const noexcept;
 
+  // check if have a valid route towards root or not
+  bool hasValidRoute() const noexcept;
+
   // get status string (includes route-info and dual-counters)
   std::string getStatusString() const noexcept;
 
@@ -212,6 +215,10 @@ class Dual {
 
   // get current spt children
   std::unordered_set<std::string> children() const noexcept;
+
+  // get current spt peers (nexthop + children)
+  // return empty-set if dual has no valid route
+  std::unordered_set<std::string> sptPeers() const noexcept;
 
   // my node id
   const std::string nodeId;
@@ -263,6 +270,9 @@ class Dual {
 
   // check if a neighbor is up or not
   bool neighborUp(const std::string& neighbor);
+
+  // clear counters to zero for a given neighbor
+  void clearCounters(const std::string& neighbor) noexcept;
 
   // route-info towards root
   RouteInfo info_;
@@ -341,7 +351,16 @@ class DualNode {
   Dual& getDual(const std::string& rootId);
 
   // get all discovered duals reference as map<root-id: Dual>
-  std::unordered_map<std::string, Dual>& getDuals();
+  std::map<std::string, Dual>& getDuals();
+
+  // pick smallest root-id who has a valid-route
+  // return none if no ready SPT found
+  folly::Optional<std::string> getSptRootId() const noexcept;
+
+  // get SPT-peers for a given root-id
+  // return empty-set if dual for root-id is not ready
+  std::unordered_set<std::string> getSptPeers(
+      const folly::Optional<std::string>& rootId) const noexcept;
 
   // get route-info for a given root-id
   // return none if root-id is not discoveried yet
@@ -379,11 +398,14 @@ class DualNode {
   // add Dual for a given root-id if not exist yet
   void addDual(const std::string& rootId);
 
+  // clear counters to zero for a given neighbor
+  void clearCounters(const std::string& neighbor) noexcept;
+
   // local distances map<neighbor: distance>
   std::unordered_map<std::string, int64_t> localDistances_;
 
   // map<root-id: Dual-object>
-  std::unordered_map<std::string, Dual> duals_;
+  std::map<std::string, Dual> duals_;
 
   // map<neighbor-id: counters>
   std::unordered_map<std::string, thrift::DualPerNeighborCounters> counters_;

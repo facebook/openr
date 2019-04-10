@@ -179,14 +179,16 @@ TEST_F(HealthCheckerTestFixture, BasicOperation) {
        {"adj:2", createAdjValue("2", 1, {adj21})}},
       {},
       {},
-      {});
+      {},
+      "");
   auto prefixPublication = thrift::Publication(
       apache::thrift::FRAGILE,
       {{"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {},
       {},
-      {});
+      {},
+      "");
   replyInitialSyncReq(adjPublication);
   replyInitialSyncReq(prefixPublication);
   LOG(INFO) << "Sent initial sync";
@@ -203,7 +205,8 @@ TEST_F(HealthCheckerTestFixture, BasicOperation) {
        {"prefix:4", createPrefixValue("4", 1, {addr4})}},
       {},
       {},
-      {});
+      {},
+      "");
 
   kvStorePub.sendThriftObj(nextPub, serializer);
 

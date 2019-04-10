@@ -41,6 +41,8 @@ KvStoreWrapper::KvStoreWrapper(
       subSock_(zmqContext),
       enableFloodOptimization_(enableFloodOptimization) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
+  // assume useFloodOptimization when enableFloodOptimization is True
+  bool useFloodOptimization = enableFloodOptimization;
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
       nodeId,
@@ -58,7 +60,8 @@ KvStoreWrapper::KvStoreWrapper(
       kvStoreRate,
       ttlDecr,
       enableFloodOptimization,
-      isFloodRoot);
+      isFloodRoot,
+      useFloodOptimization);
 
   localCmdUrl = kvStore_->inprocCmdUrl;
 }
@@ -273,7 +276,7 @@ KvStoreWrapper::getFloodTopo() {
   reqSock_.sendThriftObj(request, serializer_);
   auto maybeMsg = reqSock_.recvThriftObj<thrift::SptInfos>(serializer_);
   if (maybeMsg.hasError()) {
-    LOG(FATAL) << "getCounters recv response failed: " << maybeMsg.error();
+    LOG(FATAL) << "getFloodTopo recv response failed: " << maybeMsg.error();
   }
 
   return std::move(maybeMsg.value());

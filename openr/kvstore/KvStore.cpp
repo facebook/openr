@@ -927,6 +927,7 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     thrift::Publication rcvdPublication;
     rcvdPublication.keyVals = std::move(thriftReq.keySetParams.keyVals);
     rcvdPublication.nodeIds = std::move(thriftReq.keySetParams.nodeIds);
+    rcvdPublication.floodRootId = std::move(thriftReq.keySetParams.floodRootId);
     mergePublication(rcvdPublication);
 
     // respond to the client
@@ -967,6 +968,8 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
           thriftPub.keyVals, thriftReq.keyDumpParams.keyValHashes.value());
     }
     updatePublicationTtl(thriftPub);
+    // I'm the initiator, set flood-root-id
+    thriftPub.floodRootId = DualNode::getSptRootId();
     return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
   case thrift::Command::HASH_DUMP: {
@@ -1066,6 +1069,10 @@ KvStore::processFloodTopoGet() noexcept {
 
   // set counters
   sptInfos.counters = DualNode::getCounters();
+
+  // set flood root-id and peers
+  sptInfos.floodRootId = DualNode::getSptRootId();
+  sptInfos.floodPeers = getFloodPeers(sptInfos.floodRootId);
   return sptInfos;
 }
 
@@ -1104,7 +1111,7 @@ KvStore::processNexthopChange(
       << ": callback invoked while nexthop does not change: " << oldNhStr;
   // root should NEVER change its nexthop (nexthop always equal to myself)
   CHECK_NE(nodeId_, rootId);
-  LOG(INFO) << "dual root-id (" << rootId << ") nexhop change: " << oldNhStr
+  LOG(INFO) << "dual root-id (" << rootId << ") nexthop change: " << oldNhStr
             << " -> " << newNhStr;
   // // unset old parent if any
   if (oldNh.hasValue()) {
@@ -1187,7 +1194,7 @@ KvStore::processSyncResponse() noexcept {
 
   // syncPubMsg can be of two types
   // 1. ack to SET_KEY ("OK" or "ERR")
-  // 2. response of DUMP_KEY (thrift::Publication)
+  // 2. response of KEY_DUMP (thrift::Publication)
   // We check for first one and then fallback to second one
   if (syncPubMsg.size() < 3) {
     auto syncPubStr = syncPubMsg.read<std::string>().value();
@@ -1365,10 +1372,10 @@ KvStore::bufferPublication(thrift::Publication&& publication) {
       "kvstore.rate_limit_keys", publication.keyVals.size(), fbzmq::AVG);
   // update or add keys
   for (auto const& kv : publication.keyVals) {
-    publicationBuffer_.emplace(kv.first);
+    publicationBuffer_[publication.floodRootId].emplace(kv.first);
   }
   for (auto const& key : publication.expiredKeys) {
-    publicationBuffer_.emplace(key);
+    publicationBuffer_[publication.floodRootId].emplace(key);
   }
 }
 
@@ -1377,19 +1384,33 @@ KvStore::floodBufferedUpdates() {
   if (!publicationBuffer_.size()) {
     return;
   }
-  thrift::Publication publication{};
-  for (const auto& key : publicationBuffer_) {
-    auto kvStoreIt = kvStore_.find(key);
-    if (kvStoreIt != kvStore_.end()) {
-      publication.keyVals.emplace(make_pair(key, kvStoreIt->second));
-    } else {
-      publication.expiredKeys.emplace_back(key);
+
+  // merged-publications to be sent
+  std::vector<thrift::Publication> publications;
+
+  // merge publication per root-id
+  for (const auto& kv : publicationBuffer_) {
+    thrift::Publication publication{};
+    publication.floodRootId = kv.first;
+    for (const auto& key : kv.second) {
+      auto kvStoreIt = kvStore_.find(key);
+      if (kvStoreIt != kvStore_.end()) {
+        publication.keyVals.emplace(make_pair(key, kvStoreIt->second));
+      } else {
+        publication.expiredKeys.emplace_back(key);
+      }
     }
+    publications.emplace_back(std::move(publication));
   }
-  // publication.nodeIds is set to default-none here
-  // I'm the initiator of this merged-publication
+
   publicationBuffer_.clear();
-  return floodPublication(std::move(publication), false);
+
+  for (auto& pub : publications) {
+    // when sending out merged publication, we maintain orginal-root-id
+    // we act as a forwarder, NOT an initiator. Disable set-flood-root here
+    floodPublication(
+        std::move(pub), false /* rate-limit */, false /* set-flood-root */);
+  }
 }
 
 void
@@ -1414,6 +1435,8 @@ KvStore::finalizeFullSync(
   updateRequest.cmd = thrift::Command::KEY_SET;
   updateRequest.keySetParams.keyVals = std::move(keyVals);
   updateRequest.keySetParams.solicitResponse = false;
+  // I'm the initiator, set flood-root-id
+  updateRequest.keySetParams.floodRootId = DualNode::getSptRootId();
 
   VLOG(1) << "sending finalizeFullSync back to " << senderId;
   auto const ret = peerSyncSock_.sendMultiple(
@@ -1427,8 +1450,33 @@ KvStore::finalizeFullSync(
   }
 }
 
+std::unordered_set<std::string>
+KvStore::getFloodPeers(const folly::Optional<std::string>& rootId) {
+  auto sptPeers = DualNode::getSptPeers(rootId);
+  bool floodToAll = false;
+  if (not enableFloodOptimization_ or not useFloodOptimization_ or
+      sptPeers.empty()) {
+    // fall back to legacy flooding if feature not enabled or can not find
+    // valid SPT-peers
+    floodToAll = true;
+  }
+
+  // flood-peers: SPT-peers + peers-who-does-not-support-dual
+  std::unordered_set<std::string> floodPeers;
+  for (const auto& kv : peers_) {
+    const auto& peer = kv.first;
+    const auto& peerSpec = kv.second.first;
+    if (floodToAll or sptPeers.count(peer) != 0 or
+        not peerSpec.supportFloodOptimization) {
+      floodPeers.emplace(peer);
+    }
+  }
+  return floodPeers;
+}
+
 void
-KvStore::floodPublication(thrift::Publication&& publication, bool rateLimit) {
+KvStore::floodPublication(
+    thrift::Publication&& publication, bool rateLimit, bool setFloodRoot) {
   // rate limit if configured
   if (floodLimiter_ && rateLimit && !floodLimiter_->consume(1)) {
     bufferPublication(std::move(publication));
@@ -1477,33 +1525,42 @@ KvStore::floodPublication(thrift::Publication&& publication, bool rateLimit) {
   if (publication.keyVals.empty()) {
     return;
   }
+
+  if (setFloodRoot and not senderId.hasValue()) {
+    // I'm the initiator, set flood-root-id
+    publication.floodRootId = DualNode::getSptRootId();
+  }
+
   thrift::Request floodRequest;
   floodRequest.cmd = thrift::Command::KEY_SET;
   floodRequest.keySetParams.keyVals = publication.keyVals;
   floodRequest.keySetParams.solicitResponse = false;
   floodRequest.keySetParams.nodeIds = publication.nodeIds;
-  for (auto& kv : peers_) {
-    if (senderId.hasValue() && senderId.value() == kv.first) {
+  floodRequest.keySetParams.floodRootId = publication.floodRootId;
+
+  const auto& floodPeers = getFloodPeers(floodRequest.keySetParams.floodRootId);
+  for (const auto& peer : floodPeers) {
+    if (senderId.hasValue() && senderId.value() == peer) {
       // Do not flood towards senderId from whom we received this publication
       continue;
     }
     VLOG(4) << "Forwarding publication, received from: "
             << (senderId.hasValue() ? senderId.value() : "N/A")
-            << ", to: " << kv.first << ", via: " << nodeId_;
+            << ", to: " << peer << ", via: " << nodeId_;
 
     tData_.addStatValue("kvstore.sent_publications", 1, fbzmq::COUNT);
     tData_.addStatValue(
         "kvstore.sent_key_vals", publication.keyVals.size(), fbzmq::SUM);
 
     // Send flood request
-    auto const& peerCmdSocketId = kv.second.second;
+    auto const& peerCmdSocketId = peers_.at(peer).second;
     auto const ret = peerSyncSock_.sendMultiple(
         fbzmq::Message::from(peerCmdSocketId).value(),
         fbzmq::Message(),
         fbzmq::Message::fromThriftObj(floodRequest, serializer_).value());
     if (ret.hasError()) {
       // this could be pretty common on initial connection setup
-      LOG(ERROR) << "Failed to flood publication to peer " << kv.first
+      LOG(ERROR) << "Failed to flood publication to peer " << peer
                  << " using id " << peerCmdSocketId;
     }
   }
@@ -1536,12 +1593,10 @@ KvStore::mergePublication(
   }
 
   // Generate delta with local KvStore
-  thrift::Publication deltaPublication(
-      apache::thrift::FRAGILE,
-      mergeKeyValues(kvStore_, rcvdPublication.keyVals, filters_),
-      {} /* expired keys */,
-      {} /* nodeIds */,
-      {} /* tobeUpdatedKeys */);
+  thrift::Publication deltaPublication;
+  deltaPublication.keyVals =
+      mergeKeyValues(kvStore_, rcvdPublication.keyVals, filters_);
+  deltaPublication.floodRootId = rcvdPublication.floodRootId;
 
   const size_t kvUpdateCnt = deltaPublication.keyVals.size();
   tData_.addStatValue("kvstore.updated_key_vals", kvUpdateCnt, fbzmq::SUM);

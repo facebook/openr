@@ -320,6 +320,16 @@ Dual::getCounters() const noexcept {
 }
 
 void
+Dual::clearCounters(const std::string& neighbor) noexcept {
+  if (counters_.count(neighbor) == 0) {
+    LOG(WARNING) << "clearCounters called on non-existing neighbor "
+                 << neighbor;
+    return;
+  }
+  counters_[neighbor] = thrift::DualPerRootCounters();
+}
+
+void
 Dual::addChild(const std::string& child) noexcept {
   if (children_.count(child)) {
     LOG(WARNING) << rootId << ": adding an existing child " << child;
@@ -353,6 +363,26 @@ Dual::neighborUp(const std::string& neighbor) {
 const Dual::RouteInfo&
 Dual::getInfo() const noexcept {
   return info_;
+}
+
+bool
+Dual::hasValidRoute() const noexcept {
+  return (
+      info_.sm.state == DualState::PASSIVE and
+      info_.distance != std::numeric_limits<int64_t>::max() and
+      info_.nexthop.hasValue());
+}
+
+std::unordered_set<std::string>
+Dual::sptPeers() const noexcept {
+  if (not hasValidRoute()) {
+    // route not ready
+    return {};
+  }
+
+  auto peers = children();
+  peers.emplace(*info_.nexthop);
+  return peers;
 }
 
 int64_t
@@ -424,6 +454,8 @@ Dual::peerDown(
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
   LOG(INFO) << rootId << "::" << nodeId << ": LINK DOWN event from "
             << neighbor;
+  // clear counters
+  clearCounters(neighbor);
 
   // update local-distance and report-distance
   localDistances_[neighbor] = std::numeric_limits<int64_t>::max();
@@ -688,6 +720,8 @@ void
 DualNode::peerDown(const std::string& neighbor) {
   // update local-distance
   localDistances_[neighbor] = std::numeric_limits<int64_t>::max();
+  // clear counters
+  clearCounters(neighbor);
 
   std::unordered_map<std::string, thrift::DualMessages> msgsToSend;
 
@@ -726,9 +760,43 @@ DualNode::getDual(const std::string& rootId) {
   return duals_.at(rootId);
 }
 
-std::unordered_map<std::string, Dual>&
+std::map<std::string, Dual>&
 DualNode::getDuals() {
   return duals_;
+}
+
+folly::Optional<std::string>
+DualNode::getSptRootId() const noexcept {
+  if (duals_.empty()) {
+    // haven't discovered any root yet
+    return folly::none;
+  }
+
+  // pick smallest root-id who has valid route
+  for (const auto& kv : duals_) {
+    if (kv.second.hasValidRoute()) {
+      return kv.first;
+    }
+  }
+
+  return folly::none;
+}
+
+std::unordered_set<std::string>
+DualNode::getSptPeers(const folly::Optional<std::string>& rootId) const
+    noexcept {
+  if (not rootId.hasValue()) {
+    // none rootId, return empty peers
+    return {};
+  }
+
+  const auto dual = duals_.find(*rootId);
+  if (dual == duals_.end()) {
+    // rootId not discovered yet, return empty peers
+    return {};
+  }
+
+  return dual->second.sptPeers();
 }
 
 void
@@ -832,6 +900,16 @@ DualNode::getCounters() const noexcept {
     counters.rootCounters.emplace(kv.first, kv.second.getCounters());
   }
   return counters;
+}
+
+void
+DualNode::clearCounters(const std::string& neighbor) noexcept {
+  if (counters_.count(neighbor) == 0) {
+    LOG(WARNING) << "clearCounters called on non-existing neighbor "
+                 << neighbor;
+    return;
+  }
+  counters_[neighbor] = thrift::DualPerNeighborCounters();
 }
 
 void

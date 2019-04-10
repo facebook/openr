@@ -1457,17 +1457,24 @@ def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> Non
 
     output = []
 
+    # step0. print current flooding root id
+    print("\n> Current Flood On Root-Id: {}".format(spt_infos.floodRootId))
+
     # step1. print neighbor level counters
     caption = "Neighbor DUAL Counters"
-    column_labels = ["Neighbor", "Pkt(Tx/Rx)", "Msg(Tx/Rx)"]
+    column_labels = ["Neighbor", "Pkt(Tx/Rx)", "Msg(Tx/Rx)", "Is Flooding Peer"]
     neighbor_counters = spt_infos.counters.neighborCounters
     rows = []
     for nb, counters in neighbor_counters.items():
+        state = click.style("No")
+        if nb in spt_infos.floodPeers:
+            state = click.style("Yes", fg="green")
         rows.append(
             [
                 nb,
                 "{}/{}".format(counters.pktSent, counters.pktRecv),
                 "{}/{}".format(counters.msgSent, counters.msgRecv),
+                state,
             ]
         )
     seg = printing.render_horizontal_table(rows, column_labels, tablefmt="plain")
@@ -1481,6 +1488,7 @@ def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> Non
         "Reply(Tx/Rx)",
         "Update(Tx/Rx)",
         "Total(Tx/Rx)",
+        "Role",
     ]
     for root, info in spt_infos.infos.items():
         if roots is not None and root not in roots:
@@ -1489,16 +1497,16 @@ def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> Non
             state = click.style("PASSIVE", fg="green")
         else:
             state = click.style("ACTIVE", fg="red")
-        cap = "root@{}[{}]: parent: {}, cost: {}, ({})children: {}".format(
-            root,
-            state,
-            info.parent,
-            info.cost,
-            len(info.children),
-            ",".join(info.children),
+        cap = "root@{}[{}]: parent: {}, cost: {}, ({}) children".format(
+            root, state, info.parent, info.cost, len(info.children)
         )
         rows = []
         for nb, counters in root_counters.get(root).items():
+            role = "-"
+            if nb == info.parent:
+                role = "Parent"
+            elif nb in info.children:
+                role = "Child"
             rows.append(
                 [
                     nb,
@@ -1506,6 +1514,7 @@ def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> Non
                     "{}/{}".format(counters.replySent, counters.replyRecv),
                     "{}/{}".format(counters.updateSent, counters.updateRecv),
                     "{}/{}".format(counters.totalSent, counters.totalRecv),
+                    role,
                 ]
             )
         seg = printing.render_horizontal_table(rows, column_labels, tablefmt="plain")

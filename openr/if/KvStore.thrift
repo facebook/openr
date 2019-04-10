@@ -77,6 +77,10 @@ struct KeySetParams {
   // Optional attributes. List of nodes through which this publication has
   // traversed. Client shouldn't worry about this attribute.
   5: optional list<string> nodeIds;
+
+  // optional flood root-id, indicating which SPT this publication should be
+  // flooded on; if none, flood to all peers
+  6: optional string floodRootId;
 }
 
 // parameters for the KEY_GET command
@@ -132,7 +136,7 @@ struct FloodTopoSetParams {
 }
 
 typedef set<string>
-  (cpp.type = "std::unordered_set<std::string>") SptChildrenSet
+  (cpp.type = "std::unordered_set<std::string>") PeerNames
 
 // single spanning tree information
 struct SptInfo {
@@ -143,7 +147,7 @@ struct SptInfo {
   // optional parent if any (aka nexthop)
   3: optional string parent
   // a set of spt children
-  4: SptChildrenSet children
+  4: PeerNames children
 }
 
 // map<root-id: SPT-info>
@@ -152,8 +156,14 @@ typedef map<string, SptInfo>
 
 // all spanning tree(s) information
 struct SptInfos {
+  // map<root-id: SptInfo>
   1: SptInfoMap infos
+  // all DUAL related counters
   2: Dual.DualCounters counters
+  // current flood-root-id if any
+  3: optional string floodRootId
+  // current flooding peers
+  4: PeerNames floodPeers
 }
 
 //
@@ -190,6 +200,10 @@ struct Publication {
   // this is only used for full-sync respone to tell full-sync initiator to
   // send back keyVals that need to be updated
   5: optional list<string> tobeUpdatedKeys;
+
+  // optional flood root-id, indicating which SPT this publication should be
+  // flooded on; if none, flood to all peers
+  6: optional string floodRootId;
 }
 
 // Dump of the current peers: sent in
