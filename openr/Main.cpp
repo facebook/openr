@@ -797,7 +797,6 @@ main(int argc, char** argv) {
     std::vector<std::string> acceptableNames;
     folly::split(",", FLAGS_tls_acceptable_peers, acceptableNames, true);
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
-    CHECK(acceptableNamesSet.size()); // Set must not be empty
   }
 
   auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(

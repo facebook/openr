@@ -37,7 +37,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf {
   bool hasModule(thrift::OpenrModuleType type) override;
 
  private:
-  void authenticateConnection();
+  void authorizeConnection();
   const std::string nodeName_;
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
   std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>

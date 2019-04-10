@@ -51,37 +51,37 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 }
 
 void
-OpenrCtrlHandler::authenticateConnection() {
+OpenrCtrlHandler::authorizeConnection() {
   auto connContext = getConnectionContext()->getConnectionContext();
+  auto peerCommonName = connContext->getPeerCommonName();
 
-  if (nullptr == connContext->getPeerCertificate()) {
+  if (peerCommonName.empty() || acceptablePeerCommonNames_.empty()) {
     // for now, we will allow non-secure connections, but lets log the event so
     // we know how often this is happening.
     fbzmq::LogSample sample{};
 
-    sample.addString("event", "UNSECURE_CTRL_CONNECTION");
+    sample.addString(
+        "event",
+        peerCommonName.empty() ? "UNENCRYPTED_CTRL_CONNECTION"
+                               : "UNRESTRICTED_AUTHORIZATION");
     sample.addString("entity", "OPENR_CTRL_HANDLER");
     sample.addString("node_name", nodeName_);
-
-    auto header = connContext->getHeader();
     sample.addString(
-        "client_name",
-        nullptr == header ? "unknown" : header->getPeerIdentity());
+        "peer_address", connContext->getPeerAddress()->getAddressStr());
+    sample.addString("peer_common_name", peerCommonName);
 
     zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
         apache::thrift::FRAGILE,
         Constants::kEventLogCategory.toString(),
         {sample.toJson()}));
 
-    LOG(INFO) << "Got non-secure request. Log Sample: " << sample.toJson();
+    LOG(INFO) << "Authorizing request with issues: " << sample.toJson();
     return;
   }
 
-  auto peerName = connContext->getPeerCommonName();
-  if (acceptablePeerCommonNames_.size() and
-      !acceptablePeerCommonNames_.count(peerName)) {
+  if (!acceptablePeerCommonNames_.count(peerCommonName)) {
     throw thrift::OpenrError(
-        folly::sformat("Peer name {} is unacceptable", peerName));
+        folly::sformat("Peer name {} is unacceptable", peerCommonName));
   }
 }
 
@@ -90,7 +90,7 @@ OpenrCtrlHandler::command(
     std::string& response,
     thrift::OpenrModuleType type,
     std::unique_ptr<std::string> request) {
-  authenticateConnection();
+  authorizeConnection();
   try {
     auto& sock = moduleSockets_.at(type);
     sock.sendOne(fbzmq::Message::from(*request).value()).value();
@@ -111,7 +111,7 @@ OpenrCtrlHandler::command(
 
 bool
 OpenrCtrlHandler::hasModule(thrift::OpenrModuleType type) {
-  authenticateConnection();
+  authorizeConnection();
   return 0 != moduleSockets_.count(type);
 }
 } // namespace openr

@@ -327,7 +327,8 @@ DEFINE_string(
     tls_acceptable_peers,
     "",
     "A comma separated list of strings. Strings are x509 common names to "
-    "accept SSL connections from.");
+    "accept SSL connections from. If an empty string is provided, the server "
+    "will accept connections from any authenticated peer.");
 DEFINE_int32(
     persistent_store_initial_backoff_ms,
     openr::Constants::kPersistentStoreInitialBackoff.count(),
