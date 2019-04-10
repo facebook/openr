@@ -16,7 +16,7 @@ if (BUILD_WITH_LTO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/..)
+include_directories(${CMAKE_SOURCE_DIR})
 
 find_library(ASYNC async PATHS)
 find_library(CONCURRENCY concurrency PATHS)
@@ -38,7 +38,6 @@ find_library(THRIFTCPP2 thriftcpp2 PATHS)
 find_library(THRIFTPROTOCOL thriftprotocol PATHS)
 find_library(TRANSPORT transport PATHS)
 find_library(ZMQ zmq)
-find_library(SIGAR sigar)
 find_library(ZSTD zstd)
 
 # FOLLY_EXCEPTION_TRACER may not be found
@@ -54,20 +53,19 @@ find_path(THRIFT_COMPILER_INCLUDE thrift/templates)
 set(THRIFT_TEMPLATES ${THRIFT_COMPILER_INCLUDE}/thrift/templates)
 include(${THRIFT_COMPILER_INCLUDE}/thrift/ThriftLibrary.cmake)
 
-set(THRIFT_PREFIX "openr/if")
-set(THRIFT_DIR ${CMAKE_BINARY_DIR}/thrift-out/${THRIFT_PREFIX})
-file(MAKE_DIRECTORY ${THRIFT_DIR})
+set(THRIFT_DIR ${CMAKE_BINARY_DIR}/thrift-out)
+include_directories(${THRIFT_DIR})
 
-include_directories(${CMAKE_BINARY_DIR}/thrift-out)
+file(MAKE_DIRECTORY ${THRIFT_DIR}/openr/if)
 
 thrift_object(
   "PersistentStore" #file_name
   "" #services
   "cpp2" #language
   "optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 thrift_object(
@@ -75,9 +73,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -90,9 +88,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 thrift_object(
@@ -100,9 +98,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 thrift_object(
@@ -110,9 +108,9 @@ thrift_object(
   "OpenrCtrl" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -125,9 +123,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 thrift_object(
@@ -135,9 +133,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -151,9 +149,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -166,9 +164,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -182,9 +180,9 @@ thrift_object(
   "FibService;SystemService" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -197,9 +195,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -212,9 +210,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -227,9 +225,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -242,9 +240,9 @@ thrift_object(
   "" #services
   "cpp2" #language
   "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/if" #file_path
-  "${THRIFT_DIR}" #output_path
-  "${THRIFT_PREFIX}" #include_prefix
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
 )
 
 add_dependencies(
@@ -253,52 +251,42 @@ add_dependencies(
   Lsdb-cpp2-obj
 )
 
-install(FILES
-  ${CMAKE_SOURCE_DIR}/if/Lsdb.thrift
-  ${CMAKE_SOURCE_DIR}/if/Dual.thrift
-  ${CMAKE_SOURCE_DIR}/if/Network.thrift
-  ${CMAKE_SOURCE_DIR}/if/Fib.thrift
-  ${CMAKE_SOURCE_DIR}/if/Platform.thrift
-  ${CMAKE_SOURCE_DIR}/if/Decision.thrift
-  DESTINATION include/openr/if
-)
-
 add_library(openrlib
-  allocators/PrefixAllocator.cpp
-  common/BuildInfo.cpp
-  common/ExponentialBackoff.cpp
-  common/NetworkUtil.cpp
-  common/OpenrEventLoop.cpp
-  common/Util.cpp
-  common/Constants.cpp
-  config-store/PersistentStore.cpp
-  config-store/PersistentStoreClient.cpp
-  ctrl-server/OpenrCtrlHandler.cpp
-  decision/Decision.cpp
-  decision/LinkState.cpp
-  decision-old/DecisionOld.cpp
-  dual/Dual.cpp
-  fib/Fib.cpp
-  health-checker/HealthChecker.cpp
-  kvstore/KvStoreClient.cpp
-  kvstore/KvStore.cpp
-  kvstore/KvStoreWrapper.cpp
-  link-monitor/LinkMonitor.cpp
-  link-monitor/InterfaceEntry.cpp
-  nl/NetlinkMessage.cpp
-  nl/NetlinkRoute.cpp
-  nl/NetlinkSocket.cpp
-  nl/NetlinkTypes.cpp
-  platform/NetlinkFibHandler.cpp
-  platform/NetlinkSystemHandler.cpp
-  platform/PlatformPublisher.cpp
-  plugin/Plugin.cpp
-  prefix-manager/PrefixManager.cpp
-  prefix-manager/PrefixManagerClient.cpp
-  spark/IoProvider.cpp
-  spark/SparkWrapper.cpp
-  spark/Spark.cpp
-  watchdog/Watchdog.cpp
+  openr/allocators/PrefixAllocator.cpp
+  openr/common/BuildInfo.cpp
+  openr/common/ExponentialBackoff.cpp
+  openr/common/NetworkUtil.cpp
+  openr/common/OpenrEventLoop.cpp
+  openr/common/Util.cpp
+  openr/common/Constants.cpp
+  openr/config-store/PersistentStore.cpp
+  openr/config-store/PersistentStoreClient.cpp
+  openr/ctrl-server/OpenrCtrlHandler.cpp
+  openr/decision/Decision.cpp
+  openr/decision/LinkState.cpp
+  openr/decision-old/DecisionOld.cpp
+  openr/dual/Dual.cpp
+  openr/fib/Fib.cpp
+  openr/health-checker/HealthChecker.cpp
+  openr/kvstore/KvStoreClient.cpp
+  openr/kvstore/KvStore.cpp
+  openr/kvstore/KvStoreWrapper.cpp
+  openr/link-monitor/LinkMonitor.cpp
+  openr/link-monitor/InterfaceEntry.cpp
+  openr/nl/NetlinkMessage.cpp
+  openr/nl/NetlinkRoute.cpp
+  openr/nl/NetlinkSocket.cpp
+  openr/nl/NetlinkTypes.cpp
+  openr/platform/NetlinkFibHandler.cpp
+  openr/platform/NetlinkSystemHandler.cpp
+  openr/platform/PlatformPublisher.cpp
+  openr/plugin/Plugin.cpp
+  openr/prefix-manager/PrefixManager.cpp
+  openr/prefix-manager/PrefixManagerClient.cpp
+  openr/spark/IoProvider.cpp
+  openr/spark/SparkWrapper.cpp
+  openr/spark/Spark.cpp
+  openr/watchdog/Watchdog.cpp
   $<TARGET_OBJECTS:AllocPrefix-cpp2-obj>
   $<TARGET_OBJECTS:Decision-cpp2-obj>
   $<TARGET_OBJECTS:Fib-cpp2-obj>
@@ -343,7 +331,6 @@ target_link_libraries(openrlib
   ${SODIUM}
   ${SIGAR}
   ${RE2}
-  ${SIGAR}
   -lboost_system
   -lpthread
   ${NLROUTE3}
@@ -357,8 +344,8 @@ install(TARGETS
 )
 
 add_executable(openr
-  Main.cpp
-  common/Flags.cpp
+  openr/Main.cpp
+  openr/common/Flags.cpp
 )
 
 target_include_directories(openr
@@ -397,9 +384,9 @@ install(TARGETS
 )
 
 add_executable(platform_linux
-  platform/LinuxPlatformMain.cpp
-  platform/NetlinkFibHandler.cpp
-  platform/NetlinkSystemHandler.cpp
+  openr/platform/LinuxPlatformMain.cpp
+  openr/platform/NetlinkFibHandler.cpp
+  openr/platform/NetlinkSystemHandler.cpp
 )
 
 target_include_directories(platform_linux
@@ -436,129 +423,45 @@ install(TARGETS
   DESTINATION sbin
 )
 
-# intstall the openr startup script
+#
+# Install files
+#
+
+# scripts
 install(PROGRAMS
-  ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_openr.sh
+  ${CMAKE_CURRENT_SOURCE_DIR}/openr/scripts/run_openr.sh
   DESTINATION sbin
 )
 
-# install all the headers
-
-install(FILES
-  allocators/PrefixAllocator.h
-  allocators/RangeAllocator.h
-  allocators/RangeAllocator-inl.h
-  DESTINATION include/openr/allocators
+# headers
+install(
+  DIRECTORY ${CMAKE_SOURCE_DIR}/openr
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.h"
 )
 
-install(FILES
-  common/NetworkUtil.h
-  common/BuildInfo.h
-  common/Constants.h
-  common/ExponentialBackoff.h
-  common/Flags.h
-  common/OpenrEventLoop.h
-  common/StepDetector.h
-  common/Types.h
-  common/Util.h
-  DESTINATION include/openr/common
+# thrift files
+install(
+  DIRECTORY ${CMAKE_SOURCE_DIR}/openr
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.thrift"
 )
 
-install(FILES
-  config-store/PersistentStore.h
-  config-store/PersistentStoreClient.h
-  DESTINATION include/openr/config-store
+# generated thrift headers
+install(
+  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/openr
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.h"
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/openr
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.tcc"
 )
 
-install(FILES
-  ctrl-server/OpenrCtrlHandler.h
-  DESTINATION include/openr/ctrl-server
-)
-
-install(FILES
-  decision/Decision.h
-  decision/LinkState.h
-  DESTINATION include/openr/decision
-)
-
-install(FILES
-  decision-old/DecisionOld.h
-  DESTINATION include/openr/decision-old
-)
-
-install(FILES
-  dual/Dual.h
-  DESTINATION include/openr/dual
-)
-
-install(FILES
-  health-checker/HealthChecker.h
-  DESTINATION include/openr/health-checker
-)
-
-install(FILES
-  kvstore/KvStoreWrapper.h
-  kvstore/KvStoreClient-inl.h
-  kvstore/KvStoreClient.h
-  kvstore/KvStore.h
-  DESTINATION include/openr/kvstore
-)
-
-install(FILES
-  link-monitor/LinkMonitor.h
-  link-monitor/InterfaceEntry.h
-  DESTINATION include/openr/link-monitor
-)
-
-install(FILES
-  nl/NetlinkMessage.h
-  nl/NetlinkRoute.h
-  nl/NetlinkSocket.h
-  nl/NetlinkTypes.h
-  DESTINATION include/openr/nl
-)
-
-install(FILES
-  platform/NetlinkSystemHandler.h
-  platform/PlatformPublisher.h
-  platform/NetlinkFibHandler.h
-  DESTINATION include/openr/platform
-)
-
-install(FILES
-  plugin/Plugin.h
-  DESTINATION include/openr/plugin
-)
-
-install(FILES
-  prefix-manager/PrefixManager.h
-  prefix-manager/PrefixManagerClient.h
-  DESTINATION include/openr/prefix-manager
-)
-
-install(FILES
-  spark/IoProvider.h
-  spark/SparkWrapper.h
-  spark/Spark.h
-  DESTINATION include/openr/spark
-)
-
-install(FILES
-  watchdog/Watchdog.h
-  DESTINATION include/openr/watchdog
-)
-
-install(FILES
-  fib/Fib.h
-  DESTINATION include/openr/fib
-)
-
-# Install the generated thrift headers
-install(DIRECTORY ${THRIFT_DIR}/gen-cpp2 DESTINATION include/openr/if
-        FILES_MATCHING PATTERN "*.h")
-install(DIRECTORY ${THRIFT_DIR}/gen-cpp2 DESTINATION include/openr/if
-        FILES_MATCHING PATTERN "*.tcc")
-
+#
+# Tests
+#
 
 option(BUILD_TESTS "BUILD_TESTS" ON)
 option(ADD_ROOT_TESTS "ADD_ROOT_TESTS" ON)
@@ -573,7 +476,7 @@ if(BUILD_TESTS)
   find_library(GTEST_MAIN gtest_main)
 
   add_executable(netlink_socket_sample
-    nl/examples/NetlinkSocketSample.cpp
+    openr/nl/examples/NetlinkSocketSample.cpp
   )
 
   target_include_directories(netlink_socket_sample
@@ -598,10 +501,10 @@ if(BUILD_TESTS)
   )
 
   add_executable(openr_system_test
-    tests/OpenrSystemTest.cpp
-    tests/OpenrWrapper.cpp
-    spark/tests/MockIoProvider.cpp
-    tests/MockSystemHandler.cpp
+    openr/tests/OpenrSystemTest.cpp
+    openr/tests/OpenrWrapper.cpp
+    openr/spark/tests/MockIoProvider.cpp
+    openr/tests/MockSystemHandler.cpp
   )
 
   target_include_directories(openr_system_test
@@ -644,8 +547,8 @@ if(BUILD_TESTS)
   )
 
   add_executable(prefix_allocator_test
-    allocators/tests/PrefixAllocatorTest.cpp
-    allocators/tests/MockSystemServiceHandler.cpp
+    openr/allocators/tests/PrefixAllocatorTest.cpp
+    openr/allocators/tests/MockSystemServiceHandler.cpp
   )
 
   target_include_directories(prefix_allocator_test
@@ -654,7 +557,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(range_allocator_test
-    allocators/tests/RangeAllocatorTest.cpp
+    openr/allocators/tests/RangeAllocatorTest.cpp
   )
 
   target_link_libraries(prefix_allocator_test
@@ -687,10 +590,10 @@ if(BUILD_TESTS)
   )
 
   add_executable(exp_backoff_test
-    common/tests/ExponentialBackoffTest.cpp
+    openr/common/tests/ExponentialBackoffTest.cpp
   )
   add_executable(util_test
-    common/tests/UtilTest.cpp
+    openr/common/tests/UtilTest.cpp
   )
 
   target_link_libraries(exp_backoff_test
@@ -718,7 +621,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(config_store_test
-    config-store/tests/PersistentStoreTest.cpp
+    openr/config-store/tests/PersistentStoreTest.cpp
   )
 
   target_link_libraries(config_store_test
@@ -737,7 +640,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(decision_test
-    decision/tests/DecisionTest.cpp
+    openr/decision/tests/DecisionTest.cpp
   )
 
   target_link_libraries(decision_test
@@ -756,7 +659,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(dual_test
-    dual/tests/DualTest.cpp
+    openr/dual/tests/DualTest.cpp
   )
 
   target_link_libraries(dual_test
@@ -775,7 +678,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(link_state_test
-    decision/tests/LinkStateTest.cpp
+    openr/decision/tests/LinkStateTest.cpp
   )
 
   target_link_libraries(link_state_test
@@ -794,7 +697,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(health_checker_test
-    health-checker/tests/HealthCheckerTest.cpp
+    openr/health-checker/tests/HealthCheckerTest.cpp
   )
 
   target_link_libraries(health_checker_test
@@ -813,10 +716,10 @@ if(BUILD_TESTS)
   )
 
   add_executable(kvstore_test
-    kvstore/tests/KvStoreTest.cpp
+    openr/kvstore/tests/KvStoreTest.cpp
   )
   add_executable(kvstore_client_test
-    kvstore/tests/KvStoreClientTest.cpp
+    openr/kvstore/tests/KvStoreClientTest.cpp
   )
 
   target_link_libraries(kvstore_test
@@ -845,8 +748,8 @@ if(BUILD_TESTS)
 
 
   add_executable(link_monitor_test
-    link-monitor/tests/LinkMonitorTest.cpp
-    link-monitor/tests/MockNetlinkSystemHandler.cpp
+    openr/link-monitor/tests/LinkMonitorTest.cpp
+    openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
   )
 
   target_include_directories(link_monitor_test
@@ -870,8 +773,8 @@ if(BUILD_TESTS)
   )
 
   add_executable(fib_test
-    fib/tests/FibTest.cpp
-    fib/tests/MockNetlinkFibHandler.cpp
+    openr/fib/tests/FibTest.cpp
+    openr/fib/tests/MockNetlinkFibHandler.cpp
   )
 
   target_include_directories(fib_test
@@ -898,16 +801,16 @@ if(BUILD_TESTS)
   )
 
   add_executable(netlink_message_test
-    nl/tests/NetlinkMessageTest.cpp
+    openr/nl/tests/NetlinkMessageTest.cpp
   )
   add_executable(netlink_types_test
-    nl/tests/NetlinkTypesTest.cpp
+    openr/nl/tests/NetlinkTypesTest.cpp
   )
   add_executable(netlink_socket_test
-    nl/tests/NetlinkSocketTest.cpp
+    openr/nl/tests/NetlinkSocketTest.cpp
   )
   add_executable(netlink_socket_subscribe_test
-    nl/tests/NetlinkSocketSubscribeTest.cpp
+    openr/nl/tests/NetlinkSocketSubscribeTest.cpp
   )
 
   target_include_directories(netlink_types_test
@@ -972,7 +875,7 @@ if(BUILD_TESTS)
   )
 
   add_executable(prefix_manager_test
-    prefix-manager/tests/PrefixManagerTest.cpp
+    openr/prefix-manager/tests/PrefixManagerTest.cpp
   )
 
   target_link_libraries(prefix_manager_test
@@ -991,12 +894,12 @@ if(BUILD_TESTS)
   )
 
   add_executable(spark_test
-    spark/tests/SparkTest.cpp
-    spark/tests/MockIoProvider.cpp
+    openr/spark/tests/SparkTest.cpp
+    openr/spark/tests/MockIoProvider.cpp
   )
   add_executable(mock_io_provider_test
-    spark/tests/MockIoProviderTest.cpp
-    spark/tests/MockIoProvider.cpp
+    openr/spark/tests/MockIoProviderTest.cpp
+    openr/spark/tests/MockIoProvider.cpp
   )
 
   target_link_libraries(spark_test

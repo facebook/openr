@@ -9,8 +9,8 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import specs.fbthrift as fbthrift
 import debian_specs.fbzmq as fbzmq
+import specs.fbthrift as fbthrift
 import specs.folly as folly
 import specs.re2 as re2
 from shell_quoting import ShellQuoted, path_join
@@ -21,7 +21,7 @@ from shell_quoting import ShellQuoted, path_join
 
 def fbcode_builder_spec(builder):
     builder.add_option("thom311/libnl:git_hash", "libnl3_2_25")
-    builder.add_option("openr/openr/build:cmake_defines", {"ADD_ROOT_TESTS": "OFF"})
+    builder.add_option("openr/build:cmake_defines", {"ADD_ROOT_TESTS": "OFF"})
     maybe_curl_patch = []
     patch = path_join(
         builder.option("projects_dir"),
@@ -50,11 +50,11 @@ def fbcode_builder_spec(builder):
         "steps": [
             builder.github_project_workdir("thom311/libnl", "."),
             builder.step("Build and install thom311/libnl", libnl_build_commands),
-            builder.fb_github_project_workdir("openr/openr/build", "facebook"),
+            builder.fb_github_project_workdir("openr/build", "facebook"),
             builder.step(
-                "Build and install openr/openr/build",
+                "Build and install openr/build",
                 [
-                    builder.cmake_configure("openr/openr/build"),
+                    builder.cmake_configure("openr/build"),
                     # we need the pythonpath to find the thrift compiler
                     builder.run(
                         ShellQuoted(
