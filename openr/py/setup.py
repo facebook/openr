@@ -9,6 +9,7 @@
 
 
 import os
+from pathlib import Path
 from subprocess import check_call
 from sys import version_info
 
@@ -30,21 +31,24 @@ def generate_thrift_files():
     """
 
     current_dir = os.path.dirname(os.path.realpath(__file__))
-    thrift_dir = os.path.join(os.path.dirname(current_dir), "if")
-    thrift_files = [x for x in os.listdir(thrift_dir) if x.endswith(".thrift")]
+    root_dir = os.path.dirname(os.path.dirname(current_dir))
+    top_dirs = [os.path.join(root_dir, "openr/if"), os.path.join(root_dir, "common")]
 
-    for thrift_file in thrift_files:
-        print("> Generating python definition for {}".format(thrift_file))
-        check_call(
-            [
-                "thrift1",
-                "--gen",
-                "py",
-                "--out",
-                current_dir,
-                os.path.join(thrift_dir, thrift_file),
-            ]
-        )
+    for top_dir in top_dirs:
+        for thrift_file in Path(top_dir).rglob("*.thrift"):
+            print("> Generating python definition for {}".format(thrift_file))
+            check_call(
+                [
+                    "thrift1",
+                    "--gen",
+                    "py",
+                    "-I",
+                    root_dir,
+                    "--out",
+                    current_dir,
+                    str(thrift_file),
+                ]
+            )
 
 
 generate_thrift_files()
@@ -67,7 +71,7 @@ setup(
         "OpenR python tools and bindings. Includes python bindings for various "
         "OpenR modules, CLI tool for interacting with OpenR named as `breeze`."
     ),
-    packages=create_package_list("openr"),
+    packages=create_package_list("openr") + create_package_list("fb303"),
     entry_points={"console_scripts": ["breeze=openr.cli.breeze:main"]},
     license="MIT License",
     install_requires=INSTALL_REQUIRES,

@@ -9,7 +9,9 @@ namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Platform
 
+include "common/fb303/if/fb303.thrift"
 include "Network.thrift"
+
 /**
  * We provide simple API to publish link/address/neighbor updating events
  * through PUB-SUB mechanism to all of its subscriber modules in OpenR
@@ -131,18 +133,6 @@ service SystemService {
     throws (1: PlatformError error)
 }
 
-/**
- * Common status reporting mechanism across all services
- */
-enum ServiceStatus {
-  DEAD = 0,
-  STARTING = 1,
-  ALIVE = 2,
-  STOPPING = 3,
-  STOPPED = 4,
-  WARNING = 5,
-}
-
 // static mapping of clientId => protocolId, priority
 // For Open/R
 //    ClientId: 786 => ProtocolId: 99, Priority: 10
@@ -156,7 +146,7 @@ const map<i16, i16> clientIdtoPriority = {786:10, 0:20, 64:11}
 /**
  * Interface to on-box Fib.
  */
-service FibService {
+service FibService extends fb303.FacebookService {
 
   //
   // Unicast Routes API
@@ -217,19 +207,4 @@ service FibService {
   list<Network.MplsRoute> getMplsRouteTableByClient(
     1: i16 clientId
   ) throws (1: PlatformError error)
-
-  /**
-   * Returns the unix time that the service has been running since
-   */
-  i64 aliveSince() (priority = 'IMPORTANT')
-
-  /**
-   * Get the status of this service
-   */
-  ServiceStatus getStatus() (priority = 'IMPORTANT')
-
-  /**
-   * Get number of routes
-   */
-  map<string, i64> getCounters()
 }

@@ -35,7 +35,7 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
   explicit NetlinkFibHandler(
       fbzmq::ZmqEventLoop* zmqEventLoop,
       std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket);
-  ~NetlinkFibHandler() override {}
+  ~NetlinkFibHandler() override;
 
   folly::Future<folly::Unit> future_addUnicastRoute(
       int16_t clientId, std::unique_ptr<thrift::UnicastRoute> route) override;
@@ -57,7 +57,7 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   int64_t aliveSince() override;
 
-  thrift::ServiceStatus getStatus() override;
+  facebook::fb303::cpp2::fb_status getStatus() override;
 
   void getCounters(std::map<std::string, int64_t>& counters) override;
 

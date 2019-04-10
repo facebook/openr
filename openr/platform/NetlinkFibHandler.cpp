@@ -106,6 +106,8 @@ NetlinkFibHandler::NetlinkFibHandler(
   });
 }
 
+NetlinkFibHandler::~NetlinkFibHandler() {}
+
 template <class A>
 folly::Expected<int16_t, bool>
 NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
@@ -280,10 +282,10 @@ NetlinkFibHandler::aliveSince() {
   return startTime_;
 }
 
-openr::thrift::ServiceStatus
+facebook::fb303::cpp2::fb_status
 NetlinkFibHandler::getStatus() {
   VLOG(3) << "Received getStatus";
-  return openr::thrift::ServiceStatus::ALIVE;
+  return facebook::fb303::cpp2::fb_status::ALIVE;
 }
 
 folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>

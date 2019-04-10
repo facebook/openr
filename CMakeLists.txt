@@ -48,15 +48,31 @@ endif()
 find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
 
 # Include Thrift
+set(
+  THRIFT_GENERATE_THRIFT_INCLUDE_DIRECTORIES
+  ${CMAKE_SOURCE_DIR}
+  CACHE PATH "thrift include directory"
+)
 find_program(THRIFT1 thrift1)
 find_path(THRIFT_COMPILER_INCLUDE thrift/templates)
 set(THRIFT_TEMPLATES ${THRIFT_COMPILER_INCLUDE}/thrift/templates)
-include(${THRIFT_COMPILER_INCLUDE}/thrift/ThriftLibrary.cmake)
+include(${CMAKE_SOURCE_DIR}/ThriftLibrary.cmake)
 
 set(THRIFT_DIR ${CMAKE_BINARY_DIR}/thrift-out)
 include_directories(${THRIFT_DIR})
 
 file(MAKE_DIRECTORY ${THRIFT_DIR}/openr/if)
+file(MAKE_DIRECTORY ${THRIFT_DIR}/common/fb303/if)
+
+thrift_object(
+  "fb303" #file_name
+  "FacebookService" #services
+  "cpp2" #language
+  "optionals" #options
+  "${CMAKE_SOURCE_DIR}/common/fb303/if" #file_path
+  "${THRIFT_DIR}/common/fb303/if" #output_path
+  "common/fb303/if" #include_prefix
+)
 
 thrift_object(
   "PersistentStore" #file_name
@@ -187,6 +203,7 @@ thrift_object(
 
 add_dependencies(
   Platform-cpp2-obj
+  fb303-cpp2-obj
   Network-cpp2-obj
 )
 
@@ -287,6 +304,7 @@ add_library(openrlib
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
   openr/watchdog/Watchdog.cpp
+  $<TARGET_OBJECTS:fb303-cpp2-obj>
   $<TARGET_OBJECTS:AllocPrefix-cpp2-obj>
   $<TARGET_OBJECTS:Decision-cpp2-obj>
   $<TARGET_OBJECTS:Fib-cpp2-obj>
@@ -439,10 +457,20 @@ install(
   DESTINATION include
   FILES_MATCHING PATTERN "*.h"
 )
+install(
+  DIRECTORY ${CMAKE_SOURCE_DIR}/common
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.h"
+)
 
 # thrift files
 install(
   DIRECTORY ${CMAKE_SOURCE_DIR}/openr
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.thrift"
+)
+install(
+  DIRECTORY ${CMAKE_SOURCE_DIR}/common
   DESTINATION include
   FILES_MATCHING PATTERN "*.thrift"
 )
@@ -455,6 +483,16 @@ install(
 )
 install(
   DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/openr
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.tcc"
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/common
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.h"
+)
+install(
+  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/common
   DESTINATION include
   FILES_MATCHING PATTERN "*.tcc"
 )
