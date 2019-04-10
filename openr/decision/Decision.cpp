@@ -169,7 +169,7 @@ class SpfSolver::SpfSolverImpl {
   unordered_map<
       string /* otherNodeName */,
       pair<Metric, unordered_set<string /* nextHopNodeName */>>>
-  runSpf(const std::string& nodeName);
+  runSpf(const std::string& nodeName, bool useLinkMetric);
 
   std::vector<std::shared_ptr<Link>> getOrderedLinkSet(
       const thrift::AdjacencyDatabase& adjDb);
@@ -516,7 +516,8 @@ SpfSolver::SpfSolverImpl::getPrefixDatabases() {
 unordered_map<
     string /* otherNodeName */,
     pair<Metric, unordered_set<string /* nextHopNodeName */>>>
-SpfSolver::SpfSolverImpl::runSpf(const std::string& thisNodeName) {
+SpfSolver::SpfSolverImpl::runSpf(
+    const std::string& thisNodeName, bool useLinkMetric) {
   unordered_map<string, pair<Metric, unordered_set<string>>> result;
 
   tData_.addStatValue("decision.spf_runs", 1, fbzmq::COUNT);
@@ -550,13 +551,14 @@ SpfSolver::SpfSolverImpl::runSpf(const std::string& thisNodeName) {
     // nextHops for any node that is connected to recordedNodeName that doesn't
     // already have a lower cost path from thisNodeName
     //
-    // this is the "relax" step in the Dijkstra Algorithim pseudocode in CLRS
+    // this is the "relax" step in the Dijkstra Algorithm pseudocode in CLRS
     for (const auto& link : linkState_.linksFromNode(recordedNodeName)) {
       auto otherNodeName = link->getOtherNodeName(recordedNodeName);
       if (link->isOverloaded() || result.count(otherNodeName)) {
         continue;
       }
-      auto metric = link->getMetricFromNode(recordedNodeName);
+      auto metric =
+          useLinkMetric ? link->getMetricFromNode(recordedNodeName) : 1;
       auto otherNode = q.get(otherNodeName);
       if (!otherNode) {
         q.insertNode(otherNodeName, recordedNodeMetric + metric);
@@ -599,7 +601,7 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
   tData_.addStatValue("decision.path_build_runs", 1, fbzmq::COUNT);
 
   spfResults_.clear();
-  spfResults_[myNodeName] = runSpf(myNodeName);
+  spfResults_[myNodeName] = runSpf(myNodeName, true);
   if (computeLfaPaths_) {
     // avoid duplicate iterations over a neighbor which can happen due to
     // multiple adjacencies to it
@@ -611,7 +613,7 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
           link->isOverloaded()) {
         continue;
       }
-      spfResults_[otherNodeName] = runSpf(otherNodeName);
+      spfResults_[otherNodeName] = runSpf(otherNodeName, true);
     }
   }
 
