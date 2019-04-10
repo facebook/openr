@@ -99,6 +99,13 @@ TEST(LinkStateTest, BasicOperation) {
       state.linksFromNode("node3"), testing::UnorderedElementsAre(l2, l3));
   EXPECT_THAT(state.linksFromNode("node4"), testing::IsEmpty());
 
+  EXPECT_FALSE(state.isNodeOverloaded("node1"));
+  EXPECT_FALSE(state.updateNodeOverloaded("node1", true));
+  EXPECT_TRUE(state.isNodeOverloaded("node1"));
+  EXPECT_FALSE(state.updateNodeOverloaded("node1", true));
+  EXPECT_TRUE(state.updateNodeOverloaded("node1", false));
+  EXPECT_FALSE(state.isNodeOverloaded("node1"));
+
   state.removeLink(l1);
   EXPECT_THAT(state.linksFromNode("node1"), testing::UnorderedElementsAre(l3));
   EXPECT_THAT(state.linksFromNode("node2"), testing::UnorderedElementsAre(l2));

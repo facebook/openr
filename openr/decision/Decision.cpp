@@ -275,7 +275,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
   std::unordered_set<Link> linksDown;
 
   bool topoChanged =
-      newAdjacencyDb.isOverloaded != priorAdjacencyDb.isOverloaded;
+      linkState_.updateNodeOverloaded(nodeName, newAdjacencyDb.isOverloaded);
 
   bool routeAttrChanged = false;
 
@@ -538,7 +538,7 @@ SpfSolver::SpfSolverImpl::runSpf(const std::string& thisNodeName) {
     auto& recordedNodeMetric = emplaceRc.first->second.first;
     auto& recordedNodeNextHops = emplaceRc.first->second.second;
 
-    if (adjacencyDatabases_.at(recordedNodeName).isOverloaded &&
+    if (linkState_.isNodeOverloaded(recordedNodeName) &&
         recordedNodeName != thisNodeName) {
       // no transit traffic through this node. we've recorded the nexthops to
       // this node, but will not consider any of it's adjancecies as offering

@@ -297,4 +297,20 @@ LinkState::orderedLinksFromNode(const std::string& nodeName) {
   return links;
 }
 
+bool
+LinkState::updateNodeOverloaded(
+    const std::string& nodeName, bool isOverloaded) {
+  // don't indicate LinkState changed if this is a new node, only if it causes
+  // some new links to come up
+  bool changed = nodeOverloads_.count(nodeName) &&
+      (isOverloaded != nodeOverloads_.at(nodeName));
+  nodeOverloads_[nodeName] = isOverloaded;
+  return changed;
+}
+
+bool
+LinkState::isNodeOverloaded(const std::string& nodeName) const {
+  return nodeOverloads_.count(nodeName) && nodeOverloads_.at(nodeName);
+}
+
 } // namespace openr

@@ -136,9 +136,15 @@ class LinkState {
   std::vector<std::shared_ptr<Link>> orderedLinksFromNode(
       const std::string& nodeName);
 
+  bool updateNodeOverloaded(const std::string& nodeName, bool isOverloaded);
+
+  bool isNodeOverloaded(const std::string& nodeName) const;
+
  private:
   // this stores the same link object accessible from either nodeName
   std::unordered_map<std::string /* nodeName */, LinkSet> linkMap_;
+
+  std::unordered_map<std::string /* nodeName */, bool> nodeOverloads_;
 
 }; // class LinkState
 } // namespace openr
