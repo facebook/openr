@@ -298,6 +298,12 @@ with the new one. Use it with care!
 OVERRIDE_LOOPBACK_ADDR=false
 ```
 
+#### PREFIX_FWD_TYPE_MPLS
+
+Prefix type can be IP or SR_MPLS. Based on the type either IP next hop or MPLS
+label next hop is used for routing to the prefix. The type applies to both
+prefix address and redistributed interface address.
+
 #### SPARK_HOLD_TIME_S
 
 Hold time indicating time in seconds from it's last hello after which neighbor

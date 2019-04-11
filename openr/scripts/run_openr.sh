@@ -88,6 +88,7 @@ MIN_LOG_LEVEL=0
 OVERRIDE_LOOPBACK_ADDR=false
 PREFIX_MANAGER_CMD_PORT=60011
 PREFIXES=""
+PREFIX_FWD_TYPE_MPLS=0
 REDISTRIBUTE_IFACES="lo1"
 SEED_PREFIX=""
 SET_LEAF_NODE=false
@@ -203,6 +204,7 @@ exec ${OPENR} \
   --override_loopback_addr=${OVERRIDE_LOOPBACK_ADDR} \
   --prefix_manager_cmd_port=${PREFIX_MANAGER_CMD_PORT} \
   --prefixes="${PREFIXES}" \
+  --prefix_fwd_type_mpls="${PREFIX_FWD_TYPE_MPLS}" \
   --redistribute_ifaces=${REDISTRIBUTE_IFACES} \
   --seed_prefix=${SEED_PREFIX} \
   --set_leaf_node=${SET_LEAF_NODE} \

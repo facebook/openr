@@ -84,6 +84,7 @@ LinkMonitor::LinkMonitor(
     bool enablePerfMeasurement,
     bool enableV4,
     bool enableSegmentRouting,
+    bool forwardingTypeMpls,
     AdjacencyDbMarker adjacencyDbMarker,
     SparkCmdUrl sparkCmdUrl,
     SparkReportUrl sparkReportUrl,
@@ -115,6 +116,7 @@ LinkMonitor::LinkMonitor(
       enablePerfMeasurement_(enablePerfMeasurement),
       enableV4_(enableV4),
       enableSegmentRouting_(enableSegmentRouting),
+      forwardingTypeMpls_(forwardingTypeMpls),
       adjacencyDbMarker_(adjacencyDbMarker),
       sparkCmdUrl_(sparkCmdUrl),
       sparkReportUrl_(sparkReportUrl),
@@ -858,7 +860,9 @@ LinkMonitor::advertiseRedistAddrs() {
     prefixEntry.prefix = prefix;
     prefixEntry.type = thrift::PrefixType::LOOPBACK;
     prefixEntry.data = "";
-    prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
+    prefixEntry.forwardingType = forwardingTypeMpls_
+        ? thrift::PrefixForwardingType::SR_MPLS
+        : thrift::PrefixForwardingType::IP;
     prefixEntry.ephemeral = folly::none;
     prefixes.push_back(prefixEntry);
   }
@@ -876,6 +880,9 @@ LinkMonitor::advertiseRedistAddrs() {
     }
     // Add all prefixes of this interface
     for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
+      prefix.forwardingType = forwardingTypeMpls_
+          ? thrift::PrefixForwardingType::SR_MPLS
+          : thrift::PrefixForwardingType::IP;
       prefixes.emplace_back(std::move(prefix));
     }
   }

@@ -502,6 +502,7 @@ main(int argc, char** argv) {
             FLAGS_set_loopback_address,
             FLAGS_override_loopback_addr,
             FLAGS_loopback_iface,
+            FLAGS_prefix_fwd_type_mpls,
             Constants::kPrefixAllocatorSyncInterval,
             kConfigStoreUrl,
             context,
@@ -647,6 +648,7 @@ main(int argc, char** argv) {
           FLAGS_enable_perf_measurement,
           FLAGS_enable_v4,
           FLAGS_enable_segment_routing,
+          FLAGS_prefix_fwd_type_mpls,
           AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
           SparkCmdUrl{
               FLAGS_enable_spark

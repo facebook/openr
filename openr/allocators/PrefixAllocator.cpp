@@ -49,6 +49,7 @@ PrefixAllocator::PrefixAllocator(
     bool setLoopbackAddress,
     bool overrideGlobalAddress,
     const std::string& loopbackIfaceName,
+    bool forwardingTypeMpls,
     std::chrono::milliseconds syncInterval,
     PersistentStoreUrl const& configStoreUrl,
     fbzmq::Context& zmqContext,
@@ -60,6 +61,7 @@ PrefixAllocator::PrefixAllocator(
       setLoopbackAddress_(setLoopbackAddress),
       overrideGlobalAddress_(overrideGlobalAddress),
       loopbackIfaceName_(loopbackIfaceName),
+      forwardingTypeMpls_(forwardingTypeMpls),
       syncInterval_(syncInterval),
       configStoreClient_(configStoreUrl, zmqContext),
       zmqMonitorClient_(zmqContext, monitorSubmitUrl),
@@ -637,7 +639,9 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixEntry.prefix = toIpPrefix(prefix);
   prefixEntry.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
   prefixEntry.data = {};
-  prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
+  prefixEntry.forwardingType = forwardingTypeMpls_
+      ? thrift::PrefixForwardingType::SR_MPLS
+      : thrift::PrefixForwardingType::IP;
   prefixEntry.ephemeral = folly::none;
   auto ret = prefixManagerClient_->syncPrefixesByType(
       openr::thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry});

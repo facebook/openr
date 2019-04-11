@@ -74,6 +74,8 @@ class PrefixAllocator : public OpenrEventLoop, public boost::static_visitor<> {
       bool overrideGlobalAddress,
       // loopback interface name
       const std::string& loopbackIfaceName,
+      // prefix fowrading type MPLS
+      bool forwardingTypeMpls,
       // period to check prefix collision
       std::chrono::milliseconds syncInterval,
       PersistentStoreUrl const& configStoreUrl,
@@ -194,6 +196,7 @@ class PrefixAllocator : public OpenrEventLoop, public boost::static_visitor<> {
   const bool setLoopbackAddress_{false};
   const bool overrideGlobalAddress_{false};
   const std::string loopbackIfaceName_;
+  const bool forwardingTypeMpls_{false};
 
   // Sync interval for range allocator
   const std::chrono::milliseconds syncInterval_;

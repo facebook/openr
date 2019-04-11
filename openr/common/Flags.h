@@ -131,3 +131,4 @@ DECLARE_bool(is_flood_root);
 DECLARE_bool(use_flood_optimization);
 
 DECLARE_bool(use_netlink_message);
+DECLARE_bool(prefix_fwd_type_mpls);
