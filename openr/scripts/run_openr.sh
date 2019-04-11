@@ -99,6 +99,7 @@ STATIC_PREFIX_ALLOC=false
 TLS_ACCEPTABLE_PEERS=""
 TLS_ECC_CURVE_NAME="prime256v1"
 TLS_TICKET_SEED_PATH=""
+USE_NETLINK_MESSAGE=true
 VERBOSITY=1
 X509_CA_PATH=""
 X509_CERT_PATH=""
@@ -214,6 +215,7 @@ exec ${OPENR} \
   --tls_acceptable_peers=${TLS_ACCEPTABLE_PEERS} \
   --tls_ecc_curve_name=${TLS_ECC_CURVE_NAME} \
   --tls_ticket_seed_path=${TLS_TICKET_SEED_PATH} \
+  --use_netlink_message=${USE_NETLINK_MESSAGE} \
   --x509_ca_path=${X509_CA_PATH} \
   --x509_cert_path=${X509_CERT_PATH} \
   --x509_key_path=${X509_KEY_PATH} \

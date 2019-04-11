@@ -24,8 +24,10 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/nl/NetlinkMessage.h>
 #include <openr/nl/NetlinkRoute.h>
+#include <openr/nl/NetlinkTypes.h>
 
 extern "C" {
 #include <net/if.h>
@@ -65,10 +67,10 @@ folly::IPAddress ipAddrY4V6{"fe80::204"};
 folly::IPAddress ipAddrX1V4{"172.10.10.10"};
 folly::IPAddress ipAddrY1V4{"172.10.11.10"};
 
-std::vector<uint32_t> outLabel1{500};
-std::vector<uint32_t> outLabel2{500, 501};
-std::vector<uint32_t> outLabel3{502, 503, 504};
-std::vector<uint32_t> outLabel4{505, 506, 507, 508};
+std::vector<int32_t> outLabel1{500};
+std::vector<int32_t> outLabel2{500, 501};
+std::vector<int32_t> outLabel3{502, 503, 504};
+std::vector<int32_t> outLabel4{505, 506, 507, 508};
 uint32_t swapLabel{500};
 
 uint32_t inLabel1{110};
@@ -217,9 +219,9 @@ class NlMessageFixture : public ::testing::Test {
  protected:
   openr::fbnl::NextHop
   buildNextHop(
-      folly::Optional<std::vector<uint32_t>> pushLabels,
+      folly::Optional<std::vector<int32_t>> pushLabels,
       folly::Optional<uint32_t> swapLabel,
-      folly::Optional<int> action,
+      folly::Optional<thrift::MplsActionCode> action,
       folly::Optional<folly::IPAddress> gateway,
       int ifIndex) {
     openr::fbnl::NextHopBuilder nhBuilder;
@@ -307,8 +309,12 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
   fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(
-      buildNextHop(outLabel1, folly::none, PUSH, ipAddrY1V6, ifIndexZ));
+  paths.push_back(buildNextHop(
+      outLabel1,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V6,
+      ifIndexZ));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
   evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
@@ -352,8 +358,12 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(
-      buildNextHop(folly::none, folly::none, POP_PHP, ipAddrY1V6, ifIndexZ));
+  paths.push_back(buildNextHop(
+      folly::none,
+      folly::none,
+      thrift::MplsActionCode::PHP,
+      ipAddrY1V6,
+      ifIndexZ));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
 
   evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
@@ -366,12 +376,43 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
     EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
   });
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(110), [&]() noexcept {
+  // test replace MPLS route, adding same route and nexthop
+  evlTest.scheduleTimeout(std::chrono::milliseconds(200), [&]() noexcept {
+    ackCount = nlSock->getAckCount();
+    nlSock->addLabelRoute(route);
+  });
+
+  evlTest.scheduleTimeout(std::chrono::milliseconds(300), [&]() noexcept {
+    EXPECT_EQ(0, nlSock->getErrorCount());
+    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  });
+
+  paths.push_back(buildNextHop(
+      folly::none,
+      folly::none,
+      thrift::MplsActionCode::PHP,
+      ipAddrY2V6,
+      ifIndexZ));
+
+  auto route2 = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
+
+  // test replace MPLS route, adding same label with different next hop
+  evlTest.scheduleTimeout(std::chrono::milliseconds(350), [&]() noexcept {
+    ackCount = nlSock->getAckCount();
+    nlSock->addLabelRoute(route2);
+  });
+
+  evlTest.scheduleTimeout(std::chrono::milliseconds(450), [&]() noexcept {
+    EXPECT_EQ(0, nlSock->getErrorCount());
+    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  });
+
+  evlTest.scheduleTimeout(std::chrono::milliseconds(500), [&]() noexcept {
     ackCount = nlSock->getAckCount();
     nlSock->deleteLabelRoute(route);
   });
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(210), [&]() noexcept {
+  evlTest.scheduleTimeout(std::chrono::milliseconds(600), [&]() noexcept {
     EXPECT_EQ(0, nlSock->getErrorCount());
     EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
     evlTest.stop();
@@ -394,8 +435,12 @@ TEST_F(NlMessageFixture, PopLabel) {
   fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(
-      buildNextHop(folly::none, folly::none, POP, folly::none, ifIndexLo));
+  paths.push_back(buildNextHop(
+      folly::none,
+      folly::none,
+      thrift::MplsActionCode::POP_AND_LOOKUP,
+      folly::none,
+      ifIndexLo));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
 
   evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
@@ -440,8 +485,12 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
   fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(
-      buildNextHop(folly::none, swapLabel, SWAP, ipAddrY1V6, ifIndexZ));
+  paths.push_back(buildNextHop(
+      folly::none,
+      swapLabel,
+      thrift::MplsActionCode::SWAP,
+      ipAddrY1V6,
+      ifIndexZ));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
 
   evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
@@ -486,8 +535,12 @@ TEST_F(NlMessageFixture, NlErrorMessage) {
   fbzmq::ZmqEventLoop evlTest;
   std::vector<openr::fbnl::NextHop> paths;
   uint32_t invalidIfindex = 1000;
-  paths.push_back(
-      buildNextHop(folly::none, swapLabel, SWAP, ipAddrY1V6, invalidIfindex));
+  paths.push_back(buildNextHop(
+      folly::none,
+      swapLabel,
+      thrift::MplsActionCode::SWAP,
+      ipAddrY1V6,
+      invalidIfindex));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
 
   evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
@@ -521,15 +574,23 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   std::vector<openr::fbnl::NextHop> paths1;
   std::vector<openr::fbnl::Route> routes;
   uint32_t ackCount{0};
-  paths1.push_back(
-      buildNextHop(folly::none, swapLabel, SWAP, ipAddrY1V6, ifIndexZ));
+  paths1.push_back(buildNextHop(
+      folly::none,
+      swapLabel,
+      thrift::MplsActionCode::SWAP,
+      ipAddrY1V6,
+      ifIndexZ));
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths1));
 
   std::vector<openr::fbnl::NextHop> paths2;
   // Invalid route, send PUSH without labels
-  paths2.push_back(
-      buildNextHop(folly::none, folly::none, PUSH, ipAddrY1V6, ifIndexZ));
+  paths2.push_back(buildNextHop(
+      folly::none,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V6,
+      ifIndexZ));
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix2, folly::none, paths2));
 
@@ -554,6 +615,10 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   });
 
   evlTest.scheduleTimeout(std::chrono::milliseconds(250), [&]() noexcept {
+    // delete needs only the destination prefix or label, doesn't
+    // matter if the nexthop is valid or not. In this case delete will
+    // be called for both routes but only one route is installed. Kernel
+    // will return an error
     EXPECT_EQ(1, nlSock->getErrorCount());
     // deleting 2 routes but should have received only 1 ack
     EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
@@ -585,14 +650,26 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
 
   std::vector<openr::fbnl::NextHop> paths;
   // create mix of next hops, including without label
-  paths.push_back(
-      buildNextHop(outLabel1, folly::none, PUSH, ipAddrY1V6, ifIndexZ));
-  paths.push_back(
-      buildNextHop(outLabel2, folly::none, PUSH, ipAddrY1V6, ifIndexZ));
+  paths.push_back(buildNextHop(
+      outLabel1,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V6,
+      ifIndexZ));
+  paths.push_back(buildNextHop(
+      outLabel2,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V6,
+      ifIndexZ));
   paths.push_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
-  paths.push_back(
-      buildNextHop(outLabel4, folly::none, PUSH, ipAddrY1V6, ifIndexZ));
+  paths.push_back(buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V6,
+      ifIndexZ));
   std::vector<openr::fbnl::Route> routes;
 
   struct v6Addr addr6 {
@@ -644,8 +721,12 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
   fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(
-      buildNextHop(folly::none, folly::none, POP_PHP, ipAddrY1V4, ifIndexY));
+  paths.push_back(buildNextHop(
+      folly::none,
+      folly::none,
+      thrift::MplsActionCode::PHP,
+      ipAddrY1V4,
+      ifIndexY));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel5, paths);
 
   evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
@@ -690,8 +771,12 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(
-      buildNextHop(outLabel4, folly::none, PUSH, ipAddrY1V4, ifIndexY));
+  paths.push_back(buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V4,
+      ifIndexY));
   paths.push_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
@@ -739,8 +824,12 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   uint32_t count{20000};
   std::vector<openr::fbnl::NextHop> paths;
   // create label next hop
-  paths.push_back(
-      buildNextHop(outLabel1, folly::none, SWAP, ipAddrY1V6, ifIndexZ));
+  paths.push_back(buildNextHop(
+      outLabel1,
+      folly::none,
+      thrift::MplsActionCode::SWAP,
+      ipAddrY1V6,
+      ifIndexZ));
   std::vector<openr::fbnl::Route> labelRoutes;
   for (uint32_t i = 0; i < count; i++) {
     labelRoutes.push_back(

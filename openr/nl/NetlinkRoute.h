@@ -34,8 +34,6 @@ constexpr uint32_t kLabelShift{12};
 constexpr uint32_t kLabelMask{0xFFFFF000};
 constexpr uint32_t kLabelSizeBits{20};
 
-enum LabelAction { NOP = 0, PUSH, SWAP, POP_PHP, POP };
-
 class NetlinkRouteMessage final : public NetlinkMessage {
  public:
   NetlinkRouteMessage();

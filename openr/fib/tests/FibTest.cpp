@@ -144,6 +144,7 @@ class FibTestFixture : public ::testing::Test {
         port, /* thrift port */
         false, /* dryrun */
         true, /* periodic syncFib */
+        false, /* segment route */
         std::chrono::seconds(2),
         DecisionPubUrl{"inproc://decision-pub"},
         std::string{"inproc://fib-cmd"},

@@ -53,6 +53,7 @@ class Fib final : public OpenrEventLoop {
       int32_t thriftPort,
       bool dryrun,
       bool enableFibSync,
+      bool enableSegmentRouting,
       std::chrono::seconds coldStartDuration,
       const DecisionPubUrl& decisionPubUrl,
       const folly::Optional<std::string>& fibRepUrl,
@@ -160,6 +161,9 @@ class Fib final : public OpenrEventLoop {
 
   // Enable periodic syncFib to FibAgent
   bool enableFibSync_{false};
+
+  // Enable segment routing
+  const bool enableSegmentRouting_{false};
 
   // amount of time to wait before send routes to agent either when this module
   // starts or the agent we are talking with restarts

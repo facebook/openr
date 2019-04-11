@@ -173,11 +173,15 @@ NetlinkRouteMessage::addPopNexthop(
     const openr::fbnl::NextHop& path) const {
   // for each next hop add the ENCAP
   rtnh->rtnh_len = sizeof(*rtnh);
+  if (!path.getIfIndex().hasValue()) {
+    LOG(ERROR) << "Loopback interface index not provided for POP";
+    return ResultCode::NO_LOOPBACK_INDEX;
+  }
   rtnh->rtnh_ifindex = path.getIfIndex().value();
   rtnh->rtnh_flags = 0;
   rtnh->rtnh_hops = 0;
 
-  int oif = path.getIfIndex().value();
+  int oif = rtnh->rtnh_ifindex;
   if (addSubAttributes(
           rta, RTA_OIF, reinterpret_cast<const char*>(&oif), sizeof(oif)) ==
       nullptr) {
@@ -302,21 +306,21 @@ NetlinkRouteMessage::addMultiPathNexthop(
 
     if (action.hasValue()) {
       switch (action.value()) {
-      case openr::Netlink::PUSH:
+      case thrift::MplsActionCode::PUSH:
         result = addLabelNexthop(rta, rtnh, path);
         break;
 
-      case openr::Netlink::SWAP:
-      case openr::Netlink::POP_PHP:
+      case thrift::MplsActionCode::SWAP:
+      case thrift::MplsActionCode::PHP:
         result = addSwapOrPHPNexthop(rta, rtnh, path);
         break;
 
-      case openr::Netlink::POP:
+      case thrift::MplsActionCode::POP_AND_LOOKUP:
         result = addPopNexthop(rta, rtnh, path);
         break;
 
       default:
-        LOG(ERROR) << "Unknown action " << action.value();
+        LOG(ERROR) << "Unknown action ";
         return ResultCode::UNKNOWN_LABEL_ACTION;
       }
     } else {

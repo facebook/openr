@@ -176,6 +176,11 @@ class NetlinkSocket {
   virtual folly::Future<folly::Unit> addRoute(Route route);
 
   /**
+   * Add MPLS label route, nexthop semantics is same as route nexthop
+   */
+  virtual folly::Future<folly::Unit> addMplsRoute(Route route);
+
+  /**
    * Delete unicast/multicast routes from route table
    * This will delete route according to destination, nexthops. You must set
    * exactly the same destination and nexthops as in route table.
@@ -184,6 +189,11 @@ class NetlinkSocket {
    * @throws fbnl::NlException
    */
   virtual folly::Future<folly::Unit> delRoute(Route route);
+
+  /**
+   * delete MPLS route. Only label is needed to delete the label route
+   */
+  virtual folly::Future<folly::Unit> delMplsRoute(Route route);
 
   /**
    * Sync route table in kernel with given route table
@@ -195,6 +205,13 @@ class NetlinkSocket {
    */
   virtual folly::Future<folly::Unit> syncUnicastRoutes(
       uint8_t protocolId, NlUnicastRoutes newRouteDb);
+
+  /**
+   * Sync MPLS label routes. Delete label routes not in 'MplsRouteDb' and
+   * add the routes not present in kernel
+   */
+  virtual folly::Future<folly::Unit> syncMplsRoutes(
+      uint8_t protocolId, NlMplsRoutes newMplsRouteDb);
 
   /**
    * Delete routes that not in the 'newRouteDb' but in kernel
@@ -209,6 +226,13 @@ class NetlinkSocket {
    * @throws fbnl::NlException
    */
   virtual folly::Future<NlUnicastRoutes> getCachedUnicastRoutes(
+      uint8_t protocolId) const;
+
+  /**
+   * Get cached MPLS routes by protocol ID
+   * @throws fbnl::NlException
+   */
+  virtual folly::Future<NlMplsRoutes> getCachedMplsRoutes(
       uint8_t protocolId) const;
 
   /**
@@ -230,6 +254,12 @@ class NetlinkSocket {
    * @throws fbnl::NlException
    */
   virtual folly::Future<int64_t> getRouteCount() const;
+
+  /**
+   * Get number of all cached MPLS routes
+   * @throws fbnl::NlException
+   */
+  virtual folly::Future<int64_t> getMplsRouteCount() const;
 
   /**
    * Add Interface address e.g. ip addr add 192.168.1.1/24 dev em1
@@ -277,6 +307,11 @@ class NetlinkSocket {
    * @throws fbnl::NlException
    */
   virtual folly::Future<int> getIfIndex(const std::string& ifName);
+
+  /**
+   * get loopback interface index
+   */
+  virtual folly::Future<folly::Optional<int>> getLoopbackIfindex();
 
   /**
    * Get interface name form index
@@ -357,6 +392,10 @@ class NetlinkSocket {
 
   void doDeleteUnicastRoute(Route route);
 
+  void doAddUpdateMplsRoute(Route route);
+
+  void doDeleteMplsRoute(Route route);
+
   void doAddMulticastRoute(Route route);
 
   void doDeleteMulticastRoute(Route route);
@@ -431,6 +470,11 @@ class NetlinkSocket {
    */
   NlUnicastRoutesDb unicastRoutesCache_;
 
+  /**
+   * MPLS label route cache
+   */
+  NlMplsRoutesDb mplsRoutesCache_;
+
   // Check against redundant multicast routes
   NlMulticastRoutesDb mcastRoutesCache_;
 
@@ -439,6 +483,8 @@ class NetlinkSocket {
   EventsHandler* handler_{nullptr};
 
   bool useNetlinkMessage_{false};
+
+  folly::Optional<int> loopbackIfIndex_;
 
   /**
    * We keep an internal cache of Neighbor and Link entries

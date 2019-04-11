@@ -185,7 +185,6 @@ service FibService extends fb303.FacebookService {
   //
   // MPLS routes API
   //
-
   void addMplsRoutes(
     1: i16 clientId,
     2: list<Network.MplsRoute> routes,

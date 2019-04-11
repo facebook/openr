@@ -735,7 +735,7 @@ NextHopBuilder::setWeight(uint8_t weight) {
 }
 
 NextHopBuilder&
-NextHopBuilder::setLabelAction(int action) {
+NextHopBuilder::setLabelAction(thrift::MplsActionCode action) {
   labelAction_ = action;
   return *this;
 }
@@ -747,7 +747,7 @@ NextHopBuilder::setSwapLabel(uint32_t swapLabel) {
 }
 
 NextHopBuilder&
-NextHopBuilder::setPushLabels(const std::vector<uint32_t>& pushLabels) {
+NextHopBuilder::setPushLabels(const std::vector<int32_t>& pushLabels) {
   pushLabels_ = pushLabels;
   return *this;
 }
@@ -767,7 +767,7 @@ NextHopBuilder::getWeight() const {
   return weight_;
 }
 
-folly::Optional<int>
+folly::Optional<thrift::MplsActionCode>
 NextHopBuilder::getLabelAction() const {
   return labelAction_;
 }
@@ -777,7 +777,7 @@ NextHopBuilder::getSwapLabel() const {
   return swapLabel_;
 }
 
-folly::Optional<std::vector<uint32_t>>
+folly::Optional<std::vector<int32_t>>
 NextHopBuilder::getPushLabels() const {
   return pushLabels_;
 }
@@ -840,7 +840,7 @@ NextHop::getWeight() const {
   return weight_;
 }
 
-folly::Optional<int>
+folly::Optional<thrift::MplsActionCode>
 NextHop::getLabelAction() const {
   return labelAction_;
 }
@@ -850,7 +850,7 @@ NextHop::getSwapLabel() const {
   return swapLabel_;
 }
 
-folly::Optional<std::vector<uint32_t>>
+folly::Optional<std::vector<int32_t>>
 NextHop::getPushLabels() const {
   return pushLabels_;
 }
@@ -872,7 +872,9 @@ NextHop::str() const {
       (ifIndex_ ? std::to_string(*ifIndex_) : "n/a"),
       (weight_ ? std::to_string(*weight_) : "n/a"));
   if (labelAction_.hasValue()) {
-    result += folly::sformat(" Label action {}", labelAction_.value());
+    result += folly::sformat(
+        " Label action {}",
+        apache::thrift::util::enumNameSafe(labelAction_.value()));
   }
   if (swapLabel_.hasValue()) {
     result += folly::sformat(" Swap label {}", swapLabel_.value());
@@ -1702,6 +1704,11 @@ Link::getRtnlLinkRef() {
 bool
 Link::isUp() const {
   return !!(flags_ & IFF_RUNNING);
+}
+
+bool
+Link::isLoopback() const {
+  return !!(flags_ & IFF_LOOPBACK);
 }
 
 std::string

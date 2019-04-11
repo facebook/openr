@@ -244,6 +244,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       static_cast<int32_t>(60100), // fib agent port
       true, // dry run mode
       false, // periodic sync
+      false, // segment routing
       fibColdStartDuration,
       DecisionPubUrl{decisionPubUrl_},
       std::string{fibCmdUrl_},

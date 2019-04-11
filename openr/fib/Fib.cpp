@@ -26,6 +26,7 @@ Fib::Fib(
     int32_t thriftPort,
     bool dryrun,
     bool enableFibSync,
+    bool enableSegmentRouting,
     std::chrono::seconds coldStartDuration,
     const DecisionPubUrl& decisionPubUrl,
     const folly::Optional<std::string>& fibRepUrl,
@@ -38,6 +39,7 @@ Fib::Fib(
       thriftPort_(thriftPort),
       dryrun_(dryrun),
       enableFibSync_(enableFibSync),
+      enableSegmentRouting_(enableSegmentRouting),
       coldStartDuration_(coldStartDuration),
       decisionSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
@@ -427,7 +429,6 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
     return;
   }
 
-
   // Make thrift calls to do real programming
   try {
     if (maybePerfEvents_) {
@@ -441,15 +442,12 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
     if (patchedUnicastRoutesToUpdate.size()) {
       client_->sync_addUnicastRoutes(kFibId_, patchedUnicastRoutesToUpdate);
     }
-    // TODO: Uncomment this once APIs are developed
-    /*
-    if (routeDbDelta.mplsRoutesToDelete.size()) {
+    if (enableSegmentRouting_ && routeDbDelta.mplsRoutesToDelete.size()) {
       client_->sync_deleteMplsRoutes(kFibId_, routeDbDelta.mplsRoutesToDelete);
     }
-    if (mplsRoutesToUpdate.size()) {
+    if (enableSegmentRouting_ && mplsRoutesToUpdate.size()) {
       client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
     }
-    */
     dirtyRouteDb_ = false;
     logPerfEvents();
     LOG(INFO) << "Done processing route add/update";
@@ -509,10 +507,9 @@ Fib::syncRouteDb() {
     client_->sync_syncFib(kFibId_, unicastRoutes);
 
     // Sync mpls routes
-    // TODO: Uncomment once MPLS API is implemented
-    /*
-    client_->sync_syncMplsFib(kFibId_, mplsRoutes);
-    */
+    if (enableSegmentRouting_) {
+      client_->sync_syncMplsFib(kFibId_, mplsRoutes);
+    }
 
     dirtyRouteDb_ = false;
     logPerfEvents();

@@ -251,6 +251,92 @@ NetlinkFibHandler::future_deleteUnicastRoutes(
 }
 
 folly::Future<folly::Unit>
+NetlinkFibHandler::future_addMplsRoute(
+    int16_t clientId, std::unique_ptr<thrift::MplsRoute> route) {
+  VLOG(1) << "Adding/Updating MPLS route for " << route->topLabel;
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  auto protocol = getProtocol(promise, clientId);
+  if (protocol.hasError()) {
+    return future;
+  }
+  return netlinkSocket_->addMplsRoute(buildMplsRoute(*route, protocol.value()));
+}
+
+folly::Future<folly::Unit>
+NetlinkFibHandler::future_deleteMplsRoute(int16_t clientId, int32_t topLabel) {
+  VLOG(1) << "Deleting mpls route " << topLabel;
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  auto protocol = getProtocol(promise, clientId);
+  if (protocol.hasError()) {
+    return future;
+  }
+  fbnl::RouteBuilder rtBuilder;
+  rtBuilder.setMplsLabel(topLabel).setProtocolId(protocol.value());
+  return netlinkSocket_->delMplsRoute(rtBuilder.build());
+}
+
+folly::Future<folly::Unit>
+NetlinkFibHandler::future_addMplsRoutes(
+    int16_t clientId, std::unique_ptr<std::vector<thrift::MplsRoute>> routes) {
+  LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  // Run all route updates in a single eventloop
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     clientId,
+                                     promise = std::move(promise),
+                                     routes = std::move(routes)]() mutable {
+    for (auto& route : *routes) {
+      auto ptr = folly::make_unique<thrift::MplsRoute>(std::move(route));
+      try {
+        // This is going to be synchronous call as we are invoking from
+        // within event loop
+        future_addMplsRoute(clientId, std::move(ptr)).get();
+      } catch (std::exception const& e) {
+        promise.setException(e);
+        return;
+      }
+    }
+    promise.setValue();
+  });
+
+  return future;
+}
+
+folly::Future<folly::Unit>
+NetlinkFibHandler::future_deleteMplsRoutes(
+    int16_t clientId, std::unique_ptr<std::vector<int32_t>> topLabels) {
+  LOG(INFO) << "Deleting mpls routes of client: " << getClientName(clientId);
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop(
+      [this,
+       clientId,
+       promise = std::move(promise),
+       topLabels = std::move(topLabels)]() mutable {
+        for (auto& label : *topLabels) {
+          try {
+            future_deleteMplsRoute(clientId, label).get();
+          } catch (std::exception const& e) {
+            promise.setException(e);
+            return;
+          }
+        }
+        promise.setValue();
+      });
+
+  return future;
+}
+
+folly::Future<folly::Unit>
 NetlinkFibHandler::future_syncFib(
     int16_t clientId,
     std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) {
@@ -273,6 +359,30 @@ NetlinkFibHandler::future_syncFib(
 
   return netlinkSocket_->syncUnicastRoutes(
       protocol.value(), std::move(newRoutes));
+}
+
+folly::Future<folly::Unit>
+NetlinkFibHandler::future_syncMplsFib(
+    int16_t clientId,
+    std::unique_ptr<std::vector<thrift::MplsRoute>> mplsRoutes) {
+  LOG(INFO) << "Syncing MPLS FIB with provided routes. Client: "
+            << getClientName(clientId);
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+  auto protocol = getProtocol(promise, clientId);
+  if (protocol.hasError()) {
+    return future;
+  }
+
+  fbnl::NlMplsRoutes newMplsRoutes;
+  for (auto const& mplsRoute : *mplsRoutes) {
+    newMplsRoutes.emplace(
+        mplsRoute.topLabel, buildMplsRoute(mplsRoute, protocol.value()));
+  }
+
+  return netlinkSocket_->syncMplsRoutes(
+      protocol.value(), std::move(newMplsRoutes));
 }
 
 int64_t
@@ -312,21 +422,42 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
       });
 }
 
-fbnl::Route
-NetlinkFibHandler::buildRoute(
-    const thrift::UnicastRoute& route, int protocol) const noexcept {
-  fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setDestination(toIPNetwork(route.dest)).setProtocolId(protocol);
-
-  // treat empty nexthop as null route
-  if (route.nextHops.empty()) {
-    rtBuilder.setType(RTN_BLACKHOLE);
-    return rtBuilder.build();
+void
+NetlinkFibHandler::buildMplsAction(
+    fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) const {
+  if (!nhop.mplsAction.hasValue()) {
+    return;
   }
+  auto mplsAction = nhop.mplsAction.value();
+  nhBuilder.setLabelAction(mplsAction.action);
+  if (mplsAction.action == thrift::MplsActionCode::SWAP) {
+    if (!mplsAction.swapLabel.hasValue()) {
+      throw fbnl::NlException("Swap label not provided");
+    }
+    nhBuilder.setSwapLabel(mplsAction.swapLabel.value());
+  } else if (mplsAction.action == thrift::MplsActionCode::PUSH) {
+    if (!mplsAction.pushLabels.hasValue()) {
+      throw fbnl::NlException("Push label(s) not provided");
+    }
+    nhBuilder.setPushLabels(mplsAction.pushLabels.value());
+  } else if (mplsAction.action == thrift::MplsActionCode::POP_AND_LOOKUP) {
+    auto lpbkIfIndex = netlinkSocket_->getLoopbackIfindex().get();
+    if (lpbkIfIndex.hasValue()) {
+      nhBuilder.setIfIndex(lpbkIfIndex.value());
+    } else {
+      throw fbnl::NlException("POP action, loopback interface not available");
+    }
+  }
+  return;
+}
 
+void
+NetlinkFibHandler::buildNextHop(
+    fbnl::RouteBuilder& rtBuilder,
+    const std::vector<thrift::NextHopThrift>& nhop) const {
   // add nexthops
   fbnl::NextHopBuilder nhBuilder;
-  for (const auto& nh : route.nextHops) {
+  for (const auto& nh : nhop) {
     // if recursive lookup is enabled, try resolve nexthop first
     if (FLAGS_enable_recursive_lookup) {
       const auto& resolvedNhSet = lookupNexthop(nh.address);
@@ -351,9 +482,39 @@ NetlinkFibHandler::buildRoute(
           netlinkSocket_->getIfIndex(nh.address.ifName.value()).get());
     }
     nhBuilder.setGateway(toIPAddress(nh.address));
+    buildMplsAction(nhBuilder, nh);
     rtBuilder.addNextHop(nhBuilder.setWeight(0).build());
     nhBuilder.reset();
   }
+}
+
+fbnl::Route
+NetlinkFibHandler::buildRoute(
+    const thrift::UnicastRoute& route, int protocol) const noexcept {
+  fbnl::RouteBuilder rtBuilder;
+  rtBuilder.setDestination(toIPNetwork(route.dest)).setProtocolId(protocol);
+
+  // treat empty nexthop as null route
+  if (route.nextHops.empty()) {
+    rtBuilder.setType(RTN_BLACKHOLE);
+    return rtBuilder.build();
+  }
+  buildNextHop(rtBuilder, route.nextHops);
+  return rtBuilder.setFlags(0).setValid(true).build();
+}
+
+fbnl::Route
+NetlinkFibHandler::buildMplsRoute(
+    const thrift::MplsRoute& mplsRoute, int protocol) const noexcept {
+  fbnl::RouteBuilder rtBuilder;
+  rtBuilder.setMplsLabel(static_cast<uint32_t>(mplsRoute.topLabel));
+  rtBuilder.setProtocolId(protocol);
+
+  // treat empty nexthop as null route
+  if (mplsRoute.nextHops.empty()) {
+    rtBuilder.setType(RTN_BLACKHOLE);
+  }
+  buildNextHop(rtBuilder, mplsRoute.nextHops);
   return rtBuilder.setFlags(0).setValid(true).build();
 }
 

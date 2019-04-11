@@ -879,6 +879,7 @@ TEST_P(NetlinkSocketFixture, NullRouteTest) {
   const Route& rt = routes.at(prefix);
   EXPECT_EQ(prefix, rt.getDestination());
   EXPECT_EQ(kAqRouteProtoId, rt.getProtocolId());
+  // buildNullRoute does not add nexthop.
   EXPECT_EQ(0, rt.getNextHops().size());
   EXPECT_EQ(RTN_BLACKHOLE, rt.getType());
 

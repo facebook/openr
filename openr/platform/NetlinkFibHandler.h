@@ -22,6 +22,7 @@
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
+#include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/nl/NetlinkSocket.h>
 #include <openr/nl/NetlinkTypes.h>
 
@@ -51,9 +52,27 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::IpPrefix>> prefixes) override;
 
+  folly::Future<folly::Unit> future_addMplsRoute(
+      int16_t clientId, std::unique_ptr<thrift::MplsRoute> route);
+
+  folly::Future<folly::Unit> future_deleteMplsRoute(
+      int16_t clientId, int32_t topLabel);
+
+  folly::Future<folly::Unit> future_addMplsRoutes(
+      int16_t clientId,
+      std::unique_ptr<std::vector<thrift::MplsRoute>> mplsRoute) override;
+
+  folly::Future<folly::Unit> future_deleteMplsRoutes(
+      int16_t clientId,
+      std::unique_ptr<std::vector<int32_t>> topLabels) override;
+
   folly::Future<folly::Unit> future_syncFib(
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) override;
+
+  folly::Future<folly::Unit> future_syncMplsFib(
+      int16_t clientId,
+      std::unique_ptr<std::vector<thrift::MplsRoute>> routes) override;
 
   int64_t aliveSince() override;
 
@@ -77,6 +96,16 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   fbnl::Route buildRoute(const thrift::UnicastRoute& route, int protocol) const
       noexcept;
+
+  fbnl::Route buildMplsRoute(
+      const thrift::MplsRoute& mplsRoute, int protocol) const noexcept;
+
+  void buildMplsAction(
+      fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) const;
+
+  void buildNextHop(
+      fbnl::RouteBuilder& rtBuilder,
+      const std::vector<thrift::NextHopThrift>& nhop) const;
 
   // This function only gets used when enable_recursive_lookup flags is set
   // Do recursive look up among static routes for current nexthop

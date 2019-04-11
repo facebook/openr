@@ -153,17 +153,16 @@ MockNetlinkFibHandler::getRouteTableByClient(
       auto const& prefix = kv.first;
       auto const& nextHops = kv.second;
 
-      auto thriftNextHops = from(nextHops) |
+      auto thriftNextHops =
+          from(nextHops) |
           mapped([](const std::pair<std::string, folly::IPAddress>& nextHop) {
-                              VLOG(2)
-                                  << "mapping next-hop " << nextHop.second.str()
-                                  << " dev " << nextHop.first;
-                              thrift::NextHopThrift thriftNextHop;
-                              thriftNextHop.address =
-                                  toBinaryAddress(nextHop.second);
-                              thriftNextHop.address.ifName = nextHop.first;
-                              return thriftNextHop;
-                            }) |
+            VLOG(2) << "mapping next-hop " << nextHop.second.str() << " dev "
+                    << nextHop.first;
+            thrift::NextHopThrift thriftNextHop;
+            thriftNextHop.address = toBinaryAddress(nextHop.second);
+            thriftNextHop.address.ifName = nextHop.first;
+            return thriftNextHop;
+          }) |
           as<std::vector>();
 
       thrift::UnicastRoute route;

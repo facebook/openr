@@ -149,7 +149,7 @@ NetlinkProtocolSocket::resetLastMessage() {
 void
 NetlinkProtocolSocket::processAck(uint32_t ack) {
   if (ack == lastMessage_.seq) {
-    VLOG(1) << "Last ack recevied " << ack;
+    VLOG(2) << "Last ack recevied " << ack;
     resetLastMessage();
     // continue sending next set of messages
     sendNetlinkMessage();
@@ -158,7 +158,7 @@ NetlinkProtocolSocket::processAck(uint32_t ack) {
 
 ResultCode
 NetlinkProtocolSocket::sendMessageHeader() {
-  VLOG(1) << "Sending " << lastMessage_.msg->msg_iovlen << " netlink messages";
+  VLOG(2) << "Sending " << lastMessage_.msg->msg_iovlen << " netlink messages";
   CHECK(lastMessage_.msg.get());
   auto status = sendmsg(nlSock_, lastMessage_.msg.get(), 0);
 
@@ -183,7 +183,7 @@ void
 NetlinkProtocolSocket::sendNetlinkMessage() {
   evl_->runImmediatelyOrInEventLoop([this]() {
     struct sockaddr_nl nladdr = {
-        .nl_family = AF_NETLINK, .nl_pad = 0, .nl_pid = pid_, .nl_groups = 0};
+        .nl_family = AF_NETLINK, .nl_pad = 0, .nl_pid = 0, .nl_groups = 0};
     uint32_t count{0};
     uint32_t iovSize = std::min(msgQueue_.size(), kMaxIovMsg);
 
@@ -215,7 +215,7 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
       count++;
     }
     lastMessage_.seq = gSequenceNumber;
-    VLOG(1) << "last seq sent:" << lastMessage_.seq
+    VLOG(2) << "Last seq sent:" << lastMessage_.seq
             << " msg size:" << lastMessage_.msgq.size();
 
     auto msg = std::make_unique<struct msghdr>();

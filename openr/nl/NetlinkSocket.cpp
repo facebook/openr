@@ -197,10 +197,12 @@ NetlinkSocket::handleLinkEvent(
   auto& linkAttr = links_[linkName];
   linkAttr.isUp = link.isUp();
   linkAttr.ifIndex = link.getIfIndex();
+  if (link.isLoopback()) {
+    loopbackIfIndex_ = linkAttr.ifIndex;
+  }
   if (!linkAttr.isUp) {
     removeNeighborCacheEntries(linkName);
   }
-
   if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
     EventVariant event = std::move(link);
     handler_->handleEvent(linkName, action, event);
@@ -401,6 +403,148 @@ NetlinkSocket::addRoute(Route route) {
   return future;
 }
 
+folly::Future<folly::Unit>
+NetlinkSocket::addMplsRoute(Route mplsRoute) {
+  auto prefix = mplsRoute.getDestination();
+  VLOG(3) << "NetlinkSocket add MPLS route "
+          << folly::IPAddress::networkToString(prefix);
+
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     p = std::move(promise),
+                                     dest = std::move(prefix),
+                                     r = std::move(mplsRoute)]() mutable {
+    try {
+      uint8_t type = r.getType();
+      switch (type) {
+      case RTN_UNICAST:
+        doAddUpdateMplsRoute(std::move(r));
+        break;
+      default:
+        throw fbnl::NlException(
+            folly::sformat("Unsupported MPLS route type {}", (int)type));
+      }
+      p.setValue();
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error adding MPLS routes to "
+                 << folly::IPAddress::networkToString(dest)
+                 << ". Exception: " << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
+  return future;
+}
+
+folly::Future<folly::Unit>
+NetlinkSocket::delMplsRoute(Route mplsRoute) {
+  VLOG(3) << "NetlinkSocket deleting MPLS route";
+  auto prefix = mplsRoute.getDestination();
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     p = std::move(promise),
+                                     r = std::move(mplsRoute),
+                                     dest = std::move(prefix)]() mutable {
+    try {
+      uint8_t type = r.getType();
+      switch (type) {
+      case RTN_UNICAST:
+        doDeleteMplsRoute(std::move(r));
+        break;
+      default:
+        throw fbnl::NlException(
+            folly::sformat("Unsupported MPLS route type {}", (int)type));
+      }
+      p.setValue();
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error deleting MPLS routes to "
+                 << folly::IPAddress::networkToString(dest)
+                 << " Error: " << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
+  return future;
+}
+
+folly::Future<folly::Unit>
+NetlinkSocket::syncMplsRoutes(uint8_t protocolId, NlMplsRoutes newMplsRouteDb) {
+  folly::Promise<folly::Unit> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop([this,
+                                     p = std::move(promise),
+                                     syncDb = std::move(newMplsRouteDb),
+                                     protocolId]() mutable {
+    try {
+      LOG(INFO) << "Syncing " << syncDb.size() << " mpls routes";
+      auto& mplsRoutes = mplsRoutesCache_[protocolId];
+      std::unordered_set<int32_t> toDelete;
+      // collect label routes to delete
+      for (auto const& kv : mplsRoutes) {
+        if (syncDb.find(kv.first) == syncDb.end()) {
+          toDelete.insert(kv.first);
+        }
+      }
+      // delete
+      LOG(INFO) << "Sync: Deleting " << toDelete.size() << " mpls routes";
+      for (auto label : toDelete) {
+        auto mplsRouteEntry = mplsRoutes.at(label);
+        doDeleteMplsRoute(mplsRouteEntry);
+      }
+      // Go over MPLS routes in new routeDb, update/add
+      for (auto& kv : syncDb) {
+        doAddUpdateMplsRoute(kv.second);
+      }
+      p.setValue();
+      LOG(INFO) << "Sync done.";
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "Error syncing MPLS routeDb with Fib: "
+                 << folly::exceptionStr(ex);
+      p.setException(ex);
+    }
+  });
+  return future;
+}
+
+folly::Future<NlMplsRoutes>
+NetlinkSocket::getCachedMplsRoutes(uint8_t protocolId) const {
+  VLOG(3) << "NetlinkSocket get cached MPLS routes by protocol "
+          << (int)protocolId;
+  folly::Promise<NlMplsRoutes> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop(
+      [this, p = std::move(promise), protocolId]() mutable {
+        auto iter = mplsRoutesCache_.find(protocolId);
+        if (iter != mplsRoutesCache_.end()) {
+          p.setValue(iter->second);
+        } else {
+          p.setValue(NlMplsRoutes{});
+        }
+      });
+  return future;
+}
+
+folly::Future<int64_t>
+NetlinkSocket::getMplsRouteCount() const {
+  VLOG(3) << "NetlinkSocket get MPLS routes count";
+
+  folly::Promise<int64_t> promise;
+  auto future = promise.getFuture();
+
+  evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
+    int64_t count = 0;
+    for (const auto& routes : mplsRoutesCache_) {
+      count += routes.second.size();
+    }
+    p.setValue(count);
+  });
+  return future;
+}
+
 void
 NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   checkUnicastRoute(route);
@@ -427,6 +571,7 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
         err = static_cast<int>(nlSock_->deleteRoute(iter->second));
       } else {
         err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+        LOG(ERROR) << "Failed route delete: " << nl_geterror(err);
       }
       if (0 != err && -NLE_OBJ_NOTFOUND != err) {
         throw fbnl::NlException(folly::sformat(
@@ -444,6 +589,7 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     err = static_cast<int>(nlSock_->addRoute(route));
   } else {
     err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), NLM_F_REPLACE);
+    LOG(ERROR) << "Failed route add: " << nl_geterror(err);
   }
   if (0 != err) {
     throw fbnl::NlException(
@@ -501,6 +647,68 @@ NetlinkSocket::checkUnicastRoute(const Route& route) {
 }
 
 void
+NetlinkSocket::doDeleteMplsRoute(Route mplsRoute) {
+  if (!useNetlinkMessage_) {
+    LOG(WARNING)
+        << "Label programming not supported, enable use_netlink_message flag";
+    return;
+  }
+  auto label = mplsRoute.getMplsLabel();
+  if (!label.hasValue()) {
+    return;
+  }
+  auto& mplsRoutes = mplsRoutesCache_[mplsRoute.getProtocolId()];
+  if (mplsRoutes.count(label.value()) == 0) {
+    LOG(ERROR) << "Trying to delete non-existing label: " << label.value();
+    return;
+  }
+
+  int err{0};
+  err = static_cast<int>(nlSock_->deleteLabelRoute(mplsRoute));
+  // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
+  // some routes when interface goes down
+  if (err != 0 && -NLE_OBJ_NOTFOUND != err) {
+    throw fbnl::NlException(folly::sformat(
+        "Failed to delete MPLS {} Error: {}", label.value(), err));
+  }
+  // Update local cache with removed prefix
+  mplsRoutes.erase(label.value());
+}
+
+void
+NetlinkSocket::doAddUpdateMplsRoute(Route mplsRoute) {
+  if (!useNetlinkMessage_) {
+    LOG(WARNING)
+        << "Label programming not supported, enable use_netlink_message flag";
+    return;
+  };
+  auto label = mplsRoute.getMplsLabel();
+  if (!label.hasValue()) {
+    LOG(ERROR) << "MPLS route add - no label provided";
+    return;
+  }
+  // check cache has the same entry
+  auto& mplsRoutes = mplsRoutesCache_[mplsRoute.getProtocolId()];
+  auto mplsRouteEntry = mplsRoutes.find(label.value());
+  // Same route
+  if (mplsRouteEntry != mplsRoutes.end() &&
+      mplsRouteEntry->second == mplsRoute) {
+    return;
+  }
+
+  mplsRoutes.erase(label.value());
+  int err{0};
+  err = static_cast<int>(nlSock_->addLabelRoute(mplsRoute));
+  if (0 != err) {
+    throw fbnl::NlException(folly::sformat(
+        "Could not add mpls route\n{}\nError: {}", mplsRoute.str(), err));
+  }
+  // Add MPLS route entry in cache on successful addition
+  mplsRoutes.emplace(std::make_pair(
+      static_cast<int32_t>(label.value()), std::move(mplsRoute)));
+}
+
+void
 NetlinkSocket::doDeleteUnicastRoute(Route route) {
   checkUnicastRoute(route);
 
@@ -517,6 +725,7 @@ NetlinkSocket::doDeleteUnicastRoute(Route route) {
     err = static_cast<int>(nlSock_->deleteRoute(route));
   } else {
     err = rtnlRouteDelete(reqSock_, route.getRtnlRouteKeyRef(), 0);
+    LOG(ERROR) << "Failed route delete: " << nl_geterror(err);
   }
   // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
   // some routes when interface goes down
@@ -556,6 +765,7 @@ NetlinkSocket::doAddMulticastRoute(Route route) {
     err = static_cast<int>(nlSock_->addRoute(route));
   } else {
     err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), 0);
+    LOG(ERROR) << "Failed multicast route add: " << nl_geterror(err);
   }
   if (err != 0) {
     throw fbnl::NlException(folly::sformat(
@@ -607,6 +817,7 @@ NetlinkSocket::doDeleteMulticastRoute(Route route) {
     err = static_cast<int>(nlSock_->deleteRoute(iter->second));
   } else {
     err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+    LOG(ERROR) << "Failed multicast route delete: " << nl_geterror(err);
   }
   if (err != 0) {
     throw fbnl::NlException(folly::sformat(
@@ -654,6 +865,7 @@ NetlinkSocket::doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb) {
     }
   }
   // Delete routes from kernel
+  LOG(INFO) << "Sync: number of routes to delete: " << toDelete.size();
   for (auto it = toDelete.begin(); it != toDelete.end(); ++it) {
     auto const& prefix = *it;
     auto iter = unicastRoutes.find(prefix);
@@ -664,6 +876,7 @@ NetlinkSocket::doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb) {
   }
 
   // Go over routes in new routeDb, update/add
+  LOG(INFO) << "Sync: number of routes to add: " << syncDb.size();
   for (auto& kv : syncDb) {
     doAddUpdateUnicastRoute(kv.second);
   }
@@ -682,7 +895,7 @@ NetlinkSocket::syncLinkRoutes(uint8_t protocolId, NlLinkRoutes newRouteDb) {
       doSyncLinkRoutes(protocolId, std::move(syncDb));
       p.setValue();
     } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error syncing link routeDb with Fib: "
+      LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
                  << folly::exceptionStr(ex);
       p.setException(ex);
     }
@@ -710,6 +923,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
       err = static_cast<int>(nlSock_->deleteRoute(iter->second));
     } else {
       err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
+      LOG(ERROR) << "Failed route delete: " << nl_geterror(err);
     }
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
@@ -731,6 +945,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     } else {
       err = rtnlRouteAdd(
           reqSock_, routeToAdd.second.getRtnlRouteRef(), NLM_F_REPLACE);
+      LOG(ERROR) << "Failed route add: " << nl_geterror(err);
     }
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
@@ -828,6 +1043,16 @@ NetlinkSocket::getIfIndex(const std::string& ifName) {
       });
   return future;
 }
+
+folly::Future<folly::Optional<int>>
+NetlinkSocket::getLoopbackIfindex() {
+  folly::Promise<folly::Optional<int>> promise;
+  auto future = promise.getFuture();
+  evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
+    p.setValue(loopbackIfIndex_);
+  });
+  return future;
+} // namespace fbnl
 
 folly::Future<std::string>
 NetlinkSocket::getIfName(int ifIndex) const {
@@ -1180,6 +1405,7 @@ int
 NetlinkSocket::rtnlRouteAdd(
     struct nl_sock* sock, struct rtnl_route* route, int flags) {
   tickEvent();
+  VLOG(1) << "Adding route : " << route;
   return rtnl_route_add(sock, route, flags);
 }
 
@@ -1187,6 +1413,7 @@ int
 NetlinkSocket::rtnlRouteDelete(
     struct nl_sock* sock, struct rtnl_route* route, int flags) {
   tickEvent();
+  VLOG(1) << "Deleting route : " << route;
   return rtnl_route_delete(sock, route, flags);
 }
 

@@ -15,6 +15,11 @@
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
 #include <folly/Optional.h>
+#include <thrift/lib/cpp2/Thrift.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
+
+#include <openr/common/Util.h>
+#include <openr/if/gen-cpp2/Lsdb_types.h>
 
 extern "C" {
 #include <net/if.h>
@@ -64,11 +69,11 @@ class NextHopBuilder final {
 
   NextHopBuilder& setWeight(uint8_t weight);
 
-  NextHopBuilder& setLabelAction(int action);
+  NextHopBuilder& setLabelAction(thrift::MplsActionCode);
 
   NextHopBuilder& setSwapLabel(uint32_t swapLabel);
 
-  NextHopBuilder& setPushLabels(const std::vector<uint32_t>& pushLabels);
+  NextHopBuilder& setPushLabels(const std::vector<int32_t>& pushLabels);
 
   folly::Optional<int> getIfIndex() const;
 
@@ -76,11 +81,11 @@ class NextHopBuilder final {
 
   folly::Optional<uint8_t> getWeight() const;
 
-  folly::Optional<int> getLabelAction() const;
+  folly::Optional<thrift::MplsActionCode> getLabelAction() const;
 
   folly::Optional<uint32_t> getSwapLabel() const;
 
-  folly::Optional<std::vector<uint32_t>> getPushLabels() const;
+  folly::Optional<std::vector<int32_t>> getPushLabels() const;
 
   uint8_t getFamily() const;
 
@@ -88,9 +93,9 @@ class NextHopBuilder final {
   folly::Optional<int> ifIndex_;
   folly::Optional<folly::IPAddress> gateway_;
   folly::Optional<uint8_t> weight_;
-  folly::Optional<int> labelAction_;
+  folly::Optional<thrift::MplsActionCode> labelAction_;
   folly::Optional<uint32_t> swapLabel_;
-  folly::Optional<std::vector<uint32_t>> pushLabels_;
+  folly::Optional<std::vector<int32_t>> pushLabels_;
   folly::Optional<uint8_t> family_;
 };
 
@@ -108,11 +113,11 @@ class NextHop final {
 
   std::string str() const;
 
-  folly::Optional<int> getLabelAction() const;
+  folly::Optional<thrift::MplsActionCode> getLabelAction() const;
 
   folly::Optional<uint32_t> getSwapLabel() const;
 
-  folly::Optional<std::vector<uint32_t>> getPushLabels() const;
+  folly::Optional<std::vector<int32_t>> getPushLabels() const;
 
   uint8_t getFamily() const;
   /**
@@ -139,9 +144,9 @@ class NextHop final {
   folly::Optional<int> ifIndex_;
   folly::Optional<folly::IPAddress> gateway_;
   folly::Optional<uint8_t> weight_;
-  folly::Optional<int> labelAction_;
+  folly::Optional<thrift::MplsActionCode> labelAction_;
   folly::Optional<uint32_t> swapLabel_;
-  folly::Optional<std::vector<uint32_t>> pushLabels_;
+  folly::Optional<std::vector<int32_t>> pushLabels_;
   folly::Optional<uint8_t> family_;
 };
 
@@ -625,6 +630,8 @@ class Link final {
 
   bool isUp() const;
 
+  bool isLoopback() const;
+
   std::string str() const;
 
   struct rtnl_link* getRtnlLinkRef();
@@ -650,6 +657,12 @@ using NlUnicastRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
 
 // protocolId=>routes
 using NlUnicastRoutesDb = std::unordered_map<uint8_t, NlUnicastRoutes>;
+
+// MPLS => label and its possible nextHops
+using NlMplsRoutes = std::unordered_map<int32_t, Route>;
+
+// protocolId=>label routes
+using NlMplsRoutesDb = std::unordered_map<uint8_t, NlMplsRoutes>;
 
 /**
  * Multicast and link routes do not have nextHop IP

@@ -331,6 +331,7 @@ createUnicastRoute(
     thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops) {
   thrift::UnicastRoute unicastRoute;
   unicastRoute.dest = std::move(dest);
+  std::sort(nextHops.begin(), nextHops.end());
   unicastRoute.nextHops = std::move(nextHops);
   return unicastRoute;
 }
@@ -345,6 +346,7 @@ createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
 
   thrift::MplsRoute mplsRoute;
   mplsRoute.topLabel = topLabel;
+  std::sort(nextHops.begin(), nextHops.end());
   mplsRoute.nextHops = std::move(nextHops);
   return mplsRoute;
 }

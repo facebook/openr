@@ -729,6 +729,7 @@ main(int argc, char** argv) {
           FLAGS_fib_handler_port,
           FLAGS_dryrun,
           FLAGS_enable_fib_sync,
+          FLAGS_enable_segment_routing,
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
           kDecisionPubUrl,
           maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_fib_rep_port),
