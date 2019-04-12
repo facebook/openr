@@ -118,6 +118,14 @@ class DebianSystemFBCodeBuilder(ShellFBCodeBuilder):
             self.run(ShellQuoted('sudo ldconfig')),
         ]
 
+    def debian_deps(self):
+        return super(DebianSystemFBCodeBuilder, self).debian_deps() +\
+            [
+                'python-setuptools',
+                'python3-setuptools',
+                'python-pip',
+            ]
+
     def setup(self):
         steps = [
             ShellQuoted('#!/bin/bash\n'),
