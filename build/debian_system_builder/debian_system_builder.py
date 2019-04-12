@@ -96,9 +96,12 @@ class DebianSystemFBCodeBuilder(ShellFBCodeBuilder):
         return self.step('Check out {0}, workdir {1}'.format(project, path), [
             self.workdir(base_dir),
             self.run(
-                ShellQuoted('if [[ ! -e "{p}" ]]; then \n'
+                ShellQuoted('if [[ ! -d {d} ]]; then \n'
                             '\tgit clone https://github.com/{p}\n'
-                            'fi').format(p=project)
+                            'fi').format(p=project,
+                                         d=path_join(base_dir,
+                                                     os.path.basename(project))
+                                        )
             ) if not local_repo_dir else self.copy_local_repo(
                 local_repo_dir, os.path.basename(project)
             ),
@@ -114,6 +117,14 @@ class DebianSystemFBCodeBuilder(ShellFBCodeBuilder):
             )),
             self.run(ShellQuoted('sudo ldconfig')),
         ]
+
+    def debian_deps(self):
+        return super(DebianSystemFBCodeBuilder, self).debian_deps() +\
+            [
+                'python-setuptools',
+                'python3-setuptools',
+                'python-pip',
+            ]
 
     def setup(self):
         steps = [
