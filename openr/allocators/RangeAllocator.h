@@ -6,7 +6,6 @@
  */
 
 #pragma once
-#define ZEROMQ_HELPER_KVSTORE_H_
 
 #include <chrono>
 #include <random>
@@ -51,12 +50,12 @@ class RangeAllocator {
       const std::string& nodeName,
       const std::string& keyPrefix,
       KvStoreClient* const kvStoreClient,
-      std::function<void(folly::Optional<T>) noexcept> callback,
+      std::function<void(folly::Optional<T>)> callback,
       const std::chrono::milliseconds minBackoffDur =
           std::chrono::milliseconds(50),
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
       const bool overrideOwner = true,
-      const std::function<bool(T) noexcept> checkValueInUseCb = nullptr);
+      const std::function<bool(T)> checkValueInUseCb = nullptr);
 
   /**
    * user must call this to start allocation
@@ -134,7 +133,7 @@ class RangeAllocator {
   fbzmq::ZmqEventLoop* const eventLoop_{nullptr};
 
   // Callback function to let user know of newly allocated value
-  const std::function<void(folly::Optional<T>) noexcept> callback_{nullptr};
+  const std::function<void(folly::Optional<T>)> callback_{nullptr};
 
   // allow a higher originator ID to grab a key from an existing owner with a
   // lower ID knowingly
@@ -169,9 +168,11 @@ class RangeAllocator {
   bool hasStarted_{false};
 
   // callback to check if value already exists
-  const std::function<bool(T) noexcept> checkValueInUseCb_{nullptr};
+  const std::function<bool(T)> checkValueInUseCb_{nullptr};
 };
 
 } // namespace openr
 
+#define RANGE_ALLOCATOR_H_
 #include "RangeAllocator-inl.h"
+#undef RANGE_ALLOCATOR_H_

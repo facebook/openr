@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#ifndef ZEROMQ_HELPER_KVSTORE_H_
+#ifndef RANGE_ALLOCATOR_H_
 #error This file may only be included from RangeAllocator.h
 #endif
 
@@ -40,11 +40,11 @@ RangeAllocator<T>::RangeAllocator(
     const std::string& nodeName,
     const std::string& keyPrefix,
     KvStoreClient* const kvStoreClient,
-    std::function<void(folly::Optional<T>) noexcept> callback,
+    std::function<void(folly::Optional<T>)> callback,
     const std::chrono::milliseconds minBackoffDur /* = 50ms */,
     const std::chrono::milliseconds maxBackoffDur /* = 2s */,
     const bool overrideOwner /* = true */,
-    const std::function<bool(T) noexcept> checkValueInUseCb)
+    const std::function<bool(T)> checkValueInUseCb)
     : nodeName_(nodeName),
       keyPrefix_(keyPrefix),
       kvStoreClient_(kvStoreClient),
