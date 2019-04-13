@@ -37,9 +37,10 @@
 
 namespace openr {
 
+using LinkStateMetric = uint64_t;
+
 class Link {
  public:
-  using Metric = uint64_t;
 
   Link(
       const std::string& nodeName1,
@@ -49,7 +50,7 @@ class Link {
 
  private:
   const std::string n1_, n2_, if1_, if2_;
-  Metric metric1_{1}, metric2_{1};
+  LinkStateMetric metric1_{1}, metric2_{1};
   int32_t adjLabel1_{0}, adjLabel2_{0};
   bool overload1_{false}, overload2_{false};
   thrift::BinaryAddress nhV41_, nhV42_, nhV61_, nhV62_;
@@ -69,7 +70,7 @@ class Link {
 
   const std::string& getIfaceFromNode(const std::string& nodeName) const;
 
-  Metric getMetricFromNode(const std::string& nodeName) const;
+  LinkStateMetric getMetricFromNode(const std::string& nodeName) const;
 
   int32_t getAdjLabelFromNode(const std::string& nodeName) const;
 
@@ -89,7 +90,7 @@ class Link {
   void setNhV6FromNode(
       const std::string& nodeName, const thrift::BinaryAddress& nhV6);
 
-  void setMetricFromNode(const std::string& nodeName, Metric d);
+  void setMetricFromNode(const std::string& nodeName, LinkStateMetric d);
 
   void setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel);
 

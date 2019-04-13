@@ -77,7 +77,7 @@ Link::getIfaceFromNode(const std::string& nodeName) const {
   throw std::invalid_argument(nodeName);
 }
 
-Link::Metric
+LinkStateMetric
 Link::getMetricFromNode(const std::string& nodeName) const {
   if (n1_ == nodeName) {
     return metric1_;
@@ -162,7 +162,7 @@ Link::setNhV6FromNode(
 }
 
 void
-Link::setMetricFromNode(const std::string& nodeName, Metric d) {
+Link::setMetricFromNode(const std::string& nodeName, LinkStateMetric d) {
   if (n1_ == nodeName) {
     metric1_ = d;
   } else if (n2_ == nodeName) {

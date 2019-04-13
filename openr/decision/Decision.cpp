@@ -33,7 +33,7 @@ using namespace std;
 
 using apache::thrift::FRAGILE;
 
-using Metric = openr::Link::Metric;
+using Metric = openr::LinkStateMetric;
 
 namespace {
 
