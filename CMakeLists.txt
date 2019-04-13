@@ -628,6 +628,26 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/allocators
   )
 
+  add_executable(openr_ctrl_handler_test
+    openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
+  )
+
+  target_link_libraries(openr_ctrl_handler_test
+    openrlib
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+  )
+
+  add_test(ExponentialBackoffTest openr_ctrl_handler_test)
+
+  install(TARGETS
+    openr_ctrl_handler_test
+    DESTINATION sbin/tests/openr/ctrl-server
+  )
+
+
   add_executable(exp_backoff_test
     openr/common/tests/ExponentialBackoffTest.cpp
   )

@@ -37,11 +37,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   // Raw APIs to directly interact with Open/R modules
   //
 
-  virtual folly::SemiFuture<std::unique_ptr<std::string>> semifuture_command(
+  folly::SemiFuture<std::unique_ptr<std::string>> semifuture_command(
       thrift::OpenrModuleType type,
       std::unique_ptr<std::string> request) override;
 
-  virtual folly::SemiFuture<bool> semifuture_hasModule(
+  folly::SemiFuture<bool> semifuture_hasModule(
       thrift::OpenrModuleType type) override;
 
   //
@@ -59,7 +59,38 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
       std::unique_ptr<std::vector<std::string>> keys) override;
   int64_t getCounter(std::unique_ptr<std::string> key) override;
 
+  //
+  // Route APIs
+  //
+
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
+  semifuture_getRouteDb() override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
+  semifuture_getRouteDbComputed(std::unique_ptr<std::string> nodeName) override;
+
+  //
+  // Performance stats APIs
+  //
+
+  folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
+  semifuture_getPerfDb() override;
+
+  //
+  // Decision APIs
+  //
+
+  folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
+  semifuture_getDecisionAdjacencyDbs() override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
+  semifuture_getDecisionPrefixDbs() override;
+
  private:
+  template <typename ReturnType, typename InputType>
+  folly::Expected<ReturnType, fbzmq::Error> requestReply(
+      thrift::OpenrModuleType module, InputType&& input);
+
   void authorizeConnection();
   const std::string nodeName_;
   const std::unordered_set<std::string> acceptablePeerCommonNames_;

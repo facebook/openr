@@ -91,6 +91,29 @@ OpenrCtrlHandler::authorizeConnection() {
   }
 }
 
+template <typename ReturnType, typename InputType>
+folly::Expected<ReturnType, fbzmq::Error>
+OpenrCtrlHandler::requestReply(
+    thrift::OpenrModuleType module, InputType&& input) {
+  // Check module
+  auto moduleIt = moduleSockets_.find(module);
+  if (moduleIt == moduleSockets_.end()) {
+    return folly::makeUnexpected(fbzmq::Error(
+        0, folly::sformat("Unknown module {}", static_cast<int>(module))));
+  }
+
+  // Send request
+  auto& sock = moduleIt->second;
+  apache::thrift::CompactSerializer serializer;
+  auto sendRet = sock.sendThriftObj(input, serializer);
+  if (sendRet.hasError()) {
+    return folly::makeUnexpected(sendRet.error());
+  }
+
+  // Recv response
+  return sock.recvThriftObj<ReturnType>(serializer, Constants::kReadTimeout);
+}
+
 folly::SemiFuture<std::unique_ptr<std::string>>
 OpenrCtrlHandler::semifuture_command(
     thrift::OpenrModuleType type, std::unique_ptr<std::string> request) {
@@ -183,6 +206,102 @@ OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
     return static_cast<int64_t>(counter->value);
   }
   return 0;
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
+OpenrCtrlHandler::semifuture_getRouteDb() {
+  folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
+
+  thrift::FibRequest request;
+  request.cmd = thrift::FibCommand::ROUTE_DB_GET;
+
+  auto reply = requestReply<thrift::RouteDatabase>(
+      thrift::OpenrModuleType::FIB, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<thrift::RouteDatabase>(std::move(reply.value())));
+  }
+
+  return p.getSemiFuture();
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
+OpenrCtrlHandler::semifuture_getRouteDbComputed(
+    std::unique_ptr<std::string> nodeName) {
+  folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
+
+  thrift::DecisionRequest request;
+  request.cmd = thrift::DecisionCommand::ROUTE_DB_GET;
+  request.nodeName = std::move(*nodeName);
+
+  auto reply = requestReply<thrift::DecisionReply>(
+      thrift::OpenrModuleType::DECISION, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<thrift::RouteDatabase>(std::move(reply->routeDb)));
+  }
+
+  return p.getSemiFuture();
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
+OpenrCtrlHandler::semifuture_getPerfDb() {
+  folly::Promise<std::unique_ptr<thrift::PerfDatabase>> p;
+
+  thrift::FibRequest request;
+  request.cmd = thrift::FibCommand::PERF_DB_GET;
+
+  auto reply = requestReply<thrift::PerfDatabase>(
+      thrift::OpenrModuleType::FIB, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<thrift::PerfDatabase>(std::move(reply.value())));
+  }
+
+  return p.getSemiFuture();
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
+OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
+  folly::Promise<std::unique_ptr<thrift::AdjDbs>> p;
+
+  thrift::DecisionRequest request;
+  request.cmd = thrift::DecisionCommand::ADJ_DB_GET;
+
+  auto reply = requestReply<thrift::DecisionReply>(
+      thrift::OpenrModuleType::DECISION, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(std::make_unique<thrift::AdjDbs>(std::move(reply->adjDbs)));
+  }
+
+  return p.getSemiFuture();
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
+OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
+  folly::Promise<std::unique_ptr<thrift::PrefixDbs>> p;
+
+  thrift::DecisionRequest request;
+  request.cmd = thrift::DecisionCommand::ROUTE_DB_GET;
+
+  auto reply = requestReply<thrift::DecisionReply>(
+      thrift::OpenrModuleType::DECISION, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<thrift::PrefixDbs>(std::move(reply->prefixDbs)));
+  }
+
+  return p.getSemiFuture();
 }
 
 } // namespace openr
