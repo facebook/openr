@@ -37,12 +37,12 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   // Raw APIs to directly interact with Open/R modules
   //
 
-  void command(
-      std::string& response,
+  virtual folly::SemiFuture<std::unique_ptr<std::string>> semifuture_command(
       thrift::OpenrModuleType type,
       std::unique_ptr<std::string> request) override;
 
-  bool hasModule(thrift::OpenrModuleType type) override;
+  virtual folly::SemiFuture<bool> semifuture_hasModule(
+      thrift::OpenrModuleType type) override;
 
   //
   // fb303 service APIs

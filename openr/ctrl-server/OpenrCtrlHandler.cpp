@@ -91,34 +91,37 @@ OpenrCtrlHandler::authorizeConnection() {
   }
 }
 
-void
-OpenrCtrlHandler::command(
-    std::string& response,
-    thrift::OpenrModuleType type,
-    std::unique_ptr<std::string> request) {
+folly::SemiFuture<std::unique_ptr<std::string>>
+OpenrCtrlHandler::semifuture_command(
+    thrift::OpenrModuleType type, std::unique_ptr<std::string> request) {
   authorizeConnection();
+  folly::Promise<std::unique_ptr<std::string>> p;
   try {
     auto& sock = moduleSockets_.at(type);
     sock.sendOne(fbzmq::Message::from(*request).value()).value();
-    response = sock.recvOne(Constants::kReadTimeout)
-                   .value()
-                   .read<std::string>()
-                   .value();
+    std::string response = sock.recvOne(Constants::kReadTimeout)
+                               .value()
+                               .read<std::string>()
+                               .value();
+    p.setValue(std::make_unique<std::string>(std::move(response)));
   } catch (const std::out_of_range& e) {
     auto error = folly::sformat("Unknown module: {}", static_cast<int>(type));
     LOG(ERROR) << error;
-    throw thrift::OpenrError(error);
+    p.setException(thrift::OpenrError(error));
   } catch (const folly::Unexpected<fbzmq::Error>::BadExpectedAccess& e) {
     auto error = "Error processing request: " + e.error().errString;
     LOG(ERROR) << error;
-    throw thrift::OpenrError(error);
+    p.setException(thrift::OpenrError(error));
   }
+  return p.getSemiFuture();
 }
 
-bool
-OpenrCtrlHandler::hasModule(thrift::OpenrModuleType type) {
+folly::SemiFuture<bool>
+OpenrCtrlHandler::semifuture_hasModule(thrift::OpenrModuleType type) {
   authorizeConnection();
-  return 0 != moduleSockets_.count(type);
+  folly::Promise<bool> p;
+  p.setValue(0 != moduleSockets_.count(type));
+  return p.getSemiFuture();
 }
 
 facebook::fb303::cpp2::fb_status
