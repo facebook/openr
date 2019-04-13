@@ -8,6 +8,8 @@
 namespace cpp2 openr.thrift
 namespace py openr.OpenrCtrl
 
+include "common/fb303/if/fb303.thrift"
+
 enum OpenrModuleType {
   DECISION = 1,
   FIB = 2,
@@ -23,7 +25,7 @@ exception OpenrError {
   1: string message
 } ( message = "message" )
 
-service OpenrCtrl {
+service OpenrCtrl extends fb303.FacebookService {
   binary command(1: OpenrModuleType module, 2: binary request)
     throws (1: OpenrError error)
 

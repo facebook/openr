@@ -156,6 +156,8 @@ main(int argc, char** argv) {
   BuildInfo::log(ss);
   gflags::SetVersionString(ss.str());
 
+  BuildInfo::exportBuildInfo();
+
   // Initialize all params
   folly::init(&argc, &argv);
 
@@ -812,6 +814,8 @@ main(int argc, char** argv) {
 
   thriftCtrlServer.setInterface(ctrlHandler);
   thriftCtrlServer.setNumIOWorkerThreads(1);
+  // Intentionally kept this as (1). If you're changing to higher number please
+  // address thread safety for private member variables in OpenrCtrlHandler
   thriftCtrlServer.setNumCPUWorkerThreads(1);
 
   // serve

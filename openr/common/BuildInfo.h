@@ -110,6 +110,11 @@ class BuildInfo {
    */
   static void log(std::ostream& os);
 
+  /**
+   * Export build information
+   */
+  static void exportBuildInfo();
+
  private:
   BuildInfo(){};
 };

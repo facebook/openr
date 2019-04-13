@@ -100,4 +100,9 @@ BuildInfo::log(std::ostream& /* os */) {
   // if your usecase wants to log build information!
 }
 
+void
+BuildInfo::exportBuildInfo() {
+  return;
+}
+
 } // namespace openr

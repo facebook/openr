@@ -269,6 +269,7 @@ add_dependencies(
 )
 
 add_library(openrlib
+  common/fb303/cpp/FacebookBase2.cpp
   openr/allocators/PrefixAllocator.cpp
   openr/common/BuildInfo.cpp
   openr/common/ExponentialBackoff.cpp

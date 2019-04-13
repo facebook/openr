@@ -6,6 +6,9 @@
  */
 
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
+
+#include <re2/re2.h>
+
 #include <folly/ExceptionString.h>
 #include <folly/io/async/SSLContext.h>
 #include <folly/io/async/ssl/OpenSSLUtils.h>
@@ -22,7 +25,8 @@ OpenrCtrlHandler::OpenrCtrlHandler(
         std::shared_ptr<OpenrEventLoop>>& moduleTypeToEvl,
     MonitorSubmitUrl const& monitorSubmitUrl,
     fbzmq::Context& context)
-    : nodeName_(nodeName),
+    : facebook::fb303::FacebookBase2("openr"),
+      nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
       moduleTypeToEvl_(moduleTypeToEvl) {
   zmqMonitorClient_ =
@@ -49,6 +53,8 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     }
   }
 }
+
+OpenrCtrlHandler::~OpenrCtrlHandler() {}
 
 void
 OpenrCtrlHandler::authorizeConnection() {
@@ -114,4 +120,66 @@ OpenrCtrlHandler::hasModule(thrift::OpenrModuleType type) {
   authorizeConnection();
   return 0 != moduleSockets_.count(type);
 }
+
+facebook::fb303::cpp2::fb_status
+OpenrCtrlHandler::getStatus() {
+  return facebook::fb303::cpp2::fb_status::ALIVE;
+}
+
+void
+OpenrCtrlHandler::getCounters(std::map<std::string, int64_t>& _return) {
+  FacebookBase2::getCounters(_return);
+  for (auto const& kv : zmqMonitorClient_->dumpCounters()) {
+    _return.emplace(kv.first, static_cast<int64_t>(kv.second.value));
+  }
+}
+
+void
+OpenrCtrlHandler::getRegexCounters(
+    std::map<std::string, int64_t>& _return,
+    std::unique_ptr<std::string> regex) {
+  // Compile regex
+  re2::RE2 compiledRegex(*regex);
+  if (not compiledRegex.ok()) {
+    return;
+  }
+
+  // Get all counters
+  std::map<std::string, int64_t> counters;
+  getCounters(counters);
+
+  // Filter counters
+  for (auto const& kv : counters) {
+    if (RE2::PartialMatch(kv.first, compiledRegex)) {
+      _return.emplace(kv);
+    }
+  }
+}
+
+void
+OpenrCtrlHandler::getSelectedCounters(
+    std::map<std::string, int64_t>& _return,
+    std::unique_ptr<std::vector<std::string>> keys) {
+  // Get all counters
+  std::map<std::string, int64_t> counters;
+  getCounters(counters);
+
+  // Filter counters
+  for (auto const& key : *keys) {
+    auto it = counters.find(key);
+    if (it != counters.end()) {
+      _return.emplace(*it);
+    }
+  }
+}
+
+int64_t
+OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
+  auto counter = zmqMonitorClient_->getCounter(*key);
+  if (counter.hasValue()) {
+    return static_cast<int64_t>(counter->value);
+  }
+  return 0;
+}
+
 } // namespace openr
