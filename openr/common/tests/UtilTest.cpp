@@ -364,6 +364,42 @@ TEST(UtilTest, getTotalPerfEventsDurationTest) {
   }
 }
 
+TEST(UtilTest, getDurationBetweenPerfEventsTest) {
+  {
+    thrift::PerfEvents perfEvents;
+    auto maybeDuration =
+        getDurationBetweenPerfEvents(perfEvents, "LINK_UP", "SPF_CALCULATE");
+    EXPECT_TRUE(maybeDuration.hasError());
+  }
+
+  {
+    thrift::PerfEvents perfEvents;
+    thrift::PerfEvent event1{apache::thrift::FRAGILE, "node1", "LINK_UP", 100};
+    perfEvents.events.emplace_back(std::move(event1));
+    thrift::PerfEvent event2{
+        apache::thrift::FRAGILE, "node1", "DECISION_RECVD", 200};
+    perfEvents.events.emplace_back(std::move(event2));
+    thrift::PerfEvent event3{
+        apache::thrift::FRAGILE, "node1", "SPF_CALCULATE", 300};
+    perfEvents.events.emplace_back(std::move(event3));
+    auto maybeDuration =
+        getDurationBetweenPerfEvents(perfEvents, "LINK_UP", "SPF_CALCULATE");
+    EXPECT_EQ(maybeDuration.value().count(), 200);
+    maybeDuration = getDurationBetweenPerfEvents(
+        perfEvents, "DECISION_RECVD", "SPF_CALCULATE");
+    EXPECT_EQ(maybeDuration.value().count(), 100);
+    maybeDuration = getDurationBetweenPerfEvents(
+        perfEvents, "NO_SUCH_NAME", "SPF_CALCULATE");
+    EXPECT_TRUE(maybeDuration.hasError());
+    maybeDuration = getDurationBetweenPerfEvents(
+        perfEvents, "SPF_CALCULATE", "DECISION_RECVD");
+    EXPECT_TRUE(maybeDuration.hasError());
+    maybeDuration = getDurationBetweenPerfEvents(
+        perfEvents, "DECISION_RECVD", "NO_SUCH_NAME");
+    EXPECT_TRUE(maybeDuration.hasError());
+  }
+}
+
 TEST(UtilTest, getBestNextHopsUnicast) {
   auto bestNextHops = getBestNextHopsUnicast({path1_2_1, path1_2_2});
   EXPECT_EQ(bestNextHops.size(), 1);

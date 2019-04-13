@@ -140,6 +140,11 @@ std::vector<std::string> sprintPerfEvents(
     const thrift::PerfEvents& perfEvents) noexcept;
 std::chrono::milliseconds getTotalPerfEventsDuration(
     const thrift::PerfEvents& perfEvents) noexcept;
+folly::Expected<std::chrono::milliseconds, std::string>
+getDurationBetweenPerfEvents(
+    const thrift::PerfEvents& perfEvents,
+    const std::string& firstName,
+    const std::string& secondName) noexcept;
 
 /**
  * Generate hash for each keyval pair

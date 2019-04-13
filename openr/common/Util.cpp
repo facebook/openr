@@ -355,6 +355,40 @@ getTotalPerfEventsDuration(const thrift::PerfEvents& perfEvents) noexcept {
   return std::chrono::milliseconds(latestTs - recentTs);
 }
 
+folly::Expected<std::chrono::milliseconds, std::string>
+getDurationBetweenPerfEvents(
+    const thrift::PerfEvents& perfEvents,
+    const std::string& firstName,
+    const std::string& secondName) noexcept {
+  auto search = std::find_if(
+      perfEvents.events.begin(),
+      perfEvents.events.end(),
+      [&firstName](const thrift::PerfEvent& event) {
+        return event.eventDescr == firstName;
+      });
+  if (search == perfEvents.events.end()) {
+    return folly::makeUnexpected(
+        folly::sformat("Could not find first event: {}", firstName));
+  }
+  int64_t first = search->unixTs;
+  search = std::find_if(
+      search + 1,
+      perfEvents.events.end(),
+      [&secondName](const thrift::PerfEvent& event) {
+        return event.eventDescr == secondName;
+      });
+  if (search == perfEvents.events.end()) {
+    return folly::makeUnexpected(
+        folly::sformat("Could not find second event: {}", secondName));
+  }
+  int64_t second = search->unixTs;
+  if (second < first) {
+    return folly::makeUnexpected(
+        std::string{"Negative duration between first and second event"});
+  }
+  return std::chrono::milliseconds(second - first);
+}
+
 int64_t
 generateHash(
     const int64_t version,
