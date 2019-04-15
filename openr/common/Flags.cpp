@@ -263,10 +263,6 @@ DEFINE_string(
     "",
     "Only keys with originator ID matching any of the originator ID will "
     "be added to kvstore.");
-DEFINE_bool(
-    enable_old_decision_module,
-    false,
-    "Set this flag to revert to old decision code");
 DEFINE_int32(memory_limit_mb, 300, "Memory limit in MB");
 DEFINE_bool(
     enable_legacy_flooding,

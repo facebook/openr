@@ -33,7 +33,6 @@
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
-#include <openr/decision-old/DecisionOld.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/health-checker/HealthChecker.h>
@@ -675,52 +674,25 @@ main(int argc, char** argv) {
   // receives itself as one of the nodes before running the spf.
 
   // Start Decision Module
-  std::unique_ptr<DecisionOld> decisionOld{nullptr};
-  if (FLAGS_enable_old_decision_module) {
-    decisionOld = std::make_unique<DecisionOld>(
-        FLAGS_node_name,
-        FLAGS_enable_v4,
-        AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-        std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
-        std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
-        kvStoreLocalCmdUrl,
-        kvStoreLocalPubUrl,
-        DecisionCmdUrl{folly::sformat(
-            "tcp://{}:{}", FLAGS_listen_addr, FLAGS_decision_rep_port)},
-        kDecisionPubUrl,
-        monitorSubmitUrl,
-        context);
-    std::thread decisionThread([&decisionOld]() noexcept {
-      LOG(INFO) << "Starting Decision thread...";
-      folly::setThreadName("Decision");
-      decisionOld->run();
-      LOG(INFO) << "Decision thread got stopped.";
-    });
-    decisionOld->waitUntilRunning();
-    allThreads.emplace_back(std::move(decisionThread));
-    watchdog->addEvl(decisionOld.get(), "Decision");
-  } else {
-    startEventLoop(
-        allThreads,
-        orderedEventLoops,
-        moduleTypeToEvl,
-        watchdog,
-        std::make_shared<Decision>(
-            FLAGS_node_name,
-            FLAGS_enable_v4,
-            FLAGS_enable_lfa,
-            AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-            PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-            std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
-            std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
-            kvStoreLocalCmdUrl,
-            kvStoreLocalPubUrl,
-            maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_decision_rep_port),
-            kDecisionPubUrl,
-            monitorSubmitUrl,
-            context));
-  }
+  startEventLoop(
+      allThreads,
+      orderedEventLoops,
+      moduleTypeToEvl,
+      watchdog,
+      std::make_shared<Decision>(
+          FLAGS_node_name,
+          FLAGS_enable_v4,
+          FLAGS_enable_lfa,
+          AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
+          PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+          std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
+          std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
+          kvStoreLocalCmdUrl,
+          kvStoreLocalPubUrl,
+          maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_decision_rep_port),
+          kDecisionPubUrl,
+          monitorSubmitUrl,
+          context));
 
   // Define and start Fib Module
   startEventLoop(
@@ -842,10 +814,6 @@ main(int argc, char** argv) {
        ++riter) {
     (*riter)->stop();
     (*riter)->waitUntilStopped();
-  }
-  if (decisionOld) {
-    decisionOld->stop();
-    decisionOld->waitUntilStopped();
   }
   monitor.stop();
   monitor.waitUntilStopped();

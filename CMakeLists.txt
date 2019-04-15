@@ -282,7 +282,6 @@ add_library(openrlib
   openr/ctrl-server/OpenrCtrlHandler.cpp
   openr/decision/Decision.cpp
   openr/decision/LinkState.cpp
-  openr/decision-old/DecisionOld.cpp
   openr/dual/Dual.cpp
   openr/fib/Fib.cpp
   openr/health-checker/HealthChecker.cpp
