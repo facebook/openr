@@ -26,8 +26,7 @@
 namespace openr {
 namespace Netlink {
 
-constexpr uint16_t kMaxNlPayloadSize{2048};
-constexpr uint16_t kMaxNhopPayloadSize{1024};
+constexpr uint16_t kMaxNlPayloadSize{4096};
 constexpr uint32_t kNetlinkSockRecvBuf{1 * 1024 * 1024};
 
 constexpr uint32_t kMaxNlMessageQueue{126001};

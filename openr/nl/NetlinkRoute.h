@@ -87,7 +87,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
 
   // Add ECMP paths
   ResultCode addMultiPathNexthop(
-      std::array<char, kMaxNhopPayloadSize>& nhop,
+      std::array<char, kMaxNlPayloadSize>& nhop,
       const openr::fbnl::Route& route) const;
 
   // Add label encap

@@ -266,7 +266,7 @@ NetlinkRouteMessage::addLabelNexthop(
 ResultCode
 NetlinkRouteMessage::addNextHops(const openr::fbnl::Route& route) {
   ResultCode status{ResultCode::SUCCESS};
-  std::array<char, kMaxNhopPayloadSize> nhop = {};
+  std::array<char, kMaxNlPayloadSize> nhop = {};
   if (route.getNextHops().size()) {
     if ((status = addMultiPathNexthop(nhop, route)) != ResultCode::SUCCESS) {
       return status;
@@ -286,7 +286,7 @@ NetlinkRouteMessage::addNextHops(const openr::fbnl::Route& route) {
 
 ResultCode
 NetlinkRouteMessage::addMultiPathNexthop(
-    std::array<char, kMaxNhopPayloadSize>& nhop,
+    std::array<char, kMaxNlPayloadSize>& nhop,
     const openr::fbnl::Route& route) const {
   // Add [RTA_MULTIPATH - label, via, dev][RTA_ENCAP][RTA_ENCAP_TYPE]
   struct rtattr* rta = reinterpret_cast<struct rtattr*>(nhop.data());

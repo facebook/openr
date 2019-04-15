@@ -71,6 +71,8 @@ std::vector<int32_t> outLabel1{500};
 std::vector<int32_t> outLabel2{500, 501};
 std::vector<int32_t> outLabel3{502, 503, 504};
 std::vector<int32_t> outLabel4{505, 506, 507, 508};
+std::vector<int32_t> outLabel5{509};
+std::vector<int32_t> outLabel6{609, 610, 611, 612};
 uint32_t swapLabel{500};
 
 uint32_t inLabel1{110};
@@ -415,6 +417,101 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   evlTest.scheduleTimeout(std::chrono::milliseconds(600), [&]() noexcept {
     EXPECT_EQ(0, nlSock->getErrorCount());
     EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+    evlTest.stop();
+  });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "Starting evl thread";
+    evlTest.run();
+    LOG(INFO) << "Stopping evl thread.";
+  });
+  evlTest.waitUntilRunning();
+  evlTest.waitUntilStopped();
+  evlThread.join();
+}
+
+TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
+  // Add IPv6 route with 48 path ECMP
+
+  // Create another ZmqEventLoop instance for running tests
+  fbzmq::ZmqEventLoop evlTest;
+  uint32_t ackCount{0};
+  std::vector<openr::fbnl::NextHop> paths;
+  for (uint32_t i = 0; i < 48; i++) {
+    outLabel6[0] = outLabel6[0] + i;
+    paths.push_back(buildNextHop(
+        outLabel6,
+        folly::none,
+        thrift::MplsActionCode::PUSH,
+        ipAddrY1V6,
+        ifIndexZ));
+  }
+
+  auto route = buildRoute(kRouteProtoId, ipPrefix5, folly::none, paths);
+
+  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
+    ackCount = nlSock->getAckCount();
+    // create label next hop
+    nlSock->addRoute(route);
+  });
+
+  evlTest.scheduleTimeout(std::chrono::milliseconds(400), [&]() noexcept {
+    EXPECT_EQ(0, nlSock->getErrorCount());
+    // should have received one with status = 0
+    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  });
+
+  evlTest.scheduleTimeout(std::chrono::milliseconds(410), [&]() noexcept {
+    ackCount = nlSock->getAckCount();
+    nlSock->deleteRoute(route);
+  });
+
+  evlTest.scheduleTimeout(std::chrono::milliseconds(610), [&]() noexcept {
+    EXPECT_EQ(0, nlSock->getErrorCount());
+    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+    evlTest.stop();
+  });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "Starting evl thread";
+    evlTest.run();
+    LOG(INFO) << "Stopping evl thread.";
+  });
+  evlTest.waitUntilRunning();
+  evlTest.waitUntilStopped();
+  evlThread.join();
+}
+
+TEST_F(NlMessageFixture, MaxPayloadExceeded) {
+  // check for max payload handling. Add nexthops that exceeds payload size
+  // Should error out
+
+  fbzmq::ZmqEventLoop evlTest;
+  uint32_t ackCount{0};
+  std::vector<openr::fbnl::NextHop> paths;
+  struct v6Addr addr6 {
+    0
+  };
+  for (uint32_t i = 0; i < 200; i++) {
+    addr6.u32_addr[0] = htonl(0xfe800000 + i);
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(&addr6.u8_addr[0]), 16));
+    paths.push_back(buildNextHop(
+        outLabel5,
+        folly::none,
+        thrift::MplsActionCode::PHP,
+        ipAddress,
+        ifIndexZ));
+  }
+
+  auto route = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
+
+  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
+    ackCount = nlSock->getAckCount();
+    auto status = nlSock->addLabelRoute(route);
+    EXPECT_EQ(status, ResultCode::NO_MESSAGE_BUFFER);
     evlTest.stop();
   });
 
