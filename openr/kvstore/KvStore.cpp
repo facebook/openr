@@ -822,6 +822,7 @@ KvStore::requestFullSyncFromPeers() {
       LOG(ERROR) << "Failed to send full sync request to peer " << peerName
                  << " using id " << peerCmdSocketId << " (will try again). "
                  << ret.error();
+      collectSendFailureStats(ret.error(), peerCmdSocketId);
       expBackoff.reportError(); // Apply exponential backoff
       timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       ++it;
@@ -1136,7 +1137,9 @@ KvStore::processNexthopChange(
         fbzmq::Message(),
         fbzmq::Message::fromThriftObj(request, serializer_).value());
     if (ret.hasError()) {
-      LOG(ERROR) << rootId << ": failed to unset spt-parent " << *oldNh;
+      LOG(ERROR) << rootId << ": failed to unset spt-parent " << *oldNh
+                 << ", error: " << ret.error();
+      collectSendFailureStats(ret.error(), dstCmdSocketId);
     }
   }
 
@@ -1165,7 +1168,9 @@ KvStore::processNexthopChange(
         fbzmq::Message(),
         fbzmq::Message::fromThriftObj(request, serializer_).value());
     if (ret.hasError()) {
-      LOG(ERROR) << rootId << ": failed to set spt-parent " << *newNh;
+      LOG(ERROR) << rootId << ": failed to set spt-parent " << *newNh
+                 << ", error: " << ret.error();
+      collectSendFailureStats(ret.error(), dstCmdSocketId);
     }
   }
 }
@@ -1446,7 +1451,8 @@ KvStore::finalizeFullSync(
   if (ret.hasError()) {
     // this could fail when senderId goes offline
     LOG(ERROR) << "Failed to send finalizeFullSync to " << senderId
-               << " using id " << senderId;
+               << " using id " << senderId << ", error: " << ret.error();
+    collectSendFailureStats(ret.error(), senderId);
   }
 }
 
@@ -1472,6 +1478,15 @@ KvStore::getFloodPeers(const folly::Optional<std::string>& rootId) {
     }
   }
   return floodPeers;
+}
+
+void
+KvStore::collectSendFailureStats(
+    const fbzmq::Error& error, const std::string& dstSockId) {
+  tData_.addStatValue(
+      folly::sformat("kvstore.send_failure.{}.{}", dstSockId, error.errNum),
+      1,
+      fbzmq::COUNT);
 }
 
 void
@@ -1561,7 +1576,9 @@ KvStore::floodPublication(
     if (ret.hasError()) {
       // this could be pretty common on initial connection setup
       LOG(ERROR) << "Failed to flood publication to peer " << peer
-                 << " using id " << peerCmdSocketId;
+                 << " using id " << peerCmdSocketId
+                 << ", error: " << ret.error();
+      collectSendFailureStats(ret.error(), peerCmdSocketId);
     }
   }
 }
@@ -1682,7 +1699,8 @@ KvStore::sendDualMessages(
   // due to zmq async fashion, ret here is always true even on failure
   if (ret.hasError()) {
     LOG(ERROR) << "failed to send dual messages to " << neighbor << " using id "
-               << neighborCmdSocketId;
+               << neighborCmdSocketId << ", error: " << ret.error();
+    collectSendFailureStats(ret.error(), neighborCmdSocketId);
     return false;
   }
   return true;

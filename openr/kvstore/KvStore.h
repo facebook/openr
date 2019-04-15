@@ -173,6 +173,13 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   std::unordered_set<std::string> getFloodPeers(
       const folly::Optional<std::string>& rootId);
 
+  // collect router-client send failure statistics in following form
+  // "kvstore.send_failure.dst-peer-id.error-code"
+  // error: fbzmq-Error
+  // dstSockId: destination socket identity
+  void collectSendFailureStats(
+      const fbzmq::Error& error, const std::string& dstSockId);
+
   // consume a publication pending on sub_ socket
   // (i.e. announced by some of our peers)
   // relays the original publication if needed
