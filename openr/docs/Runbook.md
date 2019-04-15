@@ -458,6 +458,42 @@ Defaults to 65536.
 KVSTORE_ZMQ_HWM=65536
 ```
 
+#### ENABLE_FLOOD_OPTIMIZATION
+
+Set this true to enable flooding-optimization, Open/R will start forming
+spanning tree and flood updates on formed SPT instead of physical
+topology. This will greatly reduce kvstore updates traffic, however, based on
+which node is picked as flood-root, control-plane propagation might increase.
+Before, propagation is determined by shortest path between two nodes. Now, it
+will be the path between two nodes in the formed SPT, which is not necessary to
+be the shortest path. (worst case: 2 x SPT-depth between two leaf nodes).
+data-plane traffic stays the same.
+
+```
+ENABLE_FLOOD_OPTIMIZATION=false
+```
+
+#### IS_FLOOD_ROOT
+
+Set this true to let this node declare itself as a flood-root. You can set
+multiple nodes as flood-roots in a network, in steady state, open/r will pick
+optimal (smallest node-name) one as the SPT for flooding. If optimal root went
+away, open/r will pick 2nd optimal one as SPT-root and so on so forth. If all 
+root nodes went away, open/r will fall back to legacy flooding.
+
+```
+IS_FLOOD_ROOT=false
+```
+
+#### USE_FLOOD_OPTIMIZATION
+
+Set this true to let open/r USE formed SPT for flooding, this flag will be
+deprecated soon. This is just for safely rollout purpose
+
+```
+USE_FLOOD_OPTIMIZATION=false
+```
+
 ### TLS Related Flags
 
 We are in the process of adding TLS for all openr traffic. This will be

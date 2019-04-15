@@ -104,6 +104,9 @@ VERBOSITY=1
 X509_CA_PATH=""
 X509_CERT_PATH=""
 X509_KEY_PATH=""
+ENABLE_FLOOD_OPTIMIZATION=false
+IS_FLOOD_ROOT=false
+USE_FLOOD_OPTIMIZATION=false
 
 #
 # Some sanity checks before we start OpenR
@@ -219,6 +222,9 @@ exec ${OPENR} \
   --x509_ca_path=${X509_CA_PATH} \
   --x509_cert_path=${X509_CERT_PATH} \
   --x509_key_path=${X509_KEY_PATH} \
+  --enable_flood_optimization=${ENABLE_FLOOD_OPTIMIZATION} \
+  --is_flood_root=${IS_FLOOD_ROOT} \
+  --use_flood_optimization=${USE_FLOOD_OPTIMIZATION} \
   --logbufsecs=0 \
   --logtostderr \
   --max_log_size=1 \
