@@ -5,12 +5,15 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.OpenrCtrl
+namespace php Openr
 
 include "common/fb303/if/fb303.thrift"
 include "Decision.thrift"
 include "Fib.thrift"
+include "HealthChecker.thrift"
 
 enum OpenrModuleType {
   DECISION = 1,
@@ -86,4 +89,15 @@ service OpenrCtrl extends fb303.FacebookService {
    * expires
    */
   Decision.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error)
+
+  //
+  // HealthChecker APIs
+  //
+
+  /**
+   * Get health-checker statistics per node
+   */
+  HealthChecker.HealthCheckerInfo getHealthCheckerInfo()
+    throws (1: OpenrError error)
+
 }

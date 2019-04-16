@@ -467,7 +467,7 @@ HealthChecker::processRequestMsg(fbzmq::Message&& msg) {
   }
 
   auto thriftReq = maybeThriftReq.value();
-  thrift::HealthCheckerPeekReply reply;
+  thrift::HealthCheckerInfo reply;
   switch (thriftReq.cmd) {
   case thrift::HealthCheckerCmd::PEEK: {
     for (auto const& kv : nodeInfo_) {

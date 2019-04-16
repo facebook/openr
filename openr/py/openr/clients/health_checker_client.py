@@ -30,5 +30,5 @@ class HealthCheckerClient(OpenrClient):
         req_msg.cmd = health_checker_types.HealthCheckerCmd.PEEK
 
         return self.send_and_recv_thrift_obj(
-            req_msg, health_checker_types.HealthCheckerPeekReply
+            req_msg, health_checker_types.HealthCheckerInfo
         )

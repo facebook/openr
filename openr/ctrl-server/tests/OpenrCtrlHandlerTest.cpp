@@ -12,9 +12,11 @@
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <openr/common/Constants.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
+#include <openr/health-checker/HealthChecker.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace openr;
@@ -84,6 +86,24 @@ class OpenrCtrlFixture : public ::testing::Test {
     fibThread_ = std::thread([&]() { fib->run(); });
     moduleTypeToEvl[thrift::OpenrModuleType::FIB] = fib;
 
+    // Create HealthChecker module
+    healthChecker = std::make_shared<HealthChecker>(
+        nodeName,
+        thrift::HealthCheckOption::PingNeighborOfNeighbor,
+        uint32_t{50}, /* health check pct */
+        uint16_t{0}, /* make sure it binds to some open port */
+        std::chrono::seconds(2),
+        folly::none, /* maybeIpTos */
+        AdjacencyDbMarker{Constants::kAdjDbMarker.str()},
+        PrefixDbMarker{Constants::kPrefixDbMarker.str()},
+        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
+        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        folly::none, // command-url
+        monitorSubmitUrl_,
+        context_);
+    healthCheckerThread_ = std::thread([&]() { healthChecker->run(); });
+    moduleTypeToEvl[thrift::OpenrModuleType::HEALTH_CHECKER] = healthChecker;
+
     // Create open/r handler
     handler = std::make_unique<OpenrCtrlHandler>(
         nodeName,
@@ -96,6 +116,9 @@ class OpenrCtrlFixture : public ::testing::Test {
   void
   TearDown() override {
     handler.reset();
+
+    healthChecker->stop();
+    healthCheckerThread_.join();
 
     fib->stop();
     fibThread_.join();
@@ -116,6 +139,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::thread zmqMonitorThread_;
   std::thread decisionThread_;
   std::thread fibThread_;
+  std::thread healthCheckerThread_;
 
  public:
   const std::string nodeName{"thanos@universe"};
@@ -123,6 +147,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
   std::shared_ptr<Decision> decision;
   std::shared_ptr<Fib> fib;
+  std::shared_ptr<HealthChecker> healthChecker;
   std::unique_ptr<OpenrCtrlHandler> handler;
 };
 
@@ -178,6 +203,14 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
     auto ret = handler->semifuture_getDecisionPrefixDbs().get();
     ASSERT_NE(nullptr, ret);
     EXPECT_EQ(0, ret->size());
+  }
+}
+
+TEST_F(OpenrCtrlFixture, HealthCheckerApis) {
+  {
+    auto ret = handler->semifuture_getHealthCheckerInfo().get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_EQ(0, ret->nodeInfo.size());
   }
 }
 

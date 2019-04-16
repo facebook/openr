@@ -86,6 +86,13 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
   semifuture_getDecisionPrefixDbs() override;
 
+  //
+  // HealthChecker APIs
+  //
+
+  folly::SemiFuture<std::unique_ptr<thrift::HealthCheckerInfo>>
+  semifuture_getHealthCheckerInfo() override;
+
  private:
   template <typename ReturnType, typename InputType>
   folly::Expected<ReturnType, fbzmq::Error> requestReply(

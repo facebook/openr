@@ -304,4 +304,23 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
   return p.getSemiFuture();
 }
 
+folly::SemiFuture<std::unique_ptr<thrift::HealthCheckerInfo>>
+OpenrCtrlHandler::semifuture_getHealthCheckerInfo() {
+  folly::Promise<std::unique_ptr<thrift::HealthCheckerInfo>> p;
+
+  thrift::HealthCheckerRequest request;
+  request.cmd = thrift::HealthCheckerCmd::PEEK;
+
+  auto reply = requestReply<thrift::HealthCheckerInfo>(
+      thrift::OpenrModuleType::HEALTH_CHECKER, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<thrift::HealthCheckerInfo>(std::move(reply.value())));
+  }
+
+  return p.getSemiFuture();
+}
+
 } // namespace openr
