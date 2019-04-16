@@ -1685,11 +1685,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // neighbors receive all the keys and we must receive `kNumStores`
   // key-value updates from each store over PUB socket.
   LOG(INFO) << "Waiting for full sync to complete.";
-  {
+  for (auto& store : stores_) {
     std::unordered_set<std::string> keys;
-    VLOG(3) << "Store " << myStore->nodeId << " received keys.";
+    VLOG(3) << "Store " << store->nodeId << " received keys.";
     while (keys.size() < kNumStores) {
-      auto publication = myStore->recvPublication(kTimeout);
+      auto publication = store->recvPublication(kTimeout);
       for (auto const& kv : publication.keyVals) {
         VLOG(3) << "\tkey: " << kv.first
                 << ", value: " << kv.second.value.value();
@@ -1730,11 +1730,12 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // of our neighbors receive all the keys and we must receive `kNumStores`
   // key-value updates from each store over PUB socket.
   LOG(INFO) << "waiting for another full sync to complete...";
-  {
+  // Receive 16 updates from each store
+  for (auto& store : stores_) {
     std::unordered_set<std::string> keys;
-    VLOG(3) << "Store " << myStore->nodeId << " received keys.";
+    VLOG(3) << "Store " << store->nodeId << " received keys.";
     while (keys.size() < kNumStores) {
-      auto publication = myStore->recvPublication(kTimeout);
+      auto publication = store->recvPublication(kTimeout);
       for (auto const& kv : publication.keyVals) {
         VLOG(3) << "\tkey: " << kv.first
                 << ", value: " << kv.second.value.value();
@@ -1766,6 +1767,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   LOG(INFO) << "Testing flooding behavior";
 
   // Get current counters
+  LOG(INFO) << "Getting counters snapshot";
   auto oldNodeCounters = getNodeCounters();
 
   // Set new key
@@ -1798,11 +1800,12 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   }
 
   // Get new counters
+  LOG(INFO) << "Getting counters snapshot";
   auto newNodeCounters = getNodeCounters();
 
   // Verify counters
   for (auto& store : stores_) {
-    VLOG(2) << "Verifying counters from " << store->nodeId;
+    LOG(INFO) << "Verifying counters from " << store->nodeId;
     auto& oldCounters = oldNodeCounters[store->nodeId];
     auto& newCounters = newNodeCounters[store->nodeId];
     EXPECT_LE(

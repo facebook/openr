@@ -316,15 +316,6 @@ KvStore::mergeKeyValues(
       continue;
     }
 
-    VLOG(4) << "(mergeKeyValues) key: '" << key << "' value: '"
-            << (value.value.hasValue() ? "valid" : "null")
-            << "' new version: " << newVersion << " old version: " << myVersion
-            << " new TTL: " << value.ttl << " new originator: '"
-            << value.originatorId << "' new TTL version: " << value.ttlVersion;
-    VLOG_IF(5, value.value.hasValue())
-        << "(mergeKeyValues) value: '" << key
-        << folly::backslashify(value.value.value());
-
     bool updateAllNeeded{false};
     bool updateTtlNeeded{false};
 
@@ -375,6 +366,21 @@ KvStore::mergeKeyValues(
               << "'";
       continue;
     }
+
+    VLOG(2) << "Updating key: " << key << "\n  Value: "
+            << (kvStoreIt != kvStore.end() && kvStoreIt->second.value.hasValue()
+                    ? kvStoreIt->second.value.value()
+                    : "null")
+            << " -> " << (value.value.hasValue() ? value.value.value() : "null")
+            << "\n  Version: " << myVersion << " -> " << newVersion
+            << "\n  Originator: "
+            << (kvStoreIt != kvStore.end() ? kvStoreIt->second.originatorId
+                                           : "null")
+            << " -> " << value.originatorId << "\n  TtlVersion: "
+            << (kvStoreIt != kvStore.end() ? kvStoreIt->second.ttlVersion : 0)
+            << " -> " << value.ttlVersion << "\n  Ttl: "
+            << (kvStoreIt != kvStore.end() ? kvStoreIt->second.ttl : 0)
+            << " -> " << value.ttl;
 
     // grab the new value (this will copy, intended)
     thrift::Value newValue = value;
