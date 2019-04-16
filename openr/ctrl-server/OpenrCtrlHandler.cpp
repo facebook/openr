@@ -91,10 +91,9 @@ OpenrCtrlHandler::authorizeConnection() {
   }
 }
 
-template <typename ReturnType, typename InputType>
-folly::Expected<ReturnType, fbzmq::Error>
-OpenrCtrlHandler::requestReply(
-    thrift::OpenrModuleType module, InputType&& input) {
+folly::Expected<fbzmq::Message, fbzmq::Error>
+OpenrCtrlHandler::requestReplyMessage(
+    thrift::OpenrModuleType module, fbzmq::Message&& request, bool oneway) {
   // Check module
   auto moduleIt = moduleSockets_.find(module);
   if (moduleIt == moduleSockets_.end()) {
@@ -104,38 +103,52 @@ OpenrCtrlHandler::requestReply(
 
   // Send request
   auto& sock = moduleIt->second;
-  apache::thrift::CompactSerializer serializer;
-  auto sendRet = sock.sendThriftObj(input, serializer);
+  auto sendRet = sock.sendOne(std::move(request));
   if (sendRet.hasError()) {
     return folly::makeUnexpected(sendRet.error());
   }
 
+  // Recv response if not oneway
+  if (oneway) {
+    return fbzmq::Message();
+  } else {
+    return sock.recvOne(Constants::kReadTimeout);
+  }
+}
+
+template <typename ReturnType, typename InputType>
+folly::Expected<ReturnType, fbzmq::Error>
+OpenrCtrlHandler::requestReplyThrift(
+    thrift::OpenrModuleType module, InputType&& input) {
+  apache::thrift::CompactSerializer serializer;
+  auto reply = requestReplyMessage(
+      module,
+      fbzmq::Message::fromThriftObj(std::forward<InputType>(input), serializer)
+          .value(),
+      false);
+  if (reply.hasError()) {
+    return folly::makeUnexpected(reply.error());
+  }
+
   // Recv response
-  return sock.recvThriftObj<ReturnType>(serializer, Constants::kReadTimeout);
+  return reply->template readThriftObj<ReturnType>(serializer);
 }
 
 folly::SemiFuture<std::unique_ptr<std::string>>
 OpenrCtrlHandler::semifuture_command(
-    thrift::OpenrModuleType type, std::unique_ptr<std::string> request) {
+    thrift::OpenrModuleType module, std::unique_ptr<std::string> request) {
   authorizeConnection();
   folly::Promise<std::unique_ptr<std::string>> p;
-  try {
-    auto& sock = moduleSockets_.at(type);
-    sock.sendOne(fbzmq::Message::from(*request).value()).value();
-    std::string response = sock.recvOne(Constants::kReadTimeout)
-                               .value()
-                               .read<std::string>()
-                               .value();
-    p.setValue(std::make_unique<std::string>(std::move(response)));
-  } catch (const std::out_of_range& e) {
-    auto error = folly::sformat("Unknown module: {}", static_cast<int>(type));
-    LOG(ERROR) << error;
-    p.setException(thrift::OpenrError(error));
-  } catch (const folly::Unexpected<fbzmq::Error>::BadExpectedAccess& e) {
-    auto error = "Error processing request: " + e.error().errString;
-    LOG(ERROR) << error;
-    p.setException(thrift::OpenrError(error));
+
+  auto reply = requestReplyMessage(
+      module, fbzmq::Message::from(std::move(*request)).value(), false);
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<std::string>(reply->read<std::string>().value()));
   }
+
   return p.getSemiFuture();
 }
 
@@ -215,7 +228,7 @@ OpenrCtrlHandler::semifuture_getRouteDb() {
   thrift::FibRequest request;
   request.cmd = thrift::FibCommand::ROUTE_DB_GET;
 
-  auto reply = requestReply<thrift::RouteDatabase>(
+  auto reply = requestReplyThrift<thrift::RouteDatabase>(
       thrift::OpenrModuleType::FIB, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));
@@ -236,7 +249,7 @@ OpenrCtrlHandler::semifuture_getRouteDbComputed(
   request.cmd = thrift::DecisionCommand::ROUTE_DB_GET;
   request.nodeName = std::move(*nodeName);
 
-  auto reply = requestReply<thrift::DecisionReply>(
+  auto reply = requestReplyThrift<thrift::DecisionReply>(
       thrift::OpenrModuleType::DECISION, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));
@@ -255,7 +268,7 @@ OpenrCtrlHandler::semifuture_getPerfDb() {
   thrift::FibRequest request;
   request.cmd = thrift::FibCommand::PERF_DB_GET;
 
-  auto reply = requestReply<thrift::PerfDatabase>(
+  auto reply = requestReplyThrift<thrift::PerfDatabase>(
       thrift::OpenrModuleType::FIB, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));
@@ -274,7 +287,7 @@ OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
   thrift::DecisionRequest request;
   request.cmd = thrift::DecisionCommand::ADJ_DB_GET;
 
-  auto reply = requestReply<thrift::DecisionReply>(
+  auto reply = requestReplyThrift<thrift::DecisionReply>(
       thrift::OpenrModuleType::DECISION, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));
@@ -292,7 +305,7 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
   thrift::DecisionRequest request;
   request.cmd = thrift::DecisionCommand::ROUTE_DB_GET;
 
-  auto reply = requestReply<thrift::DecisionReply>(
+  auto reply = requestReplyThrift<thrift::DecisionReply>(
       thrift::OpenrModuleType::DECISION, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));
@@ -311,7 +324,7 @@ OpenrCtrlHandler::semifuture_getHealthCheckerInfo() {
   thrift::HealthCheckerRequest request;
   request.cmd = thrift::HealthCheckerCmd::PEEK;
 
-  auto reply = requestReply<thrift::HealthCheckerInfo>(
+  auto reply = requestReplyThrift<thrift::HealthCheckerInfo>(
       thrift::OpenrModuleType::HEALTH_CHECKER, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));

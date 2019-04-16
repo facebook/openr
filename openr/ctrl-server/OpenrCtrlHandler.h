@@ -94,8 +94,12 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   semifuture_getHealthCheckerInfo() override;
 
  private:
+  // For oneway requests, empty message will be returned immediately
+  folly::Expected<fbzmq::Message, fbzmq::Error> requestReplyMessage(
+      thrift::OpenrModuleType module, fbzmq::Message&& request, bool oneway);
+
   template <typename ReturnType, typename InputType>
-  folly::Expected<ReturnType, fbzmq::Error> requestReply(
+  folly::Expected<ReturnType, fbzmq::Error> requestReplyThrift(
       thrift::OpenrModuleType module, InputType&& input);
 
   void authorizeConnection();
