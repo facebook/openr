@@ -152,6 +152,13 @@ def install_dir():
     return install_dir
 
 
+def projects_dir():
+    projects_dir = os.environ.get('PROJECTS_DIR')
+    if not projects_dir:
+        projects_dir = '/usr/local/src'
+    return projects_dir
+
+
 def ccache_dir():
     ccache_dir = os.environ.get('CCACHE_DIR')
     if not ccache_dir:
@@ -169,13 +176,14 @@ def gcc_version():
 if __name__ == '__main__':
     from utils import read_fbcode_builder_config, build_fbcode_builder_config
     install_dir = install_dir()
+    projects_dir = projects_dir()
 
     config_file = os.path.join(os.path.dirname(__file__),
                                'debian_system_fbcode_builder_config.py')
     config = read_fbcode_builder_config(config_file)
     builder = DebianSystemFBCodeBuilder()
 
-    builder.add_option('projects_dir', install_dir)
+    builder.add_option('projects_dir', projects_dir)
     if distutils.spawn.find_executable('ccache'):
         ccache_dir = ccache_dir()
         builder.add_option('ccache_dir', ccache_dir)
