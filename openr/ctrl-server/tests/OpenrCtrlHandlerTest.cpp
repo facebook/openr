@@ -132,6 +132,28 @@ class OpenrCtrlFixture : public ::testing::Test {
     zmqMonitorThread_.join();
   }
 
+  thrift::Value
+  createThriftValue(
+      int64_t version,
+      const std::string& originatorId,
+      const std::string& value) {
+    thrift::Value thriftValue;
+    thriftValue.version = version;
+    thriftValue.originatorId = originatorId;
+    thriftValue.value = value;
+    thriftValue.ttl = Constants::kTtlInfinity;
+    thriftValue.hash = generateHash(version, originatorId, value);
+    return thriftValue;
+  }
+
+  thrift::PeerSpec
+  createPeerSpec(const std::string& pubUrl, const std::string& cmdUrl) {
+    thrift::PeerSpec peerSpec;
+    peerSpec.pubUrl = pubUrl;
+    peerSpec.cmdUrl = cmdUrl;
+    return peerSpec;
+  }
+
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
   const DecisionPubUrl decisionPubUrl_{"inproc://decision-pub"};
@@ -211,6 +233,172 @@ TEST_F(OpenrCtrlFixture, HealthCheckerApis) {
     auto ret = handler->semifuture_getHealthCheckerInfo().get();
     ASSERT_NE(nullptr, ret);
     EXPECT_EQ(0, ret->nodeInfo.size());
+  }
+}
+
+TEST_F(OpenrCtrlFixture, KvStoreApis) {
+  thrift::KeyVals keyVals;
+  keyVals["key1"] = createThriftValue(1, "node1", "value1");
+  keyVals["key11"] = createThriftValue(1, "node1", "value11");
+  keyVals["key111"] = createThriftValue(1, "node1", "value111");
+  keyVals["key2"] = createThriftValue(1, "node1", "value2");
+  keyVals["key22"] = createThriftValue(1, "node1", "value22");
+  keyVals["key222"] = createThriftValue(1, "node1", "value222");
+  keyVals["key3"] = createThriftValue(1, "node3", "value3");
+  keyVals["key33"] = createThriftValue(1, "node33", "value33");
+  keyVals["key333"] = createThriftValue(1, "node33", "value333");
+
+  //
+  // Key set/get
+  //
+
+  {
+    thrift::KeySetParams setParams;
+    setParams.keyVals = keyVals;
+
+    auto ret = handler
+                   ->semifuture_setKvStoreKeyVals(
+                       std::make_unique<thrift::KeySetParams>(setParams))
+                   .get();
+    ASSERT_TRUE(folly::Unit() == ret);
+
+    setParams.solicitResponse = false;
+    ret = handler
+              ->semifuture_setKvStoreKeyVals(
+                  std::make_unique<thrift::KeySetParams>(setParams))
+              .get();
+    ASSERT_TRUE(folly::Unit() == ret);
+
+    ret = handler
+              ->semifuture_setKvStoreKeyValsOneWay(
+                  std::make_unique<thrift::KeySetParams>(setParams))
+              .get();
+    ASSERT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    std::vector<std::string> filterKeys{"key11", "key2"};
+    auto ret = handler
+                   ->semifuture_getKvStoreKeyVals(
+                       std::make_unique<std::vector<std::string>>(filterKeys))
+                   .get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_EQ(2, ret->keyVals.size());
+    EXPECT_EQ(keyVals.at("key2"), ret->keyVals["key2"]);
+    EXPECT_EQ(keyVals.at("key11"), ret->keyVals["key11"]);
+  }
+
+  {
+    thrift::KeyDumpParams params;
+    params.prefix = "key3";
+    params.originatorIds.insert("node3");
+
+    auto ret = handler
+                   ->semifuture_getKvStoreKeyValsFiltered(
+                       std::make_unique<thrift::KeyDumpParams>(params))
+                   .get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_EQ(3, ret->keyVals.size());
+    EXPECT_EQ(keyVals.at("key3"), ret->keyVals["key3"]);
+    EXPECT_EQ(keyVals.at("key33"), ret->keyVals["key33"]);
+    EXPECT_EQ(keyVals.at("key333"), ret->keyVals["key333"]);
+  }
+
+  {
+    thrift::KeyDumpParams params;
+    params.prefix = "key3";
+    params.originatorIds.insert("node3");
+
+    auto ret = handler
+                   ->semifuture_getKvStoreHashFiltered(
+                       std::make_unique<thrift::KeyDumpParams>(params))
+                   .get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_EQ(3, ret->keyVals.size());
+    auto value3 = keyVals.at("key3");
+    value3.value = folly::none;
+    auto value33 = keyVals.at("key33");
+    value33.value = folly::none;
+    auto value333 = keyVals.at("key333");
+    value333.value = folly::none;
+    EXPECT_EQ(value3, ret->keyVals["key3"]);
+    EXPECT_EQ(value33, ret->keyVals["key33"]);
+    EXPECT_EQ(value333, ret->keyVals["key333"]);
+  }
+
+  //
+  // Dual and Flooding APIs
+  //
+
+  {
+    thrift::DualMessages messages;
+    auto ret = handler
+                   ->semifuture_processKvStoreDualMessage(
+                       std::make_unique<thrift::DualMessages>(messages))
+                   .get();
+    ASSERT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    thrift::FloodTopoSetParams params;
+    auto ret = handler
+                   ->semifuture_updateFloodTopologyChild(
+                       std::make_unique<thrift::FloodTopoSetParams>(params))
+                   .get();
+    ASSERT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ret = handler->semifuture_getSpanningTreeInfo().get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_FALSE(ret->passive);
+    EXPECT_EQ(0, ret->cost);
+    ASSERT_TRUE(ret->parent.hasValue());
+    EXPECT_EQ(nodeName, ret->parent.value());
+    EXPECT_EQ(0, ret->children.size());
+  }
+
+  //
+  // Peers APIs
+  //
+
+  const thrift::PeersMap peers{
+      {"peer1", createPeerSpec("inproc:://peer1-pub", "inproc://peer1-cmd")},
+      {"peer2", createPeerSpec("inproc:://peer2-pub", "inproc://peer2-cmd")},
+      {"peer3", createPeerSpec("inproc:://peer3-pub", "inproc://peer3-cmd")}};
+
+  {
+    auto ret = handler
+                   ->semifuture_addUpdateKvStorePeers(
+                       std::make_unique<thrift::PeersMap>(peers))
+                   .get();
+    ASSERT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ret = handler->semifuture_getKvStorePeers().get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_EQ(3, ret->size());
+    EXPECT_EQ(peers.at("peer1"), (*ret)["peer1"]);
+    EXPECT_EQ(peers.at("peer2"), (*ret)["peer2"]);
+    EXPECT_EQ(peers.at("peer3"), (*ret)["peer3"]);
+  }
+
+  {
+    std::vector<std::string> peersToDel{"peer2"};
+    auto ret = handler
+                   ->semifuture_deleteKvStorePeers(
+                       std::make_unique<std::vector<std::string>>(peersToDel))
+                   .get();
+    ASSERT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ret = handler->semifuture_getKvStorePeers().get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_EQ(2, ret->size());
+    EXPECT_EQ(peers.at("peer1"), (*ret)["peer1"]);
+    EXPECT_EQ(peers.at("peer3"), (*ret)["peer3"]);
   }
 }
 

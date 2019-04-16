@@ -93,6 +93,45 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::HealthCheckerInfo>>
   semifuture_getHealthCheckerInfo() override;
 
+  //
+  // KvStore APIs
+  //
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_getKvStoreKeyVals(
+      std::unique_ptr<std::vector<std::string>> filterKeys) override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_getKvStoreKeyValsFiltered(
+      std::unique_ptr<thrift::KeyDumpParams> filter) override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_getKvStoreHashFiltered(
+      std::unique_ptr<thrift::KeyDumpParams> filter) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
+      std::unique_ptr<thrift::KeySetParams> setParams) override;
+  folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyValsOneWay(
+      std::unique_ptr<thrift::KeySetParams> setParams) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
+      std::unique_ptr<thrift::DualMessages> messages) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_updateFloodTopologyChild(
+      std::unique_ptr<thrift::FloodTopoSetParams> params) override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::SptInfo>>
+  semifuture_getSpanningTreeInfo() override;
+
+  folly::SemiFuture<folly::Unit> semifuture_addUpdateKvStorePeers(
+      std::unique_ptr<thrift::PeersMap> peers) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_deleteKvStorePeers(
+      std::unique_ptr<std::vector<std::string>> peerNames) override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
+  semifuture_getKvStorePeers() override;
+
  private:
   // For oneway requests, empty message will be returned immediately
   folly::Expected<fbzmq::Message, fbzmq::Error> requestReplyMessage(
@@ -101,6 +140,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   template <typename ReturnType, typename InputType>
   folly::Expected<ReturnType, fbzmq::Error> requestReplyThrift(
       thrift::OpenrModuleType module, InputType&& input);
+
+  template <typename InputType>
+  folly::SemiFuture<folly::Unit> processThriftRequest(
+      thrift::OpenrModuleType module, InputType&& request, bool oneway);
 
   void authorizeConnection();
   const std::string nodeName_;
