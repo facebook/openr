@@ -40,6 +40,20 @@ cd /tmp/docker-context-m6h7_x
 sudo docker build -t openr-build . | tee log
 ```
 
+### Build on debian host without docker
+---
+
+The `debian_system_builder` helps you creating a build script using the `fbcode_builder` logic. The system builder extends the `shell_builder` to create a shell script that installs Open/R and its dependecies to the system. The `debian_system_builder` is tested on `ubuntu 16.04 server`.
+
+To create and execute the build script run:
+
+```
+cd openr/build
+python debian_system_builder/debian_system_builder.py > ./build_openr_debian.sh
+sudo chmod +x build_openr_debian.sh
+sudo ./build_openr_debian.sh
+```
+
 ### Miscellaneous
 ---
 

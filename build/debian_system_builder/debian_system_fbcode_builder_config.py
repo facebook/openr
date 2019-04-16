@@ -10,9 +10,9 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import debian_specs.fbzmq as fbzmq
+import debian_specs.python_fbthrift as python_fbthrift
 import debian_specs.python_fbzmq as python_fbzmq
 import specs.fbthrift as fbthrift
-import debian_specs.python_fbthrift as python_fbthrift
 import specs.folly as folly
 import specs.re2 as re2
 from shell_quoting import ShellQuoted, path_join
@@ -75,38 +75,24 @@ def fbcode_builder_spec(builder):
                 "Install OpenR python modules",
                 [
                     builder.workdir(
-                        path_join(
-                            builder.option('projects_dir'),
-                            "openr/openr/py"
-                        )
+                        path_join(builder.option("projects_dir"), "openr/openr/py")
                     ),
                     builder.run(
                         ShellQuoted(
-                            "sudo pip install cffi future"
+                            "sudo pip install cffi future pathlib 'networkx==2.2'"
                         )
                     ),
-                    builder.run(
-                        ShellQuoted(
-                            "sudo python setup.py build"
-                        )
-                    ),
-                    builder.run(
-                        ShellQuoted(
-                            "sudo python setup.py install"
-                        )
-                    ),
-                ]
+                    builder.run(ShellQuoted("sudo python setup.py build")),
+                    builder.run(ShellQuoted("sudo python setup.py install")),
+                ],
             ),
             builder.step(
                 "Run openr tests",
                 [
                     builder.workdir(
-                        path_join(
-                            builder.option('projects_dir'),
-                            "openr/build"
-                        )
+                        path_join(builder.option("projects_dir"), "openr/build")
                     ),
-                    builder.run(ShellQuoted("CTEST_OUTPUT_ON_FAILURE=TRUE make test"))
+                    builder.run(ShellQuoted("CTEST_OUTPUT_ON_FAILURE=TRUE make test")),
                 ],
             ),
         ],
