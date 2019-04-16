@@ -124,6 +124,7 @@ class DebianSystemFBCodeBuilder(ShellFBCodeBuilder):
                 'python-setuptools',
                 'python3-setuptools',
                 'python-pip',
+                'ccache',
             ]
 
     def setup(self):

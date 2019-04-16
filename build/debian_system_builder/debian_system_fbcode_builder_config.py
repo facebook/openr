@@ -82,7 +82,7 @@ def fbcode_builder_spec(builder):
                     ),
                     builder.run(
                         ShellQuoted(
-                            "sudo pip install cffi future"
+                            "sudo pip install cffi future pathlib 'networkx==2.2'"
                         )
                     ),
                     builder.run(
