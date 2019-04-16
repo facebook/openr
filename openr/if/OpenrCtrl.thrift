@@ -16,6 +16,7 @@ include "Dual.thrift"
 include "Fib.thrift"
 include "HealthChecker.thrift"
 include "KvStore.thrift"
+include "LinkMonitor.thrift"
 
 enum OpenrModuleType {
   DECISION = 1,
@@ -125,7 +126,6 @@ service OpenrCtrl extends fb303.FacebookService {
   KvStore.Publication getKvStoreHashFiltered(1: KvStore.KeyDumpParams filter)
     throws (1: OpenrError error)
 
-
   /**
    * Set/Update key-values in KvStore.
    */
@@ -167,5 +167,67 @@ service OpenrCtrl extends fb303.FacebookService {
    * Get KvStore peers
    */
   KvStore.PeersMap getKvStorePeers() throws (1: OpenrError error)
+
+  //
+  // LinkMonitor APIs
+  //
+
+  /**
+   * Commands to set/unset overload bit. If overload bit is set then the node
+   * will not do any transit traffic. However node will still be reachable in
+   * the network from other nodes.
+   */
+  void setNodeOverload() throws (1: OpenrError error)
+  void unsetNodeOverload() throws (1: OpenrError error)
+
+  /**
+   * Command to set/unset overload bit for interface. If overload bit is set
+   * then no transit traffic will pass through the interface which is equivalent
+   * to hard drain on the interface.
+   */
+  void setInterfaceOverload(1: string interfaceName)
+    throws (1: OpenrError error)
+  void unsetInterfaceOverload(1: string interfaceName)
+    throws (1: OpenrError error)
+
+  /**
+   * Command to override metric for adjacencies over specific interfaces. This
+   * can be used to emulate soft-drain of interfaces by using higher metric
+   * value for link.
+   *
+   * Request must have valid `interfaceName` and `overrideMetric` values.
+   */
+  void setInterfaceMetric(1: string interfaceName, 2: i32 overrideMetric)
+    throws (1: OpenrError error)
+  void unsetInterfaceMetric(1: string interfaceName)
+    throws (1: OpenrError error)
+
+  /**
+   * Command to override metric for specific adjacencies. Request must have
+   * valid interface name, adjacency-node name and override metric value.
+   */
+  void setAdjacencyMetric(
+    1: string interfaceName,
+    2: string adjNodeName,
+    3: i32 overrideMetric,
+  ) throws (1: OpenrError error)
+  void unsetAdjacencyMetric(1: string interfaceName, 2: string adjNodeName)
+    throws (1: OpenrError error)
+
+  /**
+   * Get the current link status information
+   */
+  LinkMonitor.DumpLinksReply getInterfaces() throws (1: OpenrError error)
+
+  /**
+   * Command to request OpenR version
+   */
+  LinkMonitor.OpenrVersions getOpenrVersion() throws (1: OpenrError error)
+
+  /**
+   * Command to request build information
+   * @deprecated - instead use getRegexExportedValues("build.*") API
+   */
+  LinkMonitor.BuildInfo getBuildInfo() throws (1: OpenrError error)
 
 }

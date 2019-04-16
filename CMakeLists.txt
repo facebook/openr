@@ -629,6 +629,12 @@ if(BUILD_TESTS)
 
   add_executable(openr_ctrl_handler_test
     openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
+    openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
+  )
+
+  target_include_directories(openr_ctrl_handler_test
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
   )
 
   target_link_libraries(openr_ctrl_handler_test

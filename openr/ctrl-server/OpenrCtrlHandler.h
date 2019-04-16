@@ -132,6 +132,41 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeers() override;
 
+  //
+  // LinkMonitor APIs
+  //
+
+  folly::SemiFuture<folly::Unit> semifuture_setNodeOverload() override;
+  folly::SemiFuture<folly::Unit> semifuture_unsetNodeOverload() override;
+
+  folly::SemiFuture<folly::Unit> semifuture_setInterfaceOverload(
+      std::unique_ptr<std::string> interfaceName) override;
+  folly::SemiFuture<folly::Unit> semifuture_unsetInterfaceOverload(
+      std::unique_ptr<std::string> interfaceName) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_setInterfaceMetric(
+      std::unique_ptr<std::string> interfaceName,
+      int32_t overrideMetric) override;
+  folly::SemiFuture<folly::Unit> semifuture_unsetInterfaceMetric(
+      std::unique_ptr<std::string> interfaceName) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_setAdjacencyMetric(
+      std::unique_ptr<std::string> interfaceName,
+      std::unique_ptr<std::string> adjNodeName,
+      int32_t overrideMetric) override;
+  folly::SemiFuture<folly::Unit> semifuture_unsetAdjacencyMetric(
+      std::unique_ptr<std::string> interfaceName,
+      std::unique_ptr<std::string> adjNodeName) override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
+  semifuture_getInterfaces() override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::OpenrVersions>>
+  semifuture_getOpenrVersion() override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::BuildInfo>>
+  semifuture_getBuildInfo() override;
+
  private:
   // For oneway requests, empty message will be returned immediately
   folly::Expected<fbzmq::Message, fbzmq::Error> requestReplyMessage(

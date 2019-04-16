@@ -9,15 +9,23 @@
 
 #include <fbzmq/service/monitor/ZmqMonitor.h>
 #include <fbzmq/zmq/Context.h>
+#include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <thrift/lib/cpp2/util/ScopedServerThread.h>
+
 #include <openr/common/Constants.h>
+#include <openr/config-store/PersistentStore.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/health-checker/HealthChecker.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/link-monitor/LinkMonitor.h>
+#include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
+#include <openr/prefix-manager/PrefixManager.h>
 
 using namespace openr;
 
@@ -104,6 +112,78 @@ class OpenrCtrlFixture : public ::testing::Test {
     healthCheckerThread_ = std::thread([&]() { healthChecker->run(); });
     moduleTypeToEvl[thrift::OpenrModuleType::HEALTH_CHECKER] = healthChecker;
 
+    // Create PrefixManager module
+    prefixManager = std::make_shared<PrefixManager>(
+        nodeName,
+        prefixManagerUrl_,
+        persistentStoreUrl_,
+        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
+        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        monitorSubmitUrl_,
+        PrefixDbMarker{Constants::kPrefixDbMarker.str()},
+        false,
+        std::chrono::seconds(0),
+        Constants::kKvStoreDbTtl,
+        context_);
+    prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
+    moduleTypeToEvl[thrift::OpenrModuleType::PREFIX_MANAGER] = prefixManager;
+
+    // Create MockNetlinkSystemHandler
+    mockNlHandler =
+        std::make_shared<MockNetlinkSystemHandler>(context_, platformPubUrl_);
+    systemServer = std::make_shared<apache::thrift::ThriftServer>();
+    systemServer->setNumIOWorkerThreads(1);
+    systemServer->setNumAcceptThreads(1);
+    systemServer->setPort(0);
+    systemServer->setInterface(mockNlHandler);
+    systemThriftThread.start(systemServer);
+
+    // Create LinkMonitor
+    re2::RE2::Options regexOpts;
+    std::string regexErr;
+    auto includeRegexList =
+        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+    includeRegexList->Add("po.*", &regexErr);
+    includeRegexList->Compile();
+
+    linkMonitor = std::make_shared<LinkMonitor>(
+        context_,
+        nodeName,
+        systemThriftThread.getAddress()->getPort(),
+        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
+        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        std::move(includeRegexList),
+        nullptr,
+        nullptr, // redistribute interface name
+        std::vector<thrift::IpPrefix>{},
+        false /* useRttMetric */,
+        false /* enable perf measurement */,
+        true /* enable v4 */,
+        true /* enable segment routing */,
+        false /* prefix type mpls */,
+        AdjacencyDbMarker{Constants::kAdjDbMarker.str()},
+        sparkCmdUrl_,
+        sparkReportUrl_,
+        monitorSubmitUrl_,
+        persistentStoreUrl_,
+        false,
+        PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
+        platformPubUrl_,
+        lmPubUrl_,
+        lmCmdUrl_,
+        std::chrono::seconds(1),
+        // link flap backoffs, set low to keep UT runtime low
+        std::chrono::milliseconds(1),
+        std::chrono::milliseconds(8),
+        Constants::kKvStoreDbTtl);
+    linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
+    moduleTypeToEvl[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
+
+    // Create PersistentStore
+    persistentStore = std::make_unique<PersistentStore>(
+        "/tmp/openr-ctrl-handler-test.bin", persistentStoreUrl_, context_);
+    persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
+
     // Create open/r handler
     handler = std::make_unique<OpenrCtrlHandler>(
         nodeName,
@@ -116,6 +196,18 @@ class OpenrCtrlFixture : public ::testing::Test {
   void
   TearDown() override {
     handler.reset();
+
+    linkMonitor->stop();
+    linkMonitorThread_.join();
+
+    persistentStore->stop();
+    persistentStoreThread_.join();
+
+    prefixManager->stop();
+    prefixManagerThread_.join();
+
+    mockNlHandler->stop();
+    systemThriftThread.stop();
 
     healthChecker->stop();
     healthCheckerThread_.join();
@@ -157,11 +249,22 @@ class OpenrCtrlFixture : public ::testing::Test {
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
   const DecisionPubUrl decisionPubUrl_{"inproc://decision-pub"};
+  const PersistentStoreUrl persistentStoreUrl_{"inproc://persistent-store-url"};
+  const SparkCmdUrl sparkCmdUrl_{"inproc://spark-req"};
+  const SparkReportUrl sparkReportUrl_{"inproc://spark-report"};
+  const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
+  const LinkMonitorGlobalPubUrl lmPubUrl_{"inproc://link-monitor-pub-url"};
+  const std::string lmCmdUrl_{"inproc://link-monitor-cmd-url"};
+  const std::string prefixManagerUrl_{"inproc://prefix-mngr-global-cmd"};
   fbzmq::Context context_;
   std::thread zmqMonitorThread_;
   std::thread decisionThread_;
   std::thread fibThread_;
   std::thread healthCheckerThread_;
+  std::thread prefixManagerThread_;
+  std::thread persistentStoreThread_;
+  std::thread linkMonitorThread_;
+  apache::thrift::util::ScopedServerThread systemThriftThread;
 
  public:
   const std::string nodeName{"thanos@universe"};
@@ -170,6 +273,11 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::shared_ptr<Decision> decision;
   std::shared_ptr<Fib> fib;
   std::shared_ptr<HealthChecker> healthChecker;
+  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler;
+  std::shared_ptr<apache::thrift::ThriftServer> systemServer;
+  std::shared_ptr<PrefixManager> prefixManager;
+  std::shared_ptr<PersistentStore> persistentStore;
+  std::shared_ptr<LinkMonitor> linkMonitor;
   std::unique_ptr<OpenrCtrlHandler> handler;
 };
 
@@ -402,13 +510,94 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 }
 
+TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
+  // create an interface
+  mockNlHandler->sendLinkEvent("po1011", 100, true);
+
+  {
+    auto ret = handler->semifuture_setNodeOverload().get();
+    EXPECT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ret = handler->semifuture_unsetNodeOverload().get();
+    EXPECT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ifName = std::make_unique<std::string>("po1011");
+    auto ret =
+        handler->semifuture_setInterfaceOverload(std::move(ifName)).get();
+    EXPECT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ifName = std::make_unique<std::string>("po1011");
+    auto ret =
+        handler->semifuture_unsetInterfaceOverload(std::move(ifName)).get();
+    EXPECT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ifName = std::make_unique<std::string>("po1011");
+    auto ret =
+        handler->semifuture_setInterfaceMetric(std::move(ifName), 110).get();
+    EXPECT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ifName = std::make_unique<std::string>("po1011");
+    auto ret =
+        handler->semifuture_unsetInterfaceMetric(std::move(ifName)).get();
+    EXPECT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ifName = std::make_unique<std::string>("po1011");
+    auto adjName = std::make_unique<std::string>("night@king");
+    auto ret = handler
+                   ->semifuture_setAdjacencyMetric(
+                       std::move(ifName), std::move(adjName), 110)
+                   .get();
+    EXPECT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ifName = std::make_unique<std::string>("po1011");
+    auto adjName = std::make_unique<std::string>("night@king");
+    auto ret = handler
+                   ->semifuture_unsetAdjacencyMetric(
+                       std::move(ifName), std::move(adjName))
+                   .get();
+    EXPECT_TRUE(folly::Unit() == ret);
+  }
+
+  {
+    auto ret = handler->semifuture_getInterfaces().get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_EQ(nodeName, ret->thisNodeName);
+    EXPECT_FALSE(ret->isOverloaded);
+    EXPECT_EQ(1, ret->interfaceDetails.size());
+  }
+
+  {
+    auto ret = handler->semifuture_getOpenrVersion().get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_LE(ret->lowestSupportedVersion, ret->version);
+  }
+
+  {
+    auto ret = handler->semifuture_getBuildInfo().get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_NE("", ret->buildMode);
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
+  folly::init(&argc, &argv);
   FLAGS_logtostderr = true;
 
   // Run the tests

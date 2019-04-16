@@ -518,4 +518,164 @@ OpenrCtrlHandler::semifuture_getKvStorePeers() {
   return p.getSemiFuture();
 }
 
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setNodeOverload() {
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::SET_OVERLOAD;
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::LINK_MONITOR,
+      std::move(request),
+      false /* oneway */);
+}
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_unsetNodeOverload() {
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::UNSET_OVERLOAD;
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::LINK_MONITOR,
+      std::move(request),
+      false /* oneway */);
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setInterfaceOverload(
+    std::unique_ptr<std::string> interfaceName) {
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::SET_LINK_OVERLOAD;
+  request.interfaceName = std::move(*interfaceName);
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::LINK_MONITOR,
+      std::move(request),
+      false /* oneway */);
+}
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_unsetInterfaceOverload(
+    std::unique_ptr<std::string> interfaceName) {
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD;
+  request.interfaceName = std::move(*interfaceName);
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::LINK_MONITOR,
+      std::move(request),
+      false /* oneway */);
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setInterfaceMetric(
+    std::unique_ptr<std::string> interfaceName, int32_t overrideMetric) {
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::SET_LINK_METRIC;
+  request.interfaceName = std::move(*interfaceName);
+  request.overrideMetric = overrideMetric;
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::LINK_MONITOR,
+      std::move(request),
+      false /* oneway */);
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_unsetInterfaceMetric(
+    std::unique_ptr<std::string> interfaceName) {
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::UNSET_LINK_METRIC;
+  request.interfaceName = std::move(*interfaceName);
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::LINK_MONITOR,
+      std::move(request),
+      false /* oneway */);
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setAdjacencyMetric(
+    std::unique_ptr<std::string> interfaceName,
+    std::unique_ptr<std::string> adjNodeName,
+    int32_t overrideMetric) {
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::SET_ADJ_METRIC;
+  request.interfaceName = std::move(*interfaceName);
+  request.adjNodeName = std::move(*adjNodeName);
+  request.overrideMetric = overrideMetric;
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::LINK_MONITOR,
+      std::move(request),
+      false /* oneway */);
+}
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_unsetAdjacencyMetric(
+    std::unique_ptr<std::string> interfaceName,
+    std::unique_ptr<std::string> adjNodeName) {
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::UNSET_ADJ_METRIC;
+  request.interfaceName = std::move(*interfaceName);
+  request.adjNodeName = std::move(*adjNodeName);
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::LINK_MONITOR,
+      std::move(request),
+      false /* oneway */);
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
+OpenrCtrlHandler::semifuture_getInterfaces() {
+  folly::Promise<std::unique_ptr<thrift::DumpLinksReply>> p;
+
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::DUMP_LINKS;
+
+  auto reply = requestReplyThrift<thrift::DumpLinksReply>(
+      thrift::OpenrModuleType::LINK_MONITOR, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<thrift::DumpLinksReply>(std::move(reply.value())));
+  }
+
+  return p.getSemiFuture();
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::OpenrVersions>>
+OpenrCtrlHandler::semifuture_getOpenrVersion() {
+  folly::Promise<std::unique_ptr<thrift::OpenrVersions>> p;
+
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::GET_VERSION;
+
+  auto reply = requestReplyThrift<thrift::OpenrVersions>(
+      thrift::OpenrModuleType::LINK_MONITOR, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<thrift::OpenrVersions>(std::move(reply.value())));
+  }
+
+  return p.getSemiFuture();
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::BuildInfo>>
+OpenrCtrlHandler::semifuture_getBuildInfo() {
+  folly::Promise<std::unique_ptr<thrift::BuildInfo>> p;
+
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::GET_BUILD_INFO;
+
+  auto reply = requestReplyThrift<thrift::BuildInfo>(
+      thrift::OpenrModuleType::LINK_MONITOR, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(std::make_unique<thrift::BuildInfo>(std::move(reply.value())));
+  }
+
+  return p.getSemiFuture();
+}
+
 } // namespace openr
