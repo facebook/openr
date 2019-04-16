@@ -17,6 +17,7 @@ include "Fib.thrift"
 include "HealthChecker.thrift"
 include "KvStore.thrift"
 include "LinkMonitor.thrift"
+include "Lsdb.thrift"
 
 enum OpenrModuleType {
   DECISION = 1,
@@ -44,6 +45,49 @@ service OpenrCtrl extends fb303.FacebookService {
     throws (1: OpenrError error)
 
   bool hasModule(1: OpenrModuleType module)
+    throws (1: OpenrError error)
+
+  //
+  // PrefixManager APIs
+  //
+
+  /**
+   * Advertise or Update prefixes
+   */
+  void advertisePrefixes(1: list<Lsdb.PrefixEntry> prefixes)
+    throws (1: OpenrError error)
+
+  /**
+   * Withdraw previously advertised prefixes. Only relevant attributes for this
+   * operation are `prefix` and `type`
+   */
+  void withdrawPrefixes(1: list<Lsdb.PrefixEntry> prefixes)
+    throws (1: OpenrError error)
+
+  /**
+   * Withdraw prefixes in bulk by type (aka client-id)
+   */
+  void withdrawPrefixesByType(1: Lsdb.PrefixType prefixType)
+    throws (1: OpenrError error)
+
+  /**
+   * Sync prefixes by type. This operation set the new state for given type.
+   * PrefixType specified in API parameter must match with individual
+   * PrefixEntry object
+   */
+  void syncPrefixesByType(
+    1: Lsdb.PrefixType prefixType,
+    2: list<Lsdb.PrefixEntry> prefixes) throws (1: OpenrError error)
+
+  /**
+   * Get all prefixes being advertised
+   */
+  list<Lsdb.PrefixEntry> getPrefixes() throws (1: OpenrError error)
+
+  /**
+   * Get prefixes of specific types
+   */
+  list<Lsdb.PrefixEntry> getPrefixesByType(1: Lsdb.PrefixType prefixType)
     throws (1: OpenrError error)
 
   //

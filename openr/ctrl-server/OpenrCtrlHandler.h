@@ -60,6 +60,29 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   int64_t getCounter(std::unique_ptr<std::string> key) override;
 
   //
+  // PrefixManager APIs
+  //
+
+  folly::SemiFuture<folly::Unit> semifuture_advertisePrefixes(
+      std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_withdrawPrefixes(
+      std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_withdrawPrefixesByType(
+      thrift::PrefixType prefixType) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_syncPrefixesByType(
+      thrift::PrefixType prefixType,
+      std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) override;
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
+  semifuture_getPrefixes() override;
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
+  semifuture_getPrefixesByType(thrift::PrefixType prefixType) override;
+
+  //
   // Route APIs
   //
 

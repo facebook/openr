@@ -246,6 +246,14 @@ class OpenrCtrlFixture : public ::testing::Test {
     return peerSpec;
   }
 
+  thrift::PrefixEntry
+  createPrefixEntry(const std::string& prefix, thrift::PrefixType prefixType) {
+    thrift::PrefixEntry prefixEntry;
+    prefixEntry.prefix = toIpPrefix(prefix);
+    prefixEntry.type = prefixType;
+    return prefixEntry;
+  }
+
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
   const DecisionPubUrl decisionPubUrl_{"inproc://decision-pub"};
@@ -280,6 +288,72 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::shared_ptr<LinkMonitor> linkMonitor;
   std::unique_ptr<OpenrCtrlHandler> handler;
 };
+
+TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
+  {
+    std::vector<thrift::PrefixEntry> prefixes{
+        createPrefixEntry("10.0.0.0/8", thrift::PrefixType::LOOPBACK),
+        createPrefixEntry("11.0.0.0/8", thrift::PrefixType::LOOPBACK),
+        createPrefixEntry("20.0.0.0/8", thrift::PrefixType::BGP),
+        createPrefixEntry("21.0.0.0/8", thrift::PrefixType::BGP),
+    };
+    auto ret = handler
+                   ->semifuture_advertisePrefixes(
+                       std::make_unique<std::vector<thrift::PrefixEntry>>(
+                           std::move(prefixes)))
+                   .get();
+    EXPECT_EQ(folly::Unit(), ret);
+  }
+
+  {
+    std::vector<thrift::PrefixEntry> prefixes{
+        createPrefixEntry("21.0.0.0/8", thrift::PrefixType::BGP),
+    };
+    auto ret = handler
+                   ->semifuture_withdrawPrefixes(
+                       std::make_unique<std::vector<thrift::PrefixEntry>>(
+                           std::move(prefixes)))
+                   .get();
+    EXPECT_EQ(folly::Unit(), ret);
+  }
+
+  {
+    auto ret =
+        handler->semifuture_withdrawPrefixesByType(thrift::PrefixType::LOOPBACK)
+            .get();
+    EXPECT_EQ(folly::Unit(), ret);
+  }
+
+  {
+    std::vector<thrift::PrefixEntry> prefixes{
+        createPrefixEntry("23.0.0.0/8", thrift::PrefixType::BGP),
+    };
+    auto ret = handler
+                   ->semifuture_syncPrefixesByType(
+                       thrift::PrefixType::BGP,
+                       std::make_unique<std::vector<thrift::PrefixEntry>>(
+                           std::move(prefixes)))
+                   .get();
+    EXPECT_EQ(folly::Unit(), ret);
+  }
+
+  {
+    const std::vector<thrift::PrefixEntry> prefixes{
+        createPrefixEntry("23.0.0.0/8", thrift::PrefixType::BGP),
+    };
+    auto ret = handler->semifuture_getPrefixes().get();
+    EXPECT_NE(nullptr, ret);
+    EXPECT_EQ(prefixes, *ret);
+  }
+
+  {
+    auto ret =
+        handler->semifuture_getPrefixesByType(thrift::PrefixType::LOOPBACK)
+            .get();
+    EXPECT_NE(nullptr, ret);
+    EXPECT_EQ(0, ret->size());
+  }
+}
 
 TEST_F(OpenrCtrlFixture, RouteApis) {
   {
