@@ -21,6 +21,7 @@
 #include <openr/nl/NetlinkSocket.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
+#include <openr/fbmeshd/routing/PeriodicPinger.h>
 
 namespace openr {
 namespace fbmeshd {
@@ -285,6 +286,8 @@ class Routing : public folly::EventBase,
   uint32_t elementTtl_;
 
   apache::thrift::CompactSerializer serializer_;
+
+  PeriodicPinger periodicPinger_;
 
   /*
    * L3 Routing state

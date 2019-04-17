@@ -86,6 +86,13 @@ Routing::Routing(
       clientSocket_{this},
       addr_{addr},
       elementTtl_{elementTtl},
+      periodicPinger_{this,
+                      folly::IPAddressV6{"ff02::1%mesh0"},
+                      folly::IPAddressV6{
+                          folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
+                          nlHandler_.lookupMeshNetif().maybeMacAddress.value()},
+                      1s,
+                      "mesh0"},
       netlinkSocket_{&zmqEvl_},
       zmqEvlThread_{[this]() {
         folly::setThreadName("Routing Zmq Evl");
@@ -111,6 +118,8 @@ Routing::Routing(
   runInEventBaseThread([this]() { prepare(); });
 
   runInEventBaseThread([this]() { doMeshHousekeeping(); });
+
+  periodicPinger_.scheduleTimeout(1s);
 }
 
 void
