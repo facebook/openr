@@ -20,6 +20,71 @@ std::hash<openr::Link>::operator()(openr::Link const& link) const {
 
 namespace openr {
 
+template <class T>
+HoldableValue<T>::HoldableValue(T val) : val_(val) {}
+
+template <class T>
+const T&
+HoldableValue<T>::value() const {
+  return heldVal_.hasValue() ? heldVal_.value() : val_;
+}
+
+template <class T>
+bool
+HoldableValue<T>::hasHold() const {
+  return heldVal_.hasValue();
+}
+
+template <class T>
+bool
+HoldableValue<T>::decrementTtl() {
+  if (heldVal_ && 0 == --holdTtl_) {
+    heldVal_.clear();
+    return true;
+  }
+  return false;
+}
+
+template <class T>
+bool
+HoldableValue<T>::updateValue(
+    T val, LinkStateMetric holdUpTtl, LinkStateMetric holdDownTtl) {
+  // calling update with the same value is a no-op
+  if (val != val_) {
+    if (hasHold()) {
+      // If there was already a hold we need to fall back to fast update.
+      // Otherwise, there are cases that could lead to longer transient
+      // (less transient?) loops.
+      heldVal_.clear();
+      holdTtl_ = 0;
+    } else {
+      holdTtl_ = isChangeBringingUp(val) ? holdUpTtl : holdDownTtl;
+      if (0 != holdTtl_) {
+        heldVal_ = val_;
+      }
+    }
+    val_ = val;
+    return !hasHold();
+  }
+  return false;
+}
+
+template <>
+bool
+HoldableValue<bool>::isChangeBringingUp(bool val) {
+  return val_ && !val;
+}
+
+template <>
+bool
+HoldableValue<LinkStateMetric>::isChangeBringingUp(LinkStateMetric val) {
+  return val < val_;
+}
+
+// explicit instantiations for our use cases
+template class HoldableValue<LinkStateMetric>;
+template class HoldableValue<bool>;
+
 Link::Link(
     const std::string& nodeName1,
     const openr::thrift::Adjacency& adj1,

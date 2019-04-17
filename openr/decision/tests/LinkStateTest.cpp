@@ -12,6 +12,69 @@
 #include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
 
+TEST(HoldableValueTest, BasicOperation) {
+  openr::HoldableValue<bool> hv{true};
+  EXPECT_TRUE(hv.value());
+  EXPECT_FALSE(hv.hasHold());
+  EXPECT_FALSE(hv.decrementTtl());
+  const openr::LinkStateMetric holdUpTtl = 10, holdDownTtl = 5;
+  EXPECT_FALSE(hv.updateValue(false, holdUpTtl, holdDownTtl));
+  for (openr::LinkStateMetric i = 0; i < holdUpTtl - 1; ++i) {
+    EXPECT_TRUE(hv.hasHold());
+    EXPECT_TRUE(hv.value());
+    EXPECT_FALSE(hv.decrementTtl());
+  }
+  // expire the hold
+  EXPECT_TRUE(hv.decrementTtl());
+  EXPECT_FALSE(hv.hasHold());
+  EXPECT_FALSE(hv.value());
+
+  // expect no hold since the value didn't change
+  EXPECT_FALSE(hv.updateValue(false, holdUpTtl, holdDownTtl));
+  EXPECT_FALSE(hv.hasHold());
+  EXPECT_FALSE(hv.value());
+
+  // change is bringing down now
+  EXPECT_FALSE(hv.updateValue(true, holdUpTtl, holdDownTtl));
+  for (openr::LinkStateMetric i = 0; i < holdDownTtl - 1; ++i) {
+    EXPECT_TRUE(hv.hasHold());
+    EXPECT_FALSE(hv.value());
+    EXPECT_FALSE(hv.decrementTtl());
+  }
+  // expire the hold
+  EXPECT_TRUE(hv.decrementTtl());
+  EXPECT_FALSE(hv.hasHold());
+  EXPECT_TRUE(hv.value());
+
+  // change twice within ttl
+  EXPECT_FALSE(hv.updateValue(false, holdUpTtl, holdDownTtl));
+  EXPECT_TRUE(hv.hasHold());
+  EXPECT_TRUE(hv.value());
+  EXPECT_FALSE(hv.decrementTtl());
+
+  EXPECT_TRUE(hv.updateValue(true, holdUpTtl, holdDownTtl));
+  EXPECT_FALSE(hv.hasHold());
+  EXPECT_TRUE(hv.value());
+
+  // test with LinkMetric
+  openr::HoldableValue<openr::LinkStateMetric> hvLsm{10};
+  EXPECT_EQ(10, hvLsm.value());
+  EXPECT_FALSE(hvLsm.hasHold());
+  EXPECT_FALSE(hvLsm.decrementTtl());
+
+  // change is bringing up
+  EXPECT_FALSE(hvLsm.updateValue(5, holdUpTtl, holdDownTtl));
+  for (openr::LinkStateMetric i = 0; i < holdUpTtl - 1; ++i) {
+    EXPECT_TRUE(hvLsm.hasHold());
+    EXPECT_EQ(10, hvLsm.value());
+    EXPECT_FALSE(hvLsm.decrementTtl());
+  }
+  // expire the hold
+  EXPECT_TRUE(hvLsm.decrementTtl());
+  EXPECT_FALSE(hvLsm.hasHold());
+  EXPECT_EQ(5, hvLsm.value());
+}
+
 TEST(LinkTest, BasicOperation) {
   std::string n1 = "node1";
   auto adj1 =

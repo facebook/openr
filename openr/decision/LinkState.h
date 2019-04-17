@@ -16,6 +16,44 @@
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 
+namespace openr {
+
+using LinkStateMetric = uint64_t;
+
+// HoldableValue is the basic building block for ordered FIB programming
+// (rfc 6976)
+//
+// updateValue() will cause the previous value to be held for ttl
+// time, where the ttl is chosen based on if the update is an up or down event.
+// Subsequent updateValue() calls with the same value are no-ops.
+// An update call with a new value when hasHold() is true results in the hold
+// being clearted, thus changeing value().
+//
+// value() will return the held value until decrementTtl() returns true and the
+// held value is cleared.
+
+template <class T>
+class HoldableValue {
+ public:
+  explicit HoldableValue(T val);
+
+  const T& value() const;
+
+  bool hasHold() const;
+
+  // these methods return true if the call results in the value changing
+  bool decrementTtl();
+  bool updateValue(
+      T val, LinkStateMetric holdUpTtl, LinkStateMetric holdDownTtl);
+
+ private:
+  bool isChangeBringingUp(T val);
+
+  T val_;
+  folly::Optional<T> heldVal_;
+  LinkStateMetric holdTtl_{0};
+};
+
 //
 // Why define Link and LinkState? Isn't link state fully captured by something
 // like std::unordered_map<std::string, thrift::AdjacencyDatabase>?
@@ -34,10 +72,6 @@
 //
 // 4. Provides useful apis to read and write link state.
 //
-
-namespace openr {
-
-using LinkStateMetric = uint64_t;
 
 class Link {
  public:
