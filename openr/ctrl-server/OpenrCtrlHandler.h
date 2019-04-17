@@ -190,6 +190,20 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::BuildInfo>>
   semifuture_getBuildInfo() override;
 
+  //
+  // PersistentStore APIs
+  //
+
+  folly::SemiFuture<folly::Unit> semifuture_setConfigKey(
+      std::unique_ptr<std::string> key,
+      std::unique_ptr<std::string> value) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_eraseConfigKey(
+      std::unique_ptr<std::string> key) override;
+
+  folly::SemiFuture<std::unique_ptr<std::string>> semifuture_getConfigKey(
+      std::unique_ptr<std::string> key) override;
+
  private:
   // For oneway requests, empty message will be returned immediately
   folly::Expected<fbzmq::Message, fbzmq::Error> requestReplyMessage(

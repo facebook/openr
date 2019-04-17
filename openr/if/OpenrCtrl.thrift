@@ -275,4 +275,24 @@ service OpenrCtrl extends fb303.FacebookService {
    */
   LinkMonitor.BuildInfo getBuildInfo() throws (1: OpenrError error)
 
+  //
+  // PersistentStore APIs (query / alter dynamic configuration)
+  //
+
+  /**
+   * Set new config key - you will never need to use it
+   * NOTE: This API should only be accessible from local node
+   */
+  void setConfigKey(1: string key, 2: string value) throws (1: OpenrError error)
+
+  /**
+   * Erase key from config
+   * NOTE: This API should only be accessible from local node
+   */
+  void eraseConfigKey(1: string key) throws (1: OpenrError error)
+
+  /**
+   * Get config key
+   */
+  string getConfigKey(1: string key) throws (1: OpenrError error)
 }

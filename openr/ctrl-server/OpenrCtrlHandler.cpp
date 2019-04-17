@@ -15,6 +15,7 @@
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 
 namespace openr {
@@ -772,6 +773,53 @@ OpenrCtrlHandler::semifuture_getBuildInfo() {
     p.setException(thrift::OpenrError(reply.error().errString));
   } else {
     p.setValue(std::make_unique<thrift::BuildInfo>(std::move(reply.value())));
+  }
+
+  return p.getSemiFuture();
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setConfigKey(
+    std::unique_ptr<std::string> key, std::unique_ptr<std::string> value) {
+  thrift::StoreRequest request;
+  request.requestType = thrift::StoreRequestType::STORE;
+  request.key = std::move(*key);
+  request.data = std::move(*value);
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::PERSISTENT_STORE,
+      std::move(request),
+      false /* oneway */);
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_eraseConfigKey(std::unique_ptr<std::string> key) {
+  thrift::StoreRequest request;
+  request.requestType = thrift::StoreRequestType::ERASE;
+  request.key = std::move(*key);
+
+  return processThriftRequest(
+      thrift::OpenrModuleType::PERSISTENT_STORE,
+      std::move(request),
+      false /* oneway */);
+}
+
+folly::SemiFuture<std::unique_ptr<std::string>>
+OpenrCtrlHandler::semifuture_getConfigKey(std::unique_ptr<std::string> key) {
+  folly::Promise<std::unique_ptr<std::string>> p;
+
+  thrift::StoreRequest request;
+  request.requestType = thrift::StoreRequestType::LOAD;
+  request.key = std::move(*key);
+
+  auto reply = requestReplyThrift<thrift::StoreResponse>(
+      thrift::OpenrModuleType::PERSISTENT_STORE, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else if (not reply->success) {
+    p.setException(thrift::OpenrError("key not found"));
+  } else {
+    p.setValue(std::make_unique<std::string>(std::move(reply->data)));
   }
 
   return p.getSemiFuture();

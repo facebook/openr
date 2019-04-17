@@ -181,8 +181,13 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create PersistentStore
     persistentStore = std::make_unique<PersistentStore>(
-        "1", "/tmp/openr-ctrl-handler-test.bin", persistentStoreUrl_, context_);
+        nodeName,
+        "/tmp/openr-ctrl-handler-test.bin",
+        persistentStoreUrl_,
+        context_);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
+    moduleTypeToEvl[thrift::OpenrModuleType::PERSISTENT_STORE] =
+        persistentStore;
 
     // Create open/r handler
     handler = std::make_unique<OpenrCtrlHandler>(
@@ -664,6 +669,45 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
     auto ret = handler->semifuture_getBuildInfo().get();
     ASSERT_NE(nullptr, ret);
     EXPECT_NE("", ret->buildMode);
+  }
+}
+
+TEST_F(OpenrCtrlFixture, PersistentStoreApis) {
+  {
+    auto key = std::make_unique<std::string>("key1");
+    auto value = std::make_unique<std::string>("value1");
+    auto ret =
+        handler->semifuture_setConfigKey(std::move(key), std::move(value))
+            .get();
+    EXPECT_EQ(folly::Unit(), ret);
+  }
+
+  {
+    auto key = std::make_unique<std::string>("key2");
+    auto value = std::make_unique<std::string>("value2");
+    auto ret =
+        handler->semifuture_setConfigKey(std::move(key), std::move(value))
+            .get();
+    EXPECT_EQ(folly::Unit(), ret);
+  }
+
+  {
+    auto key = std::make_unique<std::string>("key1");
+    auto ret = handler->semifuture_eraseConfigKey(std::move(key)).get();
+    EXPECT_EQ(folly::Unit(), ret);
+  }
+
+  {
+    auto key = std::make_unique<std::string>("key2");
+    auto ret = handler->semifuture_getConfigKey(std::move(key)).get();
+    ASSERT_NE(nullptr, ret);
+    EXPECT_EQ("value2", *ret);
+  }
+
+  {
+    auto key = std::make_unique<std::string>("key1");
+    auto ret = handler->semifuture_getConfigKey(std::move(key));
+    EXPECT_THROW(std::move(ret).get(), thrift::OpenrError);
   }
 }
 
