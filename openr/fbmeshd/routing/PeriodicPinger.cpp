@@ -57,16 +57,13 @@ PeriodicPinger::timeoutExpired() noexcept {
 
   const auto dstSockAddr = dst_.toSockAddr();
 
-  CHECK_EQ(
-      ::sendto(
-          sock,
-          &icmpHeader,
-          sizeof(icmpHeader),
-          0,
-          const_cast<sockaddr*>(
-              reinterpret_cast<const sockaddr*>(&dstSockAddr)),
-          sizeof(dstSockAddr)),
-      sizeof(icmpHeader));
+  ::sendto(
+      sock,
+      &icmpHeader,
+      sizeof(icmpHeader),
+      0,
+      const_cast<sockaddr*>(reinterpret_cast<const sockaddr*>(&dstSockAddr)),
+      sizeof(dstSockAddr));
 
   ::close(sock);
 

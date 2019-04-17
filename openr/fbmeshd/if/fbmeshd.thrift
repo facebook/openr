@@ -100,3 +100,14 @@ struct MeshPathFrameRANN {
   6: i32 interval
   7: i32 metric
 }
+
+struct MeshPathFramePANN {
+  1: i64 origAddr
+  2: i64 origSn
+  3: byte hopCount
+  4: byte ttl
+  6: i64 targetAddr
+  7: i32 metric
+  8: bool isGate
+  9: bool replyRequested
+}

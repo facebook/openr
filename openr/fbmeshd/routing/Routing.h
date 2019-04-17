@@ -109,7 +109,7 @@ class Routing : public folly::EventBase,
   /*
    * mesh path frame type
    */
-  enum class MeshPathFrameType { PREQ = 0, PREP, PERR, RANN };
+  enum class MeshPathFrameType { PREQ = 0, PREP, PERR, RANN, PANN };
 
   /*
    * RANN flags
@@ -157,6 +157,11 @@ class Routing : public folly::EventBase,
           flags{other.flags},
           isRoot{other.isRoot},
           isGate{other.isGate} {}
+
+    bool
+    expired() const {
+      return std::chrono::steady_clock::now() > expTime;
+    }
 
     folly::MacAddress dst;
     folly::MacAddress nextHop{};
@@ -246,6 +251,17 @@ class Routing : public folly::EventBase,
       uint32_t metric,
       uint32_t preqId);
 
+  void txPannFrame(
+      folly::MacAddress da,
+      folly::MacAddress origAddr,
+      uint64_t origSn,
+      uint8_t hopCount,
+      uint8_t ttl,
+      folly::MacAddress targetAddr,
+      uint32_t metric,
+      bool isGate,
+      bool replyRequested);
+
   void txRootFrame();
 
   void meshQueuePreq(
@@ -273,6 +289,8 @@ class Routing : public folly::EventBase,
       uint32_t pathMetric);
   void hwmpRannFrameProcess(
       folly::MacAddress sa, thrift::MeshPathFrameRANN rann);
+  void hwmpPannFrameProcess(
+      folly::MacAddress sa, thrift::MeshPathFramePANN rann);
 
   // netlink handler used to request mpath from the kernel
   Nl80211Handler& nlHandler_;

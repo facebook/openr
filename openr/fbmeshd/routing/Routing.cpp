@@ -379,7 +379,16 @@ void
 Routing::doMeshPathRoot() {
   VLOG(8) << folly::sformat("Routing::{}()", __func__);
   if (dot11MeshHWMPRootMode_ > RootModeIdentifier::ROOTMODE_ROOT) {
-    txRootFrame();
+    txPannFrame(
+        folly::MacAddress::BROADCAST,
+        *nlHandler_.lookupMeshNetif().maybeMacAddress,
+        ++sn_,
+        0,
+        elementTtl_,
+        folly::MacAddress::BROADCAST,
+        0,
+        dot11MeshGateAnnouncementProtocol_,
+        true);
 
     std::chrono::milliseconds interval;
     if (dot11MeshHWMPRootMode_ == RootModeIdentifier::PROACTIVE_RANN) {
@@ -621,6 +630,50 @@ Routing::txFrame(
 }
 
 void
+Routing::txPannFrame(
+    folly::MacAddress da,
+    folly::MacAddress origAddr,
+    uint64_t origSn,
+    uint8_t hopCount,
+    uint8_t ttl,
+    folly::MacAddress targetAddr,
+    uint32_t metric,
+    bool isGate,
+    bool replyRequested) {
+  VLOG(8) << folly::sformat("Routing::{}()", __func__);
+  const auto destSockAddr = folly::SocketAddress{
+      da.isBroadcast()
+          ? folly::IPAddressV6{"ff02::1%mesh0"}
+          : folly::IPAddressV6{folly::IPAddressV6{
+                                   folly::IPAddressV6::LINK_LOCAL, da}
+                                   .str() +
+                               "%mesh0"},
+      6668};
+  std::string skb;
+
+  VLOG(10) << "sending PANN orig:" << origAddr << " target:" << targetAddr
+           << " dst:" << destSockAddr.describe();
+  serializer_.serialize(
+      thrift::MeshPathFramePANN{
+          apache::thrift::FRAGILE,
+          static_cast<int64_t>(origAddr.u64NBO()),
+          static_cast<int64_t>(origSn),
+          static_cast<int8_t>(hopCount),
+          static_cast<int8_t>(ttl),
+          static_cast<int64_t>(targetAddr.u64NBO()),
+          static_cast<int32_t>(metric),
+          isGate,
+          replyRequested,
+      },
+      &skb);
+
+  auto buf = folly::IOBuf::copyBuffer(skb, 1, 0);
+  buf->prepend(1);
+  *buf->writableData() = static_cast<uint8_t>(MeshPathFrameType::PANN);
+  clientSocket_.write(destSockAddr, buf);
+}
+
+void
 Routing::txRootFrame() {
   VLOG(8) << folly::sformat("Routing::{}()", __func__);
   auto interval = dot11MeshHWMPRannInterval_;
@@ -778,6 +831,7 @@ Routing::onDataAvailable(
   thrift::MeshPathFramePREQ preq;
   thrift::MeshPathFramePREP prep;
   thrift::MeshPathFrameRANN rann;
+  thrift::MeshPathFramePANN pann;
   uint32_t pathMetric;
   switch (action) {
   case MeshPathFrameType::PREQ:
@@ -816,6 +870,11 @@ Routing::onDataAvailable(
     serializer_.deserialize(data.get(), rann);
     hwmpRannFrameProcess(
         *client.getIPAddress().asV6().getMacAddressFromLinkLocal(), rann);
+    break;
+  case MeshPathFrameType::PANN:
+    serializer_.deserialize(data.get(), pann);
+    hwmpPannFrameProcess(
+        *client.getIPAddress().asV6().getMacAddressFromLinkLocal(), pann);
     break;
   default:
     return;
@@ -1103,6 +1162,109 @@ Routing::hwmpRannFrameProcess(
         interval,
         newMetric,
         0);
+  }
+}
+
+void
+Routing::hwmpPannFrameProcess(
+    folly::MacAddress sa, thrift::MeshPathFramePANN pann) {
+  VLOG(8) << folly::sformat("Routing::{}({}, ...)", __func__, sa.toString());
+
+  folly::MacAddress origAddr{
+      folly::MacAddress::fromNBO(static_cast<uint64_t>(pann.origAddr))};
+  uint64_t origSn{static_cast<uint64_t>(pann.origSn)};
+  uint8_t hopCount{static_cast<uint8_t>(pann.hopCount)};
+  hopCount++;
+  uint32_t origMetric{static_cast<uint32_t>(pann.metric)};
+  uint8_t ttl{static_cast<uint8_t>(pann.ttl)};
+  folly::MacAddress targetAddr{
+      folly::MacAddress::fromNBO(static_cast<uint64_t>(pann.targetAddr))};
+
+  /*  Ignore our own PANNs */
+  if (origAddr == *nlHandler_.lookupMeshNetif().maybeMacAddress) {
+    return;
+  }
+
+  VLOG(10) << "received PANN from " << origAddr << " via neighbour " << sa
+           << " target " << targetAddr << " (is_gate=" << pann.isGate << ")";
+
+  const auto& stas = nlHandler_.getStationsInfo();
+  const auto sta =
+      std::find_if(stas.begin(), stas.end(), [sa](const auto& sta) {
+        return sta.macAddress == sa && sta.expectedThroughput != 0;
+      });
+  if (sta == stas.end()) {
+    VLOG(10) << "discarding PANN - sta not found";
+    return;
+  }
+
+  folly::MacAddress da{targetAddr};
+  if (da.isUnicast() && da != *nlHandler_.lookupMeshNetif().maybeMacAddress) {
+    const auto targetMpathIt{meshPaths_.find(targetAddr)};
+    if (targetMpathIt == meshPaths_.end()) {
+      VLOG(10) << "discarding PANN - target not found";
+      return;
+    }
+    const auto& targetMpath = targetMpathIt->second;
+    if (targetMpath.expired()) {
+      VLOG(10) << "discarding PANN - target expired";
+      return;
+    }
+    da = targetMpath.nextHop;
+  }
+
+  uint32_t lastHopMetric{getAirtimeLinkMetric(*sta)};
+
+  uint32_t newMetric{origMetric + lastHopMetric};
+  if (newMetric < origMetric) {
+    newMetric = kMaxMetric;
+  }
+
+  auto& mpath = getMeshPath(origAddr);
+
+  if (mpath.sn >= origSn && !(mpath.sn == origSn && newMetric < mpath.metric)) {
+    VLOG(10) << "discarding PANN - mpath.sn:" << mpath.sn
+             << " origSn:" << origSn << " newMetric" << newMetric
+             << " mpath.metric" << mpath.metric;
+    return;
+  }
+
+  mpath.sn = origSn;
+  mpath.metric = newMetric;
+  mpath.nextHop = sa;
+  mpath.isGate = pann.isGate;
+  mpath.expTime =
+      std::chrono::steady_clock::now() + dot11MeshHWMPactivePathTimeout_;
+
+  if (ttl <= 1) {
+    return;
+  }
+  ttl--;
+
+  if (targetAddr != *nlHandler_.lookupMeshNetif().maybeMacAddress) {
+    txPannFrame(
+        da,
+        origAddr,
+        origSn,
+        hopCount,
+        ttl,
+        targetAddr,
+        newMetric,
+        pann.isGate,
+        pann.replyRequested);
+  }
+
+  if (pann.replyRequested) {
+    txPannFrame(
+        mpath.nextHop,
+        *nlHandler_.lookupMeshNetif().maybeMacAddress,
+        ++sn_,
+        0,
+        elementTtl_,
+        origAddr,
+        0,
+        dot11MeshGateAnnouncementProtocol_,
+        false);
   }
 }
 
