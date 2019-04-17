@@ -10,7 +10,6 @@
 #include <chrono>
 #include <string>
 
-#include <fbzmq/async/Runnable.h>
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -18,6 +17,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 
@@ -38,9 +38,10 @@ namespace openr {
  * load/save/erase entries with different value types like thrift-objects,
  * primitive types and strings.
  */
-class PersistentStore : public fbzmq::Runnable {
+class PersistentStore : public OpenrEventLoop {
  public:
   PersistentStore(
+      const std::string& nodeName,
       const std::string& storageFilePath,
       const PersistentStoreUrl& socketUrl,
       fbzmq::Context& context,
@@ -53,28 +54,6 @@ class PersistentStore : public fbzmq::Runnable {
   // Destructor will try to save DB to disk before destroying the object
   ~PersistentStore() override;
 
-  //
-  // Implementation of Runnable interface
-  //
-
-  void run() override;
-  void stop() override;
-
-  bool
-  isRunning() const override {
-    return eventLoop_.isRunning();
-  }
-
-  void
-  waitUntilRunning() const override {
-    eventLoop_.waitUntilRunning();
-  }
-
-  void
-  waitUntilStopped() const override {
-    eventLoop_.waitUntilStopped();
-  }
-
   uint64_t
   getNumOfDbWritesToDisk() const {
     return numOfWritesToDisk_;
@@ -82,7 +61,8 @@ class PersistentStore : public fbzmq::Runnable {
 
  private:
   // Function to process pending request on reqSocket_
-  void processRequest();
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& request) override;
 
   // Function to save/load `database_` to local disk. Returns true on success
   // else false. Doesn't throw exception.
@@ -96,10 +76,6 @@ class PersistentStore : public fbzmq::Runnable {
   // if doesn't exists.
   const std::string storageFilePath_;
 
-  // Server(REP) socket which accepts requests from clients for load/store
-  // of config data.
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> repSocket_;
-
   // Timer for saving database to disk
   std::unique_ptr<fbzmq::ZmqTimeout> saveDbTimer_;
   std::unique_ptr<ExponentialBackoff<std::chrono::milliseconds>>
@@ -108,9 +84,6 @@ class PersistentStore : public fbzmq::Runnable {
   // Database to store config data. It is synced up on a persistent storage
   // layer (disk) in a file.
   thrift::StoreDatabase database_;
-
-  // Internal loop in which all events are processed sequentially
-  fbzmq::ZmqEventLoop eventLoop_;
 
   // Serializer for encoding/decoding of thrift objects
   apache::thrift::CompactSerializer serializer_;

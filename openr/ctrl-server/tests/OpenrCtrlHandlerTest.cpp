@@ -181,7 +181,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create PersistentStore
     persistentStore = std::make_unique<PersistentStore>(
-        "/tmp/openr-ctrl-handler-test.bin", persistentStoreUrl_, context_);
+        "1", "/tmp/openr-ctrl-handler-test.bin", persistentStoreUrl_, context_);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create open/r handler

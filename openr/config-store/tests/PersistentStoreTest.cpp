@@ -47,7 +47,7 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   // Create new store and perform some operations on it
   //
 
-  store = std::make_unique<PersistentStore>(filePath, sockUrl1, context);
+  store = std::make_unique<PersistentStore>("1", filePath, sockUrl1, context);
   storeThread = std::make_unique<std::thread>([&]() { store->run(); });
   store->waitUntilRunning();
   client = std::make_unique<PersistentStoreClient>(sockUrl1, context);
@@ -88,7 +88,7 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   storeThread.reset();
   store.reset();
 
-  store = std::make_unique<PersistentStore>(filePath, sockUrl2, context);
+  store = std::make_unique<PersistentStore>("1", filePath, sockUrl2, context);
   storeThread = std::make_unique<std::thread>([&]() { store->run(); });
   store->waitUntilRunning();
   client = std::make_unique<PersistentStoreClient>(sockUrl2, context);

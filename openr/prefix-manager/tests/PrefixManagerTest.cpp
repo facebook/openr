@@ -130,6 +130,7 @@ class PrefixManagerTestFixture : public ::testing::Test {
         "/tmp/pm_ut_config_store.bin.{}",
         std::hash<std::thread::id>{}(std::this_thread::get_id()));
     configStore = std::make_unique<PersistentStore>(
+        "1",
         storageFilePath,
         PersistentStoreUrl{kConfigStoreUrl},
         context,
@@ -542,6 +543,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
 
   // spin up a config store
   auto configStore = std::make_unique<PersistentStore>(
+      "1",
       folly::sformat(
           "/tmp/pm_ut_config_store.bin.{}",
           std::hash<std::thread::id>{}(std::this_thread::get_id())),

@@ -84,7 +84,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     //
     tempFileName_ = folly::sformat("/tmp/openr.{}", tid);
     configStore_ = std::make_unique<PersistentStore>(
-        tempFileName_, PersistentStoreUrl{kConfigStoreUrl}, zmqContext_);
+        "1", tempFileName_, PersistentStoreUrl{kConfigStoreUrl}, zmqContext_);
     threads_.emplace_back([&]() noexcept { configStore_->run(); });
     configStore_->waitUntilRunning();
     configStoreClient_ = std::make_unique<PersistentStoreClient>(
@@ -397,6 +397,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // spin up config store server for this allocator
       auto configStore = std::make_unique<PersistentStore>(
+          folly::sformat("node{}", i),
           tempFileName,
           PersistentStoreUrl{kConfigStoreUrl + myNodeName},
           zmqContext);
@@ -409,6 +410,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       tempFileName = folly::sformat("/tmp/openr.{}.{}.{}", tid, round, i);
       tempFileNames.emplace_back(tempFileName);
       auto tempConfigStore = std::make_unique<PersistentStore>(
+          folly::sformat("temp-node{}", i),
           tempFileName,
           PersistentStoreUrl{kConfigStoreUrl + myNodeName + "temp"},
           zmqContext);

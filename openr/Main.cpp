@@ -360,6 +360,7 @@ main(int argc, char** argv) {
 
   // Start config-store URL
   PersistentStore configStore(
+      FLAGS_node_name,
       FLAGS_config_store_filepath,
       kConfigStoreUrl,
       context,

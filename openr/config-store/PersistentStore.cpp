@@ -17,35 +17,26 @@ namespace openr {
 using namespace std::chrono_literals;
 
 PersistentStore::PersistentStore(
+    const std::string& nodeName,
     const std::string& storageFilePath,
     const PersistentStoreUrl& socketUrl,
     fbzmq::Context& context,
     std::chrono::milliseconds saveInitialBackoff,
     std::chrono::milliseconds saveMaxBackoff)
-    : storageFilePath_(storageFilePath),
-      repSocket_(
-          context, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
-  // Bind rep socket
-  VLOG(3) << "PersistentStore: Binding server socket on url "
-          << static_cast<std::string>(socketUrl);
-  auto bindRet = repSocket_.bind(fbzmq::SocketUrl(socketUrl));
-  if (bindRet.hasError()) {
-    LOG(FATAL) << "Error binding socket url "
-               << static_cast<std::string>(socketUrl);
-  }
-
-  eventLoop_.addSocket(
-      fbzmq::RawZmqSocketPtr{*repSocket_},
-      ZMQ_POLLIN,
-      [this](int /* revents */) noexcept { processRequest(); });
-
+    : OpenrEventLoop(
+          nodeName,
+          thrift::OpenrModuleType::PERSISTENT_STORE,
+          context,
+          folly::none,
+          std::string(socketUrl)),
+      storageFilePath_(storageFilePath) {
   if (saveInitialBackoff != 0ms or saveMaxBackoff != 0ms) {
     // Create timer and backoff mechanism only if backoff is requested
     saveDbTimerBackoff_ =
         std::make_unique<ExponentialBackoff<std::chrono::milliseconds>>(
             saveInitialBackoff, saveMaxBackoff);
 
-    saveDbTimer_ = fbzmq::ZmqTimeout::make(&eventLoop_, [this]() noexcept {
+    saveDbTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
       if (saveDatabaseToDisk()) {
         saveDbTimerBackoff_->reportSuccess();
       } else {
@@ -66,35 +57,17 @@ PersistentStore::PersistentStore(
 }
 
 PersistentStore::~PersistentStore() {
-  if (eventLoop_.isRunning()) {
-    stop();
-  }
   saveDatabaseToDisk();
 }
 
-void
-PersistentStore::run() {
-  eventLoop_.run();
-}
-
-void
-PersistentStore::stop() {
-  eventLoop_.stop();
-  eventLoop_.waitUntilStopped();
-}
-
-void
-PersistentStore::processRequest() {
+folly::Expected<fbzmq::Message, fbzmq::Error>
+PersistentStore::processRequestMsg(fbzmq::Message&& requestMsg) {
   thrift::StoreResponse response;
-  auto request = repSocket_.recvThriftObj<thrift::StoreRequest>(serializer_);
+  auto request = requestMsg.readThriftObj<thrift::StoreRequest>(serializer_);
   if (request.hasError()) {
     LOG(ERROR) << "Error while reading request " << request.error();
     response.success = false;
-    auto ret = repSocket_.sendThriftObj(response, serializer_);
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error while sending response " << ret.error();
-    }
-    return;
+    return fbzmq::Message::fromThriftObj(response, serializer_);
   }
 
   // Generate response
@@ -138,10 +111,7 @@ PersistentStore::processRequest() {
   }
 
   // Send response
-  auto ret = repSocket_.sendThriftObj(response, serializer_);
-  if (ret.hasError()) {
-    LOG(ERROR) << "Error while sending response " << ret.error();
-  }
+  return fbzmq::Message::fromThriftObj(response, serializer_);
 }
 
 bool

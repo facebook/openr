@@ -62,6 +62,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // create config-store
   configStore_ = std::make_unique<PersistentStore>(
+      nodeId_,
       folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_),
       PersistentStoreUrl{configStoreUrl_},
       context_);
