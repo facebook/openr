@@ -62,6 +62,11 @@ struct DecisionPendingUpdates {
 
     // Skip if perf information is missing
     if (not perfEvents.hasValue()) {
+      if (not perfEvents_) {
+        perfEvents_ = thrift::PerfEvents{};
+        addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
+        minTs_ = perfEvents_->events.front().unixTs;
+      }
       return;
     }
 
