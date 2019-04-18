@@ -293,16 +293,12 @@ Routing::doSyncRoutes() {
 
 Routing::MeshPath&
 Routing::getMeshPath(folly::MacAddress addr) {
-  decltype(meshPaths_)::iterator mpathIt = meshPaths_.find(addr);
-  if (mpathIt == meshPaths_.end()) {
-    mpathIt = meshPaths_
-                  .emplace(
-                      std::piecewise_construct,
-                      std::forward_as_tuple(addr),
-                      std::forward_as_tuple(addr))
-                  .first;
-  }
-  return mpathIt->second;
+  return meshPaths_
+      .emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(addr),
+          std::forward_as_tuple(addr))
+      .first->second;
 }
 
 uint32_t
