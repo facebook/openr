@@ -153,8 +153,8 @@ service OpenrCtrl extends fb303.FacebookService {
   //
 
   /**
-   * Get raw key-values from KvStore. If `filterKeys` is empty then all key-vals
-   * are returned else only requested keys will be returned.
+   * Get specific key-values from KvStore. If `filterKeys` is empty then no
+   * keys will be returned
    */
   KvStore.Publication getKvStoreKeyVals(1: list<string> filterKeys)
     throws (1: OpenrError error)

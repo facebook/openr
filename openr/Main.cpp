@@ -359,21 +359,18 @@ main(int argc, char** argv) {
   waitForFibService(mainEventLoop);
 
   // Start config-store URL
-  PersistentStore configStore(
-      FLAGS_node_name,
-      FLAGS_config_store_filepath,
-      kConfigStoreUrl,
-      context,
-      std::chrono::milliseconds(FLAGS_persistent_store_initial_backoff_ms),
-      std::chrono::milliseconds(FLAGS_persistent_store_max_backoff_ms));
-  std::thread configStoreThread([&configStore]() noexcept {
-    LOG(INFO) << "Starting ConfigStore thread...";
-    folly::setThreadName("ConfigStore");
-    configStore.run();
-    LOG(INFO) << "ConfigStore thread got stopped.";
-  });
-  configStore.waitUntilRunning();
-  allThreads.emplace_back(std::move(configStoreThread));
+  startEventLoop(
+      allThreads,
+      orderedEventLoops,
+      moduleTypeToEvl,
+      watchdog,
+      std::make_shared<PersistentStore>(
+          FLAGS_node_name,
+          FLAGS_config_store_filepath,
+          kConfigStoreUrl,
+          context,
+          std::chrono::milliseconds(FLAGS_persistent_store_initial_backoff_ms),
+          std::chrono::milliseconds(FLAGS_persistent_store_max_backoff_ms)));
 
   // Start monitor Module
   // for each log message it receives, we want to add the openr domain
@@ -751,14 +748,14 @@ main(int argc, char** argv) {
     } else {
       keyPath = FLAGS_x509_cert_path;
     }
-    // TODO Change to REQUIRED after we have evryone using certs
+    // TODO Change to REQUIRED after we have everyone using certs
     thriftCtrlServer.setSSLPolicy(apache::thrift::SSLPolicy::PERMITTED);
     auto sslContext = std::make_shared<wangle::SSLContextConfig>();
     sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
     sslContext->clientCAFile = FLAGS_x509_ca_path;
     sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
     sslContext->setNextProtocols(Constants::getNextProtocolsForThriftServers());
-    // TODO Change to VERIFY_REQ_CLIENT_CERT after we have evryone using certs
+    // TODO Change to VERIFY_REQ_CLIENT_CERT after we have everyone using certs
     sslContext->clientVerification =
         folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
     sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
@@ -818,8 +815,6 @@ main(int argc, char** argv) {
   }
   monitor.stop();
   monitor.waitUntilStopped();
-  configStore.stop();
-  configStore.waitUntilStopped();
 
   if (nlEventLoop) {
     nlEventLoop->stop();

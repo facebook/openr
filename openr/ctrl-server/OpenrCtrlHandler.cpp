@@ -424,7 +424,7 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
   folly::Promise<std::unique_ptr<thrift::PrefixDbs>> p;
 
   thrift::DecisionRequest request;
-  request.cmd = thrift::DecisionCommand::ROUTE_DB_GET;
+  request.cmd = thrift::DecisionCommand::PREFIX_DB_GET;
 
   auto reply = requestReplyThrift<thrift::DecisionReply>(
       thrift::OpenrModuleType::DECISION, std::move(request));
