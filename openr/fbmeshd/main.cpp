@@ -195,7 +195,7 @@ DEFINE_uint32(
     "how often to sync routes with the fib");
 DEFINE_bool(
     enable_routing, false, "If set, enables experimental routing module");
-DEFINE_uint32(routing_ttl, 3, "TTL for routing elements");
+DEFINE_uint32(routing_ttl, 32, "TTL for routing elements");
 
 DEFINE_bool(
     is_openr_enabled,

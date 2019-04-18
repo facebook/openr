@@ -27,6 +27,7 @@ const auto kMeshHousekeepingInterval{60s};
 const auto kMeshPathExpire{60s};
 const auto kSyncRoutesInterval{1s};
 const auto kMinGatewayRedundancy{2};
+const auto kPeriodicPingerInterval{10s};
 
 void
 meshPathExpire(
@@ -84,7 +85,7 @@ Routing::Routing(
                       folly::IPAddressV6{
                           folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
                           nlHandler_.lookupMeshNetif().maybeMacAddress.value()},
-                      1s,
+                      kPeriodicPingerInterval,
                       "mesh0"},
       netlinkSocket_{&zmqEvl_},
       zmqEvlThread_{[this]() {
@@ -141,8 +142,8 @@ Routing::doSyncRoutes() {
     const auto kTaygaIfName{"tayga"};
     auto taygaIfIndex = netlinkSocket_.getIfIndex("tayga").get();
 
-    folly::Optional<std::pair<folly::MacAddress, int32_t>> bestRoot;
-    bool isCurrentRootStillAlive = false;
+    folly::Optional<std::pair<folly::MacAddress, int32_t>> bestGate;
+    bool isCurrentGateStillAlive = false;
     for (const auto& mpathIt : meshPaths_) {
       const auto& mpath = mpathIt.second;
 
@@ -180,33 +181,33 @@ Routing::doSyncRoutes() {
               .build());
 
       if (mpath.expTime > std::chrono::steady_clock::now() && mpath.isGate) {
-        if (currentRoot_ && currentRoot_->first == mpath.dst) {
-          isCurrentRootStillAlive = true;
+        if (currentGate_ && currentGate_->first == mpath.dst) {
+          isCurrentGateStillAlive = true;
         }
-        if (!bestRoot || bestRoot->second > mpath.metric) {
-          bestRoot = std::make_pair(mpath.dst, mpath.metric);
+        if (!bestGate || bestGate->second > mpath.metric) {
+          bestGate = std::make_pair(mpath.dst, mpath.metric);
         }
       }
     }
-    if (bestRoot) {
-      VLOG(10) << "Best root: " << bestRoot->first
-               << " with metric: " << bestRoot->second;
+    if (bestGate) {
+      VLOG(10) << "Best gate: " << bestGate->first
+               << " with metric: " << bestGate->second;
     } else {
-      VLOG(10) << "No root found";
+      VLOG(10) << "No gate found";
     }
-    if (currentRoot_ && isCurrentRootStillAlive) {
-      if (bestRoot->second * gatewayChangeThresholdFactor_ <
-          currentRoot_->second) {
-        currentRoot_ = bestRoot;
+    if (currentGate_ && isCurrentGateStillAlive) {
+      if (bestGate->second * gatewayChangeThresholdFactor_ <
+          currentGate_->second) {
+        currentGate_ = bestGate;
       }
     } else {
-      currentRoot_ = bestRoot;
+      currentGate_ = bestGate;
     }
-    if (currentRoot_) {
-      VLOG(10) << "Current root: " << currentRoot_->first
-               << " with metric: " << currentRoot_->second;
+    if (currentGate_) {
+      VLOG(10) << "Current gate: " << currentGate_->first
+               << " with metric: " << currentGate_->second;
     } else {
-      VLOG(10) << "No current root found";
+      VLOG(10) << "No current gate found";
     }
 
     auto destination = std::make_pair<folly::IPAddress, uint8_t>(
@@ -221,13 +222,11 @@ Routing::doSyncRoutes() {
               .setRouteIfIndex(taygaIfIndex)
               .setRouteIfName(kTaygaIfName)
               .buildLinkRoute());
-    } else if (currentRoot_) {
+    } else if (currentGate_) {
       const auto defaultV4Prefix =
           std::make_pair<folly::IPAddress, uint8_t>(folly::IPAddressV4{}, 0);
 
-      // ip route add default dev tayga mtu 1260 advmss 1220
-      // the MTU is set to 1260 because IPv6 default mtu is 1280, and the IPv4->
-      // IPv6 conversion increases the packet size by 20 bytes.
+      // ip route add default dev tayga mtu 1500 advmss 1460
       linkRouteDb.emplace(
           std::make_pair(defaultV4Prefix, kTaygaIfName),
           fbnl::RouteBuilder{}
@@ -247,7 +246,7 @@ Routing::doSyncRoutes() {
               .addNextHop(fbnl::NextHopBuilder{}
                               .setGateway(folly::IPAddressV6{
                                   folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                                  meshPaths_.at(currentRoot_->first).nextHop})
+                                  meshPaths_.at(currentGate_->first).nextHop})
                               .setIfIndex(meshIfIndex)
                               .build())
               .build());
@@ -520,6 +519,19 @@ Routing::hwmpPannFrameProcess(
   mpath.metric = newMetric;
   mpath.nextHop = sa;
   mpath.isGate = pann.isGate;
+
+  if (pann.isGate &&
+      std::count_if(
+          meshPaths_.begin(),
+          meshPaths_.end(),
+          [origAddr, newMetric](const auto& mpathPair) {
+            const auto& mpath = mpathPair.second;
+            return mpath.dst != origAddr && !mpath.expired() && mpath.isGate &&
+                mpath.metric <= newMetric;
+          }) >= (isGate_ ? kMinGatewayRedundancy - 1 : kMinGatewayRedundancy)) {
+    return;
+  }
+
   mpath.expTime = std::chrono::steady_clock::now() + activePathTimeout_;
 
   if (pann.replyRequested) {

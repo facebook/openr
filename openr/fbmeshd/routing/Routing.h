@@ -92,19 +92,19 @@ class Routing : public folly::EventBase,
   Routing& operator=(const Routing&) = delete;
   Routing& operator=(Routing&&) = delete;
 
-  void prepare();
-
   void setGatewayStatus(bool isGate);
-
-  void
-  onListenStarted() noexcept override {}
-
-  void
-  onListenStopped() noexcept override {}
 
   std::unordered_map<folly::MacAddress, MeshPath> dumpMpaths();
 
  private:
+  void prepare();
+
+  virtual void
+  onListenStarted() noexcept override {}
+
+  virtual void
+  onListenStopped() noexcept override {}
+
   void doSyncRoutes();
 
   void meshPathAddGate(MeshPath& mpath);
@@ -167,7 +167,7 @@ class Routing : public folly::EventBase,
    * L3 Routing state
    */
   double const gatewayChangeThresholdFactor_{2};
-  folly::Optional<std::pair<folly::MacAddress, int32_t>> currentRoot_;
+  folly::Optional<std::pair<folly::MacAddress, int32_t>> currentGate_;
   fbzmq::ZmqEventLoop zmqEvl_;
   openr::fbnl::NetlinkSocket netlinkSocket_;
   std::thread zmqEvlThread_;
@@ -178,14 +178,14 @@ class Routing : public folly::EventBase,
   std::unique_ptr<folly::AsyncTimeout> meshPathRootTimer_;
 
   /* Local mesh Sequence Number */
-  uint32_t sn_{0};
+  uint64_t sn_{0};
 
   /*
    * Protocol Parameters
    */
   std::chrono::milliseconds activePathTimeout_{30000};
   bool isRoot_{false};
-  std::chrono::milliseconds rootPannInterval_{3000};
+  std::chrono::milliseconds rootPannInterval_{5000};
   bool isGate_{false};
 
   /*
