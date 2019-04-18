@@ -279,6 +279,8 @@ class Routing : public folly::EventBase,
       std::unique_ptr<folly::IOBuf> data,
       bool truncated) noexcept override;
 
+  bool isStationInTopKGates(folly::MacAddress mac);
+
   void hwmpPreqFrameProcess(
       folly::MacAddress sa,
       thrift::MeshPathFramePREQ preq,

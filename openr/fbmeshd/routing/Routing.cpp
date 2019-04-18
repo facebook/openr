@@ -26,6 +26,7 @@ const auto kMeshHousekeepingInterval{60s};
 const auto kMeshPathExpire{600s};
 const auto kMaxSaneSnDelta{32};
 const auto kSyncRoutesInterval{1s};
+const auto kMinGatewayRedundancy{2};
 
 void
 meshPathExpire(
@@ -1165,6 +1166,31 @@ Routing::hwmpRannFrameProcess(
   }
 }
 
+bool
+Routing::isStationInTopKGates(folly::MacAddress mac) {
+  std::vector<std::pair<uint32_t, folly::MacAddress>> ret;
+
+  for (const auto& mpath : meshPaths_) {
+    if (!mpath.second.expired() && mpath.second.isGate) {
+      ret.emplace_back(mpath.second.metric, mpath.first);
+    }
+  }
+
+  std::sort(ret.begin(), ret.end());
+
+  const auto maxNoGates = dot11MeshGateAnnouncementProtocol_
+      ? kMinGatewayRedundancy - 1
+      : kMinGatewayRedundancy;
+
+  for (auto i{0}; i < maxNoGates && i < ret.size(); i++) {
+    if (ret[i].second == mac) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void
 Routing::hwmpPannFrameProcess(
     folly::MacAddress sa, thrift::MeshPathFramePANN pann) {
@@ -1229,30 +1255,14 @@ Routing::hwmpPannFrameProcess(
     return;
   }
 
+  const auto topKGatesOldHasOrig = isStationInTopKGates(origAddr);
+
   mpath.sn = origSn;
   mpath.metric = newMetric;
   mpath.nextHop = sa;
   mpath.isGate = pann.isGate;
   mpath.expTime =
       std::chrono::steady_clock::now() + dot11MeshHWMPactivePathTimeout_;
-
-  if (ttl <= 1) {
-    return;
-  }
-  ttl--;
-
-  if (targetAddr != *nlHandler_.lookupMeshNetif().maybeMacAddress) {
-    txPannFrame(
-        da,
-        origAddr,
-        origSn,
-        hopCount,
-        ttl,
-        targetAddr,
-        newMetric,
-        pann.isGate,
-        pann.replyRequested);
-  }
 
   if (pann.replyRequested) {
     txPannFrame(
@@ -1265,6 +1275,27 @@ Routing::hwmpPannFrameProcess(
         0,
         dot11MeshGateAnnouncementProtocol_,
         false);
+  }
+
+  if (ttl <= 1) {
+    return;
+  }
+  ttl--;
+
+  const auto topKGatesNewHasOrig = isStationInTopKGates(origAddr);
+
+  if (targetAddr != *nlHandler_.lookupMeshNetif().maybeMacAddress &&
+      (!pann.isGate || topKGatesOldHasOrig || topKGatesNewHasOrig)) {
+    txPannFrame(
+        da,
+        origAddr,
+        origSn,
+        hopCount,
+        ttl,
+        targetAddr,
+        newMetric,
+        pann.isGate,
+        pann.replyRequested);
   }
 }
 
