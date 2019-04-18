@@ -19,6 +19,9 @@ typedef map<string, i32>
 
 typedef i32 (cpp2.type = "int32_t") UInt32
 typedef i64 (cpp2.type = "uint64_t") MacAddress // network byte order
+typedef byte (cpp2.type = "uint8_t") u8
+typedef i32 (cpp2.type = "uint32_t") u32
+typedef i64 (cpp2.type = "uint64_t") u64
 
 struct SeparaPayload {
   1: MacAddress domain
@@ -38,10 +41,10 @@ struct Mesh {
 struct MpathEntry {
   1: MacAddress dest
   2: MacAddress nextHop
-  3: i64 sn
-  4: i32 metric
-  5: i64 expTime
-  7: byte hopCount
+  3: u64 sn
+  4: u32 metric
+  5: u64 expTime
+  7: u8 hopCount
   8: bool isRoot
   9: bool isGate
 }
@@ -64,12 +67,12 @@ service MeshService {
 }
 
 struct MeshPathFramePANN {
-  1: i64 origAddr
-  2: i64 origSn
-  3: byte hopCount
-  4: byte ttl
-  6: i64 targetAddr
-  7: i32 metric
+  1: MacAddress origAddr
+  2: u64 origSn
+  3: u8 hopCount
+  4: u8 ttl
+  6: MacAddress targetAddr
+  7: u32 metric
   8: bool isGate
   9: bool replyRequested
 }

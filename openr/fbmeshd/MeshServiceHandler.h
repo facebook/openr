@@ -187,15 +187,15 @@ class MeshServiceHandler final : public thrift::MeshServiceSvIf {
           apache::thrift::FragileConstructor::FRAGILE,
           it.first.u64NBO(),
           it.second.nextHop.u64NBO(),
-          static_cast<int64_t>(it.second.sn),
-          static_cast<int32_t>(it.second.metric),
+          it.second.sn,
+          it.second.metric,
           std::max(
-              static_cast<int64_t>(0),
-              static_cast<int64_t>(
+              static_cast<uint64_t>(0),
+              static_cast<uint64_t>(
                   std::chrono::duration_cast<std::chrono::milliseconds>(
                       it.second.expTime - std::chrono::steady_clock::now())
                       .count())),
-          static_cast<int8_t>(it.second.hopCount),
+          it.second.hopCount,
           it.second.isRoot,
           it.second.isGate,
       });

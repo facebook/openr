@@ -383,12 +383,12 @@ Routing::txPannFrame(
   serializer_.serialize(
       thrift::MeshPathFramePANN{
           apache::thrift::FRAGILE,
-          static_cast<int64_t>(origAddr.u64NBO()),
-          static_cast<int64_t>(origSn),
-          static_cast<int8_t>(hopCount),
-          static_cast<int8_t>(ttl),
-          static_cast<int64_t>(targetAddr.u64NBO()),
-          static_cast<int32_t>(metric),
+          origAddr.u64NBO(),
+          origSn,
+          hopCount,
+          ttl,
+          targetAddr.u64NBO(),
+          metric,
           isGate,
           replyRequested,
       },
@@ -454,15 +454,13 @@ Routing::hwmpPannFrameProcess(
     folly::MacAddress sa, thrift::MeshPathFramePANN pann) {
   VLOG(8) << folly::sformat("Routing::{}({}, ...)", __func__, sa.toString());
 
-  folly::MacAddress origAddr{
-      folly::MacAddress::fromNBO(static_cast<uint64_t>(pann.origAddr))};
-  uint64_t origSn{static_cast<uint64_t>(pann.origSn)};
-  uint8_t hopCount{static_cast<uint8_t>(pann.hopCount)};
+  folly::MacAddress origAddr{folly::MacAddress::fromNBO(pann.origAddr)};
+  uint64_t origSn{pann.origSn};
+  uint8_t hopCount{pann.hopCount};
   hopCount++;
-  uint32_t origMetric{static_cast<uint32_t>(pann.metric)};
-  uint8_t ttl{static_cast<uint8_t>(pann.ttl)};
-  folly::MacAddress targetAddr{
-      folly::MacAddress::fromNBO(static_cast<uint64_t>(pann.targetAddr))};
+  uint32_t origMetric{pann.metric};
+  uint8_t ttl{pann.ttl};
+  folly::MacAddress targetAddr{folly::MacAddress::fromNBO(pann.targetAddr)};
 
   /*  Ignore our own PANNs */
   if (origAddr == *nlHandler_.lookupMeshNetif().maybeMacAddress) {
