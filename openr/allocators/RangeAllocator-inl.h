@@ -44,7 +44,8 @@ RangeAllocator<T>::RangeAllocator(
     const std::chrono::milliseconds minBackoffDur /* = 50ms */,
     const std::chrono::milliseconds maxBackoffDur /* = 2s */,
     const bool overrideOwner /* = true */,
-    const std::function<bool(T)> checkValueInUseCb)
+    const std::function<bool(T)> checkValueInUseCb,
+    const std::chrono::milliseconds rangeAllocTtl)
     : nodeName_(nodeName),
       keyPrefix_(keyPrefix),
       kvStoreClient_(kvStoreClient),
@@ -52,7 +53,8 @@ RangeAllocator<T>::RangeAllocator(
       callback_(std::move(callback)),
       overrideOwner_(overrideOwner),
       backoff_(minBackoffDur, maxBackoffDur),
-      checkValueInUseCb_(std::move(checkValueInUseCb)) {}
+      checkValueInUseCb_(std::move(checkValueInUseCb)),
+      rangeAllocTtl_(rangeAllocTtl) {}
 
 template <typename T>
 RangeAllocator<T>::~RangeAllocator() {
@@ -203,7 +205,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
             1 /* version */,
             nodeName_ /* originatorId */,
             details::primitiveToBinary(newVal) /* value */,
-            Constants::kRangeAllocTtl.count() /* ttl */,
+            rangeAllocTtl_.count() /* ttl */,
             ttlVersion /* ttl version */,
             0 /* hash */));
     CHECK(ret) << ret.error();
@@ -215,7 +217,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     // We set back via KvStoreClient so that ttl is published regularly
     auto newValue = *maybeThriftVal;
     newValue.ttlVersion += 1; // bump ttl version
-    newValue.ttl = Constants::kRangeAllocTtl.count(); // reset ttl
+    newValue.ttl = rangeAllocTtl_.count(); // reset ttl
     kvStoreClient_->setKey(newKey, newValue);
     myValue_ = newVal;
     callback_(myValue_);
@@ -273,7 +275,6 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
   }
   if (i == allocRangeSize_) {
     LOG(ERROR) << "All values are owned by higher originatorIds";
-    return;
   }
 
   // Schedule timeout to allocate new value

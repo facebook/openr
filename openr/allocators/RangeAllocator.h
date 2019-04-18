@@ -55,7 +55,9 @@ class RangeAllocator {
           std::chrono::milliseconds(50),
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
       const bool overrideOwner = true,
-      const std::function<bool(T)> checkValueInUseCb = nullptr);
+      const std::function<bool(T)> checkValueInUseCb = nullptr,
+      const std::chrono::milliseconds rangeAllocTtl =
+          Constants::kRangeAllocTtl);
 
   /**
    * user must call this to start allocation
@@ -169,6 +171,9 @@ class RangeAllocator {
 
   // callback to check if value already exists
   const std::function<bool(T)> checkValueInUseCb_{nullptr};
+
+  // KvStore TTL for value
+  const std::chrono::milliseconds rangeAllocTtl_;
 };
 
 } // namespace openr

@@ -105,7 +105,9 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
   createAllocators(
       const std::pair<T, T>& allocRange,
       const folly::Optional<std::vector<T>> maybeInitVals,
-      std::function<void(int /* client id */, folly::Optional<T>)> callback) {
+      std::function<void(int /* client id */, folly::Optional<T>)> callback,
+      const std::chrono::milliseconds rangeAllocTtl =
+          Constants::kRangeAllocTtl) {
     // sanity check
     if (maybeInitVals) {
       CHECK_EQ(clients.size(), maybeInitVals->size());
@@ -122,7 +124,9 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
            i](folly::Optional<T> newVal) noexcept { callback(i, newVal); },
           10ms /* min backoff */,
           100ms /* max backoff */,
-          overrideOwner /* override allowed */);
+          overrideOwner /* override allowed */,
+          nullptr,
+          rangeAllocTtl);
       // start allocator
       allocator->startAllocator(
           allocRange,
@@ -239,10 +243,14 @@ TEST_P(RangeAllocatorFixture, NoSeed) {
 /**
  * Run allocators with no seed but the range doesn't have enough allocation
  * space. In this case allocators with higher IDs will succeed and other
- * allocators will strive forever for the value.
+ * allocators will strive forever for the value. Ensure other allocators are
+ * continuously retrying, by removing an allocator and making sure another
+ * client picks up newly freed value.
  */
 TEST_P(RangeAllocatorFixture, InsufficentRange) {
   // total of `kNumClients - 1` values available
+  uint32_t expectedClientIdStart = 1U;
+  uint32_t expectedClientIdEnd = kNumClients;
   const uint32_t rangeSize = kNumClients - 1;
   const uint64_t start = 61;
   const uint64_t end = start + rangeSize - 1; // Range is inclusive
@@ -286,10 +294,12 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
           eventLoop.stop();
           return;
         }
-        // Overide mode: client [1, rangeSize] must have received values
-        // except 0-th client
+        // Overide mode: client [expectedClientIdStart, expectedClientIdEnd]
+        // must have received values. The first run should be [1, kNumClients].
+        // The second run should be [0, kNumClients - 1].
         const auto expectedClientIds =
-            range(1U, rangeSize + 1) | as<std::set<int>>();
+            range(expectedClientIdStart, expectedClientIdEnd) |
+            as<std::set<int>>();
         const auto clientIds = from(allocation) |
             map([](std::pair<int, uint64_t> const& kv) { return kv.first; }) |
             as<std::set<int>>();
@@ -298,8 +308,40 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
           LOG(INFO) << "We got everything, stopping eventLoop.";
           eventLoop.stop();
         }
-      });
+      },
+      4s);
 
+  eventLoop.run();
+
+  EXPECT_TRUE(allocators.front()->isRangeConsumed());
+
+  VLOG(2) << "=============== Allocation Table ===============";
+  for (auto const& kv : allocation) {
+    VLOG(2) << kv.first << "\t-->\t" << kv.second;
+  }
+
+  // Schedule timeout to remove an allocator (client). This should then free a
+  // prefix for the last, unallocated, allocator.
+  eventLoop.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    if (not overrideOwner) {
+      for (uint32_t i = 0; i < kNumClients; i++) {
+        if (allocators[i]->getValue().hasValue()) {
+          VLOG(1) << "Removing client " << i << " with value "
+                  << allocators[i]->getValue().value();
+          allocation.erase(i);
+          allocators.erase(allocators.begin() + i);
+          break;
+        }
+      }
+    } else {
+      expectedClientIdStart--;
+      expectedClientIdEnd--;
+      allocation.erase(kNumClients - 1);
+      allocators.pop_back();
+    }
+  });
+
+  VLOG(2) << "Continuing eventLoop...";
   eventLoop.run();
 
   EXPECT_TRUE(allocators.front()->isRangeConsumed());
