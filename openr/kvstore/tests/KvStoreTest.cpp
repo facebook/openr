@@ -2185,7 +2185,7 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
   expectedKeyVals[key2] = thriftVal2;
   {
     fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock{
-        context, folly::none, folly::none, fbzmq::NonblockingFlag{true}};
+        context, folly::none, folly::none, fbzmq::NonblockingFlag{false}};
     reqSock.connect(fbzmq::SocketUrl{myStore->localCmdUrl});
 
     // Prepare request
