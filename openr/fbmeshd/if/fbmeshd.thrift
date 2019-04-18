@@ -41,7 +41,6 @@ struct MpathEntry {
   3: i64 sn
   4: i32 metric
   5: i64 expTime
-  6: byte flags
   7: byte hopCount
   8: bool isRoot
   9: bool isGate
@@ -62,43 +61,6 @@ service MeshService {
   i32 clearMetricOverride(1: string macAddress)
 
   list<MpathEntry> dumpMpath();
-}
-
-struct MeshPathFramePREQ {
-  1: byte flags
-  2: byte hopCount
-  3: byte ttl
-  4: i32 preqId
-  5: i64 origAddr
-  6: i64 origSn
-  7: i32 lifetime
-  8: i32 metric
-  9: byte targetCount
-  10: byte targetFlags
-  11: i64 targetAddr
-  12: i64 targetSn
-}
-
-struct MeshPathFramePREP {
-  1: byte flags
-  2: byte hopCount
-  3: byte ttl
-  4: i64 targetAddr
-  5: i64 targetSn
-  6: i32 lifetime
-  7: i32 metric
-  8: i64 origAddr
-  9: i64 origSn
-}
-
-struct MeshPathFrameRANN {
-  1: byte flags
-  2: byte hopCount
-  3: byte ttl
-  4: i64 rootAddr
-  5: i64 rootSn
-  6: i32 interval
-  7: i32 metric
 }
 
 struct MeshPathFramePANN {
