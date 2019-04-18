@@ -196,8 +196,7 @@ Routing::doSyncRoutes() {
       VLOG(10) << "No gate found";
     }
     if (currentGate_ && isCurrentGateStillAlive) {
-      if (bestGate->second * gatewayChangeThresholdFactor_ <
-          currentGate_->second) {
+      if (bestGate->second < currentGate_->second) {
         currentGate_ = bestGate;
       }
     } else {
