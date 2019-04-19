@@ -5,7 +5,7 @@
 [Unit]
 Description=Facebook Open Routing Platform
 BindsTo=wedge_agent.service
-After=network-online.target wedge_agent.service
+After=wedge_agent.service
 # Unlimited restarts (no start limit hit within a given time period)
 StartLimitIntervalSec=0
 

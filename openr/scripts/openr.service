@@ -7,7 +7,6 @@
 
 [Unit]
 Description=Facebook Open Routing Platform
-After=network-online.target
 
 [Service]
 Type=simple
