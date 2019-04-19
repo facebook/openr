@@ -116,6 +116,24 @@ install_folly() {
   popd
 }
 
+install_fizz() {
+  pushd .
+  if [[ ! -e "fizz" ]]; then
+    git clone https://github.com/facebookincubator/fizz
+  fi
+  rev=$(find_github_hash facebook/fizz)
+  cd fizz/build
+  if [[ ! -z "$rev" ]]; then
+    git fetch origin
+    git checkout "$rev"
+  fi
+  cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" ../fizz
+  make
+  sudo make install
+  sudo ldconfig
+  popd
+}
+
 install_fbthrift() {
   pushd .
   if [[ ! -e "fbthrift" ]]; then
@@ -133,6 +151,19 @@ install_fbthrift() {
   sudo ldconfig
   cd ../thrift/lib/py
   sudo python setup.py install
+  popd
+}
+
+install_sigar() {
+  pushd .
+  if [[ ! -e "sigar" ]]; then
+    git clone https://github.com/hyperic/sigar/
+  fi
+  cd sigar
+  ./autogen.sh
+  ./configure --disable-shared CFLAGS='-fgnu89-inline'
+  sudo make install
+  sudo ldconfig
   popd
 }
 
@@ -337,12 +368,14 @@ install_gtest
 install_mstch
 install_zstd
 install_folly
+install_fizz
 install_wangle
 install_libsodium
 install_libzmq
 install_libnl
 install_krb5
 install_fbthrift
+install_sigar
 install_fbzmq
 install_re2
 install_openr
