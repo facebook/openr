@@ -203,6 +203,8 @@ struct PrefixEntry {
   // Ephemeral entries are not saved into persistent store(file) and will be
   // lost with restart, if not refreshed before cold start time.
   5: optional bool ephemeral
+  // Metric vector for externally injected routes into openr
+  6: optional MetricVector mv
 }
 
 // all prefixes that are bound to a given router

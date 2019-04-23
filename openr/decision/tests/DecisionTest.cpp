@@ -79,70 +79,14 @@ const auto addr2V4 = toIpPrefix("10.2.2.2/32");
 const auto addr3V4 = toIpPrefix("10.3.3.3/32");
 const auto addr4V4 = toIpPrefix("10.4.4.4/32");
 
-const auto prefixDb1 = createPrefixDb(
-    "1",
-    {{FRAGILE,
-      addr1,
-      thrift::PrefixType::LOOPBACK,
-      {},
-      thrift::PrefixForwardingType::IP,
-      false}});
-const auto prefixDb2 = createPrefixDb(
-    "2",
-    {{FRAGILE,
-      addr2,
-      thrift::PrefixType::LOOPBACK,
-      {},
-      thrift::PrefixForwardingType::IP,
-      false}});
-const auto prefixDb3 = createPrefixDb(
-    "3",
-    {{FRAGILE,
-      addr3,
-      thrift::PrefixType::LOOPBACK,
-      {},
-      thrift::PrefixForwardingType::IP,
-      false}});
-const auto prefixDb4 = createPrefixDb(
-    "4",
-    {{FRAGILE,
-      addr4,
-      thrift::PrefixType::LOOPBACK,
-      {},
-      thrift::PrefixForwardingType::IP,
-      false}});
-const auto prefixDb1V4 = createPrefixDb(
-    "1",
-    {{FRAGILE,
-      addr1V4,
-      thrift::PrefixType::LOOPBACK,
-      {},
-      thrift::PrefixForwardingType::IP,
-      false}});
-const auto prefixDb2V4 = createPrefixDb(
-    "2",
-    {{FRAGILE,
-      addr2V4,
-      thrift::PrefixType::LOOPBACK,
-      {},
-      thrift::PrefixForwardingType::IP,
-      false}});
-const auto prefixDb3V4 = createPrefixDb(
-    "3",
-    {{FRAGILE,
-      addr3V4,
-      thrift::PrefixType::LOOPBACK,
-      {},
-      thrift::PrefixForwardingType::IP,
-      false}});
-const auto prefixDb4V4 = createPrefixDb(
-    "4",
-    {{FRAGILE,
-      addr4V4,
-      thrift::PrefixType::LOOPBACK,
-      {},
-      thrift::PrefixForwardingType::IP,
-      false}});
+const auto prefixDb1 = createPrefixDb("1", {createPrefixEntry(addr1)});
+const auto prefixDb2 = createPrefixDb("2", {createPrefixEntry(addr2)});
+const auto prefixDb3 = createPrefixDb("3", {createPrefixEntry(addr3)});
+const auto prefixDb4 = createPrefixDb("4", {createPrefixEntry(addr4)});
+const auto prefixDb1V4 = createPrefixDb("1", {createPrefixEntry(addr1V4)});
+const auto prefixDb2V4 = createPrefixDb("2", {createPrefixEntry(addr2V4)});
+const auto prefixDb3V4 = createPrefixDb("3", {createPrefixEntry(addr3V4)});
+const auto prefixDb4V4 = createPrefixDb("4", {createPrefixEntry(addr4V4)});
 
 const thrift::MplsAction labelPopAction{
     createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP)};
@@ -1165,33 +1109,9 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
   auto defaultRoutePrefix = v4Enabled ? "0.0.0.0/0" : "::/0";
   auto defaultRoute = toIpPrefix(defaultRoutePrefix);
   auto prefixDb1 = createPrefixDb(
-      "1",
-      {{FRAGILE,
-        addr1,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::IP,
-        false},
-       {FRAGILE,
-        defaultRoute,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::IP,
-        false}});
+      "1", {createPrefixEntry(addr1), createPrefixEntry(defaultRoute)});
   auto prefixDb4 = createPrefixDb(
-      "4",
-      {{FRAGILE,
-        addr4,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::IP,
-        false},
-       {FRAGILE,
-        defaultRoute,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::IP,
-        false}});
+      "4", {createPrefixEntry(addr4), createPrefixEntry(defaultRoute)});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb1));
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb4));
 
@@ -1975,48 +1895,43 @@ TEST(DecisionTest, Ip2MplsRoutes) {
   const auto defaultPrefixV6 = toIpPrefix("::/0");
   const auto prefixDb1_ = createPrefixDb(
       "1",
-      {{FRAGILE,
-        addr1,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::SR_MPLS,
-        false}});
+      {createPrefixEntry(
+          addr1,
+          thrift::PrefixType::LOOPBACK,
+          {},
+          thrift::PrefixForwardingType::SR_MPLS)});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb1_));
   const auto prefixDb2_ = createPrefixDb(
       "2",
-      {{FRAGILE,
-        addr2,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::SR_MPLS,
-        false}});
+      {createPrefixEntry(
+          addr2,
+          thrift::PrefixType::LOOPBACK,
+          {},
+          thrift::PrefixForwardingType::SR_MPLS)});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb2_));
   const auto prefixDb3_ = createPrefixDb(
       "3",
-      {{FRAGILE,
-        addr3,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::SR_MPLS,
-        false}});
+      {createPrefixEntry(
+          addr3,
+          thrift::PrefixType::LOOPBACK,
+          {},
+          thrift::PrefixForwardingType::SR_MPLS)});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb3_));
   const auto prefixDb4_ = createPrefixDb(
       "4",
-      {{FRAGILE,
-        defaultPrefixV6,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::SR_MPLS,
-        false}});
+      {createPrefixEntry(
+          defaultPrefixV6,
+          thrift::PrefixType::LOOPBACK,
+          {},
+          thrift::PrefixForwardingType::SR_MPLS)});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb4_));
   const auto prefixDb5_ = createPrefixDb(
       "5",
-      {{FRAGILE,
-        defaultPrefixV6,
-        thrift::PrefixType::LOOPBACK,
-        {},
-        thrift::PrefixForwardingType::SR_MPLS,
-        false}});
+      {createPrefixEntry(
+          defaultPrefixV6,
+          thrift::PrefixType::LOOPBACK,
+          {},
+          thrift::PrefixForwardingType::SR_MPLS)});
   EXPECT_TRUE(spfSolver->updatePrefixDatabase(prefixDb5_));
 
   // Some actions
@@ -2287,14 +2202,8 @@ createGrid(SpfSolver& spfSolver, int n) {
 
       // prefix
       auto addrV6 = toIpPrefix(nodeToPrefixV6(node));
-      spfSolver.updatePrefixDatabase(createPrefixDb(
-          nodeName,
-          {{FRAGILE,
-            addrV6,
-            thrift::PrefixType::LOOPBACK,
-            {},
-            thrift::PrefixForwardingType::IP,
-            false}}));
+      spfSolver.updatePrefixDatabase(
+          createPrefixDb(nodeName, {createPrefixEntry(addrV6)}));
     }
   }
 }
@@ -2530,13 +2439,7 @@ class DecisionTestFixture : public ::testing::Test {
       const vector<thrift::IpPrefix>& prefixes) {
     vector<thrift::PrefixEntry> prefixEntries;
     for (const auto& prefix : prefixes) {
-      prefixEntries.emplace_back(
-          FRAGILE,
-          prefix,
-          thrift::PrefixType::LOOPBACK,
-          "",
-          thrift::PrefixForwardingType::IP,
-          false);
+      prefixEntries.emplace_back(createPrefixEntry(prefix));
     }
     return thrift::Value(
         FRAGILE,

@@ -304,6 +304,25 @@ createPrefixDb(
   return prefixDb;
 }
 
+inline thrift::PrefixEntry
+createPrefixEntry(
+    thrift::IpPrefix prefix,
+    thrift::PrefixType type = thrift::PrefixType::LOOPBACK,
+    const std::string& data = "",
+    thrift::PrefixForwardingType forwardingType =
+        thrift::PrefixForwardingType::IP,
+    folly::Optional<bool> ephemeral = folly::none,
+    folly::Optional<thrift::MetricVector> mv = folly::none) {
+  thrift::PrefixEntry prefixEntry;
+  prefixEntry.prefix = prefix;
+  prefixEntry.type = type;
+  prefixEntry.data = data;
+  prefixEntry.forwardingType = forwardingType;
+  prefixEntry.ephemeral = ephemeral;
+  prefixEntry.mv = mv;
+  return prefixEntry;
+}
+
 inline thrift::NextHopThrift
 createNextHop(
     thrift::BinaryAddress addr,

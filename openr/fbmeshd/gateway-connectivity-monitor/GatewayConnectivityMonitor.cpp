@@ -149,14 +149,8 @@ void
 GatewayConnectivityMonitor::advertiseDefaultRoute() {
   VLOG(8) << "Advertising default gateway";
   if (isOpenrEnabled_) {
-    const auto ret =
-        prefixManagerClient_.addPrefixes({openr::thrift::PrefixEntry(
-            apache::thrift::FRAGILE,
-            toIpPrefix("0.0.0.0/0"),
-            openr::thrift::PrefixType::DEFAULT,
-            {},
-            openr::thrift::PrefixForwardingType::IP,
-            false)});
+    const auto ret = prefixManagerClient_.addPrefixes({createPrefixEntry(
+        toIpPrefix("0.0.0.0/0"), openr::thrift::PrefixType::DEFAULT)});
     if (ret.hasError()) {
       LOG(ERROR) << "Announcing default prefix failed: " << ret.error();
       monitorClient_.incrementSumStat(
@@ -179,14 +173,8 @@ void
 GatewayConnectivityMonitor::withdrawDefaultRoute() {
   VLOG(8) << "Withdrawing default gateway";
   if (isOpenrEnabled_) {
-    const auto ret =
-        prefixManagerClient_.withdrawPrefixes({openr::thrift::PrefixEntry(
-            apache::thrift::FRAGILE,
-            toIpPrefix("0.0.0.0/0"),
-            openr::thrift::PrefixType::DEFAULT,
-            {},
-            openr::thrift::PrefixForwardingType::IP,
-            false)});
+    const auto ret = prefixManagerClient_.withdrawPrefixes({createPrefixEntry(
+        toIpPrefix("0.0.0.0/0"), openr::thrift::PrefixType::DEFAULT)});
     // if the default prefix doesn't exit, the calls still succeeds
     // (ret.hasError() == false) but sets ret.value().success = false.
     if (ret.hasError()) {

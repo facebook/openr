@@ -597,27 +597,9 @@ TEST(UtilTest, MplsActionValidate) {
 
 TEST(UtilTest, getPrefixForwardingType) {
   std::unordered_map<std::string, thrift::PrefixEntry> prefixes;
-  prefixes["node1"] = thrift::PrefixEntry(
-      apache::thrift::FRAGILE,
-      toIpPrefix("10.0.0.0/8"),
-      thrift::PrefixType::LOOPBACK,
-      "",
-      thrift::PrefixForwardingType::IP,
-      false);
-  prefixes["node2"] = thrift::PrefixEntry(
-      apache::thrift::FRAGILE,
-      toIpPrefix("10.0.0.0/8"),
-      thrift::PrefixType::LOOPBACK,
-      "",
-      thrift::PrefixForwardingType::IP,
-      false);
-  prefixes["node3"] = thrift::PrefixEntry(
-      apache::thrift::FRAGILE,
-      toIpPrefix("10.0.0.0/8"),
-      thrift::PrefixType::LOOPBACK,
-      "",
-      thrift::PrefixForwardingType::IP,
-      false);
+  prefixes["node1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes["node2"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes["node3"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
 
   EXPECT_EQ(
       thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));

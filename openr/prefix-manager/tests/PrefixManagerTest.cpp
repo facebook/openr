@@ -35,85 +35,34 @@ const auto addr8 = toIpPrefix("ffff:10:4:8::/64");
 const auto addr9 = toIpPrefix("ffff:10:4:9::/64");
 const auto addr10 = toIpPrefix("ffff:10:4:10::/64");
 
-const auto prefixEntry1 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr1,
-    thrift::PrefixType::DEFAULT,
-    {},
-    thrift::PrefixForwardingType::IP,
-    false);
-const auto prefixEntry2 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr2,
-    thrift::PrefixType::PREFIX_ALLOCATOR,
-    {},
-    thrift::PrefixForwardingType::IP,
-    false);
-const auto prefixEntry3 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr3,
-    thrift::PrefixType::DEFAULT,
-    {},
-    thrift::PrefixForwardingType::IP,
-    false);
-const auto prefixEntry4 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr4,
-    thrift::PrefixType::PREFIX_ALLOCATOR,
-    {},
-    thrift::PrefixForwardingType::IP,
-    false);
-const auto prefixEntry5 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr5,
-    thrift::PrefixType::DEFAULT,
-    {},
-    thrift::PrefixForwardingType::IP,
-    false);
-const auto prefixEntry6 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr6,
-    thrift::PrefixType::PREFIX_ALLOCATOR,
-    {},
-    thrift::PrefixForwardingType::IP,
-    false);
-const auto prefixEntry7 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr7,
-    thrift::PrefixType::DEFAULT,
-    {},
-    thrift::PrefixForwardingType::IP,
-    false);
-const auto prefixEntry8 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr8,
-    thrift::PrefixType::PREFIX_ALLOCATOR,
-    {},
-    thrift::PrefixForwardingType::IP,
-    false);
-const auto ephemeralPrefixEntry9 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
-    addr9,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    true);
-const auto persistentPrefixEntry9 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
+const auto prefixEntry1 = createPrefixEntry(addr1, thrift::PrefixType::DEFAULT);
+const auto prefixEntry2 =
+    createPrefixEntry(addr2, thrift::PrefixType::PREFIX_ALLOCATOR);
+const auto prefixEntry3 = createPrefixEntry(addr3, thrift::PrefixType::DEFAULT);
+const auto prefixEntry4 =
+    createPrefixEntry(addr4, thrift::PrefixType::PREFIX_ALLOCATOR);
+const auto prefixEntry5 = createPrefixEntry(addr5, thrift::PrefixType::DEFAULT);
+const auto prefixEntry6 =
+    createPrefixEntry(addr6, thrift::PrefixType::PREFIX_ALLOCATOR);
+const auto prefixEntry7 = createPrefixEntry(addr7, thrift::PrefixType::DEFAULT);
+const auto prefixEntry8 =
+    createPrefixEntry(addr8, thrift::PrefixType::PREFIX_ALLOCATOR);
+const auto ephemeralPrefixEntry9 = createPrefixEntry(
+    addr9, thrift::PrefixType::BGP, {}, thrift::PrefixForwardingType::IP, true);
+
+const auto persistentPrefixEntry9 = createPrefixEntry(
     addr9,
     thrift::PrefixType::BGP,
     {},
     thrift::PrefixForwardingType::IP,
     false);
-const auto ephemeralPrefixEntry10 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
+const auto ephemeralPrefixEntry10 = createPrefixEntry(
     addr10,
     thrift::PrefixType::BGP,
     {},
     thrift::PrefixForwardingType::IP,
     true);
-const auto persistentPrefixEntry10 = thrift::PrefixEntry(
-    apache::thrift::FRAGILE,
+const auto persistentPrefixEntry10 = createPrefixEntry(
     addr10,
     thrift::PrefixType::BGP,
     {},
