@@ -1507,6 +1507,10 @@ def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> Non
                 role = "Parent"
             elif nb in info.children:
                 role = "Child"
+            if counters.querySent > counters.replyRecv:
+                # active-state: I'm expecting receving reply from this neighbor
+                # show it as red
+                nb = click.style(nb, fg="red")
             rows.append(
                 [
                     nb,

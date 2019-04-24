@@ -1404,7 +1404,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       EXPECT_EQ(sptInfo0.parent, "r0");
       if (r1Parent == "n1") {
         EXPECT_EQ(sptInfo0.children.size(), 1);
-        EXPECT_EQ(sptInfo0.children.count("r0"), 1);
+        EXPECT_EQ(sptInfo0.children.count("r1"), 1);
       } else {
         EXPECT_EQ(sptInfo0.children.size(), 0);
       }
@@ -1415,10 +1415,10 @@ TEST_F(KvStoreTestFixture, DualTest) {
       EXPECT_EQ(sptInfo1.cost, 1);
       EXPECT_EQ(sptInfo1.parent, "r1");
       if (r0Parent == "n1") {
-        EXPECT_EQ(sptInfo0.children.size(), 1);
-        EXPECT_EQ(sptInfo0.children.count("r0"), 1);
+        EXPECT_EQ(sptInfo1.children.size(), 1);
+        EXPECT_EQ(sptInfo1.children.count("r0"), 1);
       } else {
-        EXPECT_EQ(sptInfo0.children.size(), 0);
+        EXPECT_EQ(sptInfo1.children.size(), 0);
       }
 
       // validate flooding-peer-info
@@ -1434,10 +1434,10 @@ TEST_F(KvStoreTestFixture, DualTest) {
     }
   };
 
-  // validate all roots up case
+  // case1. validate all roots up case
   validateAllRootsUpCase();
 
-  // validate r0 down case
+  // case2. validate r0 down case
   // everybody should pick r1 as new root
   r0->delPeer("n0");
   r0->delPeer("n1");
@@ -1527,12 +1527,153 @@ TEST_F(KvStoreTestFixture, DualTest) {
     EXPECT_EQ(sptInfos.floodPeers.count("r1"), 1);
   }
 
-  // bring r0 back up, and validate again
+  // case3. bring r0 back up, and validate again
   // everybody should pick r0 as new root
   EXPECT_TRUE(r0->addPeer(n0->nodeId, n0->getPeerSpec()));
   EXPECT_TRUE(r0->addPeer(n1->nodeId, n1->getPeerSpec()));
   EXPECT_TRUE(n0->addPeer(r0->nodeId, r0->getPeerSpec()));
   EXPECT_TRUE(n1->addPeer(r0->nodeId, r0->getPeerSpec()));
+
+  // let kvstore dual sync
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  validateAllRootsUpCase();
+
+  // case4. bring link r0-n0 down
+  // verify topology below
+  //  r0    r1
+  //   \   /|
+  //    \_/ |
+  //   /  \ |
+  // n0    n1
+  r0->delPeer("n0");
+  n0->delPeer("r0");
+
+  // let kvstore dual sync
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  // validate r0
+  {
+    const auto& sptInfos = r0->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, 0);
+    EXPECT_EQ(sptInfo0.parent, "r0");
+    EXPECT_EQ(sptInfo0.children.size(), 1);
+    EXPECT_EQ(sptInfo0.children.count("n1"), 1);
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 2);
+    EXPECT_EQ(sptInfo1.parent, "n1");
+    EXPECT_EQ(sptInfo1.children.size(), 0);
+
+    // validate flooding-peer-info
+    EXPECT_TRUE(sptInfos.floodRootId.hasValue());
+    EXPECT_EQ(*sptInfos.floodRootId, "r0");
+    EXPECT_EQ(sptInfos.floodPeers.size(), 1);
+    EXPECT_EQ(sptInfos.floodPeers.count("n1"), 1);
+  }
+
+  // validate r1
+  {
+    const auto& sptInfos = r1->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, 2);
+    EXPECT_EQ(sptInfo0.parent, "n1");
+    EXPECT_EQ(sptInfo0.children.size(), 1);
+    EXPECT_EQ(sptInfo0.children.count("n0"), 1);
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 0);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.children.size(), 2);
+    EXPECT_EQ(sptInfo1.children.count("n0"), 1);
+    EXPECT_EQ(sptInfo1.children.count("n1"), 1);
+
+    // validate flooding-peer-info
+    EXPECT_TRUE(sptInfos.floodRootId.hasValue());
+    EXPECT_EQ(*sptInfos.floodRootId, "r0");
+    EXPECT_EQ(sptInfos.floodPeers.size(), 2);
+    EXPECT_EQ(sptInfos.floodPeers.count("n0"), 1);
+    EXPECT_EQ(sptInfos.floodPeers.count("n1"), 1);
+  }
+
+  // validate n0
+  {
+    const auto& sptInfos = n0->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, 3);
+    EXPECT_EQ(sptInfo0.parent, "r1");
+    EXPECT_EQ(sptInfo0.children.size(), 0);
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 1);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.children.size(), 0);
+
+    // validate flooding-peer-info
+    EXPECT_EQ(*sptInfos.floodRootId, "r0");
+    EXPECT_EQ(sptInfos.floodPeers.size(), 1);
+    EXPECT_EQ(sptInfos.floodPeers.count("r1"), 1);
+  }
+
+  // validate n1
+  {
+    const auto& sptInfos = n1->getFloodTopo();
+    EXPECT_EQ(sptInfos.infos.size(), 2);
+    EXPECT_EQ(sptInfos.infos.count("r0"), 1);
+    EXPECT_EQ(sptInfos.infos.count("r1"), 1);
+
+    // validate root r0
+    const auto& sptInfo0 = sptInfos.infos.at("r0");
+    EXPECT_TRUE(sptInfo0.passive);
+    EXPECT_EQ(sptInfo0.cost, 1);
+    EXPECT_EQ(sptInfo0.parent, "r0");
+    EXPECT_EQ(sptInfo0.children.size(), 1);
+    EXPECT_EQ(sptInfo0.children.count("r1"), 1);
+
+    // validate root r1
+    const auto& sptInfo1 = sptInfos.infos.at("r1");
+    EXPECT_TRUE(sptInfo1.passive);
+    EXPECT_EQ(sptInfo1.cost, 1);
+    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.children.size(), 1);
+    EXPECT_EQ(sptInfo1.children.count("r0"), 1);
+
+    // validate flooding-peer-info
+    EXPECT_EQ(*sptInfos.floodRootId, "r0");
+    EXPECT_EQ(sptInfos.floodPeers.size(), 2);
+    EXPECT_EQ(sptInfos.floodPeers.count("r0"), 1);
+    EXPECT_EQ(sptInfos.floodPeers.count("r1"), 1);
+  }
+
+  // case5. bring r0-n1 link back up, and validate again
+  EXPECT_TRUE(r0->addPeer(n0->nodeId, n0->getPeerSpec()));
+  EXPECT_TRUE(n0->addPeer(r0->nodeId, r0->getPeerSpec()));
 
   // let kvstore dual sync
   /* sleep override */

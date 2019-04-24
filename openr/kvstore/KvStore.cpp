@@ -725,7 +725,7 @@ KvStore::addPeers(
   // add dual peers if any
   if (enableFloodOptimization_) {
     for (const auto& peer : dualPeersToAdd) {
-      LOG(INFO) << "dual peer up : " << peer;
+      LOG(INFO) << "dual peer up: " << peer;
       DualNode::peerUp(peer, 1 /* link-cost */); // use hop count as metric
     }
   }
@@ -771,7 +771,7 @@ KvStore::delPeers(std::vector<std::string> const& peers) {
   // remove dual peers if any
   if (enableFloodOptimization_) {
     for (const auto& peer : dualPeersToRemove) {
-      LOG(INFO) << "dual peer down : " << peer;
+      LOG(INFO) << "dual peer down: " << peer;
       DualNode::peerDown(peer);
     }
   }
@@ -1094,13 +1094,24 @@ KvStore::processFloodTopoSet(
   const auto& child = setParams.srcId;
   if (setParams.setChild) {
     // set child command
-    VLOG(1) << "flood topo set child on root-id: " << setParams.rootId
-            << " , child: " << setParams.srcId;
-    dual.addChild(child);
+    LOG(INFO) << "dual child set: root-id: (" << setParams.rootId
+              << ") child: " << setParams.srcId;
+    if (peers_.count(child) != 0) {
+      dual.addChild(child);
+    } else {
+      // peer is down, but peer chose me as parent(nexthop).
+      // I have to detect this peer up in order to send out updates to this
+      // peer so that this peer can possibly chose me as nexthop.
+      // Therefore this can only happen in one case: some event caused peer to
+      // chose me as nexthop, but peer got rebooted right after; And I detected
+      // peer-down event before I got topo-set command -> ignore the command
+      LOG(WARNING) << "dual ignore child set root-id: (" << setParams.rootId
+                   << ") child: " << setParams.srcId << ": peer is down";
+    }
   } else {
     // unset child command
-    VLOG(1) << "flood topo unset child on root-id: " << setParams.rootId
-            << " , child: " << setParams.srcId;
+    LOG(INFO) << "dual child unset: root-id: (" << setParams.rootId
+              << ") child: " << setParams.srcId;
     dual.removeChild(child);
   }
 }
@@ -1118,36 +1129,8 @@ KvStore::processNexthopChange(
       << ": callback invoked while nexthop does not change: " << oldNhStr;
   // root should NEVER change its nexthop (nexthop always equal to myself)
   CHECK_NE(nodeId_, rootId);
-  LOG(INFO) << "dual root-id (" << rootId << ") nexthop change: " << oldNhStr
+  LOG(INFO) << "dual nexthop change: root-id (" << rootId << ") " << oldNhStr
             << " -> " << newNhStr;
-  // // unset old parent if any
-  if (oldNh.hasValue()) {
-    if (peers_.count(*oldNh) == 0) {
-      // old spt parent is gone already, do nothing;
-      return;
-    }
-    CHECK_NE(nodeId_, *oldNh) << "old nexthop was myself";
-    // unset it
-    const auto& dstCmdSocketId = peers_.at(*oldNh).second;
-    thrift::Request request;
-    request.cmd = thrift::Command::FLOOD_TOPO_SET;
-
-    thrift::FloodTopoSetParams setParams;
-    setParams.rootId = rootId;
-    setParams.srcId = nodeId_;
-    setParams.setChild = false; // unset
-    request.floodTopoSetParams = setParams;
-
-    const auto ret = peerSyncSock_.sendMultiple(
-        fbzmq::Message::from(dstCmdSocketId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(request, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << rootId << ": failed to unset spt-parent " << *oldNh
-                 << ", error: " << ret.error();
-      collectSendFailureStats(ret.error(), dstCmdSocketId);
-    }
-  }
 
   // set new parent if any
   if (newNh.hasValue()) {
@@ -1175,6 +1158,48 @@ KvStore::processNexthopChange(
         fbzmq::Message::fromThriftObj(request, serializer_).value());
     if (ret.hasError()) {
       LOG(ERROR) << rootId << ": failed to set spt-parent " << *newNh
+                 << ", error: " << ret.error();
+      collectSendFailureStats(ret.error(), dstCmdSocketId);
+    }
+
+    // Enqueue new-nexthop for full-sync (insert only if entry doesn't exists)
+    // NOTE we have to perform full-sync after we do FLOOD_TOPO_SET, so that
+    // we can be sure that I won't be in a disconnected state after we got
+    // full synced. (ps: full-sync is 3-way-sync, one direction sync should be
+    // good enough)
+    LOG(INFO) << "dual full-sync with " << *newNh;
+    peersToSyncWith_.emplace(
+        *newNh,
+        ExponentialBackoff<std::chrono::milliseconds>(
+            Constants::kInitialBackoff, Constants::kMaxBackoff));
+
+    // initial full sync request if peersToSyncWith_ was empty
+    if (not fullSyncTimer_->isScheduled()) {
+      fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+    }
+  }
+
+  // unset old parent if any
+  if (oldNh.hasValue() and peers_.count(*oldNh)) {
+    // valid old parent AND it's still my peer, unset it
+    CHECK_NE(nodeId_, *oldNh) << "old nexthop was myself";
+    // unset it
+    const auto& dstCmdSocketId = peers_.at(*oldNh).second;
+    thrift::Request request;
+    request.cmd = thrift::Command::FLOOD_TOPO_SET;
+
+    thrift::FloodTopoSetParams setParams;
+    setParams.rootId = rootId;
+    setParams.srcId = nodeId_;
+    setParams.setChild = false; // unset
+    request.floodTopoSetParams = setParams;
+
+    const auto ret = peerSyncSock_.sendMultiple(
+        fbzmq::Message::from(dstCmdSocketId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(request, serializer_).value());
+    if (ret.hasError()) {
+      LOG(ERROR) << rootId << ": failed to unset spt-parent " << *oldNh
                  << ", error: " << ret.error();
       collectSendFailureStats(ret.error(), dstCmdSocketId);
     }
