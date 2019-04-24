@@ -142,6 +142,14 @@ startEventLoop(
 
 int
 main(int argc, char** argv) {
+  // Set version string to show when `openr --version` is invoked
+  std::stringstream ss;
+  BuildInfo::log(ss);
+  gflags::SetVersionString(ss.str());
+
+  // Initialize all params
+  folly::init(&argc, &argv);
+
   // Initialize syslog
   // We log all messages upto INFO level.
   // LOG_CONS => Log to console on error
@@ -151,16 +159,8 @@ main(int argc, char** argv) {
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   syslog(LOG_NOTICE, "Starting OpenR daemon.");
 
-  std::stringstream ss;
-  BuildInfo::log(ss);
-  gflags::SetVersionString(ss.str());
-
+  // Export and log build information
   BuildInfo::exportBuildInfo();
-
-  // Initialize all params
-  folly::init(&argc, &argv);
-
-  // Log build information
   LOG(INFO) << ss.str();
 
   // start signal handler before any thread
