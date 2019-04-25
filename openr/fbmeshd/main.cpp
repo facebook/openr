@@ -30,6 +30,7 @@
 #include <openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.h>
 #include <openr/fbmeshd/mesh-spark/MeshSpark.h>
 #include <openr/fbmeshd/openr-metric-manager/OpenRMetricManager.h>
+#include <openr/fbmeshd/pinger/PeerPinger.h>
 #include <openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.h>
 #include <openr/fbmeshd/routing/Routing.h>
 #include <openr/fbmeshd/separa/Separa.h>
@@ -203,6 +204,9 @@ DEFINE_bool(
     "If set, considers openr to be enabled and enables functionality relating"
     " to openr");
 
+DEFINE_bool(
+    enable_peer_pinger, false, "if set, enables periodic pinging of peers");
+
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
 
@@ -354,6 +358,15 @@ main(int argc, char* argv[]) {
         linkMonitorGlobalCmdUrl,
         monitorSubmitUrl,
         zmqContext);
+  }
+
+  std::unique_ptr<PeerPinger> peerPinger;
+  if (FLAGS_enable_peer_pinger) {
+    allThreads.emplace_back(std::thread([&peerPinger]() {
+      folly::EventBase evb;
+      peerPinger = std::make_unique<PeerPinger>(&evb);
+      peerPinger->run();
+    }));
   }
 
   PeerSelector peerSelector{

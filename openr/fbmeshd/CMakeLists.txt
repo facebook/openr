@@ -133,6 +133,7 @@ add_executable(fbmeshd
     ${PROJECT_SOURCE_DIR}/mesh-spark/MeshSpark.cpp
     ${PROJECT_SOURCE_DIR}/nl/GenericNetlinkFamily.cpp
     ${PROJECT_SOURCE_DIR}/openr-metric-manager/OpenRMetricManager.cpp
+    ${PROJECT_SOURCE_DIR}/pinger/PeerPinger.cpp
     ${PROJECT_SOURCE_DIR}/route-update-monitor/RouteUpdateMonitor.cpp
     ${PROJECT_SOURCE_DIR}/routing/PeriodicPinger.cpp
     ${PROJECT_SOURCE_DIR}/routing/Routing.cpp
