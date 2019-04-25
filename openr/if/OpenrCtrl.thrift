@@ -283,7 +283,7 @@ service OpenrCtrl extends fb303.FacebookService {
    * Set new config key - you will never need to use it
    * NOTE: This API should only be accessible from local node
    */
-  void setConfigKey(1: string key, 2: string value) throws (1: OpenrError error)
+  void setConfigKey(1: string key, 2: binary value) throws (1: OpenrError error)
 
   /**
    * Erase key from config
@@ -294,5 +294,5 @@ service OpenrCtrl extends fb303.FacebookService {
   /**
    * Get config key
    */
-  string getConfigKey(1: string key) throws (1: OpenrError error)
+  binary getConfigKey(1: string key) throws (1: OpenrError error)
 }

@@ -8,40 +8,26 @@
 #
 
 
-import sys
-from builtins import object
-
 from openr.AllocPrefix import ttypes as ap_types
 from openr.cli.utils import utils
-from openr.clients import config_store_client
+from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.LinkMonitor import ttypes as lm_types
 from openr.Lsdb import ttypes as lsdb_types
+from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
 
 
-class ConfigCmd(object):
-    def __init__(self, cli_opts):
-        """ initialize the Config Store client """
-
-        self.client = config_store_client.ConfigStoreClient(cli_opts)
-
-
-class ConfigPrefixAllocatorCmd(ConfigCmd):
-    def run(self):
-        try:
-            prefix_alloc_blob = self.client.load(Consts.PREFIX_ALLOC_KEY)
-        except KeyError:
-            print("Missing Prefix Allocator config", file=sys.stderr)
-            return
-
+class ConfigPrefixAllocatorCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client):
+        prefix_alloc_blob = client.getConfigKey(Consts.PREFIX_ALLOC_KEY)
         prefix_alloc = deserialize_thrift_object(
             prefix_alloc_blob, ap_types.AllocPrefix
         )
         self.print_config(prefix_alloc)
 
-    def print_config(self, prefix_alloc):
+    def print_config(self, prefix_alloc: ap_types.AllocPrefix) -> None:
         seed_prefix = prefix_alloc.seedPrefix
         seed_prefix_addr = ipnetwork.sprint_addr(seed_prefix.prefixAddress.addr)
 
@@ -58,20 +44,15 @@ class ConfigPrefixAllocatorCmd(ConfigCmd):
         print(printing.render_vertical_table(rows, caption=caption))
 
 
-class ConfigLinkMonitorCmd(ConfigCmd):
-    def run(self):
-        try:
-            lm_config_blob = self.client.load(Consts.LINK_MONITOR_KEY)
-        except KeyError:
-            print("Missing Link Monitor config", file=sys.stderr)
-            return
-
+class ConfigLinkMonitorCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        lm_config_blob = client.getConfigKey(Consts.LINK_MONITOR_KEY)
         lm_config = deserialize_thrift_object(
             lm_config_blob, lm_types.LinkMonitorConfig
         )
         self.print_config(lm_config)
 
-    def print_config(self, lm_config):
+    def print_config(self, lm_config: lm_types.LinkMonitorConfig):
         caption = "Link Monitor parameters stored"
         rows = []
         rows.append(
@@ -99,40 +80,27 @@ class ConfigLinkMonitorCmd(ConfigCmd):
         print(printing.render_horizontal_table(rows, column_labels=column_labels))
 
 
-class ConfigPrefixManagerCmd(ConfigCmd):
-    def run(self):
-        try:
-            prefix_mgr_config_blob = self.client.load(Consts.PREFIX_MGR_KEY)
-        except KeyError:
-            print("Missing Prefix Manager config", file=sys.stderr)
-            return
-
+class ConfigPrefixManagerCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        prefix_mgr_config_blob = client.getConfigKey(Consts.PREFIX_MGR_KEY)
         prefix_mgr_config = deserialize_thrift_object(
             prefix_mgr_config_blob, lsdb_types.PrefixDatabase
         )
         self.print_config(prefix_mgr_config)
 
-    def print_config(self, prefix_mgr_config):
+    def print_config(self, prefix_mgr_config: lsdb_types.PrefixDatabase):
         print()
         print(utils.sprint_prefixes_db_full(prefix_mgr_config))
         print()
 
 
-class ConfigEraseCmd(ConfigCmd):
-    def run(self, key):
-        success = self.client.erase(key)
-        if success:
-            print("Key erased\n")
-        else:
-            print("Erase failed\n")
-            sys.exit(1)
+class ConfigEraseCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client, key: str) -> None:
+        client.eraseConfigKey(key)
+        print("Key erased")
 
 
-class ConfigStoreCmd(ConfigCmd):
-    def run(self, key, value):
-        success = self.client.store(key, value)
-        if success:
-            print("Key stored\n")
-        else:
-            print("Store failed\n")
-            sys.exit(1)
+class ConfigStoreCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client, key: str, value: str) -> None:
+        client.setConfigKey(key, value)
+        print("Key-Value stored")
