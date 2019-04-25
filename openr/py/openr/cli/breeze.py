@@ -15,13 +15,10 @@ import json
 #
 import locale
 
-import bunch
-
 #
 # Disable click unicode literals warning before importing other modules
 #
 import click
-import zmq
 from openr.cli.clis import (
     config,
     decision,
@@ -35,8 +32,6 @@ from openr.cli.clis import (
     tech_support,
 )
 from openr.cli.utils.options import OPTIONS, breeze_option
-from openr.Platform import ttypes as platform_types
-from openr.utils.consts import Consts
 
 
 click.disable_unicode_literals_warning = True
