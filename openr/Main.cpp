@@ -750,6 +750,9 @@ main(int argc, char** argv) {
     }
     // TODO Change to REQUIRED after we have everyone using certs
     thriftCtrlServer.setSSLPolicy(apache::thrift::SSLPolicy::PERMITTED);
+    // Allow non-secure clients on localhost (e.g. breeze / fbmeshd)
+    thriftCtrlServer.setAllowPlaintextOnLoopback(true);
+
     auto sslContext = std::make_shared<wangle::SSLContextConfig>();
     sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
     sslContext->clientCAFile = FLAGS_x509_ca_path;
