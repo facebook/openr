@@ -146,6 +146,7 @@ struct MetricEntity {
   // Priority fields. Initially priorities are assigned as
   // 10000, 9000, 8000, 7000 etc, this enables us to add any priorities
   // in between two fields.
+  // Higher value is higher priority.
   2: i64 priority
 
   // Compare type defines how to handle cases of backward compatibility and
