@@ -42,12 +42,20 @@ class PeerPinger : public folly::AsyncTimeout {
 
   void parsePingOutput(folly::StringPiece s, folly::MacAddress peer);
 
+  // processes collected ping data by filtering out outliers and calculating
+  // the average ping delay value. This value will be stored as the link metric
+  void processPingData();
+
   std::unordered_set<folly::MacAddress> peers_;
 
+  // collected set of ping delay data for each peer
   std::unordered_map<folly::MacAddress, std::vector<float>> pingData_;
+
+  // link metric calculated for each peer
+  std::unordered_map<folly::MacAddress, float> linkMetric_;
 
   folly::EventBase* evb_;
 
-  // netlink handler used to request metrics from the kernel
+  // netlink handler used to request peers from the kernel
   openr::fbmeshd::Nl80211Handler& nlHandler_;
 };

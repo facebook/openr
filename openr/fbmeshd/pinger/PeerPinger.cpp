@@ -17,7 +17,7 @@
 
 using namespace openr::fbmeshd;
 
-DEFINE_int32(ping_interval_s, 600, "peer ping interval");
+DEFINE_int32(ping_interval_s, 30, "peer ping interval");
 
 PeerPinger::PeerPinger(folly::EventBase* evb, Nl80211Handler& nlHandler)
     : evb_(evb), nlHandler_(nlHandler) {
@@ -119,6 +119,26 @@ PeerPinger::syncPeers() {
 }
 
 void
+PeerPinger::processPingData() {
+  std::vector<float> data;
+  for (auto it : pingData_) {
+    if (it.second.size() == 0) {
+      continue;
+    }
+    auto peer = it.first;
+    data = it.second;
+    std::sort(data.begin(), data.end());
+    // remove the largest 5% data points from avg calculation
+    int size = 95 * data.size() / 100;
+    VLOG(5) << "data size reduced from " << data.size() << " to " << size;
+    float average =
+        std::accumulate(data.begin(), data.begin() + size - 1, 0.0) / size;
+    VLOG(5) << peer << " average ping " << average;
+    linkMetric_[peer] = average;
+  }
+}
+
+void
 PeerPinger::timeoutExpired() noexcept {
   std::chrono::duration<int> pingInterval{FLAGS_ping_interval_s};
   syncPeers();
@@ -138,6 +158,8 @@ PeerPinger::timeoutExpired() noexcept {
       LOG(ERROR) << "error pinging " << peer << ": " << e.what();
     }
   }
+
+  processPingData();
 
   // schedule next run for ping
   auto end = std::chrono::steady_clock::now();
