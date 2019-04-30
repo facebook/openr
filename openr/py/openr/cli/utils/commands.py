@@ -20,7 +20,7 @@ class OpenrCtrlCmd(object):
     def __init__(self, options: bunch.Bunch) -> None:
         """ initialize the Config Store client """
 
-        self._options: bunch.Bunch = options
+        self._options = options  # type: bunch.Bunch
 
     def run(self, *args, **kwargs) -> None:
         """
