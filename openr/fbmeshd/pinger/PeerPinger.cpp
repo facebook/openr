@@ -8,15 +8,20 @@
 #include "openr/fbmeshd/pinger/PeerPinger.h"
 
 #include <chrono>
-#include <thread>
+#include <numeric>
+#include <string>
 
 #include <folly/Subprocess.h>
-#include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/fbmeshd/common/Constants.h>
+
+using namespace openr::fbmeshd;
 
 DEFINE_int32(ping_interval_s, 600, "peer ping interval");
 
-PeerPinger::PeerPinger(folly::EventBase* evb) : evb_(evb) {
+PeerPinger::PeerPinger(folly::EventBase* evb, Nl80211Handler& nlHandler)
+    : evb_(evb), nlHandler_(nlHandler) {
+  LOG(INFO) << "PeerPinger created";
   attachEventBase(evb_);
 }
 
@@ -39,38 +44,35 @@ PeerPinger::stop() {
 }
 
 void
-PeerPinger::addPeer(const folly::MacAddress& peer) {
-  VLOG(2) << "  adding peer " << peer;
-  peers_.emplace(peer);
-}
-
-void
-PeerPinger::removePeer(const folly::MacAddress& peer) {
-  VLOG(2) << "removing peer " << peer;
-  peers_.erase(peer);
-}
-
-void
-PeerPinger::parsePingOutput(folly::StringPiece line) {
-  std::vector<folly::StringPiece> v;
-  folly::split(" ", line, v);
-  if (v.size() == 8 && v[1] == "bytes") {
-    auto pingLatency = v[6].split_step(" ");
+PeerPinger::parsePingOutput(folly::StringPiece line, folly::MacAddress peer) {
+  std::vector<std::string> col;
+  folly::split(" ", line, col);
+  if (col.size() != 8 || col[1] != "bytes") {
+    return;
+  }
+  std::vector<std::string> v;
+  folly::split("=", col[6], v);
+  if (v.size() > 1) {
+    try {
+      float pingLatency = stof(v[1]);
+      pingData_[peer].push_back(pingLatency);
+    } catch (std::exception& e) {
+      LOG(ERROR) << "error parsing ping output " << line << ": " << e.what();
+    }
   }
 }
 
 void
 PeerPinger::pingPeer(const folly::MacAddress& peer) {
-  std::string cmd = "/usr/sbin/ping6 ";
-
+  std::string cmd = "ping6 ";
   folly::IPAddressV6 ipv6(folly::IPAddressV6::LINK_LOCAL, peer);
-  cmd = cmd + ipv6.str() + " -i 0.2 -c 10 -n";
+  cmd = cmd + ipv6.str() + "%mesh0 -i 0.1 -c 50 -n";
 
   folly::Subprocess proc(cmd, folly::Subprocess::Options().pipeStdout());
 
   auto callback = folly::Subprocess::readLinesCallback(
       [&](int /*fd*/, folly::StringPiece line) {
-        parsePingOutput(line);
+        parsePingOutput(line, peer);
         return false;
       });
 
@@ -83,8 +85,43 @@ PeerPinger::pingPeer(const folly::MacAddress& peer) {
 }
 
 void
+PeerPinger::syncPeers() {
+  VLOG(3) << folly::sformat("PeerPinger::{}()", __func__);
+  std::vector<StationInfo> newStations = nlHandler_.getStationsInfo();
+
+  // remove inactive stations, and keep macAddresses of the active ones
+  std::vector<folly::MacAddress> activePeers;
+  for (const auto& station : newStations) {
+    if (station.inactiveTime < Constants::kMaxPeerInactiveTime) {
+      activePeers.push_back(station.macAddress);
+    }
+  }
+
+  // add new peers
+  for (const auto& peer : activePeers) {
+    if (peers_.find(peer) == peers_.end()) {
+      VLOG(3) << "adding peer " << peer;
+      peers_.emplace(peer);
+    }
+  }
+
+  // remove neighbors that are not in the new set of peers
+  std::unordered_set<folly::MacAddress> newPeerSet(
+      activePeers.begin(), activePeers.end());
+  for (auto it = peers_.begin(); it != peers_.end();) {
+    if (newPeerSet.find(*it) == newPeerSet.end()) {
+      VLOG(3) << "removing peer " << *it;
+      it = peers_.erase(it);
+    } else {
+      it++;
+    }
+  }
+}
+
+void
 PeerPinger::timeoutExpired() noexcept {
   std::chrono::duration<int> pingInterval{FLAGS_ping_interval_s};
+  syncPeers();
   if (peers_.size() == 0) {
     VLOG(1) << "no targets to ping.";
     scheduleTimeout(pingInterval);
@@ -94,7 +131,12 @@ PeerPinger::timeoutExpired() noexcept {
   auto start = std::chrono::steady_clock::now();
 
   for (const auto& peer : peers_) {
-    pingPeer(peer);
+    pingData_[peer].clear();
+    try {
+      pingPeer(peer);
+    } catch (folly::CalledProcessError& e) {
+      LOG(ERROR) << "error pinging " << peer << ": " << e.what();
+    }
   }
 
   // schedule next run for ping

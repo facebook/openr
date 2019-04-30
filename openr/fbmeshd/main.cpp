@@ -362,9 +362,9 @@ main(int argc, char* argv[]) {
 
   std::unique_ptr<PeerPinger> peerPinger;
   if (FLAGS_enable_peer_pinger) {
-    allThreads.emplace_back(std::thread([&peerPinger]() {
+    allThreads.emplace_back(std::thread([&peerPinger, &nlHandler]() {
       folly::EventBase evb;
-      peerPinger = std::make_unique<PeerPinger>(&evb);
+      peerPinger = std::make_unique<PeerPinger>(&evb, nlHandler);
       peerPinger->run();
     }));
   }

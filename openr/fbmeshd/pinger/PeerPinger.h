@@ -14,6 +14,8 @@
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/TimeoutManager.h>
 
+#include <openr/fbmeshd/802.11s/Nl80211Handler.h>
+
 class PeerPinger : public folly::AsyncTimeout {
   // This class should never be copied; remove default copy/move
   PeerPinger() = delete;
@@ -23,25 +25,29 @@ class PeerPinger : public folly::AsyncTimeout {
   PeerPinger& operator=(PeerPinger&&) = delete;
 
  public:
-  explicit PeerPinger(folly::EventBase* evb);
+  PeerPinger(folly::EventBase* evb, openr::fbmeshd::Nl80211Handler& nlHandler);
+
   ~PeerPinger() override;
 
   void run();
 
   void stop();
 
-  void addPeer(const folly::MacAddress& peerMacAddr);
-
-  void removePeer(const folly::MacAddress& peerMacAddr);
+  void syncPeers();
 
   void timeoutExpired() noexcept override;
 
  private:
   void pingPeer(const folly::MacAddress& peer);
 
-  void parsePingOutput(folly::StringPiece s);
+  void parsePingOutput(folly::StringPiece s, folly::MacAddress peer);
 
   std::unordered_set<folly::MacAddress> peers_;
 
+  std::unordered_map<folly::MacAddress, std::vector<float>> pingData_;
+
   folly::EventBase* evb_;
+
+  // netlink handler used to request metrics from the kernel
+  openr::fbmeshd::Nl80211Handler& nlHandler_;
 };
