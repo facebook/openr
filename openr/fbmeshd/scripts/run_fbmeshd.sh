@@ -30,6 +30,7 @@ DECISION_REP_PORT=60004
 ENABLE_ENCRYPTION=false
 ENABLE_MESH_SPARK=true
 ENABLE_OPENR_METRIC_MANAGER=true
+ENABLE_ROUTING=false
 ENABLE_SEPARA=false
 ENABLE_SHORT_NAMES=false
 ENABLE_WATCHDOG=true
@@ -54,6 +55,7 @@ MESH_ID='mesh-soma'
 MESH_IFNAME='mesh0'
 MESH_MAC_ADDRESS=''
 MESH_MAX_PEER_LINKS=32
+MESH_MTU=1520
 MESH_RSSI_THRESHOLD=-80
 MESH_SPARK_CMD_PORT=60018
 MESH_SPARK_NEIGHBOR_HOLD_TIME_S=60
@@ -124,12 +126,14 @@ override any passed by this script"
 fi
 
 if [ -f "${FBMESHD_CONFIG}" ]; then
+  # shellcheck disable=SC1090
   source "${FBMESHD_CONFIG}"
   echo "Using fbmeshd config parameters from ${FBMESHD_CONFIG}"
 
   if [ -d "${FBMESHD_CONFIG}.d" ]; then
     for f in "${FBMESHD_CONFIG}.d"/*; do
       echo "Overriding fbmeshd config parameters from ${f}"
+      # shellcheck disable=SC1090
       source "${f}";
     done
   fi
@@ -146,6 +150,7 @@ exec ${FBMESHD} \
   --enable_encryption="${ENABLE_ENCRYPTION}" \
   --enable_mesh_spark="${ENABLE_MESH_SPARK}" \
   --enable_openr_metric_manager="${ENABLE_OPENR_METRIC_MANAGER}" \
+  --enable_routing="${ENABLE_ROUTING}" \
   --enable_separa="${ENABLE_SEPARA}" \
   --enable_short_names="${ENABLE_SHORT_NAMES}" \
   --enable_watchdog="${ENABLE_WATCHDOG}" \
@@ -158,6 +163,7 @@ exec ${FBMESHD} \
   --gateway_connectivity_monitor_interval_s="${GATEWAY_CONNECTIVITY_MONITOR_INTERVAL_S}" \
   --gateway_connectivity_monitor_robustness="${GATEWAY_CONNECTIVITY_MONITOR_ROBUSTNESS}" \
   --gateway_connectivity_monitor_socket_timeout_s="${GATEWAY_CONNECTIVITY_MONITOR_SOCKET_TIMEOUT_S}" \
+  --is_openr_enabled="$([ ${ENABLE_ROUTING} == false ] && echo "true" || echo "false")" \
   --kvstore_cmd_port="${KVSTORE_CMD_PORT}" \
   --kvstore_pub_port="${KVSTORE_PUB_PORT}" \
   --link_monitor_cmd_port="${LINK_MONITOR_CMD_PORT}" \
@@ -170,6 +176,7 @@ exec ${FBMESHD} \
   --mesh_ifname="${MESH_IFNAME}" \
   --mesh_mac_address="${MESH_MAC_ADDRESS}" \
   --mesh_max_peer_links="${MESH_MAX_PEER_LINKS}" \
+  --mesh_mtu="${MESH_MTU}" \
   --mesh_rssi_threshold="${MESH_RSSI_THRESHOLD}" \
   --mesh_spark_cmd_port="${MESH_SPARK_CMD_PORT}" \
   --mesh_spark_neighbor_hold_time_s="${MESH_SPARK_NEIGHBOR_HOLD_TIME_S}" \
