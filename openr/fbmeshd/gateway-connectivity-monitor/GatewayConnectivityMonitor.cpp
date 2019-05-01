@@ -130,12 +130,12 @@ void
 GatewayConnectivityMonitor::checkRoutesAndAdvertise() {
   if (probeWanConnectivityRobustly()) {
     VLOG(8) << "Successfully probed wan connectivity";
-    if (not isDampened()) {
+    if (!isDampened()) {
       advertiseDefaultRoute();
     } else {
       LOG(INFO) << "Default route dampened, not advertising";
     }
-    if (not isGatewayActive_) {
+    if (!isGatewayActive_) {
       flap();
     }
     isGatewayActive_ = true;
