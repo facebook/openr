@@ -13,6 +13,7 @@ constexpr double Constants::kRttChangeThreashold;
 constexpr folly::StringPiece Constants::kAdjDbMarker;
 constexpr folly::StringPiece Constants::kErrorResponse;
 constexpr folly::StringPiece Constants::kEventLogCategory;
+constexpr folly::StringPiece Constants::kFibTimeMarker;
 constexpr folly::StringPiece Constants::kGlobalCmdLocalIdTemplate;
 constexpr folly::StringPiece Constants::kGlobalPubIdTemplate;
 constexpr folly::StringPiece Constants::kGlobalSubIdTemplate;

@@ -167,6 +167,10 @@ DEFINE_bool(
     "address on different subnets on each end.");
 DEFINE_bool(
     enable_lfa, false, "Enable LFA computation for quick reroute per RFC 5286");
+DEFINE_bool(
+    enable_ordered_fib_programming,
+    false,
+    "Enable ordered fib programming per RFC 6976");
 DEFINE_bool(enable_spark, true, "If set, enables Spark for neighbor discovery");
 DEFINE_int32(
     spark_hold_time_s,

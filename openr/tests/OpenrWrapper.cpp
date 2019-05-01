@@ -227,6 +227,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nodeId_,
       v4Enabled, // enable v4
       true, // computeLfaPaths
+      false, // enableOrderedFib
       AdjacencyDbMarker{"adj:"},
       PrefixDbMarker{"prefix:"},
       std::chrono::milliseconds(10),
@@ -247,11 +248,14 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       true, // dry run mode
       false, // periodic sync
       false, // segment routing
+      false, // ordered Fib
       fibColdStartDuration,
       DecisionPubUrl{decisionPubUrl_},
       std::string{fibCmdUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       context_);
 
   // FIB client socket

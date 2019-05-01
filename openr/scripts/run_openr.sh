@@ -55,6 +55,7 @@ ENABLE_LEGACY_FLOODING=true
 ENABLE_LFA=false
 ENABLE_NETLINK_FIB_HANDLER=true
 ENABLE_NETLINK_SYSTEM_HANDLER=true
+ENABLE_ORDERED_FIB_PROGRAMMING=false
 ENABLE_PERF_MEASUREMENT=true
 ENABLE_PREFIX_ALLOC=false
 ENABLE_RTT_METRIC=true
@@ -171,6 +172,7 @@ exec ${OPENR} \
   --enable_lfa=${ENABLE_LFA} \
   --enable_netlink_fib_handler=${ENABLE_NETLINK_FIB_HANDLER} \
   --enable_netlink_system_handler=${ENABLE_NETLINK_SYSTEM_HANDLER} \
+  --enable_ordered_fib_programming=${ENABLE_ORDERED_FIB_PROGRAMMING} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
   --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
   --enable_rtt_metric=${ENABLE_RTT_METRIC} \

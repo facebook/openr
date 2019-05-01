@@ -681,6 +681,7 @@ main(int argc, char** argv) {
           FLAGS_node_name,
           FLAGS_enable_v4,
           FLAGS_enable_lfa,
+          FLAGS_enable_ordered_fib_programming,
           AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
           std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
@@ -704,12 +705,15 @@ main(int argc, char** argv) {
           FLAGS_dryrun,
           FLAGS_enable_fib_sync,
           FLAGS_enable_segment_routing,
+          FLAGS_enable_ordered_fib_programming,
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
           kDecisionPubUrl,
           maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_fib_rep_port),
           LinkMonitorGlobalPubUrl{
               folly::sformat("tcp://[::1]:{}", FLAGS_link_monitor_pub_port)},
           monitorSubmitUrl,
+          kvStoreLocalCmdUrl,
+          kvStoreLocalPubUrl,
           context));
 
   // Define and start HealthChecker

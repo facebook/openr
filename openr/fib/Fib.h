@@ -24,6 +24,7 @@
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
+#include <openr/kvstore/KvStoreClient.h>
 
 namespace openr {
 
@@ -54,11 +55,14 @@ class Fib final : public OpenrEventLoop {
       bool dryrun,
       bool enableFibSync,
       bool enableSegmentRouting,
+      bool enableOrderedFib,
       std::chrono::seconds coldStartDuration,
       const DecisionPubUrl& decisionPubUrl,
       const folly::Optional<std::string>& fibRepUrl,
       const LinkMonitorGlobalPubUrl& linkMonPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
+      const KvStoreLocalCmdUrl& storeCmdUrl,
+      const KvStoreLocalPubUrl& storePubUrl,
       fbzmq::Context& zmqContext);
 
   /**
@@ -165,6 +169,9 @@ class Fib final : public OpenrEventLoop {
   // Enable segment routing
   const bool enableSegmentRouting_{false};
 
+  // indicates that we should publish fib programming time to kvstore
+  bool enableOrderedFib_{false};
+
   // amount of time to wait before send routes to agent either when this module
   // starts or the agent we are talking with restarts
   const std::chrono::seconds coldStartDuration_;
@@ -204,6 +211,8 @@ class Fib final : public OpenrEventLoop {
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+
+  std::unique_ptr<KvStoreClient> kvStoreClient_;
 
   // Latest aliveSince heard from FibService. If the next one is different then
   // it means that FibAgent has restarted and we need to perform sync.

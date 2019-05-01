@@ -2319,6 +2319,7 @@ class DecisionTestFixture : public ::testing::Test {
         "1", /* node name */
         true, /* enable v4 */
         true, /* computeLfaPaths */
+        false, /* enableOrderedFib */
         AdjacencyDbMarker{"adj:"},
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),

@@ -25,6 +25,7 @@
 #endif
 #include <gflags/gflags.h>
 
+#include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
@@ -121,10 +122,14 @@ namespace openr {
 class SpfSolver::SpfSolverImpl {
  public:
   SpfSolverImpl(
-      const std::string& myNodeName, bool enableV4, bool computeLfaPaths)
+      const std::string& myNodeName,
+      bool enableV4,
+      bool computeLfaPaths,
+      bool enableOrderedFib)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
-        computeLfaPaths_(computeLfaPaths) {}
+        computeLfaPaths_(computeLfaPaths),
+        enableOrderedFib_(enableOrderedFib) {}
 
   ~SpfSolverImpl() = default;
 
@@ -132,6 +137,8 @@ class SpfSolver::SpfSolverImpl {
       bool /* topology has changed*/,
       bool /* route attributes has changed (nexthop addr, node/adj label */>
   updateAdjacencyDatabase(thrift::AdjacencyDatabase const& newAdjacencyDb);
+
+  bool hasHolds() const;
 
   // returns true if the AdjacencyDatabase existed
   bool deleteAdjacencyDatabase(const std::string& nodeName);
@@ -151,6 +158,8 @@ class SpfSolver::SpfSolverImpl {
       const std::string& myNodeName);
   folly::Optional<thrift::RouteDatabase> buildRouteDb(
       const std::string& myNodeName);
+
+  bool decrementHolds();
 
   std::unordered_map<std::string, int64_t> getCounters();
 
@@ -209,6 +218,11 @@ class SpfSolver::SpfSolverImpl {
   std::shared_ptr<Link> maybeMakeLink(
       const std::string& nodeName, const thrift::Adjacency& adj);
 
+  // returns the hop count from myNodeName_ to nodeName
+  Metric getMyHopsToNode(const std::string& nodeName);
+  // returns the hop count of the furthest node connected to nodeName
+  Metric getMaxHopsToNode(const std::string& nodeName);
+
   std::unordered_map<std::string, thrift::AdjacencyDatabase>
       adjacencyDatabases_;
 
@@ -240,6 +254,8 @@ class SpfSolver::SpfSolverImpl {
   const bool enableV4_{false};
 
   const bool computeLfaPaths_{false};
+
+  const bool enableOrderedFib_{false};
 };
 
 std::pair<
@@ -274,8 +290,14 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
   std::unordered_set<Link> linksUp;
   std::unordered_set<Link> linksDown;
 
-  bool topoChanged =
-      linkState_.updateNodeOverloaded(nodeName, newAdjacencyDb.isOverloaded);
+  Metric holdUpTtl = 0, holdDownTtl = 0;
+  if (enableOrderedFib_) {
+    holdUpTtl = getMyHopsToNode(nodeName);
+    holdDownTtl = getMaxHopsToNode(nodeName) - holdUpTtl;
+  }
+
+  bool topoChanged = linkState_.updateNodeOverloaded(
+      nodeName, newAdjacencyDb.isOverloaded, holdUpTtl, holdDownTtl);
 
   bool routeAttrChanged = false;
 
@@ -292,19 +314,25 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
         (oldIter == oldLinks.end() || **newIter < **oldIter)) {
       // newIter is pointing at a Link not currently present, record this as a
       // link to add and advance newIter
-      topoChanged = true;
+      (*newIter)->setHoldUpTtl(holdUpTtl);
+      topoChanged |= (*newIter)->isUp();
+      // even if we are holding a change, we apply the change to our link state
+      // and check for holds when running spf. this ensures we don't add the
+      // same hold twice
       linkState_.addLink(*newIter);
-      VLOG(1) << "addLink " << (*newIter)->directionalToString(nodeName);
+      VLOG(1) << "addLink " << (*newIter)->toString();
       ++newIter;
       continue;
     }
     if (oldIter != oldLinks.end() &&
         (newIter == newLinks.end() || **oldIter < **newIter)) {
-      // oldIter is pointing at a Link that is no longer present, record this as
-      // a link to remove and advance oldIter
-      topoChanged = true;
+      // oldIter is pointing at a Link that is no longer present, record this
+      // as a link to remove and advance oldIter.
+      // If this link was previously overloaded or had a hold up, this does not
+      // change the topology.
+      topoChanged |= (*oldIter)->isUp();
       linkState_.removeLink(*oldIter);
-      VLOG(1) << "removeLink " << (*oldIter)->directionalToString(nodeName);
+      VLOG(1) << "removeLink " << (*oldIter)->toString();
       ++oldIter;
       continue;
     }
@@ -314,37 +342,28 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     auto& newLink = **newIter;
     auto& oldLink = **oldIter;
 
-    // Check if link metric value has changed or not
-    if (newLink.getMetricFromNode(nodeName) !=
-        oldLink.getMetricFromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
-          "Metric change on link {}: {} => {}",
-          newLink.directionalToString(nodeName),
-          oldLink.getMetricFromNode(nodeName),
-          newLink.getMetricFromNode(nodeName));
+    // change the metric on the link object we already have
+    bool metricChanged = oldLink.setMetricFromNode(
+        nodeName, newLink.getMetricFromNode(nodeName), holdUpTtl, holdDownTtl);
+    topoChanged |= metricChanged;
 
-      topoChanged = true;
-      // change the metric on the link object we already have
-      oldLink.setMetricFromNode(nodeName, newLink.getMetricFromNode(nodeName));
-    }
+    VLOG_IF(metricChanged, 1) << folly::sformat(
+        "Metric change on link {}: {} => {}",
+        newLink.directionalToString(nodeName),
+        oldLink.getMetricFromNode(nodeName),
+        newLink.getMetricFromNode(nodeName));
 
-    // Check if node overload has changed
-    if (newLink.getOverloadFromNode(nodeName) !=
-        oldLink.getOverloadFromNode(nodeName)) {
-      VLOG(1) << folly::sformat(
-          "Overload change on link {}: {} => {}",
-          newLink.directionalToString(nodeName),
-          oldLink.getOverloadFromNode(nodeName),
-          newLink.getOverloadFromNode(nodeName));
-
-      // for spf, we do not consider simplex overloading, so there is no need to
-      // rerun unless this is true
-      topoChanged |= newLink.isOverloaded() != oldLink.isOverloaded();
-
-      // change the overload value in the link object we already have
-      oldLink.setOverloadFromNode(
-          nodeName, newLink.getOverloadFromNode(nodeName));
-    }
+    bool overloadChanged = oldLink.setOverloadFromNode(
+        nodeName,
+        newLink.getOverloadFromNode(nodeName),
+        holdUpTtl,
+        holdDownTtl);
+    topoChanged |= overloadChanged;
+    VLOG_IF(overloadChanged, 1) << folly::sformat(
+        "Overload change on link {}: {} => {}",
+        newLink.directionalToString(nodeName),
+        oldLink.getOverloadFromNode(nodeName),
+        newLink.getOverloadFromNode(nodeName));
 
     // Check if adjacency label has changed
     if (newLink.getAdjLabelFromNode(nodeName) !=
@@ -394,6 +413,37 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
 }
 
 bool
+SpfSolver::SpfSolverImpl::hasHolds() const {
+  return linkState_.hasHolds();
+}
+
+Metric
+SpfSolver::SpfSolverImpl::getMyHopsToNode(const std::string& nodeName) {
+  if (myNodeName_ == nodeName) {
+    return 0;
+  }
+  auto spfResult = runSpf(myNodeName_, false);
+  if (spfResult.count(nodeName)) {
+    return spfResult.at(nodeName).first;
+  }
+  return getMaxHopsToNode(nodeName);
+}
+
+Metric
+SpfSolver::SpfSolverImpl::getMaxHopsToNode(const std::string& nodeName) {
+  Metric max = 0;
+  for (auto const& pathsFromNode : runSpf(nodeName, false)) {
+    max = std::max(max, pathsFromNode.second.first);
+  }
+  return max;
+}
+
+bool
+SpfSolver::SpfSolverImpl::decrementHolds() {
+  return linkState_.decrementHolds();
+}
+
+bool
 SpfSolver::SpfSolverImpl::deleteAdjacencyDatabase(const std::string& nodeName) {
   VLOG(1) << "Deleting adjacency database for node " << nodeName;
   auto search = adjacencyDatabases_.find(nodeName);
@@ -403,7 +453,7 @@ SpfSolver::SpfSolverImpl::deleteAdjacencyDatabase(const std::string& nodeName) {
                  << nodeName;
     return false;
   }
-  linkState_.removeLinksFromNode(nodeName);
+  linkState_.removeNode(nodeName);
   adjacencyDatabases_.erase(search);
   return true;
 }
@@ -554,7 +604,7 @@ SpfSolver::SpfSolverImpl::runSpf(
     // this is the "relax" step in the Dijkstra Algorithm pseudocode in CLRS
     for (const auto& link : linkState_.linksFromNode(recordedNodeName)) {
       auto otherNodeName = link->getOtherNodeName(recordedNodeName);
-      if (link->isOverloaded() || result.count(otherNodeName)) {
+      if (!link->isUp() || result.count(otherNodeName)) {
         continue;
       }
       auto metric =
@@ -609,8 +659,7 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
     for (auto const& link : linkState_.linksFromNode(myNodeName)) {
       auto const& otherNodeName = link->getOtherNodeName(myNodeName);
       // Skip if already visited
-      if (!visitedAdjNodes.insert(otherNodeName).second ||
-          link->isOverloaded()) {
+      if (!visitedAdjNodes.insert(otherNodeName).second || !link->isUp()) {
         continue;
       }
       spfResults_[otherNodeName] = runSpf(otherNodeName, true);
@@ -879,7 +928,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
           nextHopNodes.find(std::make_pair(neighborNode, dstNode));
 
       // Ignore overloaded links or nexthops
-      if (search == nextHopNodes.end() or link->isOverloaded()) {
+      if (search == nextHopNodes.end() or not link->isUp()) {
         continue;
       }
 
@@ -946,8 +995,7 @@ SpfSolver::SpfSolverImpl::findMinDistToNeighbor(
     const std::string& myNodeName, const std::string& neighborName) const {
   Metric min = std::numeric_limits<Metric>::max();
   for (const auto& link : linkState_.linksFromNode(myNodeName)) {
-    if (!link->isOverloaded() &&
-        link->getOtherNodeName(myNodeName) == neighborName) {
+    if (link->isUp() && link->getOtherNodeName(myNodeName) == neighborName) {
       min = std::min(link->getMetricFromNode(myNodeName), min);
     }
   }
@@ -978,9 +1026,9 @@ SpfSolver::SpfSolverImpl::getOrderedLinkSet(
   std::vector<std::shared_ptr<Link>> links;
   links.reserve(adjDb.adjacencies.size());
   for (const auto& adj : adjDb.adjacencies) {
-    auto maybeLink = maybeMakeLink(adjDb.thisNodeName, adj);
-    if (maybeLink) {
-      links.emplace_back(maybeLink);
+    auto linkPtr = maybeMakeLink(adjDb.thisNodeName, adj);
+    if (nullptr != linkPtr) {
+      links.emplace_back(linkPtr);
     }
   }
   links.shrink_to_fit();
@@ -998,9 +1046,12 @@ SpfSolver::SpfSolverImpl::getCounters() {
 //
 
 SpfSolver::SpfSolver(
-    const std::string& myNodeName, bool enableV4, bool computeLfaPaths)
+    const std::string& myNodeName,
+    bool enableV4,
+    bool computeLfaPaths,
+    bool enableOrderedFib)
     : impl_(new SpfSolver::SpfSolverImpl(
-          myNodeName, enableV4, computeLfaPaths)) {}
+          myNodeName, enableV4, computeLfaPaths, enableOrderedFib)) {}
 
 SpfSolver::~SpfSolver() {}
 
@@ -1011,6 +1062,11 @@ std::pair<
 SpfSolver::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb) {
   return impl_->updateAdjacencyDatabase(newAdjacencyDb);
+}
+
+bool
+SpfSolver::hasHolds() const {
+  return impl_->hasHolds();
 }
 
 bool
@@ -1049,6 +1105,11 @@ SpfSolver::buildRouteDb(const std::string& myNodeName) {
   return impl_->buildRouteDb(myNodeName);
 }
 
+bool
+SpfSolver::decrementHolds() {
+  return impl_->decrementHolds();
+}
+
 std::unordered_map<std::string, int64_t>
 SpfSolver::getCounters() {
   return impl_->getCounters();
@@ -1062,6 +1123,7 @@ Decision::Decision(
     std::string myNodeName,
     bool enableV4,
     bool computeLfaPaths,
+    bool enableOrderedFib,
     const AdjacencyDbMarker& adjacencyDbMarker,
     const PrefixDbMarker& prefixDbMarker,
     std::chrono::milliseconds debounceMinDur,
@@ -1090,18 +1152,17 @@ Decision::Decision(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
   processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
       this, [this]() noexcept { processPendingUpdates(); });
-  spfSolver_ =
-      std::make_unique<SpfSolver>(myNodeName_, enableV4, computeLfaPaths);
+  spfSolver_ = std::make_unique<SpfSolver>(
+      myNodeName, enableV4, computeLfaPaths, enableOrderedFib);
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
-  prepare(zmqContext);
+  prepare(zmqContext, enableOrderedFib);
 }
 
 void
-Decision::prepare(fbzmq::Context& zmqContext) noexcept {
-  VLOG(2) << "Decision: Binding pubUrl '" << decisionPubUrl_ << "'";
+Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
   const auto pubBind = decisionPub_.bind(fbzmq::SocketUrl{decisionPubUrl_});
   if (pubBind.hasError()) {
     LOG(FATAL) << "Error binding to URL '" << decisionPubUrl_ << "' "
@@ -1176,6 +1237,20 @@ Decision::prepare(fbzmq::Context& zmqContext) noexcept {
           }
         }
       });
+
+  // Schedule periodic timer to decremtOrderedFibHolds
+  if (enableOrderedFib) {
+    orderedFibTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+      LOG(INFO) << "Decrementing Holds";
+      decrementOrderedFibHolds();
+      if (spfSolver_->hasHolds()) {
+        auto timeout = getMaxFib();
+        LOG(INFO) << "Scheduling next hold decrement in " << timeout.count()
+                  << "ms";
+        orderedFibTimer_->scheduleTimeout(getMaxFib());
+      }
+    });
+  }
 
   auto zmqContextPtr = &zmqContext;
   scheduleTimeout(std::chrono::milliseconds(0), [this, zmqContextPtr] {
@@ -1282,6 +1357,10 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
           res.prefixesChanged = true;
           pendingPrefixUpdates_.addUpdate(myNodeName_, adjacencyDb.perfEvents);
         }
+        if (spfSolver_->hasHolds() && orderedFibTimer_ != nullptr &&
+            !orderedFibTimer_->isScheduled()) {
+          orderedFibTimer_->scheduleTimeout(getMaxFib());
+        }
         continue;
       }
 
@@ -1296,7 +1375,19 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         }
         continue;
       }
-    } catch (std::exception const& e) {
+
+      if (key.find(Constants::kFibTimeMarker.toString()) == 0) {
+        try {
+          std::chrono::milliseconds fibTime{stoll(rawVal.value.value())};
+          fibTimes_[nodeName] = fibTime;
+        } catch (...) {
+          LOG(ERROR) << "Could not convert "
+                     << Constants::kFibTimeMarker.toString()
+                     << " value to int64";
+        }
+        continue;
+      }
+    } catch (const std::exception& e) {
       LOG(ERROR) << "Failed to deserialize info for key " << key
                  << ". Exception: " << folly::exceptionStr(e);
     }
@@ -1428,17 +1519,8 @@ Decision::processPendingAdjUpdates() {
     return;
   }
 
-  auto& routeDb = maybeRouteDb.value();
-  if (maybePerfEvents) {
-    addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_SPF");
-  }
-  routeDb.perfEvents = maybePerfEvents;
-
-  // publish the new route state
-  auto sendRc = decisionPub_.sendThriftObj(routeDb, serializer_);
-  if (sendRc.hasError()) {
-    LOG(ERROR) << "Error publishing new routing table: " << sendRc.error();
-  }
+  maybeRouteDb.value().perfEvents = maybePerfEvents;
+  sendRouteUpdate(maybeRouteDb.value(), "DECISION_SPF");
 }
 
 void
@@ -1454,17 +1536,46 @@ Decision::processPendingPrefixUpdates() {
     return;
   }
 
-  auto& routeDb = maybeRouteDb.value();
-  if (maybePerfEvents) {
-    addPerfEvent(*maybePerfEvents, myNodeName_, "ROUTE_UPDATE");
-  }
-  routeDb.perfEvents = maybePerfEvents;
+  maybeRouteDb.value().perfEvents = maybePerfEvents;
+  sendRouteUpdate(maybeRouteDb.value(), "ROUTE_UPDATE");
+}
 
+void
+Decision::decrementOrderedFibHolds() {
+  if (spfSolver_->decrementHolds()) {
+    auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
+    if (not maybeRouteDb.hasValue()) {
+      LOG(INFO) << "decrementOrderedFibHolds incurred no route updates";
+      return;
+    }
+
+    // Create empty perfEvents list. In this case we don't this route update to
+    // be inculded in the Fib time
+    maybeRouteDb.value().perfEvents = thrift::PerfEvents{};
+    sendRouteUpdate(maybeRouteDb.value(), "ORDERED_FIB_HOLDS_EXPIRED");
+  }
+}
+
+void
+Decision::sendRouteUpdate(
+    thrift::RouteDatabase& db, std::string const& eventDescription) {
+  if (db.perfEvents.hasValue()) {
+    addPerfEvent(db.perfEvents.value(), myNodeName_, eventDescription);
+  }
   // publish the new route state
-  auto sendRc = decisionPub_.sendThriftObj(routeDb, serializer_);
+  auto sendRc = decisionPub_.sendThriftObj(db, serializer_);
   if (sendRc.hasError()) {
     LOG(ERROR) << "Error publishing new routing table: " << sendRc.error();
   }
+}
+
+std::chrono::milliseconds
+Decision::getMaxFib() {
+  std::chrono::milliseconds maxFib{1};
+  for (auto& kv : fibTimes_) {
+    maxFib = std::max(maxFib, kv.second);
+  }
+  return maxFib;
 }
 
 } // namespace openr

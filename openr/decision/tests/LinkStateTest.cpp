@@ -102,16 +102,16 @@ TEST(LinkTest, BasicOperation) {
 
   EXPECT_FALSE(l1.getOverloadFromNode(n1));
   EXPECT_FALSE(l1.getOverloadFromNode(n2));
-  EXPECT_FALSE(l1.isOverloaded());
+  EXPECT_TRUE(l1.isUp());
   EXPECT_THROW(l1.getOtherNodeName("node3"), std::invalid_argument);
 
-  l1.setMetricFromNode(n1, 2);
+  EXPECT_TRUE(l1.setMetricFromNode(n1, 2, 0, 0));
   EXPECT_EQ(2, l1.getMetricFromNode(n1));
 
-  l1.setOverloadFromNode(n2, true);
+  EXPECT_TRUE(l1.setOverloadFromNode(n2, true, 0, 0));
   EXPECT_FALSE(l1.getOverloadFromNode(n1));
   EXPECT_TRUE(l1.getOverloadFromNode(n2));
-  EXPECT_TRUE(l1.isOverloaded());
+  EXPECT_FALSE(l1.isUp());
 
   // compare equivalent links
   openr::Link l2(n2, adj2, n1, adj1);
@@ -163,10 +163,10 @@ TEST(LinkStateTest, BasicOperation) {
   EXPECT_THAT(state.linksFromNode("node4"), testing::IsEmpty());
 
   EXPECT_FALSE(state.isNodeOverloaded("node1"));
-  EXPECT_FALSE(state.updateNodeOverloaded("node1", true));
+  EXPECT_FALSE(state.updateNodeOverloaded("node1", true, 0, 0));
   EXPECT_TRUE(state.isNodeOverloaded("node1"));
-  EXPECT_FALSE(state.updateNodeOverloaded("node1", true));
-  EXPECT_TRUE(state.updateNodeOverloaded("node1", false));
+  EXPECT_FALSE(state.updateNodeOverloaded("node1", true, 0, 0));
+  EXPECT_TRUE(state.updateNodeOverloaded("node1", false, 0, 0));
   EXPECT_FALSE(state.isNodeOverloaded("node1"));
 
   state.removeLink(l1);
@@ -175,7 +175,7 @@ TEST(LinkStateTest, BasicOperation) {
   EXPECT_THAT(
       state.linksFromNode("node3"), testing::UnorderedElementsAre(l2, l3));
 
-  state.removeLinksFromNode("node1");
+  state.removeNode("node1");
   EXPECT_THAT(state.linksFromNode("node1"), testing::IsEmpty());
   EXPECT_THAT(state.linksFromNode("node2"), testing::UnorderedElementsAre(l2));
   EXPECT_THAT(state.linksFromNode("node3"), testing::UnorderedElementsAre(l2));

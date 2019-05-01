@@ -96,10 +96,10 @@ Link::Link(
       if2_(adj2.ifName),
       metric1_(adj1.metric),
       metric2_(adj2.metric),
-      adjLabel1_(adj1.adjLabel),
-      adjLabel2_(adj2.adjLabel),
       overload1_(adj1.isOverloaded),
       overload2_(adj2.isOverloaded),
+      adjLabel1_(adj1.adjLabel),
+      adjLabel2_(adj2.adjLabel),
       nhV41_(adj1.nextHopV4),
       nhV42_(adj2.nextHopV4),
       nhV61_(adj1.nextHopV6),
@@ -145,10 +145,10 @@ Link::getIfaceFromNode(const std::string& nodeName) const {
 LinkStateMetric
 Link::getMetricFromNode(const std::string& nodeName) const {
   if (n1_ == nodeName) {
-    return metric1_;
+    return metric1_.value();
   }
   if (n2_ == nodeName) {
-    return metric2_;
+    return metric2_.value();
   }
   throw std::invalid_argument(nodeName);
 }
@@ -167,17 +167,41 @@ Link::getAdjLabelFromNode(const std::string& nodeName) const {
 bool
 Link::getOverloadFromNode(const std::string& nodeName) const {
   if (n1_ == nodeName) {
-    return overload1_;
+    return overload1_.value();
   }
   if (n2_ == nodeName) {
-    return overload2_;
+    return overload2_.value();
   }
   throw std::invalid_argument(nodeName);
 }
 
+void
+Link::setHoldUpTtl(LinkStateMetric ttl) {
+  holdUpTtl_ = ttl;
+}
+
 bool
-Link::isOverloaded() const {
-  return overload1_ || overload2_;
+Link::isUp() const {
+  return (0 == holdUpTtl_) && !overload1_.value() && !overload2_.value();
+}
+
+bool
+Link::decrementHolds() {
+  bool holdExpired = false;
+  if (0 != holdUpTtl_) {
+    holdExpired |= (0 == --holdUpTtl_);
+  }
+  holdExpired |= metric1_.decrementTtl();
+  holdExpired |= metric2_.decrementTtl();
+  holdExpired |= overload1_.decrementTtl();
+  holdExpired |= overload2_.decrementTtl();
+  return holdExpired;
+}
+
+bool
+Link::hasHolds() const {
+  return 0 != holdUpTtl_ || metric1_.hasHold() || metric2_.hasHold() ||
+      overload1_.hasHold() || overload2_.hasHold();
 }
 
 const thrift::BinaryAddress&
@@ -226,15 +250,18 @@ Link::setNhV6FromNode(
   }
 }
 
-void
-Link::setMetricFromNode(const std::string& nodeName, LinkStateMetric d) {
+bool
+Link::setMetricFromNode(
+    const std::string& nodeName,
+    LinkStateMetric d,
+    LinkStateMetric holdUpTtl,
+    LinkStateMetric holdDownTtl) {
   if (n1_ == nodeName) {
-    metric1_ = d;
+    return metric1_.updateValue(d, holdUpTtl, holdDownTtl);
   } else if (n2_ == nodeName) {
-    metric2_ = d;
-  } else {
-    throw std::invalid_argument(nodeName);
+    return metric2_.updateValue(d, holdUpTtl, holdDownTtl);
   }
+  throw std::invalid_argument(nodeName);
 }
 
 void
@@ -248,15 +275,23 @@ Link::setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel) {
   }
 }
 
-void
-Link::setOverloadFromNode(const std::string& nodeName, bool overload) {
+bool
+Link::setOverloadFromNode(
+    const std::string& nodeName,
+    bool overload,
+    LinkStateMetric holdUpTtl,
+    LinkStateMetric holdDownTtl) {
+  bool const wasUp = isUp();
   if (n1_ == nodeName) {
-    overload1_ = overload;
+    overload1_.updateValue(overload, holdUpTtl, holdDownTtl);
   } else if (n2_ == nodeName) {
-    overload2_ = overload;
+    overload2_.updateValue(overload, holdUpTtl, holdDownTtl);
   } else {
     throw std::invalid_argument(nodeName);
   }
+  // since we don't support simplex overloads, we only signal topo change if
+  // this is true
+  return wasUp != isUp();
 }
 
 bool
@@ -311,6 +346,7 @@ void
 LinkState::addLink(std::shared_ptr<Link> link) {
   CHECK(linkMap_[link->firstNodeName()].insert(link).second);
   CHECK(linkMap_[link->secondNodeName()].insert(link).second);
+  CHECK(allLinks_.insert(link).second);
 }
 
 // throws std::out_of_range if links are not present
@@ -318,10 +354,11 @@ void
 LinkState::removeLink(std::shared_ptr<Link> link) {
   CHECK(linkMap_.at(link->firstNodeName()).erase(link));
   CHECK(linkMap_.at(link->secondNodeName()).erase(link));
+  CHECK(allLinks_.erase(link));
 }
 
 void
-LinkState::removeLinksFromNode(const std::string& nodeName) {
+LinkState::removeNode(const std::string& nodeName) {
   auto search = linkMap_.find(nodeName);
   if (search == linkMap_.end()) {
     // No links were added (addition of empty adjacency db can cause this)
@@ -332,11 +369,13 @@ LinkState::removeLinksFromNode(const std::string& nodeName) {
   for (auto const& link : search->second) {
     try {
       CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
+      CHECK(allLinks_.erase(link));
     } catch (std::out_of_range const& e) {
       LOG(FATAL) << "std::out_of_range for " << nodeName;
     }
   }
   linkMap_.erase(search);
+  nodeOverloads_.erase(nodeName);
 }
 
 const LinkState::LinkSet&
@@ -364,18 +403,49 @@ LinkState::orderedLinksFromNode(const std::string& nodeName) {
 
 bool
 LinkState::updateNodeOverloaded(
-    const std::string& nodeName, bool isOverloaded) {
-  // don't indicate LinkState changed if this is a new node, only if it causes
-  // some new links to come up
-  bool changed = nodeOverloads_.count(nodeName) &&
-      (isOverloaded != nodeOverloads_.at(nodeName));
-  nodeOverloads_[nodeName] = isOverloaded;
-  return changed;
+    const std::string& nodeName,
+    bool isOverloaded,
+    LinkStateMetric holdUpTtl,
+    LinkStateMetric holdDownTtl) {
+  if (nodeOverloads_.count(nodeName)) {
+    return nodeOverloads_.at(nodeName).updateValue(
+        isOverloaded, holdUpTtl, holdDownTtl);
+  }
+  nodeOverloads_.emplace(nodeName, HoldableValue<bool>{isOverloaded});
+  // don't indicate LinkState changed if this is a new node
+  return false;
 }
 
 bool
 LinkState::isNodeOverloaded(const std::string& nodeName) const {
-  return nodeOverloads_.count(nodeName) && nodeOverloads_.at(nodeName);
+  return nodeOverloads_.count(nodeName) && nodeOverloads_.at(nodeName).value();
+}
+
+bool
+LinkState::decrementHolds() {
+  bool holdChange = false;
+  for (auto& link : allLinks_) {
+    holdChange |= link->decrementHolds();
+  }
+  for (auto& kv : nodeOverloads_) {
+    holdChange |= kv.second.decrementTtl();
+  }
+  return holdChange;
+}
+
+bool
+LinkState::hasHolds() const {
+  for (auto& link : allLinks_) {
+    if (link->hasHolds()) {
+      return true;
+    }
+  }
+  for (auto& kv : nodeOverloads_) {
+    if (kv.second.hasHold()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 } // namespace openr

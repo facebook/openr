@@ -66,6 +66,8 @@ DECLARE_bool(enable_rtt_metric);
 DECLARE_bool(enable_v4);
 DECLARE_bool(enable_subnet_validation);
 DECLARE_bool(enable_lfa);
+DECLARE_bool(enable_ordered_fib_programming);
+
 DECLARE_bool(enable_spark);
 
 DECLARE_int32(spark_hold_time_s);

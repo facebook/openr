@@ -145,11 +145,14 @@ class FibTestFixture : public ::testing::Test {
         false, /* dryrun */
         true, /* periodic syncFib */
         false, /* segment route */
+        false, /* orderedFib */
         std::chrono::seconds(2),
         DecisionPubUrl{"inproc://decision-pub"},
         std::string{"inproc://fib-cmd"},
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
+        KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
+        KvStoreLocalPubUrl{"inproc://kvstore-sub"},
         context);
 
     fibThread = std::make_unique<std::thread>([this]() {

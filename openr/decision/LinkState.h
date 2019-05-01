@@ -75,7 +75,6 @@ class HoldableValue {
 
 class Link {
  public:
-
   Link(
       const std::string& nodeName1,
       const openr::thrift::Adjacency& adj1,
@@ -84,10 +83,12 @@ class Link {
 
  private:
   const std::string n1_, n2_, if1_, if2_;
-  LinkStateMetric metric1_{1}, metric2_{1};
+  HoldableValue<LinkStateMetric> metric1_{1}, metric2_{1};
+  HoldableValue<bool> overload1_{false}, overload2_{false};
   int32_t adjLabel1_{0}, adjLabel2_{0};
-  bool overload1_{false}, overload2_{false};
   thrift::BinaryAddress nhV41_, nhV42_, nhV61_, nhV62_;
+  LinkStateMetric holdUpTtl_{0};
+
   const std::pair<
       std::pair<std::string, std::string>,
       std::pair<std::string, std::string>>
@@ -95,6 +96,14 @@ class Link {
 
  public:
   const size_t hash{0};
+
+  void setHoldUpTtl(LinkStateMetric ttl);
+
+  bool isUp() const;
+
+  bool decrementHolds();
+
+  bool hasHolds() const;
 
   const std::string& getOtherNodeName(const std::string& nodeName) const;
 
@@ -110,8 +119,6 @@ class Link {
 
   bool getOverloadFromNode(const std::string& nodeName) const;
 
-  bool isOverloaded() const;
-
   const thrift::BinaryAddress& getNhV4FromNode(
       const std::string& nodeName) const;
 
@@ -124,11 +131,19 @@ class Link {
   void setNhV6FromNode(
       const std::string& nodeName, const thrift::BinaryAddress& nhV6);
 
-  void setMetricFromNode(const std::string& nodeName, LinkStateMetric d);
+  bool setMetricFromNode(
+      const std::string& nodeName,
+      LinkStateMetric d,
+      LinkStateMetric holdUpTtl,
+      LinkStateMetric holdDownTtl);
 
   void setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel);
 
-  void setOverloadFromNode(const std::string& nodeName, bool overload);
+  bool setOverloadFromNode(
+      const std::string& nodeName,
+      bool overload,
+      LinkStateMetric holdUpTtl,
+      LinkStateMetric holdDownTtl);
 
   bool operator<(const Link& other) const;
 
@@ -164,22 +179,34 @@ class LinkState {
 
   void removeLink(std::shared_ptr<Link> link);
 
-  void removeLinksFromNode(const std::string& nodeName);
+  void removeNode(const std::string& nodeName);
 
   const LinkSet& linksFromNode(const std::string& nodeName) const;
 
   std::vector<std::shared_ptr<Link>> orderedLinksFromNode(
       const std::string& nodeName);
 
-  bool updateNodeOverloaded(const std::string& nodeName, bool isOverloaded);
+  bool updateNodeOverloaded(
+      const std::string& nodeName,
+      bool isOverloaded,
+      LinkStateMetric holdUpTtl,
+      LinkStateMetric holdDownTtl);
 
   bool isNodeOverloaded(const std::string& nodeName) const;
+
+  bool decrementHolds();
+
+  bool hasHolds() const;
 
  private:
   // this stores the same link object accessible from either nodeName
   std::unordered_map<std::string /* nodeName */, LinkSet> linkMap_;
 
-  std::unordered_map<std::string /* nodeName */, bool> nodeOverloads_;
+  // useful for iterating over all the links
+  LinkSet allLinks_;
+
+  std::unordered_map<std::string /* nodeName */, HoldableValue<bool>>
+      nodeOverloads_;
 
 }; // class LinkState
 } // namespace openr

@@ -27,11 +27,14 @@ Fib::Fib(
     bool dryrun,
     bool enableFibSync,
     bool enableSegmentRouting,
+    bool enableOrderedFib,
     std::chrono::seconds coldStartDuration,
     const DecisionPubUrl& decisionPubUrl,
     const folly::Optional<std::string>& fibRepUrl,
     const LinkMonitorGlobalPubUrl& linkMonPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
+    const KvStoreLocalCmdUrl& storeCmdUrl,
+    const KvStoreLocalPubUrl& storePubUrl,
     fbzmq::Context& zmqContext)
     : OpenrEventLoop(
           myNodeName, thrift::OpenrModuleType::FIB, zmqContext, fibRepUrl),
@@ -40,6 +43,7 @@ Fib::Fib(
       dryrun_(dryrun),
       enableFibSync_(enableFibSync),
       enableSegmentRouting_(enableSegmentRouting),
+      enableOrderedFib_(enableOrderedFib),
       coldStartDuration_(coldStartDuration),
       decisionSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
@@ -62,6 +66,10 @@ Fib::Fib(
           expBackoff_.getTimeRemainingUntilRetry());
     }
   });
+
+  kvStoreClient_ = std::make_unique<KvStoreClient>(
+      zmqContext, this, myNodeName_, storeCmdUrl, storePubUrl);
+
   syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
 
   healthChecker_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
@@ -620,6 +628,27 @@ Fib::logPerfEvents() {
   // Add latest event information (this function is meant to be called after
   // routeDb has synced)
   addPerfEvent(*maybePerfEvents_, myNodeName_, "OPENR_FIB_ROUTES_PROGRAMMED");
+
+  if (enableOrderedFib_) {
+    // Export convergence duration counter
+    // this is the local time it takes to program a route after an event
+    // we are using this for ordered fib programing
+    auto localDuration = getDurationBetweenPerfEvents(
+        *maybePerfEvents_, "DECISION_RECEIVED", "OPENR_FIB_ROUTES_PROGRAMMED");
+    if (localDuration.hasError()) {
+      LOG(WARNING) << "Ignoring perf event with bad local duration "
+                   << localDuration.error();
+    } else if (*localDuration <= Constants::kConvergenceMaxDuration) {
+      tData_.addStatValue(
+          "fib.local_route_program_time_ms",
+          localDuration->count(),
+          fbzmq::AVG);
+      kvStoreClient_->persistKey(
+          Constants::kFibTimeMarker.toString() + myNodeName_,
+          std::to_string(tData_.getCounters().at(
+              "fib.local_route_program_time_ms.avg.60")));
+    }
+  }
 
   // Ignore perf events with very off total duration
   auto totalDuration = getTotalPerfEventsDuration(*maybePerfEvents_);

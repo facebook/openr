@@ -24,7 +24,6 @@
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
@@ -103,7 +102,11 @@ class SpfSolver {
  public:
   // these need to be defined in the .cpp so they can refer
   // to the actual implementation of SpfSolverImpl
-  SpfSolver(const std::string& myNodeName, bool enableV4, bool computeLfaPaths);
+  SpfSolver(
+      const std::string& myNodeName,
+      bool enableV4,
+      bool computeLfaPaths,
+      bool enableOrderedFib = false);
   ~SpfSolver();
 
   //
@@ -116,6 +119,8 @@ class SpfSolver {
       bool /* topology has changed */,
       bool /* route attributes has changed (nexthop addr, node/adj label */>
   updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
+
+  bool hasHolds() const;
 
   // delete a node's adjacency database
   // return true if this has caused any change in graph
@@ -147,6 +152,8 @@ class SpfSolver {
   // Returns folly::none if myNodeName doesn't have any prefix database
   folly::Optional<thrift::RouteDatabase> buildRouteDb(
       const std::string& myNodeName);
+
+  bool decrementHolds();
 
   std::unordered_map<std::string, int64_t> getCounters();
 
@@ -183,6 +190,7 @@ class Decision : public OpenrEventLoop {
       std::string myNodeName,
       bool enableV4,
       bool computeLfaPaths,
+      bool enableOrderedFib,
       const AdjacencyDbMarker& adjacencyDbMarker,
       const PrefixDbMarker& prefixDbMarker,
       std::chrono::milliseconds debounceMinDur,
@@ -202,7 +210,7 @@ class Decision : public OpenrEventLoop {
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
 
-  void prepare(fbzmq::Context& zmqContext) noexcept;
+  void prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept;
 
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& request) override;
@@ -253,6 +261,13 @@ class Decision : public OpenrEventLoop {
    */
   void processPendingPrefixUpdates();
 
+  void decrementOrderedFibHolds();
+
+  void sendRouteUpdate(
+      thrift::RouteDatabase& db, std::string const& eventDescription);
+
+  std::chrono::milliseconds getMaxFib();
+
   // perform full dump of all LSDBs and run initial routing computations
   void initialSync(fbzmq::Context& zmqContext);
 
@@ -277,6 +292,10 @@ class Decision : public OpenrEventLoop {
   // the pointer to the SPF path calculator
   std::unique_ptr<SpfSolver> spfSolver_;
 
+  // For orderedFib prgramming, we keep track of the fib programming times
+  // across the network
+  std::unordered_map<std::string, std::chrono::milliseconds> fibTimes_;
+
   apache::thrift::CompactSerializer serializer_;
 
   // base interval to submit to monitor with (jitter will be added)
@@ -284,6 +303,9 @@ class Decision : public OpenrEventLoop {
 
   // Timer for submitting to monitor periodically
   std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
+
+  // Timer for decrementing link holds for ordered fib programming
+  std::unique_ptr<fbzmq::ZmqTimeout> orderedFibTimer_{nullptr};
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;

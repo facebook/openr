@@ -65,6 +65,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         nodeName, /* node name */
         true, /* enable v4 */
         true, /* computeLfaPaths */
+        false, /* enableOrderedFib */
         AdjacencyDbMarker{"adj:"},
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),
@@ -85,11 +86,14 @@ class OpenrCtrlFixture : public ::testing::Test {
         true, /* dryrun */
         false, /* periodic syncFib */
         true, /* enableSegmentRouting */
+        false, /* enableOrderedFib */
         std::chrono::seconds(2),
         DecisionPubUrl{"inproc://decision-pub"},
         std::string{"inproc://fib-cmd"},
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
+        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
+        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         context_);
     fibThread_ = std::thread([&]() { fib->run(); });
     moduleTypeToEvl[thrift::OpenrModuleType::FIB] = fib;
