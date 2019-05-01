@@ -8,22 +8,16 @@
 #
 
 
-from builtins import object, range
+from builtins import range
 
 import tabulate
-from openr.clients import perf_client
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.OpenrCtrl import OpenrCtrl
 
 
-class PerfCmd(object):
-    def __init__(self, cli_opts):
-        """ initialize the Perf client """
-
-        self.client = perf_client.PerfClient(cli_opts)
-
-
-class ViewFibCmd(PerfCmd):
-    def run(self):
-        resp = self.client.view_fib()
+class ViewFibCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        resp = client.getPerfDb()
         headers = ["Node", "Events", "Duration", "Unix Timestamp"]
         for i in range(len(resp.eventInfo)):
             rows = []
