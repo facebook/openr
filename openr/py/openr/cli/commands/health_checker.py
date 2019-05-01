@@ -7,24 +7,15 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-
-from builtins import object
-
 import tabulate
-from openr.clients import health_checker_client
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import ipnetwork
 
 
-class HealthCheckerCmd(object):
-    def __init__(self, cli_opts):
-        """ initialize the Health Checker client """
-
-        self.client = health_checker_client.HealthCheckerClient(cli_opts)
-
-
-class PeekCmd(HealthCheckerCmd):
-    def run(self):
-        resp = self.client.peek()
+class PeekCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        resp = client.getHealthCheckerInfo()
         headers = [
             "Node",
             "IP Address",
