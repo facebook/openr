@@ -66,7 +66,7 @@ void
 PeerPinger::pingPeer(const folly::MacAddress& peer) {
   std::string cmd = "ping6 ";
   folly::IPAddressV6 ipv6(folly::IPAddressV6::LINK_LOCAL, peer);
-  cmd = cmd + ipv6.str() + "%mesh0 -i 0.1 -c 50 -n";
+  cmd = cmd + ipv6.str() + "%mesh0 -i 0.1 -c 50 -n -s 1024";
 
   folly::Subprocess proc(cmd, folly::Subprocess::Options().pipeStdout());
 
