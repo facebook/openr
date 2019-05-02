@@ -478,7 +478,7 @@ ENABLE_FLOOD_OPTIMIZATION=false
 Set this true to let this node declare itself as a flood-root. You can set
 multiple nodes as flood-roots in a network, in steady state, open/r will pick
 optimal (smallest node-name) one as the SPT for flooding. If optimal root went
-away, open/r will pick 2nd optimal one as SPT-root and so on so forth. If all 
+away, open/r will pick 2nd optimal one as SPT-root and so on so forth. If all
 root nodes went away, open/r will fall back to legacy flooding.
 
 ```
@@ -547,3 +547,37 @@ program routes (link and interface address are still done via libnl3) in linux
 kernel. However at this time using USE_NETLINK_MESSAGE option does not have the
 ability to listen to netlink route events. To program routes with label nexthops
 and MPLS label routes use this option.
+
+
+### Link Backoff - Improving Stabilility of Link State
+
+Network can have some bad links that can keep flapping because of bad hardware
+or environment (in case of wireless links). A single link flap event on one node
+will cause SPF runs on all the devices. If such link continue to flap
+continuously with some interval then it creates instability and unnecessary
+churn in control plane.
+
+Enabling link backoff can alleviate this problem. Main idea is to let link prove
+itself stable for expected amount of time before using it. The duration to prove
+stability increases with every flap within max-backoff.
+
+#### LINK_FLAP_INITIAL_BACKOFF_MS
+
+When link goes down after being stable/up for long time, then the backoff is
+applied.
+
+- If link goes up and down in backoff state then it's backoff gets doubled
+  (Exponential backoff). Backoff clear timer will start from latest down
+  event
+- When backoff is cleared then actual status of link is used. If UP link then
+  neighbor discovery is performed else Open/R will wait for link to come up.
+
+#### LINK_FLAP_MAX_BACKOFF_MS
+
+Serves two purposes
+- This is the maximum backoff a link gets penalized with by consecutive flaps
+- When the first backoff time has passed and the link is in UP state, the next
+  time the link goes down within `LINK_FLAP_MAX_BACKOFF_MS`, the new backoff
+  double of the previous backoff. If the link remains stable for
+  `LINK_FLAP_MAX_BACKOFF_MS` then all of its history is erased and link gets
+  `LINK_FLAP_INITIAL_BACKOFF_MS` next time when it goes down.
