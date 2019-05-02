@@ -120,7 +120,7 @@ OpenRMetricManager::prepareTimers() noexcept {
 
   // schedule periodic submission of averaged airtime metrics to step detectors
   submitMetricsTimer_ = fbzmq::ZmqTimeout::make(
-      &zmqLoop_, [this]() mutable noexcept { submitAvgMetrics(); });
+      &zmqLoop_, [this]() mutable noexcept { submitAvgAirTimeMetrics(); });
   submitMetricsTimer_->scheduleTimeout(stepDetectorSubmitInterval_, true);
 }
 
@@ -222,7 +222,42 @@ OpenRMetricManager::getAvgAirtimeMetric(std::vector<uint32_t>& samples) {
 }
 
 void
-OpenRMetricManager::submitAvgMetrics() {
+OpenRMetricManager::updateStepDetectors(
+    std::unordered_map<folly::MacAddress, uint32_t> peerMetrics) {
+  auto now = std::chrono::steady_clock::now().time_since_epoch();
+
+  // add new step detectors and update the existing ones
+  // add slow_wnd_size * submitMetricsInterval to the current time for
+  // consistency with the initialization step
+  for (auto it : peerMetrics) {
+    auto peer = it.first;
+    auto metric = it.second;
+    auto stepDetector = stepDetectors_.find(peer);
+    if (stepDetector == stepDetectors_.end()) {
+      addStepDetector(peer, metric);
+    } else {
+      stepDetector->second.addValue(
+          std::chrono::duration_cast<std::chrono::seconds>(
+              now +
+              FLAGS_step_detector_slow_wnd_size * stepDetectorSubmitInterval_),
+          metric);
+    }
+  }
+
+  // remove stepDetectors of peers not in the new peer set
+  for (auto it = stepDetectors_.begin(); it != stepDetectors_.end();) {
+    if (peers_.find(it->first) == peers_.end()) {
+      VLOG(1) << "removing stepdetector for peer " << it->first;
+      it = stepDetectors_.erase(it);
+    } else {
+      it++;
+    }
+  }
+}
+
+void
+OpenRMetricManager::submitAvgAirTimeMetrics() {
+  std::unordered_map<folly::MacAddress, uint32_t> avgAirTimeMetrics;
   for (auto it = peers_.begin(); it != peers_.end();) {
     auto peer = it->first;
     // remove the peer if it has fewer than 2 samples
@@ -267,33 +302,9 @@ OpenRMetricManager::submitAvgMetrics() {
     }
     metricsOverrideMutex_.unlock();
 
-    auto now = std::chrono::steady_clock::now().time_since_epoch();
-
-    // submit averaged metrics to step detectors
-    // add slow_wnd_size * submitMetricsInterval to the current time for
-    // consistency with the initialization step
-    auto stepDetector = stepDetectors_.find(peer);
-    if (stepDetector == stepDetectors_.end()) {
-      addStepDetector(peer, metric);
-    } else {
-      stepDetector->second.addValue(
-          std::chrono::duration_cast<std::chrono::seconds>(
-              now +
-              FLAGS_step_detector_slow_wnd_size * stepDetectorSubmitInterval_),
-          metric);
-    }
-    it++;
+    avgAirTimeMetrics[peer] = metric;
   }
-
-  // remove stepDetectors of peers not in the new peer set
-  for (auto it = stepDetectors_.begin(); it != stepDetectors_.end();) {
-    if (peers_.find(it->first) == peers_.end()) {
-      VLOG(1) << "removing stepdetector for peer " << it->first;
-      it = stepDetectors_.erase(it);
-    } else {
-      it++;
-    }
-  }
+  updateStepDetectors(avgAirTimeMetrics);
 }
 
 // override the airtime link metric for the given peer
