@@ -21,7 +21,7 @@ using namespace openr;
 using namespace folly;
 
 // sync time-ms to wait for all DUAL nodes to converge
-const std::chrono::milliseconds syncms{200};
+const std::chrono::milliseconds syncms{500};
 
 // I/O response delay to mimic real senario
 // e.g one link-up-event might result in different ack time on each end.
@@ -889,7 +889,7 @@ TEST_P(DualFixture, CircularTest) {
   const auto& flap = param.flap;
   VLOG(1) << "test params: " << totalRoots << ", " << flap;
 
-  int numNodes = 5;
+  int numNodes = 4;
   // add nodes
   for (int i = 0; i < numNodes; ++i) {
     bool isRoot = i < totalRoots;
