@@ -16,6 +16,7 @@ import bunch
 import zmq
 from openr.clients import prefix_mgr_client
 from openr.Lsdb import ttypes as lsdb_types
+from openr.Network import ttypes as network_types
 from openr.PrefixManager import ttypes as prefix_mgr_types
 from openr.utils import zmq_socket
 from openr.utils.ipnetwork import ip_str_to_prefix, sprint_prefix
@@ -23,19 +24,19 @@ from openr.utils.ipnetwork import ip_str_to_prefix, sprint_prefix
 
 prefix_entry1 = lsdb_types.PrefixEntry(
     prefix=ip_str_to_prefix("2620:0:1cff:dead:bef1:ffff:ffff:1/128"),
-    type=lsdb_types.PrefixType.LOOPBACK,
+    type=network_types.PrefixType.LOOPBACK,
     forwardingType=lsdb_types.PrefixForwardingType.IP,
 )
 
 prefix_entry2 = lsdb_types.PrefixEntry(
     prefix=ip_str_to_prefix("2620:0:1cff:dead:bef1:ffff:ffff:2/128"),
-    type=lsdb_types.PrefixType.LOOPBACK,
+    type=network_types.PrefixType.LOOPBACK,
     forwardingType=lsdb_types.PrefixForwardingType.IP,
 )
 
 prefix_entry3 = lsdb_types.PrefixEntry(
     prefix=ip_str_to_prefix("2620:0:1cff:dead:bef1:ffff:ffff:3/128"),
-    type=lsdb_types.PrefixType.LOOPBACK,
+    type=network_types.PrefixType.LOOPBACK,
     forwardingType=lsdb_types.PrefixForwardingType.IP,
 )
 
@@ -109,7 +110,7 @@ class TestPrefixMgrClient(unittest.TestCase):
             resp = prefix_mgr_client_inst.view_prefix()
             prefix_entry4 = lsdb_types.PrefixEntry(
                 prefix=ip_str_to_prefix("2620:0:1cff:dead:bef1:ffff:ffff:4/128"),
-                type=lsdb_types.PrefixType.LOOPBACK,
+                type=network_types.PrefixType.LOOPBACK,
             )
             self.assertTrue(resp.success)
             self.assertTrue(prefix_entry4 in resp.prefixes)

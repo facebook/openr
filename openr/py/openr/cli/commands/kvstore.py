@@ -26,6 +26,7 @@ from openr.cli.utils import utils
 from openr.clients import kvstore_client, kvstore_subscriber
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
+from openr.Network import ttypes as network_types
 from openr.utils import ipnetwork, printing, serializer
 from openr.utils.consts import Consts
 
@@ -105,12 +106,12 @@ class KvStoreCmd(object):
 
         # First look for LOOPBACK prefix
         for prefix_entry in prefix_db.prefixEntries:
-            if prefix_entry.type == lsdb_types.PrefixType.LOOPBACK:
+            if prefix_entry.type == network_types.PrefixType.LOOPBACK:
                 return ipnetwork.sprint_addr(prefix_entry.prefix.prefixAddress.addr)
 
         # Next look for PREFIX_ALLOCATOR prefix if any
         for prefix_entry in prefix_db.prefixEntries:
-            if prefix_entry.type == lsdb_types.PrefixType.PREFIX_ALLOCATOR:
+            if prefix_entry.type == network_types.PrefixType.PREFIX_ALLOCATOR:
                 return utils.alloc_prefix_to_loopback_ip_str(prefix_entry.prefix)
 
         # Else return None
@@ -275,7 +276,7 @@ class NodesCmd(KvStoreCmd):
             loopback_prefixes = [
                 p.prefix
                 for p in prefix_db.prefixEntries
-                if p.type == lsdb_types.PrefixType.LOOPBACK
+                if p.type == network_types.PrefixType.LOOPBACK
             ]
             loopback_prefixes.sort(
                 key=lambda x: len(x.prefixAddress.addr), reverse=True

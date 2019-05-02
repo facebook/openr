@@ -16,6 +16,7 @@ from collections import defaultdict
 from openr.cli.utils import utils
 from openr.clients import decision_client, kvstore_client
 from openr.Lsdb import ttypes as lsdb_types
+from openr.Network import ttypes as network_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
@@ -122,7 +123,7 @@ class PathCmd(DecisionCmd):
                     continue
 
                 # Parse PrefixAllocator address
-                if prefix_entry.type == lsdb_types.PrefixType.PREFIX_ALLOCATOR:
+                if prefix_entry.type == network_types.PrefixType.PREFIX_ALLOCATOR:
                     prefix = ipnetwork.sprint_prefix(prefix_entry.prefix)
                     if prefix_entry.prefix.prefixLength == 128:
                         prefix = prefix.split("/")[0]
@@ -137,7 +138,7 @@ class PathCmd(DecisionCmd):
                     continue
 
                 # Parse LOOPBACK address
-                if prefix_entry.type == lsdb_types.PrefixType.LOOPBACK:
+                if prefix_entry.type == network_types.PrefixType.LOOPBACK:
                     prefix = ipnetwork.sprint_prefix(prefix_entry.prefix)
                     loopback_set.add(prefix.split("/")[0])
                     continue

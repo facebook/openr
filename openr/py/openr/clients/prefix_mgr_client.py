@@ -10,6 +10,7 @@
 
 from openr.clients.openr_client import OpenrClient
 from openr.Lsdb import ttypes as lsdb_types
+from openr.Network import ttypes as network_types
 from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.PrefixManager import ttypes as prefix_mgr_types
 from openr.utils import ipnetwork
@@ -28,7 +29,7 @@ class PrefixMgrClient(OpenrClient):
     ):
         """ Send the given cmd to prefix manager and return resp """
 
-        PREFIX_TYPE_TO_VALUES = lsdb_types.PrefixType._NAMES_TO_VALUES
+        PREFIX_TYPE_TO_VALUES = network_types.PrefixType._NAMES_TO_VALUES
         if prefix_type not in PREFIX_TYPE_TO_VALUES:
             raise Exception(
                 "Unknown type {}. Use any of {}".format(

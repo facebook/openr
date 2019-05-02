@@ -170,21 +170,6 @@ struct MetricVector {
   2: list<MetricEntity> metrics
 }
 
-enum PrefixType {
-  LOOPBACK = 1,
-  DEFAULT = 2,
-  BGP = 3,
-  PREFIX_ALLOCATOR = 4,
-  BREEZE = 5,   // Prefixes injected via breeze
-
-  // Placeholder Types
-  TYPE_1 = 21,
-  TYPE_2 = 22,
-  TYPE_3 = 23,
-  TYPE_4 = 24,
-  TYPE_5 = 25,
-}
-
 enum PrefixForwardingType {
   IP = 0, # Default
   SR_MPLS = 1,
@@ -192,7 +177,7 @@ enum PrefixForwardingType {
 
 struct PrefixEntry {
   1: Network.IpPrefix prefix
-  2: PrefixType type
+  2: Network.PrefixType type
   // optional additional metadata (encoding depends on PrefixType)
   3: binary data
   // Default mode of forwarding for prefix is IP. If `forwardingType` is

@@ -18,6 +18,7 @@ include "HealthChecker.thrift"
 include "KvStore.thrift"
 include "LinkMonitor.thrift"
 include "Lsdb.thrift"
+include "Network.thrift"
 
 enum OpenrModuleType {
   DECISION = 1,
@@ -68,7 +69,7 @@ service OpenrCtrl extends fb303.FacebookService {
   /**
    * Withdraw prefixes in bulk by type (aka client-id)
    */
-  void withdrawPrefixesByType(1: Lsdb.PrefixType prefixType)
+  void withdrawPrefixesByType(1: Network.PrefixType prefixType)
     throws (1: OpenrError error)
 
   /**
@@ -77,7 +78,7 @@ service OpenrCtrl extends fb303.FacebookService {
    * PrefixEntry object
    */
   void syncPrefixesByType(
-    1: Lsdb.PrefixType prefixType,
+    1: Network.PrefixType prefixType,
     2: list<Lsdb.PrefixEntry> prefixes) throws (1: OpenrError error)
 
   /**
@@ -88,7 +89,7 @@ service OpenrCtrl extends fb303.FacebookService {
   /**
    * Get prefixes of specific types
    */
-  list<Lsdb.PrefixEntry> getPrefixesByType(1: Lsdb.PrefixType prefixType)
+  list<Lsdb.PrefixEntry> getPrefixesByType(1: Network.PrefixType prefixType)
     throws (1: OpenrError error)
 
   //

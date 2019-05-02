@@ -69,6 +69,21 @@ struct MplsRoute {
   4: list<NextHopThrift> nextHops
 }
 
+enum PrefixType {
+  LOOPBACK = 1,
+  DEFAULT = 2,
+  BGP = 3,
+  PREFIX_ALLOCATOR = 4,
+  BREEZE = 5,   // Prefixes injected via breeze
+
+  // Placeholder Types
+  TYPE_1 = 21,
+  TYPE_2 = 22,
+  TYPE_3 = 23,
+  TYPE_4 = 24,
+  TYPE_5 = 25,
+}
+
 struct UnicastRoute {
   1: required IpPrefix dest
   2: list<BinaryAddress> deprecatedNexthops  # DEPRECATED - Use nextHops instead

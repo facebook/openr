@@ -194,7 +194,7 @@ def sprint_prefixes_db_full(prefix_db, loopback_only=False):
         key=lambda x: x.prefix.prefixAddress.addr,
     )
     for prefix_entry in sorted_entries:
-        if loopback_only and prefix_entry.type is not lsdb_types.PrefixType.LOOPBACK:
+        if loopback_only and prefix_entry.type is not network_types.PrefixType.LOOPBACK:
             continue
         prefix_strs.append(
             [

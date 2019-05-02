@@ -71,10 +71,10 @@ def ip_str_to_prefix(prefix_str):
 
 def sprint_prefix_type(prefix_type):
     """
-    :param prefix: lsdb_types.PrefixType
+    :param prefix: network_types.PrefixType
     """
 
-    return lsdb_types.PrefixType._VALUES_TO_NAMES.get(prefix_type, None)
+    return network_types.PrefixType._VALUES_TO_NAMES.get(prefix_type, None)
 
 
 def sprint_prefix_forwarding_type(forwarding_type):

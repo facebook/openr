@@ -9,6 +9,7 @@ namespace cpp2 openr.thrift
 namespace py openr.PrefixManager
 
 include "Lsdb.thrift"
+include "Network.thrift"
 
 enum PrefixManagerCommand {
   ADD_PREFIXES = 1,
@@ -24,7 +25,7 @@ struct PrefixManagerRequest {
   // numbering on purpose
   3: list<Lsdb.PrefixEntry> prefixes
   // only applies to *_BY_TYPE commands
-  4: Lsdb.PrefixType type
+  4: Network.PrefixType type
 }
 
 struct PrefixManagerResponse {
