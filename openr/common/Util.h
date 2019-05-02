@@ -326,8 +326,8 @@ createPrefixEntry(
 inline thrift::NextHopThrift
 createNextHop(
     thrift::BinaryAddress addr,
-    const std::string& ifName,
-    int32_t metric,
+    const std::string& ifName = "",
+    int32_t metric = 0,
     folly::Optional<thrift::MplsAction> maybeMplsAction = folly::none) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;

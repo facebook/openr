@@ -186,6 +186,19 @@ class SpfSolver::SpfSolverImpl {
   std::vector<std::shared_ptr<Link>> getOrderedLinkSet(
       const thrift::AdjacencyDatabase& adjDb);
 
+  folly::Optional<thrift::UnicastRoute> createOpenRRoute(
+      std::string const& myNodeName,
+      thrift::IpPrefix const& prefix,
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
+  folly::Optional<thrift::UnicastRoute> createBGPRoute(
+      std::string const& myNodeName,
+      thrift::IpPrefix const& prefix,
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
+
+  // return a loopback address for each node in the the set
+  std::vector<thrift::NextHopThrift> getLoopbackVias(
+      std::unordered_set<std::string> const& nodes);
+
   // Give source node-name and dstNodeNames, this function returns the set of
   // nexthops (along with LFA if enabled) towards these set of dstNodeNames
   std::pair<
@@ -706,9 +719,12 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   //
   for (const auto& kv : prefixes_) {
     const auto& prefix = kv.first;
+    const auto& nodePrefixes = kv.second;
 
+    // TODO Handle not all prefix entries have the same type
+    bool isBGP = nodePrefixes.begin()->second.type == thrift::PrefixType::BGP;
     // skip adding route for prefixes advertised by this node
-    if (kv.second.count(myNodeName)) {
+    if (nodePrefixes.count(myNodeName) and not isBGP) {
       continue;
     }
 
@@ -720,35 +736,11 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       continue;
     }
 
-    // Prepare list of nodes announcing the prefix
-    std::set<std::string> prefixNodes;
-    for (auto const& nodePrefix : kv.second) {
-      prefixNodes.emplace(nodePrefix.first);
+    auto route = isBGP ? createBGPRoute(myNodeName, prefix, nodePrefixes)
+                       : createOpenRRoute(myNodeName, prefix, nodePrefixes);
+    if (route.hasValue()) {
+      routeDb.unicastRoutes.emplace_back(std::move(route.value()));
     }
-
-    const bool perDestination = getPrefixForwardingType(kv.second) ==
-        thrift::PrefixForwardingType::SR_MPLS;
-
-    const auto metricNhs =
-        getNextHopsWithMetric(myNodeName, prefixNodes, perDestination);
-    if (metricNhs.second.empty()) {
-      LOG(WARNING) << "No route to prefix " << toString(prefix)
-                   << ", advertised by: " << folly::join(", ", prefixNodes);
-      tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
-      continue;
-    }
-
-    // Convert list of neighbor nodes to nexthops (considering adjacencies)
-    routeDb.unicastRoutes.emplace_back(createUnicastRoute(
-        prefix,
-        getNextHopsThrift(
-            myNodeName,
-            prefixNodes,
-            isV4Prefix,
-            perDestination,
-            metricNhs.first,
-            metricNhs.second,
-            folly::none)));
   } // for prefixes_
 
   //
@@ -834,6 +826,108 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   tData_.addStatValue("decision.route_build_ms", deltaTime.count(), fbzmq::AVG);
   return routeDb;
 } // buildRouteDb
+
+folly::Optional<thrift::UnicastRoute>
+SpfSolver::SpfSolverImpl::createOpenRRoute(
+    std::string const& myNodeName,
+    thrift::IpPrefix const& prefix,
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
+  // Prepare list of nodes announcing the prefix
+  std::set<std::string> prefixNodes;
+  for (auto const& nodePrefix : nodePrefixes) {
+    prefixNodes.emplace(nodePrefix.first);
+  }
+
+  const bool perDestination = getPrefixForwardingType(nodePrefixes) ==
+      thrift::PrefixForwardingType::SR_MPLS;
+
+  const auto metricNhs =
+      getNextHopsWithMetric(myNodeName, prefixNodes, perDestination);
+  if (metricNhs.second.empty()) {
+    LOG(WARNING) << "No route to prefix " << toString(prefix)
+                 << ", advertised by: " << folly::join(", ", prefixNodes);
+    tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+    return folly::none;
+  }
+
+  // Convert list of neighbor nodes to nexthops (considering adjacencies)
+  return createUnicastRoute(
+      prefix,
+      getNextHopsThrift(
+          myNodeName,
+          prefixNodes,
+          prefix.prefixAddress.addr.size() == folly::IPAddressV4::byteCount(),
+          perDestination,
+          metricNhs.first,
+          metricNhs.second,
+          folly::none));
+}
+
+folly::Optional<thrift::UnicastRoute>
+SpfSolver::SpfSolverImpl::createBGPRoute(
+    std::string const& myNodeName,
+    thrift::IpPrefix const& prefix,
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
+  std::unordered_set<std::string> nodes;
+  thrift::MetricVector const* bestVector = nullptr;
+  std::string const* bestData = nullptr;
+  for (auto const& kv : nodePrefixes) {
+    auto const& name = kv.first;
+    auto const& prefixEntry = kv.second;
+    if (!spfResults_.at(myNodeName).count(name)) {
+      // skip if no path to node
+      continue;
+    }
+    auto const& metricVector = prefixEntry.mv.value();
+    switch ((nullptr == bestVector) ? MetricVectorUtils::CompareResult::WINNER
+                                    : MetricVectorUtils::compareMetricVectors(
+                                          metricVector, *bestVector)) {
+    case MetricVectorUtils::CompareResult::WINNER:
+      nodes.clear();
+      FOLLY_FALLTHROUGH;
+    case MetricVectorUtils::CompareResult::TIE_WINNER:
+      bestVector = &(metricVector);
+      bestData = &(prefixEntry.data);
+      FOLLY_FALLTHROUGH;
+    case MetricVectorUtils::CompareResult::TIE_LOOSER:
+      nodes.emplace(name);
+      break;
+    case MetricVectorUtils::CompareResult::TIE:
+    case MetricVectorUtils::CompareResult::ERROR:
+      LOG(ERROR) << "Cannot order prefix entries. Skipping route for prefix: "
+                 << toString(prefix);
+      return folly::none;
+    default:
+      break;
+    }
+  }
+  if (nodes.empty()) {
+    return folly::none;
+  }
+  CHECK_NOTNULL(bestData);
+  return thrift::UnicastRoute{FRAGILE,
+                              prefix,
+                              {},
+                              thrift::AdminDistance::EBGP,
+                              getLoopbackVias(nodes),
+                              thrift::PrefixType::BGP,
+                              *bestData};
+}
+
+std::vector<thrift::NextHopThrift>
+SpfSolver::SpfSolverImpl::getLoopbackVias(
+    std::unordered_set<std::string> const& nodes) {
+  std::vector<thrift::NextHopThrift> result;
+  result.reserve(nodes.size());
+  for (auto const& node : nodes) {
+    if (!nodeHostLoopbacksV6_.count(node)) {
+      LOG(ERROR) << "No loopback for node: " << node;
+    } else {
+      result.emplace_back(createNextHop(nodeHostLoopbacksV6_.at(node)));
+    }
+  }
+  return result;
+}
 
 std::pair<
     Metric /* min metric to destination */,

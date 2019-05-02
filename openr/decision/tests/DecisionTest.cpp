@@ -545,6 +545,141 @@ TEST(MplsRoutes, BasicTest) {
   validateAdjLabelRoutes(routeMap, "3", {adj32});
 }
 
+TEST(BGPRedistribution, BasicOperation) {
+  std::string nodeName("1");
+  SpfSolver spfSolver(
+      nodeName, false /* disable v4 */, false /* disable LFA */);
+
+  auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
+  auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
+  EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb2).first);
+
+  thrift::PrefixDatabase prefixDb1WithBGP = prefixDb1;
+  thrift::PrefixDatabase prefixDb2WithBGP = prefixDb2;
+
+  std::string data1 = "data1", data2 = "data2";
+  thrift::IpPrefix bgpPrefix1 = addr3;
+
+  thrift::MetricVector mv1, mv2;
+  int64_t numMetrics = 5;
+  mv1.metrics.resize(numMetrics);
+  mv2.metrics.resize(numMetrics);
+  for (int64_t i = 0; i < numMetrics; ++i) {
+    mv1.metrics[i].type = mv2.metrics[i].type = i;
+    mv1.metrics[i].priority = mv2.metrics[i].priority = i;
+    mv1.metrics[i].op = mv2.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    mv1.metrics[i].isBestPathTieBreaker = mv2.metrics[i].isBestPathTieBreaker =
+        false;
+    mv1.metrics[i].metric = mv2.metrics[i].metric = {i};
+  }
+
+  // only node1 advertises the BGP prefix, it will have the best path
+  prefixDb1WithBGP.prefixEntries.emplace_back(
+      FRAGILE,
+      bgpPrefix1,
+      thrift::PrefixType::BGP,
+      data1,
+      thrift::PrefixForwardingType::IP,
+      false,
+      mv1);
+
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1WithBGP));
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
+
+  auto routeDb = spfSolver.buildPaths("1");
+  thrift::UnicastRoute route1(
+      FRAGILE,
+      bgpPrefix1,
+      {},
+      thrift::AdminDistance::EBGP,
+      {createNextHop(addr1.prefixAddress)},
+      thrift::PrefixType::BGP,
+      data1);
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
+
+  // add the prefix to node2 with the same metric vector. we expect the bgp
+  // route to be gone since both nodes have same metric vector we can't
+  // determine a best path
+  prefixDb2WithBGP.prefixEntries.emplace_back(
+      FRAGILE,
+      bgpPrefix1,
+      thrift::PrefixType::BGP,
+      data2,
+      thrift::PrefixForwardingType::IP,
+      false,
+      mv2);
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(1));
+
+  // decrease the one of second node's metrics and expect to see the route
+  // toward just the first
+  prefixDb2WithBGP.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .metric.front()--;
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
+
+  // now make 2 better
+  prefixDb2WithBGP.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .metric.front() += 2;
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
+
+  thrift::UnicastRoute route2(
+      FRAGILE,
+      bgpPrefix1,
+      {},
+      thrift::AdminDistance::EBGP,
+      {createNextHop(addr2.prefixAddress)},
+      thrift::PrefixType::BGP,
+      data2);
+
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route2));
+
+  // now make that a tie break for a multipath route
+  prefixDb1WithBGP.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .isBestPathTieBreaker = true;
+  prefixDb2WithBGP.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .isBestPathTieBreaker = true;
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1WithBGP));
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
+
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(
+      routeDb.value().unicastRoutes,
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, bgpPrefix1),
+          Field(&thrift::UnicastRoute::data, data2),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHop(addr2.prefixAddress),
+                  createNextHop(addr1.prefixAddress))))));
+
+  // dicsonnect the network, each node will consider it's BGP route the best
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(createAdjDb("1", {}, 0)).first);
+  EXPECT_THAT(
+      spfSolver.buildPaths("1").value().unicastRoutes,
+      testing::Contains(route1));
+  EXPECT_THAT(
+      spfSolver.buildPaths("2").value().unicastRoutes,
+      testing::Contains(route2));
+}
+
 //
 // Test topology:
 // connected bidirectionally

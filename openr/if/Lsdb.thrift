@@ -157,7 +157,7 @@ struct MetricEntity {
   // Field/fields with this set will be used for best path tie breaking only
   4: bool isBestPathTieBreaker
 
-  // List of uint32's. Always > win's. -ve numbers will represent < wins
+  // List of int64's. Always > win's. -ve numbers will represent < wins
   5: list<i64> metric
 }
 

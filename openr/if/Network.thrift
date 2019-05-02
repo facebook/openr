@@ -89,4 +89,8 @@ struct UnicastRoute {
   2: list<BinaryAddress> deprecatedNexthops  # DEPRECATED - Use nextHops instead
   3: optional AdminDistance adminDistance
   4: list<NextHopThrift> nextHops
+
+  // fields used for route redistribution
+  5: optional PrefixType prefixType
+  6: optional binary data
 }
