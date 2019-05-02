@@ -157,6 +157,9 @@ class SpfSolver {
 
   std::unordered_map<std::string, int64_t> getCounters();
 
+  std::unordered_map<std::string, thrift::BinaryAddress> const&
+  getNodeHostLoopbacksV6();
+
  private:
   // no-copy
   SpfSolver(SpfSolver const&) = delete;

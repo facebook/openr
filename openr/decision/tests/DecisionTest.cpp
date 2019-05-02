@@ -343,6 +343,27 @@ TEST(SpfSolver, PrefixUpdate) {
   EXPECT_EQ(prefixDb1Updated, spfSolver.getPrefixDatabases().at(nodeName));
 }
 
+TEST(SpfSolver, getNodeHostLoopbacksV6) {
+  std::string nodeName("1");
+  SpfSolver spfSolver(
+      nodeName, false /* disable v4 */, false /* disable LFA */);
+
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
+  std::pair<std::string, thrift::BinaryAddress> pair1("1", addr1.prefixAddress);
+  EXPECT_THAT(
+      spfSolver.getNodeHostLoopbacksV6(), testing::UnorderedElementsAre(pair1));
+
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
+  std::pair<std::string, thrift::BinaryAddress> pair2("2", addr2.prefixAddress);
+  EXPECT_THAT(
+      spfSolver.getNodeHostLoopbacksV6(),
+      testing::UnorderedElementsAre(pair1, pair2));
+
+  EXPECT_TRUE(spfSolver.deletePrefixDatabase("1"));
+  EXPECT_THAT(
+      spfSolver.getNodeHostLoopbacksV6(), testing::UnorderedElementsAre(pair2));
+}
+
 /**
  * Test to verify adjacencyDatabase update
  */

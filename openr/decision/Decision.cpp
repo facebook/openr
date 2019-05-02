@@ -163,6 +163,9 @@ class SpfSolver::SpfSolverImpl {
 
   std::unordered_map<std::string, int64_t> getCounters();
 
+  std::unordered_map<std::string, thrift::BinaryAddress> const&
+  getNodeHostLoopbacksV6();
+
   fbzmq::ThreadData&
   getThreadData() noexcept {
     return tData_;
@@ -243,6 +246,7 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, thrift::PrefixEntry>>
       prefixes_;
   std::unordered_map<std::string, std::set<thrift::IpPrefix>> nodeToPrefixes_;
+  std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
 
   // track some stats
   fbzmq::ThreadData tData_;
@@ -511,6 +515,10 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
       nodeList[nodeName] = prefixEntry;
       isUpdated = true;
     }
+    if (thrift::PrefixType::LOOPBACK == prefixEntry.type &&
+        folly::IPAddressV6::bitCount() == prefixEntry.prefix.prefixLength) {
+      nodeHostLoopbacksV6_[nodeName] = prefixEntry.prefix.prefixAddress;
+    }
   }
 
   return isUpdated;
@@ -543,6 +551,7 @@ SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
   }
 
   nodeToPrefixes_.erase(search);
+  nodeHostLoopbacksV6_.erase(nodeName);
   return isUpdated;
 }
 
@@ -558,6 +567,11 @@ SpfSolver::SpfSolverImpl::getPrefixDatabases() {
     prefixDatabases.emplace(kv.first, std::move(prefixDb));
   }
   return prefixDatabases;
+}
+
+std::unordered_map<std::string, thrift::BinaryAddress> const&
+SpfSolver::SpfSolverImpl::getNodeHostLoopbacksV6() {
+  return nodeHostLoopbacksV6_;
 }
 
 /**
@@ -1113,6 +1127,11 @@ SpfSolver::decrementHolds() {
 std::unordered_map<std::string, int64_t>
 SpfSolver::getCounters() {
   return impl_->getCounters();
+}
+
+std::unordered_map<std::string, thrift::BinaryAddress> const&
+SpfSolver::getNodeHostLoopbacksV6() {
+  return impl_->getNodeHostLoopbacksV6();
 }
 
 //
