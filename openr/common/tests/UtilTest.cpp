@@ -617,6 +617,156 @@ TEST(UtilTest, getPrefixForwardingType) {
       thrift::PrefixForwardingType::SR_MPLS, getPrefixForwardingType(prefixes));
 }
 
+using namespace openr::MetricVectorUtils;
+TEST(MetricVectorUtilsTest, CompareResultInverseOperator) {
+  EXPECT_EQ(CompareResult::WINNER, !CompareResult::LOOSER);
+  EXPECT_EQ(!CompareResult::WINNER, CompareResult::LOOSER);
+
+  EXPECT_EQ(CompareResult::TIE, !CompareResult::TIE);
+
+  EXPECT_EQ(CompareResult::TIE_WINNER, !CompareResult::TIE_LOOSER);
+  EXPECT_EQ(!CompareResult::TIE_WINNER, CompareResult::TIE_LOOSER);
+
+  EXPECT_EQ(CompareResult::ERROR, !CompareResult::ERROR);
+}
+
+TEST(MetricVectorUtilsTest, isDecisive) {
+  EXPECT_TRUE(isDecisive(CompareResult::WINNER));
+  EXPECT_TRUE(isDecisive(CompareResult::LOOSER));
+  EXPECT_TRUE(isDecisive(CompareResult::ERROR));
+
+  EXPECT_FALSE(isDecisive(CompareResult::TIE_WINNER));
+  EXPECT_FALSE(isDecisive(CompareResult::TIE_LOOSER));
+  EXPECT_FALSE(isDecisive(CompareResult::TIE));
+}
+
+TEST(MetricVectorUtilsTest, sortMetricVector) {
+  thrift::MetricVector mv;
+
+  int64_t const numMetrics = 5;
+
+  // default construct some MetricEntities
+  mv.metrics.resize(numMetrics);
+
+  for (int64_t i = 0; i < numMetrics; i++) {
+    mv.metrics[i].type = i;
+    mv.metrics[i].priority = i;
+  }
+
+  EXPECT_FALSE(isSorted(mv));
+  sortMetricVector(mv);
+  EXPECT_TRUE(isSorted(mv));
+}
+
+TEST(MetricVectorUtilsTest, compareMetrics) {
+  EXPECT_EQ(CompareResult::TIE, compareMetrics({}, {}, true));
+  EXPECT_EQ(CompareResult::ERROR, compareMetrics({1}, {}, true));
+  EXPECT_EQ(CompareResult::TIE, compareMetrics({1, 2}, {1, 2}, true));
+
+  EXPECT_EQ(CompareResult::WINNER, compareMetrics({2}, {1}, false));
+  EXPECT_EQ(CompareResult::LOOSER, compareMetrics({2, 1}, {2, 3}, false));
+
+  EXPECT_EQ(CompareResult::TIE_WINNER, compareMetrics({-1}, {-2}, true));
+  EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetrics({1, 1}, {2, 0}, true));
+}
+
+TEST(MetricVectorUtilsTest, resultForLoner) {
+  thrift::MetricEntity entity;
+  entity.op = thrift::CompareType::WIN_IF_PRESENT;
+  entity.isBestPathTieBreaker = false;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::WINNER);
+  entity.isBestPathTieBreaker = true;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::TIE_WINNER);
+
+  entity.op = thrift::CompareType::WIN_IF_NOT_PRESENT;
+  entity.isBestPathTieBreaker = false;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::LOOSER);
+  entity.isBestPathTieBreaker = true;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::TIE_LOOSER);
+
+  entity.op = thrift::CompareType::IGNORE_IF_NOT_PRESENT;
+  entity.isBestPathTieBreaker = false;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::TIE);
+  entity.isBestPathTieBreaker = true;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::TIE);
+}
+
+TEST(MetricVectorUtilsTest, maybeUpdate) {
+  CompareResult result = CompareResult::TIE;
+  maybeUpdate(result, CompareResult::TIE_WINNER);
+  EXPECT_EQ(result, CompareResult::TIE_WINNER);
+
+  maybeUpdate(result, CompareResult::TIE_LOOSER);
+  EXPECT_EQ(result, CompareResult::TIE_WINNER);
+
+  maybeUpdate(result, CompareResult::WINNER);
+  EXPECT_EQ(result, CompareResult::WINNER);
+
+  maybeUpdate(result, CompareResult::TIE_WINNER);
+  EXPECT_EQ(result, CompareResult::WINNER);
+
+  maybeUpdate(result, CompareResult::ERROR);
+  EXPECT_EQ(result, CompareResult::ERROR);
+}
+
+TEST(MetricVectorUtilsTest, compareMetricVectors) {
+  thrift::MetricVector l, r;
+  EXPECT_EQ(CompareResult::TIE, compareMetricVectors(l, r));
+
+  l.version = 1;
+  r.version = 2;
+  EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
+  r.version = 1;
+
+  int64_t numMetrics = 5;
+  l.metrics.resize(numMetrics);
+  r.metrics.resize(numMetrics);
+  for (int64_t i = 0; i < numMetrics; ++i) {
+    l.metrics[i].type = i;
+    l.metrics[i].priority = i;
+    l.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    l.metrics[i].isBestPathTieBreaker = false;
+    l.metrics[i].metric = {i};
+
+    r.metrics[i].type = i;
+    r.metrics[i].priority = i;
+    r.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    r.metrics[i].isBestPathTieBreaker = false;
+    r.metrics[i].metric = {i};
+  }
+
+  EXPECT_EQ(CompareResult::TIE, compareMetricVectors(l, r));
+
+  r.metrics[numMetrics - 2].metric.front()--;
+  EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(r, l));
+
+  r.metrics[numMetrics - 2].isBestPathTieBreaker = true;
+  EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
+  l.metrics[numMetrics - 2].isBestPathTieBreaker = true;
+  EXPECT_EQ(CompareResult::TIE_WINNER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetricVectors(r, l));
+
+  r.metrics.resize(numMetrics - 1);
+  EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(r, l));
+
+  // make type different but keep priority the same
+  l.metrics[0].type--;
+  EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(r, l));
+  l.metrics[0].type++;
+
+  // change op for l loner;
+  l.metrics[numMetrics - 1].op = thrift::CompareType::WIN_IF_NOT_PRESENT;
+  EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(r, l));
+
+  l.metrics[numMetrics - 1].op = thrift::CompareType::IGNORE_IF_NOT_PRESENT;
+  EXPECT_EQ(CompareResult::TIE_WINNER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetricVectors(r, l));
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

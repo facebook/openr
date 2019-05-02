@@ -34,7 +34,6 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 
 namespace openr {
-
 /**
  * Class to store re2 objects, provides API to match string with regex
  */
@@ -48,8 +47,8 @@ class KeyPrefix {
 };
 
 /**
- * Utility function to execute shell command and return true/false as indication
- * of it's success
+ * Utility function to execute shell command and return true/false as
+ * indication of it's success
  */
 int executeShellCommand(const std::string& command);
 
@@ -158,8 +157,9 @@ int64_t generateHash(
 /**
  * TO BE DEPRECATED SOON: Backward compatible with empty remoteIfName
  * Translate remote interface name from local interface name
- * This is only applicable when remoteIfName is empty from peer adjacency update
- * It returns remoteIfName if it is there else constructs one from localIfName
+ * This is only applicable when remoteIfName is empty from peer adjacency
+ * update It returns remoteIfName if it is there else constructs one from
+ * localIfName
  */
 std::string getRemoteIfName(const thrift::Adjacency& adj);
 
@@ -171,8 +171,8 @@ std::vector<thrift::NextHopThrift> getBestNextHopsUnicast(
     std::vector<thrift::NextHopThrift> const& nextHops);
 
 /**
- * Given list of nextHops for mpls route, validate nexthops and return nextHops
- * with lowest metric value and of same MplsActionCode.
+ * Given list of nextHops for mpls route, validate nexthops and return
+ * nextHops with lowest metric value and of same MplsActionCode.
  */
 std::vector<thrift::NextHopThrift> getBestNextHopsMpls(
     std::vector<thrift::NextHopThrift> const& nextHops);
@@ -198,9 +198,9 @@ folly::Optional<std::string> maybeGetTcpEndpoint(
 /**
  * Get forwarding type from list of prefixes. We're taking map as input for
  * efficiency purpose.
- * It is feasible that multiple nodes will advertise a same prefix and will ask
- * to forward on different modes. We will make sure that MPLS is used if and
- * only if everyone says MPLS else forwarding type will be IP.
+ * It is feasible that multiple nodes will advertise a same prefix and
+ * will ask to forward on different modes. We will make sure that MPLS is used
+ * if and only if everyone says MPLS else forwarding type will be IP.
  */
 thrift::PrefixForwardingType getPrefixForwardingType(
     const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes);
@@ -404,5 +404,156 @@ createMplsRoutesWithBestNextHops(const std::vector<thrift::MplsRoute>& routes) {
 
   return newRoutes;
 }
+
+namespace MetricVectorUtils {
+
+enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };
+
+inline CompareResult operator!(CompareResult mv) {
+  switch (mv) {
+  case CompareResult::WINNER: {
+    return CompareResult::LOOSER;
+  }
+  case CompareResult::TIE_WINNER: {
+    return CompareResult::TIE_LOOSER;
+  }
+  case CompareResult::TIE: {
+    return CompareResult::TIE;
+  }
+  case CompareResult::TIE_LOOSER: {
+    return CompareResult::TIE_WINNER;
+  }
+  case CompareResult::LOOSER: {
+    return CompareResult::WINNER;
+  }
+  case CompareResult::ERROR: {
+    return CompareResult::ERROR;
+  }
+  }
+  return CompareResult::ERROR;
+}
+
+inline bool
+isDecisive(CompareResult const& result) {
+  return CompareResult::WINNER == result || CompareResult::LOOSER == result ||
+      CompareResult::ERROR == result;
+}
+
+inline bool
+isSorted(thrift::MetricVector const& mv) {
+  int64_t priorPriority = std::numeric_limits<int64_t>::max();
+  for (auto const& ent : mv.metrics) {
+    if (ent.priority > priorPriority) {
+      return false;
+    }
+    priorPriority = ent.priority;
+  }
+  return true;
+}
+
+// sort a metric vector in decreasing order of priority
+inline void
+sortMetricVector(thrift::MetricVector const& mv) {
+  if (isSorted(mv)) {
+    return;
+  }
+  std::vector<thrift::MetricEntity>& metrics =
+      const_cast<std::vector<thrift::MetricEntity>&>(mv.metrics);
+  std::sort(
+      metrics.begin(),
+      metrics.end(),
+      [](thrift::MetricEntity& l, thrift::MetricEntity& r) {
+        return l.priority > r.priority;
+      });
+}
+
+inline CompareResult
+compareMetrics(
+    std::vector<int64_t> const& l,
+    std::vector<int64_t> const& r,
+    bool tieBreaker) {
+  if (l.size() != r.size()) {
+    return CompareResult::ERROR;
+  }
+  for (auto lIter = l.begin(), rIter = r.begin(); lIter != l.end();
+       ++lIter, ++rIter) {
+    if (*lIter > *rIter) {
+      return tieBreaker ? CompareResult::TIE_WINNER : CompareResult::WINNER;
+    } else if (*lIter < *rIter) {
+      return tieBreaker ? CompareResult::TIE_LOOSER : CompareResult::LOOSER;
+    }
+  }
+  return CompareResult::TIE;
+}
+
+inline CompareResult
+resultForLoner(thrift::MetricEntity const& entity) {
+  if (thrift::CompareType::WIN_IF_PRESENT == entity.op) {
+    return entity.isBestPathTieBreaker ? CompareResult::TIE_WINNER
+                                       : CompareResult::WINNER;
+  } else if (thrift::CompareType::WIN_IF_NOT_PRESENT == entity.op) {
+    return entity.isBestPathTieBreaker ? CompareResult::TIE_LOOSER
+                                       : CompareResult::LOOSER;
+  }
+  // IGNORE_IF_NOT_PRESENT
+  return CompareResult::TIE;
+}
+
+inline void
+maybeUpdate(CompareResult& target, CompareResult update) {
+  if (isDecisive(update) || CompareResult::TIE == target) {
+    target = update;
+  }
+}
+
+inline CompareResult
+compareMetricVectors(
+    thrift::MetricVector const& l, thrift::MetricVector const& r) {
+  CompareResult result = CompareResult::TIE;
+
+  if (l.version != r.version) {
+    return CompareResult::ERROR;
+  }
+
+  sortMetricVector(l);
+  sortMetricVector(r);
+
+  auto lIter = l.metrics.begin();
+  auto rIter = r.metrics.begin();
+  while (!isDecisive(result) &&
+         (lIter != l.metrics.end() && rIter != r.metrics.end())) {
+    if (lIter->type == rIter->type) {
+      if (lIter->isBestPathTieBreaker != rIter->isBestPathTieBreaker) {
+        maybeUpdate(result, CompareResult::ERROR);
+      } else {
+        maybeUpdate(
+            result,
+            compareMetrics(
+                lIter->metric, rIter->metric, lIter->isBestPathTieBreaker));
+      }
+      ++lIter;
+      ++rIter;
+    } else if (lIter->priority > rIter->priority) {
+      maybeUpdate(result, resultForLoner(*lIter));
+      ++lIter;
+    } else if (lIter->priority < rIter->priority) {
+      maybeUpdate(result, !resultForLoner(*rIter));
+      ++rIter;
+    } else {
+      // priorities are the same but types are different
+      maybeUpdate(result, CompareResult::ERROR);
+    }
+  }
+  while (!isDecisive(result) && lIter != l.metrics.end()) {
+    maybeUpdate(result, resultForLoner(*lIter));
+    ++lIter;
+  }
+  while (!isDecisive(result) && rIter != r.metrics.end()) {
+    maybeUpdate(result, !resultForLoner(*rIter));
+    ++rIter;
+  }
+  return result;
+}
+} // namespace MetricVectorUtils
 
 } // namespace openr
