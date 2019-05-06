@@ -67,8 +67,10 @@ Fib::Fib(
     }
   });
 
-  kvStoreClient_ = std::make_unique<KvStoreClient>(
-      zmqContext, this, myNodeName_, storeCmdUrl, storePubUrl);
+  if (enableOrderedFib_) {
+    kvStoreClient_ = std::make_unique<KvStoreClient>(
+        zmqContext, this, myNodeName_, storeCmdUrl, storePubUrl);
+  }
 
   syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
 
