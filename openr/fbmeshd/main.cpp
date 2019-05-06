@@ -117,7 +117,7 @@ DEFINE_string(
     "The interface that the gateway connectivity monitor runs on");
 DEFINE_string(
     gateway_connectivity_monitor_addresses,
-    "8.8.4.4:443",
+    "8.8.4.4:443,1.1.1.1:443",
     "A comma-separated list of addresses that the gateway connectivity monitor "
     "connects to to check WAN connectivity (host:port)");
 DEFINE_uint32(
