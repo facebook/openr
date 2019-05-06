@@ -11,6 +11,7 @@
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
 #include <folly/Random.h>
+#include <folly/futures/Promise.h>
 #include <gflags/gflags.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -2609,6 +2610,16 @@ class DecisionTestFixture : public ::testing::Test {
         0 /* hash */);
   }
 
+  std::unordered_map<std::string, int64_t>
+  getCountersMap() {
+    folly::Promise<std::unordered_map<std::string, int64_t>> promise;
+    auto future = promise.getFuture();
+    decision->runInEventLoop([this, p = std::move(promise)]() mutable noexcept {
+      p.setValue(decision->getCounters());
+    });
+    return std::move(future).get();
+  }
+
   //
   // member variables
   //
@@ -2869,7 +2880,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       "");
 
-  auto counters = decision->getCounters();
+  auto counters = getCountersMap();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(0, counters["decision.route_build_runs.count.0"]);
   sendKvPublication(publication);
@@ -2878,7 +2889,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // wait for SPF to finish
   std::this_thread::sleep_for(debounceTimeout / 2);
   // validate SPF after initial sync, no rebouncing here
-  counters = decision->getCounters();
+  counters = getCountersMap();
   EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(1, counters["decision.route_build_runs.count.0"]);
 
@@ -2889,7 +2900,6 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   // Some tricks here; we need to bump the time-stamp on router 2's data, so
   // it can override existing; for router 3 we publish new key-value
-
   publication = thrift::Publication(
       FRAGILE,
       {{"adj:3", createAdjValue("3", 1, {adj32})},
@@ -2922,10 +2932,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // wait for debouncing to kick in
   std::this_thread::sleep_for(debounceTimeout);
   // validate SPF
-  counters = decision->getCounters();
+  counters = getCountersMap();
   EXPECT_EQ(2, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(2, counters["decision.route_build_runs.count.0"]);
-
   //
   // Only publish prefix updates
   //
@@ -2941,7 +2950,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   /* sleep override */
   // wait for route rebuilding to finish
   std::this_thread::sleep_for(debounceTimeout / 2);
-  counters = decision->getCounters();
+  counters = getCountersMap();
   EXPECT_EQ(2, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(3, counters["decision.route_build_runs.count.0"]);
 
@@ -2967,7 +2976,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   /* sleep override */
   // wait for SPF to finish
   std::this_thread::sleep_for(debounceTimeout);
-  counters = decision->getCounters();
+  counters = getCountersMap();
   EXPECT_EQ(3, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(4, counters["decision.route_build_runs.count.0"]);
 
@@ -3007,7 +3016,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   /* sleep override */
   // wait for route rebuilding to finish
   std::this_thread::sleep_for(debounceTimeout);
-  counters = decision->getCounters();
+  counters = getCountersMap();
   EXPECT_EQ(3, counters["decision.path_build_runs.count.0"]);
   // only 1 request shall be processed
   EXPECT_EQ(5, counters["decision.route_build_runs.count.0"]);
@@ -3034,7 +3043,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
       {},
       "");
 
-  auto counters = decision->getCounters();
+  auto counters = getCountersMap();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
 
   sendKvPublication(publication);
@@ -3044,7 +3053,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   std::this_thread::sleep_for(2 * debounceTimeout);
 
   // make sure the counter did not increment
-  counters = decision->getCounters();
+  counters = getCountersMap();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
 }
 
@@ -3069,7 +3078,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
       {},
       "");
 
-  auto counters = decision->getCounters();
+  auto counters = getCountersMap();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
 
   sendKvPublication(publication);
@@ -3079,7 +3088,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   std::this_thread::sleep_for(2 * debounceTimeout);
 
   // make sure counter is incremented
-  counters = decision->getCounters();
+  counters = getCountersMap();
   EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
 
   // Send same publication again to Decision using pub socket
@@ -3090,7 +3099,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   std::this_thread::sleep_for(2 * debounceTimeout);
 
   // make sure counter is not incremented
-  counters = decision->getCounters();
+  counters = getCountersMap();
   EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
 }
 
@@ -3479,7 +3488,6 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   auto routes1 = recvMyRouteDb(decisionPub, "1", serializer);
   EXPECT_EQ(999, routes1.unicastRoutes.size()); // Route to all nodes except
                                                 // mine
-
   //
   // Wait until all pending updates are finished
   //
@@ -3505,7 +3513,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
 
   const int64_t adjUpdateCnt = 1000 /* initial */;
   const int64_t prefixUpdateCnt = totalSent + 1000 /* initial */ + 1 /* end */;
-  auto counters = decision->getCounters();
+  auto counters = getCountersMap();
   EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(adjUpdateCnt, counters["decision.adj_db_update.count.0"]);
   EXPECT_EQ(prefixUpdateCnt, counters["decision.prefix_db_update.count.0"]);
