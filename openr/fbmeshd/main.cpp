@@ -25,6 +25,7 @@
 #include <openr/fbmeshd/MeshServiceHandler.h>
 #include <openr/fbmeshd/SignalHandler.h>
 #include <openr/fbmeshd/common/Constants.h>
+#include <openr/fbmeshd/common/Util.h>
 #include <openr/fbmeshd/gateway-11s-root-route-programmer/Gateway11sRootRouteProgrammer.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/GatewayConnectivityMonitor.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.h>
@@ -115,10 +116,10 @@ DEFINE_string(
     "eth0",
     "The interface that the gateway connectivity monitor runs on");
 DEFINE_string(
-    gateway_connectivity_monitor_address,
+    gateway_connectivity_monitor_addresses,
     "8.8.4.4:443",
-    "The address that the gateway connectivity monitor connects to check "
-    "connectivity (host:port)");
+    "A comma-separated list of addresses that the gateway connectivity monitor "
+    "connects to to check WAN connectivity (host:port)");
 DEFINE_uint32(
     gateway_connectivity_monitor_interval_s,
     1,
@@ -437,14 +438,18 @@ main(int argc, char* argv[]) {
     }));
   }
 
-  folly::SocketAddress gatewayConnectivityMonitorAddress;
-  gatewayConnectivityMonitorAddress.setFromIpPort(
-      FLAGS_gateway_connectivity_monitor_address);
+  auto gatewayConnectivityMonitorAddresses{parseCsvFlag<folly::SocketAddress>(
+      FLAGS_gateway_connectivity_monitor_addresses, [](const std::string& str) {
+        folly::SocketAddress address;
+        address.setFromIpPort(str);
+        return address;
+      })};
+
   GatewayConnectivityMonitor gatewayConnectivityMonitor{
       nlHandler,
       prefixManagerLocalCmdUrl,
       FLAGS_gateway_connectivity_monitor_interface,
-      gatewayConnectivityMonitorAddress,
+      std::move(gatewayConnectivityMonitorAddresses),
       std::chrono::seconds{FLAGS_gateway_connectivity_monitor_interval_s},
       std::chrono::seconds{FLAGS_gateway_connectivity_monitor_socket_timeout_s},
       monitorSubmitUrl,

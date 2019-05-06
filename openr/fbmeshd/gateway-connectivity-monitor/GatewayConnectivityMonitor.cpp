@@ -35,7 +35,7 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
     Nl80211Handler& nlHandler,
     const openr::PrefixManagerLocalCmdUrl& prefixManagerCmdUrl,
     const std::string& monitoredInterface,
-    folly::SocketAddress monitoredAddress,
+    std::vector<folly::SocketAddress> monitoredAddresses,
     std::chrono::seconds monitorInterval,
     std::chrono::seconds monitorSocketTimeout,
     const MonitorSubmitUrl& monitorSubmitUrl,
@@ -59,7 +59,7 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
       nlHandler_{nlHandler},
       prefixManagerClient_{prefixManagerCmdUrl, zmqContext, 3000ms},
       monitoredInterface_{monitoredInterface},
-      monitoredAddress_{monitoredAddress},
+      monitoredAddresses_{monitoredAddresses},
       monitorSocketTimeout_{monitorSocketTimeout},
       robustness_{robustness},
       setRootModeIfGate_{setRootModeIfGate},
@@ -93,17 +93,32 @@ GatewayConnectivityMonitor::probeWanConnectivity() {
   Socket socket;
   Socket::Result result;
 
-  if ((result = socket.connect(
-           monitoredInterface_, monitoredAddress_, monitorSocketTimeout_))
-          .success) {
+  VLOG(8) << "Probing WAN connectivity...";
+  bool connectionSucceeded = false;
+  for (const auto& monitoredAddress : monitoredAddresses_) {
+    if ((result = socket.connect(
+             monitoredInterface_, monitoredAddress, monitorSocketTimeout_))
+            .success) {
+      VLOG(8) << "Successfully connected to " << monitoredAddress;
+      connectionSucceeded = true;
+      break;
+    } else {
+      VLOG(8) << "Failed to connect to " << monitoredAddress;
+    }
+  }
+
+  if (connectionSucceeded) {
+    VLOG(8) << "Probing WAN connectivity succeeded";
     monitorClient_.incrementSumStat(
         "fbmeshd.gateway_connectivity_monitor.probe_wan_connectivity.success");
   } else {
+    VLOG(8) << "Probing WAN connectivity failed";
+    // If all connection attempts failed, report failure mode of the last one
     monitorClient_.incrementSumStat(folly::sformat(
         "fbmeshd.gateway_connectivity_monitor.probe_wan_connectivity.failed.{}",
         result.errorMsg));
   }
-  return result.success;
+  return connectionSucceeded;
 }
 
 void

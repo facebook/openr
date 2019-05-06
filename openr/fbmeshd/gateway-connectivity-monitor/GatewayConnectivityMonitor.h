@@ -29,7 +29,7 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
       Nl80211Handler& nlHandler,
       const PrefixManagerLocalCmdUrl& prefixManagerCmdUrl,
       const std::string& monitoredInterface,
-      folly::SocketAddress monitoredAddress,
+      std::vector<folly::SocketAddress> monitoredAddresses,
       std::chrono::seconds monitorInterval,
       std::chrono::seconds monitorSocketTimeout,
       const MonitorSubmitUrl& monitorSubmitUrl,
@@ -72,7 +72,7 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
   openr::PrefixManagerClient prefixManagerClient_;
 
   const std::string monitoredInterface_;
-  const folly::SocketAddress monitoredAddress_;
+  const std::vector<folly::SocketAddress> monitoredAddresses_;
   const std::chrono::seconds monitorSocketTimeout_;
   const unsigned int robustness_;
   const uint8_t setRootModeIfGate_;
