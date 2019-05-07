@@ -145,6 +145,19 @@ NetlinkFibHandler::toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb) {
       thrift::NextHopThrift nextHop;
       nextHop.address = toBinaryAddress(nh.getGateway().value());
       nextHop.address.ifName = ifName;
+      auto labelAction = nh.getLabelAction();
+      if (labelAction.hasValue()) {
+        if (labelAction.value() == thrift::MplsActionCode::POP_AND_LOOKUP ||
+            labelAction.value() == thrift::MplsActionCode::PHP) {
+          nextHop.mplsAction = createMplsAction(labelAction.value());
+        } else if (labelAction.value() == thrift::MplsActionCode::SWAP) {
+          nextHop.mplsAction =
+              createMplsAction(labelAction.value(), nh.getSwapLabel().value());
+        } else if (labelAction.value() == thrift::MplsActionCode::PUSH) {
+          nextHop.mplsAction = createMplsAction(
+              labelAction.value(), folly::none, nh.getPushLabels().value());
+        }
+      }
       thriftNextHops.emplace_back(std::move(nextHop));
     }
 
