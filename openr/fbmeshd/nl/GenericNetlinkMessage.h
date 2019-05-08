@@ -33,7 +33,7 @@ class GenericNetlinkMessage : public NetlinkMessage {
         NL_AUTO_SEQ,
         static_cast<int>(family),
         0,
-        flags,
+        flags | NLM_F_ACK,
         cmd,
         0);
   }
