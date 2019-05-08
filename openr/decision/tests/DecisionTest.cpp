@@ -611,7 +611,7 @@ TEST(BGPRedistribution, BasicOperation) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1WithBGP));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
 
-  auto routeDb = spfSolver.buildPaths("1");
+  auto routeDb = spfSolver.buildPaths("2");
   thrift::UnicastRoute route1(
       FRAGILE,
       bgpPrefix1,
@@ -645,7 +645,7 @@ TEST(BGPRedistribution, BasicOperation) {
       .metrics[numMetrics - 1]
       .metric.front()--;
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildPaths("2");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
 
@@ -694,14 +694,19 @@ TEST(BGPRedistribution, BasicOperation) {
                   createNextHop(addr2.prefixAddress),
                   createNextHop(addr1.prefixAddress))))));
 
-  // dicsonnect the network, each node will consider it's BGP route the best
+  // dicsonnect the network, each node will consider it's BGP route the best,
+  // and thus not program anything
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(createAdjDb("1", {}, 0)).first);
   EXPECT_THAT(
       spfSolver.buildPaths("1").value().unicastRoutes,
-      testing::Contains(route1));
+      testing::AllOf(
+          testing::Not(testing::Contains(route1)),
+          testing::Not(testing::Contains(route2))));
   EXPECT_THAT(
       spfSolver.buildPaths("2").value().unicastRoutes,
-      testing::Contains(route2));
+      testing::AllOf(
+          testing::Not(testing::Contains(route1)),
+          testing::Not(testing::Contains(route2))));
 }
 
 //
