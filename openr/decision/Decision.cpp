@@ -740,10 +740,35 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     const auto& prefix = kv.first;
     const auto& nodePrefixes = kv.second;
 
-    // TODO Handle not all prefix entries have the same type
-    bool isBGP = nodePrefixes.begin()->second.type == thrift::PrefixType::BGP;
+    bool hasBGP = false, hasNonBGP = false, missingMv = false;
+    for (auto const& npKv : nodePrefixes) {
+      bool isBGP = npKv.second.type == thrift::PrefixType::BGP;
+      hasBGP |= isBGP;
+      hasNonBGP |= !isBGP;
+      if (isBGP and not npKv.second.mv.hasValue()) {
+        missingMv = true;
+        LOG(ERROR) << "Prefix entry for prefix " << toString(npKv.second.prefix)
+                   << " advertised by " << npKv.first
+                   << " is of type BGP but does not contain a metric vector.";
+      }
+    }
+
+    // skip adding route for BGP prefixes that have issues
+    if (hasBGP) {
+      if (hasNonBGP) {
+        LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
+                   << " which is advertised with BGP and non-BGP type.";
+        continue;
+      }
+      if (missingMv) {
+        LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
+                   << " at least one advertiser is missing its metric vector.";
+        continue;
+      }
+    }
+
     // skip adding route for prefixes advertised by this node
-    if (nodePrefixes.count(myNodeName) and not isBGP) {
+    if (nodePrefixes.count(myNodeName) and not hasBGP) {
       continue;
     }
 
@@ -755,7 +780,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       continue;
     }
 
-    auto route = isBGP
+    auto route = hasBGP
         ? createBGPRoute(myNodeName, prefix, nodePrefixes, isV4Prefix)
         : createOpenRRoute(myNodeName, prefix, nodePrefixes, isV4Prefix);
     if (route.hasValue()) {
@@ -897,6 +922,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     auto const& name = kv.first;
     auto const& prefixEntry = kv.second;
     if (!spfResults_.at(myNodeName).count(name)) {
+      LOG(ERROR) << "No path to " << name << ". Skipping considering this.";
       // skip if no path to node
       continue;
     }
