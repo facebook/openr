@@ -164,6 +164,9 @@ class SpfSolver::SpfSolverImpl {
   std::unordered_map<std::string, int64_t> getCounters();
 
   std::unordered_map<std::string, thrift::BinaryAddress> const&
+  getNodeHostLoopbacksV4();
+
+  std::unordered_map<std::string, thrift::BinaryAddress> const&
   getNodeHostLoopbacksV6();
 
   fbzmq::ThreadData&
@@ -189,15 +192,17 @@ class SpfSolver::SpfSolverImpl {
   folly::Optional<thrift::UnicastRoute> createOpenRRoute(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
-      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+      bool const isV4);
   folly::Optional<thrift::UnicastRoute> createBGPRoute(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
-      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+      bool const isV4);
 
   // return a loopback address for each node in the the set
   std::vector<thrift::NextHopThrift> getLoopbackVias(
-      std::unordered_set<std::string> const& nodes);
+      std::unordered_set<std::string> const& nodes, bool const isV4);
 
   // Give source node-name and dstNodeNames, this function returns the set of
   // nexthops (along with LFA if enabled) towards these set of dstNodeNames
@@ -259,6 +264,7 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, thrift::PrefixEntry>>
       prefixes_;
   std::unordered_map<std::string, std::set<thrift::IpPrefix>> nodeToPrefixes_;
+  std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
 
   // track some stats
@@ -528,9 +534,16 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
       nodeList[nodeName] = prefixEntry;
       isUpdated = true;
     }
-    if (thrift::PrefixType::LOOPBACK == prefixEntry.type &&
-        folly::IPAddressV6::bitCount() == prefixEntry.prefix.prefixLength) {
-      nodeHostLoopbacksV6_[nodeName] = prefixEntry.prefix.prefixAddress;
+    if (thrift::PrefixType::LOOPBACK == prefixEntry.type) {
+      auto addrSize = prefixEntry.prefix.prefixAddress.addr.size();
+      if (addrSize == folly::IPAddressV4::byteCount() &&
+          folly::IPAddressV4::bitCount() == prefixEntry.prefix.prefixLength) {
+        nodeHostLoopbacksV4_[nodeName] = prefixEntry.prefix.prefixAddress;
+      }
+      if (addrSize == folly::IPAddressV6::byteCount() &&
+          folly::IPAddressV6::bitCount() == prefixEntry.prefix.prefixLength) {
+        nodeHostLoopbacksV6_[nodeName] = prefixEntry.prefix.prefixAddress;
+      }
     }
   }
 
@@ -564,6 +577,7 @@ SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
   }
 
   nodeToPrefixes_.erase(search);
+  nodeHostLoopbacksV4_.erase(nodeName);
   nodeHostLoopbacksV6_.erase(nodeName);
   return isUpdated;
 }
@@ -580,6 +594,11 @@ SpfSolver::SpfSolverImpl::getPrefixDatabases() {
     prefixDatabases.emplace(kv.first, std::move(prefixDb));
   }
   return prefixDatabases;
+}
+
+std::unordered_map<std::string, thrift::BinaryAddress> const&
+SpfSolver::SpfSolverImpl::getNodeHostLoopbacksV4() {
+  return nodeHostLoopbacksV4_;
 }
 
 std::unordered_map<std::string, thrift::BinaryAddress> const&
@@ -736,8 +755,9 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       continue;
     }
 
-    auto route = isBGP ? createBGPRoute(myNodeName, prefix, nodePrefixes)
-                       : createOpenRRoute(myNodeName, prefix, nodePrefixes);
+    auto route = isBGP
+        ? createBGPRoute(myNodeName, prefix, nodePrefixes, isV4Prefix)
+        : createOpenRRoute(myNodeName, prefix, nodePrefixes, isV4Prefix);
     if (route.hasValue()) {
       routeDb.unicastRoutes.emplace_back(std::move(route.value()));
     }
@@ -831,7 +851,8 @@ folly::Optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::createOpenRRoute(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
-    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+    bool const isV4) {
   // Prepare list of nodes announcing the prefix
   std::set<std::string> prefixNodes;
   for (auto const& nodePrefix : nodePrefixes) {
@@ -856,7 +877,7 @@ SpfSolver::SpfSolverImpl::createOpenRRoute(
       getNextHopsThrift(
           myNodeName,
           prefixNodes,
-          prefix.prefixAddress.addr.size() == folly::IPAddressV4::byteCount(),
+          isV4,
           perDestination,
           metricNhs.first,
           metricNhs.second,
@@ -867,7 +888,8 @@ folly::Optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::createBGPRoute(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
-    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+    bool const isV4) {
   std::unordered_set<std::string> nodes;
   thrift::MetricVector const* bestVector = nullptr;
   std::string const* bestData = nullptr;
@@ -909,21 +931,23 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               prefix,
                               {},
                               thrift::AdminDistance::EBGP,
-                              getLoopbackVias(nodes),
+                              getLoopbackVias(nodes, isV4),
                               thrift::PrefixType::BGP,
                               *bestData};
 }
 
 std::vector<thrift::NextHopThrift>
 SpfSolver::SpfSolverImpl::getLoopbackVias(
-    std::unordered_set<std::string> const& nodes) {
+    std::unordered_set<std::string> const& nodes, bool const isV4) {
   std::vector<thrift::NextHopThrift> result;
   result.reserve(nodes.size());
+  auto const& hostLoopBacks =
+      isV4 ? nodeHostLoopbacksV4_ : nodeHostLoopbacksV6_;
   for (auto const& node : nodes) {
-    if (!nodeHostLoopbacksV6_.count(node)) {
+    if (!hostLoopBacks.count(node)) {
       LOG(ERROR) << "No loopback for node: " << node;
     } else {
-      result.emplace_back(createNextHop(nodeHostLoopbacksV6_.at(node)));
+      result.emplace_back(createNextHop(hostLoopBacks.at(node)));
     }
   }
   return result;
@@ -1221,6 +1245,11 @@ SpfSolver::decrementHolds() {
 std::unordered_map<std::string, int64_t>
 SpfSolver::getCounters() {
   return impl_->getCounters();
+}
+
+std::unordered_map<std::string, thrift::BinaryAddress> const&
+SpfSolver::getNodeHostLoopbacksV4() {
+  return impl_->getNodeHostLoopbacksV4();
 }
 
 std::unordered_map<std::string, thrift::BinaryAddress> const&
