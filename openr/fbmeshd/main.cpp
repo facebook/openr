@@ -198,6 +198,7 @@ DEFINE_uint32(
 DEFINE_bool(
     enable_routing, false, "If set, enables experimental routing module");
 DEFINE_uint32(routing_ttl, 32, "TTL for routing elements");
+DEFINE_int32(routing_tos, 192, "ToS value for routing messages");
 
 DEFINE_bool(
     is_openr_enabled,
@@ -429,7 +430,10 @@ main(int argc, char* argv[]) {
   static constexpr auto routingId{"Routing"};
   if (FLAGS_enable_routing) {
     routing = std::make_unique<Routing>(
-        nlHandler, folly::SocketAddress{"::", 6668}, FLAGS_routing_ttl);
+        nlHandler,
+        folly::SocketAddress{"::", 6668},
+        FLAGS_routing_ttl,
+        FLAGS_routing_tos);
     allThreads.emplace_back(std::thread([&routing]() noexcept {
       LOG(INFO) << "Starting Routing";
       folly::setThreadName(routingId);

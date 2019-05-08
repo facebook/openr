@@ -83,7 +83,8 @@ class Routing : public folly::EventBase,
   explicit Routing(
       Nl80211Handler& nlHandler,
       folly::SocketAddress addr,
-      uint32_t elementTtl);
+      uint32_t elementTtl,
+      int32_t tos);
 
   Routing() = delete;
   ~Routing() override = default;
@@ -158,6 +159,8 @@ class Routing : public folly::EventBase,
   folly::SocketAddress addr_;
 
   uint32_t elementTtl_;
+
+  int32_t tos_;
 
   apache::thrift::CompactSerializer serializer_;
 

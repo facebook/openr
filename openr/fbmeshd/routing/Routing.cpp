@@ -74,12 +74,14 @@ getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
 Routing::Routing(
     openr::fbmeshd::Nl80211Handler& nlHandler,
     folly::SocketAddress addr,
-    uint32_t elementTtl)
+    uint32_t elementTtl,
+    int32_t tos)
     : nlHandler_{nlHandler},
       socket_{this},
       clientSocket_{this},
       addr_{addr},
       elementTtl_{elementTtl},
+      tos_{tos},
       periodicPinger_{this,
                       folly::IPAddressV6{"ff02::1%mesh0"},
                       folly::IPAddressV6{
@@ -111,6 +113,7 @@ void
 Routing::prepare() {
   socket_.bind(addr_);
   clientSocket_.bind(folly::SocketAddress("::", 0));
+  clientSocket_.setTrafficClass(tos_);
   VLOG(4) << "Server listening on " << socket_.address().describe();
 
   socket_.addListener(this, this);
