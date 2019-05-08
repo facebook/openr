@@ -207,7 +207,7 @@ DEFINE_int32(
         openr::thrift::HealthCheckOption::PingNeighborOfNeighbor),
     "Health check scenarios, default set as ping neighbor of neighbor");
 DEFINE_int32(
-    health_check_pct, 50, "Health check pct % of nodes in entire topology");
+    health_check_pct, 0, "Health check pct % of nodes in entire topology");
 DEFINE_bool(
     enable_netlink_fib_handler,
     false,
