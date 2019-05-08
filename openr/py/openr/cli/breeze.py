@@ -28,6 +28,7 @@ from openr.cli.clis import (
     lm,
     monitor,
     perf,
+    plugin,
     prefix_mgr,
     tech_support,
 )
@@ -126,6 +127,7 @@ def get_breeze_cli():
     cli.add_command(perf.PerfCli().perf)
     cli.add_command(prefix_mgr.PrefixMgrCli().prefixmgr)
     cli.add_command(tech_support.TechSupportCli().tech_support)
+    plugin.plugin_start(cli)
     return cli
 
 
