@@ -574,10 +574,12 @@ TEST(BGPRedistribution, BasicOperation) {
   SpfSolver spfSolver(
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
-  auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
+  auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 0);
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
+  auto adjacencyDb3 = createAdjDb("3", {adj31}, 0);
   EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb2).first);
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb3).first);
 
   thrift::PrefixDatabase prefixDb1WithBGP = prefixDb1;
   thrift::PrefixDatabase prefixDb2WithBGP = prefixDb2;
@@ -681,8 +683,13 @@ TEST(BGPRedistribution, BasicOperation) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1WithBGP));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
 
-  routeDb = spfSolver.buildPaths("1");
-  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  // 1 and 2 will not program BGP route
+  EXPECT_THAT(
+      spfSolver.buildPaths("1").value().unicastRoutes, testing::SizeIs(1));
+
+  // 3 will program the BGP route towards both
+  routeDb = spfSolver.buildPaths("3");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(

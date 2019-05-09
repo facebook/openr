@@ -949,9 +949,9 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
       break;
     }
   }
-  if (nodes.empty() or (1 == nodes.size() and nodes.count(myNodeName))) {
-    // do not program a route if we already have the best path to it or there is
-    // no path to it
+  if (nodes.empty() or nodes.count(myNodeName)) {
+    // do not program a route if we are advertising a best path to it or there
+    // is no path to it
     return folly::none;
   }
   CHECK_NOTNULL(bestData);
