@@ -370,7 +370,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
         nodeName, newLink.getMetricFromNode(nodeName), holdUpTtl, holdDownTtl);
     topoChanged |= metricChanged;
 
-    VLOG_IF(metricChanged, 1) << folly::sformat(
+    LOG_IF(INFO, metricChanged) << folly::sformat(
         "Metric change on link {}: {} => {}",
         newLink.directionalToString(nodeName),
         oldLink.getMetricFromNode(nodeName),
@@ -382,7 +382,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
         holdUpTtl,
         holdDownTtl);
     topoChanged |= overloadChanged;
-    VLOG_IF(overloadChanged, 1) << folly::sformat(
+    LOG_IF(INFO, overloadChanged) << folly::sformat(
         "Overload change on link {}: {} => {}",
         newLink.directionalToString(nodeName),
         oldLink.getOverloadFromNode(nodeName),

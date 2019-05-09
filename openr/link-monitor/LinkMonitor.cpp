@@ -549,6 +549,7 @@ LinkMonitor::neighborUpEvent(
       folly::sformat(
           "Neighbor {} is up on interface {}.", remoteNodeName, ifName)
           .c_str());
+  tData_.addStatValue("link_monitor.neighbor_up", 1, fbzmq::SUM);
 
   int64_t weight = 1;
   if (interfaces_.count(ifName)) {
@@ -616,6 +617,7 @@ LinkMonitor::neighborDownEvent(
       folly::sformat(
           "Neighbor {} is down on interface {}.", remoteNodeName, ifName)
           .c_str());
+  tData_.addStatValue("link_monitor.neighbor_down", 1, fbzmq::SUM);
 
   // remove such adjacencies
   adjacencies_.erase(adjId);
