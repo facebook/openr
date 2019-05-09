@@ -6,6 +6,7 @@
  */
 
 #include <syslog.h>
+#include <fstream>
 #include <stdexcept>
 
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
@@ -73,10 +74,27 @@ const PersistentStoreUrl kConfigStoreUrl{"ipc:///tmp/openr_config_store_cmd"};
 
 const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
 
+const std::string inet6Path = "/proc/net/if_inet6";
 } // namespace
 
 // Disable background jemalloc background thread => new jemalloc-5 feature
 const char* malloc_conf = "background_thread:false";
+
+void
+checkIsIpv6Enabled() {
+  // check if file path exists
+  std::ifstream ifs(inet6Path);
+  if (!ifs) {
+    LOG(ERROR) << "File path: " << inet6Path << " doesn't exist!";
+    return;
+  }
+
+  // check file size for if_inet6_path.
+  // zero-size file means IPv6 is NOT enabled globally.
+  if (ifs.peek() == std::ifstream::traits_type::eof()) {
+    LOG(FATAL) << "IPv6 is NOT enabled. Pls check system config!";
+  }
+}
 
 void
 waitForFibService(const fbzmq::ZmqEventLoop& evl) {
@@ -175,6 +193,9 @@ main(int argc, char** argv) {
     LOG(ERROR) << "Failed initializing sodium";
     return 1;
   }
+
+  // Sanity check for IPv6 global environment
+  checkIsIpv6Enabled();
 
   // Sanity checks on Segment Routing labels
   const int32_t maxLabel = Constants::kMaxSrLabel;
