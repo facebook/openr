@@ -23,7 +23,6 @@ class KvStoreCli(object):
         self.kvstore.add_command(PrefixesCli().prefixes)
         self.kvstore.add_command(AdjCli().adj)
         self.kvstore.add_command(FloodCli().flood)
-        self.kvstore.add_command(InterfacesCli().interfaces)
         self.kvstore.add_command(NodesCli().nodes)
         self.kvstore.add_command(KeysCli().keys)
         self.kvstore.add_command(KeyValsCli().keyvals)
@@ -133,29 +132,6 @@ class FloodCli(object):
         if roots is not None:
             roots = roots.split(",")
         kvstore.FloodCmd(cli_opts).run(roots)
-
-
-class InterfacesCli(object):
-    @click.command()
-    @click.option(
-        "--nodes",
-        default="",
-        help="Get interface database of nodes. Default will get "
-        "host's interfaces. Get interfaces for all nodes if "
-        "'all' is give.",
-    )
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.option(
-        "--all/--no-all",
-        default=False,
-        help="Show all links including ones without addresses",
-    )
-    @click.pass_obj
-    def interfaces(cli_opts, nodes, json, all):  # noqa: B902
-        """ dump interface information """
-
-        nodes = parse_nodes(cli_opts, nodes)
-        kvstore.InterfacesCmd(cli_opts).run(nodes, json, all)
 
 
 class KvCompareCli(object):
