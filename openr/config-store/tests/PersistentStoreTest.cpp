@@ -47,7 +47,9 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   // Create new store and perform some operations on it
   //
 
-  store = std::make_unique<PersistentStore>("1", filePath, sockUrl1, context);
+  const std::string inprocSocket{folly::sformat("1-{}", tid)};
+  store = std::make_unique<PersistentStore>(
+      inprocSocket, filePath, sockUrl1, context);
   storeThread = std::make_unique<std::thread>([&]() { store->run(); });
   store->waitUntilRunning();
   client = std::make_unique<PersistentStoreClient>(sockUrl1, context);
