@@ -67,7 +67,9 @@ class KVStore(object):
         return publication
 
     def process_request(self):
-        request = self._kv_store_server_socket.recv_thrift_obj(kv_store_types.Request)
+        request = self._kv_store_server_socket.recv_thrift_obj(
+            kv_store_types.KvStoreRequest
+        )
         options = {
             kv_store_types.Command.KEY_GET: self._get_keys,
             kv_store_types.Command.KEY_DUMP: self._dump_all_with_filter,

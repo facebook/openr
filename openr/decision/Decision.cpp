@@ -1592,7 +1592,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 // perform full dump of all LSDBs and run initial routing computations
 void
 Decision::initialSync(fbzmq::Context& zmqContext) {
-  thrift::Request thriftReq;
+  thrift::KvStoreRequest thriftReq;
 
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> storeReq(zmqContext);
 

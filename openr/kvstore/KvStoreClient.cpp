@@ -125,16 +125,20 @@ KvStoreClient::prepareKvStoreCmdSock() noexcept {
 void
 KvStoreClient::checkPersistKeyInStore() {
   // Prepare request
-  thrift::Request request;
-  request.cmd = thrift::Command::KEY_GET;
+  thrift::KvStoreRequest request;
+  thrift::KeyGetParams params;
 
   if (persistedKeyVals_.empty()) {
     return;
   }
 
   for (auto const& key : persistedKeyVals_) {
-    request.keyGetParams.keys.push_back(key.first);
+    params.keys.push_back(key.first);
   }
+
+  request.cmd = thrift::Command::KEY_GET;
+  request.keyGetParams = params;
+
   // Send request
   prepareKvStoreCmdSock();
   kvStoreCmdSock_->sendThriftObj(request, serializer_);
@@ -356,9 +360,12 @@ KvStoreClient::getKey(std::string const& key) {
   VLOG(3) << "KvStoreClient: getKey called for key " << key;
 
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::KeyGetParams params;
+  params.keys.push_back(key);
+
   request.cmd = thrift::Command::KEY_GET;
-  request.keyGetParams.keys.push_back(key);
+  request.keyGetParams = params;
 
   // Send request
   prepareKvStoreCmdSock();
@@ -388,10 +395,15 @@ KvStoreClient::dumpImpl(
     apache::thrift::CompactSerializer& serializer,
     std::string const& prefix,
     folly::Optional<std::chrono::milliseconds> recvTimeout) {
-  // Send request
-  thrift::Request request;
+  // Prepare request
+  thrift::KvStoreRequest request;
+  thrift::KeyDumpParams params;
+
+  params.prefix = prefix;
   request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams.prefix = prefix;
+  request.keyDumpParams = params;
+
+  // Send request
   sock.sendThriftObj(request, serializer);
 
   // Receive response
@@ -542,9 +554,12 @@ KvStoreClient::addPeers(
   VLOG(3) << "KvStoreClient: addPeers called for " << peers.size() << " peers.";
 
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::PeerAddParams params;
+
+  params.peers = std::move(peers);
   request.cmd = thrift::Command::PEER_ADD;
-  request.peerAddParams.peers = std::move(peers);
+  request.peerAddParams = params;
 
   // Send request
   prepareKvStoreCmdSock();
@@ -559,7 +574,7 @@ KvStoreClient::addPeers(
   }
   auto& reply = *maybeReply;
 
-  if (reply.peers.size() < request.peerAddParams.peers.size()) {
+  if (reply.peers.size() < params.peers.size()) {
     return folly::makeUnexpected(fbzmq::Error(
         0,
         "Failed to submit new peer requests to KvStore, server "
@@ -590,7 +605,7 @@ KvStoreClient::getPeers() {
   VLOG(3) << "KvStoreClient: getPeers called";
 
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::PEER_DUMP;
 
   // Send request
@@ -890,9 +905,12 @@ KvStoreClient::setKeysHelper(
   }
 
   // Build request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::KeySetParams params;
+
+  params.keyVals = std::move(keyVals);
   request.cmd = thrift::Command::KEY_SET;
-  request.keySetParams.keyVals = std::move(keyVals);
+  request.keySetParams = params;
 
   // Send request to KvStore
   prepareKvStoreCmdSock();
@@ -916,9 +934,12 @@ KvStoreClient::setKeysHelper(
 folly::Expected<folly::Unit, fbzmq::Error>
 KvStoreClient::delPeersHelper(const std::vector<std::string>& peerNames) {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::PeerDelParams params;
+
+  params.peerNames = peerNames;
   request.cmd = thrift::Command::PEER_DEL;
-  request.peerDelParams.peerNames = peerNames;
+  request.peerDelParams = params;
 
   // Send request
   prepareKvStoreCmdSock();

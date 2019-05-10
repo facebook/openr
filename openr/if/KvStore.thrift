@@ -167,17 +167,17 @@ struct SptInfos {
 }
 
 //
-// Request specification
+// KvStoreRequest specification
 //
 
 // a request to the server (tagged union)
-struct Request {
+struct KvStoreRequest {
   1: Command cmd
-  2: KeySetParams keySetParams
-  3: KeyGetParams keyGetParams
-  6: KeyDumpParams keyDumpParams
-  4: PeerAddParams peerAddParams
-  5: PeerDelParams peerDelParams
+  2: optional KeySetParams keySetParams
+  3: optional KeyGetParams keyGetParams
+  6: optional KeyDumpParams keyDumpParams
+  4: optional PeerAddParams peerAddParams
+  5: optional PeerDelParams peerDelParams
   9: optional Dual.DualMessages dualMessages
   10: optional FloodTopoSetParams floodTopoSetParams
 }

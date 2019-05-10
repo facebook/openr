@@ -799,20 +799,24 @@ KvStore::requestFullSyncFromPeers() {
     // exception and we will retry again.
     auto const& peerCmdSocketId = peers_.at(peerName).second;
 
-    thrift::Request dumpRequest;
-    dumpRequest.cmd = thrift::Command::KEY_DUMP;
+    // Build request
+    thrift::KvStoreRequest dumpRequest;
+    thrift::KeyDumpParams params;
+
     if (filters_.hasValue()) {
       std::string keyPrefix =
           folly::join(",", filters_.value().getKeyPrefixes());
-      dumpRequest.keyDumpParams.prefix = keyPrefix;
-      dumpRequest.keyDumpParams.originatorIds =
-          filters_.value().getOrigniatorIdList();
+      params.prefix = keyPrefix;
+      params.originatorIds = filters_.value().getOrigniatorIdList();
     }
     std::set<std::string> originator{};
     std::vector<std::string> keyPrefixList{};
     KvStoreFilters kvFilters{keyPrefixList, originator};
-    dumpRequest.keyDumpParams.keyValHashes =
-        std::move(dumpHashWithFilters(kvFilters).keyVals);
+    params.keyValHashes = std::move(dumpHashWithFilters(kvFilters).keyVals);
+
+    dumpRequest.cmd = thrift::Command::KEY_DUMP;
+    dumpRequest.keyDumpParams = params;
+
     VLOG(1) << "Sending full sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
     latestSentPeerSync_.emplace(
@@ -897,10 +901,11 @@ KvStore::updatePublicationTtl(
 // process a request
 folly::Expected<fbzmq::Message, fbzmq::Error>
 KvStore::processRequestMsg(fbzmq::Message&& request) {
-  auto maybeThriftReq = request.readThriftObj<thrift::Request>(serializer_);
+  auto maybeThriftReq =
+      request.readThriftObj<thrift::KvStoreRequest>(serializer_);
 
   if (maybeThriftReq.hasError()) {
-    LOG(ERROR) << "processRequest: failed reading thrift::Request "
+    LOG(ERROR) << "processRequest: failed reading thrift::KvStoreRequest "
                << maybeThriftReq.error();
     return folly::makeUnexpected(fbzmq::Error());
   }
@@ -915,14 +920,21 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
   switch (thriftReq.cmd) {
   case thrift::Command::KEY_SET: {
     VLOG(3) << "Set key requested";
+    if (not thriftReq.keySetParams.has_value()) {
+      LOG(ERROR) << "received none keySetParams";
+      return folly::makeUnexpected(fbzmq::Error());
+    }
+
     tData_.addStatValue("kvstore.cmd_key_set", 1, fbzmq::COUNT);
-    if (thriftReq.keySetParams.keyVals.empty()) {
+
+    auto& ketSetParamsVal = thriftReq.keySetParams.value();
+    if (ketSetParamsVal.keyVals.empty()) {
       LOG(ERROR) << "Malformed set request, ignoring";
       return folly::makeUnexpected(fbzmq::Error());
     }
 
     // Update hash for key-values
-    for (auto& kv : thriftReq.keySetParams.keyVals) {
+    for (auto& kv : ketSetParamsVal.keyVals) {
       auto& value = kv.second;
       if (value.value.hasValue()) {
         value.hash =
@@ -932,47 +944,58 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
 
     // Create publication and merge it with local KvStore
     thrift::Publication rcvdPublication;
-    rcvdPublication.keyVals = std::move(thriftReq.keySetParams.keyVals);
-    rcvdPublication.nodeIds = std::move(thriftReq.keySetParams.nodeIds);
-    rcvdPublication.floodRootId = std::move(thriftReq.keySetParams.floodRootId);
+    rcvdPublication.keyVals = std::move(ketSetParamsVal.keyVals);
+    rcvdPublication.nodeIds = std::move(ketSetParamsVal.nodeIds);
+    rcvdPublication.floodRootId = std::move(ketSetParamsVal.floodRootId);
     mergePublication(rcvdPublication);
 
     // respond to the client
-    if (thriftReq.keySetParams.solicitResponse) {
+    if (ketSetParamsVal.solicitResponse) {
       return fbzmq::Message::from(Constants::kSuccessResponse.toString());
     }
     return fbzmq::Message();
   }
   case thrift::Command::KEY_GET: {
-    VLOG(3) << "Get key-values requested";
+    VLOG(3) << "Get key requested";
+    if (not thriftReq.keyGetParams.has_value()) {
+      LOG(ERROR) << "received none keyGetParams";
+      return folly::makeUnexpected(fbzmq::Error());
+    }
+
     tData_.addStatValue("kvstore.cmd_key_get", 1, fbzmq::COUNT);
 
-    auto thriftPub = getKeyVals(thriftReq.keyGetParams.keys);
+    auto thriftPub = getKeyVals(thriftReq.keyGetParams.value().keys);
     updatePublicationTtl(thriftPub);
     return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
   case thrift::Command::KEY_DUMP: {
-    if (thriftReq.keyDumpParams.keyValHashes.hasValue()) {
+    VLOG(3) << "Dump all keys requested";
+    if (not thriftReq.keyDumpParams.has_value()) {
+      LOG(ERROR) << "received none keyDumpParams";
+      return folly::makeUnexpected(fbzmq::Error());
+    }
+
+    auto& keyDumpParamsVal = thriftReq.keyDumpParams.value();
+    if (keyDumpParamsVal.keyValHashes.hasValue()) {
       VLOG(3) << "Dump keys requested along with "
-              << thriftReq.keyDumpParams.keyValHashes.value().size()
+              << keyDumpParamsVal.keyValHashes.value().size()
               << " keyValHashes item(s) provided from peer";
     } else {
       VLOG(3) << "Dump all keys requested - "
-              << "KeyPrefixes:" << thriftReq.keyDumpParams.prefix
-              << " Originator IDs:"
-              << folly::join(",", thriftReq.keyDumpParams.originatorIds);
+              << "KeyPrefixes:" << keyDumpParamsVal.prefix << " Originator IDs:"
+              << folly::join(",", keyDumpParamsVal.originatorIds);
     }
     // TODO, add per request id counters in thrift server
     tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
 
     std::vector<std::string> keyPrefixList;
-    folly::split(",", thriftReq.keyDumpParams.prefix, keyPrefixList, true);
+    folly::split(",", keyDumpParamsVal.prefix, keyPrefixList, true);
     const auto keyPrefixMatch =
-        KvStoreFilters(keyPrefixList, thriftReq.keyDumpParams.originatorIds);
+        KvStoreFilters(keyPrefixList, keyDumpParamsVal.originatorIds);
     auto thriftPub = dumpAllWithFilters(keyPrefixMatch);
-    if (thriftReq.keyDumpParams.keyValHashes.hasValue()) {
+    if (keyDumpParamsVal.keyValHashes.hasValue()) {
       thriftPub = dumpDifference(
-          thriftPub.keyVals, thriftReq.keyDumpParams.keyValHashes.value());
+          thriftPub.keyVals, keyDumpParamsVal.keyValHashes.value());
     }
     updatePublicationTtl(thriftPub);
     // I'm the initiator, set flood-root-id
@@ -981,10 +1004,17 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
   }
   case thrift::Command::HASH_DUMP: {
     VLOG(3) << "Dump all hashes requested";
+    if (not thriftReq.keyDumpParams.has_value()) {
+      LOG(ERROR) << "received none keyDumpParams";
+      return folly::makeUnexpected(fbzmq::Error());
+    }
+
     tData_.addStatValue("kvstore.cmd_hash_dump", 1, fbzmq::COUNT);
+
     std::set<std::string> originator{};
     std::vector<std::string> keyPrefixList{};
-    folly::split(",", thriftReq.keyDumpParams.prefix, keyPrefixList, true);
+    folly::split(
+        ",", thriftReq.keyDumpParams.value().prefix, keyPrefixList, true);
     KvStoreFilters kvFilters{keyPrefixList, originator};
     auto hashDump = dumpHashWithFilters(kvFilters);
     updatePublicationTtl(hashDump);
@@ -1000,22 +1030,30 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     VLOG(2) << "Peer addition requested";
     tData_.addStatValue("kvstore.cmd_peer_add", 1, fbzmq::COUNT);
 
-    if (thriftReq.peerAddParams.peers.empty()) {
+    if (not thriftReq.peerAddParams.hasValue()) {
+      LOG(ERROR) << "received none peerAddParams";
+      return folly::makeUnexpected(fbzmq::Error());
+    }
+    if (thriftReq.peerAddParams.value().peers.empty()) {
       LOG(ERROR) << "Malformed peer-add request, ignoring";
       return folly::makeUnexpected(fbzmq::Error());
     }
-    addPeers(thriftReq.peerAddParams.peers);
+    addPeers(thriftReq.peerAddParams.value().peers);
     return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
   }
   case thrift::Command::PEER_DEL: {
     VLOG(2) << "Peer deletion requested";
     tData_.addStatValue("kvstore.cmd_per_del", 1, fbzmq::COUNT);
 
-    if (thriftReq.peerDelParams.peerNames.empty()) {
+    if (not thriftReq.peerDelParams.hasValue()) {
+      LOG(ERROR) << "received none peerDelParams";
+      return folly::makeUnexpected(fbzmq::Error());
+    }
+    if (thriftReq.peerDelParams.value().peerNames.empty()) {
       LOG(ERROR) << "Malformed peer-del request, ignoring";
       return folly::makeUnexpected(fbzmq::Error());
     }
-    delPeers(thriftReq.peerDelParams.peerNames);
+    delPeers(thriftReq.peerDelParams.value().peerNames);
     return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
   }
   case thrift::Command::PEER_DUMP: {
@@ -1029,7 +1067,7 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
       LOG(ERROR) << "received none dualMessages";
       return fbzmq::Message(); // ignore it
     }
-    if (thriftReq.dualMessages->messages.empty()) {
+    if (thriftReq.dualMessages.value().messages.empty()) {
       LOG(ERROR) << "received empty dualMessages";
       return fbzmq::Message(); // ignore it
     }
@@ -1143,7 +1181,7 @@ KvStore::processNexthopChange(
         << *newNh;
     CHECK_NE(nodeId_, *newNh) << "new nexthop is myself";
     const auto& dstCmdSocketId = peers_.at(*newNh).second;
-    thrift::Request request;
+    thrift::KvStoreRequest request;
     request.cmd = thrift::Command::FLOOD_TOPO_SET;
 
     thrift::FloodTopoSetParams setParams;
@@ -1185,7 +1223,7 @@ KvStore::processNexthopChange(
     CHECK_NE(nodeId_, *oldNh) << "old nexthop was myself";
     // unset it
     const auto& dstCmdSocketId = peers_.at(*oldNh).second;
-    thrift::Request request;
+    thrift::KvStoreRequest request;
     request.cmd = thrift::Command::FLOOD_TOPO_SET;
 
     thrift::FloodTopoSetParams setParams;
@@ -1467,12 +1505,16 @@ KvStore::finalizeFullSync(
     }
   }
 
-  thrift::Request updateRequest;
-  updateRequest.cmd = thrift::Command::KEY_SET;
-  updateRequest.keySetParams.keyVals = std::move(keyVals);
-  updateRequest.keySetParams.solicitResponse = false;
+  thrift::KvStoreRequest updateRequest;
+  thrift::KeySetParams params;
+
+  params.keyVals = std::move(keyVals);
+  params.solicitResponse = false;
   // I'm the initiator, set flood-root-id
-  updateRequest.keySetParams.floodRootId = DualNode::getSptRootId();
+  params.floodRootId = DualNode::getSptRootId();
+
+  updateRequest.cmd = thrift::Command::KEY_SET;
+  updateRequest.keySetParams = params;
 
   VLOG(1) << "sending finalizeFullSync back to " << senderId;
   auto const ret = peerSyncSock_.sendMultiple(
@@ -1577,14 +1619,18 @@ KvStore::floodPublication(
     publication.floodRootId = DualNode::getSptRootId();
   }
 
-  thrift::Request floodRequest;
-  floodRequest.cmd = thrift::Command::KEY_SET;
-  floodRequest.keySetParams.keyVals = publication.keyVals;
-  floodRequest.keySetParams.solicitResponse = false;
-  floodRequest.keySetParams.nodeIds = publication.nodeIds;
-  floodRequest.keySetParams.floodRootId = publication.floodRootId;
+  thrift::KvStoreRequest floodRequest;
+  thrift::KeySetParams params;
 
-  const auto& floodPeers = getFloodPeers(floodRequest.keySetParams.floodRootId);
+  params.keyVals = publication.keyVals;
+  params.solicitResponse = false;
+  params.nodeIds = publication.nodeIds;
+  params.floodRootId = publication.floodRootId;
+
+  floodRequest.cmd = thrift::Command::KEY_SET;
+  floodRequest.keySetParams = params;
+
+  const auto& floodPeers = getFloodPeers(params.floodRootId);
   for (const auto& peer : floodPeers) {
     if (senderId.hasValue() && senderId.value() == peer) {
       // Do not flood towards senderId from whom we received this publication
@@ -1718,7 +1764,7 @@ KvStore::sendDualMessages(
     return false;
   }
   const auto& neighborCmdSocketId = peers_.at(neighbor).second;
-  thrift::Request dualRequest;
+  thrift::KvStoreRequest dualRequest;
   dualRequest.cmd = thrift::Command::DUAL;
   dualRequest.dualMessages = msgs;
   const auto ret = peerSyncSock_.sendMultiple(

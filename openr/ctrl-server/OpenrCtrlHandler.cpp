@@ -462,9 +462,12 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
 
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::KeyGetParams params;
+
+  params.keys = std::move(*filterKeys);
   request.cmd = thrift::Command::KEY_GET;
-  request.keyGetParams.keys = std::move(*filterKeys);
+  request.keyGetParams = params;
 
   auto reply = requestReplyThrift<thrift::Publication>(
       thrift::OpenrModuleType::KVSTORE, std::move(request));
@@ -482,7 +485,7 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
 
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::KEY_DUMP;
   request.keyDumpParams = std::move(*filter);
 
@@ -502,7 +505,7 @@ OpenrCtrlHandler::semifuture_getKvStoreHashFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
   folly::Promise<std::unique_ptr<thrift::Publication>> p;
 
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::HASH_DUMP;
   request.keyDumpParams = std::move(*filter);
 
@@ -521,7 +524,7 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams) {
   const bool solicitResponse = setParams->solicitResponse;
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::KEY_SET;
   request.keySetParams = std::move(*setParams);
 
@@ -541,7 +544,7 @@ OpenrCtrlHandler::semifuture_setKvStoreKeyValsOneWay(
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_processKvStoreDualMessage(
     std::unique_ptr<thrift::DualMessages> messages) {
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::DUAL;
   request.dualMessages = std::move(*messages);
 
@@ -552,7 +555,7 @@ OpenrCtrlHandler::semifuture_processKvStoreDualMessage(
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_updateFloodTopologyChild(
     std::unique_ptr<thrift::FloodTopoSetParams> params) {
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::FLOOD_TOPO_SET;
   request.floodTopoSetParams = std::move(*params);
 
@@ -564,7 +567,7 @@ folly::SemiFuture<std::unique_ptr<thrift::SptInfo>>
 OpenrCtrlHandler::semifuture_getSpanningTreeInfo() {
   folly::Promise<std::unique_ptr<thrift::SptInfo>> p;
 
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::FLOOD_TOPO_GET;
 
   auto reply = requestReplyThrift<thrift::SptInfo>(
@@ -581,9 +584,12 @@ OpenrCtrlHandler::semifuture_getSpanningTreeInfo() {
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_addUpdateKvStorePeers(
     std::unique_ptr<thrift::PeersMap> peers) {
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::PeerAddParams params;
+
+  params.peers = std::move(*peers);
   request.cmd = thrift::Command::PEER_ADD;
-  request.peerAddParams.peers = std::move(*peers);
+  request.peerAddParams = params;
 
   return processThriftRequest(
       thrift::OpenrModuleType::KVSTORE, std::move(request), false /* oneway */);
@@ -592,9 +598,12 @@ OpenrCtrlHandler::semifuture_addUpdateKvStorePeers(
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_deleteKvStorePeers(
     std::unique_ptr<std::vector<std::string>> peerNames) {
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::PeerDelParams params;
+
+  params.peerNames = std::move(*peerNames);
   request.cmd = thrift::Command::PEER_DEL;
-  request.peerDelParams.peerNames = std::move(*peerNames);
+  request.peerDelParams = params;
 
   return processThriftRequest(
       thrift::OpenrModuleType::KVSTORE, std::move(request), false /* oneway */);
@@ -604,7 +613,7 @@ folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeers() {
   folly::Promise<std::unique_ptr<thrift::PeersMap>> p;
 
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::PEER_DUMP;
 
   auto reply = requestReplyThrift<thrift::PeerCmdReply>(

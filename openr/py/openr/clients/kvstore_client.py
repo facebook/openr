@@ -31,14 +31,14 @@ class KvStoreClient(OpenrClient):
             It gets from local snapshot KeyVals of the kvstore.
         """
 
-        req_msg = kv_store_types.Request(kv_store_types.Command.KEY_GET)
+        req_msg = kv_store_types.KvStoreRequest(kv_store_types.Command.KEY_GET)
         req_msg.keyGetParams = kv_store_types.KeyGetParams(keys)
 
         return self.send_and_recv_thrift_obj(req_msg, kv_store_types.Publication)
 
     def set_key(self, keyVals):
 
-        req_msg = kv_store_types.Request(kv_store_types.Command.KEY_SET)
+        req_msg = kv_store_types.KvStoreRequest(kv_store_types.Command.KEY_SET)
         req_msg.keySetParams = kv_store_types.KeySetParams(keyVals)
 
         return self.send_and_recv_thrift_obj(req_msg, str)
@@ -53,7 +53,7 @@ class KvStoreClient(OpenrClient):
              if prefix is an empty string, the full KV store is dumped
         """
 
-        req_msg = kv_store_types.Request(kv_store_types.Command.KEY_DUMP)
+        req_msg = kv_store_types.KvStoreRequest(kv_store_types.Command.KEY_DUMP)
         req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
         req_msg.keyDumpParams.originatorIds = []
         req_msg.keyDumpParams.keyValHashes = None
@@ -69,7 +69,7 @@ class KvStoreClient(OpenrClient):
              if prefix is an empty string, the full KV hash is dumped
         """
 
-        req_msg = kv_store_types.Request(kv_store_types.Command.HASH_DUMP)
+        req_msg = kv_store_types.KvStoreRequest(kv_store_types.Command.HASH_DUMP)
         req_msg.keyDumpParams = kv_store_types.KeyDumpParams(prefix)
 
         return self.send_and_recv_thrift_obj(req_msg, kv_store_types.Publication)
@@ -79,12 +79,12 @@ class KvStoreClient(OpenrClient):
              if prefix is an empty string, the full KV store is dumped
         """
 
-        req_msg = kv_store_types.Request(kv_store_types.Command.PEER_DUMP)
+        req_msg = kv_store_types.KvStoreRequest(kv_store_types.Command.PEER_DUMP)
         return self.send_and_recv_thrift_obj(req_msg, kv_store_types.PeerCmdReply)
 
     def get_spt_infos(self):
         """ get all spanning tree infos
         """
 
-        req_msg = kv_store_types.Request(kv_store_types.Command.FLOOD_TOPO_GET)
+        req_msg = kv_store_types.KvStoreRequest(kv_store_types.Command.FLOOD_TOPO_GET)
         return self.send_and_recv_thrift_obj(req_msg, kv_store_types.SptInfos)

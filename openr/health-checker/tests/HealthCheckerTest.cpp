@@ -81,7 +81,8 @@ class HealthCheckerTestFixture : public ::testing::Test {
   void
   replyInitialSyncReq(const thrift::Publication& publication) {
     // receive the request for initial routeDb sync
-    auto maybeDumpReq = kvStoreRep.recvThriftObj<thrift::Request>(serializer);
+    auto maybeDumpReq =
+        kvStoreRep.recvThriftObj<thrift::KvStoreRequest>(serializer);
     EXPECT_FALSE(maybeDumpReq.hasError());
     auto dumpReq = maybeDumpReq.value();
     EXPECT_EQ(thrift::Command::KEY_DUMP, dumpReq.cmd);

@@ -2330,10 +2330,13 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
     reqSock.connect(fbzmq::SocketUrl{myStore->localCmdUrl});
 
     // Prepare request
-    thrift::Request request;
+    thrift::KvStoreRequest request;
+    thrift::KeySetParams params;
+
+    params.keyVals.emplace(key2, thriftVal2);
+    params.solicitResponse = false;
     request.cmd = thrift::Command::KEY_SET;
-    request.keySetParams.keyVals.emplace(key2, thriftVal2);
-    request.keySetParams.solicitResponse = false;
+    request.keySetParams = params;
 
     // Make ZMQ call and wait for response
     apache::thrift::CompactSerializer serializer;

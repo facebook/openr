@@ -483,9 +483,13 @@ template <class Serializer>
 std::unordered_map<std::string /* key */, thrift::Value>
 OpenrWrapper<Serializer>::kvStoreDumpAll(std::string const& prefix) {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::KeyDumpParams params;
+
+  params.prefix = prefix;
   request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams.prefix = prefix;
+  request.keyDumpParams = params;
+
   // Make ZMQ call and wait for response
   kvStoreReqSock_.sendThriftObj(request, serializer_).value();
   auto reply =

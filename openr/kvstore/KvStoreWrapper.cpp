@@ -126,11 +126,15 @@ KvStoreWrapper::setKey(
     thrift::Value value,
     folly::Optional<std::vector<std::string>> nodeIds) {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::KeySetParams params;
+
+  params.keyVals.emplace(std::move(key), std::move(value));
+  params.solicitResponse = true;
+  params.nodeIds = std::move(nodeIds);
+
   request.cmd = thrift::Command::KEY_SET;
-  request.keySetParams.keyVals.emplace(std::move(key), std::move(value));
-  request.keySetParams.solicitResponse = true;
-  request.keySetParams.nodeIds = std::move(nodeIds);
+  request.keySetParams = params;
 
   // Make ZMQ call and wait for response
   auto sendStatus = reqSock_.sendThriftObj(request, serializer_);
@@ -153,9 +157,12 @@ KvStoreWrapper::setKey(
 folly::Optional<thrift::Value>
 KvStoreWrapper::getKey(std::string key) {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::KeyGetParams params;
+
+  params.keys.push_back(key);
   request.cmd = thrift::Command::KEY_GET;
-  request.keyGetParams.keys.push_back(key);
+  request.keyGetParams = params;
 
   // Make ZMQ call and wait for response
   reqSock_.sendThriftObj(request, serializer_);
@@ -178,13 +185,18 @@ KvStoreWrapper::getKey(std::string key) {
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::dumpAll(folly::Optional<KvStoreFilters> filters) {
   // Prepare request
-  thrift::Request request;
-  request.cmd = thrift::Command::KEY_DUMP;
+  thrift::KvStoreRequest request;
+  thrift::KeyDumpParams params;
+
   if (filters.hasValue()) {
     std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
-    request.keyDumpParams.prefix = keyPrefix;
-    request.keyDumpParams.originatorIds = filters.value().getOrigniatorIdList();
+    params.prefix = keyPrefix;
+    params.originatorIds = filters.value().getOrigniatorIdList();
   }
+
+  request.cmd = thrift::Command::KEY_DUMP;
+  request.keyDumpParams = params;
+
   // Make ZMQ call and wait for response
   reqSock_.sendThriftObj(request, serializer_);
   auto maybeMsg = reqSock_.recvThriftObj<thrift::Publication>(serializer_);
@@ -201,9 +213,12 @@ KvStoreWrapper::dumpAll(folly::Optional<KvStoreFilters> filters) {
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::dumpHashes(std::string const& prefix) {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::KeyDumpParams params;
+
+  params.prefix = prefix;
   request.cmd = thrift::Command::HASH_DUMP;
-  request.keyDumpParams.prefix = prefix;
+  request.keyDumpParams = params;
 
   // Make ZMQ call and wait for response
   reqSock_.sendThriftObj(request, serializer_);
@@ -221,9 +236,12 @@ KvStoreWrapper::dumpHashes(std::string const& prefix) {
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::syncKeyVals(thrift::KeyVals const& keyValHashes) {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::KeyDumpParams params;
+
+  params.keyValHashes = keyValHashes;
   request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams.keyValHashes = keyValHashes;
+  request.keyDumpParams = params;
 
   // Make ZMQ call and wait for response
   reqSock_.sendThriftObj(request, serializer_);
@@ -252,7 +270,7 @@ KvStoreWrapper::recvPublication(std::chrono::milliseconds timeout) {
 fbzmq::thrift::CounterMap
 KvStoreWrapper::getCounters() {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::COUNTERS_GET;
 
   // Make ZMQ call and wait for response
@@ -269,7 +287,7 @@ KvStoreWrapper::getCounters() {
 thrift::SptInfos
 KvStoreWrapper::getFloodTopo() {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::FLOOD_TOPO_GET;
 
   // Make ZMQ call and wait for response
@@ -285,9 +303,12 @@ KvStoreWrapper::getFloodTopo() {
 bool
 KvStoreWrapper::addPeer(std::string peerName, thrift::PeerSpec spec) {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::PeerAddParams params;
+
+  params.peers.emplace(peerName, spec);
   request.cmd = thrift::Command::PEER_ADD;
-  request.peerAddParams.peers.emplace(peerName, spec);
+  request.peerAddParams = params;
 
   // Make ZMQ call and wait for response
   reqSock_.sendThriftObj(request, serializer_);
@@ -310,9 +331,12 @@ KvStoreWrapper::addPeer(std::string peerName, thrift::PeerSpec spec) {
 bool
 KvStoreWrapper::delPeer(std::string peerName) {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
+  thrift::PeerDelParams params;
+
+  params.peerNames.push_back(peerName);
   request.cmd = thrift::Command::PEER_DEL;
-  request.peerDelParams.peerNames.push_back(peerName);
+  request.peerDelParams = params;
 
   // Make ZMQ call and wait for response
   reqSock_.sendThriftObj(request, serializer_);
@@ -330,7 +354,7 @@ KvStoreWrapper::delPeer(std::string peerName) {
 std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
 KvStoreWrapper::getPeers() {
   // Prepare request
-  thrift::Request request;
+  thrift::KvStoreRequest request;
   request.cmd = thrift::Command::PEER_DUMP;
 
   // Make ZMQ call and wait for response
