@@ -260,7 +260,7 @@ class PathCmd(DecisionCmd):
             return []
         for route in routes:
             if ipnetwork.sprint_prefix(route.dest) == dst_prefix:
-                if len(route.nextHops):
+                if route.nextHops and len(route.nextHops):
                     return [nh.address for nh in route.nextHops]
                 else:
                     return route.deprecatedNexthops
