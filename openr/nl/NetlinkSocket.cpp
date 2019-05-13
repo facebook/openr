@@ -571,7 +571,8 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
         err = static_cast<int>(nlSock_->deleteRoute(iter->second));
       } else {
         err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
-        LOG(ERROR) << "Failed route delete: " << nl_geterror(err);
+        LOG_IF(ERROR, err != 0 && -NLE_OBJ_NOTFOUND != err)
+            << "Failed route delete: " << nl_geterror(err);
       }
       if (0 != err && -NLE_OBJ_NOTFOUND != err) {
         throw fbnl::NlException(folly::sformat(
@@ -589,7 +590,7 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     err = static_cast<int>(nlSock_->addRoute(route));
   } else {
     err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), NLM_F_REPLACE);
-    LOG(ERROR) << "Failed route add: " << nl_geterror(err);
+    LOG_IF(ERROR, err != 0) << "Failed route add: " << nl_geterror(err);
   }
   if (0 != err) {
     throw fbnl::NlException(
@@ -725,7 +726,8 @@ NetlinkSocket::doDeleteUnicastRoute(Route route) {
     err = static_cast<int>(nlSock_->deleteRoute(route));
   } else {
     err = rtnlRouteDelete(reqSock_, route.getRtnlRouteKeyRef(), 0);
-    LOG(ERROR) << "Failed route delete: " << nl_geterror(err);
+    LOG_IF(ERROR, err != 0 && -NLE_OBJ_NOTFOUND != err)
+        << "Failed route delete: " << nl_geterror(err);
   }
   // Mask off NLE_OBJ_NOTFOUND error because Netlink automatically withdraw
   // some routes when interface goes down
@@ -765,7 +767,8 @@ NetlinkSocket::doAddMulticastRoute(Route route) {
     err = static_cast<int>(nlSock_->addRoute(route));
   } else {
     err = rtnlRouteAdd(reqSock_, route.getRtnlRouteRef(), 0);
-    LOG(ERROR) << "Failed multicast route add: " << nl_geterror(err);
+    LOG_IF(ERROR, err != 0)
+        << "Failed multicast route add: " << nl_geterror(err);
   }
   if (err != 0) {
     throw fbnl::NlException(folly::sformat(
@@ -817,7 +820,8 @@ NetlinkSocket::doDeleteMulticastRoute(Route route) {
     err = static_cast<int>(nlSock_->deleteRoute(iter->second));
   } else {
     err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
-    LOG(ERROR) << "Failed multicast route delete: " << nl_geterror(err);
+    LOG_IF(ERROR, err != 0)
+        << "Failed multicast route delete: " << nl_geterror(err);
   }
   if (err != 0) {
     throw fbnl::NlException(folly::sformat(
@@ -923,7 +927,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
       err = static_cast<int>(nlSock_->deleteRoute(iter->second));
     } else {
       err = rtnlRouteDelete(reqSock_, iter->second.getRtnlRouteKeyRef(), 0);
-      LOG(ERROR) << "Failed route delete: " << nl_geterror(err);
+      LOG_IF(ERROR, err != 0) << "Failed route delete: " << nl_geterror(err);
     }
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
@@ -945,7 +949,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     } else {
       err = rtnlRouteAdd(
           reqSock_, routeToAdd.second.getRtnlRouteRef(), NLM_F_REPLACE);
-      LOG(ERROR) << "Failed route add: " << nl_geterror(err);
+      LOG_IF(ERROR, err != 0) << "Failed route add: " << nl_geterror(err);
     }
     if (err != 0) {
       throw fbnl::NlException(folly::sformat(
