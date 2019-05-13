@@ -1053,7 +1053,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
   switch (req.cmd) {
   case thrift::LinkMonitorCommand::SET_OVERLOAD:
     if (config_.isOverloaded) {
-      // node already in overloaded state, do nothing
+      LOG(INFO) << "Skip update. Node already in overloaded state";
       break;
     }
     LOG(INFO) << "Setting overload bit for node.";
@@ -1063,7 +1063,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
 
   case thrift::LinkMonitorCommand::UNSET_OVERLOAD:
     if (not config_.isOverloaded) {
-      // node is not in overloaded state, do nothing
+      LOG(INFO) << "Skip update. Node is currently NOT in overloaded state";
       break;
     }
     LOG(INFO) << "Unsetting overload bit for node.";
@@ -1078,7 +1078,8 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
       break;
     }
     if (config_.overloadedLinks.count(req.interfaceName)) {
-      // interface is already overloaded
+      LOG(INFO) << "Skip link overload update. Interface: " << req.interfaceName
+                << " is already overloaded";
       break;
     }
     LOG(INFO) << "Setting overload bit for interface " << req.interfaceName;
@@ -1105,6 +1106,12 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     if (req.overrideMetric < 1) {
       LOG(ERROR) << "Minimum allowed metric value for link is 1. Can't set "
                  << "a value smaller than that. Got " << req.overrideMetric;
+      break;
+    }
+    if (config_.linkMetricOverrides[req.interfaceName] == req.overrideMetric) {
+      LOG(INFO) << "Skip link metric update. Overridden metric: "
+                << req.overrideMetric
+                << " already set for interface: " << req.interfaceName;
       break;
     }
     LOG(INFO) << "Overriding metric for interface " << req.interfaceName
@@ -1179,12 +1186,19 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     thrift::AdjKey adjKey;
     adjKey.ifName = req.interfaceName;
     adjKey.nodeName = req.adjNodeName.value();
-    config_.adjMetricOverrides[adjKey] = req.overrideMetric;
 
     if (adjacencies_.count(
             std::make_pair(req.adjNodeName.value(), req.interfaceName))) {
+      if (config_.adjMetricOverrides[adjKey] == req.overrideMetric) {
+        LOG(INFO) << "Skip adjacency metric update. Overridden metric: "
+                  << req.overrideMetric
+                  << " already set for adjacency: " << req.adjNodeName.value()
+                  << " " << req.interfaceName;
+        break;
+      }
       LOG(INFO) << "Overriding metric for adjacency " << req.adjNodeName.value()
                 << " " << req.interfaceName << " to " << req.overrideMetric;
+      config_.adjMetricOverrides[adjKey] = req.overrideMetric;
       advertiseAdjacencies(); // TODO: Use throttle here
 
     } else {
