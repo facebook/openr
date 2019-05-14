@@ -63,16 +63,16 @@ DEFINE_int32(
 
 DEFINE_bool(
     enable_mesh_spark,
-    false,
+    true,
     "If set, enables OpenR neighbor discovery using 11s");
 
 DEFINE_bool(
-    userspace_mesh_peering,
+    enable_userspace_mesh_peering,
     true,
     "If set, mesh peering management handshake will be done in userspace");
 
 DEFINE_bool(
-    event_based_peer_selector,
+    enable_event_based_peer_selector,
     false,
     "If set, PeerSelector will use event-based mode instead of polling mode");
 
@@ -310,7 +310,7 @@ main(int argc, char* argv[]) {
   monitorEventLoopWithWatchdog(
       &evl, "fbmeshd_shared_event_loop", watchdog.get());
   AuthsaeCallbackHelpers::init(evl);
-  Nl80211Handler nlHandler{evl, FLAGS_userspace_mesh_peering};
+  Nl80211Handler nlHandler{evl, FLAGS_enable_userspace_mesh_peering};
   SignalHandler signalHandler{evl, nlHandler};
   signalHandler.registerSignalHandler(SIGINT);
   signalHandler.registerSignalHandler(SIGTERM);
@@ -371,11 +371,11 @@ main(int argc, char* argv[]) {
     }));
   }
 
-  PeerSelector peerSelector{
-      evl,
-      nlHandler,
-      rssiThreshold,
-      !(FLAGS_event_based_peer_selector && FLAGS_userspace_mesh_peering)};
+  PeerSelector peerSelector{evl,
+                            nlHandler,
+                            rssiThreshold,
+                            !(FLAGS_enable_event_based_peer_selector &&
+                              FLAGS_enable_userspace_mesh_peering)};
 
   std::unique_ptr<Separa> separa;
   if (meshSpark != nullptr && FLAGS_is_openr_enabled &&

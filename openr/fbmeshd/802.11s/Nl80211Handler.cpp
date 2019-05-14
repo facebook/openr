@@ -83,7 +83,7 @@ DEFINE_uint32(
     mesh_max_peer_links, 32, "Maximum number of allowed 11s peer links");
 DEFINE_uint32(mesh_hwmp_active_path_timeout, 30000, "HWMP Active path timeout");
 DEFINE_uint32(mesh_hwmp_rann_interval, 3000, "HWMP RANN interval");
-DEFINE_uint32(mesh_mtu, 1500, "The MTU value to set for the mesh device");
+DEFINE_uint32(mesh_mtu, 1520, "The MTU value to set for the mesh device");
 
 // Nl80211Handler pointer to be used by authsae for callback forwarding
 Nl80211Handler* Nl80211Handler::globalNlHandler;
