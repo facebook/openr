@@ -170,7 +170,7 @@ class Routing : public folly::EventBase,
    * L3 Routing state
    */
   double const gatewayChangeThresholdFactor_{2};
-  folly::Optional<std::pair<folly::MacAddress, int32_t>> currentGate_;
+  folly::Optional<std::pair<folly::MacAddress, uint32_t>> currentGate_;
   fbzmq::ZmqEventLoop zmqEvl_;
   openr::fbnl::NetlinkSocket netlinkSocket_;
   std::thread zmqEvlThread_;

@@ -80,7 +80,7 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
 
 bool
 GatewayConnectivityMonitor::probeWanConnectivityRobustly() {
-  for (int tryNum{0}; tryNum < robustness_; ++tryNum) {
+  for (size_t tryNum{0}; tryNum < robustness_; ++tryNum) {
     if (probeWanConnectivity()) {
       return true;
     }

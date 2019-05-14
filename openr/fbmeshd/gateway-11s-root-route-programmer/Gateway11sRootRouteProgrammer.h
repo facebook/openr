@@ -47,7 +47,7 @@ class Gateway11sRootRouteProgrammer : public fbzmq::ZmqEventLoop {
 
   openr::fbnl::NetlinkSocket netlinkSocket_;
 
-  folly::Optional<std::pair<folly::MacAddress, int32_t>> currentRoot_;
+  folly::Optional<std::pair<folly::MacAddress, uint32_t>> currentRoot_;
 
   double const gatewayChangeThresholdFactor_;
 

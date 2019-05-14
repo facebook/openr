@@ -71,7 +71,7 @@ void
 Gateway11sRootRouteProgrammer::determineBestRoot() {
   const NetInterface& netif = nlHandler_.lookupMeshNetif();
 
-  folly::Optional<std::pair<folly::MacAddress, int32_t>> bestRoot;
+  folly::Optional<std::pair<folly::MacAddress, uint32_t>> bestRoot;
 
   GenericNetlinkMessage msg{GenericNetlinkFamily::NL80211(),
                             NL80211_CMD_GET_MPATH,

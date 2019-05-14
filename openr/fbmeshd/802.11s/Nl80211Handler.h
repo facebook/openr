@@ -216,5 +216,7 @@ class Nl80211Handler final : public Nl80211HandlerInterface {
   bool userspace_mesh_peering_;
 };
 
+std::ostream& operator<<(std::ostream& out, const Nl80211Handler& nl);
+
 } // namespace fbmeshd
 } // namespace openr

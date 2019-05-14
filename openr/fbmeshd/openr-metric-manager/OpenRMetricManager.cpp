@@ -56,11 +56,7 @@ DEFINE_bool(
     false,
     "True if step-detector should not change metrics after initialization");
 
-DEFINE_int32(
-    step_detector_max_metric,
-    1366,
-    "maximum link metric");
-
+DEFINE_int32(step_detector_max_metric, 1366, "maximum link metric");
 
 using namespace openr::fbmeshd;
 
@@ -209,7 +205,7 @@ OpenRMetricManager::getAvgAirtimeMetric(std::vector<uint32_t>& samples) {
   // the minimum transmission rate used for beacon frames.
   // An exception is when all samples are at max, as this may be caused
   // by a very poor connection that can only send data at minimum rate.
-  auto count = std::count(
+  size_t count = std::count(
       samples.begin(), samples.end(), FLAGS_step_detector_max_metric);
   auto end = samples.end();
   if (count < samples.size()) {
@@ -276,7 +272,8 @@ OpenRMetricManager::submitAvgAirTimeMetrics() {
     // this is to stop reporting metrics after adding N initial
     // samples to the step-detector, where N=step_detector_slow_wnd_size
     if (FLAGS_step_detector_static) {
-      if (numSubmittedMetrics_[peer] > FLAGS_step_detector_slow_wnd_size) {
+      if (numSubmittedMetrics_[peer] >
+          static_cast<uint32_t>(FLAGS_step_detector_slow_wnd_size)) {
         VLOG(3) << peer << " reached slow_wnd_size limit";
         continue;
       } else {

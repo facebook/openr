@@ -50,7 +50,8 @@ class TabularNetlinkAttribute {
 
   explicit TabularNetlinkAttribute(nlattr* nlattrp, const nla_policy* policy)
       : TabularNetlinkAttribute(
-            static_cast<nlattr*>(nla_data(nlattrp)), nla_len(nlattrp)) {}
+            static_cast<nlattr*>(nla_data(nlattrp)), nla_len(nlattrp), policy) {
+  }
 
  public:
   explicit TabularNetlinkAttribute(

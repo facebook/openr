@@ -145,7 +145,7 @@ Routing::doSyncRoutes() {
     const auto kTaygaIfName{"tayga"};
     auto taygaIfIndex = netlinkSocket_.getIfIndex("tayga").get();
 
-    folly::Optional<std::pair<folly::MacAddress, int32_t>> bestGate;
+    folly::Optional<std::pair<folly::MacAddress, uint32_t>> bestGate;
     bool isCurrentGateStillAlive = false;
     for (const auto& mpathIt : meshPaths_) {
       const auto& mpath = mpathIt.second;
@@ -407,7 +407,7 @@ Routing::onDataAvailable(
     std::shared_ptr<folly::AsyncUDPSocket> /* socket */,
     const folly::SocketAddress& client,
     std::unique_ptr<folly::IOBuf> data,
-    bool truncated) noexcept {
+    bool /* truncated */) noexcept {
   auto action = static_cast<MeshPathFrameType>(*data->data());
   data->trimStart(1);
 
@@ -435,10 +435,10 @@ Routing::isStationInTopKGates(folly::MacAddress mac) {
 
   std::sort(ret.begin(), ret.end());
 
-  const auto maxNoGates =
+  const size_t maxNoGates =
       isGate_ ? kMinGatewayRedundancy - 1 : kMinGatewayRedundancy;
 
-  for (auto i{0}; i < maxNoGates && i < ret.size(); i++) {
+  for (size_t i = 0; i < maxNoGates && i < ret.size(); i++) {
     if (ret[i].second == mac) {
       return true;
     }
