@@ -28,6 +28,10 @@ Socket::connect(
     const std::string& interface,
     const folly::SocketAddress& address,
     const std::chrono::seconds& socketTimeout) {
+  if (fd != -1) {
+    return {false, "socket object in use"};
+  }
+
   if ((fd = ::socket(AF_INET, SOCK_STREAM, 0)) == -1) {
     return {false, "socket"};
   }

@@ -90,12 +90,12 @@ GatewayConnectivityMonitor::probeWanConnectivityRobustly() {
 
 bool
 GatewayConnectivityMonitor::probeWanConnectivity() {
-  Socket socket;
   Socket::Result result;
 
   VLOG(8) << "Probing WAN connectivity...";
   bool connectionSucceeded = false;
   for (const auto& monitoredAddress : monitoredAddresses_) {
+    Socket socket;
     if ((result = socket.connect(
              monitoredInterface_, monitoredAddress, monitorSocketTimeout_))
             .success) {
