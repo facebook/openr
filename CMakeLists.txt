@@ -991,3 +991,12 @@ if(BUILD_TESTS)
   )
 
 endif()
+
+#
+# fbmeshd
+#
+
+option(BUILD_FBMESHD "BUILD_FBMESHD" OFF)
+if(BUILD_FBMESHD)
+  include(fbmeshd.cmake)
+endif()
