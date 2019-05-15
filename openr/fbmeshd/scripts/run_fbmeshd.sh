@@ -72,7 +72,15 @@ fi
 #
 # Parse the options into the format that we need for passing to the executable
 #
-mapfile -t FBMESHD_CONFIG_ARGS < <(set -o posix; set | grep '^CONFIG_fbmeshd_' | sed -e 's/^CONFIG_fbmeshd_/--/' | sort)
+mapfile -t FBMESHD_CONFIG_VARS < <(set -o posix; set | grep '^CONFIG_fbmeshd_' | cut -d '=' -f1)
+
+FBMESHD_CONFIG_ARGS=()
+for var in "${FBMESHD_CONFIG_VARS[@]}"
+do
+  FLAG="${var//CONFIG_fbmeshd_/--}"
+  VALUE=$(eval "echo $""$var")
+  FBMESHD_CONFIG_ARGS+=("$FLAG=$VALUE")
+done
 
 #
 # Let the magic begin. Keep the options sorted except for log level \m/
