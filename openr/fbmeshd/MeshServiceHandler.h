@@ -195,6 +195,7 @@ class MeshServiceHandler final : public thrift::MeshServiceSvIf {
                   std::chrono::duration_cast<std::chrono::milliseconds>(
                       it.second.expTime - std::chrono::steady_clock::now())
                       .count())),
+          it.second.nextHopMetric,
           it.second.hopCount,
           it.second.isRoot,
           it.second.isGate,

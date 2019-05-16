@@ -44,6 +44,7 @@ struct MpathEntry {
   3: u64 sn
   4: u32 metric
   5: u64 expTime
+  6: u32 nextHopMetric
   7: u8 hopCount
   8: bool isRoot
   9: bool isGate

@@ -43,6 +43,7 @@ class Routing : public folly::EventBase,
    *	forwarded
    * @sn: target sequence number
    * @metric: current metric to this destination
+   * @nextHopMetric: metric for the next hop link
    * @hopCount: hops to destination
    * @expTime: when the path will expire or when it expired
    * @isRoot: the destination station of this path is a root node
@@ -59,6 +60,7 @@ class Routing : public folly::EventBase,
           nextHop{other.nextHop},
           sn{other.sn},
           metric{other.metric},
+          nextHopMetric{other.nextHopMetric},
           hopCount{other.hopCount},
           expTime{other.expTime},
           isRoot{other.isRoot},
@@ -73,6 +75,7 @@ class Routing : public folly::EventBase,
     folly::MacAddress nextHop{};
     uint64_t sn{0};
     uint32_t metric{0};
+    uint32_t nextHopMetric{0};
     uint8_t hopCount{0};
     std::chrono::steady_clock::time_point expTime{
         std::chrono::steady_clock::now()};

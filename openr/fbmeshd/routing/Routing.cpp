@@ -529,6 +529,7 @@ Routing::hwmpPannFrameProcess(
   mpath.sn = origSn;
   mpath.metric = newMetric;
   mpath.nextHop = sa;
+  mpath.nextHopMetric = lastHopMetric;
   mpath.hopCount = hopCount;
   mpath.isGate = pann.isGate;
   mpath.expTime = std::chrono::steady_clock::now() + activePathTimeout_;
