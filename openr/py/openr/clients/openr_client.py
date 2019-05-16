@@ -32,6 +32,7 @@ class OpenrCtrlClient(OpenrCtrl.Client):
     def __init__(self, host: str, transport: THeaderTransport.THeaderTransport) -> None:
         self.host = host  # Just for accessibility
         self._transport = transport
+        self._transport.add_transform(THeaderTransport.TRANSFORM.ZSTD)
         OpenrCtrl.Client.__init__(
             self, THeaderProtocol.THeaderProtocol(self._transport)
         )
@@ -168,6 +169,7 @@ class OpenrClient(object):
         )
         socket.setTimeout(self.cli_opts.timeout)
         transport = THeaderTransport.THeaderTransport(socket)
+        transport.add_transform(THeaderTransport.TRANSFORM.ZSTD)
         protocol = THeaderProtocol.THeaderProtocol(transport)
 
         transport.open()
@@ -228,7 +230,6 @@ class OpenrClient(object):
                     resp = dealer_client.recv()
                 else:
                     raise e
-
         if thrift_type_to_recv is str:
             return str(resp)
 
