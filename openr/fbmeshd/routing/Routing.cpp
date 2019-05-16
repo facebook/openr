@@ -502,7 +502,17 @@ Routing::hwmpPannFrameProcess(
 
   auto& mpath = getMeshPath(origAddr);
 
-  if (mpath.sn >= origSn && !(mpath.sn == origSn && newMetric < mpath.metric)) {
+  /*
+   * At this point we decide to ignore some PANNs (i.e. return from here):
+   *  - We only ignore PANNs for mpaths that are not expired
+   *  - We ignore PANNs that have an old serial number
+   *  - We also ignore PANNs that are trying to change the nextHop, unless the
+   *    new nextHop has a better metric. This rule prevents route flapping when
+   *    we occasionally lose a PANN.
+   */
+  if (!mpath.expired() &&
+      (mpath.sn > origSn ||
+       (mpath.nextHop != sa && mpath.metric <= newMetric))) {
     VLOG(10) << "discarding PANN - mpath.sn:" << mpath.sn
              << " origSn:" << origSn << " newMetric" << newMetric
              << " mpath.metric" << mpath.metric;
@@ -510,11 +520,6 @@ Routing::hwmpPannFrameProcess(
   }
 
   const auto topKGatesOldHasOrig = isStationInTopKGates(origAddr);
-
-  mpath.sn = origSn;
-  mpath.metric = newMetric;
-  mpath.nextHop = sa;
-  mpath.isGate = pann.isGate;
 
   if (pann.isGate &&
       std::count_if(
@@ -528,6 +533,11 @@ Routing::hwmpPannFrameProcess(
     return;
   }
 
+  mpath.sn = origSn;
+  mpath.metric = newMetric;
+  mpath.nextHop = sa;
+  mpath.hopCount = hopCount;
+  mpath.isGate = pann.isGate;
   mpath.expTime = std::chrono::steady_clock::now() + activePathTimeout_;
 
   if (pann.replyRequested) {
