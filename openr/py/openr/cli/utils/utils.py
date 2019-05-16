@@ -260,15 +260,28 @@ def thrift_to_dict(thrift_inst, update_func=None):
     return gen_dict
 
 
+def metric_vector_to_dict(metric_vector):
+    def _update(metric_vector_dict, metric_vector):
+        metric_vector_dict.update(
+            {"metrics": [thrift_to_dict(m) for m in metric_vector.metrics]}
+        )
+
+    return thrift_to_dict(metric_vector, _update)
+
+
 def prefix_entry_to_dict(prefix_entry):
     """ convert prefixEntry from thrift instance into a dict in strings """
 
     def _update(prefix_entry_dict, prefix_entry):
-        # Only addrs need string conversion so we udpate them
+        # prefix and data need string conversion and metric_vector can be
+        # represented as a dict so we update them
         prefix_entry_dict.update(
             {
                 "prefix": ipnetwork.sprint_prefix(prefix_entry.prefix),
-                "data": prefix_entry.data,
+                "data": str(prefix_entry.data),
+                "mv": metric_vector_to_dict(prefix_entry.mv)
+                if prefix_entry.mv
+                else None,
             }
         )
 
