@@ -63,6 +63,7 @@ using namespace openr::fbmeshd;
 OpenRMetricManager::OpenRMetricManager(
     fbzmq::ZmqEventLoop& zmqLoop,
     openr::fbmeshd::Nl80211Handler* nlHandler,
+    std::unique_ptr<PeerPinger> peerPinger,
     const std::string& ifName,
     const std::string& linkMonitorCmdUrl,
     const openr::MonitorSubmitUrl& monitorSubmitUrl,
@@ -76,6 +77,7 @@ OpenRMetricManager::OpenRMetricManager(
       linkMonitorCmdUrl_{linkMonitorCmdUrl},
       linkMonitorCmdSock_{nullptr},
       zmqMonitorClient_{zmqContext, monitorSubmitUrl} {
+  peerPinger_ = std::move(peerPinger);
   prepareLinkMonitorCmdSocket();
   prepareTimers();
 }
@@ -106,18 +108,28 @@ OpenRMetricManager::prepareTimers() noexcept {
   monitorTimer_->scheduleTimeout(
       openr::Constants::kMonitorSubmitInterval, true);
 
-  // schedule periodic query of airtime metrics
-  getAirtimeMetricsTimer_ = fbzmq::ZmqTimeout::make(
-      &zmqLoop_, [this]() mutable noexcept { getAirtimeMetrics(); });
-  getAirtimeMetricsTimer_->scheduleTimeout(
-      std::chrono::seconds(
-          FLAGS_step_detector_airtime_metric_sample_interval_s),
-      true);
-
-  // schedule periodic submission of averaged airtime metrics to step detectors
-  submitMetricsTimer_ = fbzmq::ZmqTimeout::make(
-      &zmqLoop_, [this]() mutable noexcept { submitAvgAirTimeMetrics(); });
-  submitMetricsTimer_->scheduleTimeout(stepDetectorSubmitInterval_, true);
+  // if peer-pinger is enabled, get ping metrics; otherwise, get 11s metrics
+  if (FLAGS_enable_peer_pinger) {
+    stepDetectorSubmitInterval_ = std::chrono::seconds(FLAGS_ping_interval_s);
+    // schedule periodic query of PeerPinger metrics
+    submitPingMetricsTimer_ = fbzmq::ZmqTimeout::make(
+        &zmqLoop_, [this]() mutable noexcept { submitPingMetrics(); });
+    submitPingMetricsTimer_->scheduleTimeout(
+        std::chrono::seconds(stepDetectorSubmitInterval_), true);
+  } else {
+    // schedule periodic query of airtime metrics
+    getAirtimeMetricsTimer_ = fbzmq::ZmqTimeout::make(
+        &zmqLoop_, [this]() mutable noexcept { getAirtimeMetrics(); });
+    getAirtimeMetricsTimer_->scheduleTimeout(
+        std::chrono::seconds(
+            FLAGS_step_detector_airtime_metric_sample_interval_s),
+        true);
+    // schedule periodic submission of averaged airtime metrics to step
+    // detectors
+    submitMetricsTimer_ = fbzmq::ZmqTimeout::make(
+        &zmqLoop_, [this]() mutable noexcept { submitAvgAirTimeMetrics(); });
+    submitMetricsTimer_->scheduleTimeout(stepDetectorSubmitInterval_, true);
+  }
 }
 
 void
@@ -249,6 +261,16 @@ OpenRMetricManager::updateStepDetectors(
       it++;
     }
   }
+}
+
+void
+OpenRMetricManager::submitPingMetrics() {
+  if (!peerPinger_) {
+    VLOG(2) << "skipping submit-ping-metric cycle. peerPinger_ is null.";
+    return;
+  }
+  auto peerMetrics = peerPinger_->getLinkMetrics();
+  updateStepDetectors(peerMetrics);
 }
 
 void

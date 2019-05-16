@@ -15,6 +15,7 @@
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
+#include <openr/fbmeshd/pinger/PeerPinger.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/kvstore/KvStoreClient.h>
@@ -31,6 +32,7 @@ class OpenRMetricManager final {
   OpenRMetricManager(
       fbzmq::ZmqEventLoop& zmqLoop,
       openr::fbmeshd::Nl80211Handler* nlHandler,
+      std::unique_ptr<PeerPinger> peerPinger,
       const std::string& ifName,
       const std::string& linkMonitorCmdUrl,
       const openr::MonitorSubmitUrl& monitorSubmitUrl,
@@ -81,6 +83,8 @@ class OpenRMetricManager final {
    */
   void submitAvgAirTimeMetrics();
 
+  void submitPingMetrics();
+
   /**
    * create a new step detector with initial metric
    */
@@ -98,17 +102,22 @@ class OpenRMetricManager final {
   // netlink handler used to request metrics from the kernel
   openr::fbmeshd::Nl80211Handler* nlHandler_;
 
+  std::unique_ptr<PeerPinger> peerPinger_;
+
   // the mesh interface name
   const std::string ifName_;
 
   // interval for submitting averaged metrics to step detectors
-  const std::chrono::seconds stepDetectorSubmitInterval_;
+  std::chrono::seconds stepDetectorSubmitInterval_;
 
   // timer for periodic query of airtime metrics
   std::unique_ptr<fbzmq::ZmqTimeout> getAirtimeMetricsTimer_;
 
   // timer for periodic submission of averaged airtime metrics to step detectors
   std::unique_ptr<fbzmq::ZmqTimeout> submitMetricsTimer_;
+
+  // timer for periodic submission of ping metrics to step detectors
+  std::unique_ptr<fbzmq::ZmqTimeout> submitPingMetricsTimer_;
 
   apache::thrift::CompactSerializer serializer_;
 

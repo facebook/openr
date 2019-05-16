@@ -12,6 +12,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/fbmeshd/openr-metric-manager/OpenRMetricManager.h>
+#include <openr/fbmeshd/pinger/PeerPinger.h>
 
 using namespace openr::fbmeshd;
 
@@ -38,8 +39,10 @@ class OpenRMetricManagerTest : public ::testing::Test {
   //
   // TODO: Write a mock class for nlHandler so we can test those functions
   openr::fbmeshd::Nl80211Handler* nlHandler_{nullptr};
+  std::unique_ptr<PeerPinger> peerPinger{nullptr};
   OpenRMetricManager openRMetricManager_{zmqLoop_,
                                          nlHandler_,
+                                         std::move(peerPinger),
                                          "mesh0",
                                          linkMonitorGlobalCmdUrl,
                                          monitorSubmitUrl,

@@ -17,7 +17,10 @@
 
 using namespace openr::fbmeshd;
 
-DEFINE_int32(ping_interval_s, 30, "peer ping interval");
+DEFINE_int32(ping_interval_s, 600, "peer ping interval");
+
+DEFINE_bool(
+    enable_peer_pinger, false, "if set, enables periodic pinging of peers");
 
 PeerPinger::PeerPinger(folly::EventBase* evb, Nl80211Handler& nlHandler)
     : evb_(evb), nlHandler_(nlHandler) {
@@ -119,8 +122,9 @@ PeerPinger::syncPeers() {
 }
 
 void
-PeerPinger::processPingData() {
+PeerPinger::updateLinkMetrics() {
   std::vector<float> data;
+  std::unordered_map<folly::MacAddress, uint32_t> newMetrics;
   for (auto it : pingData_) {
     if (it.second.size() == 0) {
       continue;
@@ -128,14 +132,24 @@ PeerPinger::processPingData() {
     auto peer = it.first;
     data = it.second;
     std::sort(data.begin(), data.end());
+
     // remove the largest 5% data points from avg calculation
     int size = 95 * data.size() / 100;
     VLOG(5) << "data size reduced from " << data.size() << " to " << size;
-    float average =
+    uint32_t average =
         std::accumulate(data.begin(), data.begin() + size - 1, 0.0) / size;
     VLOG(5) << peer << " average ping " << average;
-    linkMetric_[peer] = average;
+    newMetrics[peer] = average;
   }
+  linkMetrics_ = newMetrics;
+}
+
+std::unordered_map<folly::MacAddress, uint32_t>
+PeerPinger::getLinkMetrics() {
+  std::unordered_map<folly::MacAddress, uint32_t> metrics;
+  evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [this, &metrics]() { metrics = linkMetrics_; });
+  return metrics;
 }
 
 void
@@ -143,7 +157,7 @@ PeerPinger::timeoutExpired() noexcept {
   std::chrono::duration<int> pingInterval{FLAGS_ping_interval_s};
   syncPeers();
   if (peers_.size() == 0) {
-    VLOG(1) << "no targets to ping.";
+    VLOG(3) << "no targets to ping.";
     scheduleTimeout(pingInterval);
     return;
   }
@@ -159,7 +173,7 @@ PeerPinger::timeoutExpired() noexcept {
     }
   }
 
-  processPingData();
+  updateLinkMetrics();
 
   // schedule next run for ping
   auto end = std::chrono::steady_clock::now();

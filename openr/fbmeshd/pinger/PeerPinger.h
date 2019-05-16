@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <gflags/gflags.h>
+
 #include <folly/IPAddressV6.h>
 #include <folly/MacAddress.h>
 #include <folly/Subprocess.h>
@@ -15,6 +17,10 @@
 #include <folly/io/async/TimeoutManager.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
+
+DECLARE_bool(enable_peer_pinger);
+
+DECLARE_int32(ping_interval_s);
 
 class PeerPinger : public folly::AsyncTimeout {
   // This class should never be copied; remove default copy/move
@@ -37,22 +43,23 @@ class PeerPinger : public folly::AsyncTimeout {
 
   void timeoutExpired() noexcept override;
 
+  std::unordered_map<folly::MacAddress, uint32_t> getLinkMetrics();
+
  private:
   void pingPeer(const folly::MacAddress& peer);
 
   void parsePingOutput(folly::StringPiece s, folly::MacAddress peer);
 
-  // processes collected ping data by filtering out outliers and calculating
-  // the average ping delay value. This value will be stored as the link metric
-  void processPingData();
+  // update link metrics with the newest ping results
+  void updateLinkMetrics();
 
   std::unordered_set<folly::MacAddress> peers_;
 
   // collected set of ping delay data for each peer
   std::unordered_map<folly::MacAddress, std::vector<float>> pingData_;
 
-  // link metric calculated for each peer
-  std::unordered_map<folly::MacAddress, float> linkMetric_;
+  // latest ping-based link metrics
+  std::unordered_map<folly::MacAddress, uint32_t> linkMetrics_;
 
   folly::EventBase* evb_;
 

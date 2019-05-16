@@ -206,9 +206,6 @@ DEFINE_bool(
     "If set, considers openr to be enabled and enables functionality relating"
     " to openr");
 
-DEFINE_bool(
-    enable_peer_pinger, false, "if set, enables periodic pinging of peers");
-
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
 
@@ -351,24 +348,25 @@ main(int argc, char* argv[]) {
         zmqContext);
   }
 
-  std::unique_ptr<OpenRMetricManager> openRMetricManager;
-  if (FLAGS_enable_openr_metric_manager && FLAGS_is_openr_enabled) {
-    openRMetricManager = std::make_unique<OpenRMetricManager>(
-        evl,
-        &nlHandler,
-        FLAGS_mesh_ifname,
-        linkMonitorGlobalCmdUrl,
-        monitorSubmitUrl,
-        zmqContext);
-  }
-
-  std::unique_ptr<PeerPinger> peerPinger;
+  std::unique_ptr<PeerPinger> peerPinger(nullptr);
   if (FLAGS_enable_peer_pinger) {
     allThreads.emplace_back(std::thread([&peerPinger, &nlHandler]() {
       folly::EventBase evb;
       peerPinger = std::make_unique<PeerPinger>(&evb, nlHandler);
       peerPinger->run();
     }));
+  }
+
+  std::unique_ptr<OpenRMetricManager> openRMetricManager;
+  if (FLAGS_enable_openr_metric_manager && FLAGS_is_openr_enabled) {
+    openRMetricManager = std::make_unique<OpenRMetricManager>(
+        evl,
+        &nlHandler,
+        std::move(peerPinger),
+        FLAGS_mesh_ifname,
+        linkMonitorGlobalCmdUrl,
+        monitorSubmitUrl,
+        zmqContext);
   }
 
   PeerSelector peerSelector{evl,
