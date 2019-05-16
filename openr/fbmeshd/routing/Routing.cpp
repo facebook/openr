@@ -28,6 +28,10 @@ const auto kMeshPathExpire{60s};
 const auto kSyncRoutesInterval{1s};
 const auto kMinGatewayRedundancy{2};
 const auto kPeriodicPingerInterval{10s};
+const auto kMetricManagerInterval{3s};
+const auto kMetricManagerEwmaFactorLog2{7};
+const auto kMetricManagerHysteresisFactorLog2{2};
+const auto kMetricManagerBaseBitrate{60};
 
 void
 meshPathExpire(
@@ -89,6 +93,12 @@ Routing::Routing(
                           nlHandler_.lookupMeshNetif().maybeMacAddress.value()},
                       kPeriodicPingerInterval,
                       "mesh0"},
+      metricManager_{this,
+                     kMetricManagerInterval,
+                     nlHandler_,
+                     kMetricManagerEwmaFactorLog2,
+                     kMetricManagerHysteresisFactorLog2,
+                     kMetricManagerBaseBitrate},
       netlinkSocket_{&zmqEvl_},
       zmqEvlThread_{[this]() {
         folly::setThreadName("Routing Zmq Evl");
@@ -122,7 +132,7 @@ Routing::prepare() {
   doMeshHousekeeping();
 
   periodicPinger_.scheduleTimeout(1s);
-
+  metricManager_.scheduleTimeout(kMetricManagerInterval);
   syncRoutesTimer_->scheduleTimeout(kSyncRoutesInterval);
 }
 
@@ -303,23 +313,6 @@ Routing::getMeshPath(folly::MacAddress addr) {
       .first->second;
 }
 
-uint32_t
-Routing::getAirtimeLinkMetric(const StationInfo& sta) {
-  auto rate = sta.expectedThroughput;
-  if (rate == 0) {
-    return kMaxMetric;
-  }
-
-  /* bitrate is in units of 100 Kbps, while we need rate in units of
-   * 1Mbps. This will be corrected on txTime computation.
-   */
-  rate = 1 + ((rate - 1) / 100);
-  uint32_t txTime{((1 << 8) + 10 * (8192 << 8) / rate)};
-  uint32_t estimatedRetx{((1 << (2 * 8)) / (1 << 8))};
-  uint64_t result{(txTime * estimatedRetx) >> (2 * 8)};
-  return static_cast<uint32_t>(result);
-}
-
 /*
  * Timer callbacks
  */
@@ -468,7 +461,7 @@ Routing::hwmpPannFrameProcess(
   VLOG(10) << "received PANN from " << origAddr << " via neighbour " << sa
            << " target " << targetAddr << " (is_gate=" << pann.isGate << ")";
 
-  const auto& stas = nlHandler_.getStationsInfo();
+  const auto stas = nlHandler_.getStationsInfo();
   const auto sta =
       std::find_if(stas.begin(), stas.end(), [sa](const auto& sta) {
         return sta.macAddress == sa && sta.expectedThroughput != 0;
@@ -493,7 +486,7 @@ Routing::hwmpPannFrameProcess(
     da = targetMpath.nextHop;
   }
 
-  uint32_t lastHopMetric{getAirtimeLinkMetric(*sta)};
+  uint32_t lastHopMetric{metricManager_.getLinkMetric(*sta)};
 
   uint32_t newMetric{origMetric + lastHopMetric};
   if (newMetric < origMetric) {

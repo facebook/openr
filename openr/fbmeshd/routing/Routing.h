@@ -21,6 +21,7 @@
 #include <openr/nl/NetlinkSocket.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
+#include <openr/fbmeshd/routing/MetricManager.h>
 #include <openr/fbmeshd/routing/PeriodicPinger.h>
 
 namespace openr {
@@ -112,7 +113,6 @@ class Routing : public folly::EventBase,
 
   MeshPath& getMeshPath(folly::MacAddress addr);
 
-  uint32_t getAirtimeLinkMetric(const StationInfo& sta);
   /*
    * HWMP Timer callbacks
    */
@@ -165,6 +165,8 @@ class Routing : public folly::EventBase,
   apache::thrift::CompactSerializer serializer_;
 
   PeriodicPinger periodicPinger_;
+
+  MetricManager metricManager_;
 
   /*
    * L3 Routing state
