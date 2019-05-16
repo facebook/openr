@@ -781,7 +781,7 @@ KvStore::delPeers(std::vector<std::string> const& peers) {
 void
 KvStore::requestFullSyncFromPeers() {
   // minimal timeout for next run
-  auto timeout = std::chrono::milliseconds(0);
+  auto timeout = std::chrono::milliseconds(Constants::kMaxBackoff);
 
   // Make requests
   for (auto it = peersToSyncWith_.begin(); it != peersToSyncWith_.end();) {
