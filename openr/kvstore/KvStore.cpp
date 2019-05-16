@@ -630,7 +630,7 @@ KvStore::addPeers(
   for (auto const& kv : peers) {
     auto const& peerName = kv.first;
     auto const& newPeerSpec = kv.second;
-    auto const& newPeerId = folly::sformat(
+    auto const& newPeerCmdId = folly::sformat(
         Constants::kGlobalCmdLocalIdTemplate.toString(),
         peerName,
         peerAddCounter_);
@@ -660,18 +660,19 @@ KvStore::addPeers(
 
         if (peerSpec.cmdUrl != newPeerSpec.cmdUrl) {
           cmdUrlUpdated = true;
-          LOG(INFO) << "Disconnecting from " << peerSpec.cmdUrl;
+          LOG(INFO) << "Disconnecting from " << peerSpec.cmdUrl << " with id "
+                    << it->second.second;
           const auto ret =
               peerSyncSock_.disconnect(fbzmq::SocketUrl{peerSpec.cmdUrl});
           if (ret.hasError()) {
             LOG(FATAL) << "Error Disconnecting to URL '" << peerSpec.cmdUrl
                        << "' " << ret.error();
           }
+          it->second.second = newPeerCmdId;
         }
 
         // Update entry with new data
         it->second.first = newPeerSpec;
-        it->second.second = newPeerId;
       } else {
         LOG(INFO)
             << "Adding new peer " << peerName
@@ -682,7 +683,7 @@ KvStore::addPeers(
         pubUrlUpdated = true;
         cmdUrlUpdated = true;
         std::tie(it, std::ignore) =
-            peers_.emplace(peerName, std::make_pair(newPeerSpec, newPeerId));
+            peers_.emplace(peerName, std::make_pair(newPeerSpec, newPeerCmdId));
       }
 
       if (legacyFlooding_ && pubUrlUpdated) {
@@ -695,12 +696,14 @@ KvStore::addPeers(
       }
 
       if (cmdUrlUpdated) {
-        LOG(INFO) << "Connecting sync channel to " << newPeerSpec.cmdUrl;
+        CHECK(newPeerCmdId == it->second.second);
+        LOG(INFO) << "Connecting sync channel to " << newPeerSpec.cmdUrl
+                  << " with id " << newPeerCmdId;
         auto const optStatus = peerSyncSock_.setSockOpt(
-            ZMQ_CONNECT_RID, newPeerId.data(), newPeerId.size());
+            ZMQ_CONNECT_RID, newPeerCmdId.data(), newPeerCmdId.size());
         if (optStatus.hasError()) {
           LOG(FATAL) << "Error setting ZMQ_CONNECT_RID with value "
-                     << newPeerId;
+                     << newPeerCmdId;
         }
         if (peerSyncSock_.connect(fbzmq::SocketUrl{newPeerSpec.cmdUrl})
                 .hasError()) {

@@ -1123,12 +1123,15 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
  * Test to verify PEER_ADD/PEER_DEL and verify that keys are synchronized
  * to the neighbor.
  * 1. Start store0, store1 and store2
- * 2. Add store1 and store2 to store2
+ * 2. Add store1 and store2 to store0
  * 3. Advertise keys in store1 and store2
  * 4. Verify that they appear in store0
- * 5. Verify PEER_DEL API
+ * 5. Update store1 peer definitions in store0
+ * 6. Update keys in store1
+ * 7. Verify that they appear in store0 (can only happen via full-sync)
+ * 8. Verify PEER_DEL API
  */
-TEST_F(KvStoreTestFixture, PeerAddRemove) {
+TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
   auto store0 = createKvStore("store0", emptyPeers);
@@ -1189,6 +1192,31 @@ TEST_F(KvStoreTestFixture, PeerAddRemove) {
 
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0...";
+  pub = store0->recvPublication(kTimeout);
+  EXPECT_EQ(1, pub.keyVals.size());
+  EXPECT_EQ(thriftVal, pub.keyVals["test"]);
+
+  // Update store1 with same peer spec
+  EXPECT_TRUE(store0->addPeer(store1->nodeId, store1->getPeerSpec()));
+  EXPECT_EQ(expectedPeers, store0->getPeers());
+
+  // Update key
+  // Set key into store1 and make sure it appears in store0
+  LOG(INFO) << "Updating value in store1 again ...";
+  thriftVal = thrift::Value(
+      apache::thrift::FRAGILE,
+      3 /* version */,
+      "1.2.3.4" /* originatorId */,
+      "value3" /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  EXPECT_TRUE(store1->setKey("test", thriftVal));
+  // Update hash
+  thriftVal.hash =
+      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  // Receive publication from store0 for new key-update
+  LOG(INFO) << "Waiting for message from store0 on pub socket ...";
   pub = store0->recvPublication(kTimeout);
   EXPECT_EQ(1, pub.keyVals.size());
   EXPECT_EQ(thriftVal, pub.keyVals["test"]);
