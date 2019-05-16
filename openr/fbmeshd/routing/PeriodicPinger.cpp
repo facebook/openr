@@ -32,15 +32,6 @@ PeriodicPinger::timeoutExpired() noexcept {
   auto sock = ::socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
   CHECK_NE(sock, -1);
 
-  CHECK_EQ(
-      ::setsockopt(
-          sock,
-          SOL_SOCKET,
-          SO_BINDTODEVICE,
-          interface_.c_str(),
-          interface_.size()),
-      0);
-
   icmp6_hdr icmpHeader;
   icmpHeader.icmp6_type = ICMP6_ECHO_REQUEST;
   icmpHeader.icmp6_code = 0;
