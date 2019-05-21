@@ -12,13 +12,13 @@ from builtins import object, str
 from typing import Dict, List, Optional
 
 import zmq
-from openr.clients.openr_client import OpenrClient
+from openr.clients.openr_client import OpenrClientDeprecated
 from openr.KvStore import ttypes as kv_store_types
 from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.utils import consts, serializer, zmq_socket
 
 
-class KvStoreClient(OpenrClient):
+class KvStoreClient(OpenrClientDeprecated):
     def __init__(self, cli_opts, host=None):
         host = host if host else cli_opts.host
         zmq_endpoint = "tcp://[{}]:{}".format(host, cli_opts.kv_rep_port)

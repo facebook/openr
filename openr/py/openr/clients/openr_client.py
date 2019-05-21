@@ -117,7 +117,7 @@ def get_openr_ctrl_client(
         )
 
 
-class OpenrClient(object):
+class OpenrClientDeprecated(object):
     """
     DEPRECATED - Use OpenrCtrlSecureClient or OpenrCtrlPlainTextClient
     """

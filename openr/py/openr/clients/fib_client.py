@@ -11,13 +11,13 @@
 from builtins import object
 
 import zmq
-from openr.clients.openr_client import OpenrClient
+from openr.clients.openr_client import OpenrClientDeprecated
 from openr.Fib import ttypes as fib_types
 from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.utils import consts, zmq_socket
 
 
-class FibClient(OpenrClient):
+class FibClient(OpenrClientDeprecated):
     def __init__(self, cli_opts):
         super(FibClient, self).__init__(
             OpenrModuleType.FIB,

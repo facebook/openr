@@ -11,13 +11,13 @@
 from builtins import object
 
 import zmq
-from openr.clients.openr_client import OpenrClient
+from openr.clients.openr_client import OpenrClientDeprecated
 from openr.LinkMonitor import ttypes as lm_types
 from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.utils import consts, zmq_socket
 
 
-class LMClient(OpenrClient):
+class LMClient(OpenrClientDeprecated):
     def __init__(self, cli_opts):
         super(LMClient, self).__init__(
             OpenrModuleType.LINK_MONITOR,

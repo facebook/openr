@@ -8,7 +8,7 @@
 #
 
 
-from openr.clients.openr_client import OpenrClient
+from openr.clients.openr_client import OpenrClientDeprecated
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl.ttypes import OpenrModuleType
@@ -16,7 +16,7 @@ from openr.PrefixManager import ttypes as prefix_mgr_types
 from openr.utils import ipnetwork
 
 
-class PrefixMgrClient(OpenrClient):
+class PrefixMgrClient(OpenrClientDeprecated):
     def __init__(self, cli_opts):
         super(PrefixMgrClient, self).__init__(
             OpenrModuleType.PREFIX_MANAGER,

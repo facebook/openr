@@ -11,13 +11,13 @@
 from builtins import object
 
 import zmq
-from openr.clients.openr_client import OpenrClient
+from openr.clients.openr_client import OpenrClientDeprecated
 from openr.Decision import ttypes as decision_types
 from openr.OpenrCtrl.ttypes import OpenrModuleType
 from openr.utils import consts, zmq_socket
 
 
-class DecisionClient(OpenrClient):
+class DecisionClient(OpenrClientDeprecated):
     def __init__(self, cli_opts):
         super(DecisionClient, self).__init__(
             OpenrModuleType.DECISION,
