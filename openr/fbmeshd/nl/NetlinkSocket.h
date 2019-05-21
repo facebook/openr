@@ -34,6 +34,12 @@ class NetlinkSocket {
   }
 
   void
+  connect(int protocol) {
+    int err = nl_connect(sock_, protocol);
+    CHECK_EQ(err, 0) << nl_geterror(err);
+  }
+
+  void
   sendAndReceive(
       const NetlinkMessageType& msg,
       const std::function<int(const NetlinkMessageType&)>& cbValid) const {
