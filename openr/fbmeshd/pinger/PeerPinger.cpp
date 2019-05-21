@@ -22,6 +22,10 @@ DEFINE_int32(ping_interval_s, 600, "peer ping interval");
 DEFINE_bool(
     enable_peer_pinger, false, "if set, enables periodic pinging of peers");
 
+DEFINE_int32(ping_count, 50, "ping count");
+
+DEFINE_int32(ping_packet_size, 1024, "ping packet size");
+
 PeerPinger::PeerPinger(folly::EventBase* evb, Nl80211Handler& nlHandler)
     : evb_(evb), nlHandler_(nlHandler) {
   LOG(INFO) << "PeerPinger created";
@@ -67,9 +71,12 @@ PeerPinger::parsePingOutput(folly::StringPiece line, folly::MacAddress peer) {
 
 void
 PeerPinger::pingPeer(const folly::MacAddress& peer) {
-  std::string cmd = "ping6 ";
   folly::IPAddressV6 ipv6(folly::IPAddressV6::LINK_LOCAL, peer);
-  cmd = cmd + ipv6.str() + "%mesh0 -i 0.1 -c 50 -n -s 1024";
+  auto cmd = folly::sformat(
+      "ping6 {}%mesh0 -i 0.1 -c {} -n -s {}",
+      ipv6.str(),
+      FLAGS_ping_count,
+      FLAGS_ping_packet_size);
 
   folly::Subprocess proc(cmd, folly::Subprocess::Options().pipeStdout());
 
