@@ -195,6 +195,7 @@ class Routing : public folly::EventBase,
   bool isRoot_{false};
   std::chrono::milliseconds rootPannInterval_{5000};
   bool isGate_{false};
+  bool isGateBeforeRouteSync_{false};
 
   /*
    * Path state

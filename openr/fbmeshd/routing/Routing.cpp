@@ -222,7 +222,43 @@ Routing::doSyncRoutes() {
       VLOG(10) << "No current gate found";
     }
 
-    auto destination = std::make_pair<folly::IPAddress, uint8_t>(
+    auto destination =
+        folly::CIDRNetwork{getTaygaIPV6FromMacAddress(meshMacAddress), 128};
+    linkRouteDb.emplace(
+        std::make_pair(destination, kTaygaIfName),
+        fbnl::RouteBuilder{}
+            .setDestination(destination)
+            .setProtocolId(98)
+            .setRouteIfIndex(taygaIfIndex)
+            .setRouteIfName(kTaygaIfName)
+            .buildLinkRoute());
+
+    destination = folly::CIDRNetwork{folly::IPAddressV4{"172.16.0.0"}, 16};
+    linkRouteDb.emplace(
+        std::make_pair(destination, kTaygaIfName),
+        fbnl::RouteBuilder{}
+            .setDestination(destination)
+            .setProtocolId(98)
+            .setRouteIfIndex(taygaIfIndex)
+            .setRouteIfName(kTaygaIfName)
+            .buildLinkRoute());
+
+    mesh0Addrs.push_back(
+        fbnl::IfAddressBuilder{}
+            .setPrefix(folly::CIDRNetwork{
+                getMesh0IPV6FromMacAddress(meshMacAddress), 64})
+            .setIfIndex(meshIfIndex)
+            .build());
+
+    netlinkSocket_.syncIfAddress(
+        meshIfIndex, mesh0Addrs, AF_INET6, RT_SCOPE_UNIVERSE);
+
+    if (isGateBeforeRouteSync_ != isGate_) {
+      netlinkSocket_.syncUnicastRoutes(98, std::move(unicastRouteDb)).get();
+      netlinkSocket_.syncLinkRoutes(98, std::move(linkRouteDb)).get();
+    }
+
+    destination = std::make_pair<folly::IPAddress, uint8_t>(
         folly::IPAddressV6{"fd00:ffff::"}, 96);
 
     if (isGate_) {
@@ -263,37 +299,8 @@ Routing::doSyncRoutes() {
                               .build())
               .build());
     }
+    isGateBeforeRouteSync_ = isGate_;
 
-    destination =
-        folly::CIDRNetwork{getTaygaIPV6FromMacAddress(meshMacAddress), 128};
-    linkRouteDb.emplace(
-        std::make_pair(destination, kTaygaIfName),
-        fbnl::RouteBuilder{}
-            .setDestination(destination)
-            .setProtocolId(98)
-            .setRouteIfIndex(taygaIfIndex)
-            .setRouteIfName(kTaygaIfName)
-            .buildLinkRoute());
-
-    destination = folly::CIDRNetwork{folly::IPAddressV4{"172.16.0.0"}, 16};
-    linkRouteDb.emplace(
-        std::make_pair(destination, kTaygaIfName),
-        fbnl::RouteBuilder{}
-            .setDestination(destination)
-            .setProtocolId(98)
-            .setRouteIfIndex(taygaIfIndex)
-            .setRouteIfName(kTaygaIfName)
-            .buildLinkRoute());
-
-    mesh0Addrs.push_back(
-        fbnl::IfAddressBuilder{}
-            .setPrefix(folly::CIDRNetwork{
-                getMesh0IPV6FromMacAddress(meshMacAddress), 64})
-            .setIfIndex(meshIfIndex)
-            .build());
-
-    netlinkSocket_.syncIfAddress(
-        meshIfIndex, mesh0Addrs, AF_INET6, RT_SCOPE_UNIVERSE);
     netlinkSocket_.syncUnicastRoutes(98, std::move(unicastRouteDb)).get();
     netlinkSocket_.syncLinkRoutes(98, std::move(linkRouteDb)).get();
   });
