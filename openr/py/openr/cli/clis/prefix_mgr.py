@@ -9,6 +9,7 @@
 
 
 from builtins import object
+from typing import List
 
 import click
 from openr.cli.commands import prefix_mgr
@@ -33,11 +34,17 @@ class PrefixMgrCli(object):
 class WithdrawCli(object):
     @click.command()
     @click.argument("prefixes", nargs=-1)
+    @click.option(
+        "--prefix-type",
+        "-t",
+        default="BREEZE",
+        help="Type or client-ID associated with prefix.",
+    )
     @click.pass_obj
-    def withdraw(cli_opts, prefixes):  # noqa: B902
+    def withdraw(cli_opts, prefixes: List[str], prefix_type: str):  # noqa: B902
         """ Withdraw the prefixes being advertised from this node """
 
-        prefix_mgr.WithdrawCmd(cli_opts).run(prefixes)
+        prefix_mgr.WithdrawCmd(cli_opts).run(prefixes, prefix_type)
 
 
 class AdvertiseCli(object):
