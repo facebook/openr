@@ -166,11 +166,18 @@ class LinkMonitor final : public OpenrEventLoop {
   // return true if sync is successful
   bool syncInterfaces();
 
-  // derive peer-spec info from current adjacencies_
-  // handle peer changes e.g remove/add peers if any
-  void advertiseKvStorePeers();
+  // derive current peer-spec info from current adjacencies_
+  // calculate delta and announce them to KvStore (peer add/remove) if any
+  //
+  // upPeers: a set of peers we just detected them UP.
+  // this covers the case where peer restarted, but we didn't detect restarting
+  // spark packet (e.g peer non-graceful-shutdown or all spark messages lost)
+  // in this case, the above delta will miss these peers, advertise them
+  // if peer-spec matches
+  void advertiseKvStorePeers(
+      const std::unordered_map<std::string, thrift::PeerSpec>& upPeers = {});
 
-  // Advertise my report-adjacencies_ to the KvStore
+  // Advertise my adjacencies_ to the KvStore
   void advertiseAdjacencies();
 
   // Advertise interfaces and addresses to Spark/Fib and PrefixManager

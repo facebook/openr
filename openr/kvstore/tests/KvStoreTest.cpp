@@ -1707,6 +1707,27 @@ TEST_F(KvStoreTestFixture, DualTest) {
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
   validateAllRootsUpCase();
+
+  // case6. mimic r0 non-graceful shutdown and restart
+  // bring r0 down non-gracefully
+  r0->delPeer("n0");
+  r0->delPeer("n1");
+  // NOTE: n0, n1 will NOT receive delPeer() command
+
+  // wait 1 sec for r0 comes back up
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  // bring r0 back up
+  EXPECT_TRUE(r0->addPeer(n0->nodeId, n0->getPeerSpec()));
+  EXPECT_TRUE(r0->addPeer(n1->nodeId, n1->getPeerSpec()));
+  EXPECT_TRUE(n0->addPeer(r0->nodeId, r0->getPeerSpec()));
+  EXPECT_TRUE(n1->addPeer(r0->nodeId, r0->getPeerSpec()));
+
+  // let kvstore dual sync
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  validateAllRootsUpCase();
 }
 
 /**

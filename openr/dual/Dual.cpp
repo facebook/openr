@@ -132,6 +132,9 @@ Dual::routeAffected() {
     }
   }
 
+  // nexthop MUST has value, if it's none, it will be handled in
+  // above "distance changed" or "no valid route found" cases
+  CHECK(info_.nexthop.hasValue());
   if (nexthops.count(*info_.nexthop) == 0) {
     // nextHop changed
     auto oldnh = info_.nexthop.hasValue() ? *info_.nexthop : "none";
@@ -278,8 +281,9 @@ Dual::tryLocalOrDiffusing(
     bool success = diffusingComputation(msgsToSend);
     if (success) {
       info_.sm.processEvent(event, false);
-    } else {
-      // can't send even one query out -> my current successor is down
+    }
+    if (info_.nexthop.hasValue() and not neighborUp(*info_.nexthop)) {
+      // current successor is down
       if (nexthopCb_) {
         nexthopCb_(info_.nexthop, folly::none);
       }
@@ -402,6 +406,17 @@ Dual::peerUp(
   LOG(INFO) << rootId << "::" << nodeId << ": LINK UP event from (" << neighbor
             << ", " << cost << ")";
 
+  // reset parent, if I chose this neighbor as parent before, but I didn't
+  // receive peer-down event(non-graceful shutdown), reset nexthop and distance
+  // as-if we received peer-down event before.
+  if (info_.nexthop.hasValue() and *info_.nexthop == neighbor) {
+    if (nexthopCb_) {
+      nexthopCb_(info_.nexthop, folly::none);
+    }
+    info_.nexthop = folly::none;
+    info_.distance = std::numeric_limits<int64_t>::max();
+  }
+
   // update local-distance
   localDistances_[neighbor] = cost;
   info_.neighborInfos.emplace(neighbor, NeighborInfo());
@@ -417,7 +432,7 @@ Dual::peerUp(
 
       thrift::DualMessage msg;
       msg.dstId = rootId;
-      msg.distance = info_.reportDistance;
+      msg.distance = info_.neighborInfos[neighbor].reportDistance;
       msg.type = thrift::DualMessageType::REPLY;
       processReply(neighbor, msg, msgsToSend);
     }
@@ -456,6 +471,9 @@ Dual::peerDown(
             << neighbor;
   // clear counters
   clearCounters(neighbor);
+
+  // remove child
+  removeChild(neighbor);
 
   // update local-distance and report-distance
   localDistances_[neighbor] = std::numeric_limits<int64_t>::max();
@@ -727,7 +745,6 @@ DualNode::peerDown(const std::string& neighbor) {
 
   for (auto& kv : duals_) {
     kv.second.peerDown(neighbor, msgsToSend);
-    kv.second.removeChild(neighbor);
   }
 
   sendAllDualMessages(msgsToSend);

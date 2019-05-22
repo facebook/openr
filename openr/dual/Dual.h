@@ -332,13 +332,13 @@ class DualNode {
       const folly::Optional<std::string>& oldNh,
       const folly::Optional<std::string>& newNh) noexcept = 0;
 
-  // link up from neighbor at link-metric cost
+  // peer up from neighbor at link-metric cost
   void peerUp(const std::string& neighbor, int64_t cost);
 
-  // link down from neighbor
+  // peer down from neighbor
   void peerDown(const std::string& neighbor);
 
-  // link cost change from neighbor
+  // peer cost change from neighbor
   void peerCostChange(const std::string& neighbor, int64_t cost);
 
   // process dual messages

@@ -640,12 +640,19 @@ KvStore::addPeers(
       auto it = peers_.find(peerName);
       bool pubUrlUpdated{false};
       bool cmdUrlUpdated{false};
+      bool isNewPeer{false};
+
+      // add dual peers for both new-peer or update-peer event
+      if (supportFloodOptimization) {
+        dualPeersToAdd.emplace_back(peerName);
+      }
 
       if (it != peers_.end()) {
         LOG(INFO)
             << "Updating existing peer " << peerName
             << ", support-flood-optimization: " << supportFloodOptimization;
-        auto& peerSpec = it->second.first;
+
+        const auto& peerSpec = it->second.first;
 
         if (legacyFlooding_ && peerSpec.pubUrl != newPeerSpec.pubUrl) {
           pubUrlUpdated = true;
@@ -659,6 +666,7 @@ KvStore::addPeers(
         }
 
         if (peerSpec.cmdUrl != newPeerSpec.cmdUrl) {
+          // case1: peer-spec updated (e.g parallel cases)
           cmdUrlUpdated = true;
           LOG(INFO) << "Disconnecting from " << peerSpec.cmdUrl << " with id "
                     << it->second.second;
@@ -669,17 +677,20 @@ KvStore::addPeers(
                        << "' " << ret.error();
           }
           it->second.second = newPeerCmdId;
+        } else {
+          // case2. new peer came up (previsously shut down ungracefully)
+          LOG(WARNING) << "new peer " << peerName << ", previously "
+                       << "shutdown non-gracefully";
+          isNewPeer = true;
         }
-
         // Update entry with new data
         it->second.first = newPeerSpec;
       } else {
+        // case3. new peer came up
         LOG(INFO)
             << "Adding new peer " << peerName
             << ", support-flood-optimization: " << supportFloodOptimization;
-        if (supportFloodOptimization) {
-          dualPeersToAdd.emplace_back(peerName);
-        }
+        isNewPeer = true;
         pubUrlUpdated = true;
         cmdUrlUpdated = true;
         std::tie(it, std::ignore) =
@@ -712,6 +723,15 @@ KvStore::addPeers(
         }
       }
 
+      if (isNewPeer) {
+        if (supportFloodOptimization) {
+          // make sure let peer to unset-child for me for all roots first
+          // after that, I'll be fed with proper dual-events and I'll be
+          // chosing new nexthop if need.
+          unsetChildAll(peerName);
+        }
+      }
+
       // Enqueue for full dump requests
       LOG(INFO) << "Enqueuing full dump request for peer " << peerName;
       peersToSyncWith_.emplace(
@@ -725,7 +745,7 @@ KvStore::addPeers(
   }
   fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
 
-  // add dual peers if any
+  // process dual events if any
   if (enableFloodOptimization_) {
     for (const auto& peer : dualPeersToAdd) {
       LOG(INFO) << "dual peer up: " << peer;
@@ -1127,6 +1147,16 @@ KvStore::processFloodTopoGet() noexcept {
 void
 KvStore::processFloodTopoSet(
     const thrift::FloodTopoSetParams& setParams) noexcept {
+  if (setParams.allRoots.hasValue() and *setParams.allRoots and
+      not setParams.setChild) {
+    // process unset-child for all-roots command
+    auto& duals = DualNode::getDuals();
+    for (auto& kv : duals) {
+      kv.second.removeChild(setParams.srcId);
+    }
+    return;
+  }
+
   if (not DualNode::hasDual(setParams.rootId)) {
     LOG(ERROR) << "processFloodTopoSet unknown root-id: " << setParams.rootId;
     return;
@@ -1137,24 +1167,60 @@ KvStore::processFloodTopoSet(
     // set child command
     LOG(INFO) << "dual child set: root-id: (" << setParams.rootId
               << ") child: " << setParams.srcId;
-    if (peers_.count(child) != 0) {
-      dual.addChild(child);
-    } else {
-      // peer is down, but peer chose me as parent(nexthop).
-      // I have to detect this peer up in order to send out updates to this
-      // peer so that this peer can possibly chose me as nexthop.
-      // Therefore this can only happen in one case: some event caused peer to
-      // chose me as nexthop, but peer got rebooted right after; And I detected
-      // peer-down event before I got topo-set command -> ignore the command
-      LOG(WARNING) << "dual ignore child set root-id: (" << setParams.rootId
-                   << ") child: " << setParams.srcId << ": peer is down";
-    }
+    dual.addChild(child);
   } else {
     // unset child command
     LOG(INFO) << "dual child unset: root-id: (" << setParams.rootId
               << ") child: " << setParams.srcId;
     dual.removeChild(child);
   }
+}
+
+void
+KvStore::sendTopoSetCmd(
+    const std::string& rootId,
+    const std::string& peerName,
+    bool setChild,
+    bool allRoots) noexcept {
+  const auto& dstCmdSocketId = peers_.at(peerName).second;
+  thrift::KvStoreRequest request;
+  request.cmd = thrift::Command::FLOOD_TOPO_SET;
+
+  thrift::FloodTopoSetParams setParams;
+  setParams.rootId = rootId;
+  setParams.srcId = nodeId_;
+  setParams.setChild = setChild;
+  if (allRoots) {
+    setParams.allRoots = allRoots;
+  }
+  request.floodTopoSetParams = setParams;
+
+  const auto ret = peerSyncSock_.sendMultiple(
+      fbzmq::Message::from(dstCmdSocketId).value(),
+      fbzmq::Message(),
+      fbzmq::Message::fromThriftObj(request, serializer_).value());
+  if (ret.hasError()) {
+    LOG(ERROR) << rootId << ": failed to " << (setChild ? "set" : "unset")
+               << " spt-parent " << peerName << ", error: " << ret.error();
+    collectSendFailureStats(ret.error(), dstCmdSocketId);
+  }
+}
+
+void
+KvStore::setChild(
+    const std::string& rootId, const std::string& peerName) noexcept {
+  sendTopoSetCmd(rootId, peerName, true, false);
+}
+
+void
+KvStore::unsetChild(
+    const std::string& rootId, const std::string& peerName) noexcept {
+  sendTopoSetCmd(rootId, peerName, false, false);
+}
+
+void
+KvStore::unsetChildAll(const std::string& peerName) noexcept {
+  sendTopoSetCmd("" /* root-id is ignored */, peerName, false, true);
 }
 
 void
@@ -1183,25 +1249,7 @@ KvStore::processNexthopChange(
         << rootId << ": trying to set new spt-parent who does not exist "
         << *newNh;
     CHECK_NE(nodeId_, *newNh) << "new nexthop is myself";
-    const auto& dstCmdSocketId = peers_.at(*newNh).second;
-    thrift::KvStoreRequest request;
-    request.cmd = thrift::Command::FLOOD_TOPO_SET;
-
-    thrift::FloodTopoSetParams setParams;
-    setParams.rootId = rootId;
-    setParams.srcId = nodeId_;
-    setParams.setChild = true; // set
-    request.floodTopoSetParams = setParams;
-
-    const auto ret = peerSyncSock_.sendMultiple(
-        fbzmq::Message::from(dstCmdSocketId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(request, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << rootId << ": failed to set spt-parent " << *newNh
-                 << ", error: " << ret.error();
-      collectSendFailureStats(ret.error(), dstCmdSocketId);
-    }
+    setChild(rootId, *newNh);
 
     // Enqueue new-nexthop for full-sync (insert only if entry doesn't exists)
     // NOTE we have to perform full-sync after we do FLOOD_TOPO_SET, so that
@@ -1225,25 +1273,7 @@ KvStore::processNexthopChange(
     // valid old parent AND it's still my peer, unset it
     CHECK_NE(nodeId_, *oldNh) << "old nexthop was myself";
     // unset it
-    const auto& dstCmdSocketId = peers_.at(*oldNh).second;
-    thrift::KvStoreRequest request;
-    request.cmd = thrift::Command::FLOOD_TOPO_SET;
-
-    thrift::FloodTopoSetParams setParams;
-    setParams.rootId = rootId;
-    setParams.srcId = nodeId_;
-    setParams.setChild = false; // unset
-    request.floodTopoSetParams = setParams;
-
-    const auto ret = peerSyncSock_.sendMultiple(
-        fbzmq::Message::from(dstCmdSocketId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(request, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << rootId << ": failed to unset spt-parent " << *oldNh
-                 << ", error: " << ret.error();
-      collectSendFailureStats(ret.error(), dstCmdSocketId);
-    }
+    unsetChild(rootId, *oldNh);
   }
 }
 

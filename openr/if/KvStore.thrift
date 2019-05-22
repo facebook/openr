@@ -133,6 +133,9 @@ struct FloodTopoSetParams {
   2: string srcId
   // set/unset a spanning tree child
   3: bool setChild
+  // action apply to all-roots or not
+  // if true, rootId will be ignored and action will be applied to all roots
+  4: optional bool allRoots
 }
 
 typedef set<string>

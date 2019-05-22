@@ -161,6 +161,29 @@ class KvStore final : public OpenrEventLoop, public DualNode {
       const std::string& neighbor,
       const thrift::DualMessages& msgs) noexcept override;
 
+  // send topology-set command to peer, peer will set/unset me as child
+  // rootId: action will applied on given rootId
+  // peerName: peer name
+  // setChild: true if set, false if unset
+  // allRoots: if true, rootId will be ignored, action will be applied to all
+  //           roots. (currently used for initial unsetChildAll() cmd)
+  void sendTopoSetCmd(
+      const std::string& rootId,
+      const std::string& peerName,
+      bool setChild,
+      bool allRoots) noexcept;
+
+  // set child on given rootId
+  void setChild(
+      const std::string& rootId, const std::string& peerName) noexcept;
+
+  // unset child on given rootId
+  void unsetChild(
+      const std::string& rootId, const std::string& peerName) noexcept;
+
+  // unset child on all rootIds
+  void unsetChildAll(const std::string& peerName) noexcept;
+
   // callbacks when nexthop changed for a given root-id
   void processNexthopChange(
       const std::string& rootId,

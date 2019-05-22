@@ -593,12 +593,12 @@ LinkMonitor::neighborUpEvent(
   // 1) the min interface changes: the previous min interface's connection will
   // be overridden by KvStoreClient, thus no need to explicitly remove it
   // 2) does not change: the existing connection to a neighbor is retained
-  adjacencies_[adjId] = AdjacencyValue(
-      thrift::PeerSpec(FRAGILE, pubUrl, repUrl, event.supportFloodOptimization),
-      std::move(newAdj));
+  const auto& peerSpec =
+      thrift::PeerSpec(FRAGILE, pubUrl, repUrl, event.supportFloodOptimization);
+  adjacencies_[adjId] = AdjacencyValue(peerSpec, std::move(newAdj));
 
   // Advertise KvStore peers immediately
-  advertiseKvStorePeers();
+  advertiseKvStorePeers({{remoteNodeName, peerSpec}});
 
   // Advertise new adjancies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
@@ -679,7 +679,8 @@ LinkMonitor::getPeersFromAdjacencies(
 }
 
 void
-LinkMonitor::advertiseKvStorePeers() {
+LinkMonitor::advertiseKvStorePeers(
+    const std::unordered_map<std::string, thrift::PeerSpec>& upPeers) {
   // Get old and new peer list. Also update local state
   const auto oldPeers = std::move(peers_);
   peers_ = getPeersFromAdjacencies(adjacencies_);
@@ -705,14 +706,31 @@ LinkMonitor::advertiseKvStorePeers() {
   std::unordered_map<std::string, thrift::PeerSpec> toAddPeers;
   for (const auto& newKv : newPeers) {
     const auto& nodeName = newKv.first;
-    // Even if nodeName is the same, there is the chance that we are updating
-    // session (in parallel link cases). So we have to check PeerSpec to decide
-    // whether there's a update needed or not
+    // send out peer-add to kvstore if
+    // 1. it's a new peer (not exist in old-peers)
+    // 2. old-peer but peer-spec changed (e.g parallel link case)
     if (oldPeers.find(nodeName) == oldPeers.end() or
         oldPeers.at(nodeName) != newKv.second) {
       toAddPeers.emplace(nodeName, newKv.second);
       logPeerEvent("ADD_PEER", newKv.first, newKv.second);
     }
+  }
+
+  for (const auto& upPeer : upPeers) {
+    const auto& name = upPeer.first;
+    const auto& spec = upPeer.second;
+    // upPeer MUST already be in current state peers_
+    CHECK(peers_.count(name));
+
+    if (toAddPeers.count(name)) {
+      // already added, skip it
+      continue;
+    }
+    if (spec != peers_.at(name)) {
+      // spec does not match, skip it
+      continue;
+    }
+    toAddPeers.emplace(name, spec);
   }
 
   // Add new peers
