@@ -391,34 +391,34 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
 
   // Do not program routes in case of dryrun
   LOG(INFO) << "Skipping programing of routes in dryrun ... ";
-  VLOG(1) << "Unicast routes to add/update";
+  VLOG(2) << "Unicast routes to add/update";
   for (auto const& route : patchedUnicastRoutesToUpdate) {
-    VLOG(1) << "> " << toString(route.dest) << ", " << route.nextHops.size();
+    VLOG(2) << "> " << toString(route.dest) << ", " << route.nextHops.size();
     for (auto const& nh : route.nextHops) {
-      VLOG(1) << "  " << toString(nh);
+      VLOG(2) << "  " << toString(nh);
     }
   }
 
-  VLOG(1) << "";
-  VLOG(1) << "Unicast routes to delete";
+  VLOG(2) << "";
+  VLOG(2) << "Unicast routes to delete";
   for (auto const& prefix : routeDbDelta.unicastRoutesToDelete) {
-    VLOG(1) << "> " << toString(prefix);
+    VLOG(2) << "> " << toString(prefix);
   }
 
-  VLOG(1) << "";
-  VLOG(1) << "Mpls routes to add/update";
+  VLOG(2) << "";
+  VLOG(2) << "Mpls routes to add/update";
   for (auto const& route : mplsRoutesToUpdate) {
-    VLOG(1) << "> " << std::to_string(route.topLabel) << ", "
+    VLOG(2) << "> " << std::to_string(route.topLabel) << ", "
             << route.nextHops.size();
     for (auto const& nh : route.nextHops) {
-      VLOG(1) << "  " << toString(nh);
+      VLOG(2) << "  " << toString(nh);
     }
   }
 
-  VLOG(1) << "";
-  VLOG(1) << "MPLS routes to delete";
+  VLOG(2) << "";
+  VLOG(2) << "MPLS routes to delete";
   for (auto const& topLabel : routeDbDelta.mplsRoutesToDelete) {
-    VLOG(1) << "> " << std::to_string(topLabel);
+    VLOG(2) << "> " << std::to_string(topLabel);
   }
 
   if (dryrun_) {
@@ -484,21 +484,21 @@ Fib::syncRouteDb() {
   // In dry run we just print the routes. No real action
   if (dryrun_) {
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
-    VLOG(1) << "Unicast routes to add/update";
+    VLOG(2) << "Unicast routes to add/update";
     for (auto const& route : unicastRoutes) {
-      VLOG(1) << "> " << toString(route.dest) << ", " << route.nextHops.size();
+      VLOG(2) << "> " << toString(route.dest) << ", " << route.nextHops.size();
       for (auto const& nh : route.nextHops) {
-        VLOG(1) << "  " << toString(nh);
+        VLOG(2) << "  " << toString(nh);
       }
     }
 
-    VLOG(1) << "";
-    VLOG(1) << "Mpls routes to add/update";
+    VLOG(2) << "";
+    VLOG(2) << "Mpls routes to add/update";
     for (auto const& route : mplsRoutes) {
-      VLOG(1) << "> " << std::to_string(route.topLabel) << ", "
+      VLOG(2) << "> " << std::to_string(route.topLabel) << ", "
               << route.nextHops.size();
       for (auto const& nh : route.nextHops) {
-        VLOG(1) << "  " << toString(nh);
+        VLOG(2) << "  " << toString(nh);
       }
     }
 
