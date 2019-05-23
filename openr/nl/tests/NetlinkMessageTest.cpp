@@ -280,6 +280,12 @@ class NlMessageFixture : public ::testing::Test {
     };
   };
 
+  struct v4Addr {
+    union {
+      uint8_t u8_addr[4];
+      uint32_t u32_addr;
+    };
+  };
   // netlink message socket
   std::unique_ptr<NetlinkProtocolSocket> nlSock{nullptr};
 };
@@ -742,9 +748,6 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   uint32_t ackCount{0};
   uint32_t count{100000};
 
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(5));
-
   std::vector<openr::fbnl::NextHop> paths;
   // create mix of next hops, including without label
   paths.push_back(buildNextHop(
@@ -859,7 +862,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
 }
 
 TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
-  // Add IPv6 route with single path label next with one label
+  // Add IPv4 route with single path label next with one label
   // outoing IF is vethTestY
 
   // Create another ZmqEventLoop instance for running tests
@@ -910,6 +913,121 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   evlTest.waitUntilRunning();
   evlTest.waitUntilStopped();
   evlThread.join();
+}
+
+TEST_F(NlMessageFixture, MultipIpV4RouteLabelNexthop) {
+  // Add Multiple IPv4 routes with single path label next with one label
+  // outoing IF is vethTestY
+
+  // Create another ZmqEventLoop instance for running tests
+  uint32_t ackCount{0};
+  const uint32_t count{100000};
+  std::vector<openr::fbnl::NextHop> paths;
+  paths.push_back(buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V4,
+      ifIndexY));
+  paths.push_back(buildNextHop(
+      outLabel5,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V4,
+      ifIndexY));
+  paths.push_back(buildNextHop(
+      outLabel6,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V4,
+      ifIndexY));
+
+  std::vector<openr::fbnl::Route> routes;
+  struct v4Addr addr4 {};
+
+  for (uint32_t i = 0; i < count; i++) {
+    addr4.u32_addr = 0x000000A0 + i;
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
+    folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
+    routes.emplace_back(buildRoute(kRouteProtoId, prefix, folly::none, paths));
+  }
+
+  ackCount = nlSock->getAckCount();
+  LOG(INFO) << "Adding in bulk " << count << " routes";
+  nlSock->addRoutes(routes);
+
+  int retry{5};
+  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+  LOG(INFO) << "Done adding " << count << " routes";
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // should have received acks with status = 0
+  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+
+  // delete routes
+  LOG(INFO) << "Deleting in bulk " << count << " routes";
+  ackCount = nlSock->getAckCount();
+  nlSock->deleteRoutes(routes);
+
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+
+  retry = 5;
+  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+  LOG(INFO) << "Done deleting";
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // should have received acks status = 0
+  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+
+  // add routes one by one instead of a vector of routes
+  LOG(INFO) << "Adding one by one " << count << " routes";
+  ackCount = nlSock->getAckCount();
+  for (uint32_t i = 0; i < count; i++) {
+    addr4.u32_addr = 0x000000A0 + i;
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
+    folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
+    auto route = buildRoute(kRouteProtoId, prefix, folly::none, paths);
+    nlSock->addRoute(route);
+  }
+  LOG(INFO) << "Done adding " << count << " routes";
+
+  retry = 5;
+  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // should have received acks with status = 0
+  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+
+  // delete routes one by one instead of a vector of routes
+  LOG(INFO) << "Deleting in bulk " << count << " routes";
+  ackCount = nlSock->getAckCount();
+  for (uint32_t i = 0; i < count; i++) {
+    addr4.u32_addr = 0x000000A0 + i;
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
+        static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
+    folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
+    auto route = buildRoute(kRouteProtoId, prefix, folly::none, paths);
+    nlSock->deleteRoute(route);
+  }
+
+  retry = 5;
+  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+  LOG(INFO) << "Done deleting";
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // should have received acks status = 0
+  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
 }
 
 TEST_F(NlMessageFixture, MultipleLabelRoutes) {

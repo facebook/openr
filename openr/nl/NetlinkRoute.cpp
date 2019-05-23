@@ -153,8 +153,7 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
   if (via.addrFamily == AF_INET) {
     viaLen = sizeof(nextHopV4);
   }
-  memcpy(
-      via.ip, reinterpret_cast<const char*>(gw.bytes()), gw.byteCount());
+  memcpy(via.ip, reinterpret_cast<const char*>(gw.bytes()), gw.byteCount());
   if (addSubAttributes(
           rta, RTA_VIA, reinterpret_cast<const char*>(&via), viaLen) ==
       nullptr) {
