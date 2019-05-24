@@ -177,7 +177,7 @@ service FibService extends fb303.FacebookService {
     2: list<Network.UnicastRoute> routes,
   ) throws (1: PlatformError error)
 
-  // Retreive list of routes per client
+  // Retreive list of unicast routes per client
   list<Network.UnicastRoute> getRouteTableByClient(
     1: i16 clientId
   ) throws (1: PlatformError error)

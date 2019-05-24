@@ -83,6 +83,9 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
   folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
   future_getRouteTableByClient(int16_t clientId) override;
 
+  folly::Future<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
+  future_getMplsRouteTableByClient(int16_t clientId) override;
+
  private:
   NetlinkFibHandler(const NetlinkFibHandler&) = delete;
   NetlinkFibHandler& operator=(const NetlinkFibHandler&) = delete;
@@ -93,6 +96,12 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   std::vector<thrift::UnicastRoute> toThriftUnicastRoutes(
       const fbnl::NlUnicastRoutes& routeDb);
+
+  std::vector<thrift::MplsRoute> toThriftMplsRoutes(
+      const fbnl::NlMplsRoutes& routeDb);
+
+  std::vector<thrift::NextHopThrift> buildNextHops(
+      const fbnl::NextHopSet& nextHopSet);
 
   fbnl::Route buildRoute(const thrift::UnicastRoute& route, int protocol) const
       noexcept;

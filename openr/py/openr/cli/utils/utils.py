@@ -96,7 +96,6 @@ def time_since(timestamp):
     Example format:
 
     time_since(10000)
-    >>> 112d11h
 
     :rtype: datetime.timedelta
     """
@@ -1074,16 +1073,11 @@ def print_allocations_table(alloc_str):
     print(printing.render_horizontal_table(rows, ["Node", "Prefix"]))
 
 
-def build_routes(prefixes, nexthops):
+def build_nexthops(nexthops: List[str]) -> List[network_types.BinaryAddress]:
     """
-    :param prefixes: List of prefixes in string representation
-    :param nexthops: List of nexthops ip addresses in string presentation
-
-    :returns: list network_types.UnicastRoute (structured routes)
-    :rtype: list
+    Convert nexthops in list of string to list of binaryAddress
     """
 
-    prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
     nhs = []
     for nh_iface in nexthops:
         iface, addr = None, None
@@ -1097,6 +1091,19 @@ def build_routes(prefixes, nexthops):
         nexthop = ipnetwork.ip_str_to_addr(addr)
         nexthop.ifName = iface
         nhs.append(nexthop)
+
+    return nhs
+
+
+def build_routes(
+    prefixes: List[str], nexthops: List[str]
+) -> List[network_types.UnicastRoute]:
+    """
+    Build list of UnicastRoute using prefixes and nexthops list
+    """
+
+    prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+    nhs = build_nexthops(nexthops)
     return [
         network_types.UnicastRoute(
             dest=p,
@@ -1107,85 +1114,151 @@ def build_routes(prefixes, nexthops):
     ]
 
 
-def get_route_as_dict(routes):
+def get_route_as_dict_in_str(
+    routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    route_type: str = "unicast",
+) -> Dict[str, str]:
     """
-    Convert a routeDb into a dict representing routes in str format
-
-    :param routes: list network_types.UnicastRoute (structured routes)
-
-    :returns: dict of routes {prefix: [nexthops]}
-    :rtype: dict
+    Convert a routeDb into a dict representing routes in string format
     """
 
+    routes_dict = None
     # Thrift object instances do not have hash support
     # Make custom stringified object so we can hash and diff
     # dict of prefixes(str) : nexthops(str)
-    routes_dict = {
-        ipnetwork.sprint_prefix(route.dest): sorted(
-            ip_nexthop_to_str(nh, True) for nh in get_route_nexthops(route)
-        )
-        for route in routes
-    }
+    if route_type == "unicast":
+        routes_dict = {
+            ipnetwork.sprint_prefix(route.dest): sorted(
+                ip_nexthop_to_str(nh, True) for nh in get_route_nexthops(route)
+            )
+            for route in routes
+        }
+    elif route_type == "mpls":
+        routes_dict = {
+            str(route.topLabel): sorted(
+                ip_nexthop_to_str(nh, True) for nh in route.nextHops
+            )
+            for route in routes
+        }
+    else:
+        assert 0, "Unknown route type %s" % route_type
 
     return routes_dict
 
 
-def routes_difference(lhs, rhs):
+def get_route_as_dict(
+    routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    route_type: str = "unicast",
+) -> Dict[str, Union[network_types.UnicastRoute, network_types.MplsRoute]]:
+    """
+    Convert a routeDb into a dict representing routes:
+    (K, V) = (UnicastRoute.dest/MplsRoute.topLabel, UnicastRoute/MplsRoute)
+    """
+    routes_dict = {}
+
+    if route_type == "unicast":
+        for route in routes:
+            routes_dict[ipnetwork.sprint_prefix(route.dest)] = route
+    elif route_type == "mpls":
+        for route in routes:
+            routes_dict[str(route.topLabel)] = route
+    else:
+        assert 0, "Unknown route type %s" % route_type
+
+    return routes_dict
+
+
+def routes_difference(
+    lhs: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    rhs: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    route_type: str = "unicast",
+) -> List[Union[network_types.UnicastRoute, network_types.MplsRoute]]:
     """
     Get routeDb delta between provided inputs
-
-    :param lhs: list network_types.UnicastRoute (structured routes)
-    :param rhs: list network_types.UnicastRoute (structured routes)
-
-    :returns: list network_types.UnicastRoute (structured routes)
-    :rtype: list
     """
 
     diff = []
 
     # dict of prefixes(str) : nexthops(str)
-    _lhs = get_route_as_dict(lhs)
-    _rhs = get_route_as_dict(rhs)
+    _lhs = get_route_as_dict(lhs, route_type)
+    _rhs = get_route_as_dict(rhs, route_type)
 
-    diff_prefixes = set(_lhs) - set(_rhs)
-
-    for prefix in diff_prefixes:
-        diff.extend(build_routes([prefix], _lhs[prefix]))
+    # diff_keys will be:
+    #   1. dest for network_types.UnicastRoute
+    #   2. topLabel for network_types.MplsRoute
+    diff_keys = set(_lhs) - set(_rhs)
+    for key in diff_keys:
+        diff.append(_lhs[key])
 
     return diff
 
 
-def prefixes_with_different_nexthops(lhs, rhs):
+def prefixes_with_different_nexthops(
+    lhs: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    rhs: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    route_type: str,
+) -> List[Tuple[str, str, str]]:
     """
-    Get prefixes common to both routeDbs with different nexthops
-
-    :param lhs: list network_types.UnicastRoute (structured routes)
-    :param rhs: list network_types.UnicastRoute (structured routes)
-
-    :returns: list str of IpPrefix common to lhs and rhs but
-              have different nexthops
-    :rtype: list
+    Get keys common to both routeDbs with different nexthops
     """
 
-    prefixes = []
+    keys = []
 
-    # dict of prefixes(str) : nexthops(str)
-    _lhs = get_route_as_dict(lhs)
-    _rhs = get_route_as_dict(rhs)
-    common_prefixes = set(_lhs) & set(_rhs)
+    # dict of:
+    # 1. prefix(str) : nexthops(str) for UnicastRoute
+    # 2. topLabel(str) : nexthops(str) for MplsRoute
+    _lhs = get_route_as_dict_in_str(lhs, route_type)
+    _rhs = get_route_as_dict_in_str(rhs, route_type)
+    common_keys = set(_lhs) & set(_rhs)
 
-    for prefix in common_prefixes:
-        if _lhs[prefix] != _rhs[prefix]:
-            prefixes.append((prefix, _lhs[prefix], _rhs[prefix]))
+    if route_type == "unicast":
+        for key in common_keys:
+            if _lhs[key] != _rhs[key]:
+                keys.append((key, _lhs[key], _rhs[key]))
+    elif route_type == "mpls":
+        for key in common_keys:
+            nh_diff_found = False
+            l_nh_coll = _lhs[key]
+            r_nh_coll = _rhs[key]
 
-    return prefixes
+            if l_nh_coll == r_nh_coll:
+                continue
+
+            # iterate through every single nexthop for this key
+            for index in range(0, len(l_nh_coll)):
+                l_nh = l_nh_coll[index]
+                r_nh = r_nh_coll[index]
+                if l_nh != r_nh:
+                    l_tokens = l_nh.split()
+                    r_tokens = r_nh.split()
+                    # Skip verification for MPLS 'POP_AND_LOOKUP' action since
+                    # different agent underneath can give different result.
+                    if (
+                        l_tokens[1] == "POP_AND_LOOKUP"
+                        and r_tokens[1] == "POP_AND_LOOKUP"
+                    ):
+                        continue
+                    nh_diff_found = True
+
+            # nexthop diff found
+            if nh_diff_found:
+                keys.append((key, l_nh_coll, r_nh_coll))
+
+    return keys
 
 
-def compare_route_db(routes_a, routes_b, sources, enable_color, quiet=False):
+def compare_route_db(
+    routes_a: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    routes_b: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    route_type: str,
+    sources: List[str],
+    enable_color: bool,
+    quiet: bool = False,
+) -> (bool, List[str]):
 
-    extra_routes_in_a = routes_difference(routes_a, routes_b)
-    extra_routes_in_b = routes_difference(routes_b, routes_a)
-    diff_prefixes = prefixes_with_different_nexthops(routes_a, routes_b)
+    extra_routes_in_a = routes_difference(routes_a, routes_b, route_type)
+    extra_routes_in_b = routes_difference(routes_b, routes_a, route_type)
+    diff_prefixes = prefixes_with_different_nexthops(routes_a, routes_b, route_type)
 
     # return error type
     error_msg = []
@@ -1210,14 +1283,20 @@ def compare_route_db(routes_a, routes_b, sources, enable_color, quiet=False):
     if extra_routes_in_a:
         caption = "Routes in {} but not in {}".format(*sources)
         if not quiet:
-            print_unicast_routes(caption, extra_routes_in_a)
+            if route_type == "unicast":
+                print_unicast_routes(caption, extra_routes_in_a)
+            elif route_type == "mpls":
+                print_mpls_routes(caption, extra_routes_in_a)
         else:
             error_msg.append(caption)
 
     if extra_routes_in_b:
         caption = "Routes in {} but not in {}".format(*reversed(sources))
         if not quiet:
-            print_unicast_routes(caption, extra_routes_in_b)
+            if route_type == "unicast":
+                print_unicast_routes(caption, extra_routes_in_b)
+            elif route_type == "mpls":
+                print_mpls_routes(caption, extra_routes_in_b)
         else:
             error_msg.append(caption)
 
@@ -1435,24 +1514,34 @@ def get_routes_json(host, client, routes, prefixes=None):
     return data
 
 
-def get_shortest_routes(route_db):
+def get_shortest_routes(
+    route_db: fib_types.RouteDatabase
+) -> (List[network_types.UnicastRoute], List[network_types.MplsRoute]):
     """
     Find all shortest routes for each prefix in routeDb
 
     :param route_db: RouteDatabase
-    :return list of UnicastRoute of prefix & corresponding shortest nexthops
+    :return (
+        list of UnicastRoute of prefix & corresponding shortest nexthops
+        list of MplsRoute of prefix & corresponding shortest nexthops
+    )
     """
 
-    shortest_routes = []
-    for route in sorted(
+    unicast_routes, mpls_routes = None, None
+    unicast_routes = sorted(
         route_db.unicastRoutes, key=lambda x: x.dest.prefixAddress.addr
-    ):
+    )
+    mpls_routes = sorted(route_db.mplsRoutes, key=lambda x: x.topLabel)
+
+    shortest_unicast_routes = []
+    shortest_mpls_routes = []
+    for route in unicast_routes:
         if not route.nextHops:
             continue
 
         min_metric = min(route.nextHops, key=lambda x: x.metric).metric
         nextHops = [nh for nh in route.nextHops if nh.metric == min_metric]
-        shortest_routes.append(
+        shortest_unicast_routes.append(
             network_types.UnicastRoute(
                 dest=route.dest,
                 deprecatedNexthops=[nh.address for nh in nextHops],
@@ -1460,7 +1549,17 @@ def get_shortest_routes(route_db):
             )
         )
 
-    return shortest_routes
+    for route in mpls_routes:
+        if not route.nextHops:
+            continue
+
+        min_metric = min(route.nextHops, key=lambda x: x.metric).metric
+        nextHops = [nh for nh in route.nextHops if nh.metric == min_metric]
+        shortest_mpls_routes.append(
+            network_types.MplsRoute(topLabel=route.topLabel, nextHops=nextHops)
+        )
+
+    return (shortest_unicast_routes, shortest_mpls_routes)
 
 
 def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> None:

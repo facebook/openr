@@ -127,46 +127,61 @@ NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
   return ret->second;
 }
 
+std::vector<thrift::NextHopThrift>
+NetlinkFibHandler::buildNextHops(const fbnl::NextHopSet& nextHops) {
+  std::vector<thrift::NextHopThrift> thriftNextHops;
+
+  for (auto const& nh : nextHops) {
+    CHECK(nh.getGateway().hasValue());
+    const auto& ifName = nh.getIfIndex().hasValue()
+        ? netlinkSocket_->getIfName(nh.getIfIndex().value()).get()
+        : "";
+    thrift::NextHopThrift nextHop;
+    nextHop.address = toBinaryAddress(nh.getGateway().value());
+    nextHop.address.ifName = ifName;
+    auto labelAction = nh.getLabelAction();
+    if (labelAction.hasValue()) {
+      if (labelAction.value() == thrift::MplsActionCode::POP_AND_LOOKUP ||
+          labelAction.value() == thrift::MplsActionCode::PHP) {
+        nextHop.mplsAction = createMplsAction(labelAction.value());
+      } else if (labelAction.value() == thrift::MplsActionCode::SWAP) {
+        nextHop.mplsAction =
+            createMplsAction(labelAction.value(), nh.getSwapLabel().value());
+      } else if (labelAction.value() == thrift::MplsActionCode::PUSH) {
+        nextHop.mplsAction = createMplsAction(
+            labelAction.value(), folly::none, nh.getPushLabels().value());
+      }
+    }
+    thriftNextHops.emplace_back(std::move(nextHop));
+  }
+  return thriftNextHops;
+}
+
 std::vector<thrift::UnicastRoute>
 NetlinkFibHandler::toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb) {
   std::vector<thrift::UnicastRoute> routes;
 
   for (auto const& kv : routeDb) {
-    auto const& prefix = kv.first;
-    auto const& nextHops = kv.second.getNextHops();
-
-    std::vector<thrift::NextHopThrift> thriftNextHops;
-
-    for (auto const& nh : nextHops) {
-      CHECK(nh.getGateway().hasValue());
-      const auto& ifName = nh.getIfIndex().hasValue()
-          ? netlinkSocket_->getIfName(nh.getIfIndex().value()).get()
-          : "";
-      thrift::NextHopThrift nextHop;
-      nextHop.address = toBinaryAddress(nh.getGateway().value());
-      nextHop.address.ifName = ifName;
-      auto labelAction = nh.getLabelAction();
-      if (labelAction.hasValue()) {
-        if (labelAction.value() == thrift::MplsActionCode::POP_AND_LOOKUP ||
-            labelAction.value() == thrift::MplsActionCode::PHP) {
-          nextHop.mplsAction = createMplsAction(labelAction.value());
-        } else if (labelAction.value() == thrift::MplsActionCode::SWAP) {
-          nextHop.mplsAction =
-              createMplsAction(labelAction.value(), nh.getSwapLabel().value());
-        } else if (labelAction.value() == thrift::MplsActionCode::PUSH) {
-          nextHop.mplsAction = createMplsAction(
-              labelAction.value(), folly::none, nh.getPushLabels().value());
-        }
-      }
-      thriftNextHops.emplace_back(std::move(nextHop));
-    }
-
     thrift::UnicastRoute route;
-    route.dest = toIpPrefix(prefix);
-    route.nextHops.insert(
-        route.nextHops.end(), thriftNextHops.begin(), thriftNextHops.end());
+    route.dest = toIpPrefix(kv.first);
+    route.nextHops = buildNextHops(kv.second.getNextHops());
     // DEPRECATED - Only for backward compatibility
     route.deprecatedNexthops = createDeprecatedNexthops(route.nextHops);
+
+    routes.emplace_back(std::move(route));
+  }
+  return routes;
+}
+
+std::vector<thrift::MplsRoute>
+NetlinkFibHandler::toThriftMplsRoutes(const fbnl::NlMplsRoutes& routeDb) {
+  std::vector<thrift::MplsRoute> routes;
+
+  for (auto const& kv : routeDb) {
+    thrift::MplsRoute route;
+    route.topLabel = kv.first;
+    route.nextHops = buildNextHops(kv.second.getNextHops());
+
     routes.emplace_back(std::move(route));
   }
   return routes;
@@ -413,8 +428,9 @@ NetlinkFibHandler::getStatus() {
 
 folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
 NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
-  LOG(INFO) << "Get routes from FIB for clientId " << clientId;
+  LOG(INFO) << "Get unicast routes from FIB for clientId " << clientId;
 
+  // promise here is used only for error case
   folly::Promise<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
       promise;
   auto future = promise.getFuture();
@@ -429,12 +445,36 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
             toThriftUnicastRoutes(res));
       })
       .thenError<std::runtime_error>([](std::exception const& ex) {
-        LOG(ERROR) << "Failed to get routing table by client: " << ex.what()
-                   << ", returning empty table instead";
+        LOG(ERROR) << "Failed to get unicast routing table by client: "
+                   << ex.what() << ", returning empty table instead";
         return std::make_unique<std::vector<openr::thrift::UnicastRoute>>();
       });
 }
 
+folly::Future<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
+NetlinkFibHandler::future_getMplsRouteTableByClient(int16_t clientId) {
+  LOG(INFO) << "Get Mpls routes from FIB for clientId " << clientId;
+
+  // promise here is used only for error case
+  folly::Promise<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
+      promise;
+  auto future = promise.getFuture();
+  auto protocol = getProtocol(promise, clientId);
+  if (protocol.hasError()) {
+    return future;
+  }
+
+  return netlinkSocket_->getCachedMplsRoutes(protocol.value())
+      .thenValue([this](fbnl::NlMplsRoutes res) mutable {
+        return std::make_unique<std::vector<openr::thrift::MplsRoute>>(
+            toThriftMplsRoutes(res));
+      })
+      .thenError<std::runtime_error>([](std::exception const& ex) {
+        LOG(ERROR) << "Failed to get Mpls routing table by client: "
+                   << ex.what() << ", returning empty table instead";
+        return std::make_unique<std::vector<openr::thrift::MplsRoute>>();
+      });
+}
 void
 NetlinkFibHandler::buildMplsAction(
     fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) const {

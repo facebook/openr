@@ -7,7 +7,6 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-
 from builtins import object
 
 from openr.cli.utils import utils
@@ -155,10 +154,23 @@ class FibSyncRoutesCmd(FibAgentCmd):
 class FibValidateRoutesCmd(FibAgentCmd):
     def run(self, cli_opts):
         try:
-            decision_routes = self.get_decision_route_db(cli_opts)
-            fib_routes = self.get_fib_route_db(cli_opts)
-            agent_routes = self.client.getRouteTableByClient(self.client.client_id)
-            lm_links = self.get_lm_link_db(cli_opts).interfaceDetails
+            # fetch routes from decision module
+            (decision_unicast_routes, decision_mpls_routes) = utils.get_shortest_routes(
+                decision_client.DecisionClient(cli_opts).get_route_db()
+            )
+            # fetch routes from fib module
+            (fib_unicast_routes, fib_mpls_routes) = utils.get_shortest_routes(
+                fib_client.FibClient(cli_opts).get_route_db()
+            )
+            # fetch route from net_agent module
+            agent_unicast_routes = self.client.getRouteTableByClient(
+                self.client.client_id
+            )
+            agent_mpls_routes = self.client.getMplsRouteTableByClient(
+                self.client.client_id
+            )
+            # fetch link_db from link-monitor module
+            lm_links = lm_client.LMClient(cli_opts).dump_links().interfaceDetails
 
         except Exception as e:
             print("Failed to validate Fib routes.")
@@ -166,28 +178,42 @@ class FibValidateRoutesCmd(FibAgentCmd):
             raise e
             # return 1
 
-        res1, _ = utils.compare_route_db(
-            decision_routes,
-            fib_routes,
-            ["Decision", "Openr-Fib"],
+        (res1_unicast, _) = utils.compare_route_db(
+            decision_unicast_routes,
+            fib_unicast_routes,
+            "unicast",
+            ["Decision:unicast", "Openr-Fib:unicast"],
             cli_opts.enable_color,
         )
-        res2, _ = utils.compare_route_db(
-            fib_routes, agent_routes, ["Openr-Fib", "FibAgent"], cli_opts.enable_color
+        (res1_mpls, _) = utils.compare_route_db(
+            decision_mpls_routes,
+            fib_mpls_routes,
+            "mpls",
+            ["Decision:mpls", "Openr-Fib:mpls"],
+            cli_opts.enable_color,
         )
-        res3, _ = utils.validate_route_nexthops(
-            fib_routes, lm_links, ["Openr-Fib", "LinkMonitor"], cli_opts.enable_color
+        (res2_unicast, _) = utils.compare_route_db(
+            fib_unicast_routes,
+            agent_unicast_routes,
+            "unicast",
+            ["Openr-Fib:unicast", "FibAgent:unicast"],
+            cli_opts.enable_color,
         )
-        return 0 if res1 and res2 and res3 else -1
-
-    def get_fib_route_db(self, cli_opts):
-        client = fib_client.FibClient(cli_opts)
-        return utils.get_shortest_routes(client.get_route_db())
-
-    def get_decision_route_db(self, cli_opts):
-        self.decision_client = decision_client.DecisionClient(cli_opts)
-        return utils.get_shortest_routes(self.decision_client.get_route_db())
-
-    def get_lm_link_db(self, cli_opts):
-        self.lm_client = lm_client.LMClient(cli_opts)
-        return self.lm_client.dump_links()
+        (res2_mpls, _) = utils.compare_route_db(
+            fib_mpls_routes,
+            agent_mpls_routes,
+            "mpls",
+            ["Openr-Fib:mpls", "FibAgent:mpls"],
+            cli_opts.enable_color,
+        )
+        (res3, _) = utils.validate_route_nexthops(
+            fib_unicast_routes,
+            lm_links,
+            ["Openr-Fib:unicast", "LinkMonitor"],
+            cli_opts.enable_color,
+        )
+        return (
+            0
+            if res1_unicast and res1_mpls and res2_unicast and res2_mpls and res3
+            else -1
+        )
