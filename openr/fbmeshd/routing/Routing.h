@@ -27,11 +27,8 @@
 namespace openr {
 namespace fbmeshd {
 
-class Routing : public folly::AsyncUDPServerSocket::Callback {
+class Routing {
  public:
-  using SendPacketCallback =
-      std::function<void(folly::MacAddress, std::unique_ptr<folly::IOBuf>)>;
-
   /*
    * mesh path frame type
    */
@@ -86,13 +83,10 @@ class Routing : public folly::AsyncUDPServerSocket::Callback {
   };
 
   explicit Routing(
-      folly::EventBase* evb,
-      Nl80211Handler& nlHandler,
-      folly::SocketAddress addr,
-      uint32_t elementTtl);
+      folly::EventBase* evb, Nl80211Handler& nlHandler, uint32_t elementTtl);
 
   Routing() = delete;
-  ~Routing() override = default;
+  ~Routing() = default;
   Routing(const Routing&) = delete;
   Routing(Routing&&) = delete;
   Routing& operator=(const Routing&) = delete;
@@ -102,17 +96,14 @@ class Routing : public folly::AsyncUDPServerSocket::Callback {
 
   std::unordered_map<folly::MacAddress, MeshPath> dumpMpaths();
 
-  void setSendPacketCallback(SendPacketCallback cb);
+  void setSendPacketCallback(
+      std::function<void(folly::MacAddress, std::unique_ptr<folly::IOBuf>)> cb);
   void resetSendPacketCallback();
+
+  void receivePacket(folly::MacAddress sa, std::unique_ptr<folly::IOBuf> data);
 
  private:
   void prepare();
-
-  virtual void
-  onListenStarted() noexcept override {}
-
-  virtual void
-  onListenStopped() noexcept override {}
 
   void doSyncRoutes();
 
@@ -141,16 +132,6 @@ class Routing : public folly::AsyncUDPServerSocket::Callback {
       bool isGate,
       bool replyRequested);
 
-  /*
-   * Receive path processing
-   */
-
-  void onDataAvailable(
-      std::shared_ptr<folly::AsyncUDPSocket> socket,
-      const folly::SocketAddress& client,
-      std::unique_ptr<folly::IOBuf> data,
-      bool truncated) noexcept override;
-
   bool isStationInTopKGates(folly::MacAddress mac);
 
   void hwmpPannFrameProcess(
@@ -161,10 +142,6 @@ class Routing : public folly::AsyncUDPServerSocket::Callback {
   // netlink handler used to request mpath from the kernel
   Nl80211Handler& nlHandler_;
 
-  folly::AsyncUDPServerSocket socket_;
-
-  folly::SocketAddress addr_;
-
   uint32_t elementTtl_;
 
   apache::thrift::CompactSerializer serializer_;
@@ -173,7 +150,9 @@ class Routing : public folly::AsyncUDPServerSocket::Callback {
 
   MetricManager metricManager_;
 
-  folly::Optional<SendPacketCallback> sendPacketCallback_;
+  folly::Optional<
+      std::function<void(folly::MacAddress, std::unique_ptr<folly::IOBuf>)>>
+      sendPacketCallback_;
 
   /*
    * L3 Routing state

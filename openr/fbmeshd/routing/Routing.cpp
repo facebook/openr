@@ -78,12 +78,9 @@ getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
 Routing::Routing(
     folly::EventBase* evb,
     openr::fbmeshd::Nl80211Handler& nlHandler,
-    folly::SocketAddress addr,
     uint32_t elementTtl)
     : evb_{evb},
       nlHandler_{nlHandler},
-      socket_{evb_},
-      addr_{addr},
       elementTtl_{elementTtl},
       periodicPinger_{evb_,
                       folly::IPAddressV6{"ff02::1%mesh0"},
@@ -120,11 +117,6 @@ Routing::Routing(
 
 void
 Routing::prepare() {
-  socket_.bind(addr_);
-  VLOG(4) << "Server listening on " << socket_.address().describe();
-
-  socket_.addListener(evb_, this);
-  socket_.listen();
   doMeshPathRoot();
   doMeshHousekeeping();
 
@@ -395,11 +387,8 @@ Routing::txPannFrame(
  */
 
 void
-Routing::onDataAvailable(
-    std::shared_ptr<folly::AsyncUDPSocket> /* socket */,
-    const folly::SocketAddress& client,
-    std::unique_ptr<folly::IOBuf> data,
-    bool /* truncated */) noexcept {
+Routing::receivePacket(
+    folly::MacAddress sa, std::unique_ptr<folly::IOBuf> data) {
   auto action = static_cast<MeshPathFrameType>(*data->data());
   data->trimStart(1);
 
@@ -407,8 +396,7 @@ Routing::onDataAvailable(
   switch (action) {
   case MeshPathFrameType::PANN:
     serializer_.deserialize(data.get(), pann);
-    hwmpPannFrameProcess(
-        *client.getIPAddress().asV6().getMacAddressFromLinkLocal(), pann);
+    hwmpPannFrameProcess(sa, pann);
     break;
   default:
     return;
@@ -602,7 +590,8 @@ Routing::dumpMpaths() {
 }
 
 void
-Routing::setSendPacketCallback(Routing::SendPacketCallback cb) {
+Routing::setSendPacketCallback(
+    std::function<void(folly::MacAddress, std::unique_ptr<folly::IOBuf>)> cb) {
   if (evb_->isRunning()) {
     evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
         [this, cb = std::move(cb)]() { sendPacketCallback_ = cb; });

@@ -10,12 +10,29 @@
 using namespace openr::fbmeshd;
 
 UDPRoutingPacketTransport::UDPRoutingPacketTransport(
-    folly::EventBase* evb, int32_t tos)
-    : evb_{evb}, clientSocket_{evb_} {
-  evb_->runInEventBaseThread([this, tos]() {
+    folly::EventBase* evb, uint16_t port, int32_t tos)
+    : evb_{evb}, serverSocket_{evb_}, clientSocket_{evb_} {
+  evb_->runInEventBaseThread([this, port, tos]() {
+    serverSocket_.bind(folly::SocketAddress{"::", port});
+    serverSocket_.addListener(evb_, this);
+    serverSocket_.listen();
+
     clientSocket_.bind(folly::SocketAddress("::", 0));
     clientSocket_.setTrafficClass(tos);
   });
+}
+
+void
+UDPRoutingPacketTransport::onDataAvailable(
+    std::shared_ptr<folly::AsyncUDPSocket> /* socket */,
+    const folly::SocketAddress& client,
+    std::unique_ptr<folly::IOBuf> data,
+    bool /* truncated */) noexcept {
+  if (receivePacketCallback_) {
+    (*receivePacketCallback_)(
+        *client.getIPAddress().asV6().getMacAddressFromLinkLocal(),
+        std::move(data));
+  }
 }
 
 void
@@ -32,4 +49,25 @@ UDPRoutingPacketTransport::sendPacket(
         6668};
     clientSocket_.write(destSockAddr, std::move(buf));
   });
+}
+
+void
+UDPRoutingPacketTransport::setReceivePacketCallback(
+    std::function<void(folly::MacAddress, std::unique_ptr<folly::IOBuf>)> cb) {
+  if (evb_->isRunning()) {
+    evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
+        [this, cb = std::move(cb)]() { receivePacketCallback_ = cb; });
+  } else {
+    receivePacketCallback_ = cb;
+  }
+}
+
+void
+UDPRoutingPacketTransport::resetReceivePacketCallback() {
+  if (evb_->isRunning()) {
+    evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
+        [this]() { receivePacketCallback_.reset(); });
+  } else {
+    receivePacketCallback_.reset();
+  }
 }

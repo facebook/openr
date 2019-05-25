@@ -432,17 +432,19 @@ main(int argc, char* argv[]) {
   if (FLAGS_enable_routing) {
     routingEventLoop = std::make_unique<folly::EventBase>();
     routing = std::make_unique<Routing>(
-        routingEventLoop.get(),
-        nlHandler,
-        folly::SocketAddress{"::", 6668},
-        FLAGS_routing_ttl);
+        routingEventLoop.get(), nlHandler, FLAGS_routing_ttl);
     routingPacketTransport = std::make_unique<UDPRoutingPacketTransport>(
-        routingEventLoop.get(), FLAGS_routing_tos);
+        routingEventLoop.get(), 6668, FLAGS_routing_tos);
 
     routing->setSendPacketCallback(
         [&routingPacketTransport](
             folly::MacAddress da, std::unique_ptr<folly::IOBuf> buf) {
           routingPacketTransport->sendPacket(da, std::move(buf));
+        });
+
+    routingPacketTransport->setReceivePacketCallback(
+        [&routing](folly::MacAddress sa, std::unique_ptr<folly::IOBuf> buf) {
+          routing->receivePacket(sa, std::move(buf));
         });
 
     allThreads.emplace_back(std::thread([&routingEventLoop]() noexcept {
