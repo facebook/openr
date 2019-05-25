@@ -432,7 +432,10 @@ main(int argc, char* argv[]) {
   if (FLAGS_enable_routing) {
     routingEventLoop = std::make_unique<folly::EventBase>();
     routing = std::make_unique<Routing>(
-        routingEventLoop.get(), nlHandler, FLAGS_routing_ttl);
+        routingEventLoop.get(),
+        nlHandler,
+        nlHandler.lookupMeshNetif().maybeMacAddress.value(),
+        FLAGS_routing_ttl);
     routingPacketTransport = std::make_unique<UDPRoutingPacketTransport>(
         routingEventLoop.get(), 6668, FLAGS_routing_tos);
 

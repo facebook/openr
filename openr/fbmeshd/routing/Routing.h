@@ -83,7 +83,10 @@ class Routing {
   };
 
   explicit Routing(
-      folly::EventBase* evb, Nl80211Handler& nlHandler, uint32_t elementTtl);
+      folly::EventBase* evb,
+      Nl80211Handler& nlHandler,
+      folly::MacAddress nodeAddr,
+      uint32_t elementTtl);
 
   Routing() = delete;
   ~Routing() = default;
@@ -141,6 +144,8 @@ class Routing {
 
   // netlink handler used to request mpath from the kernel
   Nl80211Handler& nlHandler_;
+
+  folly::MacAddress nodeAddr_;
 
   uint32_t elementTtl_;
 

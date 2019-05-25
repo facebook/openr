@@ -78,17 +78,19 @@ getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
 Routing::Routing(
     folly::EventBase* evb,
     openr::fbmeshd::Nl80211Handler& nlHandler,
+    folly::MacAddress nodeAddr,
     uint32_t elementTtl)
     : evb_{evb},
       nlHandler_{nlHandler},
+      nodeAddr_{nodeAddr},
       elementTtl_{elementTtl},
-      periodicPinger_{evb_,
-                      folly::IPAddressV6{"ff02::1%mesh0"},
-                      folly::IPAddressV6{
-                          folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                          nlHandler_.lookupMeshNetif().maybeMacAddress.value()},
-                      kPeriodicPingerInterval,
-                      "mesh0"},
+      periodicPinger_{
+          evb_,
+          folly::IPAddressV6{"ff02::1%mesh0"},
+          folly::IPAddressV6{folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
+                             nodeAddr},
+          kPeriodicPingerInterval,
+          "mesh0"},
       metricManager_{evb_,
                      kMetricManagerInterval,
                      nlHandler_,
@@ -134,9 +136,8 @@ Routing::doSyncRoutes() {
   VLOG(8) << folly::sformat("Routing::{}()", __func__);
 
   auto meshIfIndex = nlHandler_.lookupMeshNetif().maybeIfIndex.value();
-  auto meshMacAddress = nlHandler_.lookupMeshNetif().maybeMacAddress.value();
 
-  zmqEvl_.runInEventLoop([this, meshIfIndex, meshMacAddress]() {
+  zmqEvl_.runInEventLoop([this, meshIfIndex]() {
     openr::fbnl::NlUnicastRoutes unicastRouteDb;
     openr::fbnl::NlLinkRoutes linkRouteDb;
     std::vector<fbnl::IfAddress> mesh0Addrs;
@@ -212,7 +213,7 @@ Routing::doSyncRoutes() {
     }
 
     auto destination =
-        folly::CIDRNetwork{getTaygaIPV6FromMacAddress(meshMacAddress), 128};
+        folly::CIDRNetwork{getTaygaIPV6FromMacAddress(nodeAddr_), 128};
     linkRouteDb.emplace(
         std::make_pair(destination, kTaygaIfName),
         fbnl::RouteBuilder{}
@@ -232,12 +233,11 @@ Routing::doSyncRoutes() {
             .setRouteIfName(kTaygaIfName)
             .buildLinkRoute());
 
-    mesh0Addrs.push_back(
-        fbnl::IfAddressBuilder{}
-            .setPrefix(folly::CIDRNetwork{
-                getMesh0IPV6FromMacAddress(meshMacAddress), 64})
-            .setIfIndex(meshIfIndex)
-            .build());
+    mesh0Addrs.push_back(fbnl::IfAddressBuilder{}
+                             .setPrefix(folly::CIDRNetwork{
+                                 getMesh0IPV6FromMacAddress(nodeAddr_), 64})
+                             .setIfIndex(meshIfIndex)
+                             .build());
 
     netlinkSocket_.syncIfAddress(
         meshIfIndex, mesh0Addrs, AF_INET6, RT_SCOPE_UNIVERSE);
@@ -326,7 +326,7 @@ Routing::doMeshPathRoot() {
   if (isRoot_) {
     txPannFrame(
         folly::MacAddress::BROADCAST,
-        *nlHandler_.lookupMeshNetif().maybeMacAddress,
+        nodeAddr_,
         ++sn_,
         0,
         elementTtl_,
@@ -441,7 +441,7 @@ Routing::hwmpPannFrameProcess(
   folly::MacAddress targetAddr{folly::MacAddress::fromNBO(pann.targetAddr)};
 
   /*  Ignore our own PANNs */
-  if (origAddr == *nlHandler_.lookupMeshNetif().maybeMacAddress) {
+  if (origAddr == nodeAddr_) {
     return;
   }
 
@@ -459,7 +459,7 @@ Routing::hwmpPannFrameProcess(
   }
 
   folly::MacAddress da{targetAddr};
-  if (da.isUnicast() && da != *nlHandler_.lookupMeshNetif().maybeMacAddress) {
+  if (da.isUnicast() && da != nodeAddr_) {
     const auto targetMpathIt{meshPaths_.find(targetAddr)};
     if (targetMpathIt == meshPaths_.end()) {
       VLOG(10) << "discarding PANN - target not found";
@@ -524,7 +524,7 @@ Routing::hwmpPannFrameProcess(
   if (pann.replyRequested) {
     txPannFrame(
         mpath.nextHop,
-        *nlHandler_.lookupMeshNetif().maybeMacAddress,
+        nodeAddr_,
         ++sn_,
         0,
         elementTtl_,
@@ -541,7 +541,7 @@ Routing::hwmpPannFrameProcess(
 
   const auto topKGatesNewHasOrig = isStationInTopKGates(origAddr);
 
-  if (targetAddr != *nlHandler_.lookupMeshNetif().maybeMacAddress &&
+  if (targetAddr != nodeAddr_ &&
       (!pann.isGate || topKGatesOldHasOrig || topKGatesNewHasOrig)) {
     txPannFrame(
         da,
