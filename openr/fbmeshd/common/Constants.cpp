@@ -23,3 +23,5 @@ constexpr int32_t Constants::kMeshSparkReportPort;
 
 constexpr std::chrono::seconds Constants::kDefaultHalfLife;
 constexpr std::chrono::seconds Constants::kDefaultMaxSuppressLimit;
+
+constexpr std::array<uint8_t, 3> Constants::kFacebookOui;

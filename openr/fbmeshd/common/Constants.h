@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 
@@ -49,6 +50,9 @@ class Constants final {
   static constexpr unsigned int kDefaultReuseLimit{750};
   static constexpr std::chrono::seconds kDefaultHalfLife{1 * 60};
   static constexpr std::chrono::seconds kDefaultMaxSuppressLimit{3 * 60};
+
+  // Facebook OUI
+  static constexpr std::array<uint8_t, 3> kFacebookOui{0xa4, 0x0e, 0x2b};
 };
 
 } // namespace fbmeshd
