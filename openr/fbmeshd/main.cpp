@@ -10,6 +10,7 @@
 #include <systemd/sd-daemon.h> // @manual
 #endif
 
+#include <chrono>
 #include <thread>
 
 #include <fbzmq/async/ZmqEventLoop.h>
@@ -33,12 +34,15 @@
 #include <openr/fbmeshd/openr-metric-manager/OpenRMetricManager.h>
 #include <openr/fbmeshd/pinger/PeerPinger.h>
 #include <openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.h>
+#include <openr/fbmeshd/routing/MetricManager80211s.h>
 #include <openr/fbmeshd/routing/Routing.h>
 #include <openr/fbmeshd/routing/UDPRoutingPacketTransport.h>
 #include <openr/fbmeshd/separa/Separa.h>
 #include <openr/watchdog/Watchdog.h>
 
 using namespace openr::fbmeshd;
+
+using namespace std::chrono_literals;
 
 DEFINE_int32(fbmeshd_service_port, 30303, "fbmeshd thrift service port");
 
@@ -209,6 +213,11 @@ DEFINE_bool(
 
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
+
+const auto kMetricManagerInterval{3s};
+const auto kMetricManagerEwmaFactorLog2{7};
+const auto kMetricManagerHysteresisFactorLog2{2};
+const auto kMetricManagerBaseBitrate{60};
 
 } // namespace
 
@@ -426,14 +435,22 @@ main(int argc, char* argv[]) {
   }
 
   std::unique_ptr<folly::EventBase> routingEventLoop;
+  std::unique_ptr<MetricManager80211s> metricManager80211s;
   std::unique_ptr<Routing> routing;
   std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport;
   static constexpr auto routingId{"Routing"};
   if (FLAGS_enable_routing) {
     routingEventLoop = std::make_unique<folly::EventBase>();
+    metricManager80211s = std::make_unique<MetricManager80211s>(
+        routingEventLoop.get(),
+        kMetricManagerInterval,
+        nlHandler,
+        kMetricManagerEwmaFactorLog2,
+        kMetricManagerHysteresisFactorLog2,
+        kMetricManagerBaseBitrate);
     routing = std::make_unique<Routing>(
         routingEventLoop.get(),
-        nlHandler,
+        metricManager80211s.get(),
         nlHandler.lookupMeshNetif().maybeMacAddress.value(),
         FLAGS_routing_ttl);
     routingPacketTransport = std::make_unique<UDPRoutingPacketTransport>(

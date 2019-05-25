@@ -5,13 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/fbmeshd/routing/MetricManager.h"
+#include "openr/fbmeshd/routing/MetricManager80211s.h"
 
 #include <cstddef>
 
 using namespace openr::fbmeshd;
 
-MetricManager::MetricManager(
+MetricManager80211s::MetricManager80211s(
     folly::EventBase* evb,
     std::chrono::milliseconds interval,
     Nl80211Handler& nlHandler,
@@ -19,14 +19,18 @@ MetricManager::MetricManager(
     uint32_t hysteresisFactor,
     uint32_t baseBitrate)
     : folly::AsyncTimeout{evb},
+      evb_{evb},
       interval_{interval},
       nlHandler_{nlHandler},
       ewmaFactor_{ewmaFactor},
       hysteresisFactor_{hysteresisFactor},
-      baseBitrate_{baseBitrate} {}
+      baseBitrate_{baseBitrate} {
+  evb->runInEventBaseThread(
+      [this, interval] { evb_->scheduleTimeout(this, interval); });
+}
 
 uint32_t
-MetricManager::bitrateToAirtime(uint32_t rate) {
+MetricManager80211s::bitrateToAirtime(uint32_t rate) {
   if (rate == 0) {
     /* Don't return UINT_MAX because old_metric+last_hop_metric would overflow
      */
@@ -43,8 +47,8 @@ MetricManager::bitrateToAirtime(uint32_t rate) {
 }
 
 void
-MetricManager::timeoutExpired() noexcept {
-  VLOG(8) << "MetricManager: updating metrics...";
+MetricManager80211s::timeoutExpired() noexcept {
+  VLOG(8) << "MetricManager80211s: updating metrics...";
   const auto stas = nlHandler_.getStationsInfo();
   for (const auto& it : stas) {
     auto mac = it.macAddress;
@@ -57,14 +61,14 @@ MetricManager::timeoutExpired() noexcept {
 
     /* Filter base bitrate (6Mbps) rates */
     if (it.expectedThroughput == baseBitrate_) {
-      VLOG(8) << "MetricManager: filtered base bitrate metric update for "
+      VLOG(8) << "MetricManager80211s: filtered base bitrate metric update for "
               << mac;
       continue;
     }
 
     /* Initialize to newMetric to speed up convergence  */
     if (metrics_.count(mac) == 0) {
-      VLOG(10) << "MetricManager: first metric entry for " << mac;
+      VLOG(10) << "MetricManager80211s: first metric entry for " << mac;
       metrics_[mac].ewmaMetric = newMetric << ewmaFactor_;
     }
 
@@ -83,20 +87,20 @@ MetricManager::timeoutExpired() noexcept {
       metrics_[mac].count++;
     }
 
-    VLOG(10) << "MetricManager: " << mac << " adding metric " << newMetric
+    VLOG(10) << "MetricManager80211s: " << mac << " adding metric " << newMetric
              << " new metric " << (metrics_[mac].ewmaMetric >> ewmaFactor_);
   }
 
-  scheduleTimeout(interval_);
+  evb_->scheduleTimeout(this, interval_);
 }
 
 uint32_t
-MetricManager::getLinkMetric(const StationInfo& sta) {
+MetricManager80211s::getLinkMetric(const StationInfo& sta) {
   auto mac = sta.macAddress;
 
   /* If we don't have a metric for this station yet, use expected throughput*/
   if (metrics_.count(mac) == 0) {
-    VLOG(10) << "MetricManager: request for unknown: " << mac;
+    VLOG(10) << "MetricManager80211s: request for unknown: " << mac;
     return bitrateToAirtime(sta.expectedThroughput);
   }
 
@@ -110,8 +114,20 @@ MetricManager::getLinkMetric(const StationInfo& sta) {
     metrics_[mac].reportedMetric = metrics_[mac].ewmaMetric;
   }
 
-  VLOG(10) << "MetricManager: request for " << mac
+  VLOG(10) << "MetricManager80211s: request for " << mac
            << " reply: " << (metrics_[mac].reportedMetric >> ewmaFactor_);
 
   return metrics_[mac].reportedMetric >> ewmaFactor_;
+}
+
+std::unordered_map<folly::MacAddress, uint32_t>
+MetricManager80211s::getLinkMetrics() {
+  std::unordered_map<folly::MacAddress, uint32_t> metrics;
+  for (const auto& sta : nlHandler_.getStationsInfo()) {
+    if (sta.expectedThroughput == 0) {
+      continue;
+    }
+    metrics.emplace(sta.macAddress, getLinkMetric(sta));
+  }
+  return metrics;
 }

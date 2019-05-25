@@ -84,7 +84,7 @@ class Routing {
 
   explicit Routing(
       folly::EventBase* evb,
-      Nl80211Handler& nlHandler,
+      MetricManager* metricManager,
       folly::MacAddress nodeAddr,
       uint32_t elementTtl);
 
@@ -142,9 +142,6 @@ class Routing {
 
   folly::EventBase* evb_;
 
-  // netlink handler used to request mpath from the kernel
-  Nl80211Handler& nlHandler_;
-
   folly::MacAddress nodeAddr_;
 
   uint32_t elementTtl_;
@@ -153,7 +150,7 @@ class Routing {
 
   PeriodicPinger periodicPinger_;
 
-  MetricManager metricManager_;
+  MetricManager* metricManager_;
 
   folly::Optional<
       std::function<void(folly::MacAddress, std::unique_ptr<folly::IOBuf>)>>

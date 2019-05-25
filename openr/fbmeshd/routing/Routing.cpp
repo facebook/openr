@@ -28,10 +28,6 @@ const auto kMeshPathExpire{60s};
 const auto kSyncRoutesInterval{1s};
 const auto kMinGatewayRedundancy{2};
 const auto kPeriodicPingerInterval{10s};
-const auto kMetricManagerInterval{3s};
-const auto kMetricManagerEwmaFactorLog2{7};
-const auto kMetricManagerHysteresisFactorLog2{2};
-const auto kMetricManagerBaseBitrate{60};
 
 void
 meshPathExpire(
@@ -77,11 +73,10 @@ getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
 
 Routing::Routing(
     folly::EventBase* evb,
-    openr::fbmeshd::Nl80211Handler& nlHandler,
+    MetricManager* metricManager,
     folly::MacAddress nodeAddr,
     uint32_t elementTtl)
     : evb_{evb},
-      nlHandler_{nlHandler},
       nodeAddr_{nodeAddr},
       elementTtl_{elementTtl},
       periodicPinger_{
@@ -91,12 +86,7 @@ Routing::Routing(
                              nodeAddr},
           kPeriodicPingerInterval,
           "mesh0"},
-      metricManager_{evb_,
-                     kMetricManagerInterval,
-                     nlHandler_,
-                     kMetricManagerEwmaFactorLog2,
-                     kMetricManagerHysteresisFactorLog2,
-                     kMetricManagerBaseBitrate},
+      metricManager_{metricManager},
       netlinkSocket_{&zmqEvl_},
       zmqEvlThread_{[this]() {
         folly::setThreadName("Routing Zmq Evl");
@@ -123,7 +113,6 @@ Routing::prepare() {
   doMeshHousekeeping();
 
   periodicPinger_.scheduleTimeout(1s);
-  metricManager_.scheduleTimeout(kMetricManagerInterval);
   syncRoutesTimer_->scheduleTimeout(kSyncRoutesInterval);
 }
 
@@ -448,11 +437,9 @@ Routing::hwmpPannFrameProcess(
   VLOG(10) << "received PANN from " << origAddr << " via neighbour " << sa
            << " target " << targetAddr << " (is_gate=" << pann.isGate << ")";
 
-  const auto stas = nlHandler_.getStationsInfo();
-  const auto sta =
-      std::find_if(stas.begin(), stas.end(), [sa](const auto& sta) {
-        return sta.macAddress == sa && sta.expectedThroughput != 0;
-      });
+  const auto stas = metricManager_->getLinkMetrics();
+
+  const auto sta = stas.find(sa);
   if (sta == stas.end()) {
     VLOG(10) << "discarding PANN - sta not found";
     return;
@@ -473,7 +460,7 @@ Routing::hwmpPannFrameProcess(
     da = targetMpath.nextHop;
   }
 
-  uint32_t lastHopMetric{metricManager_.getLinkMetric(*sta)};
+  uint32_t lastHopMetric{sta->second};
 
   uint32_t newMetric{origMetric + lastHopMetric};
   if (newMetric < origMetric) {

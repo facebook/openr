@@ -77,7 +77,7 @@ add_executable(fbmeshd
     openr/fbmeshd/openr-metric-manager/OpenRMetricManager.cpp
     openr/fbmeshd/pinger/PeerPinger.cpp
     openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.cpp
-    openr/fbmeshd/routing/MetricManager.cpp
+    openr/fbmeshd/routing/MetricManager80211s.cpp
     openr/fbmeshd/routing/PeriodicPinger.cpp
     openr/fbmeshd/routing/Routing.cpp
     openr/fbmeshd/routing/UDPRoutingPacketTransport.cpp
