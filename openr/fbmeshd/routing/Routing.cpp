@@ -135,7 +135,7 @@ void
 Routing::doSyncRoutes() {
   VLOG(8) << folly::sformat("Routing::{}()", __func__);
 
-  auto meshIfIndex = nlHandler_.lookupMeshNetif().maybeIfIndex.value();
+  auto meshIfIndex = netlinkSocket_.getIfIndex("mesh0").get();
 
   zmqEvl_.runInEventLoop([this, meshIfIndex]() {
     openr::fbnl::NlUnicastRoutes unicastRouteDb;
