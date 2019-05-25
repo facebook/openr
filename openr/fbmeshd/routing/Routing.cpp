@@ -76,24 +76,23 @@ getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
 } // namespace
 
 Routing::Routing(
+    folly::EventBase* evb,
     openr::fbmeshd::Nl80211Handler& nlHandler,
     folly::SocketAddress addr,
-    uint32_t elementTtl,
-    int32_t tos)
-    : nlHandler_{nlHandler},
-      socket_{this},
-      clientSocket_{this},
+    uint32_t elementTtl)
+    : evb_{evb},
+      nlHandler_{nlHandler},
+      socket_{evb_},
       addr_{addr},
       elementTtl_{elementTtl},
-      tos_{tos},
-      periodicPinger_{this,
+      periodicPinger_{evb_,
                       folly::IPAddressV6{"ff02::1%mesh0"},
                       folly::IPAddressV6{
                           folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
                           nlHandler_.lookupMeshNetif().maybeMacAddress.value()},
                       kPeriodicPingerInterval,
                       "mesh0"},
-      metricManager_{this,
+      metricManager_{evb_,
                      kMetricManagerInterval,
                      nlHandler_,
                      kMetricManagerEwmaFactorLog2,
@@ -105,28 +104,26 @@ Routing::Routing(
         zmqEvl_.run();
       }},
       syncRoutesTimer_{folly::AsyncTimeout::make(
-          *this,
+          *evb_,
           [this]() noexcept {
             doSyncRoutes();
             syncRoutesTimer_->scheduleTimeout(kSyncRoutesInterval);
           })},
       noLongerAGateRANNTimer_{folly::AsyncTimeout::make(
-          *this, [this]() noexcept { isRoot_ = false; })},
+          *evb_, [this]() noexcept { isRoot_ = false; })},
       housekeepingTimer_{folly::AsyncTimeout::make(
-          *this, [this]() noexcept { doMeshHousekeeping(); })},
+          *evb_, [this]() noexcept { doMeshHousekeeping(); })},
       meshPathRootTimer_{folly::AsyncTimeout::make(
-          *this, [this]() noexcept { doMeshPathRoot(); })} {
-  runInEventBaseThread([this]() { prepare(); });
+          *evb_, [this]() noexcept { doMeshPathRoot(); })} {
+  evb_->runInEventBaseThread([this]() { prepare(); });
 }
 
 void
 Routing::prepare() {
   socket_.bind(addr_);
-  clientSocket_.bind(folly::SocketAddress("::", 0));
-  clientSocket_.setTrafficClass(tos_);
   VLOG(4) << "Server listening on " << socket_.address().describe();
 
-  socket_.addListener(this, this);
+  socket_.addListener(evb_, this);
   socket_.listen();
   doMeshPathRoot();
   doMeshHousekeeping();
@@ -366,18 +363,10 @@ Routing::txPannFrame(
     bool isGate,
     bool replyRequested) {
   VLOG(8) << folly::sformat("Routing::{}()", __func__);
-  const auto destSockAddr = folly::SocketAddress{
-      da.isBroadcast()
-          ? folly::IPAddressV6{"ff02::1%mesh0"}
-          : folly::IPAddressV6{folly::IPAddressV6{
-                                   folly::IPAddressV6::LINK_LOCAL, da}
-                                   .str() +
-                               "%mesh0"},
-      6668};
-  std::string skb;
 
+  std::string skb;
   VLOG(10) << "sending PANN orig:" << origAddr << " target:" << targetAddr
-           << " dst:" << destSockAddr.describe();
+           << " dst:" << da.toString();
   serializer_.serialize(
       thrift::MeshPathFramePANN{
           apache::thrift::FRAGILE,
@@ -395,7 +384,10 @@ Routing::txPannFrame(
   auto buf = folly::IOBuf::copyBuffer(skb, 1, 0);
   buf->prepend(1);
   *buf->writableData() = static_cast<uint8_t>(MeshPathFrameType::PANN);
-  clientSocket_.write(destSockAddr, buf);
+
+  if (sendPacketCallback_) {
+    (*sendPacketCallback_)(da, std::move(buf));
+  }
 }
 
 /*
@@ -582,7 +574,7 @@ Routing::hwmpPannFrameProcess(
 
 void
 Routing::setGatewayStatus(bool isGate) {
-  runInEventBaseThread([isGate, this]() {
+  evb_->runInEventBaseThread([isGate, this]() {
     if (isGate_ == isGate) {
       return;
     }
@@ -604,7 +596,27 @@ std::unordered_map<folly::MacAddress, Routing::MeshPath>
 Routing::dumpMpaths() {
   VLOG(8) << folly::sformat("Routing::{}()", __func__);
   std::unordered_map<folly::MacAddress, Routing::MeshPath> mpaths;
-  runImmediatelyOrRunInEventBaseThreadAndWait(
+  evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
       [this, &mpaths]() { mpaths = meshPaths_; });
   return mpaths;
+}
+
+void
+Routing::setSendPacketCallback(Routing::SendPacketCallback cb) {
+  if (evb_->isRunning()) {
+    evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
+        [this, cb = std::move(cb)]() { sendPacketCallback_ = cb; });
+  } else {
+    sendPacketCallback_ = cb;
+  }
+}
+
+void
+Routing::resetSendPacketCallback() {
+  if (evb_->isRunning()) {
+    evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
+        [this]() { sendPacketCallback_.reset(); });
+  } else {
+    sendPacketCallback_.reset();
+  }
 }

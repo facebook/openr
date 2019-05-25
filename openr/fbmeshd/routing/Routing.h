@@ -27,9 +27,11 @@
 namespace openr {
 namespace fbmeshd {
 
-class Routing : public folly::EventBase,
-                public folly::AsyncUDPServerSocket::Callback {
+class Routing : public folly::AsyncUDPServerSocket::Callback {
  public:
+  using SendPacketCallback =
+      std::function<void(folly::MacAddress, std::unique_ptr<folly::IOBuf>)>;
+
   /*
    * mesh path frame type
    */
@@ -83,12 +85,11 @@ class Routing : public folly::EventBase,
     bool isGate{false};
   };
 
- public:
   explicit Routing(
+      folly::EventBase* evb,
       Nl80211Handler& nlHandler,
       folly::SocketAddress addr,
-      uint32_t elementTtl,
-      int32_t tos);
+      uint32_t elementTtl);
 
   Routing() = delete;
   ~Routing() override = default;
@@ -100,6 +101,9 @@ class Routing : public folly::EventBase,
   void setGatewayStatus(bool isGate);
 
   std::unordered_map<folly::MacAddress, MeshPath> dumpMpaths();
+
+  void setSendPacketCallback(SendPacketCallback cb);
+  void resetSendPacketCallback();
 
  private:
   void prepare();
@@ -152,24 +156,24 @@ class Routing : public folly::EventBase,
   void hwmpPannFrameProcess(
       folly::MacAddress sa, thrift::MeshPathFramePANN rann);
 
+  folly::EventBase* evb_;
+
   // netlink handler used to request mpath from the kernel
   Nl80211Handler& nlHandler_;
 
   folly::AsyncUDPServerSocket socket_;
 
-  folly::AsyncUDPSocket clientSocket_;
-
   folly::SocketAddress addr_;
 
   uint32_t elementTtl_;
-
-  int32_t tos_;
 
   apache::thrift::CompactSerializer serializer_;
 
   PeriodicPinger periodicPinger_;
 
   MetricManager metricManager_;
+
+  folly::Optional<SendPacketCallback> sendPacketCallback_;
 
   /*
    * L3 Routing state

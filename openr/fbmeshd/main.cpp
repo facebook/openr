@@ -34,6 +34,7 @@
 #include <openr/fbmeshd/pinger/PeerPinger.h>
 #include <openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.h>
 #include <openr/fbmeshd/routing/Routing.h>
+#include <openr/fbmeshd/routing/UDPRoutingPacketTransport.h>
 #include <openr/fbmeshd/separa/Separa.h>
 #include <openr/watchdog/Watchdog.h>
 
@@ -424,18 +425,30 @@ main(int argc, char* argv[]) {
         }));
   }
 
+  std::unique_ptr<folly::EventBase> routingEventLoop;
   std::unique_ptr<Routing> routing;
+  std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport;
   static constexpr auto routingId{"Routing"};
   if (FLAGS_enable_routing) {
+    routingEventLoop = std::make_unique<folly::EventBase>();
     routing = std::make_unique<Routing>(
+        routingEventLoop.get(),
         nlHandler,
         folly::SocketAddress{"::", 6668},
-        FLAGS_routing_ttl,
-        FLAGS_routing_tos);
-    allThreads.emplace_back(std::thread([&routing]() noexcept {
+        FLAGS_routing_ttl);
+    routingPacketTransport = std::make_unique<UDPRoutingPacketTransport>(
+        routingEventLoop.get(), FLAGS_routing_tos);
+
+    routing->setSendPacketCallback(
+        [&routingPacketTransport](
+            folly::MacAddress da, std::unique_ptr<folly::IOBuf> buf) {
+          routingPacketTransport->sendPacket(da, std::move(buf));
+        });
+
+    allThreads.emplace_back(std::thread([&routingEventLoop]() noexcept {
       LOG(INFO) << "Starting Routing";
       folly::setThreadName(routingId);
-      routing->loopForever();
+      routingEventLoop->loopForever();
       LOG(INFO) << "Routing thread stopped.";
     }));
   }
@@ -517,6 +530,11 @@ main(int argc, char* argv[]) {
   if (separa) {
     separa->stop();
     separa->waitUntilStopped();
+  }
+
+  if (routingEventLoop) {
+    routing->resetSendPacketCallback();
+    routingEventLoop->terminateLoopSoon();
   }
 
   // Wait for all threads to finish

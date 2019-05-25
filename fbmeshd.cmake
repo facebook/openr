@@ -80,6 +80,7 @@ add_executable(fbmeshd
     openr/fbmeshd/routing/MetricManager.cpp
     openr/fbmeshd/routing/PeriodicPinger.cpp
     openr/fbmeshd/routing/Routing.cpp
+    openr/fbmeshd/routing/UDPRoutingPacketTransport.cpp
     openr/fbmeshd/separa/Separa.cpp
     $<TARGET_OBJECTS:fbmeshd-cpp2-obj>
 )
