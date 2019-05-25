@@ -81,17 +81,14 @@ class OpenRMetricManager final {
    * and submit that information to `stepDetectors_`. It is not responsible
    * for actually updating the metric values in OpenR.
    */
-  void submitAvgAirTimeMetrics();
+  void submitAvgMetrics();
 
   void submitPingMetrics();
 
   /**
-   * create a new step detector with initial metric
+   * create a new step-detector with initial metric
    */
   void addStepDetector(folly::MacAddress peer, uint32_t metric);
-
-  // update existing step detectors with new samples
-  void updateStepDetectors(std::unordered_map<folly::MacAddress, uint32_t>);
 
   // ZmqEventLoop for scheduling async events and socket callback registration
   fbzmq::ZmqEventLoop& zmqLoop_;
