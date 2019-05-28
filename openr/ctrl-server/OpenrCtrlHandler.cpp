@@ -63,8 +63,10 @@ void
 OpenrCtrlHandler::authorizeConnection() {
   auto connContext = getConnectionContext()->getConnectionContext();
   auto peerCommonName = connContext->getPeerCommonName();
+  auto peerAddr = connContext->getPeerAddress();
 
-  if (peerCommonName.empty() || acceptablePeerCommonNames_.empty()) {
+  if ((peerCommonName.empty() || acceptablePeerCommonNames_.empty()) &&
+      !peerAddr->isLoopbackAddress()) {
     // for now, we will allow non-secure connections, but lets log the event so
     // we know how often this is happening.
     fbzmq::LogSample sample{};
