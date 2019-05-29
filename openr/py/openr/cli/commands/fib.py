@@ -8,17 +8,24 @@
 #
 
 from builtins import object
+from typing import Any
 
 from openr.cli.utils import utils
+from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients import decision_client, fib_client, lm_client
+from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import ipnetwork, printing
 
 
-class FibCmd(object):
-    def __init__(self, cli_opts):
-        """ initialize the Fib client """
+class FibCmdBase(OpenrCtrlCmd):
+    """
+    Base class for Fib cmds. All of Fib cmd
+    is spawn out of this.
+    """
 
-        self.client = fib_client.FibClient(cli_opts)
+    def __init__(self, cli_opts):
+        """initialize the Fib client"""
+        super(FibCmdBase, self).__init__(cli_opts)
 
 
 class FibAgentCmd(object):
@@ -44,9 +51,11 @@ class FibAgentCmd(object):
             raise
 
 
-class FibRoutesComputedCmd(FibCmd):
-    def run(self, prefixes, labels, json):
-        route_db = self.client.get_route_db()
+class FibRoutesComputedCmd(FibCmdBase):
+    def _run(
+        self, client: OpenrCtrl.Client, prefixes: Any, labels: Any, json: bool
+    ) -> None:
+        route_db = client.getRouteDb()
         if json:
             route_db_dict = {route_db.thisNodeName: utils.route_db_to_dict(route_db)}
             utils.print_routes_json(route_db_dict, prefixes, labels)
