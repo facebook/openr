@@ -125,11 +125,13 @@ class SpfSolver::SpfSolverImpl {
       const std::string& myNodeName,
       bool enableV4,
       bool computeLfaPaths,
-      bool enableOrderedFib)
+      bool enableOrderedFib,
+      bool bgpDryRun)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
         computeLfaPaths_(computeLfaPaths),
-        enableOrderedFib_(enableOrderedFib) {}
+        enableOrderedFib_(enableOrderedFib),
+        bgpDryRun_(bgpDryRun) {}
 
   ~SpfSolverImpl() = default;
 
@@ -279,6 +281,8 @@ class SpfSolver::SpfSolverImpl {
   const bool computeLfaPaths_{false};
 
   const bool enableOrderedFib_{false};
+
+  const bool bgpDryRun_{false};
 };
 
 std::pair<
@@ -961,7 +965,8 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               thrift::AdminDistance::EBGP,
                               getLoopbackVias(nodes, isV4),
                               thrift::PrefixType::BGP,
-                              *bestData};
+                              *bestData,
+                              bgpDryRun_ /* doNotProgram */};
 }
 
 std::vector<thrift::NextHopThrift>
@@ -1209,9 +1214,11 @@ SpfSolver::SpfSolver(
     const std::string& myNodeName,
     bool enableV4,
     bool computeLfaPaths,
-    bool enableOrderedFib)
+    bool enableOrderedFib,
+    bool bgpDryRun)
     : impl_(new SpfSolver::SpfSolverImpl(
-          myNodeName, enableV4, computeLfaPaths, enableOrderedFib)) {}
+          myNodeName, enableV4, computeLfaPaths, enableOrderedFib, bgpDryRun)) {
+}
 
 SpfSolver::~SpfSolver() {}
 
@@ -1294,6 +1301,7 @@ Decision::Decision(
     bool enableV4,
     bool computeLfaPaths,
     bool enableOrderedFib,
+    bool bgpDryRun,
     const AdjacencyDbMarker& adjacencyDbMarker,
     const PrefixDbMarker& prefixDbMarker,
     std::chrono::milliseconds debounceMinDur,
@@ -1323,7 +1331,7 @@ Decision::Decision(
   processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
       this, [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(
-      myNodeName, enableV4, computeLfaPaths, enableOrderedFib);
+      myNodeName, enableV4, computeLfaPaths, enableOrderedFib, bgpDryRun);
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);

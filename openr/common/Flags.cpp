@@ -171,6 +171,10 @@ DEFINE_bool(
     enable_ordered_fib_programming,
     false,
     "Enable ordered fib programming per RFC 6976");
+DEFINE_bool(
+    enable_bgp_route_programming,
+    true,
+    "Enable programming routes with prefix type BGP to the system FIB");
 DEFINE_bool(enable_spark, true, "If set, enables Spark for neighbor discovery");
 DEFINE_int32(
     spark_hold_time_s,

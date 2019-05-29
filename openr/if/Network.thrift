@@ -93,4 +93,5 @@ struct UnicastRoute {
   // fields used for route redistribution
   5: optional PrefixType prefixType
   6: optional binary data
+  7: bool doNotInstall = false
 }

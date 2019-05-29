@@ -621,7 +621,8 @@ TEST(BGPRedistribution, BasicOperation) {
       thrift::AdminDistance::EBGP,
       {createNextHop(addr1.prefixAddress)},
       thrift::PrefixType::BGP,
-      data1);
+      data1,
+      false);
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
 
@@ -665,7 +666,8 @@ TEST(BGPRedistribution, BasicOperation) {
       thrift::AdminDistance::EBGP,
       {createNextHop(addr2.prefixAddress)},
       thrift::PrefixType::BGP,
-      data2);
+      data2,
+      false);
 
   routeDb = spfSolver.buildPaths("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
@@ -2512,6 +2514,7 @@ class DecisionTestFixture : public ::testing::Test {
         true, /* enable v4 */
         true, /* computeLfaPaths */
         false, /* enableOrderedFib */
+        false, /* bgpDryRun */
         AdjacencyDbMarker{"adj:"},
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),

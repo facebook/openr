@@ -238,6 +238,16 @@ Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
     addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_ROUTE_DB_RECVD");
   }
 
+  // remove routes that should not be programmed
+  auto rIter = newRouteDb.unicastRoutes.begin();
+  while (rIter != newRouteDb.unicastRoutes.end()) {
+    if (rIter->doNotInstall) {
+      rIter = newRouteDb.unicastRoutes.erase(rIter);
+    } else {
+      ++rIter;
+    }
+  }
+
   // Find out delta to be programmed
   auto const routeDelta = findDeltaRoutes(newRouteDb, routeDb_);
   // update new routeDb_

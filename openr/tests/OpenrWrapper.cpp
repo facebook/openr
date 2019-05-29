@@ -228,6 +228,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       v4Enabled, // enable v4
       true, // computeLfaPaths
       false, // enableOrderedFib
+      false, // bgpDryRun
       AdjacencyDbMarker{"adj:"},
       PrefixDbMarker{"prefix:"},
       std::chrono::milliseconds(10),
