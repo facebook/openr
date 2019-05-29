@@ -8,7 +8,7 @@
 #
 
 from builtins import object
-from typing import Any
+from typing import Any, List
 
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
@@ -94,9 +94,10 @@ class FibCountersCmd(FibAgentCmd):
 
 
 class FibRoutesInstalledCmd(FibAgentCmd):
-    def run(self, prefixes, json_opt=False):
+    def run(self, prefixes: List[str], labels: List[int], json_opt: bool = False):
         try:
             routes = self.client.getRouteTableByClient(self.client.client_id)
+            mpls_routes = self.client.getMplsRouteTableByClient(self.client.client_id)
         except Exception as e:
             print("Failed to get routes from Fib.")
             print("Exception: {}".format(e))
@@ -107,11 +108,15 @@ class FibRoutesInstalledCmd(FibAgentCmd):
 
         if json_opt:
             utils.print_json(
-                utils.get_routes_json(host_id, client_id, routes, prefixes)
+                utils.get_routes_json(
+                    host_id, client_id, routes, prefixes, mpls_routes, labels
+                )
             )
         else:
-            caption = "{}'s FIB routes by client {}".format(host_id, client_id)
+            caption = f"{host_id}'s FIB routes by client {client_id}"
             utils.print_unicast_routes(caption, routes, prefixes)
+            caption = f"{host_id}'s MPLS routes by client {client_id}"
+            utils.print_mpls_routes(caption, mpls_routes, labels)
 
         return 0
 

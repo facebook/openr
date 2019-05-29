@@ -10,8 +10,10 @@
 
 import sys
 from builtins import object
+from typing import List
 
 import click
+from bunch import Bunch
 from openr.cli.commands import fib
 from openr.cli.utils.options import breeze_option
 
@@ -62,12 +64,24 @@ class FibRoutesInstalledCli(object):
         multiple=True,
         help="Get route for specific IPs or Prefixes.",
     )
+    @click.option(
+        "--labels",
+        "-l",
+        type=click.INT,
+        multiple=True,
+        help="Get route for specific labels.",
+    )
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
-    def routes(cli_opts, prefixes, json):  # noqa: B902
+    def routes(
+        cli_opts: Bunch,  # noqa: B902
+        prefixes: List[str],
+        labels: List[int],
+        json: bool,
+    ):
         """ Get and print all the routes on fib agent """
 
-        return_code = fib.FibRoutesInstalledCmd(cli_opts).run(prefixes, json)
+        return_code = fib.FibRoutesInstalledCmd(cli_opts).run(prefixes, labels, json)
         sys.exit(return_code)
 
 

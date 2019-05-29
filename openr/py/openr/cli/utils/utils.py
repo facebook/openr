@@ -1493,13 +1493,19 @@ def print_mpls_routes(
     print(printing.render_vertical_table(route_strs, caption=caption))
 
 
-def get_routes_json(host, client, routes, prefixes=None):
-
+def get_routes_json(
+    host: str,
+    client: int,
+    routes: List[network_types.UnicastRoute],
+    prefixes: List[str] = None,
+    mpls_routes: List[network_types.MplsRoute] = None,
+    labels: List[int] = None,
+):
     networks = None
     if prefixes:
         networks = [ipaddress.ip_network(p) for p in prefixes]
 
-    data = {"host": host, "client": client, "routes": []}
+    data = {"host": host, "client": client, "routes": [], "mplsRoutes": []}
 
     for route in routes:
         dest = ipnetwork.sprint_prefix(route.dest)
@@ -1510,6 +1516,16 @@ def get_routes_json(host, client, routes, prefixes=None):
             "nexthops": [ip_nexthop_to_str(nh) for nh in get_route_nexthops(route)],
         }
         data["routes"].append(route_data)
+
+    for label in mpls_routes:
+        dest = label.topLabel
+        if labels and dest not in labels:
+            continue
+        route_data = {
+            "dest": dest,
+            "nexthops": [ip_nexthop_to_str(nh) for nh in label.nextHops],
+        }
+        data["mplsRoutes"].append(route_data)
 
     return data
 
