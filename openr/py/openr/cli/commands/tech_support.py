@@ -106,7 +106,7 @@ class TechSupportCmd(object):
         prefix_mgr.ViewCmd(self.cli_opts).run()
 
     def print_lm_links(self):
-        lm.LMLinksCmd(self.cli_opts).run(True, False, False)
+        lm.LMLinksCmd(self.cli_opts).run(False, False)
 
     def print_kvstore_peers(self):
         kvstore.PeersCmd(self.cli_opts).run()

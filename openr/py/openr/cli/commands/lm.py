@@ -14,69 +14,202 @@ from typing import Any, Dict, List
 
 import click
 from openr.cli.utils import utils
-from openr.clients import lm_client
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.LinkMonitor import ttypes as lm_types
+from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import ipnetwork, printing
 
 
-class LMCmd(object):
+class LMCmdBase(OpenrCtrlCmd):
+    """
+    Base class for LinkMonitor cmds. All of LinkMonitor cmd
+    is spawn out of this.
+    """
+
     def __init__(self, cli_opts):
         """ initialize the Link Monitor client """
+        super(LMCmdBase, self).__init__(cli_opts)
 
-        self.client = lm_client.LMClient(cli_opts)
         self.enable_color = cli_opts.enable_color
 
+    def toggleNodeOverloadBit(
+        self, client: OpenrCtrl.Client, overload: bool, yes: bool = False
+    ) -> None:
+        links = client.getInterfaces()
+        host = links.thisNodeName
+        print()
 
-class SetNodeOverloadCmd(LMCmd):
-    def run(self, yes=False):
+        if overload and links.isOverloaded:
+            print("Node {} is already overloaded.\n".format(host))
+            sys.exit(0)
 
-        set_unset_overload(self.client, True, yes)
+        if not overload and not links.isOverloaded:
+            print("Node {} is not overloaded.\n".format(host))
+            sys.exit(0)
+
+        action = "set overload bit" if overload else "unset overload bit"
+        if not utils.yesno(
+            "Are you sure to {} for node {} ?".format(action, host), yes
+        ):
+            print()
+            return
+
+        if overload:
+            client.setNodeOverload()
+        else:
+            client.unsetNodeOverload()
+
+        print("Successfully {}..\n".format(action))
+
+    def toggleLinkOverloadBit(
+        self,
+        client: OpenrCtrl.Client,
+        overload: bool,
+        interface: str,
+        yes: bool = False,
+    ) -> None:
+        links = client.getInterfaces()
+        print()
+
+        if interface not in links.interfaceDetails:
+            print("No such interface: {}".format(interface))
+            return
+
+        if overload and links.interfaceDetails[interface].isOverloaded:
+            print("Interface is already overloaded.\n")
+            sys.exit(0)
+
+        if not overload and not links.interfaceDetails[interface].isOverloaded:
+            print("Interface is not overloaded.\n")
+            sys.exit(0)
+
+        action = "set overload bit" if overload else "unset overload bit"
+        question_str = "Are you sure to {} for interface {} ?"
+        if not utils.yesno(question_str.format(action, interface), yes):
+            print()
+            return
+
+        if overload:
+            client.setInterfaceOverload(interface)
+        else:
+            client.unsetInterfaceOverload(interface)
+
+        print("Successfully {} for the interface.\n".format(action))
+
+    def checkIfLinkOverriden(
+        self, links: lm_types.DumpLinksReply, interface: str, metric: int
+    ) -> bool:
+        """
+        This function call will comapre the metricOverride in the following way:
+        1) metricOverride NOT set -> return None;
+        2) metricOverride set -> return True/False;
+        """
+        metricOverride = links.interfaceDetails[interface].metricOverride
+        if not metricOverride:
+            return None
+        return metricOverride == metric
+
+    def toggleLinkMetric(
+        self,
+        client: OpenrCtrl.Client,
+        override: bool,
+        interface: str,
+        metric: int,
+        yes: bool,
+    ) -> None:
+        links = client.getInterfaces()
+        print()
+
+        if interface not in links.interfaceDetails:
+            print("No such interface: {}".format(interface))
+            return
+
+        status = self.checkIfLinkOverriden(links, interface, metric)
+        if not override and status is None:
+            print("Interface hasn't been assigned metric override.\n")
+            sys.exit(0)
+
+        if override and status:
+            print(
+                "Interface: {} has already been set with metric: {}.\n".format(
+                    interface, metric
+                )
+            )
+            sys.exit(0)
+
+        action = "set override metric" if override else "unset override metric"
+        question_str = "Are you sure to {} for interface {} ?"
+        if not utils.yesno(question_str.format(action, interface), yes):
+            print()
+            return
+
+        if override:
+            client.setInterfaceMetric(interface, metric)
+        else:
+            client.unsetInterfaceMetric(interface)
+
+        print("Successfully {} for the interface.\n".format(action))
 
 
-class UnsetNodeOverloadCmd(LMCmd):
-    def run(self, yes=False):
-
-        set_unset_overload(self.client, False, yes)
-
-
-class SetLinkOverloadCmd(LMCmd):
-    def run(self, interface, yes):
-
-        set_unset_link_overload(self.client, True, interface, yes)
+class SetNodeOverloadCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
+        self.toggleNodeOverloadBit(client, True, yes)
 
 
-class UnsetLinkOverloadCmd(LMCmd):
-    def run(self, interface, yes):
-
-        set_unset_link_overload(self.client, False, interface, yes)
-
-
-class SetLinkMetricCmd(LMCmd):
-    def run(self, interface, metric, yes):
-
-        set_unset_link_metric(self.client, True, interface, metric, yes)
+class UnsetNodeOverloadCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
+        self.toggleNodeOverloadBit(client, False, yes)
 
 
-class UnsetLinkMetricCmd(LMCmd):
-    def run(self, interface, yes):
-
-        set_unset_link_metric(self.client, False, interface, 0, yes)
-
-
-class SetAdjMetricCmd(LMCmd):
-    def run(self, node, interface, metric, yes):
-
-        set_unset_adj_metric(self.client, True, node, interface, metric, yes)
+class SetLinkOverloadCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+        self.toggleLinkOverloadBit(client, True, interface, yes)
 
 
-class UnsetAdjMetricCmd(LMCmd):
-    def run(self, node, interface, yes):
+class UnsetLinkOverloadCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+        self.toggleLinkOverloadBit(client, False, interface, yes)
 
-        set_unset_adj_metric(self.client, False, node, interface, 0, yes)
+
+class SetLinkMetricCmd(LMCmdBase):
+    def _run(
+        self, client: OpenrCtrl.Client, interface: str, metric: str, yes: bool
+    ) -> None:
+        self.toggleLinkMetric(client, True, interface, int(metric), yes)
 
 
-class VersionCmd(LMCmd):
-    def run(self, json):
-        openr_version = self.client.get_openr_version()
+class UnsetLinkMetricCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+        self.toggleLinkMetric(client, False, interface, 0, yes)
+
+
+class SetAdjMetricCmd(LMCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        node: str,
+        interface: str,
+        metric: str,
+        yes: bool,
+    ) -> None:
+        client.setAdjacencyMetric(interface, node, int(metric))
+
+
+class UnsetAdjMetricCmd(LMCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        node: str,
+        interface: str,
+        metric: str,
+        yes: bool,
+    ) -> None:
+        client.unsetAdjacencyMetric(interface, node)
+
+
+class VersionCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, json: bool) -> None:
+        openr_version = client.getOpenrVersion()
 
         if json:
             version = utils.thrift_to_dict(openr_version)
@@ -94,9 +227,9 @@ class VersionCmd(LMCmd):
             )
 
 
-class BuildInfoCmd(LMCmd):
-    def run(self, json):
-        info = self.client.get_build_info()
+class BuildInfoCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, json: bool) -> None:
+        info = client.getBuildInfo()
 
         if json:
             info = utils.thrift_to_dict(info)
@@ -120,9 +253,9 @@ class BuildInfoCmd(LMCmd):
             )
 
 
-class LMLinksCmd(LMCmd):
-    def run(self, all, only_suppressed, json):
-        links = self.client.dump_links(all)
+class LMLinksCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, only_suppressed: bool, json: bool) -> None:
+        links = client.getInterfaces()
         if only_suppressed:
             links.interfaceDetails = {
                 k: v for k, v in links.interfaceDetails.items() if v.linkFlapBackOffMs
@@ -250,116 +383,3 @@ class LMLinksCmd(LMCmd):
 
         print(printing.render_horizontal_table(rows, columns, caption))
         print()
-
-
-def set_unset_overload(client, overload, yes):
-    """
-    Set/Unset overload bit for the node. Setting overload bit will take
-    away all transit traffic going through node while node will still
-    remains to be reachable.
-    """
-
-    links = client.dump_links()
-    host = links.thisNodeName
-    print()
-
-    if overload and links.isOverloaded:
-        print("Node {} is already overloaded.\n".format(host))
-        sys.exit(0)
-
-    if not overload and not links.isOverloaded:
-        print("Node {} is not overloaded.\n".format(host))
-        sys.exit(0)
-
-    action = "set overload bit" if overload else "unset overload bit"
-    if not utils.yesno("Are you sure to {} for node {} ?".format(action, host), yes):
-        print()
-        return
-
-    links = client.set_unset_overload(overload)
-
-    # Verify post command action
-    if overload == links.isOverloaded:
-        print("Successfully {}..\n".format(action))
-    else:
-        print("Failed to {}.\n".format(action))
-
-
-def set_unset_link_overload(client, overload, interface, yes):
-    """
-    Set/Unset link overload. All transit traffic on this link will be drained.
-    Equivalent to hard draining the link
-    """
-
-    links = client.dump_links()
-    print()
-
-    def intf_is_overloaded(links, interface):
-        if interface in links.interfaceDetails:
-            return links.interfaceDetails[interface].isOverloaded
-        return False
-
-    if overload and intf_is_overloaded(links, interface):
-        print("Interface is already overloaded.\n")
-        sys.exit(0)
-
-    if not overload and not intf_is_overloaded(links, interface):
-        print("Interface is not overloaded.\n")
-        sys.exit(0)
-
-    action = "set overload bit" if overload else "unset overload bit"
-    question_str = "Are you sure to {} for interface {} ?"
-    if not utils.yesno(question_str.format(action, interface), yes):
-        print()
-        return
-
-    links = client.set_unset_link_overload(overload, interface)
-
-    if overload == intf_is_overloaded(links, interface):
-        print("Successfully {} for the interface.\n".format(action))
-    else:
-        print("Failed to {} for the interface.\n".format(action))
-
-
-def set_unset_link_metric(client, override, interface, metric, yes):
-    """
-    Set/Unset metric override for the specific link. This can be used to
-    emulate soft drains.
-    """
-
-    links = client.dump_links()
-    print()
-
-    if interface not in links.interfaceDetails:
-        print("No such interface: {}".format(interface))
-        return
-
-    def intf_override(links, interface):
-        if interface in links.interfaceDetails:
-            return links.interfaceDetails[interface].metricOverride
-        return None
-
-    if not override and not intf_override(links, interface):
-        print("Interface hasn't been assigned metric override.\n")
-        sys.exit(0)
-
-    action = "set override metric" if override else "unset override metric"
-    question_str = "Are you sure to {} for interface {} ?"
-    if not utils.yesno(question_str.format(action, interface), yes):
-        print()
-        return
-
-    links = client.set_unset_link_metric(override, interface, metric)
-
-    # Verify post command action
-    if override == (intf_override(links, interface) is not None):
-        print("Successfully {} for the interface.\n".format(action))
-    else:
-        print("Failed to {} for the interface.\n".format(action))
-
-
-def set_unset_adj_metric(client, override, node, interface, metric, yes):
-    """
-    Set/Unset metric override for the specific adjacency.
-    """
-    client.set_unset_adj_metric(override, node, interface, metric)
