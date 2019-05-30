@@ -29,6 +29,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
           thrift::OpenrModuleType,
           std::shared_ptr<OpenrEventLoop>>& moduleTypeToEvl,
       MonitorSubmitUrl const& monitorSubmitUrl,
+      KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
+      fbzmq::ZmqEventLoop& evl,
       fbzmq::Context& context);
 
   ~OpenrCtrlHandler() override;
@@ -208,6 +210,14 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<std::string>> semifuture_getConfigKey(
       std::unique_ptr<std::string> key) override;
 
+  //
+  // APIs to expose state of private variables
+  //
+  size_t
+  getNumKvStorePublishers() {
+    return kvStorePublishers_->size();
+  }
+
  private:
   // For oneway requests, empty message will be returned immediately
   folly::Expected<fbzmq::Message, fbzmq::Error> requestReplyMessage(
@@ -231,8 +241,21 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>>
       moduleSockets_;
 
+  // Reference to event-loop
+  fbzmq::ZmqEventLoop& evl_;
+
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+
+  // KvStore sub socket
+  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> kvStoreSubSock_;
+
+  // Active kvstore snoop publishers
+  std::atomic<int64_t> publisherToken_{0};
+  folly::Synchronized<std::unordered_map<
+      int64_t,
+      apache::thrift::StreamPublisher<thrift::Publication>>>
+      kvStorePublishers_;
 
 }; // class OpenrCtrlHandler
 } // namespace openr

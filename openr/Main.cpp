@@ -809,6 +809,8 @@ main(int argc, char** argv) {
       acceptableNamesSet,
       moduleTypeToEvl,
       monitorSubmitUrl,
+      kvStoreLocalPubUrl,
+      mainEventLoop,
       context);
 
   thriftCtrlServer.setInterface(ctrlHandler);

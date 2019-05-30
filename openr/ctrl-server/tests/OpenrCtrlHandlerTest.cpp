@@ -194,18 +194,37 @@ class OpenrCtrlFixture : public ::testing::Test {
     moduleTypeToEvl[thrift::OpenrModuleType::PERSISTENT_STORE] =
         persistentStore;
 
+    // Create main-event-loop
+    mainEvlThread_ = std::thread([&]() { mainEvl_.run(); });
+
+    // we need to set thread manager as the createStreamGenerator will
+    // call getBlockingThreadManager to execute
+    tm = apache::thrift::concurrency::ThreadManager::newSimpleThreadManager(
+        1, false);
+    tm->threadFactory(
+        std::make_shared<apache::thrift::concurrency::PosixThreadFactory>());
+    tm->start();
+
     // Create open/r handler
     handler = std::make_unique<OpenrCtrlHandler>(
         nodeName,
         acceptablePeerNames,
         moduleTypeToEvl,
         monitorSubmitUrl_,
+        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        mainEvl_,
         context_);
+    handler->setThreadManager(tm.get());
   }
 
   void
   TearDown() override {
+    mainEvl_.stop();
+    mainEvlThread_.join();
+
     handler.reset();
+
+    tm->join();
 
     linkMonitor->stop();
     linkMonitorThread_.join();
@@ -275,6 +294,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   const std::string lmCmdUrl_{"inproc://link-monitor-cmd-url"};
   const std::string prefixManagerUrl_{"inproc://prefix-mngr-global-cmd"};
   fbzmq::Context context_;
+  fbzmq::ZmqEventLoop mainEvl_;
   std::thread zmqMonitorThread_;
   std::thread decisionThread_;
   std::thread fibThread_;
@@ -282,6 +302,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::thread prefixManagerThread_;
   std::thread persistentStoreThread_;
   std::thread linkMonitorThread_;
+  std::thread mainEvlThread_;
   apache::thrift::util::ScopedServerThread systemThriftThread;
 
  public:
@@ -296,6 +317,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::shared_ptr<PrefixManager> prefixManager;
   std::shared_ptr<PersistentStore> persistentStore;
   std::shared_ptr<LinkMonitor> linkMonitor;
+  std::shared_ptr<apache::thrift::concurrency::ThreadManager> tm;
   std::unique_ptr<OpenrCtrlHandler> handler;
 };
 
@@ -591,6 +613,42 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(2, ret->size());
     EXPECT_EQ(peers.at("peer1"), (*ret)["peer1"]);
     EXPECT_EQ(peers.at("peer3"), (*ret)["peer3"]);
+  }
+
+  //
+  // Snoop API
+  //
+
+  {
+    std::atomic<int> received{0};
+    const std::string key{"snoop-key"};
+    auto subscription = handler->snoopKvStore().subscribe(
+        [&received, key](thrift::Publication&& pub) {
+          EXPECT_EQ(1, pub.keyVals.size());
+          ASSERT_EQ(1, pub.keyVals.count(key));
+          EXPECT_EQ("value1", pub.keyVals.at(key).value.value());
+          EXPECT_EQ(received + 1, pub.keyVals.at(key).version);
+          received++;
+        });
+    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    kvStoreWrapper->setKey(key, createThriftValue(1, "node1", "value1"));
+    kvStoreWrapper->setKey(key, createThriftValue(1, "node1", "value1"));
+    kvStoreWrapper->setKey(key, createThriftValue(2, "node1", "value1"));
+    kvStoreWrapper->setKey(key, createThriftValue(3, "node1", "value1"));
+
+    // Check we should receive-3 updates
+    while (received < 3) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumKvStorePublishers() != 0) {
+      std::this_thread::yield();
+    }
   }
 }
 

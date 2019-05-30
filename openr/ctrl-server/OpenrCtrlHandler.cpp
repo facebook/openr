@@ -27,13 +27,57 @@ OpenrCtrlHandler::OpenrCtrlHandler(
         thrift::OpenrModuleType,
         std::shared_ptr<OpenrEventLoop>>& moduleTypeToEvl,
     MonitorSubmitUrl const& monitorSubmitUrl,
+    KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
+    fbzmq::ZmqEventLoop& evl,
     fbzmq::Context& context)
     : facebook::fb303::FacebookBase2("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
-      moduleTypeToEvl_(moduleTypeToEvl) {
+      moduleTypeToEvl_(moduleTypeToEvl),
+      evl_(evl),
+      kvStoreSubSock_(context) {
+  // Create monitor client
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(context, monitorSubmitUrl);
+
+  // Connect to KvStore
+  const auto kvStoreSub =
+      kvStoreSubSock_.connect(fbzmq::SocketUrl{kvStoreLocalPubUrl});
+  if (kvStoreSub.hasError()) {
+    LOG(FATAL) << "Error binding to URL " << std::string(kvStoreLocalPubUrl)
+               << " " << kvStoreSub.error();
+  }
+
+  // Subscribe to everything
+  const auto kvStoreSubOpt = kvStoreSubSock_.setSockOpt(ZMQ_SUBSCRIBE, "", 0);
+  if (kvStoreSubOpt.hasError()) {
+    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
+               << std::string(kvStoreLocalPubUrl) << " "
+               << kvStoreSubOpt.error();
+  }
+
+  evl_.runInEventLoop([this]() noexcept {
+    evl_.addSocket(
+        fbzmq::RawZmqSocketPtr{*kvStoreSubSock_},
+        ZMQ_POLLIN,
+        [&](int) noexcept {
+          apache::thrift::CompactSerializer serializer;
+          // Read publication from socket and process it
+          auto maybePublication =
+              kvStoreSubSock_.recvThriftObj<thrift::Publication>(serializer);
+          if (maybePublication.hasError()) {
+            LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
+                       << "Exception: " << maybePublication.error();
+            return;
+          }
+
+          SYNCHRONIZED(kvStorePublishers_) {
+            for (auto& kv : kvStorePublishers_) {
+              kv.second.next(maybePublication.value());
+            }
+          }
+        });
+  });
 
   for (const auto& kv : moduleTypeToEvl_) {
     auto moduleType = kv.first;
@@ -57,7 +101,28 @@ OpenrCtrlHandler::OpenrCtrlHandler(
   }
 }
 
-OpenrCtrlHandler::~OpenrCtrlHandler() {}
+OpenrCtrlHandler::~OpenrCtrlHandler() {
+  evl_.removeSocket(fbzmq::RawZmqSocketPtr{*kvStoreSubSock_});
+  kvStoreSubSock_.close();
+
+  std::vector<apache::thrift::StreamPublisher<thrift::Publication>> publishers;
+  // NOTE: We're intentionally creating list of publishers to and then invoke
+  // `complete()` on them.
+  // Reason => `complete()` returns only when callback `onComplete` associated
+  // with publisher returns. Since we acquire lock within `onComplete` callback,
+  // we will run into the deadlock if `complete()` is invoked within
+  // SYNCHRONIZED block
+  SYNCHRONIZED(kvStorePublishers_) {
+    for (auto& kv : kvStorePublishers_) {
+      publishers.emplace_back(std::move(kv.second));
+    }
+  }
+  LOG(INFO) << "Terminating " << publishers.size()
+            << " active KvStore snoop stream(s).";
+  for (auto& publisher : publishers) {
+    std::move(publisher).complete();
+  }
+}
 
 void
 OpenrCtrlHandler::authorizeConnection() {
@@ -631,11 +696,28 @@ OpenrCtrlHandler::semifuture_getKvStorePeers() {
 
 apache::thrift::Stream<thrift::Publication>
 OpenrCtrlHandler::snoopKvStore() {
-  // TODO: Implement stream to send kvstore updates
-  return createStreamGenerator(
-      []() mutable -> folly::Optional<thrift::Publication> {
-        return folly::none; // Return end of stream
+  // Get new client-ID (monotonically increasing)
+  auto clientToken = publisherToken_++;
+
+  auto streamAndPublisher =
+      createStreamPublisher<thrift::Publication>([this, clientToken]() {
+        SYNCHRONIZED(kvStorePublishers_) {
+          if (kvStorePublishers_.erase(clientToken)) {
+            LOG(INFO) << "KvStore snoop stream-" << clientToken << " ended.";
+          } else {
+            LOG(ERROR) << "Can't remove unknown KvStore snoop stream-"
+                       << clientToken;
+          }
+        }
       });
+
+  SYNCHRONIZED(kvStorePublishers_) {
+    assert(kvStorePublishers_.count(clientToken) == 0);
+    LOG(INFO) << "KvStore snoop stream-" << clientToken << " started.";
+    kvStorePublishers_.emplace(
+        clientToken, std::move(streamAndPublisher.second));
+  }
+  return std::move(streamAndPublisher.first);
 }
 
 folly::SemiFuture<folly::Unit>
