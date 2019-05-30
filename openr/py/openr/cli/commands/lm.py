@@ -26,13 +26,7 @@ class LMCmdBase(OpenrCtrlCmd):
     is spawn out of this.
     """
 
-    def __init__(self, cli_opts):
-        """ initialize the Link Monitor client """
-        super(LMCmdBase, self).__init__(cli_opts)
-
-        self.enable_color = cli_opts.enable_color
-
-    def toggleNodeOverloadBit(
+    def toggle_node_overload_bit(
         self, client: OpenrCtrl.Client, overload: bool, yes: bool = False
     ) -> None:
         links = client.getInterfaces()
@@ -61,7 +55,7 @@ class LMCmdBase(OpenrCtrlCmd):
 
         print("Successfully {}..\n".format(action))
 
-    def toggleLinkOverloadBit(
+    def toggle_link_overload_bit(
         self,
         client: OpenrCtrl.Client,
         overload: bool,
@@ -96,7 +90,7 @@ class LMCmdBase(OpenrCtrlCmd):
 
         print("Successfully {} for the interface.\n".format(action))
 
-    def checkIfLinkOverriden(
+    def check_link_overriden(
         self, links: lm_types.DumpLinksReply, interface: str, metric: int
     ) -> bool:
         """
@@ -109,7 +103,7 @@ class LMCmdBase(OpenrCtrlCmd):
             return None
         return metricOverride == metric
 
-    def toggleLinkMetric(
+    def toggle_link_metric(
         self,
         client: OpenrCtrl.Client,
         override: bool,
@@ -124,7 +118,7 @@ class LMCmdBase(OpenrCtrlCmd):
             print("No such interface: {}".format(interface))
             return
 
-        status = self.checkIfLinkOverriden(links, interface, metric)
+        status = self.check_link_overriden(links, interface, metric)
         if not override and status is None:
             print("Interface hasn't been assigned metric override.\n")
             sys.exit(0)
@@ -153,34 +147,34 @@ class LMCmdBase(OpenrCtrlCmd):
 
 class SetNodeOverloadCmd(LMCmdBase):
     def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
-        self.toggleNodeOverloadBit(client, True, yes)
+        self.toggle_node_overload_bit(client, True, yes)
 
 
 class UnsetNodeOverloadCmd(LMCmdBase):
     def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
-        self.toggleNodeOverloadBit(client, False, yes)
+        self.toggle_node_overload_bit(client, False, yes)
 
 
 class SetLinkOverloadCmd(LMCmdBase):
     def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
-        self.toggleLinkOverloadBit(client, True, interface, yes)
+        self.toggle_link_overload_bit(client, True, interface, yes)
 
 
 class UnsetLinkOverloadCmd(LMCmdBase):
     def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
-        self.toggleLinkOverloadBit(client, False, interface, yes)
+        self.toggle_link_overload_bit(client, False, interface, yes)
 
 
 class SetLinkMetricCmd(LMCmdBase):
     def _run(
         self, client: OpenrCtrl.Client, interface: str, metric: str, yes: bool
     ) -> None:
-        self.toggleLinkMetric(client, True, interface, int(metric), yes)
+        self.toggle_link_metric(client, True, interface, int(metric), yes)
 
 
 class UnsetLinkMetricCmd(LMCmdBase):
     def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
-        self.toggleLinkMetric(client, False, interface, 0, yes)
+        self.toggle_link_metric(client, False, interface, 0, yes)
 
 
 class SetAdjMetricCmd(LMCmdBase):
@@ -197,12 +191,7 @@ class SetAdjMetricCmd(LMCmdBase):
 
 class UnsetAdjMetricCmd(LMCmdBase):
     def _run(
-        self,
-        client: OpenrCtrl.Client,
-        node: str,
-        interface: str,
-        metric: str,
-        yes: bool,
+        self, client: OpenrCtrl.Client, node: str, interface: str, yes: bool
     ) -> None:
         client.unsetAdjacencyMetric(interface, node)
 

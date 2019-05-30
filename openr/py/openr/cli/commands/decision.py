@@ -12,12 +12,12 @@ import ipaddress
 import sys
 from builtins import object
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Tuple
 
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.clients import kvstore_client
+from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
@@ -27,27 +27,25 @@ from openr.utils.serializer import deserialize_thrift_object
 
 
 class DecisionCmdBase(OpenrCtrlCmd):
-    def __init__(self, cli_opts):
-        """ initialize the Decision client """
+    """
+    Base class for decision module cmd
+    """
 
-        self.host = cli_opts.host
-        self.timeout = cli_opts.timeout
-        self.cli_opts = cli_opts
-        self.fib_agent_port = cli_opts.fib_agent_port
-        self.enable_color = cli_opts.enable_color
-        self.kvstore_client = kvstore_client.KvStoreClient(cli_opts)
-
-        super(DecisionCmdBase, self).__init__(cli_opts)
-
-    def iter_dbs(self, container, dbs, nodes, parse_func):
-        """ parse prefix databases from decision module
-
-            :container: container to store the generated data
-            :dbs decision_types.PrefixDbs or decision_types.AdjDbs
-            :nodes set: the set of nodes for parsing
-            :parse_func function: the parsing function
+    def iter_dbs(
+        self,
+        container: Any,
+        dbs: Dict,
+        nodes: set,
+        parse_func: Callable[[Any, Dict], None],
+    ):
         """
+        parse prefix databases from decision module
 
+        @param: container - container to store the generated data and returns
+        @param: dbs - decision_types.PrefixDbs or decision_types.AdjDbs
+        @param: nodes - set: the set of nodes for parsing
+        @param: parse_func - function: the parsing function
+        """
         for (node, db) in sorted(dbs.items()):
             if "all" not in nodes and node not in nodes:
                 continue
@@ -118,7 +116,9 @@ class PathCmd(DecisionCmdBase):
 
         # Get prefix_dbs from KvStore
         self.prefix_dbs = {}
-        pub = self.kvstore_client.dump_all_with_filter(Consts.PREFIX_DB_MARKER)
+        pub = client.getKvStoreKeyValsFiltered(
+            kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
+        )
         for v in pub.keyVals.values():
             prefix_db = deserialize_thrift_object(v.value, lsdb_types.PrefixDatabase)
             self.prefix_dbs[prefix_db.thisNodeName] = prefix_db
@@ -430,13 +430,15 @@ class DecisionValidateCmd(DecisionCmdBase):
 
         return adjValidateRet or prefixValidateRet
 
-    def get_dbs(self, client: OpenrCtrl.Client) -> (Dict, Dict, Dict):
+    def get_dbs(self, client: OpenrCtrl.Client) -> Tuple[Dict, Dict, Dict]:
         # get LSDB from Decision
         decision_adj_dbs = client.getDecisionAdjacencyDbs()
         decision_prefix_dbs = client.getDecisionPrefixDbs()
 
         # get LSDB from KvStore
-        kvstore_keyvals = self.kvstore_client.dump_all_with_filter().keyVals
+        kvstore_keyvals = client.getKvStoreKeyValsFiltered(
+            kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
+        ).keyVals
 
         return (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals)
 

@@ -17,17 +17,21 @@ class OpenrCtrlCmd(object):
     Command wrapping OpenrCtrl.Client
     """
 
-    def __init__(self, options: bunch.Bunch) -> None:
+    def __init__(self, cli_opts: bunch.Bunch) -> None:
         """ initialize the Config Store client """
 
-        self._options = options  # type: bunch.Bunch
+        self.cli_opts = cli_opts  # type: bunch.Bunch
+        self.enable_color = cli_opts.enable_color
+        self.host = cli_opts.host
+        self.timeout = cli_opts.timeout
+        self.fib_agent_port = cli_opts.fib_agent_port
 
     def run(self, *args, **kwargs) -> None:
         """
         run method that invokes _run with client and arguments
         """
 
-        with get_openr_ctrl_client(self._options.host, self._options) as client:
+        with get_openr_ctrl_client(self.host, self.cli_opts) as client:
             self._run(client, *args, **kwargs)
 
     def _run(self, client: OpenrCtrl.Client, *args, **kwargs) -> None:

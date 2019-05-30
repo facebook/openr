@@ -19,6 +19,7 @@ class Consts(object):
     IP_TOS = 192
     ADJ_DB_MARKER = "adj:"
     PREFIX_DB_MARKER = "prefix:"
+    ALL_DB_MARKER = ""
 
     SEED_PREFIX_ALLOC_PARAM_KEY = "e2e-network-prefix"
     STATIC_PREFIX_ALLOC_PARAM_KEY = "e2e-network-allocations"

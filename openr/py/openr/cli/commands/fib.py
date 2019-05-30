@@ -17,17 +17,6 @@ from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import ipnetwork, printing
 
 
-class FibCmdBase(OpenrCtrlCmd):
-    """
-    Base class for Fib cmds. All of Fib cmd
-    is spawn out of this.
-    """
-
-    def __init__(self, cli_opts):
-        """initialize the Fib client"""
-        super(FibCmdBase, self).__init__(cli_opts)
-
-
 class FibAgentCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Fib agent client """
@@ -51,7 +40,7 @@ class FibAgentCmd(object):
             raise
 
 
-class FibRoutesComputedCmd(FibCmdBase):
+class FibRoutesComputedCmd(OpenrCtrlCmd):
     def _run(
         self, client: OpenrCtrl.Client, prefixes: Any, labels: Any, json: bool
     ) -> None:
