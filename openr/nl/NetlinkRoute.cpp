@@ -22,7 +22,7 @@ NetlinkRouteMessage::init(
   // initialize netlink header
   msghdr_->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
   msghdr_->nlmsg_type = type;
-  msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_MULTI;
+  msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
 
   if (type != RTM_DELROUTE) {
     msghdr_->nlmsg_flags |= NLM_F_CREATE;

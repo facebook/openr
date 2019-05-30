@@ -31,8 +31,7 @@ constexpr uint32_t kNetlinkSockRecvBuf{1 * 1024 * 1024};
 
 constexpr uint32_t kMaxNlMessageQueue{126001};
 constexpr size_t kMaxIovMsg{500};
-constexpr std::chrono::milliseconds kNlMessageSendTimer{10};
-constexpr std::chrono::milliseconds kNlMessageAckTimer{2000};
+constexpr std::chrono::milliseconds kNlMessageAckTimer{1000};
 
 enum class ResultCode {
   SUCCESS = 0,
@@ -145,11 +144,6 @@ class NetlinkProtocolSocket {
 
   fbzmq::ZmqEventLoop* evl_{nullptr};
 
-  // send last msghdr saved in LastMessage to netlink socket
-  ResultCode sendMessageHeader();
-
-  void resetLastMessage();
-
   // netlink message queue
   std::queue<std::unique_ptr<NetlinkMessage>> msgQueue_;
 
@@ -176,17 +170,8 @@ class NetlinkProtocolSocket {
 
   // last sent message data
   struct lastMessage {
-    // pointers for the last set of messages
-    std::queue<std::unique_ptr<NetlinkMessage>> msgq;
-
-    // netlink message
-    std::unique_ptr<struct msghdr> msg;
-
-    // last
-    uint64_t seq;
-
-    // timer for receving ack
-    std::unique_ptr<fbzmq::ZmqTimeout> ackTimer{nullptr};
+    // last sequence number
+    uint32_t seq;
   } lastMessage_;
 };
 } // namespace Netlink
