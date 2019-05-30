@@ -27,7 +27,6 @@ const auto kMeshHousekeepingInterval{60s};
 const auto kMeshPathExpire{60s};
 const auto kSyncRoutesInterval{1s};
 const auto kMinGatewayRedundancy{2};
-const auto kPeriodicPingerInterval{10s};
 
 void
 meshPathExpire(
@@ -79,13 +78,6 @@ Routing::Routing(
     : evb_{evb},
       nodeAddr_{nodeAddr},
       elementTtl_{elementTtl},
-      periodicPinger_{
-          evb_,
-          folly::IPAddressV6{"ff02::1%mesh0"},
-          folly::IPAddressV6{folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                             nodeAddr},
-          kPeriodicPingerInterval,
-          "mesh0"},
       metricManager_{metricManager},
       netlinkSocket_{&zmqEvl_},
       zmqEvlThread_{[this]() {
@@ -112,7 +104,6 @@ Routing::prepare() {
   doMeshPathRoot();
   doMeshHousekeeping();
 
-  periodicPinger_.scheduleTimeout(1s);
   syncRoutesTimer_->scheduleTimeout(kSyncRoutesInterval);
 }
 

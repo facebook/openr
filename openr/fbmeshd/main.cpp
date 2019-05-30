@@ -35,6 +35,7 @@
 #include <openr/fbmeshd/pinger/PeerPinger.h>
 #include <openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.h>
 #include <openr/fbmeshd/routing/MetricManager80211s.h>
+#include <openr/fbmeshd/routing/PeriodicPinger.h>
 #include <openr/fbmeshd/routing/Routing.h>
 #include <openr/fbmeshd/routing/UDPRoutingPacketTransport.h>
 #include <openr/fbmeshd/separa/Separa.h>
@@ -218,6 +219,7 @@ const auto kMetricManagerInterval{3s};
 const auto kMetricManagerEwmaFactorLog2{7};
 const auto kMetricManagerHysteresisFactorLog2{2};
 const auto kMetricManagerBaseBitrate{60};
+const auto kPeriodicPingerInterval{10s};
 
 } // namespace
 
@@ -438,6 +440,7 @@ main(int argc, char* argv[]) {
   std::unique_ptr<MetricManager80211s> metricManager80211s;
   std::unique_ptr<Routing> routing;
   std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport;
+  std::unique_ptr<PeriodicPinger> periodicPinger;
   static constexpr auto routingId{"Routing"};
   if (FLAGS_enable_routing) {
     routingEventLoop = std::make_unique<folly::EventBase>();
@@ -455,6 +458,14 @@ main(int argc, char* argv[]) {
         FLAGS_routing_ttl);
     routingPacketTransport = std::make_unique<UDPRoutingPacketTransport>(
         routingEventLoop.get(), 6668, FLAGS_routing_tos);
+    periodicPinger = std::make_unique<PeriodicPinger>(
+        routingEventLoop.get(),
+        folly::IPAddressV6{"ff02::1%mesh0"},
+        folly::IPAddressV6{folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
+                           nlHandler.lookupMeshNetif().maybeMacAddress.value()},
+        kPeriodicPingerInterval,
+        "mesh0");
+    periodicPinger->scheduleTimeout(1s);
 
     routing->setSendPacketCallback(
         [&routingPacketTransport](
