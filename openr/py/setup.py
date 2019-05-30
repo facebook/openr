@@ -33,9 +33,12 @@ def generate_thrift_files():
     current_dir = os.path.dirname(os.path.realpath(__file__))
     root_dir = os.path.dirname(os.path.dirname(current_dir))
     top_dirs = [os.path.join(root_dir, "openr/if"), os.path.join(root_dir, "common")]
+    exclude_files = ["OpenrCtrlCpp"]
 
     for top_dir in top_dirs:
         for thrift_file in Path(top_dir).rglob("*.thrift"):
+            if thrift_file.stem in exclude_files:
+                continue
             print("> Generating python definition for {}".format(thrift_file))
             check_call(
                 [

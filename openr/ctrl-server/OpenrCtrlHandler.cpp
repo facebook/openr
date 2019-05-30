@@ -629,6 +629,15 @@ OpenrCtrlHandler::semifuture_getKvStorePeers() {
   return p.getSemiFuture();
 }
 
+apache::thrift::Stream<thrift::Publication>
+OpenrCtrlHandler::snoopKvStore() {
+  // TODO: Implement stream to send kvstore updates
+  return createStreamGenerator(
+      []() mutable -> folly::Optional<thrift::Publication> {
+        return folly::none; // Return end of stream
+      });
+}
+
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setNodeOverload() {
   thrift::LinkMonitorRequest request;

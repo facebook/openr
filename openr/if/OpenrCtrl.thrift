@@ -36,6 +36,10 @@ exception OpenrError {
   1: string message
 } ( message = "message" )
 
+/**
+ * Thrift service - exposes RPC APIs for interaction with all of Open/R's
+ * modules.
+ */
 service OpenrCtrl extends fb303.FacebookService {
 
   //

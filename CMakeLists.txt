@@ -129,6 +129,21 @@ thrift_object(
   "openr/if" #include_prefix
 )
 
+thrift_object(
+  "OpenrCtrlCpp" #file_name
+  "OpenrCtrlCpp" #services
+  "cpp2" #language
+  "json,optionals,stream" #options
+  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
+  "${THRIFT_DIR}/openr/if" #output_path
+  "openr/if" #include_prefix
+)
+
+add_dependencies(
+  OpenrCtrlCpp-cpp2-obj
+  OpenrCtrl-cpp2-obj
+)
+
 add_dependencies(
   Lsdb-cpp2-obj
   Network-cpp2-obj
@@ -315,6 +330,7 @@ add_library(openrlib
   $<TARGET_OBJECTS:Dual-cpp2-obj>
   $<TARGET_OBJECTS:Network-cpp2-obj>
   $<TARGET_OBJECTS:OpenrCtrl-cpp2-obj>
+  $<TARGET_OBJECTS:OpenrCtrlCpp-cpp2-obj>
   $<TARGET_OBJECTS:PersistentStore-cpp2-obj>
   $<TARGET_OBJECTS:Platform-cpp2-obj>
   $<TARGET_OBJECTS:PrefixManager-cpp2-obj>

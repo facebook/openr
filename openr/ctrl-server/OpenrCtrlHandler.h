@@ -12,10 +12,10 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/OpenrEventLoop.h>
 #include <openr/common/Types.h>
-#include <openr/if/gen-cpp2/OpenrCtrl.h>
+#include <openr/if/gen-cpp2/OpenrCtrlCpp.h>
 
 namespace openr {
-class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
+class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
                                public facebook::fb303::FacebookBase2 {
  public:
   /**
@@ -154,6 +154,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlSvIf,
 
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeers() override;
+
+  // Intentionally not use SemiFuture as stream is async by nature and we will
+  // immediately create and return the stream handler
+  apache::thrift::Stream<thrift::Publication> snoopKvStore() override;
 
   //
   // LinkMonitor APIs
