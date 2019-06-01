@@ -18,6 +18,7 @@
 #include <folly/io/async/AsyncUDPServerSocket.h>
 #include <folly/io/async/AsyncUDPSocket.h>
 #include <folly/io/async/EventBase.h>
+#include <openr/nl/NetlinkSocket.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
 #include <openr/fbmeshd/routing/MetricManager.h>
@@ -93,7 +94,6 @@ class Routing {
   Routing& operator=(const Routing&) = delete;
   Routing& operator=(Routing&&) = delete;
 
-  bool getGatewayStatus() const;
   void setGatewayStatus(bool isGate);
 
   std::unordered_map<folly::MacAddress, MeshPath> dumpMpaths();
@@ -104,10 +104,10 @@ class Routing {
 
   void receivePacket(folly::MacAddress sa, std::unique_ptr<folly::IOBuf> data);
 
-  std::unordered_map<folly::MacAddress, MeshPath> getMeshPaths();
-
  private:
   void prepare();
+
+  void doSyncRoutes();
 
   void meshPathAddGate(MeshPath& mpath);
 
@@ -157,6 +157,10 @@ class Routing {
    * L3 Routing state
    */
   double const gatewayChangeThresholdFactor_{2};
+  folly::Optional<std::pair<folly::MacAddress, uint32_t>> currentGate_;
+  fbzmq::ZmqEventLoop zmqEvl_;
+  openr::fbnl::NetlinkSocket netlinkSocket_;
+  std::thread zmqEvlThread_;
   std::unique_ptr<folly::AsyncTimeout> syncRoutesTimer_;
   std::unique_ptr<folly::AsyncTimeout> noLongerAGateRANNTimer_;
 
@@ -173,6 +177,7 @@ class Routing {
   bool isRoot_{false};
   std::chrono::milliseconds rootPannInterval_{5000};
   bool isGate_{false};
+  bool isGateBeforeRouteSync_{false};
 
   /*
    * Path state

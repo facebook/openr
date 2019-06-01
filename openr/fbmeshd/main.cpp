@@ -37,7 +37,6 @@
 #include <openr/fbmeshd/routing/MetricManager80211s.h>
 #include <openr/fbmeshd/routing/PeriodicPinger.h>
 #include <openr/fbmeshd/routing/Routing.h>
-#include <openr/fbmeshd/routing/SyncRoutes80211s.h>
 #include <openr/fbmeshd/routing/UDPRoutingPacketTransport.h>
 #include <openr/fbmeshd/separa/Separa.h>
 #include <openr/watchdog/Watchdog.h>
@@ -442,7 +441,6 @@ main(int argc, char* argv[]) {
   std::unique_ptr<Routing> routing;
   std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport;
   std::unique_ptr<PeriodicPinger> periodicPinger;
-  std::unique_ptr<SyncRoutes80211s> syncRoutes80211s;
   static constexpr auto routingId{"Routing"};
   if (FLAGS_enable_routing) {
     routingEventLoop = std::make_unique<folly::EventBase>();
@@ -468,8 +466,6 @@ main(int argc, char* argv[]) {
         kPeriodicPingerInterval,
         "mesh0");
     periodicPinger->scheduleTimeout(1s);
-    syncRoutes80211s = std::make_unique<SyncRoutes80211s>(
-        routing.get(), nlHandler.lookupMeshNetif().maybeMacAddress.value());
 
     routing->setSendPacketCallback(
         [&routingPacketTransport](
