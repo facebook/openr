@@ -140,9 +140,23 @@ PeerPinger::updateLinkMetrics() {
     data = it.second;
     std::sort(data.begin(), data.end());
 
+    // skip if number of samples is less than half the count value
+    // passed to the ping command
+    uint32_t minSize = 50 * FLAGS_ping_count / 100;
+    if (data.size() < minSize) {
+      VLOG(2) << "ignoring data collected from peer " << peer
+              << " too few ping samples: " << data.size();
+      continue;
+    }
+
     // remove the largest 5% data points from avg calculation
-    int size = 95 * data.size() / 100;
+    // these are considered outliers
+    uint32_t size = 95 * data.size() / 100;
+    for (uint32_t i = size; i < data.size(); i++) {
+      VLOG(5) << "removing data point " << data[i];
+    }
     VLOG(5) << "data size reduced from " << data.size() << " to " << size;
+
     uint32_t average =
         std::accumulate(data.begin(), data.begin() + size - 1, 0.0) / size;
     VLOG(5) << peer << " average ping " << average;
