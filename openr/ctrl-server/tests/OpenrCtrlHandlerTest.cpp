@@ -558,6 +558,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::FloodTopoSetParams params;
+    params.rootId = nodeName;
     auto ret = handler
                    ->semifuture_updateFloodTopologyChild(
                        std::make_unique<thrift::FloodTopoSetParams>(params))
@@ -566,13 +567,20 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 
   {
-    auto ret = handler->semifuture_getSpanningTreeInfo().get();
+    auto ret = handler->semifuture_getSpanningTreeInfos().get();
     ASSERT_NE(nullptr, ret);
-    EXPECT_FALSE(ret->passive);
-    EXPECT_EQ(0, ret->cost);
-    ASSERT_TRUE(ret->parent.hasValue());
-    EXPECT_EQ(nodeName, ret->parent.value());
-    EXPECT_EQ(0, ret->children.size());
+    EXPECT_EQ(1, ret->infos.size());
+    ASSERT_NE(ret->infos.end(), ret->infos.find(nodeName));
+    EXPECT_EQ(0, ret->counters.neighborCounters.size());
+    EXPECT_EQ(1, ret->counters.rootCounters.size());
+    EXPECT_EQ(nodeName, ret->floodRootId);
+    EXPECT_EQ(0, ret->floodPeers.size());
+
+    thrift::SptInfo sptInfo = ret->infos.at(nodeName);
+    EXPECT_EQ(0, sptInfo.cost);
+    ASSERT_TRUE(sptInfo.parent.hasValue());
+    EXPECT_EQ(nodeName, sptInfo.parent.value());
+    EXPECT_EQ(0, sptInfo.children.size());
   }
 
   //

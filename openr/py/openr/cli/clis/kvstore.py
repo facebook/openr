@@ -81,12 +81,11 @@ class KeysCli(object):
 class KeyValsCli(object):
     @click.command()
     @click.argument("keys", nargs=-1, required=True)
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
-    def keyvals(cli_opts, keys, json):  # noqa: B902
+    def keyvals(cli_opts, keys):  # noqa: B902
         """ get values of input keys """
 
-        kvstore.KeyValsCmd(cli_opts).run(keys, json)
+        kvstore.KeyValsCmd(cli_opts).run(keys)
 
 
 class NodesCli(object):
@@ -260,7 +259,7 @@ class AllocationsCli(object):
     def list(cli_opts):  # noqa: B902
         """ View static allocations set in KvStore """
 
-        kvstore.AllocationsCmd(cli_opts).run_list()
+        kvstore.AllocationsListCmd(cli_opts).run()
 
     @click.command()
     @click.argument("node", nargs=1, required=True)
@@ -269,7 +268,7 @@ class AllocationsCli(object):
     def set(cli_opts, node, prefix):  # noqa: B902
         """ Set/Update prefix allocation for a certain node """
 
-        kvstore.AllocationsCmd(cli_opts).run_set(node, prefix)
+        kvstore.AllocationsSetCmd(cli_opts).run(node, prefix)
 
     @click.command()
     @click.argument("node", nargs=1, required=True)
@@ -277,4 +276,4 @@ class AllocationsCli(object):
     def unset(cli_opts, node):  # noqa: B902
         """ Unset prefix allocation for a certain node """
 
-        kvstore.AllocationsCmd(cli_opts).run_unset(node)
+        kvstore.AllocationsUnsetCmd(cli_opts).run(node)

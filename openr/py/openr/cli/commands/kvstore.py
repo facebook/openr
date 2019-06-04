@@ -16,63 +16,62 @@ import sys
 import time
 from builtins import object, str
 from itertools import combinations
-from typing import List
+from typing import Any, Callable, Dict, List
 
 import bunch
 import hexdump
 import zmq
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
+from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients import kvstore_client, kvstore_subscriber
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
+from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import ipnetwork, printing, serializer
 from openr.utils.consts import Consts
 
 
-def print_publication_delta(title, pub_update, sprint_db=""):
-    print(
-        printing.render_vertical_table(
-            [
+class KvStoreCmdBase(OpenrCtrlCmd):
+    def print_publication_delta(
+        self, title: str, pub_update: List[str], sprint_db: str = ""
+    ) -> None:
+        print(
+            printing.render_vertical_table(
                 [
-                    "{}\n{}{}".format(
-                        title,
-                        pub_update,
-                        "\n\n{}".format(sprint_db) if sprint_db else "",
-                    )
+                    [
+                        "{}\n{}{}".format(
+                            title,
+                            pub_update,
+                            "\n\n{}".format(sprint_db) if sprint_db else "",
+                        )
+                    ]
                 ]
-            ]
+            )
         )
-    )
 
-
-def print_timestamp():
-    print(
-        "Timestamp: {}".format(
-            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    def print_timestamp(self) -> None:
+        print(
+            "Timestamp: {}".format(
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            )
         )
-    )
 
+    def iter_publication(
+        self,
+        container: Any,
+        publication: Any,
+        nodes: set,
+        parse_func: Callable[[Any, str], None],
+    ) -> None:
+        """
+        parse dumped publication
 
-class KvStoreCmd(object):
-    def __init__(self, cli_opts):
-        """ initialize the Kvsotre client """
-
-        self.host = cli_opts.host
-        self.kv_pub_port = cli_opts.kv_pub_port
-        self.cli_opts = cli_opts
-        self.enable_color = cli_opts.enable_color
-
-        self.client = kvstore_client.KvStoreClient(cli_opts)
-
-    def iter_publication(self, container, publication, nodes, parse_func):
-        """ parse dumped publication
-
-            :container: container to store the generated data
-            :publication kv_store_types.Publication: the publication for parsing
-            :nodes set: the set of nodes for parsing
-            :parse_func function: the parsing function
+        @param: container - Any: container to store the generated data
+        @param: publication - kv_store_types.Publication: the publication for parsing
+        @param: nodes - set: the set of nodes for parsing
+        @param: parse_func - function: the parsing function
         """
 
         for (key, value) in sorted(publication.keyVals.items(), key=lambda x: x[0]):
@@ -82,7 +81,7 @@ class KvStoreCmd(object):
 
             parse_func(container, value)
 
-    def get_node_to_ips(self):
+    def get_node_to_ips(self, client: OpenrCtrl.Client) -> Dict:
         """ get the dict of all nodes to their IP in the network """
 
         def _parse_nodes(node_dict, value):
@@ -92,17 +91,14 @@ class KvStoreCmd(object):
             node_dict[prefix_db.thisNodeName] = self.get_node_ip(prefix_db)
 
         node_dict = {}
-        resp = self.client.dump_all_with_filter(Consts.PREFIX_DB_MARKER)
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         self.iter_publication(node_dict, resp, ["all"], _parse_nodes)
 
         return node_dict
 
-    def get_node_ip(self, prefix_db):
-        """
-        get routable IP address of node from it's prefix database
-        :return: string representation of Node's IP addresss. Returns None if
-                 no IP found.
-        """
+    def get_node_ip(self, prefix_db: lsdb_types.PrefixDatabase) -> Any:
+        """get routable IP address of node from it's prefix database"""
 
         # First look for LOOPBACK prefix
         for prefix_entry in prefix_db.prefixEntries:
@@ -118,36 +114,40 @@ class KvStoreCmd(object):
         return None
 
 
-class PrefixesCmd(KvStoreCmd):
-    def run(self, nodes, json):
-        resp = self.client.dump_all_with_filter(Consts.PREFIX_DB_MARKER)
+class PrefixesCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, nodes: Any, json: bool) -> None:
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         if json:
             utils.print_prefixes_json(resp, nodes, self.iter_publication)
         else:
             utils.print_prefixes_table(resp, nodes, self.iter_publication)
 
 
-class KeysCmd(KvStoreCmd):
-    def run(self, json_fmt, prefix, originator=None, ttl=False):
-        if originator is not None:
-            resp = self.client.dump_all_with_filter(prefix, originator)
-        else:
-            resp = self.client.dump_key_with_prefix(prefix)
-        self.print_kvstore_keys(resp, ttl, json_fmt)
+class KeysCmd(KvStoreCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        json: bool,
+        prefix: Any,
+        originator: Any = None,
+        ttl: bool = False,
+    ) -> None:
+        keyDumpParams = self.buildKvStoreKeyDumpParams(prefix)
+        resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        self.print_kvstore_keys(resp, ttl, json)
 
-    def print_kvstore_keys(self, resp, ttl, json_fmt):
-        """ print keys from raw publication from KvStore
-
-            :param resp kv_store_types.Publication: pub from kv store
-            :param ttl bool: Show ttl value and version if True
-        """
+    def print_kvstore_keys(
+        self, resp: kv_store_types.Publication, ttl: bool, json: bool
+    ) -> None:
+        """ print keys from raw publication from KvStore"""
 
         # Force set value to None
         for value in resp.keyVals.values():
             value.value = None
 
         # Export in json format if enabled
-        if json_fmt:
+        if json:
             data = {}
             for k, v in resp.keyVals.items():
                 data[k] = utils.thrift_to_dict(v)
@@ -189,10 +189,10 @@ class KeysCmd(KvStoreCmd):
         print(printing.render_horizontal_table(rows, column_labels, caption))
 
 
-class KeyValsCmd(KvStoreCmd):
-    def run(self, keys, json_fmt):
-        resp = self.client.get_keys(keys)
-        self.print_kvstore_values(resp, json_fmt)
+class KeyValsCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, keys: List[str]) -> None:
+        resp = client.getKvStoreKeyVals(keys)
+        self.print_kvstore_values(resp)
 
     def deserialize_kvstore_publication(self, key, value):
         """ classify kvstore prefix and return the corresponding deserialized obj """
@@ -210,22 +210,10 @@ class KeyValsCmd(KvStoreCmd):
         else:
             return None
 
-    def print_kvstore_values(self, resp, json_fmt):
-        """ print values from raw publication from KvStore
-
-            :param resp kv_store_types.Publication: pub from kv store
-        """
-
-        # Export in json format if enabled
-        if json_fmt:
-            data = {}
-            for k, v in resp.keyVals.items():
-                data[k] = utils.thrift_to_dict(v)
-            print(utils.json_dumps(data))
-            return
+    def print_kvstore_values(self, resp: kv_store_types.Publication) -> None:
+        """ print values from raw publication from KvStore"""
 
         rows = []
-
         for key, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
             val = self.deserialize_kvstore_publication(key, value)
             if not val:
@@ -255,9 +243,10 @@ class KeyValsCmd(KvStoreCmd):
         print(printing.render_vertical_table(rows, caption=caption))
 
 
-class NodesCmd(KvStoreCmd):
-    def run(self):
-        resp = self.client.dump_all_with_filter(prefix=Consts.PREFIX_DB_MARKER)
+class NodesCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         host_id = utils.get_connected_node_name(self.cli_opts)
         self.print_kvstore_nodes(resp, host_id)
 
@@ -307,9 +296,12 @@ class NodesCmd(KvStoreCmd):
         print(printing.render_horizontal_table(rows, label))
 
 
-class AdjCmd(KvStoreCmd):
-    def run(self, nodes, bidir, json):
-        publication = self.client.dump_all_with_filter(Consts.ADJ_DB_MARKER)
+class AdjCmd(KvStoreCmdBase):
+    def _run(
+        self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
+    ) -> None:
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+        publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
         adjs_map = utils.adj_dbs_to_dict(
             publication, nodes, bidir, self.iter_publication
         )
@@ -319,24 +311,27 @@ class AdjCmd(KvStoreCmd):
             utils.print_adjs_table(adjs_map, self.enable_color)
 
 
-class FloodCmd(KvStoreCmd):
-    def run(self, roots: List[str]) -> None:
-        spt_infos = self.client.get_spt_infos()
+class FloodCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, roots: List[str]) -> None:
+        spt_infos = client.getSpanningTreeInfos()
         utils.print_spt_infos(spt_infos, roots)
 
 
-class ShowAdjNodeCmd(KvStoreCmd):
-    def run(self, nodes, node, interface):
-        publication = self.client.dump_all_with_filter(Consts.ADJ_DB_MARKER)
+class ShowAdjNodeCmd(KvStoreCmdBase):
+    def _run(
+        self, client: OpenrCtrl.Client, nodes: set, node: Any, interface: Any
+    ) -> None:
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+        publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
         adjs_map = utils.adj_dbs_to_dict(
             publication, nodes, True, self.iter_publication
         )
         utils.print_adjs_table(adjs_map, self.enable_color, node, interface)
 
 
-class KvCompareCmd(KvStoreCmd):
-    def run(self, nodes):
-        all_nodes_to_ips = self.get_node_to_ips()
+class KvCompareCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, nodes: set) -> None:
+        all_nodes_to_ips = self.get_node_to_ips(client)
         if nodes:
             nodes = set(nodes.strip().split(","))
             if "all" in nodes:
@@ -345,10 +340,11 @@ class KvCompareCmd(KvStoreCmd):
             if host_id in nodes:
                 nodes.remove(host_id)
 
-            our_kvs = self.client.dump_all_with_filter().keyVals
+            keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
+            pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
             kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips)
             for node in kv_dict:
-                self.compare(our_kvs, kv_dict[node], host_id, node)
+                self.compare(pub.keyVals, kv_dict[node], host_id, node)
 
         else:
             nodes = list(all_nodes_to_ips.keys())
@@ -416,7 +412,7 @@ class KvCompareCmd(KvStoreCmd):
             lines = None
 
         if lines != []:
-            print_publication_delta(
+            self.print_publication_delta(
                 "Key: {} difference".format(key),
                 utils.sprint_pub_update(our_kv_pub_db, key, other_val),
                 "\n".join(lines) if lines else "",
@@ -444,19 +440,19 @@ class KvCompareCmd(KvStoreCmd):
         return kv_dict
 
 
-class PeersCmd(KvStoreCmd):
-    def run(self):
+class PeersCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        peers = client.getKvStorePeers()
+        self.print_peers(peers)
 
-        self.print_peers(self.client.dump_peers())
-
-    def print_peers(self, peers_reply):
+    def print_peers(self, peers: kv_store_types.PeersMap) -> None:
         """ print the Kv Store peers """
 
         host_id = utils.get_connected_node_name(self.cli_opts)
         caption = "{}'s peers".format(host_id)
 
         rows = []
-        for (key, value) in sorted(peers_reply.peers.items(), key=lambda x: x[0]):
+        for (key, value) in sorted(peers.items(), key=lambda x: x[0]):
             row = [key]
             row.append("cmd via {}".format(value.cmdUrl))
             row.append("pub via {}".format(value.pubUrl))
@@ -465,36 +461,43 @@ class PeersCmd(KvStoreCmd):
         print(printing.render_vertical_table(rows, caption=caption))
 
 
-class EraseKeyCmd(KvStoreCmd):
-    def run(self, key):
+class EraseKeyCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, key: str) -> None:
+        publication = client.getKvStoreKeyVals([key])
+        keyVals = publication.keyVals
 
-        publication = self.client.get_keys([key])
-
-        if key not in publication.keyVals:
+        if key not in keyVals:
             print("Error: Key {} not found in KvStore.".format(key))
             sys.exit(1)
 
         # Get and modify the key
-        val = publication.keyVals.get(key)
+        val = keyVals.get(key)
         val.value = None
         val.ttl = 256  # set new ttl to 256ms (its decremented 1ms on every hop)
         val.ttlVersion += 1  # bump up ttl version
 
-        print(publication.keyVals)
-        response = self.client.set_key(publication.keyVals)
-        if response != b"OK":
-            print("Error: failed to set ttl to 0")
-        else:
-            print("Success: key {} will be erased soon from all KvStores.".format(key))
+        print(keyVals)
+
+        client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals))
+
+        print("Success: key {} will be erased soon from all KvStores.".format(key))
 
 
-class SetKeyCmd(KvStoreCmd):
-    def run(self, key, value, originator, version, ttl):
-
+class SetKeyCmd(KvStoreCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        key: str,
+        value: Any,
+        originator: str,
+        version: Any,
+        ttl: int,
+    ) -> None:
         val = kv_store_types.Value()
+
         if version is None:
             # Retrieve existing Value from KvStore
-            publication = self.client.get_keys([key])
+            publication = client.getKvStoreKeyVals([key])
             if key in publication.keyVals:
                 existing_val = publication.keyVals.get(key)
                 print(
@@ -513,25 +516,22 @@ class SetKeyCmd(KvStoreCmd):
 
         # Advertise publication back to KvStore
         keyVals = {key: val}
-        response = self.client.set_key(keyVals)
-        if response != b"OK":
-            print("Error: Failed to set key into KvStore")
-        else:
-            print(
-                "Success: Set key {} with version {} and ttl {} successfully"
-                " in KvStore. This does not guarantee that value is updated"
-                " in KvStore as old value can be persisted back".format(
-                    key,
-                    val.version,
-                    val.ttl if val.ttl != Consts.CONST_TTL_INF else "infinity",
-                )
+        client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals))
+        print(
+            "Success: Set key {} with version {} and ttl {} successfully"
+            " in KvStore. This does not guarantee that value is updated"
+            " in KvStore as old value can be persisted back".format(
+                key,
+                val.version,
+                val.ttl if val.ttl != Consts.CONST_TTL_INF else "infinity",
             )
+        )
 
 
-class KvSignatureCmd(KvStoreCmd):
-    def run(self, prefix):
-
-        resp = self.client.dump_key_with_prefix(prefix)
+class KvSignatureCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, prefix: str) -> None:
+        keyDumpParams = self.buildKvStoreKeyDumpParams(prefix)
+        resp = client.getKvStoreHashFiltered(keyDumpParams)
 
         signature = hashlib.sha256()
         for _, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
@@ -540,8 +540,16 @@ class KvSignatureCmd(KvStoreCmd):
         print("sha256: {}".format(signature.hexdigest()))
 
 
-class TopologyCmd(KvStoreCmd):
-    def run(self, node, bidir, output_file, edge_label, json):
+class TopologyCmd(KvStoreCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        node: str,
+        bidir: bool,
+        output_file: str,
+        edge_label: Any,
+        json: bool,
+    ) -> None:
 
         try:
             import matplotlib.pyplot as plt
@@ -560,8 +568,9 @@ class TopologyCmd(KvStoreCmd):
         rem_str = dict((re.escape(k), v) for k, v in rem_str.items())
         rem_pattern = re.compile("|".join(rem_str.keys()))
 
-        publication = self.client.dump_all_with_filter(Consts.ADJ_DB_MARKER)
-        nodes = list(self.get_node_to_ips().keys()) if not node else [node]
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+        publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        nodes = list(self.get_node_to_ips(client).keys()) if not node else [node]
         adjs_map = utils.adj_dbs_to_dict(
             publication, nodes, bidir, self.iter_publication
         )
@@ -678,10 +687,16 @@ class TopologyCmd(KvStoreCmd):
         print(utils.json_dumps(adj_topo))
 
 
-class SnoopCmd(KvStoreCmd):
-    def run(self, delta, ttl, regex, duration):
-
-        global_dbs = self.get_snapshot(delta)
+class SnoopCmd(KvStoreCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        delta: bool,
+        ttl: bool,
+        regex: str,
+        duration: int,
+    ) -> None:
+        global_dbs = self.get_snapshot(client, delta)
         pattern = re.compile(regex)
 
         print("Subscribing to KvStore updates. Magic begins here ... \n")
@@ -723,7 +738,7 @@ class SnoopCmd(KvStoreCmd):
                 global_dbs.prefixes.pop(key.split(":")[1], None)
 
         if rows:
-            print_timestamp()
+            self.print_timestamp()
             print(printing.render_vertical_table(rows))
 
     def print_delta(self, msg, regex, pattern, ttl, delta, global_dbs):
@@ -733,9 +748,9 @@ class SnoopCmd(KvStoreCmd):
                 continue
             if value.value is None:
                 if ttl:
-                    print_timestamp()
+                    self.print_timestamp()
                     print("Traversal List: {}".format(msg.nodeIds))
-                    print_publication_delta(
+                    self.print_publication_delta(
                         "Key: {}, ttl update".format(key),
                         "ttl: {}, ttlVersion: {}".format(value.ttl, value.ttlVersion),
                     )
@@ -753,9 +768,9 @@ class SnoopCmd(KvStoreCmd):
                 )
                 continue
 
-            print_timestamp()
+            self.print_timestamp()
             print("Traversal List: {}".format(msg.nodeIds))
-            print_publication_delta(
+            self.print_publication_delta(
                 "Key: {} update".format(key),
                 utils.sprint_pub_update(global_dbs.publications, key, value),
             )
@@ -775,8 +790,8 @@ class SnoopCmd(KvStoreCmd):
             lines = utils.sprint_prefixes_db_full(prefix_db)
 
         if lines:
-            print_timestamp()
-            print_publication_delta(
+            self.print_timestamp()
+            self.print_publication_delta(
                 "{}'s prefixes".format(reported_node_name),
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
@@ -803,8 +818,8 @@ class SnoopCmd(KvStoreCmd):
             _, lines = utils.sprint_adj_db_full(global_adj_db, new_adj_db, False)
 
         if lines:
-            print_timestamp()
-            print_publication_delta(
+            self.print_timestamp()
+            self.print_publication_delta(
                 "{}'s adjacencies".format(reported_node_name),
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
@@ -812,7 +827,7 @@ class SnoopCmd(KvStoreCmd):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def get_snapshot(self, delta):
+    def get_snapshot(self, client: OpenrCtrl.Client, delta: Any) -> Dict:
         # get the active network snapshot first, so we can compute deltas
         global_dbs = bunch.Bunch(
             {
@@ -824,7 +839,8 @@ class SnoopCmd(KvStoreCmd):
 
         if delta:
             print("Retrieving KvStore snapshot ... ")
-            resp = self.client.dump_all_with_filter()
+            keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
+            resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
 
             global_dbs.prefixes = utils.build_global_prefix_db(resp)
             global_dbs.adjs = utils.build_global_adj_db(resp)
@@ -836,21 +852,22 @@ class SnoopCmd(KvStoreCmd):
         return global_dbs
 
 
-class AllocationsCmd(SetKeyCmd):
-    def run_list(self):
+class AllocationsListCmd(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client) -> None:
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
-        resp = self.client.get_keys([key])
+        resp = client.getKvStoreKeyVals([key])
         if key not in resp.keyVals:
             print("Static allocation is not set in KvStore")
         else:
             utils.print_allocations_table(resp.keyVals.get(key).value)
 
-    def run_set(self, node_name, prefix_str):
+
+class AllocationsSetCmd(SetKeyCmd):
+    def _run(self, client: OpenrCtrl.Client, node_name: str, prefix_str: str) -> None:
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
-        prefix = ipnetwork.ip_str_to_prefix(prefix_str)
 
         # Retrieve previous allocation
-        resp = self.client.get_keys([key])
+        resp = client.getKvStoreKeyVals([key])
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
@@ -860,6 +877,7 @@ class AllocationsCmd(SetKeyCmd):
             allocs = alloc_types.StaticAllocation(nodePrefixes={})
 
         # Return if there is no change
+        prefix = ipnetwork.ip_str_to_prefix(prefix_str)
         if allocs.nodePrefixes.get(node_name) == prefix:
             print(
                 "No changes needed. {}'s prefix is already set to {}".format(
@@ -871,13 +889,18 @@ class AllocationsCmd(SetKeyCmd):
         # Update value in KvStore
         allocs.nodePrefixes[node_name] = prefix
         value = serializer.serialize_thrift_object(allocs)
-        self.run(key, value, "breeze", None, Consts.CONST_TTL_INF)
 
-    def run_unset(self, node_name):
+        super(AllocationsSetCmd, self)._run(
+            client, key, value, "breeze", None, Consts.CONST_TTL_INF
+        )
+
+
+class AllocationsUnsetCmd(SetKeyCmd):
+    def _run(self, client: OpenrCtrl.Client, node_name: str) -> None:
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
 
         # Retrieve previous allocation
-        resp = self.client.get_keys([key])
+        resp = client.getKvStoreKeyVals([key])
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
@@ -893,4 +916,7 @@ class AllocationsCmd(SetKeyCmd):
         # Update value in KvStore
         del allocs.nodePrefixes[node_name]
         value = serializer.serialize_thrift_object(allocs)
-        self.run(key, value, "breeze", None, Consts.CONST_TTL_INF)
+
+        super(AllocationsUnsetCmd, self)._run(
+            client, key, value, "breeze", None, Consts.CONST_TTL_INF
+        )

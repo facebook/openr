@@ -634,19 +634,19 @@ OpenrCtrlHandler::semifuture_updateFloodTopologyChild(
       thrift::OpenrModuleType::KVSTORE, std::move(request), true /* oneway */);
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::SptInfo>>
-OpenrCtrlHandler::semifuture_getSpanningTreeInfo() {
-  folly::Promise<std::unique_ptr<thrift::SptInfo>> p;
+folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
+OpenrCtrlHandler::semifuture_getSpanningTreeInfos() {
+  folly::Promise<std::unique_ptr<thrift::SptInfos>> p;
 
   thrift::KvStoreRequest request;
   request.cmd = thrift::Command::FLOOD_TOPO_GET;
 
-  auto reply = requestReplyThrift<thrift::SptInfo>(
+  auto reply = requestReplyThrift<thrift::SptInfos>(
       thrift::OpenrModuleType::KVSTORE, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));
   } else {
-    p.setValue(std::make_unique<thrift::SptInfo>(std::move(reply.value())));
+    p.setValue(std::make_unique<thrift::SptInfos>(std::move(reply.value())));
   }
 
   return p.getSemiFuture();

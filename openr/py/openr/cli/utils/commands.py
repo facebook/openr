@@ -7,9 +7,14 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+
+from typing import Dict, List, Optional
+
 import bunch
 from openr.clients.openr_client import get_openr_ctrl_client
+from openr.KvStore import ttypes as kv_store_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.utils.consts import Consts
 
 
 class OpenrCtrlCmd(object):
@@ -25,6 +30,7 @@ class OpenrCtrlCmd(object):
         self.host = cli_opts.host
         self.timeout = cli_opts.timeout
         self.fib_agent_port = cli_opts.fib_agent_port
+        self.kv_pub_port = cli_opts.kv_pub_port
 
     def run(self, *args, **kwargs) -> None:
         """
@@ -40,3 +46,24 @@ class OpenrCtrlCmd(object):
         """
 
         raise NotImplementedError
+
+    # common function used by decision, kvstore mnodule
+    def buildKvStoreKeyDumpParams(
+        self,
+        prefix: str = Consts.ALL_DB_MARKER,
+        originator_ids: Optional[List[str]] = None,
+        keyval_hash: Optional[Dict[str, kv_store_types.Value]] = None,
+    ) -> kv_store_types.KeyDumpParams:
+        """
+        Build KeyDumpParams based on input parameter list
+        """
+        params = kv_store_types.KeyDumpParams(prefix)
+        params.originatorIds = []
+        params.keyValHashes = None
+
+        if originator_ids:
+            params.originatorIds = originator_ids
+        if keyval_hash:
+            params.keyValHashes = keyval_hash
+
+        return params

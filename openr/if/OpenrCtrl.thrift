@@ -198,7 +198,7 @@ service OpenrCtrl extends fb303.FacebookService {
   /**
    * Get spanning tree information
    */
-  KvStore.SptInfo getSpanningTreeInfo() throws (1: OpenrError error);
+  KvStore.SptInfos getSpanningTreeInfos() throws (1: OpenrError error);
 
   /**
    * Add/Update KvStore peer - usually not to be used by external peers unless
