@@ -607,6 +607,7 @@ TEST(BGPRedistribution, BasicOperation) {
       thrift::PrefixType::BGP,
       data1,
       thrift::PrefixForwardingType::IP,
+      thrift::PrefixForwardingAlgorithm::SP_ECMP,
       false,
       mv1);
 
@@ -635,6 +636,7 @@ TEST(BGPRedistribution, BasicOperation) {
       thrift::PrefixType::BGP,
       data2,
       thrift::PrefixForwardingType::IP,
+      thrift::PrefixForwardingAlgorithm::SP_ECMP,
       false,
       mv2);
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));

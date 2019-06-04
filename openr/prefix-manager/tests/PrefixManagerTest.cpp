@@ -48,25 +48,33 @@ const auto prefixEntry7 = createPrefixEntry(addr7, thrift::PrefixType::DEFAULT);
 const auto prefixEntry8 =
     createPrefixEntry(addr8, thrift::PrefixType::PREFIX_ALLOCATOR);
 const auto ephemeralPrefixEntry9 = createPrefixEntry(
-    addr9, thrift::PrefixType::BGP, {}, thrift::PrefixForwardingType::IP, true);
+    addr9,
+    thrift::PrefixType::BGP,
+    {},
+    thrift::PrefixForwardingType::IP,
+    thrift::PrefixForwardingAlgorithm::SP_ECMP,
+    true);
 
 const auto persistentPrefixEntry9 = createPrefixEntry(
     addr9,
     thrift::PrefixType::BGP,
     {},
     thrift::PrefixForwardingType::IP,
+    thrift::PrefixForwardingAlgorithm::SP_ECMP,
     false);
 const auto ephemeralPrefixEntry10 = createPrefixEntry(
     addr10,
     thrift::PrefixType::BGP,
     {},
     thrift::PrefixForwardingType::IP,
+    thrift::PrefixForwardingAlgorithm::SP_ECMP,
     true);
 const auto persistentPrefixEntry10 = createPrefixEntry(
     addr10,
     thrift::PrefixType::BGP,
     {},
     thrift::PrefixForwardingType::IP,
+    thrift::PrefixForwardingAlgorithm::SP_ECMP,
     false);
 } // namespace
 

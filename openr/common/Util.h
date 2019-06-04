@@ -311,6 +311,8 @@ createPrefixEntry(
     const std::string& data = "",
     thrift::PrefixForwardingType forwardingType =
         thrift::PrefixForwardingType::IP,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm =
+        thrift::PrefixForwardingAlgorithm::SP_ECMP,
     folly::Optional<bool> ephemeral = folly::none,
     folly::Optional<thrift::MetricVector> mv = folly::none) {
   thrift::PrefixEntry prefixEntry;
@@ -318,6 +320,7 @@ createPrefixEntry(
   prefixEntry.type = type;
   prefixEntry.data = data;
   prefixEntry.forwardingType = forwardingType;
+  prefixEntry.forwardingAlgorithm = forwardingAlgorithm;
   prefixEntry.ephemeral = ephemeral;
   prefixEntry.mv = mv;
   return prefixEntry;

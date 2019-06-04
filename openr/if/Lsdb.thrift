@@ -175,6 +175,11 @@ enum PrefixForwardingType {
   SR_MPLS = 1,
 }
 
+enum PrefixForwardingAlgorithm {
+  SP_ECMP = 0, # Default (Shortest Path ECMP)
+  KSP2_ED_ECMP = 1, # 2-Shortest path edge-disjoint ECMP
+}
+
 struct PrefixEntry {
   1: Network.IpPrefix prefix
   2: Network.PrefixType type
@@ -184,6 +189,12 @@ struct PrefixEntry {
   // set then IP -> MPLS route will be programmed at LERs and LSR will perform
   // label forwarding until packet reaches destination.
   4: PrefixForwardingType forwardingType = 0
+  # Default forwarding algorithm is shortest path ECMP. Open/R implements
+  # 2-shortest path edge disjoint algorithm for forwarding. Forwarding type
+  # must be set to SR_MPLS. MPLS tunneling will be used for forwarding on
+  # shortest paths
+  7: PrefixForwardingAlgorithm forwardingAlgorithm = 0
+
   // Indicates if the prefix entry is ephemeral or persistent.
   // If optional value is not present, then entry is persistent.
   // Ephemeral entries are not saved into persistent store(file) and will be
