@@ -12,6 +12,8 @@
 #include <folly/FileUtil.h>
 #include <folly/io/IOBuf.h>
 
+#include <openr/common/Util.h>
+
 namespace openr {
 
 using namespace std::chrono_literals;
@@ -138,6 +140,13 @@ PersistentStore::saveDatabaseToDisk() noexcept {
 
 bool
 PersistentStore::loadDatabaseFromDisk() noexcept {
+  // Check if file exists
+  if (not fileExists(storageFilePath_)) {
+    LOG(INFO) << "Storage file " << storageFilePath_ << " doesn't exists. "
+              << "Starting with empty database";
+    return true;
+  }
+
   // Read data from file
   std::string fileData{""};
   if (not folly::readFile(storageFilePath_.c_str(), fileData)) {

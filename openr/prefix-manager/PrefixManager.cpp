@@ -125,7 +125,7 @@ PrefixManager::persistPrefixDb() {
 
   auto ret = configStoreClient_.storeThriftObj(kConfigKey, persistentPrefixDb);
   if (ret.hasError()) {
-    LOG(ERROR) << "Error saving persistent prefixDb to file";
+    LOG(ERROR) << "Error saving persistent prefixDb to file. " << ret.error();
   }
 }
 

@@ -90,7 +90,7 @@ splitByComma(const std::string& input) {
   return output;
 }
 
-// TODO remove once transitioned to cpp17
+// TODO replace with `std::filesystem::exists(...) once transitioned to cpp17
 bool
 fileExists(const std::string& path) {
   int fd = ::open(path.c_str(), O_RDONLY);
