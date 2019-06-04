@@ -84,7 +84,8 @@ class PrefixManagerTestFixture : public ::testing::Test {
         PersistentStoreUrl{kConfigStoreUrl},
         context,
         std::chrono::milliseconds(0),
-        std::chrono::milliseconds(0));
+        std::chrono::milliseconds(0),
+        true);
 
     configStoreThread = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "ConfigStore thread starting";
@@ -497,7 +498,10 @@ TEST(PrefixManagerTest, HoldTimeout) {
           "/tmp/pm_ut_config_store.bin.{}",
           std::hash<std::thread::id>{}(std::this_thread::get_id())),
       PersistentStoreUrl{kConfigStoreUrl},
-      context);
+      context,
+      Constants::kPersistentStoreInitialBackoff,
+      Constants::kPersistentStoreMaxBackoff,
+      true);
   std::thread configStoreThread([&]() noexcept {
     LOG(INFO) << "ConfigStore thread starting";
     configStore->run();

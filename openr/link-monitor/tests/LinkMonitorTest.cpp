@@ -187,7 +187,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // spin up a config store
     configStore = std::make_unique<PersistentStore>(
-        "1", kConfigStorePath, PersistentStoreUrl{kConfigStoreUrl}, context);
+        "1",
+        kConfigStorePath,
+        PersistentStoreUrl{kConfigStoreUrl},
+        context,
+        Constants::kPersistentStoreInitialBackoff,
+        Constants::kPersistentStoreMaxBackoff,
+        true /* dryrun */);
 
     configStoreThread = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "ConfigStore thread starting";

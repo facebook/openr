@@ -49,7 +49,8 @@ class PersistentStore : public OpenrEventLoop {
       std::chrono::milliseconds saveInitialBackoff =
           Constants::kPersistentStoreInitialBackoff,
       std::chrono::milliseconds saveMaxBackoff =
-          Constants::kPersistentStoreMaxBackoff);
+          Constants::kPersistentStoreMaxBackoff,
+      bool dryrun = false);
 
   // Destructor will try to save DB to disk before destroying the object
   ~PersistentStore() override;
@@ -75,6 +76,9 @@ class PersistentStore : public OpenrEventLoop {
   // Location on disk where data will be synced up. A file will be created
   // if doesn't exists.
   const std::string storageFilePath_;
+
+  // Dryrun to avoid disk writes in UTs
+  bool dryrun_{false};
 
   // Timer for saving database to disk
   std::unique_ptr<fbzmq::ZmqTimeout> saveDbTimer_;

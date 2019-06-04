@@ -24,14 +24,16 @@ PersistentStore::PersistentStore(
     const PersistentStoreUrl& socketUrl,
     fbzmq::Context& context,
     std::chrono::milliseconds saveInitialBackoff,
-    std::chrono::milliseconds saveMaxBackoff)
+    std::chrono::milliseconds saveMaxBackoff,
+    bool dryrun)
     : OpenrEventLoop(
           nodeName,
           thrift::OpenrModuleType::PERSISTENT_STORE,
           context,
           folly::none,
           std::string(socketUrl)),
-      storageFilePath_(storageFilePath) {
+      storageFilePath_(storageFilePath),
+      dryrun_(dryrun) {
   if (saveInitialBackoff != 0ms or saveMaxBackoff != 0ms) {
     // Create timer and backoff mechanism only if backoff is requested
     saveDbTimerBackoff_ =
@@ -125,9 +127,20 @@ PersistentStore::saveDatabaseToDisk() noexcept {
   ioBuf->coalesce();
 
   try {
-    // Write ioBuf to disk atomically
-    auto fileData = ioBuf->moveToFbString().toStdString();
-    folly::writeFileAtomic(storageFilePath_, fileData, 0666);
+    if (not dryrun_) {
+      LOG(INFO) << "Updating database on disk";
+      const auto startTs = std::chrono::steady_clock::now();
+      // Write ioBuf to disk atomically
+      auto fileData = ioBuf->moveToFbString().toStdString();
+      folly::writeFileAtomic(storageFilePath_, fileData, 0666);
+      LOG(INFO) << "Updated database on disk. Took "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now() - startTs)
+                       .count()
+                << "ms";
+    } else {
+      VLOG(1) << "Skipping writing to disk in dryrun mode";
+    }
     numOfWritesToDisk_++;
   } catch (std::exception const& err) {
     LOG(ERROR) << "Failed to write data to file '" << storageFilePath_ << "'. "

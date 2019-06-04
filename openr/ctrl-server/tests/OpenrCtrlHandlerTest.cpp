@@ -189,7 +189,10 @@ class OpenrCtrlFixture : public ::testing::Test {
         nodeName,
         "/tmp/openr-ctrl-handler-test.bin",
         persistentStoreUrl_,
-        context_);
+        context_,
+        Constants::kPersistentStoreInitialBackoff,
+        Constants::kPersistentStoreMaxBackoff,
+        true /* dryrun */);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
     moduleTypeToEvl[thrift::OpenrModuleType::PERSISTENT_STORE] =
         persistentStore;
