@@ -316,15 +316,16 @@ main(int argc, char* argv[]) {
 
   fbzmq::ZmqEventLoop evl;
 
-  monitorEventLoopWithWatchdog(
-      &evl, "fbmeshd_shared_event_loop", watchdog.get());
-  AuthsaeCallbackHelpers::init(evl);
-  Nl80211Handler nlHandler{evl, FLAGS_enable_userspace_mesh_peering};
-  SignalHandler signalHandler{evl, nlHandler};
+  SignalHandler signalHandler{evl};
   signalHandler.registerSignalHandler(SIGINT);
   signalHandler.registerSignalHandler(SIGTERM);
   signalHandler.registerSignalHandler(SIGABRT);
 
+  monitorEventLoopWithWatchdog(
+      &evl, "fbmeshd_shared_event_loop", watchdog.get());
+  AuthsaeCallbackHelpers::init(evl);
+
+  Nl80211Handler nlHandler{evl, FLAGS_enable_userspace_mesh_peering};
   auto returnValue = nlHandler.joinMeshes();
   if (returnValue != R_SUCCESS) {
     return returnValue;

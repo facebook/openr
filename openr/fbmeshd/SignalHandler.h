@@ -11,8 +11,6 @@
 
 #include <fbzmq/async/AsyncSignalHandler.h>
 
-#include <openr/fbmeshd/802.11s/Nl80211Handler.h>
-
 namespace openr {
 namespace fbmeshd {
 
@@ -30,11 +28,8 @@ class SignalHandler final : public fbzmq::AsyncSignalHandler {
   SignalHandler& operator=(SignalHandler&&) = delete;
 
  public:
-  explicit SignalHandler(fbzmq::ZmqEventLoop& evl, Nl80211Handler& nlHandler)
-      : fbzmq::AsyncSignalHandler(&evl), nlHandler_(nlHandler) {}
-
- private:
-  Nl80211Handler& nlHandler_;
+  explicit SignalHandler(fbzmq::ZmqEventLoop& evl)
+      : fbzmq::AsyncSignalHandler(&evl) {}
 
   void
   signalReceived(int sig) noexcept override {
