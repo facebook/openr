@@ -53,6 +53,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   facebook::fb303::cpp2::fb_status getStatus() override;
 
   void getCounters(std::map<std::string, int64_t>& _return) override;
+  using facebook::fb303::FacebookBase2::getRegexCounters;
   void getRegexCounters(
       std::map<std::string, int64_t>& _return,
       std::unique_ptr<std::string> regex) override;
