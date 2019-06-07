@@ -139,6 +139,8 @@ class Fib final : public OpenrEventLoop {
   // received route-db if provided.
   folly::Optional<thrift::PerfEvents> maybePerfEvents_;
   thrift::RouteDatabase routeDb_;
+  // Route DB containing only dry run or not installed routes
+  thrift::RouteDatabase doNotInstallRouteDb_;
   std::deque<thrift::PerfEvents> perfDb_;
 
   // Flag to indicate the result of previous route programming attempt.

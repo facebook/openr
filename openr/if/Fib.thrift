@@ -37,6 +37,7 @@ struct PerfDatabase {
 enum FibCommand {
   ROUTE_DB_GET = 1,
   PERF_DB_GET = 2,
+  ROUTE_DB_UNINSTALLABLE_GET = 3,
 }
 
 struct FibRequest {

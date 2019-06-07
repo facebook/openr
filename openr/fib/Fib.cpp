@@ -219,6 +219,11 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
     // send the thrift::PerfDatabase
     return fbzmq::Message::fromThriftObj(dumpPerfDb(), serializer_);
     break;
+  case thrift::FibCommand::ROUTE_DB_UNINSTALLABLE_GET:
+    VLOG(2) << "Fib: Do not install RouteDb requested";
+    // send the thrift::RouteDatabase
+    return fbzmq::Message::fromThriftObj(doNotInstallRouteDb_, serializer_);
+    break;
   default:
     LOG(ERROR) << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());
@@ -227,6 +232,8 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
 
 void
 Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
+  thrift::RouteDatabase doNotInstallRouteDb;
+
   VLOG(2) << "Processing new routes from Decision. "
           << newRouteDb.unicastRoutes.size() << " unicast routes and "
           << newRouteDb.mplsRoutes.size() << " mpls routes";
@@ -242,6 +249,8 @@ Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
   auto rIter = newRouteDb.unicastRoutes.begin();
   while (rIter != newRouteDb.unicastRoutes.end()) {
     if (rIter->doNotInstall) {
+      doNotInstallRouteDb.unicastRoutes.emplace_back(
+          *std::make_move_iterator(rIter));
       rIter = newRouteDb.unicastRoutes.erase(rIter);
     } else {
       ++rIter;
@@ -252,6 +261,7 @@ Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
   auto const routeDelta = findDeltaRoutes(newRouteDb, routeDb_);
   // update new routeDb_
   routeDb_ = std::move(newRouteDb);
+  doNotInstallRouteDb_ = std::move(doNotInstallRouteDb);
   // Add some counters
   tData_.addStatValue("fib.process_route_db", 1, fbzmq::COUNT);
   // Send request to agent

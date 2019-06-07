@@ -113,6 +113,12 @@ service OpenrCtrl extends fb303.FacebookService {
   Fib.RouteDatabase getRouteDbComputed(1: string nodeName)
     throws (1: OpenrError error)
 
+    /**
+     * Get route database of the current node which are not installable.
+     */
+    Fib.RouteDatabase getRouteDbUnInstallable()
+      throws (1: OpenrError error)
+
   //
   // Performance stats APIs
   //
