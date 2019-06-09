@@ -409,8 +409,6 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   auto const& mplsRoutesToUpdate =
       createMplsRoutesWithBestNextHops(routeDbDelta.mplsRoutesToUpdate);
 
-  // Do not program routes in case of dryrun
-  LOG(INFO) << "Skipping programing of routes in dryrun ... ";
   VLOG(2) << "Unicast routes to add/update";
   for (auto const& route : patchedUnicastRoutesToUpdate) {
     VLOG(2) << "> " << toString(route.dest) << ", " << route.nextHops.size();
@@ -442,6 +440,8 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   }
 
   if (dryrun_) {
+    // Do not program routes in case of dryrun
+    LOG(INFO) << "Skipping programing of routes in dryrun ... ";
     logPerfEvents();
     return;
   }

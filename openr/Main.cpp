@@ -703,7 +703,7 @@ main(int argc, char** argv) {
           FLAGS_enable_v4,
           FLAGS_enable_lfa,
           FLAGS_enable_ordered_fib_programming,
-          FLAGS_enable_bgp_route_programming,
+          not FLAGS_enable_bgp_route_programming,
           AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
           std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
