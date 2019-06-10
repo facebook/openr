@@ -18,6 +18,6 @@ struct PluginArgs {
   DecisionPubUrl decisionPubUrl;
 };
 
-void pluginStart(const PluginArgs& pluginArgs);
+void pluginStart(const PluginArgs& /* pluginArgs */);
 void pluginStop();
 } // namespace openr

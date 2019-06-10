@@ -9,7 +9,7 @@
 
 namespace openr {
 void
-pluginStart(const PluginArgs& pluginArgs) {
+pluginStart(const PluginArgs& /* pluginArgs*/) {
   return;
 }
 
