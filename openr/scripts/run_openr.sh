@@ -57,6 +57,7 @@ ENABLE_NETLINK_FIB_HANDLER=true
 ENABLE_NETLINK_SYSTEM_HANDLER=true
 ENABLE_ORDERED_FIB_PROGRAMMING=false
 ENABLE_PERF_MEASUREMENT=true
+ENABLE_PLUGIN=false
 ENABLE_PREFIX_ALLOC=false
 ENABLE_RTT_METRIC=true
 ENABLE_SECURE_THRIFT_SERVER=false
@@ -82,6 +83,7 @@ KVSTORE_TTL_DECREMENT_MS=1
 KVSTORE_ZMQ_HWM=65536
 LINK_FLAP_INITIAL_BACKOFF_MS=1000
 LINK_FLAP_MAX_BACKOFF_MS=60000
+LOGGING=""
 LINK_MONITOR_CMD_PORT=60006
 LOOPBACK_IFACE="lo"
 MEMORY_LIMIT_MB=300
@@ -103,6 +105,7 @@ TLS_ECC_CURVE_NAME="prime256v1"
 TLS_TICKET_SEED_PATH=""
 USE_NETLINK_MESSAGE=true
 VERBOSITY=1
+VMODULE=""
 X509_CA_PATH=""
 X509_CERT_PATH=""
 X509_KEY_PATH=""
@@ -175,6 +178,7 @@ exec ${OPENR} \
   --enable_netlink_system_handler=${ENABLE_NETLINK_SYSTEM_HANDLER} \
   --enable_ordered_fib_programming=${ENABLE_ORDERED_FIB_PROGRAMMING} \
   --enable_perf_measurement=${ENABLE_PERF_MEASUREMENT} \
+  --enable_plugin=${ENABLE_PLUGIN} \
   --enable_prefix_alloc=${ENABLE_PREFIX_ALLOC} \
   --enable_rtt_metric=${ENABLE_RTT_METRIC} \
   --enable_secure_thrift_server=${ENABLE_SECURE_THRIFT_SERVER} \
@@ -202,6 +206,7 @@ exec ${OPENR} \
   --link_flap_initial_backoff_ms=${LINK_FLAP_INITIAL_BACKOFF_MS} \
   --link_flap_max_backoff_ms=${LINK_FLAP_MAX_BACKOFF_MS} \
   --link_monitor_cmd_port=${LINK_MONITOR_CMD_PORT} \
+  --logging="${LOGGING}" \
   --loopback_iface=${LOOPBACK_IFACE} \
   --memory_limit_mb=${MEMORY_LIMIT_MB} \
   --minloglevel=${MIN_LOG_LEVEL} \
@@ -233,4 +238,5 @@ exec ${OPENR} \
   --logtostderr \
   --max_log_size=1 \
   --v=${VERBOSITY} \
+  --vmodule="${VMODULE}" \
   ${OPENR_ARGS}
