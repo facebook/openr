@@ -19,12 +19,13 @@
 
 namespace openr {
 
-class PrefixManagerClient final {
+class PrefixManagerClient {
  public:
   PrefixManagerClient(
       const PrefixManagerLocalCmdUrl& localCmdUrl,
       fbzmq::Context& context,
       folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none);
+  virtual ~PrefixManagerClient() = default;
 
   folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error> addPrefixes(
       const std::vector<thrift::PrefixEntry>& prefixes);
@@ -45,9 +46,9 @@ class PrefixManagerClient final {
   folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
   getPrefixesByType(thrift::PrefixType type);
 
- private:
-  folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error> sendRequest(
-      const thrift::PrefixManagerRequest& request);
+ protected:
+  virtual folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
+  sendRequest(const thrift::PrefixManagerRequest& request);
 
   // Dealer socket to talk with prefix manager
   fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_CLIENT> prefixManagerCmdSock_;

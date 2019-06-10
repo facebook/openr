@@ -43,6 +43,7 @@
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/platform/PlatformPublisher.h>
+#include <openr/plugin/Plugin.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
@@ -57,9 +58,6 @@ using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 using apache::thrift::concurrency::ThreadManager;
 using openr::thrift::OpenrModuleType;
-
-extern void pluginStart();
-extern void pluginStop();
 
 namespace {
 //
@@ -829,7 +827,7 @@ main(int argc, char** argv) {
 
   // Call external module for platform specific implementations
   if (FLAGS_enable_plugin) {
-    pluginStart();
+    pluginStart(PluginArgs{context, prefixManagerLocalCmdUrl});
   }
 
   // Wait for main-event loop to return

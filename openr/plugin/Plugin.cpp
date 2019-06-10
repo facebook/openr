@@ -7,8 +7,9 @@
 
 #include "Plugin.h"
 
+namespace openr {
 void
-pluginStart() {
+pluginStart(const PluginArgs& pluginArgs) {
   return;
 }
 
@@ -16,3 +17,4 @@ void
 pluginStop() {
   return;
 }
+} // namespace openr

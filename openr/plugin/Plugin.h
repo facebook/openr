@@ -7,5 +7,15 @@
 
 #pragma once
 
-void pluginStart();
+#include <fbzmq/zmq/Zmq.h>
+#include "openr/common/Types.h"
+
+namespace openr {
+struct PluginArgs {
+  fbzmq::Context& zmqContext;
+  PrefixManagerLocalCmdUrl prefixManagerUrl;
+};
+
+void pluginStart(const PluginArgs& pluginArgs);
 void pluginStop();
+} // namespace openr
