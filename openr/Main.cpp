@@ -65,7 +65,7 @@ namespace {
 //
 
 // the URL for Decision module
-const DecisionPubUrl kDecisionPubUrl{"inproc://decision_server_pub"};
+const DecisionPubUrl kDecisionPubUrl{"ipc:///tmp/decision-pub-url"};
 
 // the URL Prefix for the ConfigStore module
 const PersistentStoreUrl kConfigStoreUrl{"ipc:///tmp/openr_config_store_cmd"};
@@ -827,7 +827,8 @@ main(int argc, char** argv) {
 
   // Call external module for platform specific implementations
   if (FLAGS_enable_plugin) {
-    pluginStart(PluginArgs{context, prefixManagerLocalCmdUrl});
+    pluginStart(PluginArgs{
+        FLAGS_node_name, context, prefixManagerLocalCmdUrl, kDecisionPubUrl});
   }
 
   // Wait for main-event loop to return

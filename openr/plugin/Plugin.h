@@ -8,12 +8,14 @@
 #pragma once
 
 #include <fbzmq/zmq/Zmq.h>
-#include "openr/common/Types.h"
+#include <openr/common/Types.h>
 
 namespace openr {
 struct PluginArgs {
+  std::string myNodeName;
   fbzmq::Context& zmqContext;
   PrefixManagerLocalCmdUrl prefixManagerUrl;
+  DecisionPubUrl decisionPubUrl;
 };
 
 void pluginStart(const PluginArgs& pluginArgs);
