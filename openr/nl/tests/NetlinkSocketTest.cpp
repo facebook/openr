@@ -106,8 +106,19 @@ class NetlinkSocketFixture : public testing::TestWithParam<bool> {
     bringUpIntf(kVethNameX);
     bringUpIntf(kVethNameY);
 
+    std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
+    nlProtocolSocket =
+        std::make_unique<openr::Netlink::NetlinkProtocolSocket>(&evl2);
+    nlProtocolSocketThread = std::thread([&]() {
+      nlProtocolSocket->init();
+      evl2.run();
+      evl2.waitUntilStopped();
+    });
+    evl2.waitUntilRunning();
+
     // create netlink route socket
-    netlinkSocket = std::make_unique<NetlinkSocket>(&evl, nullptr, GetParam());
+    netlinkSocket = std::make_unique<NetlinkSocket>(
+        &evl, nullptr, GetParam(), std::move(nlProtocolSocket));
 
     // Run the zmq event loop in its own thread
     // We will either timeout if expected events are not received
@@ -116,7 +127,6 @@ class NetlinkSocketFixture : public testing::TestWithParam<bool> {
       evl.run();
       evl.waitUntilStopped();
     });
-
     evl.waitUntilRunning();
   }
 
@@ -130,6 +140,10 @@ class NetlinkSocketFixture : public testing::TestWithParam<bool> {
     if (evl.isRunning()) {
       evl.stop();
       eventThread.join();
+    }
+    if (evl2.isRunning()) {
+      evl2.stop();
+      nlProtocolSocketThread.join();
     }
 
     netlinkSocket.reset();
@@ -206,7 +220,9 @@ class NetlinkSocketFixture : public testing::TestWithParam<bool> {
 
   std::unique_ptr<NetlinkSocket> netlinkSocket;
   fbzmq::ZmqEventLoop evl;
+  fbzmq::ZmqEventLoop evl2;
   std::thread eventThread;
+  std::thread nlProtocolSocketThread;
 
   struct rtnl_link* link_{nullptr};
   struct nl_sock* socket_{nullptr};

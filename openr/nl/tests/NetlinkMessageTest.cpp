@@ -136,11 +136,11 @@ class NlMessageFixture : public ::testing::Test {
     bringUpIntf(kVethNameY);
 
     // netlink protocol socket
-    nlSock = std::make_unique<NetlinkProtocolSocket>(&evl, ::getpid());
-    nlSock->init();
+    nlSock = std::make_unique<NetlinkProtocolSocket>(&evl);
 
     // start event thread
     eventThread = std::thread([&]() {
+      nlSock->init();
       evl.run();
       evl.waitUntilStopped();
     });
@@ -313,9 +313,8 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
   // Add IPv6 route with single path label next with one label
   // outoing IF is vethTestY
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel1,
@@ -325,46 +324,25 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    // create label next hop
-    nlSock->addRoute(route);
-  });
+  ackCount = nlSock->getAckCount();
+  // create label next hop
+  status = nlSock->addRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    // should have received one with status = 0
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(110), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->deleteRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(210), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
 TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   // Add label route with single path label with PHP nexthop
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -374,26 +352,17 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->addLabelRoute(route);
-  });
+  ackCount = nlSock->getAckCount();
+  status = nlSock->addLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  // test replace MPLS route, adding same route and nexthop
-  evlTest.scheduleTimeout(std::chrono::milliseconds(200), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->addLabelRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(300), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
+  ackCount = nlSock->getAckCount();
+  status = nlSock->addLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
   paths.push_back(buildNextHop(
       folly::none,
@@ -404,45 +373,24 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
 
   auto route2 = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
 
-  // test replace MPLS route, adding same label with different next hop
-  evlTest.scheduleTimeout(std::chrono::milliseconds(350), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->addLabelRoute(route2);
-  });
+  ackCount = nlSock->getAckCount();
+  status = nlSock->addLabelRoute(route2);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(450), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(500), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->deleteLabelRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(600), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
 TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
   // Add IPv6 route with 48 path ECMP
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   std::vector<openr::fbnl::NextHop> paths;
   for (uint32_t i = 0; i < 48; i++) {
     outLabel6[0] = outLabel6[0] + i;
@@ -455,47 +403,25 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
   }
 
   auto route = buildRoute(kRouteProtoId, ipPrefix5, folly::none, paths);
+  ackCount = nlSock->getAckCount();
+  // create label next hop
+  status = nlSock->addRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    // create label next hop
-    nlSock->addRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(400), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    // should have received one with status = 0
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(410), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->deleteRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(610), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
 TEST_F(NlMessageFixture, MaxPayloadExceeded) {
   // check for max payload handling. Add nexthops that exceeds payload size
   // Should error out
 
-  fbzmq::ZmqEventLoop evlTest;
-  uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   std::vector<openr::fbnl::NextHop> paths;
   struct v6Addr addr6 {
     0
@@ -513,30 +439,15 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
   }
 
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    auto status = nlSock->addLabelRoute(route);
-    EXPECT_EQ(status, ResultCode::NO_MESSAGE_BUFFER);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  status = nlSock->addLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::NO_MESSAGE_BUFFER);
 }
 
 TEST_F(NlMessageFixture, PopLabel) {
   // pop label to loopback i/f
 
-  fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -545,48 +456,26 @@ TEST_F(NlMessageFixture, PopLabel) {
       folly::none,
       ifIndexLo));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
+  ackCount = nlSock->getAckCount();
+  // create label next hop
+  status = nlSock->addLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    // create label next hop
-    nlSock->addLabelRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    // should have received one with status = 0
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(110), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->deleteLabelRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(210), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
 TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
   // Add label route with single path label next with one label
   // outoing IF is vethTestY
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -595,47 +484,25 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
       ipAddrY1V6,
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
+  ackCount = nlSock->getAckCount();
+  // create label next hop
+  status = nlSock->addLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    // create label next hop
-    nlSock->addLabelRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    // should have received one with status = 0
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(110), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->deleteLabelRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(210), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
 TEST_F(NlMessageFixture, NlErrorMessage) {
   // Add label route with single path label next with one label
-  // and an invalid outgoing I/F. The nlmsg error should increase
+  // and an invalid outgoing I/F. Function should return Fail
+  // and the nlmsg error should increase
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   std::vector<openr::fbnl::NextHop> paths;
   uint32_t invalidIfindex = 1000;
   paths.push_back(buildNextHop(
@@ -645,38 +512,21 @@ TEST_F(NlMessageFixture, NlErrorMessage) {
       ipAddrY1V6,
       invalidIfindex));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    // create label next hop
-    nlSock->addLabelRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    EXPECT_NE(0, nlSock->getErrorCount());
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // create label next hop
+  ResultCode status = nlSock->addLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SYSERR);
+  EXPECT_NE(0, nlSock->getErrorCount());
 }
 
 TEST_F(NlMessageFixture, InvalidRoute) {
   // Add two routes, one valid and the other invalid. Only one should be
   // sent to program
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   std::vector<openr::fbnl::NextHop> paths1;
   std::vector<openr::fbnl::Route> routes;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   paths1.push_back(buildNextHop(
       folly::none,
       swapLabel,
@@ -697,55 +547,33 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix2, folly::none, paths2));
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    // create label next hop
-    nlSock->addRoutes(routes);
-  });
+  ackCount = nlSock->getAckCount();
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // create label next hop
+  nlSock->addRoutes(routes);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // programmed 2 routes but should have received only 1 ack
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    // programmed 2 routes but should have received only 1 ack
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(150), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    for (auto const& route : routes) {
-      nlSock->deleteRoute(route);
-    }
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(250), [&]() noexcept {
-    // delete needs only the destination prefix or label, doesn't
-    // matter if the nexthop is valid or not. In this case delete will
-    // be called for both routes but only one route is installed. Kernel
-    // will return an error
-    EXPECT_EQ(1, nlSock->getErrorCount());
-    // deleting 2 routes but should have received only 1 ack
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  // delete needs only the destination prefix or label, doesn't
+  // matter if the nexthop is valid or not. In this case delete will
+  // be called for both routes but only one route is installed. Kernel
+  // will return an error
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteRoute(routes[0]);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  status = nlSock->deleteRoute(routes[1]);
+  EXPECT_EQ(1, nlSock->getErrorCount());
+  // deleting 2 routes but should have received only 1 ack
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
 TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   // Add IPv6 route with single path label next with one label
   // outoing IF is vethTestY
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   uint32_t count{100000};
 
   std::vector<openr::fbnl::NextHop> paths;
@@ -785,30 +613,17 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
 
   ackCount = nlSock->getAckCount();
   LOG(INFO) << "Adding " << count << " routes";
-  nlSock->addRoutes(routes);
-
-  int retry{45};
-  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
+  status = nlSock->addRoutes(routes);
   LOG(INFO) << "Done adding " << count << " routes";
+  EXPECT_EQ(status, ResultCode::SUCCESS);
   EXPECT_EQ(0, nlSock->getErrorCount());
   // should have received acks with status = 0
   EXPECT_GE(nlSock->getAckCount(), ackCount + count);
 
   // delete routes
   ackCount = nlSock->getAckCount();
-  nlSock->deleteRoutes(routes);
-
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(5));
-
-  retry = 30;
-  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
+  status = nlSock->deleteRoutes(routes);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
   EXPECT_EQ(0, nlSock->getErrorCount());
   // should have received acks status = 0
   EXPECT_GE(nlSock->getAckCount(), ackCount + count);
@@ -817,9 +632,8 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
 TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
   // Add label route with single path label with PHP nexthop
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -829,45 +643,25 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
       ifIndexY));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel5, paths);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->addLabelRoute(route);
-  });
+  ackCount = nlSock->getAckCount();
+  status = nlSock->addLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(110), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->deleteLabelRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(210), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteLabelRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
 TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   // Add IPv4 route with single path label next with one label
   // outoing IF is vethTestY
 
-  // Create another ZmqEventLoop instance for running tests
-  fbzmq::ZmqEventLoop evlTest;
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
@@ -881,46 +675,27 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    // create ipv4 route with label nexthop
-    nlSock->addRoute(route);
-  });
+  ackCount = nlSock->getAckCount();
+  // create ipv4 route with label nexthop
+  status = nlSock->addRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // should have received one ack with status = 0
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 
-  evlTest.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    // should have received one with status = 0
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(110), [&]() noexcept {
-    ackCount = nlSock->getAckCount();
-    nlSock->deleteRoute(route);
-  });
-
-  evlTest.scheduleTimeout(std::chrono::milliseconds(210), [&]() noexcept {
-    EXPECT_EQ(0, nlSock->getErrorCount());
-    EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
-    evlTest.stop();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting evl thread";
-    evlTest.run();
-    LOG(INFO) << "Stopping evl thread.";
-  });
-  evlTest.waitUntilRunning();
-  evlTest.waitUntilStopped();
-  evlThread.join();
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
-TEST_F(NlMessageFixture, MultipIpV4RouteLabelNexthop) {
+TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   // Add Multiple IPv4 routes with single path label next with one label
   // outoing IF is vethTestY
 
-  // Create another ZmqEventLoop instance for running tests
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   const uint32_t count{100000};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
@@ -955,14 +730,9 @@ TEST_F(NlMessageFixture, MultipIpV4RouteLabelNexthop) {
 
   ackCount = nlSock->getAckCount();
   LOG(INFO) << "Adding in bulk " << count << " routes";
-  nlSock->addRoutes(routes);
-
-  int retry{5};
-  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
+  status = nlSock->addRoutes(routes);
   LOG(INFO) << "Done adding " << count << " routes";
+  EXPECT_EQ(status, ResultCode::SUCCESS);
   EXPECT_EQ(0, nlSock->getErrorCount());
   // should have received acks with status = 0
   EXPECT_GE(nlSock->getAckCount(), ackCount + count);
@@ -970,17 +740,9 @@ TEST_F(NlMessageFixture, MultipIpV4RouteLabelNexthop) {
   // delete routes
   LOG(INFO) << "Deleting in bulk " << count << " routes";
   ackCount = nlSock->getAckCount();
-  nlSock->deleteRoutes(routes);
-
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(5));
-
-  retry = 5;
-  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
+  status = nlSock->deleteRoutes(routes);
   LOG(INFO) << "Done deleting";
+  EXPECT_EQ(status, ResultCode::SUCCESS);
   EXPECT_EQ(0, nlSock->getErrorCount());
   // should have received acks status = 0
   EXPECT_GE(nlSock->getAckCount(), ackCount + count);
@@ -994,21 +756,16 @@ TEST_F(NlMessageFixture, MultipIpV4RouteLabelNexthop) {
         static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
     folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
     auto route = buildRoute(kRouteProtoId, prefix, folly::none, paths);
-    nlSock->addRoute(route);
+    status = nlSock->addRoute(route);
+    EXPECT_EQ(status, ResultCode::SUCCESS);
   }
   LOG(INFO) << "Done adding " << count << " routes";
-
-  retry = 5;
-  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
   EXPECT_EQ(0, nlSock->getErrorCount());
   // should have received acks with status = 0
   EXPECT_GE(nlSock->getAckCount(), ackCount + count);
 
   // delete routes one by one instead of a vector of routes
-  LOG(INFO) << "Deleting in bulk " << count << " routes";
+  LOG(INFO) << "Deleting " << count << " routes one at a time";
   ackCount = nlSock->getAckCount();
   for (uint32_t i = 0; i < count; i++) {
     addr4.u32_addr = 0x000000A0 + i;
@@ -1016,13 +773,8 @@ TEST_F(NlMessageFixture, MultipIpV4RouteLabelNexthop) {
         static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
     folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
     auto route = buildRoute(kRouteProtoId, prefix, folly::none, paths);
-    nlSock->deleteRoute(route);
-  }
-
-  retry = 5;
-  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    status = nlSock->deleteRoute(route);
+    EXPECT_EQ(status, ResultCode::SUCCESS);
   }
   LOG(INFO) << "Done deleting";
   EXPECT_EQ(0, nlSock->getErrorCount());
@@ -1034,8 +786,8 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   // Add IPv6 route with single path label next with one label
   // outoing IF is vethTestY
 
-  // Create another ZmqEventLoop instance for running tests
   uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
   uint32_t count{20000};
   std::vector<openr::fbnl::NextHop> paths;
   // create label next hop
@@ -1053,30 +805,16 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
 
   ackCount = nlSock->getAckCount();
   LOG(INFO) << "Adding " << count << " label routes";
-  nlSock->addRoutes(labelRoutes);
-
-  // should have received acks with status = 0
-  int retry{30};
-  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
+  status = nlSock->addRoutes(labelRoutes);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
   LOG(INFO) << "Done adding " << count << " label routes";
   EXPECT_GE(nlSock->getAckCount(), ackCount + count);
   EXPECT_EQ(0, nlSock->getErrorCount());
 
   ackCount = nlSock->getAckCount();
-  nlSock->deleteRoutes(labelRoutes);
-
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(3));
+  status = nlSock->deleteRoutes(labelRoutes);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
   EXPECT_EQ(0, nlSock->getErrorCount());
-  // should have received acks status = 0
-  retry = 30;
-  while (nlSock->getAckCount() < ackCount + count && retry-- > 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
   EXPECT_GE(nlSock->getAckCount(), ackCount + count);
 }
 

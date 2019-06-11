@@ -23,8 +23,14 @@ namespace openr {
 namespace fbnl {
 
 NetlinkSocket::NetlinkSocket(
-    fbzmq::ZmqEventLoop* evl, EventsHandler* handler, bool useNetlinkMessage)
-    : evl_(evl), handler_(handler), useNetlinkMessage_(useNetlinkMessage) {
+    fbzmq::ZmqEventLoop* evl,
+    EventsHandler* handler,
+    bool useNetlinkMessage,
+    std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock)
+    : evl_(evl),
+      handler_(handler),
+      useNetlinkMessage_(useNetlinkMessage),
+      nlSock_(std::move(nlSock)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 
   // Create netlink socket for only notification subscription
@@ -51,14 +57,9 @@ NetlinkSocket::NetlinkSocket(
   err = nl_socket_set_buffer_size(subSock_, kNlSockRecvBuf, 0);
   CHECK_EQ(err, 0) << "Failed to set socket buffer on subSock_";
 
-  // create netlink protocol object
+  // check netlink protocol object
   if (useNetlinkMessage_) {
-    auto tid = static_cast<int>(
-        std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    nlSock_ =
-        std::make_unique<openr::Netlink::NetlinkProtocolSocket>(evl_, tid);
     CHECK(nlSock_ != nullptr) << "Missing event loop.";
-    nlSock_->init();
   }
 
   // Request a route cache to be created and registered with cache manager

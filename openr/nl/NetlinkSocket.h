@@ -156,7 +156,8 @@ class NetlinkSocket {
   explicit NetlinkSocket(
       fbzmq::ZmqEventLoop* evl,
       EventsHandler* handler = nullptr,
-      bool useNetlinkMessage = false);
+      bool useNetlinkMessage = false,
+      std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock = nullptr);
 
   virtual ~NetlinkSocket();
 

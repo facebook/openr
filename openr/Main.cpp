@@ -277,7 +277,9 @@ main(int argc, char** argv) {
   std::shared_ptr<ThreadManager> thriftThreadMgr;
 
   auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  auto nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
   std::shared_ptr<openr::fbnl::NetlinkSocket> nlSocket;
+  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
   std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
   std::unique_ptr<std::thread> netlinkFibServerThread;
@@ -294,8 +296,24 @@ main(int argc, char** argv) {
     eventPublisher = std::make_unique<PlatformPublisher>(
         context, PlatformPublisherUrl{FLAGS_platform_pub_url});
 
+    // Create Netlink Protocol object in a new thread
+    nlProtocolSocket = std::make_unique<openr::Netlink::NetlinkProtocolSocket>(
+        nlProtocolSocketEventLoop.get());
+    auto nlProtocolSocketThread = std::thread([&]() {
+      LOG(INFO) << "Starting NetlinkProtolSocketEvl thread ...";
+      folly::setThreadName("NetlinkProtolSocketEvl");
+      nlProtocolSocket->init();
+      nlProtocolSocketEventLoop->run();
+      LOG(INFO) << "NetlinkProtolSocketEvl thread got stopped.";
+    });
+    nlProtocolSocketEventLoop->waitUntilRunning();
+    allThreads.emplace_back(std::move(nlProtocolSocketThread));
+
     nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
-        nlEventLoop.get(), eventPublisher.get(), FLAGS_use_netlink_message);
+        nlEventLoop.get(),
+        eventPublisher.get(),
+        FLAGS_use_netlink_message,
+        std::move(nlProtocolSocket));
     // Subscribe selected network events
     nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
     nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);
@@ -849,6 +867,11 @@ main(int argc, char** argv) {
   if (nlEventLoop) {
     nlEventLoop->stop();
     nlEventLoop->waitUntilStopped();
+  }
+
+  if (nlProtocolSocketEventLoop) {
+    nlProtocolSocketEventLoop->stop();
+    nlProtocolSocketEventLoop->waitUntilStopped();
   }
 
   if (netlinkFibServer) {

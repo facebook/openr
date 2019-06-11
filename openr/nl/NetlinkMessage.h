@@ -20,6 +20,7 @@
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
+#include <folly/futures/Future.h>
 
 #include <openr/nl/NetlinkTypes.h>
 
@@ -32,10 +33,13 @@ constexpr uint32_t kNetlinkSockRecvBuf{1 * 1024 * 1024};
 constexpr uint32_t kMaxNlMessageQueue{126001};
 constexpr size_t kMaxIovMsg{500};
 constexpr std::chrono::milliseconds kNlMessageAckTimer{1000};
+constexpr std::chrono::milliseconds kNlRequestTimeout{30000};
 
 enum class ResultCode {
   SUCCESS = 0,
   FAIL,
+  TIMEOUT,
+  SYSERR,
   NO_MESSAGE_BUFFER,
   SENDMSG_FAILED,
   INVALID_ADDRESS_FAMILY,
@@ -64,6 +68,11 @@ class NetlinkMessage {
   // update size of message received
   void updateBytesReceived(uint16_t bytes);
 
+  // set status value (in promise)
+  void setReturnStatus(int status);
+
+  folly::Future<int> getFuture();
+
  protected:
   // add TLV attributes, specify the length and size of data
   // returns false if enough buffer is not available. Also updates the
@@ -90,11 +99,14 @@ class NetlinkMessage {
   // size available for adding messages,
   // in case of rx message, it contains bytes received
   uint32_t size_{kMaxNlPayloadSize};
+
+  // Promise to relay the status code received from kernel
+  std::unique_ptr<folly::Promise<int>> promise_{nullptr};
 };
 
 class NetlinkProtocolSocket {
  public:
-  NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl, int pid);
+  explicit NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl);
 
   // create socket and add to eventloop
   void init();
@@ -111,26 +123,31 @@ class NetlinkProtocolSocket {
   void processMessage(
       const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead);
 
-  // add route and nexthop paths
+  // synchronous add route and nexthop paths
   ResultCode addRoute(const openr::fbnl::Route& route);
 
-  // delete route
+  // synchronous delete route
   ResultCode deleteRoute(const openr::fbnl::Route& route);
 
-  // add label route
+  // synchronous add label route
   ResultCode addLabelRoute(const openr::fbnl::Route& route);
 
-  // delete label route
+  // synchronous delete label route
   ResultCode deleteLabelRoute(const openr::fbnl::Route& route);
 
-  // add given list of IP or label routes and their nexthop paths
+  // synchronous add given list of IP or label routes and their nexthop paths
   ResultCode addRoutes(const std::vector<openr::fbnl::Route> routes);
 
-  // delete a list of given IP or label routes
+  // synchronous delete a list of given IP or label routes
   ResultCode deleteRoutes(const std::vector<openr::fbnl::Route> routes);
 
   // add netlink message to the queue
   void addNetlinkMessage(std::vector<std::unique_ptr<NetlinkMessage>> nlmsg);
+
+  // get netlink request statuses
+  ResultCode getReturnStatus(
+      std::vector<folly::Future<int>>& futures,
+      std::chrono::milliseconds timeout = kNlMessageAckTimer);
 
   // error count
   uint32_t getErrorCount() const;
@@ -173,6 +190,12 @@ class NetlinkProtocolSocket {
     // last sequence number
     uint32_t seq;
   } lastMessage_;
+
+  // Sequence number -> NetlinkMesage request Map
+  std::unordered_map<uint32_t, std::shared_ptr<NetlinkMessage>> nlSeqNoMap_;
+
+  // Set ack status value to promise in the netlink request message
+  void setReturnStatusValue(uint32_t seq, int ackStatus);
 };
 } // namespace Netlink
 } // namespace openr
