@@ -233,6 +233,7 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
 void
 Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
   thrift::RouteDatabase doNotInstallRouteDb;
+  std::vector<thrift::UnicastRoute> installUnicastRoutes;
 
   VLOG(2) << "Processing new routes from Decision. "
           << newRouteDb.unicastRoutes.size() << " unicast routes and "
@@ -251,12 +252,14 @@ Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
     if (rIter->doNotInstall) {
       doNotInstallRouteDb.unicastRoutes.emplace_back(
           *std::make_move_iterator(rIter));
-      rIter = newRouteDb.unicastRoutes.erase(rIter);
     } else {
-      ++rIter;
+      installUnicastRoutes.emplace_back(*std::make_move_iterator(rIter));
     }
+    ++rIter;
   }
 
+  // Update DB with non dry run routes
+  newRouteDb.unicastRoutes = installUnicastRoutes;
   // Find out delta to be programmed
   auto const routeDelta = findDeltaRoutes(newRouteDb, routeDb_);
   // update new routeDb_
