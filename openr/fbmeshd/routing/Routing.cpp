@@ -25,7 +25,6 @@ const uint32_t kMaxMetric{0xffffffff};
 
 const auto kMeshHousekeepingInterval{60s};
 const auto kMeshPathExpire{60s};
-const auto kSyncRoutesInterval{1s};
 const auto kMinGatewayRedundancy{2};
 
 void
@@ -41,33 +40,6 @@ meshPathExpire(
   }
 }
 
-folly::IPAddressV6
-getIPV6FromMacAddress(const char* prefix, folly::MacAddress macAddress) {
-  folly::ByteArray16 bytes;
-  const auto* macBytes = macAddress.bytes();
-  memcpy(&bytes.front(), prefix, 8);
-  bytes[8] = uint8_t(macBytes[0] ^ 0x02);
-  bytes[9] = macBytes[1];
-  bytes[10] = macBytes[2];
-  bytes[11] = 0xff;
-  bytes[12] = 0xfe;
-  bytes[13] = macBytes[3];
-  bytes[14] = macBytes[4];
-  bytes[15] = macBytes[5];
-
-  return folly::IPAddressV6::fromBinary(bytes);
-}
-
-folly::IPAddressV6
-getTaygaIPV6FromMacAddress(folly::MacAddress macAddress) {
-  return getIPV6FromMacAddress("\xfd\x00\x00\x00\x00\x00\x00\x00", macAddress);
-}
-
-folly::IPAddressV6
-getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
-  return getIPV6FromMacAddress("\xfc\x00\x00\x00\x00\x00\x00\x00", macAddress);
-}
-
 } // namespace
 
 Routing::Routing(
@@ -79,17 +51,6 @@ Routing::Routing(
       nodeAddr_{nodeAddr},
       elementTtl_{elementTtl},
       metricManager_{metricManager},
-      netlinkSocket_{&zmqEvl_},
-      zmqEvlThread_{[this]() {
-        folly::setThreadName("Routing Zmq Evl");
-        zmqEvl_.run();
-      }},
-      syncRoutesTimer_{folly::AsyncTimeout::make(
-          *evb_,
-          [this]() noexcept {
-            doSyncRoutes();
-            syncRoutesTimer_->scheduleTimeout(kSyncRoutesInterval);
-          })},
       noLongerAGateRANNTimer_{folly::AsyncTimeout::make(
           *evb_, [this]() noexcept { isRoot_ = false; })},
       housekeepingTimer_{folly::AsyncTimeout::make(
@@ -103,176 +64,14 @@ void
 Routing::prepare() {
   doMeshPathRoot();
   doMeshHousekeeping();
-
-  syncRoutesTimer_->scheduleTimeout(kSyncRoutesInterval);
 }
 
-/*
- * L3 Routing over HWMP
- */
-
-void
-Routing::doSyncRoutes() {
-  VLOG(8) << folly::sformat("Routing::{}()", __func__);
-
-  auto meshIfIndex = netlinkSocket_.getIfIndex("mesh0").get();
-
-  zmqEvl_.runInEventLoop([this, meshIfIndex]() {
-    openr::fbnl::NlUnicastRoutes unicastRouteDb;
-    openr::fbnl::NlLinkRoutes linkRouteDb;
-    std::vector<fbnl::IfAddress> mesh0Addrs;
-
-    const auto kTaygaIfName{"tayga"};
-    auto taygaIfIndex = netlinkSocket_.getIfIndex("tayga").get();
-
-    folly::Optional<std::pair<folly::MacAddress, uint32_t>> bestGate;
-    bool isCurrentGateStillAlive = false;
-    for (const auto& mpathIt : meshPaths_) {
-      const auto& mpath = mpathIt.second;
-
-      if (mpath.nextHop == folly::MacAddress::ZERO) {
-        continue;
-      }
-
-      auto destination = std::make_pair<folly::IPAddress, uint8_t>(
-          getTaygaIPV6FromMacAddress(mpath.dst), 128);
-      unicastRouteDb.emplace(
-          destination,
-          fbnl::RouteBuilder{}
-              .setDestination(destination)
-              .setProtocolId(98)
-              .addNextHop(fbnl::NextHopBuilder{}
-                              .setGateway(folly::IPAddressV6{
-                                  folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                                  mpath.nextHop})
-                              .setIfIndex(meshIfIndex)
-                              .build())
-              .build());
-      destination = std::make_pair<folly::IPAddress, uint8_t>(
-          getMesh0IPV6FromMacAddress(mpath.dst), 128);
-      unicastRouteDb.emplace(
-          destination,
-          fbnl::RouteBuilder{}
-              .setDestination(destination)
-              .setProtocolId(98)
-              .addNextHop(fbnl::NextHopBuilder{}
-                              .setGateway(folly::IPAddressV6{
-                                  folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                                  mpath.nextHop})
-                              .setIfIndex(meshIfIndex)
-                              .build())
-              .build());
-
-      if (mpath.expTime > std::chrono::steady_clock::now() && mpath.isGate) {
-        if (currentGate_ && currentGate_->first == mpath.dst) {
-          isCurrentGateStillAlive = true;
-        }
-        if (!bestGate || bestGate->second > mpath.metric) {
-          bestGate = std::make_pair(mpath.dst, mpath.metric);
-        }
-      }
-    }
-    if (bestGate) {
-      VLOG(10) << "Best gate: " << bestGate->first
-               << " with metric: " << bestGate->second;
-    } else {
-      VLOG(10) << "No gate found";
-    }
-    if (currentGate_ && isCurrentGateStillAlive) {
-      if (bestGate->second < currentGate_->second) {
-        currentGate_ = bestGate;
-      }
-    } else {
-      currentGate_ = bestGate;
-    }
-    if (currentGate_) {
-      VLOG(10) << "Current gate: " << currentGate_->first
-               << " with metric: " << currentGate_->second;
-    } else {
-      VLOG(10) << "No current gate found";
-    }
-
-    auto destination =
-        folly::CIDRNetwork{getTaygaIPV6FromMacAddress(nodeAddr_), 128};
-    linkRouteDb.emplace(
-        std::make_pair(destination, kTaygaIfName),
-        fbnl::RouteBuilder{}
-            .setDestination(destination)
-            .setProtocolId(98)
-            .setRouteIfIndex(taygaIfIndex)
-            .setRouteIfName(kTaygaIfName)
-            .buildLinkRoute());
-
-    destination = folly::CIDRNetwork{folly::IPAddressV4{"172.16.0.0"}, 16};
-    linkRouteDb.emplace(
-        std::make_pair(destination, kTaygaIfName),
-        fbnl::RouteBuilder{}
-            .setDestination(destination)
-            .setProtocolId(98)
-            .setRouteIfIndex(taygaIfIndex)
-            .setRouteIfName(kTaygaIfName)
-            .buildLinkRoute());
-
-    mesh0Addrs.push_back(fbnl::IfAddressBuilder{}
-                             .setPrefix(folly::CIDRNetwork{
-                                 getMesh0IPV6FromMacAddress(nodeAddr_), 64})
-                             .setIfIndex(meshIfIndex)
-                             .build());
-
-    netlinkSocket_.syncIfAddress(
-        meshIfIndex, mesh0Addrs, AF_INET6, RT_SCOPE_UNIVERSE);
-
-    if (isGateBeforeRouteSync_ != isGate_) {
-      netlinkSocket_.syncUnicastRoutes(98, std::move(unicastRouteDb)).get();
-      netlinkSocket_.syncLinkRoutes(98, std::move(linkRouteDb)).get();
-    }
-
-    destination = std::make_pair<folly::IPAddress, uint8_t>(
-        folly::IPAddressV6{"fd00:ffff::"}, 96);
-
-    if (isGate_) {
-      linkRouteDb.emplace(
-          std::make_pair(destination, kTaygaIfName),
-          fbnl::RouteBuilder{}
-              .setDestination(destination)
-              .setProtocolId(98)
-              .setRouteIfIndex(taygaIfIndex)
-              .setRouteIfName(kTaygaIfName)
-              .buildLinkRoute());
-    } else if (currentGate_) {
-      const auto defaultV4Prefix =
-          std::make_pair<folly::IPAddress, uint8_t>(folly::IPAddressV4{}, 0);
-
-      // ip route add default dev tayga mtu 1500 advmss 1460
-      linkRouteDb.emplace(
-          std::make_pair(defaultV4Prefix, kTaygaIfName),
-          fbnl::RouteBuilder{}
-              .setDestination(defaultV4Prefix)
-              .setProtocolId(98)
-              .setMtu(1500)
-              .setAdvMss(1460)
-              .setRouteIfIndex(taygaIfIndex)
-              .setRouteIfName(kTaygaIfName)
-              .buildLinkRoute());
-
-      unicastRouteDb.emplace(
-          destination,
-          fbnl::RouteBuilder{}
-              .setDestination(destination)
-              .setProtocolId(98)
-              .addNextHop(fbnl::NextHopBuilder{}
-                              .setGateway(folly::IPAddressV6{
-                                  folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                                  meshPaths_.at(currentGate_->first).nextHop})
-                              .setIfIndex(meshIfIndex)
-                              .build())
-              .build());
-    }
-    isGateBeforeRouteSync_ = isGate_;
-
-    netlinkSocket_.syncUnicastRoutes(98, std::move(unicastRouteDb)).get();
-    netlinkSocket_.syncLinkRoutes(98, std::move(linkRouteDb)).get();
-  });
+std::unordered_map<folly::MacAddress, Routing::MeshPath>
+Routing::getMeshPaths() {
+  std::unordered_map<folly::MacAddress, MeshPath> meshPaths;
+  evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [this, &meshPaths]() { meshPaths = meshPaths_; });
+  return meshPaths;
 }
 
 /*
@@ -537,6 +336,14 @@ Routing::hwmpPannFrameProcess(
 /*
  * Management / Control functions
  */
+
+bool
+Routing::getGatewayStatus() const {
+  bool isGate{};
+  evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [&isGate, this]() { isGate = isGate_; });
+  return isGate;
+}
 
 void
 Routing::setGatewayStatus(bool isGate) {
