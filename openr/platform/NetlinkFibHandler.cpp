@@ -235,7 +235,7 @@ NetlinkFibHandler::future_addUnicastRoutes(
                                      promise = std::move(promise),
                                      routes = std::move(routes)]() mutable {
     for (auto& route : *routes) {
-      auto ptr = folly::make_unique<thrift::UnicastRoute>(std::move(route));
+      auto ptr = std::make_unique<thrift::UnicastRoute>(std::move(route));
       try {
         // This is going to be synchronous call as we are invoking from
         // within event loop
@@ -264,7 +264,7 @@ NetlinkFibHandler::future_deleteUnicastRoutes(
                                      promise = std::move(promise),
                                      prefixes = std::move(prefixes)]() mutable {
     for (auto& prefix : *prefixes) {
-      auto ptr = folly::make_unique<thrift::IpPrefix>(std::move(prefix));
+      auto ptr = std::make_unique<thrift::IpPrefix>(std::move(prefix));
       try {
         future_deleteUnicastRoute(clientId, std::move(ptr)).get();
       } catch (std::exception const& e) {
@@ -321,7 +321,7 @@ NetlinkFibHandler::future_addMplsRoutes(
                                      promise = std::move(promise),
                                      routes = std::move(routes)]() mutable {
     for (auto& route : *routes) {
-      auto ptr = folly::make_unique<thrift::MplsRoute>(std::move(route));
+      auto ptr = std::make_unique<thrift::MplsRoute>(std::move(route));
       try {
         // This is going to be synchronous call as we are invoking from
         // within event loop
