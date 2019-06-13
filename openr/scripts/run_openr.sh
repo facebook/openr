@@ -75,7 +75,6 @@ IFACE_REGEX_EXCLUDE=""
 IFACE_REGEX_INCLUDE=""
 IP_TOS=192
 KEY_PREFIX_FILTERS=""
-KVSTORE_FLOOD_MSG_PER_SEC=0
 KVSTORE_FLOOD_MSG_BURST_SIZE=0
 KVSTORE_FLOOD_MSG_PER_SEC=0
 KVSTORE_KEY_TTL_MS=300000
@@ -197,7 +196,6 @@ exec ${OPENR} \
   --ifname_prefix=${IFACE_PREFIXES} \
   --ip_tos=${IP_TOS} \
   --key_prefix_filters=${KEY_PREFIX_FILTERS} \
-  --kvstore_flood_msg_per_sec=${KVSTORE_FLOOD_MSG_PER_SEC} \
   --kvstore_flood_msg_burst_size=${KVSTORE_FLOOD_MSG_BURST_SIZE} \
   --kvstore_flood_msg_per_sec=${KVSTORE_FLOOD_MSG_PER_SEC} \
   --kvstore_key_ttl_ms=${KVSTORE_KEY_TTL_MS} \
