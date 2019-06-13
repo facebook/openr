@@ -14,6 +14,7 @@ from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients import decision_client, fib_client, lm_client
 from openr.OpenrCtrl import OpenrCtrl
+from openr.Platform import ttypes as platform_types
 from openr.utils import ipnetwork, printing
 
 
@@ -168,6 +169,8 @@ class FibSyncRoutesCmd(FibAgentCmd):
 
 class FibValidateRoutesCmd(FibAgentCmd):
     def run(self, cli_opts):
+        all_success = True
+
         try:
             # fetch routes from decision module
             (decision_unicast_routes, decision_mpls_routes) = utils.get_shortest_routes(
@@ -181,9 +184,6 @@ class FibValidateRoutesCmd(FibAgentCmd):
             agent_unicast_routes = self.client.getRouteTableByClient(
                 self.client.client_id
             )
-            agent_mpls_routes = self.client.getMplsRouteTableByClient(
-                self.client.client_id
-            )
             # fetch link_db from link-monitor module
             lm_links = lm_client.LMClient(cli_opts).dump_links().interfaceDetails
 
@@ -193,42 +193,56 @@ class FibValidateRoutesCmd(FibAgentCmd):
             raise e
             # return 1
 
-        (res1_unicast, _) = utils.compare_route_db(
+        (ret, _) = utils.compare_route_db(
             decision_unicast_routes,
             fib_unicast_routes,
             "unicast",
             ["Decision:unicast", "Openr-Fib:unicast"],
             cli_opts.enable_color,
         )
-        (res1_mpls, _) = utils.compare_route_db(
+        all_success = all_success and ret
+
+        (ret, _) = utils.compare_route_db(
             decision_mpls_routes,
             fib_mpls_routes,
             "mpls",
             ["Decision:mpls", "Openr-Fib:mpls"],
             cli_opts.enable_color,
         )
-        (res2_unicast, _) = utils.compare_route_db(
+        all_success = all_success and ret
+
+        (ret, _) = utils.compare_route_db(
             fib_unicast_routes,
             agent_unicast_routes,
             "unicast",
             ["Openr-Fib:unicast", "FibAgent:unicast"],
             cli_opts.enable_color,
         )
-        (res2_mpls, _) = utils.compare_route_db(
-            fib_mpls_routes,
-            agent_mpls_routes,
-            "mpls",
-            ["Openr-Fib:mpls", "FibAgent:mpls"],
-            cli_opts.enable_color,
-        )
-        (res3, _) = utils.validate_route_nexthops(
+        all_success = all_success and ret
+
+        # for backward compatibily of Open/R binary
+        try:
+            agent_mpls_routes = self.client.getMplsRouteTableByClient(
+                self.client.client_id
+            )
+        except platform_types.PlatformError as e:
+            print("Pls check Open/R version. Exception: {}".format(e))
+        else:
+            (ret, _) = utils.compare_route_db(
+                fib_mpls_routes,
+                agent_mpls_routes,
+                "mpls",
+                ["Openr-Fib:mpls", "FibAgent:mpls"],
+                cli_opts.enable_color,
+            )
+            all_success = all_success and ret
+
+        (ret, _) = utils.validate_route_nexthops(
             fib_unicast_routes,
             lm_links,
             ["Openr-Fib:unicast", "LinkMonitor"],
             cli_opts.enable_color,
         )
-        return (
-            0
-            if res1_unicast and res1_mpls and res2_unicast and res2_mpls and res3
-            else -1
-        )
+        all_success = all_success and ret
+
+        return 0 if all_success else -1
