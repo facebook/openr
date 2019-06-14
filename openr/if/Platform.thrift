@@ -133,7 +133,7 @@ service SystemService {
     throws (1: PlatformError error)
 }
 
-// static mapping of clientId => protocolId, priority
+// static mapping of clientId => protocolId, priority same of admin distance
 // For Open/R
 //    ClientId: 786 => ProtocolId: 99, Priority: 10
 // For BGP
@@ -141,7 +141,8 @@ service SystemService {
 // For TG breeze CLI client
 //    ClientId: 64 => ProtocolId: 64, Priority: 11
 const map<i16, i16> clientIdtoProtocolId = {786:99, 0:253, 64:64}
-const map<i16, i16> clientIdtoPriority = {786:10, 0:20, 64:11}
+const map<i16, i16> protocolIdtoPriority = {99:10, 253:20, 64:11}
+const i16 kUnknowProtAdminDistance = 255
 
 /**
  * Interface to on-box Fib.

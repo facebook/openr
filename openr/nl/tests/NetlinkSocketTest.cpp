@@ -49,6 +49,9 @@ const std::string kVethNameY("vethTestY");
 // We will use this as the proto for our routes
 const uint8_t kAqRouteProtoId = 99;
 const uint8_t kAqRouteProtoId1 = 159;
+const uint32_t kAqRouteProtoIdPriority = 10;
+const uint32_t kAqRouteProtoId1Priority = 255;
+
 } // namespace
 
 // This fixture creates virtual interface (veths)
@@ -1448,6 +1451,247 @@ TEST_P(NetlinkSocketFixture, MultiProtocolUnicastTest) {
     }
   }
 
+  EXPECT_EQ(0, count);
+}
+
+TEST_P(NetlinkSocketFixture, MultiProtocolUnicastTestDecisionTest) {
+  // V6 routes for protocol 99
+  folly::CIDRNetwork prefix1V6{folly::IPAddress("fc00:cafe:3::3"), 128};
+  folly::CIDRNetwork prefix2V6{folly::IPAddress("fc00:cafe:3::4"), 128};
+  auto nh1V6 = folly::IPAddress("fe80::1");
+  auto nh2V6 = folly::IPAddress("fe80::2");
+  int ifIndexX = rtnl_link_name2i(linkCache_, kVethNameX.c_str());
+  int ifIndexY = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
+  // V4 routes for protocol 159
+  folly::CIDRNetwork prefix1V4{folly::IPAddress("192.168.0.11"), 32};
+  folly::CIDRNetwork prefix2V4{folly::IPAddress("192.168.0.12"), 32};
+  auto nh1V4 = folly::IPAddress("169.254.0.1");
+  auto nh2V4 = folly::IPAddress("169.254.0.2");
+
+  std::vector<folly::IPAddress> nextHopsV6{nh1V6};
+
+  auto routeFunc = [](struct nl_object * obj, void* arg) noexcept->void {
+    RouteCallbackContext* ctx = static_cast<RouteCallbackContext*>(arg);
+    struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
+    RouteBuilder builder;
+    int protocol = rtnl_route_get_protocol(routeObj);
+    if (protocol == kAqRouteProtoId || protocol == kAqRouteProtoId1) {
+      ctx->results.emplace_back(builder.buildFromObject(routeObj));
+    }
+  };
+
+  // Add routes with single nextHop for protocol 99
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6))
+      .get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6))
+      .get();
+  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
+  EXPECT_EQ(2, routes.size());
+  ASSERT_EQ(1, routes.count(prefix1V6));
+  ASSERT_EQ(1, routes.count(prefix2V6));
+  const Route& rt1 = routes.at(prefix1V6);
+  const Route& rt2 = routes.at(prefix2V6);
+  EXPECT_EQ(1, rt1.getNextHops().size());
+  EXPECT_EQ(1, rt2.getNextHops().size());
+  EXPECT_TRUE(CompareNextHops(nextHopsV6, rt1));
+  EXPECT_TRUE(CompareNextHops(nextHopsV6, rt2));
+
+  // Adde routes for protocol 159
+  std::vector<folly::IPAddress> nextHops1V4{nh1V4};
+  std::vector<folly::IPAddress> nextHops1V6{nh2V6};
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V6, prefix1V6))
+      .get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V6, prefix2V6))
+      .get();
+  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
+  EXPECT_EQ(2, routes.size());
+  ASSERT_EQ(1, routes.count(prefix1V6));
+  ASSERT_EQ(1, routes.count(prefix2V6));
+  const Route& rt3 = routes.at(prefix1V6);
+  const Route& rt4 = routes.at(prefix2V6);
+  EXPECT_EQ(1, rt3.getNextHops().size());
+  EXPECT_EQ(1, rt4.getNextHops().size());
+  EXPECT_TRUE(CompareNextHops(nextHops1V6, rt3));
+  EXPECT_TRUE(CompareNextHops(nextHops1V6, rt4));
+
+  // Check kernel kAqRouteProtoId should be selected
+  RouteCallbackContext ctx;
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  int count = 0;
+  int totalRoute = 0;
+  for (const auto& r : ctx.results) {
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoIdPriority) {
+      count++;
+    }
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoIdPriority) {
+      count++;
+    }
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoId1Priority) {
+      count++;
+    }
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoId1Priority) {
+      count++;
+    }
+    totalRoute++;
+  }
+  EXPECT_EQ(4, count);
+  EXPECT_EQ(4, totalRoute);
+
+  // Add same route again, should not affect result
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6))
+      .get();
+
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6))
+      .get();
+
+  // Check kernel kAqRouteProtoId should be selected
+  ctx.results.clear();
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  count = 0;
+  for (const auto& r : ctx.results) {
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1) {
+      count++;
+    }
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1) {
+      count++;
+    }
+  }
+  EXPECT_EQ(2, count);
+
+  // delete the route in routing table, system should choose the backup route
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6))
+      .get();
+
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6))
+      .get();
+
+  ctx.results.clear();
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  count = 0;
+  totalRoute = 0;
+  for (const auto& r : ctx.results) {
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoId1Priority) {
+      count++;
+      LOG(INFO) << static_cast<int>(r.getProtocolId());
+    }
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoId1Priority) {
+      count++;
+    }
+    totalRoute++;
+  }
+  EXPECT_EQ(2, count);
+  EXPECT_EQ(2, totalRoute);
+
+  // add route back to see if it replace
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6))
+      .get();
+  netlinkSocket
+      ->addRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6))
+      .get();
+
+  ctx.results.clear();
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  count = 0;
+  totalRoute = 0;
+  for (const auto& r : ctx.results) {
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoIdPriority) {
+      count++;
+    }
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoIdPriority) {
+      count++;
+    }
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoId1Priority) {
+      count++;
+    }
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId1 && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoId1Priority) {
+      count++;
+    }
+    totalRoute++;
+  }
+  EXPECT_EQ(4, count);
+  EXPECT_EQ(4, totalRoute);
+
+  // delete protocol1 route
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V6, prefix1V6))
+      .get();
+
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexY, kAqRouteProtoId1, nextHops1V6, prefix2V6))
+      .get();
+
+  ctx.results.clear();
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  count = 0;
+  totalRoute = 0;
+  for (const auto& r : ctx.results) {
+    if (r.getDestination() == prefix1V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoIdPriority) {
+      count++;
+    }
+    if (r.getDestination() == prefix2V6 &&
+        r.getProtocolId() == kAqRouteProtoId && r.getNextHops().size() == 1 &&
+        r.getPriority().value() == kAqRouteProtoIdPriority) {
+      count++;
+    }
+    totalRoute++;
+  }
+  EXPECT_EQ(2, count);
+  EXPECT_EQ(2, totalRoute);
+
+  // delete protocol route
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix1V6))
+      .get();
+
+  netlinkSocket
+      ->delRoute(buildRoute(ifIndexX, kAqRouteProtoId, nextHopsV6, prefix2V6))
+      .get();
+
+  ctx.results.clear();
+  rtnlCacheCB(routeFunc, &ctx, routeCache_);
+  count = 0;
+
+  for (const auto& r : ctx.results) {
+    if (r.getDestination() == prefix1V6) {
+      count++;
+    }
+    if (r.getDestination() == prefix2V6) {
+      count++;
+    }
+  }
   EXPECT_EQ(0, count);
 }
 

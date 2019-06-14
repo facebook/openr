@@ -6,6 +6,9 @@
  */
 
 #include <openr/nl/NetlinkSocket.h>
+#include <openr/if/gen-cpp2/Platform_constants.h>
+
+using pc = openr::thrift::Platform_constants;
 
 namespace {
 const folly::StringPiece kRouteObjectStr("route/route");
@@ -570,6 +573,19 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   // Create new set of nexthops to be programmed. Existing + New ones
   auto& unicastRoutes = unicastRoutesCache_[route.getProtocolId()];
   auto iter = unicastRoutes.find(dest);
+  // if user did not speicify priority
+  if (!route.getPriority()) {
+    const auto routePair =
+        openr::thrift::Platform_constants::protocolIdtoPriority().find(
+            route.getProtocolId());
+    if (routePair ==
+        openr::thrift::Platform_constants::protocolIdtoPriority().end()) {
+      route.setPriority(
+          openr::thrift::Platform_constants::kUnknowProtAdminDistance());
+    } else {
+      route.setPriority(routePair->second);
+    }
+  }
   // Same route
   if (iter != unicastRoutes.end() && iter->second == route) {
     return;

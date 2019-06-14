@@ -350,6 +350,8 @@ class Route final {
 
   folly::Optional<std::string> getRouteIfName() const;
 
+  void setPriority(uint32_t priority);
+
   std::string str() const;
 
   /**

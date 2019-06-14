@@ -403,6 +403,17 @@ NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
     return status;
   };
 
+  // set up admin distance if priority.
+  if (route.getPriority()) {
+    const uint32_t adminDistance = route.getPriority().value();
+    const char* const adPtr = reinterpret_cast<const char*>(&adminDistance);
+    if ((status =
+             addAttributes(RTA_PRIORITY, adPtr, sizeof(uint32_t), msghdr_)) !=
+        ResultCode::SUCCESS) {
+      return status;
+    };
+  }
+
   return addNextHops(route);
 }
 

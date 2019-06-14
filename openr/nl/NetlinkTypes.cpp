@@ -41,6 +41,7 @@ RouteBuilder::loadFromObject(struct rtnl_route* obj) {
   setFlags(rtnl_route_get_flags(obj));
   setProtocolId(rtnl_route_get_protocol(obj));
   setType(rtnl_route_get_type(obj));
+  setPriority(rtnl_route_get_priority(obj));
   struct nl_addr* dst = rtnl_route_get_dst(obj);
 
   // Special handling for default routes
@@ -678,6 +679,11 @@ Route::buildAddrObject(const folly::CIDRNetwork& addr) {
   }
   nl_addr_set_prefixlen(nlAddr_, addr.second);
   return nlAddr_;
+}
+
+void
+Route::setPriority(uint32_t priority) {
+  priority_ = priority;
 }
 
 /*=================================NextHop====================================*/
