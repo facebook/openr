@@ -168,6 +168,7 @@ Routing::txPannFrame(
 void
 Routing::receivePacket(
     folly::MacAddress sa, std::unique_ptr<folly::IOBuf> data) {
+  VLOG(8) << folly::sformat("Routing::{}()", __func__);
   auto action = static_cast<MeshPathFrameType>(*data->data());
   data->trimStart(1);
 
