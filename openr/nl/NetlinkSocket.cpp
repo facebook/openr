@@ -268,6 +268,7 @@ void
 NetlinkSocket::handleNeighborEvent(
     nl_object* obj, int action, bool runHandler) noexcept {
   CHECK_NOTNULL(obj);
+  LOG(INFO) << "Handle neibor event";
   if (!checkObjectType(obj, kNeighborObjectStr)) {
     return;
   }
@@ -282,8 +283,22 @@ NetlinkSocket::handleNeighborEvent(
   std::string ifName = getIfName(neigh.getIfIndex()).get();
   auto key = std::make_pair(ifName, neigh.getDestination());
   neighbors_.erase(key);
+
+  NeighborUpdate neighborUpdate;
   if (neigh.isReachable()) {
     neighbors_.emplace(std::make_pair(key, std::move(neigh)));
+    neighborUpdate.addNeighbor(neigh.getDestination().str());
+  } else {
+    neighborUpdate.delNeighbor(neigh.getDestination().str());
+  }
+
+  if (neighborListener_) {
+    std::lock_guard<std::mutex> g(neighborListenerMutex_);
+    try {
+      neighborListener_(neighborUpdate);
+    } catch (std::exception const& ex) {
+      LOG(ERROR) << "neiborgh call failed: " << ex.what();
+    }
   }
 
   if (handler_ && runHandler && eventFlags_[NEIGH_EVENT]) {
@@ -1427,6 +1442,13 @@ NetlinkSocket::tickEvent() {
   if (++eventCount_ == 0) {
     nl_cache_mngr_poll(cacheManager_, 0 /* timeout */);
   }
+}
+
+void
+NetlinkSocket::registerNeighborListener(
+    std::function<void(const NeighborUpdate& neighborUpdate)> callback) {
+  std::lock_guard<std::mutex> g(neighborListenerMutex_);
+  neighborListener_ = std::move(callback);
 }
 
 } // namespace fbnl

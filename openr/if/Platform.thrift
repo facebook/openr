@@ -206,4 +206,24 @@ service FibService extends fb303.FacebookService {
   list<Network.MplsRoute> getMplsRouteTableByClient(
     1: i16 clientId
   ) throws (1: PlatformError error)
+
+  void registerForNeighborChanged()
+    throws (1: PlatformError error) (thread='eb')
+
+  void sendNeighborDownInfo(
+    1: list<string> neighborIp
+    )
+    throws (1: PlatformError error)
+}
+
+service NeighborListenerClientForFibagent {
+  /*
+   * Sends list of neighbors that have changed to the subscriber.
+   *
+   * These come in the form of ip address strings which have been added
+   * since the last notification. Changes are not queued between
+   * subscriptions.
+   */
+  void neighborsChanged(1: list<string> added, 2: list<string> removed)
+    throws (1: PlatformError error)
 }

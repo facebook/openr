@@ -125,6 +125,35 @@ class NetlinkSocket {
     EventsHandler& operator=(const EventsHandler&) = delete;
   };
 
+  class NeighborUpdate {
+   public:
+    NeighborUpdate() = default;
+    void
+    addNeighbor(std::string add) {
+      added_.push_back(add);
+    }
+    void
+    delNeighbor(std::string del) {
+      removed_.push_back(del);
+    }
+    void
+    delNeighbors(const std::vector<std::string>& del) {
+      removed_.insert(removed_.end(), del.begin(), del.end());
+    }
+    std::vector<std::string>
+    getAddedNeighbor() {
+      return added_;
+    }
+    std::vector<std::string>
+    getRemovedNeighbor() {
+      return removed_;
+    }
+
+   private:
+    std::vector<std::string> added_;
+    std::vector<std::string> removed_;
+  };
+
   struct EventVisitor : public boost::static_visitor<> {
     std::string linkName;
     int eventAction; // NL_ACT_DEL, NL_ACT_NEW
@@ -357,6 +386,9 @@ class NetlinkSocket {
 
   void setEventHandler(EventsHandler* handler);
 
+  void registerNeighborListener(
+      std::function<void(const NeighborUpdate& neighborUpdate)> callback);
+
  private:
   // This is the callback we pass into libnl when data is ready on the socket
   // The opaque data will contain the user registered EventHandler
@@ -505,6 +537,10 @@ class NetlinkSocket {
   uint8_t eventCount_{0};
 
   std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock_{nullptr};
+
+  std::mutex neighborListenerMutex_;
+  std::function<void(const NeighborUpdate& neighborUpdate)> neighborListener_{
+      nullptr};
 };
 
 } // namespace fbnl

@@ -111,6 +111,7 @@ main(int argc, char** argv) {
       linuxFibAgentServer.setNPoolThreads(1);
       linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
       linuxFibAgentServer.setInterface(fibHandler);
+      linuxFibAgentServer.setDuplex(true);
 
       LOG(INFO) << "Fib Agent starting...";
       linuxFibAgentServer.serve();

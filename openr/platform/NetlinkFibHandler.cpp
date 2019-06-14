@@ -67,6 +67,19 @@ NetlinkFibHandler::NetlinkFibHandler(
                      .count()),
       evl_{zmqEventLoop} {
   CHECK_NOTNULL(zmqEventLoop);
+  netlinkSocket_->registerNeighborListener(
+      [this](const fbnl::NetlinkSocket::NeighborUpdate& neighborUpdate) {
+        std::lock_guard<std::mutex> g(listenersMutex_);
+        for (auto& listener : listeners_.accessAllThreads()) {
+          LOG(INFO) << "Sending notification to bgpD";
+          listener.eventBase->runInEventBaseThread(
+              [this, neighborUpdate, listenerPtr = &listener] {
+                LOG(INFO) << "firing off notification";
+                invokeNeighborListeners(listenerPtr, neighborUpdate);
+              });
+        }
+      });
+
   keepAliveCheckTimer_ = fbzmq::ZmqTimeout::make(zmqEventLoop, [&]() noexcept {
     auto now = std::chrono::steady_clock::now();
     if (now - recentKeepAliveTs_ > kRoutesHoldTimeout) {
@@ -586,6 +599,86 @@ NetlinkFibHandler::lookupNexthop(const thrift::BinaryAddress& nh) const
 void
 NetlinkFibHandler::getCounters(std::map<std::string, int64_t>& counters) {
   counters["fibagent.num_of_routes"] = netlinkSocket_->getRouteCount().get();
+}
+
+void
+NetlinkFibHandler::sendNeighborDownInfo(
+    std::unique_ptr<std::vector<std::string>> neighborIp) {
+  fbnl::NetlinkSocket::NeighborUpdate neighborUpdate;
+  neighborUpdate.delNeighbors(*neighborIp);
+  std::lock_guard<std::mutex> g(listenersMutex_);
+  for (auto& listener : listeners_.accessAllThreads()) {
+    LOG(INFO) << "Sending notification to bgpD";
+    listener.eventBase->runInEventBaseThread(
+        [this, neighborUpdate, listenerPtr = &listener] {
+          LOG(INFO) << "firing off notification";
+          invokeNeighborListeners(listenerPtr, neighborUpdate);
+        });
+  }
+}
+
+void
+NetlinkFibHandler::async_eb_registerForNeighborChanged(
+    std::unique_ptr<apache::thrift::HandlerCallback<void>> cb) {
+  auto ctx = cb->getConnectionContext()->getConnectionContext();
+  auto client = ctx->getDuplexClient<
+      thrift::NeighborListenerClientForFibagentAsyncClient>();
+
+  LOG(INFO) << "registered for bgp";
+  std::lock_guard<std::mutex> g(listenersMutex_);
+  auto info = listeners_.get();
+  CHECK(cb->getEventBase()->isInEventBaseThread());
+  if (!info) {
+    info = new ThreadLocalListener(cb->getEventBase());
+    listeners_.reset(info);
+  }
+
+  // make sure the eventbase is same, because later we want to run callback in
+  // cb's eventbase
+  DCHECK_EQ(info->eventBase, cb->getEventBase());
+  if (!info->eventBase) {
+    info->eventBase = cb->getEventBase();
+  }
+
+  info->clients.emplace(ctx, client);
+  LOG(INFO) << "registered for bgp success";
+  cb->done();
+}
+
+void
+NetlinkFibHandler::invokeNeighborListeners(
+    ThreadLocalListener* listener,
+    fbnl::NetlinkSocket::NeighborUpdate neighborUpdate) {
+  // Collect the iterators to avoid erasing and potentially reordering
+  // the iterators in the list.
+  for (const auto& ctx : brokenClients_) {
+    listener->clients.erase(ctx);
+  }
+  brokenClients_.clear();
+  for (auto& client : listener->clients) {
+    auto clientDone = [&](apache::thrift::ClientReceiveState&& state) {
+      try {
+        thrift::NeighborListenerClientForFibagentAsyncClient::
+            recv_neighborsChanged(state);
+      } catch (const std::exception& ex) {
+        LOG(ERROR) << "Exception in neighbor listener: " << ex.what();
+        brokenClients_.push_back(client.first);
+      }
+    };
+    if (client.second != nullptr) {
+      try {
+        client.second->neighborsChanged(
+            clientDone,
+            neighborUpdate.getAddedNeighbor(),
+            neighborUpdate.getRemovedNeighbor());
+      } catch (const std::exception& ex) {
+        LOG(ERROR) << "calling neibor change failed due to : " << ex.what();
+        brokenClients_.push_back(client.first);
+      }
+    } else {
+      LOG(ERROR) << "clients has null pointer";
+    }
+  }
 }
 
 } // namespace openr

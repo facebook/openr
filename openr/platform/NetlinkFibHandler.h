@@ -23,6 +23,7 @@
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/NeighborListenerClientForFibagent.h>
 #include <openr/nl/NetlinkSocket.h>
 #include <openr/nl/NetlinkTypes.h>
 
@@ -74,6 +75,12 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::MplsRoute>> routes) override;
 
+  void sendNeighborDownInfo(
+      std::unique_ptr<std::vector<std::string>> neighborIp) override;
+
+  void async_eb_registerForNeighborChanged(
+      std::unique_ptr<apache::thrift::HandlerCallback<void>> callback) override;
+
   int64_t aliveSince() override;
 
   facebook::fb303::cpp2::fb_status getStatus() override;
@@ -87,6 +94,25 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
   future_getMplsRouteTableByClient(int16_t clientId) override;
 
  private:
+  struct ThreadLocalListener {
+    folly::EventBase* eventBase;
+    std::unordered_map<
+        const apache::thrift::server::TConnectionContext*,
+        std::shared_ptr<thrift::NeighborListenerClientForFibagentAsyncClient>>
+        clients;
+
+    explicit ThreadLocalListener(folly::EventBase* eb) : eventBase(eb) {}
+  };
+
+  std::mutex listenersMutex_;
+  folly::ThreadLocalPtr<ThreadLocalListener, int> listeners_;
+
+  std::vector<const apache::thrift::TConnectionContext*> brokenClients_;
+
+  void invokeNeighborListeners(
+      ThreadLocalListener* listener,
+      fbnl::NetlinkSocket::NeighborUpdate neighborUpdate);
+
   NetlinkFibHandler(const NetlinkFibHandler&) = delete;
   NetlinkFibHandler& operator=(const NetlinkFibHandler&) = delete;
 

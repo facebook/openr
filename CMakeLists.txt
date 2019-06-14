@@ -208,7 +208,7 @@ add_dependencies(
 
 thrift_object(
   "Platform" #file_name
-  "FibService;SystemService" #services
+  "FibService;SystemService;NeighborListenerClientForFibagent" #services
   "cpp2" #language
   "json,optionals" #options
   "${CMAKE_SOURCE_DIR}/openr/if" #file_path
