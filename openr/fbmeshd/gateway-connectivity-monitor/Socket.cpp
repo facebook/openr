@@ -32,7 +32,10 @@ Socket::connect(
     return {false, "socket object in use"};
   }
 
-  if ((fd = ::socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+  if ((fd = ::socket(
+           address.getIPAddress().isV4() ? AF_INET : AF_INET6,
+           SOCK_STREAM,
+           0)) == -1) {
     return {false, "socket"};
   }
 
