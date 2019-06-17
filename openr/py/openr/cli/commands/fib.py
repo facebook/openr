@@ -12,7 +12,7 @@ from typing import Any, List
 
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.clients import decision_client, fib_client, lm_client
+from openr.clients.openr_client import get_openr_ctrl_client
 from openr.OpenrCtrl import OpenrCtrl
 from openr.Platform import ttypes as platform_types
 from openr.utils import ipnetwork, printing
@@ -172,20 +172,28 @@ class FibValidateRoutesCmd(FibAgentCmd):
         all_success = True
 
         try:
-            # fetch routes from decision module
+            decision_route_db = None
+            fib_route_db = None
+            lm_links = None
+
+            with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
+                # fetch routes from decision module
+                decision_route_db = client.getRouteDbComputed("")
+                # fetch routes from fib module
+                fib_route_db = client.getRouteDb()
+                # fetch link_db from link-monitor module
+                lm_links = client.getInterfaces().interfaceDetails
+
             (decision_unicast_routes, decision_mpls_routes) = utils.get_shortest_routes(
-                decision_client.DecisionClient(cli_opts).get_route_db()
+                decision_route_db
             )
-            # fetch routes from fib module
             (fib_unicast_routes, fib_mpls_routes) = utils.get_shortest_routes(
-                fib_client.FibClient(cli_opts).get_route_db()
+                fib_route_db
             )
             # fetch route from net_agent module
             agent_unicast_routes = self.client.getRouteTableByClient(
                 self.client.client_id
             )
-            # fetch link_db from link-monitor module
-            lm_links = lm_client.LMClient(cli_opts).dump_links().interfaceDetails
 
         except Exception as e:
             print("Failed to validate Fib routes.")
