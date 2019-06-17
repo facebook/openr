@@ -11,6 +11,7 @@ namespace py openr.OpenrCtrl
 namespace php Openr
 
 include "common/fb303/if/fb303.thrift"
+include "fbzmq/service/if/Monitor.thrift"
 include "Decision.thrift"
 include "Dual.thrift"
 include "Fib.thrift"
@@ -306,4 +307,13 @@ service OpenrCtrl extends fb303.FacebookService {
    * Get config key
    */
   binary getConfigKey(1: string key) throws (1: OpenrError error)
+
+  //
+  // ZMQ Monitor APIs (get counters / log events)
+  //
+
+  /**
+   * Get ZMQ log events
+   */
+  list<Monitor.EventLog> getEventLogs() throws (1: OpenrError error)
 }

@@ -63,6 +63,13 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   int64_t getCounter(std::unique_ptr<std::string> key) override;
 
   //
+  // ZMQ Monitor APIs
+  //
+
+  folly::SemiFuture<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>>
+  semifuture_getEventLogs() override;
+
+  //
   // PrefixManager APIs
   //
 

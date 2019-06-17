@@ -260,6 +260,22 @@ OpenrCtrlHandler::getStatus() {
   return facebook::fb303::cpp2::fb_status::ALIVE;
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>>
+OpenrCtrlHandler::semifuture_getEventLogs() {
+  folly::Promise<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>> p;
+
+  auto eventLogs = zmqMonitorClient_->getLastEventLogs();
+  if (eventLogs.hasValue()) {
+    p.setValue(std::make_unique<std::vector<fbzmq::thrift::EventLog>>(
+        eventLogs.value()));
+  } else {
+    p.setException(
+        thrift::OpenrError(std::string("Fail to retrieve eventlogs")));
+  }
+
+  return p.getSemiFuture();
+}
+
 void
 OpenrCtrlHandler::getCounters(std::map<std::string, int64_t>& _return) {
   FacebookBase2::getCounters(_return);

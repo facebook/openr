@@ -12,50 +12,63 @@ import json
 import os
 import time
 from builtins import object
+from typing import Dict, List
 
 import tabulate
 import zmq
 from fbzmq.Monitor import ttypes as monitor_types
 from openr.cli.utils import utils
-from openr.clients import monitor_client, monitor_subscriber
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.clients import monitor_subscriber
+from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import consts, printing, zmq_socket
 
 
-class MonitorCmd(object):
-    def __init__(self, cli_opts):
-        """ initialize the Monitor client """
+class MonitorCmd(OpenrCtrlCmd):
+    def print_log_list_type(self, llist: List) -> str:
+        idx = 1
+        str_txt = "{}".format("".join(llist[0]) + "\n")
+        while idx < len(llist):
+            str_txt += "{:<18} {}".format("", "".join(llist[idx]) + "\n")
+            idx += 1
 
-        self.host = cli_opts.host
-        self.cli_opts = cli_opts
-        self.monitor_pub_port = cli_opts.monitor_pub_port
+        return str_txt
 
-        self.client = monitor_client.MonitorClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.monitor_rep_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory,
-        )
+    def print_log_sample(self, log_sample: Dict) -> None:
+        columns = ["", ""]
+        rows = []
+        for _, value0 in log_sample.items():
+            for key, value in value0.items():
+                if key == "time":
+                    value = time.strftime("%H:%M:%S %Y-%m-%d", time.localtime(value))
+                if type(value) is list:
+                    value = self.print_log_list_type(value)
+
+                rows.append(["{:<17}  {}".format(key, value)])
+
+        print(tabulate.tabulate(rows, headers=columns, tablefmt="plain"))
 
 
 class CountersCmd(MonitorCmd):
-    def run(self, prefix="", is_json=False):
+    def _run(
+        self, client: OpenrCtrl.Client, prefix: str = "", json: bool = False
+    ) -> None:
+        resp = client.getCounters()
+        self.print_counters(resp, prefix, json)
 
-        resp = self.client.dump_all_counter_data()
-        self.print_counters(resp, prefix, is_json)
-
-    def print_counters(self, resp, prefix, is_json):
+    def print_counters(self, resp: Dict, prefix: str, json: bool) -> None:
         """ print the Kv Store counters """
 
         host_id = utils.get_connected_node_name(self.cli_opts)
         caption = "{}'s counters".format(host_id)
 
         rows = []
-        for key, counter in sorted(resp.counters.items()):
+        for key, counter in sorted(resp.items()):
             if not key.startswith(prefix):
                 continue
-            rows.append([key, ":", counter.value])
+            rows.append([key, ":", counter])
 
-        if is_json:
+        if json:
             json_data = {k: v for k, _, v in rows}
             print(utils.json_dumps(json_data))
         else:
@@ -68,7 +81,7 @@ class CountersCmd(MonitorCmd):
 
 
 class ForceCrashCmd(MonitorCmd):
-    def run(self, yes):
+    def _run(self, client: OpenrCtrl.Client, yes: bool):
 
         if not yes:
             yes = utils.yesno("Are you sure to trigger Open/R crash")
@@ -87,40 +100,18 @@ class ForceCrashCmd(MonitorCmd):
         sock.close()
 
 
-def print_log_list_type(llist):
-
-    idx = 1
-    str_txt = "{}".format("".join(llist[0]) + "\n")
-
-    while idx < len(llist):
-        str_txt += "{:<18} {}".format("", "".join(llist[idx]) + "\n")
-        idx += 1
-
-    return str_txt
-
-
-def print_log_sample(log_sample):
-
-    columns = ["", ""]
-    rows = []
-    for _, value0 in log_sample.items():
-        for key, value in value0.items():
-
-            if key == "time":
-                value = time.strftime("%H:%M:%S %Y-%m-%d", time.localtime(value))
-            if type(value) is list:
-                value = print_log_list_type(value)
-
-            rows.append(["{:<17}  {}".format(key, value)])
-
-    print(tabulate.tabulate(rows, headers=columns, tablefmt="plain"))
-
-
 class SnoopCmd(MonitorCmd):
 
     counters_db = {}
 
-    def run(self, log, counters, delta, duration):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        log: True,
+        counters: True,
+        delta: True,
+        duration: int,
+    ) -> None:
 
         pub_client = monitor_subscriber.MonitorSubscriber(
             zmq.Context(),
@@ -166,7 +157,7 @@ class SnoopCmd(MonitorCmd):
 
     def print_event_log_data(self, event_log_data):
         log_sample = json.loads(" ".join(event_log_data.samples))
-        print_log_sample(log_sample)
+        self.print_log_sample(log_sample)
 
     def print_snoop_data(self, log, counters, delta, resp):
         """ print the snoop data"""
@@ -178,34 +169,29 @@ class SnoopCmd(MonitorCmd):
 
 
 class LogCmd(MonitorCmd):
-    def run(self, json_opt=False):
-
-        resp = self.client.dump_log_data()
+    def _run(self, client: OpenrCtrl.Client, json_opt: bool = False) -> None:
+        resp = client.getEventLogs()
         self.print_log_data(resp, json_opt)
 
     def print_log_data(self, resp, json_opt):
         """ print the log data"""
 
-        def update_func(json_obj, thrift_obj):
-            json_obj["eventLogs"] = [
-                utils.thrift_to_dict(e) for e in thrift_obj.eventLogs
-            ]
-
         if json_opt:
-            data = utils.thrift_to_dict(resp, update_func)
+            data = {}
+            data["eventLogs"] = [utils.thrift_to_dict(e) for e in resp]
             print(utils.json_dumps(data))
-            return
 
-        log_samples = []
-        for event_log in resp.eventLogs:
-            log_samples.extend([json.loads(lg) for lg in event_log.samples])
+        else:
+            log_samples = []
+            for event_log in resp:
+                log_samples.extend([json.loads(lg) for lg in event_log.samples])
 
-        for log_sample in log_samples:
-            print_log_sample(log_sample)
+            for log_sample in log_samples:
+                self.print_log_sample(log_sample)
 
 
 class StatisticsCmd(MonitorCmd):
-    def run(self):
+    def _run(self, client: OpenrCtrl.Client) -> None:
         stats_templates = [
             {
                 "title": "KvStore Stats",
@@ -247,7 +233,7 @@ class StatisticsCmd(MonitorCmd):
             },
         ]
 
-        counters = self.client.dump_all_counter_data().counters
+        counters = client.getCounters()
         self.print_stats(stats_templates, counters)
 
     def print_stats(self, stats_templates, counters):
@@ -261,7 +247,7 @@ class StatisticsCmd(MonitorCmd):
             counters_rows = []
             for title, key in template["counters"]:
                 val = counters.get(key, None)
-                counters_rows.append([title, "N/A" if not val else val.value])
+                counters_rows.append([title, "N/A" if not val else val])
 
             stats_cols = ["Stat", "1 min", "10 mins", "1 hour", "All Time"]
             stats_rows = []
@@ -269,7 +255,7 @@ class StatisticsCmd(MonitorCmd):
                 row = [title]
                 for key in ["{}.{}".format(key_prefix, s) for s in suffixes]:
                     val = counters.get(key, None)
-                    row.append("N/A" if not val else val.value)
+                    row.append("N/A" if not val else val)
                 stats_rows.append(row)
 
             print("> {} ".format(template["title"]))

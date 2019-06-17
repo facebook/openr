@@ -32,7 +32,11 @@ def generate_thrift_files():
 
     current_dir = os.path.dirname(os.path.realpath(__file__))
     root_dir = os.path.dirname(os.path.dirname(current_dir))
-    top_dirs = [os.path.join(root_dir, "openr/if"), os.path.join(root_dir, "common")]
+    top_dirs = [
+        os.path.join(root_dir, "openr/if"),
+        os.path.join(root_dir, "common"),
+        os.path.join(root_dir, "fbzmq"),
+    ]
     exclude_files = ["OpenrCtrlCpp"]
 
     for top_dir in top_dirs:
