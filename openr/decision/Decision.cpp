@@ -1600,8 +1600,6 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 // perform full dump of all LSDBs and run initial routing computations
 void
 Decision::initialSync(fbzmq::Context& zmqContext) {
-  thrift::KvStoreRequest thriftReq;
-
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> storeReq(zmqContext);
 
   // we'll be using this to get the full dump from the KvStore
@@ -1611,7 +1609,12 @@ Decision::initialSync(fbzmq::Context& zmqContext) {
                << reqConnect.error();
   }
 
+  thrift::KvStoreRequest thriftReq;
+  thrift::KeyDumpParams params;
+
   thriftReq.cmd = thrift::Command::KEY_DUMP;
+  thriftReq.keyDumpParams = params;
+
   storeReq.sendThriftObj(thriftReq, serializer_);
 
   VLOG(2) << "Decision process requesting initial state...";
