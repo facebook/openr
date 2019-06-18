@@ -218,12 +218,8 @@ TEST_F(FibTestFixture, processRouteDb) {
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
 
-  int64_t countSync = mockFibHandler->getFibSyncCount();
   // initial syncFib debounce
-  while (mockFibHandler->getFibSyncCount() <= countSync) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForSyncFib();
 
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
@@ -234,10 +230,7 @@ TEST_F(FibTestFixture, processRouteDb) {
 
   int64_t countAdd = mockFibHandler->getAddRoutesCount();
   // add routes
-  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
 
   EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 1);
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
@@ -253,10 +246,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
   // syncFib debounce
-  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
   EXPECT_GT(mockFibHandler->getAddRoutesCount(), countAdd);
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), countDel);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -271,10 +261,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   routeDb.unicastRoutes.emplace_back(createUnicastRoute(prefix3, {path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
   // syncFib debounce
-  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
   EXPECT_GT(mockFibHandler->getAddRoutesCount(), countAdd);
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), countDel);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -288,12 +275,8 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
 
-  int64_t countSync = mockFibHandler->getFibSyncCount();
   // initial syncFib debounce
-  while (mockFibHandler->getFibSyncCount() <= countSync) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForSyncFib();
 
   // Mimic interface initially coming up
   thrift::InterfaceDatabase intfDb(
@@ -336,10 +319,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
 
   int64_t countAdd = mockFibHandler->getAddRoutesCount();
   // add routes
-  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
 
   // Mimic interface going down
   thrift::InterfaceDatabase intfChange_1(
@@ -364,10 +344,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
 
   countAdd = mockFibHandler->getAddRoutesCount();
   // update routes
-  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
 
   EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -397,10 +374,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
 
   int64_t countDel = mockFibHandler->getDelRoutesCount();
   // remove routes
-  while (mockFibHandler->getDelRoutesCount() <= countDel) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
 
   EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -413,12 +387,8 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
 
-  int64_t countSync = mockFibHandler->getFibSyncCount();
   // initial syncFib debounce
-  while (mockFibHandler->getFibSyncCount() <= countSync) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForSyncFib();
 
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
@@ -431,10 +401,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
 
   int64_t countAdd = mockFibHandler->getAddRoutesCount();
   // add routes
-  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
@@ -447,10 +414,8 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   // delete one route
   routeDb.unicastRoutes.pop_back();
   decisionPub.sendThriftObj(routeDb, serializer).value();
-  while (mockFibHandler->getDelRoutesCount() <= countDel) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
+
   countDel = mockFibHandler->getDelRoutesCount();
   EXPECT_EQ(countAdd, 1);
   EXPECT_EQ(countDel, 1);
@@ -462,10 +427,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   routeDb.unicastRoutes.emplace_back(
       createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
   decisionPub.sendThriftObj(routeDb, serializer).value();
-  while (mockFibHandler->getAddRoutesCount() <= countAdd) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForUpdateUnicastRoutes();
   countAdd = mockFibHandler->getAddRoutesCount();
   EXPECT_EQ(countAdd, 2);
   EXPECT_EQ(countDel, 1);
@@ -479,8 +441,6 @@ TEST_F(FibTestFixture, fibRestart) {
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
 
-  int64_t countSync = mockFibHandler->getFibSyncCount();
-
   // Mimic decision pub sock publishing RouteDatabase
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = "node-1";
@@ -489,11 +449,8 @@ TEST_F(FibTestFixture, fibRestart) {
 
   decisionPub.sendThriftObj(routeDb, serializer).value();
 
-  // syncFib debounce
-  while (mockFibHandler->getFibSyncCount() <= countSync) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  // initial syncFib debounce
+  mockFibHandler->waitForSyncFib();
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
@@ -503,10 +460,7 @@ TEST_F(FibTestFixture, fibRestart) {
   EXPECT_EQ(routes.size(), 0);
 
   // syncFib debounce
-  while (mockFibHandler->getFibSyncCount() <= 0) {
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
+  mockFibHandler->waitForSyncFib();
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);

@@ -90,6 +90,7 @@ MockNetlinkFibHandler::addUnicastRoutes(
   SYNCHRONIZED(countAddRoutes_) {
     countAddRoutes_++;
   }
+  updateUnicastRoutesBaton_.post();
 }
 
 void
@@ -106,6 +107,7 @@ MockNetlinkFibHandler::deleteUnicastRoutes(
   SYNCHRONIZED(countDelRoutes_) {
     countDelRoutes_++;
   }
+  updateUnicastRoutesBaton_.post();
 }
 
 void
@@ -132,6 +134,7 @@ MockNetlinkFibHandler::syncFib(
   SYNCHRONIZED(countSync_) {
     countSync_++;
   }
+  syncFibBaton_.post();
 }
 
 int64_t
@@ -200,6 +203,18 @@ MockNetlinkFibHandler::getDelRoutesCount() {
   }
   return res;
 }
+
+void
+MockNetlinkFibHandler::waitForUpdateUnicastRoutes() {
+  updateUnicastRoutesBaton_.wait();
+  updateUnicastRoutesBaton_.reset();
+};
+
+void
+MockNetlinkFibHandler::waitForSyncFib() {
+  syncFibBaton_.wait();
+  syncFibBaton_.reset();
+};
 
 void
 MockNetlinkFibHandler::stop() {

@@ -68,6 +68,12 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
       std::unique_ptr<std::vector<openr::thrift::UnicastRoute>> routes)
       override;
 
+  // Wait for adding/deleting routes to complete
+  void waitForUpdateUnicastRoutes();
+
+  // Wait for synchronizing Fib to complete
+  void waitForSyncFib();
+
   int64_t aliveSince() override;
 
   void getRouteTableByClient(
@@ -94,6 +100,10 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   folly::Synchronized<int64_t> countAddRoutes_{0};
   folly::Synchronized<int64_t> countDelRoutes_{0};
+
+  // A baton for synchronization
+  folly::Baton<> updateUnicastRoutesBaton_;
+  folly::Baton<> syncFibBaton_;
 };
 
 } // namespace openr
