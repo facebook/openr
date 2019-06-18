@@ -623,7 +623,8 @@ TEST(BGPRedistribution, BasicOperation) {
       {createNextHop(addr1.prefixAddress)},
       thrift::PrefixType::BGP,
       data1,
-      false);
+      false,
+      createNextHop(addr1.prefixAddress));
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
 
@@ -669,7 +670,8 @@ TEST(BGPRedistribution, BasicOperation) {
       {createNextHop(addr2.prefixAddress)},
       thrift::PrefixType::BGP,
       data2,
-      false);
+      false,
+      createNextHop(addr2.prefixAddress));
 
   routeDb = spfSolver.buildPaths("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));

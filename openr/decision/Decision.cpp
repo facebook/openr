@@ -919,6 +919,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
     bool const isV4) {
+  std::string bestNode;
   std::unordered_set<std::string> nodes;
   thrift::MetricVector const* bestVector = nullptr;
   std::string const* bestData = nullptr;
@@ -940,6 +941,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     case MetricVectorUtils::CompareResult::TIE_WINNER:
       bestVector = &(metricVector);
       bestData = &(prefixEntry.data);
+      bestNode = name;
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_LOOSER:
       nodes.emplace(name);
@@ -959,6 +961,14 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     return folly::none;
   }
   CHECK_NOTNULL(bestData);
+  auto bestNexthop = getLoopbackVias({bestNode}, isV4);
+  if (bestNexthop.size() != 1) {
+    LOG(ERROR)
+        << "Cannot find the best paths loopback address. Skipping route for prefix: "
+        << toString(prefix);
+    return folly::none;
+  }
+
   return thrift::UnicastRoute{FRAGILE,
                               prefix,
                               {},
@@ -966,7 +976,8 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               getLoopbackVias(nodes, isV4),
                               thrift::PrefixType::BGP,
                               *bestData,
-                              bgpDryRun_ /* doNotProgram */};
+                              bgpDryRun_, /* doNotProgram */
+                              bestNexthop.at(0)};
 }
 
 std::vector<thrift::NextHopThrift>

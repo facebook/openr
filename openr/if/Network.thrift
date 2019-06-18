@@ -94,4 +94,6 @@ struct UnicastRoute {
   5: optional PrefixType prefixType
   6: optional binary data
   7: bool doNotInstall = false
+
+  41: optional NextHopThrift bestNexthop
 }
