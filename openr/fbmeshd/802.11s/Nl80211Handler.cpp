@@ -1475,6 +1475,22 @@ Nl80211Handler::processEvent(const GenericNetlinkMessage& msg) {
       if (type == IEEE802_11_FC_TYPE_MGMT &&
           (subtype == IEEE802_11_FC_STYPE_ACTION ||
            subtype == IEEE802_11_FC_STYPE_AUTH)) {
+        int32_t rssi{};
+
+        if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
+          rssi = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
+        }
+        // drop frames below rssi threshold, except for close frames
+        // because we don't want to keep estab stations on bad links
+        if (rssi < FLAGS_mesh_rssi_threshold &&
+            !(frame_len >= (int)sizeof(struct ieee80211_mgmt_frame) &&
+              frame->action.action_code == PLINK_CLOSE)) {
+          VLOG(8) << folly::sformat(
+              "Ignoring non-close frame below rssi threshold ({} < {})",
+              rssi,
+              FLAGS_mesh_rssi_threshold);
+          break;
+        }
         const NetInterface& netif = lookupMeshNetif();
         if (process_mgmt_frame(
                 frame,
