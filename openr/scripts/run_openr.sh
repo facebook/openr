@@ -82,8 +82,9 @@ KVSTORE_TTL_DECREMENT_MS=1
 KVSTORE_ZMQ_HWM=65536
 LINK_FLAP_INITIAL_BACKOFF_MS=1000
 LINK_FLAP_MAX_BACKOFF_MS=60000
-LOGGING=""
 LINK_MONITOR_CMD_PORT=60006
+LOGGING=""
+LOG_FILE=""
 LOOPBACK_IFACE="lo"
 MEMORY_LIMIT_MB=800
 MIN_LOG_LEVEL=0
@@ -159,7 +160,7 @@ fi
 # Let the magic begin. Keep the options sorted except for log level \m/
 #
 
-exec ${OPENR} \
+ARGS="\
   --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
   --assume_drained=${ASSUME_DRAINED} \
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \
@@ -204,15 +205,15 @@ exec ${OPENR} \
   --link_flap_initial_backoff_ms=${LINK_FLAP_INITIAL_BACKOFF_MS} \
   --link_flap_max_backoff_ms=${LINK_FLAP_MAX_BACKOFF_MS} \
   --link_monitor_cmd_port=${LINK_MONITOR_CMD_PORT} \
-  --logging="${LOGGING}" \
+  --logging=${LOGGING} \
   --loopback_iface=${LOOPBACK_IFACE} \
   --memory_limit_mb=${MEMORY_LIMIT_MB} \
   --minloglevel=${MIN_LOG_LEVEL} \
-  --node_name="${NODE_NAME}" \
+  --node_name=${NODE_NAME} \
   --override_loopback_addr=${OVERRIDE_LOOPBACK_ADDR} \
   --prefix_manager_cmd_port=${PREFIX_MANAGER_CMD_PORT} \
-  --prefixes="${PREFIXES}" \
-  --prefix_fwd_type_mpls="${PREFIX_FWD_TYPE_MPLS}" \
+  --prefixes=${PREFIXES} \
+  --prefix_fwd_type_mpls=${PREFIX_FWD_TYPE_MPLS} \
   --redistribute_ifaces=${REDISTRIBUTE_IFACES} \
   --seed_prefix=${SEED_PREFIX} \
   --set_leaf_node=${SET_LEAF_NODE} \
@@ -236,5 +237,13 @@ exec ${OPENR} \
   --logtostderr \
   --max_log_size=1 \
   --v=${VERBOSITY} \
-  --vmodule="${VMODULE}" \
-  ${OPENR_ARGS}
+  --vmodule=${VMODULE} \
+  ${OPENR_ARGS}"
+
+if [[ -n $LOG_FILE ]]; then
+  echo "Redirecting logs to ${LOG_FILE}"
+  exec "${OPENR}" ${ARGS} >> ${LOG_FILE} 2>&1
+else
+  exec "${OPENR}" ${ARGS}
+fi
+
