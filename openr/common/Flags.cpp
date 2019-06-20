@@ -294,6 +294,10 @@ DEFINE_int32(
     openr::Constants::kKvStoreDbTtl.count(), // 5 min
     "TTL of a key (in ms) in the Kvstore");
 DEFINE_int32(
+    kvstore_sync_interval_s,
+    openr::Constants::kStoreSyncInterval.count(),
+    "Kvstore periodic random node sync interval in seconds");
+DEFINE_int32(
     kvstore_ttl_decrement_ms,
     openr::Constants::kTtlDecrement.count(),
     "Amount of time to decrement TTL when flooding updates");
