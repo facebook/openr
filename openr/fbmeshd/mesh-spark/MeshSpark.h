@@ -34,16 +34,7 @@ class MeshSpark final {
       const std::string& ifName,
       const openr::KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const openr::KvStoreLocalPubUrl& kvStoreLocalPubUrl,
-      bool enableDomains,
       fbzmq::Context& zmqContext);
-
-  folly::Optional<folly::MacAddress> getDomain();
-
-  void setDomain(folly::Optional<folly::MacAddress> newDomain);
-
-  void updateCache(
-      folly::MacAddress node,
-      std::pair<folly::Optional<folly::MacAddress>, bool> domain);
 
  private:
   /**
@@ -84,8 +75,6 @@ class MeshSpark final {
 
   void filterWhiteListedPeers(std::vector<folly::MacAddress>& peers);
 
-  void filterInDomainPeers(std::vector<folly::MacAddress>& peers);
-
   // ZmqEventLoop pointer for scheduling async events and socket callback
   // registration
   fbzmq::ZmqEventLoop& zmqLoop_;
@@ -123,17 +112,5 @@ class MeshSpark final {
 
   // node name -> ipv4 address
   std::unordered_map<folly::MacAddress, folly::IPAddressV4> kvStoreIPs_;
-
-  // enable domain filtering?
-  const bool enableDomains_;
-
-  // Stores the current domain, nodes in the same domain can for OpenR peerings
-  folly::Synchronized<folly::Optional<folly::MacAddress>> myDomain_;
-
-  // Cache for checking which nodes belong to which domain
-  folly::Synchronized<std::unordered_map<
-      folly::MacAddress,
-      std::pair<folly::Optional<folly::MacAddress>, bool>>>
-      neighborDomainCache_;
 
 }; // MeshSpark

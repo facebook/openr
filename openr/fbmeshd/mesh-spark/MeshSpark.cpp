@@ -47,7 +47,6 @@ MeshSpark::MeshSpark(
     const std::string& ifName,
     const openr::KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const openr::KvStoreLocalPubUrl& kvStoreLocalPubUrl,
-    bool enableDomains,
     fbzmq::Context& zmqContext)
     : zmqLoop_{zmqLoop},
       zmqContext_{zmqContext},
@@ -66,8 +65,7 @@ MeshSpark::MeshSpark(
           &zmqLoop,
           "node1", /* nodeId is used for writing to kvstore. not used herei */
           kvStoreLocalCmdUrl,
-          kvStoreLocalPubUrl),
-      enableDomains_{enableDomains} {
+          kvStoreLocalPubUrl) {
   syncPeersTimer_ = fbzmq::ZmqTimeout::make(
       &zmqLoop_, [this]() mutable noexcept { syncPeers(); });
   syncPeersTimer_->scheduleTimeout(syncPeersInterval_, true);
@@ -247,45 +245,6 @@ MeshSpark::filterWhiteListedPeers(std::vector<folly::MacAddress>& peers) {
 }
 
 void
-MeshSpark::filterInDomainPeers(std::vector<folly::MacAddress>& peers) {
-  if (!enableDomains_) {
-    return;
-  }
-  std::vector<folly::MacAddress> inDomainPeers;
-  const auto myDomain = *myDomain_.rlock();
-  neighborDomainCache_.withWLock([&peers, &inDomainPeers, myDomain](
-                                     auto& neighborDomainCache_) {
-    // Cleanup expired peer info in the cache
-    std::unordered_set<folly::MacAddress> peerSet(peers.begin(), peers.end());
-    std::unordered_set<folly::MacAddress> keysInCache;
-    for (const auto& it : neighborDomainCache_) {
-      keysInCache.emplace(it.first);
-    }
-    for (const auto& key : keysInCache) {
-      if (peerSet.count(key) == 0) {
-        neighborDomainCache_.erase(key);
-      }
-    }
-
-    // filter out peers that don't belong to our domain
-    std::copy_if(
-        peers.begin(),
-        peers.end(),
-        std::back_inserter(inDomainPeers),
-        [&neighborDomainCache_, myDomain](const auto& peer) {
-          if (neighborDomainCache_.count(peer) == 0) {
-            return false;
-          }
-          const auto peerDomainAndEnabled = neighborDomainCache_.at(peer);
-          return !peerDomainAndEnabled.second ||
-              (peerDomainAndEnabled.first.hasValue() && myDomain.hasValue() &&
-               peerDomainAndEnabled.first == myDomain);
-        });
-  });
-  peers = inDomainPeers;
-}
-
-void
 MeshSpark::syncPeers() {
   VLOG(1) << folly::sformat("MeshSpark::{}()", __func__);
   processPrefixDbUpdate();
@@ -298,9 +257,6 @@ MeshSpark::syncPeers() {
       activePeers.push_back(station.macAddress);
     }
   }
-
-  // remove peers that are not in this node's domain
-  filterInDomainPeers(activePeers);
 
   // remove peers that are not white-listed
   filterWhiteListedPeers(activePeers);
@@ -351,44 +307,4 @@ MeshSpark::syncPeers() {
       }
     }
   }
-}
-
-folly::Optional<folly::MacAddress>
-MeshSpark::getDomain() {
-  return *myDomain_.rlock();
-}
-
-void
-MeshSpark::setDomain(folly::Optional<folly::MacAddress> newDomain) {
-  myDomain_.withWLock([this, newDomain](auto& myDomain_) {
-    myDomain_ = newDomain;
-    zmqLoop_.runImmediatelyOrInEventLoop([this]() { syncPeers(); });
-  });
-}
-
-void
-MeshSpark::updateCache(
-    folly::MacAddress node,
-    std::pair<folly::Optional<folly::MacAddress>, bool> domain) {
-  std::pair<folly::Optional<folly::MacAddress>, bool> oldDomain;
-  neighborDomainCache_.withWLock(
-      [domain, node, &oldDomain](auto& neighborDomainCache_) {
-        auto it = neighborDomainCache_.find(node);
-        if (it != neighborDomainCache_.end()) {
-          oldDomain = it->second;
-          it->second = domain;
-        } else {
-          neighborDomainCache_[node] = domain;
-        }
-      });
-  if (!domain.second) {
-    return;
-  }
-  myDomain_.withRLock([this, oldDomain, domain](auto& myDomain_) {
-    if (myDomain_.hasValue() &&
-        (domain.first == myDomain_ || oldDomain.first == myDomain_) &&
-        domain.first != oldDomain.first) {
-      zmqLoop_.runImmediatelyOrInEventLoop([this]() { syncPeers(); });
-    }
-  });
 }

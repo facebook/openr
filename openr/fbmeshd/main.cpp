@@ -39,7 +39,6 @@
 #include <openr/fbmeshd/routing/Routing.h>
 #include <openr/fbmeshd/routing/SyncRoutes80211s.h>
 #include <openr/fbmeshd/routing/UDPRoutingPacketTransport.h>
-#include <openr/fbmeshd/separa/Separa.h>
 #include <openr/watchdog/Watchdog.h>
 
 using namespace openr::fbmeshd;
@@ -86,26 +85,27 @@ DEFINE_bool(
 DEFINE_bool(
     enable_separa,
     false,
-    "If set, Separa algorithm will be enabled to manage mesh partitions. "
-    "Implies enable_separa_broadcasts=true");
+    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
 DEFINE_int32(
-    separa_hello_port, 6667, "The port used to send separa hello packets");
+    separa_hello_port,
+    6667,
+    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
 DEFINE_int32(
     separa_broadcast_interval_s,
     1,
-    "how often to send separa broadcasts in seconds");
+    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
 DEFINE_int32(
     separa_domain_lockdown_period_s,
     60,
-    "how long to lockdown domains in seconds");
+    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
 DEFINE_double(
     separa_domain_change_threshold_factor,
     1,
-    "threshold factor for doing a separa domain change");
+    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
 DEFINE_bool(
     enable_separa_broadcasts,
     true,
-    "If set, Separa broadcasts will be enabled");
+    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
 
 DEFINE_int32(
     decision_rep_port,
@@ -358,7 +358,6 @@ main(int argc, char* argv[]) {
         FLAGS_mesh_ifname,
         kvStoreLocalCmdUrl,
         kvStoreLocalPubUrl,
-        FLAGS_enable_separa,
         zmqContext);
   }
 
@@ -388,36 +387,6 @@ main(int argc, char* argv[]) {
                             rssiThreshold,
                             !(FLAGS_enable_event_based_peer_selector &&
                               FLAGS_enable_userspace_mesh_peering)};
-
-  std::unique_ptr<Separa> separa;
-  if (meshSpark != nullptr && FLAGS_is_openr_enabled &&
-      (FLAGS_enable_separa_broadcasts || FLAGS_enable_separa)) {
-    separa = std::make_unique<Separa>(
-        FLAGS_separa_hello_port,
-        std::chrono::seconds{FLAGS_separa_broadcast_interval_s},
-        std::chrono::seconds{FLAGS_separa_domain_lockdown_period_s},
-        FLAGS_separa_domain_change_threshold_factor,
-        !FLAGS_enable_separa,
-        nlHandler,
-        *meshSpark,
-        prefixManagerLocalCmdUrl,
-        decisionCmdUrl,
-        kvStoreLocalCmdUrl,
-        kvStoreLocalPubUrl,
-        monitorSubmitUrl,
-        zmqContext);
-
-    static constexpr auto separaId{"Separa"};
-    monitorEventLoopWithWatchdog(separa.get(), separaId, watchdog.get());
-
-    allThreads.emplace_back(std::thread([&separa]() noexcept {
-      LOG(INFO) << "Starting the Separa thread...";
-      folly::setThreadName(separaId);
-      separa->run();
-      LOG(INFO) << "Separa thread got stopped.";
-    }));
-    separa->waitUntilRunning();
-  }
 
   std::unique_ptr<Gateway11sRootRouteProgrammer> gateway11sRootRouteProgrammer;
   static constexpr auto gateway11sRootRouteProgrammerId{
@@ -564,11 +533,6 @@ main(int argc, char* argv[]) {
 
   gatewayConnectivityMonitor.stop();
   gatewayConnectivityMonitor.waitUntilStopped();
-
-  if (separa) {
-    separa->stop();
-    separa->waitUntilStopped();
-  }
 
   if (routingEventLoop) {
     routing->resetSendPacketCallback();
