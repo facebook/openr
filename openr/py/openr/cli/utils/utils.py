@@ -20,10 +20,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import bunch
 import click
-import zmq
 from openr.AllocPrefix import ttypes as alloc_types
-from openr.clients.kvstore_client import KvStoreClient
-from openr.clients.lm_client import LMClient
+from openr.clients.openr_client import get_openr_ctrl_client
 from openr.Fib import ttypes as fib_types
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
@@ -139,15 +137,13 @@ def get_fib_agent_client(
     return client
 
 
-def get_connected_node_name(cli_opts):
+def get_connected_node_name(cli_opts: bunch.Bunch) -> str:
     """ get the identity of the connected node by querying link monitor"""
 
-    client = LMClient(cli_opts)
-
-    try:
-        return client.get_identity()
-    except zmq.error.Again:
-        return cli_opts.host
+    identity = None
+    with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
+        identity = client.getInterfaces().thisNodeName
+    return identity
 
 
 def get_route_nexthops(
@@ -1053,14 +1049,14 @@ def sprint_prefixes_db_delta(global_prefixes_db, prefix_db):
     return strs
 
 
-def dump_node_kvs(cli_opts, host):
-    client = KvStoreClient(cli_opts, host=host)
-    try:
-        kv = client.dump_all_with_filter()
-    except zmq.error.Again:
-        print("cannot connect to {}'s kvstore".format(host))
-        return None
-    return kv
+def dump_node_kvs(cli_opts: bunch.Bunch, host: str) -> kv_store_types.Publication:
+    pub = None
+
+    with get_openr_ctrl_client(host, cli_opts) as client:
+        keyDumpParams = kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
+        pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
+
+    return pub
 
 
 def print_allocations_table(alloc_str):

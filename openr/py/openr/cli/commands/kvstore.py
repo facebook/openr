@@ -14,7 +14,7 @@ import re
 import string
 import sys
 import time
-from builtins import object, str
+from builtins import str
 from itertools import combinations
 from typing import Any, Callable, Dict, List
 
@@ -24,7 +24,7 @@ import zmq
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.clients import kvstore_client, kvstore_subscriber
+from openr.clients import kvstore_subscriber
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
