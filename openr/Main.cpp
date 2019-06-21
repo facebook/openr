@@ -708,6 +708,11 @@ main(int argc, char** argv) {
   // SPF in Decision module.  This is to make sure the Decision module
   // receives itself as one of the nodes before running the spf.
 
+  folly::Optional<std::chrono::seconds> decisionGRWindow{folly::none};
+  if (FLAGS_decision_graceful_restart_window_s >= 0) {
+    decisionGRWindow =
+        std::chrono::seconds(FLAGS_decision_graceful_restart_window_s);
+  }
   // Start Decision Module
   startEventLoop(
       allThreads,
@@ -724,6 +729,7 @@ main(int argc, char** argv) {
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
           std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
           std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
+          decisionGRWindow,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
           maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_decision_rep_port),
@@ -745,6 +751,7 @@ main(int argc, char** argv) {
           FLAGS_enable_segment_routing,
           FLAGS_enable_ordered_fib_programming,
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
+          decisionGRWindow.hasValue(), /* waitOnDecision */
           kDecisionPubUrl,
           maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_fib_rep_port),
           LinkMonitorGlobalPubUrl{

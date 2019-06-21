@@ -1320,6 +1320,7 @@ Decision::Decision(
     const PrefixDbMarker& prefixDbMarker,
     std::chrono::milliseconds debounceMinDur,
     std::chrono::milliseconds debounceMaxDur,
+    folly::Optional<std::chrono::seconds> gracefulRestartDuration,
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
     const folly::Optional<std::string>& decisionCmdUrl,
@@ -1349,6 +1350,12 @@ Decision::Decision(
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
+
+  coldStartTimer_ =
+      fbzmq::ZmqTimeout::make(this, [this]() noexcept { coldStartUpdate(); });
+  if (gracefulRestartDuration.hasValue()) {
+    coldStartTimer_->scheduleTimeout(gracefulRestartDuration.value());
+  }
 
   prepare(zmqContext, enableOrderedFib);
 }
@@ -1706,6 +1713,10 @@ Decision::processPendingAdjUpdates() {
   }
   pendingAdjUpdates_.clear();
 
+  if (coldStartTimer_->isScheduled()) {
+    return;
+  }
+
   // run SPF once for all updates received
   LOG(INFO) << "Decision: computing new paths.";
   auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
@@ -1722,6 +1733,9 @@ void
 Decision::processPendingPrefixUpdates() {
   auto maybePerfEvents = pendingPrefixUpdates_.getPerfEvents();
   pendingPrefixUpdates_.clear();
+  if (coldStartTimer_->isScheduled()) {
+    return;
+  }
 
   // update routeDb once for all updates received
   LOG(INFO) << "Decision: updating new routeDb.";
@@ -1738,7 +1752,10 @@ Decision::processPendingPrefixUpdates() {
 void
 Decision::decrementOrderedFibHolds() {
   if (spfSolver_->decrementHolds()) {
-    auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
+    if (coldStartTimer_->isScheduled()) {
+      return;
+    }
+    auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
     if (not maybeRouteDb.hasValue()) {
       LOG(INFO) << "decrementOrderedFibHolds incurred no route updates";
       return;
@@ -1749,6 +1766,22 @@ Decision::decrementOrderedFibHolds() {
     maybeRouteDb.value().perfEvents = thrift::PerfEvents{};
     sendRouteUpdate(maybeRouteDb.value(), "ORDERED_FIB_HOLDS_EXPIRED");
   }
+}
+
+void
+Decision::coldStartUpdate() {
+  auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
+  if (not maybeRouteDb.hasValue()) {
+    LOG(ERROR) << "SEVERE: No routes to program after cold start duration. "
+               << "Sending empty route db to FIB";
+    thrift::RouteDatabase db;
+    sendRouteUpdate(db, "COLD_START_UPDATE");
+    return;
+  }
+  // Create empty perfEvents list. In this case we don't this route update to
+  // be inculded in the Fib time
+  maybeRouteDb.value().perfEvents = thrift::PerfEvents{};
+  sendRouteUpdate(maybeRouteDb.value(), "COLD_START_UPDATE");
 }
 
 void

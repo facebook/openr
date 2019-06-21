@@ -57,6 +57,7 @@ class Fib final : public OpenrEventLoop {
       bool enableSegmentRouting,
       bool enableOrderedFib,
       std::chrono::seconds coldStartDuration,
+      bool waitOnDecision,
       const DecisionPubUrl& decisionPubUrl,
       const folly::Optional<std::string>& fibRepUrl,
       const LinkMonitorGlobalPubUrl& linkMonPubUrl,
@@ -142,6 +143,10 @@ class Fib final : public OpenrEventLoop {
   // Route DB containing only dry run or not installed routes
   thrift::RouteDatabase doNotInstallRouteDb_;
   std::deque<thrift::PerfEvents> perfDb_;
+
+  // indicates we've received a decision route publication and therefore have
+  // routes to sync. will not synce routes with system until this is set
+  bool hasRoutesFromDecision_{false};
 
   // Flag to indicate the result of previous route programming attempt.
   // If set, it means what currently cached in local routeDb_ has not been 100%

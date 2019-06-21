@@ -29,6 +29,7 @@ Fib::Fib(
     bool enableSegmentRouting,
     bool enableOrderedFib,
     std::chrono::seconds coldStartDuration,
+    bool waitOnDecision,
     const DecisionPubUrl& decisionPubUrl,
     const folly::Optional<std::string>& fibRepUrl,
     const LinkMonitorGlobalPubUrl& linkMonPubUrl,
@@ -56,14 +57,15 @@ Fib::Fib(
   routeDb_.thisNodeName = myNodeName_;
 
   syncRoutesTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
-    auto success = syncRouteDb();
-    if (success) {
-      expBackoff_.reportSuccess();
-    } else {
-      // Apply exponential backoff and schedule next run
-      expBackoff_.reportError();
-      syncRoutesTimer_->scheduleTimeout(
-          expBackoff_.getTimeRemainingUntilRetry());
+    if (hasRoutesFromDecision_) {
+      if (syncRouteDb()) {
+        expBackoff_.reportSuccess();
+      } else {
+        // Apply exponential backoff and schedule next run
+        expBackoff_.reportError();
+        syncRoutesTimer_->scheduleTimeout(
+            expBackoff_.getTimeRemainingUntilRetry());
+      }
     }
   });
 
@@ -72,7 +74,10 @@ Fib::Fib(
         zmqContext, this, myNodeName_, storeCmdUrl, storePubUrl);
   }
 
-  syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
+  if (not waitOnDecision) {
+    hasRoutesFromDecision_ = true;
+    syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
+  }
 
   healthChecker_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
     // Make thrift calls to do real programming
@@ -93,9 +98,8 @@ Fib::Fib(
   }
 
   syncFibTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
-    if (!syncRoutesTimer_->isScheduled()) {
-      // Trigger immediate run
-      syncRouteDb();
+    if (hasRoutesFromDecision_) {
+      syncRouteDbDebounced();
     }
   });
 
@@ -232,6 +236,7 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
 
 void
 Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
+  hasRoutesFromDecision_ = true;
   thrift::RouteDatabase doNotInstallRouteDb;
   std::vector<thrift::UnicastRoute> installUnicastRoutes;
 

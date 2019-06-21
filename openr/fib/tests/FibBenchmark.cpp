@@ -64,6 +64,7 @@ class FibWrapper {
         false, // segment route
         false, // orderedFib
         std::chrono::seconds(2),
+        false, // waitOnDecision
         DecisionPubUrl{"inproc://decision-pub"},
         std::string{"inproc://fib-cmd"},
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},

@@ -177,6 +177,11 @@ DEFINE_bool(
     "Enable programming routes with prefix type BGP to the system FIB");
 DEFINE_bool(enable_spark, true, "If set, enables Spark for neighbor discovery");
 DEFINE_int32(
+    decision_graceful_restart_window_s,
+    -1,
+    "Duration (in seconds) to wait for convergence upon restart before "
+    "calculating new routes. Set to negative value to disable.");
+DEFINE_int32(
     spark_hold_time_s,
     18,
     "How long (in seconds) to keep neighbor adjacency without receiving any "

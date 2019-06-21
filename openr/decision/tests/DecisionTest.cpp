@@ -2523,6 +2523,7 @@ class DecisionTestFixture : public ::testing::Test {
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
+        folly::none,
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
         std::string{"inproc://decision-rep"},

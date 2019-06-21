@@ -71,6 +71,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
+        folly::none,
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         std::string{"inproc://decision-rep"},
@@ -89,6 +90,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         true, /* enableSegmentRouting */
         false, /* enableOrderedFib */
         std::chrono::seconds(2),
+        false, /* waitOnDecision */
         DecisionPubUrl{"inproc://decision-pub"},
         std::string{"inproc://fib-cmd"},
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},

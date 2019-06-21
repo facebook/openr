@@ -233,6 +233,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       PrefixDbMarker{"prefix:"},
       std::chrono::milliseconds(10),
       std::chrono::milliseconds(250),
+      folly::none,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       decisionCmdUrl_,
@@ -251,6 +252,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false, // segment routing
       false, // ordered Fib
       fibColdStartDuration,
+      false, // waitOnDecision
       DecisionPubUrl{decisionPubUrl_},
       std::string{fibCmdUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},

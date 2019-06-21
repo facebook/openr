@@ -203,6 +203,7 @@ class Decision : public OpenrEventLoop {
       const PrefixDbMarker& prefixDbMarker,
       std::chrono::milliseconds debounceMinDur,
       std::chrono::milliseconds debounceMaxDur,
+      folly::Optional<std::chrono::seconds> gracefulRestartDuration,
       const KvStoreLocalCmdUrl& storeCmdUrl,
       const KvStoreLocalPubUrl& storePubUrl,
       const folly::Optional<std::string>& decisionCmdUrl,
@@ -239,6 +240,10 @@ class Decision : public OpenrEventLoop {
    */
   detail::DecisionPendingUpdates pendingPrefixUpdates_;
 
+  // callback timer used on startup to publish routes after
+  // gracefulRestartDuration
+  std::unique_ptr<fbzmq::ZmqTimeout> coldStartTimer_{nullptr};
+
   /**
    * Timer to schedule pending update processing
    * Refer to processUpdatesStatus_ to decide whether spf recalculation or
@@ -270,6 +275,8 @@ class Decision : public OpenrEventLoop {
   void processPendingPrefixUpdates();
 
   void decrementOrderedFibHolds();
+
+  void coldStartUpdate();
 
   void sendRouteUpdate(
       thrift::RouteDatabase& db, std::string const& eventDescription);

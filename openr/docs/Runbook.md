@@ -148,6 +148,15 @@ interface and announce it to rest of the network.
 REDISTRIBUTE_IFACES=lo1
 ```
 
+#### DECISION_GRACEFUL_RESTART_WINDOW_S
+
+Set time interval to wait for convergence before OpenR calculates routes and
+publishes them to the system. Set negative to disable this feature.
+
+```
+DECISION_GRACEFUL_RESTART_WINDOW_S=60
+```
+
 #### DRYRUN
 
 OpenR will not try to program routes in it's default configuration. You should

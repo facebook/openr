@@ -45,6 +45,7 @@ ASSUME_DRAINED=false
 CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
 DECISION_DEBOUNCE_MAX_MS=250
 DECISION_DEBOUNCE_MIN_MS=10
+DECISION_GRACEFUL_RESTART_WINDOW_S=-1
 DECISION_REP_PORT=60004
 DOMAIN=openr
 DRYRUN=false
@@ -167,6 +168,7 @@ ARGS="\
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \
   --decision_debounce_max_ms=${DECISION_DEBOUNCE_MAX_MS} \
   --decision_debounce_min_ms=${DECISION_DEBOUNCE_MIN_MS} \
+  --decision_graceful_restart_window_s=${DECISION_GRACEFUL_RESTART_WINDOW_S} \
   --decision_rep_port=${DECISION_REP_PORT} \
   --domain=${DOMAIN} \
   --dryrun=${DRYRUN} \
@@ -248,4 +250,3 @@ if [[ -n $LOG_FILE ]]; then
 else
   exec "${OPENR}" ${ARGS}
 fi
-
