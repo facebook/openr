@@ -947,8 +947,11 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
       nodes.emplace(name);
       break;
     case MetricVectorUtils::CompareResult::TIE:
+      LOG(ERROR) << "Tie ordering prefix entries. Skipping route for prefix: "
+                 << toString(prefix);
+      return folly::none;
     case MetricVectorUtils::CompareResult::ERROR:
-      LOG(ERROR) << "Cannot order prefix entries. Skipping route for prefix: "
+      LOG(ERROR) << "Error ordering prefix entries. Skipping route for prefix: "
                  << toString(prefix);
       return folly::none;
     default:
