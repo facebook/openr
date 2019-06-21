@@ -13,7 +13,6 @@
 #include <glog/logging.h>
 
 #include <folly/Singleton.h>
-#include <folly/lang/Assume.h>
 
 #include <openr/fbmeshd/nl/NetlinkCallbackHandle.h>
 
@@ -89,10 +88,11 @@ class NetlinkSocket {
       }
 
       if (err->error == -NLE_MSG_OVERFLOW) {
-        LOG(FATAL) << "Kernel overflow error; crashing. ("
-                   << "command: " << static_cast<uint32_t>(gnlh->cmd)
-                   << "; sequence: " << err->msg.nlmsg_seq << ")";
-        folly::assume_unreachable();
+        LOG(WARNING)
+            << "Kernel overflow error; retrying receiving netlink message. ("
+            << "command: " << static_cast<uint32_t>(gnlh->cmd)
+            << "; sequence: " << err->msg.nlmsg_seq << ")";
+        return NL_SKIP;
       }
 
       throw std::runtime_error(
