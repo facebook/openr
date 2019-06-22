@@ -21,8 +21,24 @@
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 
+namespace {
+constexpr folly::StringPiece kTlvFormatMarker{"TlvFormatMarker"};
+enum WriteType { APPEND = 1, WRITE = 2 };
+
+} // anonymous namespace
+
 namespace openr {
 
+enum ActionType {
+  ADD = 1,
+  DEL = 2,
+};
+
+struct PersistentObject {
+  ActionType type;
+  std::string key;
+  folly::Optional<std::string> data;
+};
 /**
  * PersistentStore provides functionality of storing `Key-Values` with arbitrary
  * values which persists across restarts.
@@ -60,6 +76,15 @@ class PersistentStore : public OpenrEventLoop {
     return numOfWritesToDisk_;
   }
 
+  // Encode a PersistentObject, this can be private method, but for unit test,
+  // we make it public
+  static folly::Expected<std::unique_ptr<folly::IOBuf>, std::string>
+  encodePersistentObject(const PersistentObject& pObject) noexcept;
+  // Decode a PersistentObject, this can be private method, but for test,
+  // we make it public
+  folly::Expected<folly::Optional<PersistentObject>, std::string>
+  decodePersistentObject(folly::io::Cursor& cursor) noexcept;
+
  private:
   // Function to process pending request on reqSocket_
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
@@ -70,8 +95,30 @@ class PersistentStore : public OpenrEventLoop {
   bool saveDatabaseToDisk() noexcept;
   bool loadDatabaseFromDisk() noexcept;
 
+  // Load old format file from disk, this is for compatible with the old version
+  folly::Expected<folly::Unit, std::string> loadDatabaseOldFormat(
+      const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept;
+
+  // Load TlvFormat from disk
+  folly::Expected<folly::Unit, std::string> loadDatabaseTlvFormat(
+      const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept;
+
+  // Function to save Persistent Object to local disk.
+  bool savePersistentObjectToDisk() noexcept;
+
+  // Write IoBuf ro local disk
+  folly::Expected<folly::Unit, std::string> writeIoBufToDisk(
+      const std::unique_ptr<folly::IOBuf>& ioBuf, WriteType writeType) noexcept;
+
+  // Function to create a PersistentObject.
+  PersistentObject toPersistentObject(
+      const ActionType type, const std::string& key, const std::string& data);
+
   // Keeps track of number of writes of Database to disk
   std::atomic<std::uint64_t> numOfWritesToDisk_{0};
+
+  // Keeps track of number of writes of PersistentObject to disk
+  std::atomic<std::uint64_t> numOfNewWritesToDisk_{0};
 
   // Location on disk where data will be synced up. A file will be created
   // if doesn't exists.
@@ -91,6 +138,9 @@ class PersistentStore : public OpenrEventLoop {
 
   // Serializer for encoding/decoding of thrift objects
   apache::thrift::CompactSerializer serializer_;
+
+  // Define a persistent object
+  std::vector<PersistentObject> pObjects_;
 };
 
 } // namespace openr
