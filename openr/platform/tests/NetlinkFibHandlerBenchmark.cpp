@@ -16,12 +16,11 @@
 #include <folly/Format.h>
 #include <folly/MacAddress.h>
 #include <folly/Random.h>
-#include <folly/gen/Base.h>
-#include <folly/init/Init.h>
 #include <folly/test/TestUtils.h>
 #include <openr/fib/tests/PrefixGenerator.h>
 #include <openr/nl/NetlinkSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
+#include <openr/platform/tests/NetlinkFibHandlerBenchmark.h>
 
 extern "C" {
 #include <net/if.h>
@@ -188,8 +187,8 @@ class NetlinkFibWrapper {
   }
 };
 
-static void
-getProcessTimeBM(benchmark::State& state) {
+void
+BM_NetlinkFibHandler(benchmark::State& state) {
   /* Benchmark test to measure the time performance */
   auto netlinkFibWrapper = std::make_unique<NetlinkFibWrapper>();
   const uint32_t numOfPrefixes = state.range(0);
@@ -215,18 +214,6 @@ getProcessTimeBM(benchmark::State& state) {
         ->future_addUnicastRoutes(kFibId, std::move(routes))
         .wait();
   }
-
-  state.SetItemsProcessed(state.iterations());
 }
-BENCHMARK(getProcessTimeBM)->RangeMultiplier(10)->Range(10, 10000);
+
 } // namespace openr
-
-int
-main(int argc, char** argv) {
-  /* Use main instead of macro BENCHMARK_MAIN() since we need folly::init*/
-  folly::init(&argc, &argv);
-  ::benchmark::Initialize(&argc, argv);
-  if (::benchmark::ReportUnrecognizedArguments(argc, argv))
-    return 1;
-  ::benchmark::RunSpecifiedBenchmarks();
-}

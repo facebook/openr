@@ -153,8 +153,8 @@ class FibWrapper {
   PrefixGenerator prefixGenerator;
 };
 
-static void
-getProcessTimeBM(benchmark::State& state) {
+void
+BM_Fib(benchmark::State& state) {
   // Fib starts with clean route database
   auto fibWrapper = std::make_unique<FibWrapper>();
 
@@ -179,9 +179,9 @@ getProcessTimeBM(benchmark::State& state) {
   fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
 
   // Customized time counter
-  // processTimes[0] is the time of sending routDB to Fib
-  // processTimes[1] is the time of processing within Fib
-  // processTimes[2] is the time of synchonizing routs with Fib agent server
+  // processTimes[0] is the time of sending routDB from decision to Fib
+  // processTimes[1] is the time of processing DB within Fib
+  // processTimes[2] is the time of programming routs with Fib agent server
   std::vector<uint64_t> processTimes{0, 0, 0};
   // Maek sure deltaSize <= numOfPrefixes
   auto deltaSize = kDeltaSize <= numOfPrefixes ? kDeltaSize : numOfPrefixes;
@@ -213,16 +213,10 @@ getProcessTimeBM(benchmark::State& state) {
     processTime /= (state.iterations() + 1);
   }
 
-  // Get items/s
-  state.SetItemsProcessed(state.iterations());
-
   // Add customized counters to state.
-  state.counters.insert({{"SendTime", processTimes[0]},
-                         {"ProcessTime", processTimes[1]},
-                         {"ProgramTime (ms)", processTimes[2]}});
+  state.counters.insert({{"DB_Receive", processTimes[0]},
+                         {"Fib_Debounce", processTimes[1]},
+                         {"DB_Program", processTimes[2]}});
 }
 
-BENCHMARK(getProcessTimeBM)->RangeMultiplier(10)->Range(10, 10000);
 } // namespace openr
-
-BENCHMARK_MAIN();
