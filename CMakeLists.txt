@@ -149,6 +149,7 @@ add_dependencies(
 add_dependencies(
   Lsdb-cpp2-obj
   Network-cpp2-obj
+  HealthChecker-cpp2-obj
 )
 
 thrift_object(
