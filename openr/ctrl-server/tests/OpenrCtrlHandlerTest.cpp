@@ -40,10 +40,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         monitorSubmitUrl_, "inproc://monitor_pub_url", context_);
     zmqMonitorThread_ = std::thread([&]() { zmqMonitor->run(); });
 
-    // Create modules
-    std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
-        moduleTypeToEvl;
-
     // Create KvStore module
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
         context_,
@@ -57,7 +53,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         true /* enableFloodOptimization */,
         true /* isFloodRoot */);
     kvStoreWrapper->run();
-    moduleTypeToEvl[thrift::OpenrModuleType::KVSTORE] =
+    moduleTypeToEvl_[thrift::OpenrModuleType::KVSTORE] =
         kvStoreWrapper->getKvStore();
 
     // Create Decision module
@@ -79,7 +75,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         monitorSubmitUrl_,
         context_);
     decisionThread_ = std::thread([&]() { decision->run(); });
-    moduleTypeToEvl[thrift::OpenrModuleType::DECISION] = decision;
+    moduleTypeToEvl_[thrift::OpenrModuleType::DECISION] = decision;
 
     // Create Fib module
     fib = std::make_shared<Fib>(
@@ -99,7 +95,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         context_);
     fibThread_ = std::thread([&]() { fib->run(); });
-    moduleTypeToEvl[thrift::OpenrModuleType::FIB] = fib;
+    moduleTypeToEvl_[thrift::OpenrModuleType::FIB] = fib;
 
     // Create HealthChecker module
     healthChecker = std::make_shared<HealthChecker>(
@@ -117,7 +113,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         monitorSubmitUrl_,
         context_);
     healthCheckerThread_ = std::thread([&]() { healthChecker->run(); });
-    moduleTypeToEvl[thrift::OpenrModuleType::HEALTH_CHECKER] = healthChecker;
+    moduleTypeToEvl_[thrift::OpenrModuleType::HEALTH_CHECKER] = healthChecker;
 
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
@@ -133,7 +129,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         Constants::kKvStoreDbTtl,
         context_);
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
-    moduleTypeToEvl[thrift::OpenrModuleType::PREFIX_MANAGER] = prefixManager;
+    moduleTypeToEvl_[thrift::OpenrModuleType::PREFIX_MANAGER] = prefixManager;
 
     // Create MockNetlinkSystemHandler
     mockNlHandler =
@@ -184,7 +180,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::milliseconds(8),
         Constants::kKvStoreDbTtl);
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
-    moduleTypeToEvl[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
+    moduleTypeToEvl_[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
 
     // Create PersistentStore
     persistentStore = std::make_unique<PersistentStore>(
@@ -196,7 +192,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         Constants::kPersistentStoreMaxBackoff,
         true /* dryrun */);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
-    moduleTypeToEvl[thrift::OpenrModuleType::PERSISTENT_STORE] =
+    moduleTypeToEvl_[thrift::OpenrModuleType::PERSISTENT_STORE] =
         persistentStore;
 
     // Create main-event-loop
@@ -214,7 +210,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     handler = std::make_unique<OpenrCtrlHandler>(
         nodeName,
         acceptablePeerNames,
-        moduleTypeToEvl,
+        moduleTypeToEvl_,
         monitorSubmitUrl_,
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         mainEvl_,
@@ -224,11 +220,14 @@ class OpenrCtrlFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    // ATTN: moduleTypeToEvl_ maintains <shared_ptr> of OpenrEventLoop.
+    //       Must cleanup. Otherwise, there will be additional ref count and
+    //       cause OpenrEventLoop binding to the existing addr.
+    moduleTypeToEvl_.clear();
+
     mainEvl_.stop();
     mainEvlThread_.join();
-
     handler.reset();
-
     tm->join();
 
     linkMonitor->stop();
@@ -324,6 +323,8 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::shared_ptr<LinkMonitor> linkMonitor;
   std::shared_ptr<apache::thrift::concurrency::ThreadManager> tm;
   std::unique_ptr<OpenrCtrlHandler> handler;
+  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
+      moduleTypeToEvl_;
 };
 
 TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
