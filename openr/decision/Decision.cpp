@@ -1215,7 +1215,8 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRoute(
              : firstLink->getNhV6FromNode(myNodeName),
         firstLink->getIfaceFromNode(myNodeName),
         pathCost,
-        std::move(mplsAction)));
+        std::move(mplsAction),
+        true /* useNonShortestRoute */));
   }
 
   return std::move(route);

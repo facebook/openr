@@ -413,6 +413,15 @@ TEST(UtilTest, getBestNextHopsUnicast) {
       getBestNextHopsUnicast({path1_2_1, path1_2_2, path1_2_3, path1_3_1});
   EXPECT_EQ(
       bestNextHops, std::vector<thrift::NextHopThrift>({path1_2_1, path1_3_1}));
+
+  auto path1_2_2_updated = path1_2_2;
+  path1_2_2_updated.useNonShortestRoute = true;
+  bestNextHops = getBestNextHopsUnicast(
+      {path1_2_1, path1_2_2_updated, path1_2_3, path1_3_1});
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>(
+          {path1_2_1, path1_2_2_updated, path1_3_1}));
 }
 
 TEST(UtilTest, getBestNextHopsMpls) {

@@ -331,12 +331,14 @@ createNextHop(
     thrift::BinaryAddress addr,
     const std::string& ifName = "",
     int32_t metric = 0,
-    folly::Optional<thrift::MplsAction> maybeMplsAction = folly::none) {
+    folly::Optional<thrift::MplsAction> maybeMplsAction = folly::none,
+    bool useNonShortestRoute = false) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
   nextHop.address.ifName = ifName;
   nextHop.metric = metric;
   nextHop.mplsAction = maybeMplsAction;
+  nextHop.useNonShortestRoute = useNonShortestRoute;
   return nextHop;
 }
 

@@ -63,6 +63,9 @@ struct NextHopThrift {
 
   // Metric (aka cost) associated with this nexthop
   51: i32 metric = 0
+
+  // Use non-shortest route (usually false but enabled for KSP2_ED_ECMP)
+  52: bool useNonShortestRoute = 0
 }
 
 struct MplsRoute {

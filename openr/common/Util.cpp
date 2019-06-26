@@ -426,7 +426,7 @@ getBestNextHopsUnicast(std::vector<thrift::NextHopThrift> const& allNextHops) {
   // Find nextHops with the minimum cost
   std::vector<thrift::NextHopThrift> bestNextHops;
   for (auto const& nextHop : allNextHops) {
-    if (nextHop.metric == minCost) {
+    if (nextHop.metric == minCost or nextHop.useNonShortestRoute) {
       bestNextHops.emplace_back(nextHop);
     }
   }
