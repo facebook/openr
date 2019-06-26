@@ -137,3 +137,4 @@ DECLARE_bool(use_flood_optimization);
 
 DECLARE_bool(use_netlink_message);
 DECLARE_bool(prefix_fwd_type_mpls);
+DECLARE_bool(prefix_algo_type_ksp2_ed_ecmp);

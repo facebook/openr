@@ -195,6 +195,12 @@ main(int argc, char** argv) {
   // Sanity check for IPv6 global environment
   checkIsIpv6Enabled();
 
+  // Sanity check for prefix forwarding type and algorithm
+  if (FLAGS_prefix_algo_type_ksp2_ed_ecmp) {
+    CHECK(FLAGS_prefix_fwd_type_mpls)
+        << "Forwarding type must be set to SR_MPLS for KSP2_ED_ECMP";
+  }
+
   // Sanity checks on Segment Routing labels
   const int32_t maxLabel = Constants::kMaxSrLabel;
   CHECK(Constants::kSrGlobalRange.first > 0);
@@ -539,6 +545,7 @@ main(int argc, char** argv) {
             FLAGS_override_loopback_addr,
             FLAGS_loopback_iface,
             FLAGS_prefix_fwd_type_mpls,
+            FLAGS_prefix_algo_type_ksp2_ed_ecmp,
             Constants::kPrefixAllocatorSyncInterval,
             kConfigStoreUrl,
             context,
@@ -685,6 +692,7 @@ main(int argc, char** argv) {
           FLAGS_enable_v4,
           FLAGS_enable_segment_routing,
           FLAGS_prefix_fwd_type_mpls,
+          FLAGS_prefix_algo_type_ksp2_ed_ecmp,
           AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
           SparkCmdUrl{
               FLAGS_enable_spark

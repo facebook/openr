@@ -85,6 +85,7 @@ LinkMonitor::LinkMonitor(
     bool enableV4,
     bool enableSegmentRouting,
     bool forwardingTypeMpls,
+    bool forwardingAlgoKsp2Ed,
     AdjacencyDbMarker adjacencyDbMarker,
     SparkCmdUrl sparkCmdUrl,
     SparkReportUrl sparkReportUrl,
@@ -117,6 +118,7 @@ LinkMonitor::LinkMonitor(
       enableV4_(enableV4),
       enableSegmentRouting_(enableSegmentRouting),
       forwardingTypeMpls_(forwardingTypeMpls),
+      forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
       adjacencyDbMarker_(adjacencyDbMarker),
       sparkCmdUrl_(sparkCmdUrl),
       sparkReportUrl_(sparkReportUrl),
@@ -883,6 +885,9 @@ LinkMonitor::advertiseRedistAddrs() {
     prefixEntry.forwardingType = forwardingTypeMpls_
         ? thrift::PrefixForwardingType::SR_MPLS
         : thrift::PrefixForwardingType::IP;
+    prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
+        ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
+        : thrift::PrefixForwardingAlgorithm::SP_ECMP;
     prefixEntry.ephemeral = folly::none;
     prefixes.push_back(prefixEntry);
   }
@@ -903,6 +908,9 @@ LinkMonitor::advertiseRedistAddrs() {
       prefix.forwardingType = forwardingTypeMpls_
           ? thrift::PrefixForwardingType::SR_MPLS
           : thrift::PrefixForwardingType::IP;
+      prefix.forwardingAlgorithm = forwardingAlgoKsp2Ed_
+          ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
+          : thrift::PrefixForwardingAlgorithm::SP_ECMP;
       prefixes.emplace_back(std::move(prefix));
     }
   }

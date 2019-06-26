@@ -164,6 +164,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         true /* enable v4 */,
         true /* enable segment routing */,
         false /* prefix type mpls */,
+        false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{Constants::kAdjDbMarker.str()},
         sparkCmdUrl_,
         sparkReportUrl_,

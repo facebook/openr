@@ -182,6 +182,16 @@ def sprint_prefix_forwarding_type(forwarding_type):
     return lsdb_types.PrefixForwardingType._VALUES_TO_NAMES.get(forwarding_type)
 
 
+def sprint_prefix_forwarding_algorithm(
+    forwarding_algo: lsdb_types.PrefixForwardingAlgorithm
+) -> str:
+    """
+    :param forwarding_algorithm: lsdb_types.PrefixForwardingAlgorithm
+    """
+
+    return lsdb_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(forwarding_algo)
+
+
 def sprint_prefix_is_ephemeral(prefix_entry: lsdb_types.PrefixEntry) -> str:
     """
     :param prefix_entry: lsdb_types.PrefixEntry

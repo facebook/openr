@@ -313,6 +313,19 @@ Prefix type can be IP or SR_MPLS. Based on the type either IP next hop or MPLS
 label next hop is used for routing to the prefix. The type applies to both
 prefix address and redistributed interface address.
 
+#### PREFIX_FWD_ALGO_KSP2_ED_ECMP
+
+Boolean variable to change prefix forwarding algorithm from standard
+(Shortest path ECMP) to 2-Shortest-Path Edge Disjoint ECMP. Algorithm computes
+edge disjoint second shortest ECMP paths for each destination prefix. MPLS
+SR based tunneling is used for forwarding traffic over non-shortest paths.
+
+This can be computationally expensive for networks exchanging large number of
+routes. As per current implementation it will incur one extra SPF run per
+destination prefix.
+
+`PREFIX_FWD_TYPE_MPLS` must be set if `PREFIX_FWD_ALGO_KSP2_ED_ECMP` is set.
+
 #### SPARK_HOLD_TIME_S
 
 Hold time indicating time in seconds from it's last hello after which neighbor

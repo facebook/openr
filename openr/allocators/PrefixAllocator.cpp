@@ -50,6 +50,7 @@ PrefixAllocator::PrefixAllocator(
     bool overrideGlobalAddress,
     const std::string& loopbackIfaceName,
     bool forwardingTypeMpls,
+    bool forwardingAlgoKsp2Ed,
     std::chrono::milliseconds syncInterval,
     PersistentStoreUrl const& configStoreUrl,
     fbzmq::Context& zmqContext,
@@ -62,6 +63,7 @@ PrefixAllocator::PrefixAllocator(
       overrideGlobalAddress_(overrideGlobalAddress),
       loopbackIfaceName_(loopbackIfaceName),
       forwardingTypeMpls_(forwardingTypeMpls),
+      forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
       syncInterval_(syncInterval),
       configStoreClient_(configStoreUrl, zmqContext),
       zmqMonitorClient_(zmqContext, monitorSubmitUrl),
@@ -642,6 +644,9 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixEntry.forwardingType = forwardingTypeMpls_
       ? thrift::PrefixForwardingType::SR_MPLS
       : thrift::PrefixForwardingType::IP;
+  prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
+      ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
+      : thrift::PrefixForwardingAlgorithm::SP_ECMP;
   prefixEntry.ephemeral = folly::none;
   auto ret = prefixManagerClient_->syncPrefixesByType(
       openr::thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry});

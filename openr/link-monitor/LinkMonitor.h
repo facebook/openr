@@ -99,6 +99,8 @@ class LinkMonitor final : public OpenrEventLoop {
       bool enableSegmentRouting,
       // prefix forwarding type MPLS
       bool forwardingTypeMpls,
+      // prefix algorithm type KSP2_ED
+      bool forwardingAlgoKsp2Ed,
       // KvStore's adjacency object's key prefix
       AdjacencyDbMarker adjacencyDbMarker,
       // URLs for spark, kv-store and monitor
@@ -256,6 +258,8 @@ class LinkMonitor final : public OpenrEventLoop {
   const bool enableSegmentRouting_{false};
   // prefix forwarding type MPLS
   const bool forwardingTypeMpls_{false};
+  // prefix algorithm type KSP2_ED_ECMP
+  const bool forwardingAlgoKsp2Ed_{false};
   // used to match the adjacency database keys
   const std::string adjacencyDbMarker_;
   // used to encode interface db information in KvStore

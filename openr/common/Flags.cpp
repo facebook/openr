@@ -366,3 +366,7 @@ DEFINE_bool(
     prefix_fwd_type_mpls,
     false,
     "Advertise prefix forwarding type as SR MPLS to use label forwarding");
+DEFINE_bool(
+    prefix_algo_type_ksp2_ed_ecmp,
+    false,
+    "Advertise prefix algorithm type as 2-Shortest paths Edge Disjoint ECMP");
