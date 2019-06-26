@@ -52,6 +52,7 @@ set(
   THRIFT_GENERATE_THRIFT_INCLUDE_DIRECTORIES
   ${CMAKE_SOURCE_DIR}
   ${CMAKE_INSTALL_PREFIX}/include
+  ${CMAKE_PREFIX_PATH}/${CMAKE_INSTALL_PREFIX}/include
   CACHE PATH "thrift include directory"
 )
 find_program(THRIFT1 thrift1)
