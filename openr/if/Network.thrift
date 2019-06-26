@@ -31,6 +31,8 @@ enum MplsActionCode {
 struct MplsAction {
   1: MplsActionCode action;
   2: optional i32 swapLabel;          // Required if action == SWAP
+  // front() (index=0) in list will be bottom of stack and back()
+  // element is top of the stack
   3: optional list<i32> pushLabels;   // Required if action == PUSH
 }
 

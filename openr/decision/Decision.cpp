@@ -33,8 +33,19 @@
 using namespace std;
 
 using apache::thrift::FRAGILE;
+using apache::thrift::TEnumTraits;
 
 using Metric = openr::LinkStateMetric;
+
+using SpfResult = unordered_map<
+    string /* otherNodeName */,
+    pair<Metric, unordered_set<string /* nextHopNodeName */>>>;
+
+// Path starts from neighbor node and ends at destination. It's size must be
+// atleast one. Second attribute describe the link that is followed from
+// associated node (first attribute)
+// Path is described in reverse. Last index is the next immediate node.
+using Path = std::vector<std::pair<std::string, std::shared_ptr<openr::Link>>>;
 
 namespace {
 
@@ -176,6 +187,9 @@ class SpfSolver::SpfSolverImpl {
     return tData_;
   }
 
+  static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
+      const SpfResult& spfResult, const std::set<std::string>& dstNodes);
+
  private:
   // no copy
   SpfSolverImpl(SpfSolverImpl const&) = delete;
@@ -183,10 +197,21 @@ class SpfSolver::SpfSolverImpl {
 
   // run SPF and produce map from node name to next-hops that have shortest
   // paths to it
-  unordered_map<
-      string /* otherNodeName */,
-      pair<Metric, unordered_set<string /* nextHopNodeName */>>>
-  runSpf(const std::string& nodeName, bool useLinkMetric);
+  SpfResult runSpf(
+      const std::string& nodeName,
+      bool useLinkMetric,
+      const LinkState::LinkSet& linksToIgnore = {});
+
+  // Trace all edge disjoint paths from source to destination node.
+  // srcNodeDistances => map indicating distances of each node from source
+  // Returns list of paths.
+  // Each path is list<node, Link> starting from immediate neighbor of
+  // source-node to destination node. Path length will be atleast one
+  std::vector<Path> traceEdgeDisjointPaths(
+      const std::string& srcNodeName,
+      const std::string& dstNodeName,
+      const SpfResult& srcNodeDistances,
+      const LinkState::LinkSet& linksToIgnore = {});
 
   std::vector<std::shared_ptr<Link>> getOrderedLinkSet(
       const thrift::AdjacencyDatabase& adjDb);
@@ -197,6 +222,12 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
   folly::Optional<thrift::UnicastRoute> createBGPRoute(
+      std::string const& myNodeName,
+      thrift::IpPrefix const& prefix,
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+      bool const isV4);
+
+  folly::Optional<thrift::UnicastRoute> createOpenRKsp2EdRoute(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
@@ -617,7 +648,9 @@ unordered_map<
     string /* otherNodeName */,
     pair<Metric, unordered_set<string /* nextHopNodeName */>>>
 SpfSolver::SpfSolverImpl::runSpf(
-    const std::string& thisNodeName, bool useLinkMetric) {
+    const std::string& thisNodeName,
+    bool useLinkMetric,
+    const LinkState::LinkSet& linksToIgnore) {
   unordered_map<string, pair<Metric, unordered_set<string>>> result;
 
   tData_.addStatValue("decision.spf_runs", 1, fbzmq::COUNT);
@@ -654,7 +687,8 @@ SpfSolver::SpfSolverImpl::runSpf(
     // this is the "relax" step in the Dijkstra Algorithm pseudocode in CLRS
     for (const auto& link : linkState_.linksFromNode(recordedNodeName)) {
       auto otherNodeName = link->getOtherNodeName(recordedNodeName);
-      if (!link->isUp() || result.count(otherNodeName)) {
+      if (!link->isUp() or result.count(otherNodeName) or
+          linksToIgnore.count(link)) {
         continue;
       }
       auto metric =
@@ -689,6 +723,86 @@ SpfSolver::SpfSolverImpl::runSpf(
   LOG(INFO) << "SPF elapsed time: " << deltaTime.count() << "ms.";
   tData_.addStatValue("decision.spf_ms", deltaTime.count(), fbzmq::AVG);
   return result;
+}
+
+std::vector<Path>
+SpfSolver::SpfSolverImpl::traceEdgeDisjointPaths(
+    const std::string& srcNodeName,
+    const std::string& dstNodeName,
+    const SpfResult& spfResult,
+    const LinkState::LinkSet& linksToIgnore) {
+  std::vector<Path> paths;
+
+  // Return immediately if destination node is not reachable
+  if (not spfResult.count(dstNodeName)) {
+    return paths;
+  }
+
+  //
+  // Here we're tracing paths in reverse from destination node. We first pick
+  // neighbors of destination node which are on the shortest paths
+  //
+  std::unordered_set<std::pair<std::string, std::string>> visitedLinks;
+  // Starting with dummy entry for expanding paths
+  std::vector<Path> partialPaths = {{{dstNodeName, nullptr}}};
+
+  //
+  // Now recursively trace all the partial paths to the source
+  //
+  while (partialPaths.size()) {
+    auto spurPath = std::move(partialPaths.back());
+    partialPaths.pop_back();
+
+    const auto spurNode = folly::copy(spurPath.back().first);
+
+    // Clear dummy entry in the path
+    if (spurNode == dstNodeName) {
+      spurPath.clear();
+    }
+
+    // If we have encountered source-node then include this path in
+    // the return value
+    if (spurNode == srcNodeName) {
+      paths.emplace_back(std::move(spurPath));
+      continue;
+    }
+
+    // Iterate over all neighbors to expand spurPath further
+    for (auto& link : linkState_.linksFromNode(spurNode)) {
+      // Skip ignored links
+      if (!link->isUp() or linksToIgnore.count(link)) {
+        continue;
+      }
+
+      auto& nbrName = link->getOtherNodeName(spurNode);
+      auto& nbrIface = link->getIfaceFromNode(nbrName);
+      auto nbrMetric = spfResult.at(nbrName).first;
+      auto spurMetric = spfResult.at(spurNode).first;
+
+      // Ignore already seen neighbor (except source-node)
+      if (visitedLinks.count({nbrName, nbrIface})) {
+        continue;
+      }
+
+      // Ignore links not on the shortest path
+      // A link is on the shortest path iff following is true
+      if (nbrMetric + link->getMetricFromNode(nbrName) != spurMetric) {
+        continue;
+      }
+
+      CHECK_EQ(nbrMetric + link->getMetricFromNode(nbrName), spurMetric);
+      spurPath.emplace_back(std::make_pair(nbrName, link));
+      partialPaths.emplace_back(std::move(spurPath));
+      visitedLinks.emplace(nbrName, nbrIface);
+
+      // Allow fan-out from dstNodeName else continue tracing only one path
+      if (spurNode != dstNodeName) {
+        break; // We have extended current path to one of the neighbor
+      }
+    }
+  }
+
+  return paths;
 }
 
 folly::Optional<thrift::RouteDatabase>
@@ -745,6 +859,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     const auto& nodePrefixes = kv.second;
 
     bool hasBGP = false, hasNonBGP = false, missingMv = false;
+    bool hasSpEcmp = false, hasKsp2EdEcmp = false;
     for (auto const& npKv : nodePrefixes) {
       bool isBGP = npKv.second.type == thrift::PrefixType::BGP;
       hasBGP |= isBGP;
@@ -755,6 +870,10 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
                    << " advertised by " << npKv.first
                    << " is of type BGP but does not contain a metric vector.";
       }
+      hasSpEcmp |= npKv.second.forwardingAlgorithm ==
+          thrift::PrefixForwardingAlgorithm::SP_ECMP;
+      hasKsp2EdEcmp |= npKv.second.forwardingAlgorithm ==
+          thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     }
 
     // skip adding route for BGP prefixes that have issues
@@ -767,6 +886,11 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       if (missingMv) {
         LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
                    << " at least one advertiser is missing its metric vector.";
+        continue;
+      }
+      if (hasKsp2EdEcmp) {
+        LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
+                   << " which is advertised with KSP2_ED_ECMP algorithm.";
         continue;
       }
     }
@@ -784,11 +908,23 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       continue;
     }
 
-    auto route = hasBGP
-        ? createBGPRoute(myNodeName, prefix, nodePrefixes, isV4Prefix)
-        : createOpenRRoute(myNodeName, prefix, nodePrefixes, isV4Prefix);
-    if (route.hasValue()) {
-      routeDb.unicastRoutes.emplace_back(std::move(route.value()));
+    const auto forwardingAlgorithm = hasKsp2EdEcmp and not hasSpEcmp
+        ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
+        : thrift::PrefixForwardingAlgorithm::SP_ECMP;
+
+    if (forwardingAlgorithm == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
+      auto route = hasBGP
+          ? createBGPRoute(myNodeName, prefix, nodePrefixes, isV4Prefix)
+          : createOpenRRoute(myNodeName, prefix, nodePrefixes, isV4Prefix);
+      if (route.hasValue()) {
+        routeDb.unicastRoutes.emplace_back(std::move(route.value()));
+      }
+    } else {
+      auto route =
+          createOpenRKsp2EdRoute(myNodeName, prefix, nodePrefixes, isV4Prefix);
+      if (route.hasValue()) {
+        routeDb.unicastRoutes.emplace_back(std::move(route.value()));
+      }
     }
   } // for prefixes_
 
@@ -983,6 +1119,108 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               bestNexthop.at(0)};
 }
 
+folly::Optional<thrift::UnicastRoute>
+SpfSolver::SpfSolverImpl::createOpenRKsp2EdRoute(
+    std::string const& myNodeName,
+    thrift::IpPrefix const& prefix,
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+    bool const isV4) {
+  // Sanity checks - forwarding-type must be SR_MPLS
+  for (auto const& np : nodePrefixes) {
+    if (np.second.forwardingType != thrift::PrefixForwardingType::SR_MPLS) {
+      LOG(ERROR) << "Prefix " << toString(prefix) << " announced by "
+                 << np.first << " has incompatible forwarding type "
+                 << TEnumTraits<thrift::PrefixForwardingType>::findName(
+                        np.second.forwardingType)
+                 << " for algorithm KSP2_ED_ECMP;";
+      return folly::none;
+    }
+  }
+
+  // Sequence of unique paths (nodes starting from neighbor to destination)
+  std::vector<std::pair<Path, Metric>> dstPaths;
+
+  // Prepare list of possible destination nodes
+  std::set<std::string> dstNodeNames;
+  for (auto& np : nodePrefixes) {
+    dstNodeNames.emplace(np.first);
+  }
+
+  // Step-1 Get all shortest paths and min-cost nodes to whom we will be
+  // forwarding
+  auto const& spf1 = spfResults_.at(myNodeName);
+  auto const& minMetricNodes1 = getMinCostNodes(spf1, dstNodeNames);
+  auto const& minCost1 = minMetricNodes1.first;
+  auto const& minCostNodes1 = minMetricNodes1.second;
+
+  // Step-2 Prepare set of links to ignore from subsequent SPF for finding
+  //        second shortest paths. Collect all shortest paths
+  LinkState::LinkSet linksToIgnore;
+  for (auto const& minCostDst : minCostNodes1) {
+    auto minPaths = traceEdgeDisjointPaths(myNodeName, minCostDst, spf1);
+    for (auto& minPath : minPaths) {
+      for (auto& nodeLink : minPath) {
+        linksToIgnore.insert(nodeLink.second);
+      }
+      dstPaths.emplace_back(std::make_pair(std::move(minPath), minCost1));
+    }
+  }
+
+  // Step-3 Collect all second shortest paths
+  if (linksToIgnore.size()) {
+    auto const spf2 = runSpf(myNodeName, true, linksToIgnore);
+    auto const& minMetricNodes2 = getMinCostNodes(spf2, dstNodeNames);
+    auto const& minCost2 = minMetricNodes2.first;
+    auto const& minCostNodes2 = minMetricNodes2.second;
+
+    for (auto const& minCostDst : minCostNodes2) {
+      auto minPaths =
+          traceEdgeDisjointPaths(myNodeName, minCostDst, spf2, linksToIgnore);
+      for (auto& minPath : minPaths) {
+        dstPaths.emplace_back(std::make_pair(std::move(minPath), minCost2));
+      }
+    }
+  }
+
+  // Step-4 Convert all paths
+  if (not dstPaths.size()) {
+    return folly::none;
+  }
+
+  thrift::UnicastRoute route;
+  route.dest = prefix;
+  for (auto& pathAndCost : dstPaths) {
+    // NOTE: Here we're forwarding according to the node-labels instead of
+    // explicit link labels. This gives unique nexthops when there are no
+    // parallel links in network between two nodes.
+    std::vector<int32_t> labels;
+    for (auto& nodeLink : pathAndCost.first) {
+      auto& otherNodeName = nodeLink.second->getOtherNodeName(nodeLink.first);
+      labels.emplace_back(adjacencyDatabases_.at(otherNodeName).nodeLabel);
+    }
+    CHECK(labels.size());
+    labels.pop_back(); // Remove first node's label to respect PHP
+
+    // Create nexthop
+    CHECK(pathAndCost.first.size());
+    auto firstLink = pathAndCost.first.back().second;
+    auto& pathCost = pathAndCost.second;
+    folly::Optional<thrift::MplsAction> mplsAction;
+    if (labels.size()) {
+      mplsAction = createMplsAction(
+          thrift::MplsActionCode::PUSH, folly::none, std::move(labels));
+    }
+    route.nextHops.emplace_back(createNextHop(
+        isV4 ? firstLink->getNhV4FromNode(myNodeName)
+             : firstLink->getNhV6FromNode(myNodeName),
+        firstLink->getIfaceFromNode(myNodeName),
+        pathCost,
+        std::move(mplsAction)));
+  }
+
+  return std::move(route);
+}
+
 std::vector<thrift::NextHopThrift>
 SpfSolver::SpfSolverImpl::getLoopbackVias(
     std::unordered_set<std::string> const& nodes, bool const isV4) {
@@ -1000,23 +1238,16 @@ SpfSolver::SpfSolverImpl::getLoopbackVias(
   return result;
 }
 
-std::pair<
-    Metric /* min metric to destination */,
-    std::unordered_map<
-        std::pair<std::string /* nextHopNodeName */, std::string /* dstNode */>,
-        Metric /* the distance from the nexthop to the dest */>>
-SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
-    const std::string& myNodeName,
-    const std::set<std::string>& dstNodeNames,
-    bool perDestination) const {
-  auto& shortestPathsFromHere = spfResults_.at(myNodeName);
+std::pair<Metric, std::unordered_set<std::string>>
+SpfSolver::SpfSolverImpl::getMinCostNodes(
+    const SpfResult& spfResult, const std::set<std::string>& dstNodeNames) {
   Metric shortestMetric = std::numeric_limits<Metric>::max();
 
   // find the set of the closest nodes in our destination
   std::unordered_set<std::string> minCostNodes;
   for (const auto& dstNode : dstNodeNames) {
-    auto it = shortestPathsFromHere.find(dstNode);
-    if (it == shortestPathsFromHere.end()) {
+    auto it = spfResult.find(dstNode);
+    if (it == spfResult.end()) {
       continue;
     }
     const auto nodeDistance = it->second.first;
@@ -1028,6 +1259,24 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
       minCostNodes.emplace(dstNode);
     }
   }
+
+  return std::make_pair(shortestMetric, std::move(minCostNodes));
+}
+
+std::pair<
+    Metric /* min metric to destination */,
+    std::unordered_map<
+        std::pair<std::string /* nextHopNodeName */, std::string /* dstNode */>,
+        Metric /* the distance from the nexthop to the dest */>>
+SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
+    const std::string& myNodeName,
+    const std::set<std::string>& dstNodeNames,
+    bool perDestination) const {
+  auto& shortestPathsFromHere = spfResults_.at(myNodeName);
+  auto const& minMetricNodes =
+      getMinCostNodes(shortestPathsFromHere, dstNodeNames);
+  auto const& shortestMetric = minMetricNodes.first;
+  auto const& minCostNodes = minMetricNodes.second;
 
   // build up next hop nodes both nodes that are along a shortest path to the
   // prefix and, if enabled, those with an LFA path to the prefix
@@ -1116,8 +1365,6 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
       // destination)
       if (not dstNode.empty() and dstNodeNames.count(neighborNode) and
           neighborNode != dstNode) {
-        LOG(INFO) << "***** to " << dstNode << " via "
-                  << link->directionalToString(myNodeName);
         continue;
       }
 
