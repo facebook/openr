@@ -19,6 +19,10 @@ NetlinkRouteMessage::NetlinkRouteMessage() {
 void
 NetlinkRouteMessage::init(
     int type, uint32_t rtFlags, const openr::fbnl::Route& route) {
+  if (type != RTM_NEWROUTE && type != RTM_DELROUTE && type != RTM_GETROUTE) {
+    LOG(ERROR) << "Incorrect Netlink message type";
+    return;
+  }
   // initialize netlink header
   msghdr_->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
   msghdr_->nlmsg_type = type;
@@ -34,7 +38,7 @@ NetlinkRouteMessage::init(
 
   // intialize the route meesage header
   auto nlmsgAlen = NLMSG_ALIGN(sizeof(struct nlmsghdr));
-  rtmsg_ = (struct rtmsg*)((char*)msghdr_ + nlmsgAlen);
+  rtmsg_ = reinterpret_cast<struct rtmsg*>((char*)msghdr_ + nlmsgAlen);
 
   rtmsg_->rtm_table = RT_TABLE_MAIN;
   rtmsg_->rtm_protocol = route.getProtocolId();
@@ -499,5 +503,138 @@ NetlinkRouteMessage::deleteLabelRoute(const openr::fbnl::Route& route) {
 
   return status;
 }
+
+NetlinkLinkMessage::NetlinkLinkMessage() {
+  // get pointer to NLMSG header
+  msghdr_ = getMessagePtr();
+}
+
+void
+NetlinkLinkMessage::init(int type, uint32_t linkFlags) {
+  if (type != RTM_NEWLINK && type != RTM_DELLINK && type != RTM_GETLINK) {
+    LOG(ERROR) << "Incorrect Netlink message type";
+    return;
+  }
+  // initialize netlink header
+  msghdr_->nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+  msghdr_->nlmsg_type = type;
+  msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+
+  if (type == RTM_GETLINK) {
+    // Get all links
+    msghdr_->nlmsg_flags |= NLM_F_DUMP;
+  }
+
+  // intialize the route link message header
+  auto nlmsgAlen = NLMSG_ALIGN(sizeof(struct nlmsghdr));
+  ifinfomsg_ = reinterpret_cast<struct ifinfomsg*>((char*)msghdr_ + nlmsgAlen);
+
+  ifinfomsg_->ifi_flags = linkFlags;
+  ifinfomsg_->ifi_change = 0xffffffff;
+}
+
+fbnl::Link
+NetlinkLinkMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
+  fbnl::LinkBuilder builder;
+  const struct ifinfomsg* const linkEntry =
+      reinterpret_cast<struct ifinfomsg*>(NLMSG_DATA(nlmsg));
+
+  builder =
+      builder.setIfIndex(linkEntry->ifi_index).setFlags(linkEntry->ifi_flags);
+
+  const struct rtattr* linkAttr;
+  auto linkAttrLen = IFLA_PAYLOAD(nlmsg);
+  // process all link attributes
+  for (linkAttr = IFLA_RTA(linkEntry); RTA_OK(linkAttr, linkAttrLen);
+       linkAttr = RTA_NEXT(linkAttr, linkAttrLen)) {
+    switch (linkAttr->rta_type) {
+    case IFLA_IFNAME: {
+      const char* name = reinterpret_cast<const char*>(RTA_DATA(linkAttr));
+      builder = builder.setLinkName(std::string(name));
+    }
+    }
+  }
+  auto link = builder.build();
+  VLOG(1) << "Link#" << link.getIfIndex() << " Name: " << link.getLinkName()
+          << " State:" << (link.isUp() ? " UP" : " DOWN");
+  return link;
+}
+
+NetlinkAddrMessage::NetlinkAddrMessage() {
+  // get pointer to NLMSG header
+  msghdr_ = getMessagePtr();
+}
+
+void
+NetlinkAddrMessage::init(int type, uint32_t addrFlags) {
+  if (type != RTM_NEWADDR && type != RTM_DELADDR && type != RTM_GETADDR) {
+    LOG(ERROR) << "Incorrect Netlink message type";
+    return;
+  }
+  // initialize netlink header
+  msghdr_->nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg));
+  msghdr_->nlmsg_type = type;
+  msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+
+  if (type == RTM_GETADDR) {
+    // Get all addresses
+    msghdr_->nlmsg_flags |= NLM_F_DUMP;
+  }
+
+  // intialize the route address message header
+  auto nlmsgAlen = NLMSG_ALIGN(sizeof(struct nlmsghdr));
+  ifaddrmsg_ = reinterpret_cast<struct ifaddrmsg*>((char*)msghdr_ + nlmsgAlen);
+
+  ifaddrmsg_->ifa_flags = addrFlags;
+}
+
+fbnl::IfAddress
+NetlinkAddrMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
+  fbnl::IfAddressBuilder builder;
+  const struct ifaddrmsg* const addrEntry =
+      reinterpret_cast<struct ifaddrmsg*>(NLMSG_DATA(nlmsg));
+
+  const bool isValid = nlmsg->nlmsg_type == RTM_NEWADDR ? true : false;
+  builder = builder.setIfIndex(addrEntry->ifa_index)
+                .setScope(addrEntry->ifa_scope)
+                .setValid(isValid);
+
+  const struct rtattr* addrAttr;
+  auto addrAttrLen = IFA_PAYLOAD(nlmsg);
+  // process all address attributes
+  for (addrAttr = IFA_RTA(addrEntry); RTA_OK(addrAttr, addrAttrLen);
+       addrAttr = RTA_NEXT(addrAttr, addrAttrLen)) {
+    switch (addrAttr->rta_type) {
+    case IFA_ADDRESS: {
+      if (addrEntry->ifa_family == AF_INET) {
+        struct in_addr* addr4 = reinterpret_cast<in_addr*> RTA_DATA(addrAttr);
+        auto ipAddress = folly::IPAddressV4::fromLong(addr4->s_addr);
+        folly::CIDRNetwork prefix =
+            std::make_pair(ipAddress, (uint8_t)addrEntry->ifa_prefixlen);
+        builder = builder.setPrefix(prefix);
+      } else if (addrEntry->ifa_family == AF_INET6) {
+        struct in6_addr* addr6 = reinterpret_cast<in6_addr*> RTA_DATA(addrAttr);
+        auto ipAddress = folly::IPAddressV6::tryFromBinary(
+            folly::ByteRange((const unsigned char*)addr6->s6_addr, 16));
+        if (ipAddress.hasValue()) {
+          folly::CIDRNetwork prefix = std::make_pair(
+              ipAddress.value(), (uint8_t)addrEntry->ifa_prefixlen);
+          builder = builder.setPrefix(prefix);
+        } else {
+          LOG(ERROR) << "Error parsing Netlink ADDR message";
+        }
+      }
+    }
+    }
+  }
+  auto addr = builder.build();
+  if (addr.getPrefix().hasValue()) {
+    VLOG(1) << "Address: "
+            << folly::IPAddress::networkToString(addr.getPrefix().value())
+            << " If Index:" << addrEntry->ifa_index;
+  }
+  return addr;
+}
+
 } // namespace Netlink
 } // namespace openr

@@ -25,6 +25,12 @@
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr {
+namespace fbnl {
+class NetlinkSocket;
+}
+} // namespace openr
+
+namespace openr {
 namespace Netlink {
 
 constexpr uint16_t kMaxNlPayloadSize{4096};
@@ -119,6 +125,13 @@ class NetlinkProtocolSocket {
 
   ~NetlinkProtocolSocket();
 
+  // Set netlinkSocket Link event callback
+  void setLinkEventCB(std::function<void(fbnl::Link, int, bool)> linkEventCB);
+
+  // Set netlinkSocket Addr event callback
+  void setAddrEventCB(
+      std::function<void(fbnl::IfAddress, int, bool)> addrEventCB);
+
   // process message
   void processMessage(
       const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead);
@@ -147,6 +160,7 @@ class NetlinkProtocolSocket {
   // get netlink request statuses
   ResultCode getReturnStatus(
       std::vector<folly::Future<int>>& futures,
+      std::unordered_set<int> ignoredErrors,
       std::chrono::milliseconds timeout = kNlMessageAckTimer);
 
   // error count
@@ -155,11 +169,19 @@ class NetlinkProtocolSocket {
   // ack count
   uint32_t getAckCount() const;
 
+  // get all link interfaces and interface addresses from Netlink
+  fbnl::NlLinks getAllLinks();
+
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
   NetlinkProtocolSocket& operator=(NetlinkProtocolSocket const&) = delete;
 
   fbzmq::ZmqEventLoop* evl_{nullptr};
+
+  // Event callbacks
+  std::function<void(fbnl::Link, int, bool)> linkEventCB_;
+
+  std::function<void(fbnl::IfAddress, int, bool)> addrEventCB_;
 
   // netlink message queue
   std::queue<std::unique_ptr<NetlinkMessage>> msgQueue_;
@@ -185,17 +207,23 @@ class NetlinkProtocolSocket {
   // NLMSG acks
   uint32_t acks_{0};
 
-  // last sent message data
-  struct lastMessage {
-    // last sequence number
-    uint32_t seq;
-  } lastMessage_;
+  // last sent sequence number
+  uint32_t lastSeqNo_;
 
   // Sequence number -> NetlinkMesage request Map
   std::unordered_map<uint32_t, std::shared_ptr<NetlinkMessage>> nlSeqNoMap_;
 
   // Set ack status value to promise in the netlink request message
   void setReturnStatusValue(uint32_t seq, int ackStatus);
+
+  // get all interface addresses from Netlink
+  void getAllIfAddresses();
+
+  /**
+   * We keep an internal cache of Link entries
+   * This are used in the getAllLinks method
+   */
+  fbnl::NlLinks links_{};
 };
 } // namespace Netlink
 } // namespace openr

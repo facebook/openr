@@ -10,6 +10,7 @@
 #include <linux/lwtunnel.h>
 #include <linux/mpls.h>
 #include <linux/rtnetlink.h>
+#include <net/if_arp.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -38,7 +39,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
  public:
   NetlinkRouteMessage();
 
-  // initiallize with default params
+  // initiallize route message with default params
   void init(int type, uint32_t flags, const openr::fbnl::Route& route);
 
   friend std::ostream&
@@ -79,7 +80,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   // process netlink route message
   void parseMessage() const;
 
-  // pointer to route meesage header
+  // pointer to route message header
   struct rtmsg* rtmsg_{nullptr};
 
   // add set of nexthops
@@ -128,6 +129,40 @@ class NetlinkRouteMessage final : public NetlinkMessage {
     uint16_t addrFamily;
     char ip[4];
   } __attribute__((__packed__));
+};
+
+class NetlinkLinkMessage final : public NetlinkMessage {
+ public:
+  NetlinkLinkMessage();
+
+  // initiallize link message with default params
+  void init(int type, uint32_t flags);
+
+  fbnl::Link parseMessage(const struct nlmsghdr* nlh) const;
+
+ private:
+  // pointer to link message header
+  struct ifinfomsg* ifinfomsg_{nullptr};
+
+  // pointer to the netlink message header
+  struct nlmsghdr* msghdr_{nullptr};
+};
+
+class NetlinkAddrMessage final : public NetlinkMessage {
+ public:
+  NetlinkAddrMessage();
+
+  // initiallize address message with default params
+  void init(int type, uint32_t flags);
+
+  fbnl::IfAddress parseMessage(const struct nlmsghdr* nlh) const;
+
+ private:
+  // pointer to interface message header
+  struct ifaddrmsg* ifaddrmsg_{nullptr};
+
+  // pointer to the netlink message header
+  struct nlmsghdr* msghdr_{nullptr};
 };
 
 } // namespace Netlink

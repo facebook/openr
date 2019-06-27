@@ -109,15 +109,16 @@ class NetlinkSocketFixture : public testing::TestWithParam<bool> {
     bringUpIntf(kVethNameX);
     bringUpIntf(kVethNameY);
 
-    std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
-    nlProtocolSocket =
-        std::make_unique<openr::Netlink::NetlinkProtocolSocket>(&evl2);
-    nlProtocolSocketThread = std::thread([&]() {
-      nlProtocolSocket->init();
-      evl2.run();
-      evl2.waitUntilStopped();
-    });
-    evl2.waitUntilRunning();
+    if (GetParam()) {
+      nlProtocolSocket =
+          std::make_unique<openr::Netlink::NetlinkProtocolSocket>(&evl2);
+      nlProtocolSocketThread = std::thread([&]() {
+        nlProtocolSocket->init();
+        evl2.run();
+        evl2.waitUntilStopped();
+      });
+      evl2.waitUntilRunning();
+    }
 
     // create netlink route socket
     netlinkSocket = std::make_unique<NetlinkSocket>(
@@ -222,6 +223,7 @@ class NetlinkSocketFixture : public testing::TestWithParam<bool> {
   }
 
   std::unique_ptr<NetlinkSocket> netlinkSocket;
+  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
   fbzmq::ZmqEventLoop evl;
   fbzmq::ZmqEventLoop evl2;
   std::thread eventThread;

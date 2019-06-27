@@ -116,7 +116,7 @@ CompareNextHops(std::vector<folly::IPAddress>& nexthops, const Route& route) {
 
 // This fixture creates virtual links (veths)
 // which the UT can use
-class NetlinkSocketSubscribeFixture : public testing::Test {
+class NetlinkSocketSubscribeFixture : public testing::TestWithParam<bool> {
  public:
   NetlinkSocketSubscribeFixture() = default;
   ~NetlinkSocketSubscribeFixture() override = default;
@@ -147,6 +147,18 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
     if (err != 0) {
       LOG(ERROR) << "Failed to add veth link: " << nl_geterror(err);
     }
+
+    if (GetParam()) {
+      nlProtocolSocket =
+          std::make_unique<openr::Netlink::NetlinkProtocolSocket>(
+              &nlProtocolSocketEventLoop);
+      nlProtocolSocketThread = std::thread([&]() {
+        nlProtocolSocket->init();
+        nlProtocolSocketEventLoop.run();
+        nlProtocolSocketEventLoop.waitUntilStopped();
+      });
+      nlProtocolSocketEventLoop.waitUntilRunning();
+    }
   }
 
   void
@@ -159,7 +171,17 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
     rtnl_link_delete(socket_, link_);
     nl_socket_free(socket_);
     rtnl_link_veth_release(link_);
+
+    if (nlProtocolSocketEventLoop.isRunning()) {
+      nlProtocolSocketEventLoop.stop();
+      nlProtocolSocketThread.join();
+    }
   }
+
+ protected:
+  ZmqEventLoop nlProtocolSocketEventLoop;
+  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
+  std::thread nlProtocolSocketThread;
 
  private:
   struct rtnl_link* link_{nullptr};
@@ -305,15 +327,21 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   MyNetlinkHandler& operator=(const MyNetlinkHandler&) = delete;
 };
 
+INSTANTIATE_TEST_CASE_P(
+    NetlinkSocketSubscribeInstance,
+    NetlinkSocketSubscribeFixture,
+    ::testing::Bool());
+
 // By default our test veth links should be down
 // and there should be no neighbor entries
 // We also do not start our zmq event loop, so there should be
 // no events delivered
-TEST_F(NetlinkSocketSubscribeFixture, DefaultStateTest) {
+TEST_P(NetlinkSocketSubscribeFixture, DefaultStateTest) {
   ZmqEventLoop zmqLoop;
 
   auto myHandler = std::make_shared<MyNetlinkHandler>();
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   netlinkSocket.subscribeAllEvents();
   myHandler->setNetlinkSocket(&netlinkSocket);
 
@@ -352,7 +380,7 @@ TEST_F(NetlinkSocketSubscribeFixture, DefaultStateTest) {
 
 // Flap a link and test for events
 // Also get and verify links states in main thread
-TEST_F(NetlinkSocketSubscribeFixture, LinkFlapTest) {
+TEST_P(NetlinkSocketSubscribeFixture, LinkFlapTest) {
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events
@@ -380,7 +408,8 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkFlapTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.subscribeAllEvents();
 
@@ -445,8 +474,9 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkFlapTest) {
 // Now delete the entries one by one
 // Verify neighbor entry is reachable
 // Also get and verify links and neighbor states in main thread
-TEST_F(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
+TEST_P(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
   ZmqEventLoop zmqLoop;
+
   auto neighborKey1 = std::make_pair(kVethNameX, kNextHopIp1);
   auto neighborKey2 = std::make_pair(kVethNameY, kNextHopIp2);
 
@@ -475,7 +505,8 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   netlinkSocket.subscribeAllEvents();
   myHandler->setNetlinkSocket(&netlinkSocket);
 
@@ -593,7 +624,7 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
 }
 
 // Flap link and check that link-local IPs appear and disappear
-TEST_F(NetlinkSocketSubscribeFixture, AddrLinkFlapTest) {
+TEST_P(NetlinkSocketSubscribeFixture, AddrLinkFlapTest) {
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events
@@ -626,7 +657,8 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrLinkFlapTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.subscribeAllEvents();
 
@@ -705,7 +737,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrLinkFlapTest) {
 }
 
 // Add and remove IPs
-TEST_F(NetlinkSocketSubscribeFixture, AddrAddRemoveTest) {
+TEST_P(NetlinkSocketSubscribeFixture, AddrAddRemoveTest) {
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events
@@ -738,7 +770,8 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrAddRemoveTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.subscribeAllEvents();
 
@@ -851,7 +884,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrAddRemoveTest) {
 
 // Link event flag test
 // Subscribe/Unsubscribe link event
-TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
+TEST_P(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events
@@ -886,7 +919,8 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
           "vethTest" /* Filter on test links only */);
 
   // Only enable link event
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.unsubscribeAllEvents();
   netlinkSocket.subscribeEvent(fbnl::LINK_EVENT);
@@ -926,6 +960,7 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
 
   // Now bring the links down and disable link event handler
   myHandler->linkAddEventCount = 0;
+  myHandler->linkDelEventCount = 0;
   netlinkSocket.unsubscribeEvent(fbnl::LINK_EVENT);
 
   timeout = setTimeout();
@@ -957,8 +992,9 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
 }
 
 // Subscribe/Unsubscribe neighbor event
-TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
+TEST_P(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
   ZmqEventLoop zmqLoop;
+
   auto neighborKey1 = std::make_pair(kVethNameX, kNextHopIp1);
   auto neighborKey2 = std::make_pair(kVethNameY, kNextHopIp2);
 
@@ -995,7 +1031,8 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only enable neighbor event
   netlinkSocket.unsubscribeAllEvents();
@@ -1055,7 +1092,7 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
 }
 
 // Subscribe/Unsubscribe addr event
-TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
+TEST_P(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events
@@ -1083,7 +1120,8 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only subscribe addr event
   netlinkSocket.unsubscribeAllEvents();
@@ -1171,7 +1209,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
 }
 
 // Add/Del route, test route events
-TEST_F(NetlinkSocketSubscribeFixture, RouteTest) {
+TEST_P(NetlinkSocketSubscribeFixture, RouteTest) {
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events
@@ -1199,7 +1237,8 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.subscribeAllEvents();
 
@@ -1300,7 +1339,7 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteTest) {
 }
 
 // Add/Del route, test route events
-TEST_F(NetlinkSocketSubscribeFixture, RouteFlagTest) {
+TEST_P(NetlinkSocketSubscribeFixture, RouteFlagTest) {
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events
@@ -1328,7 +1367,8 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteFlagTest) {
           },
           "vethTest" /* Filter on test links only */);
 
-  NetlinkSocket netlinkSocket(&zmqLoop, myHandler.get());
+  NetlinkSocket netlinkSocket(
+      &zmqLoop, myHandler.get(), GetParam(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only subscribe route event
   netlinkSocket.unsubscribeAllEvents();

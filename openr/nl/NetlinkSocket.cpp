@@ -17,8 +17,8 @@ const folly::StringPiece kAddrObjectStr("route/addr");
 const folly::StringPiece kNeighborObjectStr("route/neigh");
 
 // Socket buffer size for netlink sockets we create
-// We use 2MB, default is 32KB
-const size_t kNlSockRecvBuf{2 * 1024 * 1024};
+// We use 10MB, default is 32KB
+const size_t kNlSockRecvBuf{10 * 1024 * 1024};
 
 } // anonymous namespace
 
@@ -60,9 +60,36 @@ NetlinkSocket::NetlinkSocket(
   err = nl_socket_set_buffer_size(subSock_, kNlSockRecvBuf, 0);
   CHECK_EQ(err, 0) << "Failed to set socket buffer on subSock_";
 
-  // check netlink protocol object
   if (useNetlinkMessage_) {
-    CHECK(nlSock_ != nullptr) << "Missing event loop.";
+    CHECK(nlSock_ != nullptr) << "Missing NetlinkProtocolSocket";
+    // Pass link and address callbacks to NetlinkProtocolSocket
+    nlSock_->setLinkEventCB([this](
+        openr::fbnl::Link link, int action, bool runHandler) noexcept {
+      evl_->runImmediatelyOrInEventLoop([this,
+                                         link = std::move(link),
+                                         action = action,
+                                         runHandler = runHandler]() mutable {
+        std::string linkName = link.getLinkName();
+        if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
+          EventVariant event = std::move(link);
+          handler_->handleEvent(linkName, action, event);
+        }
+      });
+    });
+
+    nlSock_->setAddrEventCB([this](
+        openr::fbnl::IfAddress ifAddr, int action, bool runHandler) noexcept {
+      evl_->runImmediatelyOrInEventLoop([this,
+                                         ifAddr = std::move(ifAddr),
+                                         action = action,
+                                         runHandler = runHandler]() mutable {
+        std::string ifName = getIfName(ifAddr.getIfIndex()).get();
+        if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
+          EventVariant event = std::move(ifAddr);
+          handler_->handleEvent(ifName, action, event);
+        }
+      });
+    });
   }
 
   // Request a route cache to be created and registered with cache manager
@@ -71,7 +98,7 @@ NetlinkSocket::NetlinkSocket(
   err = nl_cache_mngr_add(
       cacheManager_, kRouteObjectStr.data(), routeCacheCB, this, &routeCache_);
   if (err != 0 || !routeCache_) {
-    CHECK(false) << "Failed to add neighbor cache to manager. Error: "
+    CHECK(false) << "Failed to add route cache to manager. Error: "
                  << nl_geterror(err);
   }
 
@@ -124,6 +151,7 @@ NetlinkSocket::NetlinkSocket(
 }
 
 NetlinkSocket::~NetlinkSocket() {
+  nlSock_.reset();
   VLOG(2) << "NetlinkSocket destroy cache";
 
   evl_->removeSocketFd(nl_cache_mngr_get_fd(cacheManager_));
@@ -207,7 +235,8 @@ NetlinkSocket::handleLinkEvent(
   if (!linkAttr.isUp) {
     removeNeighborCacheEntries(linkName);
   }
-  if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
+  if (handler_ && runHandler && !useNetlinkMessage_ &&
+      eventFlags_[LINK_EVENT]) {
     EventVariant event = std::move(link);
     handler_->handleEvent(linkName, action, event);
   }
@@ -245,7 +274,9 @@ NetlinkSocket::handleAddrEvent(
   auto ifAddr = builder.loadFromObject(addrObj).setValid(isValid).build();
   std::string ifName = getIfName(ifAddr.getIfIndex()).get();
   if (isValid) {
-    links_[ifName].networks.insert(ifAddr.getPrefix().value());
+    if (links_[ifName].networks.count(ifAddr.getPrefix().value()) == 0) {
+      links_[ifName].networks.insert(ifAddr.getPrefix().value());
+    }
   } else if (action == NL_ACT_DEL) {
     auto it = links_.find(ifName);
     if (it != links_.end()) {
@@ -253,7 +284,8 @@ NetlinkSocket::handleAddrEvent(
     }
   }
 
-  if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
+  if (handler_ && runHandler && !useNetlinkMessage_ &&
+      eventFlags_[ADDR_EVENT]) {
     EventVariant event = std::move(ifAddr);
     handler_->handleEvent(ifName, action, event);
   }
@@ -271,7 +303,7 @@ void
 NetlinkSocket::handleNeighborEvent(
     nl_object* obj, int action, bool runHandler) noexcept {
   CHECK_NOTNULL(obj);
-  LOG(INFO) << "Handle neibor event";
+  LOG(INFO) << "Handle neighbor event";
   if (!checkObjectType(obj, kNeighborObjectStr)) {
     return;
   }
@@ -300,7 +332,7 @@ NetlinkSocket::handleNeighborEvent(
     try {
       neighborListener_(neighborUpdate);
     } catch (std::exception const& ex) {
-      LOG(ERROR) << "neiborgh call failed: " << ex.what();
+      LOG(ERROR) << "neighbor call failed: " << ex.what();
     }
   }
 
@@ -1317,6 +1349,9 @@ NetlinkSocket::getAllLinks() {
     try {
       updateLinkCache();
       updateAddrCache();
+      if (useNetlinkMessage_) {
+        links_ = nlSock_->getAllLinks();
+      }
       p.setValue(links_);
     } catch (const std::exception& ex) {
       p.setException(ex);
@@ -1403,9 +1438,6 @@ void
 NetlinkSocket::subscribeEvent(NetlinkEventType event) {
   if (event >= MAX_EVENT_TYPE) {
     return;
-  }
-  if (event == ROUTE_EVENT) {
-    CHECK(!useNetlinkMessage_);
   }
   eventFlags_.set(event);
 }
