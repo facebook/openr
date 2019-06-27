@@ -672,7 +672,7 @@ NetlinkFibHandler::invokeNeighborListeners(
             neighborUpdate.getAddedNeighbor(),
             neighborUpdate.getRemovedNeighbor());
       } catch (const std::exception& ex) {
-        LOG(ERROR) << "calling neibor change failed due to : " << ex.what();
+        LOG(ERROR) << "calling neighbor change failed due to : " << ex.what();
         brokenClients_.push_back(client.first);
       }
     } else {
