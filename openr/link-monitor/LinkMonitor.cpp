@@ -340,41 +340,25 @@ LinkMonitor::prepare() noexcept {
 
         switch (event.eventType) {
         case thrift::SparkNeighborEventType::NEIGHBOR_UP: {
-          logNeighborEvent(
-              "NB_UP",
-              event.neighbor.nodeName,
-              event.ifName,
-              event.neighbor.ifName);
+          logNeighborEvent(event);
           neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
           break;
         }
 
         case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING: {
-          logNeighborEvent(
-              "NB_RESTARTING",
-              event.neighbor.nodeName,
-              event.ifName,
-              event.neighbor.ifName);
+          logNeighborEvent(event);
           neighborRestartingEvent(event.neighbor.nodeName, event.ifName);
           break;
         }
 
         case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
-          logNeighborEvent(
-              "NB_RESTARTED",
-              event.neighbor.nodeName,
-              event.ifName,
-              event.neighbor.ifName);
+          logNeighborEvent(event);
           neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
           break;
         }
 
         case thrift::SparkNeighborEventType::NEIGHBOR_DOWN: {
-          logNeighborEvent(
-              "NB_DOWN",
-              event.neighbor.nodeName,
-              event.ifName,
-              event.neighbor.ifName);
+          logNeighborEvent(event);
           neighborDownEvent(event.neighbor.nodeName, event.ifName);
           break;
         }
@@ -384,11 +368,7 @@ LinkMonitor::prepare() noexcept {
             break;
           }
 
-          logNeighborEvent(
-              "NB_RTT_CHANGE",
-              event.neighbor.nodeName,
-              event.ifName,
-              event.neighbor.ifName);
+          logNeighborEvent(event);
 
           int32_t newRttMetric = getRttMetric(event.rttUs);
           VLOG(1) << "Metric value changed for neighbor "
@@ -1300,19 +1280,18 @@ LinkMonitor::submitCounters() {
 }
 
 void
-LinkMonitor::logNeighborEvent(
-    const std::string& event,
-    const std::string& neighbor,
-    const std::string& iface,
-    const std::string& remoteIface) {
+LinkMonitor::logNeighborEvent(thrift::SparkNeighborEvent const& event) {
   fbzmq::LogSample sample{};
-
-  sample.addString("event", event);
+  sample.addString(
+      "event",
+      apache::thrift::TEnumTraits<thrift::SparkNeighborEventType>::findName(
+          event.eventType));
   sample.addString("entity", "LinkMonitor");
   sample.addString("node_name", nodeId_);
-  sample.addString("neighbor", neighbor);
-  sample.addString("interface", iface);
-  sample.addString("remote_interface", remoteIface);
+  sample.addString("neighbor", event.neighbor.nodeName);
+  sample.addString("interface", event.ifName);
+  sample.addString("remote_interface", event.neighbor.ifName);
+  sample.addInt("rtt_us", event.rttUs);
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,

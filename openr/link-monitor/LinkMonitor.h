@@ -210,11 +210,7 @@ class LinkMonitor final : public OpenrEventLoop {
   void submitCounters();
 
   // submit events to monitor
-  void logNeighborEvent(
-      const std::string& event,
-      const std::string& neighbor,
-      const std::string& iface,
-      const std::string& remoteIface);
+  void logNeighborEvent(thrift::SparkNeighborEvent const& event);
 
   // link events
   void logLinkEvent(
