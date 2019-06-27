@@ -799,7 +799,6 @@ PrefixAllocator::logPrefixEvent(
   fbzmq::LogSample sample{};
 
   sample.addString("event", event);
-  sample.addString("entity", "PrefixAllocator");
   sample.addString("node_name", myNodeName_);
   if (allocParams_.hasValue() && oldPrefix) {
     auto const& seedPrefix = allocParams_->first;

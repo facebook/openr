@@ -1286,7 +1286,6 @@ LinkMonitor::logNeighborEvent(thrift::SparkNeighborEvent const& event) {
       "event",
       apache::thrift::TEnumTraits<thrift::SparkNeighborEventType>::findName(
           event.eventType));
-  sample.addString("entity", "LinkMonitor");
   sample.addString("node_name", nodeId_);
   sample.addString("neighbor", event.neighbor.nodeName);
   sample.addString("interface", event.ifName);
@@ -1314,7 +1313,6 @@ LinkMonitor::logLinkEvent(
   const std::string event = isUp ? "UP" : "DOWN";
 
   sample.addString("event", folly::sformat("IFACE_{}", event));
-  sample.addString("entity", "LinkMonitor");
   sample.addString("node_name", nodeId_);
   sample.addString("interface", iface);
   sample.addInt("backoff_ms", backoffTime.count());
@@ -1343,7 +1341,6 @@ LinkMonitor::logPeerEvent(
   fbzmq::LogSample sample{};
 
   sample.addString("event", event);
-  sample.addString("entity", "LinkMonitor");
   sample.addString("node_name", nodeId_);
   sample.addString("peer_name", peerName);
   sample.addString("pub_url", peerSpec.pubUrl);

@@ -1779,7 +1779,6 @@ KvStore::logKvEvent(const std::string& event, const std::string& key) {
   fbzmq::LogSample sample{};
 
   sample.addString("event", event);
-  sample.addString("entity", "KvStore");
   sample.addString("node_name", nodeId_);
   sample.addString("key", key);
 

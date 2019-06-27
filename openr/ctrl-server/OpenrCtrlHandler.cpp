@@ -144,7 +144,6 @@ OpenrCtrlHandler::authorizeConnection() {
         "event",
         peerCommonName.empty() ? "UNENCRYPTED_CTRL_CONNECTION"
                                : "UNRESTRICTED_AUTHORIZATION");
-    sample.addString("entity", "OPENR_CTRL_HANDLER");
     sample.addString("node_name", nodeName_);
     sample.addString(
         "peer_address", connContext->getPeerAddress()->getAddressStr());

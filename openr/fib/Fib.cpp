@@ -711,7 +711,6 @@ Fib::logPerfEvents() {
   // Log via zmq monitor
   fbzmq::LogSample sample{};
   sample.addString("event", "ROUTE_CONVERGENCE");
-  sample.addString("entity", "Fib");
   sample.addString("node_name", myNodeName_);
   sample.addStringVector("perf_events", eventStrs);
   sample.addInt("duration_ms", totalDuration.count());
