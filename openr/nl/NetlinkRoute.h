@@ -28,7 +28,7 @@
 
 namespace openr {
 namespace Netlink {
-constexpr uint16_t kMaxLabels{4};
+constexpr uint16_t kMaxLabels{16};
 constexpr uint32_t kLabelBosShift{8};
 constexpr uint32_t kLabelShift{12};
 constexpr uint32_t kLabelMask{0xFFFFF000};

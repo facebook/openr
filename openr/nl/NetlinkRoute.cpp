@@ -221,6 +221,8 @@ NetlinkRouteMessage::addLabelNexthop(
     LOG(ERROR) << "Labels not provided for PUSH action";
     return ResultCode::NO_LABEL;
   }
+  // abort immediately to bring attention
+  CHECK(labels.value().size() <= kMaxLabels);
   for (auto label : labels.value()) {
     VLOG(2) << "Pushing label: " << label;
     bool bos = i == labels.value().size() - 1 ? true : false;

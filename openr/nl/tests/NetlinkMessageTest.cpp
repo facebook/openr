@@ -267,6 +267,82 @@ class NlMessageFixture : public ::testing::Test {
     return rtBuilder.build();
   }
 
+  std::vector<openr::fbnl::Route>
+  buildV6RouteDb(int count) {
+    std::vector<openr::fbnl::Route> routes;
+    std::vector<openr::fbnl::NextHop> paths;
+    paths.push_back(buildNextHop(
+        outLabel4,
+        folly::none,
+        thrift::MplsActionCode::PUSH,
+        ipAddrY1V4,
+        ifIndexY));
+    paths.push_back(buildNextHop(
+        outLabel5,
+        folly::none,
+        thrift::MplsActionCode::PUSH,
+        ipAddrY1V4,
+        ifIndexY));
+    paths.push_back(buildNextHop(
+        outLabel6,
+        folly::none,
+        thrift::MplsActionCode::PUSH,
+        ipAddrY1V4,
+        ifIndexY));
+
+    struct v4Addr addr4 {};
+    for (uint32_t i = 0; i < count; i++) {
+      addr4.u32_addr = 0x000000A0 + i;
+      folly::IPAddress ipAddress =
+          folly::IPAddress::fromBinary(folly::ByteRange(
+              static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
+      folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
+      routes.emplace_back(
+          buildRoute(kRouteProtoId, prefix, folly::none, paths));
+    }
+    return routes;
+  }
+
+  std::vector<openr::fbnl::Route>
+  buildV4RouteDb(int count) {
+    std::vector<openr::fbnl::Route> routes;
+    std::vector<openr::fbnl::NextHop> paths;
+    // create mix of next hops, including without label
+    paths.push_back(buildNextHop(
+        outLabel1,
+        folly::none,
+        thrift::MplsActionCode::PUSH,
+        ipAddrY1V6,
+        ifIndexZ));
+    paths.push_back(buildNextHop(
+        outLabel2,
+        folly::none,
+        thrift::MplsActionCode::PUSH,
+        ipAddrY1V6,
+        ifIndexZ));
+    paths.push_back(buildNextHop(
+        folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
+    paths.push_back(buildNextHop(
+        outLabel4,
+        folly::none,
+        thrift::MplsActionCode::PUSH,
+        ipAddrY1V6,
+        ifIndexZ));
+    struct v6Addr addr6 {
+      0
+    };
+    for (uint32_t i = 0; i < count; i++) {
+      addr6.u32_addr[0] = htonl(0x50210000 + i);
+      folly::IPAddress ipAddress =
+          folly::IPAddress::fromBinary(folly::ByteRange(
+              static_cast<const unsigned char*>(&addr6.u8_addr[0]), 16));
+      folly::CIDRNetwork prefix = std::make_pair(ipAddress, 64);
+      routes.emplace_back(
+          buildRoute(kRouteProtoId, prefix, folly::none, paths));
+    }
+    return routes;
+  }
+
   // ifindex of vethTestX and vethTextY
   uint32_t ifIndexX{0};
   uint32_t ifIndexY{0};
@@ -575,41 +651,7 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
   uint32_t count{100000};
-
-  std::vector<openr::fbnl::NextHop> paths;
-  // create mix of next hops, including without label
-  paths.push_back(buildNextHop(
-      outLabel1,
-      folly::none,
-      thrift::MplsActionCode::PUSH,
-      ipAddrY1V6,
-      ifIndexZ));
-  paths.push_back(buildNextHop(
-      outLabel2,
-      folly::none,
-      thrift::MplsActionCode::PUSH,
-      ipAddrY1V6,
-      ifIndexZ));
-  paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
-  paths.push_back(buildNextHop(
-      outLabel4,
-      folly::none,
-      thrift::MplsActionCode::PUSH,
-      ipAddrY1V6,
-      ifIndexZ));
-  std::vector<openr::fbnl::Route> routes;
-
-  struct v6Addr addr6 {
-    0
-  };
-  for (uint32_t i = 0; i < count; i++) {
-    addr6.u32_addr[0] = htonl(0x50210000 + i);
-    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
-        static_cast<const unsigned char*>(&addr6.u8_addr[0]), 16));
-    folly::CIDRNetwork prefix = std::make_pair(ipAddress, 64);
-    routes.emplace_back(buildRoute(kRouteProtoId, prefix, folly::none, paths));
-  }
+  const auto routes = buildV6RouteDb(count);
 
   ackCount = nlSock->getAckCount();
   LOG(INFO) << "Adding " << count << " routes";
@@ -690,6 +732,38 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
 }
 
+TEST_F(NlMessageFixture, MaxLabelStackTest) {
+  // Add IPv4 route with single path label next with one label
+  // outoing IF is vethTestY
+
+  uint32_t ackCount{0};
+  ResultCode status{ResultCode::FAIL};
+  folly::CIDRNetwork ipPrefix1V4 =
+      folly::IPAddress::createNetwork("11.10.0.0/24");
+  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<int32_t> labels(16);
+  std::iota(std::begin(labels), std::end(labels), 701);
+  paths.push_back(buildNextHop(
+      labels, folly::none, thrift::MplsActionCode::PUSH, ipAddrY1V4, ifIndexY));
+  paths.push_back(buildNextHop(
+      folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
+  auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
+
+  ackCount = nlSock->getAckCount();
+  // create ipv4 route with label nexthop
+  status = nlSock->addRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  // should have received one ack with status = 0
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+
+  ackCount = nlSock->getAckCount();
+  status = nlSock->deleteRoute(route);
+  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+}
+
 TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   // Add Multiple IPv4 routes with single path label next with one label
   // outoing IF is vethTestY
@@ -697,36 +771,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
   const uint32_t count{100000};
-  std::vector<openr::fbnl::NextHop> paths;
-  paths.push_back(buildNextHop(
-      outLabel4,
-      folly::none,
-      thrift::MplsActionCode::PUSH,
-      ipAddrY1V4,
-      ifIndexY));
-  paths.push_back(buildNextHop(
-      outLabel5,
-      folly::none,
-      thrift::MplsActionCode::PUSH,
-      ipAddrY1V4,
-      ifIndexY));
-  paths.push_back(buildNextHop(
-      outLabel6,
-      folly::none,
-      thrift::MplsActionCode::PUSH,
-      ipAddrY1V4,
-      ifIndexY));
-
-  std::vector<openr::fbnl::Route> routes;
-  struct v4Addr addr4 {};
-
-  for (uint32_t i = 0; i < count; i++) {
-    addr4.u32_addr = 0x000000A0 + i;
-    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
-        static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
-    folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
-    routes.emplace_back(buildRoute(kRouteProtoId, prefix, folly::none, paths));
-  }
+  const auto routes = buildV4RouteDb(count);
 
   ackCount = nlSock->getAckCount();
   LOG(INFO) << "Adding in bulk " << count << " routes";
@@ -750,12 +795,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   // add routes one by one instead of a vector of routes
   LOG(INFO) << "Adding one by one " << count << " routes";
   ackCount = nlSock->getAckCount();
-  for (uint32_t i = 0; i < count; i++) {
-    addr4.u32_addr = 0x000000A0 + i;
-    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
-        static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
-    folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
-    auto route = buildRoute(kRouteProtoId, prefix, folly::none, paths);
+  for (const auto& route : routes) {
     status = nlSock->addRoute(route);
     EXPECT_EQ(status, ResultCode::SUCCESS);
   }
@@ -767,12 +807,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   // delete routes one by one instead of a vector of routes
   LOG(INFO) << "Deleting " << count << " routes one at a time";
   ackCount = nlSock->getAckCount();
-  for (uint32_t i = 0; i < count; i++) {
-    addr4.u32_addr = 0x000000A0 + i;
-    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
-        static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
-    folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
-    auto route = buildRoute(kRouteProtoId, prefix, folly::none, paths);
+  for (const auto& route : routes) {
     status = nlSock->deleteRoute(route);
     EXPECT_EQ(status, ResultCode::SUCCESS);
   }
