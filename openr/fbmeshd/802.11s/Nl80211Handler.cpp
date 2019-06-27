@@ -54,9 +54,9 @@ using namespace openr::fbmeshd;
 
 DEFINE_string(mesh_id, "mesh-soma", "Mesh ID");
 DEFINE_string(mesh_ifname, "mesh0", "Mesh interface name");
-DEFINE_string(mesh_channel_type, "20", "Mesh channel type, in string format");
+DEFINE_string(mesh_channel_type, "40", "Mesh channel type, in string format");
 DEFINE_int32(mesh_frequency, 5805, "Mesh control frequency");
-DEFINE_int32(mesh_center_freq1, 5805, "Mesh center frequency 1");
+DEFINE_int32(mesh_center_freq1, 5795, "Mesh center frequency 1");
 DEFINE_int32(mesh_center_freq2, 0, "Mesh center frequency 2");
 
 DEFINE_bool(enable_encryption, false, "Whether to use mesh link encryption");
