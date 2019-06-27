@@ -2221,9 +2221,9 @@ TEST_F(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj12_1, false, 11),
-                createNextHopFromAdj(adj12_2, false, 11),
-                createNextHopFromAdj(adj12_3, false, 20)}));
+      NextHops({createNextHopFromAdj(adj12_1, false, 11, folly::none, true),
+                createNextHopFromAdj(adj12_2, false, 11, folly::none, true),
+                createNextHopFromAdj(adj12_3, false, 20, folly::none, true)}));
 
   //
   // Bring down adj12_2 and adj34_2 to make our nexthop validations easy
