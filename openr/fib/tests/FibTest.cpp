@@ -35,6 +35,7 @@
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/tests/OpenrModuleTestBase.h>
 
 using namespace std;
 using namespace openr;
@@ -116,7 +117,7 @@ checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
   return true;
 }
 
-class FibTestFixture : public ::testing::Test {
+class FibTestFixture : public ::testing::Test, public OpenrModuleTestBase {
  public:
   void
   SetUp() override {
@@ -136,8 +137,6 @@ class FibTestFixture : public ::testing::Test {
     EXPECT_NO_THROW(
         decisionRep.bind(fbzmq::SocketUrl{"inproc://decision-cmd"}).value());
     EXPECT_NO_THROW(lmPub.bind(fbzmq::SocketUrl{"inproc://lm-pub"}).value());
-    EXPECT_NO_THROW(
-        fibReq.connect(fbzmq::SocketUrl{"inproc://fib-cmd"}).value());
 
     fib = std::make_shared<Fib>(
         "node-1",
@@ -149,11 +148,11 @@ class FibTestFixture : public ::testing::Test {
         std::chrono::seconds(2),
         false, /* waitOnDecision */
         DecisionPubUrl{"inproc://decision-pub"},
-        std::string{"inproc://fib-cmd"},
+        folly::none,
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
-        KvStoreLocalPubUrl{"inproc://kvstore-sub"},
+        KvStoreLocalPubUrl{"inproc://kvstore-pub"},
         context);
 
     fibThread = std::make_unique<std::thread>([this]() {
@@ -162,10 +161,24 @@ class FibTestFixture : public ::testing::Test {
       LOG(INFO) << "Fib thread finishing";
     });
     fib->waitUntilRunning();
+
+    // put handler into moduleToEvl to make sure openr-ctrl thrift handler
+    // can access Fib module.
+    moduleTypeToEvl_[thrift::OpenrModuleType::FIB] = fib;
+    startOpenrCtrlHandler(
+        "node-1",
+        acceptablePeerNames,
+        MonitorSubmitUrl{"inproc://monitor-sub"},
+        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
+        context);
   }
 
   void
   TearDown() override {
+    LOG(INFO) << "Stopping openr-ctrl thrift server";
+    stopOpenrCtrlHandler();
+    LOG(INFO) << "Openr-ctrl thrift server got stopped";
+
     // this will be invoked before Fib's d-tor
     LOG(INFO) << "Stopping the Fib thread";
     fib->stop();
@@ -183,14 +196,11 @@ class FibTestFixture : public ::testing::Test {
 
   thrift::RouteDatabase
   getRouteDb() {
-    fibReq.sendThriftObj(
-        thrift::FibRequest(FRAGILE, thrift::FibCommand::ROUTE_DB_GET),
-        serializer);
+    thrift::RouteDatabase routeDb;
+    auto resp = openrCtrlHandler_->semifuture_getRouteDb().get();
+    EXPECT_TRUE(resp);
 
-    auto maybeReply = fibReq.recvThriftObj<thrift::RouteDatabase>(serializer);
-    EXPECT_FALSE(maybeReply.hasError());
-    const auto& routeDb = maybeReply.value();
-
+    routeDb = *resp;
     return routeDb;
   }
 
@@ -202,10 +212,12 @@ class FibTestFixture : public ::testing::Test {
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> decisionPub{context};
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> decisionRep{context};
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> lmPub{context};
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> fibReq{context};
 
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
+
+  // variables used to create Open/R ctrl thrift handler
+  std::unordered_set<std::string> acceptablePeerNames;
 
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;

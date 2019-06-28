@@ -6,9 +6,11 @@
  */
 #include <benchmark/benchmark.h>
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
+#include <gtest/gtest.h>
 #include <openr/fib/Fib.h>
 #include <openr/fib/tests/MockNetlinkFibHandler.h>
 #include <openr/fib/tests/PrefixGenerator.h>
+#include <openr/tests/OpenrModuleTestBase.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 #include <thread>
@@ -32,7 +34,7 @@ using apache::thrift::FRAGILE;
 using apache::thrift::ThriftServer;
 using apache::thrift::util::ScopedServerThread;
 
-class FibWrapper {
+class FibWrapper : public OpenrModuleTestBase {
  public:
   FibWrapper() {
     // Register Singleton
@@ -50,9 +52,6 @@ class FibWrapper {
 
     // Create sockets
     decisionPub.bind(fbzmq::SocketUrl{"inproc://decision-pub"});
-    decisionRep.bind(fbzmq::SocketUrl{"inproc://decision-cmd"}).value();
-    lmPub.bind(fbzmq::SocketUrl{"inproc://lm-pub"}).value();
-    fibReq.connect(fbzmq::SocketUrl{"inproc://fib-cmd"}).value();
 
     // Creat Fib module and start fib thread
     port = fibThriftThread.getAddress()->getPort();
@@ -66,7 +65,7 @@ class FibWrapper {
         std::chrono::seconds(2),
         false, // waitOnDecision
         DecisionPubUrl{"inproc://decision-pub"},
-        std::string{"inproc://fib-cmd"},
+        folly::none,
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
@@ -79,17 +78,29 @@ class FibWrapper {
       LOG(INFO) << "Fib thread finishing";
     });
     fib->waitUntilRunning();
+
+    // put handler into moduleToEvl to make sure openr-ctrl thrift handler
+    // can access Fib module.
+    moduleTypeToEvl_[thrift::OpenrModuleType::FIB] = fib;
+    startOpenrCtrlHandler(
+        "node-1",
+        acceptablePeerNames,
+        MonitorSubmitUrl{"inproc://monitor_submit"},
+        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
+        context);
   }
 
   ~FibWrapper() {
+    LOG(INFO) << "Stopping openr-ctrl thrift server";
+    stopOpenrCtrlHandler();
+    LOG(INFO) << "Openr-ctrl thrift server got stopped";
+
     // This will be invoked before Fib's d-tor
     fib->stop();
     fibThread->join();
 
     // Close socket
     decisionPub.close();
-    decisionRep.close();
-    lmPub.close();
 
     // Stop mocked nl platform
     mockFibHandler->stop();
@@ -98,17 +109,11 @@ class FibWrapper {
 
   thrift::PerfDatabase
   getPerfDb() {
-    // Send a fib request to get perfDB
-    fibReq.sendThriftObj(
-        thrift::FibRequest(FRAGILE, thrift::FibCommand::PERF_DB_GET),
-        serializer);
+    thrift::PerfDatabase perfDb;
+    auto resp = openrCtrlHandler_->semifuture_getPerfDb().get();
+    EXPECT_TRUE(resp);
 
-    // Receive reply
-    auto maybeReply = fibReq.recvThriftObj<thrift::PerfDatabase>(serializer);
-    if (maybeReply.hasError()) {
-      LOG(ERROR) << "Error::maybeReply.hasError()";
-    }
-    const auto& perfDb = maybeReply.value();
+    perfDb = *resp;
     return perfDb;
   }
 
@@ -139,12 +144,12 @@ class FibWrapper {
 
   fbzmq::Context context{};
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> decisionPub{context};
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> decisionRep{context};
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> lmPub{context};
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> fibReq{context};
 
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
+
+  // variables used to create Open/R ctrl thrift handler
+  std::unordered_set<std::string> acceptablePeerNames;
 
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;

@@ -34,12 +34,12 @@
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/NetworkUtil.h>
-#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/platform/PlatformPublisher.h>
+#include <openr/tests/OpenrModuleTestBase.h>
 
 using namespace std;
 using namespace openr;
@@ -167,7 +167,8 @@ const std::string kConfigStorePath = "/tmp/lm_ut_config_store.bin";
 const std::string kConfigStoreUrl = "inproc://lm_ut_config_store";
 } // namespace
 
-class LinkMonitorTestFixture : public ::testing::Test {
+class LinkMonitorTestFixture : public ::testing::Test,
+                               public OpenrModuleTestBase {
  public:
   void
   SetUp() override {
@@ -296,10 +297,15 @@ class LinkMonitorTestFixture : public ::testing::Test {
     });
     linkMonitor->waitUntilRunning();
 
-    // put handlder into moduleToEvl to make sure openr-ctrl thrift handler
+    // put handlder into moduleToEvl_ to make sure openr-ctrl thrift handler
     // can access link-monitor module.
-    moduleTypeToEvl[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
-    startOpenrCtrlHandler();
+    moduleTypeToEvl_[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
+    startOpenrCtrlHandler(
+        "node-1",
+        acceptablePeerNames,
+        MonitorSubmitUrl{"inproc://monitor_submit"},
+        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        context);
   }
 
   void
@@ -345,43 +351,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     mockNlHandler->stop();
     systemThriftThread.stop();
     LOG(INFO) << "Mocked thrift handlers got stopped";
-  }
-
-  void
-  startOpenrCtrlHandler() {
-    std::unordered_set<std::string> acceptablePeerNames;
-
-    // Create main-event-loop
-    mainEvlThread_ = std::thread([&]() { mainEvl_.run(); });
-
-    tm = apache::thrift::concurrency::ThreadManager::newSimpleThreadManager(
-        1, false);
-    tm->threadFactory(
-        std::make_shared<apache::thrift::concurrency::PosixThreadFactory>());
-    tm->start();
-
-    openrCtrlHandler = std::make_shared<OpenrCtrlHandler>(
-        "node-1",
-        acceptablePeerNames,
-        moduleTypeToEvl,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        mainEvl_,
-        context);
-    openrCtrlHandler->setThreadManager(tm.get());
-  }
-
-  void
-  stopOpenrCtrlHandler() {
-    // ATTN: moduleTypeToEvl maintains <shared_ptr> of OpenrEventLoop.
-    //       Must cleanup. Otherwise, there will be additional ref count and
-    //       cause OpenrEventLoop binding to the existing addr.
-    moduleTypeToEvl.clear();
-
-    mainEvl_.stop();
-    mainEvlThread_.join();
-    openrCtrlHandler.reset();
-    tm->join();
   }
 
   // emulate spark keeping receiving InterfaceDb until no more udpates
@@ -553,13 +522,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread systemThriftThread;
 
-  // Create Open/R ctrl thrift handler
-  fbzmq::ZmqEventLoop mainEvl_;
-  std::thread mainEvlThread_;
-  std::shared_ptr<apache::thrift::concurrency::ThreadManager> tm;
-  std::shared_ptr<OpenrCtrlHandler> openrCtrlHandler;
-  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
-      moduleTypeToEvl;
+  // variables used to create Open/R ctrl thrift handler
+  std::unordered_set<std::string> acceptablePeerNames;
 
   fbzmq::Context context{};
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{context};
@@ -779,10 +743,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     const std::string interfaceName = "iface_2_1";
     const std::string nodeName = "node-2";
     LOG(INFO) << "Testing set node overload command!";
-    auto ret = openrCtrlHandler->semifuture_setNodeOverload().get();
+    auto ret = openrCtrlHandler_->semifuture_setNodeOverload().get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
-    auto res = openrCtrlHandler->semifuture_getInterfaces().get();
+    auto res = openrCtrlHandler_->semifuture_getInterfaces().get();
     ASSERT_NE(nullptr, res);
     EXPECT_TRUE(res->isOverloaded);
     EXPECT_EQ(1, res->interfaceDetails.size());
@@ -791,7 +755,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         res->interfaceDetails.at(interfaceName).metricOverride.hasValue());
 
     LOG(INFO) << "Testing set link metric command!";
-    ret = openrCtrlHandler
+    ret = openrCtrlHandler_
               ->semifuture_setInterfaceMetric(
                   std::make_unique<std::string>(interfaceName), linkMetric)
               .get();
@@ -799,13 +763,13 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing set link overload command!";
-    ret = openrCtrlHandler
+    ret = openrCtrlHandler_
               ->semifuture_setInterfaceOverload(
                   std::make_unique<std::string>(interfaceName))
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
-    res = openrCtrlHandler->semifuture_getInterfaces().get();
+    res = openrCtrlHandler_->semifuture_getInterfaces().get();
     ASSERT_NE(nullptr, res);
     EXPECT_TRUE(res->isOverloaded);
     EXPECT_TRUE(res->interfaceDetails.at(interfaceName).isOverloaded);
@@ -814,10 +778,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         res->interfaceDetails.at(interfaceName).metricOverride.value());
 
     LOG(INFO) << "Testing unset node overload command!";
-    ret = openrCtrlHandler->semifuture_unsetNodeOverload().get();
+    ret = openrCtrlHandler_->semifuture_unsetNodeOverload().get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
-    res = openrCtrlHandler->semifuture_getInterfaces().get();
+    res = openrCtrlHandler_->semifuture_getInterfaces().get();
     EXPECT_FALSE(res->isOverloaded);
     EXPECT_TRUE(res->interfaceDetails.at(interfaceName).isOverloaded);
     EXPECT_EQ(
@@ -825,7 +789,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         res->interfaceDetails.at(interfaceName).metricOverride.value());
 
     LOG(INFO) << "Testing unset link overload command!";
-    ret = openrCtrlHandler
+    ret = openrCtrlHandler_
               ->semifuture_unsetInterfaceOverload(
                   std::make_unique<std::string>(interfaceName))
               .get();
@@ -833,26 +797,26 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing unset link metric command!";
-    ret = openrCtrlHandler
+    ret = openrCtrlHandler_
               ->semifuture_unsetInterfaceMetric(
                   std::make_unique<std::string>(interfaceName))
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
-    res = openrCtrlHandler->semifuture_getInterfaces().get();
+    res = openrCtrlHandler_->semifuture_getInterfaces().get();
     EXPECT_FALSE(res->isOverloaded);
     EXPECT_FALSE(res->interfaceDetails.at(interfaceName).isOverloaded);
     EXPECT_FALSE(
         res->interfaceDetails.at(interfaceName).metricOverride.hasValue());
 
     LOG(INFO) << "Testing set node overload command( AGAIN )!";
-    ret = openrCtrlHandler->semifuture_setNodeOverload().get();
+    ret = openrCtrlHandler_->semifuture_setNodeOverload().get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing set link metric command( AGAIN )!";
-    ret = openrCtrlHandler
+    ret = openrCtrlHandler_
               ->semifuture_setInterfaceMetric(
                   std::make_unique<std::string>(interfaceName), linkMetric)
               .get();
@@ -860,7 +824,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing set adj metric command!";
-    ret = openrCtrlHandler
+    ret = openrCtrlHandler_
               ->semifuture_setAdjacencyMetric(
                   std::make_unique<std::string>(interfaceName),
                   std::make_unique<std::string>(nodeName),
@@ -870,7 +834,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "Testing unset adj metric command!";
-    ret = openrCtrlHandler
+    ret = openrCtrlHandler_
               ->semifuture_unsetAdjacencyMetric(
                   std::make_unique<std::string>(interfaceName),
                   std::make_unique<std::string>(nodeName))
@@ -955,8 +919,13 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // put handlder into moduleToEvl to make sure openr-ctrl thrift handler
   // can access link-monitor module.
-  moduleTypeToEvl[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
-  startOpenrCtrlHandler();
+  moduleTypeToEvl_[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
+  startOpenrCtrlHandler(
+      "node-1",
+      acceptablePeerNames,
+      MonitorSubmitUrl{"inproc://monitor_submit"},
+      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+      context);
 
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{
       context,
@@ -1368,8 +1337,13 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
   // put handlder into moduleToEvl to make sure openr-ctrl thrift handler
   // can access link-monitor module.
-  moduleTypeToEvl[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
-  startOpenrCtrlHandler();
+  moduleTypeToEvl_[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
+  startOpenrCtrlHandler(
+      "node-1",
+      acceptablePeerNames,
+      MonitorSubmitUrl{"inproc://monitor_submit"},
+      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+      context);
 
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
@@ -1412,7 +1386,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       true /* is up */);
 
   // at this point, both interface should have no backoff
-  auto links = openrCtrlHandler->semifuture_getInterfaces().get();
+  auto links = openrCtrlHandler_->semifuture_getInterfaces().get();
   EXPECT_EQ(2, links->interfaceDetails.size());
   for (const auto& ifName : ifNames) {
     EXPECT_FALSE(
@@ -1446,7 +1420,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
     // been cleared up yet
     recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
-    auto links1 = openrCtrlHandler->semifuture_getInterfaces().get();
+    auto links1 = openrCtrlHandler_->semifuture_getInterfaces().get();
     EXPECT_EQ(2, res.size());
     EXPECT_EQ(2, links1->interfaceDetails.size());
     for (const auto& ifName : ifNames) {
@@ -1499,7 +1473,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
     // expect sparkIfDb to have two interfaces DOWN
     recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
-    auto links2 = openrCtrlHandler->semifuture_getInterfaces().get();
+    auto links2 = openrCtrlHandler_->semifuture_getInterfaces().get();
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());
@@ -1536,7 +1510,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
     // Make sure to wait long enough to clear out backoff timers
     recvAndReplyIfUpdate(std::chrono::seconds(8));
     auto res = collateIfUpdates(sparkIfDb);
-    auto links3 = openrCtrlHandler->semifuture_getInterfaces().get();
+    auto links3 = openrCtrlHandler_->semifuture_getInterfaces().get();
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());

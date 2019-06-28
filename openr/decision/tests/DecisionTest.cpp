@@ -21,6 +21,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/decision/Decision.h>
+#include <openr/tests/OpenrModuleTestBase.h>
 
 DEFINE_bool(stress_test, false, "pass this to run the stress test");
 
@@ -2791,7 +2792,7 @@ TEST(GridTopology, StressTest) {
 // Start the decision thread and simulate KvStore communications
 // Expect proper RouteDatabase publications to appear
 //
-class DecisionTestFixture : public ::testing::Test {
+class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
  protected:
   void
   SetUp() override {
@@ -2811,7 +2812,7 @@ class DecisionTestFixture : public ::testing::Test {
         folly::none,
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
-        std::string{"inproc://decision-rep"},
+        folly::none,
         DecisionPubUrl{"inproc://decision-pub"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
@@ -2823,23 +2824,37 @@ class DecisionTestFixture : public ::testing::Test {
     });
     decision->waitUntilRunning();
 
+    // put handler into moduleToEvl to make sure openr-ctrl thrift handler
+    // can access Decision module.
+    moduleTypeToEvl_[thrift::OpenrModuleType::DECISION] = decision;
+    startOpenrCtrlHandler(
+        "node-1",
+        acceptablePeerNames,
+        MonitorSubmitUrl{"inproc://monitor_submit"},
+        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
+        zeromqContext);
+
     const int hwm = 1000;
     decisionPub.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(hwm)).value();
     decisionPub.setSockOpt(ZMQ_SUBSCRIBE, "", 0).value();
     decisionPub.connect(fbzmq::SocketUrl{"inproc://decision-pub"});
-    decisionReq.connect(fbzmq::SocketUrl{"inproc://decision-rep"});
 
     // Make initial sync request with empty route-db
     replyInitialSyncReq(thrift::Publication());
     // Make request from decision to ensure that sockets are ready for use!
-    dumpRouteDatabase(decisionReq, {"random-node"}, serializer);
+    dumpRouteDb({"random-node"});
   }
 
   void
   TearDown() override {
+    LOG(INFO) << "Stopping openr-ctrl thrift server";
+    stopOpenrCtrlHandler();
+    LOG(INFO) << "Openr-ctrl thrift server got stopped";
+
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
     decisionThread->join();
+    LOG(INFO) << "Decision thread got stopped";
   }
 
   //
@@ -2847,25 +2862,17 @@ class DecisionTestFixture : public ::testing::Test {
   //
 
   std::unordered_map<std::string, thrift::RouteDatabase>
-  dumpRouteDatabase(
-      fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>& decisionReq,
-      const vector<string>& allNodes,
-      const apache::thrift::CompactSerializer& serializer) {
+  dumpRouteDb(const vector<string>& allNodes) {
     std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
 
     for (string const& node : allNodes) {
-      decisionReq.sendThriftObj(
-          thrift::DecisionRequest(
-              FRAGILE, thrift::DecisionCommand::ROUTE_DB_GET, node),
-          serializer);
-
-      auto maybeReply =
-          decisionReq.recvThriftObj<thrift::DecisionReply>(serializer);
-      EXPECT_FALSE(maybeReply.hasError());
-      const auto& routeDb = maybeReply.value().routeDb;
-      EXPECT_EQ(node, routeDb.thisNodeName);
-
-      routeMap[node] = routeDb;
+      auto resp = openrCtrlHandler_
+                      ->semifuture_getRouteDbComputed(
+                          std::make_unique<std::string>(node))
+                      .get();
+      EXPECT_TRUE(resp);
+      EXPECT_EQ(node, resp->thisNodeName);
+      routeMap[node] = *resp;
       VLOG(4) << "---";
     }
 
@@ -2953,6 +2960,9 @@ class DecisionTestFixture : public ::testing::Test {
   // member variables
   //
 
+  // variables used to create Open/R ctrl thrift handler
+  std::unordered_set<std::string> acceptablePeerNames;
+
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
   CompactSerializer serializer{};
@@ -2963,7 +2973,6 @@ class DecisionTestFixture : public ::testing::Test {
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> kvStorePub{zeromqContext};
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> kvStoreRep{zeromqContext};
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> decisionPub{zeromqContext};
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> decisionReq{zeromqContext};
 
   // KvStore owned by this wrapper.
   std::shared_ptr<Decision> decision{nullptr};
@@ -3043,7 +3052,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       NextHops({createNextHopFromAdj(adj12, false, 20)}));
 
   // dump other nodes' routeDB
-  auto routeDbMap = dumpRouteDatabase(decisionReq, {"2", "3"}, serializer);
+  auto routeDbMap = dumpRouteDb({"2", "3"});
   EXPECT_EQ(2, routeDbMap["2"].unicastRoutes.size());
   EXPECT_EQ(2, routeDbMap["3"].unicastRoutes.size());
   for (auto kv : routeDbMap) {
@@ -3480,8 +3489,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
   std::this_thread::sleep_for(2 * debounceTimeout);
 
   // validate routers
-  auto routeMapList =
-      dumpRouteDatabase(decisionReq, {"1", "2", "3"}, serializer);
+  auto routeMapList = dumpRouteDb({"1", "2", "3"});
   RouteMap routeMap;
   for (auto kv : routeMapList) {
     fillRouteMap(kv.first, routeMap, kv.second);
@@ -3548,7 +3556,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
 
   // Query new information
   // validate routers
-  routeMapList = dumpRouteDatabase(decisionReq, {"1", "2", "3"}, serializer);
+  routeMapList = dumpRouteDb({"1", "2", "3"});
   routeMap.clear();
   for (auto kv : routeMapList) {
     fillRouteMap(kv.first, routeMap, kv.second);
@@ -3640,8 +3648,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // Query new information
   // validate routers
-  auto routeMapList =
-      dumpRouteDatabase(decisionReq, {"1", "2", "3", "4"}, serializer);
+  auto routeMapList = dumpRouteDb({"1", "2", "3", "4"});
   EXPECT_EQ(4, routeMapList.size()); // 1 route per neighbor
   RouteMap routeMap;
   for (auto kv : routeMapList) {
@@ -3708,8 +3715,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // Query new information
   // validate routers
-  routeMapList =
-      dumpRouteDatabase(decisionReq, {"1", "2", "3", "4"}, serializer);
+  routeMapList = dumpRouteDb({"1", "2", "3", "4"});
   EXPECT_EQ(4, routeMapList.size()); // 1 route per neighbor
   routeMap.clear();
   for (auto kv : routeMapList) {
