@@ -73,7 +73,7 @@ Socket::connect(
   }
 
   if (errno != EINPROGRESS) {
-    return {true, "not_einprogress"};
+    return {false, "not_einprogress"};
   }
 
   // Connection is in progress, wait for timeout
