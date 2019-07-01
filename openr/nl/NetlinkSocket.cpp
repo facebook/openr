@@ -60,38 +60,6 @@ NetlinkSocket::NetlinkSocket(
   err = nl_socket_set_buffer_size(subSock_, kNlSockRecvBuf, 0);
   CHECK_EQ(err, 0) << "Failed to set socket buffer on subSock_";
 
-  if (useNetlinkMessage_) {
-    CHECK(nlSock_ != nullptr) << "Missing NetlinkProtocolSocket";
-    // Pass link and address callbacks to NetlinkProtocolSocket
-    nlSock_->setLinkEventCB([this](
-        openr::fbnl::Link link, int action, bool runHandler) noexcept {
-      evl_->runImmediatelyOrInEventLoop([this,
-                                         link = std::move(link),
-                                         action = action,
-                                         runHandler = runHandler]() mutable {
-        std::string linkName = link.getLinkName();
-        if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
-          EventVariant event = std::move(link);
-          handler_->handleEvent(linkName, action, event);
-        }
-      });
-    });
-
-    nlSock_->setAddrEventCB([this](
-        openr::fbnl::IfAddress ifAddr, int action, bool runHandler) noexcept {
-      evl_->runImmediatelyOrInEventLoop([this,
-                                         ifAddr = std::move(ifAddr),
-                                         action = action,
-                                         runHandler = runHandler]() mutable {
-        std::string ifName = getIfName(ifAddr.getIfIndex()).get();
-        if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
-          EventVariant event = std::move(ifAddr);
-          handler_->handleEvent(ifName, action, event);
-        }
-      });
-    });
-  }
-
   // Request a route cache to be created and registered with cache manager
   // route event handler is provided which has this object as opaque data so
   // we can get object state back in this static callback
@@ -144,6 +112,38 @@ NetlinkSocket::NetlinkSocket(
       VLOG(2) << "Processed " << lambdaErr << " netlink messages.";
     }
   });
+
+  if (useNetlinkMessage_) {
+    CHECK(nlSock_ != nullptr) << "Missing NetlinkProtocolSocket";
+    // Pass link and address callbacks to NetlinkProtocolSocket
+    nlSock_->setLinkEventCB([this](
+        openr::fbnl::Link link, int action, bool runHandler) noexcept {
+      evl_->runImmediatelyOrInEventLoop([this,
+                                         link = std::move(link),
+                                         action = action,
+                                         runHandler = runHandler]() mutable {
+        std::string linkName = link.getLinkName();
+        if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
+          EventVariant event = std::move(link);
+          handler_->handleEvent(linkName, action, event);
+        }
+      });
+    });
+
+    nlSock_->setAddrEventCB([this](
+        openr::fbnl::IfAddress ifAddr, int action, bool runHandler) noexcept {
+      evl_->runImmediatelyOrInEventLoop([this,
+                                         ifAddr = std::move(ifAddr),
+                                         action = action,
+                                         runHandler = runHandler]() mutable {
+        std::string ifName = getIfName(ifAddr.getIfIndex()).get();
+        if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
+          EventVariant event = std::move(ifAddr);
+          handler_->handleEvent(ifName, action, event);
+        }
+      });
+    });
+  }
 
   // need to reload routes from kernel to avoid re-adding existing route
   // type of exception in NetlinkSocket
