@@ -97,9 +97,11 @@ class FibCountersCmd(FibAgentCmd):
 
 class FibRoutesInstalledCmd(FibAgentCmd):
     def run(self, prefixes: List[str], labels: List[int], json_opt: bool = False):
+        routes = []
+        mpls_routes = []
+
         try:
             routes = self.client.getRouteTableByClient(self.client.client_id)
-            mpls_routes = self.client.getMplsRouteTableByClient(self.client.client_id)
         except Exception as e:
             print("Failed to get routes from Fib.")
             print("Exception: {}".format(e))
@@ -107,6 +109,11 @@ class FibRoutesInstalledCmd(FibAgentCmd):
 
         host_id = utils.get_connected_node_name(self.cli_opts)
         client_id = self.client.client_id
+
+        try:
+            mpls_routes = self.client.getMplsRouteTableByClient(self.client.client_id)
+        except platform_types.PlatformError as e:
+            print("Pls check Open/R version. Exception: {}".format(e))
 
         if json_opt:
             utils.print_json(
