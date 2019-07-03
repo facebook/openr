@@ -204,8 +204,8 @@ class Dual {
   std::string getStatusString() const noexcept;
 
   // get map<root-id: DualPerRootCounters>
-  std::unordered_map<std::string, thrift::DualPerRootCounters> getCounters()
-      const noexcept;
+  std::map<std::string, thrift::DualPerRootCounters> getCounters() const
+      noexcept;
 
   // add a spt child
   void addChild(const std::string& child) noexcept;
@@ -281,7 +281,7 @@ class Dual {
   std::unordered_map<std::string, int64_t> localDistances_;
 
   // dual messages counters map<neighbor: dual-counters>
-  std::unordered_map<std::string, thrift::DualPerRootCounters> counters_;
+  std::map<std::string, thrift::DualPerRootCounters> counters_;
 
   // callback when nexthop changed
   const std::function<void(

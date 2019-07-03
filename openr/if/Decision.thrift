@@ -8,15 +8,20 @@
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Decision
+namespace py3 openr.thrift
 
 include "Fib.thrift"
 include "Lsdb.thrift"
 
 typedef map<string, Lsdb.AdjacencyDatabase>
-  (cpp.type = "std::unordered_map<std::string, AdjacencyDatabase>") AdjDbs
+  (
+    cpp.type =
+    "std::unordered_map<std::string, openr::thrift::AdjacencyDatabase>"
+  ) AdjDbs
 
 typedef map<string, Lsdb.PrefixDatabase>
-  (cpp.type = "std::unordered_map<std::string, PrefixDatabase>") PrefixDbs
+  (cpp.type = "std::unordered_map<std::string, openr::thrift::PrefixDatabase>")
+  PrefixDbs
 
 
 // query info in Decision

@@ -8,6 +8,7 @@
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Network
+namespace py3 openr.thrift
 namespace php Openr
 
 // Using the defaults from here:

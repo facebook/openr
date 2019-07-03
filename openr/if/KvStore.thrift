@@ -9,6 +9,7 @@ namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.KvStore
+namespace py3 openr.thrift
 
 include "Dual.thrift"
 
@@ -36,7 +37,7 @@ struct Value {
 }
 
 typedef map<string, Value>
-  (cpp.type = "std::unordered_map<std::string, Value>") KeyVals
+  (cpp.type = "std::unordered_map<std::string, openr::thrift::Value>") KeyVals
 
 
 enum Command {
@@ -110,7 +111,8 @@ struct PeerSpec {
 }
 
 typedef map<string, PeerSpec>
-  (cpp.type = "std::unordered_map<std::string, PeerSpec>") PeersMap
+  (cpp.type = "std::unordered_map<std::string, openr::thrift::PeerSpec>")
+  PeersMap
 
 // parameters for peer addition
 struct PeerAddParams {
@@ -155,7 +157,8 @@ struct SptInfo {
 
 // map<root-id: SPT-info>
 typedef map<string, SptInfo>
-  (cpp.type = "std::unordered_map<std::string, SptInfo>") SptInfoMap
+  (cpp.type = "std::unordered_map<std::string, openr::thrift::SptInfo>")
+  SptInfoMap
 
 // all spanning tree(s) information
 struct SptInfos {

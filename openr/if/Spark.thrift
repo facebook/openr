@@ -8,6 +8,7 @@
 namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.Spark
+namespace py3 openr.thrift
 
 include "Network.thrift"
 

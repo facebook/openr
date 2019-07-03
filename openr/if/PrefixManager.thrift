@@ -7,6 +7,7 @@
 
 namespace cpp2 openr.thrift
 namespace py openr.PrefixManager
+namespace py3 openr.thrift
 
 include "Lsdb.thrift"
 include "Network.thrift"

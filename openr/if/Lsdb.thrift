@@ -8,6 +8,7 @@
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Lsdb
+namespace py3 openr.thrift
 namespace php OpenR_Lsdb
 
 include "Network.thrift"

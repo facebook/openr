@@ -8,6 +8,7 @@
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Platform
+namespace py3 openr.thrift
 
 include "common/fb303/if/fb303.thrift"
 include "Network.thrift"

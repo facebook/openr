@@ -9,6 +9,7 @@ namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.Fib
+namespace py3 openr.thrift
 
 include "Network.thrift"
 include "Lsdb.thrift"

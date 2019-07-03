@@ -8,6 +8,7 @@
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.OpenrCtrl
+namespace py3 openr.thrift
 namespace php Openr
 
 include "common/fb303/if/fb303.thrift"

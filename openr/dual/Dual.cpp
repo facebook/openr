@@ -318,7 +318,7 @@ Dual::getStatusString() const noexcept {
       folly::join("\n", counterStrs));
 }
 
-std::unordered_map<std::string, thrift::DualPerRootCounters>
+std::map<std::string, thrift::DualPerRootCounters>
 Dual::getCounters() const noexcept {
   return counters_;
 }

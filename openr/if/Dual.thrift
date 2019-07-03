@@ -9,6 +9,7 @@ namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.Dual
+namespace py3 openr.thrift
 
 // DUAL message type
 enum DualMessageType {
@@ -57,12 +58,12 @@ struct DualPerRootCounters {
 
 typedef map<string, DualPerNeighborCounters>
   (cpp.type =
-    "std::unordered_map<std::string, /* neighbor */ DualPerNeighborCounters>")
+    "std::unordered_map<std::string, /* neighbor */ openr::thrift::DualPerNeighborCounters>")
   NeighborCounters
 
 typedef map<string, map<string, DualPerRootCounters>>
   (cpp.type =
-    "std::unordered_map<std::string, /* root */ std::unordered_map<std::string /* neighbor */, DualPerRootCounters>>")
+    "std::unordered_map<std::string, /* root */ std::map<std::string /* neighbor */, openr::thrift::DualPerRootCounters>>")
   RootCounters
 
 // all DUAL related counters

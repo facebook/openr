@@ -8,6 +8,7 @@
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.HealthChecker
+namespace py3 openr.thrift
 
 include "Network.thrift"
 
