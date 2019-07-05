@@ -49,17 +49,11 @@ getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
 } // namespace
 
 SyncRoutes80211s::SyncRoutes80211s(Routing* routing, folly::MacAddress nodeAddr)
-    : routing_{routing},
-      nodeAddr_{nodeAddr},
-      netlinkSocket_{&zmqEvl_},
-      zmqEvlThread_{[this]() {
-        folly::setThreadName("SyncRoutes80211s Zmq Evl");
-        zmqEvl_.run();
-      }} {
-  zmqEvl_.runInEventLoop([this]() {
-    zmqEvl_.scheduleTimeout(
-        kSyncRoutesInterval, [this]() noexcept { doSyncRoutes(); });
-  });
+    : routing_{routing}, nodeAddr_{nodeAddr}, netlinkSocket_{this} {
+  // Set timer to sync routes
+  syncRoutesTimer_ =
+      fbzmq::ZmqTimeout::make(this, [this]() noexcept { doSyncRoutes(); });
+  syncRoutesTimer_->scheduleTimeout(kSyncRoutesInterval, true);
 }
 
 void
@@ -224,7 +218,4 @@ SyncRoutes80211s::doSyncRoutes() {
 
   netlinkSocket_.syncUnicastRoutes(98, std::move(unicastRouteDb)).get();
   netlinkSocket_.syncLinkRoutes(98, std::move(linkRouteDb)).get();
-
-  zmqEvl_.scheduleTimeout(
-      kSyncRoutesInterval, [this]() noexcept { doSyncRoutes(); });
 }

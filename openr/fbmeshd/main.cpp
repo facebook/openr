@@ -438,8 +438,19 @@ main(int argc, char* argv[]) {
         kPeriodicPingerInterval,
         "mesh0");
     periodicPinger->scheduleTimeout(1s);
+
     syncRoutes80211s = std::make_unique<SyncRoutes80211s>(
         routing.get(), nlHandler.lookupMeshNetif().maybeMacAddress.value());
+
+    static constexpr auto syncRoutes80211sId{"SyncRoutes80211s"};
+    monitorEventLoopWithWatchdog(
+        syncRoutes80211s.get(), syncRoutes80211sId, watchdog.get());
+    allThreads.emplace_back(std::thread([&syncRoutes80211s]() noexcept {
+      LOG(INFO) << "Starting the SyncRoutes80211s thread...";
+      folly::setThreadName(syncRoutes80211sId);
+      syncRoutes80211s->run();
+      LOG(INFO) << "SyncRoutes80211s thread stopped.";
+    }));
 
     routing->setSendPacketCallback(
         [&routingPacketTransport](

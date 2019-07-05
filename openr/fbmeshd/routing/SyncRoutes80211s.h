@@ -17,7 +17,7 @@
 namespace openr {
 namespace fbmeshd {
 
-class SyncRoutes80211s {
+class SyncRoutes80211s : public fbzmq::ZmqEventLoop {
  public:
   SyncRoutes80211s(Routing* routing, folly::MacAddress nodeAddr);
 
@@ -35,9 +35,8 @@ class SyncRoutes80211s {
   Routing* routing_;
   folly::MacAddress nodeAddr_;
 
-  fbzmq::ZmqEventLoop zmqEvl_;
+  std::unique_ptr<fbzmq::ZmqTimeout> syncRoutesTimer_;
   openr::fbnl::NetlinkSocket netlinkSocket_;
-  std::thread zmqEvlThread_;
 
   folly::Optional<std::pair<folly::MacAddress, uint32_t>> currentGate_;
   bool isGateBeforeRouteSync_{false};
