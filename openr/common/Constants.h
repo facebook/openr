@@ -250,9 +250,6 @@ class Constants {
   // Decision publisher port for emitting realtime route-db updates
   static constexpr int32_t kDecisionPubPort{60003};
 
-  // The port Decision replier listens on
-  static constexpr int32_t kDecisionRepPort{60004};
-
   // The port link monitor publishes on
   static constexpr int32_t kLinkMonitorPubPort{60005};
 
@@ -273,9 +270,6 @@ class Constants {
 
   // The port prefix manager receives commands on
   static constexpr int32_t kPrefixManagerCmdPort{60011};
-
-  // The port Health Checker replier listens on
-  static constexpr int32_t kHealthCheckerRepPort{60012};
 
   // Switch agent thrift service port for Platform programming
   static constexpr int32_t kSystemAgentPort{60099};

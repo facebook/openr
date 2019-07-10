@@ -23,7 +23,6 @@ class FibAgentCmd(object):
         """ initialize the Fib agent client """
 
         self.cli_opts = cli_opts
-        self.decision_rep_port = cli_opts.decision_rep_port
         try:
             self.client = utils.get_fib_agent_client(
                 cli_opts.host,

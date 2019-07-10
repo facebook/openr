@@ -740,7 +740,6 @@ main(int argc, char** argv) {
           decisionGRWindow,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
-          maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_decision_rep_port),
           kDecisionPubUrl,
           monitorSubmitUrl,
           context));
@@ -787,8 +786,6 @@ main(int argc, char** argv) {
             PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
             kvStoreLocalCmdUrl,
             kvStoreLocalPubUrl,
-            maybeGetTcpEndpoint(
-                FLAGS_listen_addr, FLAGS_health_checker_rep_port),
             monitorSubmitUrl,
             context));
   }

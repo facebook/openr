@@ -31,9 +31,8 @@ class DecisionCli(object):
         self.decision.add_command(DecisionValidateCli().validate)
 
     @click.group()
-    @breeze_option("--decision_rep_port", type=int, help="Decision port")
     @click.pass_context
-    def decision(ctx, decision_rep_port):  # noqa: B902
+    def decision(ctx):  # noqa: B902
         """ CLI tool to peek into Decision module. """
         pass
 

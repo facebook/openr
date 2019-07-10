@@ -160,7 +160,6 @@ class OpenrWrapper {
   const std::string platformPubUrl_;
   const std::string linkMonitorGlobalCmdUrl_;
   const std::string linkMonitorGlobalPubUrl_;
-  const std::string decisionCmdUrl_;
   const std::string decisionPubUrl_;
   const std::string fibCmdUrl_;
 

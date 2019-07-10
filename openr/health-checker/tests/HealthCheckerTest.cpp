@@ -57,7 +57,6 @@ class HealthCheckerTestFixture : public ::testing::Test {
         PrefixDbMarker{"prefix:"},
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
-        std::string{"inproc://healthchecker-rep"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zmqContext);
 

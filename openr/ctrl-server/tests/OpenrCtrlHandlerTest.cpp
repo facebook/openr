@@ -70,7 +70,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         folly::none,
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        std::string{"inproc://decision-rep"},
         DecisionPubUrl{decisionPubUrl_},
         monitorSubmitUrl_,
         context_);
@@ -109,7 +108,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         PrefixDbMarker{Constants::kPrefixDbMarker.str()},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        folly::none, // command-url
         monitorSubmitUrl_,
         context_);
     healthCheckerThread_ = std::thread([&]() { healthChecker->run(); });

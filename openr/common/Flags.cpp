@@ -23,10 +23,6 @@ DEFINE_int32(
     decision_pub_port,
     openr::Constants::kDecisionPubPort,
     "Decision publisher port for emitting realtime route-db updates");
-DEFINE_int32(
-    decision_rep_port,
-    openr::Constants::kDecisionRepPort,
-    "The port Decision replier listens on");
 // Flag to enable or disable plugin module.
 DEFINE_bool(enable_plugin, false, "Enable plugin module");
 DEFINE_int32(
@@ -57,10 +53,6 @@ DEFINE_int32(
     prefix_manager_cmd_port,
     openr::Constants::kPrefixManagerCmdPort,
     "The port prefix manager receives commands on");
-DEFINE_int32(
-    health_checker_rep_port,
-    openr::Constants::kHealthCheckerRepPort,
-    "The port Health Checker replier listens on");
 DEFINE_int32(
     system_agent_port,
     openr::Constants::kSystemAgentPort,

@@ -108,11 +108,6 @@ DEFINE_bool(
     "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
 
 DEFINE_int32(
-    decision_rep_port,
-    openr::Constants::kDecisionRepPort,
-    "The port Decision replier listens on");
-
-DEFINE_int32(
     prefix_manager_cmd_port,
     openr::Constants::kPrefixManagerCmdPort,
     "The port prefix manager receives commands on");
@@ -354,8 +349,6 @@ main(int argc, char* argv[]) {
       folly::sformat("tcp://{}:{}", kHostName, FLAGS_link_monitor_cmd_port)};
   const openr::PrefixManagerLocalCmdUrl prefixManagerLocalCmdUrl{
       folly::sformat("tcp://{}:{}", kHostName, FLAGS_prefix_manager_cmd_port)};
-  const openr::DecisionCmdUrl decisionCmdUrl{
-      folly::sformat("tcp://{}:{}", kHostName, FLAGS_decision_rep_port)};
   const openr::MonitorSubmitUrl monitorSubmitUrl{
       folly::sformat("tcp://{}:{}", kHostName, FLAGS_monitor_rep_port)};
 

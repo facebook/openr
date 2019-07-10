@@ -2812,7 +2812,6 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
         folly::none,
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
-        folly::none,
         DecisionPubUrl{"inproc://decision-pub"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);

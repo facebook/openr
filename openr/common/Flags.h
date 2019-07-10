@@ -18,7 +18,6 @@ DECLARE_int32(kvstore_pub_port);
 DECLARE_int32(kvstore_rep_port);
 
 DECLARE_int32(decision_pub_port);
-DECLARE_int32(decision_rep_port);
 
 DECLARE_bool(enable_plugin);
 
@@ -31,7 +30,6 @@ DECLARE_int32(monitor_rep_port);
 DECLARE_int32(fib_rep_port);
 DECLARE_int32(health_checker_port);
 DECLARE_int32(prefix_manager_cmd_port);
-DECLARE_int32(health_checker_rep_port);
 DECLARE_int32(system_agent_port);
 DECLARE_int32(fib_handler_port);
 DECLARE_int32(spark_mcast_port);

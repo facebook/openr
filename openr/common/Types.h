@@ -31,7 +31,6 @@ BOOST_STRONG_TYPEDEF(std::string, MonitorPubUrl);
 BOOST_STRONG_TYPEDEF(std::string, PersistentStoreUrl);
 
 // Decision URLs
-BOOST_STRONG_TYPEDEF(std::string, DecisionCmdUrl);
 BOOST_STRONG_TYPEDEF(std::string, DecisionPubUrl);
 
 // markers for some of KvStore keys

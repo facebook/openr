@@ -49,7 +49,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           folly::sformat("inproc://{}-linkmonitor-cmd", nodeId_)),
       linkMonitorGlobalPubUrl_(
           folly::sformat("inproc://{}-linkmonitor-pub", nodeId_)),
-      decisionCmdUrl_(folly::sformat("inproc://{}-decision-cmd", nodeId_)),
       decisionPubUrl_(folly::sformat("inproc://{}-decision-pub", nodeId_)),
       fibCmdUrl_(folly::sformat("inproc://{}-fib-cmd", nodeId_)),
       kvStoreReqSock_(context),
@@ -237,7 +236,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       folly::none,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      decisionCmdUrl_,
       DecisionPubUrl{decisionPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       context_);

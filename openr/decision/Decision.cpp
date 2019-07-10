@@ -1571,15 +1571,10 @@ Decision::Decision(
     folly::Optional<std::chrono::seconds> gracefulRestartDuration,
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
-    const folly::Optional<std::string>& decisionCmdUrl,
     const DecisionPubUrl& decisionPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventLoop(
-          myNodeName,
-          thrift::OpenrModuleType::DECISION,
-          zmqContext,
-          decisionCmdUrl),
+    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::DECISION, zmqContext),
       processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       myNodeName_(myNodeName),
       adjacencyDbMarker_(adjacencyDbMarker),

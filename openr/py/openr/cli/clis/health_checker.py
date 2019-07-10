@@ -20,9 +20,8 @@ class HealthCheckerCli(object):
         self.healthchecker.add_command(PeekCli().peek)
 
     @click.group()
-    @breeze_option("--health_checker_cmd_port", type=int, help="Health Checker port")
     @click.pass_context
-    def healthchecker(ctx, health_checker_cmd_port):  # noqa: B902
+    def healthchecker(ctx):  # noqa: B902
         """ CLI tool to peek into Health Checker module. """
         pass
 
