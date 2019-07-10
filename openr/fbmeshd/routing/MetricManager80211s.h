@@ -32,7 +32,8 @@ class MetricManager80211s : public MetricManager, public folly::AsyncTimeout {
       Nl80211Handler& nlHandler,
       uint32_t ewmaFactor,
       uint32_t hysteresisFactor,
-      uint32_t baseBitrate);
+      uint32_t baseBitrate,
+      double rssiWeight);
 
   // This class should never be copied; remove default copy/move
   MetricManager80211s() = delete;
@@ -50,6 +51,7 @@ class MetricManager80211s : public MetricManager, public folly::AsyncTimeout {
  private:
   virtual void timeoutExpired() noexcept override;
   uint32_t bitrateToAirtime(uint32_t rate);
+  uint32_t rssiToAirtime(int32_t rssi);
 
   folly::EventBase* evb_;
   std::chrono::milliseconds interval_;
@@ -58,6 +60,7 @@ class MetricManager80211s : public MetricManager, public folly::AsyncTimeout {
   uint32_t ewmaFactor_;
   uint32_t hysteresisFactor_;
   uint32_t baseBitrate_;
+  double rssiWeight_;
 };
 
 } // namespace fbmeshd

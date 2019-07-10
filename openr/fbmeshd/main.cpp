@@ -215,6 +215,10 @@ DEFINE_uint32(
     7,
     "Routing metric manager EWMA log2 factor (e.g. value of 7 here implies"
     " factor of 2^7=128)");
+DEFINE_double(
+    routing_metric_manager_rssi_weight,
+    0.0,
+    "Weight of the RSSI based metric (vs. bitrate) in the combined metric");
 DEFINE_bool(
     is_openr_enabled,
     false,
@@ -429,7 +433,8 @@ main(int argc, char* argv[]) {
         nlHandler,
         FLAGS_routing_metric_manager_ewma_factor_log2,
         kMetricManagerHysteresisFactorLog2,
-        kMetricManagerBaseBitrate);
+        kMetricManagerBaseBitrate,
+        FLAGS_routing_metric_manager_rssi_weight);
     routing = std::make_unique<Routing>(
         routingEventLoop.get(),
         metricManager80211s.get(),

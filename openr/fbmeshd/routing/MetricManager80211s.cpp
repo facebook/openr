@@ -17,14 +17,16 @@ MetricManager80211s::MetricManager80211s(
     Nl80211Handler& nlHandler,
     uint32_t ewmaFactor,
     uint32_t hysteresisFactor,
-    uint32_t baseBitrate)
+    uint32_t baseBitrate,
+    double rssiWeight)
     : folly::AsyncTimeout{evb},
       evb_{evb},
       interval_{interval},
       nlHandler_{nlHandler},
       ewmaFactor_{ewmaFactor},
       hysteresisFactor_{hysteresisFactor},
-      baseBitrate_{baseBitrate} {
+      baseBitrate_{baseBitrate},
+      rssiWeight_{rssiWeight} {
   evb->runInEventBaseThread(
       [this, interval] { evb_->scheduleTimeout(this, interval); });
 }
@@ -46,13 +48,52 @@ MetricManager80211s::bitrateToAirtime(uint32_t rate) {
   return static_cast<uint32_t>(result);
 }
 
+uint32_t
+MetricManager80211s::rssiToAirtime(int32_t rssi) {
+  if (rssi == 0) {
+    /* Don't return UINT_MAX because old_metric+last_hop_metric would overflow
+     */
+    return uint32_t{0x7fffffff};
+  }
+  /* RSSI is not the best way to calculate airtime, but sometimes it is all
+   * we have available. We assume NSS-2 VHT80 and use this chart to convert
+   * rssi to bitrate, then airtime: https://www.wlanpros.com/mcs-index-charts/
+   */
+  uint32_t rate;
+  if (rssi >= -51) {
+    rate = 867;
+  } else if (rssi >= -53) {
+    rate = 780;
+  } else if (rssi >= -58) {
+    rate = 650;
+  } else if (rssi >= -59) {
+    rate = 585;
+  } else if (rssi >= -60) {
+    rate = 520;
+  } else if (rssi >= -64) {
+    rate = 390;
+  } else if (rssi >= -68) {
+    rate = 260;
+  } else if (rssi >= -71) {
+    rate = 195;
+  } else if (rssi >= -73) {
+    rate = 130;
+  } else {
+    rate = 65;
+  }
+
+  return uint32_t{8192 / rate};
+}
+
 void
 MetricManager80211s::timeoutExpired() noexcept {
   VLOG(8) << "MetricManager80211s: updating metrics...";
   const auto stas = nlHandler_.getStationsInfo();
   for (const auto& it : stas) {
     auto mac = it.macAddress;
-    uint32_t newMetric{bitrateToAirtime(it.expectedThroughput)};
+    uint32_t newMetricBitrate{bitrateToAirtime(it.expectedThroughput)};
+    uint32_t newMetricRssi{rssiToAirtime(it.signalAvgDbm)};
+    uint32_t newMetric;
 
     /* Filter bitrates of 0 so it doesn't polute the average */
     if (it.expectedThroughput == 0) {
@@ -65,6 +106,16 @@ MetricManager80211s::timeoutExpired() noexcept {
               << mac;
       continue;
     }
+
+    // if the RSSI based metric seems broken, ignore it
+    if (newMetricRssi == 0 || newMetricRssi > 1000) {
+      VLOG(1) << "MetricManager80211s: rssi based metric seems broken: "
+              << newMetricRssi;
+      newMetricRssi = newMetricBitrate;
+    }
+
+    newMetric = round(
+        (1.0 - rssiWeight_) * newMetricBitrate + rssiWeight_ * newMetricRssi);
 
     /* Initialize to newMetric to speed up convergence  */
     if (metrics_.count(mac) == 0) {
