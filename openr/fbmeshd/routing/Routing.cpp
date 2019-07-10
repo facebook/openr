@@ -46,7 +46,9 @@ Routing::Routing(
     folly::EventBase* evb,
     MetricManager* metricManager,
     folly::MacAddress nodeAddr,
-    uint32_t elementTtl)
+    uint32_t elementTtl,
+    std::chrono::milliseconds activePathTimeout,
+    std::chrono::milliseconds rootPannInterval)
     : evb_{evb},
       nodeAddr_{nodeAddr},
       elementTtl_{elementTtl},
@@ -56,7 +58,9 @@ Routing::Routing(
       housekeepingTimer_{folly::AsyncTimeout::make(
           *evb_, [this]() noexcept { doMeshHousekeeping(); })},
       meshPathRootTimer_{folly::AsyncTimeout::make(
-          *evb_, [this]() noexcept { doMeshPathRoot(); })} {
+          *evb_, [this]() noexcept { doMeshPathRoot(); })},
+      activePathTimeout_{activePathTimeout},
+      rootPannInterval_{rootPannInterval} {
   evb_->runInEventBaseThread([this]() { prepare(); });
 }
 

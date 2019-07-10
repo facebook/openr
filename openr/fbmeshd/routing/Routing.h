@@ -84,7 +84,9 @@ class Routing {
       folly::EventBase* evb,
       MetricManager* metricManager,
       folly::MacAddress nodeAddr,
-      uint32_t elementTtl);
+      uint32_t elementTtl,
+      std::chrono::milliseconds activePathTimeout,
+      std::chrono::milliseconds rootPannInterval);
 
   Routing() = delete;
   ~Routing() = default;
@@ -169,9 +171,9 @@ class Routing {
   /*
    * Protocol Parameters
    */
-  std::chrono::milliseconds activePathTimeout_{30000};
+  std::chrono::milliseconds activePathTimeout_;
   bool isRoot_{false};
-  std::chrono::milliseconds rootPannInterval_{5000};
+  std::chrono::milliseconds rootPannInterval_;
   bool isGate_{false};
 
   /*

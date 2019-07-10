@@ -206,7 +206,15 @@ DEFINE_bool(
     enable_routing, true, "If set, enables experimental routing module");
 DEFINE_uint32(routing_ttl, 32, "TTL for routing elements");
 DEFINE_int32(routing_tos, 192, "ToS value for routing messages");
-
+DEFINE_uint32(
+    routing_active_path_timeout_ms, 30000, "Routing active path timeout (ms)");
+DEFINE_uint32(
+    routing_root_pann_interval_ms, 5000, "Routing PANN interval (ms)");
+DEFINE_uint32(
+    routing_metric_manager_ewma_factor_log2,
+    7,
+    "Routing metric manager EWMA log2 factor (e.g. value of 7 here implies"
+    " factor of 2^7=128)");
 DEFINE_bool(
     is_openr_enabled,
     false,
@@ -217,7 +225,6 @@ namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
 
 const auto kMetricManagerInterval{3s};
-const auto kMetricManagerEwmaFactorLog2{7};
 const auto kMetricManagerHysteresisFactorLog2{2};
 const auto kMetricManagerBaseBitrate{60};
 const auto kPeriodicPingerInterval{10s};
@@ -420,14 +427,16 @@ main(int argc, char* argv[]) {
         routingEventLoop.get(),
         kMetricManagerInterval,
         nlHandler,
-        kMetricManagerEwmaFactorLog2,
+        FLAGS_routing_metric_manager_ewma_factor_log2,
         kMetricManagerHysteresisFactorLog2,
         kMetricManagerBaseBitrate);
     routing = std::make_unique<Routing>(
         routingEventLoop.get(),
         metricManager80211s.get(),
         nlHandler.lookupMeshNetif().maybeMacAddress.value(),
-        FLAGS_routing_ttl);
+        FLAGS_routing_ttl,
+        std::chrono::milliseconds{FLAGS_routing_active_path_timeout_ms},
+        std::chrono::milliseconds{FLAGS_routing_root_pann_interval_ms});
     routingPacketTransport = std::make_unique<UDPRoutingPacketTransport>(
         routingEventLoop.get(), 6668, FLAGS_routing_tos);
     periodicPinger = std::make_unique<PeriodicPinger>(
