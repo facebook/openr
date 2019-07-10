@@ -82,31 +82,6 @@ DEFINE_bool(
     false,
     "If set, PeerSelector will use event-based mode instead of polling mode");
 
-DEFINE_bool(
-    enable_separa,
-    false,
-    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
-DEFINE_int32(
-    separa_hello_port,
-    6667,
-    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
-DEFINE_int32(
-    separa_broadcast_interval_s,
-    1,
-    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
-DEFINE_int32(
-    separa_domain_lockdown_period_s,
-    60,
-    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
-DEFINE_double(
-    separa_domain_change_threshold_factor,
-    1,
-    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
-DEFINE_bool(
-    enable_separa_broadcasts,
-    true,
-    "DEPRECATED; TODO: delete after Separa is disabled on all meshes");
-
 DEFINE_int32(
     prefix_manager_cmd_port,
     openr::Constants::kPrefixManagerCmdPort,
