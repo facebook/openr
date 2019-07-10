@@ -213,15 +213,14 @@ BM_Fib(benchmark::State& state) {
   }
 
   // Get average time for each itaration
-  // To avoid 'division by 0', add 1 to state.iterations()
   for (auto& processTime : processTimes) {
-    processTime /= (state.iterations() + 1);
+    processTime /= state.iterations() == 0 ? 1 : state.iterations();
   }
 
   // Add customized counters to state.
-  state.counters.insert({{"DB_Receive", processTimes[0]},
-                         {"Fib_Debounce", processTimes[1]},
-                         {"DB_Program", processTimes[2]}});
+  state.counters.insert({{"route_receive", processTimes[0]},
+                         {"debounce", processTimes[1]},
+                         {"route_install", processTimes[2]}});
 }
 
 } // namespace openr
