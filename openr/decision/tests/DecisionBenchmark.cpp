@@ -5,17 +5,18 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <memory>
-
 #include <benchmark/benchmark.h>
 #include <folly/IPAddress.h>
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
 #include <folly/Random.h>
 #include <folly/futures/Promise.h>
+#include <memory>
+
 #include <openr/common/Constants.h>
 #include <openr/decision/Decision.h>
 #include <openr/decision/tests/DecisionBenchmark.h>
+#include <openr/tests/OpenrModuleTestBase.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -48,14 +49,14 @@ createAdjDb(
 // Start the decision thread and simulate KvStore communications
 // Expect proper RouteDatabase publications to appear
 //
-class DecisionWrapper {
+class DecisionWrapper : public OpenrModuleTestBase {
  public:
   DecisionWrapper() {
     kvStorePub.bind(fbzmq::SocketUrl{"inproc://kvStore-pub"});
     kvStoreRep.bind(fbzmq::SocketUrl{"inproc://kvStore-rep"});
 
     decision = std::make_shared<Decision>(
-        "1", /* nodeId name */
+        "1", /* node name */
         true, /* enable v4 */
         true, /* computeLfaPaths */
         false, /* enableOrderedFib */
@@ -67,7 +68,6 @@ class DecisionWrapper {
         folly::none,
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
-        std::string{"inproc://decision-rep"},
         DecisionPubUrl{"inproc://decision-pub"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
@@ -79,24 +79,39 @@ class DecisionWrapper {
     });
     decision->waitUntilRunning();
 
+    // put handler into moduleToEvl to make sure openr-ctrl thrift handler
+    // can access Decision module.
+    moduleTypeToEvl_[thrift::OpenrModuleType::DECISION] = decision;
+
+    // variables used to create Open/R ctrl thrift handler
+    std::unordered_set<std::string> acceptablePeerNames;
+    startOpenrCtrlHandler(
+        "node-1",
+        acceptablePeerNames,
+        MonitorSubmitUrl{"inproc://monitor-rep"},
+        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
+        zeromqContext);
+
     const int hwm = 1000;
     decisionPub.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(hwm)).value();
     decisionPub.setSockOpt(ZMQ_SUBSCRIBE, "", 0).value();
     decisionPub.connect(fbzmq::SocketUrl{"inproc://decision-pub"});
-    decisionReq.connect(fbzmq::SocketUrl{"inproc://decision-rep"});
 
     // Make initial sync request with empty route-db
     replyInitialSyncReq(thrift::Publication());
     // Make request from decision to ensure that sockets are ready for use!
-    // TODO: zmq usage to send DecisionRequest will be depreacated. decisionReq
-    // will be removed.
-    dumpRouteDatabase({"random-nodeId"});
+    dumpRouteDb({"random-node"});
   }
 
   ~DecisionWrapper() {
+    LOG(INFO) << "Stopping openr-ctrl thrift server";
+    stopOpenrCtrlHandler();
+    LOG(INFO) << "Openr-ctrl thrift server got stopped";
+
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
     decisionThread->join();
+    LOG(INFO) << "Decision thread got stopped";
   }
 
   //
@@ -163,21 +178,17 @@ class DecisionWrapper {
   //
   // private member methods
   //
+
   std::unordered_map<std::string, thrift::RouteDatabase>
-  dumpRouteDatabase(const std::vector<std::string>& allNodes) {
+  dumpRouteDb(const std::vector<std::string>& allNodes) {
     std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
 
-    for (std::string const& nodeId : allNodes) {
-      decisionReq.sendThriftObj(
-          thrift::DecisionRequest(
-              FRAGILE, thrift::DecisionCommand::ROUTE_DB_GET, nodeId),
-          serializer);
-
-      auto maybeReply =
-          decisionReq.recvThriftObj<thrift::DecisionReply>(serializer);
-      const auto& routeDb = maybeReply.value().routeDb;
-
-      routeMap[nodeId] = routeDb;
+    for (std::string const& node : allNodes) {
+      auto resp = openrCtrlHandler_
+                      ->semifuture_getRouteDbComputed(
+                          std::make_unique<std::string>(node))
+                      .get();
+      routeMap[node] = *resp;
       VLOG(4) << "---";
     }
 
@@ -401,24 +412,25 @@ createGrid(
 void
 updateRandomGridAdjs(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
-    std::pair<int, int>& updatedIndices,
+    folly::Optional<std::pair<int, int>>& selectedNode,
     const int n,
     std::vector<uint64_t>& processTimes) {
   thrift::Publication newPub;
 
   // If there has been an update, revert the update,
   // otherwise, choose a random nodeId for update
-  auto row = (updatedIndices.first == -1) ? folly::Random::rand32() % n
-                                          : updatedIndices.first;
-  auto col = (updatedIndices.second == -1) ? folly::Random::rand32() % n
-                                           : updatedIndices.second;
+  auto row = selectedNode.hasValue() ? selectedNode.value().first
+                                     : folly::Random::rand32() % n;
+  auto col = selectedNode.hasValue() ? selectedNode.value().second
+                                     : folly::Random::rand32() % n;
 
   auto nodeName = folly::sformat("{}", row * n + col);
   auto adjs = createGridAdjacencys(row, col, n);
-  auto overloadBit = (updatedIndices.first == -1) ? true : false;
+  auto overloadBit = selectedNode.hasValue() ? false : true;
   // Record the updated nodeId
-  updatedIndices = (updatedIndices.first == -1) ? std::pair<int, int>(row, col)
-                                                : std::pair<int, int>(-1, -1);
+  selectedNode = selectedNode.hasValue()
+      ? folly::none
+      : folly::Optional<std::pair<int, int>>(std::make_pair(row, col));
 
   // Send the update to decision and receive the routes
   sendRecvUpdate(
@@ -437,9 +449,8 @@ insertUserCounters(
   }
 
   // Add customized counters to state.
-  state.counters.insert({{"adj_receive", processTimes[0]},
-                         {"debounce", processTimes[1]},
-                         {"spf", processTimes[2]}});
+  state.counters.insert(
+      {{"adj_receive", processTimes[0]}, {"spf", processTimes[2]}});
 }
 
 //
@@ -461,7 +472,7 @@ BM_DecisionGrid(benchmark::State& state) {
   decisionWrapper->recvMyRouteDb();
 
   // Record the updated nodeId
-  std::pair<int, int> updatedIndices{-1, -1};
+  folly::Optional<std::pair<int, int>> selectedNode = folly::none;
   //
   // Customized time counter
   // processTimes[0] is the time of sending adjDB from Kvstore (simulated) to
@@ -472,7 +483,7 @@ BM_DecisionGrid(benchmark::State& state) {
 
   for (auto _ : state) {
     // Advertise adj update. This should trigger the SPF run.
-    updateRandomGridAdjs(decisionWrapper, updatedIndices, n, processTimes);
+    updateRandomGridAdjs(decisionWrapper, selectedNode, n, processTimes);
   }
 
   // Insert processTimes as user counters
