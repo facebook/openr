@@ -122,11 +122,7 @@ NetlinkSocket::NetlinkSocket(
                                          link = std::move(link),
                                          action = action,
                                          runHandler = runHandler]() mutable {
-        std::string linkName = link.getLinkName();
-        if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
-          EventVariant event = std::move(link);
-          handler_->handleEvent(linkName, action, event);
-        }
+        doHandleLinkEvent(link, action, runHandler);
       });
     });
 
@@ -136,13 +132,21 @@ NetlinkSocket::NetlinkSocket(
                                          ifAddr = std::move(ifAddr),
                                          action = action,
                                          runHandler = runHandler]() mutable {
-        std::string ifName = getIfName(ifAddr.getIfIndex()).get();
-        if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
-          EventVariant event = std::move(ifAddr);
-          handler_->handleEvent(ifName, action, event);
-        }
+        doHandleAddrEvent(ifAddr, action, runHandler);
       });
     });
+
+    nlSock_->setNeighborEventCB([this](
+        openr::fbnl::Neighbor neigh, int action, bool runHandler) noexcept {
+      evl_->runImmediatelyOrInEventLoop([this,
+                                         neigh = std::move(neigh),
+                                         action = action,
+                                         runHandler = runHandler]() mutable {
+        doHandleNeighborEvent(neigh, action, runHandler);
+      });
+    });
+    // Instantiate local link and neighbor caches
+    getAllReachableNeighbors().get();
   }
 
   // need to reload routes from kernel to avoid re-adding existing route
@@ -217,6 +221,10 @@ NetlinkSocket::linkCacheCB(
 void
 NetlinkSocket::handleLinkEvent(
     struct nl_object* obj, int action, bool runHandler) noexcept {
+  if (useNetlinkMessage_) {
+    // useNetlinkMessage_ is true, libnl link events are not processed.
+    return;
+  }
   CHECK_NOTNULL(obj);
   if (!checkObjectType(obj, kLinkObjectStr)) {
     return;
@@ -225,6 +233,12 @@ NetlinkSocket::handleLinkEvent(
   struct rtnl_link* linkObj = reinterpret_cast<struct rtnl_link*>(obj);
   LinkBuilder builder;
   auto link = builder.buildFromObject(linkObj);
+  doHandleLinkEvent(std::move(link), action, runHandler);
+}
+
+void
+NetlinkSocket::doHandleLinkEvent(
+    Link link, int action, bool runHandler) noexcept {
   const auto linkName = link.getLinkName();
   auto& linkAttr = links_[linkName];
   linkAttr.isUp = link.isUp();
@@ -235,8 +249,7 @@ NetlinkSocket::handleLinkEvent(
   if (!linkAttr.isUp) {
     removeNeighborCacheEntries(linkName);
   }
-  if (handler_ && runHandler && !useNetlinkMessage_ &&
-      eventFlags_[LINK_EVENT]) {
+  if (handler_ && runHandler && eventFlags_[LINK_EVENT]) {
     EventVariant event = std::move(link);
     handler_->handleEvent(linkName, action, event);
   }
@@ -263,6 +276,10 @@ NetlinkSocket::addrCacheCB(
 void
 NetlinkSocket::handleAddrEvent(
     struct nl_object* obj, int action, bool runHandler) noexcept {
+  if (useNetlinkMessage_) {
+    // useNetlinkMessage_ is true, libnl addr events are not processed.
+    return;
+  }
   CHECK_NOTNULL(obj);
   if (!checkObjectType(obj, kAddrObjectStr)) {
     return;
@@ -272,8 +289,14 @@ NetlinkSocket::handleAddrEvent(
   IfAddressBuilder builder;
   const bool isValid = (action != NL_ACT_DEL);
   auto ifAddr = builder.loadFromObject(addrObj).setValid(isValid).build();
+  doHandleAddrEvent(std::move(ifAddr), action, runHandler);
+}
+
+void
+NetlinkSocket::doHandleAddrEvent(
+    IfAddress ifAddr, int action, bool runHandler) noexcept {
   std::string ifName = getIfName(ifAddr.getIfIndex()).get();
-  if (isValid) {
+  if (action == NL_ACT_GET) {
     if (links_[ifName].networks.count(ifAddr.getPrefix().value()) == 0) {
       links_[ifName].networks.insert(ifAddr.getPrefix().value());
     }
@@ -284,8 +307,7 @@ NetlinkSocket::handleAddrEvent(
     }
   }
 
-  if (handler_ && runHandler && !useNetlinkMessage_ &&
-      eventFlags_[ADDR_EVENT]) {
+  if (handler_ && runHandler && eventFlags_[ADDR_EVENT]) {
     EventVariant event = std::move(ifAddr);
     handler_->handleEvent(ifName, action, event);
   }
@@ -302,6 +324,10 @@ NetlinkSocket::neighCacheCB(
 void
 NetlinkSocket::handleNeighborEvent(
     nl_object* obj, int action, bool runHandler) noexcept {
+  if (useNetlinkMessage_) {
+    // useNetlinkMessage_ is true, libnl neighbor events are not processed.
+    return;
+  }
   CHECK_NOTNULL(obj);
   LOG(INFO) << "Handle neighbor event";
   if (!checkObjectType(obj, kNeighborObjectStr)) {
@@ -315,16 +341,22 @@ NetlinkSocket::handleNeighborEvent(
   }
   NeighborBuilder builder;
   auto neigh = builder.buildFromObject(neighObj, NL_ACT_DEL == action);
-  std::string ifName = getIfName(neigh.getIfIndex()).get();
-  auto key = std::make_pair(ifName, neigh.getDestination());
+  doHandleNeighborEvent(std::move(neigh), action, runHandler);
+}
+
+void
+NetlinkSocket::doHandleNeighborEvent(
+    Neighbor neighbor, int action, bool runHandler) noexcept {
+  std::string ifName = getIfName(neighbor.getIfIndex()).get();
+  auto key = std::make_pair(ifName, neighbor.getDestination());
   neighbors_.erase(key);
 
   NeighborUpdate neighborUpdate;
-  if (neigh.isReachable()) {
-    neighbors_.emplace(std::make_pair(key, std::move(neigh)));
-    neighborUpdate.addNeighbor(neigh.getDestination().str());
+  if (neighbor.isReachable()) {
+    neighbors_.emplace(std::make_pair(key, neighbor));
+    neighborUpdate.addNeighbor(neighbor.getDestination().str());
   } else {
-    neighborUpdate.delNeighbor(neigh.getDestination().str());
+    neighborUpdate.delNeighbor(neighbor.getDestination().str());
   }
 
   if (neighborListener_) {
@@ -338,7 +370,7 @@ NetlinkSocket::handleNeighborEvent(
 
   if (handler_ && runHandler && eventFlags_[NEIGH_EVENT]) {
     NeighborBuilder nhBuilder;
-    EventVariant event = nhBuilder.buildFromObject(neighObj);
+    EventVariant event = std::move(neighbor);
     handler_->handleEvent(ifName, action, event);
   }
 }
@@ -1106,8 +1138,16 @@ NetlinkSocket::getIfIndex(const std::string& ifName) {
   folly::Promise<int> promise;
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop(
-      [this, p = std::move(promise), ifStr = ifName.c_str()]() mutable {
-        p.setValue(rtnl_link_name2i(linkCache_, ifStr));
+      [this, p = std::move(promise), ifName = folly::copy(ifName)]() mutable {
+        int ifIndex{-1};
+        if (useNetlinkMessage_) {
+          if (links_.count(ifName)) {
+            ifIndex = links_[ifName].ifIndex;
+          }
+        } else {
+          ifIndex = rtnl_link_name2i(linkCache_, ifName.c_str());
+        }
+        p.setValue(ifIndex);
       });
   return future;
 }
@@ -1120,7 +1160,7 @@ NetlinkSocket::getLoopbackIfindex() {
     p.setValue(loopbackIfIndex_);
   });
   return future;
-} // namespace fbnl
+}
 
 folly::Future<std::string>
 NetlinkSocket::getIfName(int ifIndex) const {
@@ -1128,9 +1168,18 @@ NetlinkSocket::getIfName(int ifIndex) const {
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), ifIndex]() mutable {
-        std::array<char, IFNAMSIZ> ifNameBuf;
-        std::string ifName(rtnl_link_i2name(
-            linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+        std::string ifName{""};
+        if (useNetlinkMessage_) {
+          for (const auto& linkEntry : links_) {
+            if (linkEntry.second.ifIndex == ifIndex) {
+              ifName = linkEntry.first;
+            }
+          }
+        } else {
+          std::array<char, IFNAMSIZ> ifNameBuf;
+          ifName = std::string(rtnl_link_i2name(
+              linkCache_, ifIndex, ifNameBuf.data(), ifNameBuf.size()));
+        }
         p.setValue(ifName);
       });
   return future;
@@ -1347,10 +1396,18 @@ NetlinkSocket::getAllLinks() {
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
     try {
-      updateLinkCache();
-      updateAddrCache();
       if (useNetlinkMessage_) {
-        links_ = nlSock_->getAllLinks();
+        auto links = nlSock_->getAllLinks();
+        for (auto& linkEntry : links) {
+          doHandleLinkEvent(linkEntry.first, linkEntry.second, false);
+        }
+        auto addresses = nlSock_->getAllIfAddresses();
+        for (auto& addrEntry : addresses) {
+          doHandleAddrEvent(addrEntry.first, addrEntry.second, false);
+        }
+      } else {
+        updateLinkCache();
+        updateAddrCache();
       }
       p.setValue(links_);
     } catch (const std::exception& ex) {
@@ -1367,11 +1424,17 @@ NetlinkSocket::getAllReachableNeighbors() {
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
     try {
-      // Neighbor need linkcache to map ifIndex to name
-      updateLinkCache();
-      updateAddrCache();
-      updateNeighborCache();
-      p.setValue(std::move(neighbors_));
+      getAllLinks().get();
+      if (useNetlinkMessage_) {
+        auto neighbors = nlSock_->getAllNeighbors();
+        for (auto& neighborEntry : neighbors) {
+          doHandleNeighborEvent(
+              neighborEntry.first, neighborEntry.second, false);
+        }
+      } else {
+        updateNeighborCache();
+      }
+      p.setValue(neighbors_);
     } catch (const std::exception& ex) {
       p.setException(ex);
     }

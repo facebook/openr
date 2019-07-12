@@ -413,10 +413,18 @@ class NetlinkSocket {
 
   void handleLinkEvent(nl_object* obj, int action, bool runHandler) noexcept;
 
+  void doHandleLinkEvent(Link link, int action, bool runHandler) noexcept;
+
   void handleAddrEvent(nl_object* obj, int action, bool runHandler) noexcept;
+
+  void doHandleAddrEvent(
+      IfAddress ifAddr, int action, bool runHandler) noexcept;
 
   void handleNeighborEvent(
       nl_object* obj, int action, bool runHandler) noexcept;
+
+  void doHandleNeighborEvent(
+      Neighbor neighbor, int action, bool runHandler) noexcept;
 
   void doUpdateRouteCache(
       struct rtnl_route* obj, int action, bool updateUnicastRoute = false);

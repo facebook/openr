@@ -2646,6 +2646,14 @@ TEST_P(NetlinkSocketFixture, GetAddrsTest) {
   EXPECT_TRUE(p4);
 }
 
+// Check if NetlinkSocket returns the index of the loopback interface
+// which is used for MPLS route programming
+TEST_P(NetlinkSocketFixture, LoopbackTest) {
+  LOG(INFO) << "Get all links and check if loopback index is set";
+  netlinkSocket->getAllLinks();
+  EXPECT_TRUE(netlinkSocket->getLoopbackIfindex().get().hasValue());
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

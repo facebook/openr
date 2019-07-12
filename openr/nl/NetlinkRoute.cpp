@@ -555,8 +555,7 @@ NetlinkLinkMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
     }
   }
   auto link = builder.build();
-  VLOG(1) << "Link#" << link.getIfIndex() << " Name: " << link.getLinkName()
-          << " State:" << (link.isUp() ? " UP" : " DOWN");
+  VLOG(2) << link.str();
   return link;
 }
 
@@ -614,8 +613,8 @@ NetlinkAddrMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
         builder = builder.setPrefix(prefix);
       } else if (addrEntry->ifa_family == AF_INET6) {
         struct in6_addr* addr6 = reinterpret_cast<in6_addr*> RTA_DATA(addrAttr);
-        auto ipAddress = folly::IPAddressV6::tryFromBinary(
-            folly::ByteRange((const unsigned char*)addr6->s6_addr, 16));
+        auto ipAddress = folly::IPAddressV6::tryFromBinary(folly::ByteRange(
+            reinterpret_cast<const unsigned char*>(addr6->s6_addr), 16));
         if (ipAddress.hasValue()) {
           folly::CIDRNetwork prefix = std::make_pair(
               ipAddress.value(), (uint8_t)addrEntry->ifa_prefixlen);
@@ -628,12 +627,84 @@ NetlinkAddrMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
     }
   }
   auto addr = builder.build();
-  if (addr.getPrefix().hasValue()) {
-    VLOG(1) << "Address: "
-            << folly::IPAddress::networkToString(addr.getPrefix().value())
-            << " If Index:" << addrEntry->ifa_index;
-  }
+  VLOG(2) << addr.str();
   return addr;
+}
+
+NetlinkNeighborMessage::NetlinkNeighborMessage() {
+  // get pointer to NLMSG header
+  msghdr_ = getMessagePtr();
+}
+
+void
+NetlinkNeighborMessage::init(int type, uint32_t neighFlags) {
+  if (type != RTM_NEWNEIGH && type != RTM_DELNEIGH && type != RTM_GETNEIGH) {
+    LOG(ERROR) << "Incorrect Netlink message type";
+    return;
+  }
+  // initialize netlink header
+  msghdr_->nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
+  msghdr_->nlmsg_type = type;
+  msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+
+  if (type == RTM_GETNEIGH) {
+    // Get all neighbors
+    msghdr_->nlmsg_flags |= NLM_F_DUMP;
+  }
+
+  // intialize the route neighbor message header
+  auto nlmsgAlen = NLMSG_ALIGN(sizeof(struct nlmsghdr));
+  ndmsg_ = reinterpret_cast<struct ndmsg*>((char*)msghdr_ + nlmsgAlen);
+  ndmsg_->ndm_flags = neighFlags;
+}
+
+fbnl::Neighbor
+NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
+  fbnl::NeighborBuilder builder;
+  const struct ndmsg* const neighEntry =
+      reinterpret_cast<struct ndmsg*>(NLMSG_DATA(nlmsg));
+
+  // Construct neighbor from Netlink message
+  bool isDeleted = (nlmsg->nlmsg_type == RTM_DELNEIGH);
+  builder = builder.setIfIndex(neighEntry->ndm_ifindex)
+                .setState(neighEntry->ndm_state, isDeleted);
+  const struct rtattr* neighAttr;
+  auto neighAttrLen = RTM_PAYLOAD(nlmsg);
+  // process all neighbor attributes
+  for (neighAttr = RTM_RTA(neighEntry); RTA_OK(neighAttr, neighAttrLen);
+       neighAttr = RTA_NEXT(neighAttr, neighAttrLen)) {
+    switch (neighAttr->rta_type) {
+    case NDA_DST: {
+      if (neighEntry->ndm_family == AF_INET) {
+        // IPv4 address
+        struct in_addr* addr4 = reinterpret_cast<in_addr*> RTA_DATA(neighAttr);
+        auto ipAddress = folly::IPAddressV4::fromLong(addr4->s_addr);
+        builder = builder.setDestination(ipAddress);
+      } else if (neighEntry->ndm_family == AF_INET6) {
+        // IPv6 Address
+        struct in6_addr* addr6 =
+            reinterpret_cast<in6_addr*> RTA_DATA(neighAttr);
+        auto ipAddress = folly::IPAddressV6::tryFromBinary(folly::ByteRange(
+            reinterpret_cast<const unsigned char*>(addr6->s6_addr), 16));
+        if (ipAddress.hasValue()) {
+          builder = builder.setDestination(ipAddress.value());
+        } else {
+          LOG(ERROR) << "Error parsing Netlink NEIGH message";
+        }
+      }
+    } break;
+
+    case NDA_LLADDR: {
+      auto macAddress = folly::MacAddress::fromBinary(folly::ByteRange(
+          reinterpret_cast<const unsigned char*>(RTA_DATA(neighAttr)),
+          ETH_ALEN));
+      builder.setLinkAddress(macAddress);
+    } break;
+    }
+  }
+  fbnl::Neighbor neighbor = builder.build();
+  VLOG(2) << neighbor.str();
+  return neighbor;
 }
 
 } // namespace Netlink

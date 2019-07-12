@@ -132,6 +132,10 @@ class NetlinkProtocolSocket {
   void setAddrEventCB(
       std::function<void(fbnl::IfAddress, int, bool)> addrEventCB);
 
+  // Set netlinkSocket Addr event callback
+  void setNeighborEventCB(
+      std::function<void(fbnl::Neighbor, int, bool)> neighborEventCB);
+
   // process message
   void processMessage(
       const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead);
@@ -169,8 +173,14 @@ class NetlinkProtocolSocket {
   // ack count
   uint32_t getAckCount() const;
 
-  // get all link interfaces and interface addresses from Netlink
-  fbnl::NlLinks getAllLinks();
+  // get all link interfaces from Netlink
+  std::vector<std::pair<fbnl::Link, int>> getAllLinks();
+
+  // get all interface addresses from Netlink
+  std::vector<std::pair<fbnl::IfAddress, int>> getAllIfAddresses();
+
+  // get all neighbors from Netlink
+  std::vector<std::pair<fbnl::Neighbor, int>> getAllNeighbors();
 
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
@@ -182,6 +192,8 @@ class NetlinkProtocolSocket {
   std::function<void(fbnl::Link, int, bool)> linkEventCB_;
 
   std::function<void(fbnl::IfAddress, int, bool)> addrEventCB_;
+
+  std::function<void(fbnl::Neighbor, int, bool)> neighborEventCB_;
 
   // netlink message queue
   std::queue<std::unique_ptr<NetlinkMessage>> msgQueue_;
@@ -216,14 +228,13 @@ class NetlinkProtocolSocket {
   // Set ack status value to promise in the netlink request message
   void setReturnStatusValue(uint32_t seq, int ackStatus);
 
-  // get all interface addresses from Netlink
-  void getAllIfAddresses();
-
   /**
-   * We keep an internal cache of Link entries
-   * This are used in the getAllLinks method
+   * We keep an internal cache of Link, Address and Neighbor action events
+   * This are used in the getAllLinks/getAllReachableNeighbors method
    */
-  fbnl::NlLinks links_{};
+  std::vector<std::pair<fbnl::Link, /* action event */ int>> links_{};
+  std::vector<std::pair<fbnl::IfAddress, /* action event */ int>> addresses_{};
+  std::vector<std::pair<fbnl::Neighbor, /* action event */ int>> neighbors_{};
 };
 } // namespace Netlink
 } // namespace openr

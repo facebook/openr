@@ -66,6 +66,8 @@ folly::IPAddress ipAddrY4V6{"fe80::204"};
 
 folly::IPAddress ipAddrX1V4{"172.10.10.10"};
 folly::IPAddress ipAddrY1V4{"172.10.11.10"};
+const folly::MacAddress kLinkAddr1("01:02:03:04:05:06");
+const folly::MacAddress kLinkAddr2("01:02:03:04:05:07");
 
 std::vector<int32_t> outLabel1{500};
 std::vector<int32_t> outLabel2{500, 501};
@@ -164,6 +166,52 @@ class NlMessageFixture : public ::testing::Test {
     nl_cache_free(linkCache_);
     nl_socket_free(socket_);
     rtnl_link_veth_release(link_);
+  }
+
+  void
+  addNeighborEntry(
+      const std::string& ifName,
+      const folly::IPAddress& nextHopIp,
+      const folly::MacAddress& linkAddr) {
+    auto cmd = "ip -6 neigh add {} lladdr {} nud reachable dev {}"_shellify(
+        nextHopIp.str().c_str(), linkAddr.toString().c_str(), ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+  }
+
+  void
+  deleteNeighborEntry(
+      const std::string& ifName,
+      const folly::IPAddress& nextHopIp,
+      const folly::MacAddress& linkAddr) {
+    // Now delete the neighbor entry from the system
+    auto cmd = "ip -6 neigh del {} lladdr {} nud reachable dev {}"_shellify(
+        nextHopIp.str().c_str(), linkAddr.toString().c_str(), ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+  }
+
+  void
+  addV4NeighborEntry(
+      const std::string& ifName,
+      const folly::IPAddress& nextHopIp,
+      const folly::MacAddress& linkAddr) {
+    auto cmd = "ip neigh add {} lladdr {} nud reachable dev {}"_shellify(
+        nextHopIp.str().c_str(), linkAddr.toString().c_str(), ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
+  }
+
+  void
+  deleteV4NeighborEntry(
+      const std::string& ifName,
+      const folly::IPAddress& nextHopIp,
+      const folly::MacAddress& linkAddr) {
+    // Now delete the neighbor entry from the system
+    auto cmd = "ip neigh del {} lladdr {} nud reachable dev {}"_shellify(
+        nextHopIp.str().c_str(), linkAddr.toString().c_str(), ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
   }
 
  private:
@@ -851,6 +899,146 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   EXPECT_EQ(status, ResultCode::SUCCESS);
   EXPECT_EQ(0, nlSock->getErrorCount());
   EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+}
+
+TEST_F(NlMessageFixture, GetAllNeighbors) {
+  // Add 100 neighbors and check if getAllReachableNeighbors
+  // in NetlinkProtocolSocket returns the neighbors
+  int countNeighbors{100};
+  LOG(INFO) << "Adding " << countNeighbors << " test neighbors";
+  // Bring up neighbors
+  for (int i = 0; i < countNeighbors; i++) {
+    addNeighborEntry(
+        kVethNameX,
+        folly::IPAddress{"face:b00c::" + std::to_string(i)},
+        kLinkAddr1);
+  }
+
+  // Get links and neighbors
+  LOG(INFO) << "Getting links and neighbors";
+  auto links = nlSock->getAllLinks();
+  auto neighbors = nlSock->getAllNeighbors();
+
+  // Find kVethNameX
+  int ifIndexX{-1};
+  for (const auto& linkEntry : links) {
+    if (linkEntry.first.getLinkName() == kVethNameX) {
+      ifIndexX = linkEntry.first.getIfIndex();
+    }
+  }
+  EXPECT_NE(ifIndexX, -1);
+
+  int testNeighbors = 0;
+  for (const auto& neighborEntry : neighbors) {
+    if (neighborEntry.first.getIfIndex() == ifIndexX &&
+        neighborEntry.first.getDestination().str().find("face:b00c::") !=
+            std::string::npos &&
+        neighborEntry.first.isReachable()) {
+      // Found neighbor on vethTestX with face:b00c::i address
+      testNeighbors += 1;
+      // Check if neighbor has the correct MAC address
+      EXPECT_EQ(kLinkAddr1, neighborEntry.first.getLinkAddress());
+    }
+  }
+  // Check if Netlink returned all the test neighbors
+  EXPECT_EQ(testNeighbors, countNeighbors);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+
+  // Delete neighbors
+  LOG(INFO) << "Deleting " << countNeighbors << " test neighbors";
+  for (int i = 0; i < countNeighbors; i++) {
+    deleteNeighborEntry(
+        kVethNameX,
+        folly::IPAddress{"face:b00c::" + std::to_string(i)},
+        kLinkAddr1);
+  }
+
+  // Check if getAllNeighbors do not return any reachable neighbors on
+  // kVethNameX
+  neighbors = nlSock->getAllNeighbors();
+  testNeighbors = 0;
+  for (const auto& neighborEntry : neighbors) {
+    if (neighborEntry.first.getIfIndex() == ifIndexX &&
+        neighborEntry.first.getDestination().str().find("face:b00c::") !=
+            std::string::npos &&
+        neighborEntry.first.isReachable()) {
+      // Found neighbor on vethTestX with face:b00c::i address
+      testNeighbors += 1;
+    }
+  }
+  // All test neighbors are unreachable,
+  // GetAllReachableNeighbors shouldn't return them
+  EXPECT_EQ(testNeighbors, 0);
+}
+
+TEST_F(NlMessageFixture, GetAllNeighborsV4) {
+  // Add 100 V4 neighbors and check if getAllNeighbors
+  // in NetlinkProtocolSocket returns the neighbors
+  int countNeighbors{100};
+  LOG(INFO) << "Adding " << countNeighbors << " test V4 neighbors";
+  // Bring up neighbors
+  for (int i = 0; i < countNeighbors; i++) {
+    addV4NeighborEntry(
+        kVethNameX,
+        folly::IPAddress{"172.8.0." + std::to_string(i)},
+        kLinkAddr1);
+  }
+
+  // Get links and neighbors
+  LOG(INFO) << "Getting links and neighbors";
+  auto links = nlSock->getAllLinks();
+  auto neighbors = nlSock->getAllNeighbors();
+
+  // Find kVethNameX
+  int ifIndexX{-1};
+  for (const auto& linkEntry : links) {
+    if (linkEntry.first.getLinkName() == kVethNameX) {
+      ifIndexX = linkEntry.first.getIfIndex();
+    }
+  }
+  EXPECT_NE(ifIndexX, -1);
+
+  int testNeighbors = 0;
+  for (const auto& neighborEntry : neighbors) {
+    if (neighborEntry.first.getIfIndex() == ifIndexX &&
+        neighborEntry.first.getDestination().str().find("172.8.0.") !=
+            std::string::npos &&
+        neighborEntry.first.isReachable()) {
+      // Found neighbor on vethTestX with face:b00c::i address
+      testNeighbors += 1;
+      // Check if neighbor has the correct MAC address
+      EXPECT_EQ(kLinkAddr1, neighborEntry.first.getLinkAddress());
+    }
+  }
+  // Check if Netlink returned all the test neighbors
+  EXPECT_EQ(testNeighbors, countNeighbors);
+  EXPECT_EQ(0, nlSock->getErrorCount());
+
+  // Delete neighbors
+  LOG(INFO) << "Deleting " << countNeighbors << " test neighbors";
+  for (int i = 0; i < countNeighbors; i++) {
+    deleteV4NeighborEntry(
+        kVethNameX,
+        folly::IPAddress{"172.8.0." + std::to_string(i)},
+        kLinkAddr1);
+  }
+
+  // Check if getAllNeighbors do not return any reachable neighbors on
+  // kVethNameX
+  neighbors = nlSock->getAllNeighbors();
+  testNeighbors = 0;
+  for (const auto& neighborEntry : neighbors) {
+    if (neighborEntry.first.getIfIndex() == ifIndexX &&
+        neighborEntry.first.getDestination().str().find("172.8.0.") !=
+            std::string::npos &&
+        neighborEntry.first.isReachable()) {
+      // Found neighbor on vethTestX with face:b00c::i address
+      testNeighbors += 1;
+    }
+  }
+  // All test neighbors are unreachable,
+  // GetAllReachableNeighbors should not return them
+  EXPECT_EQ(testNeighbors, 0);
 }
 
 int

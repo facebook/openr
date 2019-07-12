@@ -11,6 +11,7 @@
 #include <linux/mpls.h>
 #include <linux/rtnetlink.h>
 #include <net/if_arp.h>
+#include <netinet/ether.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -160,6 +161,23 @@ class NetlinkAddrMessage final : public NetlinkMessage {
  private:
   // pointer to interface message header
   struct ifaddrmsg* ifaddrmsg_{nullptr};
+
+  // pointer to the netlink message header
+  struct nlmsghdr* msghdr_{nullptr};
+};
+
+class NetlinkNeighborMessage final : public NetlinkMessage {
+ public:
+  NetlinkNeighborMessage();
+
+  // initiallize neighbor message with default params
+  void init(int type, uint32_t flags);
+
+  fbnl::Neighbor parseMessage(const struct nlmsghdr* nlh) const;
+
+ private:
+  // pointer to neighbor message header
+  struct ndmsg* ndmsg_{nullptr};
 
   // pointer to the netlink message header
   struct nlmsghdr* msghdr_{nullptr};

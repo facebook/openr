@@ -584,6 +584,7 @@ class Neighbor final {
 };
 
 bool operator==(const Neighbor& lhs, const Neighbor& rhs);
+bool isNeighborReachable(int state);
 
 class Link;
 class LinkBuilder final {
