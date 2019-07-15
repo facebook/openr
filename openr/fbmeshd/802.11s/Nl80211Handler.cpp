@@ -1506,7 +1506,7 @@ Nl80211Handler::processEvent(const GenericNetlinkMessage& msg) {
     break;
 
   case NL80211_CMD_FRAME_TX_STATUS:
-    VLOG(5) << "Processing NL80211_CMD_TX_STATUS event";
+    VLOG(5) << "Processing NL80211_CMD_FRAME_TX_STATUS event";
     if (!tb[NL80211_ATTR_ACK]) {
       LOG(ERROR) << "Frame transmission failed: did not receive ACK";
     }
