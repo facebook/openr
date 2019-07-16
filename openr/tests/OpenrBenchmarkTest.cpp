@@ -14,7 +14,6 @@
 #include <maestro/if/gen-cpp2/Maestro_types.h>
 #include <nettools/ebbmon/if/gen-cpp2/Exporter_types.h>
 #include <openr/config-store/tests/PersistentStoreBenchmark.h>
-#include <openr/decision/tests/DecisionBenchmark.h>
 #include <openr/fib/tests/FibBenchmark.h>
 #include <openr/platform/tests/NetlinkFibHandlerBenchmark.h>
 #include <servicerouter/client/cpp2/ServiceRouter.h>
@@ -38,9 +37,6 @@ BENCHMARK(BM_Fib)->RangeMultiplier(10)->Range(10, 10000);
 
 // NetlinkFibHandler
 BENCHMARK(BM_NetlinkFibHandler)->RangeMultiplier(10)->Range(10, 10000);
-
-// Decision
-BENCHMARK(BM_DecisionGrid)->RangeMultiplier(10)->Range(10, 10000);
 
 } // namespace openr
 
