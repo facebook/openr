@@ -69,6 +69,14 @@ class KvStoreWrapper {
   folly::Optional<thrift::Value> getKey(std::string key);
 
   /**
+   * APIs to set key-values into the KvStore. Returns true on success else
+   * returns false.
+   */
+  bool setKeys(
+      const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
+      folly::Optional<std::vector<std::string>> nodeIds = folly::none);
+
+  /**
    * API to get dump from KvStore.
    * if we pass a prefix, only return keys that match it
    */
