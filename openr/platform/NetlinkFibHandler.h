@@ -85,6 +85,8 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   facebook::fb303::cpp2::fb_status getStatus() override;
 
+  openr::thrift::SwitchRunState getSwitchRunState() override;
+
   void getCounters(std::map<std::string, int64_t>& counters) override;
 
   folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>

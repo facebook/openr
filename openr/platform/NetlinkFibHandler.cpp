@@ -439,6 +439,12 @@ NetlinkFibHandler::getStatus() {
   return facebook::fb303::cpp2::fb_status::ALIVE;
 }
 
+openr::thrift::SwitchRunState
+NetlinkFibHandler::getSwitchRunState() {
+  VLOG(3) << "Received getSwitchRunState";
+  return openr::thrift::SwitchRunState::UNINITIALIZED;
+}
+
 folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
 NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
   LOG(INFO) << "Get unicast routes from FIB for clientId " << clientId;

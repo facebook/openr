@@ -61,6 +61,16 @@ enum FibClient {
   CLIENT_5 = 5,
 }
 
+// SwSwitch run states. SwSwitch moves forward from a
+// lower numbered state to the next
+enum SwitchRunState {
+  UNINITIALIZED = 0,
+  INITIALIZED = 1,
+  CONFIGURED = 2,
+  FIB_SYNCED = 3,
+  EXITING = 4
+}
+
 /**
  * Message sent over to subscriber of Platform Event.
  * eventType to indicate type of netlink event to be updated
@@ -149,6 +159,11 @@ const i16 kUnknowProtAdminDistance = 255
  * Interface to on-box Fib.
  */
 service FibService extends fb303.FacebookService {
+
+  /*
+  * get run state
+  */
+  SwitchRunState getSwitchRunState()
 
   //
   // Unicast Routes API
