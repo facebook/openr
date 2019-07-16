@@ -33,7 +33,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     : context_(context),
       nodeId_(nodeId),
       ioProvider_(std::move(ioProvider)),
-      configStoreUrl_(folly::sformat("inproc://{}-store-url", nodeId_)),
       monitorSubmitUrl_(folly::sformat("inproc://{}-monitor-submit", nodeId_)),
       monitorPubUrl_(folly::sformat("inproc://{}-monitor-pub", nodeId_)),
       kvStoreLocalPubUrl_(folly::sformat("inproc://{}-kvstore-pub", nodeId_)),
@@ -63,8 +62,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   configStore_ = std::make_unique<PersistentStore>(
       nodeId_,
       folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_),
-      PersistentStoreUrl{configStoreUrl_},
       context_);
+  configStoreUrl_ = configStore_->inprocCmdUrl;
 
   // create zmq monitor
   monitor_ = std::make_unique<fbzmq::ZmqMonitor>(

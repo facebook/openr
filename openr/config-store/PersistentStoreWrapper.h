@@ -38,9 +38,9 @@ class PersistentStoreWrapper {
   void stop();
 
  public:
-  const std::string inprocSocket;
+  const std::string nodeName;
   const std::string filePath;
-  const std::string sockUrl;
+  std::string sockUrl;
 
  private:
   std::shared_ptr<PersistentStore> store_;

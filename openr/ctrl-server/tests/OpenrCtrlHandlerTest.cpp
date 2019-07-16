@@ -40,6 +40,19 @@ class OpenrCtrlFixture : public ::testing::Test {
         monitorSubmitUrl_, "inproc://monitor_pub_url", context_);
     zmqMonitorThread_ = std::thread([&]() { zmqMonitor->run(); });
 
+    // Create PersistentStore
+    persistentStore = std::make_unique<PersistentStore>(
+        nodeName,
+        "/tmp/openr-ctrl-handler-test.bin",
+        context_,
+        Constants::kPersistentStoreInitialBackoff,
+        Constants::kPersistentStoreMaxBackoff,
+        true /* dryrun */);
+    persistentStoreUrl_ = PersistentStoreUrl{persistentStore->inprocCmdUrl};
+    persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
+    moduleTypeToEvl_[thrift::OpenrModuleType::PERSISTENT_STORE] =
+        persistentStore;
+
     // Create KvStore module
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
         context_,
@@ -181,19 +194,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
     moduleTypeToEvl_[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
 
-    // Create PersistentStore
-    persistentStore = std::make_unique<PersistentStore>(
-        nodeName,
-        "/tmp/openr-ctrl-handler-test.bin",
-        persistentStoreUrl_,
-        context_,
-        Constants::kPersistentStoreInitialBackoff,
-        Constants::kPersistentStoreMaxBackoff,
-        true /* dryrun */);
-    persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
-    moduleTypeToEvl_[thrift::OpenrModuleType::PERSISTENT_STORE] =
-        persistentStore;
-
     // Create main-event-loop
     mainEvlThread_ = std::thread([&]() { mainEvl_.run(); });
 
@@ -289,13 +289,14 @@ class OpenrCtrlFixture : public ::testing::Test {
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
   const DecisionPubUrl decisionPubUrl_{"inproc://decision-pub"};
-  const PersistentStoreUrl persistentStoreUrl_{"inproc://persistent-store-url"};
   const SparkCmdUrl sparkCmdUrl_{"inproc://spark-req"};
   const SparkReportUrl sparkReportUrl_{"inproc://spark-report"};
   const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
   const LinkMonitorGlobalPubUrl lmPubUrl_{"inproc://link-monitor-pub-url"};
   const std::string lmCmdUrl_{"inproc://link-monitor-cmd-url"};
   const std::string prefixManagerUrl_{"inproc://prefix-mngr-global-cmd"};
+  PersistentStoreUrl persistentStoreUrl_;
+
   fbzmq::Context context_;
   fbzmq::ZmqEventLoop mainEvl_;
   std::thread zmqMonitorThread_;

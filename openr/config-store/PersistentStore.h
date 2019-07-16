@@ -59,7 +59,6 @@ class PersistentStore : public OpenrEventLoop {
   PersistentStore(
       const std::string& nodeName,
       const std::string& storageFilePath,
-      const PersistentStoreUrl& socketUrl,
       fbzmq::Context& context,
       // persistent store DB saving backoffs
       std::chrono::milliseconds saveInitialBackoff =

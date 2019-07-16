@@ -67,9 +67,6 @@ namespace {
 // the URL for Decision module
 const DecisionPubUrl kDecisionPubUrl{"ipc:///tmp/decision-pub-url"};
 
-// the URL Prefix for the ConfigStore module
-const PersistentStoreUrl kConfigStoreUrl{"ipc:///tmp/openr_config_store_cmd"};
-
 const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
 
 const std::string inet6Path = "/proc/net/if_inet6";
@@ -410,10 +407,12 @@ main(int argc, char** argv) {
       std::make_shared<PersistentStore>(
           FLAGS_node_name,
           FLAGS_config_store_filepath,
-          kConfigStoreUrl,
           context,
           std::chrono::milliseconds(FLAGS_persistent_store_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_persistent_store_max_backoff_ms)));
+
+  const PersistentStoreUrl configStoreInProcUrl{
+      moduleTypeToEvl.at(OpenrModuleType::PERSISTENT_STORE)->inprocCmdUrl};
 
   // Start monitor Module
   // for each log message it receives, we want to add the openr domain
@@ -503,7 +502,7 @@ main(int argc, char** argv) {
       std::make_shared<PrefixManager>(
           FLAGS_node_name,
           maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_prefix_manager_cmd_port),
-          kConfigStoreUrl,
+          configStoreInProcUrl,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
           monitorSubmitUrl,
@@ -547,7 +546,7 @@ main(int argc, char** argv) {
             FLAGS_prefix_fwd_type_mpls,
             FLAGS_prefix_algo_type_ksp2_ed_ecmp,
             Constants::kPrefixAllocatorSyncInterval,
-            kConfigStoreUrl,
+            configStoreInProcUrl,
             context,
             FLAGS_system_agent_port));
   }
@@ -700,7 +699,7 @@ main(int argc, char** argv) {
                   : FLAGS_spark_cmd_url},
           SparkReportUrl{FLAGS_spark_report_url},
           monitorSubmitUrl,
-          kConfigStoreUrl,
+          configStoreInProcUrl,
           FLAGS_assume_drained,
           prefixManagerLocalCmdUrl,
           PlatformPublisherUrl{FLAGS_platform_pub_url},

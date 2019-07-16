@@ -148,10 +148,8 @@ class OpenrWrapper {
   // sub module communication zmq urls and ports
   int kvStoreGlobalCmdPort_{0};
   int kvStoreGlobalPubPort_{0};
-  const std::string configStoreUrl_;
   const std::string monitorSubmitUrl_;
   const std::string monitorPubUrl_;
-  std::string kvStoreLocalCmdUrl_;
   const std::string kvStoreLocalPubUrl_;
   const std::string kvStoreGlobalCmdUrl_;
   const std::string kvStoreGlobalPubUrl_;
@@ -162,6 +160,8 @@ class OpenrWrapper {
   const std::string linkMonitorGlobalPubUrl_;
   const std::string decisionPubUrl_;
   const std::string fibCmdUrl_;
+  std::string kvStoreLocalCmdUrl_;
+  std::string configStoreUrl_;
 
   // client sockets mainly for tests
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> kvStoreReqSock_;

@@ -65,8 +65,6 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
   const std::string filePath{
       folly::sformat("/tmp/aq_persistent_store_test_{}", tid)};
-  const PersistentStoreUrl sockUrl1{"inproc://aq_persistent_store_test1"};
-  const PersistentStoreUrl sockUrl2{"inproc://aq_persistent_store_test2"};
 
   // Data types to store/load
   const std::pair<std::string, uint32_t> keyVal1{"key1", 1235};
@@ -88,11 +86,12 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   // Create new store and perform some operations on it
   //
 
-  const std::string inprocSocket{folly::sformat("1-{}", tid)};
-  store = std::make_unique<PersistentStore>(
-      inprocSocket, filePath, sockUrl1, context);
+  const std::string nodeName{folly::sformat("1-{}", tid)};
+  store = std::make_unique<PersistentStore>(nodeName, filePath, context);
   storeThread = std::make_unique<std::thread>([&]() { store->run(); });
   store->waitUntilRunning();
+
+  const PersistentStoreUrl sockUrl1{store->inprocCmdUrl};
   client = std::make_unique<PersistentStoreClient>(sockUrl1, context);
 
   // Store and verify Load
@@ -158,9 +157,11 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   storeThread.reset();
   store.reset();
 
-  store = std::make_unique<PersistentStore>("1", filePath, sockUrl2, context);
+  store = std::make_unique<PersistentStore>("1", filePath, context);
   storeThread = std::make_unique<std::thread>([&]() { store->run(); });
   store->waitUntilRunning();
+
+  const PersistentStoreUrl sockUrl2{store->inprocCmdUrl};
   client = std::make_unique<PersistentStoreClient>(sockUrl2, context);
 
   // Verify key1 and key2

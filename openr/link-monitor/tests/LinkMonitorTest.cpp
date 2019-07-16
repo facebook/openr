@@ -164,7 +164,6 @@ printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
 const std::string kTestVethNamePrefix = "vethLMTest";
 const std::vector<uint64_t> kTestVethIfIndex = {1240, 1241, 1242};
 const std::string kConfigStorePath = "/tmp/lm_ut_config_store.bin";
-const std::string kConfigStoreUrl = "inproc://lm_ut_config_store";
 } // namespace
 
 class LinkMonitorTestFixture : public ::testing::Test,
@@ -191,11 +190,11 @@ class LinkMonitorTestFixture : public ::testing::Test,
     configStore = std::make_unique<PersistentStore>(
         "1",
         kConfigStorePath,
-        PersistentStoreUrl{kConfigStoreUrl},
         context,
         Constants::kPersistentStoreInitialBackoff,
         Constants::kPersistentStoreMaxBackoff,
         true /* dryrun */);
+    kConfigStoreUrl = configStore->inprocCmdUrl;
 
     configStoreThread = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "ConfigStore thread starting";
@@ -531,6 +530,7 @@ class LinkMonitorTestFixture : public ::testing::Test,
 
   unique_ptr<PersistentStore> configStore;
   unique_ptr<std::thread> configStoreThread;
+  std::string kConfigStoreUrl;
 
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;

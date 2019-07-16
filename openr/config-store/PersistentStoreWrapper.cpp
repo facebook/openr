@@ -15,17 +15,14 @@ PersistentStoreWrapper::PersistentStoreWrapper(
     // persistent store DB saving backoffs
     std::chrono::milliseconds saveInitialBackoff,
     std::chrono::milliseconds saveMaxBackoff)
-    : inprocSocket(folly::sformat("1-{}", tid)),
-      filePath(folly::sformat("/tmp/aq_persistent_store_test_{}", tid)),
-      sockUrl(folly::sformat("inproc://aq_persistent_store_test_{}", tid)) {
+    : nodeName(folly::sformat("1-{}", tid)),
+      filePath(folly::sformat("/tmp/aq_persistent_store_test_{}", tid)) {
   VLOG(1) << "PersistentStoreWrapper: Creating PersistentStore.";
   store_ = std::make_shared<PersistentStore>(
-      inprocSocket,
-      filePath,
-      PersistentStoreUrl{sockUrl},
-      context,
-      saveInitialBackoff,
-      saveMaxBackoff);
+      nodeName, filePath, context, saveInitialBackoff, saveMaxBackoff);
+
+  // set sockUrl as inproc socketUrl
+  sockUrl = store_->inprocCmdUrl;
 }
 
 void

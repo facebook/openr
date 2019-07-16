@@ -27,17 +27,12 @@ namespace openr {
 PersistentStore::PersistentStore(
     const std::string& nodeName,
     const std::string& storageFilePath,
-    const PersistentStoreUrl& socketUrl,
     fbzmq::Context& context,
     std::chrono::milliseconds saveInitialBackoff,
     std::chrono::milliseconds saveMaxBackoff,
     bool dryrun)
     : OpenrEventLoop(
-          nodeName,
-          thrift::OpenrModuleType::PERSISTENT_STORE,
-          context,
-          folly::none,
-          std::string(socketUrl)),
+          nodeName, thrift::OpenrModuleType::PERSISTENT_STORE, context),
       storageFilePath_(storageFilePath),
       dryrun_(dryrun) {
   if (saveInitialBackoff != 0ms or saveMaxBackoff != 0ms) {

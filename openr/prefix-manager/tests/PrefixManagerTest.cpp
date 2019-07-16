@@ -21,7 +21,6 @@ using apache::thrift::CompactSerializer;
 
 namespace {
 
-const std::string kConfigStoreUrl = "inproc://pm_ut_config_store";
 const std::string kPrefixManagerGlobalCmdUrl = "inproc://pm_ut_global_cmd_url";
 
 const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
@@ -89,7 +88,6 @@ class PrefixManagerTestFixture : public ::testing::Test {
     configStore = std::make_unique<PersistentStore>(
         "1",
         storageFilePath,
-        PersistentStoreUrl{kConfigStoreUrl},
         context,
         std::chrono::milliseconds(0),
         std::chrono::milliseconds(0),
@@ -122,7 +120,7 @@ class PrefixManagerTestFixture : public ::testing::Test {
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
         std::string{kPrefixManagerGlobalCmdUrl},
-        PersistentStoreUrl{kConfigStoreUrl},
+        PersistentStoreUrl{configStore->inprocCmdUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -151,8 +149,8 @@ class PrefixManagerTestFixture : public ::testing::Test {
     prefixManagerThread->join();
 
     // Erase data from config store
-    PersistentStoreClient configStoreClient{PersistentStoreUrl{kConfigStoreUrl},
-                                            context};
+    PersistentStoreClient configStoreClient{
+        PersistentStoreUrl{configStore->inprocCmdUrl}, context};
     configStoreClient.erase("prefix-manager-config");
 
     // stop config store
@@ -370,7 +368,7 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
       std::string{kPrefixManagerGlobalCmdUrl + "2"},
-      PersistentStoreUrl{kConfigStoreUrl},
+      PersistentStoreUrl{configStore->inprocCmdUrl},
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -505,7 +503,6 @@ TEST(PrefixManagerTest, HoldTimeout) {
       folly::sformat(
           "/tmp/pm_ut_config_store.bin.{}",
           std::hash<std::thread::id>{}(std::this_thread::get_id())),
-      PersistentStoreUrl{kConfigStoreUrl},
       context,
       Constants::kPersistentStoreInitialBackoff,
       Constants::kPersistentStoreMaxBackoff,
@@ -533,7 +530,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
   auto prefixManager = std::make_unique<PrefixManager>(
       "node-1",
       std::string{kPrefixManagerGlobalCmdUrl},
-      PersistentStoreUrl{kConfigStoreUrl},
+      PersistentStoreUrl{configStore->inprocCmdUrl},
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},

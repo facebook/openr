@@ -50,9 +50,6 @@ const AllocPrefixMarker kAllocPrefixMarker{"allocprefix:"};
 // length of allocated prefix
 const int kAllocPrefixLen = 128;
 
-// key used by seed prefix in kvstore
-const string kConfigStoreUrl{"inproc://openr_config_store_cmd"};
-
 class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
  public:
   void
@@ -86,7 +83,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     configStore_ = std::make_unique<PersistentStore>(
         "1",
         tempFileName_,
-        PersistentStoreUrl{kConfigStoreUrl},
         zmqContext_,
         Constants::kPersistentStoreInitialBackoff,
         Constants::kPersistentStoreMaxBackoff,
@@ -94,7 +90,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     threads_.emplace_back([&]() noexcept { configStore_->run(); });
     configStore_->waitUntilRunning();
     configStoreClient_ = std::make_unique<PersistentStoreClient>(
-        PersistentStoreUrl{kConfigStoreUrl}, zmqContext_);
+        PersistentStoreUrl{configStore_->inprocCmdUrl}, zmqContext_);
 
     // Erase previous configs (if any)
     configStoreClient_->erase("prefix-allocator-config");
@@ -116,7 +112,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     prefixManager_ = std::make_unique<PrefixManager>(
         myNodeName_,
         std::string{pfxMgrGlobalUrl_},
-        PersistentStoreUrl{kConfigStoreUrl},
+        PersistentStoreUrl{configStore_->inprocCmdUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -160,7 +156,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         false /* prefix fwd type MPLS */,
         false /* prefix fwd algo KSP2_ED_ECMP */,
         kSyncInterval,
-        PersistentStoreUrl{kConfigStoreUrl},
+        PersistentStoreUrl{configStore_->inprocCmdUrl},
         zmqContext_,
         port_);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
@@ -406,8 +402,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       auto configStore = std::make_unique<PersistentStore>(
           folly::sformat("node{}", i),
           tempFileName,
-          PersistentStoreUrl{kConfigStoreUrl + myNodeName},
           zmqContext);
+      std::string persistentStoreUrl = configStore->inprocCmdUrl;
       threads.emplace_back([&configStore]() noexcept { configStore->run(); });
       configStore->waitUntilRunning();
       configStores.emplace_back(std::move(configStore));
@@ -419,8 +415,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       auto tempConfigStore = std::make_unique<PersistentStore>(
           folly::sformat("temp-node{}", i),
           tempFileName,
-          PersistentStoreUrl{kConfigStoreUrl + myNodeName + "temp"},
           zmqContext);
+      std::string tempPersistentStoreUrl = tempConfigStore->inprocCmdUrl;
       threads.emplace_back([&tempConfigStore]() noexcept {
         tempConfigStore->run();
       });
@@ -433,7 +429,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       auto prefixManager = std::make_unique<PrefixManager>(
           myNodeName,
           std::string{pfxMgrGlobalUrl},
-          PersistentStoreUrl{kConfigStoreUrl + myNodeName + "temp"},
+          PersistentStoreUrl{tempPersistentStoreUrl},
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
           MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -464,7 +460,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           false /* prefix fwd type MPLS */,
           false /* prefix fwd algo KSP2_ED_ECMP */,
           kSyncInterval,
-          PersistentStoreUrl{kConfigStoreUrl + myNodeName},
+          PersistentStoreUrl{persistentStoreUrl},
           zmqContext,
           port_);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
