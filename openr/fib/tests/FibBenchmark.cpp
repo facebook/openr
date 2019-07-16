@@ -4,8 +4,10 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-#include <benchmark/benchmark.h>
+
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
+#include <folly/Benchmark.h>
+#include <folly/init/Init.h>
 #include <gtest/gtest.h>
 #include <openr/fib/Fib.h>
 #include <openr/fib/tests/MockNetlinkFibHandler.h>
@@ -15,6 +17,30 @@
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 #include <thread>
 
+/**
+ * Defines a benchmark that allows users to record customized counter during
+ * benchmarking and passes a parameter to another one. This is common for
+ * benchmarks that need a "problem size" in addition to "number of iterations".
+ */
+#define BENCHMARK_COUNTERS_PARAM(name, counters, param) \
+  BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param, param)
+
+/*
+ * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
+ * each parameter, rather than using the parameter value.
+ */
+#define BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param_name, ...) \
+  BENCHMARK_IMPL_COUNTERS(                                             \
+      FB_CONCATENATE(name, FB_CONCATENATE(_, param_name)),             \
+      FB_STRINGIZE(name) "(" FB_STRINGIZE(param_name) ")",             \
+      counters,                                                        \
+      iters,                                                           \
+      unsigned,                                                        \
+      iters) {                                                         \
+    name(counters, iters, ##__VA_ARGS__);                              \
+  }
+
+using namespace folly;
 namespace {
 // Virtual interface
 const std::string kVethNameY("vethTestY");
@@ -158,16 +184,22 @@ class FibWrapper : public OpenrModuleTestBase {
   PrefixGenerator prefixGenerator;
 };
 
-void
-BM_Fib(benchmark::State& state) {
+/**
+ * Benchmark for fib
+ * 1. Create a fib
+ * 2. Generate random IpV6s and routes
+ * 3. Send routes to fib
+ * 4. Wait until the completion of routes update
+ */
+static void
+BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
+  auto suspender = folly::BenchmarkSuspender();
   // Fib starts with clean route database
   auto fibWrapper = std::make_unique<FibWrapper>();
 
   // Initial syncFib debounce
   fibWrapper->mockFibHandler->waitForSyncFib();
 
-  // Mimic decision pub sock publishing RouteDatabase
-  const uint32_t numOfPrefixes = state.range(0);
   // Generate random prefixes
   auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
       numOfPrefixes, kBitMaskLen);
@@ -190,8 +222,9 @@ BM_Fib(benchmark::State& state) {
   std::vector<uint64_t> processTimes{0, 0, 0};
   // Maek sure deltaSize <= numOfPrefixes
   auto deltaSize = kDeltaSize <= numOfPrefixes ? kDeltaSize : numOfPrefixes;
+  suspender.dismiss(); // Start measuring benchmark time
 
-  for (auto _ : state) {
+  for (auto i = 0; i < iters; i++) {
     // Update routes by randomly regenerating nextHops for deltaSize prefixes.
     for (auto index = 0; index < deltaSize; index++) {
       routeDb.unicastRoutes.emplace_back(createUnicastRoute(
@@ -212,15 +245,28 @@ BM_Fib(benchmark::State& state) {
     fibWrapper->accumulatePerfTimes(processTimes);
   }
 
+  suspender.rehire(); // Stop measuring time again
   // Get average time for each itaration
   for (auto& processTime : processTimes) {
-    processTime /= state.iterations() == 0 ? 1 : state.iterations();
+    processTime /= iters == 0 ? 1 : iters;
   }
 
   // Add customized counters to state.
-  state.counters.insert({{"route_receive", processTimes[0]},
-                         {"debounce", processTimes[1]},
-                         {"route_install", processTimes[2]}});
+  counters["route_receive_ms"] = processTimes[0];
+  counters["route_install_ms"] = processTimes[2];
 }
 
+// The parameter is the number of prefixes sent to fib
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 10);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 1000);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 10000);
+
 } // namespace openr
+
+int
+main(int argc, char** argv) {
+  folly::init(&argc, &argv);
+  folly::runBenchmarks();
+  return 0;
+}

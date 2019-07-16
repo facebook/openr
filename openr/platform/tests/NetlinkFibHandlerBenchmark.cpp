@@ -9,18 +9,18 @@
 #include <string>
 #include <thread>
 
-#include <benchmark/benchmark.h>
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/Benchmark.h>
 #include <folly/Exception.h>
 #include <folly/Format.h>
 #include <folly/MacAddress.h>
 #include <folly/Random.h>
+#include <folly/init/Init.h>
 #include <folly/test/TestUtils.h>
 #include <openr/fib/tests/PrefixGenerator.h>
 #include <openr/nl/NetlinkSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
-#include <openr/platform/tests/NetlinkFibHandlerBenchmark.h>
 
 extern "C" {
 #include <net/if.h>
@@ -187,17 +187,25 @@ class NetlinkFibWrapper {
   }
 };
 
-void
-BM_NetlinkFibHandler(benchmark::State& state) {
-  /* Benchmark test to measure the time performance */
+/**
+ * Benchmark test to measure the time performance of NetlinkFibHandler
+ * 1. Create a NetlinkFibHandler
+ * 2. Generate random IpV6s and routes
+ * 3. Add routes through netlink
+ * 4. Wait until the completion of routes update
+ */
+static void
+BM_NetlinkFibHandler(uint32_t iters, size_t numOfPrefixes) {
+  auto suspender = folly::BenchmarkSuspender();
   auto netlinkFibWrapper = std::make_unique<NetlinkFibWrapper>();
-  const uint32_t numOfPrefixes = state.range(0);
 
   // Randomly generate IPV6 prefixes
   auto prefixes = netlinkFibWrapper->prefixGenerator.ipv6PrefixGenerator(
       numOfPrefixes, kBitMaskLen);
 
-  for (auto _ : state) {
+  suspender.dismiss(); // Start measuring benchmark time
+
+  for (auto i = 0; i < iters; i++) {
     auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
     routes->reserve(prefixes.size());
 
@@ -209,6 +217,7 @@ BM_NetlinkFibHandler(benchmark::State& state) {
               kNumOfNexthops, kVethNameY)));
     }
 
+    suspender.rehire(); // Stop measuring time again
     // Add new routes through netlink
     netlinkFibWrapper->fibHandler
         ->future_addUnicastRoutes(kFibId, std::move(routes))
@@ -216,4 +225,17 @@ BM_NetlinkFibHandler(benchmark::State& state) {
   }
 }
 
+// The parameter is the number of prefixes
+BENCHMARK_PARAM(BM_NetlinkFibHandler, 10);
+BENCHMARK_PARAM(BM_NetlinkFibHandler, 100);
+BENCHMARK_PARAM(BM_NetlinkFibHandler, 1000);
+BENCHMARK_PARAM(BM_NetlinkFibHandler, 10000);
+
 } // namespace openr
+
+int
+main(int argc, char** argv) {
+  folly::init(&argc, &argv);
+  folly::runBenchmarks();
+  return 0;
+}

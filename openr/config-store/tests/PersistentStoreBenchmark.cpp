@@ -5,18 +5,24 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <benchmark/benchmark.h>
+#include <folly/Benchmark.h>
 #include <folly/Random.h>
+#include <folly/init/Init.h>
 #include <openr/config-store/PersistentStoreClient.h>
 #include <openr/config-store/PersistentStoreWrapper.h>
+#include "common/init/Init.h"
 
 namespace {
-// kIterations
-uint32_t kIterations = 1000;
+// kIterations <= n: change this to 10 singce n starts from 10,
+// n is in BENCHMARK_PARAM(BM_PersistentStoreWrite, n)
+uint32_t kIterations = 10;
 } // namespace
 
 namespace openr {
 
+/**
+ * Construct a vector with random strings inside
+ */
 std::vector<std::string>
 constructRandomVector(uint32_t entryInStore) {
   std::vector<std::string> stringKeys;
@@ -27,6 +33,9 @@ constructRandomVector(uint32_t entryInStore) {
   return stringKeys;
 }
 
+/**
+ * Write keys with random values to store
+ */
 static void
 writeKeyValueToStore(
     const std::vector<std::string>& stringKeys,
@@ -38,6 +47,9 @@ writeKeyValueToStore(
   }
 }
 
+/**
+ * Erase all keys in store
+ */
 static void
 eraseKeyFromStore(
     const std::vector<std::string>& stringKeys,
@@ -47,8 +59,15 @@ eraseKeyFromStore(
   }
 }
 
+/**
+ * Benchmark for writing keys to store
+ * 1. Generate random keys
+ * 2. Write keys to store
+ * 3. Erase keys
+ */
 void
-BM_PersistentStoreWrite(benchmark::State& state) {
+BM_PersistentStoreWrite(uint32_t iters, size_t numOfStringKeys) {
+  auto suspender = folly::BenchmarkSuspender();
   fbzmq::Context context;
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
@@ -59,23 +78,33 @@ BM_PersistentStoreWrite(benchmark::State& state) {
       PersistentStoreUrl{storeWrapper->sockUrl}, context);
 
   // Generate keys
-  auto stringKeys = constructRandomVector(state.range(0));
+  auto stringKeys = constructRandomVector(numOfStringKeys);
   writeKeyValueToStore(stringKeys, client, 1);
   auto iterations =
       (stringKeys.size() / kIterations == 0) ? stringKeys.size() : kIterations;
+  suspender.dismiss(); // Start measuring benchmark time
 
-  for (auto _ : state) {
-    // Write (key, random_value) pairs to store
+  // Write (key, random_value) pairs to store
+  for (auto i = 0; i < iters; i++) {
     writeKeyValueToStore(stringKeys, client, stringKeys.size() / iterations);
   }
 
+  suspender.rehire(); // Stop measuring time again
   // Erase the keys and stop store before exiting
   eraseKeyFromStore(stringKeys, client);
   storeWrapper->stop();
 }
 
+/**
+ * Benchmark for loading keys from store
+ * 1. Generate random keys
+ * 2. Write keys to store
+ * 3. Load keys from store
+ * 4. Erase keys
+ */
 void
-BM_PersistentStoreLoad(benchmark::State& state) {
+BM_PersistentStoreLoad(uint32_t iters, size_t numOfStringKeys) {
+  auto suspender = folly::BenchmarkSuspender();
   fbzmq::Context context;
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
   // Create new storeWrapper and perform some operations on it
@@ -85,34 +114,76 @@ BM_PersistentStoreLoad(benchmark::State& state) {
       PersistentStoreUrl{storeWrapper->sockUrl}, context);
 
   // Generate keys
-  auto stringKeys = constructRandomVector(state.range(0));
+  auto stringKeys = constructRandomVector(numOfStringKeys);
   writeKeyValueToStore(stringKeys, client, 1);
   auto iterations =
       (stringKeys.size() / kIterations == 0) ? stringKeys.size() : kIterations;
 
-  for (auto _ : state) {
+  suspender.dismiss(); // Start measuring benchmark time
+  for (auto i = 0; i < iters; i++) {
     // Load value by key from store
     for (auto index = 0; index < stringKeys.size();
          index += stringKeys.size() / iterations) {
       client->load<std::string>(stringKeys[index]);
     }
   }
-
+  suspender.rehire(); // Stop measuring time again
   // Erase the keys and stop store before exiting
   eraseKeyFromStore(stringKeys, client);
   storeWrapper->stop();
 }
 
+/**
+ * Benchmark for Creating/Destroing a store
+ * 1. Generate random keys
+ * 2. Write keys to store
+ * 3. Create and destroy a store
+ */
 void
-BM_PersistentStoreCreateDestroy(benchmark::State& state) {
+BM_PersistentStoreCreateDestroy(uint32_t iters, size_t numOfStringKeys) {
+  auto suspender = folly::BenchmarkSuspender();
   fbzmq::Context context;
-
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
+  // Create storeWrapper and perform some operations on it
 
-  for (auto _ : state) {
+  auto storeWrapper = std::make_unique<PersistentStoreWrapper>(context, tid);
+  storeWrapper->run();
+  auto client = std::make_unique<PersistentStoreClient>(
+      PersistentStoreUrl{storeWrapper->sockUrl}, context);
+
+  // Generate keys
+  auto stringKeys = constructRandomVector(numOfStringKeys);
+  writeKeyValueToStore(stringKeys, client, 1);
+  suspender.dismiss(); // Start measuring benchmark time
+
+  for (auto i = 0; i < iters; i++) {
     // Create new storeWrapper and perform some operations on it
-    auto storeWrapper = std::make_unique<PersistentStoreWrapper>(context, tid);
+    auto storeWrapper1 = std::make_unique<PersistentStoreWrapper>(context, tid);
   }
 }
 
+// The parameter is the number of keys already written to store
+// before benchmarking the time.
+BENCHMARK_PARAM(BM_PersistentStoreWrite, 10);
+BENCHMARK_PARAM(BM_PersistentStoreWrite, 100);
+BENCHMARK_PARAM(BM_PersistentStoreWrite, 1000);
+BENCHMARK_PARAM(BM_PersistentStoreWrite, 10000);
+
+BENCHMARK_PARAM(BM_PersistentStoreLoad, 10);
+BENCHMARK_PARAM(BM_PersistentStoreLoad, 100);
+BENCHMARK_PARAM(BM_PersistentStoreLoad, 1000);
+BENCHMARK_PARAM(BM_PersistentStoreLoad, 10000);
+
+BENCHMARK_PARAM(BM_PersistentStoreCreateDestroy, 10);
+BENCHMARK_PARAM(BM_PersistentStoreCreateDestroy, 100);
+BENCHMARK_PARAM(BM_PersistentStoreCreateDestroy, 1000);
+BENCHMARK_PARAM(BM_PersistentStoreCreateDestroy, 10000);
+
 } // namespace openr
+
+int
+main(int argc, char** argv) {
+  folly::init(&argc, &argv);
+  folly::runBenchmarks();
+  return 0;
+}
