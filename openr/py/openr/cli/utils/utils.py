@@ -668,6 +668,8 @@ def interface_dbs_to_dict(publication, nodes, iter_func):
 
 def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
     """ convert nextHop from thrift instance into a dict in strings """
+    if nextHop is None:
+        return None
 
     def _update(next_hop_dict, nextHop):
         next_hop_dict.update(
@@ -691,6 +693,8 @@ def unicast_route_to_dict(route):
             {
                 "dest": ipnetwork.sprint_prefix(route.dest),
                 "nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops],
+                "bestNexthop": next_hop_thrift_to_dict(route.bestNexthop),
+                "data": str(route.data),
             }
         )
 
