@@ -18,9 +18,6 @@ constexpr int32_t Constants::kMinRssiThreshold;
 
 constexpr std::chrono::seconds Constants::kMaxPeerInactiveTime;
 
-constexpr int32_t Constants::kMeshSparkCmdPort;
-constexpr int32_t Constants::kMeshSparkReportPort;
-
 constexpr std::chrono::seconds Constants::kDefaultHalfLife;
 constexpr std::chrono::seconds Constants::kDefaultMaxSuppressLimit;
 

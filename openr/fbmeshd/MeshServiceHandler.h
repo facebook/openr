@@ -12,7 +12,6 @@
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
 #include <openr/fbmeshd/if/gen-cpp2/MeshService.h>
-#include <openr/fbmeshd/openr-metric-manager/OpenRMetricManager.h>
 #include <openr/fbmeshd/routing/Routing.h>
 
 namespace openr {
@@ -29,19 +28,12 @@ class MeshServiceHandler final : public thrift::MeshServiceSvIf {
  private:
   fbzmq::ZmqEventLoop& evl_;
   Nl80211Handler& nlHandler_;
-  OpenRMetricManager* openRMetricManager_;
   Routing* routing_;
 
  public:
   MeshServiceHandler(
-      fbzmq::ZmqEventLoop& evl,
-      Nl80211Handler& nlHandler,
-      OpenRMetricManager* openRMetricManager,
-      Routing* routing)
-      : evl_(evl),
-        nlHandler_(nlHandler),
-        openRMetricManager_(openRMetricManager),
-        routing_(routing) {}
+      fbzmq::ZmqEventLoop& evl, Nl80211Handler& nlHandler, Routing* routing)
+      : evl_(evl), nlHandler_(nlHandler), routing_(routing) {}
 
   ~MeshServiceHandler() override {}
 
@@ -125,55 +117,6 @@ class MeshServiceHandler final : public thrift::MeshServiceSvIf {
           return true;
         },
         "error receiving mesh info from netlink");
-  }
-
-  void
-  setMetricOverride(
-      std::unique_ptr<std::string> macAddress, thrift::UInt32 metric) override {
-    if (!openRMetricManager_) {
-      return;
-    }
-    try {
-      openRMetricManager_->setMetricOverride(
-          folly::MacAddress(*macAddress), metric);
-    } catch (const std::invalid_argument& e) {
-      VLOG(0) << __FUNCTION__ << ": " << e.what();
-    }
-  }
-
-  FOLLY_NODISCARD thrift::UInt32
-  getMetricOverride(std::unique_ptr<std::string> macAddress) override {
-    if (!openRMetricManager_) {
-      return 0;
-    }
-    thrift::UInt32 retval = 0;
-    try {
-      retval = openRMetricManager_->getMetricOverride(
-          folly::MacAddress(*macAddress));
-    } catch (const std::invalid_argument& e) {
-      VLOG(0) << __FUNCTION__ << ": " << e.what();
-    }
-    return retval;
-  }
-
-  int
-  clearMetricOverride(std::unique_ptr<std::string> macAddress) override {
-    if (!openRMetricManager_) {
-      return 0;
-    }
-    int retval = false;
-    if (!macAddress->empty()) {
-      try {
-        retval = openRMetricManager_->clearMetricOverride(
-            folly::MacAddress(*macAddress));
-      } catch (const std::invalid_argument& e) {
-        VLOG(0) << __FUNCTION__ << ": " << e.what();
-      }
-    } else {
-      // if no MAC address, clear all overrides
-      retval = openRMetricManager_->clearMetricOverride();
-    }
-    return retval;
   }
 
   void

@@ -35,12 +35,6 @@ class Constants final {
   // neighbors
   static constexpr std::chrono::seconds kMaxPeerInactiveTime{120};
 
-  // The port mesh spark recives commands on
-  static constexpr int32_t kMeshSparkCmdPort{60018};
-
-  // The port mesh spark reports on
-  static constexpr int32_t kMeshSparkReportPort{60019};
-
   // Gateway Connectivity Manager Robustness default
   static constexpr unsigned int kDefaultRobustness{2};
 

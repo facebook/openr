@@ -33,7 +33,6 @@ writeProcFs(
 
 GatewayConnectivityMonitor::GatewayConnectivityMonitor(
     Nl80211Handler& nlHandler,
-    const openr::PrefixManagerLocalCmdUrl& prefixManagerCmdUrl,
     const std::string& monitoredInterface,
     std::vector<folly::SocketAddress> monitoredAddresses,
     std::chrono::seconds monitorInterval,
@@ -48,8 +47,7 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
     unsigned int robustness,
     uint8_t setRootModeIfGate,
     Gateway11sRootRouteProgrammer* gateway11sRootRouteProgrammer,
-    Routing* routing,
-    bool isOpenrEnabled)
+    Routing* routing)
     : RouteDampener{this,
                     penalty,
                     suppressLimit,
@@ -57,7 +55,6 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
                     halfLife,
                     maxSuppressLimit},
       nlHandler_{nlHandler},
-      prefixManagerClient_{prefixManagerCmdUrl, zmqContext, 3000ms},
       monitoredInterface_{monitoredInterface},
       monitoredAddresses_{monitoredAddresses},
       monitorSocketTimeout_{monitorSocketTimeout},
@@ -65,8 +62,7 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
       setRootModeIfGate_{setRootModeIfGate},
       gateway11sRootRouteProgrammer_{gateway11sRootRouteProgrammer},
       routing_{routing},
-      monitorClient_{this, monitorSubmitUrl, zmqContext},
-      isOpenrEnabled_{isOpenrEnabled} {
+      monitorClient_{this, monitorSubmitUrl, zmqContext} {
   // Disable reverse path filtering, i.e.
   // Do not drop packets from non-routable addresses on monitored interface
   writeProcFs("0", "/proc/sys/net/ipv4/conf/{}/rp_filter", monitoredInterface);
@@ -163,16 +159,6 @@ GatewayConnectivityMonitor::checkRoutesAndAdvertise() {
 void
 GatewayConnectivityMonitor::advertiseDefaultRoute() {
   VLOG(8) << "Advertising default gateway";
-  if (isOpenrEnabled_) {
-    const auto ret = prefixManagerClient_.addPrefixes({createPrefixEntry(
-        toIpPrefix("0.0.0.0/0"), openr::thrift::PrefixType::DEFAULT)});
-    if (ret.hasError()) {
-      LOG(ERROR) << "Announcing default prefix failed: " << ret.error();
-      monitorClient_.incrementSumStat(
-          "fbmeshd.gateway_connectivity_monitor.announce_prefix_failed");
-    }
-  }
-
   if (setRootModeIfGate_ != 0) {
     nlHandler_.setRootMode(setRootModeIfGate_);
   }
@@ -187,18 +173,6 @@ GatewayConnectivityMonitor::advertiseDefaultRoute() {
 void
 GatewayConnectivityMonitor::withdrawDefaultRoute() {
   VLOG(8) << "Withdrawing default gateway";
-  if (isOpenrEnabled_) {
-    const auto ret = prefixManagerClient_.withdrawPrefixes({createPrefixEntry(
-        toIpPrefix("0.0.0.0/0"), openr::thrift::PrefixType::DEFAULT)});
-    // if the default prefix doesn't exit, the calls still succeeds
-    // (ret.hasError() == false) but sets ret.value().success = false.
-    if (ret.hasError()) {
-      LOG(ERROR) << "Withdrawing default prefix failed: " << ret.error();
-      monitorClient_.incrementSumStat(
-          "fbmeshd.gateway_connectivity_monitor.withdraw_prefix_failed");
-    }
-  }
-
   if (setRootModeIfGate_ != 0) {
     nlHandler_.setRootMode(0);
   }

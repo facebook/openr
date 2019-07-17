@@ -79,9 +79,7 @@ add_executable(fbmeshd
     openr/fbmeshd/gateway-connectivity-monitor/MonitorClient.cpp
     openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.cpp
     openr/fbmeshd/gateway-connectivity-monitor/Socket.cpp
-    openr/fbmeshd/mesh-spark/MeshSpark.cpp
     openr/fbmeshd/nl/GenericNetlinkFamily.cpp
-    openr/fbmeshd/openr-metric-manager/OpenRMetricManager.cpp
     openr/fbmeshd/pinger/PeerPinger.cpp
     openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.cpp
     openr/fbmeshd/routing/MetricManager80211s.cpp

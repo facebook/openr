@@ -30,8 +30,6 @@
 #include <openr/fbmeshd/gateway-11s-root-route-programmer/Gateway11sRootRouteProgrammer.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/GatewayConnectivityMonitor.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.h>
-#include <openr/fbmeshd/mesh-spark/MeshSpark.h>
-#include <openr/fbmeshd/openr-metric-manager/OpenRMetricManager.h>
 #include <openr/fbmeshd/pinger/PeerPinger.h>
 #include <openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.h>
 #include <openr/fbmeshd/routing/MetricManager80211s.h>
@@ -47,30 +45,7 @@ using namespace std::chrono_literals;
 
 DEFINE_int32(fbmeshd_service_port, 30303, "fbmeshd thrift service port");
 
-DEFINE_int32(
-    kvstore_pub_port,
-    openr::Constants::kKvStorePubPort,
-    "The port where KvStore publishes updates");
-DEFINE_int32(
-    kvstore_cmd_port,
-    openr::Constants::kKvStoreRepPort,
-    "The port where KvStore listens for commands");
 DEFINE_string(node_name, "node1", "The name of current node");
-
-DEFINE_bool(
-    enable_openr_metric_manager,
-    true,
-    "If set, manages metric information and sends it to OpenR");
-
-DEFINE_int32(
-    link_monitor_cmd_port,
-    openr::Constants::kLinkMonitorCmdPort,
-    "The port link monitor listens for commands on");
-
-DEFINE_bool(
-    enable_mesh_spark,
-    true,
-    "If set, enables OpenR neighbor discovery using 11s");
 
 DEFINE_bool(
     enable_userspace_mesh_peering,
@@ -81,11 +56,6 @@ DEFINE_bool(
     enable_event_based_peer_selector,
     false,
     "If set, PeerSelector will use event-based mode instead of polling mode");
-
-DEFINE_int32(
-    prefix_manager_cmd_port,
-    openr::Constants::kPrefixManagerCmdPort,
-    "The port prefix manager receives commands on");
 
 // Gateway Connectivity Monitor configs
 DEFINE_string(
@@ -172,8 +142,7 @@ DEFINE_uint32(
     gateway_11s_root_route_programmer_interval_s,
     1,
     "how often to sync routes with the fib");
-DEFINE_bool(
-    enable_routing, true, "If set, enables experimental routing module");
+
 DEFINE_uint32(routing_ttl, 32, "TTL for routing elements");
 DEFINE_int32(routing_tos, 192, "ToS value for routing messages");
 DEFINE_uint32(
@@ -189,11 +158,6 @@ DEFINE_double(
     routing_metric_manager_rssi_weight,
     0.0,
     "Weight of the RSSI based metric (vs. bitrate) in the combined metric");
-DEFINE_bool(
-    is_openr_enabled,
-    false,
-    "If set, considers openr to be enabled and enables functionality relating"
-    " to openr");
 
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
@@ -316,29 +280,10 @@ main(int argc, char* argv[]) {
   // Set up the zmq context for this process.
   fbzmq::Context zmqContext;
 
-  const openr::KvStoreLocalPubUrl kvStoreLocalPubUrl{
-      folly::sformat("tcp://{}:{}", kHostName, FLAGS_kvstore_pub_port)};
-  const openr::KvStoreLocalCmdUrl kvStoreLocalCmdUrl{
-      folly::sformat("tcp://{}:{}", kHostName, FLAGS_kvstore_cmd_port)};
-  const std::string linkMonitorGlobalCmdUrl{
-      folly::sformat("tcp://{}:{}", kHostName, FLAGS_link_monitor_cmd_port)};
-  const openr::PrefixManagerLocalCmdUrl prefixManagerLocalCmdUrl{
-      folly::sformat("tcp://{}:{}", kHostName, FLAGS_prefix_manager_cmd_port)};
   const openr::MonitorSubmitUrl monitorSubmitUrl{
       folly::sformat("tcp://{}:{}", kHostName, FLAGS_monitor_rep_port)};
 
   RouteUpdateMonitor routeMonitor{evl, nlHandler};
-
-  std::unique_ptr<MeshSpark> meshSpark{nullptr};
-  if (FLAGS_enable_mesh_spark && FLAGS_is_openr_enabled) {
-    meshSpark = std::make_unique<MeshSpark>(
-        evl,
-        nlHandler,
-        FLAGS_mesh_ifname,
-        kvStoreLocalCmdUrl,
-        kvStoreLocalPubUrl,
-        zmqContext);
-  }
 
   std::unique_ptr<PeerPinger> peerPinger(nullptr);
   if (FLAGS_enable_peer_pinger) {
@@ -347,18 +292,6 @@ main(int argc, char* argv[]) {
       peerPinger = std::make_unique<PeerPinger>(&evb, nlHandler);
       peerPinger->run();
     }));
-  }
-
-  std::unique_ptr<OpenRMetricManager> openRMetricManager;
-  if (FLAGS_enable_openr_metric_manager && FLAGS_is_openr_enabled) {
-    openRMetricManager = std::make_unique<OpenRMetricManager>(
-        evl,
-        &nlHandler,
-        std::move(peerPinger),
-        FLAGS_mesh_ifname,
-        linkMonitorGlobalCmdUrl,
-        monitorSubmitUrl,
-        zmqContext);
   }
 
   PeerSelector peerSelector{evl,
@@ -386,72 +319,70 @@ main(int argc, char* argv[]) {
         }));
   }
 
-  std::unique_ptr<folly::EventBase> routingEventLoop;
-  std::unique_ptr<MetricManager80211s> metricManager80211s;
-  std::unique_ptr<Routing> routing;
-  std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport;
-  std::unique_ptr<PeriodicPinger> periodicPinger;
-  std::unique_ptr<SyncRoutes80211s> syncRoutes80211s;
+  std::unique_ptr<folly::EventBase> routingEventLoop =
+      std::make_unique<folly::EventBase>();
+  std::unique_ptr<MetricManager80211s> metricManager80211s =
+      std::make_unique<MetricManager80211s>(
+          routingEventLoop.get(),
+          kMetricManagerInterval,
+          nlHandler,
+          FLAGS_routing_metric_manager_ewma_factor_log2,
+          kMetricManagerHysteresisFactorLog2,
+          kMetricManagerBaseBitrate,
+          FLAGS_routing_metric_manager_rssi_weight);
+  std::unique_ptr<Routing> routing = std::make_unique<Routing>(
+      routingEventLoop.get(),
+      metricManager80211s.get(),
+      nlHandler.lookupMeshNetif().maybeMacAddress.value(),
+      FLAGS_routing_ttl,
+      std::chrono::milliseconds{FLAGS_routing_active_path_timeout_ms},
+      std::chrono::milliseconds{FLAGS_routing_root_pann_interval_ms});
+  std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport =
+      std::make_unique<UDPRoutingPacketTransport>(
+          routingEventLoop.get(), 6668, FLAGS_routing_tos);
+  std::unique_ptr<PeriodicPinger> periodicPinger =
+      std::make_unique<PeriodicPinger>(
+          routingEventLoop.get(),
+          folly::IPAddressV6{"ff02::1%mesh0"},
+          folly::IPAddressV6{
+              folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
+              nlHandler.lookupMeshNetif().maybeMacAddress.value()},
+          kPeriodicPingerInterval,
+          "mesh0");
+  periodicPinger->scheduleTimeout(1s);
+
+  std::unique_ptr<SyncRoutes80211s> syncRoutes80211s =
+      std::make_unique<SyncRoutes80211s>(
+          routing.get(), nlHandler.lookupMeshNetif().maybeMacAddress.value());
+
+  static constexpr auto syncRoutes80211sId{"SyncRoutes80211s"};
+  monitorEventLoopWithWatchdog(
+      syncRoutes80211s.get(), syncRoutes80211sId, watchdog.get());
+  allThreads.emplace_back(std::thread([&syncRoutes80211s]() noexcept {
+    LOG(INFO) << "Starting the SyncRoutes80211s thread...";
+    folly::setThreadName(syncRoutes80211sId);
+    syncRoutes80211s->run();
+    LOG(INFO) << "SyncRoutes80211s thread stopped.";
+  }));
+
+  routing->setSendPacketCallback(
+      [&routingPacketTransport](
+          folly::MacAddress da, std::unique_ptr<folly::IOBuf> buf) {
+        routingPacketTransport->sendPacket(da, std::move(buf));
+      });
+
+  routingPacketTransport->setReceivePacketCallback(
+      [&routing](folly::MacAddress sa, std::unique_ptr<folly::IOBuf> buf) {
+        routing->receivePacket(sa, std::move(buf));
+      });
+
   static constexpr auto routingId{"Routing"};
-  if (FLAGS_enable_routing) {
-    routingEventLoop = std::make_unique<folly::EventBase>();
-    metricManager80211s = std::make_unique<MetricManager80211s>(
-        routingEventLoop.get(),
-        kMetricManagerInterval,
-        nlHandler,
-        FLAGS_routing_metric_manager_ewma_factor_log2,
-        kMetricManagerHysteresisFactorLog2,
-        kMetricManagerBaseBitrate,
-        FLAGS_routing_metric_manager_rssi_weight);
-    routing = std::make_unique<Routing>(
-        routingEventLoop.get(),
-        metricManager80211s.get(),
-        nlHandler.lookupMeshNetif().maybeMacAddress.value(),
-        FLAGS_routing_ttl,
-        std::chrono::milliseconds{FLAGS_routing_active_path_timeout_ms},
-        std::chrono::milliseconds{FLAGS_routing_root_pann_interval_ms});
-    routingPacketTransport = std::make_unique<UDPRoutingPacketTransport>(
-        routingEventLoop.get(), 6668, FLAGS_routing_tos);
-    periodicPinger = std::make_unique<PeriodicPinger>(
-        routingEventLoop.get(),
-        folly::IPAddressV6{"ff02::1%mesh0"},
-        folly::IPAddressV6{folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                           nlHandler.lookupMeshNetif().maybeMacAddress.value()},
-        kPeriodicPingerInterval,
-        "mesh0");
-    periodicPinger->scheduleTimeout(1s);
-
-    syncRoutes80211s = std::make_unique<SyncRoutes80211s>(
-        routing.get(), nlHandler.lookupMeshNetif().maybeMacAddress.value());
-
-    static constexpr auto syncRoutes80211sId{"SyncRoutes80211s"};
-    monitorEventLoopWithWatchdog(
-        syncRoutes80211s.get(), syncRoutes80211sId, watchdog.get());
-    allThreads.emplace_back(std::thread([&syncRoutes80211s]() noexcept {
-      LOG(INFO) << "Starting the SyncRoutes80211s thread...";
-      folly::setThreadName(syncRoutes80211sId);
-      syncRoutes80211s->run();
-      LOG(INFO) << "SyncRoutes80211s thread stopped.";
-    }));
-
-    routing->setSendPacketCallback(
-        [&routingPacketTransport](
-            folly::MacAddress da, std::unique_ptr<folly::IOBuf> buf) {
-          routingPacketTransport->sendPacket(da, std::move(buf));
-        });
-
-    routingPacketTransport->setReceivePacketCallback(
-        [&routing](folly::MacAddress sa, std::unique_ptr<folly::IOBuf> buf) {
-          routing->receivePacket(sa, std::move(buf));
-        });
-
-    allThreads.emplace_back(std::thread([&routingEventLoop]() noexcept {
-      LOG(INFO) << "Starting Routing";
-      folly::setThreadName(routingId);
-      routingEventLoop->loopForever();
-      LOG(INFO) << "Routing thread stopped.";
-    }));
-  }
+  allThreads.emplace_back(std::thread([&routingEventLoop]() noexcept {
+    LOG(INFO) << "Starting Routing";
+    folly::setThreadName(routingId);
+    routingEventLoop->loopForever();
+    LOG(INFO) << "Routing thread stopped.";
+  }));
 
   auto gatewayConnectivityMonitorAddresses{parseCsvFlag<folly::SocketAddress>(
       FLAGS_gateway_connectivity_monitor_addresses, [](const std::string& str) {
@@ -462,7 +393,6 @@ main(int argc, char* argv[]) {
 
   GatewayConnectivityMonitor gatewayConnectivityMonitor{
       nlHandler,
-      prefixManagerLocalCmdUrl,
       FLAGS_gateway_connectivity_monitor_interface,
       std::move(gatewayConnectivityMonitorAddresses),
       std::chrono::seconds{FLAGS_gateway_connectivity_monitor_interval_s},
@@ -477,8 +407,7 @@ main(int argc, char* argv[]) {
       FLAGS_gateway_connectivity_monitor_robustness,
       static_cast<uint8_t>(FLAGS_gateway_connectivity_monitor_set_root_mode),
       gateway11sRootRouteProgrammer.get(),
-      routing.get(),
-      FLAGS_is_openr_enabled};
+      routing.get()};
 
   static constexpr auto gwConnectivityMonitorId{"GatewayConnectivityMonitor"};
   monitorEventLoopWithWatchdog(
@@ -492,18 +421,17 @@ main(int argc, char* argv[]) {
 
   // create fbmeshd thrift server
   auto server = std::make_unique<apache::thrift::ThriftServer>();
-  allThreads.emplace_back(
-      std::thread([&server, &nlHandler, &evl, &openRMetricManager, &routing]() {
-        folly::EventBase evb;
-        server->setInterface(std::make_unique<MeshServiceHandler>(
-            evl, nlHandler, openRMetricManager.get(), routing.get()));
-        server->getEventBaseManager()->setEventBase(&evb, false);
-        server->setPort(FLAGS_fbmeshd_service_port);
+  allThreads.emplace_back(std::thread([&server, &nlHandler, &evl, &routing]() {
+    folly::EventBase evb;
+    server->setInterface(
+        std::make_unique<MeshServiceHandler>(evl, nlHandler, routing.get()));
+    server->getEventBaseManager()->setEventBase(&evb, false);
+    server->setPort(FLAGS_fbmeshd_service_port);
 
-        LOG(INFO) << "starting fbmeshd server...";
-        server->serve();
-        LOG(INFO) << "fbmeshd server got stopped...";
-      }));
+    LOG(INFO) << "starting fbmeshd server...";
+    server->serve();
+    LOG(INFO) << "fbmeshd server got stopped...";
+  }));
 
 #ifdef ENABLE_SYSTEMD_NOTIFY
   // Notify systemd that this service is ready

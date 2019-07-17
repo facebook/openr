@@ -27,7 +27,6 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
  public:
   explicit GatewayConnectivityMonitor(
       Nl80211Handler& nlHandler,
-      const PrefixManagerLocalCmdUrl& prefixManagerCmdUrl,
       const std::string& monitoredInterface,
       std::vector<folly::SocketAddress> monitoredAddresses,
       std::chrono::seconds monitorInterval,
@@ -42,8 +41,7 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
       unsigned int robustness,
       uint8_t setRootModeIfGate,
       Gateway11sRootRouteProgrammer* gateway11sRootRouteProgrammer,
-      Routing* routing,
-      bool isOpenrEnabled);
+      Routing* routing);
 
   GatewayConnectivityMonitor() = delete;
   ~GatewayConnectivityMonitor() override = default;
@@ -69,8 +67,6 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
  private:
   Nl80211Handler& nlHandler_;
 
-  openr::PrefixManagerClient prefixManagerClient_;
-
   const std::string monitoredInterface_;
   const std::vector<folly::SocketAddress> monitoredAddresses_;
   const std::chrono::seconds monitorSocketTimeout_;
@@ -82,8 +78,6 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
   std::unique_ptr<fbzmq::ZmqTimeout> connectivityCheckTimer_;
 
   MonitorClient monitorClient_;
-
-  bool isOpenrEnabled_;
 
   bool isGatewayActive_{false};
 };
