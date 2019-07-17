@@ -32,7 +32,7 @@ namespace openr {
  * This class implements OpenR's Platform.FibService thrit interface for
  * programming routes on Linux platform for packet routing in kernel
  */
-class NetlinkFibHandler final : public thrift::FibServiceSvIf {
+class NetlinkFibHandler : public thrift::FibServiceSvIf {
  public:
   explicit NetlinkFibHandler(
       fbzmq::ZmqEventLoop* zmqEventLoop,
@@ -94,6 +94,11 @@ class NetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   folly::Future<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
   future_getMplsRouteTableByClient(int16_t clientId) override;
+
+  std::shared_ptr<fbnl::NetlinkSocket>
+  getNetlinkSocket() {
+    return netlinkSocket_;
+  }
 
  private:
   struct ThreadLocalListener {
