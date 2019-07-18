@@ -82,18 +82,21 @@ SyncRoutes80211s::doSyncRoutes() {
 
     auto destination = std::make_pair<folly::IPAddress, uint8_t>(
         getTaygaIPV6FromMacAddress(mpath.dst), 128);
-    unicastRouteDb.emplace(
-        destination,
-        fbnl::RouteBuilder{}
-            .setDestination(destination)
-            .setProtocolId(98)
-            .addNextHop(fbnl::NextHopBuilder{}
-                            .setGateway(folly::IPAddressV6{
-                                folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                                mpath.nextHop})
-                            .setIfIndex(meshIfIndex)
-                            .build())
-            .build());
+    // Ensure tayga interface is present
+    if (taygaIfIndex != 0) {
+      unicastRouteDb.emplace(
+          destination,
+          fbnl::RouteBuilder{}
+              .setDestination(destination)
+              .setProtocolId(98)
+              .addNextHop(fbnl::NextHopBuilder{}
+                              .setGateway(folly::IPAddressV6{
+                                  folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
+                                  mpath.nextHop})
+                              .setIfIndex(meshIfIndex)
+                              .build())
+              .build());
+    }
     destination = std::make_pair<folly::IPAddress, uint8_t>(
         getMesh0IPV6FromMacAddress(mpath.dst), 128);
     unicastRouteDb.emplace(
@@ -140,24 +143,28 @@ SyncRoutes80211s::doSyncRoutes() {
 
   auto destination =
       folly::CIDRNetwork{getTaygaIPV6FromMacAddress(nodeAddr_), 128};
-  linkRouteDb.emplace(
-      std::make_pair(destination, kTaygaIfName),
-      fbnl::RouteBuilder{}
-          .setDestination(destination)
-          .setProtocolId(98)
-          .setRouteIfIndex(taygaIfIndex)
-          .setRouteIfName(kTaygaIfName)
-          .buildLinkRoute());
 
-  destination = folly::CIDRNetwork{folly::IPAddressV4{"172.16.0.0"}, 16};
-  linkRouteDb.emplace(
-      std::make_pair(destination, kTaygaIfName),
-      fbnl::RouteBuilder{}
-          .setDestination(destination)
-          .setProtocolId(98)
-          .setRouteIfIndex(taygaIfIndex)
-          .setRouteIfName(kTaygaIfName)
-          .buildLinkRoute());
+  // Ensure tayga interface is present
+  if (taygaIfIndex != 0) {
+    linkRouteDb.emplace(
+        std::make_pair(destination, kTaygaIfName),
+        fbnl::RouteBuilder{}
+            .setDestination(destination)
+            .setProtocolId(98)
+            .setRouteIfIndex(taygaIfIndex)
+            .setRouteIfName(kTaygaIfName)
+            .buildLinkRoute());
+
+    destination = folly::CIDRNetwork{folly::IPAddressV4{"172.16.0.0"}, 16};
+    linkRouteDb.emplace(
+        std::make_pair(destination, kTaygaIfName),
+        fbnl::RouteBuilder{}
+            .setDestination(destination)
+            .setProtocolId(98)
+            .setRouteIfIndex(taygaIfIndex)
+            .setRouteIfName(kTaygaIfName)
+            .buildLinkRoute());
+  }
 
   mesh0Addrs.push_back(fbnl::IfAddressBuilder{}
                            .setPrefix(folly::CIDRNetwork{
@@ -176,43 +183,46 @@ SyncRoutes80211s::doSyncRoutes() {
   destination = std::make_pair<folly::IPAddress, uint8_t>(
       folly::IPAddressV6{"fd00:ffff::"}, 96);
 
-  if (isGate) {
-    linkRouteDb.emplace(
-        std::make_pair(destination, kTaygaIfName),
-        fbnl::RouteBuilder{}
-            .setDestination(destination)
-            .setProtocolId(98)
-            .setRouteIfIndex(taygaIfIndex)
-            .setRouteIfName(kTaygaIfName)
-            .buildLinkRoute());
-  } else if (currentGate_) {
-    const auto defaultV4Prefix =
-        std::make_pair<folly::IPAddress, uint8_t>(folly::IPAddressV4{}, 0);
+  // Ensure tayga interface is present
+  if (taygaIfIndex != 0) {
+    if (isGate) {
+      linkRouteDb.emplace(
+          std::make_pair(destination, kTaygaIfName),
+          fbnl::RouteBuilder{}
+              .setDestination(destination)
+              .setProtocolId(98)
+              .setRouteIfIndex(taygaIfIndex)
+              .setRouteIfName(kTaygaIfName)
+              .buildLinkRoute());
+    } else if (currentGate_) {
+      const auto defaultV4Prefix =
+          std::make_pair<folly::IPAddress, uint8_t>(folly::IPAddressV4{}, 0);
 
-    // ip route add default dev tayga mtu 1500 advmss 1460
-    linkRouteDb.emplace(
-        std::make_pair(defaultV4Prefix, kTaygaIfName),
-        fbnl::RouteBuilder{}
-            .setDestination(defaultV4Prefix)
-            .setProtocolId(98)
-            .setMtu(1500)
-            .setAdvMss(1460)
-            .setRouteIfIndex(taygaIfIndex)
-            .setRouteIfName(kTaygaIfName)
-            .buildLinkRoute());
+      // ip route add default dev tayga mtu 1500 advmss 1460
+      linkRouteDb.emplace(
+          std::make_pair(defaultV4Prefix, kTaygaIfName),
+          fbnl::RouteBuilder{}
+              .setDestination(defaultV4Prefix)
+              .setProtocolId(98)
+              .setMtu(1500)
+              .setAdvMss(1460)
+              .setRouteIfIndex(taygaIfIndex)
+              .setRouteIfName(kTaygaIfName)
+              .buildLinkRoute());
 
-    unicastRouteDb.emplace(
-        destination,
-        fbnl::RouteBuilder{}
-            .setDestination(destination)
-            .setProtocolId(98)
-            .addNextHop(fbnl::NextHopBuilder{}
-                            .setGateway(folly::IPAddressV6{
-                                folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-                                meshPaths.at(currentGate_->first).nextHop})
-                            .setIfIndex(meshIfIndex)
-                            .build())
-            .build());
+      unicastRouteDb.emplace(
+          destination,
+          fbnl::RouteBuilder{}
+              .setDestination(destination)
+              .setProtocolId(98)
+              .addNextHop(fbnl::NextHopBuilder{}
+                              .setGateway(folly::IPAddressV6{
+                                  folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
+                                  meshPaths.at(currentGate_->first).nextHop})
+                              .setIfIndex(meshIfIndex)
+                              .build())
+              .build());
+    }
   }
   isGateBeforeRouteSync_ = isGate;
 
