@@ -40,8 +40,7 @@ struct PeerSelectorOrdering {
 PeerSelector::PeerSelector(
     fbzmq::ZmqEventLoop& zmqLoop,
     Nl80211HandlerInterface& nlHandler,
-    int minRssiThreshold,
-    bool pollNeighbors)
+    int minRssiThreshold)
     : nlHandler_{nlHandler},
       minRssiThreshold_{minRssiThreshold},
       rssiThreshold_{minRssiThreshold},
@@ -52,11 +51,9 @@ PeerSelector::PeerSelector(
 
   nlHandler.setPeerSelector(this);
 
-  if (pollNeighbors) {
-    timer_ = fbzmq::ZmqTimeout::make(
-        &zmqLoop, [this]() mutable noexcept { poll(); });
-    timer_->scheduleTimeout(interval_, true);
-  }
+  timer_ =
+      fbzmq::ZmqTimeout::make(&zmqLoop, [this]() mutable noexcept { poll(); });
+  timer_->scheduleTimeout(interval_, true);
 }
 
 PeerSelector::~PeerSelector() {

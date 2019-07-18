@@ -52,11 +52,6 @@ DEFINE_bool(
     true,
     "If set, mesh peering management handshake will be done in userspace");
 
-DEFINE_bool(
-    enable_event_based_peer_selector,
-    false,
-    "If set, PeerSelector will use event-based mode instead of polling mode");
-
 // Gateway Connectivity Monitor configs
 DEFINE_string(
     gateway_connectivity_monitor_interface,
@@ -294,11 +289,7 @@ main(int argc, char* argv[]) {
     }));
   }
 
-  PeerSelector peerSelector{evl,
-                            nlHandler,
-                            rssiThreshold,
-                            !(FLAGS_enable_event_based_peer_selector &&
-                              FLAGS_enable_userspace_mesh_peering)};
+  PeerSelector peerSelector{evl, nlHandler, rssiThreshold};
 
   std::unique_ptr<Gateway11sRootRouteProgrammer> gateway11sRootRouteProgrammer;
   static constexpr auto gateway11sRootRouteProgrammerId{

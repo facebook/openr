@@ -31,7 +31,7 @@ class PeerSelectorTest : public ::testing::Test {
   fbzmq::ZmqEventLoop zmqLoop_;
 
   MockNl80211Handler nlHandler_;
-  PeerSelector peerSelector_{zmqLoop_, nlHandler_, -80, false};
+  PeerSelector peerSelector_{zmqLoop_, nlHandler_, -80};
 
   // keep bad rssi first to test sorting
   std::vector<StationInfo> testStations_ = {
@@ -53,7 +53,7 @@ TEST_F(PeerSelectorTest, NegativeMaxDisables) {
   // should only be called once by destructor
   EXPECT_CALL(nlh, setPeerSelector(_)).Times(1);
 
-  PeerSelector foo{zmqLoop_, nlh, -80, false};
+  PeerSelector foo{zmqLoop_, nlh, -80};
 }
 
 TEST_F(PeerSelectorTest, PeersRankedBestFirst) {

@@ -33,8 +33,7 @@ class PeerSelector final {
   PeerSelector(
       fbzmq::ZmqEventLoop& zmqLoop,
       Nl80211HandlerInterface& nlHandler,
-      int minRssiThreshold,
-      bool pollNeighbors);
+      int minRssiThreshold);
 
   ~PeerSelector();
 
