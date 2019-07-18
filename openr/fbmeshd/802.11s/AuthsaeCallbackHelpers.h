@@ -37,6 +37,9 @@ class AuthsaeCallbackHelpers final {
   static void init(fbzmq::ZmqEventLoop& zmqLoop);
 
   // Methods for controlling timeouts
+  //
+  // NOTE: The public-facing timeout ID returned/accepted by these methods is
+  // abstracted from the timeout IDs used internally by the event loop!
   static int64_t addTimeoutToEventLoop(
       std::chrono::milliseconds timeout, fbzmq::TimeoutCallback callback);
   static void removeTimeoutFromEventLoop(int64_t timeoutId);

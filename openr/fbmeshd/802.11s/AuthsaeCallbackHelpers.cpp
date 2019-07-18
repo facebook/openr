@@ -24,7 +24,7 @@ extern "C" {
 
 using namespace openr::fbmeshd;
 
-// Event loop pointer to allow control over additional sockets, timeoutes, etc.
+// Event loop pointer to allow control over additional sockets, timeouts, etc.
 fbzmq::ZmqEventLoop* AuthsaeCallbackHelpers::zmqLoop_{nullptr};
 
 // These static C functions are declared and expected by authsae for the
@@ -316,8 +316,8 @@ add_timeout_with_jitter(
   int64_t timerId = AuthsaeCallbackHelpers::addTimeoutToEventLoop(
       std::chrono::milliseconds(msec), [proc, data]() { (*proc)(data); });
 
-  // Per authsae's service.h, 0 is an invalid timerid, and while we don't expect
-  // to get that timerid, it would be very bad if we did
+  // In authsae, timerid 0 is reserved, and addTimeoutToEventLoop() does not
+  // return it - enforce this to be extra safer.
   assert(timerId != 0);
 
   VLOG(1) << folly::sformat("Added timer (timerId {})", timerId);
@@ -396,7 +396,15 @@ AuthsaeCallbackHelpers::addTimeoutToEventLoop(
       "AuthsaeCallbackHelpers::{}(timeout: {}ms)", __func__, timeout.count());
 
   CHECK_NOTNULL(zmqLoop_);
-  return zmqLoop_->scheduleTimeout(timeout, std::move(callback));
+
+  // timeout ID 0 is reserved by authsae, but is a valid return value from zmq.
+  // In order to work around this, we abstract the internal zmq timeout ID from
+  // the public-facing timeout ID by using the formula:
+  //     publicTimeoutId = (privateTimeoutId + 1)
+  int64_t timeoutId =
+      zmqLoop_->scheduleTimeout(timeout, std::move(callback)) + 1;
+  assert(timeoutId != 0);
+  return timeoutId;
 }
 
 // Remove an existing timeout from the event loop
@@ -406,5 +414,11 @@ AuthsaeCallbackHelpers::removeTimeoutFromEventLoop(int64_t timeoutId) {
       "AuthsaeCallbackHelpers::{}(timeoutId: {})", __func__, timeoutId);
 
   CHECK_NOTNULL(zmqLoop_);
-  zmqLoop_->cancelTimeout(timeoutId);
+
+  // timeout ID 0 is reserved by authsae, but is a valid return value from zmq.
+  // In order to work around this, we abstract the internal zmq timeout ID from
+  // the public-facing timeout ID by using the formula:
+  //     publicTimeoutId = (privateTimeoutId + 1)
+  assert(timeoutId != 0);
+  zmqLoop_->cancelTimeout(timeoutId - 1);
 }
