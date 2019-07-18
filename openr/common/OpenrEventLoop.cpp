@@ -16,7 +16,6 @@ OpenrEventLoop::OpenrEventLoop(
     const thrift::OpenrModuleType type,
     fbzmq::Context& zmqContext,
     folly::Optional<std::string> tcpUrl,
-    folly::Optional<std::string> ipcUrl,
     folly::Optional<int> maybeIpTos,
     int socketHwm)
     : moduleType(type),
@@ -25,7 +24,6 @@ OpenrEventLoop::OpenrEventLoop(
       inprocCmdUrl(
           folly::sformat("inproc://{}_{}_local_cmd", nodeName, moduleName)),
       tcpCmdUrl(tcpUrl),
-      ipcCmdUrl(ipcUrl),
       inprocCmdSock_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
   runInEventLoop([this, &zmqContext, nodeName, maybeIpTos, socketHwm]() {
@@ -55,13 +53,6 @@ OpenrEventLoop::OpenrEventLoop(
       tcpCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
           zmqContext, id, folly::none, fbzmq::NonblockingFlag{true});
       prepareSocket(tcpCmdSock_.value(), tcpCmdUrl.value(), socketOptions);
-    }
-
-    // IPC
-    if (ipcCmdUrl) {
-      ipcCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true});
-      prepareSocket(ipcCmdSock_.value(), ipcCmdUrl.value(), socketOptions);
     }
   });
 }

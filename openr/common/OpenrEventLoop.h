@@ -32,7 +32,6 @@ class OpenrEventLoop : public fbzmq::ZmqEventLoop {
   const std::string moduleName;
   const std::string inprocCmdUrl;
   const folly::Optional<std::string> tcpCmdUrl;
-  const folly::Optional<std::string> ipcCmdUrl;
 
  protected:
   OpenrEventLoop(
@@ -40,7 +39,6 @@ class OpenrEventLoop : public fbzmq::ZmqEventLoop {
       const thrift::OpenrModuleType type,
       fbzmq::Context& zmqContext,
       folly::Optional<std::string> tcpUrl = folly::none,
-      folly::Optional<std::string> ipcUrl = folly::none,
       folly::Optional<int> maybeIpTos = folly::none,
       int socketHwm = Constants::kHighWaterMark);
 
@@ -61,15 +59,11 @@ class OpenrEventLoop : public fbzmq::ZmqEventLoop {
       fbzmq::Message&& request) = 0;
 
   // For backward compatibility, we are preserving the endpoints that the
-  // modules previously had. All had inproc sockets while some also had tcp or
-  // ipc sockets. going foraward, we will hopefully remove the tcp and ipc
-  // sockets and shift any requests coming from outside the process to use
-  // secure thrift
+  // modules previously had. All had inproc socket while some also had tcp
+  // socket. going foraward, we will hopefully remove the tcp socket and
+  // shift any requests coming from outside the process to use secure thrift
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> inprocCmdSock_;
 
   folly::Optional<fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>> tcpCmdSock_;
-
-  folly::Optional<fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>> ipcCmdSock_;
-
 }; // class OpenrEventLoop
 } // namespace openr

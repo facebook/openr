@@ -80,7 +80,6 @@ KvStore::KvStore(
           thrift::OpenrModuleType::KVSTORE,
           zmqContext,
           std::string{globalCmdUrl},
-          folly::none /* ipcUrl */,
           maybeIpTos,
           zmqHwm),
       DualNode(nodeId, isFloodRoot),
