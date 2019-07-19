@@ -317,4 +317,7 @@ service OpenrCtrl extends fb303.FacebookService {
    * Get ZMQ log events
    */
   list<Monitor.EventLog> getEventLogs() throws (1: OpenrError error)
+
+  // Get Openr Node Name
+  string getMyNodeName()
 }

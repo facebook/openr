@@ -331,6 +331,11 @@ OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
   return 0;
 }
 
+void
+OpenrCtrlHandler::getMyNodeName(std::string& _return) {
+  _return = std::string(nodeName_);
+}
+
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_advertisePrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {

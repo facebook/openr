@@ -327,6 +327,12 @@ class OpenrCtrlFixture : public ::testing::Test {
       moduleTypeToEvl_;
 };
 
+TEST_F(OpenrCtrlFixture, getMyNodeName) {
+  auto ret = handler->semifuture_getMyNodeName().get();
+  ASSERT_NE(nullptr, ret);
+  EXPECT_EQ(nodeName, *ret);
+}
+
 TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
   {
     std::vector<thrift::PrefixEntry> prefixes{

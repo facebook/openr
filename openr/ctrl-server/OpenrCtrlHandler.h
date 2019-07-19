@@ -62,6 +62,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<std::vector<std::string>> keys) override;
   int64_t getCounter(std::unique_ptr<std::string> key) override;
 
+  // Openr Node Name
+  void getMyNodeName(std::string& _return) override;
+
   //
   // ZMQ Monitor APIs
   //
