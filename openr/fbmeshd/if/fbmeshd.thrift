@@ -17,18 +17,10 @@ exception MeshServiceError {
 typedef map<string, i32>
 (cpp.type = "std::unordered_map<std::string, int32_t>") PeerMetrics
 
-typedef i32 (cpp2.type = "int32_t") UInt32
 typedef i64 (cpp2.type = "uint64_t") MacAddress // network byte order
 typedef byte (cpp2.type = "uint8_t") u8
 typedef i32 (cpp2.type = "uint32_t") u32
 typedef i64 (cpp2.type = "uint64_t") u64
-
-struct SeparaPayload {
-  1: MacAddress domain
-  2: i32 metricToGate
-  3: MacAddress desiredDomain
-  4: optional bool enabled = true
-}
 
 struct Mesh {
   4: i32 frequency
@@ -59,11 +51,6 @@ service MeshService {
 
   Mesh getMesh(1: string ifName)
     throws (1: MeshServiceError error)
-
-  void setMetricOverride(1: string macAddress, 2: UInt32 metric)
-  UInt32 getMetricOverride(1: string macAddress)
-  i32 clearMetricOverride(1: string macAddress)
-
   list<MpathEntry> dumpMpath();
 }
 
