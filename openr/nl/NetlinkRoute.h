@@ -68,6 +68,9 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   // encode MPLS label, returns in network order
   uint32_t encodeLabel(uint32_t label, bool bos) const;
 
+  // process netlink route message
+  fbnl::Route parseMessage(const struct nlmsghdr* nlmsg) const;
+
  private:
   // print ancillary data
   void showRtmMsg(const struct rtmsg* const hdr) const;
@@ -78,8 +81,27 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   // print multi path attributes
   void showMultiPathAttribues(const struct rtattr* const rta) const;
 
-  // process netlink route message
-  void parseMessage() const;
+  // parse IP address
+  folly::Expected<folly::IPAddress, folly::IPAddressFormatError> parseIp(
+      const struct rtattr* ipAttr, unsigned char family) const;
+
+  // process netlink next hops
+  std::vector<fbnl::NextHop> parseNextHops(
+      const struct rtattr* routeAttrMultipath, unsigned char family) const;
+
+  // parse NextHop Attributes
+  void parseNextHopAttribute(
+      const struct rtattr* routeAttr,
+      unsigned char family,
+      fbnl::NextHopBuilder& nhBuilder) const;
+
+  // parse MPLS labels
+  folly::Optional<std::vector<int32_t>> parseMplsLabels(
+      const struct rtattr* routeAttr) const;
+
+  // set mpls action based on nexthop fields
+  void setMplsAction(
+      fbnl::NextHopBuilder& nhBuilder, unsigned char family) const;
 
   // pointer to route message header
   struct rtmsg* rtmsg_{nullptr};
@@ -121,12 +143,12 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   struct nlmsghdr* msghdr_{nullptr};
 
   // for via nexthop
-  struct nextHop {
+  struct NextHop {
     uint16_t addrFamily;
     char ip[16];
   } __attribute__((__packed__));
 
-  struct nextHopV4 {
+  struct NextHopV4 {
     uint16_t addrFamily;
     char ip[4];
   } __attribute__((__packed__));

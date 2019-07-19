@@ -79,7 +79,7 @@ class NextHopBuilder final {
 
   folly::Optional<folly::IPAddress> getGateway() const;
 
-  folly::Optional<uint8_t> getWeight() const;
+  uint8_t getWeight() const;
 
   folly::Optional<thrift::MplsActionCode> getLabelAction() const;
 
@@ -92,7 +92,7 @@ class NextHopBuilder final {
  private:
   folly::Optional<int> ifIndex_;
   folly::Optional<folly::IPAddress> gateway_;
-  folly::Optional<uint8_t> weight_;
+  uint8_t weight_{0}; // default weight is 0
   folly::Optional<thrift::MplsActionCode> labelAction_;
   folly::Optional<uint32_t> swapLabel_;
   folly::Optional<std::vector<int32_t>> pushLabels_;
@@ -109,7 +109,7 @@ class NextHop final {
 
   folly::Optional<folly::IPAddress> getGateway() const;
 
-  folly::Optional<uint8_t> getWeight() const;
+  uint8_t getWeight() const;
 
   std::string str() const;
 
@@ -143,7 +143,7 @@ class NextHop final {
  private:
   folly::Optional<int> ifIndex_;
   folly::Optional<folly::IPAddress> gateway_;
-  folly::Optional<uint8_t> weight_;
+  uint8_t weight_{0}; // default weight is 0
   folly::Optional<thrift::MplsActionCode> labelAction_;
   folly::Optional<uint32_t> swapLabel_;
   folly::Optional<std::vector<int32_t>> pushLabels_;

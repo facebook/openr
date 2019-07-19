@@ -28,6 +28,11 @@ NetlinkRouteMessage::init(
   msghdr_->nlmsg_type = type;
   msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
 
+  if (type == RTM_GETROUTE) {
+    // Get all routes
+    msghdr_->nlmsg_flags |= NLM_F_DUMP;
+  }
+
   if (type != RTM_DELROUTE) {
     msghdr_->nlmsg_flags |= NLM_F_CREATE;
   }
@@ -150,12 +155,12 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
   rtnh->rtnh_len += rta->rta_len - prevLen;
 
   // RTA_VIA
-  struct nextHop via;
+  struct NextHop via;
   via.addrFamily = path.getFamily();
   auto gw = path.getGateway().value();
-  int viaLen{sizeof(nextHop)};
+  int viaLen{sizeof(struct NextHop)};
   if (via.addrFamily == AF_INET) {
-    viaLen = sizeof(nextHopV4);
+    viaLen = sizeof(struct NextHopV4);
   }
   memcpy(via.ip, reinterpret_cast<const char*>(gw.bytes()), gw.byteCount());
   if (addSubAttributes(
@@ -359,29 +364,239 @@ NetlinkRouteMessage::showMultiPathAttribues(
   } while ((subrta = RTA_NEXT(subrta, len)));
 }
 
-void
-NetlinkRouteMessage::parseMessage() const {
-  LOG(INFO) << "process route message: " << *this;
-  const struct rtmsg* const route_entry = (struct rtmsg*)NLMSG_DATA(msghdr_);
-  showRtmMsg(route_entry);
-
-  if (route_entry->rtm_table != RT_TABLE_MAIN) {
-    return;
+folly::Expected<folly::IPAddress, folly::IPAddressFormatError>
+NetlinkRouteMessage::parseIp(
+    const struct rtattr* ipAttr, unsigned char family) const {
+  if (family == AF_INET) {
+    struct in_addr* addr4 = reinterpret_cast<in_addr*> RTA_DATA(ipAttr);
+    return folly::IPAddressV4::fromLong(addr4->s_addr);
+  } else if (family == AF_INET6) {
+    struct in6_addr* addr6 = reinterpret_cast<in6_addr*> RTA_DATA(ipAttr);
+    return folly::IPAddressV6::tryFromBinary(
+        folly::ByteRange(reinterpret_cast<const uint8_t*>(addr6->s6_addr), 16));
+  } else {
+    return makeUnexpected(folly::IPAddressFormatError::UNSUPPORTED_ADDR_FAMILY);
   }
-  // first route attribute
-  const struct rtattr* routeAttr = (const struct rtattr*)RTM_RTA(route_entry);
-  auto routeAttrLen = RTM_PAYLOAD(msghdr_);
+}
 
-  // process all route attributes
+folly::Optional<std::vector<int32_t>>
+NetlinkRouteMessage::parseMplsLabels(const struct rtattr* routeAttr) const {
+  const struct rtattr* mplsAttr =
+      reinterpret_cast<struct rtattr*> RTA_DATA(routeAttr);
+  int mplsAttrLen = RTA_PAYLOAD(routeAttr);
   do {
-    if (!RTA_OK(routeAttr, routeAttrLen)) {
-      break;
+    switch (mplsAttr->rta_type) {
+    case MPLS_IPTUNNEL_DST: {
+      std::vector<int32_t> pushLabels{};
+      const int32_t* mplsLabels = reinterpret_cast<int32_t*> RTA_DATA(mplsAttr);
+      // each mpls label entry is 32 bits (20 bit label, and other fields)
+      int numLabels = RTA_PAYLOAD(mplsAttr) / sizeof(struct mpls_label);
+      // Check if number of labels does not exceed max label count
+      CHECK_LE(numLabels, kMaxLabels);
+      for (int i = 0; i < numLabels; i++) {
+        // decode mpls label
+        pushLabels.emplace_back(ntohl(mplsLabels[i]) >> kLabelShift);
+      }
+      return pushLabels;
+    } break;
     }
-    showRouteAttribute(routeAttr);
-    if (routeAttr->rta_type == RTA_MULTIPATH) {
-      showMultiPathAttribues(routeAttr);
+    mplsAttr = RTA_NEXT(mplsAttr, mplsAttrLen);
+  } while (RTA_OK(mplsAttr, mplsAttrLen));
+  return folly::none;
+}
+
+void
+NetlinkRouteMessage::parseNextHopAttribute(
+    const struct rtattr* routeAttr,
+    unsigned char family,
+    fbnl::NextHopBuilder& nhBuilder) const {
+  switch (routeAttr->rta_type) {
+  case RTA_GATEWAY: {
+    // Gateway address
+    auto ipAddress = parseIp(routeAttr, family);
+    if (ipAddress.hasValue()) {
+      nhBuilder.setGateway(ipAddress.value());
     }
-  } while ((routeAttr = RTA_NEXT(routeAttr, routeAttrLen)));
+  } break;
+
+  // via nexthop used for MPLS PHP or SWAP
+  case RTA_VIA: {
+    folly::Expected<folly::IPAddress, folly::IPAddressFormatError> ipAddress;
+    if (routeAttr->rta_len > 16) {
+      // IPv6 nexthop address
+      struct NextHop* via =
+          reinterpret_cast<struct NextHop*> RTA_DATA(routeAttr);
+      ipAddress = folly::IPAddressV6::tryFromBinary(
+          folly::ByteRange(reinterpret_cast<const uint8_t*>(via->ip), 16));
+    } else {
+      // IPv4 nexthop address
+      struct NextHopV4* via =
+          reinterpret_cast<struct NextHopV4*> RTA_DATA(routeAttr);
+      ipAddress = folly::IPAddressV4::tryFromBinary(
+          folly::ByteRange(reinterpret_cast<const uint8_t*>(via->ip), 4));
+    }
+    if (ipAddress.hasValue()) {
+      nhBuilder.setGateway(ipAddress.value());
+    }
+  } break;
+
+  case RTA_OIF: {
+    // Output interface index
+    nhBuilder.setIfIndex(*(reinterpret_cast<int*> RTA_DATA(routeAttr)));
+  } break;
+
+  case RTA_ENCAP: {
+    // MPLS Labels
+    auto pushLabels = parseMplsLabels(routeAttr);
+    if (pushLabels.hasValue()) {
+      nhBuilder.setPushLabels(pushLabels.value());
+    }
+  } break;
+
+  case RTA_NEWDST: {
+    // Swap Label
+    const auto swapLabel =
+        reinterpret_cast<struct mpls_label*> RTA_DATA(routeAttr);
+    // Decode swap label
+    nhBuilder.setSwapLabel(ntohl(swapLabel->entry) >> kLabelShift);
+  } break;
+  }
+}
+
+void
+NetlinkRouteMessage::setMplsAction(
+    fbnl::NextHopBuilder& nhBuilder, unsigned char family) const {
+  // Inferring MPLS action from nexthop fields
+  if (nhBuilder.getPushLabels() != folly::none) {
+    nhBuilder.setLabelAction(thrift::MplsActionCode::PUSH);
+  } else if (family == AF_MPLS) {
+    if (nhBuilder.getGateway() != folly::none &&
+        nhBuilder.getSwapLabel() != folly::none) {
+      nhBuilder.setLabelAction(thrift::MplsActionCode::SWAP);
+    } else if (
+        nhBuilder.getGateway() != folly::none &&
+        nhBuilder.getSwapLabel() == folly::none) {
+      nhBuilder.setLabelAction(thrift::MplsActionCode::PHP);
+    } else {
+      nhBuilder.setLabelAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+    }
+  }
+}
+
+fbnl::Route
+NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
+  fbnl::RouteBuilder routeBuilder;
+  // For single next hop in the route
+  fbnl::NextHopBuilder nhBuilder;
+  bool singleNextHopFlag{true};
+
+  const struct rtmsg* const routeEntry =
+      reinterpret_cast<struct rtmsg*>(NLMSG_DATA(nlmsg));
+
+  const bool isValid = nlmsg->nlmsg_type == RTM_NEWROUTE ? true : false;
+  routeBuilder.setRouteTable(routeEntry->rtm_table)
+      .setFlags(routeEntry->rtm_flags)
+      .setProtocolId(routeEntry->rtm_protocol)
+      .setType(routeEntry->rtm_type)
+      .setScope(routeEntry->rtm_scope)
+      .setValid(isValid);
+
+  const struct rtattr* routeAttr;
+  auto routeAttrLen = RTM_PAYLOAD(nlmsg);
+  // process all route attributes
+  for (routeAttr = RTM_RTA(routeEntry); RTA_OK(routeAttr, routeAttrLen);
+       routeAttr = RTA_NEXT(routeAttr, routeAttrLen)) {
+    switch (routeAttr->rta_type) {
+    case RTA_DST: {
+      if (routeEntry->rtm_family == AF_MPLS) {
+        // Parse MPLS label
+        const auto mplsLabel =
+            reinterpret_cast<struct mpls_label*> RTA_DATA(routeAttr);
+        // decode label
+        routeBuilder.setMplsLabel(ntohl(mplsLabel->entry) >> kLabelShift);
+      } else {
+        // Parse destination IP address
+        auto ipAddress = parseIp(routeAttr, routeEntry->rtm_family);
+        if (ipAddress.hasValue()) {
+          folly::CIDRNetwork prefix = std::make_pair(
+              ipAddress.value(), (uint8_t)routeEntry->rtm_dst_len);
+          routeBuilder.setDestination(prefix);
+        }
+      }
+    } break;
+
+    case RTA_PRIORITY: {
+      // parse route priority
+      routeBuilder.setPriority(*(reinterpret_cast<int*> RTA_DATA(routeAttr)));
+    } break;
+
+    // Nexthop attributes
+    case RTA_GATEWAY:
+    case RTA_OIF:
+    case RTA_VIA:
+    case RTA_ENCAP:
+    case RTA_NEWDST: {
+      parseNextHopAttribute(routeAttr, routeEntry->rtm_family, nhBuilder);
+    } break;
+
+    // If there are multiple nexthops in the route, the nexthop attributes
+    // are subattributes in RTA_MULTIPATH
+    case RTA_MULTIPATH: {
+      singleNextHopFlag = false;
+      auto nextHops = parseNextHops(routeAttr, routeEntry->rtm_family);
+      for (auto& nh : nextHops) {
+        routeBuilder.addNextHop(nh);
+      }
+    } break;
+    }
+  }
+
+  if (singleNextHopFlag) {
+    setMplsAction(nhBuilder, routeEntry->rtm_family);
+    // add single nexthop
+    routeBuilder.addNextHop(nhBuilder.build());
+  }
+
+  auto route = routeBuilder.build();
+  VLOG(2) << route.str();
+  return route;
+}
+
+std::vector<fbnl::NextHop>
+NetlinkRouteMessage::parseNextHops(
+    const struct rtattr* routeAttrMP, unsigned char family) const {
+  std::vector<fbnl::NextHop> nextHops;
+  struct rtnexthop* nh =
+      reinterpret_cast<struct rtnexthop*> RTA_DATA(routeAttrMP);
+
+  int nhLen = RTA_PAYLOAD(routeAttrMP);
+  do {
+    fbnl::NextHopBuilder nhBuilder;
+    nhBuilder.setIfIndex(nh->rtnh_ifindex);
+    const struct rtattr* routeAttr;
+    auto routeAttrLen = nh->rtnh_len - sizeof(*nh);
+    // process all route attributes
+    for (routeAttr = RTNH_DATA(nh); RTA_OK(routeAttr, routeAttrLen);
+         routeAttr = RTA_NEXT(routeAttr, routeAttrLen)) {
+      switch (routeAttr->rta_type) {
+      // Nexthop attributes
+      case RTA_GATEWAY:
+      case RTA_OIF:
+      case RTA_VIA:
+      case RTA_ENCAP:
+      case RTA_NEWDST: {
+        parseNextHopAttribute(routeAttr, family, nhBuilder);
+      } break;
+      }
+    }
+    setMplsAction(nhBuilder, family);
+    auto nexthop = nhBuilder.build();
+    VLOG(2) << nexthop.str();
+    nextHops.emplace_back(nexthop);
+    nhLen -= NLMSG_ALIGN(nh->rtnh_len);
+    nh = RTNH_NEXT(nh);
+  } while (RTNH_OK(nh, nhLen));
+  return nextHops;
 }
 
 ResultCode
@@ -398,7 +613,7 @@ NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
     return ResultCode::INVALID_ADDRESS_FAMILY;
   }
 
-  init(RTM_NEWROUTE, RTM_F_NOTIFY, route);
+  init(RTM_NEWROUTE, 0, route);
 
   rtmsg_->rtm_family = addressFamily;
   rtmsg_->rtm_dst_len = plen; /* netmask */
@@ -432,7 +647,7 @@ NetlinkRouteMessage::deleteRoute(const openr::fbnl::Route& route) {
   if (addressFamily != AF_INET && addressFamily != AF_INET6) {
     return ResultCode::INVALID_ADDRESS_FAMILY;
   }
-  init(RTM_DELROUTE, RTM_F_NOTIFY, route);
+  init(RTM_DELROUTE, 0, route);
 
   auto plen = std::get<1>(pfix);
   auto ip = std::get<0>(pfix);
@@ -614,7 +829,7 @@ NetlinkAddrMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
       } else if (addrEntry->ifa_family == AF_INET6) {
         struct in6_addr* addr6 = reinterpret_cast<in6_addr*> RTA_DATA(addrAttr);
         auto ipAddress = folly::IPAddressV6::tryFromBinary(folly::ByteRange(
-            reinterpret_cast<const unsigned char*>(addr6->s6_addr), 16));
+            reinterpret_cast<const uint8_t*>(addr6->s6_addr), 16));
         if (ipAddress.hasValue()) {
           folly::CIDRNetwork prefix = std::make_pair(
               ipAddress.value(), (uint8_t)addrEntry->ifa_prefixlen);
@@ -685,7 +900,7 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
         struct in6_addr* addr6 =
             reinterpret_cast<in6_addr*> RTA_DATA(neighAttr);
         auto ipAddress = folly::IPAddressV6::tryFromBinary(folly::ByteRange(
-            reinterpret_cast<const unsigned char*>(addr6->s6_addr), 16));
+            reinterpret_cast<const uint8_t*>(addr6->s6_addr), 16));
         if (ipAddress.hasValue()) {
           builder = builder.setDestination(ipAddress.value());
         } else {
@@ -696,8 +911,7 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
 
     case NDA_LLADDR: {
       auto macAddress = folly::MacAddress::fromBinary(folly::ByteRange(
-          reinterpret_cast<const unsigned char*>(RTA_DATA(neighAttr)),
-          ETH_ALEN));
+          reinterpret_cast<const uint8_t*>(RTA_DATA(neighAttr)), ETH_ALEN));
       builder.setLinkAddress(macAddress);
     } break;
     }

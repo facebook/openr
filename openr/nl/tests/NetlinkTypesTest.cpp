@@ -35,7 +35,7 @@ TEST(NetlinkTypes, NextHopIfIndexTest) {
   EXPECT_TRUE(nh.getIfIndex().hasValue());
   EXPECT_EQ(kIfIndex, nh.getIfIndex().value());
   EXPECT_FALSE(nh.getGateway().hasValue());
-  EXPECT_FALSE(nh.getWeight().hasValue());
+  EXPECT_EQ(0, nh.getWeight());
   struct rtnl_nexthop* object = nh.getRtnlNexthopObj();
   EXPECT_TRUE(object != nullptr);
   EXPECT_EQ(kIfIndex, rtnl_route_nh_get_ifindex(object));
@@ -65,8 +65,7 @@ TEST(NetlinkTypes, NextHopGatewayTest) {
   EXPECT_FALSE(nh.getIfIndex().hasValue());
   EXPECT_TRUE(nh.getGateway().hasValue());
   EXPECT_EQ(gateway, nh.getGateway().value());
-  EXPECT_TRUE(nh.getWeight().hasValue());
-  EXPECT_EQ(kWeight, nh.getWeight().value());
+  EXPECT_EQ(kWeight, nh.getWeight());
 
   struct rtnl_nexthop* object = nh.getRtnlNexthopObj();
   EXPECT_TRUE(object != nullptr);
@@ -99,8 +98,7 @@ TEST(NetlinkTypes, NexthopGeneralTest) {
   EXPECT_EQ(kIfIndex, nh.getIfIndex().value());
   EXPECT_TRUE(nh.getGateway().hasValue());
   EXPECT_EQ(gateway, nh.getGateway().value());
-  EXPECT_TRUE(nh.getWeight().hasValue());
-  EXPECT_EQ(kWeight, nh.getWeight().value());
+  EXPECT_EQ(kWeight, nh.getWeight());
 
   struct rtnl_nexthop* object = nh.getRtnlNexthopObj();
   EXPECT_TRUE(object != nullptr);

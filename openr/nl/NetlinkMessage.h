@@ -173,14 +173,17 @@ class NetlinkProtocolSocket {
   // ack count
   uint32_t getAckCount() const;
 
-  // get all link interfaces from Netlink
-  std::vector<std::pair<fbnl::Link, int>> getAllLinks();
+  // get all link interfaces from kernel using Netlink
+  std::vector<fbnl::Link> getAllLinks();
 
-  // get all interface addresses from Netlink
-  std::vector<std::pair<fbnl::IfAddress, int>> getAllIfAddresses();
+  // get all interface addresses from kernel using Netlink
+  std::vector<fbnl::IfAddress> getAllIfAddresses();
 
-  // get all neighbors from Netlink
-  std::vector<std::pair<fbnl::Neighbor, int>> getAllNeighbors();
+  // get all neighbors from kernel using Netlink
+  std::vector<fbnl::Neighbor> getAllNeighbors();
+
+  // get all routes from kernel using Netlink
+  std::vector<fbnl::Route> getAllRoutes();
 
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
@@ -229,12 +232,14 @@ class NetlinkProtocolSocket {
   void setReturnStatusValue(uint32_t seq, int ackStatus);
 
   /**
-   * We keep an internal cache of Link, Address and Neighbor action events
-   * This are used in the getAllLinks/getAllReachableNeighbors method
+   * We maintain a temporary cache of Link, Address, Neighbor and Routes from
+   * the kernel, which are solely used for the getAll... methods. These caches
+   * are cleared when we invoke a new getAllLinks/Addresses/Neighbors/Routes
    */
-  std::vector<std::pair<fbnl::Link, /* action event */ int>> links_{};
-  std::vector<std::pair<fbnl::IfAddress, /* action event */ int>> addresses_{};
-  std::vector<std::pair<fbnl::Neighbor, /* action event */ int>> neighbors_{};
+  std::vector<fbnl::Link> linkCache_{};
+  std::vector<fbnl::IfAddress> addressCache_{};
+  std::vector<fbnl::Neighbor> neighborCache_{};
+  std::vector<fbnl::Route> routeCache_{};
 };
 } // namespace Netlink
 } // namespace openr

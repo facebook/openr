@@ -109,8 +109,9 @@ CompareNextHops(std::vector<folly::IPAddress>& nexthops, const Route& route) {
 
 } // namespace
 
-// This fixture creates virtual links (veths)
-// which the UT can use
+// Event Unit Tests with parameter.
+// true - Use NetlinkProtocolSocket (Custom Netlink Implementation)
+// false - Use libnl3
 class NetlinkSocketSubscribeFixture : public testing::TestWithParam<bool> {
  public:
   NetlinkSocketSubscribeFixture() = default;
@@ -1207,6 +1208,10 @@ TEST_P(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
 
 // Add/Del route, test route events
 TEST_P(NetlinkSocketSubscribeFixture, RouteTest) {
+  if (GetParam()) {
+    // We skip test case with Param = true (Netlink Impl)
+    SKIP() << "NetlinkProtocolSocket does not listen to route events";
+  }
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events
@@ -1337,6 +1342,10 @@ TEST_P(NetlinkSocketSubscribeFixture, RouteTest) {
 
 // Add/Del route, test route events
 TEST_P(NetlinkSocketSubscribeFixture, RouteFlagTest) {
+  if (GetParam()) {
+    // We skip test case with Param = true (Netlink Impl)
+    SKIP() << "NetlinkProtocolSocket does not listen to route events";
+  }
   ZmqEventLoop zmqLoop;
 
   // A timeout to stop the UT in case we never received expected events

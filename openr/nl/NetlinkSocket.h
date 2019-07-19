@@ -411,6 +411,12 @@ class NetlinkSocket {
       bool runHandler,
       bool updateUnicastRoute) noexcept;
 
+  void doHandleRouteEvent(
+      Route route,
+      int action,
+      bool runHandler,
+      bool updateUnicastRoute) noexcept;
+
   void handleLinkEvent(nl_object* obj, int action, bool runHandler) noexcept;
 
   void doHandleLinkEvent(Link link, int action, bool runHandler) noexcept;
@@ -426,8 +432,7 @@ class NetlinkSocket {
   void doHandleNeighborEvent(
       Neighbor neighbor, int action, bool runHandler) noexcept;
 
-  void doUpdateRouteCache(
-      struct rtnl_route* obj, int action, bool updateUnicastRoute = false);
+  void doUpdateRouteCache(Route route, bool updateUnicastRoute = false);
 
   void doAddUpdateUnicastRoute(Route route);
 

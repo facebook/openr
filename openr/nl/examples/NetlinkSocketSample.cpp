@@ -117,13 +117,12 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
               << folly::IPAddress::networkToString(routeEntry.getDestination());
 
     for (const auto& nh : routeEntry.getNextHops()) {
-      if (!nh.getGateway().hasValue() || !nh.getIfIndex().hasValue() ||
-          !nh.getWeight().hasValue()) {
+      if (!nh.getGateway().hasValue() || !nh.getIfIndex().hasValue()) {
         continue;
       }
       LOG(INFO) << "NextHop: " << nh.getGateway().value().str()
                 << " IfaceIndex: " << nh.getIfIndex().value()
-                << " Weight: " << (int)nh.getWeight().value();
+                << " Weight: " << nh.getWeight();
     }
     LOG(INFO) << "============================================================";
   }

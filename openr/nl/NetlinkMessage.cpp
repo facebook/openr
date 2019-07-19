@@ -139,8 +139,12 @@ NetlinkProtocolSocket::init() {
   ::memset(&saddr_, 0, sizeof(saddr_));
   saddr_.nl_family = AF_NETLINK;
   saddr_.nl_pid = pid_;
-  saddr_.nl_groups = RTMGRP_IPV6_ROUTE | RTMGRP_LINK | RTMGRP_IPV4_IFADDR |
-      RTMGRP_IPV6_IFADDR | RTMGRP_NEIGH;
+  /* We can subscribe to different Netlink mutlicast groups for specific types
+   * of events: link, IPv4/IPv6 address and neighbor. */
+  saddr_.nl_groups = RTMGRP_LINK // listen for link events
+      | RTMGRP_IPV4_IFADDR // listen for IPv4 address events
+      | RTMGRP_IPV6_IFADDR // listen for IPv6 address events
+      | RTMGRP_NEIGH; // listen for Neighbor (ARP) events
 
   if (bind(nlSock_, (struct sockaddr*)&saddr_, sizeof(saddr_)) != 0) {
     LOG(FATAL) << "Failed to bind netlink socket: " << folly::errnoStr(errno);
@@ -269,12 +273,17 @@ NetlinkProtocolSocket::processMessage(
       break;
     }
 
-    VLOG(2) << "Netlink message of type " << nlh->nlmsg_type;
+    VLOG(2) << "Received Netlink message of type " << nlh->nlmsg_type;
     switch (nlh->nlmsg_type) {
     case RTM_NEWROUTE:
     case RTM_DELROUTE: {
       // next RTM message to be processed
       auto rtmMessage = std::make_unique<NetlinkRouteMessage>();
+      auto route = rtmMessage->parseMessage(nlh);
+      if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
+        // Synchronous event - do not generate route events
+        routeCache_.emplace_back(route);
+      }
     } break;
 
     case RTM_DELLINK:
@@ -285,7 +294,7 @@ NetlinkProtocolSocket::processMessage(
       int action = nlh->nlmsg_type == RTM_NEWLINK ? NL_ACT_GET : NL_ACT_DEL;
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
         // Synchronous event - do not generate link events
-        links_.emplace_back(std::make_pair(link, action));
+        linkCache_.emplace_back(link);
       } else if (linkEventCB_) {
         // Asynchronous event - generate link event for handler
         VLOG(0) << "Asynchronous Link Event: " << link.str();
@@ -305,7 +314,7 @@ NetlinkProtocolSocket::processMessage(
       // Valid address
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
         // Synchronous event - do not generate addr events
-        addresses_.emplace_back(std::make_pair(addr, action));
+        addressCache_.emplace_back(addr);
       } else if (addrEventCB_) {
         // Asynchronous event - generate addr event for handler
         VLOG(0) << "Asynchronous Addr Event: " << addr.str();
@@ -321,7 +330,7 @@ NetlinkProtocolSocket::processMessage(
       int action = nlh->nlmsg_type == RTM_NEWNEIGH ? NL_ACT_GET : NL_ACT_DEL;
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
         // Synchronous event - do not generate neighbor events
-        neighbors_.emplace_back(std::make_pair(neighbor, action));
+        neighborCache_.emplace_back(neighbor);
       } else if (neighborEventCB_) {
         // Asynchronous event - generate neighbor event for handler
         VLOG(0) << "Asynchronous Neighbor Event: " << neighbor.str();
@@ -577,10 +586,10 @@ NetlinkProtocolSocket::deleteRoutes(
       kNlRequestTimeout);
 }
 
-std::vector<std::pair<fbnl::Link, int>>
+std::vector<fbnl::Link>
 NetlinkProtocolSocket::getAllLinks() {
   // Refresh internal cache
-  links_.clear();
+  linkCache_.clear();
   // Send Netlink message to get links
   auto linkMsg = std::make_unique<openr::Netlink::NetlinkLinkMessage>();
   std::vector<folly::Future<int>> futures;
@@ -589,14 +598,14 @@ NetlinkProtocolSocket::getAllLinks() {
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   msg.emplace_back(std::move(linkMsg));
   addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{});
-  return std::move(links_);
+  getReturnStatus(futures, std::unordered_set<int>{}, kNlRequestTimeout);
+  return std::move(linkCache_);
 }
 
-std::vector<std::pair<fbnl::IfAddress, int>>
+std::vector<fbnl::IfAddress>
 NetlinkProtocolSocket::getAllIfAddresses() {
   // Refresh internal cache
-  addresses_.clear();
+  addressCache_.clear();
   auto addrMsg = std::make_unique<openr::Netlink::NetlinkAddrMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(addrMsg->getFuture());
@@ -604,14 +613,14 @@ NetlinkProtocolSocket::getAllIfAddresses() {
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   msg.emplace_back(std::move(addrMsg));
   addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{});
-  return std::move(addresses_);
+  getReturnStatus(futures, std::unordered_set<int>{}, kNlRequestTimeout);
+  return std::move(addressCache_);
 }
 
-std::vector<std::pair<fbnl::Neighbor, int>>
+std::vector<fbnl::Neighbor>
 NetlinkProtocolSocket::getAllNeighbors() {
   // Refresh internal cache
-  neighbors_.clear();
+  neighborCache_.clear();
   // Send Netlink message to get neighbors
   auto neighMsg = std::make_unique<openr::Netlink::NetlinkNeighborMessage>();
   std::vector<folly::Future<int>> futures;
@@ -620,8 +629,23 @@ NetlinkProtocolSocket::getAllNeighbors() {
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   msg.emplace_back(std::move(neighMsg));
   addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{});
-  return std::move(neighbors_);
+  getReturnStatus(futures, std::unordered_set<int>{}, kNlRequestTimeout);
+  return std::move(neighborCache_);
+}
+
+std::vector<fbnl::Route>
+NetlinkProtocolSocket::getAllRoutes() {
+  routeCache_.clear();
+  auto routeMsg = std::make_unique<openr::Netlink::NetlinkRouteMessage>();
+  std::vector<folly::Future<int>> futures;
+  futures.emplace_back(routeMsg->getFuture());
+  fbnl::RouteBuilder builder; // to create empty route
+  routeMsg->init(RTM_GETROUTE, 0, builder.build());
+  std::vector<std::unique_ptr<NetlinkMessage>> msg;
+  msg.emplace_back(std::move(routeMsg));
+  addNetlinkMessage(std::move(msg));
+  getReturnStatus(futures, std::unordered_set<int>{}, kNlRequestTimeout);
+  return std::move(routeCache_);
 }
 
 } // namespace Netlink

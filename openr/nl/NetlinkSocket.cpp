@@ -188,25 +188,43 @@ NetlinkSocket::handleRouteEvent(
     int action,
     bool runHandler,
     bool updateUnicastRoute) noexcept {
+  if (useNetlinkMessage_) {
+    // useNetlinkMessage_ is true, libnl route events are not processed.
+    return;
+  }
   CHECK_NOTNULL(obj);
   if (!checkObjectType(obj, kRouteObjectStr)) {
     return;
   }
 
   struct rtnl_route* routeObj = reinterpret_cast<struct rtnl_route*>(obj);
+  RouteBuilder builder;
+  bool isValid = (action != NL_ACT_DEL);
+  auto route = builder.loadFromObject(routeObj).setValid(isValid).build();
+  doHandleRouteEvent(std::move(route), action, runHandler, updateUnicastRoute);
+}
+
+void
+NetlinkSocket::doHandleRouteEvent(
+    Route route,
+    int action,
+    bool runHandler,
+    bool updateUnicastRoute) noexcept {
+  auto routeCopy = Route(route);
   try {
-    doUpdateRouteCache(routeObj, action, updateUnicastRoute);
+    doUpdateRouteCache(std::move(route), updateUnicastRoute);
+  } catch (const folly::InvalidAddressFamilyException& ex) {
+    // Empty address in route. Ignore exception.
+    return;
   } catch (const std::exception& ex) {
     LOG(ERROR) << "UpdateCacheFailed";
   }
 
   if (handler_ && runHandler && eventFlags_[ROUTE_EVENT]) {
-    const bool isValid = (action != NL_ACT_DEL);
-    RouteBuilder builder;
-    auto route = builder.loadFromObject(routeObj).setValid(isValid).build();
-    std::string ifName =
-        route.getRouteIfName().hasValue() ? route.getRouteIfName().value() : "";
-    EventVariant event = std::move(route);
+    std::string ifName = routeCopy.getRouteIfName().hasValue()
+        ? routeCopy.getRouteIfName().value()
+        : "";
+    EventVariant event = std::move(routeCopy);
     handler_->handleEvent(ifName, action, event);
   }
 }
@@ -376,11 +394,7 @@ NetlinkSocket::doHandleNeighborEvent(
 }
 
 void
-NetlinkSocket::doUpdateRouteCache(
-    struct rtnl_route* obj, int action, bool updateUnicastRoute) {
-  RouteBuilder builder;
-  bool isValid = (action != NL_ACT_DEL);
-  auto route = builder.loadFromObject(obj).setValid(isValid).build();
+NetlinkSocket::doUpdateRouteCache(Route route, bool updateUnicastRoute) {
   // Skip cached route entries and any routes not in the main table
   int flags = route.getFlags().hasValue() ? route.getFlags().value() : 0;
   if (route.getRouteTable() != RT_TABLE_MAIN || flags & RTM_F_CLONED) {
@@ -1398,12 +1412,12 @@ NetlinkSocket::getAllLinks() {
     try {
       if (useNetlinkMessage_) {
         auto links = nlSock_->getAllLinks();
-        for (auto& linkEntry : links) {
-          doHandleLinkEvent(linkEntry.first, linkEntry.second, false);
+        for (auto& link : links) {
+          doHandleLinkEvent(link, NL_ACT_GET, false);
         }
         auto addresses = nlSock_->getAllIfAddresses();
-        for (auto& addrEntry : addresses) {
-          doHandleAddrEvent(addrEntry.first, addrEntry.second, false);
+        for (auto& address : addresses) {
+          doHandleAddrEvent(address, NL_ACT_GET, false);
         }
       } else {
         updateLinkCache();
@@ -1427,9 +1441,8 @@ NetlinkSocket::getAllReachableNeighbors() {
       getAllLinks().get();
       if (useNetlinkMessage_) {
         auto neighbors = nlSock_->getAllNeighbors();
-        for (auto& neighborEntry : neighbors) {
-          doHandleNeighborEvent(
-              neighborEntry.first, neighborEntry.second, false);
+        for (auto& neighbor : neighbors) {
+          doHandleNeighborEvent(neighbor, NL_ACT_GET, false);
         }
       } else {
         updateNeighborCache();
@@ -1489,12 +1502,19 @@ NetlinkSocket::updateNeighborCache() {
 
 void
 NetlinkSocket::updateRouteCache() {
-  auto routeFunc = [](struct nl_object * obj, void* arg) noexcept {
-    CHECK(arg) << "Opaque context does not exist";
-    reinterpret_cast<NetlinkSocket*>(arg)->handleRouteEvent(
-        obj, NL_ACT_GET, false, true);
-  };
-  nl_cache_foreach_filter(routeCache_, nullptr, routeFunc, this);
+  if (useNetlinkMessage_) {
+    auto routes = nlSock_->getAllRoutes();
+    for (auto& route : routes) {
+      doHandleRouteEvent(route, NL_ACT_GET, false, true);
+    }
+  } else {
+    auto routeFunc = [](struct nl_object * obj, void* arg) noexcept {
+      CHECK(arg) << "Opaque context does not exist";
+      reinterpret_cast<NetlinkSocket*>(arg)->handleRouteEvent(
+          obj, NL_ACT_GET, false, true);
+    };
+    nl_cache_foreach_filter(routeCache_, nullptr, routeFunc, this);
+  }
 }
 
 void

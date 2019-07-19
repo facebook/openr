@@ -718,7 +718,7 @@ NextHopBuilder::build() const {
 void
 NextHopBuilder::reset() {
   ifIndex_.clear();
-  weight_.clear();
+  weight_ = 0;
   gateway_.clear();
 }
 
@@ -768,7 +768,7 @@ NextHopBuilder::getGateway() const {
   return gateway_;
 }
 
-folly::Optional<uint8_t>
+uint8_t
 NextHopBuilder::getWeight() const {
   return weight_;
 }
@@ -825,9 +825,7 @@ NextHopHash::operator()(const NextHop& nh) const {
   if (nh.getGateway().hasValue()) {
     res += std::hash<std::string>()(nh.getGateway().value().str());
   }
-  if (nh.getWeight().hasValue()) {
-    res += std::hash<std::string>()(std::to_string(nh.getWeight().value()));
-  }
+  res += std::hash<std::string>()(std::to_string(nh.getWeight()));
   return res;
 }
 
@@ -841,7 +839,7 @@ NextHop::getGateway() const {
   return gateway_;
 }
 
-folly::Optional<uint8_t>
+uint8_t
 NextHop::getWeight() const {
   return weight_;
 }
@@ -876,7 +874,7 @@ NextHop::str() const {
       "nexthop via {}, intf-index {}, weight {}",
       (gateway_ ? gateway_->str() : "n/a"),
       (ifIndex_ ? std::to_string(*ifIndex_) : "n/a"),
-      (weight_ ? std::to_string(*weight_) : "n/a"));
+      std::to_string(weight_));
   if (labelAction_.hasValue()) {
     result += folly::sformat(
         " Label action {}",
@@ -915,9 +913,7 @@ NextHop::buildNextHopInternal(const int ifIdx) const {
   if (nextHop == nullptr) {
     throw fbnl::NlException("Failed to create nextHop");
   }
-  if (weight_.hasValue()) {
-    rtnl_route_nh_set_weight(nextHop, weight_.value());
-  }
+  rtnl_route_nh_set_weight(nextHop, weight_);
   rtnl_route_nh_set_ifindex(nextHop, ifIdx);
   return nextHop;
 }
@@ -947,10 +943,7 @@ NextHop::buildNextHopInternal(
   if (gateway.isV4()) {
     rtnl_route_nh_set_flags(nextHop, RTNH_F_ONLINK);
   }
-  if (weight_.hasValue()) {
-    rtnl_route_nh_set_weight(nextHop, weight_.value());
-  }
-
+  rtnl_route_nh_set_weight(nextHop, weight_);
   rtnl_route_nh_set_ifindex(nextHop, ifIdx);
   rtnl_route_nh_set_gateway(nextHop, nlGateway);
   return nextHop;
@@ -983,9 +976,8 @@ NextHop::buildNextHopInternal(const folly::IPAddress& gateway) const {
   if (nextHop == nullptr) {
     throw fbnl::NlException("Failed to create nextHop");
   }
-  if (weight_.hasValue()) {
-    rtnl_route_nh_set_weight(nextHop, weight_.value());
-  }
+  rtnl_route_nh_set_weight(nextHop, weight_);
+
   rtnl_route_nh_set_gateway(nextHop, nlGateway);
   return nextHop;
 }
