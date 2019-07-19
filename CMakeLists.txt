@@ -954,7 +954,7 @@ if(BUILD_TESTS)
     # these tests must be run by root user
     add_test(NetlinkSocketTest netlink_socket_test)
     add_test(NetlinkMessageTest netlink_message_test)
-    add_test(NetlinkSocketTest netlink_socket_subscribe_test)
+    add_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test)
   endif()
 
   install(TARGETS
