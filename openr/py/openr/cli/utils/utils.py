@@ -568,9 +568,14 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
 
     assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
     this_node_name = adj_db.thisNodeName
-    node_label_str = "Node Label: {}".format(adj_db.nodeLabel)
 
-    rows = []
+    title_tokens = [this_node_name]
+    overload_str = click.style(
+        f"{adj_db.isOverloaded}", fg="red" if adj_db.isOverloaded else None
+    )
+    title_tokens.append("Overloaded: {}".format(overload_str))
+    if adj_db.nodeLabel:
+        title_tokens.append(f"Node Label: {adj_db.nodeLabel}")
 
     column_labels = [
         "Neighbor",
@@ -583,6 +588,7 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
         "Uptime",
     ]
 
+    rows = []
     for adj in adj_db.adjacencies:
         if bidir:
             other_node_db = global_adj_db.get(adj.otherNodeName, None)
@@ -611,7 +617,9 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir):
             ]
         )
 
-    return node_label_str, printing.render_horizontal_table(rows, column_labels)
+    return printing.render_horizontal_table(
+        rows, column_labels, caption=", ".join(title_tokens)
+    )
 
 
 def interface_db_to_dict(value):

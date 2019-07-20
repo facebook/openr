@@ -807,15 +807,14 @@ class SnoopCmd(KvStoreCmdBase):
         if delta:
             old_adj_db = global_adj_db.get(new_adj_db.thisNodeName, None)
             if old_adj_db is None:
-                lines = (
-                    "ADJ_DB_ADDED: {}\n".format(new_adj_db.thisNodeName)
-                    + utils.sprint_adj_db_full(global_adj_db, new_adj_db, False)[1]
-                )
+                lines = "ADJ_DB_ADDED: {}\n".format(
+                    new_adj_db.thisNodeName
+                ) + utils.sprint_adj_db_full(global_adj_db, new_adj_db, False)
             else:
                 lines = utils.sprint_adj_db_delta(new_adj_db, old_adj_db)
                 lines = "\n".join(lines)
         else:
-            _, lines = utils.sprint_adj_db_full(global_adj_db, new_adj_db, False)
+            lines = utils.sprint_adj_db_full(global_adj_db, new_adj_db, False)
 
         if lines:
             self.print_timestamp()
