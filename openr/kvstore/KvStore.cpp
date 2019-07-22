@@ -67,7 +67,6 @@ KvStore::KvStore(
     std::chrono::seconds monitorSubmitInterval,
     // initializer for mutable state
     std::unordered_map<std::string, thrift::PeerSpec> peers,
-    bool legacyFlooding,
     folly::Optional<KvStoreFilters> filters,
     int zmqHwm,
     KvStoreFloodRate floodRate,
@@ -89,7 +88,6 @@ KvStore::KvStore(
       globalPubUrl_(std::move(globalPubUrl)),
       dbSyncInterval_(dbSyncInterval),
       monitorSubmitInterval_(monitorSubmitInterval),
-      legacyFlooding_(legacyFlooding),
       hwm_(zmqHwm),
       ttlDecr_(ttlDecr),
       enableFloodOptimization_(enableFloodOptimization),
@@ -116,15 +114,6 @@ KvStore::KvStore(
           folly::sformat(Constants::kGlobalPubIdTemplate.toString(), nodeId_)},
       folly::none,
       fbzmq::NonblockingFlag{true});
-
-  if (legacyFlooding_) {
-    peerSubSock_ = fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT>(
-        zmqContext,
-        fbzmq::IdentityString{folly::sformat(
-            Constants::kGlobalSubIdTemplate.toString(), nodeId_)},
-        folly::none,
-        fbzmq::NonblockingFlag{true});
-  }
 
   if (floodRate_.hasValue()) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
@@ -213,14 +202,6 @@ KvStore::KvStore(
       LOG(FATAL) << "Error setting ZMQ_TOS to " << ipTos << " "
                  << peerSyncTos.error();
     }
-    if (legacyFlooding_) {
-      const auto peerSubTos =
-          peerSubSock_.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
-      if (peerSubTos.hasError()) {
-        LOG(FATAL) << "Error setting ZMQ_TOS to " << ipTos << " "
-                   << peerSubTos.error();
-      }
-    }
   }
 
   //
@@ -242,16 +223,6 @@ KvStore::KvStore(
   if (globalPubBind.hasError()) {
     LOG(FATAL) << "Error binding to URL '" << globalPubUrl_ << "' "
                << globalPubBind.error();
-  }
-
-  // Subscribe to all messages
-  if (legacyFlooding_) {
-    auto const peerSyncSub = peerSubSock_.setSockOpt(ZMQ_SUBSCRIBE, "", 0);
-    if (peerSyncSub.hasError()) {
-      LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
-                 << ""
-                 << " " << peerSyncSub.error();
-    }
   }
 
   // Attach socket callbacks/schedule events
@@ -457,29 +428,6 @@ KvStore::updateTtlCountdownQueue(const thrift::Publication& publication) {
   }
 }
 
-// consume a publication pending on peerSubSock_ socket
-// (i.e. announced by some of our peers) and relays the changes only
-void
-KvStore::processPublication() {
-  CHECK(legacyFlooding_);
-
-  auto thriftPubMsg = peerSubSock_.recvOne();
-  if (thriftPubMsg.hasError()) {
-    LOG(ERROR) << "processPublication: failed receiving publication "
-               << thriftPubMsg.error();
-    return;
-  }
-
-  auto maybeThriftPub =
-      thriftPubMsg.value().readThriftObj<thrift::Publication>(serializer_);
-  if (maybeThriftPub.hasError()) {
-    LOG(ERROR) << "processPublication: failed reading thrift message "
-               << maybeThriftPub.error();
-    return;
-  }
-  mergePublication(maybeThriftPub.value());
-}
-
 // build publication out of the requested keys (per request)
 // if not keys provided, will return publication with empty keyVals
 thrift::Publication
@@ -637,7 +585,6 @@ KvStore::addPeers(
 
     try {
       auto it = peers_.find(peerName);
-      bool pubUrlUpdated{false};
       bool cmdUrlUpdated{false};
       bool isNewPeer{false};
 
@@ -652,17 +599,6 @@ KvStore::addPeers(
             << ", support-flood-optimization: " << supportFloodOptimization;
 
         const auto& peerSpec = it->second.first;
-
-        if (legacyFlooding_ && peerSpec.pubUrl != newPeerSpec.pubUrl) {
-          pubUrlUpdated = true;
-          LOG(INFO) << "Unsubscribing from " << peerSpec.pubUrl;
-          auto const ret =
-              peerSubSock_.disconnect(fbzmq::SocketUrl{peerSpec.pubUrl});
-          if (ret.hasError()) {
-            LOG(FATAL) << "Error Disconnecting to URL '" << peerSpec.pubUrl
-                       << "' " << ret.error();
-          }
-        }
 
         if (peerSpec.cmdUrl != newPeerSpec.cmdUrl) {
           // case1: peer-spec updated (e.g parallel cases)
@@ -690,19 +626,9 @@ KvStore::addPeers(
             << "Adding new peer " << peerName
             << ", support-flood-optimization: " << supportFloodOptimization;
         isNewPeer = true;
-        pubUrlUpdated = true;
         cmdUrlUpdated = true;
         std::tie(it, std::ignore) =
             peers_.emplace(peerName, std::make_pair(newPeerSpec, newPeerCmdId));
-      }
-
-      if (legacyFlooding_ && pubUrlUpdated) {
-        LOG(INFO) << "Subscribing to " << newPeerSpec.pubUrl;
-        if (peerSubSock_.connect(fbzmq::SocketUrl{newPeerSpec.pubUrl})
-                .hasError()) {
-          LOG(FATAL) << "Error connecting to URL '" << newPeerSpec.pubUrl
-                     << "'";
-        }
       }
 
       if (cmdUrlUpdated) {
@@ -768,14 +694,6 @@ KvStore::delPeers(std::vector<std::string> const& peers) {
     const auto& peerSpec = it->second.first;
     if (peerSpec.supportFloodOptimization) {
       dualPeersToRemove.emplace_back(peerName);
-    }
-
-    if (legacyFlooding_) {
-      LOG(INFO) << "Unsubscribing from: " << peerSpec.pubUrl;
-      auto subRes = peerSubSock_.disconnect(fbzmq::SocketUrl{peerSpec.pubUrl});
-      if (subRes.hasError()) {
-        LOG(ERROR) << "Failed to unsubscribe. " << subRes.error();
-      }
     }
 
     LOG(INFO) << "Detaching from: " << peerSpec.cmdUrl
@@ -1388,22 +1306,6 @@ void
 KvStore::attachCallbacks() {
   VLOG(2) << "KvStore: Registering events callbacks ...";
 
-  if (legacyFlooding_) {
-    addSocket(
-        fbzmq::RawZmqSocketPtr{*peerSubSock_},
-        ZMQ_POLLIN,
-        [this](int) noexcept {
-          // we received a publication
-          VLOG(3) << "KvStore: Publication received...";
-          try {
-            processPublication();
-          } catch (std::exception const& err) {
-            LOG(ERROR) << "KvStore: Error processing publication, "
-                       << folly::exceptionStr(err);
-          }
-        });
-  }
-
   addSocket(
       fbzmq::RawZmqSocketPtr{*peerSyncSock_}, ZMQ_POLLIN, [this](int) noexcept {
         // we received a sync response
@@ -1567,7 +1469,7 @@ KvStore::getFloodPeers(const folly::Optional<std::string>& rootId) {
   bool floodToAll = false;
   if (not enableFloodOptimization_ or not useFloodOptimization_ or
       sptPeers.empty()) {
-    // fall back to legacy flooding if feature not enabled or can not find
+    // fall back to naive flooding if feature not enabled or can not find
     // valid SPT-peers
     floodToAll = true;
   }

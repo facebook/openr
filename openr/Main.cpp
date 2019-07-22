@@ -481,7 +481,6 @@ main(int argc, char** argv) {
           std::chrono::seconds(FLAGS_kvstore_sync_interval_s),
           Constants::kMonitorSubmitInterval,
           std::unordered_map<std::string, openr::thrift::PeerSpec>{},
-          FLAGS_enable_legacy_flooding,
           std::move(kvFilters),
           FLAGS_kvstore_zmq_hwm,
           kvstoreRate,

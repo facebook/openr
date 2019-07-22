@@ -87,7 +87,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreDbSyncInterval,
       kvStoreMonitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec>{},
-      false /* enable legacy flooding */,
       std::move(filters));
 
   kvStoreLocalCmdUrl_ = kvStore_->inprocCmdUrl;

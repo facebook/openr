@@ -501,7 +501,7 @@ Set this true to let this node declare itself as a flood-root. You can set
 multiple nodes as flood-roots in a network, in steady state, open/r will pick
 optimal (smallest node-name) one as the SPT for flooding. If optimal root went
 away, open/r will pick 2nd optimal one as SPT-root and so on so forth. If all
-root nodes went away, open/r will fall back to legacy flooding.
+root nodes went away, open/r will fall back to naive flooding.
 
 ```
 IS_FLOOD_ROOT=false

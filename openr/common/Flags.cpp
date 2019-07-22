@@ -269,11 +269,6 @@ DEFINE_string(
     "Only keys with originator ID matching any of the originator ID will "
     "be added to kvstore.");
 DEFINE_int32(memory_limit_mb, 300, "Memory limit in MB");
-DEFINE_bool(
-    enable_legacy_flooding,
-    true,
-    "Legacy flooding is not optimized but can be enabled to keep compatibility "
-    "with old KvStore which doesn't support new flooding mechanism");
 DEFINE_int32(
     kvstore_zmq_hwm,
     openr::Constants::kHighWaterMark,

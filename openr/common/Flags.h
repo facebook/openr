@@ -109,7 +109,6 @@ DECLARE_string(key_prefix_filters);
 DECLARE_string(key_originator_id_filters);
 
 DECLARE_int32(memory_limit_mb);
-DECLARE_bool(enable_legacy_flooding);
 
 DECLARE_int32(kvstore_zmq_hwm);
 DECLARE_int32(kvstore_flood_msg_per_sec);

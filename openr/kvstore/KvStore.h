@@ -115,8 +115,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
       std::chrono::seconds monitorSubmitInterval,
       // initial list of peers to connect to
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      // Enable legacy flooding
-      bool legacyFlooding = true,
       // KvStore key filters
       folly::Optional<KvStoreFilters> filters = folly::none,
       // ZMQ high water mark
@@ -202,11 +200,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // dstSockId: destination socket identity
   void collectSendFailureStats(
       const fbzmq::Error& error, const std::string& dstSockId);
-
-  // consume a publication pending on sub_ socket
-  // (i.e. announced by some of our peers)
-  // relays the original publication if needed
-  void processPublication();
 
   // get multiple keys at once
   thrift::Publication getKeyVals(std::vector<std::string> const& keys);
@@ -343,12 +336,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // to avoid submission of counters in testing.
   const std::chrono::seconds monitorSubmitInterval_;
 
-  // Enable legacy flooding using ZMQ PUB-SUB. If set to false then flooding
-  // will be done via KvStore's one way SET_KEY requests and publications will
-  // be sent out old way for internal clients for functioning of Open/R and
-  // external clients for debugging purpose only
-  const bool legacyFlooding_{true};
-
   // ZMQ high water mark for PUB sockets
   const int hwm_{openr::Constants::kHighWaterMark};
 
@@ -378,11 +365,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // the socket to publish changes to kv-store
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock_;
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock_;
-
-  // DEPRECATED: Use of sub socket will be removed soon for flooding between
-  // KvStores.
-  // the socket we use to subscribe to other KvStores
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> peerSubSock_;
 
   // zmq ROUTER socket for requesting full dumps from peers
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
