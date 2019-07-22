@@ -100,7 +100,7 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
     return netlinkSocket_;
   }
 
- private:
+ protected:
   struct ThreadLocalListener {
     folly::EventBase* eventBase;
     std::unordered_map<
