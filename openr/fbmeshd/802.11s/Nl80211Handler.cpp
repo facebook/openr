@@ -1675,7 +1675,7 @@ Nl80211Handler::getStationsInfo() {
         const auto tb = msg.getAttributes<NL80211_ATTR_MAX>();
 
         if (!tb[NL80211_ATTR_STA_INFO]) {
-          LOG(INFO) << "Sta stats missing";
+          LOG(INFO) << "Station stats missing, skipping";
           return NL_SKIP;
         }
 
@@ -1689,8 +1689,19 @@ Nl80211Handler::getStationsInfo() {
                  ETH_ALEN});
             uint32_t inactive_time =
                 nla_get_u32(sinfo[NL80211_STA_INFO_INACTIVE_TIME]);
-            int8_t rssi = static_cast<int8_t>(
-                nla_get_u8(sinfo[NL80211_STA_INFO_SIGNAL_AVG]));
+
+            int8_t rssi{0};
+            if (sinfo[NL80211_STA_INFO_SIGNAL_AVG]) {
+              rssi = static_cast<int8_t>(
+                  nla_get_u8(sinfo[NL80211_STA_INFO_SIGNAL_AVG]));
+              if (rssi == 0) {
+                LOG(INFO) << "Station RSSI invalid, skipping";
+                return NL_SKIP;
+              }
+            } else {
+              LOG(INFO) << "Station RSSI missing, skipping";
+              return NL_SKIP;
+            }
 
             uint32_t expectedThroughput{0};
             if (sinfo[NL80211_STA_INFO_EXPECTED_THROUGHPUT]) {
