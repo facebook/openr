@@ -679,6 +679,16 @@ KvStore::addPeers(
   }
 }
 
+// Send message via socket
+folly::Expected<size_t, fbzmq::Error>
+KvStore::sendMessageToPeer(
+    const std::string& peerSocketId, const thrift::KvStoreRequest& request) {
+  auto msg = fbzmq::Message::fromThriftObj(request, serializer_).value();
+  tData_.addStatValue("kvstore.peers.bytes_sent", msg.size(), fbzmq::SUM);
+  return peerSyncSock_.sendMultiple(
+      fbzmq::Message::from(peerSocketId).value(), fbzmq::Message(), msg);
+}
+
 // delete some peers we are subscribed to
 void
 KvStore::delPeers(std::vector<std::string> const& peers) {
@@ -762,10 +772,7 @@ KvStore::requestFullSyncFromPeers() {
     latestSentPeerSync_.emplace(
         peerCmdSocketId, std::chrono::steady_clock::now());
 
-    auto const ret = peerSyncSock_.sendMultiple(
-        fbzmq::Message::from(peerCmdSocketId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(dumpRequest, serializer_).value());
+    auto const ret = sendMessageToPeer(peerCmdSocketId, dumpRequest);
 
     if (ret.hasError()) {
       // this could be pretty common on initial connection setup
@@ -1112,10 +1119,7 @@ KvStore::sendTopoSetCmd(
   }
   request.floodTopoSetParams = setParams;
 
-  const auto ret = peerSyncSock_.sendMultiple(
-      fbzmq::Message::from(dstCmdSocketId).value(),
-      fbzmq::Message(),
-      fbzmq::Message::fromThriftObj(request, serializer_).value());
+  const auto ret = sendMessageToPeer(dstCmdSocketId, request);
   if (ret.hasError()) {
     LOG(ERROR) << rootId << ": failed to " << (setChild ? "set" : "unset")
                << " spt-parent " << peerName << ", error: " << ret.error();
@@ -1232,6 +1236,8 @@ KvStore::processSyncResponse() noexcept {
     }
   }
 
+  tData_.addStatValue(
+      "kvstore.peers.bytes_received", syncPubMsg.size(), fbzmq::SUM);
   // Perform error check
   auto maybeSyncPub =
       syncPubMsg.readThriftObj<thrift::Publication>(serializer_);
@@ -1451,10 +1457,7 @@ KvStore::finalizeFullSync(
   updateRequest.keySetParams = params;
 
   VLOG(1) << "sending finalizeFullSync back to " << senderId;
-  auto const ret = peerSyncSock_.sendMultiple(
-      fbzmq::Message::from(senderId).value(),
-      fbzmq::Message(),
-      fbzmq::Message::fromThriftObj(updateRequest, serializer_).value());
+  auto const ret = sendMessageToPeer(senderId, updateRequest);
   if (ret.hasError()) {
     // this could fail when senderId goes offline
     LOG(ERROR) << "Failed to send finalizeFullSync to " << senderId
@@ -1580,10 +1583,7 @@ KvStore::floodPublication(
 
     // Send flood request
     auto const& peerCmdSocketId = peers_.at(peer).second;
-    auto const ret = peerSyncSock_.sendMultiple(
-        fbzmq::Message::from(peerCmdSocketId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(floodRequest, serializer_).value());
+    auto const ret = sendMessageToPeer(peerCmdSocketId, floodRequest);
     if (ret.hasError()) {
       // this could be pretty common on initial connection setup
       LOG(ERROR) << "Failed to flood publication to peer " << peer
@@ -1700,10 +1700,7 @@ KvStore::sendDualMessages(
   thrift::KvStoreRequest dualRequest;
   dualRequest.cmd = thrift::Command::DUAL;
   dualRequest.dualMessages = msgs;
-  const auto ret = peerSyncSock_.sendMultiple(
-      fbzmq::Message::from(neighborCmdSocketId).value(),
-      fbzmq::Message(),
-      fbzmq::Message::fromThriftObj(dualRequest, serializer_).value());
+  const auto ret = sendMessageToPeer(neighborCmdSocketId, dualRequest);
   // TODO: for dual.query, we need to use a blocking socket to get a ack
   // from destination node to know if it receives or not
   // due to zmq async fashion, ret here is always true even on failure

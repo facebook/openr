@@ -304,6 +304,10 @@ class KvStore final : public OpenrEventLoop, public DualNode {
 
   // flood pending update blocked by rate limiter
   void floodBufferedUpdates(void);
+
+  // Send message via socket
+  folly::Expected<size_t, fbzmq::Error> sendMessageToPeer(
+      const std::string& peerSocketId, const thrift::KvStoreRequest& request);
   //
   // Private variables
   //
