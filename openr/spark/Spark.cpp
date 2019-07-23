@@ -639,6 +639,9 @@ Spark::processHelloPacket() {
   // update counters for packets received, dropped and processed
   tData_.addStatValue("spark.hello_packet_recv", 1, fbzmq::SUM);
 
+  // update counters for total size of packets received
+  tData_.addStatValue("spark.hello_packet_recv_size", bytesRead, fbzmq::SUM);
+
   if (!shouldProcessHelloPacket(ifName, clientAddr.getIPAddress())) {
     VLOG(3) << "Spark: dropping hello packet due to rate limiting on iface: "
             << ifName << " from addr: " << clientAddr.getAddressStr();
@@ -1043,7 +1046,11 @@ Spark::sendHelloPacket(
     return;
   }
 
+  // update counters for number of pkts and total size of pkts sent
+  tData_.addStatValue(
+      "spark.hello_packet_sent_size", packet.size(), fbzmq::SUM);
   tData_.addStatValue("spark.hello_packet_sent", 1, fbzmq::SUM);
+
   VLOG(4) << "Sent " << bytesSent << " bytes in hello packet";
 }
 
