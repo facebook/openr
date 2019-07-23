@@ -37,8 +37,6 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
     std::vector<folly::SocketAddress> monitoredAddresses,
     std::chrono::seconds monitorInterval,
     std::chrono::seconds monitorSocketTimeout,
-    const MonitorSubmitUrl& monitorSubmitUrl,
-    fbzmq::Context& zmqContext,
     unsigned int penalty,
     unsigned int suppressLimit,
     unsigned int reuseLimit,
@@ -47,7 +45,8 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
     unsigned int robustness,
     uint8_t setRootModeIfGate,
     Gateway11sRootRouteProgrammer* gateway11sRootRouteProgrammer,
-    Routing* routing)
+    Routing* routing,
+    StatsClient& statsClient)
     : RouteDampener{this,
                     penalty,
                     suppressLimit,
@@ -62,7 +61,7 @@ GatewayConnectivityMonitor::GatewayConnectivityMonitor(
       setRootModeIfGate_{setRootModeIfGate},
       gateway11sRootRouteProgrammer_{gateway11sRootRouteProgrammer},
       routing_{routing},
-      monitorClient_{this, monitorSubmitUrl, zmqContext} {
+      statsClient_{statsClient} {
   // Disable reverse path filtering, i.e.
   // Do not drop packets from non-routable addresses on monitored interface
   writeProcFs("0", "/proc/sys/net/ipv4/conf/{}/rp_filter", monitoredInterface);
@@ -105,12 +104,12 @@ GatewayConnectivityMonitor::probeWanConnectivity() {
 
   if (connectionSucceeded) {
     VLOG(8) << "Probing WAN connectivity succeeded";
-    monitorClient_.incrementSumStat(
+    statsClient_.incrementSumStat(
         "fbmeshd.gateway_connectivity_monitor.probe_wan_connectivity.success");
   } else {
     VLOG(8) << "Probing WAN connectivity failed";
     // If all connection attempts failed, report failure mode of the last one
-    monitorClient_.incrementSumStat(folly::sformat(
+    statsClient_.incrementSumStat(folly::sformat(
         "fbmeshd.gateway_connectivity_monitor.probe_wan_connectivity.failed.{}",
         result.errorMsg));
   }
@@ -119,8 +118,7 @@ GatewayConnectivityMonitor::probeWanConnectivity() {
 
 void
 GatewayConnectivityMonitor::setStat(const std::string& path, int value) {
-  monitorClient_.setAvgStat(
-      folly::sformat(statPathPrefixTemplate, path), value);
+  statsClient_.setAvgStat(folly::sformat(statPathPrefixTemplate, path), value);
 }
 
 void

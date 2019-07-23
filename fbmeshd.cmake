@@ -76,9 +76,9 @@ add_executable(fbmeshd
     openr/fbmeshd/common/Util.cpp
     openr/fbmeshd/gateway-11s-root-route-programmer/Gateway11sRootRouteProgrammer.cpp
     openr/fbmeshd/gateway-connectivity-monitor/GatewayConnectivityMonitor.cpp
-    openr/fbmeshd/gateway-connectivity-monitor/MonitorClient.cpp
     openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.cpp
     openr/fbmeshd/gateway-connectivity-monitor/Socket.cpp
+    openr/fbmeshd/gateway-connectivity-monitor/StatsClient.cpp
     openr/fbmeshd/nl/GenericNetlinkFamily.cpp
     openr/fbmeshd/pinger/PeerPinger.cpp
     openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.cpp

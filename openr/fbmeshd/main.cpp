@@ -275,9 +275,6 @@ main(int argc, char* argv[]) {
   // Set up the zmq context for this process.
   fbzmq::Context zmqContext;
 
-  const openr::MonitorSubmitUrl monitorSubmitUrl{
-      folly::sformat("tcp://{}:{}", kHostName, FLAGS_monitor_rep_port)};
-
   RouteUpdateMonitor routeMonitor{evl, nlHandler};
 
   std::unique_ptr<PeerPinger> peerPinger(nullptr);
@@ -382,14 +379,14 @@ main(int argc, char* argv[]) {
         return address;
       })};
 
+  StatsClient statsClient{};
+
   GatewayConnectivityMonitor gatewayConnectivityMonitor{
       nlHandler,
       FLAGS_gateway_connectivity_monitor_interface,
       std::move(gatewayConnectivityMonitorAddresses),
       std::chrono::seconds{FLAGS_gateway_connectivity_monitor_interval_s},
       std::chrono::seconds{FLAGS_gateway_connectivity_monitor_socket_timeout_s},
-      monitorSubmitUrl,
-      zmqContext,
       FLAGS_route_dampener_penalty,
       FLAGS_route_dampener_suppress_limit,
       FLAGS_route_dampener_reuse_limit,
@@ -398,7 +395,8 @@ main(int argc, char* argv[]) {
       FLAGS_gateway_connectivity_monitor_robustness,
       static_cast<uint8_t>(FLAGS_gateway_connectivity_monitor_set_root_mode),
       gateway11sRootRouteProgrammer.get(),
-      routing.get()};
+      routing.get(),
+      statsClient};
 
   static constexpr auto gwConnectivityMonitorId{"GatewayConnectivityMonitor"};
   monitorEventLoopWithWatchdog(
@@ -412,17 +410,18 @@ main(int argc, char* argv[]) {
 
   // create fbmeshd thrift server
   auto server = std::make_unique<apache::thrift::ThriftServer>();
-  allThreads.emplace_back(std::thread([&server, &nlHandler, &evl, &routing]() {
-    folly::EventBase evb;
-    server->setInterface(
-        std::make_unique<MeshServiceHandler>(evl, nlHandler, routing.get()));
-    server->getEventBaseManager()->setEventBase(&evb, false);
-    server->setPort(FLAGS_fbmeshd_service_port);
+  allThreads.emplace_back(
+      std::thread([&server, &nlHandler, &evl, &routing, &statsClient]() {
+        folly::EventBase evb;
+        server->setInterface(std::make_unique<MeshServiceHandler>(
+            evl, nlHandler, routing.get(), statsClient));
+        server->getEventBaseManager()->setEventBase(&evb, false);
+        server->setPort(FLAGS_fbmeshd_service_port);
 
-    LOG(INFO) << "starting fbmeshd server...";
-    server->serve();
-    LOG(INFO) << "fbmeshd server got stopped...";
-  }));
+        LOG(INFO) << "starting fbmeshd server...";
+        server->serve();
+        LOG(INFO) << "fbmeshd server got stopped...";
+      }));
 
 #ifdef ENABLE_SYSTEMD_NOTIFY
   // Notify systemd that this service is ready

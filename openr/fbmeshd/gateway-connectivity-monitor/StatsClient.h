@@ -19,32 +19,23 @@ namespace fbmeshd {
 
 // A class which wraps the fbzmq stats infra allowed for auto submitting of
 // stats.
-class MonitorClient final {
+class StatsClient final {
  public:
-  MonitorClient(
-      fbzmq::ZmqEventLoop* eventLoop,
-      const MonitorSubmitUrl& monitorSubmitUrl,
-      fbzmq::Context& zmqContext);
-
-  MonitorClient() = delete;
-  ~MonitorClient() = default;
-  MonitorClient(const MonitorClient&) = delete;
-  MonitorClient& operator=(const MonitorClient&) = delete;
-  MonitorClient(MonitorClient&&) = delete;
-  MonitorClient& operator=(MonitorClient&&) = delete;
+  StatsClient() = default;
+  ~StatsClient() = default;
+  StatsClient(const StatsClient&) = delete;
+  StatsClient& operator=(const StatsClient&) = delete;
+  StatsClient(StatsClient&&) = delete;
+  StatsClient& operator=(StatsClient&&) = delete;
 
   void incrementSumStat(const std::string& stat);
   void setAvgStat(const std::string& stat, int value);
 
- private:
-  // Timer for submitting to monitor periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_;
+  const std::unordered_map<std::string, int64_t> getStats();
 
+ private:
   // DS to keep track of stats
   fbzmq::ThreadData tData_;
-
-  // client to interact with monitor
-  fbzmq::ZmqMonitorClient zmqMonitorClient_;
 };
 
 } // namespace fbmeshd

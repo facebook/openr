@@ -14,8 +14,8 @@
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
 #include <openr/fbmeshd/gateway-11s-root-route-programmer/Gateway11sRootRouteProgrammer.h>
-#include <openr/fbmeshd/gateway-connectivity-monitor/MonitorClient.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.h>
+#include <openr/fbmeshd/gateway-connectivity-monitor/StatsClient.h>
 #include <openr/fbmeshd/routing/Routing.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 
@@ -31,8 +31,6 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
       std::vector<folly::SocketAddress> monitoredAddresses,
       std::chrono::seconds monitorInterval,
       std::chrono::seconds monitorSocketTimeout,
-      const MonitorSubmitUrl& monitorSubmitUrl,
-      fbzmq::Context& zmqContext,
       unsigned int penalty,
       unsigned int suppressLimit,
       unsigned int reuseLimit,
@@ -41,7 +39,8 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
       unsigned int robustness,
       uint8_t setRootModeIfGate,
       Gateway11sRootRouteProgrammer* gateway11sRootRouteProgrammer,
-      Routing* routing);
+      Routing* routing,
+      StatsClient& statsClient);
 
   GatewayConnectivityMonitor() = delete;
   ~GatewayConnectivityMonitor() override = default;
@@ -77,7 +76,7 @@ class GatewayConnectivityMonitor : public fbzmq::ZmqEventLoop,
 
   std::unique_ptr<fbzmq::ZmqTimeout> connectivityCheckTimer_;
 
-  MonitorClient monitorClient_;
+  StatsClient& statsClient_;
 
   bool isGatewayActive_{false};
 };

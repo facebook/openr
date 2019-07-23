@@ -29,7 +29,7 @@ Socket::connect(
     const folly::SocketAddress& address,
     const std::chrono::seconds& socketTimeout) {
   if (fd != -1) {
-    return {false, "socket object in use"};
+    return {false, "in_use"};
   }
 
   if ((fd = ::socket(

@@ -42,6 +42,11 @@ struct MpathEntry {
   9: bool isGate
 }
 
+struct StatCounter {
+  1: string key
+  2: i64 value
+}
+
 service MeshService {
   list<string> getPeers(1: string ifName)
     throws (1: MeshServiceError error)
@@ -51,6 +56,9 @@ service MeshService {
 
   Mesh getMesh(1: string ifName)
     throws (1: MeshServiceError error)
+
+  list<StatCounter> dumpStats()
+
   list<MpathEntry> dumpMpath();
 }
 

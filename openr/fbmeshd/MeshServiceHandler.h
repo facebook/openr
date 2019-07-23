@@ -11,6 +11,7 @@
 #include <folly/futures/Future.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
+#include <openr/fbmeshd/gateway-connectivity-monitor/StatsClient.h>
 #include <openr/fbmeshd/if/gen-cpp2/MeshService.h>
 #include <openr/fbmeshd/routing/Routing.h>
 
@@ -29,11 +30,18 @@ class MeshServiceHandler final : public thrift::MeshServiceSvIf {
   fbzmq::ZmqEventLoop& evl_;
   Nl80211Handler& nlHandler_;
   Routing* routing_;
+  StatsClient& statsClient_;
 
  public:
   MeshServiceHandler(
-      fbzmq::ZmqEventLoop& evl, Nl80211Handler& nlHandler, Routing* routing)
-      : evl_(evl), nlHandler_(nlHandler), routing_(routing) {}
+      fbzmq::ZmqEventLoop& evl,
+      Nl80211Handler& nlHandler,
+      Routing* routing,
+      StatsClient& statsClient)
+      : evl_(evl),
+        nlHandler_(nlHandler),
+        routing_(routing),
+        statsClient_(statsClient) {}
 
   ~MeshServiceHandler() override {}
 
@@ -117,6 +125,18 @@ class MeshServiceHandler final : public thrift::MeshServiceSvIf {
           return true;
         },
         "error receiving mesh info from netlink");
+  }
+
+  void
+  dumpStats(std::vector<thrift::StatCounter>& ret) override {
+    auto stats = statsClient_.getStats();
+    for (const auto& it : stats) {
+      ret.push_back(thrift::StatCounter{
+          apache::thrift::FragileConstructor::FRAGILE,
+          it.first,
+          it.second,
+      });
+    }
   }
 
   void
