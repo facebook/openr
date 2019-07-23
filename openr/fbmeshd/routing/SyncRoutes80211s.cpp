@@ -7,6 +7,8 @@
 
 #include "openr/fbmeshd/routing/SyncRoutes80211s.h"
 
+#include <sys/ioctl.h>
+
 #include <chrono>
 
 #include <folly/MacAddress.h>
@@ -46,6 +48,27 @@ getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
   return getIPV6FromMacAddress("\xfc\x00\x00\x00\x00\x00\x00\x00", macAddress);
 }
 
+bool
+isInterfaceUp(std::string interface) {
+  VLOG(8) << folly::sformat("::{}(interface: {})", __func__, interface);
+
+  int sock = socket(PF_INET6, SOCK_DGRAM, IPPROTO_IP);
+
+  struct ifreq ifr;
+  memset(&ifr, 0, sizeof(ifr));
+  strcpy(ifr.ifr_name, interface.c_str());
+
+  if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) {
+    LOG(ERROR) << "Failed to get SIOCGIFFLAGS";
+  }
+  close(sock);
+
+  bool up = ifr.ifr_flags & IFF_UP;
+  VLOG(10) << folly::sformat(
+      "Detected interface {} is {}", interface, up ? "up" : "down");
+  return up;
+}
+
 } // namespace
 
 SyncRoutes80211s::SyncRoutes80211s(Routing* routing, folly::MacAddress nodeAddr)
@@ -69,7 +92,8 @@ SyncRoutes80211s::doSyncRoutes() {
   std::vector<fbnl::IfAddress> mesh0Addrs;
 
   const auto kTaygaIfName{"tayga"};
-  auto taygaIfIndex = netlinkSocket_.getIfIndex("tayga").get();
+  auto taygaIfIndex = netlinkSocket_.getIfIndex(kTaygaIfName).get();
+  bool taygaIfUp = isInterfaceUp(kTaygaIfName);
 
   folly::Optional<std::pair<folly::MacAddress, uint32_t>> bestGate;
   bool isCurrentGateStillAlive = false;
@@ -82,8 +106,8 @@ SyncRoutes80211s::doSyncRoutes() {
 
     auto destination = std::make_pair<folly::IPAddress, uint8_t>(
         getTaygaIPV6FromMacAddress(mpath.dst), 128);
-    // Ensure tayga interface is present
-    if (taygaIfIndex != 0) {
+    // Ensure tayga interface is present and up
+    if (taygaIfIndex != 0 && taygaIfUp) {
       unicastRouteDb.emplace(
           destination,
           fbnl::RouteBuilder{}
@@ -144,8 +168,8 @@ SyncRoutes80211s::doSyncRoutes() {
   auto destination =
       folly::CIDRNetwork{getTaygaIPV6FromMacAddress(nodeAddr_), 128};
 
-  // Ensure tayga interface is present
-  if (taygaIfIndex != 0) {
+  // Ensure tayga interface is present and up
+  if (taygaIfIndex != 0 && taygaIfUp) {
     linkRouteDb.emplace(
         std::make_pair(destination, kTaygaIfName),
         fbnl::RouteBuilder{}
@@ -183,8 +207,8 @@ SyncRoutes80211s::doSyncRoutes() {
   destination = std::make_pair<folly::IPAddress, uint8_t>(
       folly::IPAddressV6{"fd00:ffff::"}, 96);
 
-  // Ensure tayga interface is present
-  if (taygaIfIndex != 0) {
+  // Ensure tayga interface is present and up
+  if (taygaIfIndex != 0 && taygaIfUp) {
     if (isGate) {
       linkRouteDb.emplace(
           std::make_pair(destination, kTaygaIfName),
