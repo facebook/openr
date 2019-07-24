@@ -642,7 +642,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   {
     std::atomic<int> received{0};
     const std::string key{"snoop-key"};
-    auto subscription = handler->snoopKvStore().subscribe(
+    auto subscription = handler->subscribeKvStore().subscribe(
         [&received, key](thrift::Publication&& pub) {
           EXPECT_EQ(1, pub.keyVals.size());
           ASSERT_EQ(1, pub.keyVals.count(key));

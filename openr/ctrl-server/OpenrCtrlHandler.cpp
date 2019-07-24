@@ -738,7 +738,7 @@ OpenrCtrlHandler::semifuture_getKvStorePeers() {
 }
 
 apache::thrift::Stream<thrift::Publication>
-OpenrCtrlHandler::snoopKvStore() {
+OpenrCtrlHandler::subscribeKvStore() {
   // Get new client-ID (monotonically increasing)
   auto clientToken = publisherToken_++;
 

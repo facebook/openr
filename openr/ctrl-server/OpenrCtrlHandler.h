@@ -173,7 +173,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   // Intentionally not use SemiFuture as stream is async by nature and we will
   // immediately create and return the stream handler
-  apache::thrift::Stream<thrift::Publication> snoopKvStore() override;
+  apache::thrift::Stream<thrift::Publication> subscribeKvStore() override;
 
   //
   // LinkMonitor APIs

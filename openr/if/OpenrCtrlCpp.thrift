@@ -16,7 +16,7 @@ include "OpenrCtrl.thrift"
  */
 service OpenrCtrlCpp extends OpenrCtrl.OpenrCtrl {
   /**
-   * Snoop on KvStore updates in real-time
+   * Subscribe KvStore updates
    */
-  stream<KvStore.Publication> snoopKvStore()
+  stream<KvStore.Publication> subscribeKvStore()
 }
