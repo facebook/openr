@@ -73,7 +73,6 @@ add_executable(fbmeshd
     openr/fbmeshd/802.11s/Nl80211Handler.cpp
     openr/fbmeshd/802.11s/PeerSelector.cpp
     openr/fbmeshd/common/Constants.cpp
-    openr/fbmeshd/common/Util.cpp
     openr/fbmeshd/gateway-11s-root-route-programmer/Gateway11sRootRouteProgrammer.cpp
     openr/fbmeshd/gateway-connectivity-monitor/GatewayConnectivityMonitor.cpp
     openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.cpp

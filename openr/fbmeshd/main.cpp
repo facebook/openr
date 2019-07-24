@@ -154,6 +154,12 @@ DEFINE_double(
     0.0,
     "Weight of the RSSI based metric (vs. bitrate) in the combined metric");
 
+// TODO T47794858:  The following flags are deprecated and should not be used.
+//
+// They will be removed in a future version of fbmeshd, at which time anyone
+// using them will result in fbmeshd not starting (as they will not be parsed).
+DEFINE_bool(enable_short_names, false, "DEPRECATED on 2019-07-24, do not use");
+
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
 

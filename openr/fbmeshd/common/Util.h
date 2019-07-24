@@ -21,14 +21,6 @@
 namespace openr {
 namespace fbmeshd {
 
-// Convert xx:yy:zz:aa:bb:cc -> faceb00c-face-b00c-face-xxyyzzaabbcc
-FOLLY_NODISCARD std::string macAddrToNodeName(
-    folly::MacAddress macAddr) noexcept;
-
-// Convert faceb00c-face-b00c-face-xxyyzzaabbcc -> xx:yy:zz:aa:bb:cc
-FOLLY_NODISCARD folly::Optional<folly::MacAddress> nodeNameToMacAddr(
-    folly::StringPiece name) noexcept;
-
 // Convert a GFlags CSV string to a std::vector by applying a processing
 // function for individual elements of the list
 template <class T>
