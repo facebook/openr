@@ -129,7 +129,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
         nodeName,
-        prefixManagerUrl_,
         persistentStoreUrl_,
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -294,7 +293,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
   const LinkMonitorGlobalPubUrl lmPubUrl_{"inproc://link-monitor-pub-url"};
   const std::string lmCmdUrl_{"inproc://link-monitor-cmd-url"};
-  const std::string prefixManagerUrl_{"inproc://prefix-mngr-global-cmd"};
   PersistentStoreUrl persistentStoreUrl_;
 
   fbzmq::Context context_;

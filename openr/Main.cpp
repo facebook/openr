@@ -500,7 +500,6 @@ main(int argc, char** argv) {
       watchdog,
       std::make_shared<PrefixManager>(
           FLAGS_node_name,
-          maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_prefix_manager_cmd_port),
           configStoreInProcUrl,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,

@@ -268,9 +268,6 @@ class Constants {
   // The port health checker sends and recvs udp pings on
   static constexpr int32_t kHealthCheckerPort{60010};
 
-  // The port prefix manager receives commands on
-  static constexpr int32_t kPrefixManagerCmdPort{60011};
-
   // Switch agent thrift service port for Platform programming
   static constexpr int32_t kSystemAgentPort{60099};
 

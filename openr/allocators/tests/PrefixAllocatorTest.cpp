@@ -111,7 +111,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     //
     prefixManager_ = std::make_unique<PrefixManager>(
         myNodeName_,
-        std::string{pfxMgrGlobalUrl_},
         PersistentStoreUrl{configStore_->inprocCmdUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
@@ -195,7 +194,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   fbzmq::ZmqEventLoop evl_;
 
   const std::string myNodeName_{"test-node"};
-  const std::string pfxMgrGlobalUrl_{"inproc://prefix-manager-global"};
   std::string tempFileName_;
 
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
@@ -424,11 +422,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       configStores.emplace_back(std::move(tempConfigStore));
 
       // spin up prefix manager
-      const auto pfxMgrGlobalUrl =
-          folly::sformat("inproc://prefix-manager-global-{}", myNodeName);
       auto prefixManager = std::make_unique<PrefixManager>(
           myNodeName,
-          std::string{pfxMgrGlobalUrl},
           PersistentStoreUrl{tempPersistentStoreUrl},
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},

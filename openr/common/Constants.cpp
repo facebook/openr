@@ -49,7 +49,6 @@ constexpr int32_t Constants::kMonitorPubPort;
 constexpr int32_t Constants::kMonitorRepPort;
 constexpr int32_t Constants::kOpenrSupportedVersion;
 constexpr int32_t Constants::kOpenrVersion;
-constexpr int32_t Constants::kPrefixManagerCmdPort;
 constexpr int32_t Constants::kSparkMcastPort;
 constexpr int32_t Constants::kSystemAgentPort;
 constexpr int64_t Constants::kDefaultAdjWeight;

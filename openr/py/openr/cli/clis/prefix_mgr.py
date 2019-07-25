@@ -24,9 +24,8 @@ class PrefixMgrCli(object):
         self.prefixmgr.add_command(SyncCli().sync)
 
     @click.group()
-    @breeze_option("--prefix_mgr_cmd_port", type=int, help="Prefix Manager port")
     @click.pass_context
-    def prefixmgr(ctx, prefix_mgr_cmd_port):  # noqa: B902
+    def prefixmgr(ctx):  # noqa: B902
         """ CLI tool to peek into Prefix Manager module. """
         pass
 

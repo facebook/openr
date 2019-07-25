@@ -50,10 +50,6 @@ DEFINE_int32(
     openr::Constants::kHealthCheckerPort,
     "The port health checker sends and recvs udp pings on");
 DEFINE_int32(
-    prefix_manager_cmd_port,
-    openr::Constants::kPrefixManagerCmdPort,
-    "The port prefix manager receives commands on");
-DEFINE_int32(
     system_agent_port,
     openr::Constants::kSystemAgentPort,
     "Switch agent thrift service port for Platform programming.");

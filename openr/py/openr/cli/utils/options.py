@@ -39,7 +39,6 @@ OPTIONS = bunch.Bunch(
         "monitor_rep_port": Consts.MONITOR_REP_PORT,
         "openr_ctrl_port": Consts.CTRL_PORT,
         "prefer_zmq": False,
-        "prefix_mgr_cmd_port": Consts.PREFIX_MGR_CMD_PORT,
         "proto_factory": Consts.PROTO_FACTORY,
         "ssl": True,
         "timeout": Consts.TIMEOUT_MS,

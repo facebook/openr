@@ -21,8 +21,6 @@ using apache::thrift::CompactSerializer;
 
 namespace {
 
-const std::string kPrefixManagerGlobalCmdUrl = "inproc://pm_ut_global_cmd_url";
-
 const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto addr2 = toIpPrefix("::ffff:10.2.2.2/128");
 const auto addr3 = toIpPrefix("::ffff:10.3.3.3/128");
@@ -119,7 +117,6 @@ class PrefixManagerTestFixture : public ::testing::Test {
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
-        std::string{kPrefixManagerGlobalCmdUrl},
         PersistentStoreUrl{configStore->inprocCmdUrl},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -367,7 +364,6 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
-      std::string{kPrefixManagerGlobalCmdUrl + "2"},
       PersistentStoreUrl{configStore->inprocCmdUrl},
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -529,7 +525,6 @@ TEST(PrefixManagerTest, HoldTimeout) {
   const auto startTime = std::chrono::steady_clock::now();
   auto prefixManager = std::make_unique<PrefixManager>(
       "node-1",
-      std::string{kPrefixManagerGlobalCmdUrl},
       PersistentStoreUrl{configStore->inprocCmdUrl},
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},

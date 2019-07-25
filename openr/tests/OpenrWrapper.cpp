@@ -40,8 +40,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
       kvStoreGlobalPubUrl_(
           folly::sformat("inproc://{}-kvstore-pub-global", nodeId_)),
-      prefixManagerGlobalCmdUrl_(
-          folly::sformat("inproc://{}-prefix_manager_cmd_global", nodeId_)),
       sparkReportUrl_(folly::sformat("inproc://{}-spark-report", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
       linkMonitorGlobalCmdUrl_(
@@ -172,7 +170,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // start prefix manager
   prefixManager_ = std::make_unique<PrefixManager>(
       nodeId_,
-      std::string{prefixManagerGlobalCmdUrl_},
       PersistentStoreUrl{configStoreUrl_},
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},

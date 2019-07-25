@@ -29,7 +29,6 @@ class PrefixManager final : public OpenrEventLoop {
  public:
   PrefixManager(
       const std::string& nodeId,
-      const folly::Optional<std::string>& globalCmdUrl,
       const PersistentStoreUrl& persistentStoreUrl,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,

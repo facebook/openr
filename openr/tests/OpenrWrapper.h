@@ -153,7 +153,6 @@ class OpenrWrapper {
   const std::string kvStoreLocalPubUrl_;
   const std::string kvStoreGlobalCmdUrl_;
   const std::string kvStoreGlobalPubUrl_;
-  const std::string prefixManagerGlobalCmdUrl_;
   const std::string sparkReportUrl_;
   const std::string platformPubUrl_;
   const std::string linkMonitorGlobalCmdUrl_;
