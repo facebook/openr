@@ -30,7 +30,6 @@
 #include <openr/fbmeshd/gateway-11s-root-route-programmer/Gateway11sRootRouteProgrammer.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/GatewayConnectivityMonitor.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.h>
-#include <openr/fbmeshd/pinger/PeerPinger.h>
 #include <openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.h>
 #include <openr/fbmeshd/routing/MetricManager80211s.h>
 #include <openr/fbmeshd/routing/PeriodicPinger.h>
@@ -156,9 +155,13 @@ DEFINE_double(
 
 // TODO T47794858:  The following flags are deprecated and should not be used.
 //
-// They will be removed in a future version of fbmeshd, at which time anyone
-// using them will result in fbmeshd not starting (as they will not be parsed).
+// They will be removed in a future version of fbmeshd, at which time using them
+// will result in fbmeshd not starting (as they will not be parsed).
+DEFINE_bool(enable_peer_pinger, false, "DEPRECATED on 2019-07-24, do not use");
 DEFINE_bool(enable_short_names, false, "DEPRECATED on 2019-07-24, do not use");
+DEFINE_int32(ping_interval_s, 0, "DEPRECATED on 2019-07-24, do not use");
+DEFINE_int32(ping_count, 0, "DEPRECATED on 2019-07-24, do not use");
+DEFINE_int32(ping_packet_size, 0, "DEPRECATED on 2019-07-24, do not use");
 
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
@@ -282,15 +285,6 @@ main(int argc, char* argv[]) {
   fbzmq::Context zmqContext;
 
   RouteUpdateMonitor routeMonitor{evl, nlHandler};
-
-  std::unique_ptr<PeerPinger> peerPinger(nullptr);
-  if (FLAGS_enable_peer_pinger) {
-    allThreads.emplace_back(std::thread([&peerPinger, &nlHandler]() {
-      folly::EventBase evb;
-      peerPinger = std::make_unique<PeerPinger>(&evb, nlHandler);
-      peerPinger->run();
-    }));
-  }
 
   PeerSelector peerSelector{evl, nlHandler, rssiThreshold};
 
