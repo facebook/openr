@@ -7,11 +7,19 @@
 
 #include "UDPRoutingPacketTransport.h"
 
+#include <folly/Format.h>
+
 using namespace openr::fbmeshd;
 
 UDPRoutingPacketTransport::UDPRoutingPacketTransport(
-    folly::EventBase* evb, uint16_t port, int32_t tos)
-    : evb_{evb}, serverSocket_{evb_}, clientSocket_{evb_} {
+    folly::EventBase* evb,
+    const std::string& interface,
+    uint16_t port,
+    int32_t tos)
+    : evb_{evb},
+      interface_{interface},
+      serverSocket_{evb_},
+      clientSocket_{evb_} {
   evb_->runInEventBaseThread([this, port, tos]() {
     serverSocket_.bind(folly::SocketAddress{"::", port});
     serverSocket_.addListener(evb_, this);
@@ -41,11 +49,11 @@ UDPRoutingPacketTransport::sendPacket(
   evb_->runInEventBaseThread([this, da, buf = std::move(buf)]() {
     const auto destSockAddr = folly::SocketAddress{
         da.isBroadcast()
-            ? folly::IPAddressV6{"ff02::1%mesh0"}
-            : folly::IPAddressV6{folly::IPAddressV6{
-                                     folly::IPAddressV6::LINK_LOCAL, da}
-                                     .str() +
-                                 "%mesh0"},
+            ? folly::IPAddressV6{folly::sformat("ff02::1%{}", interface_)}
+            : folly::IPAddressV6{folly::sformat(
+                  "{}%{}",
+                  folly::IPAddressV6{folly::IPAddressV6::LINK_LOCAL, da}.str(),
+                  interface_)},
         6668};
     clientSocket_.write(destSockAddr, std::move(buf));
   });

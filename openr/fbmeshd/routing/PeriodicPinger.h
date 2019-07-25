@@ -23,7 +23,7 @@ class PeriodicPinger : public folly::AsyncTimeout {
       folly::IPAddressV6 dst,
       folly::IPAddressV6 src,
       std::chrono::milliseconds interval,
-      const std::string& inteface);
+      const std::string& interface);
 
   PeriodicPinger() = delete;
   ~PeriodicPinger() override = default;

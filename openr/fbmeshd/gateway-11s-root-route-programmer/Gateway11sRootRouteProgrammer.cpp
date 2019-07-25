@@ -35,7 +35,7 @@ getTaygaIPV6FromMacAddress(folly::MacAddress macAddress) {
 }
 
 folly::IPAddressV6
-getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
+getMeshIPV6FromMacAddress(folly::MacAddress macAddress) {
   return getIPV6FromMacAddress("\xfc\x00\x00\x00\x00\x00\x00\x00", macAddress);
 }
 
@@ -43,6 +43,7 @@ getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
 
 Gateway11sRootRouteProgrammer::Gateway11sRootRouteProgrammer(
     openr::fbmeshd::Nl80211Handler& nlHandler,
+    const std::string& interface,
     std::chrono::seconds const interval,
     double const gatewayChangeThresholdFactor)
     : nlHandler_{nlHandler},
@@ -59,7 +60,7 @@ Gateway11sRootRouteProgrammer::Gateway11sRootRouteProgrammer(
           "proxy",
           getTaygaIPV6FromMacAddress(*netif.maybeMacAddress).str(),
           "dev",
-          "mesh0"}}
+          interface}}
       .wait();
 
   timer_ = fbzmq::ZmqTimeout::make(
@@ -132,7 +133,7 @@ Gateway11sRootRouteProgrammer::determineBestRoot() {
   }
 
   openr::fbnl::NlUnicastRoutes routeDb;
-  std::vector<fbnl::IfAddress> mesh0Addrs;
+  std::vector<fbnl::IfAddress> meshAddrs;
   ifIndex = netlinkSocket_.getIfIndex("tayga").get();
   auto destination = std::make_pair<folly::IPAddress, uint8_t>(
       folly::IPAddressV6{"fd00:ffff::"}, 96);
@@ -169,7 +170,7 @@ Gateway11sRootRouteProgrammer::determineBestRoot() {
             .setProtocolId(98)
             .addNextHop(
                 fbnl::NextHopBuilder{}
-                    .setGateway(getMesh0IPV6FromMacAddress(currentRoot_->first))
+                    .setGateway(getMeshIPV6FromMacAddress(currentRoot_->first))
                     .build())
             .build());
   }
@@ -205,15 +206,15 @@ Gateway11sRootRouteProgrammer::determineBestRoot() {
           .addNextHop(fbnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
           .build());
 
-  mesh0Addrs.push_back(
+  meshAddrs.push_back(
       fbnl::IfAddressBuilder{}
           .setPrefix(folly::CIDRNetwork{
-              getMesh0IPV6FromMacAddress(*netif.maybeMacAddress), 64})
+              getMeshIPV6FromMacAddress(*netif.maybeMacAddress), 64})
           .setIfIndex(netif.maybeIfIndex.value())
           .build());
 
   netlinkSocket_.syncIfAddress(
-      netif.maybeIfIndex.value(), mesh0Addrs, AF_INET6, RT_SCOPE_UNIVERSE);
+      netif.maybeIfIndex.value(), meshAddrs, AF_INET6, RT_SCOPE_UNIVERSE);
   netlinkSocket_.syncUnicastRoutes(98, std::move(routeDb)).get();
 }
 

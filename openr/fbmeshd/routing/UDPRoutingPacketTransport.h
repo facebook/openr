@@ -18,7 +18,11 @@ namespace fbmeshd {
 
 class UDPRoutingPacketTransport : public folly::AsyncUDPServerSocket::Callback {
  public:
-  UDPRoutingPacketTransport(folly::EventBase* evb, uint16_t port, int32_t tos);
+  UDPRoutingPacketTransport(
+      folly::EventBase* evb,
+      const std::string& interface,
+      uint16_t port,
+      int32_t tos);
 
   void sendPacket(folly::MacAddress da, std::unique_ptr<folly::IOBuf> buf);
 
@@ -40,6 +44,8 @@ class UDPRoutingPacketTransport : public folly::AsyncUDPServerSocket::Callback {
       bool truncated) noexcept override;
 
   folly::EventBase* evb_;
+
+  const std::string& interface_;
 
   folly::AsyncUDPServerSocket serverSocket_;
 

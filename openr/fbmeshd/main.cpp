@@ -46,6 +46,8 @@ DEFINE_int32(fbmeshd_service_port, 30303, "fbmeshd thrift service port");
 
 DEFINE_string(node_name, "node1", "The name of current node");
 
+DEFINE_string(mesh_ifname, "mesh0", "Mesh interface name");
+
 DEFINE_bool(
     enable_userspace_mesh_peering,
     true,
@@ -275,7 +277,8 @@ main(int argc, char* argv[]) {
       &evl, "fbmeshd_shared_event_loop", watchdog.get());
   AuthsaeCallbackHelpers::init(evl);
 
-  Nl80211Handler nlHandler{evl, FLAGS_enable_userspace_mesh_peering};
+  Nl80211Handler nlHandler{
+      evl, FLAGS_mesh_ifname, FLAGS_enable_userspace_mesh_peering};
   auto returnValue = nlHandler.joinMeshes();
   if (returnValue != R_SUCCESS) {
     return returnValue;
@@ -295,6 +298,7 @@ main(int argc, char* argv[]) {
     gateway11sRootRouteProgrammer = std::make_unique<
         Gateway11sRootRouteProgrammer>(
         nlHandler,
+        FLAGS_mesh_ifname,
         std::chrono::seconds{
             FLAGS_gateway_11s_root_route_programmer_interval_s},
         FLAGS_gateway_11s_root_route_programmer_gateway_change_threshold_factor);
@@ -327,21 +331,23 @@ main(int argc, char* argv[]) {
       std::chrono::milliseconds{FLAGS_routing_root_pann_interval_ms});
   std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport =
       std::make_unique<UDPRoutingPacketTransport>(
-          routingEventLoop.get(), 6668, FLAGS_routing_tos);
+          routingEventLoop.get(), FLAGS_mesh_ifname, 6668, FLAGS_routing_tos);
   std::unique_ptr<PeriodicPinger> periodicPinger =
       std::make_unique<PeriodicPinger>(
           routingEventLoop.get(),
-          folly::IPAddressV6{"ff02::1%mesh0"},
+          folly::IPAddressV6{folly::sformat("ff02::1%{}", FLAGS_mesh_ifname)},
           folly::IPAddressV6{
               folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
               nlHandler.lookupMeshNetif().maybeMacAddress.value()},
           kPeriodicPingerInterval,
-          "mesh0");
+          FLAGS_mesh_ifname);
   periodicPinger->scheduleTimeout(1s);
 
   std::unique_ptr<SyncRoutes80211s> syncRoutes80211s =
       std::make_unique<SyncRoutes80211s>(
-          routing.get(), nlHandler.lookupMeshNetif().maybeMacAddress.value());
+          routing.get(),
+          nlHandler.lookupMeshNetif().maybeMacAddress.value(),
+          FLAGS_mesh_ifname);
 
   static constexpr auto syncRoutes80211sId{"SyncRoutes80211s"};
   monitorEventLoopWithWatchdog(

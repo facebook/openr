@@ -19,7 +19,10 @@ namespace fbmeshd {
 
 class SyncRoutes80211s : public fbzmq::ZmqEventLoop {
  public:
-  SyncRoutes80211s(Routing* routing, folly::MacAddress nodeAddr);
+  SyncRoutes80211s(
+      Routing* routing,
+      folly::MacAddress nodeAddr,
+      const std::string& interface);
 
   // This class should never be copied; remove default copy/move
   SyncRoutes80211s() = delete;
@@ -34,6 +37,7 @@ class SyncRoutes80211s : public fbzmq::ZmqEventLoop {
 
   Routing* routing_;
   folly::MacAddress nodeAddr_;
+  const std::string& interface_;
 
   std::unique_ptr<fbzmq::ZmqTimeout> syncRoutesTimer_;
   openr::fbnl::NetlinkSocket netlinkSocket_;

@@ -44,7 +44,7 @@ getTaygaIPV6FromMacAddress(folly::MacAddress macAddress) {
 }
 
 folly::IPAddressV6
-getMesh0IPV6FromMacAddress(folly::MacAddress macAddress) {
+getMeshIPV6FromMacAddress(folly::MacAddress macAddress) {
   return getIPV6FromMacAddress("\xfc\x00\x00\x00\x00\x00\x00\x00", macAddress);
 }
 
@@ -71,8 +71,12 @@ isInterfaceUp(std::string interface) {
 
 } // namespace
 
-SyncRoutes80211s::SyncRoutes80211s(Routing* routing, folly::MacAddress nodeAddr)
-    : routing_{routing}, nodeAddr_{nodeAddr}, netlinkSocket_{this} {
+SyncRoutes80211s::SyncRoutes80211s(
+    Routing* routing, folly::MacAddress nodeAddr, const std::string& interface)
+    : routing_{routing},
+      nodeAddr_{nodeAddr},
+      interface_{interface},
+      netlinkSocket_{this} {
   // Set timer to sync routes
   syncRoutesTimer_ =
       fbzmq::ZmqTimeout::make(this, [this]() noexcept { doSyncRoutes(); });
@@ -83,13 +87,13 @@ void
 SyncRoutes80211s::doSyncRoutes() {
   VLOG(8) << folly::sformat("SyncRoutes80211s::{}()", __func__);
 
-  auto meshIfIndex = netlinkSocket_.getIfIndex("mesh0").get();
+  auto meshIfIndex = netlinkSocket_.getIfIndex(interface_).get();
   auto isGate = routing_->getGatewayStatus();
   auto meshPaths = routing_->getMeshPaths();
 
   openr::fbnl::NlUnicastRoutes unicastRouteDb;
   openr::fbnl::NlLinkRoutes linkRouteDb;
-  std::vector<fbnl::IfAddress> mesh0Addrs;
+  std::vector<fbnl::IfAddress> meshAddrs;
 
   const auto kTaygaIfName{"tayga"};
   auto taygaIfIndex = netlinkSocket_.getIfIndex(kTaygaIfName).get();
@@ -122,7 +126,7 @@ SyncRoutes80211s::doSyncRoutes() {
               .build());
     }
     destination = std::make_pair<folly::IPAddress, uint8_t>(
-        getMesh0IPV6FromMacAddress(mpath.dst), 128);
+        getMeshIPV6FromMacAddress(mpath.dst), 128);
     unicastRouteDb.emplace(
         destination,
         fbnl::RouteBuilder{}
@@ -190,14 +194,14 @@ SyncRoutes80211s::doSyncRoutes() {
             .buildLinkRoute());
   }
 
-  mesh0Addrs.push_back(fbnl::IfAddressBuilder{}
-                           .setPrefix(folly::CIDRNetwork{
-                               getMesh0IPV6FromMacAddress(nodeAddr_), 64})
-                           .setIfIndex(meshIfIndex)
-                           .build());
+  meshAddrs.push_back(fbnl::IfAddressBuilder{}
+                          .setPrefix(folly::CIDRNetwork{
+                              getMeshIPV6FromMacAddress(nodeAddr_), 64})
+                          .setIfIndex(meshIfIndex)
+                          .build());
 
   netlinkSocket_.syncIfAddress(
-      meshIfIndex, mesh0Addrs, AF_INET6, RT_SCOPE_UNIVERSE);
+      meshIfIndex, meshAddrs, AF_INET6, RT_SCOPE_UNIVERSE);
 
   if (isGateBeforeRouteSync_ != isGate) {
     netlinkSocket_.syncUnicastRoutes(98, std::move(unicastRouteDb)).get();

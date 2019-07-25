@@ -53,7 +53,6 @@ extern "C" {
 using namespace openr::fbmeshd;
 
 DEFINE_string(mesh_id, "mesh-soma", "Mesh ID");
-DEFINE_string(mesh_ifname, "mesh0", "Mesh interface name");
 DEFINE_string(mesh_channel_type, "40", "Mesh channel type, in string format");
 DEFINE_int32(mesh_frequency, 5805, "Mesh control frequency");
 DEFINE_int32(mesh_center_freq1, 5795, "Mesh center frequency 1");
@@ -158,8 +157,12 @@ const auto mpath_policy_{[]() {
 } // namespace
 
 Nl80211Handler::Nl80211Handler(
-    fbzmq::ZmqEventLoop& zmqLoop, bool userspace_mesh_peering)
-    : zmqLoop_{zmqLoop}, userspace_mesh_peering_{userspace_mesh_peering} {
+    fbzmq::ZmqEventLoop& zmqLoop,
+    const std::string& interfaceName,
+    bool userspace_mesh_peering)
+    : interfaceName_{interfaceName},
+      zmqLoop_{zmqLoop},
+      userspace_mesh_peering_{userspace_mesh_peering} {
   VLOG(8) << folly::sformat("Nl80211Handler::{}()", __func__);
 
   // We expect Nl80211Handler to be treated as a singleton, and there should not
@@ -191,8 +194,7 @@ Nl80211Handler::printConfiguration() {
   VLOG(8) << folly::sformat("Nl80211Handler::{}()", __func__);
 
   VLOG(1)
-      << "mesh id: " << FLAGS_mesh_id
-      << ", interface name: " << FLAGS_mesh_ifname
+      << "mesh id: " << FLAGS_mesh_id << ", interface name: " << interfaceName_
       << ", channel type: " << FLAGS_mesh_channel_type
       << ", control frequency: " << FLAGS_mesh_frequency
       << ", center freq1: " << FLAGS_mesh_center_freq1
@@ -225,13 +227,13 @@ Nl80211Handler::validateConfiguration() {
     throw std::invalid_argument("Mesh ID is too long");
   }
 
-  if (FLAGS_mesh_ifname.length() > IFNAMSIZ) {
+  if (interfaceName_.length() > IFNAMSIZ) {
     LOG(ERROR) << folly::sformat(
         "Interface '{}' for mesh '{}' is too long - interface is length {} but "
         "maximum (excluding null-term) is {}",
-        FLAGS_mesh_ifname,
+        interfaceName_,
         FLAGS_mesh_id,
-        FLAGS_mesh_ifname.length(),
+        interfaceName_.length(),
         IFNAMSIZ);
     throw std::invalid_argument("Interface name is too long");
   }
@@ -1220,7 +1222,7 @@ Nl80211Handler::applyConfiguration() {
     }
 
     netIntf->second.meshId = FLAGS_mesh_id;
-    netIntf->second.maybeIfName = FLAGS_mesh_ifname;
+    netIntf->second.maybeIfName = interfaceName_;
 
     netIntf->second.frequency = FLAGS_mesh_frequency;
     netIntf->second.centerFreq1 = FLAGS_mesh_center_freq1;
@@ -1282,7 +1284,7 @@ Nl80211Handler::applyConfiguration() {
                  "Error creating interface {}", netIntf->second.phyIndex())
           << " error: " << this << e.what();
     }
-    VLOG(8) << "Mapped ifName " << FLAGS_mesh_ifname << " to "
+    VLOG(8) << "Mapped ifName " << interfaceName_ << " to "
             << netIntf->second.phyName;
 
     break;

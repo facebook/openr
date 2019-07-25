@@ -76,7 +76,10 @@ class Nl80211Handler final : public Nl80211HandlerInterface {
   Nl80211Handler& operator=(Nl80211Handler&&) = delete;
 
  public:
-  Nl80211Handler(fbzmq::ZmqEventLoop& zmqLoop, bool userspace_mesh_peering);
+  Nl80211Handler(
+      fbzmq::ZmqEventLoop& zmqLoop,
+      const std::string& interface,
+      bool userspace_mesh_peering);
 
   ~Nl80211Handler();
 
@@ -152,8 +155,8 @@ class Nl80211Handler final : public Nl80211HandlerInterface {
 
  private:
   // Configuration methods
-  static void printConfiguration();
-  static void validateConfiguration();
+  void printConfiguration();
+  void validateConfiguration();
 
   // Initialization/cleanup methods
   void initNlSockets();
@@ -206,6 +209,7 @@ class Nl80211Handler final : public Nl80211HandlerInterface {
   static Nl80211Handler* globalNlHandler;
 
  private:
+  const std::string& interfaceName_;
   GenericNetlinkSocket nlEventSocket_;
   std::map<uint32_t, NetInterface> netInterfaces_;
   std::map<std::string, uint32_t> multicastGroups_;

@@ -23,6 +23,7 @@ class Gateway11sRootRouteProgrammer : public fbzmq::ZmqEventLoop {
  public:
   explicit Gateway11sRootRouteProgrammer(
       openr::fbmeshd::Nl80211Handler& nlHandler,
+      const std::string& interface,
       std::chrono::seconds const interval,
       double const gatewayChangeThresholdFactor);
 
