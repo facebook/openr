@@ -84,6 +84,14 @@ DEFINE_uint32(mesh_hwmp_active_path_timeout, 30000, "HWMP Active path timeout");
 DEFINE_uint32(mesh_hwmp_rann_interval, 3000, "HWMP RANN interval");
 DEFINE_uint32(mesh_mtu, 1520, "The MTU value to set for the mesh device");
 
+DEFINE_string(
+    mesh_init_peering_whitelist,
+    "",
+    "Comma-separated list of MAC addresses that we will attempt to initiate "
+    "peering with from this station; if another station initiates peering, "
+    "this flag will not affect it. Empty string disables this and will attempt "
+    "to initiate peering with all stations.");
+
 // Nl80211Handler pointer to be used by authsae for callback forwarding
 Nl80211Handler* Nl80211Handler::globalNlHandler;
 
@@ -1363,6 +1371,18 @@ Nl80211Handler::handleNewCandidate(const GenericNetlinkMessage& msg) {
 
   auto mac_addr = folly::MacAddress::fromBinary(
       {static_cast<unsigned char*>(nla_data(tb[NL80211_ATTR_MAC])), ETH_ALEN});
+
+  if (!FLAGS_mesh_init_peering_whitelist.empty()) {
+    auto allowed_peers = ::parseCsvFlag<folly::MacAddress>(
+        FLAGS_mesh_init_peering_whitelist,
+        [](std::string str) { return folly::MacAddress{str}; });
+
+    if (std::find(allowed_peers.begin(), allowed_peers.end(), mac_addr) ==
+        allowed_peers.end()) {
+      VLOG(8) << "Candidate is not in list of stations to initate peering with";
+      return ERR_INVALID_ARGUMENT_VALUE;
+    }
+  }
 
   int32_t rssi{};
 
