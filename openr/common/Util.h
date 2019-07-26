@@ -18,11 +18,8 @@
 #include <folly/Memory.h>
 #include <folly/Optional.h>
 #include <folly/String.h>
-#include <folly/io/async/EventBase.h>
 #include <re2/re2.h>
 #include <re2/set.h>
-#include <thrift/lib/cpp/async/TAsyncSocket.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/BuildInfo.h>
@@ -35,7 +32,6 @@
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
-#include "openr/if/gen-cpp2/OpenrCtrl.h"
 
 namespace openr {
 /**
@@ -208,15 +204,6 @@ folly::Optional<std::string> maybeGetTcpEndpoint(
  */
 thrift::PrefixForwardingType getPrefixForwardingType(
     const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes);
-
-/**
- * Get Open/R client to connect to openrCtrl thrift server to comunicate with
- * internal modules( e.g. link-monitor, kv-store etc. )
- * Caller needs provide the ipAddr to which it tries to connect and EventBase
- * instanace.
- */
-std::unique_ptr<openr::thrift::OpenrCtrlAsyncClient> getOpenrCtrlClient(
-    const std::string& ipAddr, folly::EventBase& evb);
 
 /**
  * Validates that label is 20 bit only and other bits are not set

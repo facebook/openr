@@ -590,22 +590,4 @@ getPrefixForwardingType(
   return thrift::PrefixForwardingType::SR_MPLS;
 }
 
-std::unique_ptr<openr::thrift::OpenrCtrlAsyncClient>
-getOpenrCtrlClient(const std::string& ipAddr, folly::EventBase& evb) {
-  LOG(INFO) << "Create new openr thrift client";
-
-  std::unique_ptr<openr::thrift::OpenrCtrlAsyncClient> client = nullptr;
-  try {
-    auto socket = apache::thrift::async::TAsyncSocket::newSocket(
-        &evb, ipAddr, openr::Constants::kOpenrCtrlPort);
-    auto channel = apache::thrift::HeaderClientChannel::newChannel(socket);
-    client = std::make_unique<openr::thrift::OpenrCtrlAsyncClient>(
-        std::move(channel));
-  } catch (const std::exception& ex) {
-    LOG(ERROR) << "Failed to create openr thrift client. Exception: "
-               << ex.what();
-  }
-  return client;
-}
-
 } // namespace openr
