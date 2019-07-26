@@ -175,6 +175,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // immediately create and return the stream handler
   apache::thrift::Stream<thrift::Publication> subscribeKvStore() override;
 
+  folly::SemiFuture<apache::thrift::ResponseAndStream<
+      thrift::Publication,
+      thrift::Publication>>
+  semifuture_subscribeAndGetKvStore() override;
+
   //
   // LinkMonitor APIs
   //

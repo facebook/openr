@@ -634,7 +634,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 
   //
-  // Snoop API
+  // Subscribe API
   //
 
   {
@@ -653,6 +653,49 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     kvStoreWrapper->setKey(key, createThriftValue(1, "node1", "value1"));
     kvStoreWrapper->setKey(key, createThriftValue(2, "node1", "value1"));
     kvStoreWrapper->setKey(key, createThriftValue(3, "node1", "value1"));
+
+    // Check we should receive-3 updates
+    while (received < 3) {
+      std::this_thread::yield();
+    }
+
+    // Cancel subscription
+    subscription.cancel();
+    std::move(subscription).detach();
+
+    // Wait until publisher is destroyed
+    while (handler->getNumKvStorePublishers() != 0) {
+      std::this_thread::yield();
+    }
+  }
+
+  //
+  // Subscribe and Get API
+  //
+
+  {
+    std::atomic<int> received{0};
+    const std::string key{"snoop-key"};
+    auto responseAndSubscription =
+        handler->semifuture_subscribeAndGetKvStore().get();
+
+    // Expect 10 keys in the initial dump
+    EXPECT_EQ(10, responseAndSubscription.response.keyVals.size());
+
+    auto subscription =
+        std::move(responseAndSubscription.stream)
+            .subscribe([&received, key](thrift::Publication&& pub) {
+              EXPECT_EQ(1, pub.keyVals.size());
+              ASSERT_EQ(1, pub.keyVals.count(key));
+              EXPECT_EQ("value1", pub.keyVals.at(key).value.value());
+              EXPECT_EQ(received + 4, pub.keyVals.at(key).version);
+              received++;
+            });
+    EXPECT_EQ(1, handler->getNumKvStorePublishers());
+    kvStoreWrapper->setKey(key, createThriftValue(4, "node1", "value1"));
+    kvStoreWrapper->setKey(key, createThriftValue(4, "node1", "value1"));
+    kvStoreWrapper->setKey(key, createThriftValue(5, "node1", "value1"));
+    kvStoreWrapper->setKey(key, createThriftValue(6, "node1", "value1"));
 
     // Check we should receive-3 updates
     while (received < 3) {

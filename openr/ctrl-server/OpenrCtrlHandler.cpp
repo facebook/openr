@@ -763,6 +763,21 @@ OpenrCtrlHandler::subscribeKvStore() {
   return std::move(streamAndPublisher.first);
 }
 
+folly::SemiFuture<
+    apache::thrift::ResponseAndStream<thrift::Publication, thrift::Publication>>
+OpenrCtrlHandler::semifuture_subscribeAndGetKvStore() {
+  return semifuture_getKvStoreKeyValsFiltered(
+             std::make_unique<thrift::KeyDumpParams>())
+      .defer(
+          [stream = subscribeKvStore()](
+              folly::Try<std::unique_ptr<thrift::Publication>>&& pub) mutable {
+            pub.throwIfFailed();
+            return apache::thrift::
+                ResponseAndStream<thrift::Publication, thrift::Publication>{
+                    std::move(*pub.value()), std::move(stream)};
+          });
+}
+
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setNodeOverload() {
   thrift::LinkMonitorRequest request;
