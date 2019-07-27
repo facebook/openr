@@ -47,6 +47,62 @@ class KeyPrefix {
 };
 
 /**
+ * PrefixKey class to form and parse a PrefixKey. PrefixKey can be instantialed
+ * by passing parameters to form a key, or by passing the key string to parse
+ * and populate the parameters. In case the parsing fails all the parameters
+ * are set to folly::none
+ */
+
+class PrefixKey {
+ public:
+  // constructor using IP address, type and and subtype
+  PrefixKey(std::string const& node, folly::CIDRNetwork const& ip, int area);
+
+  // construct PrefixKey object from a give key string
+  static folly::Expected<PrefixKey, std::string> fromStr(
+      const std::string& key);
+
+  // return node name
+  std::string getNodeName() const;
+
+  // return the CIDR network address
+  folly::CIDRNetwork getCIDRNetwork() const;
+
+  // return prefix sub type
+  int getPrefixArea() const;
+
+  // return prefix key string to be used to flood to kvstore
+  std::string getPrefixKey() const;
+
+  // return thrift::IpPrefix
+  thrift::IpPrefix getIpPrefix() const;
+
+  static const RE2&
+  getPrefixRE2() {
+    static const RE2 prefixKeyPattern{folly::sformat(
+        "{}(?P<node>[a-zA-Z\\d\\.\\-\\_]+):"
+        "(?P<area>[\\d]{{1,2}}):"
+        "\\[(?P<IPAddr>[a-fA-F\\d\\.\\:]+)/"
+        "(?P<plen>[\\d]{{1,3}})\\]",
+        Constants::kPrefixDbMarker.toString())};
+    return prefixKeyPattern;
+  }
+
+ private:
+  // node name
+  std::string node_{};
+
+  // IP address
+  folly::CIDRNetwork ipaddress_;
+
+  // prefix sub type
+  int prefixArea_{0};
+
+  // prefix key string
+  std::string prefixKeyString_;
+};
+
+/**
  * Utility function to execute shell command and return true/false as
  * indication of it's success
  */

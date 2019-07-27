@@ -93,6 +93,149 @@ const auto path1_2_2_pop = createNextHop(
     2,
     createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP));
 
+struct PrefixKeyEntry {
+  bool shouldPass;
+  std::string pkey;
+  std::string node;
+  folly::CIDRNetwork ipaddr;
+  int area;
+  thrift::IpPrefix ipPrefix;
+  folly::IPAddress addr;
+  int plen;
+};
+
+TEST(UtilTest, PrefixKeyTest) {
+  std::vector<PrefixKeyEntry> strToItems;
+
+  // tests for parsing prefix key
+
+  // prefix key
+  PrefixKeyEntry k1;
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:[ff00::1]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:node-name:e:[ff00::1/100]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:node_name:a:[ff00::1/a]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:nodename:0:0:[ff00::1/129]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename0:33:[ff00::1/128]";
+  k1.node = "nodename0";
+  k1.ipaddr = folly::IPAddress::createNetwork("ff00::1/128");
+  k1.area = 33;
+  k1.ipPrefix = toIpPrefix("ff00::1/128");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:nodename.0.0:3:[ff00::1/2334]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:nodename.0.0:33:[192.168.0.1/343]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename.0.0:10:[192.168.0.0/3]";
+  k1.node = "nodename.0.0";
+  k1.ipaddr = folly::IPAddress::createNetwork("192.168.0.0/3");
+  k1.area = 10;
+  k1.ipPrefix = toIpPrefix("192.168.0.0/3");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename.0.0:99:[::0/0]";
+  k1.node = "nodename.0.0";
+  k1.ipaddr = folly::IPAddress::createNetwork("::0/0");
+  k1.area = 99;
+  k1.ipPrefix = toIpPrefix("::0/0");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename.0.0:10:[0.0.0.0/19]";
+  k1.node = "nodename.0.0";
+  k1.ipaddr = folly::IPAddress::createNetwork("0.0.0.0/19");
+  k1.area = 10;
+  k1.ipPrefix = toIpPrefix("0.0.0.0/19");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should fail
+  k1.pkey = "prefix:nodename.0.0:10:99.0:[0.0.0.0/19]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail
+  k1.pkey = "prefix:nodename.0.0:99h:[0.0.0.0/19]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  for (const auto& keys : strToItems) {
+    auto prefixStr = PrefixKey::fromStr(keys.pkey);
+    if (keys.shouldPass) {
+      EXPECT_EQ(prefixStr.value().getNodeName(), keys.node);
+      EXPECT_EQ(prefixStr.value().getCIDRNetwork(), keys.ipaddr);
+      EXPECT_EQ(prefixStr.value().getPrefixArea(), keys.area);
+      EXPECT_EQ(prefixStr.value().getIpPrefix(), keys.ipPrefix);
+    } else {
+      EXPECT_FALSE(prefixStr.hasValue());
+    }
+  }
+
+  // tests for forming prefix key
+  std::vector<PrefixKeyEntry> itemsToStr;
+
+  PrefixKeyEntry k2;
+
+  k2.node = "ebb.0.0";
+  k2.addr = folly::IPAddress("ff00::0");
+  k2.plen = 16;
+  k2.area = 1;
+  k2.pkey = "prefix:ebb.0.0:1:[ff00::/16]";
+  itemsToStr.push_back(k2);
+
+  // address will be masked
+  k2.node = "ebb-0-0";
+  k2.addr = folly::IPAddress("ff00::1");
+  k2.plen = 16;
+  k2.area = 01;
+  k2.pkey = "prefix:ebb-0-0:1:[ff00::/16]";
+  itemsToStr.push_back(k2);
+
+  // address will be masked
+  k2.node = "ebb-0-0";
+  k2.addr = folly::IPAddress("192.168.0.1");
+  k2.plen = 16;
+  k2.area = 1;
+  k2.pkey = "prefix:ebb-0-0:1:[192.168.0.0/16]";
+  itemsToStr.push_back(k2);
+
+  for (const auto& keys : itemsToStr) {
+    auto ipaddress = folly::IPAddress::createNetwork(
+        folly::sformat("{}/{}", keys.addr.str(), keys.plen));
+    auto prefixStr = PrefixKey(keys.node, ipaddress, keys.area);
+    EXPECT_EQ(prefixStr.getPrefixKey(), keys.pkey);
+  }
+}
+
 // test getNthPrefix()
 TEST(UtilTest, getNthPrefix) {
   // v6 allocation parameters

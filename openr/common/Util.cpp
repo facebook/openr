@@ -50,6 +50,65 @@ KeyPrefix::keyMatch(std::string const& key) const {
   return keyPrefix_->Match(key, &matches);
 }
 
+PrefixKey::PrefixKey(
+    std::string const& node, folly::CIDRNetwork const& ip, int area)
+    : node_(node),
+      ipaddress_(ip),
+      prefixArea_(area),
+      prefixKeyString_(folly::sformat(
+          "{}{}:{}:[{}/{}]",
+          Constants::kPrefixDbMarker.toString(),
+          node_,
+          prefixArea_,
+          ipaddress_.first.str(),
+          ipaddress_.second)) {}
+
+folly::Expected<PrefixKey, std::string>
+PrefixKey::fromStr(const std::string& key) {
+  int plen{0}, area{0};
+  std::string node{};
+  std::string ipstr{};
+  folly::CIDRNetwork ipaddress;
+  auto patt = RE2::FullMatch(key, getPrefixRE2(), &node, &area, &ipstr, &plen);
+  if (!patt) {
+    return folly::makeUnexpected(std::string("Invalid key format"));
+  }
+
+  try {
+    ipaddress =
+        folly::IPAddress::createNetwork(folly::sformat("{}/{}", ipstr, plen));
+  } catch (const folly::IPAddressFormatException& e) {
+    LOG(INFO) << "Exception in converting to Prefix. " << e.what();
+    return folly::makeUnexpected(std::string("Invalid IP address in key"));
+  }
+  return PrefixKey(node, ipaddress, area);
+}
+
+std::string
+PrefixKey::getNodeName() const {
+  return node_;
+};
+
+folly::CIDRNetwork
+PrefixKey::getCIDRNetwork() const {
+  return ipaddress_;
+}
+
+std::string
+PrefixKey::getPrefixKey() const {
+  return prefixKeyString_;
+}
+
+int
+PrefixKey::getPrefixArea() const {
+  return prefixArea_;
+}
+
+thrift::IpPrefix
+PrefixKey::getIpPrefix() const {
+  return toIpPrefix(ipaddress_);
+}
+
 int
 executeShellCommand(const std::string& command) {
   int ret = system(command.c_str());
