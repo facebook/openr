@@ -51,7 +51,8 @@ class OpenrWrapper {
       std::chrono::seconds fibColdStartDuration,
       std::shared_ptr<IoProvider> ioProvider,
       int32_t systemPort,
-      uint32_t memLimit = openr::memLimitMB);
+      uint32_t memLimit = openr::memLimitMB,
+      bool per_prefix_keys = false);
 
   ~OpenrWrapper() {
     stop();
@@ -94,6 +95,22 @@ class OpenrWrapper {
    * get route databse from fib
    */
   thrift::RouteDatabase fibDumpRouteDatabase();
+
+  /**
+   * add prefix entries into prefix manager using prefix manager client
+   */
+  bool addPrefixEntries(const std::vector<thrift::PrefixEntry>& prefixes);
+
+  /**
+   * withdraw prefix entries into prefix manager using prefix manager client
+   */
+  bool withdrawPrefixEntries(const std::vector<thrift::PrefixEntry>& prefixes);
+
+  /**
+   * check if a given prefix exists in routeDb
+   */
+  static bool checkPrefixExists(
+      const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb);
 
   /*
    * to get counters
@@ -171,6 +188,9 @@ class OpenrWrapper {
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> platformPubSock_;
 
   int32_t systemPort_;
+
+  // create prefix keys for each prefix separately
+  bool per_prefix_keys_{false};
 };
 
 } // namespace openr

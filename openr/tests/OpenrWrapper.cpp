@@ -29,7 +29,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::chrono::seconds fibColdStartDuration,
     std::shared_ptr<IoProvider> ioProvider,
     int32_t systemPort,
-    uint32_t memLimit)
+    uint32_t memLimit,
+    bool per_prefix_keys)
     : context_(context),
       nodeId_(nodeId),
       ioProvider_(std::move(ioProvider)),
@@ -52,7 +53,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       sparkReqSock_(context),
       fibReqSock_(context),
       platformPubSock_(context),
-      systemPort_(systemPort) {
+      systemPort_(systemPort),
+      per_prefix_keys_(per_prefix_keys) {
   // LM ifName
   std::string ifName = "vethLMTest_" + nodeId_;
 
@@ -175,7 +177,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       PrefixDbMarker{"prefix:"},
-      false /* create IP prefix keys */,
+      per_prefix_keys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0),
       Constants::kKvStoreDbTtl,
@@ -463,13 +465,35 @@ OpenrWrapper<Serializer>::stop() {
 template <class Serializer>
 folly::Optional<thrift::IpPrefix>
 OpenrWrapper<Serializer>::getIpPrefix() {
+  SYNCHRONIZED(ipPrefix_) {
+    if (ipPrefix_.hasValue()) {
+      return ipPrefix_;
+    }
+  }
+  auto keys =
+      kvStoreClient_->dumpAllWithPrefix(folly::sformat("prefix:{}", nodeId_));
+
+  SYNCHRONIZED(ipPrefix_) {
+    for (const auto& key : keys.value()) {
+      auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+          key.second.value.value(), serializer_);
+
+      for (auto& prefix : prefixDb.prefixEntries) {
+        if (prefix.type == thrift::PrefixType::PREFIX_ALLOCATOR) {
+          ipPrefix_ = prefix.prefix;
+          break;
+        }
+      }
+    }
+  }
   return ipPrefix_.copy();
 }
 
 template <class Serializer>
 bool
 OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
-  return kvStoreClient_->getKey(key).hasValue();
+  auto keys = kvStoreClient_->dumpAllWithPrefix(key);
+  return keys.hasValue();
 }
 
 template <class Serializer>
@@ -539,6 +563,34 @@ OpenrWrapper<Serializer>::fibDumpRouteDatabase() {
       fibReqSock_.recvThriftObj<thrift::RouteDatabase>(serializer_).value();
 
   return routeDb;
+}
+
+template <class Serializer>
+bool
+OpenrWrapper<Serializer>::addPrefixEntries(
+    const std::vector<thrift::PrefixEntry>& prefixes) {
+  auto resp = prefixManagerClient_->addPrefixes(prefixes);
+  return resp.value().success;
+}
+
+template <class Serializer>
+bool
+OpenrWrapper<Serializer>::withdrawPrefixEntries(
+    const std::vector<thrift::PrefixEntry>& prefixes) {
+  auto resp = prefixManagerClient_->withdrawPrefixes(prefixes);
+  return resp.value().success;
+}
+
+template <class Serializer>
+bool
+OpenrWrapper<Serializer>::checkPrefixExists(
+    const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb) {
+  for (auto const& route : routeDb.unicastRoutes) {
+    if (prefix == route.dest) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // define template instance for some common serializers

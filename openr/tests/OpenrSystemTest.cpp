@@ -210,7 +210,8 @@ class OpenrFixture : public ::testing::Test {
   createOpenr(
       std::string nodeId,
       bool v4Enabled,
-      uint32_t memLimit = openr::memLimitMB) {
+      uint32_t memLimit = openr::memLimitMB,
+      bool per_prefix_keys = false) {
     auto ptr = std::make_unique<OpenrWrapper<CompactSerializer>>(
         context,
         nodeId,
@@ -226,7 +227,8 @@ class OpenrFixture : public ::testing::Test {
         kFibColdStartDuration,
         mockIoProvider,
         port_,
-        memLimit);
+        memLimit,
+        per_prefix_keys);
     aquamen_.emplace_back(std::move(ptr));
     return aquamen_.back().get();
   }
@@ -263,7 +265,8 @@ INSTANTIATE_TEST_CASE_P(
     SimpleRingTopologyInstance, SimpleRingTopologyFixture, ::testing::Bool());
 
 //
-// Verify multi path in ring topology for both v4 and v6
+// Verify multi path in ring topology for both v4 and v6 and
+// test IP prefix add and withdraw.
 //
 TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   // define interface names for the test
@@ -291,10 +294,10 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   bool v4Enabled(GetParam());
   v4Enabled = false;
 
-  auto openr1 = createOpenr("1", v4Enabled);
-  auto openr2 = createOpenr("2", v4Enabled);
-  auto openr3 = createOpenr("3", v4Enabled);
-  auto openr4 = createOpenr("4", v4Enabled);
+  auto openr1 = createOpenr("1", v4Enabled, openr::memLimitMB, true);
+  auto openr2 = createOpenr("2", v4Enabled, openr::memLimitMB, false);
+  auto openr3 = createOpenr("3", v4Enabled, openr::memLimitMB, true);
+  auto openr4 = createOpenr("4", v4Enabled, openr::memLimitMB, false);
 
   openr1->run();
   openr2->run();
@@ -447,6 +450,100 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
       routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
       NextHopsWithMetric({make_pair(toNextHop(adj42, v4Enabled), 2),
                           make_pair(toNextHop(adj43, v4Enabled), 2)}));
+
+  // test IP prefix add and withdraw. Add prefixes and withdraw prefixes
+  // using prefix manager client, and verify the FIB route dump reflects
+  // those changes on all the nodes
+
+  const auto paddr1 = toIpPrefix("5502::/64");
+  const auto prefixEntry1 =
+      createPrefixEntry(paddr1, thrift::PrefixType::DEFAULT);
+
+  // openr1 uses separate IP prefix key for each prefix
+  auto resp = openr1->addPrefixEntries({prefixEntry1});
+  EXPECT_TRUE(resp);
+  /* sleep override */
+  std::this_thread::sleep_for(kMaxOpenrSyncTime);
+
+  routeDb2 = openr2->fibDumpRouteDatabase();
+  routeDb3 = openr3->fibDumpRouteDatabase();
+  routeDb4 = openr4->fibDumpRouteDatabase();
+
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr1, routeDb2));
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr1, routeDb3));
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr1, routeDb4));
+
+  const auto paddr2 = toIpPrefix("5503::/64");
+  const auto prefixEntry2 =
+      createPrefixEntry(paddr2, thrift::PrefixType::DEFAULT);
+
+  // openr2 uses one prefixKey for all prefixes
+  resp = openr2->addPrefixEntries({prefixEntry2});
+  EXPECT_TRUE(resp);
+  /* sleep override */
+  std::this_thread::sleep_for(kMaxOpenrSyncTime);
+
+  routeDb1 = openr1->fibDumpRouteDatabase();
+  routeDb3 = openr3->fibDumpRouteDatabase();
+  routeDb4 = openr4->fibDumpRouteDatabase();
+
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb1));
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb3));
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb4));
+
+  // withdraw prefix1 from openr1, check prefix1 is withdrawn and prefix2
+  // is still there
+  // openr1 uses separate IP prefix key for each prefix
+  resp = openr1->withdrawPrefixEntries({prefixEntry1});
+  EXPECT_TRUE(resp);
+  /* sleep override */
+  std::this_thread::sleep_for(kMaxOpenrSyncTime);
+
+  routeDb1 = openr1->fibDumpRouteDatabase();
+  routeDb2 = openr2->fibDumpRouteDatabase();
+  routeDb3 = openr3->fibDumpRouteDatabase();
+  routeDb4 = openr4->fibDumpRouteDatabase();
+
+  // check paddr1 is deleted from FIB
+  EXPECT_FALSE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr1, routeDb2));
+  EXPECT_FALSE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr1, routeDb3));
+  EXPECT_FALSE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr1, routeDb4));
+
+  // check paddr2 exists
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb1));
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb3));
+  EXPECT_TRUE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb4));
+
+  // Delete prefix from openr2 which uses single prefix key for all prefixes,
+  // then check prefix is deleted from all other nodes
+  resp = openr2->withdrawPrefixEntries({prefixEntry2});
+  EXPECT_TRUE(resp);
+  /* sleep override */
+  std::this_thread::sleep_for(kMaxOpenrSyncTime);
+
+  routeDb1 = openr1->fibDumpRouteDatabase();
+  routeDb3 = openr3->fibDumpRouteDatabase();
+  routeDb4 = openr4->fibDumpRouteDatabase();
+
+  // check paddr2 is deleted from FIB
+  EXPECT_FALSE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb1));
+  EXPECT_FALSE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb3));
+  EXPECT_FALSE(
+      OpenrWrapper<CompactSerializer>::checkPrefixExists(paddr2, routeDb4));
 }
 
 //
