@@ -288,6 +288,10 @@ class Decision : public OpenrEventLoop {
   // periodically submit counters to monitor thread
   void submitCounters();
 
+  // node to prefix entries database for nodes advertising per prefix keys
+  thrift::PrefixDatabase updateNodePrefixDatabase(
+      const std::string& key, const thrift::PrefixDatabase& prefixDb);
+
   // this node's name and the key markers
   const std::string myNodeName_;
   // the prefix we use to find the adjacency database announcements
@@ -323,6 +327,12 @@ class Decision : public OpenrEventLoop {
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+
+  // node to prefix entries database for nodes advertising per prefix keys
+  std::unordered_map<
+      std::string,
+      std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>>
+      nodePrefixDatabase_{};
 };
 
 } // namespace openr

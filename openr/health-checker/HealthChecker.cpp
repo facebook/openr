@@ -211,9 +211,7 @@ HealthChecker::pingNodes() {
 void
 HealthChecker::processKeyVal(
     std::string const& key, folly::Optional<thrift::Value> val) noexcept {
-  std::string prefix, nodeName;
-  folly::split(
-      Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+  std::string nodeName{getNodeNameFromKey(key)};
 
   if (!val.hasValue()) {
     VLOG(4) << "HealthChecker: key expired:" << key << " node:" << nodeName;

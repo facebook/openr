@@ -390,20 +390,18 @@ class DecisionValidateCmd(DecisionCmdBase):
         kvstore_prefix_node_names = set()
 
         for key, value in sorted(kvstore_keyvals.items()):
-            if key.startswith(Consts.ADJ_DB_MARKER) or key.startswith(
-                Consts.PREFIX_DB_MARKER
-            ):
-                return_code = self.print_db_delta(
-                    key,
-                    value,
-                    kvstore_adj_node_names,
-                    kvstore_prefix_node_names,
-                    decision_adj_dbs,
-                    decision_prefix_dbs,
-                    json,
+            if key.startswith(Consts.ADJ_DB_MARKER):
+                return_code = self.print_db_delta_adj(
+                    key, value, kvstore_adj_node_names, decision_adj_dbs, json
                 )
                 if return_code != 0:
                     return return_code
+
+        return_code = self.print_db_delta_prefix(
+            kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
+        )
+        if return_code != 0:
+            return return_code
 
         decision_adj_node_names = {
             node
@@ -442,67 +440,62 @@ class DecisionValidateCmd(DecisionCmdBase):
 
         return (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals)
 
-    def print_db_delta(
-        self,
-        key,
-        value,
-        kvstore_adj_node_names,
-        kvstore_prefix_node_names,
-        decision_adj_dbs,
-        decision_prefix_dbs,
-        json,
+    def print_db_delta_adj(
+        self, key, value, kvstore_adj_node_names, decision_adj_dbs, json
     ):
         """ Returns status code. 0 = success, 1 = failure"""
 
-        if key.startswith(Consts.ADJ_DB_MARKER):
-            kvstore_adj_db = deserialize_thrift_object(
-                value.value, lsdb_types.AdjacencyDatabase
+        kvstore_adj_db = deserialize_thrift_object(
+            value.value, lsdb_types.AdjacencyDatabase
+        )
+        node_name = kvstore_adj_db.thisNodeName
+        kvstore_adj_node_names.add(node_name)
+        if node_name not in decision_adj_dbs:
+            print(
+                printing.render_vertical_table(
+                    [["node {}'s adj db is missing in Decision".format(node_name)]]
+                )
             )
-            node_name = kvstore_adj_db.thisNodeName
-            kvstore_adj_node_names.add(node_name)
-            if node_name not in decision_adj_dbs:
+            return 1
+        decision_adj_db = decision_adj_dbs[node_name]
+
+        return_code = 0
+        if json:
+            tags = ("in_decision", "in_kvstore", "changed_in_decision_and_kvstore")
+            adj_list_deltas = utils.find_adj_list_deltas(
+                decision_adj_db.adjacencies, kvstore_adj_db.adjacencies, tags=tags
+            )
+            deltas_json, return_code = utils.adj_list_deltas_json(
+                adj_list_deltas, tags=tags
+            )
+            if return_code:
+                utils.print_json(deltas_json)
+        else:
+            lines = utils.sprint_adj_db_delta(kvstore_adj_db, decision_adj_db)
+            if lines:
                 print(
                     printing.render_vertical_table(
-                        [["node {}'s adj db is missing in Decision".format(node_name)]]
-                    )
-                )
-                return 1
-            decision_adj_db = decision_adj_dbs[node_name]
-
-            return_code = 0
-            if json:
-                tags = ("in_decision", "in_kvstore", "changed_in_decision_and_kvstore")
-                adj_list_deltas = utils.find_adj_list_deltas(
-                    decision_adj_db.adjacencies, kvstore_adj_db.adjacencies, tags=tags
-                )
-                deltas_json, return_code = utils.adj_list_deltas_json(
-                    adj_list_deltas, tags=tags
-                )
-                if return_code:
-                    utils.print_json(deltas_json)
-            else:
-                lines = utils.sprint_adj_db_delta(kvstore_adj_db, decision_adj_db)
-                if lines:
-                    print(
-                        printing.render_vertical_table(
+                        [
                             [
-                                [
-                                    "node {}'s adj db in Decision out of sync with "
-                                    "KvStore's".format(node_name)
-                                ]
+                                "node {}'s adj db in Decision out of sync with "
+                                "KvStore's".format(node_name)
                             ]
-                        )
+                        ]
                     )
-                    print("\n".join(lines))
-                    return_code = 1
+                )
+                print("\n".join(lines))
+                return_code = 1
 
-            return return_code
+        return return_code
 
-        if key.startswith(Consts.PREFIX_DB_MARKER):
-            kvstore_prefix_db = deserialize_thrift_object(
-                value.value, lsdb_types.PrefixDatabase
-            )
-            node_name = kvstore_prefix_db.thisNodeName
+    def print_db_delta_prefix(
+        self, kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
+    ):
+        """ Returns status code. 0 = success, 1 = failure"""
+
+        prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
+
+        for node_name, prefix_db in prefix_maps.items():
             kvstore_prefix_node_names.add(node_name)
             if node_name not in decision_prefix_dbs:
                 print(
@@ -519,10 +512,9 @@ class DecisionValidateCmd(DecisionCmdBase):
                 return 1
             decision_prefix_db = decision_prefix_dbs[node_name]
             decision_prefix_set = {}
+
             utils.update_global_prefix_db(decision_prefix_set, decision_prefix_db)
-            lines = utils.sprint_prefixes_db_delta(
-                decision_prefix_set, kvstore_prefix_db
-            )
+            lines = utils.sprint_prefixes_db_delta(decision_prefix_set, prefix_db)
             if lines:
                 print(
                     printing.render_vertical_table(
@@ -536,8 +528,7 @@ class DecisionValidateCmd(DecisionCmdBase):
                 )
                 print("\n".join(lines))
                 return 1
-
-            return 0
+        return 0
 
     def print_db_diff(
         self,

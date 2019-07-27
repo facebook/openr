@@ -227,18 +227,25 @@ def alloc_prefix_to_loopback_ip_str(prefix):
 def print_prefixes_table(resp, nodes, iter_func):
     """ print prefixes """
 
-    def _parse_prefixes(rows, prefix_db):
+    def _parse_prefixes(prefix_maps, prefix_db):
         if isinstance(prefix_db, kv_store_types.Value):
             prefix_db = deserialize_thrift_object(
                 prefix_db.value, lsdb_types.PrefixDatabase
             )
 
-        rows.append(
-            ["{}".format(prefix_db.thisNodeName), sprint_prefixes_db_full(prefix_db)]
-        )
+        if prefix_db.thisNodeName not in prefix_maps:
+            prefix_maps[prefix_db.thisNodeName] = lsdb_types.PrefixDatabase(
+                f"{prefix_db.thisNodeName}", []
+            )
+
+        for prefix_entry in prefix_db.prefixEntries:
+            prefix_maps[prefix_db.thisNodeName].prefixEntries.append(prefix_entry)
 
     rows = []
-    iter_func(rows, resp, nodes, _parse_prefixes)
+    prefix_maps = {}
+    iter_func(prefix_maps, resp, nodes, _parse_prefixes)
+    for node_name, prefix_db in prefix_maps.items():
+        rows.append(["{}".format(node_name), sprint_prefixes_db_full(prefix_db)])
     print(printing.render_vertical_table(rows))
 
 
@@ -268,6 +275,30 @@ def metric_vector_to_dict(metric_vector):
     return thrift_to_dict(metric_vector, _update)
 
 
+def collate_prefix_keys(
+    kvstore_keyvals: kv_store_types.KeyVals
+) -> Dict[str, lsdb_types.PrefixDatabase]:
+    """ collate all the prefixes of node and return a map of
+        nodename - PrefixDatabase
+    """
+
+    prefix_maps = {}
+    for key, value in sorted(kvstore_keyvals.items()):
+        if key.startswith(Consts.PREFIX_DB_MARKER):
+
+            node_name = key.split(":")[1]
+            prefix_db = deserialize_thrift_object(
+                value.value, lsdb_types.PrefixDatabase
+            )
+            if node_name not in prefix_maps:
+                prefix_maps[node_name] = lsdb_types.PrefixDatabase(f"{node_name}", [])
+
+            for prefix_entry in prefix_db.prefixEntries:
+                prefix_maps[node_name].prefixEntries.append(prefix_entry)
+
+    return prefix_maps
+
+
 def prefix_entry_to_dict(prefix_entry):
     """ convert prefixEntry from thrift instance into a dict in strings """
 
@@ -294,7 +325,10 @@ def prefix_db_to_dict(prefixes_map, prefix_db):
         )
 
     prefixEntries = list(map(prefix_entry_to_dict, prefix_db.prefixEntries))
-    prefixes_map[prefix_db.thisNodeName] = {"prefixEntries": prefixEntries}
+    if prefix_db.thisNodeName not in prefixes_map:
+        prefixes_map[prefix_db.thisNodeName] = {"prefixEntries": prefixEntries}
+    else:
+        prefixes_map[prefix_db.thisNodeName]["prefixEntries"].extend(prefixEntries)
 
 
 def print_prefixes_json(resp, nodes, iter_func):
@@ -354,11 +388,9 @@ def build_global_prefix_db(resp):
 
     # map: (node) -> set([prefix])
     global_prefix_db = {}
+    prefix_maps = collate_prefix_keys(resp.keyVals)
 
-    for (key, value) in resp.keyVals.items():
-        if not key.startswith(Consts.PREFIX_DB_MARKER):
-            continue
-        prefix_db = deserialize_thrift_object(value.value, lsdb_types.PrefixDatabase)
+    for _, prefix_db in prefix_maps.items():
         update_global_prefix_db(global_prefix_db, prefix_db)
 
     return global_prefix_db

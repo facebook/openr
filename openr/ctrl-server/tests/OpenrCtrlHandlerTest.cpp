@@ -134,6 +134,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         monitorSubmitUrl_,
         PrefixDbMarker{Constants::kPrefixDbMarker.str()},
+        false /* create per prefix keys */,
         false,
         std::chrono::seconds(0),
         Constants::kKvStoreDbTtl,

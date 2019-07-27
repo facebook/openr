@@ -506,6 +506,7 @@ main(int argc, char** argv) {
           kvStoreLocalPubUrl,
           monitorSubmitUrl,
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+          FLAGS_per_prefix_keys,
           FLAGS_enable_perf_measurement,
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms),

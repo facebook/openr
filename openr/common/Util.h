@@ -466,6 +466,19 @@ createMplsRoutesWithBestNextHops(const std::vector<thrift::MplsRoute>& routes) {
   return newRoutes;
 }
 
+inline std::string
+getNodeNameFromKey(const std::string& key) {
+  std::string prefix, nodeName;
+  auto prefixKey = PrefixKey::fromStr(key);
+  if (prefixKey.hasValue()) {
+    nodeName = prefixKey.value().getNodeName();
+  } else {
+    folly::split(
+        Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+  }
+  return nodeName;
+}
+
 namespace MetricVectorUtils {
 
 enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };

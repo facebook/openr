@@ -75,7 +75,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         """
 
         for (key, value) in sorted(publication.keyVals.items(), key=lambda x: x[0]):
-            _, reported_node_name = key.split(":", 1)
+            reported_node_name = key.split(":")[1]
             if "all" not in nodes and reported_node_name not in nodes:
                 continue
 
@@ -84,16 +84,12 @@ class KvStoreCmdBase(OpenrCtrlCmd):
     def get_node_to_ips(self, client: OpenrCtrl.Client) -> Dict:
         """ get the dict of all nodes to their IP in the network """
 
-        def _parse_nodes(node_dict, value):
-            prefix_db = serializer.deserialize_thrift_object(
-                value.value, lsdb_types.PrefixDatabase
-            )
-            node_dict[prefix_db.thisNodeName] = self.get_node_ip(prefix_db)
-
         node_dict = {}
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
-        self.iter_publication(node_dict, resp, ["all"], _parse_nodes)
+        prefix_maps = utils.collate_prefix_keys(resp.keyVals)
+        for node, prefix_db in prefix_maps.items():
+            node_dict[node] = self.get_node_ip(prefix_db)
 
         return node_dict
 

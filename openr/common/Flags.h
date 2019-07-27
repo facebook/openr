@@ -47,6 +47,7 @@ DECLARE_string(seed_prefix);
 DECLARE_bool(enable_prefix_alloc);
 DECLARE_int32(alloc_prefix_len);
 DECLARE_bool(static_prefix_alloc);
+DECLARE_bool(per_prefix_keys);
 
 DECLARE_bool(set_loopback_address);
 DECLARE_bool(override_loopback_addr);

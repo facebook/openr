@@ -34,6 +34,7 @@ class PrefixManager final : public OpenrEventLoop {
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const PrefixDbMarker& prefixDbMarker,
+      bool createIpPrefix,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
       const std::chrono::seconds prefixHoldTime,
@@ -94,6 +95,9 @@ class PrefixManager final : public OpenrEventLoop {
 
   const PrefixDbMarker prefixDbMarker_;
 
+  // create IP keys
+  bool createIpKeys_{false} /* unused */;
+
   // enable convergence performance measurement for Adjacencies update
   const bool enablePerfMeasurement_{false};
 
@@ -125,7 +129,6 @@ class PrefixManager final : public OpenrEventLoop {
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
-
 }; // PrefixManager
 
 } // namespace openr

@@ -33,6 +33,7 @@ PrefixManager::PrefixManager(
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const PrefixDbMarker& prefixDbMarker,
+    bool createIpKeys,
     bool enablePerfMeasurement,
     const std::chrono::seconds prefixHoldTime,
     const std::chrono::milliseconds ttlKeyInKvStore,
@@ -42,6 +43,7 @@ PrefixManager::PrefixManager(
       nodeId_(nodeId),
       configStoreClient_{persistentStoreUrl, zmqContext},
       prefixDbMarker_{prefixDbMarker},
+      createIpKeys_{createIpKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
       prefixHoldUntilTimePoint_(
           std::chrono::steady_clock::now() + prefixHoldTime),

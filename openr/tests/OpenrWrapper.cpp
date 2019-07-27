@@ -175,6 +175,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       PrefixDbMarker{"prefix:"},
+      false /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0),
       Constants::kKvStoreDbTtl,

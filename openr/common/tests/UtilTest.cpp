@@ -236,6 +236,14 @@ TEST(UtilTest, PrefixKeyTest) {
   }
 }
 
+TEST(UtilTest, GetNodeNameFromKeyTest) {
+  const std::string s1{"prefix:node1"};
+  EXPECT_EQ("node1", getNodeNameFromKey(s1));
+
+  const std::string s2{"prefix:nodename.0.0:10:[0.0.0.0/0]"};
+  EXPECT_EQ("nodename.0.0", getNodeNameFromKey(s2));
+}
+
 // test getNthPrefix()
 TEST(UtilTest, getNthPrefix) {
   // v6 allocation parameters

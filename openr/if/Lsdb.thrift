@@ -212,6 +212,8 @@ struct PrefixDatabase {
   1: string thisNodeName
   // numbering is intentional
   3: list<PrefixEntry> prefixEntries
+  // flag to indicate prefix(s) must be deleted
+  5: bool deletePrefix
 
   // Optional attribute to measure convergence performance
   4: optional PerfEvents perfEvents;
