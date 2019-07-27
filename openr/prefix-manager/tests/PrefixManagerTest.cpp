@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/Constants.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
@@ -27,7 +28,7 @@ const auto addr3 = toIpPrefix("::ffff:10.3.3.3/128");
 const auto addr4 = toIpPrefix("::ffff:10.4.4.4/128");
 const auto addr5 = toIpPrefix("ffff:10:1:5::/64");
 const auto addr6 = toIpPrefix("ffff:10:2:6::/64");
-const auto addr7 = toIpPrefix("ffff:10:3:7::/64");
+const auto addr7 = toIpPrefix("ffff:10:3:7::0/64");
 const auto addr8 = toIpPrefix("ffff:10:4:8::/64");
 const auto addr9 = toIpPrefix("ffff:10:4:9::/64");
 const auto addr10 = toIpPrefix("ffff:10:4:10::/64");
@@ -75,7 +76,7 @@ const auto persistentPrefixEntry10 = createPrefixEntry(
     false);
 } // namespace
 
-class PrefixManagerTestFixture : public ::testing::Test {
+class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
  public:
   void
   SetUp() override {
@@ -121,8 +122,8 @@ class PrefixManagerTestFixture : public ::testing::Test {
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
-        PrefixDbMarker{"prefix:"},
-        false /* create IP prefix keys */,
+        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+        perPrefixKeys_ /* per prefix keys */,
         false /* prefix-mananger perf measurement */,
         std::chrono::seconds{0},
         Constants::kKvStoreDbTtl,
@@ -160,6 +161,29 @@ class PrefixManagerTestFixture : public ::testing::Test {
     LOG(INFO) << "The test KV store is stopped";
   }
 
+  // In case of separate IP prefix keys, collect all the prefix Entries
+  // (advertised from a specific node) and return as a list
+  std::vector<thrift::PrefixEntry>
+  getPrefixDb(const std::string& keyPrefix) {
+    std::vector<thrift::PrefixEntry> prefixEntries{};
+    auto marker = PrefixDbMarker{Constants::kPrefixDbMarker.toString()};
+    auto keyPrefixDbs = kvStoreClient->dumpAllWithPrefix(keyPrefix);
+    for (const auto& pkey : keyPrefixDbs.value()) {
+      if (pkey.first.find(marker) == 0) {
+        auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            pkey.second.value.value(), serializer);
+        // skip prefixes marked for delete
+        if (!prefixDb.deletePrefix) {
+          prefixEntries.insert(
+              prefixEntries.begin(),
+              prefixDb.prefixEntries.begin(),
+              prefixDb.prefixEntries.end());
+        }
+      }
+    }
+    return prefixEntries;
+  }
+
   fbzmq::Context context;
 
   fbzmq::ZmqEventLoop evl;
@@ -175,9 +199,13 @@ class PrefixManagerTestFixture : public ::testing::Test {
   std::unique_ptr<std::thread> prefixManagerThread{nullptr};
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
   std::unique_ptr<KvStoreClient> kvStoreClient{nullptr};
+  const bool perPrefixKeys_ = GetParam();
 };
 
-TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
+INSTANTIATE_TEST_CASE_P(
+    PrefixManagerInstance, PrefixManagerTestFixture, ::testing::Bool());
+
+TEST_P(PrefixManagerTestFixture, AddRemovePrefix) {
   auto resp1 = prefixManagerClient->withdrawPrefixes({prefixEntry1});
   auto resp2 = prefixManagerClient->addPrefixes({prefixEntry1});
   auto resp3 = prefixManagerClient->addPrefixes({prefixEntry1});
@@ -219,7 +247,7 @@ TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   EXPECT_TRUE(resp18.value().success);
 }
 
-TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
+TEST_P(PrefixManagerTestFixture, RemoveUpdateType) {
   prefixManagerClient->addPrefixes({prefixEntry1});
   prefixManagerClient->addPrefixes({prefixEntry2});
   prefixManagerClient->addPrefixes({prefixEntry3});
@@ -277,7 +305,7 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
       prefixManagerClient->withdrawPrefixes({prefixEntry8}).value().success);
 }
 
-TEST_F(PrefixManagerTestFixture, RemoveInvalidType) {
+TEST_P(PrefixManagerTestFixture, RemoveInvalidType) {
   EXPECT_TRUE(prefixManagerClient->addPrefixes({prefixEntry1}).value().success);
   EXPECT_TRUE(prefixManagerClient->addPrefixes({prefixEntry2}).value().success);
 
@@ -305,12 +333,23 @@ TEST_F(PrefixManagerTestFixture, RemoveInvalidType) {
   EXPECT_EQ(0, resp4.value().prefixes.size());
 }
 
-TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
+TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   prefixManagerClient->addPrefixes({prefixEntry1});
+
+  std::string keyStr{"prefix:node-1"};
+
+  if (perPrefixKeys_) {
+    auto prefixKey = PrefixKey(
+        "node-1",
+        folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
+        0);
+
+    keyStr = prefixKey.getPrefixKey();
+  }
 
   // Wait for throttled update to announce to kvstore
   std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
-  auto maybeValue = kvStoreClient->getKey("prefix:node-1");
+  auto maybeValue = kvStoreClient->getKey(keyStr);
   EXPECT_FALSE(maybeValue.hasError());
   auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue.value().value.value(), serializer);
@@ -329,36 +368,411 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
 
   /* Verify that before throttle expires, we don't see any update */
   std::this_thread::sleep_for(Constants::kPrefixMgrKvThrottleTimeout / 2);
-  auto maybeValue1 = kvStoreClient->getKey("prefix:node-1");
+  auto maybeValue1 = kvStoreClient->getKey(keyStr);
   EXPECT_FALSE(maybeValue1.hasError());
   auto db1 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue1.value().value.value(), serializer);
-  EXPECT_EQ(db1.thisNodeName, "node-1");
-  EXPECT_EQ(db1.prefixEntries.size(), 1);
+  auto prefixDb = getPrefixDb("prefix:node-1");
+  EXPECT_EQ(prefixDb.size(), 1);
 
   // Wait for throttled update to announce to kvstore
   std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
-  auto maybeValue2 = kvStoreClient->getKey("prefix:node-1");
+  auto maybeValue2 = kvStoreClient->getKey(keyStr);
   EXPECT_FALSE(maybeValue2.hasError());
   auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue2.value().value.value(), serializer);
-  EXPECT_EQ(db2.thisNodeName, "node-1");
-  EXPECT_EQ(db2.prefixEntries.size(), 8);
+  prefixDb = getPrefixDb("prefix:node-1");
+  EXPECT_EQ(prefixDb.size(), 8);
 
   // now make a change and check again
   prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
 
   // Wait for throttled update to announce to kvstore
   std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
-  auto maybeValue3 = kvStoreClient->getKey("prefix:node-1");
+  auto maybeValue3 = kvStoreClient->getKey(keyStr);
   EXPECT_FALSE(maybeValue3.hasError());
   auto db3 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue3.value().value.value(), serializer);
-  EXPECT_EQ(db3.thisNodeName, "node-1");
-  EXPECT_EQ(db3.prefixEntries.size(), 5);
+  prefixDb = getPrefixDb("prefix:node-1");
+  EXPECT_EQ(prefixDb.size(), 5);
 }
 
-TEST_F(PrefixManagerTestFixture, CheckReload) {
+/**
+ * test to check prefix key add, withdraw does not trigger update for all
+ * the prefixes managed by the prefix manager. This test does not apply to
+ * the old key format
+ */
+TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
+  // Create ZmqEventLoop
+  fbzmq::ZmqEventLoop evl;
+  int waitDuration{0};
+  // test only if 'create ip prefixes' is enabled
+  if (!perPrefixKeys_) {
+    return;
+  }
+
+  auto prefixKey1 = PrefixKey(
+      "node-1",
+      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
+      0);
+  auto prefixKey2 = PrefixKey(
+      "node-1",
+      folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
+      0);
+
+  // Schedule callback to set keys from client1 (this will be executed first)
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
+        prefixManagerClient->addPrefixes({prefixEntry1});
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        auto prefixKeyStr = prefixKey1.getPrefixKey();
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_EQ(maybeValue.value().version, 1);
+      });
+
+  // add another key
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept { prefixManagerClient->addPrefixes({prefixEntry2}); });
+
+  // version of first key should still be 1
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        auto prefixKeyStr = prefixKey1.getPrefixKey();
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_EQ(maybeValue.value().version, 1);
+
+        prefixKeyStr = prefixKey2.getPrefixKey();
+        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue2.hasValue());
+        EXPECT_EQ(maybeValue2.value().version, 1);
+      });
+
+  // withdraw prefixEntry2
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        prefixManagerClient->withdrawPrefixes({prefixEntry2});
+      });
+
+  // version of prefixEntry1 should still be 1
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        auto prefixKeyStr = prefixKey1.getPrefixKey();
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_EQ(maybeValue.value().version, 1);
+
+        // verify key is withdrawn
+        prefixKeyStr = prefixKey2.getPrefixKey();
+        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue2.hasValue());
+        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue2.value().value.value(), serializer);
+        EXPECT_NE(db.prefixEntries.size(), 0);
+        EXPECT_TRUE(db.deletePrefix);
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept { evl.stop(); });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
+}
+
+/**
+ * Test prefix key subscription callback from Kvstore client.
+ * The test verifies the callback takes the action that reflects the current
+ * state of prefix in the prefix manager (either exists or does not exist) and
+ * appropriately udpates Kvstore
+ */
+TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
+  // Create ZmqEventLoop
+  fbzmq::ZmqEventLoop evl;
+  int waitDuration{0};
+  int keyVersion{0};
+  std::string prefixKeyStr{"prefix:node-1"};
+  const auto prefixEntry =
+      createPrefixEntry(toIpPrefix("5001::/64"), thrift::PrefixType::DEFAULT);
+  auto prefixKey = PrefixKey(
+      "node-1",
+      folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
+      0);
+  if (perPrefixKeys_) {
+    prefixKeyStr = prefixKey.getPrefixKey();
+  }
+
+  // Schedule callback to set keys from client1 (this will be executed first)
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
+        prefixManagerClient->addPrefixes({prefixEntry});
+      });
+
+  // Wait for throttled update to announce to kvstore
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue.hasValue());
+        keyVersion = maybeValue.value().version;
+        EXPECT_FALSE(maybeValue.hasError());
+        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value.value(), serializer);
+        EXPECT_EQ(db.thisNodeName, "node-1");
+        EXPECT_EQ(db.prefixEntries.size(), 1);
+        EXPECT_EQ(db.prefixEntries[0], prefixEntry);
+      });
+
+  thrift::PrefixDatabase emptyPrefxDb;
+  emptyPrefxDb.thisNodeName = "node-1";
+  emptyPrefxDb.prefixEntries = {};
+  const auto emptyPrefxDbStr =
+      fbzmq::util::writeThriftObjStr(emptyPrefxDb, serializer);
+
+  // increment the key version in kvstore and set empty value. kvstoreClient
+  // will detect value changed, and retain the value present in peristent DB,
+  // and advertise with higher key version.
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
+        kvStoreClient->setKey(
+            prefixKeyStr,
+            emptyPrefxDbStr,
+            keyVersion + 1,
+            Constants::kKvStoreDbTtl);
+      });
+
+  // Wait for throttled update to announce to kvstore
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_FALSE(maybeValue.hasError());
+        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value.value(), serializer);
+        EXPECT_EQ(maybeValue.value().version, keyVersion + 2);
+        EXPECT_EQ(db.thisNodeName, "node-1");
+        EXPECT_EQ(db.prefixEntries.size(), 1);
+        EXPECT_EQ(db.prefixEntries[0], prefixEntry);
+      });
+
+  // Clear key from prefix DB map, which will delete key from persistent
+  // store and update kvstore with empty prefix entry list
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept { prefixManagerClient->withdrawPrefixes({prefixEntry}); });
+
+  // verify key is withdrawn from kvstore
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_FALSE(maybeValue.hasError());
+        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value.value(), serializer);
+        EXPECT_EQ(maybeValue.value().version, keyVersion + 3);
+        EXPECT_EQ(db.thisNodeName, "node-1");
+        // delete prefix must be set to TRUE, applies only when per prefix key
+        // is enabled
+        if (perPrefixKeys_) {
+          EXPECT_NE(db.prefixEntries.size(), 0);
+          EXPECT_TRUE(db.deletePrefix);
+        }
+      });
+
+  thrift::PrefixDatabase nonEmptyPrefxDb;
+  nonEmptyPrefxDb.thisNodeName = "node-1";
+  nonEmptyPrefxDb.prefixEntries = {prefixEntry};
+  const auto nonEmptyPrefxDbStr =
+      fbzmq::util::writeThriftObjStr(nonEmptyPrefxDb, serializer);
+
+  // Insert same key in kvstore with any higher version, and non empty value
+  // Prefix manager should get the update and re-advertise with empty Prefix
+  // with higher key version.
+  int staleKeyVersion{100};
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        kvStoreClient->setKey(
+            prefixKeyStr,
+            nonEmptyPrefxDbStr,
+            staleKeyVersion,
+            Constants::kKvStoreDbTtl);
+      });
+
+  // prefix manager will override the key inserted above with higher key
+  // version and empty prefix DB
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_FALSE(maybeValue.hasError());
+        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value.value(), serializer);
+        EXPECT_EQ(maybeValue.value().version, staleKeyVersion + 1);
+        EXPECT_EQ(db.thisNodeName, "node-1");
+        // delete prefix must be set to TRUE, applies only when per prefix key
+        // is enabled
+        if (perPrefixKeys_) {
+          EXPECT_NE(db.prefixEntries.size(), 0);
+          EXPECT_TRUE(db.deletePrefix);
+        }
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept { evl.stop(); });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
+}
+
+TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
+  fbzmq::ZmqEventLoop evl;
+  int waitDuration{0};
+
+  if (!perPrefixKeys_) {
+    return;
+  }
+
+  std::chrono::milliseconds ttl{50};
+  // spin up a new PrefixManager add verify that it loads the config
+  auto prefixManager2 = std::make_unique<PrefixManager>(
+      "node-2",
+      PersistentStoreUrl{configStore->inprocCmdUrl},
+      KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
+      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+      MonitorSubmitUrl{"inproc://monitor_submit"},
+      PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+      perPrefixKeys_ /* create IP prefix keys */,
+      false /* prefix-mananger perf measurement */,
+      std::chrono::seconds(0),
+      ttl,
+      context);
+
+  auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
+    LOG(INFO) << "PrefixManager thread starting";
+    prefixManager2->run();
+    LOG(INFO) << "PrefixManager thread finishing";
+  });
+  prefixManager2->waitUntilRunning();
+
+  auto prefixManagerClient2 = std::make_unique<PrefixManagerClient>(
+      PrefixManagerLocalCmdUrl{prefixManager2->inprocCmdUrl}, context);
+
+  auto prefixKey1 = PrefixKey(
+      "node-2",
+      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
+      0);
+  auto prefixKey2 = PrefixKey(
+      "node-2",
+      folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
+      0);
+
+  // insert two prefixes
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
+        prefixManagerClient2->addPrefixes({prefixEntry1});
+        prefixManagerClient2->addPrefixes({prefixEntry2});
+      });
+
+  // check both prefixes are in kvstore
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        auto prefixKeyStr = prefixKey1.getPrefixKey();
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_EQ(maybeValue.value().version, 1);
+
+        prefixKeyStr = prefixKey2.getPrefixKey();
+        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue2.hasValue());
+        EXPECT_EQ(maybeValue2.value().version, 1);
+      });
+
+  // withdraw prefixEntry1
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept {
+        prefixManagerClient2->withdrawPrefixes({prefixEntry1});
+      });
+
+  // check prefix entry1 should have been expired, prefix 2 should be there
+  // with same version
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration +=
+          2 * Constants::kPrefixMgrKvThrottleTimeout.count() + ttl.count()),
+      [&]() noexcept {
+        auto prefixKeyStr = prefixKey1.getPrefixKey();
+        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_FALSE(maybeValue.hasValue());
+
+        prefixKeyStr = prefixKey2.getPrefixKey();
+        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        EXPECT_TRUE(maybeValue2.hasValue());
+        EXPECT_EQ(maybeValue2.value().version, 1);
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() noexcept { evl.stop(); });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
+
+  // cleanup
+  prefixManager2->stop();
+  prefixManagerThread2->join();
+}
+
+TEST_P(PrefixManagerTestFixture, CheckReload) {
   prefixManagerClient->addPrefixes({prefixEntry1});
   prefixManagerClient->addPrefixes({prefixEntry2});
   prefixManagerClient->addPrefixes({ephemeralPrefixEntry9});
@@ -369,8 +783,8 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
-      PrefixDbMarker{"prefix:"},
-      false /* create IP prefix keys */,
+      PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
+      perPrefixKeys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0),
       Constants::kKvStoreDbTtl,
@@ -400,7 +814,7 @@ TEST_F(PrefixManagerTestFixture, CheckReload) {
   prefixManagerThread2->join();
 }
 
-TEST_F(PrefixManagerTestFixture, GetPrefixes) {
+TEST_P(PrefixManagerTestFixture, GetPrefixes) {
   prefixManagerClient->addPrefixes({prefixEntry1});
   prefixManagerClient->addPrefixes({prefixEntry2});
   prefixManagerClient->addPrefixes({prefixEntry3});
@@ -442,7 +856,7 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
   EXPECT_EQ(0, resp4.value().prefixes.size());
 }
 
-TEST_F(PrefixManagerTestFixture, PrefixAddCount) {
+TEST_P(PrefixManagerTestFixture, PrefixAddCount) {
   auto count0 = prefixManager->getPrefixAddCounter();
   EXPECT_EQ(0, count0);
 
@@ -463,7 +877,7 @@ TEST_F(PrefixManagerTestFixture, PrefixAddCount) {
   EXPECT_EQ(5, count3);
 }
 
-TEST_F(PrefixManagerTestFixture, PrefixWithdrawCount) {
+TEST_P(PrefixManagerTestFixture, PrefixWithdrawCount) {
   auto count0 = prefixManager->getPrefixWithdrawCounter();
   EXPECT_EQ(0, count0);
 
@@ -531,7 +945,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
-      PrefixDbMarker{"prefix:"},
+      PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
       false /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       holdTime,
@@ -565,7 +979,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
 
 // Verify that persist store is updated only when
 // non-ephemeral types are effected
-TEST_F(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
+TEST_P(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
   ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
   // Verify that any action on persistent entries leads to update of store
   prefixManagerClient->addPrefixes({prefixEntry1, prefixEntry2, prefixEntry3});
@@ -602,7 +1016,7 @@ TEST_F(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
 
 // Verify that persist store is update properly when both persistent
 // and ephemeral entries are mixed for same prefix type
-TEST_F(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
+TEST_P(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
   ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
   // Verify that any action on persistent entries leads to update of store
   prefixManagerClient->addPrefixes(

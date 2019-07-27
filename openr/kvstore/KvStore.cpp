@@ -24,10 +24,9 @@ namespace openr {
 KvStoreFilters::KvStoreFilters(
     std::vector<std::string> const& keyPrefix,
     std::set<std::string> const& nodeIds)
-    : keyPrefixList_(keyPrefix), originatorIds_(nodeIds) {
-  // create re2 set
-  keyPrefixObjList_ = std::make_unique<KeyPrefix>(keyPrefixList_);
-}
+    : keyPrefixList_(keyPrefix),
+      originatorIds_(nodeIds),
+      keyPrefixObjList_(KeyPrefix(keyPrefixList_)) {}
 
 bool
 KvStoreFilters::keyMatch(
@@ -35,7 +34,7 @@ KvStoreFilters::keyMatch(
   if (keyPrefixList_.empty() && originatorIds_.empty()) {
     return true;
   }
-  if (!keyPrefixList_.empty() && keyPrefixObjList_->keyMatch(key)) {
+  if (!keyPrefixList_.empty() && keyPrefixObjList_.keyMatch(key)) {
     return true;
   }
   if (!originatorIds_.empty() && originatorIds_.count(value.originatorId)) {
@@ -52,6 +51,20 @@ KvStoreFilters::getKeyPrefixes() const {
 std::set<std::string>
 KvStoreFilters::getOrigniatorIdList() const {
   return originatorIds_;
+}
+
+std::string
+KvStoreFilters::str() const {
+  std::string result{};
+  result += "\nPrefix filters:\n";
+  for (const auto& prefixString : keyPrefixList_) {
+    result += folly::sformat("{}, ", prefixString);
+  }
+  result += "\nOriginator ID filters:\n";
+  for (const auto& originatorId : originatorIds_) {
+    result += folly::sformat("{}, ", originatorId);
+  }
+  return result;
 }
 
 KvStore::KvStore(

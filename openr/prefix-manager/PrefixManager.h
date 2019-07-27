@@ -54,8 +54,12 @@ class PrefixManager final : public OpenrEventLoop {
  private:
   // Update persistent store with non-ephemeral prefix entries
   void persistPrefixDb();
+
   // Update kvstore with both ephemeral and non-ephemeral prefixes
   void updateKvStore();
+
+  // update all IP keys in KvStore
+  void updateKvStorePrefixKeys();
 
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& request) override;
@@ -87,6 +91,17 @@ class PrefixManager final : public OpenrEventLoop {
   // prefix counter for a given key
   int64_t getCounter(const std::string& key);
 
+  // key prefix callback
+  void processKeyPrefixUpdate(
+      const std::string& key, folly::Optional<thrift::Value> value) noexcept;
+
+  // add prefix entry in kvstore
+  void advertisePrefix(const thrift::PrefixEntry& prefixEntry);
+
+  // called when withdrawing a prefix, add prefix DB into kvstore with
+  // delete prefix DB flag set to true
+  void advertisePrefixWithdraw(const thrift::PrefixEntry& prefixEntry);
+
   // this node name
   const std::string nodeId_;
 
@@ -96,7 +111,7 @@ class PrefixManager final : public OpenrEventLoop {
   const PrefixDbMarker prefixDbMarker_;
 
   // create IP keys
-  bool createIpKeys_{false} /* unused */;
+  bool perPrefixKeys_{false};
 
   // enable convergence performance measurement for Adjacencies update
   const bool enablePerfMeasurement_{false};
@@ -129,6 +144,10 @@ class PrefixManager final : public OpenrEventLoop {
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+
+  // IP perfixes to advertisze to kvstore (either add or delete)
+  std::vector<std::pair<thrift::IpPrefix, thrift::PrefixType>>
+      prefixesToUpdate_{};
 }; // PrefixManager
 
 } // namespace openr

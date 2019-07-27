@@ -22,6 +22,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/kvstore/KvStore.h>
 
 namespace openr {
 
@@ -211,6 +212,13 @@ class KvStoreClient {
   void setKvCallback(KeyCallback callback);
 
   /**
+   * API to register callback for given key filter. Subscribing again
+   * will overwrite the existing filter
+   */
+  void subscribeKeyFilter(KvStoreFilters kvFilters, KeyCallback callback);
+  void unSubscribeKeyFilter();
+
+  /**
    * APIs to send Add/Del peer command to KvStore.
    * Return error type:
    *     1. zmq socket error
@@ -357,6 +365,9 @@ class KvStoreClient {
   // callback for every key published
   KeyCallback kvCallback_{nullptr};
 
+  // callback for updates from keys filtered with provided filter
+  KeyCallback keyPrefixFilterCallback_{nullptr};
+
   // backoff associated with each key for re-advertisements
   std::unordered_map<
       std::string /* key */,
@@ -382,6 +393,9 @@ class KvStoreClient {
 
   // Timer to advertise ttl updates for key-vals
   std::unique_ptr<fbzmq::ZmqTimeout> ttlTimer_;
+
+  // prefix key filter to apply for key updates
+  KvStoreFilters keyPrefixFilter_{{}, {}};
 };
 
 } // namespace openr

@@ -33,7 +33,7 @@ PrefixManager::PrefixManager(
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const PrefixDbMarker& prefixDbMarker,
-    bool createIpKeys,
+    bool perPrefixKeys,
     bool enablePerfMeasurement,
     const std::chrono::seconds prefixHoldTime,
     const std::chrono::milliseconds ttlKeyInKvStore,
@@ -43,7 +43,7 @@ PrefixManager::PrefixManager(
       nodeId_(nodeId),
       configStoreClient_{persistentStoreUrl, zmqContext},
       prefixDbMarker_{prefixDbMarker},
-      createIpKeys_{createIpKeys},
+      perPrefixKeys_{perPrefixKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
       prefixHoldUntilTimePoint_(
           std::chrono::steady_clock::now() + prefixHoldTime),
@@ -63,6 +63,20 @@ PrefixManager::PrefixManager(
     // Prefixes will be advertised after prefixHoldUntilTimePoint_
   }
 
+  // register kvstore publication callback
+  std::vector<std::string> keyPrefixList;
+  keyPrefixList.emplace_back(folly::sformat(
+      "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_));
+  std::set<std::string> originatorIds{};
+  KvStoreFilters kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
+  kvStoreClient_.subscribeKeyFilter(
+      std::move(kvFilters),
+      [this](
+          const std::string& key,
+          folly::Optional<thrift::Value> thriftVal) noexcept {
+        processKeyPrefixUpdate(key, thriftVal);
+      });
+
   // Create throttled updateKvStore
   updateKvStoreThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       this, Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
@@ -75,6 +89,12 @@ PrefixManager::PrefixManager(
   if (prefixHoldTime != std::chrono::seconds(0)) {
     scheduleTimeoutAt(prefixHoldUntilTimePoint_, [this]() {
       persistPrefixDb();
+      if (perPrefixKeys_) {
+        // advertise all prefixes
+        for (const auto& kv : prefixMap_) {
+          prefixesToUpdate_.emplace_back(kv.second.prefix, kv.second.type);
+        }
+      }
       updateKvStore();
     });
 
@@ -92,6 +112,44 @@ PrefixManager::PrefixManager(
   monitorTimer_ =
       fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
+}
+
+void
+PrefixManager::processKeyPrefixUpdate(
+    std::string const& key, folly::Optional<thrift::Value> value) noexcept {
+  LOG(INFO) << nodeId_ << ": Received update for " << key;
+  if (!value.hasValue()) {
+    return;
+  }
+  auto prefixKey = PrefixKey::fromStr(key);
+  if (prefixKey.hasValue()) {
+    auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        value.value().value.value(), serializer_);
+
+    CHECK_EQ(prefixDb.prefixEntries.size(), 1);
+    auto ipPrefix = prefixDb.prefixEntries[0];
+    auto it = prefixMap_.find(ipPrefix.prefix);
+    if (it == prefixMap_.end()) {
+      // Got an update for a key origninated by this node and that is not
+      // found in the prefix map. If the prefix DB is not set to delete
+      // then it is a stale update that must be overridden by
+      // advertising a prefix DB with deletePrefix set to True
+      if (!prefixDb.deletePrefix) {
+        LOG(INFO) << "Stale Prefix update received for non existing entry "
+                  << toString(ipPrefix.prefix)
+                  << ". Advertising delete prefix DB";
+        advertisePrefixWithdraw(ipPrefix);
+      }
+    } else {
+      // Prefix entry exists in prefix manager. We should not be here since
+      // active prefix entry will be in persistent DB. But send a prefix key
+      // update just in case.
+      advertisePrefix(it->second);
+    }
+  } else {
+    // old key format, send prefix key update
+    updateKvStore();
+  }
 }
 
 void
@@ -128,6 +186,57 @@ PrefixManager::persistPrefixDb() {
 }
 
 void
+PrefixManager::advertisePrefixWithdraw(const thrift::PrefixEntry& prefixEntry) {
+  thrift::PrefixDatabase prefxDb;
+  prefxDb.thisNodeName = nodeId_;
+  prefxDb.prefixEntries = {prefixEntry};
+  prefxDb.deletePrefix = true;
+  const auto prefxDbStr = fbzmq::util::writeThriftObjStr(prefxDb, serializer_);
+  auto prefixKey = PrefixKey(
+      nodeId_,
+      folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
+      0);
+  kvStoreClient_.clearKey(
+      prefixKey.getPrefixKey(), prefxDbStr, ttlKeyInKvStore_);
+}
+
+void
+PrefixManager::advertisePrefix(const thrift::PrefixEntry& prefixEntry) {
+  /* code */
+  thrift::PrefixDatabase prefixDb;
+  prefixDb.thisNodeName = nodeId_;
+  prefixDb.prefixEntries.emplace_back(prefixEntry);
+
+  const auto ipPrefixKey = PrefixKey(
+      nodeId_,
+      folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
+      0);
+  auto prefixKeyStr = ipPrefixKey.getPrefixKey();
+  const auto prefixDbVal =
+      fbzmq::util::writeThriftObjStr(prefixDb, serializer_);
+  VLOG(1) << "Writing prefix to KvStore " << prefixKeyStr;
+  kvStoreClient_.persistKey(prefixKeyStr, prefixDbVal, ttlKeyInKvStore_);
+}
+
+void
+PrefixManager::updateKvStorePrefixKeys() {
+  // Incremental prefix updates, either add or delete from kvstore
+  // Check prefixMap_ to decide whether to add or delete
+  for (const auto& ipPrefix : prefixesToUpdate_) {
+    auto it = prefixMap_.find(ipPrefix.first);
+    if (it == prefixMap_.end()) {
+      thrift::PrefixEntry prefixEntry;
+      prefixEntry.prefix = ipPrefix.first;
+      prefixEntry.type = ipPrefix.second;
+      advertisePrefixWithdraw(prefixEntry);
+    } else {
+      advertisePrefix(it->second);
+    }
+  }
+  prefixesToUpdate_.clear();
+}
+
+void
 PrefixManager::updateKvStore() {
   if (std::chrono::steady_clock::now() < prefixHoldUntilTimePoint_) {
     // Too early for advertising my own prefixes. Let timeout advertise it
@@ -136,6 +245,9 @@ PrefixManager::updateKvStore() {
   }
 
   // prefixDb has changed.
+  if (perPrefixKeys_) {
+    return updateKvStorePrefixKeys();
+  }
   // Update the kvstore with both persistent and ephemeral entries
   thrift::PrefixDatabase prefixDb;
   prefixDb.thisNodeName = nodeId_;
@@ -315,9 +427,15 @@ PrefixManager::addOrUpdatePrefixes(
       // Add missing prefix
       prefixMap_.emplace(prefix.prefix, prefix);
       updated = true;
+      if (perPrefixKeys_) {
+        prefixesToUpdate_.emplace_back(prefix.prefix, prefix.type);
+      }
     } else if (it->second != prefix) {
       it->second = prefix;
       updated = true;
+      if (perPrefixKeys_) {
+        prefixesToUpdate_.emplace_back(prefix.prefix, prefix.type);
+      }
     }
   }
 
@@ -345,7 +463,11 @@ PrefixManager::removePrefixes(
               << ", client: "
               << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
                      prefix.type);
-    prefixMap_.erase(prefix.prefix);
+    if (prefixMap_.erase(prefix.prefix)) {
+      if (perPrefixKeys_) {
+        prefixesToUpdate_.emplace_back(prefix.prefix, prefix.type);
+      }
+    }
   }
   return true;
 }
@@ -362,6 +484,9 @@ PrefixManager::syncPrefixesByType(
   }
   for (auto it = prefixMap_.begin(); it != prefixMap_.end();) {
     if (it->second.type == type and newPrefixes.count(it->first) == 0) {
+      if (perPrefixKeys_) {
+        prefixesToUpdate_.emplace_back(it->second.prefix, it->second.type);
+      }
       it = prefixMap_.erase(it);
       updated = true;
     } else {
@@ -380,6 +505,9 @@ PrefixManager::removePrefixesByType(thrift::PrefixType type) {
   bool changed = false;
   for (auto iter = prefixMap_.begin(); iter != prefixMap_.end();) {
     if (iter->second.type == type) {
+      if (perPrefixKeys_) {
+        prefixesToUpdate_.emplace_back(iter->second.prefix, iter->second.type);
+      }
       changed = true;
       iter = prefixMap_.erase(iter);
     } else {

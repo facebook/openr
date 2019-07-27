@@ -568,6 +568,21 @@ KvStoreClient::subscribeKey(
 }
 
 void
+KvStoreClient::subscribeKeyFilter(
+    KvStoreFilters kvFilters, KeyCallback callback) {
+  keyPrefixFilter_ = std::move(kvFilters);
+  keyPrefixFilterCallback_ = std::move(callback);
+  return;
+}
+
+void
+KvStoreClient::unSubscribeKeyFilter() {
+  keyPrefixFilterCallback_ = nullptr;
+  keyPrefixFilter_ = KvStoreFilters({}, {});
+  return;
+}
+
+void
 KvStoreClient::unsubscribeKey(std::string const& key) {
   VLOG(3) << "KvStoreClient: unsubscribeKey called for key " << key;
   // Store callback into KeyCallback map
@@ -731,7 +746,11 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
       if (cb != keyCallbacks_.end()) {
         (cb->second)(key, rcvdValue);
       }
-
+      // callback for a given key filter
+      if (keyPrefixFilterCallback_ &&
+          keyPrefixFilter_.keyMatch(key, rcvdValue)) {
+        keyPrefixFilterCallback_(key, rcvdValue);
+      }
       // Skip rest of the processing. We are not interested.
       continue;
     }

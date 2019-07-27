@@ -73,6 +73,9 @@ class KvStoreFilters {
   // return set of origninator IDs
   std::set<std::string> getOrigniatorIdList() const;
 
+  // print filters
+  std::string str() const;
+
  private:
   // list of string prefixes, empty list matches all keys
   std::vector<std::string> keyPrefixList_{};
@@ -81,7 +84,7 @@ class KvStoreFilters {
   std::set<std::string> originatorIds_{};
 
   // keyPrefix class to create RE2 set and to match keys
-  std::unique_ptr<KeyPrefix> keyPrefixObjList_{};
+  KeyPrefix keyPrefixObjList_;
 };
 
 // The class represent a server that stores KV pairs in internal map.

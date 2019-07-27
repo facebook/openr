@@ -14,6 +14,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/Optional.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -25,6 +26,7 @@ using namespace std;
 using namespace folly;
 
 using namespace openr;
+using namespace testing;
 
 using apache::thrift::CompactSerializer;
 
@@ -977,6 +979,114 @@ TEST(KvStoreClient, SubscribeApiTest) {
   EXPECT_EQ(1, keyExpCbCnt);
   EXPECT_EQ(1, keyExpKeyCbCnt);
   EXPECT_EQ(1, keyExpKeySubCbCnt);
+
+  // Stop server
+  LOG(INFO) << "Stopping store";
+  store->stop();
+}
+
+TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
+  fbzmq::Context context;
+  const std::string nodeId{"test_store"};
+
+  // Initialize and start KvStore with empty peer
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto store = std::make_shared<KvStoreWrapper>(
+      context,
+      nodeId,
+      std::chrono::seconds(60) /* db sync interval */,
+      std::chrono::seconds(3600) /* counter submit interval */,
+      emptyPeers);
+  store->run();
+
+  // Create another ZmqEventLoop instance for looping clients
+  fbzmq::ZmqEventLoop evl;
+
+  // Create and initialize kvstore-clients
+  auto client1 = std::make_shared<KvStoreClient>(
+      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+  auto client2 = std::make_shared<KvStoreClient>(
+      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+
+  std::vector<std::string> keyPrefixList;
+  keyPrefixList.emplace_back("test_");
+  std::set<std::string> originatorIds{};
+  KvStoreFilters kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
+
+  int key1CbCnt = 0;
+  // subscribe for key update for keys using kvstore filter
+  // using store->setKey should trigger the callback, key1CbCnt++
+  evl.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+    client1->subscribeKeyFilter(
+        std::move(kvFilters),
+        [&](std::string const& k, folly::Optional<thrift::Value> v) {
+          // this should be called when client1 call persistKey for test_key1
+          EXPECT_THAT(k, testing::StartsWith("test_"));
+          EXPECT_EQ(1, v.value().version);
+          EXPECT_EQ("test_key_val", v.value().value);
+          key1CbCnt++;
+        });
+
+    thrift::Value testValue1 = createThriftValue(
+        1,
+        nodeId,
+        std::string("test_key_val"),
+        1000, /* ttl in msec */
+        500 /* ttl version */,
+        0 /* hash */);
+    store->setKey("test_key1", testValue1);
+  });
+
+  // subscribe for key update for keys using kvstore filter
+  // using kvstoreClient->setKey(), this shouldn't trigger update as the
+  // key will be in persistent DB. (key1CbCnt - shoudln't change)
+  evl.scheduleTimeout(std::chrono::milliseconds(25), [&]() noexcept {
+    client1->persistKey("test_key1", "test_value2");
+  });
+
+  // add another key with same prefix, different key string, key1CbCnt++
+  evl.scheduleTimeout(std::chrono::milliseconds(50), [&]() noexcept {
+    thrift::Value testValue1 = createThriftValue(
+        1,
+        nodeId,
+        std::string("test_key_val"),
+        1000, /* ttl in msec */
+        500 /* ttl version */,
+        0 /* hash */);
+    store->setKey("test_key2", testValue1);
+  });
+
+  // unsubscribe kvstore key filter and test for callback
+  evl.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
+    client1->unSubscribeKeyFilter();
+  });
+
+  // add another key with same prefix, after unsubscribing,
+  // key callback count will not increase
+  evl.scheduleTimeout(std::chrono::milliseconds(150), [&]() noexcept {
+    thrift::Value testValue1 = createThriftValue(
+        1,
+        nodeId,
+        std::string("test_key_val"),
+        1000, /* ttl in msec */
+        500 /* ttl version */,
+        0 /* hash */);
+    store->setKey("test_key3", testValue1);
+    evl.stop();
+  });
+
+  // Start the event loop
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
+
+  // count must be 2
+  EXPECT_EQ(2, key1CbCnt);
 
   // Stop server
   LOG(INFO) << "Stopping store";

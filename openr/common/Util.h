@@ -382,6 +382,24 @@ createPrefixEntry(
   return prefixEntry;
 }
 
+inline thrift::Value
+createThriftValue(
+    int64_t version = 1,
+    std::string originatorId = "",
+    folly::Optional<std::string> keyValue = folly::none,
+    int64_t ttl = Constants::kTtlThreshold.count(),
+    int64_t ttlVersion = 0,
+    folly::Optional<int64_t> hash = folly::none) {
+  thrift::Value value;
+  value.version = version;
+  value.originatorId = originatorId;
+  value.value = keyValue;
+  value.ttl = ttl;
+  value.ttlVersion = ttlVersion;
+  value.hash = hash;
+  return value;
+}
+
 inline thrift::NextHopThrift
 createNextHop(
     thrift::BinaryAddress addr,
