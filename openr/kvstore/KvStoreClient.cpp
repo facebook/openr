@@ -355,6 +355,39 @@ KvStoreClient::unsetKey(std::string const& key) {
   keysToAdvertise_.erase(key);
 }
 
+void
+KvStoreClient::clearKey(
+    std::string const& key,
+    std::string keyValue,
+    std::chrono::milliseconds ttl) {
+  VLOG(1) << "KvStoreClient: clear key called for key " << key;
+
+  // erase keys
+  unsetKey(key);
+
+  // if key doesn't exist in KvStore no need to add it as "empty". This
+  // condition should not exist.
+  auto maybeValue = getKey(key);
+  if (!maybeValue.hasValue()) {
+    return;
+  }
+  // overwrite all values, increment version, reset value to empty
+  auto& thriftValue = maybeValue.value();
+  thriftValue.originatorId = nodeId_;
+  thriftValue.version++;
+  thriftValue.ttl = ttl.count();
+  thriftValue.ttlVersion = 0;
+  thriftValue.value = std::move(keyValue);
+
+  std::unordered_map<std::string, thrift::Value> keyVals;
+  keyVals.emplace(key, std::move(thriftValue));
+  // Advertise to KvStore
+  const auto ret = setKeysHelper(std::move(keyVals));
+  if (!ret) {
+    LOG(ERROR) << "Error sending SET_KEY request to KvStore: " << ret.error();
+  }
+}
+
 folly::Expected<thrift::Value, fbzmq::Error>
 KvStoreClient::getKey(std::string const& key) {
   VLOG(3) << "KvStoreClient: getKey called for key " << key;

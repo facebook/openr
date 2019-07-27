@@ -100,6 +100,15 @@ class KvStoreClient {
   void unsetKey(std::string const& key);
 
   /**
+   * Clear key's value by seeting default value of empty string or value passed
+   * by the caller, cancel ttl timers, advertise with higher version.
+   */
+  void clearKey(
+      std::string const& key,
+      std::string value = "",
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
+
+  /**
    * Get key from KvStore. It gets from local snapshot KeyVals of the kvstore.
    * Return error type:
    *    1. zmq socket error

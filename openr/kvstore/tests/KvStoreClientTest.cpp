@@ -363,6 +363,169 @@ TEST(KvStoreClient, PeerApiTest) {
   store->stop();
 }
 
+TEST(KvStoreClient, EmptyValueKey) {
+  fbzmq::Context context;
+  std::unordered_map<std::string, thrift::PeerSpec> peers;
+
+  // start store1, store2, store 3 with empty peers
+  auto store1 = std::make_unique<KvStoreWrapper>(
+      context,
+      "node1",
+      std::chrono::seconds(60) /* db sync interval */,
+      std::chrono::seconds(600) /* counter submit interval */,
+      peers);
+  store1->run();
+  auto store2 = std::make_unique<KvStoreWrapper>(
+      context,
+      "node2",
+      std::chrono::seconds(60) /* db sync interval */,
+      std::chrono::seconds(600) /* counter submit interval */,
+      peers);
+  store2->run();
+  auto store3 = std::make_unique<KvStoreWrapper>(
+      context,
+      "node3",
+      std::chrono::seconds(60) /* db sync interval */,
+      std::chrono::seconds(600) /* counter submit interval */,
+      peers);
+  store3->run();
+
+  // add peers store1 <---> store2 <---> store3
+  store1->addPeer(store2->nodeId, store2->getPeerSpec());
+  store2->addPeer(store1->nodeId, store1->getPeerSpec());
+  store2->addPeer(store3->nodeId, store3->getPeerSpec());
+  store3->addPeer(store2->nodeId, store2->getPeerSpec());
+
+  // add key in store1, check for the key in all stores
+  // Create another ZmqEventLoop instance for looping clients
+  fbzmq::ZmqEventLoop evl;
+  int waitDuration{0};
+
+  // create kvstore client for store 1
+  auto client1 = std::make_shared<KvStoreClient>(
+      context,
+      &evl,
+      store1->nodeId,
+      store1->localCmdUrl,
+      store1->localPubUrl,
+      1000ms);
+
+  // Schedule callback to set keys from client1 (this will be executed first)
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
+        client1->persistKey("k1", "v1", kTtl);
+      });
+
+  // check keys on all stores after sometime
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
+        auto maybeThriftVal = store1->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("v1", maybeThriftVal.value().value);
+
+        maybeThriftVal = store2->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("v1", maybeThriftVal.value().value);
+
+        maybeThriftVal = store3->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("v1", maybeThriftVal.value().value);
+        EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
+        EXPECT_EQ(1, maybeThriftVal.value().version);
+      });
+
+  // set empty value on store1, check for empty value on other stores, and
+  // key version is higher
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
+        client1->clearKey("k1", "", kTtl);
+      });
+
+  // check key has empty value on all stores and version is incremented
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
+        auto maybeThriftVal = store1->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("", maybeThriftVal.value().value);
+
+        maybeThriftVal = store2->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("", maybeThriftVal.value().value);
+
+        maybeThriftVal = store3->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("", maybeThriftVal.value().value);
+        EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
+        EXPECT_EQ(maybeThriftVal.value().version, 2);
+      });
+
+  // persist key with new value, and check for new value and higher key version
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
+        client1->persistKey("k1", "v2", kTtl);
+      });
+
+  // check key's value is udpated on all stores and version is incremented
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
+        auto maybeThriftVal = store1->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("v2", maybeThriftVal.value().value);
+
+        maybeThriftVal = store2->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("v2", maybeThriftVal.value().value);
+
+        maybeThriftVal = store3->getKey("k1");
+        ASSERT_TRUE(maybeThriftVal.hasValue());
+        EXPECT_EQ("v2", maybeThriftVal.value().value);
+        EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
+        EXPECT_EQ(maybeThriftVal.value().version, 3);
+      });
+
+  // set empty value on store1, and check for key expiry
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
+        client1->clearKey("k1", "", kTtl);
+      });
+
+  // after kTtl duration key must have been deleted due to ttl expiry
+  evl.scheduleTimeout(
+      // add 100 msec more to avoid flakiness
+      std::chrono::milliseconds(waitDuration += kTtl.count() + 100),
+      [&]() noexcept {
+        auto maybeThriftVal = store1->getKey("k1");
+        ASSERT_FALSE(maybeThriftVal.hasValue());
+
+        maybeThriftVal = store2->getKey("k1");
+        ASSERT_FALSE(maybeThriftVal.hasValue());
+
+        maybeThriftVal = store3->getKey("k1");
+        ASSERT_FALSE(maybeThriftVal.hasValue());
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(waitDuration += kTtl.count()), [&]() noexcept {
+        evl.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
+
+  // Stop store
+  LOG(INFO) << "Stopping stores";
+  store1->stop();
+  store2->stop();
+  store3->stop();
+}
+
 TEST(KvStoreClient, PersistKeyTest) {
   fbzmq::Context context;
   const std::string nodeId{"test_store"};
