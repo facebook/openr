@@ -203,16 +203,16 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
   // Generate random prefixes
   auto prefixes = fibWrapper->prefixGenerator.ipv6PrefixGenerator(
       numOfPrefixes, kBitMaskLen);
-  thrift::RouteDatabase routeDb;
-  routeDb.thisNodeName = "node-1";
+  thrift::RouteDatabaseDelta routeDbDelta;
+  routeDbDelta.thisNodeName = "node-1";
   for (auto& prefix : prefixes) {
-    routeDb.unicastRoutes.emplace_back(createUnicastRoute(
+    routeDbDelta.unicastRoutesToUpdate.emplace_back(createUnicastRoute(
         prefix,
         fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
             kNumOfNexthops, kVethNameY)));
   }
   // Send routeDB to Fib and wait for updating completing
-  fibWrapper->decisionPub.sendThriftObj(routeDb, fibWrapper->serializer);
+  fibWrapper->decisionPub.sendThriftObj(routeDbDelta, fibWrapper->serializer);
   fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
 
   // Customized time counter
@@ -226,19 +226,20 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
 
   for (auto i = 0; i < iters; i++) {
     // Update routes by randomly regenerating nextHops for deltaSize prefixes.
+    routeDbDelta.unicastRoutesToUpdate.clear();
     for (auto index = 0; index < deltaSize; index++) {
-      routeDb.unicastRoutes.emplace_back(createUnicastRoute(
+      routeDbDelta.unicastRoutesToUpdate.emplace_back(createUnicastRoute(
           prefixes[index],
           fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
               kNumOfNexthops, kVethNameY)));
     }
     // Add perfevents
     thrift::PerfEvents perfEvents;
-    addPerfEvent(perfEvents, routeDb.thisNodeName, "FIB_INIT_UPDATE");
-    routeDb.perfEvents = perfEvents;
+    addPerfEvent(perfEvents, routeDbDelta.thisNodeName, "FIB_INIT_UPDATE");
+    routeDbDelta.perfEvents = perfEvents;
 
     // Send routeDB to Fib for updates
-    fibWrapper->decisionPub.sendThriftObj(routeDb, fibWrapper->serializer);
+    fibWrapper->decisionPub.sendThriftObj(routeDbDelta, fibWrapper->serializer);
     fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
 
     // Get time information from perf event
@@ -252,15 +253,15 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
   }
 
   // Add customized counters to state.
-  counters["route_receive_ms"] = processTimes[0];
-  counters["route_install_ms"] = processTimes[2];
+  counters["route_receive"] = processTimes[0];
+  counters["route_install"] = processTimes[2];
 }
 
 // The parameter is the number of prefixes sent to fib
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 10);
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 100);
 BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_Fib, counters, 9000);
 
 } // namespace openr
 

@@ -153,10 +153,10 @@ class DecisionWrapper : public OpenrModuleTestBase {
   // member methods
   //
 
-  thrift::RouteDatabase
+  thrift::RouteDatabaseDelta
   recvMyRouteDb() {
     auto maybeRouteDb =
-        decisionPub.recvThriftObj<thrift::RouteDatabase>(serializer);
+        decisionPub.recvThriftObj<thrift::RouteDatabaseDelta>(serializer);
     auto routeDb = maybeRouteDb.value();
     return routeDb;
   }

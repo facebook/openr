@@ -34,6 +34,13 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 
 namespace openr {
+struct RouteDatabaseMap {
+  std::string thisNodeName;
+  folly::Optional<thrift::PerfEvents> perfEvents;
+  std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute> unicastRoutes;
+  std::unordered_map<uint32_t, thrift::MplsRoute> mplsRoutes;
+};
+
 /**
  * Class to store re2 objects, provides API to match string with regex
  */
@@ -479,6 +486,38 @@ createMplsRoutesWithBestNextHops(const std::vector<thrift::MplsRoute>& routes) {
   for (auto const& route : routes) {
     newRoutes.emplace_back(
         createMplsRoute(route.topLabel, getBestNextHopsMpls(route.nextHops)));
+  }
+
+  return newRoutes;
+}
+
+inline std::vector<thrift::UnicastRoute>
+createUnicastRoutesWithBestNextHopsMap(
+    const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
+        unicastRoutes) {
+  // Build routes to be programmed
+  std::vector<thrift::UnicastRoute> newRoutes;
+
+  for (auto const& route : unicastRoutes) {
+    auto newRoute = createUnicastRoute(
+        route.first, getBestNextHopsUnicast(route.second.nextHops));
+    // NOTE: remove after UnicastRoute.deprecatedNexthops is removed
+    newRoute.deprecatedNexthops = createDeprecatedNexthops(newRoute.nextHops);
+    newRoutes.emplace_back(std::move(newRoute));
+  }
+
+  return newRoutes;
+}
+
+inline std::vector<thrift::MplsRoute>
+createMplsRoutesWithBestNextHopsMap(
+    const std::unordered_map<uint32_t, thrift::MplsRoute>& mplsRoutes) {
+  // Build routes to be programmed
+  std::vector<thrift::MplsRoute> newRoutes;
+
+  for (auto const& route : mplsRoutes) {
+    newRoutes.emplace_back(createMplsRoute(
+        route.first, getBestNextHopsMpls(route.second.nextHops)));
   }
 
   return newRoutes;

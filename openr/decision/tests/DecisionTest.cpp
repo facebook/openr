@@ -2878,16 +2878,16 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
     return routeMap;
   }
 
-  thrift::RouteDatabase
+  thrift::RouteDatabaseDelta
   recvMyRouteDb(
       fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT>& decisionPub,
       const string& /* myNodeName */,
       const apache::thrift::CompactSerializer& serializer) {
     auto maybeRouteDb =
-        decisionPub.recvThriftObj<thrift::RouteDatabase>(serializer);
+        decisionPub.recvThriftObj<thrift::RouteDatabaseDelta>(serializer);
     EXPECT_FALSE(maybeRouteDb.hasError());
-    auto routeDb = maybeRouteDb.value();
-    return routeDb;
+    auto routeDbDelta = maybeRouteDb.value();
+    return routeDbDelta;
   }
 
   void
@@ -2955,6 +2955,26 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
     return std::move(future).get();
   }
 
+  /**
+   * Check whether two RouteDatabaseDeltas to be equal
+   */
+  bool
+  checkEqualRoutesDelta(
+      thrift::RouteDatabaseDelta& lhs, thrift::RouteDatabaseDelta& rhs) {
+    std::sort(
+        lhs.unicastRoutesToUpdate.begin(), lhs.unicastRoutesToUpdate.end());
+    std::sort(
+        rhs.unicastRoutesToUpdate.begin(), rhs.unicastRoutesToUpdate.end());
+
+    std::sort(
+        lhs.unicastRoutesToDelete.begin(), lhs.unicastRoutesToDelete.end());
+    std::sort(
+        rhs.unicastRoutesToDelete.begin(), rhs.unicastRoutesToDelete.end());
+
+    return lhs.unicastRoutesToUpdate == rhs.unicastRoutesToUpdate &&
+        lhs.unicastRoutesToDelete == rhs.unicastRoutesToDelete;
+  }
+
   //
   // member variables
   //
@@ -3004,10 +3024,14 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       {},
       {},
       "");
-
+  auto routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
-  auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(1, routeDb.unicastRoutes.size());
+  auto routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  auto routeDb = dumpRouteDb({"1"})["1"];
+  auto routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
+
   RouteMap routeMap;
   fillRouteMap("1", routeMap, routeDb);
 
@@ -3032,14 +3056,17 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       {},
       {},
       "");
-
+  routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
 
   // validate routers
 
-  // receive my local Decision routeDb publication
-  routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
-  EXPECT_EQ(2, routeDb.unicastRoutes.size());
+  // receive my local Decision routeDbDelta publication
+  routeDbDelta = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
+  EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
+  routeDb = dumpRouteDb({"1"})["1"];
+  routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   fillRouteMap("1", routeMap, routeDb);
   // 1
   EXPECT_EQ(
@@ -3085,9 +3112,13 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       {},
       "");
 
+  routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
-  routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
-  EXPECT_EQ(1, routeDb.unicastRoutes.size());
+  routeDbDelta = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
+  routeDb = dumpRouteDb({"1"})["1"];
+  routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
@@ -3126,10 +3157,13 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       {},
       {},
       "");
-
+  auto routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
-  auto routeDb = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(1, routeDb.unicastRoutes.size());
+  auto routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  auto routeDb = dumpRouteDb({"1"})["1"];
+  auto routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   RouteMap routeMap;
   fillRouteMap("1", routeMap, routeDb);
 
@@ -3141,10 +3175,14 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   publication = thrift::Publication(
       FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {}, {}, {}, "");
 
+  routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
-  routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
-  EXPECT_EQ(1, routeDb.unicastRoutes.size());
+  routeDbDelta = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  routeDb = dumpRouteDb({"1"})["1"];
+  routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   routeMap.clear();
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
@@ -3159,11 +3197,14 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       {},
       {},
       "");
-
+  routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
-  routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
-  EXPECT_EQ(1, routeDb.unicastRoutes.size());
+  routeDbDelta = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  routeDb = dumpRouteDb({"1"})["1"];
+  routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   routeMap.clear();
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
@@ -3182,11 +3223,14 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       {},
       {},
       "");
-
+  routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
-  routeDb = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
-  EXPECT_EQ(1, routeDb.unicastRoutes.size());
+  routeDbDelta = recvMyRouteDb(decisionPub, "1" /* node name */, serializer);
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  routeDb = dumpRouteDb({"1"})["1"];
+  routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   routeMap.clear();
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
@@ -3819,9 +3863,10 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   }
 
   // Receive RouteUpdate from Decision
-  auto routes1 = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(999, routes1.unicastRoutes.size()); // Route to all nodes except
-                                                // mine
+  auto routesDelta1 = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(999, routesDelta1.unicastRoutesToUpdate.size()); // Route to all
+                                                             // nodes except
+                                                             // mine
   //
   // Wait until all pending updates are finished
   //
@@ -3837,10 +3882,11 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   newPub.keyVals["prefix:1"] = createPrefixValue("1", 2, {newAddr});
   LOG(INFO) << "Advertising prefix update";
   sendKvPublication(newPub);
-  // Receive RouteUpdate from Decision
-  auto routes2 = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(999, routes2.unicastRoutes.size()); // Route to all nodes except
-                                                // mine
+  // Receive RouteDelta from Decision
+  auto routesDelta2 = recvMyRouteDb(decisionPub, "1", serializer);
+  // Expect no routes delta
+  EXPECT_EQ(0, routesDelta2.unicastRoutesToUpdate.size());
+
   //
   // Verify counters information
   //

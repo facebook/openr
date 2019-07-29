@@ -88,7 +88,12 @@ class Fib final : public OpenrEventLoop {
   /**
    * Process new route updates received from Decision module
    */
-  void processRouteDb(thrift::RouteDatabase&& routeDb);
+  void processRouteDb(thrift::RouteDatabaseDelta&& routeDelta);
+
+  /**
+   * Build a new route database by adding routeDelta to current database
+   */
+  void mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta& routeDelta);
 
   /**
    * Process interface status information from LinkMonitor. We remove all
@@ -139,9 +144,9 @@ class Fib final : public OpenrEventLoop {
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
   folly::Optional<thrift::PerfEvents> maybePerfEvents_;
-  thrift::RouteDatabase routeDb_;
+  RouteDatabaseMap routeDb_;
   // Route DB containing only dry run or not installed routes
-  thrift::RouteDatabase doNotInstallRouteDb_;
+  RouteDatabaseMap doNotInstallRouteDb_;
   std::deque<thrift::PerfEvents> perfDb_;
 
   // indicates we've received a decision route publication and therefore have

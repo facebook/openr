@@ -299,6 +299,8 @@ class Decision : public OpenrEventLoop {
   // the prefix we use to find the prefix db key announcements
   const std::string prefixDbMarker_;
 
+  thrift::RouteDatabase routeDb_;
+
   // URLs for the sockets
   const std::string storeCmdUrl_;
   const std::string storePubUrl_;

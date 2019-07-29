@@ -158,20 +158,21 @@ Fib::prepare() noexcept {
   addSocket(
       fbzmq::RawZmqSocketPtr{*decisionSub_}, ZMQ_POLLIN, [this](int) noexcept {
         VLOG(1) << "Fib: publication received ...";
-        auto maybeThriftObj = decisionSub_.recvThriftObj<thrift::RouteDatabase>(
-            serializer_, Constants::kReadTimeout);
+        auto maybeThriftObj =
+            decisionSub_.recvThriftObj<thrift::RouteDatabaseDelta>(
+                serializer_, Constants::kReadTimeout);
         if (maybeThriftObj.hasError()) {
           LOG(ERROR) << "Error processing decision publication: "
                      << maybeThriftObj.error();
           return;
         }
-        auto& thriftRouteDb = maybeThriftObj.value();
+        auto& thriftDeltaRouteDb = maybeThriftObj.value();
 
-        if (thriftRouteDb.thisNodeName != myNodeName_) {
+        if (thriftDeltaRouteDb.thisNodeName != myNodeName_) {
           LOG(ERROR) << "Received publication from unknown node "
-                     << thriftRouteDb.thisNodeName;
+                     << thriftDeltaRouteDb.thisNodeName;
         } else {
-          processRouteDb(std::move(thriftRouteDb));
+          processRouteDb(std::move(thriftDeltaRouteDb));
         }
       });
 
@@ -213,63 +214,91 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
                  thriftReq.cmd)
           << "` received";
   switch (thriftReq.cmd) {
-  case thrift::FibCommand::ROUTE_DB_GET:
+  case thrift::FibCommand::ROUTE_DB_GET: {
     VLOG(2) << "Fib: RouteDb requested";
     // send the thrift::RouteDatabase
-    return fbzmq::Message::fromThriftObj(routeDb_, serializer_);
+    thrift::RouteDatabase retRouteDb;
+    retRouteDb.thisNodeName = routeDb_.thisNodeName;
+    retRouteDb.perfEvents = routeDb_.perfEvents;
+    for (const auto& route : routeDb_.unicastRoutes) {
+      retRouteDb.unicastRoutes.emplace_back(route.second);
+    }
+    for (const auto& route : routeDb_.mplsRoutes) {
+      retRouteDb.mplsRoutes.emplace_back(route.second);
+    }
+    return fbzmq::Message::fromThriftObj(retRouteDb, serializer_);
     break;
+  }
   case thrift::FibCommand::PERF_DB_GET:
     VLOG(2) << "Fib: PerfDb requested";
     // send the thrift::PerfDatabase
     return fbzmq::Message::fromThriftObj(dumpPerfDb(), serializer_);
     break;
-  case thrift::FibCommand::ROUTE_DB_UNINSTALLABLE_GET:
+  case thrift::FibCommand::ROUTE_DB_UNINSTALLABLE_GET: {
     VLOG(2) << "Fib: Do not install RouteDb requested";
     // send the thrift::RouteDatabase
-    return fbzmq::Message::fromThriftObj(doNotInstallRouteDb_, serializer_);
+    thrift::RouteDatabase retRouteDb;
+    retRouteDb.thisNodeName = doNotInstallRouteDb_.thisNodeName;
+    retRouteDb.perfEvents = doNotInstallRouteDb_.perfEvents;
+    for (const auto& route : doNotInstallRouteDb_.unicastRoutes) {
+      retRouteDb.unicastRoutes.emplace_back(route.second);
+    }
+    return fbzmq::Message::fromThriftObj(retRouteDb, serializer_);
     break;
+  }
   default:
     LOG(ERROR) << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());
   }
 }
 
+/**
+ * Rebuild routeDb_ from routeDelta
+ */
 void
-Fib::processRouteDb(thrift::RouteDatabase&& newRouteDb) {
+Fib::mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta& routeDelta) {
+  // Add unicast routes to update
+  for (auto& route : routeDelta.unicastRoutesToUpdate) {
+    if (route.doNotInstall) {
+      doNotInstallRouteDb_.unicastRoutes[route.dest] = route;
+      // Remove routes that should not be programmed
+      routeDb_.unicastRoutes.erase(route.dest);
+    } else {
+      routeDb_.unicastRoutes[route.dest] = route;
+      doNotInstallRouteDb_.unicastRoutes.erase(route.dest);
+    }
+  }
+
+  // Add mpls routes to update
+  for (const auto& route : routeDelta.mplsRoutesToUpdate) {
+    routeDb_.mplsRoutes[route.topLabel] = route;
+  }
+
+  // Delete unicast routes
+  for (auto& dest : routeDelta.unicastRoutesToDelete) {
+    doNotInstallRouteDb_.unicastRoutes.erase(dest);
+    routeDb_.unicastRoutes.erase(dest);
+  }
+
+  // Delete mpls routes
+  for (const auto& topLabel : routeDelta.mplsRoutesToDelete) {
+    routeDb_.mplsRoutes.erase(topLabel);
+  }
+}
+
+void
+Fib::processRouteDb(thrift::RouteDatabaseDelta&& routeDelta) {
   hasRoutesFromDecision_ = true;
-  thrift::RouteDatabase doNotInstallRouteDb;
-  std::vector<thrift::UnicastRoute> installUnicastRoutes;
-
-  VLOG(2) << "Processing new routes from Decision. "
-          << newRouteDb.unicastRoutes.size() << " unicast routes and "
-          << newRouteDb.mplsRoutes.size() << " mpls routes";
-
   // Update perfEvents_ .. We replace existing perf events with new one as
   // convergence is going to be based on new data, not the old.
-  if (newRouteDb.perfEvents) {
-    maybePerfEvents_ = newRouteDb.perfEvents;
+  if (routeDelta.perfEvents) {
+    maybePerfEvents_ = routeDelta.perfEvents;
     addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_ROUTE_DB_RECVD");
   }
 
-  // remove routes that should not be programmed
-  auto rIter = newRouteDb.unicastRoutes.begin();
-  while (rIter != newRouteDb.unicastRoutes.end()) {
-    if (rIter->doNotInstall) {
-      doNotInstallRouteDb.unicastRoutes.emplace_back(
-          *std::make_move_iterator(rIter));
-    } else {
-      installUnicastRoutes.emplace_back(*std::make_move_iterator(rIter));
-    }
-    ++rIter;
-  }
+  // Update routeDb_
+  mergeRouteDatabaseDelta(routeDelta);
 
-  // Update DB with non dry run routes
-  newRouteDb.unicastRoutes = installUnicastRoutes;
-  // Find out delta to be programmed
-  auto const routeDelta = findDeltaRoutes(newRouteDb, routeDb_);
-  // update new routeDb_
-  routeDb_ = std::move(newRouteDb);
-  doNotInstallRouteDb_ = std::move(doNotInstallRouteDb);
   // Add some counters
   tData_.addStatValue("fib.process_route_db", 1, fbzmq::COUNT);
   // Send request to agent
@@ -306,7 +335,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
        it != routeDb_.unicastRoutes.end();) {
     // Find valid paths
     std::vector<thrift::NextHopThrift> validNextHops;
-    for (auto const& nextHop : it->nextHops) {
+    for (auto const& nextHop : it->second.nextHops) {
       CHECK(nextHop.address.ifName.hasValue());
       if (affectedInterfaces.count(nextHop.address.ifName.value()) == 0) {
         validNextHops.emplace_back(nextHop);
@@ -315,29 +344,29 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
 
     // Add to affected routes only if best path has changed and also reflect
     // changes in routeDb_
-    auto prevBestNextHops = getBestNextHopsUnicast(it->nextHops);
+    auto prevBestNextHops = getBestNextHopsUnicast(it->second.nextHops);
 
     // Find best paths
     auto validBestNextHops = getBestNextHopsUnicast(validNextHops);
 
     // Update valid nexthops
-    it->nextHops = std::move(validNextHops);
+    it->second.nextHops = std::move(validNextHops);
 
     if (validBestNextHops.size() && validBestNextHops != prevBestNextHops) {
-      VLOG(1) << "bestPaths group resize for prefix: " << toString(it->dest)
+      VLOG(1) << "bestPaths group resize for prefix: " << toString(it->first)
               << ", old: " << prevBestNextHops.size()
               << ", new: " << validBestNextHops.size();
       thrift::UnicastRoute route;
-      route.dest = it->dest;
+      route.dest = it->first;
       route.nextHops = std::move(validBestNextHops);
       routeDbDelta.unicastRoutesToUpdate.emplace_back(std::move(route));
     }
 
     // Remove route if no valid paths
-    if (it->nextHops.size() == 0) {
-      VLOG(1) << "Removing prefix " << toString(it->dest)
+    if (it->second.nextHops.size() == 0) {
+      VLOG(1) << "Removing prefix " << toString(it->first)
               << " because of no valid nextHops.";
-      routeDbDelta.unicastRoutesToDelete.emplace_back(it->dest);
+      routeDbDelta.unicastRoutesToDelete.emplace_back(it->first);
       it = routeDb_.unicastRoutes.erase(it);
     } else {
       ++it;
@@ -348,7 +377,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
        it != routeDb_.mplsRoutes.end();) {
     // Find valid paths
     std::vector<thrift::NextHopThrift> validNextHops;
-    for (auto const& nextHop : it->nextHops) {
+    for (auto const& nextHop : it->second.nextHops) {
       // We don't have ifName for `POP_AND_LOOKUP` mpls action
       if (not nextHop.address.ifName.hasValue() or
           affectedInterfaces.count(nextHop.address.ifName.value()) == 0) {
@@ -358,30 +387,30 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
 
     // Add to affected routes only if best path has changed and also reflect
     // changes in routeDb_
-    auto prevBestNextHops = getBestNextHopsMpls(it->nextHops);
+    auto prevBestNextHops = getBestNextHopsMpls(it->second.nextHops);
 
     // Find best paths
     auto validBestNextHops = getBestNextHopsMpls(validNextHops);
 
     // Update valid nexthops
-    it->nextHops = std::move(validNextHops);
+    it->second.nextHops = std::move(validNextHops);
 
     if (validBestNextHops.size() && validBestNextHops != prevBestNextHops) {
-      VLOG(1) << "bestPaths group resize for label: "
-              << std::to_string(it->topLabel)
-              << ", old: " << prevBestNextHops.size()
-              << ", new: " << validBestNextHops.size();
+      VLOG(1)
+          << "bestPaths group resize for label: " << std::to_string(it->first)
+          << ", old: " << prevBestNextHops.size()
+          << ", new: " << validBestNextHops.size();
       thrift::MplsRoute route;
-      route.topLabel = it->topLabel;
+      route.topLabel = it->first;
       route.nextHops = std::move(validBestNextHops);
       routeDbDelta.mplsRoutesToUpdate.emplace_back(std::move(route));
     }
 
     // Remove route if no valid paths
-    if (it->nextHops.size() == 0) {
-      VLOG(1) << "Removing prefix " << std::to_string(it->topLabel)
+    if (it->second.nextHops.size() == 0) {
+      VLOG(1) << "Removing prefix " << std::to_string(it->first)
               << " because of no valid nextHops.";
-      routeDbDelta.mplsRoutesToDelete.emplace_back(it->topLabel);
+      routeDbDelta.mplsRoutesToDelete.emplace_back(it->first);
       it = routeDb_.mplsRoutes.erase(it);
     } else {
       ++it;
@@ -505,9 +534,9 @@ Fib::syncRouteDb() {
             << routeDb_.unicastRoutes.size() << " routes";
 
   const auto& unicastRoutes =
-      createUnicastRoutesWithBestNexthops(routeDb_.unicastRoutes);
+      createUnicastRoutesWithBestNextHopsMap(routeDb_.unicastRoutes);
   const auto& mplsRoutes =
-      createMplsRoutesWithBestNextHops(routeDb_.mplsRoutes);
+      createMplsRoutesWithBestNextHopsMap(routeDb_.mplsRoutes);
 
   // In dry run we just print the routes. No real action
   if (dryrun_) {

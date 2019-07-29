@@ -27,6 +27,7 @@ struct RouteDatabaseDelta {
   3: list<Network.IpPrefix> unicastRoutesToDelete;
   4: list<Network.MplsRoute> mplsRoutesToUpdate
   5: list<i32> mplsRoutesToDelete
+  6: optional Lsdb.PerfEvents perfEvents;
 }
 
 // Perf log buffer maintained by Fib

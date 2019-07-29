@@ -1586,6 +1586,7 @@ Decision::Decision(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       decisionPub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
+  routeDb_.thisNodeName = myNodeName_;
   processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
       this, [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(
@@ -2081,8 +2082,14 @@ Decision::sendRouteUpdate(
   if (db.perfEvents.hasValue()) {
     addPerfEvent(db.perfEvents.value(), myNodeName_, eventDescription);
   }
+
+  // Find out delta to be sent to Fib
+  auto routeDelta = findDeltaRoutes(db, routeDb_);
+  routeDelta.perfEvents = db.perfEvents;
+  routeDb_ = std::move(db);
+
   // publish the new route state
-  auto sendRc = decisionPub_.sendThriftObj(db, serializer_);
+  auto sendRc = decisionPub_.sendThriftObj(routeDelta, serializer_);
   if (sendRc.hasError()) {
     LOG(ERROR) << "Error publishing new routing table: " << sendRc.error();
   }
