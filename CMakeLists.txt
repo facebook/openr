@@ -441,6 +441,40 @@ install(TARGETS
   DESTINATION sbin
 )
 
+option(BUILD_TOOLS "BUILD_TOOLS" ON)
+
+if(BUILD_TOOLS)
+  add_executable(openr_kvstore_snooper
+    openr/kvstore/tools/KvStoreSnooper.cpp
+  )
+
+  target_link_libraries(openr_kvstore_snooper
+    openrlib
+    ${GLOG}
+    ${GFLAGS}
+    ${THRIFT}
+    ${ZSTD}
+    ${THRIFTCPP2}
+    ${ASYNC}
+    ${PROTOCOL}
+    ${TRANSPORT}
+    ${CONCURRENCY}
+    ${THRIFTPROTOCOL}
+    ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
+    ${SODIUM}
+    ${SIGAR}
+    -lboost_system
+    -lpthread
+    -lcrypto
+  )
+
+  install(TARGETS
+    openr_kvstore_snooper
+    DESTINATION sbin
+  )
+endif()
+
 add_executable(platform_linux
   openr/platform/LinuxPlatformMain.cpp
   openr/platform/NetlinkFibHandler.cpp
