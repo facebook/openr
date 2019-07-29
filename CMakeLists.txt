@@ -53,13 +53,13 @@ if(NOT FOLLY_EXCEPTION_TRACER)
 endif()
 
 find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
+find_path(FBZMQ_THRIFT_PATH fbzmq/service/if)
 
 # Include Thrift
 set(
   THRIFT_GENERATE_THRIFT_INCLUDE_DIRECTORIES
   ${CMAKE_SOURCE_DIR}
-  ${CMAKE_INSTALL_PREFIX}/include
-  ${CMAKE_PREFIX_PATH}/${CMAKE_INSTALL_PREFIX}/include
+  ${FBZMQ_THRIFT_PATH}
   CACHE PATH "thrift include directory"
 )
 find_program(THRIFT1 thrift1)
@@ -151,6 +151,19 @@ thrift_object(
 add_dependencies(
   OpenrCtrlCpp-cpp2-obj
   OpenrCtrl-cpp2-obj
+)
+
+add_dependencies(
+  OpenrCtrl-cpp2-obj
+  fb303-cpp2-obj
+  Decision-cpp2-obj
+  Dual-cpp2-obj
+  Fib-cpp2-obj
+  KvStore-cpp2-obj
+  LinkMonitor-cpp2-obj
+  Lsdb-cpp2-obj
+  Network-cpp2-obj
+  HealthChecker-cpp2-obj
 )
 
 add_dependencies(
@@ -328,6 +341,7 @@ add_library(openrlib
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
+  openr/tests/OpenrModuleTestBase.cpp
   openr/watchdog/Watchdog.cpp
   $<TARGET_OBJECTS:fb303-cpp2-obj>
   $<TARGET_OBJECTS:AllocPrefix-cpp2-obj>

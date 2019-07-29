@@ -351,7 +351,7 @@ class NlMessageFixture : public ::testing::Test {
   }
 
   std::vector<openr::fbnl::Route>
-  buildV6RouteDb(int count) {
+  buildV6RouteDb(uint32_t count) {
     std::vector<openr::fbnl::Route> routes;
     std::vector<openr::fbnl::NextHop> paths;
     paths.push_back(buildNextHop(
@@ -387,7 +387,7 @@ class NlMessageFixture : public ::testing::Test {
   }
 
   std::vector<openr::fbnl::Route>
-  buildV4RouteDb(int count) {
+  buildV4RouteDb(uint32_t count) {
     std::vector<openr::fbnl::Route> routes;
     std::vector<openr::fbnl::NextHop> paths;
     // create mix of next hops, including without label

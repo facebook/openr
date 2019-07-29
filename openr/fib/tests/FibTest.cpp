@@ -344,7 +344,6 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
   decisionPub.sendThriftObj(routeDbDelta, serializer).value();
 
-  int64_t countAdd = mockFibHandler->getAddRoutesCount();
   // add routes
   mockFibHandler->waitForUpdateUnicastRoutes();
 
@@ -369,7 +368,6 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   intfChange_1.perfEvents = folly::none;
   lmPub.sendThriftObj(intfChange_1, serializer).value();
 
-  countAdd = mockFibHandler->getAddRoutesCount();
   // update routes
   mockFibHandler->waitForUpdateUnicastRoutes();
 
@@ -399,7 +397,6 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   intfChange_2.perfEvents = folly::none;
   lmPub.sendThriftObj(intfChange_2, serializer).value();
 
-  int64_t countDel = mockFibHandler->getDelRoutesCount();
   // remove routes
   mockFibHandler->waitForUpdateUnicastRoutes();
 

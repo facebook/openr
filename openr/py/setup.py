@@ -32,12 +32,19 @@ def generate_thrift_files():
 
     current_dir = os.path.dirname(os.path.realpath(__file__))
     root_dir = os.path.dirname(os.path.dirname(current_dir))
-    top_dirs = [
-        os.path.join(root_dir, "openr/if"),
-        os.path.join(root_dir, "common"),
-        os.path.join(root_dir, "fbzmq"),
-    ]
+    top_dirs = [os.path.join(root_dir, "openr/if"), os.path.join(root_dir, "common")]
     exclude_files = ["OpenrCtrlCpp"]
+
+    def get_include_dir(base_path, pattern):
+        for dir_name in Path(base_path).rglob("*/usr/include/"):
+            # ONLY dir which contains "pattern" is the targeted path
+            if sorted(dir_name.rglob(pattern)):
+                return str(dir_name.absolute())
+        return ""
+
+    # find "usr/include" dir which contains "fbzmq" for thrift generation usage
+    fbzmq_thrift_pattern = "fbzmq/service/if/*.thrift"
+    usr_include_dir = get_include_dir(os.path.dirname(root_dir), fbzmq_thrift_pattern)
 
     for top_dir in top_dirs:
         for thrift_file in Path(top_dir).rglob("*.thrift"):
@@ -51,6 +58,8 @@ def generate_thrift_files():
                     "py",
                     "-I",
                     root_dir,
+                    "-I",
+                    usr_include_dir,
                     "--out",
                     current_dir,
                     str(thrift_file),
