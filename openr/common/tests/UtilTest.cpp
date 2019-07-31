@@ -94,14 +94,14 @@ const auto path1_2_2_pop = createNextHop(
     createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP));
 
 struct PrefixKeyEntry {
-  bool shouldPass;
-  std::string pkey;
-  std::string node;
+  bool shouldPass{false};
+  std::string pkey{};
+  std::string node{};
   folly::CIDRNetwork ipaddr;
-  int area;
+  int area{0};
   thrift::IpPrefix ipPrefix;
   folly::IPAddress addr;
-  int plen;
+  int plen{0};
 };
 
 TEST(UtilTest, PrefixKeyTest) {

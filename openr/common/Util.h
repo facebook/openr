@@ -54,7 +54,7 @@ class KeyPrefix {
 };
 
 /**
- * PrefixKey class to form and parse a PrefixKey. PrefixKey can be instantialed
+ * PrefixKey class to form and parse a PrefixKey. PrefixKey can be instantiated
  * by passing parameters to form a key, or by passing the key string to parse
  * and populate the parameters. In case the parsing fails all the parameters
  * are set to folly::none
@@ -63,7 +63,8 @@ class KeyPrefix {
 class PrefixKey {
  public:
   // constructor using IP address, type and and subtype
-  PrefixKey(std::string const& node, folly::CIDRNetwork const& ip, int area);
+  PrefixKey(
+      std::string const& node, folly::CIDRNetwork const& prefix, int area);
 
   // construct PrefixKey object from a give key string
   static folly::Expected<PrefixKey, std::string> fromStr(
@@ -100,7 +101,7 @@ class PrefixKey {
   std::string node_{};
 
   // IP address
-  folly::CIDRNetwork ipaddress_;
+  folly::CIDRNetwork prefix_;
 
   // prefix sub type
   int prefixArea_{0};

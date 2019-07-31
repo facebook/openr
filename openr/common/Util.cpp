@@ -51,17 +51,17 @@ KeyPrefix::keyMatch(std::string const& key) const {
 }
 
 PrefixKey::PrefixKey(
-    std::string const& node, folly::CIDRNetwork const& ip, int area)
+    std::string const& node, folly::CIDRNetwork const& prefix, int area)
     : node_(node),
-      ipaddress_(ip),
+      prefix_(prefix),
       prefixArea_(area),
       prefixKeyString_(folly::sformat(
           "{}{}:{}:[{}/{}]",
           Constants::kPrefixDbMarker.toString(),
           node_,
           prefixArea_,
-          ipaddress_.first.str(),
-          ipaddress_.second)) {}
+          prefix_.first.str(),
+          prefix_.second)) {}
 
 folly::Expected<PrefixKey, std::string>
 PrefixKey::fromStr(const std::string& key) {
@@ -91,7 +91,7 @@ PrefixKey::getNodeName() const {
 
 folly::CIDRNetwork
 PrefixKey::getCIDRNetwork() const {
-  return ipaddress_;
+  return prefix_;
 }
 
 std::string
@@ -106,7 +106,7 @@ PrefixKey::getPrefixArea() const {
 
 thrift::IpPrefix
 PrefixKey::getIpPrefix() const {
-  return toIpPrefix(ipaddress_);
+  return toIpPrefix(prefix_);
 }
 
 int

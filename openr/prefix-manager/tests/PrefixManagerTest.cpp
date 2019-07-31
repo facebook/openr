@@ -670,7 +670,7 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
     return;
   }
 
-  std::chrono::milliseconds ttl{50};
+  std::chrono::milliseconds ttl{100};
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
