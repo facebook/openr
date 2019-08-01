@@ -58,12 +58,17 @@ isInterfaceUp(std::string interface) {
   memset(&ifr, 0, sizeof(ifr));
   strcpy(ifr.ifr_name, interface.c_str());
 
-  if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) {
-    LOG(ERROR) << "Failed to get SIOCGIFFLAGS";
-  }
+  int ret = ioctl(sock, SIOCGIFFLAGS, &ifr);
   close(sock);
 
-  bool up = ifr.ifr_flags & IFF_UP;
+  bool up = false;
+  if (ret >= 0) {
+    up = ifr.ifr_flags & IFF_UP;
+  } else {
+    LOG(WARNING) << "Failed to get SIOCGIFFLAGS, interface may not exist";
+    return false;
+  }
+
   VLOG(10) << folly::sformat(
       "Detected interface {} is {}", interface, up ? "up" : "down");
   return up;
