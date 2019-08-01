@@ -111,6 +111,18 @@ NetlinkMessage::setReturnStatus(int status) {
   promise_->setValue(status);
 }
 
+// get Message Type
+NetlinkMessage::MessageType
+NetlinkMessage::getMessageType() const {
+  return messageType_;
+}
+
+// set Message Type
+void
+NetlinkMessage::setMessageType(NetlinkMessage::MessageType type) {
+  messageType_ = type;
+}
+
 NetlinkProtocolSocket::NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
     : evl_(evl) {
   nlMessageTimer_ = fbzmq::ZmqTimeout::make(evl_, [this]() noexcept {
@@ -273,7 +285,8 @@ NetlinkProtocolSocket::processMessage(
       break;
     }
 
-    VLOG(2) << "Received Netlink message of type " << nlh->nlmsg_type;
+    VLOG(2) << "Received Netlink message of type " << nlh->nlmsg_type
+            << " seq no " << nlh->nlmsg_seq;
     switch (nlh->nlmsg_type) {
     case RTM_NEWROUTE:
     case RTM_DELROUTE: {
@@ -311,10 +324,27 @@ NetlinkProtocolSocket::processMessage(
       if (!addr.getPrefix().hasValue()) {
         break;
       }
-      // Valid address
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
-        // Synchronous event - do not generate addr events
-        addressCache_.emplace_back(addr);
+        // Response to a corresponding request
+        auto request = nlSeqNoMap_.at(nlh->nlmsg_seq);
+        if (request->getMessageType() ==
+            NetlinkMessage::MessageType::GET_ALL_ADDRS) {
+          // Message in response to get addresses, store in address cache
+          addressCache_.emplace_back(addr);
+        } else if (
+            request->getMessageType() ==
+                NetlinkMessage::MessageType::ADD_ADDR ||
+            request->getMessageType() ==
+                NetlinkMessage::MessageType::DEL_ADDR) {
+          /* Response to a add/del request - generate addr event for handler.
+          This occurs when we add/del IPv4 addresses generates address event
+          with the same sequence as the original request */
+          if (addrEventCB_) {
+            // Asynchronous event - generate addr event for handler
+            VLOG(0) << "Asynchronous Addr Event: " << addr.str();
+            addrEventCB_(addr, action, true);
+          }
+        }
       } else if (addrEventCB_) {
         // Asynchronous event - generate addr event for handler
         VLOG(0) << "Asynchronous Addr Event: " << addr.str();
@@ -586,6 +616,47 @@ NetlinkProtocolSocket::deleteRoutes(
       kNlRequestTimeout);
 }
 
+ResultCode
+NetlinkProtocolSocket::addIfAddress(const openr::fbnl::IfAddress& ifAddr) {
+  auto addrMsg = std::make_unique<openr::Netlink::NetlinkAddrMessage>();
+  std::vector<folly::Future<int>> futures;
+  futures.emplace_back(addrMsg->getFuture());
+
+  // Initialize Netlink message fields to add interface address
+  addrMsg->setMessageType(NetlinkMessage::MessageType::ADD_ADDR);
+  ResultCode status = addrMsg->addOrDeleteIfAddress(ifAddr, RTM_NEWADDR);
+  if (status != ResultCode::SUCCESS) {
+    return status;
+  }
+  std::vector<std::unique_ptr<NetlinkMessage>> msg;
+  msg.emplace_back(std::move(addrMsg));
+  addNetlinkMessage(std::move(msg));
+
+  // Ignore EEXIST error in add address operation (address already present)
+  return getReturnStatus(futures, std::unordered_set<int>{EEXIST});
+}
+
+ResultCode
+NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
+  auto addrMsg = std::make_unique<openr::Netlink::NetlinkAddrMessage>();
+  std::vector<folly::Future<int>> futures;
+  futures.emplace_back(addrMsg->getFuture());
+
+  // Initialize Netlink message fields to delete interface address
+  addrMsg->setMessageType(NetlinkMessage::MessageType::DEL_ADDR);
+  ResultCode status = addrMsg->addOrDeleteIfAddress(ifAddr, RTM_DELADDR);
+  if (status != ResultCode::SUCCESS) {
+    return status;
+  }
+  std::vector<std::unique_ptr<NetlinkMessage>> msg;
+  msg.emplace_back(std::move(addrMsg));
+  addNetlinkMessage(std::move(msg));
+
+  // Ignore EADDRNOTAVAIL error in delete
+  // (occurs when trying to delete address not assigned to interface)
+  return getReturnStatus(futures, std::unordered_set<int>{EADDRNOTAVAIL});
+}
+
 std::vector<fbnl::Link>
 NetlinkProtocolSocket::getAllLinks() {
   // Refresh internal cache
@@ -609,7 +680,11 @@ NetlinkProtocolSocket::getAllIfAddresses() {
   auto addrMsg = std::make_unique<openr::Netlink::NetlinkAddrMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(addrMsg->getFuture());
-  addrMsg->init(RTM_GETADDR, 0);
+
+  // Initialize Netlink message fields to get all addresses
+  addrMsg->init(RTM_GETADDR);
+  addrMsg->setMessageType(NetlinkMessage::MessageType::GET_ALL_ADDRS);
+
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   msg.emplace_back(std::move(addrMsg));
   addNetlinkMessage(std::move(msg));

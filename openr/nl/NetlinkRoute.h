@@ -161,6 +161,7 @@ class NetlinkLinkMessage final : public NetlinkMessage {
   // initiallize link message with default params
   void init(int type, uint32_t flags);
 
+  // parse Netlink Link message
   fbnl::Link parseMessage(const struct nlmsghdr* nlh) const;
 
  private:
@@ -176,9 +177,15 @@ class NetlinkAddrMessage final : public NetlinkMessage {
   NetlinkAddrMessage();
 
   // initiallize address message with default params
-  void init(int type, uint32_t flags);
+  void init(int type);
 
+  // parse Netlink Address message
   fbnl::IfAddress parseMessage(const struct nlmsghdr* nlh) const;
+
+  // create netlink message to add/delete interface address
+  // type - RTM_NEWADDR or RTM_DELADDR
+  ResultCode addOrDeleteIfAddress(
+      const openr::fbnl::IfAddress& ifAddr, const int type);
 
  private:
   // pointer to interface message header
@@ -195,6 +202,7 @@ class NetlinkNeighborMessage final : public NetlinkMessage {
   // initiallize neighbor message with default params
   void init(int type, uint32_t flags);
 
+  // parse Netlink Neighbor message
   fbnl::Neighbor parseMessage(const struct nlmsghdr* nlh) const;
 
  private:

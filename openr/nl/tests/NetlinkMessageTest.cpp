@@ -242,6 +242,31 @@ class NlMessageFixture : public ::testing::Test {
     return routeCount;
   }
 
+  // Check if if address is present in addresses obtained from kernel
+  bool
+  checkAddressInKernelAddresses(
+      const std::vector<fbnl::IfAddress>& kernelAddresses,
+      const fbnl::IfAddress& addr) {
+    for (auto& kernelAddr : kernelAddresses) {
+      if (addr == kernelAddr) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // find count of addresses present in the kernel addresses
+  int
+  findAddressesInKernelAddresses(
+      const std::vector<fbnl::IfAddress>& kernelAddresses,
+      const std::vector<fbnl::IfAddress>& addresses) {
+    int addrCount{0};
+    for (auto& addr : addresses) {
+      addrCount += checkAddressInKernelAddresses(kernelAddresses, addr) ? 1 : 0;
+    }
+    return addrCount;
+  }
+
  private:
   static void
   bringUpIntf(const std::string& ifName) {
@@ -1281,6 +1306,76 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   // verify route deletions
   kernelRoutes = nlSock->getAllRoutes();
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, labelRoutes), 0);
+}
+
+// Add and remove 250 IPv4 and IPv6 addresses (total 500)
+TEST_F(NlMessageFixture, AddrScaleTest) {
+  const int addrCount{250};
+
+  auto links = nlSock->getAllLinks();
+  // Find kVethNameX
+  int ifIndexX{-1};
+  for (const auto& link : links) {
+    if (link.getLinkName() == kVethNameX) {
+      ifIndexX = link.getIfIndex();
+    }
+  }
+  EXPECT_NE(ifIndexX, -1);
+
+  ResultCode status;
+  std::vector<fbnl::IfAddress> ifAddresses;
+  for (int i = 0; i < addrCount; i++) {
+    openr::fbnl::IfAddressBuilder builder;
+    folly::CIDRNetwork prefix1{
+        folly::IPAddress("face:d00d::" + std::to_string(i)), 128};
+    auto ifAddr = builder.setPrefix(prefix1)
+                      .setIfIndex(ifIndexX)
+                      .setScope(RT_SCOPE_UNIVERSE)
+                      .setValid(true)
+                      .build();
+    status = nlSock->addIfAddress(ifAddr);
+    EXPECT_EQ(status, ResultCode::SUCCESS);
+    ifAddresses.emplace_back(ifAddr);
+
+    openr::fbnl::IfAddressBuilder ipv4builder;
+    folly::CIDRNetwork prefix2{
+        folly::IPAddress("10.0." + std::to_string(i) + ".0"), 32};
+    auto ifAddrV4 = ipv4builder.setPrefix(prefix2)
+                        .setIfIndex(ifIndexX)
+                        .setScope(RT_SCOPE_UNIVERSE)
+                        .setValid(true)
+                        .build();
+    status = nlSock->addIfAddress(ifAddrV4);
+    EXPECT_EQ(status, ResultCode::SUCCESS);
+    ifAddresses.emplace_back(ifAddrV4);
+  }
+
+  // Verify if addresses have been added
+  auto kernelAddresses = nlSock->getAllIfAddresses();
+  EXPECT_EQ(
+      2 * addrCount,
+      findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
+
+  for (int i = 0; i < addrCount; i++) {
+    openr::fbnl::IfAddressBuilder builder;
+    folly::CIDRNetwork prefix1{
+        folly::IPAddress("face:d00d::" + std::to_string(i)), 128};
+    builder.setPrefix(prefix1).setIfIndex(ifIndexX).setScope(RT_SCOPE_UNIVERSE);
+    status = nlSock->deleteIfAddress(builder.build());
+    EXPECT_EQ(status, ResultCode::SUCCESS);
+
+    openr::fbnl::IfAddressBuilder ipv4builder;
+    folly::CIDRNetwork prefix2{
+        folly::IPAddress("10.0." + std::to_string(i) + ".0"), 32};
+    ipv4builder.setPrefix(prefix2).setIfIndex(ifIndexX).setScope(
+        RT_SCOPE_UNIVERSE);
+    status = nlSock->deleteIfAddress(ipv4builder.build());
+    EXPECT_EQ(status, ResultCode::SUCCESS);
+  }
+
+  // Verify if addresses have been deleted
+  kernelAddresses = nlSock->getAllIfAddresses();
+  EXPECT_EQ(0, findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
 }
 
 TEST_F(NlMessageFixture, GetAllNeighbors) {

@@ -53,6 +53,7 @@ enum class ResultCode {
   NO_NEXTHOP_IP,
   NO_LOOPBACK_INDEX,
   UNKNOWN_LABEL_ACTION,
+  NO_IP
 };
 
 class NetlinkMessage {
@@ -78,6 +79,31 @@ class NetlinkMessage {
   void setReturnStatus(int status);
 
   folly::Future<int> getFuture();
+
+  /* Netlink MessageType denotes the type of request sent to the kernel, so that
+   * when we receive a response from the kernel (matched by sequence number), we
+   * can process them accordingly based on the request. For example, when we get
+   a RTM_NEWADDR packet, it could correspond to GET_ALL_ADDRS or
+   ADD_ADDR and NetlinkProtocolSocket will invoke the address callback
+   only for ADD_ADDR */
+  enum class MessageType {
+    GET_ALL_LINKS,
+    GET_ALL_ADDRS,
+    GET_ADDR,
+    ADD_ADDR,
+    DEL_ADDR,
+    GET_ALL_NEIGHBORS,
+    GET_ALL_ROUTES,
+    GET_ROUTE,
+    ADD_ROUTE,
+    DEL_ROUTE
+  } messageType_;
+
+  // get Message Type
+  NetlinkMessage::MessageType getMessageType() const;
+
+  // set Message Type
+  void setMessageType(NetlinkMessage::MessageType type);
 
  protected:
   // add TLV attributes, specify the length and size of data
@@ -157,6 +183,12 @@ class NetlinkProtocolSocket {
 
   // synchronous delete a list of given IP or label routes
   ResultCode deleteRoutes(const std::vector<openr::fbnl::Route> routes);
+
+  // synchronous add interface address
+  ResultCode addIfAddress(const openr::fbnl::IfAddress& ifAddr);
+
+  // synchronous delete interface address
+  ResultCode deleteIfAddress(const openr::fbnl::IfAddress& ifAddr);
 
   // add netlink message to the queue
   void addNetlinkMessage(std::vector<std::unique_ptr<NetlinkMessage>> nlmsg);

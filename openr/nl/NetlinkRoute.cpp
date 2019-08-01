@@ -780,7 +780,7 @@ NetlinkAddrMessage::NetlinkAddrMessage() {
 }
 
 void
-NetlinkAddrMessage::init(int type, uint32_t addrFlags) {
+NetlinkAddrMessage::init(int type) {
   if (type != RTM_NEWADDR && type != RTM_DELADDR && type != RTM_GETADDR) {
     LOG(ERROR) << "Incorrect Netlink message type";
     return;
@@ -795,11 +795,56 @@ NetlinkAddrMessage::init(int type, uint32_t addrFlags) {
     msghdr_->nlmsg_flags |= NLM_F_DUMP;
   }
 
+  if (type == RTM_NEWADDR) {
+    msghdr_->nlmsg_flags |= NLM_F_CREATE;
+  }
+
   // intialize the route address message header
   auto nlmsgAlen = NLMSG_ALIGN(sizeof(struct nlmsghdr));
   ifaddrmsg_ = reinterpret_cast<struct ifaddrmsg*>((char*)msghdr_ + nlmsgAlen);
+}
 
-  ifaddrmsg_->ifa_flags = addrFlags;
+ResultCode
+NetlinkAddrMessage::addOrDeleteIfAddress(
+    const openr::fbnl::IfAddress& ifAddr, const int type) {
+  if (type != RTM_NEWADDR && type != RTM_DELADDR) {
+    LOG(ERROR) << "Incorrect Netlink message type";
+    return ResultCode::FAIL;
+  } else if (ifAddr.getFamily() != AF_INET && ifAddr.getFamily() != AF_INET6) {
+    LOG(ERROR) << "Invalid address family" << ifAddr.str();
+    return ResultCode::INVALID_ADDRESS_FAMILY;
+  } else if (!ifAddr.getPrefix().hasValue()) {
+    // No IP address given
+    LOG(ERROR) << "No IP address given to add " << ifAddr.str();
+    return ResultCode::NO_IP;
+  }
+
+  LOG(INFO) << (type == RTM_NEWADDR ? "Adding" : "Deleting") << " IP address "
+            << ifAddr.str();
+  init(type);
+  // initialize netlink address fields
+  auto ip = std::get<0>(ifAddr.getPrefix().value());
+  uint8_t prefixLen = std::get<1>(ifAddr.getPrefix().value());
+  ifaddrmsg_->ifa_family = ifAddr.getFamily();
+  ifaddrmsg_->ifa_prefixlen = prefixLen;
+  ifaddrmsg_->ifa_flags =
+      (ifAddr.getFlags().hasValue() ? ifAddr.getFlags().value() : 0);
+  if (ifAddr.getScope().hasValue()) {
+    ifaddrmsg_->ifa_scope = ifAddr.getScope().value();
+  }
+  ifaddrmsg_->ifa_index = ifAddr.getIfIndex();
+
+  const char* const ipptr = reinterpret_cast<const char*>(ip.bytes());
+  ResultCode status{ResultCode::SUCCESS};
+  status = addAttributes(IFA_ADDRESS, ipptr, ip.byteCount(), msghdr_);
+  if (status != ResultCode::SUCCESS) {
+    return status;
+  }
+  // For IPv4, need to specify the ip address in IFA_LOCAL attribute as well
+  // for point-to-point interfaces
+  // For IPv6, the extra attribute has no effect
+  status = addAttributes(IFA_LOCAL, ipptr, ip.byteCount(), msghdr_);
+  return status;
 }
 
 fbnl::IfAddress

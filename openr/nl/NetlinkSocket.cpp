@@ -115,6 +115,10 @@ NetlinkSocket::NetlinkSocket(
 
   if (useNetlinkMessage_) {
     CHECK(nlSock_ != nullptr) << "Missing NetlinkProtocolSocket";
+
+    // Instantiate local link and neighbor caches
+    getAllReachableNeighbors().get();
+
     // Pass link and address callbacks to NetlinkProtocolSocket
     nlSock_->setLinkEventCB([this](
         openr::fbnl::Link link, int action, bool runHandler) noexcept {
@@ -145,8 +149,6 @@ NetlinkSocket::NetlinkSocket(
         doHandleNeighborEvent(neigh, action, runHandler);
       });
     });
-    // Instantiate local link and neighbor caches
-    getAllReachableNeighbors().get();
   }
 
   // need to reload routes from kernel to avoid re-adding existing route
@@ -1201,18 +1203,27 @@ NetlinkSocket::getIfName(int ifIndex) const {
 
 folly::Future<folly::Unit>
 NetlinkSocket::addIfAddress(IfAddress ifAddress) {
-  VLOG(3) << "NetlinkSocket add IfAddress...";
+  LOG(INFO) << "NetlinkSocket add IfAddress... " << ifAddress.str();
 
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
 
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), addr = std::move(ifAddress)]() mutable {
-        try {
-          doAddIfAddress(addr.getRtnlAddrRef());
-          p.setValue();
-        } catch (const std::exception& ex) {
-          p.setException(ex);
+        if (useNetlinkMessage_) {
+          int err = static_cast<int>(nlSock_->addIfAddress(addr));
+          if (err == 0) {
+            p.setValue();
+          } else {
+            p.setException(fbnl::NlException("Failed to add If Address"));
+          }
+        } else {
+          try {
+            doAddIfAddress(addr.getRtnlAddrRef());
+            p.setValue();
+          } catch (const std::exception& ex) {
+            p.setException(ex);
+          }
         }
       });
   return future;
@@ -1234,7 +1245,7 @@ NetlinkSocket::doAddIfAddress(struct rtnl_addr* addr) {
 
 folly::Future<folly::Unit>
 NetlinkSocket::delIfAddress(IfAddress ifAddress) {
-  VLOG(3) << "Netlink delete IfAddress...";
+  LOG(INFO) << "Netlink delete IfAddress... " << ifAddress.str();
 
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
@@ -1245,12 +1256,21 @@ NetlinkSocket::delIfAddress(IfAddress ifAddress) {
   }
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), ifAddr = std::move(ifAddress)]() mutable {
-        struct rtnl_addr* addr = ifAddr.getRtnlAddrRef();
-        try {
-          doDeleteAddr(addr);
-          p.setValue();
-        } catch (const std::exception& ex) {
-          p.setException(ex);
+        if (useNetlinkMessage_) {
+          int err = static_cast<int>(nlSock_->deleteIfAddress(ifAddr));
+          if (err == 0) {
+            p.setValue();
+          } else {
+            p.setException(fbnl::NlException("Failed to delete If Address"));
+          }
+        } else {
+          struct rtnl_addr* addr = ifAddr.getRtnlAddrRef();
+          try {
+            doDeleteAddr(addr);
+            p.setValue();
+          } catch (const std::exception& ex) {
+            p.setException(ex);
+          }
         }
       });
   return future;
@@ -1259,7 +1279,7 @@ NetlinkSocket::delIfAddress(IfAddress ifAddress) {
 folly::Future<folly::Unit>
 NetlinkSocket::syncIfAddress(
     int ifIndex, std::vector<IfAddress> addresses, int family, int scope) {
-  VLOG(3) << "Netlink sync IfAddress...";
+  LOG(INFO) << "Netlink sync IfAddress...";
 
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
@@ -1281,18 +1301,50 @@ NetlinkSocket::syncIfAddress(
 
 folly::Future<std::vector<IfAddress>>
 NetlinkSocket::getIfAddrs(int ifIndex, int family, int scope) {
-  VLOG(3) << "Netlink get IfaceAddrs...";
+  VLOG(2) << "Netlink get IfaceAddrs...";
 
   folly::Promise<std::vector<IfAddress>> promise;
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), ifIndex, family, scope]() mutable {
-        try {
+        if (useNetlinkMessage_) {
           std::vector<IfAddress> addrs;
-          doGetIfAddrs(ifIndex, family, scope, addrs);
+          std::vector<fbnl::IfAddress> allAddrs = nlSock_->getAllIfAddresses();
+          for (auto& addr : allAddrs) {
+            // Check if addr fits the filtering parameters
+            if (family != AF_UNSPEC && family != addr.getFamily()) {
+              continue;
+            }
+            auto addrScope = addr.getScope().hasValue()
+                ? addr.getScope().value()
+                : 0; // RT_SCOPE_UNIVERSE
+            if (scope != RT_SCOPE_NOWHERE && scope != addrScope) {
+              continue;
+            }
+            if (ifIndex != addr.getIfIndex()) {
+              continue;
+            }
+            if (!addr.getPrefix().hasValue()) {
+              continue;
+            }
+
+            fbnl::IfAddressBuilder ifBuilder;
+            auto ifAddr =
+                ifBuilder.setPrefix(std::move(addr.getPrefix().value()))
+                    .setIfIndex(ifIndex)
+                    .setScope(scope)
+                    .build();
+            addrs.emplace_back(std::move(ifAddr));
+          }
           p.setValue(std::move(addrs));
-        } catch (const std::exception& ex) {
-          p.setException(ex);
+        } else {
+          try {
+            std::vector<IfAddress> addrs;
+            doGetIfAddrs(ifIndex, family, scope, addrs);
+            p.setValue(std::move(addrs));
+          } catch (const std::exception& ex) {
+            p.setException(ex);
+          }
         }
       });
   return future;
@@ -1301,7 +1353,6 @@ NetlinkSocket::getIfAddrs(int ifIndex, int family, int scope) {
 void
 NetlinkSocket::doSyncIfAddress(
     int ifIndex, std::vector<IfAddress> addrs, int family, int scope) {
-  // Check ifindex and prefix
   std::vector<folly::CIDRNetwork> newPrefixes;
   for (const auto& addr : addrs) {
     if (addr.getIfIndex() != ifIndex) {
@@ -1335,7 +1386,7 @@ NetlinkSocket::doSyncIfAddress(
   // Do add first, because in Linux deleting the only IP will cause if down.
   // Add new address, existed addresses will be ignored
   for (auto& addr : addrs) {
-    doAddIfAddress(addr.getRtnlAddrRef());
+    addIfAddress(addr);
   }
 
   // Delete deprecated addresses
@@ -1343,7 +1394,7 @@ NetlinkSocket::doSyncIfAddress(
   for (const auto& toDel : toDeletePrefixes) {
     auto delAddr =
         builder.setIfIndex(ifIndex).setPrefix(toDel).setScope(scope).build();
-    doDeleteAddr(delAddr.getRtnlAddrRef());
+    delIfAddress(delAddr);
   }
 }
 
