@@ -21,15 +21,6 @@ namespace fbnl {
 
 using EventVariant = boost::variant<Route, Neighbor, IfAddress, Link>;
 
-struct GetAddrsFuncCtx {
-  GetAddrsFuncCtx(int addrIfIndex, int addrFamily, int addrScope)
-      : ifIndex(addrIfIndex), family(addrFamily), scope(addrScope) {}
-  int ifIndex{0};
-  int family{AF_UNSPEC};
-  int scope{RT_SCOPE_NOWHERE};
-  std::vector<fbnl::IfAddress> addrs;
-};
-
 struct PrefixCmp {
   bool
   operator()(const folly::CIDRNetwork& lhs, const folly::CIDRNetwork& rhs) {
@@ -65,14 +56,8 @@ struct PrefixCmp {
  *   main thread. They should however not be called from within the registered
  *   handlers in the EventHandler object provided below (there should be no good
  *   reason to anyway) Internally, the user provided Handler funcs and get*()
- *   methods both update the same internal libnl cache, which we protect by
- *   serializing calls into a sigle eventloop.
- *
- *   Further, getAllLinks() / getAllReachableNeighbors() will internally request
- *   refill of libnl caches. This will trigger user regiseterd Handler func to
- *   be invoked in the context of the calling thread (main thread for example)
- *   User should therefore not expect to have registered handler funcs be
- *   invoked only in the context of zmq event loop thread
+ *   methods both update the same cache, which we protect by
+ *   serializing calls into a single eventloop.
  */
 class NetlinkSocket {
  public:
@@ -85,11 +70,8 @@ class NetlinkSocket {
 
     // Callback invoked by NetlinkSocket when registered event happens
     void
-    handleEvent(
-        const std::string& ifName,
-        int action,
-        const EventVariant& event) noexcept {
-      boost::apply_visitor(EventVisitor(ifName, action, this), event);
+    handleEvent(const std::string& ifName, const EventVariant& event) noexcept {
+      boost::apply_visitor(EventVisitor(ifName, this), event);
     }
 
     virtual void
@@ -156,10 +138,9 @@ class NetlinkSocket {
 
   struct EventVisitor : public boost::static_visitor<> {
     std::string linkName;
-    int eventAction; // NL_ACT_DEL, NL_ACT_NEW
     EventsHandler* eventHandler;
-    EventVisitor(const std::string& ifName, int action, EventsHandler* handler)
-        : linkName(ifName), eventAction(action), eventHandler(handler) {}
+    EventVisitor(const std::string& ifName, EventsHandler* handler)
+        : linkName(ifName), eventHandler(handler) {}
 
     void
     operator()(openr::fbnl::Route const& route) const {
@@ -185,7 +166,6 @@ class NetlinkSocket {
   explicit NetlinkSocket(
       fbzmq::ZmqEventLoop* evl,
       EventsHandler* handler = nullptr,
-      bool useNetlinkMessage = false,
       std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock = nullptr);
 
   virtual ~NetlinkSocket();
@@ -326,14 +306,14 @@ class NetlinkSocket {
       int ifIndex, std::vector<fbnl::IfAddress> addrs, int family, int scope);
 
   /**
-   * Get iface address list according
+   * Get iface address list on ifIndex filtered on family and scope
    */
   virtual folly::Future<std::vector<fbnl::IfAddress>> getIfAddrs(
       int ifIndex, int family, int scope);
 
   /**
    * Get interface index from name
-   * 0 means no such interface
+   * -1 means no such interface
    * @throws fbnl::NlException
    */
   virtual folly::Future<int> getIfIndex(const std::string& ifName);
@@ -390,47 +370,14 @@ class NetlinkSocket {
       std::function<void(const NeighborUpdate& neighborUpdate)> callback);
 
  private:
-  // This is the callback we pass into libnl when data is ready on the socket
-  // The opaque data will contain the user registered EventHandler
-  // These are static to match C function vector prototype
-  static void routeCacheCB(
-      struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
-
-  static void linkCacheCB(
-      struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
-
-  static void addrCacheCB(
-      struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
-
-  static void neighCacheCB(
-      struct nl_cache*, struct nl_object* obj, int action, void* data) noexcept;
-
-  void handleRouteEvent(
-      nl_object* obj,
-      int action,
-      bool runHandler,
-      bool updateUnicastRoute) noexcept;
-
   void doHandleRouteEvent(
-      Route route,
-      int action,
-      bool runHandler,
-      bool updateUnicastRoute) noexcept;
+      Route route, bool runHandler, bool updateUnicastRoute) noexcept;
 
-  void handleLinkEvent(nl_object* obj, int action, bool runHandler) noexcept;
+  void doHandleLinkEvent(Link link, bool runHandler) noexcept;
 
-  void doHandleLinkEvent(Link link, int action, bool runHandler) noexcept;
+  void doHandleAddrEvent(IfAddress ifAddr, bool runHandler) noexcept;
 
-  void handleAddrEvent(nl_object* obj, int action, bool runHandler) noexcept;
-
-  void doHandleAddrEvent(
-      IfAddress ifAddr, int action, bool runHandler) noexcept;
-
-  void handleNeighborEvent(
-      nl_object* obj, int action, bool runHandler) noexcept;
-
-  void doHandleNeighborEvent(
-      Neighbor neighbor, int action, bool runHandler) noexcept;
+  void doHandleNeighborEvent(Neighbor neighbor, bool runHandler) noexcept;
 
   void doUpdateRouteCache(Route route, bool updateUnicastRoute = false);
 
@@ -454,12 +401,8 @@ class NetlinkSocket {
 
   void checkUnicastRoute(const Route& route);
 
-  void doAddIfAddress(struct rtnl_addr* addr);
-
-  void doDeleteAddr(struct rtnl_addr* addr);
-
   void doSyncIfAddress(
-      int ifIdnex, std::vector<fbnl::IfAddress> addrs, int family, int scope);
+      int ifIndex, std::vector<fbnl::IfAddress> addrs, int family, int scope);
 
   void doGetIfAddrs(
       int ifIndex, int family, int scope, std::vector<fbnl::IfAddress>& addrs);
@@ -474,40 +417,7 @@ class NetlinkSocket {
 
   void updateRouteCache();
 
-  bool checkObjectType(struct nl_object* obj, folly::StringPiece expectType);
-
  private:
-  int rtnlRouteAdd(struct nl_sock* sock, struct rtnl_route* route, int flags);
-  int rtnlRouteDelete(
-      struct nl_sock* sock, struct rtnl_route* route, int flags);
-  void tickEvent();
-
-  /**
-   * Netlink scokets to interact with linux kernel. We deliberately use two
-   * sockets as it is a recommended way instead of multiplexing things over
-   * single socket. We have been seeing issues with multiplexing things (like
-   * Object Busy, Link Cache not updating etc.)
-   *
-   * subSock_ => Is a read only socket which subscribes to multicast groups
-                  for links, addrs and neighbor notifications.
-   * reqSock_ => Is a req/rep socket that is used to request full snapshot of
-                links, addrs and neighbor entries and update local cache.
-   */
-  struct nl_sock* subSock_{nullptr};
-  struct nl_sock* reqSock_{nullptr};
-
-  /**
-   * libnl uses the cacheManager to manages all caches
-   * This is needed to subscribe for events
-   */
-  struct nl_cache_mngr* cacheManager_{nullptr};
-
-  // Caches are created internally by cacheManager
-  struct nl_cache* neighborCache_{nullptr};
-  struct nl_cache* linkCache_{nullptr};
-  struct nl_cache* addrCache_{nullptr};
-  struct nl_cache* routeCache_{nullptr};
-
   fbzmq::ZmqEventLoop* evl_{nullptr};
 
   /**
@@ -528,8 +438,6 @@ class NetlinkSocket {
 
   EventsHandler* handler_{nullptr};
 
-  bool useNetlinkMessage_{false};
-
   folly::Optional<int> loopbackIfIndex_;
 
   /**
@@ -541,13 +449,6 @@ class NetlinkSocket {
 
   // Indicating to run which event type's handler
   folly::AtomicBitSet<MAX_EVENT_TYPE> eventFlags_;
-
-  // Integer to keep track of route add/del events. When it overflows we perform
-  // polling of pending events. This is useful when we are adding thounsands of
-  // routes in a single sync, which leads to lot of updates from kernel. If we
-  // don't do periodic polling after few hundred route updates (add/remove) we
-  // see netlink "Out of memory" error.
-  uint8_t eventCount_{0};
 
   std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock_{nullptr};
 

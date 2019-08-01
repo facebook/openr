@@ -314,10 +314,7 @@ main(int argc, char** argv) {
     allThreads.emplace_back(std::move(nlProtocolSocketThread));
 
     nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
-        nlEventLoop.get(),
-        eventPublisher.get(),
-        FLAGS_use_netlink_message,
-        std::move(nlProtocolSocket));
+        nlEventLoop.get(), eventPublisher.get(), std::move(nlProtocolSocket));
     // Subscribe selected network events
     nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
     nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);

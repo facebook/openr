@@ -152,15 +152,14 @@ class NetlinkProtocolSocket {
   ~NetlinkProtocolSocket();
 
   // Set netlinkSocket Link event callback
-  void setLinkEventCB(std::function<void(fbnl::Link, int, bool)> linkEventCB);
+  void setLinkEventCB(std::function<void(fbnl::Link, bool)> linkEventCB);
 
   // Set netlinkSocket Addr event callback
-  void setAddrEventCB(
-      std::function<void(fbnl::IfAddress, int, bool)> addrEventCB);
+  void setAddrEventCB(std::function<void(fbnl::IfAddress, bool)> addrEventCB);
 
   // Set netlinkSocket Addr event callback
   void setNeighborEventCB(
-      std::function<void(fbnl::Neighbor, int, bool)> neighborEventCB);
+      std::function<void(fbnl::Neighbor, bool)> neighborEventCB);
 
   // process message
   void processMessage(
@@ -224,11 +223,11 @@ class NetlinkProtocolSocket {
   fbzmq::ZmqEventLoop* evl_{nullptr};
 
   // Event callbacks
-  std::function<void(fbnl::Link, int, bool)> linkEventCB_;
+  std::function<void(fbnl::Link, bool)> linkEventCB_;
 
-  std::function<void(fbnl::IfAddress, int, bool)> addrEventCB_;
+  std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
 
-  std::function<void(fbnl::Neighbor, int, bool)> neighborEventCB_;
+  std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
 
   // netlink message queue
   std::queue<std::unique_ptr<NetlinkMessage>> msgQueue_;

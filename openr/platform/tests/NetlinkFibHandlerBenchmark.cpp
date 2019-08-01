@@ -98,7 +98,7 @@ class NetlinkFibWrapper {
 
     // Create netlink route socket
     nlSocket = std::make_shared<NetlinkSocket>(
-        &evl, nullptr, true, std::move(nlProtocolSocket));
+        &evl, nullptr, std::move(nlProtocolSocket));
 
     // Run the zmq event loop in its own thread
     // We will either timeout if expected events are not received

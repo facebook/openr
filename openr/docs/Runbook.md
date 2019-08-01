@@ -562,15 +562,6 @@ for the associated wangle::SSLContextConfig
 A comma separated list of strings. Strings are x509 common names to accept SSL
 connections from.
 
-#### USE_NETLINK_MESSAGE
-
-This sets the option of either using libnl3 or netlink protocol messages to
-program routes (link and interface address are still done via libnl3) in linux
-kernel. However at this time using USE_NETLINK_MESSAGE option does not have the
-ability to listen to netlink route events. To program routes with label nexthops
-and MPLS label routes use this option.
-
-
 ### Link Backoff - Improving Stabilility of Link State
 
 Network can have some bad links that can keep flapping because of bad hardware

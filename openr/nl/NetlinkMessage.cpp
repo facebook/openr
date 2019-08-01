@@ -174,19 +174,19 @@ NetlinkProtocolSocket::init() {
 
 void
 NetlinkProtocolSocket::setLinkEventCB(
-    std::function<void(fbnl::Link, int, bool)> linkEventCB) {
+    std::function<void(fbnl::Link, bool)> linkEventCB) {
   linkEventCB_ = linkEventCB;
 }
 
 void
 NetlinkProtocolSocket::setAddrEventCB(
-    std::function<void(fbnl::IfAddress, int, bool)> addrEventCB) {
+    std::function<void(fbnl::IfAddress, bool)> addrEventCB) {
   addrEventCB_ = addrEventCB;
 }
 
 void
 NetlinkProtocolSocket::setNeighborEventCB(
-    std::function<void(fbnl::Neighbor, int, bool)> neighborEventCB) {
+    std::function<void(fbnl::Neighbor, bool)> neighborEventCB) {
   neighborEventCB_ = neighborEventCB;
 }
 
@@ -304,14 +304,14 @@ NetlinkProtocolSocket::processMessage(
       // process link information received from netlink
       auto linkMessage = std::make_unique<NetlinkLinkMessage>();
       fbnl::Link link = linkMessage->parseMessage(nlh);
-      int action = nlh->nlmsg_type == RTM_NEWLINK ? NL_ACT_GET : NL_ACT_DEL;
+
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
         // Synchronous event - do not generate link events
         linkCache_.emplace_back(link);
       } else if (linkEventCB_) {
         // Asynchronous event - generate link event for handler
         VLOG(0) << "Asynchronous Link Event: " << link.str();
-        linkEventCB_(link, action, true);
+        linkEventCB_(link, true);
       }
     } break;
 
@@ -320,7 +320,7 @@ NetlinkProtocolSocket::processMessage(
       // process interface address information received from netlink
       auto addrMessage = std::make_unique<NetlinkAddrMessage>();
       fbnl::IfAddress addr = addrMessage->parseMessage(nlh);
-      int action = nlh->nlmsg_type == RTM_NEWADDR ? NL_ACT_GET : NL_ACT_DEL;
+
       if (!addr.getPrefix().hasValue()) {
         break;
       }
@@ -342,13 +342,13 @@ NetlinkProtocolSocket::processMessage(
           if (addrEventCB_) {
             // Asynchronous event - generate addr event for handler
             VLOG(0) << "Asynchronous Addr Event: " << addr.str();
-            addrEventCB_(addr, action, true);
+            addrEventCB_(addr, true);
           }
         }
       } else if (addrEventCB_) {
         // Asynchronous event - generate addr event for handler
         VLOG(0) << "Asynchronous Addr Event: " << addr.str();
-        addrEventCB_(addr, action, true);
+        addrEventCB_(addr, true);
       }
     } break;
 
@@ -357,14 +357,14 @@ NetlinkProtocolSocket::processMessage(
       // process neighbor information received from netlink
       auto neighMessage = std::make_unique<NetlinkNeighborMessage>();
       fbnl::Neighbor neighbor = neighMessage->parseMessage(nlh);
-      int action = nlh->nlmsg_type == RTM_NEWNEIGH ? NL_ACT_GET : NL_ACT_DEL;
+
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
         // Synchronous event - do not generate neighbor events
         neighborCache_.emplace_back(neighbor);
       } else if (neighborEventCB_) {
         // Asynchronous event - generate neighbor event for handler
         VLOG(0) << "Asynchronous Neighbor Event: " << neighbor.str();
-        neighborEventCB_(neighbor, action, true);
+        neighborEventCB_(neighbor, true);
       }
     } break;
 

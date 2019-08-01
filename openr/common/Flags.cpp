@@ -343,10 +343,6 @@ DEFINE_bool(
     false,
     "Enable this to use formed flooding topology to flood updates");
 DEFINE_bool(
-    use_netlink_message,
-    true,
-    "Use netlink protocol instead of libnl to program routes");
-DEFINE_bool(
     prefix_fwd_type_mpls,
     false,
     "Advertise prefix forwarding type as SR MPLS to use label forwarding");
