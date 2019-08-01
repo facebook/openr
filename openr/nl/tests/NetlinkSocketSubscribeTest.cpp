@@ -19,14 +19,6 @@
 #include <gtest/gtest.h>
 #include <openr/nl/NetlinkSocket.h>
 
-extern "C" {
-#include <netlink/errno.h>
-#include <netlink/netlink.h>
-#include <netlink/route/link.h>
-#include <netlink/route/link/veth.h>
-#include <netlink/socket.h>
-}
-
 using namespace openr;
 using namespace openr::fbnl;
 using namespace fbzmq;
@@ -121,25 +113,17 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
       return;
     }
 
-    // cleanup old interfaces in any
+    // cleanup old interfaces if any
     auto cmd = "ip link del {}"_shellify(kVethNameX.c_str());
     folly::Subprocess proc(std::move(cmd));
     // Ignore result
     proc.wait();
 
-    socket_ = nl_socket_alloc();
-    nl_connect(socket_, NETLINK_ROUTE);
-
-    link_ = rtnl_link_veth_alloc();
-    auto peerLink = rtnl_link_veth_get_peer(link_);
-    rtnl_link_set_name(link_, kVethNameX.c_str());
-    rtnl_link_set_name(peerLink, kVethNameY.c_str());
-    nl_object_put(OBJ_CAST(peerLink));
-
-    int err = rtnl_link_add(socket_, link_, NLM_F_CREATE);
-    if (err != 0) {
-      LOG(ERROR) << "Failed to add veth link: " << nl_geterror(err);
-    }
+    // add veth interface pair
+    cmd = "ip link add {} type veth peer name {}"_shellify(
+        kVethNameX.c_str(), kVethNameY.c_str());
+    folly::Subprocess proc1(std::move(cmd));
+    EXPECT_EQ(0, proc1.wait().exitStatus());
 
     nlProtocolSocket = std::make_unique<openr::Netlink::NetlinkProtocolSocket>(
         &nlProtocolSocketEventLoop);
@@ -158,9 +142,10 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
       return;
     }
 
-    rtnl_link_delete(socket_, link_);
-    nl_socket_free(socket_);
-    rtnl_link_veth_release(link_);
+    // cleanup veth interfaces
+    auto cmd = "ip link del {}"_shellify(kVethNameX.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
 
     if (nlProtocolSocketEventLoop.isRunning()) {
       nlProtocolSocketEventLoop.stop();
@@ -172,10 +157,6 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
   ZmqEventLoop nlProtocolSocketEventLoop;
   std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
   std::thread nlProtocolSocketThread;
-
- private:
-  struct rtnl_link* link_{nullptr};
-  struct nl_sock* socket_{nullptr};
 };
 
 // EventFunc is to let a UT do whatever it wants for the event
