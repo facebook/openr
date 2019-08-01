@@ -104,28 +104,11 @@ class NlMessageFixture : public ::testing::Test {
     // Ignore result
     proc.wait();
 
-    socket_ = nl_socket_alloc();
-    ASSERT_TRUE(socket_);
-    nl_connect(socket_, NETLINK_ROUTE);
-
-    rtnl_link_alloc_cache(socket_, AF_UNSPEC, &linkCache_);
-    ASSERT_TRUE(linkCache_);
-
-    link_ = rtnl_link_veth_alloc();
-    ASSERT_TRUE(link_);
-    auto peerLink = rtnl_link_veth_get_peer(link_);
-    ASSERT_TRUE(peerLink);
-    rtnl_link_set_name(link_, kVethNameX.c_str());
-    rtnl_link_set_name(peerLink, kVethNameY.c_str());
-    nl_object_put(OBJ_CAST(peerLink));
-
-    auto err = rtnl_link_add(socket_, link_, NLM_F_CREATE);
-    ASSERT_EQ(0, err);
-
-    nl_cache_refill(socket_, linkCache_);
-
-    ifIndexX = rtnl_link_name2i(linkCache_, kVethNameX.c_str());
-    ifIndexY = rtnl_link_name2i(linkCache_, kVethNameY.c_str());
+    // add veth interface pair
+    cmd = "ip link add {} type veth peer name {}"_shellify(
+        kVethNameX.c_str(), kVethNameY.c_str());
+    folly::Subprocess proc1(std::move(cmd));
+    EXPECT_EQ(0, proc1.wait().exitStatus());
 
     addAddress(kVethNameX, ipAddrX1V6.str());
     addAddress(kVethNameY, ipAddrY1V6.str());
@@ -152,6 +135,19 @@ class NlMessageFixture : public ::testing::Test {
     });
 
     evl.waitUntilRunning();
+
+    // find ifIndexX and ifIndexY
+    auto links = nlSock->getAllLinks();
+    for (const auto& link : links) {
+      if (link.getLinkName() == kVethNameX) {
+        ifIndexX = link.getIfIndex();
+      }
+      if (link.getLinkName() == kVethNameY) {
+        ifIndexY = link.getIfIndex();
+      }
+    }
+    EXPECT_NE(ifIndexX, 0);
+    EXPECT_NE(ifIndexY, 0);
   }
 
   void
@@ -161,15 +157,16 @@ class NlMessageFixture : public ::testing::Test {
       return;
     }
 
+    // cleanup virtual interfaces
+    auto cmd = "ip link del {} 2>/dev/null"_shellify(kVethNameX.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    // Ignore result
+    proc.wait();
+
     if (evl.isRunning()) {
       evl.stop();
       eventThread.join();
     }
-
-    rtnl_link_delete(socket_, link_);
-    nl_cache_free(linkCache_);
-    nl_socket_free(socket_);
-    rtnl_link_veth_release(link_);
   }
 
   void
@@ -270,54 +267,21 @@ class NlMessageFixture : public ::testing::Test {
  private:
   static void
   bringUpIntf(const std::string& ifName) {
-    // Prepare socket
-    auto sockFd = socket(PF_INET, SOCK_DGRAM, 0);
-    CHECK_LT(0, sockFd);
-
-    // Prepare request
-    struct ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
-    folly::strlcpy(ifr.ifr_name, ifName.c_str(), IFNAMSIZ);
-
-    // Get existing flags
-    int error = ioctl(sockFd, SIOCGIFFLAGS, static_cast<void*>(&ifr));
-    CHECK_EQ(0, error);
-
-    // Mutate flags and set them back
-    ifr.ifr_flags |= IFF_UP;
-    error = ioctl(sockFd, SIOCSIFFLAGS, static_cast<void*>(&ifr));
-    CHECK_EQ(0, error);
+    auto cmd = "ip link set dev {} up"_shellify(ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
   }
 
   void
   addAddress(const std::string& ifName, const std::string& address) {
-    int ifIndex = rtnl_link_name2i(linkCache_, ifName.c_str());
-    ASSERT_NE(0, ifIndex);
-
-    auto addrMask = std::make_pair(folly::IPAddress(address), 16);
-    struct nl_addr* nlAddr = nl_addr_build(
-        addrMask.first.family(),
-        (void*)addrMask.first.bytes(),
-        addrMask.first.byteCount());
-    ASSERT_TRUE(nlAddr);
-    nl_addr_set_prefixlen(nlAddr, addrMask.second);
-
-    struct rtnl_addr* addr = rtnl_addr_alloc();
-    ASSERT_TRUE(addr);
-    rtnl_addr_set_local(addr, nlAddr);
-    rtnl_addr_set_ifindex(addr, ifIndex);
-    int err = rtnl_addr_add(socket_, addr, 0);
-    ASSERT_EQ(0, err);
-    nl_addr_put(nlAddr);
-    rtnl_addr_put(addr);
+    auto cmd =
+        "ip addr add {} dev {}"_shellify(address.c_str(), ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    EXPECT_EQ(0, proc.wait().exitStatus());
   }
 
   fbzmq::ZmqEventLoop evl;
   std::thread eventThread;
-
-  struct nl_cache* linkCache_{nullptr};
-  struct rtnl_link* link_{nullptr};
-  struct nl_sock* socket_{nullptr};
 
  protected:
   openr::fbnl::NextHop
