@@ -33,13 +33,13 @@ class SignalHandler final : public fbzmq::AsyncSignalHandler {
 
   void
   signalReceived(int sig) noexcept override {
-    LOG(INFO) << "Received signal: " << sig;
+    LOG(INFO) << "ZmqEventLoop received signal: " << sig;
     switch (sig) {
-    case SIGTERM:
-    case SIGKILL:
+    case SIGABRT:
     case SIGINT:
-    case SIGABRT: {
-      LOG(INFO) << ". Stopping event loop ...";
+    case SIGKILL:
+    case SIGTERM: {
+      LOG(INFO) << "Stopping ZmqEventLoop...";
       auto evl = getZmqEventLoop();
       evl->stop();
       break;

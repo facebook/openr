@@ -23,6 +23,7 @@
 #include <openr/fbmeshd/802.11s/AuthsaeCallbackHelpers.h>
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
 #include <openr/fbmeshd/802.11s/PeerSelector.h>
+#include <openr/fbmeshd/FollySignalHandler.h>
 #include <openr/fbmeshd/MeshServiceHandler.h>
 #include <openr/fbmeshd/SignalHandler.h>
 #include <openr/fbmeshd/common/Constants.h>
@@ -200,10 +201,10 @@ startWatchdog(openr::Watchdog* watchdog, std::vector<std::thread>& allThreads) {
 
   // Spawn a watchdog thread
   allThreads.emplace_back(std::thread([watchdog]() noexcept {
-    LOG(INFO) << "Starting Watchdog thread ...";
+    LOG(INFO) << "Starting Watchdog thread...";
     folly::setThreadName("Watchdog");
     watchdog->run();
-    LOG(INFO) << "Watchdog thread got stopped.";
+    LOG(INFO) << "Watchdog thread stopped.";
   }));
   watchdog->waitUntilRunning();
 }
@@ -269,9 +270,9 @@ main(int argc, char* argv[]) {
   fbzmq::ZmqEventLoop evl;
 
   SignalHandler signalHandler{evl};
+  signalHandler.registerSignalHandler(SIGABRT);
   signalHandler.registerSignalHandler(SIGINT);
   signalHandler.registerSignalHandler(SIGTERM);
-  signalHandler.registerSignalHandler(SIGABRT);
 
   monitorEventLoopWithWatchdog(
       &evl, "fbmeshd_shared_event_loop", watchdog.get());
@@ -304,18 +305,23 @@ main(int argc, char* argv[]) {
         FLAGS_gateway_11s_root_route_programmer_gateway_change_threshold_factor);
     allThreads.emplace_back(
         std::thread([&gateway11sRootRouteProgrammer]() noexcept {
-          LOG(INFO) << "Starting the Gateway 11s root route programmer";
+          LOG(INFO) << "Starting Gateway11sRootRouteProgrammer thread...";
           folly::setThreadName(gateway11sRootRouteProgrammerId);
           gateway11sRootRouteProgrammer->run();
-          LOG(INFO) << "Gateway 11s root route programmer thread stopped.";
+          LOG(INFO) << "Gateway11sRootRouteProgrammer thread stopped.";
         }));
   }
 
-  std::unique_ptr<folly::EventBase> routingEventLoop =
-      std::make_unique<folly::EventBase>();
+  folly::EventBase routingEventLoop;
+
+  FollySignalHandler follySignalHandler{routingEventLoop, evl};
+  follySignalHandler.registerSignalHandler(SIGABRT);
+  follySignalHandler.registerSignalHandler(SIGINT);
+  follySignalHandler.registerSignalHandler(SIGTERM);
+
   std::unique_ptr<MetricManager80211s> metricManager80211s =
       std::make_unique<MetricManager80211s>(
-          routingEventLoop.get(),
+          &routingEventLoop,
           kMetricManagerInterval,
           nlHandler,
           FLAGS_routing_metric_manager_ewma_factor_log2,
@@ -323,7 +329,7 @@ main(int argc, char* argv[]) {
           kMetricManagerBaseBitrate,
           FLAGS_routing_metric_manager_rssi_weight);
   std::unique_ptr<Routing> routing = std::make_unique<Routing>(
-      routingEventLoop.get(),
+      &routingEventLoop,
       metricManager80211s.get(),
       nlHandler.lookupMeshNetif().maybeMacAddress.value(),
       FLAGS_routing_ttl,
@@ -331,10 +337,10 @@ main(int argc, char* argv[]) {
       std::chrono::milliseconds{FLAGS_routing_root_pann_interval_ms});
   std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport =
       std::make_unique<UDPRoutingPacketTransport>(
-          routingEventLoop.get(), FLAGS_mesh_ifname, 6668, FLAGS_routing_tos);
+          &routingEventLoop, FLAGS_mesh_ifname, 6668, FLAGS_routing_tos);
   std::unique_ptr<PeriodicPinger> periodicPinger =
       std::make_unique<PeriodicPinger>(
-          routingEventLoop.get(),
+          &routingEventLoop,
           folly::IPAddressV6{folly::sformat("ff02::1%{}", FLAGS_mesh_ifname)},
           folly::IPAddressV6{
               folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
@@ -353,7 +359,7 @@ main(int argc, char* argv[]) {
   monitorEventLoopWithWatchdog(
       syncRoutes80211s.get(), syncRoutes80211sId, watchdog.get());
   allThreads.emplace_back(std::thread([&syncRoutes80211s]() noexcept {
-    LOG(INFO) << "Starting the SyncRoutes80211s thread...";
+    LOG(INFO) << "Starting SyncRoutes80211s thread...";
     folly::setThreadName(syncRoutes80211sId);
     syncRoutes80211s->run();
     LOG(INFO) << "SyncRoutes80211s thread stopped.";
@@ -372,9 +378,9 @@ main(int argc, char* argv[]) {
 
   static constexpr auto routingId{"Routing"};
   allThreads.emplace_back(std::thread([&routingEventLoop]() noexcept {
-    LOG(INFO) << "Starting Routing";
+    LOG(INFO) << "Starting Routing thread...";
     folly::setThreadName(routingId);
-    routingEventLoop->loopForever();
+    routingEventLoop.loopForever();
     LOG(INFO) << "Routing thread stopped.";
   }));
 
@@ -408,10 +414,10 @@ main(int argc, char* argv[]) {
   monitorEventLoopWithWatchdog(
       &gatewayConnectivityMonitor, gwConnectivityMonitorId, watchdog.get());
   allThreads.emplace_back(std::thread([&gatewayConnectivityMonitor]() noexcept {
-    LOG(INFO) << "Starting the Gateway connectivity monitor thread...";
+    LOG(INFO) << "Starting GatewayConnectivityMonitor thread...";
     folly::setThreadName(gwConnectivityMonitorId);
     gatewayConnectivityMonitor.run();
-    LOG(INFO) << "Gateway connectivity monitor thread stopped.";
+    LOG(INFO) << "GatewayConnectivityMonitor thread stopped.";
   }));
 
   // create fbmeshd thrift server
@@ -424,9 +430,9 @@ main(int argc, char* argv[]) {
         server->getEventBaseManager()->setEventBase(&evb, false);
         server->setPort(FLAGS_fbmeshd_service_port);
 
-        LOG(INFO) << "starting fbmeshd server...";
+        LOG(INFO) << "Starting fbmeshd server thread ...";
         server->serve();
-        LOG(INFO) << "fbmeshd server got stopped...";
+        LOG(INFO) << "fbmeshd server thread stopped.";
       }));
 
 #ifdef ENABLE_SYSTEMD_NOTIFY
@@ -440,6 +446,9 @@ main(int argc, char* argv[]) {
   sd_notify(0, "STOPPING=1");
 #endif
 
+  LOG(INFO) << "Leaving mesh...";
+  nlHandler.leaveMeshes();
+
   if (watchdog) {
     watchdog->stop();
     watchdog->waitUntilStopped();
@@ -451,9 +460,15 @@ main(int argc, char* argv[]) {
   gatewayConnectivityMonitor.stop();
   gatewayConnectivityMonitor.waitUntilStopped();
 
-  if (routingEventLoop) {
-    routing->resetSendPacketCallback();
-    routingEventLoop->terminateLoopSoon();
+  syncRoutes80211s->stop();
+  syncRoutes80211s->waitUntilStopped();
+
+  routing->resetSendPacketCallback();
+  routingEventLoop.terminateLoopSoon();
+
+  if (gateway11sRootRouteProgrammer) {
+    gateway11sRootRouteProgrammer->stop();
+    gateway11sRootRouteProgrammer->waitUntilStopped();
   }
 
   // Wait for all threads to finish
@@ -461,6 +476,6 @@ main(int argc, char* argv[]) {
     t.join();
   }
 
-  LOG(INFO) << "Stopping fbmesh daemon";
+  LOG(INFO) << "Stopping fbmesh daemon...";
   return 0;
 }
