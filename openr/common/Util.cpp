@@ -649,4 +649,27 @@ getPrefixForwardingType(
   return thrift::PrefixForwardingType::SR_MPLS;
 }
 
+namespace MetricVectorUtils {
+
+// Utility method to create metric entity.
+thrift::MetricEntity
+createMetricEntity(
+    int64_t type,
+    int64_t priority,
+    thrift::CompareType op,
+    bool isBestPathTieBreaker,
+    const std::vector<int64_t>& metric) {
+  thrift::MetricEntity me;
+
+  me.type = type;
+  me.priority = priority;
+  me.op = op;
+  me.isBestPathTieBreaker = isBestPathTieBreaker;
+  me.metric = metric;
+
+  return me;
+}
+
+} // namespace MetricVectorUtils
+
 } // namespace openr

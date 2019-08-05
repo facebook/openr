@@ -541,6 +541,13 @@ namespace MetricVectorUtils {
 
 enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };
 
+thrift::MetricEntity createMetricEntity(
+    int64_t type,
+    int64_t priority,
+    thrift::CompareType op,
+    bool isBestPathTieBreaker,
+    const std::vector<int64_t>& metric);
+
 inline CompareResult operator!(CompareResult mv) {
   switch (mv) {
   case CompareResult::WINNER: {

@@ -129,6 +129,38 @@ struct AdjacencyDatabase {
 // Prefixes
 //
 
+/**
+ * Metric entity type
+ */
+enum MetricEntityType {
+  LOCAL_PREFERENCE = 0,
+  LOCAL_ROUTE = 1,
+  AS_PATH_LEN = 2,
+  ORIGIN_CODE = 3,
+  EXTERNAL_ROUTE = 4,
+  CONFED_EXTERNAL_ROUTE = 5,
+  ROUTER_ID = 6,
+  CLUSTER_LIST_LEN = 7,
+  PEER_IP = 8,
+}
+
+/**
+ * Metric entity priorities.
+ * Large gaps are provided so that in future, we can place other fields
+ * in between if needed
+ */
+enum MetricEntityPriority {
+  LOCAL_PREFERENCE = 9000,
+  LOCAL_ROUTE = 8000,
+  AS_PATH_LEN = 7000,
+  ORIGIN_CODE = 6000,
+  EXTERNAL_ROUTE = 5000,
+  CONFED_EXTERNAL_ROUTE = 4000,
+  ROUTER_ID = 3000,
+  CLUSTER_LIST_LEN = 2000,
+  PEER_IP = 1000,
+}
+
 // How to compare two MetricEntity
 enum CompareType {
   // if present only in one metric vector, route with this type will win
