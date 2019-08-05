@@ -401,27 +401,35 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     auto& oldLink = **oldIter;
 
     // change the metric on the link object we already have
-    bool metricChanged = oldLink.setMetricFromNode(
-        nodeName, newLink.getMetricFromNode(nodeName), holdUpTtl, holdDownTtl);
-    topoChanged |= metricChanged;
+    if (newLink.getMetricFromNode(nodeName) !=
+        oldLink.getMetricFromNode(nodeName)) {
+      LOG(INFO) << folly::sformat(
+          "Metric change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getMetricFromNode(nodeName),
+          newLink.getMetricFromNode(nodeName));
+      oldLink.setMetricFromNode(
+          nodeName,
+          newLink.getMetricFromNode(nodeName),
+          holdUpTtl,
+          holdDownTtl);
+      topoChanged = true;
+    }
 
-    LOG_IF(INFO, metricChanged) << folly::sformat(
-        "Metric change on link {}: {} => {}",
-        newLink.directionalToString(nodeName),
-        oldLink.getMetricFromNode(nodeName),
-        newLink.getMetricFromNode(nodeName));
-
-    bool overloadChanged = oldLink.setOverloadFromNode(
-        nodeName,
-        newLink.getOverloadFromNode(nodeName),
-        holdUpTtl,
-        holdDownTtl);
-    topoChanged |= overloadChanged;
-    LOG_IF(INFO, overloadChanged) << folly::sformat(
-        "Overload change on link {}: {} => {}",
-        newLink.directionalToString(nodeName),
-        oldLink.getOverloadFromNode(nodeName),
-        newLink.getOverloadFromNode(nodeName));
+    if (newLink.getOverloadFromNode(nodeName) !=
+        oldLink.getOverloadFromNode(nodeName)) {
+      LOG(INFO) << folly::sformat(
+          "Overload change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getOverloadFromNode(nodeName),
+          newLink.getOverloadFromNode(nodeName));
+      oldLink.setOverloadFromNode(
+          nodeName,
+          newLink.getOverloadFromNode(nodeName),
+          holdUpTtl,
+          holdDownTtl);
+      topoChanged = true;
+    }
 
     // Check if adjacency label has changed
     if (newLink.getAdjLabelFromNode(nodeName) !=
