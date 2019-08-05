@@ -48,13 +48,14 @@ OPTIONS = bunch.Bunch(
 )
 
 
-def getDefaultOptions(host: str) -> bunch.Bunch:
+def getDefaultOptions(host: str, timeout_ms: int = Consts.TIMEOUT_MS) -> bunch.Bunch:
     """
     get all default options for a given host
     """
 
     options = copy.deepcopy(OPTIONS)
     options.host = host
+    options.timeout = timeout_ms
     for k in options:
         options[k] = getDefaultOption(options, k)
     return options
