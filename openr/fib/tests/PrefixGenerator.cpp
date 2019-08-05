@@ -35,7 +35,7 @@ PrefixGenerator::ipv6PrefixGenerator(
   std::vector<thrift::IpPrefix> ipPrefixes;
   ipPrefixes.reserve(numOfPrefixes);
 
-  for (auto iteration = 0; iteration < numOfPrefixes; iteration++) {
+  for (uint32_t iteration = 0; iteration < numOfPrefixes; iteration++) {
     // Generate a random  IPv6
     auto ipv6Addr = randIpv6();
     // Mask with bitMaskLen
@@ -54,7 +54,7 @@ PrefixGenerator::getRandomNextHops(
   std::vector<thrift::NextHopThrift> nextHops;
   nextHops.reserve(numOfNextHops);
 
-  for (auto index = 0; index < numOfNextHops; index++) {
+  for (uint32_t index = 0; index < numOfNextHops; index++) {
     // Random local IPV6
     auto ipv6Addr = folly::IPAddress(folly::sformat(
         "fe80::{}", folly::sformat("{:02x}", folly::Random::rand32() >> 16)));

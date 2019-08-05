@@ -205,12 +205,12 @@ BM_NetlinkFibHandler(uint32_t iters, size_t numOfPrefixes) {
 
   suspender.dismiss(); // Start measuring benchmark time
 
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
     routes->reserve(prefixes.size());
 
     // Update routes by randomly regenerating nextHops for kDeltaSize prefixes.
-    for (auto index = 0; index < numOfPrefixes; index++) {
+    for (uint32_t index = 0; index < numOfPrefixes; index++) {
       routes->emplace_back(createUnicastRoute(
           prefixes[index],
           netlinkFibWrapper->prefixGenerator.getRandomNextHopsUnicast(

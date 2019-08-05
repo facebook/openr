@@ -127,7 +127,7 @@ updateKvStore(
       ? kvStore.size() - numOfUpdateKeys
       : offsetIdx;
 
-  for (auto idx = offsetIdx; idx < offsetIdx + numOfUpdateKeys; idx++) {
+  for (uint32_t idx = offsetIdx; idx < offsetIdx + numOfUpdateKeys; idx++) {
     auto kvIt = kvStore.begin();
     std::advance(kvIt, idx);
     auto key = kvIt->first;
@@ -166,7 +166,7 @@ floodingUpdate(
   // Set keys into kvStore
   std::vector<std::pair<std::string, thrift::Value>> keyVals;
   keyVals.reserve(numOfUpdateKeys);
-  for (auto idx = 0; idx < numOfUpdateKeys; idx++) {
+  for (uint32_t idx = 0; idx < numOfUpdateKeys; idx++) {
     auto key = keys[idx];
     auto value = genRandomStr(kSizeOfValue);
     thrift::Value thriftVal(
@@ -207,7 +207,7 @@ BM_KvStoreMergeKeyValues(
 
   // Insert (key, value)s into kvStore
   uint64_t version = 1;
-  for (auto idx = 0; idx < numOfKeysInStore; idx++) {
+  for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
     auto key = genRandomStr(kSizeOfKey);
     auto value = genRandomStr(kSizeOfValue);
     thrift::Value thriftValue(
@@ -228,7 +228,7 @@ BM_KvStoreMergeKeyValues(
   // Version starts with 2 since keys aleady in kvStore have a version of 1
   version++;
   suspender.dismiss(); // Start measuring benchmark time
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     updateKvStore(numOfUpdateKeys, version, kvStore);
   }
 }
@@ -248,7 +248,7 @@ BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
   auto kvStore = kvStoreTestFixture->createKvStore("kvStore", emptyPeers);
   kvStore->run();
 
-  for (auto idx = 0; idx < numOfKeysInStore; idx++) {
+  for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
     auto key = genRandomStr(kSizeOfKey);
     auto value = genRandomStr(kSizeOfValue);
     thrift::Value thriftVal(
@@ -267,7 +267,7 @@ BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
   }
 
   suspender.dismiss(); // Start measuring benchmark time
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     kvStore->dumpAll();
   }
 }
@@ -291,7 +291,7 @@ BM_KvStoreFloodingUpdate(uint32_t iters, size_t numOfUpdateKeys) {
   // Generate random keys beforehand for updating
   std::vector<std::string> keys;
   keys.reserve(numOfUpdateKeys);
-  for (auto idx = 0; idx < numOfUpdateKeys; idx++) {
+  for (uint32_t idx = 0; idx < numOfUpdateKeys; idx++) {
     keys.emplace_back(genRandomStr(kSizeOfKey));
   }
 
@@ -299,7 +299,7 @@ BM_KvStoreFloodingUpdate(uint32_t iters, size_t numOfUpdateKeys) {
   uint64_t version = 1;
   suspender.dismiss(); // Start measuring benchmark time
 
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     floodingUpdate(numOfUpdateKeys, version, keys, kvStore);
   }
 }

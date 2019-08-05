@@ -1463,7 +1463,6 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTestDecisionTest) {
   folly::CIDRNetwork prefix1V4{folly::IPAddress("192.168.0.11"), 32};
   folly::CIDRNetwork prefix2V4{folly::IPAddress("192.168.0.12"), 32};
   auto nh1V4 = folly::IPAddress("169.254.0.1");
-  auto nh2V4 = folly::IPAddress("169.254.0.2");
 
   std::vector<folly::IPAddress> nextHopsV6{nh1V6};
 

@@ -46,6 +46,7 @@ find_library(THRIFTPROTOCOL thriftprotocol PATHS)
 find_library(TRANSPORT transport PATHS)
 find_library(ZMQ zmq)
 find_library(ZSTD zstd)
+find_library(BENCHMARK follybenchmark PATHS)
 
 # FOLLY_EXCEPTION_TRACER may not be found
 if(NOT FOLLY_EXCEPTION_TRACER)
@@ -317,6 +318,7 @@ add_library(openrlib
   openr/common/Constants.cpp
   openr/config-store/PersistentStore.cpp
   openr/config-store/PersistentStoreClient.cpp
+  openr/config-store/PersistentStoreWrapper.cpp
   openr/ctrl-server/OpenrCtrlHandler.cpp
   openr/decision/Decision.cpp
   openr/decision/LinkState.cpp
@@ -341,6 +343,7 @@ add_library(openrlib
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
+  openr/fib/tests/PrefixGenerator.cpp
   openr/tests/OpenrModuleTestBase.cpp
   openr/watchdog/Watchdog.cpp
   $<TARGET_OBJECTS:fb303-cpp2-obj>
@@ -1062,6 +1065,125 @@ if(BUILD_TESTS)
     spark_test
     mock_io_provider_test
     DESTINATION sbin/tests/openr/spark
+  )
+
+  #
+  # benchmarks
+  #
+
+  add_executable(config_store_benchmark
+    openr/config-store/tests/PersistentStoreBenchmark.cpp
+  )
+
+  target_include_directories(config_store_benchmark
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+
+  target_link_libraries(config_store_benchmark
+    openrlib
+    ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
+    ${BENCHMARK}
+  )
+
+  install(TARGETS
+    config_store_benchmark
+    DESTINATION sbin/tests/openr/config-store
+  )
+
+  add_executable(fib_benchmark
+    openr/fib/tests/FibBenchmark.cpp
+    openr/fib/tests/MockNetlinkFibHandler.cpp
+  )
+
+  target_include_directories(fib_benchmark
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+
+  target_link_libraries(fib_benchmark
+    openrlib
+    ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+    ${THRIFTCPP2}
+    ${BENCHMARK}
+  )
+
+  install(TARGETS
+    fib_benchmark
+    DESTINATION sbin/tests/openr/fib
+  )
+
+  add_executable(netlink_fib_handler_benchmark
+    openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
+  )
+
+  target_include_directories(netlink_fib_handler_benchmark
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+
+  target_link_libraries(netlink_fib_handler_benchmark
+    openrlib
+    ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+    ${BENCHMARK}
+  )
+
+  install(TARGETS
+    netlink_fib_handler_benchmark
+    DESTINATION sbin/tests/openr/platform
+  )
+
+  add_executable(decision_benchmark
+    openr/decision/tests/DecisionBenchmark.cpp
+  )
+
+  target_include_directories(decision_benchmark
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+
+  target_link_libraries(decision_benchmark
+    openrlib
+    ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
+    ${BENCHMARK}
+  )
+
+  install(TARGETS
+    decision_benchmark
+    DESTINATION sbin/tests/openr/decision
+  )
+
+  add_executable(kvstore_benchmark
+    openr/kvstore/tests/KvStoreBenchmark.cpp
+  )
+
+  target_include_directories(kvstore_benchmark
+    PRIVATE
+    ${LIBNL3-HEADERS}/libnl3
+  )
+
+  target_link_libraries(kvstore_benchmark
+    openrlib
+    ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
+    ${BENCHMARK}
+  )
+
+  install(TARGETS
+    kvstore_benchmark
+    DESTINATION sbin/tests/openr/kvstore
   )
 
 endif()

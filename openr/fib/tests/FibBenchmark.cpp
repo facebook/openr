@@ -156,7 +156,7 @@ class FibWrapper : public OpenrModuleTestBase {
       // Each time get the latest perf event.
       auto perfDBInfoSize = perfDB.eventInfo.size();
       auto eventInfo = perfDB.eventInfo[perfDBInfoSize - 1];
-      for (auto index = 1; index < eventInfo.events.size(); index++) {
+      for (size_t index = 1; index < eventInfo.events.size(); index++) {
         processTimes[index - 1] +=
             (eventInfo.events[index].unixTs -
              eventInfo.events[index - 1].unixTs);
@@ -224,10 +224,10 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
   auto deltaSize = kDeltaSize <= numOfPrefixes ? kDeltaSize : numOfPrefixes;
   suspender.dismiss(); // Start measuring benchmark time
 
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     // Update routes by randomly regenerating nextHops for deltaSize prefixes.
     routeDbDelta.unicastRoutesToUpdate.clear();
-    for (auto index = 0; index < deltaSize; index++) {
+    for (uint32_t index = 0; index < deltaSize; index++) {
       routeDbDelta.unicastRoutesToUpdate.emplace_back(createUnicastRoute(
           prefixes[index],
           fibWrapper->prefixGenerator.getRandomNextHopsUnicast(

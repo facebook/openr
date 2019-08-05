@@ -10,7 +10,6 @@
 #include <folly/init/Init.h>
 #include <openr/config-store/PersistentStoreClient.h>
 #include <openr/config-store/PersistentStoreWrapper.h>
-#include "common/init/Init.h"
 
 namespace {
 // kIterations <= n: change this to 10 singce n starts from 10,
@@ -27,7 +26,7 @@ std::vector<std::string>
 constructRandomVector(uint32_t entryInStore) {
   std::vector<std::string> stringKeys;
   stringKeys.reserve(entryInStore);
-  for (auto i = 0; i < entryInStore; ++i) {
+  for (uint32_t i = 0; i < entryInStore; ++i) {
     stringKeys.push_back(folly::sformat("key-{}", i));
   }
   return stringKeys;
@@ -41,7 +40,7 @@ writeKeyValueToStore(
     const std::vector<std::string>& stringKeys,
     const std::unique_ptr<PersistentStoreClient>& client,
     const uint32_t skipStep) {
-  for (auto index = 0; index < stringKeys.size(); index += skipStep) {
+  for (size_t index = 0; index < stringKeys.size(); index += skipStep) {
     client->store(
         stringKeys[index], folly::sformat("val-{}", folly::Random::rand32()));
   }
@@ -85,7 +84,7 @@ BM_PersistentStoreWrite(uint32_t iters, size_t numOfStringKeys) {
   suspender.dismiss(); // Start measuring benchmark time
 
   // Write (key, random_value) pairs to store
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     writeKeyValueToStore(stringKeys, client, stringKeys.size() / iterations);
   }
 
@@ -120,9 +119,9 @@ BM_PersistentStoreLoad(uint32_t iters, size_t numOfStringKeys) {
       (stringKeys.size() / kIterations == 0) ? stringKeys.size() : kIterations;
 
   suspender.dismiss(); // Start measuring benchmark time
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     // Load value by key from store
-    for (auto index = 0; index < stringKeys.size();
+    for (size_t index = 0; index < stringKeys.size();
          index += stringKeys.size() / iterations) {
       client->load<std::string>(stringKeys[index]);
     }
@@ -156,7 +155,7 @@ BM_PersistentStoreCreateDestroy(uint32_t iters, size_t numOfStringKeys) {
   writeKeyValueToStore(stringKeys, client, 1);
   suspender.dismiss(); // Start measuring benchmark time
 
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     // Create new storeWrapper and perform some operations on it
     auto storeWrapper1 = std::make_unique<PersistentStoreWrapper>(context, tid);
   }

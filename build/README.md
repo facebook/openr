@@ -69,5 +69,19 @@ that broken command or iterate to address the issue
 // `openr-build` is name of docker container
 sudo docker run -u 0 -i -t openr-build /bin/bash
 ```
+### Benchmarks
+---
+
+The benchmarking methodology is designed to help Open/R users to assess the functional efficiency of various modules of Open/R and identify time performance metrics. These metrics can be tracked to identify regressions and performance improvements.
+
+We have created standalone benchmarks for ConfigStore, Fib, NetlinkFibHandler, Decision and KvStore. You can find the binary files from:
+
+```
+sbin/tests/openr/config-store/
+sbin/tests/openr/fib/
+sbin/tests/openr/platform/
+sbin/tests/openr/decision/
+sbin/tests/openr/kvstore/
+```
 
 > NOTE: Whatever you do within docker container is lost once you logout

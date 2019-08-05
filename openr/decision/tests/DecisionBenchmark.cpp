@@ -299,7 +299,7 @@ accumulatePerfTimes(
   CHECK_EQ(perfEvents.events.size(), processTimes.size() + 1);
 
   // Accumulate time into processTimes
-  for (auto index = 1; index < perfEvents.events.size(); index++) {
+  for (size_t index = 1; index < perfEvents.events.size(); index++) {
     processTimes[index - 1] +=
         (perfEvents.events[index].unixTs - perfEvents.events[index - 1].unixTs);
   }
@@ -469,8 +469,8 @@ createGrid(
   thrift::Publication initialPub;
 
   // Grid topology
-  for (auto row = 0; row < n; ++row) {
-    for (auto col = 0; col < n; ++col) {
+  for (int row = 0; row < n; ++row) {
+    for (int col = 0; col < n; ++col) {
       auto nodeId = row * n + col;
       auto nodeName = folly::sformat("{}", nodeId);
       // Add adjs
@@ -503,12 +503,12 @@ createSswsAdjacencies(
     const int numOfPods,
     const int numOfPlanes,
     const int numOfSswsPerPlane) {
-  for (auto planeId = 0; planeId < numOfPlanes; planeId++) {
-    for (auto sswIdInPlane = 0; sswIdInPlane < numOfSswsPerPlane;
+  for (int planeId = 0; planeId < numOfPlanes; planeId++) {
+    for (int sswIdInPlane = 0; sswIdInPlane < numOfSswsPerPlane;
          sswIdInPlane++) {
       auto nodeName = getNodeName(sswMarker, planeId, sswIdInPlane);
       // Add one fsw in each pod to ssw's adjacencies.
-      for (auto podId = 0; podId < numOfPods; podId++) {
+      for (int podId = 0; podId < numOfPods; podId++) {
         std::vector<thrift::Adjacency> adjs;
         auto otherName = getNodeName(fswMarker, podId, planeId);
         createFabricAdjacency(nodeName, fswMarker, podId, planeId, adjs);
@@ -537,19 +537,19 @@ createFswsAdjacencies(
     const int numOfFswsPerPod,
     const int numOfSswsPerPlane,
     const int numOfRswsPerPod) {
-  for (auto podId = 0; podId < numOfPods; podId++) {
-    for (auto swIdInPod = 0; swIdInPod < numOfFswsPerPod; swIdInPod++) {
+  for (int podId = 0; podId < numOfPods; podId++) {
+    for (int swIdInPod = 0; swIdInPod < numOfFswsPerPod; swIdInPod++) {
       auto nodeName = getNodeName(fswMarker, podId, swIdInPod);
       std::vector<thrift::Adjacency> adjs;
       // Add ssws within the plane to adjacencies
       auto planeId = swIdInPod;
-      for (auto otherId = 0; otherId < numOfSswsPerPlane; otherId++) {
+      for (int otherId = 0; otherId < numOfSswsPerPlane; otherId++) {
         auto otherName = getNodeName(sswMarker, planeId, otherId);
         createFabricAdjacency(nodeName, sswMarker, planeId, otherId, adjs);
       }
 
       // Add all rsws within the pod to adjacencies.
-      for (auto otherId = 0; otherId < numOfRswsPerPod; otherId++) {
+      for (int otherId = 0; otherId < numOfRswsPerPod; otherId++) {
         auto otherName =
             getNodeName(rswMarker, podId, otherId); // folly::sformat("{}",
                                                     // otherId); //
@@ -577,12 +577,12 @@ createRswsAdjacencies(
     const int numOfPods,
     const int numOfFswsPerPod,
     const int numOfRswsPerPod) {
-  for (auto podId = 0; podId < numOfPods; podId++) {
-    for (auto swIdInPod = 0; swIdInPod < numOfRswsPerPod; swIdInPod++) {
+  for (int podId = 0; podId < numOfPods; podId++) {
+    for (int swIdInPod = 0; swIdInPod < numOfRswsPerPod; swIdInPod++) {
       auto nodeName = getNodeName(rswMarker, podId, swIdInPod);
       // Add all fsws within the pod to adjacencies.
       std::vector<thrift::Adjacency> adjs;
-      for (auto otherId = 0; otherId < numOfFswsPerPod; otherId++) {
+      for (int otherId = 0; otherId < numOfFswsPerPod; otherId++) {
         auto otherName = getNodeName(fswMarker, podId, otherId);
         createFabricAdjacency(nodeName, fswMarker, podId, otherId, adjs);
       }
@@ -675,7 +675,7 @@ updateRandomFabricAdjs(
 
   // Add all fsws within the pod to the adjacencies.
   std::vector<thrift::Adjacency> adjsRsw;
-  for (auto otherId = 0; otherId < numOfFswsPerPod; otherId += 1) {
+  for (int otherId = 0; otherId < numOfFswsPerPod; otherId += 1) {
     auto otherName = getNodeName(kFswMarker, podId, otherId);
     createFabricAdjacency(rwsNodeName, kFswMarker, podId, otherId, adjsRsw);
   }
@@ -774,7 +774,7 @@ BM_DecisionGrid(
   std::vector<uint64_t> processTimes{0, 0, 0};
   suspender.dismiss(); // Start measuring benchmark time
 
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     // Advertise adj update. This should trigger the SPF run.
     updateRandomGridAdjs(decisionWrapper, selectedNode, n, processTimes);
   }
@@ -836,7 +836,7 @@ BM_DecisionFabric(
   std::vector<uint64_t> processTimes{0, 0, 0};
   suspender.dismiss(); // Start measuring benchmark time
 
-  for (auto i = 0; i < iters; i++) {
+  for (uint32_t i = 0; i < iters; i++) {
     // Advertise adj update. This should trigger the SPF run.
     updateRandomFabricAdjs(
         decisionWrapper,
