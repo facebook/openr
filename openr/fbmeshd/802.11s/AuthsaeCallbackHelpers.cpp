@@ -86,6 +86,26 @@ peer_created(unsigned char* peer_mac) {
 }
 
 static void
+delete_peer_by_addr(unsigned char* peer_mac) {
+  candidate* cand = find_peer(peer_mac, 0);
+  if (!cand) {
+    return;
+  }
+
+  if (cand->in_kernel) {
+    /*
+     * remove from kernel; will be removed from SAE db after
+     * kernel delivers DEL_STATION event.
+     */
+    Nl80211Handler::globalNlHandler->deleteStation(
+        folly::MacAddress::fromBinary({peer_mac, ETH_ALEN}));
+  } else {
+    /* remove from SAE db only */
+    delete_peer(&cand);
+  }
+}
+
+static void
 fin(unsigned short reason,
     unsigned char* peer_mac,
     unsigned char* key,
@@ -117,8 +137,7 @@ fin(unsigned short reason,
       LOG(WARNING) << "SAE completed successfully without returning a key.";
     }
   } else {
-    Nl80211Handler::globalNlHandler->deleteStation(
-        folly::MacAddress::fromBinary({peer_mac, ETH_ALEN}));
+    delete_peer_by_addr(peer_mac);
   }
 }
 
@@ -265,12 +284,6 @@ estab_peer_link(
   }
 }
 
-static void
-delete_peer(unsigned char* peer_mac) {
-  Nl80211Handler::globalNlHandler->deleteStation(
-      folly::MacAddress::fromBinary({peer_mac, ETH_ALEN}));
-}
-
 static int
 add_input(int fd, void* /* data*/, fdcb /* proc */) {
   VLOG(1) << folly::sformat("authsae: {}(fd: {})", __func__, fd);
@@ -364,7 +377,7 @@ getAmpeCallbacks() {
   cb.meshd_set_mesh_conf = meshd_set_mesh_conf;
   cb.set_plink_state = set_plink_state;
   cb.estab_peer_link = estab_peer_link;
-  cb.delete_peer = delete_peer;
+  cb.delete_peer = delete_peer_by_addr;
   cb.evl = get_evl_ops();
   return &cb;
 }
