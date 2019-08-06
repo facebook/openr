@@ -77,11 +77,14 @@ isInterfaceUp(std::string interface) {
 } // namespace
 
 SyncRoutes80211s::SyncRoutes80211s(
-    Routing* routing, folly::MacAddress nodeAddr, const std::string& interface)
+    Routing* routing,
+    std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket,
+    folly::MacAddress nodeAddr,
+    const std::string& interface)
     : routing_{routing},
       nodeAddr_{nodeAddr},
       interface_{interface},
-      netlinkSocket_{this} {
+      netlinkSocket_{this, nullptr, std::move(nlProtocolSocket)} {
   // Set timer to sync routes
   syncRoutesTimer_ =
       fbzmq::ZmqTimeout::make(this, [this]() noexcept { doSyncRoutes(); });

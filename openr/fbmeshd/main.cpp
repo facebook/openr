@@ -349,9 +349,25 @@ main(int argc, char* argv[]) {
           FLAGS_mesh_ifname);
   periodicPinger->scheduleTimeout(1s);
 
+  // set up NetlinkProtocolSocket in a new thread to program the linux kernel
+  auto nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
+  nlProtocolSocket = std::make_unique<openr::Netlink::NetlinkProtocolSocket>(
+      nlProtocolSocketEventLoop.get());
+  allThreads.emplace_back(
+      std::thread([&nlProtocolSocket, &nlProtocolSocketEventLoop]() {
+        LOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
+        folly::setThreadName("NetlinkProtolSocketEvl");
+        nlProtocolSocket->init();
+        nlProtocolSocketEventLoop->run();
+        LOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
+      }));
+  nlProtocolSocketEventLoop->waitUntilRunning();
+
   std::unique_ptr<SyncRoutes80211s> syncRoutes80211s =
       std::make_unique<SyncRoutes80211s>(
           routing.get(),
+          std::move(nlProtocolSocket),
           nlHandler.lookupMeshNetif().maybeMacAddress.value(),
           FLAGS_mesh_ifname);
 
@@ -462,6 +478,12 @@ main(int argc, char* argv[]) {
 
   syncRoutes80211s->stop();
   syncRoutes80211s->waitUntilStopped();
+
+  nlProtocolSocket.reset();
+  if (nlProtocolSocketEventLoop) {
+    nlProtocolSocketEventLoop->stop();
+    nlProtocolSocketEventLoop->waitUntilStopped();
+  }
 
   routing->resetSendPacketCallback();
   routingEventLoop.terminateLoopSoon();

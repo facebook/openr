@@ -60,6 +60,8 @@ class NetlinkMessage {
  public:
   NetlinkMessage();
 
+  virtual ~NetlinkMessage() = default;
+
   // construct message with type
   NetlinkMessage(int type);
 
