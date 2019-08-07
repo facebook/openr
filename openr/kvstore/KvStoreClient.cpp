@@ -342,6 +342,10 @@ KvStoreClient::scheduleTtlUpdates(
           std::chrono::milliseconds(ttl / 4),
           std::chrono::milliseconds(ttl / 4 + 1)));
 
+  // Delay first ttl advertisement by (ttl / 4). We have just advertised key or
+  // update and would like to avoid sending unncessary immediate ttl update
+  keyTtlBackoffs_.at(key).second.reportError();
+
   advertiseTtlUpdates();
 }
 
