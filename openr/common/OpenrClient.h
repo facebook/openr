@@ -9,6 +9,7 @@
 
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp/transport/THeader.h>
+#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
 
 #include <openr/common/Constants.h>
@@ -16,7 +17,37 @@
 
 namespace openr {
 
-std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>
+namespace detail {
+
+void
+setCompressionTransform(apache::thrift::HeaderClientChannel* channel) {
+  CHECK(channel);
+  channel->setTransform(apache::thrift::transport::THeader::ZSTD_TRANSFORM);
+}
+
+void
+setCompressionTransform(apache::thrift::RocketClientChannel* channel) {
+  CHECK(false) << "Transform is not supported on rocket client channel";
+}
+} // namespace detail
+
+/**
+ * Create client for OpenrCtrlCpp service over plain-text communication channel.
+ *
+ * Underneath client support multiple channel. Here we recommend to use two
+ * channels based on your need.
+ *
+ * apache::thrift::HeaderClientChannel => This is default and widely used
+ * channel. It doesn't support streaming APIs. However it support transparent
+ * compression for data exchanges. This can be efficient for retrieving large
+ * amount, of data like routes, topology, KvStore key/vals etc.
+ *
+ * apache::thrift::RocketClientChannel => This is new channel. It supports
+ * streaming APIs. Use this if you need stream APIs.
+ *
+ */
+template <typename ClientChannel = apache::thrift::HeaderClientChannel>
+static std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>
 getOpenrCtrlPlainTextClient(
     folly::EventBase& evb,
     const folly::IPAddress& addr,
@@ -28,23 +59,21 @@ getOpenrCtrlPlainTextClient(
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
     // Create Socket
     // NOTE: It is possible to have caching for socket. We're not doing it as
-    // we expect clients to be persistent.
+    // we expect clients to be persistent/sticky.
     auto transport = apache::thrift::async::TAsyncSocket::UniquePtr(
         new apache::thrift::async::TAsyncSocket(
             &evb, folly::SocketAddress(addr, port), connectTimeout.count()),
         folly::DelayedDestruction::Destructor());
 
     // Create channel and set timeout
-    auto channel =
-        apache::thrift::RocketClientChannel::newChannel(std::move(transport));
+    auto channel = ClientChannel::newChannel(std::move(transport));
     channel->setTimeout(processingTimeout.count());
 
-    // NOTE: Enable transform for compression when available with
-    // RocketClientChannel
-    // Enable compression for efficient transport. This will incur CPU cost but
-    // it is negligible
-    // channel->setTransform(apache::thrift::transport::THeader::ZSTD_TRANSFORM);
+    // Enable compression for efficient transport when available. This will
+    // incur CPU cost but it is insignificant for usual queries.
+    detail::setCompressionTransform(channel.get());
 
+    // Create client
     client =
         std::make_unique<thrift::OpenrCtrlCppAsyncClient>(std::move(channel));
   });

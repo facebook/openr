@@ -25,8 +25,9 @@ main(int argc, char** argv) {
   std::thread evbThread([&evb]() { evb.loopForever(); });
 
   // Create Open/R client
-  auto client = openr::getOpenrCtrlPlainTextClient(
-      evb, folly::IPAddress(FLAGS_host), FLAGS_port);
+  auto client =
+      openr::getOpenrCtrlPlainTextClient<apache::thrift::RocketClientChannel>(
+          evb, folly::IPAddress(FLAGS_host), FLAGS_port);
   auto response = client->semifuture_subscribeAndGetKvStore().get();
   auto& globalKeyVals = response.response.keyVals;
   LOG(INFO) << "Stream is connected, updates will follow";
