@@ -66,6 +66,7 @@ DECLARE_bool(enable_subnet_validation);
 DECLARE_bool(enable_lfa);
 DECLARE_bool(enable_ordered_fib_programming);
 DECLARE_bool(enable_bgp_route_programming);
+DECLARE_bool(bgp_use_igp_metric);
 
 DECLARE_bool(enable_spark);
 

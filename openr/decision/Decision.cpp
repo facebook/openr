@@ -137,12 +137,14 @@ class SpfSolver::SpfSolverImpl {
       bool enableV4,
       bool computeLfaPaths,
       bool enableOrderedFib,
-      bool bgpDryRun)
+      bool bgpDryRun,
+      bool bgpUseIgpMetric)
       : myNodeName_(myNodeName),
         enableV4_(enableV4),
         computeLfaPaths_(computeLfaPaths),
         enableOrderedFib_(enableOrderedFib),
-        bgpDryRun_(bgpDryRun) {}
+        bgpDryRun_(bgpDryRun),
+        bgpUseIgpMetric_(bgpUseIgpMetric) {}
 
   ~SpfSolverImpl() = default;
 
@@ -235,7 +237,9 @@ class SpfSolver::SpfSolverImpl {
 
   // return a loopback address for each node in the the set
   std::vector<thrift::NextHopThrift> getLoopbackVias(
-      std::unordered_set<std::string> const& nodes, bool const isV4);
+      std::unordered_set<std::string> const& nodes,
+      bool const isV4,
+      folly::Optional<int64_t> const& igpMetric);
 
   // Give source node-name and dstNodeNames, this function returns the set of
   // nexthops (along with LFA if enabled) towards these set of dstNodeNames
@@ -314,6 +318,9 @@ class SpfSolver::SpfSolverImpl {
   const bool enableOrderedFib_{false};
 
   const bool bgpDryRun_{false};
+
+  // Use IGP metric in metric vector comparision
+  const bool bgpUseIgpMetric_{false};
 };
 
 std::pair<
@@ -566,6 +573,8 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
   for (const auto& prefixEntry : prefixDb.prefixEntries) {
     auto& nodeList = prefixes_[prefixEntry.prefix];
     auto nodePrefixIt = nodeList.find(nodeName);
+
+    // Add or Update prefix
     if (nodePrefixIt == nodeList.end()) {
       VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
               << " has been advertised by node " << nodeName;
@@ -576,7 +585,12 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
               << " has been updated by node " << nodeName;
       nodeList[nodeName] = prefixEntry;
       isUpdated = true;
+    } else {
+      // This prefix has no change. Skip rest of code!
+      continue;
     }
+
+    // Keep track of loopback addresses (v4 / v6) for each node
     if (thrift::PrefixType::LOOPBACK == prefixEntry.type) {
       auto addrSize = prefixEntry.prefix.prefixAddress.addr.size();
       if (addrSize == folly::IPAddressV4::byteCount() &&
@@ -1065,30 +1079,67 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     bool const isV4) {
   std::string bestNode;
   std::unordered_set<std::string> nodes;
-  thrift::MetricVector const* bestVector = nullptr;
+  folly::Optional<thrift::MetricVector> bestVector{folly::none};
+  folly::Optional<int64_t> bestIgpMetric;
   std::string const* bestData = nullptr;
+  const auto& mySpfResult = spfResults_.at(myNodeName);
+
   for (auto const& kv : nodePrefixes) {
-    auto const& name = kv.first;
+    auto const& nodeName = kv.first;
     auto const& prefixEntry = kv.second;
-    if (!spfResults_.at(myNodeName).count(name)) {
-      LOG(ERROR) << "No path to " << name << ". Skipping considering this.";
+
+    // Skip unreachable nodes
+    auto it = mySpfResult.find(nodeName);
+    if (it == mySpfResult.end()) {
+      LOG(ERROR) << "No path to " << nodeName << ". Skipping considering this.";
       // skip if no path to node
       continue;
     }
-    auto const& metricVector = prefixEntry.mv.value();
-    switch ((nullptr == bestVector) ? MetricVectorUtils::CompareResult::WINNER
-                                    : MetricVectorUtils::compareMetricVectors(
-                                          metricVector, *bestVector)) {
+
+    // Sanity check that OPENR_IGP_COST shouldn't exist
+    if (MetricVectorUtils::getMetricEntityByType(
+            prefixEntry.mv.value(),
+            static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST))) {
+      LOG(ERROR) << "Received unexpected metric entity OPENR_IGP_COST in metric"
+                 << " vector for prefix " << toString(prefix) << " from node "
+                 << nodeName << ". Ignoring";
+      continue;
+    }
+
+    // Copy is intentional - As we will need to augment metric vector with
+    // IGP_COST
+    thrift::MetricVector metricVector = prefixEntry.mv.value();
+
+    // Associate IGP_COST to prefixEntry
+    if (bgpUseIgpMetric_) {
+      const auto igpMetric = static_cast<int64_t>(it->second.first);
+      if (not bestIgpMetric.hasValue() or *bestIgpMetric > igpMetric) {
+        bestIgpMetric = igpMetric;
+      }
+      metricVector.metrics.emplace_back(MetricVectorUtils::createMetricEntity(
+          static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST),
+          static_cast<int64_t>(thrift::MetricEntityPriority::OPENR_IGP_COST),
+          thrift::CompareType::WIN_IF_NOT_PRESENT,
+          false, /* isBestPathTieBreaker */
+          /* lowest metric wins */
+          {-1 * igpMetric}));
+      VLOG(2) << "Attaching IGP metric of " << igpMetric << " to prefix "
+              << toString(prefix) << " for node " << nodeName;
+    }
+
+    switch (!bestVector.hasValue() ? MetricVectorUtils::CompareResult::WINNER
+                                   : MetricVectorUtils::compareMetricVectors(
+                                         metricVector, *bestVector)) {
     case MetricVectorUtils::CompareResult::WINNER:
       nodes.clear();
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_WINNER:
-      bestVector = &(metricVector);
+      bestVector = std::move(metricVector);
       bestData = &(prefixEntry.data);
-      bestNode = name;
+      bestNode = nodeName;
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_LOOSER:
-      nodes.emplace(name);
+      nodes.emplace(nodeName);
       break;
     case MetricVectorUtils::CompareResult::TIE:
       LOG(ERROR) << "Tie ordering prefix entries. Skipping route for prefix: "
@@ -1108,7 +1159,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     return folly::none;
   }
   CHECK_NOTNULL(bestData);
-  auto bestNexthop = getLoopbackVias({bestNode}, isV4);
+  auto bestNexthop = getLoopbackVias({bestNode}, isV4, bestIgpMetric);
   if (bestNexthop.size() != 1) {
     LOG(ERROR)
         << "Cannot find the best paths loopback address. Skipping route for prefix: "
@@ -1120,7 +1171,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               prefix,
                               {},
                               thrift::AdminDistance::EBGP,
-                              getLoopbackVias(nodes, isV4),
+                              getLoopbackVias(nodes, isV4, bestIgpMetric),
                               thrift::PrefixType::BGP,
                               *bestData,
                               bgpDryRun_, /* doNotProgram */
@@ -1232,7 +1283,9 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRoute(
 
 std::vector<thrift::NextHopThrift>
 SpfSolver::SpfSolverImpl::getLoopbackVias(
-    std::unordered_set<std::string> const& nodes, bool const isV4) {
+    std::unordered_set<std::string> const& nodes,
+    bool const isV4,
+    folly::Optional<int64_t> const& igpMetric) {
   std::vector<thrift::NextHopThrift> result;
   result.reserve(nodes.size());
   auto const& hostLoopBacks =
@@ -1241,7 +1294,8 @@ SpfSolver::SpfSolverImpl::getLoopbackVias(
     if (!hostLoopBacks.count(node)) {
       LOG(ERROR) << "No loopback for node: " << node;
     } else {
-      result.emplace_back(createNextHop(hostLoopBacks.at(node)));
+      result.emplace_back(
+          createNextHop(hostLoopBacks.at(node), "", igpMetric.value_or(0)));
     }
   }
   return result;
@@ -1485,10 +1539,15 @@ SpfSolver::SpfSolver(
     bool enableV4,
     bool computeLfaPaths,
     bool enableOrderedFib,
-    bool bgpDryRun)
+    bool bgpDryRun,
+    bool bgpUseIgpMetric)
     : impl_(new SpfSolver::SpfSolverImpl(
-          myNodeName, enableV4, computeLfaPaths, enableOrderedFib, bgpDryRun)) {
-}
+          myNodeName,
+          enableV4,
+          computeLfaPaths,
+          enableOrderedFib,
+          bgpDryRun,
+          bgpUseIgpMetric)) {}
 
 SpfSolver::~SpfSolver() {}
 
@@ -1572,6 +1631,7 @@ Decision::Decision(
     bool computeLfaPaths,
     bool enableOrderedFib,
     bool bgpDryRun,
+    bool bgpUseIgpMetric,
     const AdjacencyDbMarker& adjacencyDbMarker,
     const PrefixDbMarker& prefixDbMarker,
     std::chrono::milliseconds debounceMinDur,
@@ -1598,7 +1658,12 @@ Decision::Decision(
   processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
       this, [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(
-      myNodeName, enableV4, computeLfaPaths, enableOrderedFib, bgpDryRun);
+      myNodeName,
+      enableV4,
+      computeLfaPaths,
+      enableOrderedFib,
+      bgpDryRun,
+      bgpUseIgpMetric);
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);

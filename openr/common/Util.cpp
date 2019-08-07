@@ -651,6 +651,16 @@ getPrefixForwardingType(
 
 namespace MetricVectorUtils {
 
+folly::Optional<const openr::thrift::MetricEntity>
+getMetricEntityByType(const openr::thrift::MetricVector& mv, int64_t type) {
+  for (auto& me : mv.metrics) {
+    if (me.type == type) {
+      return me;
+    }
+  }
+  return folly::none;
+}
+
 // Utility method to create metric entity.
 thrift::MetricEntity
 createMetricEntity(

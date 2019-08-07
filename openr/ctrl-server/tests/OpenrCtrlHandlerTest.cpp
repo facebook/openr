@@ -76,6 +76,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         true, /* computeLfaPaths */
         false, /* enableOrderedFib */
         false, /* bgpDryRun */
+        false, /* bgpUseIgpMetric */
         AdjacencyDbMarker{"adj:"},
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),

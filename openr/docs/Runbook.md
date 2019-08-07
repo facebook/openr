@@ -427,7 +427,7 @@ can be viewed via breeze API `breeze perf fib`
 
 #### ENABLE_SEGMENT_ROUTING
 
-Experinmental and partially implemented segment routing feature. As of now it
+Experimental and partially implemented segment routing feature. As of now it
 only elects node/adjacency labels. In future we will extend it to compute and
 program FIB routes.
 
@@ -594,3 +594,19 @@ Serves two purposes
   double of the previous backoff. If the link remains stable for
   `LINK_FLAP_MAX_BACKOFF_MS` then all of its history is erased and link gets
   `LINK_FLAP_INITIAL_BACKOFF_MS` next time when it goes down.
+
+
+#### BGP_USE_IGP_METRIC
+
+Boolean flag. This attaches IGP metric for all received BGP routes. This metric
+is used as tie-breaker in MetricVector comparison mimicking BGP attributes.
+Refer to `enum MetricEntityPriority` in `openr/if/Lsdb.thrift` for relative
+order of BGP best path calculation.
+
+IGP metric for a node is calculated as sum of all adjacency metrics on the
+shortest path towards it.
+
+```
+// Set to false by default
+BGP_USE_IGP_METRIC=false
+```

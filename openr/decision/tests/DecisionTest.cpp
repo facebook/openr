@@ -736,6 +736,168 @@ TEST(BGPRedistribution, BasicOperation) {
           testing::Not(testing::Contains(route2))));
 }
 
+/**
+ * node1 connects to node2 and node3. Both are same distance away (10). Both
+ * node2 and node3 announces prefix1 with same metric vector. Routes for prefix1
+ * is inspected on node1 at each step. Test outline follows
+ *
+ * 1) prefix1 -> {node2, node3}
+ * 2) Increase cost towards node3 to 20; prefix -> {node2}
+ * 3) mark link towards node2 as drained; prefix1 -> {node3}
+ * 3) Set cost towards node2 to 20 (still drained); prefix1 -> {node3}
+ * 4) Undrain link; prefix1 -> {node2, node3}
+ */
+TEST(BGPRedistribution, IgpMetric) {
+  std::string nodeName("1");
+  SpfSolver spfSolver(
+      nodeName,
+      false /* enableV4 */,
+      false /* computeLfaPaths */,
+      false /* enableOrderedFib */,
+      false /* bgpDryRun */,
+      true /* bgpUseIgpMetric */);
+
+  //
+  // Create BGP prefix
+  //
+  thrift::MetricVector metricVector;
+  int64_t numMetrics = 5;
+  metricVector.metrics.resize(numMetrics);
+  for (int64_t i = 0; i < numMetrics; ++i) {
+    metricVector.metrics[i].type = i;
+    metricVector.metrics[i].priority = i;
+    metricVector.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    metricVector.metrics[i].isBestPathTieBreaker = (i == numMetrics - 1);
+    metricVector.metrics[i].metric = {i};
+  }
+  const std::string data1{"data1"};
+  const auto bgpPrefix2 = createPrefixEntry(
+      addr1,
+      thrift::PrefixType::BGP,
+      data1,
+      thrift::PrefixForwardingType::IP,
+      thrift::PrefixForwardingAlgorithm::SP_ECMP,
+      false,
+      metricVector);
+  // Make tie breaking metric different
+  metricVector.metrics.at(4).metric = {100}; // Make it different
+  const auto bgpPrefix3 = createPrefixEntry(
+      addr1,
+      thrift::PrefixType::BGP,
+      data1,
+      thrift::PrefixForwardingType::IP,
+      thrift::PrefixForwardingAlgorithm::SP_ECMP,
+      false,
+      metricVector);
+
+  //
+  // Setup adjacencies
+  //
+  auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 0);
+  auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
+  auto adjacencyDb3 = createAdjDb("3", {adj31}, 0);
+  EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb2).first);
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb3).first);
+
+  //
+  // Update prefix databases
+  //
+  auto prefixDb2WithBgp =
+      createPrefixDb("2", {createPrefixEntry(addr2), bgpPrefix2});
+  auto prefixDb3WithBgp =
+      createPrefixDb("3", {createPrefixEntry(addr3), bgpPrefix3});
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBgp));
+  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb3WithBgp));
+
+  //
+  // Step-1 prefix1 -> {node2, node3}
+  //
+  auto routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
+  EXPECT_THAT(
+      routeDb.value().unicastRoutes,
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, addr1),
+          Field(&thrift::UnicastRoute::data, data1),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHop(addr2.prefixAddress, "", 10),
+                  createNextHop(addr3.prefixAddress, "", 10))))));
+
+  //
+  // Increase cost towards node3 to 20; prefix -> {node2}
+  //
+  adjacencyDb1.adjacencies[1].metric = 20;
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
+  EXPECT_THAT(
+      routeDb.value().unicastRoutes,
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, addr1),
+          Field(&thrift::UnicastRoute::data, data1),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHop(addr2.prefixAddress, "", 10))))));
+
+  //
+  // mark link towards node2 as drained; prefix1 -> {node3}
+  // No route towards addr2 (node2's loopback)
+  //
+  adjacencyDb1.adjacencies[0].isOverloaded = true;
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(
+      routeDb.value().unicastRoutes,
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, addr1),
+          Field(&thrift::UnicastRoute::data, data1),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHop(addr3.prefixAddress, "", 20))))));
+
+  //
+  // Set cost towards node2 to 20 (still drained); prefix1 -> {node3}
+  // No route towards addr2 (node2's loopback)
+  //
+  adjacencyDb1.adjacencies[0].metric = 20;
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
+  EXPECT_THAT(
+      routeDb.value().unicastRoutes,
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, addr1),
+          Field(&thrift::UnicastRoute::data, data1),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHop(addr3.prefixAddress, "", 20))))));
+
+  //
+  // Undrain link; prefix1 -> {node2, node3}
+  //
+  adjacencyDb1.adjacencies[0].isOverloaded = false;
+  EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
+  routeDb = spfSolver.buildPaths("1");
+  EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
+  EXPECT_THAT(
+      routeDb.value().unicastRoutes,
+      testing::Contains(AllOf(
+          Field(&thrift::UnicastRoute::dest, addr1),
+          Field(&thrift::UnicastRoute::data, data1),
+          Field(
+              &thrift::UnicastRoute::nextHops,
+              testing::UnorderedElementsAre(
+                  createNextHop(addr2.prefixAddress, "", 20),
+                  createNextHop(addr3.prefixAddress, "", 20))))));
+}
+
 //
 // Test topology:
 // connected bidirectionally
@@ -2805,6 +2967,7 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
         true, /* computeLfaPaths */
         false, /* enableOrderedFib */
         false, /* bgpDryRun */
+        false, /* bgpUseIgpMetric */
         AdjacencyDbMarker{"adj:"},
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),

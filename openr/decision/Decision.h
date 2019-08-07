@@ -107,7 +107,8 @@ class SpfSolver {
       bool enableV4,
       bool computeLfaPaths,
       bool enableOrderedFib = false,
-      bool bgpDryRun = false);
+      bool bgpDryRun = false,
+      bool bgpUseIgpMetric = false);
   ~SpfSolver();
 
   //
@@ -199,6 +200,7 @@ class Decision : public OpenrEventLoop {
       bool computeLfaPaths,
       bool enableOrderedFib,
       bool bgpDryRun,
+      bool bgpUseIgpMetric,
       const AdjacencyDbMarker& adjacencyDbMarker,
       const PrefixDbMarker& prefixDbMarker,
       std::chrono::milliseconds debounceMinDur,

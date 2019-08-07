@@ -541,6 +541,9 @@ namespace MetricVectorUtils {
 
 enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };
 
+folly::Optional<const openr::thrift::MetricEntity> getMetricEntityByType(
+    const openr::thrift::MetricVector& mv, int64_t type);
+
 thrift::MetricEntity createMetricEntity(
     int64_t type,
     int64_t priority,
