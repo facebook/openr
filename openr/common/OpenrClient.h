@@ -26,7 +26,7 @@ setCompressionTransform(apache::thrift::HeaderClientChannel* channel) {
 }
 
 void
-setCompressionTransform(apache::thrift::RocketClientChannel* channel) {
+setCompressionTransform(apache::thrift::RocketClientChannel* /*channel*/) {
   CHECK(false) << "Transform is not supported on rocket client channel";
 }
 } // namespace detail
