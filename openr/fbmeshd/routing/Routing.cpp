@@ -73,8 +73,15 @@ Routing::prepare() {
 std::unordered_map<folly::MacAddress, Routing::MeshPath>
 Routing::getMeshPaths() {
   std::unordered_map<folly::MacAddress, MeshPath> meshPaths;
-  evb_->runImmediatelyOrRunInEventBaseThreadAndWait(
-      [this, &meshPaths]() { meshPaths = meshPaths_; });
+  evb_->runImmediatelyOrRunInEventBaseThreadAndWait([this, &meshPaths]() {
+    // Only return meshPaths that we are peer-ed with and have a metric for
+    const auto stas = metricManager_->getLinkMetrics();
+    for (const auto& m : meshPaths_) {
+      if (!m.second.expired() && stas.find(m.second.nextHop) != stas.end()) {
+        meshPaths.emplace(m.first, m.second);
+      }
+    }
+  });
   return meshPaths;
 }
 
