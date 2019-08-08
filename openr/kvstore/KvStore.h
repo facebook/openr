@@ -269,12 +269,12 @@ class KvStore final : public OpenrEventLoop, public DualNode {
       thrift::Publication const& rcvdPublication,
       folly::Optional<std::string> senderId = folly::none);
 
-  // process a request pending on cmdSock socket
-  void processRequest(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
-
+  // This function wraps `processRequestMsgHelper` and updates send/received
+  // bytes counters.
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& msg) override;
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
+      fbzmq::Message&& msg);
 
   // process spanning-tree-set command to set/unset a child for a given root
   void processFloodTopoSet(
@@ -298,6 +298,11 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // Extracts the counters and submit them to monitor
   fbzmq::thrift::CounterMap getCounters();
   void submitCounters();
+
+  // Submit full-sync event to monitor
+  void logSyncEvent(
+      const std::string& peerNodeName,
+      const std::chrono::milliseconds syncDuration);
 
   // Submit events to monitor
   void logKvEvent(const std::string& event, const std::string& key);

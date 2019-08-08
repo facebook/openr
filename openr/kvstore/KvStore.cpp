@@ -243,7 +243,7 @@ KvStore::KvStore(
 
   VLOG(2) << "Subscribing/connecting to all peers...";
 
-  // Add all existing peers again. This will also ensure querying full dump
+  // Add all existing peers again. This will also ensure querying full-sync
   // from each peer.
   addPeers(peers);
 
@@ -670,8 +670,8 @@ KvStore::addPeers(
         }
       }
 
-      // Enqueue for full dump requests
-      LOG(INFO) << "Enqueuing full dump request for peer " << peerName;
+      // Enqueue for full-sync requests
+      LOG(INFO) << "Enqueuing full-sync request for peer " << peerName;
       peersToSyncWith_.emplace(
           peerName,
           ExponentialBackoff<std::chrono::milliseconds>(
@@ -780,7 +780,7 @@ KvStore::requestFullSyncFromPeers() {
     dumpRequest.cmd = thrift::Command::KEY_DUMP;
     dumpRequest.keyDumpParams = params;
 
-    VLOG(1) << "Sending full sync request to peer " << peerName << " using id "
+    VLOG(1) << "Sending full-sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
     latestSentPeerSync_.emplace(
         peerCmdSocketId, std::chrono::steady_clock::now());
@@ -789,7 +789,7 @@ KvStore::requestFullSyncFromPeers() {
 
     if (ret.hasError()) {
       // this could be pretty common on initial connection setup
-      LOG(ERROR) << "Failed to send full sync request to peer " << peerName
+      LOG(ERROR) << "Failed to send full-sync request to peer " << peerName
                  << " using id " << peerCmdSocketId << " (will try again). "
                  << ret.error();
       collectSendFailureStats(ret.error(), peerCmdSocketId);
@@ -802,9 +802,8 @@ KvStore::requestFullSyncFromPeers() {
     }
   } // for
 
-  // We should be able to perfom full dump from all peers. Log warning if
-  // there
-  // are still some peers to sync with.
+  // We should be able to perfom full-sync from all peers. Log warning if
+  // there are still some peers to sync with.
   if (not peersToSyncWith_.empty()) {
     LOG(WARNING) << peersToSyncWith_.size() << " peers still require sync."
                  << "Scheduling retry after " << timeout.count() << "ms.";
@@ -858,9 +857,21 @@ KvStore::updatePublicationTtl(
   }
 }
 
-// process a request
 folly::Expected<fbzmq::Message, fbzmq::Error>
 KvStore::processRequestMsg(fbzmq::Message&& request) {
+  tData_.addStatValue(
+      "kvstore.peers.bytes_received", request.size(), fbzmq::SUM);
+  auto response = processRequestMsgHelper(std::move(request));
+  if (response.hasValue()) {
+    tData_.addStatValue(
+        "kvstore.peers.bytes_sent", response->size(), fbzmq::SUM);
+  }
+  return response;
+}
+
+// process a request
+folly::Expected<fbzmq::Message, fbzmq::Error>
+KvStore::processRequestMsgHelper(fbzmq::Message&& request) {
   auto maybeThriftReq =
       request.readThriftObj<thrift::KvStoreRequest>(serializer_);
 
@@ -886,6 +897,13 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     }
 
     tData_.addStatValue("kvstore.cmd_key_set", 1, fbzmq::COUNT);
+    if (thriftReq.keySetParams->timestamp_ms.hasValue()) {
+      auto floodMs =
+          getUnixTimeStampMs() - thriftReq.keySetParams->timestamp_ms.value();
+      if (floodMs > 0) {
+        tData_.addStatValue("kvstore.flood_duration_ms", floodMs, fbzmq::AVG);
+      }
+    }
 
     auto& ketSetParamsVal = thriftReq.keySetParams.value();
     if (ketSetParamsVal.keyVals.empty()) {
@@ -1196,7 +1214,7 @@ KvStore::processNexthopChange(
         ExponentialBackoff<std::chrono::milliseconds>(
             Constants::kInitialBackoff, Constants::kMaxBackoff));
 
-    // initial full sync request if peersToSyncWith_ was empty
+    // initial full-sync request if peersToSyncWith_ was empty
     if (not fullSyncTimer_->isScheduled()) {
       fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
     }
@@ -1224,6 +1242,9 @@ KvStore::processSyncResponse() noexcept {
     return;
   }
 
+  tData_.addStatValue(
+      "kvstore.peers.bytes_received", syncPubMsg.size(), fbzmq::SUM);
+
   // at this point we received all three parts
   if (not delimMsg.empty()) {
     LOG(ERROR) << "processSyncResponse: unexpected delimiter: "
@@ -1249,8 +1270,6 @@ KvStore::processSyncResponse() noexcept {
     }
   }
 
-  tData_.addStatValue(
-      "kvstore.peers.bytes_received", syncPubMsg.size(), fbzmq::SUM);
   // Perform error check
   auto maybeSyncPub =
       syncPubMsg.readThriftObj<thrift::Publication>(serializer_);
@@ -1269,7 +1288,8 @@ KvStore::processSyncResponse() noexcept {
     auto syncDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - latestSentPeerSync_.at(requestId));
     tData_.addStatValue(
-        "kvstore.peer_sync_time_ms", syncDuration.count(), fbzmq::AVG);
+        "kvstore.full_sync_duration_ms", syncDuration.count(), fbzmq::AVG);
+    logSyncEvent(requestId, syncDuration);
     VLOG(1) << "It took " << syncDuration.count() << " ms to sync with "
             << requestId;
     latestSentPeerSync_.erase(requestId);
@@ -1308,13 +1328,13 @@ KvStore::requestSync() {
   }
 
   // Enqueue neighbor for full-sync (insert only if entry doesn't exists)
-  LOG(INFO) << "Requesting periodic sync from " << randomNeighbor;
+  LOG(INFO) << "Requesting full-sync from " << randomNeighbor;
   peersToSyncWith_.emplace(
       randomNeighbor,
       ExponentialBackoff<std::chrono::milliseconds>(
           Constants::kInitialBackoff, Constants::kMaxBackoff));
 
-  // initial full sync request if peersToSyncWith_ was empty
+  // initial full-sync request if peersToSyncWith_ was empty
   if (not fullSyncTimer_->isScheduled()) {
     fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
   }
@@ -1332,7 +1352,7 @@ KvStore::attachCallbacks() {
         processSyncResponse();
       });
 
-  // Perform full sync if there are peers to sync with.
+  // Perform full-sync if there are peers to sync with.
   fullSyncTimer_ = fbzmq::ZmqTimeout::make(
       this, [this]() noexcept { requestFullSyncFromPeers(); });
 
@@ -1465,6 +1485,7 @@ KvStore::finalizeFullSync(
   params.solicitResponse = false;
   // I'm the initiator, set flood-root-id
   params.floodRootId = DualNode::getSptRootId();
+  params.timestamp_ms = getUnixTimeStampMs();
 
   updateRequest.cmd = thrift::Command::KEY_SET;
   updateRequest.keySetParams = params;
@@ -1576,6 +1597,7 @@ KvStore::floodPublication(
   params.solicitResponse = false;
   params.nodeIds = publication.nodeIds;
   params.floodRootId = publication.floodRootId;
+  params.timestamp_ms = getUnixTimeStampMs();
 
   floodRequest.cmd = thrift::Command::KEY_SET;
   floodRequest.keySetParams = params;
@@ -1686,6 +1708,22 @@ void
 KvStore::submitCounters() {
   VLOG(3) << "Submitting counters ... ";
   zmqMonitorClient_->setCounters(getCounters());
+}
+
+void
+KvStore::logSyncEvent(
+    const std::string& peerNodeName,
+    const std::chrono::milliseconds syncDuration) {
+  fbzmq::LogSample sample{};
+  sample.addString("event", "KVSTORE_FULL_SYNC");
+  sample.addString("node_name", nodeId_);
+  sample.addString("neighbor", peerNodeName);
+  sample.addInt("duration_ms", syncDuration.count());
+
+  zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(
+      apache::thrift::FRAGILE,
+      Constants::kEventLogCategory.toString(),
+      {sample.toJson()}));
 }
 
 void

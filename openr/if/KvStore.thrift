@@ -82,6 +82,10 @@ struct KeySetParams {
   // optional flood root-id, indicating which SPT this publication should be
   // flooded on; if none, flood to all peers
   6: optional string floodRootId;
+
+  // optional attribute to indicate timestamp when request is sent. This is
+  // system timestamp in milliseconds since epoch
+  7: optional i64 timestamp_ms
 }
 
 // parameters for the KEY_GET command

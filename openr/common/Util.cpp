@@ -377,7 +377,7 @@ addPerfEvent(
     const std::string& nodeName,
     const std::string& eventDescr) noexcept {
   thrift::PerfEvent event(
-      apache::thrift::FRAGILE, nodeName, eventDescr, getUnixTimeStamp());
+      apache::thrift::FRAGILE, nodeName, eventDescr, getUnixTimeStampMs());
   perfEvents.events.emplace_back(std::move(event));
 }
 
