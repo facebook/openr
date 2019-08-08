@@ -757,7 +757,6 @@ main(int argc, char** argv) {
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
           decisionGRWindow.hasValue(), /* waitOnDecision */
           kDecisionPubUrl,
-          maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_fib_rep_port),
           LinkMonitorGlobalPubUrl{
               folly::sformat("tcp://[::1]:{}", FLAGS_link_monitor_pub_port)},
           monitorSubmitUrl,

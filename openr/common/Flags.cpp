@@ -42,10 +42,6 @@ DEFINE_int32(
     openr::Constants::kMonitorRepPort,
     "The port monitor replies on");
 DEFINE_int32(
-    fib_rep_port,
-    openr::Constants::kFibRepPort,
-    "The port fib replier listens on");
-DEFINE_int32(
     health_checker_port,
     openr::Constants::kHealthCheckerPort,
     "The port health checker sends and recvs udp pings on");

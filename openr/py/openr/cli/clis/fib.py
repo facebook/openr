@@ -38,11 +38,10 @@ class FibCli(object):
         self.fib.add_command(FibValidateRoutesCli().validate)
 
     @click.group()
-    @breeze_option("--fib_rep_port", type=int, help="Fib rep port")
     @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
     @breeze_option("--client-id", type=int, help="FIB Client ID")
     @click.pass_context
-    def fib(ctx, fib_rep_port, fib_agent_port, client_id):  # noqa: B902
+    def fib(ctx, fib_agent_port, client_id):  # noqa: B902
         """ CLI tool to peek into Fib module. """
         pass
 

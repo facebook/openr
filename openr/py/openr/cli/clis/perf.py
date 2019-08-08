@@ -20,9 +20,8 @@ class PerfCli(object):
         self.perf.add_command(ViewFibCli().fib)
 
     @click.group()
-    @breeze_option("--fib_rep_port", type=int, help="Fib rep port")
     @click.pass_context
-    def perf(ctx, fib_rep_port):  # noqa: B902
+    def perf(ctx):  # noqa: B902
         """ CLI tool to view latest perf log of each module. """
         pass
 

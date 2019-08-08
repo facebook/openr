@@ -101,7 +101,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::seconds(2),
         false, /* waitOnDecision */
         DecisionPubUrl{"inproc://decision-pub"},
-        std::string{"inproc://fib-cmd"},
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},

@@ -91,7 +91,6 @@ class FibWrapper : public OpenrModuleTestBase {
         std::chrono::seconds(2),
         false, // waitOnDecision
         DecisionPubUrl{"inproc://decision-pub"},
-        folly::none,
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},

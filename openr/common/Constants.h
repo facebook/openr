@@ -262,9 +262,6 @@ class Constants {
   // The port monitor replies on
   static constexpr int32_t kMonitorRepPort{60008};
 
-  // The port fib replier listens on
-  static constexpr int32_t kFibRepPort{60009};
-
   // The port health checker sends and recvs udp pings on
   static constexpr int32_t kHealthCheckerPort{60010};
 

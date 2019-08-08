@@ -31,14 +31,12 @@ Fib::Fib(
     std::chrono::seconds coldStartDuration,
     bool waitOnDecision,
     const DecisionPubUrl& decisionPubUrl,
-    const folly::Optional<std::string>& fibRepUrl,
     const LinkMonitorGlobalPubUrl& linkMonPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventLoop(
-          myNodeName, thrift::OpenrModuleType::FIB, zmqContext, fibRepUrl),
+    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::FIB, zmqContext),
       myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),

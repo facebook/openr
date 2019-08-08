@@ -38,7 +38,6 @@ constexpr int Constants::kKeepAliveEnable;
 constexpr int32_t Constants::kOpenrCtrlPort;
 constexpr int32_t Constants::kDecisionPubPort;
 constexpr int32_t Constants::kFibAgentPort;
-constexpr int32_t Constants::kFibRepPort;
 constexpr int32_t Constants::kHealthCheckerPort;
 constexpr int32_t Constants::kKvStorePubPort;
 constexpr int32_t Constants::kKvStoreRepPort;

@@ -29,7 +29,6 @@ OPTIONS = bunch.Bunch(
         "config_store_url": Consts.CONFIG_STORE_URL,
         "enable_color": True,
         "fib_agent_port": Consts.FIB_AGENT_PORT,
-        "fib_rep_port": Consts.FIB_REP_PORT,
         "host": "localhost",
         "key_file": "",
         "kv_pub_port": Consts.KVSTORE_PUB_PORT,

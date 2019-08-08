@@ -27,7 +27,6 @@ DECLARE_int32(link_monitor_cmd_port);
 DECLARE_int32(monitor_pub_port);
 DECLARE_int32(monitor_rep_port);
 
-DECLARE_int32(fib_rep_port);
 DECLARE_int32(health_checker_port);
 DECLARE_int32(system_agent_port);
 DECLARE_int32(fib_handler_port);

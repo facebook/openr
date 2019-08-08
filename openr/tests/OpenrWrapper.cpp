@@ -48,7 +48,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       linkMonitorGlobalPubUrl_(
           folly::sformat("inproc://{}-linkmonitor-pub", nodeId_)),
       decisionPubUrl_(folly::sformat("inproc://{}-decision-pub", nodeId_)),
-      fibCmdUrl_(folly::sformat("inproc://{}-fib-cmd", nodeId_)),
       kvStoreReqSock_(context),
       sparkReqSock_(context),
       fibReqSock_(context),
@@ -252,7 +251,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       fibColdStartDuration,
       false, // waitOnDecision
       DecisionPubUrl{decisionPubUrl_},
-      std::string{fibCmdUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
@@ -260,7 +258,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       context_);
 
   // FIB client socket
-  fibReqSock_.connect(fbzmq::SocketUrl{fibCmdUrl_}).value();
+  fibReqSock_.connect(fbzmq::SocketUrl{fib_->inprocCmdUrl}).value();
 
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(

@@ -59,7 +59,6 @@ class Fib final : public OpenrEventLoop {
       std::chrono::seconds coldStartDuration,
       bool waitOnDecision,
       const DecisionPubUrl& decisionPubUrl,
-      const folly::Optional<std::string>& fibRepUrl,
       const LinkMonitorGlobalPubUrl& linkMonPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const KvStoreLocalCmdUrl& storeCmdUrl,
