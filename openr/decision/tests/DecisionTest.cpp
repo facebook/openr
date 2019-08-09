@@ -218,6 +218,84 @@ validatePopLabelRoute(
 } // anonymous namespace
 
 //
+// This test aims to verify counter reporting from Decision module
+//
+TEST(SpfSolver, Counters) {
+  SpfSolver spfSolver(
+      "1" /* nodeName */,
+      true /* enableV4 */,
+      false /* computeLfaPaths */,
+      false /* enableOrderedFib */,
+      false /* bgpDryRun */,
+      true /* bgpUseIgpMetric */);
+
+  // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
+  // Node2 has partial adjacency
+  auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
+  auto adjacencyDb2 = createAdjDb("2", {adj21, adj23}, 2);
+  auto adjacencyDb3 = createAdjDb("3", {adj31}, 3 << 20); // invalid mpls label
+  auto adjacencyDb4 = createAdjDb("4", {}, 4);
+  spfSolver.updateAdjacencyDatabase(adjacencyDb1);
+  spfSolver.updateAdjacencyDatabase(adjacencyDb2);
+  spfSolver.updateAdjacencyDatabase(adjacencyDb3);
+  spfSolver.updateAdjacencyDatabase(adjacencyDb4);
+
+  // Node1 and Node2 has both v4/v6 loopbacks, Node3 has only V6
+  auto mplsPrefixEntry1 = createPrefixEntry( // Incompatible forwarding type
+      toIpPrefix("10.1.0.0/16"),
+      thrift::PrefixType::LOOPBACK,
+      "",
+      thrift::PrefixForwardingType::IP,
+      thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP);
+  auto bgpPrefixEntry1 = createPrefixEntry( // Missing loopback
+      toIpPrefix("10.2.0.0/16"),
+      thrift::PrefixType::BGP,
+      "data=10.2.0.0/16",
+      thrift::PrefixForwardingType::IP,
+      thrift::PrefixForwardingAlgorithm::SP_ECMP,
+      folly::none,
+      thrift::MetricVector{} /* empty metric vector */);
+  auto bgpPrefixEntry2 = createPrefixEntry( // Missing metric vector
+      toIpPrefix("10.3.0.0/16"),
+      thrift::PrefixType::BGP,
+      "data=10.3.0.0/16",
+      thrift::PrefixForwardingType::IP,
+      thrift::PrefixForwardingAlgorithm::SP_ECMP,
+      folly::none,
+      folly::none /* missing metric vector */);
+  const auto prefixDb1 = createPrefixDb(
+      "1", {createPrefixEntry(addr1), createPrefixEntry(addr1V4)});
+  const auto prefixDb2 = createPrefixDb(
+      "2", {createPrefixEntry(addr2), createPrefixEntry(addr2V4)});
+  const auto prefixDb3 = createPrefixDb(
+      "3", {createPrefixEntry(addr3), bgpPrefixEntry1, mplsPrefixEntry1});
+  const auto prefixDb4 =
+      createPrefixDb("4", {createPrefixEntry(addr4), bgpPrefixEntry2});
+  spfSolver.updatePrefixDatabase(prefixDb1);
+  spfSolver.updatePrefixDatabase(prefixDb2);
+  spfSolver.updatePrefixDatabase(prefixDb3);
+  spfSolver.updatePrefixDatabase(prefixDb4);
+
+  // Perform SPF run to generate some counters
+  spfSolver.buildPaths("1");
+
+  // Verify counters
+  const auto counters = spfSolver.getCounters();
+  EXPECT_EQ(counters.at("decision.num_partial_adjacencies"), 1);
+  EXPECT_EQ(counters.at("decision.num_complete_adjacencies"), 2);
+  EXPECT_EQ(counters.at("decision.num_nodes"), 3);
+  EXPECT_EQ(counters.at("decision.num_prefixes"), 9);
+  EXPECT_EQ(counters.at("decision.num_nodes_v4_loopbacks"), 2);
+  EXPECT_EQ(counters.at("decision.num_nodes_v6_loopbacks"), 4);
+  EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.missing_loopback_addr.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.incompatible_forwarding_type.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.skipped_unicast_route.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.skipped_mpls_route.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.no_route_to_label.count.60"), 1);
+}
+
+//
 // Create a broken topology where R1 and R2 connect no one
 // Expect no routes coming out of the spfSolver
 //

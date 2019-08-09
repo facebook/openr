@@ -903,16 +903,19 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       if (hasNonBGP) {
         LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
                    << " which is advertised with BGP and non-BGP type.";
+        tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
         continue;
       }
       if (missingMv) {
         LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
                    << " at least one advertiser is missing its metric vector.";
+        tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
         continue;
       }
       if (hasKsp2EdEcmp) {
         LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
                    << " which is advertised with KSP2_ED_ECMP algorithm.";
+        tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
         continue;
       }
     }
@@ -927,6 +930,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     bool isV4Prefix = prefixStr.size() == folly::IPAddressV4::byteCount();
     if (isV4Prefix && !enableV4_) {
       LOG(WARNING) << "Received v4 prefix while v4 is not enabled.";
+      tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
       continue;
     }
 
@@ -964,6 +968,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     if (not isMplsLabelValid(topLabel)) {
       LOG(ERROR) << "Ignoring invalid node label " << topLabel << " of node "
                  << adjDb.thisNodeName;
+      tData_.addStatValue("decision.skipped_mpls_route", 1, fbzmq::COUNT);
       continue;
     }
 
@@ -1016,6 +1021,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     if (not isMplsLabelValid(topLabel)) {
       LOG(ERROR) << "Ignoring invalid adjacency label " << topLabel
                  << " of link " << link->directionalToString(myNodeName);
+      tData_.addStatValue("decision.skipped_mpls_route", 1, fbzmq::COUNT);
       continue;
     }
 
@@ -1091,8 +1097,9 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     // Skip unreachable nodes
     auto it = mySpfResult.find(nodeName);
     if (it == mySpfResult.end()) {
-      LOG(ERROR) << "No path to " << nodeName << ". Skipping considering this.";
-      // skip if no path to node
+      LOG(ERROR) << "No route to " << nodeName
+                 << ". Skipping considering this.";
+      // skip if no route to node
       continue;
     }
 
@@ -1156,14 +1163,15 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
   if (nodes.empty() or nodes.count(myNodeName)) {
     // do not program a route if we are advertising a best path to it or there
     // is no path to it
+    LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
+    tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
     return folly::none;
   }
   CHECK_NOTNULL(bestData);
   auto bestNexthop = getLoopbackVias({bestNode}, isV4, bestIgpMetric);
   if (bestNexthop.size() != 1) {
-    LOG(ERROR)
-        << "Cannot find the best paths loopback address. Skipping route for prefix: "
-        << toString(prefix);
+    LOG(ERROR) << "Cannot find the best paths loopback address. "
+               << "Skipping route for prefix: " << toString(prefix);
     return folly::none;
   }
 
@@ -1192,6 +1200,8 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRoute(
                  << TEnumTraits<thrift::PrefixForwardingType>::findName(
                         np.second.forwardingType)
                  << " for algorithm KSP2_ED_ECMP;";
+      tData_.addStatValue(
+          "decision.incompatible_forwarding_type", 1, fbzmq::COUNT);
       return folly::none;
     }
   }
@@ -1243,6 +1253,9 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRoute(
 
   // Step-4 Convert all paths
   if (not dstPaths.size()) {
+    LOG(WARNING) << "No route to prefix " << toString(prefix)
+                 << ", advertised by: " << folly::join(", ", dstNodeNames);
+    tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
     return folly::none;
   }
 
@@ -1292,7 +1305,8 @@ SpfSolver::SpfSolverImpl::getLoopbackVias(
       isV4 ? nodeHostLoopbacksV4_ : nodeHostLoopbacksV6_;
   for (auto const& node : nodes) {
     if (!hostLoopBacks.count(node)) {
-      LOG(ERROR) << "No loopback for node: " << node;
+      LOG(ERROR) << "No loopback for node " << node;
+      tData_.addStatValue("decision.missing_loopback_addr", 1, fbzmq::COUNT);
     } else {
       result.emplace_back(
           createNextHop(hostLoopBacks.at(node), "", igpMetric.value_or(0)));
@@ -1527,7 +1541,31 @@ SpfSolver::SpfSolverImpl::getOrderedLinkSet(
 
 std::unordered_map<std::string, int64_t>
 SpfSolver::SpfSolverImpl::getCounters() {
-  return tData_.getCounters();
+  using NodeIface = std::pair<std::string, std::string>;
+
+  // Create adjacencies
+  std::unordered_map<NodeIface, std::unordered_set<NodeIface>> adjs;
+  size_t numPartialAdjacencies{0};
+  for (auto const& kv : adjacencyDatabases_) {
+    const auto& adjDb = kv.second;
+    size_t numLinks = linkState_.linksFromNode(kv.first).size();
+    // Number of links (bi-directional) must be <= number of adjacencies
+    CHECK_LE(numLinks, adjDb.adjacencies.size());
+    numPartialAdjacencies += adjDb.adjacencies.size() - numLinks;
+  }
+
+  // Get stats from tData_
+  auto counters = tData_.getCounters();
+
+  // Add custom counters
+  counters["decision.num_partial_adjacencies"] = numPartialAdjacencies;
+  counters["decision.num_complete_adjacencies"] = linkState_.numLinks();
+  counters["decision.num_nodes"] = linkState_.numNodes();
+  counters["decision.num_prefixes"] = prefixes_.size();
+  counters["decision.num_nodes_v4_loopbacks"] = nodeHostLoopbacksV4_.size();
+  counters["decision.num_nodes_v6_loopbacks"] = nodeHostLoopbacksV6_.size();
+
+  return counters;
 }
 
 //

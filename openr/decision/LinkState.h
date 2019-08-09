@@ -198,6 +198,16 @@ class LinkState {
 
   bool hasHolds() const;
 
+  size_t
+  numLinks() const {
+    return allLinks_.size();
+  }
+
+  size_t
+  numNodes() const {
+    return linkMap_.size();
+  }
+
  private:
   // this stores the same link object accessible from either nodeName
   std::unordered_map<std::string /* nodeName */, LinkSet> linkMap_;
