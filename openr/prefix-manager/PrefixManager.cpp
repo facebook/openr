@@ -170,15 +170,6 @@ PrefixManager::persistPrefixDb() {
     }
   }
 
-  // Add perf information if enabled
-  if (enablePerfMeasurement_) {
-    thrift::PerfEvents perfEvents;
-    addPerfEvent(perfEvents, nodeId_, "PREFIX_DB_UPDATED");
-    persistentPrefixDb.perfEvents = perfEvents;
-  } else {
-    DCHECK(!persistentPrefixDb.perfEvents.hasValue());
-  }
-
   auto ret = configStoreClient_.storeThriftObj(kConfigKey, persistentPrefixDb);
   if (ret.hasError()) {
     LOG(ERROR) << "Error saving persistent prefixDb to file. " << ret.error();
@@ -187,17 +178,20 @@ PrefixManager::persistPrefixDb() {
 
 void
 PrefixManager::advertisePrefixWithdraw(const thrift::PrefixEntry& prefixEntry) {
-  thrift::PrefixDatabase prefxDb;
-  prefxDb.thisNodeName = nodeId_;
-  prefxDb.prefixEntries = {prefixEntry};
-  prefxDb.deletePrefix = true;
-  const auto prefxDbStr = fbzmq::util::writeThriftObjStr(prefxDb, serializer_);
+  thrift::PrefixDatabase prefixDb;
+  prefixDb.thisNodeName = nodeId_;
+  prefixDb.prefixEntries = {prefixEntry};
+  prefixDb.deletePrefix = true;
   auto prefixKey = PrefixKey(
       nodeId_,
       folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
       0);
+  VLOG(1) << "Withdrawing prefix " << prefixKey.getPrefixKey()
+          << " from KvStore";
   kvStoreClient_.clearKey(
-      prefixKey.getPrefixKey(), prefxDbStr, ttlKeyInKvStore_);
+      prefixKey.getPrefixKey(),
+      serializePrefixDb(std::move(prefixDb)),
+      ttlKeyInKvStore_);
 }
 
 void
@@ -207,15 +201,16 @@ PrefixManager::advertisePrefix(const thrift::PrefixEntry& prefixEntry) {
   prefixDb.thisNodeName = nodeId_;
   prefixDb.prefixEntries.emplace_back(prefixEntry);
 
-  const auto ipPrefixKey = PrefixKey(
+  const auto prefixKey = PrefixKey(
       nodeId_,
       folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
       0);
-  auto prefixKeyStr = ipPrefixKey.getPrefixKey();
-  const auto prefixDbVal =
-      fbzmq::util::writeThriftObjStr(prefixDb, serializer_);
-  VLOG(1) << "Writing prefix to KvStore " << prefixKeyStr;
-  kvStoreClient_.persistKey(prefixKeyStr, prefixDbVal, ttlKeyInKvStore_);
+  VLOG(1) << "Advertising prefix " << prefixKey.getPrefixKey()
+          << " to KvStore ";
+  kvStoreClient_.persistKey(
+      prefixKey.getPrefixKey(),
+      serializePrefixDb(std::move(prefixDb)),
+      ttlKeyInKvStore_);
 }
 
 void
@@ -255,13 +250,11 @@ PrefixManager::updateKvStore() {
     prefixDb.prefixEntries.emplace_back(kv.second);
   }
 
-  const auto prefixDbVal =
-      fbzmq::util::writeThriftObjStr(prefixDb, serializer_);
   const auto prefixDbKey = folly::sformat(
       "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_);
-
-  LOG(INFO) << "writing my prefix to KvStore " << prefixDbKey;
-  kvStoreClient_.persistKey(prefixDbKey, prefixDbVal, ttlKeyInKvStore_);
+  LOG(INFO) << "Updating all prefixes in KvStore " << prefixDbKey;
+  kvStoreClient_.persistKey(
+      prefixDbKey, serializePrefixDb(std::move(prefixDb)), ttlKeyInKvStore_);
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
@@ -556,6 +549,20 @@ PrefixManager::isAnyExistingPrefixPersistent(
     }
   }
   return false;
+}
+
+std::string
+PrefixManager::serializePrefixDb(thrift::PrefixDatabase&& prefixDb) {
+  // Add perf information if enabled
+  if (enablePerfMeasurement_) {
+    thrift::PerfEvents perfEvents;
+    addPerfEvent(perfEvents, nodeId_, "PREFIX_DB_UPDATED");
+    prefixDb.perfEvents = perfEvents;
+  } else {
+    DCHECK(!prefixDb.perfEvents.hasValue());
+  }
+
+  return fbzmq::util::writeThriftObjStr(prefixDb, serializer_);
 }
 
 } // namespace openr

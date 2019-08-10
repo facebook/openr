@@ -124,7 +124,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
         MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         perPrefixKeys_ /* per prefix keys */,
-        false /* prefix-mananger perf measurement */,
+        true /* prefix-mananger perf measurement */,
         std::chrono::seconds{0},
         Constants::kKvStoreDbTtl,
         context);
@@ -355,6 +355,14 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
       maybeValue.value().value.value(), serializer);
   EXPECT_EQ(db.thisNodeName, "node-1");
   EXPECT_EQ(db.prefixEntries.size(), 1);
+  ASSERT_TRUE(db.perfEvents.hasValue());
+  ASSERT_EQ(1, db.perfEvents->events.size());
+  {
+    const auto& perfEvent = db.perfEvents->events.at(0);
+    EXPECT_EQ("PREFIX_DB_UPDATED", perfEvent.eventDescr);
+    EXPECT_EQ("node-1", perfEvent.nodeName);
+    EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+  }
 
   prefixManagerClient->withdrawPrefixes({prefixEntry1});
   prefixManagerClient->addPrefixes({prefixEntry2});
@@ -374,6 +382,14 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
       maybeValue1.value().value.value(), serializer);
   auto prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 1);
+  ASSERT_TRUE(db.perfEvents.hasValue());
+  ASSERT_EQ(1, db.perfEvents->events.size());
+  {
+    const auto& perfEvent = db.perfEvents->events.at(0);
+    EXPECT_EQ("PREFIX_DB_UPDATED", perfEvent.eventDescr);
+    EXPECT_EQ("node-1", perfEvent.nodeName);
+    EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+  }
 
   // Wait for throttled update to announce to kvstore
   std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
@@ -383,6 +399,14 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
       maybeValue2.value().value.value(), serializer);
   prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 8);
+  ASSERT_TRUE(db.perfEvents.hasValue());
+  ASSERT_EQ(1, db.perfEvents->events.size());
+  {
+    const auto& perfEvent = db.perfEvents->events.at(0);
+    EXPECT_EQ("PREFIX_DB_UPDATED", perfEvent.eventDescr);
+    EXPECT_EQ("node-1", perfEvent.nodeName);
+    EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+  }
 
   // now make a change and check again
   prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
@@ -395,6 +419,14 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
       maybeValue3.value().value.value(), serializer);
   prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 5);
+  ASSERT_TRUE(db.perfEvents.hasValue());
+  ASSERT_EQ(1, db.perfEvents->events.size());
+  {
+    const auto& perfEvent = db.perfEvents->events.at(0);
+    EXPECT_EQ("PREFIX_DB_UPDATED", perfEvent.eventDescr);
+    EXPECT_EQ("node-1", perfEvent.nodeName);
+    EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+  }
 }
 
 /**

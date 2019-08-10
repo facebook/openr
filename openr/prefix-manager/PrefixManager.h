@@ -102,6 +102,10 @@ class PrefixManager final : public OpenrEventLoop {
   // delete prefix DB flag set to true
   void advertisePrefixWithdraw(const thrift::PrefixEntry& prefixEntry);
 
+  // serialize prefixDb. This also adds miscellaneous information like perf
+  // events
+  std::string serializePrefixDb(thrift::PrefixDatabase&& prefixDb);
+
   // this node name
   const std::string nodeId_;
 
