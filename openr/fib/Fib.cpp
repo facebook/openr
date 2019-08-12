@@ -111,6 +111,16 @@ Fib::Fib(
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
+
+  // Initialize stats keys
+  tData_.addStatExportType("fib.convergence_time_ms", fbzmq::AVG);
+  tData_.addStatExportType("fib.local_route_program_time_ms", fbzmq::AVG);
+  tData_.addStatExportType("fib.process_interface_db", fbzmq::COUNT);
+  tData_.addStatExportType("fib.process_route_db", fbzmq::COUNT);
+  tData_.addStatExportType("fib.sync_fib_calls", fbzmq::COUNT);
+  tData_.addStatExportType("fib.thrift.failure.add_del_route", fbzmq::COUNT);
+  tData_.addStatExportType("fib.thrift.failure.keepalive", fbzmq::COUNT);
+  tData_.addStatExportType("fib.thrift.failure.sync_fib", fbzmq::COUNT);
 }
 
 void

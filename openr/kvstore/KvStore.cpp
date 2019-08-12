@@ -251,6 +251,33 @@ KvStore::KvStore(
   // happens within updateTtlCountdownQueue()
   ttlCountdownTimer_ = fbzmq::ZmqTimeout::make(
       this, [this]() noexcept { cleanupTtlCountdownQueue(); });
+
+  // Initialize stats keys
+  tData_.addStatExportType("kvstore.cmd_hash_dump", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.cmd_key_dump", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.cmd_key_get", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.cmd_key_set", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.cmd_peer_add", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.cmd_peer_dump", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.cmd_per_del", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.expired_key_vals", fbzmq::SUM);
+  tData_.addStatExportType("kvstore.flood_duration_ms", fbzmq::AVG);
+  tData_.addStatExportType("kvstore.full_sync_duration_ms", fbzmq::AVG);
+  tData_.addStatExportType("kvstore.looped_publications", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.peers.bytes_received", fbzmq::SUM);
+  tData_.addStatExportType("kvstore.peers.bytes_received", fbzmq::SUM);
+  tData_.addStatExportType("kvstore.peers.bytes_sent", fbzmq::SUM);
+  tData_.addStatExportType("kvstore.peers.bytes_sent", fbzmq::SUM);
+  tData_.addStatExportType("kvstore.rate_limit_keys", fbzmq::AVG);
+  tData_.addStatExportType("kvstore.rate_limit_suppress", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.received_dual_messages", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.received_key_vals", fbzmq::SUM);
+  tData_.addStatExportType("kvstore.received_publications", fbzmq::COUNT);
+  tData_.addStatExportType(
+      "kvstore.received_redundant_publications", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.sent_key_vals", fbzmq::SUM);
+  tData_.addStatExportType("kvstore.sent_publications", fbzmq::COUNT);
+  tData_.addStatExportType("kvstore.updated_key_vals", fbzmq::SUM);
 }
 
 // static, public

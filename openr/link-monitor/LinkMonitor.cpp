@@ -218,6 +218,12 @@ LinkMonitor::LinkMonitor(
 
   // Initialize ZMQ sockets
   prepare();
+
+  // Initialize stats keys
+  tData_.addStatExportType("link_monitor.neighbor_up", fbzmq::SUM);
+  tData_.addStatExportType("link_monitor.neighbor_down", fbzmq::SUM);
+  tData_.addStatExportType("link_monitor.advertise_adjacencies", fbzmq::SUM);
+  tData_.addStatExportType("link_monitor.advertise_links", fbzmq::SUM);
 }
 
 void

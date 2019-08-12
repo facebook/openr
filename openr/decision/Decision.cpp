@@ -144,7 +144,24 @@ class SpfSolver::SpfSolverImpl {
         computeLfaPaths_(computeLfaPaths),
         enableOrderedFib_(enableOrderedFib),
         bgpDryRun_(bgpDryRun),
-        bgpUseIgpMetric_(bgpUseIgpMetric) {}
+        bgpUseIgpMetric_(bgpUseIgpMetric) {
+    // Initialize stat keys
+    tData_.addStatExportType("decision.adj_db_update", fbzmq::COUNT);
+    tData_.addStatExportType(
+        "decision.incompatible_forwarding_type", fbzmq::COUNT);
+    tData_.addStatExportType("decision.missing_loopback_addr", fbzmq::COUNT);
+    tData_.addStatExportType("decision.no_route_to_label", fbzmq::COUNT);
+    tData_.addStatExportType("decision.no_route_to_prefix", fbzmq::COUNT);
+    tData_.addStatExportType("decision.path_build_ms", fbzmq::AVG);
+    tData_.addStatExportType("decision.path_build_runs", fbzmq::COUNT);
+    tData_.addStatExportType("decision.prefix_db_update", fbzmq::COUNT);
+    tData_.addStatExportType("decision.route_build_ms", fbzmq::AVG);
+    tData_.addStatExportType("decision.route_build_runs", fbzmq::COUNT);
+    tData_.addStatExportType("decision.skipped_mpls_route", fbzmq::COUNT);
+    tData_.addStatExportType("decision.skipped_unicast_route", fbzmq::COUNT);
+    tData_.addStatExportType("decision.spf_ms", fbzmq::AVG);
+    tData_.addStatExportType("decision.spf_runs", fbzmq::COUNT);
+  }
 
   ~SpfSolverImpl() = default;
 

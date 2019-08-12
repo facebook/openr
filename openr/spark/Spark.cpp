@@ -212,6 +212,17 @@ Spark::Spark(
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
+
+  // Initialize some stat keys
+  tData_.addStatExportType(
+      "spark.invalid_keepalive.different_domain", fbzmq::SUM);
+  tData_.addStatExportType(
+      "spark.invalid_keepalive.invalid_version", fbzmq::SUM);
+  tData_.addStatExportType(
+      "spark.invalid_keepalive.missing_v4_addr", fbzmq::SUM);
+  tData_.addStatExportType(
+      "spark.invalid_keepalive.different_subnet", fbzmq::SUM);
+  tData_.addStatExportType("spark.invalid_keepalive.looped_packet", fbzmq::SUM);
 }
 
 void
