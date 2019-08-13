@@ -127,8 +127,7 @@ Watchdog::updateCounters() {
 
 void
 Watchdog::fireCrash(const std::string& msg) {
-  LOG(WARNING) << msg;
-  syslog(LOG_ALERT, "%s", msg.c_str());
+  SYSLOG(ERROR) << msg;
   // hell ya!
   abort();
 }

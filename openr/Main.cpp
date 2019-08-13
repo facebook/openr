@@ -171,7 +171,7 @@ main(int argc, char** argv) {
   // LOG_NODELAY => Connect immediately
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
-  syslog(LOG_NOTICE, "Starting OpenR daemon.");
+  SYSLOG(INFO) << "Starting OpenR daemon.";
 
   // Export and log build information
   BuildInfo::exportBuildInfo();
@@ -930,7 +930,7 @@ main(int argc, char** argv) {
   }
 
   // Close syslog connection (this is optional)
-  syslog(LOG_NOTICE, "Stopping OpenR daemon.");
+  SYSLOG(INFO) << "Stopping OpenR daemon.";
   closelog();
 
   return 0;

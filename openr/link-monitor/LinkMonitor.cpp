@@ -527,18 +527,6 @@ LinkMonitor::neighborUpEvent(
       std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
           .count();
 
-  VLOG(1) << "LinkMonitor::neighborUpEvent called for '"
-          << toString(neighborAddrV6) << "%" << ifName << "', nodeName: '"
-          << remoteNodeName << "'"
-          << ", nodeIfName: '" << remoteIfName << "'";
-  syslog(
-      LOG_NOTICE,
-      "%s",
-      folly::sformat(
-          "Neighbor {} is up on interface {}.", remoteNodeName, ifName)
-          .c_str());
-  tData_.addStatValue("link_monitor.neighbor_up", 1, fbzmq::SUM);
-
   int64_t weight = 1;
   if (interfaces_.count(ifName)) {
     weight = interfaces_.at(ifName).getWeight();
@@ -557,6 +545,13 @@ LinkMonitor::neighborUpEvent(
       timestamp,
       weight,
       remoteIfName /* otherIfName */);
+
+  SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is up on interface "
+               << ifName << ". Remote Interface: " << remoteIfName
+               << ", metric: " << newAdj.metric << ", rttUs: " << event.rttUs
+               << ", addrV4: " << toString(neighborAddrV4)
+               << ", addrV6: " << toString(neighborAddrV6);
+  tData_.addStatValue("link_monitor.neighbor_up", 1, fbzmq::SUM);
 
   std::string pubUrl, repUrl;
   if (!mockMode_) {
@@ -597,14 +592,8 @@ LinkMonitor::neighborDownEvent(
     const std::string& remoteNodeName, const std::string& ifName) {
   const auto adjId = std::make_pair(remoteNodeName, ifName);
 
-  VLOG(1) << "LinkMonitor::neighborDownEvent called for nodeName: '"
-          << remoteNodeName << "', interface: '" << ifName << "'.";
-  syslog(
-      LOG_NOTICE,
-      "%s",
-      folly::sformat(
-          "Neighbor {} is down on interface {}.", remoteNodeName, ifName)
-          .c_str());
+  SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is down on interface "
+               << ifName;
   tData_.addStatValue("link_monitor.neighbor_down", 1, fbzmq::SUM);
 
   // remove such adjacencies
@@ -619,15 +608,8 @@ void
 LinkMonitor::neighborRestartingEvent(
     const std::string& remoteNodeName, const std::string& ifName) {
   const auto adjId = std::make_pair(remoteNodeName, ifName);
-
-  VLOG(1) << "LinkMonitor::neighborRestartingEvent called for nodeName: '"
-          << remoteNodeName << "', interface: '" << ifName << "'";
-  syslog(
-      LOG_NOTICE,
-      "%s",
-      folly::sformat(
-          "Neighbor {} is restarting on interface {}.", remoteNodeName, ifName)
-          .c_str());
+  SYSLOG(INFO) << "Neighbor " << remoteNodeName
+               << " is restarting on interface " << ifName;
 
   // update adjacencies_ restarting-bit and advertise peers
   if (adjacencies_.count(adjId)) {
@@ -1068,7 +1050,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
       LOG(INFO) << "Skip update. Node already in overloaded state";
       break;
     }
-    LOG(INFO) << "Setting overload bit for node.";
+    SYSLOG(INFO) << "Setting overload bit for node";
     config_.isOverloaded = true;
     advertiseAdjacencies(); // TODO: Use throttle here
     break;
@@ -1078,7 +1060,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
       LOG(INFO) << "Skip update. Node is currently NOT in overloaded state";
       break;
     }
-    LOG(INFO) << "Unsetting overload bit for node.";
+    SYSLOG(INFO) << "Unsetting overload bit for node";
     config_.isOverloaded = false;
     advertiseAdjacencies(); // TODO: Use throttle here
     break;
@@ -1094,14 +1076,15 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
                 << " is already overloaded";
       break;
     }
-    LOG(INFO) << "Setting overload bit for interface " << req.interfaceName;
+    SYSLOG(INFO) << "Setting overload bit for interface " << req.interfaceName;
     config_.overloadedLinks.insert(req.interfaceName);
     advertiseAdjacencies(); // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD:
     if (config_.overloadedLinks.erase(req.interfaceName)) {
-      LOG(INFO) << "Unsetting overload bit for interface " << req.interfaceName;
+      SYSLOG(INFO) << "Unsetting overload bit for interface "
+                   << req.interfaceName;
       advertiseAdjacencies(); // TODO: Use throttle here
     } else {
       LOG(WARNING) << "Got unset-overload-bit request for unknown link "
@@ -1126,16 +1109,16 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
                 << " already set for interface: " << req.interfaceName;
       break;
     }
-    LOG(INFO) << "Overriding metric for interface " << req.interfaceName
-              << " to " << req.overrideMetric;
+    SYSLOG(INFO) << "Overriding metric for interface " << req.interfaceName
+                 << " to " << req.overrideMetric;
     config_.linkMetricOverrides[req.interfaceName] = req.overrideMetric;
     advertiseAdjacencies(); // TODO: Use throttle here
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_METRIC:
     if (config_.linkMetricOverrides.erase(req.interfaceName)) {
-      LOG(INFO) << "Removing metric override for interface "
-                << req.interfaceName;
+      SYSLOG(INFO) << "Removing metric override for interface "
+                   << req.interfaceName;
       advertiseAdjacencies(); // TODO: Use throttle here
     } else {
       LOG(WARNING) << "Got link-metric-unset request for unknown interface "
@@ -1328,15 +1311,8 @@ LinkMonitor::logLinkEvent(
       Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 
-  syslog(
-      LOG_NOTICE,
-      "%s",
-      folly::sformat(
-          "Interface {} is {} and has backoff of {}ms",
-          iface,
-          event,
-          backoffTime.count())
-          .c_str());
+  SYSLOG(INFO) << "Interface " << iface << " is " << event
+               << " and has backoff of " << backoffTime.count() << "ms";
 }
 
 void
