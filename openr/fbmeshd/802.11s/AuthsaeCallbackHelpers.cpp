@@ -87,7 +87,13 @@ peer_created(unsigned char* peer_mac) {
 
 static void
 delete_peer_by_addr(unsigned char* peer_mac) {
-  candidate* cand = find_peer(peer_mac, 0);
+  candidate* cand = find_peer(peer_mac, 1);
+
+  /* prefer authenticated peer when deleting */
+  if (!cand) {
+    cand = find_peer(peer_mac, 0);
+  }
+
   if (!cand) {
     return;
   }
