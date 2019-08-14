@@ -252,6 +252,7 @@ estab_peer_link(
     elems.vht_info_len = sizeof(*cand->vht_info);
 
     nlHandler->createUnauthenticatedStation(netif, peer, elems);
+    cand->in_kernel = true;
   }
 
   // Report that we are now authenticated
