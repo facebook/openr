@@ -19,13 +19,13 @@ namespace openr {
 
 namespace detail {
 
-void
+static void
 setCompressionTransform(apache::thrift::HeaderClientChannel* channel) {
   CHECK(channel);
   channel->setTransform(apache::thrift::transport::THeader::ZSTD_TRANSFORM);
 }
 
-void
+static void
 setCompressionTransform(apache::thrift::RocketClientChannel* /*channel*/) {
   CHECK(false) << "Transform is not supported on rocket client channel";
 }
