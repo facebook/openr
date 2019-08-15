@@ -71,8 +71,9 @@ getOpenrCtrlPlainTextClient(
 
     // Enable compression for efficient transport when available. This will
     // incur CPU cost but it is insignificant for usual queries.
-    detail::setCompressionTransform(channel.get());
-
+    if (typeid(ClientChannel) == typeid(apache::thrift::HeaderClientChannel)) {
+      detail::setCompressionTransform(channel.get());
+    }
     // Create client
     client =
         std::make_unique<thrift::OpenrCtrlCppAsyncClient>(std::move(channel));
