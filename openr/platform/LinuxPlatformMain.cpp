@@ -60,13 +60,28 @@ main(int argc, char** argv) {
 
   std::vector<std::thread> allThreads{};
 
+  auto nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
+  nlProtocolSocket = std::make_unique<openr::Netlink::NetlinkProtocolSocket>(
+      nlProtocolSocketEventLoop.get());
+  allThreads.emplace_back(
+      std::thread([&nlProtocolSocket, &nlProtocolSocketEventLoop]() {
+        LOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
+        folly::setThreadName("NetlinkProtolSocketEvl");
+        nlProtocolSocket->init();
+        nlProtocolSocketEventLoop->run();
+        LOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
+      }));
+  nlProtocolSocketEventLoop->waitUntilRunning();
+
   // Create event publisher to handle event subscription
   auto eventPublisher = std::make_unique<openr::PlatformPublisher>(
       context, openr::PlatformPublisherUrl{FLAGS_platform_pub_url});
 
   auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
   auto nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
-      nlEventLoop.get(), eventPublisher.get());
+      nlEventLoop.get(), nullptr, std::move(nlProtocolSocket));
+
   // Subscribe selected network events
   nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
   nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);
@@ -126,6 +141,8 @@ main(int argc, char** argv) {
 
   nlEventLoop->stop();
   nlEventLoop->waitUntilStopped();
+  nlProtocolSocketEventLoop->stop();
+  nlProtocolSocketEventLoop->waitUntilStopped();
 
   if (FLAGS_enable_netlink_fib_handler) {
     linuxFibAgentServer.stop();
