@@ -13,22 +13,25 @@
 #include <netinet/icmp6.h>
 #include <netinet/ip6.h>
 
+#include <folly/Format.h>
+
 using namespace openr::fbmeshd;
 
 PeriodicPinger::PeriodicPinger(
-    folly::EventBase* evb,
     folly::IPAddressV6 dst,
     folly::IPAddressV6 src,
     std::chrono::milliseconds interval,
     const std::string& interface)
-    : folly::AsyncTimeout{evb},
-      dst_{dst},
-      src_{src},
-      interval_{interval},
-      interface_{interface} {}
+    : dst_{dst}, src_{src}, interface_{interface} {
+  // Set timer to ping
+  periodicPingerTimer_ =
+      fbzmq::ZmqTimeout::make(this, [this]() noexcept { doPing(); });
+  periodicPingerTimer_->scheduleTimeout(interval, true);
+}
 
 void
-PeriodicPinger::timeoutExpired() noexcept {
+PeriodicPinger::doPing() {
+  VLOG(8) << folly::sformat("PeriodicPinger::{}()", __func__);
   auto sock = ::socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
   CHECK_NE(sock, -1);
 
@@ -57,6 +60,4 @@ PeriodicPinger::timeoutExpired() noexcept {
       sizeof(dstSockAddr));
 
   ::close(sock);
-
-  scheduleTimeout(interval_);
 }

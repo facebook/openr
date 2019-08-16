@@ -338,16 +338,6 @@ main(int argc, char* argv[]) {
   std::unique_ptr<UDPRoutingPacketTransport> routingPacketTransport =
       std::make_unique<UDPRoutingPacketTransport>(
           &routingEventLoop, FLAGS_mesh_ifname, 6668, FLAGS_routing_tos);
-  std::unique_ptr<PeriodicPinger> periodicPinger =
-      std::make_unique<PeriodicPinger>(
-          &routingEventLoop,
-          folly::IPAddressV6{folly::sformat("ff02::1%{}", FLAGS_mesh_ifname)},
-          folly::IPAddressV6{
-              folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
-              nlHandler.lookupMeshNetif().maybeMacAddress.value()},
-          kPeriodicPingerInterval,
-          FLAGS_mesh_ifname);
-  periodicPinger->scheduleTimeout(1s);
 
   // set up NetlinkProtocolSocket in a new thread to program the linux kernel
   auto nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
@@ -363,6 +353,25 @@ main(int argc, char* argv[]) {
         LOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
       }));
   nlProtocolSocketEventLoop->waitUntilRunning();
+
+  std::unique_ptr<PeriodicPinger> periodicPinger =
+      std::make_unique<PeriodicPinger>(
+          folly::IPAddressV6{folly::sformat("ff02::1%{}", FLAGS_mesh_ifname)},
+          folly::IPAddressV6{
+              folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
+              nlHandler.lookupMeshNetif().maybeMacAddress.value()},
+          kPeriodicPingerInterval,
+          FLAGS_mesh_ifname);
+
+  static constexpr auto periodicPingerId{"PeriodicPinger"};
+  monitorEventLoopWithWatchdog(
+      periodicPinger.get(), periodicPingerId, watchdog.get());
+  allThreads.emplace_back(std::thread([&periodicPinger]() noexcept {
+    LOG(INFO) << "Starting PeriodicPinger thread...";
+    folly::setThreadName(periodicPingerId);
+    periodicPinger->run();
+    LOG(INFO) << "PeriodicPinger thread stopped.";
+  }));
 
   std::unique_ptr<SyncRoutes80211s> syncRoutes80211s =
       std::make_unique<SyncRoutes80211s>(
@@ -475,6 +484,9 @@ main(int argc, char* argv[]) {
 
   gatewayConnectivityMonitor.stop();
   gatewayConnectivityMonitor.waitUntilStopped();
+
+  periodicPinger->stop();
+  periodicPinger->waitUntilStopped();
 
   syncRoutes80211s->stop();
   syncRoutes80211s->waitUntilStopped();

@@ -9,35 +9,35 @@
 
 #include <chrono>
 
+#include <fbzmq/async/ZmqEventLoop.h>
+#include <fbzmq/async/ZmqTimeout.h>
+
 #include <folly/IPAddressV6.h>
-#include <folly/io/async/AsyncTimeout.h>
-#include <folly/io/async/EventBase.h>
 
 namespace openr {
 namespace fbmeshd {
 
-class PeriodicPinger : public folly::AsyncTimeout {
+class PeriodicPinger : public fbzmq::ZmqEventLoop {
  public:
   PeriodicPinger(
-      folly::EventBase* evb,
       folly::IPAddressV6 dst,
       folly::IPAddressV6 src,
       std::chrono::milliseconds interval,
       const std::string& interface);
 
   PeriodicPinger() = delete;
-  ~PeriodicPinger() override = default;
+  ~PeriodicPinger() = default;
   PeriodicPinger(const PeriodicPinger&) = delete;
   PeriodicPinger(PeriodicPinger&&) = delete;
   PeriodicPinger& operator=(const PeriodicPinger&) = delete;
   PeriodicPinger& operator=(PeriodicPinger&&) = delete;
 
  private:
-  virtual void timeoutExpired() noexcept override;
+  void doPing();
 
   folly::IPAddressV6 dst_;
   folly::IPAddressV6 src_;
-  std::chrono::milliseconds interval_;
+  std::unique_ptr<fbzmq::ZmqTimeout> periodicPingerTimer_;
   const std::string& interface_;
 };
 
