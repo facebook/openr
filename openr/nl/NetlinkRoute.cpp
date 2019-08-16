@@ -100,7 +100,9 @@ NetlinkRouteMessage::addIpNexthop(
     const openr::fbnl::NextHop& path,
     const openr::fbnl::Route& route) const {
   rtnh->rtnh_len = sizeof(*rtnh);
-  rtnh->rtnh_ifindex = path.getIfIndex().value();
+  if (path.getIfIndex().has_value()) {
+    rtnh->rtnh_ifindex = path.getIfIndex().value();
+  }
   rtnh->rtnh_flags = 0;
   rtnh->rtnh_hops = 0;
 
