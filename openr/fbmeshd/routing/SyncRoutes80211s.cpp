@@ -151,6 +151,7 @@ SyncRoutes80211s::doSyncRoutes() {
     if (mpath.expTime > std::chrono::steady_clock::now() && mpath.isGate) {
       if (currentGate_ && currentGate_->first == mpath.dst) {
         isCurrentGateStillAlive = true;
+        currentGate_->second = mpath.metric;
       }
       if (!bestGate || bestGate->second > mpath.metric) {
         bestGate = std::make_pair(mpath.dst, mpath.metric);
