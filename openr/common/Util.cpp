@@ -753,17 +753,22 @@ thrift::Value
 createThriftValue(
     int64_t version,
     std::string originatorId,
-    folly::Optional<std::string> keyValue,
+    folly::Optional<std::string> data,
     int64_t ttl,
     int64_t ttlVersion,
     folly::Optional<int64_t> hash) {
   thrift::Value value;
   value.version = version;
   value.originatorId = originatorId;
-  value.value = keyValue;
+  value.value = data;
   value.ttl = ttl;
   value.ttlVersion = ttlVersion;
-  value.hash = hash;
+  if (hash.hasValue()) {
+    value.hash = hash;
+  } else {
+    value.hash = generateHash(version, originatorId, data);
+  }
+
   return value;
 }
 

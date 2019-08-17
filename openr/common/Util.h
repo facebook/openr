@@ -314,10 +314,10 @@ thrift::PrefixEntry createPrefixEntry(
     folly::Optional<thrift::MetricVector> mv = folly::none);
 
 thrift::Value createThriftValue(
-    int64_t version = 1,
-    std::string originatorId = "",
-    folly::Optional<std::string> data = folly::none,
-    int64_t ttl = Constants::kTtlThreshold.count(),
+    int64_t version,
+    std::string originatorId,
+    folly::Optional<std::string> data,
+    int64_t ttl = Constants::kTtlInfinity,
     int64_t ttlVersion = 0,
     folly::Optional<int64_t> hash = folly::none);
 

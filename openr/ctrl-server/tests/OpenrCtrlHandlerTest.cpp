@@ -256,20 +256,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     zmqMonitorThread_.join();
   }
 
-  thrift::Value
-  createThriftValue(
-      int64_t version,
-      const std::string& originatorId,
-      const std::string& value) {
-    thrift::Value thriftValue;
-    thriftValue.version = version;
-    thriftValue.originatorId = originatorId;
-    thriftValue.value = value;
-    thriftValue.ttl = Constants::kTtlInfinity;
-    thriftValue.hash = generateHash(version, originatorId, value);
-    return thriftValue;
-  }
-
   thrift::PeerSpec
   createPeerSpec(const std::string& pubUrl, const std::string& cmdUrl) {
     thrift::PeerSpec peerSpec;
@@ -463,15 +449,15 @@ TEST_F(OpenrCtrlFixture, HealthCheckerApis) {
 
 TEST_F(OpenrCtrlFixture, KvStoreApis) {
   thrift::KeyVals keyVals;
-  keyVals["key1"] = createThriftValue(1, "node1", "value1");
-  keyVals["key11"] = createThriftValue(1, "node1", "value11");
-  keyVals["key111"] = createThriftValue(1, "node1", "value111");
-  keyVals["key2"] = createThriftValue(1, "node1", "value2");
-  keyVals["key22"] = createThriftValue(1, "node1", "value22");
-  keyVals["key222"] = createThriftValue(1, "node1", "value222");
-  keyVals["key3"] = createThriftValue(1, "node3", "value3");
-  keyVals["key33"] = createThriftValue(1, "node33", "value33");
-  keyVals["key333"] = createThriftValue(1, "node33", "value333");
+  keyVals["key1"] = createThriftValue(1, "node1", std::string("value1"));
+  keyVals["key11"] = createThriftValue(1, "node1", std::string("value11"));
+  keyVals["key111"] = createThriftValue(1, "node1", std::string("value111"));
+  keyVals["key2"] = createThriftValue(1, "node1", std::string("value2"));
+  keyVals["key22"] = createThriftValue(1, "node1", std::string("value22"));
+  keyVals["key222"] = createThriftValue(1, "node1", std::string("value222"));
+  keyVals["key3"] = createThriftValue(1, "node3", std::string("value3"));
+  keyVals["key33"] = createThriftValue(1, "node33", std::string("value33"));
+  keyVals["key333"] = createThriftValue(1, "node33", std::string("value333"));
 
   //
   // Key set/get
@@ -650,10 +636,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
           received++;
         });
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(key, createThriftValue(1, "node1", "value1"));
-    kvStoreWrapper->setKey(key, createThriftValue(1, "node1", "value1"));
-    kvStoreWrapper->setKey(key, createThriftValue(2, "node1", "value1"));
-    kvStoreWrapper->setKey(key, createThriftValue(3, "node1", "value1"));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(1, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(1, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(2, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(3, "node1", std::string("value1")));
 
     // Check we should receive-3 updates
     while (received < 3) {
@@ -693,10 +683,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
               received++;
             });
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
-    kvStoreWrapper->setKey(key, createThriftValue(4, "node1", "value1"));
-    kvStoreWrapper->setKey(key, createThriftValue(4, "node1", "value1"));
-    kvStoreWrapper->setKey(key, createThriftValue(5, "node1", "value1"));
-    kvStoreWrapper->setKey(key, createThriftValue(6, "node1", "value1"));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(4, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(4, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(5, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key, createThriftValue(6, "node1", std::string("value1")));
 
     // Check we should receive-3 updates
     while (received < 3) {
