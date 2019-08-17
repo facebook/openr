@@ -281,40 +281,9 @@ isMplsLabelValid(int32_t const mplsLabel) {
 /**
  * Validates mplsAction object and fatals
  */
-inline void
-checkMplsAction(thrift::MplsAction const& mplsAction) {
-  switch (mplsAction.action) {
-  case thrift::MplsActionCode::PUSH:
-    // Swap label shouldn't be set
-    CHECK(not mplsAction.swapLabel.hasValue());
-    // Push labels should be set
-    CHECK(mplsAction.pushLabels.hasValue());
-    // there should be atleast one push label
-    CHECK(not mplsAction.pushLabels->empty());
-    for (auto const& label : mplsAction.pushLabels.value()) {
-      CHECK(isMplsLabelValid(label));
-    }
-    break;
-  case thrift::MplsActionCode::SWAP:
-    // Swap label should be set
-    CHECK(mplsAction.swapLabel.hasValue());
-    CHECK(isMplsLabelValid(mplsAction.swapLabel.value()));
-    // Push labels shouldn't be set
-    CHECK(not mplsAction.pushLabels.hasValue());
-    break;
-  case thrift::MplsActionCode::PHP:
-  case thrift::MplsActionCode::POP_AND_LOOKUP:
-    // Swap label should not be set
-    CHECK(not mplsAction.swapLabel.hasValue());
-    CHECK(not mplsAction.pushLabels.hasValue());
-    break;
-  default:
-    CHECK(false) << "Unknown action code";
-  }
-}
+void checkMplsAction(thrift::MplsAction const& mplsAction);
 
-inline thrift::Adjacency
-createAdjacency(
+thrift::Adjacency createAdjacency(
     const std::string& nodeName,
     const std::string& ifName,
     const std::string& remoteIfName,
@@ -322,54 +291,18 @@ createAdjacency(
     const std::string& nextHopV4,
     int32_t metric,
     int32_t adjLabel,
-    int64_t weight = Constants::kDefaultAdjWeight) {
-  auto now = std::chrono::system_clock::now();
-  int64_t timestamp =
-      std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch())
-          .count();
-  return thrift::Adjacency(
-      apache::thrift::FRAGILE,
-      nodeName,
-      ifName,
-      toBinaryAddress(folly::IPAddress(nextHopV6)),
-      toBinaryAddress(folly::IPAddress(nextHopV4)),
-      metric,
-      adjLabel,
-      false /* overload bit status */,
-      metric * 100,
-      timestamp,
-      weight,
-      remoteIfName);
-}
+    int64_t weight = Constants::kDefaultAdjWeight);
 
-inline thrift::AdjacencyDatabase
-createAdjDb(
+thrift::AdjacencyDatabase createAdjDb(
     const std::string& nodeName,
     const std::vector<thrift::Adjacency>& adjs,
-    int32_t nodeLabel) {
-  auto adjDb = thrift::AdjacencyDatabase(
-      apache::thrift::FRAGILE,
-      nodeName,
-      false /* overload bit status */,
-      adjs,
-      nodeLabel,
-      thrift::PerfEvents());
-  adjDb.perfEvents = folly::none;
-  return adjDb;
-}
+    int32_t nodeLabel);
 
-inline thrift::PrefixDatabase
-createPrefixDb(
+thrift::PrefixDatabase createPrefixDb(
     const std::string& nodeName,
-    const std::vector<thrift::PrefixEntry>& prefixEntries) {
-  thrift::PrefixDatabase prefixDb;
-  prefixDb.thisNodeName = nodeName;
-  prefixDb.prefixEntries = prefixEntries;
-  return prefixDb;
-}
+    const std::vector<thrift::PrefixEntry>& prefixEntries);
 
-inline thrift::PrefixEntry
-createPrefixEntry(
+thrift::PrefixEntry createPrefixEntry(
     thrift::IpPrefix prefix,
     thrift::PrefixType type = thrift::PrefixType::LOOPBACK,
     const std::string& data = "",
@@ -378,164 +311,48 @@ createPrefixEntry(
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm =
         thrift::PrefixForwardingAlgorithm::SP_ECMP,
     folly::Optional<bool> ephemeral = folly::none,
-    folly::Optional<thrift::MetricVector> mv = folly::none) {
-  thrift::PrefixEntry prefixEntry;
-  prefixEntry.prefix = prefix;
-  prefixEntry.type = type;
-  prefixEntry.data = data;
-  prefixEntry.forwardingType = forwardingType;
-  prefixEntry.forwardingAlgorithm = forwardingAlgorithm;
-  prefixEntry.ephemeral = ephemeral;
-  prefixEntry.mv = mv;
-  return prefixEntry;
-}
+    folly::Optional<thrift::MetricVector> mv = folly::none);
 
-inline thrift::Value
-createThriftValue(
+thrift::Value createThriftValue(
     int64_t version = 1,
     std::string originatorId = "",
-    folly::Optional<std::string> keyValue = folly::none,
+    folly::Optional<std::string> data = folly::none,
     int64_t ttl = Constants::kTtlThreshold.count(),
     int64_t ttlVersion = 0,
-    folly::Optional<int64_t> hash = folly::none) {
-  thrift::Value value;
-  value.version = version;
-  value.originatorId = originatorId;
-  value.value = keyValue;
-  value.ttl = ttl;
-  value.ttlVersion = ttlVersion;
-  value.hash = hash;
-  return value;
-}
+    folly::Optional<int64_t> hash = folly::none);
 
-inline thrift::NextHopThrift
-createNextHop(
+thrift::NextHopThrift createNextHop(
     thrift::BinaryAddress addr,
     const std::string& ifName = "",
     int32_t metric = 0,
     folly::Optional<thrift::MplsAction> maybeMplsAction = folly::none,
-    bool useNonShortestRoute = false) {
-  thrift::NextHopThrift nextHop;
-  nextHop.address = addr;
-  nextHop.address.ifName = ifName;
-  nextHop.metric = metric;
-  nextHop.mplsAction = maybeMplsAction;
-  nextHop.useNonShortestRoute = useNonShortestRoute;
-  return nextHop;
-}
+    bool useNonShortestRoute = false);
 
-inline thrift::MplsAction
-createMplsAction(
+thrift::MplsAction createMplsAction(
     thrift::MplsActionCode const mplsActionCode,
     folly::Optional<int32_t> maybeSwapLabel = folly::none,
-    folly::Optional<std::vector<int32_t>> maybePushLabels = folly::none) {
-  thrift::MplsAction mplsAction;
-  mplsAction.action = mplsActionCode;
-  mplsAction.swapLabel = maybeSwapLabel;
-  mplsAction.pushLabels = maybePushLabels;
-  checkMplsAction(mplsAction); // sanity checks
-  return mplsAction;
-}
+    folly::Optional<std::vector<int32_t>> maybePushLabels = folly::none);
 
-inline thrift::UnicastRoute
-createUnicastRoute(
-    thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops) {
-  thrift::UnicastRoute unicastRoute;
-  unicastRoute.dest = std::move(dest);
-  std::sort(nextHops.begin(), nextHops.end());
-  unicastRoute.nextHops = std::move(nextHops);
-  return unicastRoute;
-}
+thrift::UnicastRoute createUnicastRoute(
+    thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops);
 
-inline thrift::MplsRoute
-createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
-  // Sanity checks
-  CHECK(isMplsLabelValid(topLabel));
-  for (auto const& nextHop : nextHops) {
-    CHECK(nextHop.mplsAction.hasValue());
-  }
+thrift::MplsRoute createMplsRoute(
+    int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops);
 
-  thrift::MplsRoute mplsRoute;
-  mplsRoute.topLabel = topLabel;
-  std::sort(nextHops.begin(), nextHops.end());
-  mplsRoute.nextHops = std::move(nextHops);
-  return mplsRoute;
-}
+std::vector<thrift::UnicastRoute> createUnicastRoutesWithBestNexthops(
+    const std::vector<thrift::UnicastRoute>& routes);
 
-inline std::vector<thrift::UnicastRoute>
-createUnicastRoutesWithBestNexthops(
-    const std::vector<thrift::UnicastRoute>& routes) {
-  // Build routes to be programmed
-  std::vector<thrift::UnicastRoute> newRoutes;
+std::vector<thrift::MplsRoute> createMplsRoutesWithBestNextHops(
+    const std::vector<thrift::MplsRoute>& routes);
 
-  for (auto const& route : routes) {
-    auto newRoute =
-        createUnicastRoute(route.dest, getBestNextHopsUnicast(route.nextHops));
-    // NOTE: remove after UnicastRoute.deprecatedNexthops is removed
-    newRoute.deprecatedNexthops = createDeprecatedNexthops(newRoute.nextHops);
-    newRoutes.emplace_back(std::move(newRoute));
-  }
-
-  return newRoutes;
-}
-
-inline std::vector<thrift::MplsRoute>
-createMplsRoutesWithBestNextHops(const std::vector<thrift::MplsRoute>& routes) {
-  // Build routes to be programmed
-  std::vector<thrift::MplsRoute> newRoutes;
-
-  for (auto const& route : routes) {
-    newRoutes.emplace_back(
-        createMplsRoute(route.topLabel, getBestNextHopsMpls(route.nextHops)));
-  }
-
-  return newRoutes;
-}
-
-inline std::vector<thrift::UnicastRoute>
-createUnicastRoutesWithBestNextHopsMap(
+std::vector<thrift::UnicastRoute> createUnicastRoutesWithBestNextHopsMap(
     const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
-        unicastRoutes) {
-  // Build routes to be programmed
-  std::vector<thrift::UnicastRoute> newRoutes;
+        unicastRoutes);
 
-  for (auto const& route : unicastRoutes) {
-    auto newRoute = createUnicastRoute(
-        route.first, getBestNextHopsUnicast(route.second.nextHops));
-    // NOTE: remove after UnicastRoute.deprecatedNexthops is removed
-    newRoute.deprecatedNexthops = createDeprecatedNexthops(newRoute.nextHops);
-    newRoutes.emplace_back(std::move(newRoute));
-  }
+std::vector<thrift::MplsRoute> createMplsRoutesWithBestNextHopsMap(
+    const std::unordered_map<uint32_t, thrift::MplsRoute>& mplsRoutes);
 
-  return newRoutes;
-}
-
-inline std::vector<thrift::MplsRoute>
-createMplsRoutesWithBestNextHopsMap(
-    const std::unordered_map<uint32_t, thrift::MplsRoute>& mplsRoutes) {
-  // Build routes to be programmed
-  std::vector<thrift::MplsRoute> newRoutes;
-
-  for (auto const& route : mplsRoutes) {
-    newRoutes.emplace_back(createMplsRoute(
-        route.first, getBestNextHopsMpls(route.second.nextHops)));
-  }
-
-  return newRoutes;
-}
-
-inline std::string
-getNodeNameFromKey(const std::string& key) {
-  std::string prefix, nodeName;
-  auto prefixKey = PrefixKey::fromStr(key);
-  if (prefixKey.hasValue()) {
-    nodeName = prefixKey.value().getNodeName();
-  } else {
-    folly::split(
-        Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
-  }
-  return nodeName;
-}
+std::string getNodeNameFromKey(const std::string& key);
 
 namespace MetricVectorUtils {
 
@@ -551,151 +368,27 @@ thrift::MetricEntity createMetricEntity(
     bool isBestPathTieBreaker,
     const std::vector<int64_t>& metric);
 
-inline CompareResult operator!(CompareResult mv) {
-  switch (mv) {
-  case CompareResult::WINNER: {
-    return CompareResult::LOOSER;
-  }
-  case CompareResult::TIE_WINNER: {
-    return CompareResult::TIE_LOOSER;
-  }
-  case CompareResult::TIE: {
-    return CompareResult::TIE;
-  }
-  case CompareResult::TIE_LOOSER: {
-    return CompareResult::TIE_WINNER;
-  }
-  case CompareResult::LOOSER: {
-    return CompareResult::WINNER;
-  }
-  case CompareResult::ERROR: {
-    return CompareResult::ERROR;
-  }
-  }
-  return CompareResult::ERROR;
-}
+CompareResult operator!(CompareResult mv);
 
-inline bool
-isDecisive(CompareResult const& result) {
-  return CompareResult::WINNER == result || CompareResult::LOOSER == result ||
-      CompareResult::ERROR == result;
-}
+bool isDecisive(CompareResult const& result);
 
-inline bool
-isSorted(thrift::MetricVector const& mv) {
-  int64_t priorPriority = std::numeric_limits<int64_t>::max();
-  for (auto const& ent : mv.metrics) {
-    if (ent.priority > priorPriority) {
-      return false;
-    }
-    priorPriority = ent.priority;
-  }
-  return true;
-}
+bool isSorted(thrift::MetricVector const& mv);
 
 // sort a metric vector in decreasing order of priority
-inline void
-sortMetricVector(thrift::MetricVector const& mv) {
-  if (isSorted(mv)) {
-    return;
-  }
-  std::vector<thrift::MetricEntity>& metrics =
-      const_cast<std::vector<thrift::MetricEntity>&>(mv.metrics);
-  std::sort(
-      metrics.begin(),
-      metrics.end(),
-      [](thrift::MetricEntity& l, thrift::MetricEntity& r) {
-        return l.priority > r.priority;
-      });
-}
+void sortMetricVector(thrift::MetricVector const& mv);
 
-inline CompareResult
-compareMetrics(
+CompareResult compareMetrics(
     std::vector<int64_t> const& l,
     std::vector<int64_t> const& r,
-    bool tieBreaker) {
-  if (l.size() != r.size()) {
-    return CompareResult::ERROR;
-  }
-  for (auto lIter = l.begin(), rIter = r.begin(); lIter != l.end();
-       ++lIter, ++rIter) {
-    if (*lIter > *rIter) {
-      return tieBreaker ? CompareResult::TIE_WINNER : CompareResult::WINNER;
-    } else if (*lIter < *rIter) {
-      return tieBreaker ? CompareResult::TIE_LOOSER : CompareResult::LOOSER;
-    }
-  }
-  return CompareResult::TIE;
-}
+    bool tieBreaker);
 
-inline CompareResult
-resultForLoner(thrift::MetricEntity const& entity) {
-  if (thrift::CompareType::WIN_IF_PRESENT == entity.op) {
-    return entity.isBestPathTieBreaker ? CompareResult::TIE_WINNER
-                                       : CompareResult::WINNER;
-  } else if (thrift::CompareType::WIN_IF_NOT_PRESENT == entity.op) {
-    return entity.isBestPathTieBreaker ? CompareResult::TIE_LOOSER
-                                       : CompareResult::LOOSER;
-  }
-  // IGNORE_IF_NOT_PRESENT
-  return CompareResult::TIE;
-}
+CompareResult resultForLoner(thrift::MetricEntity const& entity);
 
-inline void
-maybeUpdate(CompareResult& target, CompareResult update) {
-  if (isDecisive(update) || CompareResult::TIE == target) {
-    target = update;
-  }
-}
+void maybeUpdate(CompareResult& target, CompareResult update);
 
-inline CompareResult
-compareMetricVectors(
-    thrift::MetricVector const& l, thrift::MetricVector const& r) {
-  CompareResult result = CompareResult::TIE;
+CompareResult compareMetricVectors(
+    thrift::MetricVector const& l, thrift::MetricVector const& r);
 
-  if (l.version != r.version) {
-    return CompareResult::ERROR;
-  }
-
-  sortMetricVector(l);
-  sortMetricVector(r);
-
-  auto lIter = l.metrics.begin();
-  auto rIter = r.metrics.begin();
-  while (!isDecisive(result) &&
-         (lIter != l.metrics.end() && rIter != r.metrics.end())) {
-    if (lIter->type == rIter->type) {
-      if (lIter->isBestPathTieBreaker != rIter->isBestPathTieBreaker) {
-        maybeUpdate(result, CompareResult::ERROR);
-      } else {
-        maybeUpdate(
-            result,
-            compareMetrics(
-                lIter->metric, rIter->metric, lIter->isBestPathTieBreaker));
-      }
-      ++lIter;
-      ++rIter;
-    } else if (lIter->priority > rIter->priority) {
-      maybeUpdate(result, resultForLoner(*lIter));
-      ++lIter;
-    } else if (lIter->priority < rIter->priority) {
-      maybeUpdate(result, !resultForLoner(*rIter));
-      ++rIter;
-    } else {
-      // priorities are the same but types are different
-      maybeUpdate(result, CompareResult::ERROR);
-    }
-  }
-  while (!isDecisive(result) && lIter != l.metrics.end()) {
-    maybeUpdate(result, resultForLoner(*lIter));
-    ++lIter;
-  }
-  while (!isDecisive(result) && rIter != r.metrics.end()) {
-    maybeUpdate(result, !resultForLoner(*rIter));
-    ++rIter;
-  }
-  return result;
-}
 } // namespace MetricVectorUtils
 
 } // namespace openr
