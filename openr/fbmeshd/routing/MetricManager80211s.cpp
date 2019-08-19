@@ -12,23 +12,21 @@
 using namespace openr::fbmeshd;
 
 MetricManager80211s::MetricManager80211s(
-    folly::EventBase* evb,
     std::chrono::milliseconds interval,
     Nl80211Handler& nlHandler,
     uint32_t ewmaFactor,
     uint32_t hysteresisFactor,
     uint32_t baseBitrate,
     double rssiWeight)
-    : folly::AsyncTimeout{evb},
-      evb_{evb},
-      interval_{interval},
-      nlHandler_{nlHandler},
+    : nlHandler_{nlHandler},
       ewmaFactor_{ewmaFactor},
       hysteresisFactor_{hysteresisFactor},
       baseBitrate_{baseBitrate},
       rssiWeight_{rssiWeight} {
-  evb->runInEventBaseThread(
-      [this, interval] { evb_->scheduleTimeout(this, interval); });
+  // Set timer to update metrics
+  metricManagerTimer_ =
+      fbzmq::ZmqTimeout::make(this, [this]() noexcept { updateMetrics(); });
+  metricManagerTimer_->scheduleTimeout(interval, true);
 }
 
 uint32_t
@@ -86,7 +84,7 @@ MetricManager80211s::rssiToAirtime(int32_t rssi) {
 }
 
 void
-MetricManager80211s::timeoutExpired() noexcept {
+MetricManager80211s::updateMetrics() {
   VLOG(8) << "MetricManager80211s: updating metrics...";
   const auto stas = nlHandler_.getStationsInfo();
   for (const auto& it : stas) {
@@ -141,8 +139,6 @@ MetricManager80211s::timeoutExpired() noexcept {
     VLOG(10) << "MetricManager80211s: " << mac << " adding metric " << newMetric
              << " new metric " << (metrics_[mac].ewmaMetric >> ewmaFactor_);
   }
-
-  evb_->scheduleTimeout(this, interval_);
 }
 
 uint32_t

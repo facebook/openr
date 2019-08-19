@@ -321,13 +321,23 @@ main(int argc, char* argv[]) {
 
   std::unique_ptr<MetricManager80211s> metricManager80211s =
       std::make_unique<MetricManager80211s>(
-          &routingEventLoop,
           kMetricManagerInterval,
           nlHandler,
           FLAGS_routing_metric_manager_ewma_factor_log2,
           kMetricManagerHysteresisFactorLog2,
           kMetricManagerBaseBitrate,
           FLAGS_routing_metric_manager_rssi_weight);
+
+  static constexpr auto metricManager80211sId{"MetricManager80211s"};
+  monitorEventLoopWithWatchdog(
+      metricManager80211s.get(), metricManager80211sId, watchdog.get());
+  allThreads.emplace_back(std::thread([&metricManager80211s]() noexcept {
+    LOG(INFO) << "Starting MetricManager80211s thread...";
+    folly::setThreadName(metricManager80211sId);
+    metricManager80211s->run();
+    LOG(INFO) << "MetricManager80211s thread stopped.";
+  }));
+
   std::unique_ptr<Routing> routing = std::make_unique<Routing>(
       &routingEventLoop,
       metricManager80211s.get(),
@@ -484,6 +494,9 @@ main(int argc, char* argv[]) {
 
   gatewayConnectivityMonitor.stop();
   gatewayConnectivityMonitor.waitUntilStopped();
+
+  metricManager80211s->stop();
+  metricManager80211s->waitUntilStopped();
 
   periodicPinger->stop();
   periodicPinger->waitUntilStopped();
