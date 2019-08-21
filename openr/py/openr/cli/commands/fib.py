@@ -14,7 +14,6 @@ from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.OpenrCtrl import OpenrCtrl
-from openr.Platform import ttypes as platform_types
 from openr.utils import ipnetwork, printing
 
 
@@ -111,7 +110,7 @@ class FibRoutesInstalledCmd(FibAgentCmd):
 
         try:
             mpls_routes = self.client.getMplsRouteTableByClient(self.client.client_id)
-        except platform_types.PlatformError as e:
+        except Exception as e:
             print("Pls check Open/R version. Exception: {}".format(e))
 
         if json_opt:
@@ -239,7 +238,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             agent_mpls_routes = self.client.getMplsRouteTableByClient(
                 self.client.client_id
             )
-        except platform_types.PlatformError as e:
+        except Exception as e:
             print("Pls check Open/R version. Exception: {}".format(e))
         else:
             (ret, _) = utils.compare_route_db(
