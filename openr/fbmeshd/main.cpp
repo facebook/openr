@@ -285,9 +285,6 @@ main(int argc, char* argv[]) {
     return returnValue;
   }
 
-  // Set up the zmq context for this process.
-  fbzmq::Context zmqContext;
-
   RouteUpdateMonitor routeMonitor{evl, nlHandler};
 
   PeerSelector peerSelector{evl, nlHandler, rssiThreshold};
