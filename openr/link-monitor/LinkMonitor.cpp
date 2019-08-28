@@ -95,16 +95,11 @@ LinkMonitor::LinkMonitor(
     PrefixManagerLocalCmdUrl const& prefixManagerUrl,
     PlatformPublisherUrl const& platformPubUrl,
     LinkMonitorGlobalPubUrl linkMonitorGlobalPubUrl,
-    folly::Optional<std::string> linkMonitorGlobalCmdUrl,
     std::chrono::seconds adjHoldTime,
     std::chrono::milliseconds flapInitialBackoff,
     std::chrono::milliseconds flapMaxBackoff,
     std::chrono::milliseconds ttlKeyInKvStore)
-    : OpenrEventLoop(
-          nodeId,
-          thrift::OpenrModuleType::LINK_MONITOR,
-          zmqContext,
-          linkMonitorGlobalCmdUrl),
+    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::LINK_MONITOR, zmqContext),
       nodeId_(nodeId),
       platformThriftPort_(platformThriftPort),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),

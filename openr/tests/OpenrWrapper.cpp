@@ -43,8 +43,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           folly::sformat("inproc://{}-kvstore-pub-global", nodeId_)),
       sparkReportUrl_(folly::sformat("inproc://{}-spark-report", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
-      linkMonitorGlobalCmdUrl_(
-          folly::sformat("inproc://{}-linkmonitor-cmd", nodeId_)),
       linkMonitorGlobalPubUrl_(
           folly::sformat("inproc://{}-linkmonitor-pub", nodeId_)),
       decisionPubUrl_(folly::sformat("inproc://{}-decision-pub", nodeId_)),
@@ -211,7 +209,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
       PlatformPublisherUrl{platformPubUrl_},
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
-      std::string{linkMonitorGlobalCmdUrl_},
       linkMonitorAdjHoldTime,
       linkFlapInitialBackoff,
       linkFlapMaxBackoff,

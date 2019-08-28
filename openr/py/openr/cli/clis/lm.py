@@ -45,9 +45,8 @@ class LMCli(object):
         self.lm.add_command(BuildInfoCli().build_info, name="build-info")
 
     @click.group()
-    @breeze_option("--lm_cmd_port", type=int, help="Link Monitor port")
     @click.pass_context
-    def lm(ctx, lm_cmd_port):  # noqa: B902
+    def lm(ctx):  # noqa: B902
         """ CLI tool to peek into Link Monitor module. """
         pass
 

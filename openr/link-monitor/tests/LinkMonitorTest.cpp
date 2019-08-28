@@ -281,7 +281,6 @@ class LinkMonitorTestFixture : public ::testing::Test,
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url"},
-        folly::none,
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
         std::chrono::milliseconds(1),
@@ -903,7 +902,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url2"},
       LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
-      folly::none,
       std::chrono::seconds(1),
       // link flap backoffs, set low to keep UT runtime low
       std::chrono::milliseconds(1),
@@ -1321,7 +1319,6 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url"},
       LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
-      folly::none,
       std::chrono::seconds(1),
       // link flap backoffs, set high backoffs for this test
       std::chrono::milliseconds(4000),
@@ -1816,7 +1813,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         LinkMonitorGlobalPubUrl{
             folly::sformat("inproc://link-monitor-pub-url{}", i + 1)},
-        folly::none,
         std::chrono::seconds(1),
         std::chrono::milliseconds(1),
         std::chrono::milliseconds(8),

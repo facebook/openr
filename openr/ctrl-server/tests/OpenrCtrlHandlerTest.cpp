@@ -185,7 +185,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         platformPubUrl_,
         lmPubUrl_,
-        lmCmdUrl_,
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
         std::chrono::milliseconds(1),
@@ -279,7 +278,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   const SparkReportUrl sparkReportUrl_{"inproc://spark-report"};
   const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
   const LinkMonitorGlobalPubUrl lmPubUrl_{"inproc://link-monitor-pub-url"};
-  const std::string lmCmdUrl_{"inproc://link-monitor-cmd-url"};
   PersistentStoreUrl persistentStoreUrl_;
 
   fbzmq::Context context_;

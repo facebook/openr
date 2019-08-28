@@ -702,7 +702,6 @@ main(int argc, char** argv) {
           PlatformPublisherUrl{FLAGS_platform_pub_url},
           LinkMonitorGlobalPubUrl{
               folly::sformat("tcp://*:{}", FLAGS_link_monitor_pub_port)},
-          maybeGetTcpEndpoint(FLAGS_listen_addr, FLAGS_link_monitor_cmd_port),
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms),

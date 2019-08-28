@@ -30,10 +30,6 @@ DEFINE_int32(
     openr::Constants::kLinkMonitorPubPort,
     "The port link monitor publishes on");
 DEFINE_int32(
-    link_monitor_cmd_port,
-    openr::Constants::kLinkMonitorCmdPort,
-    "The port link monitor listens for commands on");
-DEFINE_int32(
     monitor_pub_port,
     openr::Constants::kMonitorPubPort,
     "The port monitor publishes on");

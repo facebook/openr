@@ -256,9 +256,6 @@ thrift::RouteDatabaseDelta findDeltaRoutes(
 
 thrift::BuildInfo getBuildInfoThrift() noexcept;
 
-folly::Optional<std::string> maybeGetTcpEndpoint(
-    const std::string& addr, const int32_t port);
-
 /**
  * Get forwarding type from list of prefixes. We're taking map as input for
  * efficiency purpose.

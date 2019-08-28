@@ -630,13 +630,6 @@ getBuildInfoThrift() noexcept {
       BuildInfo::getBuildMode());
 }
 
-folly::Optional<std::string>
-maybeGetTcpEndpoint(const std::string& addr, const int32_t port) {
-  return (-1 == port)
-      ? folly::none
-      : folly::Optional<std::string>{folly::sformat("tcp://{}:{}", addr, port)};
-}
-
 thrift::PrefixForwardingType
 getPrefixForwardingType(
     const std::unordered_map<std::string, thrift::PrefixEntry>& nodePrefixes) {

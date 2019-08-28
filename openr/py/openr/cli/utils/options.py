@@ -33,7 +33,6 @@ OPTIONS = bunch.Bunch(
         "key_file": "",
         "kv_pub_port": Consts.KVSTORE_PUB_PORT,
         "kv_rep_port": Consts.KVSTORE_REP_PORT,
-        "lm_cmd_port": Consts.LINK_MONITOR_CMD_PORT,
         "monitor_pub_port": Consts.MONITOR_PUB_PORT,
         "monitor_rep_port": Consts.MONITOR_REP_PORT,
         "openr_ctrl_port": Consts.CTRL_PORT,
