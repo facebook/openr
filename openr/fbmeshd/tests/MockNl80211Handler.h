@@ -17,7 +17,6 @@ class MockNl80211Handler : public Nl80211HandlerInterface {
   MOCK_METHOD0(getPeers, std::vector<folly::MacAddress>());
   MOCK_METHOD0(getStationsInfo, std::vector<StationInfo>());
   MOCK_METHOD1(setRssiThreshold, void(int32_t rssiThreshold));
-  MOCK_METHOD1(setPeerSelector, void(PeerSelector* peerSelector));
   MOCK_METHOD1(deleteStation, void(folly::MacAddress peer));
   MOCK_METHOD0(lookupMeshNetif, NetInterface&());
 };

@@ -54,15 +54,12 @@ struct StationInfo {
   uint32_t expectedThroughput;
 };
 
-class PeerSelector;
-
 class Nl80211HandlerInterface {
  public:
   virtual ~Nl80211HandlerInterface() {}
   FOLLY_NODISCARD virtual std::vector<folly::MacAddress> getPeers() = 0;
   FOLLY_NODISCARD virtual std::vector<StationInfo> getStationsInfo() = 0;
   virtual void setRssiThreshold(int32_t rssiThreshold) = 0;
-  virtual void setPeerSelector(PeerSelector* peerSelector) = 0;
   virtual void deleteStation(folly::MacAddress peer) = 0;
 };
 
@@ -150,7 +147,6 @@ class Nl80211Handler final : public Nl80211HandlerInterface {
   void setRootMode(uint8_t mode);
   void setRssiThreshold(int32_t rssiThreshold) override;
 
-  void setPeerSelector(PeerSelector* peerSelector) override;
   static std::vector<NetInterface> populateNetifs();
 
  private:
@@ -215,8 +211,6 @@ class Nl80211Handler final : public Nl80211HandlerInterface {
   std::map<std::string, uint32_t> multicastGroups_;
   fbzmq::ZmqEventLoop& zmqLoop_;
   std::unordered_map<folly::MacAddress, int32_t> metrics_;
-  // peer selector that is notified if peer membership changes
-  PeerSelector* peerSelector_{nullptr};
   bool userspace_mesh_peering_;
 };
 

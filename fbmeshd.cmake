@@ -71,7 +71,6 @@ add_executable(fbmeshd
     openr/fbmeshd/802.11s/AuthsaeConfigHelpers.cpp
     openr/fbmeshd/802.11s/NetInterface.cpp
     openr/fbmeshd/802.11s/Nl80211Handler.cpp
-    openr/fbmeshd/802.11s/PeerSelector.cpp
     openr/fbmeshd/common/Constants.cpp
     openr/fbmeshd/gateway-11s-root-route-programmer/Gateway11sRootRouteProgrammer.cpp
     openr/fbmeshd/gateway-connectivity-monitor/GatewayConnectivityMonitor.cpp
@@ -146,7 +145,6 @@ if(BUILD_TESTS)
       openr/fbmeshd/802.11s/AuthsaeConfigHelpers.cpp
       openr/fbmeshd/802.11s/NetInterface.cpp
       openr/fbmeshd/802.11s/Nl80211Handler.cpp
-      openr/fbmeshd/802.11s/PeerSelector.cpp
       openr/fbmeshd/common/Constants.cpp
       openr/fbmeshd/nl/GenericNetlinkFamily.cpp
       openr/fbmeshd/tests/Nl80211HandlerTest.cpp

@@ -42,7 +42,6 @@ extern "C" {
 #include <openr/fbmeshd/802.11s/AuthsaeCallbackHelpers.h>
 #include <openr/fbmeshd/802.11s/AuthsaeConfigHelpers.h>
 #include <openr/fbmeshd/802.11s/NetInterface.h>
-#include <openr/fbmeshd/802.11s/PeerSelector.h>
 #include <openr/fbmeshd/common/Constants.h>
 #include <openr/fbmeshd/common/Util.h>
 #include <openr/fbmeshd/nl/GenericNetlinkCallbackHandle.h>
@@ -1122,10 +1121,6 @@ Nl80211Handler::setPlinkState(
   nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, peer.bytes());
   nla_put_u8(msg, NL80211_ATTR_STA_PLINK_STATE, state);
   GenericNetlinkSocket{}.sendAndReceive(msg);
-
-  if (peerSelector_ && state == PLINK_ESTAB) {
-    peerSelector_->onPeerAddedOrRemoved();
-  }
 }
 
 void
@@ -1384,16 +1379,6 @@ Nl80211Handler::handleNewCandidate(const GenericNetlinkMessage& msg) {
     }
   }
 
-  int32_t rssi{};
-
-  if (tb[NL80211_ATTR_RX_SIGNAL_DBM]) {
-    rssi = nla_get_u32(tb[NL80211_ATTR_RX_SIGNAL_DBM]);
-  }
-  StationInfo peer{mac_addr, 0ms, rssi, false, 0};
-  if (peerSelector_ && !peerSelector_->shouldAddCandidate(peer)) {
-    return ERR_INVALID_ARGUMENT_VALUE;
-  }
-
   ieee80211_mgmt_frame bcn;
   memset(&bcn, 0, sizeof(bcn));
   bcn.frame_control =
@@ -1540,9 +1525,6 @@ Nl80211Handler::processEvent(const GenericNetlinkMessage& msg) {
   case NL80211_CMD_DEL_STATION:
     VLOG(5) << "Processing NL80211_CMD_DEL_STATION event";
     handleDeletedPeer(msg);
-    if (peerSelector_) {
-      peerSelector_->onPeerAddedOrRemoved();
-    }
     break;
 
   default:
@@ -1885,10 +1867,4 @@ Nl80211Handler::setRssiThreshold(int32_t rssiThreshold) {
       rssiThreshold);
   nla_nest_end(msg, container);
   GenericNetlinkSocket{}.sendAndReceive(msg);
-}
-
-void
-Nl80211Handler::setPeerSelector(PeerSelector* peerSelector) {
-  CHECK(peerSelector_ == nullptr || peerSelector == nullptr);
-  peerSelector_ = peerSelector;
 }

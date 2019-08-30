@@ -22,7 +22,6 @@
 #include <openr/common/Constants.h>
 #include <openr/fbmeshd/802.11s/AuthsaeCallbackHelpers.h>
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
-#include <openr/fbmeshd/802.11s/PeerSelector.h>
 #include <openr/fbmeshd/FollySignalHandler.h>
 #include <openr/fbmeshd/MeshServiceHandler.h>
 #include <openr/fbmeshd/SignalHandler.h>
@@ -156,15 +155,27 @@ DEFINE_double(
     0.0,
     "Weight of the RSSI based metric (vs. bitrate) in the combined metric");
 
-// TODO T47794858:  The following flags are deprecated and should not be used.
+// TODO: The following flags are deprecated and should not be used.
 //
 // They will be removed in a future version of fbmeshd, at which time using them
 // will result in fbmeshd not starting (as they will not be parsed).
+// TODO T47794858
 DEFINE_bool(enable_peer_pinger, false, "DEPRECATED on 2019-07-24, do not use");
 DEFINE_bool(enable_short_names, false, "DEPRECATED on 2019-07-24, do not use");
 DEFINE_int32(ping_interval_s, 0, "DEPRECATED on 2019-07-24, do not use");
 DEFINE_int32(ping_count, 0, "DEPRECATED on 2019-07-24, do not use");
 DEFINE_int32(ping_packet_size, 0, "DEPRECATED on 2019-07-24, do not use");
+// TODO T53288272
+DEFINE_uint32(
+    peer_selector_max_allowed, 0, "DEPRECATED on 2019-08-30, do not use");
+DEFINE_uint32(
+    peer_selector_eviction_period_s, 0, "DEPRECATED on 2019-08-30, do not use");
+DEFINE_uint32(
+    peer_selector_min_gate_connections,
+    0,
+    "DEPRECATED on 2019-08-30, do not use");
+DEFINE_int32(
+    peer_selector_poll_interval_s, 0, "DEPRECATED on 2019-08-30, do not use");
 
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
@@ -252,9 +263,6 @@ main(int argc, char* argv[]) {
   // depends on log output
   setvbuf(stdout, nullptr /*buffer*/, _IOLBF, 0);
 
-  int rssiThreshold =
-      std::max(Constants::kMinRssiThreshold, FLAGS_mesh_rssi_threshold);
-
   LOG(INFO) << "Starting fbmesh daemon...";
 
   std::vector<std::thread> allThreads{};
@@ -286,8 +294,6 @@ main(int argc, char* argv[]) {
   }
 
   RouteUpdateMonitor routeMonitor{evl, nlHandler};
-
-  PeerSelector peerSelector{evl, nlHandler, rssiThreshold};
 
   std::unique_ptr<Gateway11sRootRouteProgrammer> gateway11sRootRouteProgrammer;
   static constexpr auto gateway11sRootRouteProgrammerId{
