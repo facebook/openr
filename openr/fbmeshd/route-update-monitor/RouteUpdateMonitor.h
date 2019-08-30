@@ -21,7 +21,6 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
-#include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace openr {
 namespace fbmeshd {
