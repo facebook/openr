@@ -159,12 +159,6 @@ DEFINE_double(
 //
 // They will be removed in a future version of fbmeshd, at which time using them
 // will result in fbmeshd not starting (as they will not be parsed).
-// TODO T47794858
-DEFINE_bool(enable_peer_pinger, false, "DEPRECATED on 2019-07-24, do not use");
-DEFINE_bool(enable_short_names, false, "DEPRECATED on 2019-07-24, do not use");
-DEFINE_int32(ping_interval_s, 0, "DEPRECATED on 2019-07-24, do not use");
-DEFINE_int32(ping_count, 0, "DEPRECATED on 2019-07-24, do not use");
-DEFINE_int32(ping_packet_size, 0, "DEPRECATED on 2019-07-24, do not use");
 // TODO T53288272
 DEFINE_uint32(
     peer_selector_max_allowed, 0, "DEPRECATED on 2019-08-30, do not use");
