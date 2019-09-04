@@ -14,6 +14,8 @@
 
 DEFINE_string(host, "::1", "Host to connect to");
 DEFINE_int32(port, openr::Constants::kOpenrCtrlPort, "OpenrCtrl server port");
+DEFINE_int32(connect_timeout_ms, 1000, "Connect timeout for client");
+DEFINE_int32(processing_timeout_ms, 5000, "Processing timeout for client");
 
 int
 main(int argc, char** argv) {
@@ -27,7 +29,11 @@ main(int argc, char** argv) {
   // Create Open/R client
   auto client =
       openr::getOpenrCtrlPlainTextClient<apache::thrift::RocketClientChannel>(
-          evb, folly::IPAddress(FLAGS_host), FLAGS_port);
+          evb,
+          folly::IPAddress(FLAGS_host),
+          FLAGS_port,
+          std::chrono::milliseconds(FLAGS_connect_timeout_ms),
+          std::chrono::milliseconds(FLAGS_processing_timeout_ms));
   auto response = client->semifuture_subscribeAndGetKvStore().get();
   auto& globalKeyVals = response.response.keyVals;
   LOG(INFO) << "Stream is connected, updates will follow";

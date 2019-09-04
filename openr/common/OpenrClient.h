@@ -74,6 +74,7 @@ getOpenrCtrlPlainTextClient(
     if (typeid(ClientChannel) == typeid(apache::thrift::HeaderClientChannel)) {
       detail::setCompressionTransform(channel.get());
     }
+
     // Create client
     client =
         std::make_unique<thrift::OpenrCtrlCppAsyncClient>(std::move(channel));
