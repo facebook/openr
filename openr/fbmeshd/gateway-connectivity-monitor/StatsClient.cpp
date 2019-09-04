@@ -7,9 +7,6 @@
 
 #include "StatsClient.h"
 
-#include <openr/common/Constants.h>
-#include <openr/common/Util.h>
-
 namespace openr {
 namespace fbmeshd {
 

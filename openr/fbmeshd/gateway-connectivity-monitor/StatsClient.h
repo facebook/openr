@@ -7,12 +7,7 @@
 
 #pragma once
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/async/ZmqTimeout.h>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
-#include <fbzmq/zmq/Context.h>
-#include <openr/common/Types.h>
 
 namespace openr {
 namespace fbmeshd {
