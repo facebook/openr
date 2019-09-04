@@ -393,6 +393,7 @@ target_link_libraries(openrlib
   ${SIGAR}
   ${RE2}
   -lboost_system
+  -lboost_context
   -lpthread
   ${NLROUTE3}
   ${NL3}
@@ -433,6 +434,7 @@ target_link_libraries(openr
   ${SODIUM}
   ${SIGAR}
   -lboost_system
+  -lboost_context
   -lpthread
   ${NLROUTE3}
   ${NL3}
@@ -468,6 +470,7 @@ if(BUILD_TOOLS)
     ${SODIUM}
     ${SIGAR}
     -lboost_system
+    -lboost_context
     -lpthread
     -lcrypto
   )
@@ -508,6 +511,7 @@ target_link_libraries(platform_linux
   ${ZMQ}
   ${SIGAR}
   -lboost_system
+  -lboost_context
   -lpthread
   ${NLROUTE3}
   ${NL3}
@@ -648,6 +652,7 @@ if(BUILD_TESTS)
     ${GTEST_MAIN}
     ${SIGAR}
     -lboost_system
+    -lboost_context
     -lpthread
     ${NLROUTE3}
     ${NL3}
