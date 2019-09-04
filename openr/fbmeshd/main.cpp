@@ -19,7 +19,6 @@
 #include <folly/io/async/EventBase.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
-#include <openr/common/Constants.h>
 #include <openr/fbmeshd/802.11s/AuthsaeCallbackHelpers.h>
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
 #include <openr/fbmeshd/FollySignalHandler.h>
@@ -82,11 +81,6 @@ DEFINE_uint32(
     gateway_connectivity_monitor_set_root_mode,
     0,
     "The value for root mode that should be set if we are a gate");
-
-DEFINE_int32(
-    monitor_rep_port,
-    openr::Constants::kMonitorRepPort,
-    "The port monitor replies on");
 
 DEFINE_bool(
     enable_watchdog,
@@ -170,6 +164,8 @@ DEFINE_uint32(
     "DEPRECATED on 2019-08-30, do not use");
 DEFINE_int32(
     peer_selector_poll_interval_s, 0, "DEPRECATED on 2019-08-30, do not use");
+// TODO T53487225
+DEFINE_int32(monitor_rep_port, 0, "DEPRECATED on 2019-09-04, do not use");
 
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
