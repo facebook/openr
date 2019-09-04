@@ -129,7 +129,9 @@ class KeysCmd(KvStoreCmdBase):
         originator: Any = None,
         ttl: bool = False,
     ) -> None:
-        keyDumpParams = self.buildKvStoreKeyDumpParams(prefix)
+        keyDumpParams = self.buildKvStoreKeyDumpParams(
+            prefix, [originator] if originator else None
+        )
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         self.print_kvstore_keys(resp, ttl, json)
 
@@ -138,12 +140,12 @@ class KeysCmd(KvStoreCmdBase):
     ) -> None:
         """ print keys from raw publication from KvStore"""
 
-        # Force set value to None
-        for value in resp.keyVals.values():
-            value.value = None
-
         # Export in json format if enabled
         if json:
+            # Force set value to None
+            for value in resp.keyVals.values():
+                value.value = None
+
             data = {}
             for k, v in resp.keyVals.items():
                 data[k] = utils.thrift_to_dict(v)
@@ -151,34 +153,32 @@ class KeysCmd(KvStoreCmdBase):
             return
 
         rows = []
+        db_bytes = 0
         for key, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
-            hash_offset = "+" if value.hash > 0 else ""
-            if ttl:
-                if value.ttl != Consts.CONST_TTL_INF:
-                    ttlStr = str(datetime.timedelta(milliseconds=value.ttl))
-                else:
-                    ttlStr = "Inf"
-                rows.append(
-                    [
-                        key,
-                        value.originatorId,
-                        value.version,
-                        "{}{:x}".format(hash_offset, value.hash),
-                        "{} - {}".format(ttlStr, value.ttlVersion),
-                    ]
-                )
-            else:
-                rows.append(
-                    [
-                        key,
-                        value.originatorId,
-                        value.version,
-                        "{}{:x}".format(hash_offset, value.hash),
-                    ]
-                )
+            # 32 bytes comes from version, ttlVersion, ttl and hash which are i64
+            kv_size = 32 + len(key) + len(value.originatorId) + len(value.value)
+            db_bytes += kv_size
 
-        caption = "Available keys in KvStore"
-        column_labels = ["Key", "Originator", "Ver", "Hash"]
+            hash_offset = "+" if value.hash > 0 else ""
+            row = [
+                key,
+                value.originatorId,
+                value.version,
+                f"{hash_offset}{value.hash:x}",
+                printing.sprint_bytes(kv_size),
+            ]
+            if ttl:
+                ttlStr = (
+                    "Inf"
+                    if value.ttl == Consts.CONST_TTL_INF
+                    else str(datetime.timedelta(milliseconds=value.ttl))
+                )
+                row.append(f"{ttlStr} - {value.ttlVersion}")
+            rows.append(row)
+
+        db_bytes_str = printing.sprint_bytes(db_bytes)
+        caption = f"KvStore Data - {len(resp.keyVals)} keys, {db_bytes_str}"
+        column_labels = ["Key", "Originator", "Ver", "Hash", "Size"]
         if ttl:
             column_labels = column_labels + ["TTL - Ver"]
 

@@ -21,6 +21,21 @@ def caption_fmt(caption):
     return ""
 
 
+def sprint_bytes(bytes: int) -> str:
+    """ Return formatted bytes. e.g. 12KB, 15.1MB """
+
+    if bytes < 1024:
+        return f"{bytes} B"
+    bytes /= 1024
+    if bytes < 1024:
+        return f"{bytes:.2f} KB"
+    bytes /= 1024
+    if bytes < 1024:
+        return f"{bytes:.2f} MB"
+    bytes /= 1024
+    return f"{bytes:.2f} GB"
+
+
 def render_horizontal_table(data, column_labels=(), caption="", tablefmt="simple"):
     """ Render tabular data with one item per line
 
