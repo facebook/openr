@@ -708,7 +708,9 @@ KvStore::addPeers(
                  << "` reason: " << folly::exceptionStr(e);
     }
   }
-  fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  if (not fullSyncTimer_->isScheduled()) {
+    fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  }
 
   // process dual events if any
   if (enableFloodOptimization_) {
@@ -827,13 +829,24 @@ KvStore::requestFullSyncFromPeers() {
       // Remove the iterator
       it = peersToSyncWith_.erase(it);
     }
+
+    // if pending response is above the limit wait until
+    // kStoreFullSyncResponseTimeout before sending next sync request
+    if (latestSentPeerSync_.size() >= fullSycnReqInProgress_) {
+      LOG(INFO) << fullSycnReqInProgress_ << " full dump sync in progress";
+      timeout = Constants::kStoreFullSyncResponseTimeout;
+      break;
+    }
   } // for
 
-  // We should be able to perfom full-sync from all peers. Log warning if
-  // there are still some peers to sync with.
-  if (not peersToSyncWith_.empty()) {
-    LOG(WARNING) << peersToSyncWith_.size() << " peers still require sync."
-                 << "Scheduling retry after " << timeout.count() << "ms.";
+  // schedule fullSyncTimer if there are pending peers to sync with or
+  // if maximum allowed pending sync count is reached. Adding a new peer
+  // will not initiate full sync request if it's already scheduled
+  if (not peersToSyncWith_.empty() ||
+      latestSentPeerSync_.size() >= fullSycnReqInProgress_) {
+    LOG_IF(INFO, peersToSyncWith_.size())
+        << peersToSyncWith_.size() << " peers still require sync.";
+    LOG(INFO) << "Scheduling full sync after " << timeout.count() << "ms.";
     // schedule next timeout
     fullSyncTimer_->scheduleTimeout(timeout);
   }
@@ -1320,6 +1333,15 @@ KvStore::processSyncResponse() noexcept {
     VLOG(1) << "It took " << syncDuration.count() << " ms to sync with "
             << requestId;
     latestSentPeerSync_.erase(requestId);
+    // if peers to sync with is not empty then schedule one immediately
+    // double the max full sync pending once a response is received, to a max
+    // of kMaxFullSyncPendingCountThreshold
+    if (not peersToSyncWith_.empty()) {
+      fullSycnReqInProgress_ = std::min(
+          2 * fullSycnReqInProgress_,
+          Constants::kMaxFullSyncPendingCountThreshold);
+      fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+    }
   }
 }
 
