@@ -17,8 +17,6 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
 #include <folly/Portability.h>
-#include <thrift/lib/cpp2/Thrift.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
 
