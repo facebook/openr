@@ -54,16 +54,34 @@ getOpenrCtrlPlainTextClient(
     int32_t port = Constants::kOpenrCtrlPort,
     std::chrono::milliseconds connectTimeout = Constants::kPlatformConnTimeout,
     std::chrono::milliseconds processingTimeout =
-        std::chrono::milliseconds(10000)) {
+        std::chrono::milliseconds(10000),
+    const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress()) {
   std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client;
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
-    // Create Socket
-    // NOTE: It is possible to have caching for socket. We're not doing it as
-    // we expect clients to be persistent/sticky.
-    auto transport = apache::thrift::async::TAsyncSocket::UniquePtr(
-        new apache::thrift::async::TAsyncSocket(
-            &evb, folly::SocketAddress(addr, port), connectTimeout.count()),
-        folly::DelayedDestruction::Destructor());
+    const folly::SocketAddress sa(addr, port);
+
+    apache::thrift::async::TAsyncSocket::UniquePtr transport = nullptr;
+    if (bindAddr == folly::AsyncSocket::anyAddress()) {
+      // Create Socket
+      // NOTE: It is possible to have caching for socket. We're not doing it as
+      // we expect clients to be persistent/sticky.
+      transport = apache::thrift::async::TAsyncSocket::UniquePtr(
+          new apache::thrift::async::TAsyncSocket(
+              &evb, sa, connectTimeout.count()),
+          folly::DelayedDestruction::Destructor());
+    } else {
+      transport = apache::thrift::async::TAsyncSocket::UniquePtr(
+          new apache::thrift::async::TAsyncSocket(&evb),
+          folly::DelayedDestruction::Destructor());
+
+      // Bind the src address
+      transport->connect(
+          nullptr,
+          sa,
+          connectTimeout.count(),
+          folly::AsyncSocket::emptyOptionMap,
+          bindAddr);
+    }
 
     // Create channel and set timeout
     auto channel = ClientChannel::newChannel(std::move(transport));
