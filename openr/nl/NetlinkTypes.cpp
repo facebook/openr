@@ -47,7 +47,7 @@ RouteBuilder::loadFromObject(struct rtnl_route* obj) {
   // Special handling for default routes
   // All others can be constructed from binary address form
   folly::CIDRNetwork prefix;
-  std::array<char, kIpAddrBufSize> ipAddrBuf;
+  std::array<char, kIpAddrBufSize> ipAddrBuf{""};
   if (nl_addr_get_prefixlen(dst) == 0) {
     if (nl_addr_get_family(dst) == AF_INET6) {
       VLOG(3) << "Creating a V6 default route";
@@ -1479,13 +1479,13 @@ std::string
 Neighbor::str() const {
   std::string stateStr{"n/a"};
   if (state_.hasValue()) {
-    std::array<char, 32> buf;
-    rtnl_neigh_state2str(state_.value(), buf.data(), buf.size());
-    stateStr = std::string(buf.data(), buf.size());
+    std::array<char, 32> buf{""};
+    rtnl_neigh_state2str(state_.value(), buf.data(), buf.size() - 1);
+    stateStr = std::string(buf.data());
   }
 
   return folly::sformat(
-      "neighbor {} reachable {}, intf-index {}, lladdr {}, state {}",
+      "neighbor {} reachable {}, intf-index {}, mac-addr {}, state {}",
       destination_.str(),
       isReachable_ ? "Yes" : "No",
       ifIndex_,
@@ -1711,14 +1711,14 @@ Link::isLoopback() const {
 
 std::string
 Link::str() const {
-  std::array<char, 128> flagsBuf;
-  rtnl_link_flags2str(flags_, flagsBuf.data(), flagsBuf.size());
+  std::array<char, 128> flagsBuf{""};
+  rtnl_link_flags2str(flags_, flagsBuf.data(), flagsBuf.size() - 1);
 
   return folly::sformat(
       "link {} intf-index {}, flags {}",
       linkName_,
       ifIndex_,
-      std::string(flagsBuf.data(), flagsBuf.size()));
+      std::string(flagsBuf.data()));
 }
 
 bool
