@@ -16,10 +16,11 @@ import sys
 import time
 from builtins import str
 from itertools import combinations
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Set
 
 import bunch
 import hexdump
+import networkx as nx
 import zmq
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
@@ -241,15 +242,49 @@ class KeyValsCmd(KvStoreCmdBase):
 
 class NodesCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client) -> None:
-        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
-        resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        prefix_keys = client.getKvStoreKeyValsFiltered(
+            self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        )
+        adj_keys = client.getKvStoreKeyValsFiltered(
+            self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+        )
         host_id = utils.get_connected_node_name(self.cli_opts)
-        self.print_kvstore_nodes(resp, host_id)
+        self.print_kvstore_nodes(
+            self.get_connected_nodes(adj_keys, host_id), prefix_keys, host_id
+        )
 
-    def print_kvstore_nodes(self, resp, host_id):
-        """ print prefixes from raw publication from KvStore
+    def get_connected_nodes(
+        self, adj_keys: kv_store_types.Publication, node_id: str
+    ) -> Set[str]:
+        """
+        Build graph of adjacencies and return list of connected node from
+        current node-id
+        """
 
-            :param resp kv_store_types.Publication: pub from kv store
+        edges = set()
+        graph = nx.Graph()
+        for adj_value in adj_keys.keyVals.values():
+            adj_db = serializer.deserialize_thrift_object(
+                adj_value.value, lsdb_types.AdjacencyDatabase
+            )
+            graph.add_node(adj_db.thisNodeName)
+            for adj in adj_db.adjacencies:
+                # Add edge only when we see the reverse side of it.
+                if (adj.otherNodeName, adj_db.thisNodeName, adj.otherIfName) in edges:
+                    graph.add_edge(adj.otherNodeName, adj_db.thisNodeName)
+                    continue
+                edges.add((adj_db.thisNodeName, adj.otherNodeName, adj.ifName))
+        return nx.node_connected_component(graph, node_id)
+
+    def print_kvstore_nodes(
+        self,
+        connected_nodes: Set[str],
+        prefix_keys: kv_store_types.Publication,
+        host_id: str,
+    ) -> None:
+        """
+        Print kvstore nodes information. Their loopback and reachability
+        information.
         """
 
         def _parse_nodes(rows, value):
@@ -282,12 +317,17 @@ class NodesCmd(KvStoreCmdBase):
 
             row.append(ipnetwork.sprint_prefix(loopback_v6) if loopback_v6 else "N/A")
             row.append(ipnetwork.sprint_prefix(loopback_v4) if loopback_v4 else "N/A")
+            row.append(
+                "Reachable"
+                if prefix_db.thisNodeName in connected_nodes
+                else "Unreachable"
+            )
             rows.append(row)
 
         rows = []
-        self.iter_publication(rows, resp, {"all"}, _parse_nodes)
+        self.iter_publication(rows, prefix_keys, {"all"}, _parse_nodes)
 
-        label = ["Node", "V6-Loopback", "V4-Loopback"]
+        label = ["Node", "V6-Loopback", "V4-Loopback", "Status"]
 
         print(printing.render_horizontal_table(rows, label))
 
