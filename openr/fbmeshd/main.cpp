@@ -357,24 +357,16 @@ main(int argc, char* argv[]) {
       }));
   nlProtocolSocketEventLoop->waitUntilRunning();
 
+  LOG(INFO) << "Creating PeriodicPinger...";
   std::unique_ptr<PeriodicPinger> periodicPinger =
       std::make_unique<PeriodicPinger>(
+          &routingEventLoop,
           folly::IPAddressV6{folly::sformat("ff02::1%{}", FLAGS_mesh_ifname)},
           folly::IPAddressV6{
               folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
               nlHandler.lookupMeshNetif().maybeMacAddress.value()},
           kPeriodicPingerInterval,
           FLAGS_mesh_ifname);
-
-  static constexpr auto periodicPingerId{"PeriodicPinger"};
-  monitorEventLoopWithWatchdog(
-      periodicPinger.get(), periodicPingerId, watchdog.get());
-  allThreads.emplace_back(std::thread([&periodicPinger]() noexcept {
-    LOG(INFO) << "Starting PeriodicPinger thread...";
-    folly::setThreadName(periodicPingerId);
-    periodicPinger->run();
-    LOG(INFO) << "PeriodicPinger thread stopped.";
-  }));
 
   std::unique_ptr<SyncRoutes80211s> syncRoutes80211s =
       std::make_unique<SyncRoutes80211s>(
@@ -490,9 +482,6 @@ main(int argc, char* argv[]) {
 
   metricManager80211s->stop();
   metricManager80211s->waitUntilStopped();
-
-  periodicPinger->stop();
-  periodicPinger->waitUntilStopped();
 
   syncRoutes80211s->stop();
   syncRoutes80211s->waitUntilStopped();

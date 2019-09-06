@@ -18,15 +18,18 @@
 using namespace openr::fbmeshd;
 
 PeriodicPinger::PeriodicPinger(
+    folly::EventBase* evb,
     folly::IPAddressV6 dst,
     folly::IPAddressV6 src,
     std::chrono::milliseconds interval,
     const std::string& interface)
     : dst_{dst}, src_{src}, interface_{interface} {
-  // Set timer to ping
   periodicPingerTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { doPing(); });
-  periodicPingerTimer_->scheduleTimeout(interval, true);
+      folly::AsyncTimeout::make(*evb, [this, interval]() noexcept {
+        doPing();
+        periodicPingerTimer_->scheduleTimeout(interval);
+      });
+  periodicPingerTimer_->scheduleTimeout(interval);
 }
 
 void
