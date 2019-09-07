@@ -64,8 +64,6 @@ set(
   CACHE PATH "thrift include directory"
 )
 find_program(THRIFT1 thrift1)
-find_path(THRIFT_COMPILER_INCLUDE thrift/templates)
-set(THRIFT_TEMPLATES ${THRIFT_COMPILER_INCLUDE}/thrift/templates)
 include(${CMAKE_SOURCE_DIR}/ThriftLibrary.cmake)
 
 set(THRIFT_DIR ${CMAKE_BINARY_DIR}/thrift-out)
