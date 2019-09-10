@@ -15,6 +15,7 @@ import json
 import sys
 from builtins import chr, input, map
 from collections import defaultdict
+from functools import partial
 from itertools import product
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -224,26 +225,50 @@ def alloc_prefix_to_loopback_ip_str(prefix):
     return ipnetwork.sprint_addr(ip_addr)
 
 
-def print_prefixes_table(resp, nodes, iter_func):
+def parse_prefix_database(
+    prefix_filter: str,
+    client_type_filter: str,
+    prefix_dbs: Dict[str, lsdb_types.PrefixDatabase],
+    prefix_db: Any,
+):
+    """
+    Utility function to prase `prefix_db` with filter and populate prefix_dbs
+    accordingly
+    """
+    if client_type_filter:
+        _TYPES = network_types.PrefixType._NAMES_TO_VALUES
+        client_type_filter = _TYPES.get(client_type_filter.upper(), None)
+        if client_type_filter is None:
+            raise Exception(f"Unknown client type. Use one of {list(_TYPES.keys())}")
+    if prefix_filter:
+        prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
+
+    if isinstance(prefix_db, kv_store_types.Value):
+        prefix_db = deserialize_thrift_object(
+            prefix_db.value, lsdb_types.PrefixDatabase
+        )
+
+    if prefix_db.thisNodeName not in prefix_dbs:
+        prefix_dbs[prefix_db.thisNodeName] = lsdb_types.PrefixDatabase(
+            f"{prefix_db.thisNodeName}", []
+        )
+
+    for prefix_entry in prefix_db.prefixEntries:
+        if prefix_filter and prefix_filter != prefix_entry.prefix:
+            continue
+        if client_type_filter and client_type_filter != prefix_entry.type:
+            continue
+        prefix_dbs[prefix_db.thisNodeName].prefixEntries.append(prefix_entry)
+
+
+def print_prefixes_table(resp, nodes, prefix, client_type, iter_func):
     """ print prefixes """
-
-    def _parse_prefixes(prefix_maps, prefix_db):
-        if isinstance(prefix_db, kv_store_types.Value):
-            prefix_db = deserialize_thrift_object(
-                prefix_db.value, lsdb_types.PrefixDatabase
-            )
-
-        if prefix_db.thisNodeName not in prefix_maps:
-            prefix_maps[prefix_db.thisNodeName] = lsdb_types.PrefixDatabase(
-                f"{prefix_db.thisNodeName}", []
-            )
-
-        for prefix_entry in prefix_db.prefixEntries:
-            prefix_maps[prefix_db.thisNodeName].prefixEntries.append(prefix_entry)
 
     rows = []
     prefix_maps = {}
-    iter_func(prefix_maps, resp, nodes, _parse_prefixes)
+    iter_func(
+        prefix_maps, resp, nodes, partial(parse_prefix_database, prefix, client_type)
+    )
     for node_name, prefix_db in prefix_maps.items():
         rows.append(["{}".format(node_name), sprint_prefixes_db_full(prefix_db)])
     print(printing.render_vertical_table(rows))
@@ -318,24 +343,31 @@ def prefix_entry_to_dict(prefix_entry):
     return thrift_to_dict(prefix_entry, _update)
 
 
-def prefix_db_to_dict(prefixes_map, prefix_db):
+def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
+    """ convert PrefixDatabase from thrift instance to a dictionary """
+
     if isinstance(prefix_db, kv_store_types.Value):
         prefix_db = deserialize_thrift_object(
             prefix_db.value, lsdb_types.PrefixDatabase
         )
 
-    prefixEntries = list(map(prefix_entry_to_dict, prefix_db.prefixEntries))
-    if prefix_db.thisNodeName not in prefixes_map:
-        prefixes_map[prefix_db.thisNodeName] = {"prefixEntries": prefixEntries}
-    else:
-        prefixes_map[prefix_db.thisNodeName]["prefixEntries"].extend(prefixEntries)
+    def _update(prefix_db_dict, prefix_db):
+        prefix_db_dict.update(
+            {"prefixEntries": list(map(prefix_entry_to_dict, prefix_db.prefixEntries))}
+        )
+
+    return thrift_to_dict(prefix_db, _update)
 
 
-def print_prefixes_json(resp, nodes, iter_func):
+def print_prefixes_json(resp, nodes, prefix, client_type, iter_func):
     """ print prefixes in json """
 
     prefixes_map = {}
-    iter_func(prefixes_map, resp, nodes, prefix_db_to_dict)
+    iter_func(
+        prefixes_map, resp, nodes, partial(parse_prefix_database, prefix, client_type)
+    )
+    for node_name, prefix_db in prefixes_map.items():
+        prefixes_map[node_name] = prefix_db_to_dict(prefix_db)
     print(json_dumps(prefixes_map))
 
 

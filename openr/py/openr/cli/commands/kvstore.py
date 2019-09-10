@@ -112,13 +112,24 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
 
 class PrefixesCmd(KvStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client, nodes: Any, json: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        json: bool,
+        prefix: str,
+        client_type: str,
+    ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         if json:
-            utils.print_prefixes_json(resp, nodes, self.iter_publication)
+            utils.print_prefixes_json(
+                resp, nodes, prefix, client_type, self.iter_publication
+            )
         else:
-            utils.print_prefixes_table(resp, nodes, self.iter_publication)
+            utils.print_prefixes_table(
+                resp, nodes, prefix, client_type, self.iter_publication
+            )
 
 
 class KeysCmd(KvStoreCmdBase):

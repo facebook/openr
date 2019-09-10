@@ -9,6 +9,7 @@
 
 
 from builtins import object
+from typing import Any, List
 
 import click
 from bunch import Bunch
@@ -55,12 +56,25 @@ class PrefixesCli(object):
         "prefixes. Dump prefixes for all nodes if 'all' is given.",
     )
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.option("--prefix", "-p", default="", help="Prefix filter. Exact match")
+    @click.option(
+        "--client-type",
+        "-c",
+        default="",
+        help="Client type filter. Provide name e.g. loopback, bgp",
+    )
     @click.pass_obj
-    def prefixes(cli_opts, nodes, json):  # noqa: B902
+    def prefixes(
+        cli_opts: Any,  # noqa: B902
+        nodes: List[str],
+        json: bool,
+        prefix: str,
+        client_type: str,
+    ) -> None:
         """ show the prefixes in the network """
 
         nodes = parse_nodes(cli_opts, nodes)
-        kvstore.PrefixesCmd(cli_opts).run(nodes, json)
+        kvstore.PrefixesCmd(cli_opts).run(nodes, json, prefix, client_type)
 
 
 class KeysCli(object):

@@ -10,7 +10,6 @@
 
 import ipaddress
 import sys
-from builtins import object
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Tuple
 
@@ -53,12 +52,23 @@ class DecisionCmdBase(OpenrCtrlCmd):
 
 
 class DecisionPrefixesCmd(DecisionCmdBase):
-    def _run(self, client: OpenrCtrl.Client, nodes: set, json: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        json: bool,
+        prefix: str,
+        client_type: str,
+    ) -> None:
         prefix_dbs = client.getDecisionPrefixDbs()
         if json:
-            utils.print_prefixes_json(prefix_dbs, nodes, self.iter_dbs)
+            utils.print_prefixes_json(
+                prefix_dbs, nodes, prefix, client_type, self.iter_dbs
+            )
         else:
-            utils.print_prefixes_table(prefix_dbs, nodes, self.iter_dbs)
+            utils.print_prefixes_table(
+                prefix_dbs, nodes, prefix, client_type, self.iter_dbs
+            )
 
 
 class DecisionRoutesComputedCmd(DecisionCmdBase):
