@@ -280,6 +280,26 @@ isMplsLabelValid(int32_t const mplsLabel) {
  */
 void checkMplsAction(thrift::MplsAction const& mplsAction);
 
+thrift::SparkPayload createSparkPayload(
+    int32_t version,
+    const thrift::SparkNeighbor& originator,
+    uint64_t seqNum,
+    const std::map<std::string, thrift::ReflectedNeighborInfo>& neighborInfos,
+    int64_t timestamp,
+    bool solicitResponse,
+    bool supportFloodOptimization,
+    bool restarting,
+    const folly::Optional<std::unordered_set<std::string>>& areas);
+
+thrift::SparkNeighborEvent createSparkNeighborEvent(
+    thrift::SparkNeighborEventType event,
+    const std::string& ifName,
+    const thrift::SparkNeighbor& originator,
+    int64_t rttUs,
+    int32_t label,
+    bool supportFloodOptimization,
+    folly::Optional<std::string> area);
+
 thrift::Adjacency createAdjacency(
     const std::string& nodeName,
     const std::string& ifName,
@@ -289,6 +309,20 @@ thrift::Adjacency createAdjacency(
     int32_t metric,
     int32_t adjLabel,
     int64_t weight = Constants::kDefaultAdjWeight);
+
+thrift::Adjacency createThriftAdjacency(
+    const std::string& nodeName,
+    const std::string& ifName,
+    const std::string& nextHopV6,
+    const std::string& nextHopV4,
+    int32_t metric,
+    int32_t adjLabel,
+    bool isOverloaded,
+    int32_t rtt,
+    int64_t timestamp,
+    int64_t weight,
+    const std::string& remoteIfName,
+    folly::Optional<std::string> area = folly::none);
 
 thrift::AdjacencyDatabase createAdjDb(
     const std::string& nodeName,

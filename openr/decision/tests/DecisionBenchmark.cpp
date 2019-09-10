@@ -15,6 +15,7 @@
 #include <memory>
 
 #include <openr/common/Constants.h>
+#include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/tests/OpenrModuleTestBase.h>
 #include <thrift/lib/cpp2/Thrift.h>
@@ -338,26 +339,26 @@ sendRecvUpdate(
 
 // Add an adjacency to node
 inline void
-createAdjacency(
+createAdjacencyEntry(
     const uint32_t nodeId,
     const std::string& ifName,
     std::vector<thrift::Adjacency>& adjs,
     const std::string& otherIfName) {
-  adjs.emplace_back(thrift::Adjacency(
-      FRAGILE,
+  adjs.emplace_back(createThriftAdjacency(
       folly::sformat("{}", nodeId),
       ifName,
-      toBinaryAddress(folly::IPAddress(folly::sformat(
-          "fe80:{}::{}", toHex(nodeId >> 16), toHex(nodeId & 0xffff)))),
-      toBinaryAddress(folly::IPAddress(folly::sformat(
-          "10.{}.{}.{}", nodeId >> 16, (nodeId >> 8) & 0xff, nodeId & 0xff))),
+      folly::sformat(
+          "fe80:{}::{}", toHex(nodeId >> 16), toHex(nodeId & 0xffff)),
+      folly::sformat(
+          "10.{}.{}.{}", nodeId >> 16, (nodeId >> 8) & 0xff, nodeId & 0xff),
       1,
       100001 + nodeId /* adjacency-label */,
       false /* overload-bit */,
       100,
       10000 /* timestamp */,
       1 /* weight */,
-      otherIfName));
+      otherIfName,
+      folly::none));
 }
 
 // Get ifName
@@ -378,21 +379,21 @@ createFabricAdjacency(
     const int swId,
     std::vector<thrift::Adjacency>& adjs) {
   const auto otherName = getNodeName(swMarker, podId, swId);
-  adjs.emplace_back(thrift::Adjacency(
-      FRAGILE,
+  adjs.emplace_back(createThriftAdjacency(
       otherName,
       getFabricIfName(sourceNodeName, otherName),
-      toBinaryAddress(folly::IPAddress(folly::sformat(
-          "fe80:{}:{}::{}", toHex(swMarker), toHex(podId), toHex(swId)))),
-      toBinaryAddress(folly::IPAddress(folly::sformat(
-          "{}.{}.{}.{}", swMarker, (podId >> 8), (podId & 0xff), swId))),
+      folly::sformat(
+          "fe80:{}:{}::{}", toHex(swMarker), toHex(podId), toHex(swId)),
+      folly::sformat(
+          "{}.{}.{}.{}", swMarker, (podId >> 8), (podId & 0xff), swId),
       1,
       getId(swMarker, podId, swId) /* adjacency-label */,
       false /* overload-bit */,
       100,
       10000 /* timestamp */,
       1 /* weight */,
-      getFabricIfName(otherName, sourceNodeName)));
+      getFabricIfName(otherName, sourceNodeName),
+      folly::none));
 }
 
 // Add one adjacency to node at grid(row, col)
@@ -409,7 +410,7 @@ createGridAdjacency(
   }
 
   auto nodeId = row * n + col;
-  createAdjacency(nodeId, ifName, adjs, otherIfName);
+  createAdjacencyEntry(nodeId, ifName, adjs, otherIfName);
 }
 
 // Get ifName

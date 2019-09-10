@@ -66,7 +66,8 @@ class Spark final : public OpenrEventLoop {
       KvStoreCmdPort kvStoreCmdPort,
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
-      bool enableFloodOptimization = false);
+      bool enableFloodOptimization = false,
+      folly::Optional<std::unordered_set<std::string>> areas = folly::none);
 
   ~Spark() override = default;
 
@@ -135,6 +136,11 @@ class Spark final : public OpenrEventLoop {
 
   // Sumbmits the counter/stats to monitor
   void submitCounters();
+
+  // find common area, must be only one or none
+  folly::Expected<folly::Optional<std::string>, folly::Unit> findCommonArea(
+      folly::Optional<std::unordered_set<std::string>> areas,
+      const std::string& nodeName);
 
   //
   // Private state
@@ -307,5 +313,8 @@ class Spark final : public OpenrEventLoop {
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+
+  // areas that this node belongs to.
+  folly::Optional<std::unordered_set<std::string>> areas_ = folly::none;
 };
 } // namespace openr

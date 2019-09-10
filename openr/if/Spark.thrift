@@ -95,6 +95,9 @@ struct SparkPayload {
 
   // indicating I'm going to restart gracefully
   9: optional bool restarting = 0;
+
+  // list of areas that the advertising node belong to
+  10: optional set<string>  (cpp.template = "std::unordered_set") areas
 }
 
 //
@@ -124,6 +127,8 @@ struct SparkNeighborEvent {
   5: required i32 label   // Derived based off of ifIndex (local per node)
   // support flood optimization or not
   6: bool supportFloodOptimization = 0
+  // area on which adjacency will be formed
+  7: optional string area
 }
 
 //

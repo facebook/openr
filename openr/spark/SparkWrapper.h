@@ -40,7 +40,8 @@ class SparkWrapper {
       MonitorSubmitUrl const& monitorCmdUrl,
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
-      std::shared_ptr<IoProvider> ioProvider);
+      std::shared_ptr<IoProvider> ioProvider,
+      folly::Optional<std::unordered_set<std::string>> areas);
 
   ~SparkWrapper();
 

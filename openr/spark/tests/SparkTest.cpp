@@ -41,10 +41,12 @@ namespace {
 const string iface1{"iface1"};
 const string iface2{"iface2"};
 const string iface3{"iface3"};
+const string iface4{"iface4"};
 
 const int ifIndex1{1};
 const int ifIndex2{2};
 const int ifIndex3{3};
+const int ifIndex4{4};
 
 const folly::CIDRNetwork ip1V4 =
     folly::IPAddress::createNetwork("192.168.0.1", 24, false /* apply mask */);
@@ -52,10 +54,13 @@ const folly::CIDRNetwork ip2V4 =
     folly::IPAddress::createNetwork("192.168.0.2", 24, false /* apply mask */);
 const folly::CIDRNetwork ip3V4 =
     folly::IPAddress::createNetwork("192.168.0.3", 24, false /* apply mask */);
+const folly::CIDRNetwork ip4V4 =
+    folly::IPAddress::createNetwork("192.168.0.4", 24, false /* apply mask */);
 
 const folly::CIDRNetwork ip1V6 = folly::IPAddress::createNetwork("fe80::1/128");
 const folly::CIDRNetwork ip2V6 = folly::IPAddress::createNetwork("fe80::2/128");
 const folly::CIDRNetwork ip3V6 = folly::IPAddress::createNetwork("fe80::3/128");
+const folly::CIDRNetwork ip4V6 = folly::IPAddress::createNetwork("fe80::4/128");
 // Domain name (same for all Tests except in DomainTest)
 const std::string kDomainName("terragraph");
 
@@ -81,10 +86,11 @@ const std::chrono::milliseconds kKeepAliveTime(20);
 folly::Optional<thrift::SparkNeighborEvent>
 waitForEvent(
     std::shared_ptr<SparkWrapper> const spark,
-    const thrift::SparkNeighborEventType eventType) noexcept {
+    const thrift::SparkNeighborEventType eventType,
+    folly::Optional<std::chrono::milliseconds> timeout = folly::none) noexcept {
   // XXX: hardcode_it
   for (auto i = 0; i < 3; i++) {
-    auto maybeEvent = spark->recvNeighborEvent();
+    auto maybeEvent = spark->recvNeighborEvent(timeout);
     if (maybeEvent.hasError()) {
       LOG(ERROR) << "recvNeighborEvent failed: " << maybeEvent.error();
       continue;
@@ -141,7 +147,8 @@ class SparkFixture : public testing::Test {
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
-          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion)) {
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
+      folly::Optional<std::unordered_set<std::string>> areas = folly::none) {
     return std::make_unique<SparkWrapper>(
         domainName,
         myNodeName,
@@ -155,7 +162,8 @@ class SparkFixture : public testing::Test {
             folly::sformat("{}-{}", kSparkCounterCmdUrl, sparkNum)},
         version,
         context,
-        mockIoProvider);
+        mockIoProvider,
+        areas);
   }
 
   fbzmq::Context context;
@@ -1629,6 +1637,197 @@ TEST_F(SparkFixture, VersionTest) {
   auto maybeEvent = spark1->recvNeighborEvent(kHoldTime * 100);
 
   EXPECT_FALSE(maybeEvent.hasValue());
+}
+
+//
+// Spark adjacency formation with area
+//
+TEST_F(SparkFixture, AreaTest) {
+  LOG(INFO) << "SparkFixture version test";
+  using namespace std::chrono;
+  // create spark instances with different areas and with no area specified.
+  // spark should indicate neighbor up if at least there's one common
+  // area, or if area is not specified at all.
+  //
+  // Define interface names for the test
+  //
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1},
+                                    {iface2, ifIndex2},
+                                    {iface3, ifIndex3},
+                                    {iface4, ifIndex4}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 100}, {iface3, 100}, {iface4, 100}}},
+      {iface2, {{iface1, 100}, {iface3, 100}, {iface4, 100}}},
+      {iface3, {{iface1, 100}, {iface2, 100}, {iface4, 100}}},
+      {iface4, {{iface1, 100}, {iface2, 100}, {iface3, 100}}},
+  };
+
+  //
+  // Test topology:
+  //
+  // none   (1,3)
+  //  1------2
+  //  |\    /|
+  //  | \  / |
+  //  |  \/  |
+  //  |  /\  |
+  //  | /  \ |
+  //  |/    \|
+  //  3------4
+  // (3,4)  (5)
+  //
+
+  mockIoProvider->setConnectedPairs(connectedPairs);
+  std::unordered_set<std::string> area2{"1", "3"}; /* should form adj with spark
+                                                      1, 3 */
+  std::unordered_set<std::string> area3{"3", "4"}; /* should form adj with spark
+                                                      1, 2 */
+  std::unordered_set<std::string> area4{"5"}; /* should form adj only with spark
+                                                 1 */
+
+  // start spark1 with no area ID specified, spark2 with 'area2',
+  auto spark1 = createSpark(
+      kDomainName,
+      "node-1",
+      1,
+      milliseconds(6000) /* hold time */,
+      milliseconds(2000) /* my keep alive time */,
+      milliseconds(2000) /* keep alive time */,
+      std::make_pair(
+          Constants::kOpenrSupportedVersion, Constants::kOpenrSupportedVersion),
+      folly::none);
+  auto spark2 = createSpark(
+      kDomainName,
+      "node-2",
+      2,
+      milliseconds(6000) /* hold time */,
+      milliseconds(2000) /* my keep alive time */,
+      milliseconds(2000) /* keep alive time */,
+      std::make_pair(
+          Constants::kOpenrSupportedVersion, Constants::kOpenrSupportedVersion),
+      area2);
+
+  // start tracking iface1
+  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+
+  // start tracking iface2
+  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  LOG(INFO) << "Preparing to receive the messages from sparks";
+  //
+  // Spark1 has no aread ID specified, Spark2 has area2 specified
+  // Spark1 and Spark2 should form adjacency.
+  //
+  {
+    auto event =
+        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    EXPECT_EQ(event.value().neighbor.nodeName, "node-2");
+    LOG(INFO) << "node-1 Formed adj with " << event.value().neighbor.nodeName;
+  }
+  {
+    auto event =
+        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    EXPECT_EQ(event.value().neighbor.nodeName, "node-1");
+    LOG(INFO) << "node-2 Formed adj with " << event.value().neighbor.nodeName;
+  }
+  //
+  // Start node-3 with area3 which has a common area with Spark2. They should
+  // form ajacency, also node-3 should form adjacency with node-1
+  //
+  LOG(INFO) << "Starting node-3";
+
+  // create Spark3
+  auto spark3 = createSpark(
+      kDomainName,
+      "node-3",
+      3 /* changed */,
+      milliseconds(6000) /* hold time */,
+      milliseconds(2000) /* my keep alive time */,
+      milliseconds(2000) /* fast keep alive time */,
+      std::make_pair(
+          Constants::kOpenrSupportedVersion, Constants::kOpenrSupportedVersion),
+      area3);
+
+  LOG(INFO) << "Adding iface3 to node-3";
+  // add interface
+  EXPECT_TRUE(spark3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+
+  {
+    auto event =
+        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    EXPECT_EQ(event.value().neighbor.nodeName, "node-3");
+    LOG(INFO) << "node-1 Formed adj with " << event.value().neighbor.nodeName;
+  }
+  {
+    auto event =
+        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    EXPECT_EQ(event.value().neighbor.nodeName, "node-3");
+    LOG(INFO) << "node-2 Formed adj with " << event.value().neighbor.nodeName;
+  }
+  // wait for UP event from nodes 1 and 2.
+  {
+    auto event =
+        waitForEvent(spark3, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    EXPECT_TRUE(
+        event.value().neighbor.nodeName == "node-1" ||
+        event.value().neighbor.nodeName == "node-2");
+    LOG(INFO) << "node-3 Formed adj with " << event.value().neighbor.nodeName;
+  }
+  {
+    auto event =
+        waitForEvent(spark3, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    EXPECT_TRUE(
+        event.value().neighbor.nodeName == "node-1" ||
+        event.value().neighbor.nodeName == "node-2");
+    LOG(INFO) << "node-3 Formed adj with " << event.value().neighbor.nodeName;
+  }
+
+  //
+  // start spark4 with area4, it does not have any common area with spark2 or
+  // spark3 and should not form adjacency. However it should form adjacency
+  // with spark1 as it has no area specified
+  //
+  auto spark4 = createSpark(
+      kDomainName,
+      "node-4",
+      4 /* changed */,
+      milliseconds(6000) /* hold time */,
+      milliseconds(2000) /* my keep alive time */,
+      milliseconds(2000) /* fast keep alive time */,
+      std::make_pair(
+          Constants::kOpenrSupportedVersion, Constants::kOpenrSupportedVersion),
+      area4);
+
+  LOG(INFO) << "Adding iface4 to node-4";
+  // add interface
+  EXPECT_TRUE(spark4->updateInterfaceDb({{iface4, ifIndex4, ip4V4, ip4V6}}));
+  {
+    auto event = waitForEvent(
+        spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
+    ASSERT_FALSE(event.hasValue());
+    LOG(INFO) << "node-4 received no UP event for node-2";
+  }
+  {
+    auto event = waitForEvent(
+        spark4, thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
+    ASSERT_TRUE(event.hasValue());
+    EXPECT_EQ(event.value().neighbor.nodeName, "node-1");
+    LOG(INFO) << "node-4 Formed adj with " << event.value().neighbor.nodeName;
+  }
+  {
+    auto event = waitForEvent(
+        spark3, thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
+    ASSERT_FALSE(event.hasValue());
+    LOG(INFO) << "node-3 received no UP event for node-4";
+  }
 }
 
 int

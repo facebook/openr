@@ -550,6 +550,7 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
         "NextHop-v4",
         "NextHop-v6",
         "Uptime",
+        "Area",
     ]
 
     output = []
@@ -592,6 +593,7 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
                 else adj["metric"]
             )
             uptime = time_since(adj["timestamp"]) if adj["timestamp"] else ""
+            area = "N/A" if adj["area"] is None else adj["area"]
 
             rows.append(
                 [
@@ -603,6 +605,7 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
                     adj["nextHopV4"],
                     adj["nextHopV6"],
                     uptime,
+                    area,
                 ]
             )
             seg = printing.render_horizontal_table(

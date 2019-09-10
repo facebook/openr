@@ -20,6 +20,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/tests/OpenrModuleTestBase.h>
 
@@ -2883,20 +2884,19 @@ addAdj(
   }
 
   auto neighbor = i * n + j;
-  adjs.emplace_back(thrift::Adjacency(
-      FRAGILE,
+  adjs.emplace_back(createThriftAdjacency(
       folly::sformat("{}", neighbor),
       ifName,
-      toBinaryAddress(folly::IPAddress(folly::sformat("fe80::{}", neighbor))),
-      toBinaryAddress(folly::IPAddress(
-          folly::sformat("192.168.{}.{}", neighbor / 256, neighbor % 256))),
+      folly::sformat("fe80::{}", neighbor),
+      folly::sformat("192.168.{}.{}", neighbor / 256, neighbor % 256),
       1,
       100001 + neighbor /* adjacency-label */,
       false /* overload-bit */,
       100,
       10000 /* timestamp */,
       1 /* weight */,
-      otherIfName));
+      otherIfName,
+      folly::none));
 }
 
 string

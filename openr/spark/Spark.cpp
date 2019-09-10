@@ -29,6 +29,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 
 #include "IoProvider.h"
 
@@ -168,7 +169,8 @@ Spark::Spark(
     KvStoreCmdPort kvStoreCmdPort,
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
-    bool enableFloodOptimization)
+    bool enableFloodOptimization,
+    folly::Optional<std::unordered_set<std::string>> areas)
     : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::SPARK, zmqContext),
       myDomainName_(myDomainName),
       myNodeName_(myNodeName),
@@ -187,7 +189,8 @@ Spark::Spark(
       kKvStoreCmdPort_(kvStoreCmdPort),
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
       enableFloodOptimization_(enableFloodOptimization),
-      ioProvider_(std::make_shared<IoProvider>()) {
+      ioProvider_(std::make_shared<IoProvider>()),
+      areas_(std::move(areas)) {
   CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
       << "Keep-alive-time must be less than hold-time.";
   CHECK(myKeepAliveTime > std::chrono::milliseconds(0))
@@ -534,14 +537,14 @@ Spark::processNeighborRttChange(
           << newRtt / 1000.0 << "ms over interface " << ifName;
 
   neighbor.rtt = std::chrono::microseconds(newRtt);
-  thrift::SparkNeighborEvent event(
-      apache::thrift::FRAGILE,
+  auto event = createSparkNeighborEvent(
       thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE,
       ifName,
       originator,
       neighbor.rtt.count(),
       neighbor.label,
-      false /* supportFloodOptimization: doesn't matter in RTT event*/);
+      false /* supportFloodOptimization: doesn't matter in RTT event*/,
+      folly::none);
   auto ret = reportSocket_.sendMultiple(
       fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
           .value(),
@@ -576,14 +579,14 @@ Spark::processNeighborHoldTimeout(
               << " was adjacent, reporting as DOWN";
     neighbor.isAdjacent = false;
 
-    thrift::SparkNeighborEvent event(
-        apache::thrift::FRAGILE,
+    auto event = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
         ifName,
         neighbor.info,
         neighbor.rtt.count(),
         neighbor.label,
-        false /* supportFloodOptimization: doesn't matter in GR-expired event*/);
+        false /* supportFloodOptimization: doesn't matter in GR-expired event*/,
+        folly::none);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -701,6 +704,14 @@ Spark::processHelloPacket() {
     return;
   }
 
+  folly::Optional<std::string> adjArea = folly::none;
+  auto commonArea = findCommonArea(
+      helloPacket.payload.areas, helloPacket.payload.originator.nodeName);
+  if (commonArea.hasError()) {
+    return;
+  }
+  adjArea = commonArea.value();
+
   // the map of adjacent neighbors should have been already created
   auto const& originator = helloPacket.payload.originator;
   auto& neighbor = neighbors_.at(ifName).at(originator.nodeName);
@@ -724,14 +735,14 @@ Spark::processHelloPacket() {
     LOG(INFO) << "neighbor " << originator.nodeName << " from iface "
               << originator.ifName << " on iface" << ifName << " is restarting";
 
-    thrift::SparkNeighborEvent event(
-        apache::thrift::FRAGILE,
+    auto event = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
         ifName,
         originator,
         neighbor.rtt.count(),
         neighbor.label,
-        false /* supportDual: doesn't matter in DOWN event*/);
+        false /* supportDual: doesn't matter in DOWN event*/,
+        adjArea);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -854,14 +865,14 @@ Spark::processHelloPacket() {
               << originator.ifName << " on iface " << ifName
               << " is restarting, waiting for it to ack myself.";
 
-    thrift::SparkNeighborEvent event(
-        apache::thrift::FRAGILE,
+    auto event = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
         ifName,
         originator,
         neighbor.rtt.count(),
         neighbor.label,
-        supportFloodOptimization);
+        supportFloodOptimization,
+        adjArea);
     neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
@@ -905,14 +916,14 @@ Spark::processHelloPacket() {
     LOG(INFO) << "Added new adjacent neighbor " << originator.nodeName
               << " from iface " << originator.ifName << " on iface " << ifName;
 
-    thrift::SparkNeighborEvent event(
-        apache::thrift::FRAGILE,
+    auto event = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP,
         ifName,
         originator,
         neighbor.rtt.count(),
         neighbor.label,
-        supportFloodOptimization);
+        supportFloodOptimization,
+        adjArea);
     neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
@@ -939,14 +950,14 @@ Spark::processHelloPacket() {
               << " from iface " << originator.ifName << " on iface " << ifName
               << " since it no longer hears us.";
 
-    thrift::SparkNeighborEvent event(
-        apache::thrift::FRAGILE,
+    auto event = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
         ifName,
         originator,
         neighbor.rtt.count(),
         neighbor.label,
-        false /* supportFloodOptimization: doesn't matter in DOWN event*/);
+        false /* supportFloodOptimization: doesn't matter in DOWN event*/,
+        folly::none);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -1006,8 +1017,7 @@ Spark::sendHelloPacket(
       ifName);
 
   // create the hello packet payload
-  auto payload = thrift::SparkPayload(
-      apache::thrift::FRAGILE,
+  auto payload = createSparkPayload(
       openrVer,
       myself,
       mySeqNum_,
@@ -1015,7 +1025,8 @@ Spark::sendHelloPacket(
       getCurrentTimeInUs().count(),
       inFastInitState,
       enableFloodOptimization_,
-      restarting);
+      restarting,
+      areas_);
 
   // add all neighbors we have heard from on this interface
   for (const auto& kv : neighbors_.at(ifName)) {
@@ -1182,14 +1193,14 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
       LOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
                 << ifName << " down";
 
-      thrift::SparkNeighborEvent event(
-          apache::thrift::FRAGILE,
+      auto event = createSparkNeighborEvent(
           thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
           ifName,
           neighbor.info,
           neighbor.rtt.count(),
           neighbor.label,
-          false /* supportFloodOptimization: doesn't matter in DOWN event*/);
+          false /* supportFloodOptimization: doesn't matter in DOWN event*/,
+          folly::none);
       auto ret = reportSocket_.sendMultiple(
           fbzmq::Message::from(
               openr::Constants::kSparkReportClientId.toString())
@@ -1411,6 +1422,38 @@ Spark::submitCounters() {
   counters["spark.zmq_event_queue_size"] = getEventQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
+}
+
+folly::Expected<folly::Optional<std::string>, folly::Unit>
+Spark::findCommonArea(
+    folly::Optional<std::unordered_set<std::string>> adjAreas,
+    const std::string& nodeName) {
+  // check area membership
+  std::vector<std::string> commonArea{};
+
+  if (areas_.hasValue() && adjAreas.hasValue()) {
+    for (auto area = areas_.value().begin(); area != areas_.value().end();
+         area++) {
+      if (adjAreas.value().find(*area) != adjAreas.value().end()) {
+        commonArea.push_back(*area);
+      }
+    }
+    if (commonArea.size() == 0) {
+      LOG(WARNING) << ": No common area found with: " << nodeName;
+      tData_.addStatValue("spark.no_common_area", 1, fbzmq::COUNT);
+      return folly::makeUnexpected(folly::unit);
+    } else if (commonArea.size() > 1) {
+      LOG(ERROR)
+          << "Invalid configuration, cannot have multiple common areas, node: "
+          << nodeName;
+      tData_.addStatValue("spark.multiple_common_area", 1, fbzmq::COUNT);
+      return folly::makeUnexpected(folly::unit);
+    }
+    VLOG(2) << ": Spark hello packet from " << nodeName << " in area "
+            << commonArea[0];
+    return commonArea[0];
+  }
+  return folly::none;
 }
 
 } // namespace openr

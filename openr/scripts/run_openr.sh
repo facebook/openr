@@ -41,6 +41,7 @@ OPENR=openr
 
 # Keep this list in sorted order
 ALLOC_PREFIX_LEN=128
+AREAS=""
 ASSUME_DRAINED=false
 CONFIG_STORE_FILEPATH="/tmp/aq_persistent_config_store.bin"
 PER_PREFIX_KEYS=false
@@ -160,6 +161,7 @@ fi
 
 ARGS="\
   --alloc_prefix_len=${ALLOC_PREFIX_LEN} \
+  --areas=${AREAS} \
   --assume_drained=${ASSUME_DRAINED} \
   --config_store_filepath=${CONFIG_STORE_FILEPATH} \
   --per_prefix_keys=${PER_PREFIX_KEYS} \

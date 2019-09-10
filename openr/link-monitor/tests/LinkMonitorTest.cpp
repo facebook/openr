@@ -34,6 +34,7 @@
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -97,33 +98,33 @@ const auto nb3 = thrift::SparkNeighbor(
 const uint64_t kTimestamp{1000000};
 const uint64_t kNodeLabel{0};
 
-const auto adj_2_1 = thrift::Adjacency(
-    FRAGILE,
+const auto adj_2_1 = createThriftAdjacency(
     "node-2",
     "iface_2_1",
-    toBinaryAddress(folly::IPAddress("fe80::2")),
-    toBinaryAddress(folly::IPAddress("192.168.0.2")),
+    "fe80::2",
+    "192.168.0.2",
     1 /* metric */,
     1 /* label */,
     false /* overload-bit */,
     0 /* rtt */,
     kTimestamp /* timestamp */,
     Constants::kDefaultAdjWeight /* weight */,
-    "" /* otherIfName */);
+    "" /* otherIfName */,
+    folly::none);
 
-const auto adj_2_2 = thrift::Adjacency(
-    FRAGILE,
+const auto adj_2_2 = createThriftAdjacency(
     "node-2",
     "iface_2_2",
-    toBinaryAddress(folly::IPAddress("fe80::2")),
-    toBinaryAddress(folly::IPAddress("192.168.0.2")),
+    "fe80::2",
+    "192.168.0.2",
     1 /* metric */,
     2 /* label */,
     false /* overload-bit */,
     0 /* rtt */,
     kTimestamp /* timestamp */,
     Constants::kDefaultAdjWeight /* weight */,
-    "" /* otherIfName */);
+    "" /* otherIfName */,
+    folly::none);
 
 const auto staticPrefix1 = toIpPrefix("fc00:face:b00c::/64");
 const auto staticPrefix2 = toIpPrefix("fc00:cafe:babe::/64");
@@ -135,8 +136,8 @@ createNeighborEvent(
     const thrift::SparkNeighbor& neighbor,
     int64_t rttUs,
     int32_t label) {
-  return thrift::SparkNeighborEvent(
-      FRAGILE, eventType, ifName, neighbor, rttUs, label, false);
+  return createSparkNeighborEvent(
+      eventType, ifName, neighbor, rttUs, label, false, folly::none);
 }
 
 thrift::AdjacencyDatabase

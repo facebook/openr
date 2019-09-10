@@ -674,6 +674,80 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
   }
 }
 
+thrift::SparkNeighborEvent
+createSparkNeighborEvent(
+    thrift::SparkNeighborEventType eventType,
+    const std::string& ifName,
+    const thrift::SparkNeighbor& originator,
+    int64_t rttUs,
+    int32_t label,
+    bool supportFloodOptimization,
+    folly::Optional<std::string> area) {
+  thrift::SparkNeighborEvent event;
+  event.eventType = eventType;
+  event.ifName = ifName;
+  event.neighbor = originator;
+  event.rttUs = rttUs;
+  event.label = label;
+  event.supportFloodOptimization = supportFloodOptimization;
+  event.area = area;
+  return event;
+}
+
+thrift::SparkPayload
+createSparkPayload(
+    int32_t version,
+    const thrift::SparkNeighbor& originator,
+    uint64_t seqNum,
+    const std::map<std::string, thrift::ReflectedNeighborInfo>& neighborInfos,
+    int64_t timestamp,
+    bool solicitResponse,
+    bool supportFloodOptimization,
+    bool restarting,
+    const folly::Optional<std::unordered_set<std::string>>& areas) {
+  thrift::SparkPayload payload;
+  payload.version = version;
+  payload.originator = originator;
+  payload.seqNum = seqNum;
+  payload.neighborInfos = neighborInfos;
+  payload.timestamp = timestamp;
+  payload.solicitResponse = solicitResponse;
+  payload.supportFloodOptimization = supportFloodOptimization;
+  payload.restarting = restarting;
+  payload.areas = areas;
+  return payload;
+}
+
+thrift::Adjacency
+createThriftAdjacency(
+    const std::string& nodeName,
+    const std::string& ifName,
+    const std::string& nextHopV6,
+    const std::string& nextHopV4,
+    int32_t metric,
+    int32_t adjLabel,
+    bool isOverloaded,
+    int32_t rtt,
+    int64_t timestamp,
+    int64_t weight,
+    const std::string& remoteIfName,
+    folly::Optional<std::string> area) {
+  thrift::Adjacency adj;
+  adj.otherNodeName = nodeName;
+  adj.ifName = ifName;
+  adj.nextHopV6 = toBinaryAddress(folly::IPAddress(nextHopV6));
+  adj.nextHopV4 = toBinaryAddress(folly::IPAddress(nextHopV4));
+  adj.metric = metric;
+  adj.adjLabel = adjLabel;
+  adj.isOverloaded = isOverloaded;
+  adj.rtt = rtt;
+  adj.timestamp = timestamp;
+  adj.weight = weight;
+  adj.otherIfName = remoteIfName;
+  adj.area = area;
+  return adj;
+}
+
 thrift::Adjacency
 createAdjacency(
     const std::string& nodeName,
@@ -684,19 +758,19 @@ createAdjacency(
     int32_t metric,
     int32_t adjLabel,
     int64_t weight) {
-  thrift::Adjacency adj;
-  adj.otherNodeName = nodeName;
-  adj.ifName = ifName;
-  adj.nextHopV6 = toBinaryAddress(folly::IPAddress(nextHopV6));
-  adj.nextHopV4 = toBinaryAddress(folly::IPAddress(nextHopV4));
-  adj.metric = metric;
-  adj.adjLabel = adjLabel;
-  adj.isOverloaded = false;
-  adj.rtt = metric * 100;
-  adj.timestamp = getUnixTimeStampMs() / 1000;
-  adj.weight = weight;
-  adj.otherIfName = remoteIfName;
-  return adj;
+  return createThriftAdjacency(
+      nodeName,
+      ifName,
+      nextHopV6,
+      nextHopV4,
+      metric,
+      adjLabel,
+      false,
+      metric * 100,
+      getUnixTimeStampMs() / 1000,
+      weight,
+      remoteIfName,
+      folly::none);
 }
 
 thrift::AdjacencyDatabase

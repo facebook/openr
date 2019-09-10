@@ -527,19 +527,19 @@ LinkMonitor::neighborUpEvent(
     weight = interfaces_.at(ifName).getWeight();
   }
 
-  thrift::Adjacency newAdj(
-      FRAGILE,
+  thrift::Adjacency newAdj = createThriftAdjacency(
       remoteNodeName /* otherNodeName */,
       ifName,
-      neighborAddrV6 /* nextHopV6 */,
-      neighborAddrV4 /* nextHopV4 */,
-      (useRttMetric_ ? rttMetric : 1) /* metric */,
+      toString(neighborAddrV6) /* nextHopV6 */,
+      toString(neighborAddrV4) /* nextHopV4 */,
+      useRttMetric_ ? rttMetric : 1 /* metric */,
       enableSegmentRouting_ ? event.label : 0 /* adjacency-label */,
       false /* overload bit */,
-      (useRttMetric_ ? event.rttUs : 0),
+      useRttMetric_ ? event.rttUs : 0,
       timestamp,
       weight,
-      remoteIfName /* otherIfName */);
+      remoteIfName /* otherIfName */,
+      event.area);
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is up on interface "
                << ifName << ". Remote Interface: " << remoteIfName

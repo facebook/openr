@@ -17,6 +17,8 @@
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>
 #include <folly/Optional.h>
+#include <folly/gen/Base.h>
+#include <folly/gen/String.h>
 #include <folly/init/Init.h>
 #include <folly/system/ThreadName.h>
 #include <glog/logging.h>
@@ -551,7 +553,13 @@ main(int argc, char** argv) {
   //
   // If enabled, start the spark service.
   //
-
+  folly::Optional<std::unordered_set<std::string>> areas = folly::none;
+  auto nodeAreas = folly::gen::split(FLAGS_areas, ",") |
+      folly::gen::eachTo<std::string>() |
+      folly::gen::as<std::unordered_set<std::string>>();
+  if (nodeAreas.size()) {
+    areas = nodeAreas;
+  }
   if (FLAGS_enable_spark) {
     startEventLoop(
         allThreads,
@@ -575,7 +583,8 @@ main(int argc, char** argv) {
             std::make_pair(
                 Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
             context,
-            FLAGS_enable_flood_optimization));
+            FLAGS_enable_flood_optimization,
+            areas));
   }
 
   // Static list of prefixes to announce into the network as long as OpenR is
