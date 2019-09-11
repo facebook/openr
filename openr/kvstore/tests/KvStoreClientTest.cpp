@@ -776,6 +776,36 @@ TEST(KvStoreClient, ApiTest) {
     EXPECT_EQ(1, maybeVal2->version);
     EXPECT_EQ("test_ttl_value2", maybeVal2->value);
 
+    // nuke client to mimick scenario user process dies and no ttl update
+    client1 = nullptr;
+    client2 = nullptr;
+  });
+
+  evl.scheduleTimeout(std::chrono::milliseconds(7) + kTtl * 6, [&]() noexcept {
+    // Verify peers INFO from KvStore
+    const auto peersResponse = store->getPeers();
+    EXPECT_EQ(1, peersResponse.size());
+    EXPECT_EQ(0, peersResponse.count("peer1"));
+    EXPECT_EQ(1, peersResponse.count("peer2"));
+
+    // Verify key-value info
+    const auto keyValResponse = store->dumpAll();
+    LOG(INFO) << "received response.";
+    for (const auto& kv : keyValResponse) {
+      VLOG(4) << "key: " << kv.first << ", val: " << kv.second.value.value();
+    }
+    ASSERT_EQ(3, keyValResponse.size());
+
+    auto const& value1 = keyValResponse.at("test_key1");
+    EXPECT_EQ("test_value1", value1.value);
+    EXPECT_EQ(1, value1.version);
+
+    auto const& value2 = keyValResponse.at("test_key2");
+    EXPECT_EQ("test_value2-client2", value2.value);
+    EXPECT_LE(2, value2.version); // client-2 must win over client-1
+
+    EXPECT_EQ(1, keyValResponse.count("set_test_key"));
+
     // stop the event loop
     evl.stop();
   });
@@ -789,34 +819,6 @@ TEST(KvStoreClient, ApiTest) {
   evl.waitUntilRunning();
   evl.waitUntilStopped();
   evlThread.join();
-
-  /* sleep override */
-  // wait until TTL keys expire; clients stop updating TTL
-  std::this_thread::sleep_for(kTtl * 3);
-
-  // Verify peers INFO from KvStore
-  const auto peersResponse = store->getPeers();
-  EXPECT_EQ(1, peersResponse.size());
-  EXPECT_EQ(0, peersResponse.count("peer1"));
-  EXPECT_EQ(1, peersResponse.count("peer2"));
-
-  // Verify key-value info
-  const auto keyValResponse = store->dumpAll();
-  LOG(INFO) << "received response.";
-  for (const auto& kv : keyValResponse) {
-    VLOG(4) << "key: " << kv.first << ", val: " << kv.second.value.value();
-  }
-  ASSERT_EQ(3, keyValResponse.size());
-
-  auto const& value1 = keyValResponse.at("test_key1");
-  EXPECT_EQ("test_value1", value1.value);
-  EXPECT_EQ(1, value1.version);
-
-  auto const& value2 = keyValResponse.at("test_key2");
-  EXPECT_EQ("test_value2-client2", value2.value);
-  EXPECT_LE(2, value2.version); // client-2 must win over client-1
-
-  EXPECT_EQ(1, keyValResponse.count("set_test_key"));
 
   // Stop store
   LOG(INFO) << "Stopping store";

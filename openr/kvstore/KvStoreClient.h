@@ -21,6 +21,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 
@@ -57,6 +58,16 @@ class KvStoreClient {
       folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod =
           60000ms,
       folly::Optional<std::chrono::milliseconds> recvTimeout = 3000ms);
+
+  /*
+   * Second flavor of KvStoreClient to talk to KvStore through Open/R ctrl
+   * Thrift port.
+   */
+  KvStoreClient(
+      fbzmq::Context& context,
+      fbzmq::ZmqEventLoop* eventLoop,
+      std::string const& nodeId,
+      folly::SocketAddress const& socketAddr);
 
   ~KvStoreClient();
 
@@ -264,6 +275,21 @@ class KvStoreClient {
    */
   void processExpiredKeys(thrift::Publication const& publication);
 
+  /*
+   * Utility function to build thrift::Value in KvStoreClient
+   * This method will:
+   *  1. create ThriftValue based on input param;
+   *  2. check if version is specified:
+   *    1) YES - return ThriftValue just created;
+   *    2) NO - bump up version number to <lastKnownVersion> + 1
+   *            <lastKnownVersion> will be checked against KvStore
+   */
+  thrift::Value buildThriftValue(
+      std::string const& key,
+      std::string const& value,
+      uint32_t version = 0,
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
+
   /**
    * Utility function to SET keys in KvStore. Will throw an exception if things
    * goes wrong.
@@ -319,9 +345,31 @@ class KvStoreClient {
 
   void checkPersistKeyInStore();
 
+  /*
+   * Util function to instantiate openrCtrlClient
+   */
+  void initOpenrCtrlClient();
+
+  /*
+   * Wrapper function to initialize timer
+   */
+  void initTimers();
+
   //
   // Immutable state
   //
+
+  // boolean var indicating use thrift or NOT
+  const bool useThriftClient_{false};
+
+  // SocketAddress used to connect to openrCtrlClient
+  const folly::SocketAddress sockAddr_{};
+
+  // EventBase to create openrCtrl client
+  folly::EventBase evb_;
+
+  // cached OpenrCtrlClient to talk to Open/R instance
+  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> openrCtrlClient_{nullptr};
 
   // Our local node identifier
   const std::string nodeId_;
@@ -334,11 +382,12 @@ class KvStoreClient {
   fbzmq::Context& context_;
 
   // Socket Urls (we assume local, unencrypted connection)
-  const std::string kvStoreLocalCmdUrl_;
-  const std::string kvStoreLocalPubUrl_;
+  const std::string kvStoreLocalCmdUrl_{""};
+  const std::string kvStoreLocalPubUrl_{""};
 
   // periodic timer to check existence of persist key in kv store
-  folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod_;
+  folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod_{
+      folly::none};
 
   // check persiste key timer event
   std::unique_ptr<fbzmq::ZmqTimeout> checkPersistKeyTimer_;
