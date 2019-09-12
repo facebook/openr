@@ -125,13 +125,12 @@ class PathCmd(DecisionCmdBase):
             dst = dst or host_id
 
         # Get prefix_dbs from KvStore
-        self.prefix_dbs = {}
+        self.prefix_dbs: Dict[str, lsdb_types.PrefixDatabase] = {}
         pub = client.getKvStoreKeyValsFiltered(
             kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
         )
-        for v in pub.keyVals.values():
-            prefix_db = deserialize_thrift_object(v.value, lsdb_types.PrefixDatabase)
-            self.prefix_dbs[prefix_db.thisNodeName] = prefix_db
+        for value in pub.keyVals.values():
+            utils.parse_prefix_database("", "", self.prefix_dbs, value)
 
         paths = self.get_paths(client, src, dst, max_hop)
         self.print_paths(paths)
