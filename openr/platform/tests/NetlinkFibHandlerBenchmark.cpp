@@ -86,9 +86,9 @@ class NetlinkFibWrapper {
     bringUpIntf(kVethNameY);
 
     // Create NetlinkProtocolSocket
-    std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
+    std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
     nlProtocolSocket =
-        std::make_unique<openr::Netlink::NetlinkProtocolSocket>(&evl2);
+        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&evl2);
     nlProtocolSocketThread = std::thread([&]() {
       nlProtocolSocket->init();
       evl2.run();

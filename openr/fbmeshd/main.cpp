@@ -344,8 +344,8 @@ main(int argc, char* argv[]) {
 
   // set up NetlinkProtocolSocket in a new thread to program the linux kernel
   auto nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
-  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
-  nlProtocolSocket = std::make_unique<openr::Netlink::NetlinkProtocolSocket>(
+  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
+  nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
       nlProtocolSocketEventLoop.get());
   allThreads.emplace_back(
       std::thread([&nlProtocolSocket, &nlProtocolSocketEventLoop]() {

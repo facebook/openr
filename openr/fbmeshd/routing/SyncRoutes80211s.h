@@ -21,7 +21,7 @@ class SyncRoutes80211s : public fbzmq::ZmqEventLoop {
  public:
   SyncRoutes80211s(
       Routing* routing,
-      std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket,
+      std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket,
       folly::MacAddress nodeAddr,
       const std::string& interface);
 

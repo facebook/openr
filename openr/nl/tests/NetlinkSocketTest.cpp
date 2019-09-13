@@ -110,7 +110,7 @@ class NetlinkSocketFixture : public testing::Test {
     bringUpIntf(kVethNameY);
 
     nlProtocolSocket =
-        std::make_unique<openr::Netlink::NetlinkProtocolSocket>(&evl2);
+        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&evl2);
     nlProtocolSocketThread = std::thread([&]() {
       nlProtocolSocket->init();
       evl2.run();
@@ -221,7 +221,7 @@ class NetlinkSocketFixture : public testing::Test {
   }
 
   std::unique_ptr<NetlinkSocket> netlinkSocket;
-  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
+  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
   fbzmq::ZmqEventLoop evl;
   fbzmq::ZmqEventLoop evl2;
   std::thread eventThread;

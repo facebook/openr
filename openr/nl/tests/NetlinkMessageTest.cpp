@@ -43,8 +43,11 @@ extern "C" {
 }
 
 using namespace openr;
-using namespace openr::Netlink;
 using namespace folly::literals::shell_literals;
+
+using openr::fbnl::NetlinkProtocolSocket;
+using openr::fbnl::NetlinkRouteMessage;
+using openr::fbnl::ResultCode;
 
 namespace {
 const std::string kVethNameX("vethTestX");

@@ -14,7 +14,7 @@ namespace fbnl {
 NetlinkSocket::NetlinkSocket(
     fbzmq::ZmqEventLoop* evl,
     EventsHandler* handler,
-    std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock)
+    std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock)
     : evl_(evl), handler_(handler), nlSock_(std::move(nlSock)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 

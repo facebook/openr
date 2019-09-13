@@ -166,7 +166,7 @@ class NetlinkSocket {
   explicit NetlinkSocket(
       fbzmq::ZmqEventLoop* evl,
       EventsHandler* handler = nullptr,
-      std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock = nullptr);
+      std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock = nullptr);
 
   virtual ~NetlinkSocket();
 
@@ -450,7 +450,7 @@ class NetlinkSocket {
   // Indicating to run which event type's handler
   folly::AtomicBitSet<MAX_EVENT_TYPE> eventFlags_;
 
-  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlSock_{nullptr};
+  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock_{nullptr};
 
   std::mutex neighborListenerMutex_;
   std::function<void(const NeighborUpdate& neighborUpdate)> neighborListener_{

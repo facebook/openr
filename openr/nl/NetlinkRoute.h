@@ -29,7 +29,8 @@
 #endif
 
 namespace openr {
-namespace Netlink {
+namespace fbnl {
+
 constexpr uint16_t kMaxLabels{16};
 constexpr uint32_t kLabelBosShift{8};
 constexpr uint32_t kLabelShift{12};
@@ -213,5 +214,5 @@ class NetlinkNeighborMessage final : public NetlinkMessage {
   struct nlmsghdr* msghdr_{nullptr};
 };
 
-} // namespace Netlink
+} // namespace fbnl
 } // namespace openr

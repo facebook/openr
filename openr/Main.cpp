@@ -285,7 +285,7 @@ main(int argc, char** argv) {
   auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
   auto nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
   std::shared_ptr<openr::fbnl::NetlinkSocket> nlSocket;
-  std::unique_ptr<openr::Netlink::NetlinkProtocolSocket> nlProtocolSocket;
+  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
   std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
   std::unique_ptr<std::thread> netlinkFibServerThread;
@@ -303,7 +303,7 @@ main(int argc, char** argv) {
         context, PlatformPublisherUrl{FLAGS_platform_pub_url});
 
     // Create Netlink Protocol object in a new thread
-    nlProtocolSocket = std::make_unique<openr::Netlink::NetlinkProtocolSocket>(
+    nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
         nlProtocolSocketEventLoop.get());
     auto nlProtocolSocketThread = std::thread([&]() {
       LOG(INFO) << "Starting NetlinkProtolSocketEvl thread ...";

@@ -9,7 +9,7 @@
 #include "openr/nl/NetlinkMessage.h"
 
 namespace openr {
-namespace Netlink {
+namespace fbnl {
 
 NetlinkRouteMessage::NetlinkRouteMessage() {
   // get pointer to NLMSG header
@@ -968,5 +968,5 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
   return neighbor;
 }
 
-} // namespace Netlink
+} // namespace fbnl
 } // namespace openr
