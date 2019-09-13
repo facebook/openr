@@ -13,6 +13,7 @@
 
 #include <folly/Function.h>
 #include <folly/Optional.h>
+#include <folly/SocketAddress.h>
 
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
@@ -206,6 +207,28 @@ class KvStoreClient {
       const std::string& prefix,
       folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none,
       folly::Optional<int> maybeIpTos = folly::none);
+
+  /*
+   * This will be a static method to do a full-dump of KvStore key-val to
+   * multiple KvStore instances. It will fetch values from different KvStore
+   * instances and merge them together to finally return thrift::Value
+   *
+   * @param ipAddrs - collection of urls to connect to for OpenR instance
+   * @param prefix - the key prefix used for key dumping. Will dump all if empty
+   * @param processTimeout - timeout value set on porcessing
+   * @param connectTimeout - timeout value set on connecting
+   *
+   * @return merged thrift::Value
+   */
+  static folly::Expected<
+      std::unordered_map<std::string, thrift::Value>,
+      fbzmq::Error>
+  dumpAllWithThriftClientFromMultiple(
+      const std::vector<folly::SocketAddress>& sockAddrs,
+      const std::string& prefix,
+      std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
+      std::chrono::milliseconds processTimeout =
+          Constants::kServiceProcTimeout);
 
   /**
    * APIs to subscribe/unsubscribe to value change of a key in KvStore

@@ -149,6 +149,8 @@ class Constants {
   static constexpr folly::StringPiece kPlatformHost{"::1"};
   static constexpr std::chrono::milliseconds kPlatformConnTimeout{100};
   static constexpr std::chrono::milliseconds kPlatformProcTimeout{20000};
+  static constexpr std::chrono::milliseconds kServiceConnTimeout{500};
+  static constexpr std::chrono::milliseconds kServiceProcTimeout{20000};
 
   // time interval to sync between Open/R and Platform
   static constexpr std::chrono::seconds kPlatformSyncInterval{60};

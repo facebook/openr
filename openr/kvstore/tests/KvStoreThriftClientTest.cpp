@@ -30,7 +30,7 @@ namespace {
 const std::chrono::milliseconds kTtl{1000};
 } // namespace
 
-class KvStoreThriftClientTestFixture : public ::testing::Test {
+class SingleKvStoreTestFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
@@ -43,7 +43,7 @@ class KvStoreThriftClientTestFixture : public ::testing::Test {
         std::unordered_map<std::string, thrift::PeerSpec>{});
     kvStoreWrapper_->run();
 
-    // spin up an openrThriftServer
+    // spin up an OpenrThriftServerWrapper
     openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeId_,
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -74,7 +74,74 @@ class KvStoreThriftClientTestFixture : public ::testing::Test {
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
-TEST_F(KvStoreThriftClientTestFixture, ApiTest) {
+class MultipleKvStoreTestFixture : public ::testing::Test {
+ public:
+  void
+  SetUp() override {
+    // spin up a kvStore through kvStoreWrapper
+    kvStoreWrapper1_ = std::make_shared<KvStoreWrapper>(
+        context_,
+        nodeId1_,
+        std::chrono::seconds(60), // db sync interval
+        std::chrono::seconds(600), // counter submit interval,
+        std::unordered_map<std::string, thrift::PeerSpec>{});
+    kvStoreWrapper1_->run();
+
+    // spin up an OpenrThriftServerWrapper
+    openrThriftServerWrapper1_ = std::make_shared<OpenrThriftServerWrapper>(
+        nodeId1_,
+        MonitorSubmitUrl{"inproc://monitor_submit"},
+        KvStoreLocalPubUrl{kvStoreWrapper1_->localPubUrl},
+        context_);
+    openrThriftServerWrapper1_->addModuleType(
+        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper1_->getKvStore());
+    openrThriftServerWrapper1_->run();
+
+    // spin up another kvStore through kvStoreWrapper
+    kvStoreWrapper2_ = std::make_shared<KvStoreWrapper>(
+        context_,
+        nodeId2_,
+        std::chrono::seconds(60), // db sync interval
+        std::chrono::seconds(600), // counter submit interval,
+        std::unordered_map<std::string, thrift::PeerSpec>{});
+    kvStoreWrapper2_->run();
+
+    // spin up another OpenrThriftServerWrapper
+    openrThriftServerWrapper2_ = std::make_shared<OpenrThriftServerWrapper>(
+        nodeId2_,
+        MonitorSubmitUrl{"inproc://monitor_submit"},
+        KvStoreLocalPubUrl{kvStoreWrapper2_->localPubUrl},
+        context_);
+    openrThriftServerWrapper2_->addModuleType(
+        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper2_->getKvStore());
+    openrThriftServerWrapper2_->run();
+  }
+
+  void
+  TearDown() override {
+    LOG(INFO) << "Stopping openrCtrl thrift server thread";
+    openrThriftServerWrapper1_->stop();
+    openrThriftServerWrapper2_->stop();
+    LOG(INFO) << "OpenrCtrl thrift server thread got stopped";
+
+    LOG(INFO) << "Stopping KvStoreWrapper thread";
+    kvStoreWrapper1_->stop();
+    kvStoreWrapper2_->stop();
+    LOG(INFO) << "KvStoreWrapper thread got stopped";
+  }
+  // var used to conmmunicate to kvStore through openrCtrl thrift server
+  const std::string nodeId1_{"test_1"};
+  const std::string nodeId2_{"test_2"};
+  const std::string localhost_{"::1"};
+
+  fbzmq::Context context_{};
+  std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_;
+  std::shared_ptr<KvStoreWrapper> kvStoreWrapper2_;
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper1_;
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper2_;
+};
+
+TEST_F(SingleKvStoreTestFixture, SetGetKeyTest) {
   // Create another ZmqEventLoop instance for looping clients
   fbzmq::ZmqEventLoop evl;
 
@@ -167,6 +234,50 @@ TEST_F(KvStoreThriftClientTestFixture, ApiTest) {
   evl.waitUntilRunning();
   evl.waitUntilStopped();
   evlThread.join();
+}
+
+TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
+  const std::string key1{"test_key1"};
+  const std::string val1{"test_value1"};
+  const std::string key2{"test_key2"};
+  const std::string val2{"test_value2"};
+
+  std::vector<folly::SocketAddress> sockAddrs;
+  const std::string prefix = "";
+  const uint16_t port1 = openrThriftServerWrapper1_->getOpenrCtrlThriftPort();
+  const uint16_t port2 = openrThriftServerWrapper2_->getOpenrCtrlThriftPort();
+  sockAddrs.push_back(folly::SocketAddress{localhost_, port1});
+  sockAddrs.push_back(folly::SocketAddress{localhost_, port2});
+
+  // Step1: verify there is NOTHING inside kvStore instances
+  auto preMaybeValue =
+      KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+  EXPECT_FALSE(preMaybeValue.hasError());
+  EXPECT_TRUE(preMaybeValue.value().empty());
+
+  // Step2: initilize kvStoreClient connecting to different thriftServers
+  fbzmq::ZmqEventLoop evl;
+  auto client1 = std::make_shared<KvStoreClient>(
+      context_, &evl, nodeId1_, folly::SocketAddress{localhost_, port1});
+  auto client2 = std::make_shared<KvStoreClient>(
+      context_, &evl, nodeId2_, folly::SocketAddress{localhost_, port2});
+  EXPECT_TRUE(nullptr != client1);
+  EXPECT_TRUE(nullptr != client2);
+
+  // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
+  EXPECT_TRUE(client1->setKey(key1, val1));
+  EXPECT_TRUE(client2->setKey(key2, val2));
+
+  // Step4: verify we can fetch 2 keys from different servers as aggregation
+  // result
+  auto postMaybeValue =
+      KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+  EXPECT_FALSE(postMaybeValue.hasError());
+
+  auto pub = postMaybeValue.value();
+  EXPECT_TRUE(pub.size() == 2);
+  EXPECT_TRUE(pub.count(key1));
+  EXPECT_TRUE(pub.count(key2));
 }
 
 int

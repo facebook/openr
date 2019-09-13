@@ -7,6 +7,7 @@
 
 #include "KvStoreClient.h"
 
+#include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 
 #include <fbzmq/zmq/Zmq.h>
@@ -564,6 +565,8 @@ KvStoreClient::dumpAllWithPrefixMultiple(
   folly::SharedMutex mutex;
   std::vector<fbzmq::SocketUrl> unreachedUrls;
 
+  auto startTime = std::chrono::steady_clock::now();
+
   for (auto const& url : kvStoreCmdUrls) {
     threads.emplace_back([&]() {
       apache::thrift::CompactSerializer serializer;
@@ -629,7 +632,86 @@ KvStoreClient::dumpAllWithPrefixMultiple(
     return std::make_pair(folly::none, unreachedUrls);
   }
 
+  const auto elapsedTime =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - startTime)
+          .count();
+
+  LOG(INFO) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
+
   return std::make_pair(merged, unreachedUrls);
+}
+
+/*
+ * static method to dump KvStore key-val over multiple instances
+ */
+folly::Expected<std::unordered_map<std::string, thrift::Value>, fbzmq::Error>
+KvStoreClient::dumpAllWithThriftClientFromMultiple(
+    const std::vector<folly::SocketAddress>& sockAddrs,
+    const std::string& keyPrefix,
+    std::chrono::milliseconds connectTimeout,
+    std::chrono::milliseconds processTimeout) {
+  folly::EventBase evb;
+  std::vector<folly::SemiFuture<thrift::Publication>> calls;
+  std::unordered_map<std::string, thrift::Value> merged;
+  thrift::KeyDumpParams params;
+  params.prefix = keyPrefix;
+
+  LOG(INFO) << "Prepare requests to all Open/R instances";
+
+  auto startTime = std::chrono::steady_clock::now();
+  for (auto const& sockAddr : sockAddrs) {
+    std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+    try {
+      client = getOpenrCtrlPlainTextClient(
+          evb,
+          folly::IPAddress(sockAddr.getAddressStr()),
+          sockAddr.getPort(),
+          connectTimeout,
+          processTimeout);
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << "Failed to connect to Open/R instance at address of: "
+                 << sockAddr.getAddressStr()
+                 << ". Exception: " << folly::exceptionStr(ex);
+    }
+    if (!client) {
+      continue;
+    }
+    calls.emplace_back(client->semifuture_getKvStoreKeyValsFiltered(params));
+  }
+
+  // can't connect to ANY single Open/R instance
+  if (calls.empty()) {
+    return folly::makeUnexpected(
+        fbzmq::Error(0, "Failed to dump key-val from Open/R instances"));
+  }
+
+  folly::collectAllSemiFuture(calls.begin(), calls.end())
+      .via(&evb)
+      .thenValue([&](auto&& results) {
+        LOG(INFO) << "Merge values received from Open/R instances";
+
+        // loop semifuture collection to merge all values
+        for (auto& result : results) {
+          CHECK(result.hasValue());
+          auto& pub = result.value();
+          KvStore::mergeKeyValues(merged, pub.keyVals);
+        }
+        evb.terminateLoopSoon();
+      });
+
+  // magic happens here
+  evb.loopForever();
+
+  // record time used to fetch from all Open/R instances
+  const auto elapsedTime =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - startTime)
+          .count();
+
+  LOG(INFO) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
+
+  return merged;
 }
 
 folly::Expected<std::unordered_map<std::string, thrift::Value>, fbzmq::Error>
