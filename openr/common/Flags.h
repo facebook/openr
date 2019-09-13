@@ -133,5 +133,7 @@ DECLARE_bool(enable_flood_optimization);
 DECLARE_bool(is_flood_root);
 DECLARE_bool(use_flood_optimization);
 
+DECLARE_bool(enable_spark2);
+
 DECLARE_bool(prefix_fwd_type_mpls);
 DECLARE_bool(prefix_algo_type_ksp2_ed_ecmp);

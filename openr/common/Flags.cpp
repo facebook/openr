@@ -340,6 +340,7 @@ DEFINE_bool(
     use_flood_optimization,
     false,
     "Enable this to use formed flooding topology to flood updates");
+DEFINE_bool(enable_spark2, false, "Enable Spark2 support");
 DEFINE_bool(
     prefix_fwd_type_mpls,
     false,

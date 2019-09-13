@@ -50,6 +50,7 @@ SparkWrapper::SparkWrapper(
       version,
       zmqContext,
       false,
+      false,
       areas);
 
   // start spark

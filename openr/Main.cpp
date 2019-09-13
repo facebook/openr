@@ -584,6 +584,7 @@ main(int argc, char** argv) {
                 Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
             context,
             FLAGS_enable_flood_optimization,
+            FLAGS_enable_spark2,
             areas));
   }
 

@@ -39,6 +39,18 @@ enum class PacketValidationResult {
 };
 
 //
+// Define SparkNeighborState for Spark2 usage. This is used to define
+// transition state for neighbors as part of the Finite State Machine.
+//
+enum class SparkNeighborState {
+  IDLE = 1,
+  WARM = 2,
+  NEGOTIATE = 3,
+  ESTABLISHED = 4,
+  RESTART = 5,
+};
+
+//
 // Spark is responsible of telling our peer of our existence
 // and also tracking the neighbor liveness. It publishes the
 // neighbor state changes to a single downstream consumer
@@ -67,6 +79,7 @@ class Spark final : public OpenrEventLoop {
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
       bool enableFloodOptimization = false,
+      bool enableSpark2 = false,
       folly::Optional<std::unordered_set<std::string>> areas = folly::none);
 
   ~Spark() override = default;
@@ -200,6 +213,9 @@ class Spark final : public OpenrEventLoop {
   // enable dual or not
   const bool enableFloodOptimization_{false};
 
+  // enable Spark2 or not
+  const bool enableSpark2_{false};
+
   //
   // Interface tracking
   //
@@ -291,6 +307,19 @@ class Spark final : public OpenrEventLoop {
       std::string /* ifName */,
       std::unordered_map<std::string /* neighborName */, Neighbor>>
       neighbors_{};
+
+  // function to receive and parse received pkt
+  bool parsePacket(
+      thrift::SparkHelloPacket& pkt /* packet( type will be renamed later) */,
+      std::string& ifName /* interface */,
+      std::chrono::microseconds& recvTime /* kernel timestamp when recved */);
+
+  /*
+   * Spark 2 specific function/var
+   */
+  void processHelloMsg();
+  void processHeartbeatMsg();
+  void processHandshakeMsg();
 
   // to serdeser messages over ZMQ sockets
   apache::thrift::CompactSerializer serializer_;

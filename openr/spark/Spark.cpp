@@ -170,6 +170,7 @@ Spark::Spark(
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
     bool enableFloodOptimization,
+    bool enableSpark2,
     folly::Optional<std::unordered_set<std::string>> areas)
     : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::SPARK, zmqContext),
       myDomainName_(myDomainName),
@@ -189,6 +190,7 @@ Spark::Spark(
       kKvStoreCmdPort_(kvStoreCmdPort),
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
       enableFloodOptimization_(enableFloodOptimization),
+      enableSpark2_(enableSpark2),
       ioProvider_(std::make_shared<IoProvider>()),
       areas_(std::move(areas)) {
   CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
@@ -401,6 +403,12 @@ Spark::validateHelloPacket(
   uint32_t const& remoteVersion =
       static_cast<uint32_t>(helloPacket.payload.version);
 
+  // check if own packet has looped
+  if (neighborName == myNodeName_) {
+    VLOG(2) << "Ignore packet from self (" << myNodeName_ << ")";
+    tData_.addStatValue("spark.invalid_keepalive.looped_packet", 1, fbzmq::SUM);
+    return PacketValidationResult::FAILURE;
+  }
   // domain check
   if (originator.domainName != myDomainName_) {
     LOG(ERROR) << "Ignoring hello packet from node " << originator.nodeName
@@ -618,8 +626,11 @@ Spark::shouldProcessHelloPacket(
   return true;
 }
 
-void
-Spark::processHelloPacket() {
+bool
+Spark::parsePacket(
+    thrift::SparkHelloPacket& pkt,
+    std::string& ifName,
+    std::chrono::microseconds& recvTime) {
   // the read buffer
   uint8_t buf[kMinIpv6Mtu];
 
@@ -627,25 +638,25 @@ Spark::processHelloPacket() {
   int ifIndex;
   folly::SocketAddress clientAddr;
   int hopLimit;
-  std::chrono::microseconds myRecvTime;
 
-  std::tie(bytesRead, ifIndex, clientAddr, hopLimit, myRecvTime) =
+  std::tie(bytesRead, ifIndex, clientAddr, hopLimit, recvTime) =
       IoProvider::recvMessage(mcastFd_, buf, kMinIpv6Mtu, ioProvider_.get());
 
   if (hopLimit < kSparkHopLimit) {
     LOG(ERROR) << "Rejecting packet from " << clientAddr.getAddressStr()
                << " due to hop limit being " << hopLimit;
-    return;
+    return false;
   }
 
   auto res = findInterfaceFromIfindex(ifIndex);
-  if (!res) {
-    LOG(WARNING) << "Received packet from " << clientAddr.getAddressStr()
-                 << " on unknown interface with index " << ifIndex
-                 << ". Ignoring the packet.";
-    return;
+  if (!res.hasValue()) {
+    LOG(ERROR) << "Received packet from " << clientAddr.getAddressStr()
+               << " on unknown interface with index " << ifIndex
+               << ". Ignoring the packet.";
+    return false;
   }
-  const std::string ifName = *res;
+
+  ifName = res.value();
 
   VLOG(4) << "Received message on " << ifName << " ifindex " << ifIndex
           << " from " << clientAddr.getAddressStr();
@@ -657,10 +668,10 @@ Spark::processHelloPacket() {
   tData_.addStatValue("spark.hello_packet_recv_size", bytesRead, fbzmq::SUM);
 
   if (!shouldProcessHelloPacket(ifName, clientAddr.getIPAddress())) {
-    VLOG(3) << "Spark: dropping hello packet due to rate limiting on iface: "
-            << ifName << " from addr: " << clientAddr.getAddressStr();
+    LOG(ERROR) << "Spark: dropping hello packet due to rate limiting on iface: "
+               << ifName << " from addr: " << clientAddr.getAddressStr();
     tData_.addStatValue("spark.hello_packet_dropped", 1, fbzmq::SUM);
-    return;
+    return false;
   }
 
   tData_.addStatValue("spark.hello_packet_processed", 1, fbzmq::SUM);
@@ -671,32 +682,71 @@ Spark::processHelloPacket() {
     if (static_cast<size_t>(bytesRead) > kMinIpv6Mtu) {
       LOG(ERROR) << "Message from " << clientAddr.getAddressStr()
                  << " has been truncated";
-      return;
+      return false;
     }
   } else {
     LOG(ERROR) << "Failed reading from fd " << mcastFd_ << " error "
                << folly::errnoStr(errno);
-    return;
+    return false;
   }
 
   // Copy buffer into string object and parse it into helloPacket.
   std::string readBuf(reinterpret_cast<const char*>(&buf[0]), bytesRead);
-  thrift::SparkHelloPacket helloPacket;
   try {
-    helloPacket =
+    pkt =
         util::readThriftObjStr<thrift::SparkHelloPacket>(readBuf, serializer_);
   } catch (std::exception const& err) {
     LOG(ERROR) << "Failed parsing hello packet " << folly::exceptionStr(err);
+    return false;
+  }
+  return true;
+}
+
+void
+Spark::processHelloMsg() {
+  CHECK(false) << "Not implemented yet";
+}
+
+void
+Spark::processHeartbeatMsg() {
+  CHECK(false) << "Not implemented yet";
+}
+
+void
+Spark::processHandshakeMsg() {
+  CHECK(false) << "Not implemented yet";
+}
+
+void
+Spark::processHelloPacket() {
+  // Step 1: receive and parse pkt
+  thrift::SparkHelloPacket helloPacket;
+  std::string ifName;
+  std::chrono::microseconds myRecvTime;
+
+  if (!parsePacket(helloPacket, ifName, myRecvTime)) {
+    LOG(ERROR) << "Failed to parse packet. Ignore it";
     return;
   }
 
-  // in case our own packet has looped
-  if (helloPacket.payload.originator.nodeName == myNodeName_) {
-    VLOG(2) << "Ignore packet from self (" << myNodeName_ << ")";
-    tData_.addStatValue("spark.invalid_keepalive.looped_packet", 1, fbzmq::SUM);
-    return;
+  // Step 2: Spark2 specific msg processing
+  if (enableSpark2_) {
+    if (helloPacket.helloMsg.hasValue()) {
+      processHelloMsg();
+      return;
+    } else if (helloPacket.heartbeatMsg.hasValue()) {
+      processHeartbeatMsg();
+      return;
+    } else if (helloPacket.handshakeMsg.hasValue()) {
+      processHandshakeMsg();
+      return;
+    } else {
+      LOG(INFO)
+          << "No valid Spark2 msg to process. Fallback to old Spark processing";
+    }
   }
 
+  // Step 3: old spark way of processing logic
   auto validationResult = validateHelloPacket(ifName, helloPacket);
   if (validationResult == PacketValidationResult::FAILURE) {
     LOG(ERROR) << "Ignoring invalid packet received from "
@@ -1046,9 +1096,11 @@ Spark::sendHelloPacket(
   }
 
   // build the hello packet from payload and empty signature
-  auto packet = util::writeThriftObjStr(
-      thrift::SparkHelloPacket{apache::thrift::FRAGILE, payload, ""},
-      serializer_);
+  thrift::SparkHelloPacket helloPacket;
+  helloPacket.payload = std::move(payload);
+  helloPacket.signature = "";
+
+  auto packet = util::writeThriftObjStr(helloPacket, serializer_);
 
   // send the payload
   folly::SocketAddress dstAddr(

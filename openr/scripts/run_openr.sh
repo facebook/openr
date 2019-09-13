@@ -111,6 +111,7 @@ X509_KEY_PATH=""
 ENABLE_FLOOD_OPTIMIZATION=false
 IS_FLOOD_ROOT=false
 USE_FLOOD_OPTIMIZATION=false
+ENABLE_SPARK2=false
 
 #
 # Some sanity checks before we start OpenR
@@ -231,6 +232,7 @@ ARGS="\
   --enable_flood_optimization=${ENABLE_FLOOD_OPTIMIZATION} \
   --is_flood_root=${IS_FLOOD_ROOT} \
   --use_flood_optimization=${USE_FLOOD_OPTIMIZATION} \
+  --enable_spark2=${ENABLE_SPARK2} \
   --logbufsecs=0 \
   --logtostderr \
   --max_log_size=1 \

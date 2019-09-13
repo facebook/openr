@@ -101,11 +101,86 @@ struct SparkPayload {
 }
 
 //
+// Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
+// 1. SparkHelloMsg;
+//    - Functionality:
+//      1) To advertise its own existence and basic neighbor information;
+//      2) To ask for immediate response for quick adjacency establishment;
+//      3) To notify for its own "RESTART" to neighbors;
+//    - SparkHelloMsg will be sent per interface;
+// 2. SparkHeartbeatMsg;
+//    - Functionality:
+//      To notify its own aliveness by advertising msg periodically;
+//    - SparkHeartbeatMsg will be sent per interface;
+// 3. SparkHandshakeMsg;
+//    - Functionality:
+//      To exchange param information to establish adjacency;
+//    - SparkHandshakeMsg will be sent per (interface, neighbor)
+//
+struct SparkHelloMsg {
+  1: string domainName
+  2: string nodeName
+  3: string ifName
+  4: i64 seqNum
+  5: map<string, ReflectedNeighborInfo> neighborInfos
+  6: OpenrVersion version
+  7: bool solicitResponse = 0
+  8: bool restarting = 0
+}
+
+struct SparkHeartbeatMsg {
+  1: string nodeName
+  2: i64 seqNum
+}
+
+struct SparkHandshakeMsg {
+  // the name of the node sending handshake msg
+  1: string nodeName
+
+  // used as signal to keep/stop sending handshake msg
+  2: bool isAdjEstablished
+
+  // heartbeat expiration time
+  3: i64 holdTime
+
+  // graceful-restart expiration time
+  4: i64 gracefulRestartTime
+
+  // our transport addresses (right now - link local)
+  5: Network.BinaryAddress transportAddressV6
+  6: Network.BinaryAddress transportAddressV4
+
+  // neighbor's kvstore global pub/cmd ports
+  7: i32 openrCtrlThriftPort
+  8: i32 kvStorePubPort
+  9: i32 kvStoreCmdPort
+}
+
+//
 // This is used to create a new timer
 //
 struct SparkHelloPacket {
-  1: required SparkPayload payload
-  2: required binary signature
+  // Will be DEPRECATED after Spark2
+  1: SparkPayload payload
+
+  // Will be DEPRECATED after Spark2
+  2: binary signature
+
+  // - Msg to announce node's presence on link with its
+  //   own params;
+  // - Send out periodically and on receipt of hello msg
+  //   with solicitation flag set;
+  3: optional SparkHelloMsg helloMsg
+
+  // - Msg to announce nodes's aliveness.
+  // - Send out periodically on intf where there is at
+  //   least one neighbor in ESTABLISHED state;
+  4: optional SparkHeartbeatMsg heartbeatMsg
+
+  // - Msg to exchange params to establish adjacency
+  //   with neighbors;
+  // - Send out periodically and on receipt of handshake msg;
+  5: optional SparkHandshakeMsg handshakeMsg
 }
 
 enum SparkNeighborEventType {
