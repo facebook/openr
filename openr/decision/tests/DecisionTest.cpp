@@ -12,6 +12,7 @@
 #include <folly/IPAddressV6.h>
 #include <folly/Random.h>
 #include <folly/futures/Promise.h>
+#include <folly/init/Init.h>
 #include <gflags/gflags.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -22,7 +23,7 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
-#include <openr/tests/OpenrModuleTestBase.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 
 DEFINE_bool(stress_test, false, "pass this to run the stress test");
 
@@ -3032,7 +3033,7 @@ TEST(GridTopology, StressTest) {
 // Start the decision thread and simulate KvStore communications
 // Expect proper RouteDatabase publications to appear
 //
-class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
+class DecisionTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {
@@ -3064,15 +3065,17 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
     });
     decision->waitUntilRunning();
 
-    // put handler into moduleToEvl to make sure openr-ctrl thrift handler
-    // can access Decision module.
-    moduleTypeToEvl_[thrift::OpenrModuleType::DECISION] = decision;
-    startOpenrCtrlHandler(
-        "node-1",
-        acceptablePeerNames,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
+    // spin up an openrThriftServer
+    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
+        "1",
+        MonitorSubmitUrl{"inproc://monitor-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
         zeromqContext);
+
+    // make sure thrift server know how to access decision module
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::DECISION, decision);
+    openrThriftServerWrapper_->run();
 
     const int hwm = 1000;
     decisionPub.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(hwm)).value();
@@ -3088,7 +3091,7 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
   void
   TearDown() override {
     LOG(INFO) << "Stopping openr-ctrl thrift server";
-    stopOpenrCtrlHandler();
+    openrThriftServerWrapper_->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
     LOG(INFO) << "Stopping the decision thread";
@@ -3106,7 +3109,7 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
     std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
 
     for (string const& node : allNodes) {
-      auto resp = openrCtrlHandler_
+      auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
                       ->semifuture_getRouteDbComputed(
                           std::make_unique<std::string>(node))
                       .get();
@@ -3220,9 +3223,6 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
   // member variables
   //
 
-  // variables used to create Open/R ctrl thrift handler
-  std::unordered_set<std::string> acceptablePeerNames;
-
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
   CompactSerializer serializer{};
@@ -3234,11 +3234,14 @@ class DecisionTestFixture : public ::testing::Test, public OpenrModuleTestBase {
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> kvStoreRep{zeromqContext};
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> decisionPub{zeromqContext};
 
-  // KvStore owned by this wrapper.
+  // Decision owned by this wrapper.
   std::shared_ptr<Decision> decision{nullptr};
 
-  // Thread in which KvStore will be running.
+  // Thread in which decision will be running.
   std::unique_ptr<std::thread> decisionThread{nullptr};
+
+  // thriftServer to talk to decision
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
 // The following topology is used:
@@ -4145,7 +4148,7 @@ main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
+  folly::init(&argc, &argv);
   google::InstallFailureSignalHandler();
 
   // Run the tests

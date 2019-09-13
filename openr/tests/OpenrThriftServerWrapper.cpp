@@ -5,19 +5,24 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/tests/OpenrModuleTestBase.h"
+#include "openr/tests/OpenrThriftServerWrapper.h"
 
 namespace openr {
 
-void
-OpenrModuleTestBase::startOpenrCtrlHandler(
-    const std::string& nodeName,
-    const std::unordered_set<std::string>& acceptablePeerNames,
+OpenrThriftServerWrapper::OpenrThriftServerWrapper(
+    std::string const& nodeName,
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
-    fbzmq::Context& context) {
-  LOG(INFO) << "Start openr-ctrl handler";
+    fbzmq::Context& context)
+    : nodeName_(nodeName),
+      monitorSubmitUrl_(monitorSubmitUrl),
+      kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
+      context_(context) {
+  CHECK(!nodeName_.empty());
+}
 
+void
+OpenrThriftServerWrapper::run() {
   // Create main-event-loop
   mainEvlThread_ = std::thread([&]() { mainEvl_.run(); });
 
@@ -29,22 +34,29 @@ OpenrModuleTestBase::startOpenrCtrlHandler(
 
   // create openrCtrlHandler
   openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
-      nodeName,
-      acceptablePeerNames,
+      nodeName_,
+      std::unordered_set<std::string>{},
       moduleTypeToEvl_,
-      monitorSubmitUrl,
-      kvStoreLocalPubUrl,
+      monitorSubmitUrl_,
+      kvStoreLocalPubUrl_,
       mainEvl_,
-      context);
+      context_);
   openrCtrlHandler_->setThreadManager(tm_.get());
 
-  LOG(INFO) << "Successfully started openr-ctrl handler";
+  // setup openrCtrlThrift server for client to connect to
+  std::shared_ptr<apache::thrift::ThriftServer> server =
+      std::make_shared<apache::thrift::ThriftServer>();
+  server->setNumIOWorkerThreads(1);
+  server->setNumAcceptThreads(1);
+  server->setPort(0);
+  server->setInterface(openrCtrlHandler_);
+  openrCtrlThriftServerThread_.start(std::move(server));
+
+  LOG(INFO) << "Successfully started openr-ctrl thrift server";
 }
 
 void
-OpenrModuleTestBase::stopOpenrCtrlHandler() {
-  LOG(INFO) << "Stop openr-ctrl handler";
-
+OpenrThriftServerWrapper::stop() {
   // ATTN: moduleTypeToEvl maintains <shared_ptr> of OpenrEventLoop.
   //       Must cleanup. Otherwise, there will be additional ref count and
   //       cause OpenrEventLoop binding to the existing addr.
@@ -53,8 +65,9 @@ OpenrModuleTestBase::stopOpenrCtrlHandler() {
   mainEvlThread_.join();
   openrCtrlHandler_.reset();
   tm_->join();
+  openrCtrlThriftServerThread_.stop();
 
-  LOG(INFO) << "Successfully stop openr-ctrl handler";
+  LOG(INFO) << "Successfully stopped openr-ctrl thrift server";
 }
 
 } // namespace openr

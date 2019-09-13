@@ -12,7 +12,7 @@
 #include <openr/fib/Fib.h>
 #include <openr/fib/tests/MockNetlinkFibHandler.h>
 #include <openr/fib/tests/PrefixGenerator.h>
-#include <openr/tests/OpenrModuleTestBase.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 #include <thread>
@@ -60,7 +60,7 @@ using apache::thrift::FRAGILE;
 using apache::thrift::ThriftServer;
 using apache::thrift::util::ScopedServerThread;
 
-class FibWrapper : public OpenrModuleTestBase {
+class FibWrapper {
  public:
   FibWrapper() {
     // Register Singleton
@@ -104,20 +104,19 @@ class FibWrapper : public OpenrModuleTestBase {
     });
     fib->waitUntilRunning();
 
-    // put handler into moduleToEvl to make sure openr-ctrl thrift handler
-    // can access Fib module.
-    moduleTypeToEvl_[thrift::OpenrModuleType::FIB] = fib;
-    startOpenrCtrlHandler(
+    // spin up an openrThriftServer
+    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         "node-1",
-        acceptablePeerNames,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
-        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
+        MonitorSubmitUrl{"inproc://monitor-sub"},
+        KvStoreLocalPubUrl{"inproc://kvstore-sub"},
         context);
+    openrThriftServerWrapper_->addModuleType(thrift::OpenrModuleType::FIB, fib);
+    openrThriftServerWrapper_->run();
   }
 
   ~FibWrapper() {
     LOG(INFO) << "Stopping openr-ctrl thrift server";
-    stopOpenrCtrlHandler();
+    openrThriftServerWrapper_->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
     // This will be invoked before Fib's d-tor
@@ -135,7 +134,9 @@ class FibWrapper : public OpenrModuleTestBase {
   thrift::PerfDatabase
   getPerfDb() {
     thrift::PerfDatabase perfDb;
-    auto resp = openrCtrlHandler_->semifuture_getPerfDb().get();
+    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+                    ->semifuture_getPerfDb()
+                    .get();
     EXPECT_TRUE(resp);
 
     perfDb = *resp;
@@ -173,14 +174,14 @@ class FibWrapper : public OpenrModuleTestBase {
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
 
-  // variables used to create Open/R ctrl thrift handler
-  std::unordered_set<std::string> acceptablePeerNames;
-
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;
 
   std::shared_ptr<MockNetlinkFibHandler> mockFibHandler;
   PrefixGenerator prefixGenerator;
+
+  // thriftServer to talk to Fib
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
 /**

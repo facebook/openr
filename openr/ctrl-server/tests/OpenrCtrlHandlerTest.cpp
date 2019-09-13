@@ -17,8 +17,8 @@
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/OpenrClient.h>
 #include <openr/config-store/PersistentStore.h>
-#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/health-checker/HealthChecker.h>
@@ -26,6 +26,7 @@
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
 #include <openr/prefix-manager/PrefixManager.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 
 using namespace openr;
 
@@ -33,8 +34,6 @@ class OpenrCtrlFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
-    const std::unordered_set<std::string> acceptablePeerNames;
-
     // Create zmq-monitor
     zmqMonitor = std::make_unique<fbzmq::ZmqMonitor>(
         monitorSubmitUrl_, "inproc://monitor_pub_url", context_);
@@ -50,8 +49,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         true /* dryrun */);
     persistentStoreUrl_ = PersistentStoreUrl{persistentStore->inprocCmdUrl};
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
-    moduleTypeToEvl_[thrift::OpenrModuleType::PERSISTENT_STORE] =
-        persistentStore;
 
     // Create KvStore module
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
@@ -66,8 +63,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         true /* enableFloodOptimization */,
         true /* isFloodRoot */);
     kvStoreWrapper->run();
-    moduleTypeToEvl_[thrift::OpenrModuleType::KVSTORE] =
-        kvStoreWrapper->getKvStore();
 
     // Create Decision module
     decision = std::make_shared<Decision>(
@@ -88,7 +83,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         monitorSubmitUrl_,
         context_);
     decisionThread_ = std::thread([&]() { decision->run(); });
-    moduleTypeToEvl_[thrift::OpenrModuleType::DECISION] = decision;
 
     // Create Fib module
     fib = std::make_shared<Fib>(
@@ -107,7 +101,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         context_);
     fibThread_ = std::thread([&]() { fib->run(); });
-    moduleTypeToEvl_[thrift::OpenrModuleType::FIB] = fib;
 
     // Create HealthChecker module
     healthChecker = std::make_shared<HealthChecker>(
@@ -124,7 +117,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         monitorSubmitUrl_,
         context_);
     healthCheckerThread_ = std::thread([&]() { healthChecker->run(); });
-    moduleTypeToEvl_[thrift::OpenrModuleType::HEALTH_CHECKER] = healthChecker;
 
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
@@ -140,7 +132,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         Constants::kKvStoreDbTtl,
         context_);
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
-    moduleTypeToEvl_[thrift::OpenrModuleType::PREFIX_MANAGER] = prefixManager;
 
     // Create MockNetlinkSystemHandler
     mockNlHandler =
@@ -191,42 +182,43 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::milliseconds(8),
         Constants::kKvStoreDbTtl);
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
-    moduleTypeToEvl_[thrift::OpenrModuleType::LINK_MONITOR] = linkMonitor;
 
-    // Create main-event-loop
-    mainEvlThread_ = std::thread([&]() { mainEvl_.run(); });
-
-    // we need to set thread manager as the createStreamGenerator will
-    // call getBlockingThreadManager to execute
-    tm = apache::thrift::concurrency::ThreadManager::newSimpleThreadManager(
-        1, false);
-    tm->threadFactory(
-        std::make_shared<apache::thrift::concurrency::PosixThreadFactory>());
-    tm->start();
-
-    // Create open/r handler
-    handler = std::make_unique<OpenrCtrlHandler>(
+    // spin up an openrThriftServer
+    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeName,
-        acceptablePeerNames,
-        moduleTypeToEvl_,
         monitorSubmitUrl_,
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        mainEvl_,
         context_);
-    handler->setThreadManager(tm.get());
+
+    // add module into thriftServer module map
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::PERSISTENT_STORE, persistentStore);
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper->getKvStore());
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::DECISION, decision);
+    openrThriftServerWrapper_->addModuleType(thrift::OpenrModuleType::FIB, fib);
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::HEALTH_CHECKER, healthChecker);
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::PREFIX_MANAGER, prefixManager);
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::LINK_MONITOR, linkMonitor);
+
+    // start running openrThriftServer
+    openrThriftServerWrapper_->run();
+
+    // initialize openrCtrlClient talking to server
+    openrCtrlThriftClient_ =
+        getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
+            evb_,
+            folly::IPAddress("::1"),
+            openrThriftServerWrapper_->getOpenrCtrlThriftPort());
   }
 
   void
   TearDown() override {
-    // ATTN: moduleTypeToEvl_ maintains <shared_ptr> of OpenrEventLoop.
-    //       Must cleanup. Otherwise, there will be additional ref count and
-    //       cause OpenrEventLoop binding to the existing addr.
-    moduleTypeToEvl_.clear();
-
-    mainEvl_.stop();
-    mainEvlThread_.join();
-    handler.reset();
-    tm->join();
+    openrThriftServerWrapper_->stop();
 
     linkMonitor->stop();
     linkMonitorThread_.join();
@@ -281,7 +273,8 @@ class OpenrCtrlFixture : public ::testing::Test {
   PersistentStoreUrl persistentStoreUrl_;
 
   fbzmq::Context context_;
-  fbzmq::ZmqEventLoop mainEvl_;
+  folly::EventBase evb_;
+
   std::thread zmqMonitorThread_;
   std::thread decisionThread_;
   std::thread fibThread_;
@@ -289,31 +282,31 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::thread prefixManagerThread_;
   std::thread persistentStoreThread_;
   std::thread linkMonitorThread_;
-  std::thread mainEvlThread_;
-  apache::thrift::util::ScopedServerThread systemThriftThread;
 
- public:
-  const std::string nodeName{"thanos@universe"};
   std::unique_ptr<fbzmq::ZmqMonitor> zmqMonitor;
-  std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
   std::shared_ptr<Decision> decision;
   std::shared_ptr<Fib> fib;
   std::shared_ptr<HealthChecker> healthChecker;
-  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler;
-  std::shared_ptr<apache::thrift::ThriftServer> systemServer;
   std::shared_ptr<PrefixManager> prefixManager;
   std::shared_ptr<PersistentStore> persistentStore;
   std::shared_ptr<LinkMonitor> linkMonitor;
-  std::shared_ptr<apache::thrift::concurrency::ThreadManager> tm;
-  std::unique_ptr<OpenrCtrlHandler> handler;
-  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
-      moduleTypeToEvl_;
+
+  apache::thrift::util::ScopedServerThread systemThriftThread;
+  std::shared_ptr<apache::thrift::ThriftServer> systemServer;
+
+ public:
+  const std::string nodeName{"thanos@universe"};
+  std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
+  std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler;
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
+  std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient>
+      openrCtrlThriftClient_{nullptr};
 };
 
 TEST_F(OpenrCtrlFixture, getMyNodeName) {
-  auto ret = handler->semifuture_getMyNodeName().get();
-  ASSERT_NE(nullptr, ret);
-  EXPECT_EQ(nodeName, *ret);
+  std::string res = "";
+  openrCtrlThriftClient_->sync_getMyNodeName(res);
+  EXPECT_EQ(nodeName, res);
 }
 
 TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
@@ -324,125 +317,97 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
         createPrefixEntry("20.0.0.0/8", thrift::PrefixType::BGP),
         createPrefixEntry("21.0.0.0/8", thrift::PrefixType::BGP),
     };
-    auto ret = handler
-                   ->semifuture_advertisePrefixes(
-                       std::make_unique<std::vector<thrift::PrefixEntry>>(
-                           std::move(prefixes)))
-                   .get();
-    EXPECT_EQ(folly::Unit(), ret);
+    openrCtrlThriftClient_->sync_advertisePrefixes(
+        std::vector<thrift::PrefixEntry>{std::move(prefixes)});
   }
 
   {
     std::vector<thrift::PrefixEntry> prefixes{
         createPrefixEntry("21.0.0.0/8", thrift::PrefixType::BGP),
     };
-    auto ret = handler
-                   ->semifuture_withdrawPrefixes(
-                       std::make_unique<std::vector<thrift::PrefixEntry>>(
-                           std::move(prefixes)))
-                   .get();
-    EXPECT_EQ(folly::Unit(), ret);
-  }
-
-  {
-    auto ret =
-        handler->semifuture_withdrawPrefixesByType(thrift::PrefixType::LOOPBACK)
-            .get();
-    EXPECT_EQ(folly::Unit(), ret);
+    openrCtrlThriftClient_->sync_withdrawPrefixes(
+        std::vector<thrift::PrefixEntry>{std::move(prefixes)});
+    openrCtrlThriftClient_->sync_withdrawPrefixesByType(
+        thrift::PrefixType::LOOPBACK);
   }
 
   {
     std::vector<thrift::PrefixEntry> prefixes{
         createPrefixEntry("23.0.0.0/8", thrift::PrefixType::BGP),
     };
-    auto ret = handler
-                   ->semifuture_syncPrefixesByType(
-                       thrift::PrefixType::BGP,
-                       std::make_unique<std::vector<thrift::PrefixEntry>>(
-                           std::move(prefixes)))
-                   .get();
-    EXPECT_EQ(folly::Unit(), ret);
+    openrCtrlThriftClient_->sync_syncPrefixesByType(
+        thrift::PrefixType::BGP,
+        std::vector<thrift::PrefixEntry>{std::move(prefixes)});
   }
 
   {
     const std::vector<thrift::PrefixEntry> prefixes{
         createPrefixEntry("23.0.0.0/8", thrift::PrefixType::BGP),
     };
-    auto ret = handler->semifuture_getPrefixes().get();
-    EXPECT_NE(nullptr, ret);
-    EXPECT_EQ(prefixes, *ret);
+    std::vector<thrift::PrefixEntry> res;
+    openrCtrlThriftClient_->sync_getPrefixes(res);
+    EXPECT_EQ(prefixes, res);
   }
 
   {
-    auto ret =
-        handler->semifuture_getPrefixesByType(thrift::PrefixType::LOOPBACK)
-            .get();
-    EXPECT_NE(nullptr, ret);
-    EXPECT_EQ(0, ret->size());
+    std::vector<thrift::PrefixEntry> res;
+    openrCtrlThriftClient_->sync_getPrefixesByType(
+        res, thrift::PrefixType::LOOPBACK);
+    EXPECT_EQ(0, res.size());
   }
 }
 
 TEST_F(OpenrCtrlFixture, RouteApis) {
   {
-    auto ret = handler->semifuture_getRouteDb().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(nodeName, ret->thisNodeName);
-    EXPECT_EQ(0, ret->unicastRoutes.size());
-    EXPECT_EQ(0, ret->mplsRoutes.size());
+    thrift::RouteDatabase db;
+    openrCtrlThriftClient_->sync_getRouteDb(db);
+    EXPECT_EQ(nodeName, db.thisNodeName);
+    EXPECT_EQ(0, db.unicastRoutes.size());
+    EXPECT_EQ(0, db.mplsRoutes.size());
   }
 
   {
-    auto ret = handler
-                   ->semifuture_getRouteDbComputed(
-                       std::make_unique<std::string>(nodeName))
-                   .get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(nodeName, ret->thisNodeName);
-    EXPECT_EQ(0, ret->unicastRoutes.size());
-    EXPECT_EQ(0, ret->mplsRoutes.size());
+    thrift::RouteDatabase db;
+    openrCtrlThriftClient_->sync_getRouteDbComputed(db, nodeName);
+    EXPECT_EQ(nodeName, db.thisNodeName);
+    EXPECT_EQ(0, db.unicastRoutes.size());
+    EXPECT_EQ(0, db.mplsRoutes.size());
   }
 
   {
     const std::string testNode("avengers@universe");
-    auto ret = handler
-                   ->semifuture_getRouteDbComputed(
-                       std::make_unique<std::string>(testNode))
-                   .get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(testNode, ret->thisNodeName);
-    EXPECT_EQ(0, ret->unicastRoutes.size());
-    EXPECT_EQ(0, ret->mplsRoutes.size());
+    thrift::RouteDatabase db;
+    openrCtrlThriftClient_->sync_getRouteDbComputed(db, testNode);
+    EXPECT_EQ(testNode, db.thisNodeName);
+    EXPECT_EQ(0, db.unicastRoutes.size());
+    EXPECT_EQ(0, db.mplsRoutes.size());
   }
 }
 
 TEST_F(OpenrCtrlFixture, PerfApis) {
-  {
-    auto ret = handler->semifuture_getPerfDb().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(nodeName, ret->thisNodeName);
-  }
+  thrift::PerfDatabase db;
+  openrCtrlThriftClient_->sync_getPerfDb(db);
+  EXPECT_EQ(nodeName, db.thisNodeName);
 }
 
 TEST_F(OpenrCtrlFixture, DecisionApis) {
   {
-    auto ret = handler->semifuture_getDecisionAdjacencyDbs().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(0, ret->size());
+    thrift::AdjDbs db;
+    openrCtrlThriftClient_->sync_getDecisionAdjacencyDbs(db);
+    EXPECT_EQ(0, db.size());
   }
 
   {
-    auto ret = handler->semifuture_getDecisionPrefixDbs().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(0, ret->size());
+    thrift::PrefixDbs db;
+    openrCtrlThriftClient_->sync_getDecisionPrefixDbs(db);
+    EXPECT_EQ(0, db.size());
   }
 }
 
 TEST_F(OpenrCtrlFixture, HealthCheckerApis) {
-  {
-    auto ret = handler->semifuture_getHealthCheckerInfo().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(0, ret->nodeInfo.size());
-  }
+  thrift::HealthCheckerInfo info;
+  openrCtrlThriftClient_->sync_getHealthCheckerInfo(info);
+  EXPECT_EQ(0, info.nodeInfo.size());
 }
 
 TEST_F(OpenrCtrlFixture, KvStoreApis) {
@@ -465,74 +430,53 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     thrift::KeySetParams setParams;
     setParams.keyVals = keyVals;
 
-    auto ret = handler
-                   ->semifuture_setKvStoreKeyVals(
-                       std::make_unique<thrift::KeySetParams>(setParams))
-                   .get();
-    ASSERT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParams);
 
     setParams.solicitResponse = false;
-    ret = handler
-              ->semifuture_setKvStoreKeyVals(
-                  std::make_unique<thrift::KeySetParams>(setParams))
-              .get();
-    ASSERT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParams);
 
-    ret = handler
-              ->semifuture_setKvStoreKeyValsOneWay(
-                  std::make_unique<thrift::KeySetParams>(setParams))
-              .get();
-    ASSERT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_setKvStoreKeyValsOneWay(setParams);
   }
 
   {
     std::vector<std::string> filterKeys{"key11", "key2"};
-    auto ret = handler
-                   ->semifuture_getKvStoreKeyVals(
-                       std::make_unique<std::vector<std::string>>(filterKeys))
-                   .get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(2, ret->keyVals.size());
-    EXPECT_EQ(keyVals.at("key2"), ret->keyVals["key2"]);
-    EXPECT_EQ(keyVals.at("key11"), ret->keyVals["key11"]);
+    thrift::Publication pub;
+    openrCtrlThriftClient_->sync_getKvStoreKeyVals(pub, filterKeys);
+    EXPECT_EQ(2, pub.keyVals.size());
+    EXPECT_EQ(keyVals.at("key2"), pub.keyVals["key2"]);
+    EXPECT_EQ(keyVals.at("key11"), pub.keyVals["key11"]);
   }
 
   {
+    thrift::Publication pub;
     thrift::KeyDumpParams params;
     params.prefix = "key3";
     params.originatorIds.insert("node3");
 
-    auto ret = handler
-                   ->semifuture_getKvStoreKeyValsFiltered(
-                       std::make_unique<thrift::KeyDumpParams>(params))
-                   .get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(3, ret->keyVals.size());
-    EXPECT_EQ(keyVals.at("key3"), ret->keyVals["key3"]);
-    EXPECT_EQ(keyVals.at("key33"), ret->keyVals["key33"]);
-    EXPECT_EQ(keyVals.at("key333"), ret->keyVals["key333"]);
+    openrCtrlThriftClient_->sync_getKvStoreKeyValsFiltered(pub, params);
+    EXPECT_EQ(3, pub.keyVals.size());
+    EXPECT_EQ(keyVals.at("key3"), pub.keyVals["key3"]);
+    EXPECT_EQ(keyVals.at("key33"), pub.keyVals["key33"]);
+    EXPECT_EQ(keyVals.at("key333"), pub.keyVals["key333"]);
   }
 
   {
+    thrift::Publication pub;
     thrift::KeyDumpParams params;
     params.prefix = "key3";
     params.originatorIds.insert("node3");
 
-    auto ret = handler
-                   ->semifuture_getKvStoreHashFiltered(
-                       std::make_unique<thrift::KeyDumpParams>(params))
-                   .get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(3, ret->keyVals.size());
+    openrCtrlThriftClient_->sync_getKvStoreHashFiltered(pub, params);
+    EXPECT_EQ(3, pub.keyVals.size());
     auto value3 = keyVals.at("key3");
     value3.value = folly::none;
     auto value33 = keyVals.at("key33");
     value33.value = folly::none;
     auto value333 = keyVals.at("key333");
     value333.value = folly::none;
-    EXPECT_EQ(value3, ret->keyVals["key3"]);
-    EXPECT_EQ(value33, ret->keyVals["key33"]);
-    EXPECT_EQ(value333, ret->keyVals["key333"]);
+    EXPECT_EQ(value3, pub.keyVals["key3"]);
+    EXPECT_EQ(value33, pub.keyVals["key33"]);
+    EXPECT_EQ(value333, pub.keyVals["key333"]);
   }
 
   //
@@ -541,34 +485,26 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::DualMessages messages;
-    auto ret = handler
-                   ->semifuture_processKvStoreDualMessage(
-                       std::make_unique<thrift::DualMessages>(messages))
-                   .get();
-    ASSERT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_processKvStoreDualMessage(messages);
   }
 
   {
     thrift::FloodTopoSetParams params;
     params.rootId = nodeName;
-    auto ret = handler
-                   ->semifuture_updateFloodTopologyChild(
-                       std::make_unique<thrift::FloodTopoSetParams>(params))
-                   .get();
-    ASSERT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_updateFloodTopologyChild(params);
   }
 
   {
-    auto ret = handler->semifuture_getSpanningTreeInfos().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(1, ret->infos.size());
-    ASSERT_NE(ret->infos.end(), ret->infos.find(nodeName));
-    EXPECT_EQ(0, ret->counters.neighborCounters.size());
-    EXPECT_EQ(1, ret->counters.rootCounters.size());
-    EXPECT_EQ(nodeName, ret->floodRootId);
-    EXPECT_EQ(0, ret->floodPeers.size());
+    thrift::SptInfos ret;
+    openrCtrlThriftClient_->sync_getSpanningTreeInfos(ret);
+    EXPECT_EQ(1, ret.infos.size());
+    ASSERT_NE(ret.infos.end(), ret.infos.find(nodeName));
+    EXPECT_EQ(0, ret.counters.neighborCounters.size());
+    EXPECT_EQ(1, ret.counters.rootCounters.size());
+    EXPECT_EQ(nodeName, ret.floodRootId);
+    EXPECT_EQ(0, ret.floodPeers.size());
 
-    thrift::SptInfo sptInfo = ret->infos.at(nodeName);
+    thrift::SptInfo sptInfo = ret.infos.at(nodeName);
     EXPECT_EQ(0, sptInfo.cost);
     ASSERT_TRUE(sptInfo.parent.hasValue());
     EXPECT_EQ(nodeName, sptInfo.parent.value());
@@ -585,37 +521,26 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
       {"peer3", createPeerSpec("inproc:://peer3-pub", "inproc://peer3-cmd")}};
 
   {
-    auto ret = handler
-                   ->semifuture_addUpdateKvStorePeers(
-                       std::make_unique<thrift::PeersMap>(peers))
-                   .get();
-    ASSERT_TRUE(folly::Unit() == ret);
-  }
+    openrCtrlThriftClient_->sync_addUpdateKvStorePeers(peers);
 
-  {
-    auto ret = handler->semifuture_getKvStorePeers().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(3, ret->size());
-    EXPECT_EQ(peers.at("peer1"), (*ret)["peer1"]);
-    EXPECT_EQ(peers.at("peer2"), (*ret)["peer2"]);
-    EXPECT_EQ(peers.at("peer3"), (*ret)["peer3"]);
+    thrift::PeersMap ret;
+    openrCtrlThriftClient_->sync_getKvStorePeers(ret);
+
+    EXPECT_EQ(3, ret.size());
+    EXPECT_EQ(peers.at("peer1"), ret.at("peer1"));
+    EXPECT_EQ(peers.at("peer2"), ret.at("peer2"));
+    EXPECT_EQ(peers.at("peer3"), ret.at("peer3"));
   }
 
   {
     std::vector<std::string> peersToDel{"peer2"};
-    auto ret = handler
-                   ->semifuture_deleteKvStorePeers(
-                       std::make_unique<std::vector<std::string>>(peersToDel))
-                   .get();
-    ASSERT_TRUE(folly::Unit() == ret);
-  }
+    openrCtrlThriftClient_->sync_deleteKvStorePeers(peersToDel);
 
-  {
-    auto ret = handler->semifuture_getKvStorePeers().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(2, ret->size());
-    EXPECT_EQ(peers.at("peer1"), (*ret)["peer1"]);
-    EXPECT_EQ(peers.at("peer3"), (*ret)["peer3"]);
+    thrift::PeersMap ret;
+    openrCtrlThriftClient_->sync_getKvStorePeers(ret);
+    EXPECT_EQ(2, ret.size());
+    EXPECT_EQ(peers.at("peer1"), ret.at("peer1"));
+    EXPECT_EQ(peers.at("peer3"), ret.at("peer3"));
   }
 
   //
@@ -625,6 +550,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   {
     std::atomic<int> received{0};
     const std::string key{"snoop-key"};
+    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto subscription = handler->subscribeKvStore().subscribe(
         [&received, key](thrift::Publication&& pub) {
           EXPECT_EQ(1, pub.keyVals.size());
@@ -665,6 +591,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   {
     std::atomic<int> received{0};
     const std::string key{"snoop-key"};
+    auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
     auto responseAndSubscription =
         handler->semifuture_subscribeAndGetKvStore().get();
 
@@ -709,122 +636,81 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
   // create an interface
   mockNlHandler->sendLinkEvent("po1011", 100, true);
+  const std::string ifName = "po1011";
+  const std::string adjName = "night@king";
 
   {
-    auto ret = handler->semifuture_setNodeOverload().get();
-    EXPECT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_setNodeOverload();
+    openrCtrlThriftClient_->sync_unsetNodeOverload();
   }
 
   {
-    auto ret = handler->semifuture_unsetNodeOverload().get();
-    EXPECT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_setInterfaceOverload(ifName);
+    openrCtrlThriftClient_->sync_unsetInterfaceOverload(ifName);
   }
 
   {
-    auto ifName = std::make_unique<std::string>("po1011");
-    auto ret =
-        handler->semifuture_setInterfaceOverload(std::move(ifName)).get();
-    EXPECT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_setInterfaceMetric(ifName, 110);
+    openrCtrlThriftClient_->sync_unsetInterfaceMetric(ifName);
   }
 
   {
-    auto ifName = std::make_unique<std::string>("po1011");
-    auto ret =
-        handler->semifuture_unsetInterfaceOverload(std::move(ifName)).get();
-    EXPECT_TRUE(folly::Unit() == ret);
+    openrCtrlThriftClient_->sync_setAdjacencyMetric(ifName, adjName, 110);
+    openrCtrlThriftClient_->sync_unsetAdjacencyMetric(ifName, adjName);
   }
 
   {
-    auto ifName = std::make_unique<std::string>("po1011");
-    auto ret =
-        handler->semifuture_setInterfaceMetric(std::move(ifName), 110).get();
-    EXPECT_TRUE(folly::Unit() == ret);
+    thrift::DumpLinksReply reply;
+    openrCtrlThriftClient_->sync_getInterfaces(reply);
+    EXPECT_EQ(nodeName, reply.thisNodeName);
+    EXPECT_FALSE(reply.isOverloaded);
+    EXPECT_EQ(1, reply.interfaceDetails.size());
   }
 
   {
-    auto ifName = std::make_unique<std::string>("po1011");
-    auto ret =
-        handler->semifuture_unsetInterfaceMetric(std::move(ifName)).get();
-    EXPECT_TRUE(folly::Unit() == ret);
+    thrift::OpenrVersions ret;
+    openrCtrlThriftClient_->sync_getOpenrVersion(ret);
+    EXPECT_LE(ret.lowestSupportedVersion, ret.version);
   }
 
   {
-    auto ifName = std::make_unique<std::string>("po1011");
-    auto adjName = std::make_unique<std::string>("night@king");
-    auto ret = handler
-                   ->semifuture_setAdjacencyMetric(
-                       std::move(ifName), std::move(adjName), 110)
-                   .get();
-    EXPECT_TRUE(folly::Unit() == ret);
-  }
-
-  {
-    auto ifName = std::make_unique<std::string>("po1011");
-    auto adjName = std::make_unique<std::string>("night@king");
-    auto ret = handler
-                   ->semifuture_unsetAdjacencyMetric(
-                       std::move(ifName), std::move(adjName))
-                   .get();
-    EXPECT_TRUE(folly::Unit() == ret);
-  }
-
-  {
-    auto ret = handler->semifuture_getInterfaces().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ(nodeName, ret->thisNodeName);
-    EXPECT_FALSE(ret->isOverloaded);
-    EXPECT_EQ(1, ret->interfaceDetails.size());
-  }
-
-  {
-    auto ret = handler->semifuture_getOpenrVersion().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_LE(ret->lowestSupportedVersion, ret->version);
-  }
-
-  {
-    auto ret = handler->semifuture_getBuildInfo().get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_NE("", ret->buildMode);
+    thrift::BuildInfo info;
+    openrCtrlThriftClient_->sync_getBuildInfo(info);
+    EXPECT_NE("", info.buildMode);
   }
 }
 
 TEST_F(OpenrCtrlFixture, PersistentStoreApis) {
   {
-    auto key = std::make_unique<std::string>("key1");
-    auto value = std::make_unique<std::string>("value1");
-    auto ret =
-        handler->semifuture_setConfigKey(std::move(key), std::move(value))
-            .get();
-    EXPECT_EQ(folly::Unit(), ret);
+    const std::string key = "key1";
+    const std::string value = "value1";
+    openrCtrlThriftClient_->sync_setConfigKey(key, value);
   }
 
   {
-    auto key = std::make_unique<std::string>("key2");
-    auto value = std::make_unique<std::string>("value2");
-    auto ret =
-        handler->semifuture_setConfigKey(std::move(key), std::move(value))
-            .get();
-    EXPECT_EQ(folly::Unit(), ret);
+    const std::string key = "key2";
+    const std::string value = "value2";
+    openrCtrlThriftClient_->sync_setConfigKey(key, value);
   }
 
   {
-    auto key = std::make_unique<std::string>("key1");
-    auto ret = handler->semifuture_eraseConfigKey(std::move(key)).get();
-    EXPECT_EQ(folly::Unit(), ret);
+    const std::string key = "key1";
+    openrCtrlThriftClient_->sync_eraseConfigKey(key);
   }
 
   {
-    auto key = std::make_unique<std::string>("key2");
-    auto ret = handler->semifuture_getConfigKey(std::move(key)).get();
-    ASSERT_NE(nullptr, ret);
-    EXPECT_EQ("value2", *ret);
+    const std::string key = "key2";
+    std::string ret = "";
+    openrCtrlThriftClient_->sync_getConfigKey(ret, key);
+    EXPECT_EQ("value2", ret);
   }
 
   {
-    auto key = std::make_unique<std::string>("key1");
-    auto ret = handler->semifuture_getConfigKey(std::move(key));
-    EXPECT_THROW(std::move(ret).get(), thrift::OpenrError);
+    const std::string key = "key1";
+    std::string ret = "";
+    EXPECT_THROW(
+        openrCtrlThriftClient_->sync_getConfigKey(ret, key),
+        thrift::OpenrError);
   }
 }
 

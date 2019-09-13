@@ -35,7 +35,7 @@
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
-#include <openr/tests/OpenrModuleTestBase.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 
 using namespace std;
 using namespace openr;
@@ -117,7 +117,7 @@ checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
   return true;
 }
 
-class FibTestFixture : public ::testing::Test, public OpenrModuleTestBase {
+class FibTestFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
@@ -161,21 +161,20 @@ class FibTestFixture : public ::testing::Test, public OpenrModuleTestBase {
     });
     fib->waitUntilRunning();
 
-    // put handler into moduleToEvl to make sure openr-ctrl thrift handler
-    // can access Fib module.
-    moduleTypeToEvl_[thrift::OpenrModuleType::FIB] = fib;
-    startOpenrCtrlHandler(
+    // spin up an openrThriftServer
+    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         "node-1",
-        acceptablePeerNames,
-        MonitorSubmitUrl{"inproc://monitor-sub"},
+        MonitorSubmitUrl{"inproc://monitor-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
         context);
+    openrThriftServerWrapper_->addModuleType(thrift::OpenrModuleType::FIB, fib);
+    openrThriftServerWrapper_->run();
   }
 
   void
   TearDown() override {
     LOG(INFO) << "Stopping openr-ctrl thrift server";
-    stopOpenrCtrlHandler();
+    openrThriftServerWrapper_->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
     // this will be invoked before Fib's d-tor
@@ -196,7 +195,9 @@ class FibTestFixture : public ::testing::Test, public OpenrModuleTestBase {
   thrift::RouteDatabase
   getRouteDb() {
     thrift::RouteDatabase routeDb;
-    auto resp = openrCtrlHandler_->semifuture_getRouteDb().get();
+    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+                    ->semifuture_getRouteDb()
+                    .get();
     EXPECT_TRUE(resp);
 
     routeDb = *resp;
@@ -215,13 +216,13 @@ class FibTestFixture : public ::testing::Test, public OpenrModuleTestBase {
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
 
-  // variables used to create Open/R ctrl thrift handler
-  std::unordered_set<std::string> acceptablePeerNames;
-
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;
 
   std::shared_ptr<MockNetlinkFibHandler> mockFibHandler;
+
+  // thriftServer to talk to Fib
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
 TEST_F(FibTestFixture, processRouteDb) {

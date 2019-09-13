@@ -17,7 +17,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
-#include <openr/tests/OpenrModuleTestBase.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -85,7 +85,7 @@ createAdjDb(
 // Start the decision thread and simulate KvStore communications
 // Expect proper RouteDatabase publications to appear
 //
-class DecisionWrapper : public OpenrModuleTestBase {
+class DecisionWrapper {
  public:
   explicit DecisionWrapper(const std::string& nodeName) {
     kvStorePub.bind(fbzmq::SocketUrl{"inproc://kvStore-pub"});
@@ -116,18 +116,17 @@ class DecisionWrapper : public OpenrModuleTestBase {
     });
     decision->waitUntilRunning();
 
-    // put handler into moduleToEvl to make sure openr-ctrl thrift handler
-    // can access Decision module.
-    moduleTypeToEvl_[thrift::OpenrModuleType::DECISION] = decision;
-
-    // variables used to create Open/R ctrl thrift handler
-    std::unordered_set<std::string> acceptablePeerNames;
-    startOpenrCtrlHandler(
-        "node-1",
-        acceptablePeerNames,
+    // spin up an openrThriftServer
+    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
+        nodeName,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
         zeromqContext);
+
+    // make sure thrift server know how to access decision module
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::DECISION, decision);
+    openrThriftServerWrapper_->run();
 
     const int hwm = 1000;
     decisionPub.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(hwm)).value();
@@ -142,7 +141,7 @@ class DecisionWrapper : public OpenrModuleTestBase {
 
   ~DecisionWrapper() {
     LOG(INFO) << "Stopping openr-ctrl thrift server";
-    stopOpenrCtrlHandler();
+    openrThriftServerWrapper_->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
     LOG(INFO) << "Stopping the decision thread";
@@ -221,7 +220,7 @@ class DecisionWrapper : public OpenrModuleTestBase {
     std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
 
     for (std::string const& node : allNodes) {
-      auto resp = openrCtrlHandler_
+      auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
                       ->semifuture_getRouteDbComputed(
                           std::make_unique<std::string>(node))
                       .get();
@@ -264,6 +263,9 @@ class DecisionWrapper : public OpenrModuleTestBase {
 
   // Thread in which KvStore will be running.
   std::unique_ptr<std::thread> decisionThread{nullptr};
+
+  // thriftServer to talk to decision
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
 // Convert an integer to hex

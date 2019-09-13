@@ -17,7 +17,7 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-#include <openr/tests/OpenrModuleTestBase.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
@@ -30,8 +30,7 @@ namespace {
 const std::chrono::milliseconds kTtl{1000};
 } // namespace
 
-class KvStoreThriftClientTestFixture : public ::testing::Test,
-                                       public OpenrModuleTestBase {
+class KvStoreThriftClientTestFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
@@ -44,34 +43,21 @@ class KvStoreThriftClientTestFixture : public ::testing::Test,
         std::unordered_map<std::string, thrift::PeerSpec>{});
     kvStoreWrapper_->run();
 
-    // put it into moduleTypeToEvl_ for openrCtrlClient connection
-    moduleTypeToEvl_[thrift::OpenrModuleType::KVSTORE] =
-        kvStoreWrapper_->getKvStore();
-
-    // call base-class method to initialize openrCtrlHandler
-    startOpenrCtrlHandler(
+    // spin up an openrThriftServer
+    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeId_,
-        std::unordered_set<std::string>{},
         MonitorSubmitUrl{"inproc://monitor_submit"},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         context_);
-    CHECK(nullptr != openrCtrlHandler_);
-
-    // setup openrCtrl server for KvStoreThriftClient to connect to
-    std::shared_ptr<ThriftServer> server = std::make_shared<ThriftServer>();
-    server->setNumIOWorkerThreads(1);
-    server->setNumAcceptThreads(1);
-    server->setPort(0);
-    server->setInterface(openrCtrlHandler_);
-    openrCtrlThriftThread_.start(std::move(server));
-    port_ = openrCtrlThriftThread_.getAddress()->getPort();
+    openrThriftServerWrapper_->addModuleType(
+        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper_->getKvStore());
+    openrThriftServerWrapper_->run();
   }
 
   void
   TearDown() override {
     LOG(INFO) << "Stopping openrCtrl thrift server thread";
-    stopOpenrCtrlHandler();
-    openrCtrlThriftThread_.stop();
+    openrThriftServerWrapper_->stop();
     LOG(INFO) << "OpenrCtrl thrift server thread got stopped";
 
     LOG(INFO) << "Stopping KvStoreWrapper thread";
@@ -80,13 +66,12 @@ class KvStoreThriftClientTestFixture : public ::testing::Test,
   }
 
   // var used to conmmunicate to kvStore through openrCtrl thrift server
-  uint16_t port_{0};
   const std::string nodeId_{"test_kvstore_thrift"};
   const std::string localhost_{"::1"};
 
   fbzmq::Context context_{};
-  ScopedServerThread openrCtrlThriftThread_;
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper_;
+  std::shared_ptr<KvStoreWrapper> kvStoreWrapper_{nullptr};
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
 TEST_F(KvStoreThriftClientTestFixture, ApiTest) {
@@ -97,12 +82,13 @@ TEST_F(KvStoreThriftClientTestFixture, ApiTest) {
   const std::string val1{"test_value1"};
   const std::string key2{"test_key2"};
   const std::string val2{"test_value2"};
+  const uint16_t port = openrThriftServerWrapper_->getOpenrCtrlThriftPort();
 
   // Create and initilize kvStoreThriftClient
   auto client1 = std::make_shared<KvStoreClient>(
-      context_, &evl, nodeId_, folly::SocketAddress{localhost_, port_});
+      context_, &evl, nodeId_, folly::SocketAddress{localhost_, port});
   auto client2 = std::make_shared<KvStoreClient>(
-      context_, &evl, nodeId_, folly::SocketAddress{localhost_, port_});
+      context_, &evl, nodeId_, folly::SocketAddress{localhost_, port});
   EXPECT_TRUE(nullptr != client1);
   EXPECT_TRUE(nullptr != client2);
 
