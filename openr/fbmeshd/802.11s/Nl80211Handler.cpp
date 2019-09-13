@@ -1351,21 +1351,27 @@ Nl80211Handler::handleNewCandidate(const GenericNetlinkMessage& msg) {
   info_elems elems;
   parse_ies(ie, ie_len, &elems);
 
+  auto mac_addr = folly::MacAddress::fromBinary(
+      {static_cast<unsigned char*>(nla_data(tb[NL80211_ATTR_MAC])), ETH_ALEN});
+
+  VLOG(8) << folly::sformat(
+      "Processing new candidate with MAC {}", mac_addr.toString());
+
   meshd_config* meshd_conf = netif.getMeshConfig()->conf;
 
   if (elems.mesh_id == nullptr || elems.mesh_id_len != meshd_conf->meshid_len ||
       memcmp(elems.mesh_id, meshd_conf->meshid, meshd_conf->meshid_len) != 0) {
-    VLOG(8) << "Candidate is from different Mesh ID";
+    std::string candidateMeshId{reinterpret_cast<char*>(elems.mesh_id),
+                                elems.mesh_id_len};
+    VLOG(8) << folly::sformat(
+        "Ignoring candidate: different mesh ID '{}'", candidateMeshId);
     return R_SUCCESS;
   }
 
   if (elems.rsn == nullptr && meshd_conf->is_secure) {
-    VLOG(8) << "No RSN IE from this candidate";
+    VLOG(8) << "Ignoring candidate: no RSN IE provided";
     return ERR_INVALID_ARGUMENT_VALUE;
   }
-
-  auto mac_addr = folly::MacAddress::fromBinary(
-      {static_cast<unsigned char*>(nla_data(tb[NL80211_ATTR_MAC])), ETH_ALEN});
 
   if (!FLAGS_mesh_init_peering_whitelist.empty()) {
     auto allowed_peers = ::parseCsvFlag<folly::MacAddress>(
@@ -1374,7 +1380,8 @@ Nl80211Handler::handleNewCandidate(const GenericNetlinkMessage& msg) {
 
     if (std::find(allowed_peers.begin(), allowed_peers.end(), mac_addr) ==
         allowed_peers.end()) {
-      VLOG(8) << "Candidate is not in list of stations to initate peering with";
+      VLOG(8)
+          << "Ignoring candidate: not in list of stations to initate peering with";
       return ERR_INVALID_ARGUMENT_VALUE;
     }
   }
