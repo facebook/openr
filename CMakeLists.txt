@@ -342,7 +342,7 @@ add_library(openrlib
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
   openr/fib/tests/PrefixGenerator.cpp
-  openr/tests/OpenrModuleTestBase.cpp
+  openr/tests/OpenrThriftServerWrapper.cpp
   openr/watchdog/Watchdog.cpp
   $<TARGET_OBJECTS:fb303-cpp2-obj>
   $<TARGET_OBJECTS:AllocPrefix-cpp2-obj>
