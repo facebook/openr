@@ -650,7 +650,8 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
-    std::chrono::milliseconds processTimeout) {
+    std::chrono::milliseconds processTimeout,
+    const folly::SocketAddress& bindAddr) {
   folly::EventBase evb;
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
   std::unordered_map<std::string, thrift::Value> merged;
@@ -668,7 +669,8 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
           folly::IPAddress(sockAddr.getAddressStr()),
           sockAddr.getPort(),
           connectTimeout,
-          processTimeout);
+          processTimeout,
+          bindAddr);
     } catch (const std::exception& ex) {
       LOG(ERROR) << "Failed to connect to Open/R instance at address of: "
                  << sockAddr.getAddressStr()

@@ -227,8 +227,8 @@ class KvStoreClient {
       const std::vector<folly::SocketAddress>& sockAddrs,
       const std::string& prefix,
       std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
-      std::chrono::milliseconds processTimeout =
-          Constants::kServiceProcTimeout);
+      std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
+      const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
   /**
    * APIs to subscribe/unsubscribe to value change of a key in KvStore
