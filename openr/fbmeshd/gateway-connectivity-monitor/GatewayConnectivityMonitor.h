@@ -17,7 +17,6 @@
 #include <openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/StatsClient.h>
 #include <openr/fbmeshd/routing/Routing.h>
-#include <openr/prefix-manager/PrefixManagerClient.h>
 
 namespace openr {
 namespace fbmeshd {
