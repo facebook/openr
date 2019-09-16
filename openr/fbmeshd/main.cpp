@@ -35,7 +35,6 @@
 #include <openr/fbmeshd/routing/Routing.h>
 #include <openr/fbmeshd/routing/SyncRoutes80211s.h>
 #include <openr/fbmeshd/routing/UDPRoutingPacketTransport.h>
-#include <openr/watchdog/Watchdog.h>
 
 using namespace openr::fbmeshd;
 
@@ -81,15 +80,6 @@ DEFINE_uint32(
     gateway_connectivity_monitor_set_root_mode,
     0,
     "The value for root mode that should be set if we are a gate");
-
-DEFINE_bool(
-    enable_watchdog,
-    true,
-    "Enable watchdog thread to periodically check aliveness counters from each "
-    "fbmeshd thread, if unhealthy thread is detected, force crash fbmeshd");
-DEFINE_int32(watchdog_interval_s, 20, "Watchdog thread healthcheck interval");
-DEFINE_int32(watchdog_threshold_s, 300, "Watchdog thread aliveness threshold");
-DEFINE_int32(memory_limit_mb, 300, "Memory limit in MB");
 
 DEFINE_uint32(
     route_dampener_penalty,
@@ -166,6 +156,11 @@ DEFINE_int32(
     peer_selector_poll_interval_s, 0, "DEPRECATED on 2019-08-30, do not use");
 // TODO T53487225
 DEFINE_int32(monitor_rep_port, 0, "DEPRECATED on 2019-09-04, do not use");
+// TODO T54087050
+DEFINE_bool(enable_watchdog, false, "DEPRECATED on 2019-09-16, do not use");
+DEFINE_int32(watchdog_interval_s, 0, "DEPRECATED on 2019-09-16, do not use");
+DEFINE_int32(watchdog_threshold_s, 0, "DEPRECATED on 2019-09-16, do not use");
+DEFINE_int32(memory_limit_mb, 0, "DEPRECATED on 2019-09-16, do not use");
 
 namespace {
 constexpr folly::StringPiece kHostName{"localhost"};
@@ -176,74 +171,6 @@ const auto kMetricManagerBaseBitrate{60};
 const auto kPeriodicPingerInterval{10s};
 
 } // namespace
-
-void
-monitorEventLoopWithWatchdog(
-    fbzmq::ZmqEventLoop* eventLoop,
-    const std::string& eventLoopName,
-    openr::Watchdog* watchdog) {
-  if (watchdog != nullptr) {
-    watchdog->addEvl(eventLoop, eventLoopName);
-  }
-}
-
-std::unique_ptr<openr::Watchdog>
-makeWatchdog() {
-  return std::make_unique<openr::Watchdog>(
-      FLAGS_node_name,
-      std::chrono::seconds{FLAGS_watchdog_interval_s},
-      std::chrono::seconds{FLAGS_watchdog_threshold_s},
-      FLAGS_memory_limit_mb);
-}
-
-void
-startWatchdog(openr::Watchdog* watchdog, std::vector<std::thread>& allThreads) {
-  CHECK_NOTNULL(watchdog);
-
-  // Spawn a watchdog thread
-  allThreads.emplace_back(std::thread([watchdog]() noexcept {
-    LOG(INFO) << "Starting Watchdog thread...";
-    folly::setThreadName("Watchdog");
-    watchdog->run();
-    LOG(INFO) << "Watchdog thread stopped.";
-  }));
-  watchdog->waitUntilRunning();
-}
-
-std::unique_ptr<fbzmq::ZmqTimeout>
-makeSystemdWatchdogNotifier(openr::Watchdog* watchdog) {
-  CHECK_NOTNULL(watchdog);
-
-  std::unique_ptr<fbzmq::ZmqTimeout> notifier{nullptr};
-
-#ifdef ENABLE_SYSTEMD_NOTIFY
-  notifier = fbzmq::ZmqTimeout::make(watchdog, []() noexcept {
-    VLOG(2) << "Systemd watchdog notify";
-    sd_notify(0, "WATCHDOG=1");
-  });
-
-  uint64_t watchdogEnv{0};
-  int status{0};
-  // Always expect the watchdog to be set if systemd is here.
-  CHECK_GE((status = sd_watchdog_enabled(0, &watchdogEnv)), 0)
-      << "Problem when fetching systemd watchdog";
-  if (status == 0) {
-    return nullptr;
-  }
-
-  std::chrono::microseconds usec{watchdogEnv / 2};
-  auto watchdogNotifyInterval{
-      std::chrono::duration_cast<std::chrono::milliseconds>(usec)};
-
-  static constexpr bool isPeriodic{true};
-  notifier->scheduleTimeout(watchdogNotifyInterval, isPeriodic);
-  LOG(INFO) << folly::sformat(
-      "Started timer to notify systemd every {} ms.",
-      watchdogNotifyInterval.count());
-#endif
-
-  return notifier;
-}
 
 int
 main(int argc, char* argv[]) {
@@ -257,14 +184,6 @@ main(int argc, char* argv[]) {
 
   std::vector<std::thread> allThreads{};
 
-  std::unique_ptr<openr::Watchdog> watchdog{nullptr};
-  std::unique_ptr<fbzmq::ZmqTimeout> systemWatchdogNotifier{nullptr};
-  if (FLAGS_enable_watchdog) {
-    watchdog = makeWatchdog();
-    systemWatchdogNotifier = makeSystemdWatchdogNotifier(watchdog.get());
-    startWatchdog(watchdog.get(), allThreads);
-  }
-
   fbzmq::ZmqEventLoop evl;
 
   SignalHandler signalHandler{evl};
@@ -272,8 +191,6 @@ main(int argc, char* argv[]) {
   signalHandler.registerSignalHandler(SIGINT);
   signalHandler.registerSignalHandler(SIGTERM);
 
-  monitorEventLoopWithWatchdog(
-      &evl, "fbmeshd_shared_event_loop", watchdog.get());
   AuthsaeCallbackHelpers::init(evl);
 
   Nl80211Handler nlHandler{
@@ -322,8 +239,6 @@ main(int argc, char* argv[]) {
           FLAGS_routing_metric_manager_rssi_weight);
 
   static constexpr auto metricManager80211sId{"MetricManager80211s"};
-  monitorEventLoopWithWatchdog(
-      metricManager80211s.get(), metricManager80211sId, watchdog.get());
   allThreads.emplace_back(std::thread([&metricManager80211s]() noexcept {
     LOG(INFO) << "Starting MetricManager80211s thread...";
     folly::setThreadName(metricManager80211sId);
@@ -376,8 +291,6 @@ main(int argc, char* argv[]) {
           FLAGS_mesh_ifname);
 
   static constexpr auto syncRoutes80211sId{"SyncRoutes80211s"};
-  monitorEventLoopWithWatchdog(
-      syncRoutes80211s.get(), syncRoutes80211sId, watchdog.get());
   allThreads.emplace_back(std::thread([&syncRoutes80211s]() noexcept {
     LOG(INFO) << "Starting SyncRoutes80211s thread...";
     folly::setThreadName(syncRoutes80211sId);
@@ -431,8 +344,6 @@ main(int argc, char* argv[]) {
       statsClient};
 
   static constexpr auto gwConnectivityMonitorId{"GatewayConnectivityMonitor"};
-  monitorEventLoopWithWatchdog(
-      &gatewayConnectivityMonitor, gwConnectivityMonitorId, watchdog.get());
   allThreads.emplace_back(std::thread([&gatewayConnectivityMonitor]() noexcept {
     LOG(INFO) << "Starting GatewayConnectivityMonitor thread...";
     folly::setThreadName(gwConnectivityMonitorId);
@@ -468,11 +379,6 @@ main(int argc, char* argv[]) {
 
   LOG(INFO) << "Leaving mesh...";
   nlHandler.leaveMeshes();
-
-  if (watchdog) {
-    watchdog->stop();
-    watchdog->waitUntilStopped();
-  }
 
   LOG(INFO) << "Reclaiming thrift server thread";
   server->stop();
