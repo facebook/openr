@@ -231,6 +231,12 @@ TEST(SpfSolver, Counters) {
       false /* bgpDryRun */,
       true /* bgpUseIgpMetric */);
 
+  // Verifiy some initial/default counters
+  {
+    const auto counters = spfSolver.getCounters();
+    EXPECT_EQ(counters.at("decision.num_nodes"), 1);
+  }
+
   // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
   // Node2 has partial adjacency
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
