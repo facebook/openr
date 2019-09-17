@@ -9,7 +9,7 @@
 #include "openr/fbmeshd/rnl/NetlinkMessage.h"
 
 namespace openr {
-namespace fbnl {
+namespace rnl {
 
 NetlinkRouteMessage::NetlinkRouteMessage() {
   // get pointer to NLMSG header
@@ -18,7 +18,7 @@ NetlinkRouteMessage::NetlinkRouteMessage() {
 
 void
 NetlinkRouteMessage::init(
-    int type, uint32_t rtFlags, const openr::fbnl::Route& route) {
+    int type, uint32_t rtFlags, const openr::rnl::Route& route) {
   if (type != RTM_NEWROUTE && type != RTM_DELROUTE && type != RTM_GETROUTE) {
     LOG(ERROR) << "Incorrect Netlink message type";
     return;
@@ -97,8 +97,8 @@ ResultCode
 NetlinkRouteMessage::addIpNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
-    const openr::fbnl::NextHop& path,
-    const openr::fbnl::Route& route) const {
+    const openr::rnl::NextHop& path,
+    const openr::rnl::Route& route) const {
   rtnh->rtnh_len = sizeof(*rtnh);
   if (path.getIfIndex().has_value()) {
     rtnh->rtnh_ifindex = path.getIfIndex().value();
@@ -130,7 +130,7 @@ ResultCode
 NetlinkRouteMessage::addSwapOrPHPNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
-    const openr::fbnl::NextHop& path) const {
+    const openr::rnl::NextHop& path) const {
   rtnh->rtnh_len = sizeof(*rtnh);
   rtnh->rtnh_ifindex = path.getIfIndex().value();
   rtnh->rtnh_flags = 0;
@@ -180,7 +180,7 @@ ResultCode
 NetlinkRouteMessage::addPopNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
-    const openr::fbnl::NextHop& path) const {
+    const openr::rnl::NextHop& path) const {
   // for each next hop add the ENCAP
   rtnh->rtnh_len = sizeof(*rtnh);
   if (!path.getIfIndex().hasValue()) {
@@ -207,7 +207,7 @@ ResultCode
 NetlinkRouteMessage::addLabelNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
-    const openr::fbnl::NextHop& path) const {
+    const openr::rnl::NextHop& path) const {
   // fill the OIF
   rtnh->rtnh_len = sizeof(*rtnh);
   rtnh->rtnh_ifindex = path.getIfIndex().value(); /* interface index */
@@ -276,7 +276,7 @@ NetlinkRouteMessage::addLabelNexthop(
 }
 
 ResultCode
-NetlinkRouteMessage::addNextHops(const openr::fbnl::Route& route) {
+NetlinkRouteMessage::addNextHops(const openr::rnl::Route& route) {
   ResultCode status{ResultCode::SUCCESS};
   std::array<char, kMaxNlPayloadSize> nhop = {};
   if (route.getNextHops().size()) {
@@ -299,7 +299,7 @@ NetlinkRouteMessage::addNextHops(const openr::fbnl::Route& route) {
 ResultCode
 NetlinkRouteMessage::addMultiPathNexthop(
     std::array<char, kMaxNlPayloadSize>& nhop,
-    const openr::fbnl::Route& route) const {
+    const openr::rnl::Route& route) const {
   // Add [RTA_MULTIPATH - label, via, dev][RTA_ENCAP][RTA_ENCAP_TYPE]
   struct rtattr* rta = reinterpret_cast<struct rtattr*>(nhop.data());
 
@@ -411,7 +411,7 @@ void
 NetlinkRouteMessage::parseNextHopAttribute(
     const struct rtattr* routeAttr,
     unsigned char family,
-    fbnl::NextHopBuilder& nhBuilder) const {
+    rnl::NextHopBuilder& nhBuilder) const {
   switch (routeAttr->rta_type) {
   case RTA_GATEWAY: {
     // Gateway address
@@ -467,7 +467,7 @@ NetlinkRouteMessage::parseNextHopAttribute(
 
 void
 NetlinkRouteMessage::setMplsAction(
-    fbnl::NextHopBuilder& nhBuilder, unsigned char family) const {
+    rnl::NextHopBuilder& nhBuilder, unsigned char family) const {
   // Inferring MPLS action from nexthop fields
   if (nhBuilder.getPushLabels() != folly::none) {
     nhBuilder.setLabelAction(thrift::MplsActionCode::PUSH);
@@ -485,11 +485,11 @@ NetlinkRouteMessage::setMplsAction(
   }
 }
 
-fbnl::Route
+rnl::Route
 NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
-  fbnl::RouteBuilder routeBuilder;
+  rnl::RouteBuilder routeBuilder;
   // For single next hop in the route
-  fbnl::NextHopBuilder nhBuilder;
+  rnl::NextHopBuilder nhBuilder;
   bool singleNextHopFlag{true};
 
   const struct rtmsg* const routeEntry =
@@ -564,16 +564,16 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
   return route;
 }
 
-std::vector<fbnl::NextHop>
+std::vector<rnl::NextHop>
 NetlinkRouteMessage::parseNextHops(
     const struct rtattr* routeAttrMP, unsigned char family) const {
-  std::vector<fbnl::NextHop> nextHops;
+  std::vector<rnl::NextHop> nextHops;
   struct rtnexthop* nh =
       reinterpret_cast<struct rtnexthop*> RTA_DATA(routeAttrMP);
 
   int nhLen = RTA_PAYLOAD(routeAttrMP);
   do {
-    fbnl::NextHopBuilder nhBuilder;
+    rnl::NextHopBuilder nhBuilder;
     nhBuilder.setIfIndex(nh->rtnh_ifindex);
     const struct rtattr* routeAttr;
     auto routeAttrLen = nh->rtnh_len - sizeof(*nh);
@@ -602,7 +602,7 @@ NetlinkRouteMessage::parseNextHops(
 }
 
 ResultCode
-NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
+NetlinkRouteMessage::addRoute(const openr::rnl::Route& route) {
   auto const& pfix = route.getDestination();
   auto ip = std::get<0>(pfix);
   auto plen = std::get<1>(pfix);
@@ -641,7 +641,7 @@ NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
 }
 
 ResultCode
-NetlinkRouteMessage::deleteRoute(const openr::fbnl::Route& route) {
+NetlinkRouteMessage::deleteRoute(const openr::rnl::Route& route) {
   auto const& pfix = route.getDestination();
   auto addressFamily = route.getFamily();
   VLOG(1) << "Deleting route: " << route.str();
@@ -665,7 +665,7 @@ NetlinkRouteMessage::deleteRoute(const openr::fbnl::Route& route) {
 }
 
 ResultCode
-NetlinkRouteMessage::addLabelRoute(const openr::fbnl::Route& route) {
+NetlinkRouteMessage::addLabelRoute(const openr::rnl::Route& route) {
   init(RTM_NEWROUTE, 0, route);
   rtmsg_->rtm_family = AF_MPLS;
   rtmsg_->rtm_dst_len = kLabelSizeBits;
@@ -696,7 +696,7 @@ NetlinkRouteMessage::addLabelRoute(const openr::fbnl::Route& route) {
 }
 
 ResultCode
-NetlinkRouteMessage::deleteLabelRoute(const openr::fbnl::Route& route) {
+NetlinkRouteMessage::deleteLabelRoute(const openr::rnl::Route& route) {
   init(RTM_DELROUTE, 0, route);
   rtmsg_->rtm_family = AF_MPLS;
   rtmsg_->rtm_dst_len = kLabelSizeBits;
@@ -750,9 +750,9 @@ NetlinkLinkMessage::init(int type, uint32_t linkFlags) {
   ifinfomsg_->ifi_change = 0xffffffff;
 }
 
-fbnl::Link
+rnl::Link
 NetlinkLinkMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
-  fbnl::LinkBuilder builder;
+  rnl::LinkBuilder builder;
   const struct ifinfomsg* const linkEntry =
       reinterpret_cast<struct ifinfomsg*>(NLMSG_DATA(nlmsg));
 
@@ -808,7 +808,7 @@ NetlinkAddrMessage::init(int type) {
 
 ResultCode
 NetlinkAddrMessage::addOrDeleteIfAddress(
-    const openr::fbnl::IfAddress& ifAddr, const int type) {
+    const openr::rnl::IfAddress& ifAddr, const int type) {
   if (type != RTM_NEWADDR && type != RTM_DELADDR) {
     LOG(ERROR) << "Incorrect Netlink message type";
     return ResultCode::FAIL;
@@ -849,9 +849,9 @@ NetlinkAddrMessage::addOrDeleteIfAddress(
   return status;
 }
 
-fbnl::IfAddress
+rnl::IfAddress
 NetlinkAddrMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
-  fbnl::IfAddressBuilder builder;
+  rnl::IfAddressBuilder builder;
   const struct ifaddrmsg* const addrEntry =
       reinterpret_cast<struct ifaddrmsg*>(NLMSG_DATA(nlmsg));
 
@@ -920,9 +920,9 @@ NetlinkNeighborMessage::init(int type, uint32_t neighFlags) {
   ndmsg_->ndm_flags = neighFlags;
 }
 
-fbnl::Neighbor
+rnl::Neighbor
 NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
-  fbnl::NeighborBuilder builder;
+  rnl::NeighborBuilder builder;
   const struct ndmsg* const neighEntry =
       reinterpret_cast<struct ndmsg*>(NLMSG_DATA(nlmsg));
 
@@ -963,10 +963,10 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
     } break;
     }
   }
-  fbnl::Neighbor neighbor = builder.build();
+  rnl::Neighbor neighbor = builder.build();
   VLOG(2) << neighbor.str();
   return neighbor;
 }
 
-} // namespace fbnl
+} // namespace rnl
 } // namespace openr

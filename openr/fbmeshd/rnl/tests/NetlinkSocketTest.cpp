@@ -20,7 +20,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <openr/nl/NetlinkSocket.h>
+#include <openr/fbmeshd/rnl/NetlinkSocket.h>
 
 extern "C" {
 #include <net/if.h>
@@ -35,7 +35,7 @@ extern "C" {
 }
 
 using namespace openr;
-using namespace openr::fbnl;
+using namespace openr::rnl;
 
 using folly::gen::as;
 using folly::gen::from;
@@ -110,7 +110,7 @@ class NetlinkSocketFixture : public testing::Test {
     bringUpIntf(kVethNameY);
 
     nlProtocolSocket =
-        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&evl2);
+        std::make_unique<openr::rnl::NetlinkProtocolSocket>(&evl2);
     nlProtocolSocketThread = std::thread([&]() {
       nlProtocolSocket->init();
       evl2.run();
@@ -168,7 +168,7 @@ class NetlinkSocketFixture : public testing::Test {
 
   Route
   buildNullRoute(int protocolId, const folly::CIDRNetwork& dest) {
-    fbnl::RouteBuilder rtBuilder;
+    rnl::RouteBuilder rtBuilder;
     auto route = rtBuilder.setDestination(dest)
                      .setProtocolId(protocolId)
                      .setType(RTN_BLACKHOLE);
@@ -181,9 +181,9 @@ class NetlinkSocketFixture : public testing::Test {
       int protocolId,
       const std::vector<folly::IPAddress>& nexthops,
       const folly::CIDRNetwork& dest) {
-    fbnl::RouteBuilder rtBuilder;
+    rnl::RouteBuilder rtBuilder;
     auto route = rtBuilder.setDestination(dest).setProtocolId(protocolId);
-    fbnl::NextHopBuilder nhBuilder;
+    rnl::NextHopBuilder nhBuilder;
     for (const auto& nh : nexthops) {
       nhBuilder.setIfIndex(ifIndex).setGateway(nh);
       rtBuilder.addNextHop(nhBuilder.build());
@@ -198,7 +198,7 @@ class NetlinkSocketFixture : public testing::Test {
       int protocolId,
       const std::string& ifName,
       const folly::CIDRNetwork& dest) {
-    fbnl::RouteBuilder builder;
+    rnl::RouteBuilder builder;
     builder.setRouteIfIndex(ifIndex)
         .setProtocolId(protocolId)
         .setDestination(dest)
@@ -212,7 +212,7 @@ class NetlinkSocketFixture : public testing::Test {
       int protocolId,
       const std::string& ifName,
       const folly::CIDRNetwork& dest) {
-    fbnl::RouteBuilder builder;
+    rnl::RouteBuilder builder;
     builder.setRouteIfIndex(ifIndex)
         .setProtocolId(protocolId)
         .setDestination(dest)
@@ -221,7 +221,7 @@ class NetlinkSocketFixture : public testing::Test {
   }
 
   std::unique_ptr<NetlinkSocket> netlinkSocket;
-  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
+  std::unique_ptr<openr::rnl::NetlinkProtocolSocket> nlProtocolSocket;
   fbzmq::ZmqEventLoop evl;
   fbzmq::ZmqEventLoop evl2;
   std::thread eventThread;

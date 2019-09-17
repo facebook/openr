@@ -24,10 +24,10 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <openr/fbmeshd/rnl/NetlinkMessage.h>
+#include <openr/fbmeshd/rnl/NetlinkRoute.h>
+#include <openr/fbmeshd/rnl/NetlinkTypes.h>
 #include <openr/if/gen-cpp2/Network_types.h>
-#include <openr/nl/NetlinkMessage.h>
-#include <openr/nl/NetlinkRoute.h>
-#include <openr/nl/NetlinkTypes.h>
 
 extern "C" {
 #include <net/if.h>
@@ -43,11 +43,12 @@ extern "C" {
 }
 
 using namespace openr;
+using namespace openr::rnl;
 using namespace folly::literals::shell_literals;
 
-using openr::fbnl::NetlinkProtocolSocket;
-using openr::fbnl::NetlinkRouteMessage;
-using openr::fbnl::ResultCode;
+using openr::rnl::NetlinkProtocolSocket;
+using openr::rnl::NetlinkRouteMessage;
+using openr::rnl::ResultCode;
 
 namespace {
 const std::string kVethNameX("vethTestX");
@@ -221,7 +222,8 @@ class NlMessageFixture : public ::testing::Test {
   // Check if route is present in routes obtained from kernel
   bool
   checkRouteInKernelRoutes(
-      const std::vector<fbnl::Route>& kernelRoutes, const fbnl::Route& route) {
+      const std::vector<openr::rnl::Route>& kernelRoutes,
+      const rnl::Route& route) {
     for (auto& kernelRoute : kernelRoutes) {
       if (route == kernelRoute) {
         return true;
@@ -233,8 +235,8 @@ class NlMessageFixture : public ::testing::Test {
   // find count of routes present in the kernel routes
   int
   findRoutesInKernelRoutes(
-      const std::vector<fbnl::Route>& kernelRoutes,
-      const std::vector<fbnl::Route>& routes) {
+      const std::vector<rnl::Route>& kernelRoutes,
+      const std::vector<rnl::Route>& routes) {
     int routeCount{0};
     for (auto& route : routes) {
       routeCount += checkRouteInKernelRoutes(kernelRoutes, route) ? 1 : 0;
@@ -245,8 +247,8 @@ class NlMessageFixture : public ::testing::Test {
   // Check if if address is present in addresses obtained from kernel
   bool
   checkAddressInKernelAddresses(
-      const std::vector<fbnl::IfAddress>& kernelAddresses,
-      const fbnl::IfAddress& addr) {
+      const std::vector<rnl::IfAddress>& kernelAddresses,
+      const rnl::IfAddress& addr) {
     for (auto& kernelAddr : kernelAddresses) {
       if (addr == kernelAddr) {
         return true;
@@ -258,8 +260,8 @@ class NlMessageFixture : public ::testing::Test {
   // find count of addresses present in the kernel addresses
   int
   findAddressesInKernelAddresses(
-      const std::vector<fbnl::IfAddress>& kernelAddresses,
-      const std::vector<fbnl::IfAddress>& addresses) {
+      const std::vector<rnl::IfAddress>& kernelAddresses,
+      const std::vector<rnl::IfAddress>& addresses) {
     int addrCount{0};
     for (auto& addr : addresses) {
       addrCount += checkAddressInKernelAddresses(kernelAddresses, addr) ? 1 : 0;
@@ -287,14 +289,14 @@ class NlMessageFixture : public ::testing::Test {
   std::thread eventThread;
 
  protected:
-  openr::fbnl::NextHop
+  openr::rnl::NextHop
   buildNextHop(
       folly::Optional<std::vector<int32_t>> pushLabels,
       folly::Optional<uint32_t> swapLabel,
       folly::Optional<thrift::MplsActionCode> action,
       folly::Optional<folly::IPAddress> gateway,
       int ifIndex) {
-    openr::fbnl::NextHopBuilder nhBuilder;
+    openr::rnl::NextHopBuilder nhBuilder;
 
     if (pushLabels.hasValue()) {
       nhBuilder.setPushLabels(pushLabels.value());
@@ -312,13 +314,13 @@ class NlMessageFixture : public ::testing::Test {
     return nhBuilder.build();
   }
 
-  openr::fbnl::Route
+  openr::rnl::Route
   buildRoute(
       int protocolId,
       const folly::Optional<folly::CIDRNetwork>& dest,
       folly::Optional<uint32_t> mplsLabel,
-      const folly::Optional<std::vector<openr::fbnl::NextHop>>& nexthops) {
-    fbnl::RouteBuilder rtBuilder;
+      const folly::Optional<std::vector<openr::rnl::NextHop>>& nexthops) {
+    rnl::RouteBuilder rtBuilder;
 
     rtBuilder.setProtocolId(protocolId);
     if (dest.hasValue()) {
@@ -342,10 +344,10 @@ class NlMessageFixture : public ::testing::Test {
     return rtBuilder.build();
   }
 
-  std::vector<openr::fbnl::Route>
+  std::vector<openr::rnl::Route>
   buildV6RouteDb(uint32_t count) {
-    std::vector<openr::fbnl::Route> routes;
-    std::vector<openr::fbnl::NextHop> paths;
+    std::vector<openr::rnl::Route> routes;
+    std::vector<openr::rnl::NextHop> paths;
     paths.push_back(buildNextHop(
         outLabel4,
         folly::none,
@@ -378,10 +380,10 @@ class NlMessageFixture : public ::testing::Test {
     return routes;
   }
 
-  std::vector<openr::fbnl::Route>
+  std::vector<openr::rnl::Route>
   buildV4RouteDb(uint32_t count) {
-    std::vector<openr::fbnl::Route> routes;
-    std::vector<openr::fbnl::NextHop> paths;
+    std::vector<openr::rnl::Route> routes;
+    std::vector<openr::rnl::NextHop> paths;
     // create mix of next hops, including without label
     paths.push_back(buildNextHop(
         outLabel1,
@@ -466,7 +468,7 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
@@ -500,7 +502,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
 
   paths.push_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
@@ -544,7 +546,7 @@ TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
   ResultCode status{ResultCode::FAIL};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
@@ -580,7 +582,7 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
   ResultCode status{ResultCode::FAIL};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
   paths.push_back(buildNextHop(
@@ -616,7 +618,7 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel1,
       folly::none,
@@ -653,7 +655,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   for (uint32_t i = 0; i < 48; i++) {
     outLabel6[0] = outLabel6[0] + 10 + i;
     paths.push_back(buildNextHop(
@@ -693,7 +695,7 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
   // Should error out
 
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   struct v6Addr addr6 {
     0
   };
@@ -719,7 +721,7 @@ TEST_F(NlMessageFixture, PopLabel) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
@@ -755,7 +757,7 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
@@ -798,7 +800,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
       swapLabel,
@@ -835,7 +837,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
       swapLabel,
@@ -879,7 +881,7 @@ TEST_F(NlMessageFixture, NlErrorMessage) {
   // and an invalid outgoing I/F. Function should return Fail
   // and the nlmsg error should increase
 
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   uint32_t invalidIfindex = 1000;
   paths.push_back(buildNextHop(
       folly::none,
@@ -899,8 +901,8 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   // Add two routes, one valid and the other invalid. Only one should be
   // sent to program
 
-  std::vector<openr::fbnl::NextHop> paths1;
-  std::vector<openr::fbnl::Route> routes;
+  std::vector<openr::rnl::NextHop> paths1;
+  std::vector<openr::rnl::Route> routes;
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
   paths1.push_back(buildNextHop(
@@ -912,7 +914,7 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths1));
 
-  std::vector<openr::fbnl::NextHop> paths2;
+  std::vector<openr::rnl::NextHop> paths2;
   // Invalid route, send PUSH without labels
   paths2.push_back(buildNextHop(
       folly::none,
@@ -986,7 +988,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
@@ -1022,7 +1024,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
 
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
@@ -1081,7 +1083,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   ResultCode status{ResultCode::FAIL};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel4,
       folly::none,
@@ -1124,7 +1126,7 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
   ResultCode status{ResultCode::FAIL};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("11.10.0.0/24");
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   std::vector<int32_t> labels(16);
   std::iota(std::begin(labels), std::end(labels), 701);
   paths.push_back(buildNextHop(
@@ -1236,7 +1238,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   uint32_t ackCount{0};
   ResultCode status{ResultCode::FAIL};
   uint32_t count{20000};
-  std::vector<openr::fbnl::NextHop> paths;
+  std::vector<openr::rnl::NextHop> paths;
   // create label next hop
   paths.push_back(buildNextHop(
       folly::none,
@@ -1244,7 +1246,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
       thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
       ifIndexZ));
-  std::vector<openr::fbnl::Route> labelRoutes;
+  std::vector<openr::rnl::Route> labelRoutes;
   for (uint32_t i = 0; i < count; i++) {
     labelRoutes.push_back(
         buildRoute(kRouteProtoId, folly::none, 600 + i, paths));
@@ -1290,9 +1292,9 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
   EXPECT_NE(ifIndexX, -1);
 
   ResultCode status;
-  std::vector<fbnl::IfAddress> ifAddresses;
+  std::vector<rnl::IfAddress> ifAddresses;
   for (int i = 0; i < addrCount; i++) {
-    openr::fbnl::IfAddressBuilder builder;
+    openr::rnl::IfAddressBuilder builder;
     folly::CIDRNetwork prefix1{
         folly::IPAddress("face:d00d::" + std::to_string(i)), 128};
     auto ifAddr = builder.setPrefix(prefix1)
@@ -1304,7 +1306,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
     EXPECT_EQ(status, ResultCode::SUCCESS);
     ifAddresses.emplace_back(ifAddr);
 
-    openr::fbnl::IfAddressBuilder ipv4builder;
+    openr::rnl::IfAddressBuilder ipv4builder;
     folly::CIDRNetwork prefix2{
         folly::IPAddress("10.0." + std::to_string(i) + ".0"), 32};
     auto ifAddrV4 = ipv4builder.setPrefix(prefix2)
@@ -1324,14 +1326,14 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
       findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
 
   for (int i = 0; i < addrCount; i++) {
-    openr::fbnl::IfAddressBuilder builder;
+    openr::rnl::IfAddressBuilder builder;
     folly::CIDRNetwork prefix1{
         folly::IPAddress("face:d00d::" + std::to_string(i)), 128};
     builder.setPrefix(prefix1).setIfIndex(ifIndexX).setScope(RT_SCOPE_UNIVERSE);
     status = nlSock->deleteIfAddress(builder.build());
     EXPECT_EQ(status, ResultCode::SUCCESS);
 
-    openr::fbnl::IfAddressBuilder ipv4builder;
+    openr::rnl::IfAddressBuilder ipv4builder;
     folly::CIDRNetwork prefix2{
         folly::IPAddress("10.0." + std::to_string(i) + ".0"), 32};
     ipv4builder.setPrefix(prefix2).setIfIndex(ifIndexX).setScope(

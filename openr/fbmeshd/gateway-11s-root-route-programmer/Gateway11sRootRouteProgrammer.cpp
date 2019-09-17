@@ -132,8 +132,8 @@ Gateway11sRootRouteProgrammer::determineBestRoot() {
     LOG(INFO) << "No current root found";
   }
 
-  openr::fbnl::NlUnicastRoutes routeDb;
-  std::vector<fbnl::IfAddress> meshAddrs;
+  openr::rnl::NlUnicastRoutes routeDb;
+  std::vector<rnl::IfAddress> meshAddrs;
   ifIndex = netlinkSocket_.getIfIndex("tayga").get();
   auto destination = std::make_pair<folly::IPAddress, uint8_t>(
       folly::IPAddressV6{"fd00:ffff::"}, 96);
@@ -141,10 +141,10 @@ Gateway11sRootRouteProgrammer::determineBestRoot() {
   if (isGate_) {
     routeDb.emplace(
         destination,
-        fbnl::RouteBuilder{}
+        rnl::RouteBuilder{}
             .setDestination(destination)
             .setProtocolId(98)
-            .addNextHop(fbnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
+            .addNextHop(rnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
             .build());
   } else if (currentRoot_) {
     const auto defaultV4Prefix =
@@ -155,21 +155,21 @@ Gateway11sRootRouteProgrammer::determineBestRoot() {
     // IPv6 conversion increases the packet size by 20 bytes.
     routeDb.emplace(
         defaultV4Prefix,
-        fbnl::RouteBuilder{}
+        rnl::RouteBuilder{}
             .setDestination(defaultV4Prefix)
             .setProtocolId(98)
             .setMtu(1500)
             .setAdvMss(1460)
-            .addNextHop(fbnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
+            .addNextHop(rnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
             .build());
 
     routeDb.emplace(
         destination,
-        fbnl::RouteBuilder{}
+        rnl::RouteBuilder{}
             .setDestination(destination)
             .setProtocolId(98)
             .addNextHop(
-                fbnl::NextHopBuilder{}
+                rnl::NextHopBuilder{}
                     .setGateway(getMeshIPV6FromMacAddress(currentRoot_->first))
                     .build())
             .build());
@@ -179,10 +179,10 @@ Gateway11sRootRouteProgrammer::determineBestRoot() {
       folly::IPAddressV6{"fd00::"}, 64);
   routeDb.emplace(
       destination,
-      fbnl::RouteBuilder{}
+      rnl::RouteBuilder{}
           .setDestination(destination)
           .setProtocolId(98)
-          .addNextHop(fbnl::NextHopBuilder{}
+          .addNextHop(rnl::NextHopBuilder{}
                           .setIfIndex(netif.maybeIfIndex.value())
                           .build())
           .build());
@@ -191,23 +191,23 @@ Gateway11sRootRouteProgrammer::determineBestRoot() {
       getTaygaIPV6FromMacAddress(*netif.maybeMacAddress), 128};
   routeDb.emplace(
       destination,
-      fbnl::RouteBuilder{}
+      rnl::RouteBuilder{}
           .setDestination(destination)
           .setProtocolId(98)
-          .addNextHop(fbnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
+          .addNextHop(rnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
           .build());
 
   destination = folly::CIDRNetwork{folly::IPAddressV4{"172.16.0.0"}, 16};
   routeDb.emplace(
       destination,
-      fbnl::RouteBuilder{}
+      rnl::RouteBuilder{}
           .setDestination(destination)
           .setProtocolId(98)
-          .addNextHop(fbnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
+          .addNextHop(rnl::NextHopBuilder{}.setIfIndex(ifIndex).build())
           .build());
 
   meshAddrs.push_back(
-      fbnl::IfAddressBuilder{}
+      rnl::IfAddressBuilder{}
           .setPrefix(folly::CIDRNetwork{
               getMeshIPV6FromMacAddress(*netif.maybeMacAddress), 64})
           .setIfIndex(netif.maybeIfIndex.value())

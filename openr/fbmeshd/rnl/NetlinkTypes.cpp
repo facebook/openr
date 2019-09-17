@@ -12,7 +12,7 @@
 #include <openr/fbmeshd/rnl/NetlinkTypes.h>
 
 namespace openr {
-namespace fbnl {
+namespace rnl {
 
 const std::set<int> kNeighborReachableStates{
     NUD_REACHABLE, NUD_STALE, NUD_DELAY, NUD_PERMANENT, NUD_PROBE, NUD_NOARP};
@@ -56,7 +56,7 @@ RouteBuilder::loadFromObject(struct rtnl_route* obj) {
       VLOG(3) << "Creating a V4 default route";
       prefix = folly::IPAddress::createNetwork("0.0.0.0/0");
     } else {
-      throw fbnl::NlException("Unknown address family for default route");
+      throw rnl::NlException("Unknown address family for default route");
     }
   } else {
     // route object dst is the prefix. parse it
@@ -66,7 +66,7 @@ RouteBuilder::loadFromObject(struct rtnl_route* obj) {
           nl_addr_get_len(dst)));
       prefix = {ipAddress, nl_addr_get_prefixlen(dst)};
     } catch (std::exception const& e) {
-      throw fbnl::NlException(folly::sformat(
+      throw rnl::NlException(folly::sformat(
           "Error creating prefix for addr: {}",
           nl_addr2str(dst, ipAddrBuf.data(), ipAddrBuf.size())));
     }
@@ -91,7 +91,7 @@ Route
 RouteBuilder::buildMulticastRoute() const {
   if (!routeIfIndex_.hasValue() || routeIfIndex_.value() == 0 ||
       !routeIfName_.hasValue()) {
-    throw fbnl::NlException("Iface index and Iface name must be set");
+    throw rnl::NlException("Iface index and Iface name must be set");
   }
   NextHopBuilder nhBuilder;
   nhBuilder.setIfIndex(routeIfIndex_.value());
@@ -110,7 +110,7 @@ Route
 RouteBuilder::buildLinkRoute() const {
   if (!routeIfIndex_.hasValue() || routeIfIndex_.value() == 0 ||
       !routeIfName_.hasValue()) {
-    throw fbnl::NlException("Iface index and Iface name must be set");
+    throw rnl::NlException("Iface index and Iface name must be set");
   }
   NextHopBuilder nhBuilder;
   nhBuilder.setIfIndex(routeIfIndex_.value());
@@ -579,7 +579,7 @@ struct rtnl_route*
 Route::createRtnlRouteKey() {
   auto route = rtnl_route_alloc();
   if (route == nullptr) {
-    throw fbnl::NlException("Cannot allocate route object");
+    throw rnl::NlException("Cannot allocate route object");
   }
   SCOPE_FAIL {
     rtnl_route_put(route);
@@ -600,7 +600,7 @@ Route::createRtnlRouteKey() {
   };
   int err = rtnl_route_set_dst(route, nlAddr);
   if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Failed to set dst for route {} : {}",
         folly::IPAddress::networkToString(dst_),
         nl_geterror(err)));
@@ -647,7 +647,7 @@ Route::getRtnlRouteRef() {
   for (const auto& nextHop : nextHops_) {
     auto gateway = nextHop.getGateway();
     if (gateway.hasValue() && gateway.value().family() != dst_.first.family()) {
-      throw fbnl::NlException(
+      throw rnl::NlException(
           "Different address family for destination and Nexthop gateway");
     }
   }
@@ -675,7 +675,7 @@ Route::buildAddrObject(const folly::CIDRNetwork& addr) {
   struct nl_addr* nlAddr_ = nl_addr_build(
       addr.first.family(), (void*)(addr.first.bytes()), addr.first.byteCount());
   if (nlAddr_ == nullptr) {
-    throw fbnl::NlException("Failed to create nl addr");
+    throw rnl::NlException("Failed to create nl addr");
   }
   nl_addr_set_prefixlen(nlAddr_, addr.second);
   return nlAddr_;
@@ -911,7 +911,7 @@ NextHop::buildNextHopInternal(const int ifIdx) const {
   // Once we destroy the route object, it will internally free this nextHop
   struct rtnl_nexthop* nextHop = rtnl_route_nh_alloc();
   if (nextHop == nullptr) {
-    throw fbnl::NlException("Failed to create nextHop");
+    throw rnl::NlException("Failed to create nextHop");
   }
   rtnl_route_nh_set_weight(nextHop, weight_);
   rtnl_route_nh_set_ifindex(nextHop, ifIdx);
@@ -924,7 +924,7 @@ NextHop::buildNextHopInternal(
   struct nl_addr* nlGateway = nl_addr_build(
       gateway.family(), (void*)(gateway.bytes()), gateway.byteCount());
   if (nlGateway == nullptr) {
-    throw fbnl::NlException("Failed to create nl addr for gateway");
+    throw rnl::NlException("Failed to create nl addr for gateway");
   }
   // nextHop object takes a ref if gateway is successfully set
   // Either way, success or failure, we drop our ref
@@ -937,7 +937,7 @@ NextHop::buildNextHopInternal(
   // Once we destroy the route object, it will internally free this nextHop
   struct rtnl_nexthop* nextHop = rtnl_route_nh_alloc();
   if (nextHop == nullptr) {
-    throw fbnl::NlException("Failed to create nextHop");
+    throw rnl::NlException("Failed to create nextHop");
   }
 
   if (gateway.isV4()) {
@@ -953,7 +953,7 @@ NextHop::buildNextHopInternal(
 struct rtnl_nexthop*
 NextHop::buildNextHopInternal(const folly::IPAddress& gateway) const {
   if (gateway.isLinkLocal()) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Missing interface name for link local nexthop address {}",
         gateway.str()));
   }
@@ -961,7 +961,7 @@ NextHop::buildNextHopInternal(const folly::IPAddress& gateway) const {
   struct nl_addr* nlGateway = nl_addr_build(
       gateway.family(), (void*)(gateway.bytes()), gateway.byteCount());
   if (nlGateway == nullptr) {
-    throw fbnl::NlException("Failed to create nl addr for gateway");
+    throw rnl::NlException("Failed to create nl addr for gateway");
   }
   // nextHop object takes a ref if gateway is successfully set
   // Either way, success or failure, we drop our ref
@@ -974,7 +974,7 @@ NextHop::buildNextHopInternal(const folly::IPAddress& gateway) const {
   // Once we destroy the route object, it will internally free this nextHop
   struct rtnl_nexthop* nextHop = rtnl_route_nh_alloc();
   if (nextHop == nullptr) {
-    throw fbnl::NlException("Failed to create nextHop");
+    throw rnl::NlException("Failed to create nextHop");
   }
   rtnl_route_nh_set_weight(nextHop, weight_);
 
@@ -999,7 +999,7 @@ IfAddressBuilder::loadFromObject(struct rtnl_addr* addr) {
   reset();
   struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
   if (!ipaddr) {
-    throw fbnl::NlException("Failed to get ip address");
+    throw rnl::NlException("Failed to get ip address");
   }
   folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
       static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
@@ -1223,7 +1223,7 @@ IfAddress::getRtnlAddrRef() {
 
   ifAddr_ = rtnl_addr_alloc();
   if (nullptr == ifAddr_) {
-    throw fbnl::NlException("Failed to create rtnl_addr object");
+    throw rnl::NlException("Failed to create rtnl_addr object");
   }
   SCOPE_FAIL {
     rtnl_addr_put(ifAddr_);
@@ -1238,7 +1238,7 @@ IfAddress::getRtnlAddrRef() {
         (void*)(prefix_->first.bytes()),
         prefix_->first.byteCount());
     if (nullptr == localAddr) {
-      throw fbnl::NlException("Failed to create local addr");
+      throw rnl::NlException("Failed to create local addr");
     }
     nl_addr_set_prefixlen(localAddr, prefix_->second);
     // Setting the local address will automatically set the address family
@@ -1282,7 +1282,7 @@ NeighborBuilder::buildFromObject(
   struct nl_addr* dst = rtnl_neigh_get_dst(neighbor);
   if (!dst) {
     LOG(ERROR) << "Invalid destination for neighbor";
-    throw fbnl::NlException("Failed to get destination IP from neighbor entry");
+    throw rnl::NlException("Failed to get destination IP from neighbor entry");
   }
   const auto ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
       static_cast<const unsigned char*>(nl_addr_get_binary_addr(dst)),
@@ -1300,12 +1300,12 @@ NeighborBuilder::buildFromObject(
     struct nl_addr* linkAddress = rtnl_neigh_get_lladdr(neighbor);
     if (!linkAddress) {
       LOG(ERROR) << "Invalid link address for neigbbor";
-      throw fbnl::NlException("Failed to get link address from neighbor entry");
+      throw rnl::NlException("Failed to get link address from neighbor entry");
     }
     // Skip entries with invalid mac-addresses
     if (nl_addr_get_len(linkAddress) != folly::MacAddress::SIZE) {
       LOG(ERROR) << "Invalid link address for neigbbor";
-      throw fbnl::NlException("Invalid mac address");
+      throw rnl::NlException("Invalid mac address");
     }
     macAddress = folly::MacAddress::fromBinary(folly::ByteRange(
         static_cast<const unsigned char*>(nl_addr_get_binary_addr(linkAddress)),
@@ -1501,7 +1501,7 @@ Neighbor::getRtnlNeighRef() {
 
   neigh_ = rtnl_neigh_alloc();
   if (!neigh_) {
-    throw fbnl::NlException("create neighbor object failed");
+    throw rnl::NlException("create neighbor object failed");
   }
   SCOPE_FAIL {
     rtnl_neigh_put(neigh_);
@@ -1517,7 +1517,7 @@ Neighbor::getRtnlNeighRef() {
       (void*)(destination_.bytes()),
       destination_.byteCount());
   if (dst == nullptr) {
-    throw fbnl::NlException("Failed to create dst addr");
+    throw rnl::NlException("Failed to create dst addr");
   }
   SCOPE_EXIT {
     nl_addr_put(dst);
@@ -1530,7 +1530,7 @@ Neighbor::getRtnlNeighRef() {
         (void*)linkAddress_.value().bytes(),
         folly::MacAddress::SIZE);
     if (llAddr == nullptr) {
-      throw fbnl::NlException("Failed to create link addr");
+      throw rnl::NlException("Failed to create link addr");
     }
     rtnl_neigh_set_lladdr(neigh_, llAddr);
     nl_addr_put(llAddr);
@@ -1690,7 +1690,7 @@ Link::getRtnlLinkRef() {
 
   link_ = rtnl_link_alloc();
   if (!link_) {
-    throw fbnl::NlException("Allocate link object failed");
+    throw rnl::NlException("Allocate link object failed");
   }
   rtnl_link_set_ifindex(link_, ifIndex_);
   rtnl_link_set_flags(link_, flags_);
@@ -1728,5 +1728,5 @@ operator==(const Link& lhs, const Link& rhs) {
       lhs.getIfIndex() == rhs.getIfIndex() && lhs.getFlags() == rhs.getFlags());
 }
 
-} // namespace fbnl
+} // namespace rnl
 } // namespace openr

@@ -9,12 +9,12 @@
 #include <openr/if/gen-cpp2/Platform_constants.h>
 
 namespace openr {
-namespace fbnl {
+namespace rnl {
 
 NetlinkSocket::NetlinkSocket(
     fbzmq::ZmqEventLoop* evl,
     EventsHandler* handler,
-    std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock)
+    std::unique_ptr<openr::rnl::NetlinkProtocolSocket> nlSock)
     : evl_(evl), handler_(handler), nlSock_(std::move(nlSock)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 
@@ -25,7 +25,7 @@ NetlinkSocket::NetlinkSocket(
 
   // Pass link and address callbacks to NetlinkProtocolSocket
   nlSock_->setLinkEventCB([this](
-      openr::fbnl::Link link, bool runHandler) noexcept {
+      openr::rnl::Link link, bool runHandler) noexcept {
     evl_->runImmediatelyOrInEventLoop([this,
                                        link = std::move(link),
 
@@ -35,7 +35,7 @@ NetlinkSocket::NetlinkSocket(
   });
 
   nlSock_->setAddrEventCB([this](
-      openr::fbnl::IfAddress ifAddr, bool runHandler) noexcept {
+      openr::rnl::IfAddress ifAddr, bool runHandler) noexcept {
     evl_->runImmediatelyOrInEventLoop([this,
                                        ifAddr = std::move(ifAddr),
 
@@ -45,7 +45,7 @@ NetlinkSocket::NetlinkSocket(
   });
 
   nlSock_->setNeighborEventCB([this](
-      openr::fbnl::Neighbor neigh, bool runHandler) noexcept {
+      openr::rnl::Neighbor neigh, bool runHandler) noexcept {
     evl_->runImmediatelyOrInEventLoop([this,
                                        neigh = std::move(neigh),
 
@@ -258,7 +258,7 @@ NetlinkSocket::addRoute(Route route) {
         doAddMulticastRoute(std::move(r));
         break;
       default:
-        throw fbnl::NlException(
+        throw rnl::NlException(
             folly::sformat("Unsupported route type {}", (int)type));
       }
       p.setValue();
@@ -292,7 +292,7 @@ NetlinkSocket::addMplsRoute(Route mplsRoute) {
         doAddUpdateMplsRoute(std::move(r));
         break;
       default:
-        throw fbnl::NlException(
+        throw rnl::NlException(
             folly::sformat("Unsupported MPLS route type {}", (int)type));
       }
       p.setValue();
@@ -324,7 +324,7 @@ NetlinkSocket::delMplsRoute(Route mplsRoute) {
         doDeleteMplsRoute(std::move(r));
         break;
       default:
-        throw fbnl::NlException(
+        throw rnl::NlException(
             folly::sformat("Unsupported MPLS route type {}", (int)type));
       }
       p.setValue();
@@ -453,7 +453,7 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
       err = static_cast<int>(nlSock_->deleteRoute(iter->second));
 
       if (0 != err) {
-        throw fbnl::NlException(folly::sformat(
+        throw rnl::NlException(folly::sformat(
             "Failed to delete route\n{}\nError: {}", iter->second.str(), err));
       }
     }
@@ -468,7 +468,7 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   err = static_cast<int>(nlSock_->addRoute(route));
 
   if (0 != err) {
-    throw fbnl::NlException(
+    throw rnl::NlException(
         folly::sformat("Could not add route\n{}\nError: {}", route.str(), err));
   }
 
@@ -498,7 +498,7 @@ NetlinkSocket::delRoute(Route route) {
         doDeleteMulticastRoute(std::move(r));
         break;
       default:
-        throw fbnl::NlException(
+        throw rnl::NlException(
             folly::sformat("Unsupported route type {}", (int)type));
       }
       p.setValue();
@@ -516,7 +516,7 @@ void
 NetlinkSocket::checkUnicastRoute(const Route& route) {
   const auto& prefix = route.getDestination();
   if (prefix.first.isMulticast() || prefix.first.isLinkLocal()) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Invalid unicast route type for: {}",
         folly::IPAddress::networkToString(prefix)));
   }
@@ -537,7 +537,7 @@ NetlinkSocket::doDeleteMplsRoute(Route mplsRoute) {
   int err{0};
   err = static_cast<int>(nlSock_->deleteLabelRoute(mplsRoute));
   if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Failed to delete MPLS {} Error: {}", label.value(), err));
   }
   // Update local cache with removed prefix
@@ -564,7 +564,7 @@ NetlinkSocket::doAddUpdateMplsRoute(Route mplsRoute) {
   int err{0};
   err = static_cast<int>(nlSock_->addLabelRoute(mplsRoute));
   if (0 != err) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Could not add mpls route\n{}\nError: {}", mplsRoute.str(), err));
   }
   // Add MPLS route entry in cache on successful addition
@@ -588,7 +588,7 @@ NetlinkSocket::doDeleteUnicastRoute(Route route) {
 
   err = static_cast<int>(nlSock_->deleteRoute(route));
   if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Failed to delete route {} Error: {}",
         folly::IPAddress::networkToString(route.getDestination()),
         err));
@@ -623,7 +623,7 @@ NetlinkSocket::doAddMulticastRoute(Route route) {
   err = static_cast<int>(nlSock_->addRoute(route));
 
   if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Failed to add multicast route {} Error: {}",
         folly::IPAddress::networkToString(prefix),
         err));
@@ -635,12 +635,12 @@ void
 NetlinkSocket::checkMulticastRoute(const Route& route) {
   auto prefix = route.getDestination();
   if (not prefix.first.isMulticast()) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Invalid multicast address {}",
         folly::IPAddress::networkToString(prefix)));
   }
   if (not route.getRouteIfName().hasValue()) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Need set Iface name for multicast address {}",
         folly::IPAddress::networkToString(prefix)));
   }
@@ -671,7 +671,7 @@ NetlinkSocket::doDeleteMulticastRoute(Route route) {
 
   err = static_cast<int>(nlSock_->deleteRoute(iter->second));
   if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
+    throw rnl::NlException(folly::sformat(
         "Failed to delete multicast route {} Error: {}",
         folly::IPAddress::networkToString(prefix),
         err));
@@ -774,7 +774,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     err = static_cast<int>(nlSock_->deleteRoute(iter->second));
 
     if (err != 0) {
-      throw fbnl::NlException(folly::sformat(
+      throw rnl::NlException(folly::sformat(
           "Could not del link Route to: {} dev {} Error: {}",
           folly::IPAddress::networkToString(routeToDel.first),
           routeToDel.second,
@@ -792,7 +792,7 @@ NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
     err = static_cast<int>(nlSock_->addRoute(routeToAdd.second));
 
     if (err != 0) {
-      throw fbnl::NlException(folly::sformat(
+      throw rnl::NlException(folly::sformat(
           "Could not add link Route to: {} dev {} Error: {}",
           folly::IPAddress::networkToString(routeToAdd.first.first),
           routeToAdd.first.second,
@@ -936,7 +936,7 @@ NetlinkSocket::addIfAddress(IfAddress ifAddress) {
         if (err == 0) {
           p.setValue();
         } else {
-          p.setException(fbnl::NlException("Failed to add If Address"));
+          p.setException(rnl::NlException("Failed to add If Address"));
         }
       });
   return future;
@@ -949,7 +949,7 @@ NetlinkSocket::delIfAddress(IfAddress ifAddress) {
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
   if (!ifAddress.getPrefix().hasValue()) {
-    fbnl::NlException ex("Prefix must be set");
+    rnl::NlException ex("Prefix must be set");
     promise.setException(std::move(ex));
     return future;
   }
@@ -959,7 +959,7 @@ NetlinkSocket::delIfAddress(IfAddress ifAddress) {
         if (err == 0) {
           p.setValue();
         } else {
-          p.setException(fbnl::NlException("Failed to delete If Address"));
+          p.setException(rnl::NlException("Failed to delete If Address"));
         }
       });
   return future;
@@ -997,7 +997,7 @@ NetlinkSocket::getIfAddrs(int ifIndex, int family, int scope) {
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), ifIndex, family, scope]() mutable {
         std::vector<IfAddress> addrs;
-        std::vector<fbnl::IfAddress> allAddrs = nlSock_->getAllIfAddresses();
+        std::vector<rnl::IfAddress> allAddrs = nlSock_->getAllIfAddresses();
         for (auto& addr : allAddrs) {
           // Check if addr fits the filtering parameters
           if (family != AF_UNSPEC && family != addr.getFamily()) {
@@ -1015,7 +1015,7 @@ NetlinkSocket::getIfAddrs(int ifIndex, int family, int scope) {
             continue;
           }
 
-          fbnl::IfAddressBuilder ifBuilder;
+          rnl::IfAddressBuilder ifBuilder;
           auto ifAddr = ifBuilder.setPrefix(std::move(addr.getPrefix().value()))
                             .setIfIndex(ifIndex)
                             .setScope(scope)
@@ -1033,10 +1033,10 @@ NetlinkSocket::doSyncIfAddress(
   std::vector<folly::CIDRNetwork> newPrefixes;
   for (const auto& addr : addrs) {
     if (addr.getIfIndex() != ifIndex) {
-      throw fbnl::NlException("Inconsistent ifIndex in addrs");
+      throw rnl::NlException("Inconsistent ifIndex in addrs");
     }
     if (!addr.getPrefix().hasValue()) {
-      throw fbnl::NlException("Prefix must be set when sync addresses");
+      throw rnl::NlException("Prefix must be set when sync addresses");
     }
     newPrefixes.emplace_back(addr.getPrefix().value());
   }
@@ -1067,7 +1067,7 @@ NetlinkSocket::doSyncIfAddress(
   }
 
   // Delete deprecated addresses
-  fbnl::IfAddressBuilder builder;
+  rnl::IfAddressBuilder builder;
   for (const auto& toDel : toDeletePrefixes) {
     auto delAddr =
         builder.setIfIndex(ifIndex).setPrefix(toDel).setScope(scope).build();
@@ -1170,5 +1170,5 @@ NetlinkSocket::registerNeighborListener(
   neighborListener_ = std::move(callback);
 }
 
-} // namespace fbnl
+} // namespace rnl
 } // namespace openr

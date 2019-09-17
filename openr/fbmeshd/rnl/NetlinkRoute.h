@@ -29,7 +29,7 @@
 #endif
 
 namespace openr {
-namespace fbnl {
+namespace rnl {
 
 constexpr uint16_t kMaxLabels{16};
 constexpr uint32_t kLabelBosShift{8};
@@ -42,7 +42,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   NetlinkRouteMessage();
 
   // initiallize route message with default params
-  void init(int type, uint32_t flags, const openr::fbnl::Route& route);
+  void init(int type, uint32_t flags, const openr::rnl::Route& route);
 
   friend std::ostream&
   operator<<(std::ostream& out, NetlinkRouteMessage const& msg) {
@@ -55,22 +55,22 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   }
 
   // add a unicast route
-  ResultCode addRoute(const openr::fbnl::Route& route);
+  ResultCode addRoute(const openr::rnl::Route& route);
 
   // delete a route
-  ResultCode deleteRoute(const openr::fbnl::Route& route);
+  ResultCode deleteRoute(const openr::rnl::Route& route);
 
   // add label route
-  ResultCode addLabelRoute(const openr::fbnl::Route& route);
+  ResultCode addLabelRoute(const openr::rnl::Route& route);
 
   // delete label route
-  ResultCode deleteLabelRoute(const openr::fbnl::Route& route);
+  ResultCode deleteLabelRoute(const openr::rnl::Route& route);
 
   // encode MPLS label, returns in network order
   uint32_t encodeLabel(uint32_t label, bool bos) const;
 
   // process netlink route message
-  fbnl::Route parseMessage(const struct nlmsghdr* nlmsg) const;
+  rnl::Route parseMessage(const struct nlmsghdr* nlmsg) const;
 
  private:
   // print ancillary data
@@ -87,14 +87,14 @@ class NetlinkRouteMessage final : public NetlinkMessage {
       const struct rtattr* ipAttr, unsigned char family) const;
 
   // process netlink next hops
-  std::vector<fbnl::NextHop> parseNextHops(
+  std::vector<rnl::NextHop> parseNextHops(
       const struct rtattr* routeAttrMultipath, unsigned char family) const;
 
   // parse NextHop Attributes
   void parseNextHopAttribute(
       const struct rtattr* routeAttr,
       unsigned char family,
-      fbnl::NextHopBuilder& nhBuilder) const;
+      rnl::NextHopBuilder& nhBuilder) const;
 
   // parse MPLS labels
   folly::Optional<std::vector<int32_t>> parseMplsLabels(
@@ -102,43 +102,43 @@ class NetlinkRouteMessage final : public NetlinkMessage {
 
   // set mpls action based on nexthop fields
   void setMplsAction(
-      fbnl::NextHopBuilder& nhBuilder, unsigned char family) const;
+      rnl::NextHopBuilder& nhBuilder, unsigned char family) const;
 
   // pointer to route message header
   struct rtmsg* rtmsg_{nullptr};
 
   // add set of nexthops
-  ResultCode addNextHops(const openr::fbnl::Route& route);
+  ResultCode addNextHops(const openr::rnl::Route& route);
 
   // Add ECMP paths
   ResultCode addMultiPathNexthop(
       std::array<char, kMaxNlPayloadSize>& nhop,
-      const openr::fbnl::Route& route) const;
+      const openr::rnl::Route& route) const;
 
   // Add label encap
   ResultCode addLabelNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path) const;
+      const openr::rnl::NextHop& path) const;
 
   // swap or PHP
   ResultCode addSwapOrPHPNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path) const;
+      const openr::rnl::NextHop& path) const;
 
   // POP - sends to lo I/F
   ResultCode addPopNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path) const;
+      const openr::rnl::NextHop& path) const;
 
   // POP - sends to lo I/F
   ResultCode addIpNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path,
-      const openr::fbnl::Route& route) const;
+      const openr::rnl::NextHop& path,
+      const openr::rnl::Route& route) const;
 
   // pointer to the netlink message header
   struct nlmsghdr* msghdr_{nullptr};
@@ -163,7 +163,7 @@ class NetlinkLinkMessage final : public NetlinkMessage {
   void init(int type, uint32_t flags);
 
   // parse Netlink Link message
-  fbnl::Link parseMessage(const struct nlmsghdr* nlh) const;
+  rnl::Link parseMessage(const struct nlmsghdr* nlh) const;
 
  private:
   // pointer to link message header
@@ -181,12 +181,12 @@ class NetlinkAddrMessage final : public NetlinkMessage {
   void init(int type);
 
   // parse Netlink Address message
-  fbnl::IfAddress parseMessage(const struct nlmsghdr* nlh) const;
+  rnl::IfAddress parseMessage(const struct nlmsghdr* nlh) const;
 
   // create netlink message to add/delete interface address
   // type - RTM_NEWADDR or RTM_DELADDR
   ResultCode addOrDeleteIfAddress(
-      const openr::fbnl::IfAddress& ifAddr, const int type);
+      const openr::rnl::IfAddress& ifAddr, const int type);
 
  private:
   // pointer to interface message header
@@ -204,7 +204,7 @@ class NetlinkNeighborMessage final : public NetlinkMessage {
   void init(int type, uint32_t flags);
 
   // parse Netlink Neighbor message
-  fbnl::Neighbor parseMessage(const struct nlmsghdr* nlh) const;
+  rnl::Neighbor parseMessage(const struct nlmsghdr* nlh) const;
 
  private:
   // pointer to neighbor message header
@@ -214,5 +214,5 @@ class NetlinkNeighborMessage final : public NetlinkMessage {
   struct nlmsghdr* msghdr_{nullptr};
 };
 
-} // namespace fbnl
+} // namespace rnl
 } // namespace openr

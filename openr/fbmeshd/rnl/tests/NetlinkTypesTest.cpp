@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <openr/nl/NetlinkTypes.h>
+#include <openr/fbmeshd/rnl/NetlinkTypes.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -22,7 +22,7 @@ extern "C" {
 }
 
 using namespace openr;
-using namespace openr::fbnl;
+using namespace openr::rnl;
 
 const uint8_t kProtocolId = 99;
 const int kIfIndex = 1;
@@ -402,7 +402,7 @@ TEST(NetlinkTypes, RouteCopyTest) {
   EXPECT_TRUE(nlPtrKey1 != nullptr);
 
   // Copy constructor
-  fbnl::Route route2(route);
+  openr::rnl::Route route2(route);
   EXPECT_EQ(route, route2);
   auto nlPtr2 = route2.getRtnlRouteRef();
   auto nlPtrKey2 = route2.getRtnlRouteKeyRef();
@@ -581,7 +581,7 @@ TEST(NetlinkTypes, IfAddressCopyTest) {
   EXPECT_TRUE(nlPtr1 != nullptr);
 
   // Copy constructor
-  fbnl::IfAddress ifAddr2(ifAddr);
+  openr::rnl::IfAddress ifAddr2(ifAddr);
   EXPECT_EQ(ifAddr, ifAddr2);
   auto nlPtr2 = ifAddr2.getRtnlAddrRef();
   EXPECT_TRUE(nlPtr2 != nullptr);
@@ -758,7 +758,7 @@ TEST(NetlinkTypes, NeighborMoveTest) {
   EXPECT_TRUE(nlPtr1 != nullptr);
 
   // Move constructor
-  fbnl::Neighbor neigh2(std::move(neigh));
+  openr::rnl::Neighbor neigh2(std::move(neigh));
   auto nlPtr2 = neigh2.getRtnlNeighRef();
   EXPECT_TRUE(nlPtr2 != nullptr);
 
@@ -784,7 +784,7 @@ TEST(NetlinkTypes, NeighborCopyTest) {
   EXPECT_TRUE(nlPtr1 != nullptr);
 
   // Copy constructor
-  fbnl::Neighbor neigh2(neigh);
+  openr::rnl::Neighbor neigh2(neigh);
   EXPECT_EQ(neigh, neigh2);
   auto nlPtr2 = neigh2.getRtnlNeighRef();
   EXPECT_TRUE(nlPtr2 != nullptr);
@@ -855,7 +855,7 @@ TEST(NetlinkTypes, LinkMoveTest) {
   EXPECT_TRUE(nlPtr1 != nullptr);
 
   // Move constructor
-  fbnl::Link link2(std::move(link));
+  openr::rnl::Link link2(std::move(link));
   auto nlPtr2 = link2.getRtnlLinkRef();
   EXPECT_TRUE(nlPtr2 != nullptr);
 
@@ -881,7 +881,7 @@ TEST(NetlinkTypes, LinkCopyTest) {
   EXPECT_TRUE(nlPtr1 != nullptr);
 
   // Copy constructor
-  fbnl::Link link2(link);
+  openr::rnl::Link link2(link);
   EXPECT_EQ(link, link2);
   auto nlPtr2 = link2.getRtnlLinkRef();
   EXPECT_TRUE(nlPtr2 != nullptr);

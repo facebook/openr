@@ -34,7 +34,7 @@ extern "C" {
 }
 
 namespace openr {
-namespace fbnl {
+namespace rnl {
 
 class NlException : public std::runtime_error {
  public:
@@ -153,7 +153,7 @@ class NextHop final {
 bool operator==(const NextHop& lhs, const NextHop& rhs);
 
 struct NextHopHash {
-  size_t operator()(const openr::fbnl::NextHop& nh) const;
+  size_t operator()(const openr::rnl::NextHop& nh) const;
 };
 
 using NextHopSet = std::unordered_set<NextHop, NextHopHash>;
@@ -196,7 +196,7 @@ class RouteBuilder {
    * Build route (default: unicast)
    * @required parameter:
    * ProtocolId, Destination, Nexthop
-   * @throw fbnl::NlException on failed
+   * @throw rnl::NlException on failed
    */
   Route build() const;
 
@@ -208,7 +208,7 @@ class RouteBuilder {
    * Build multicast route
    * @required parameter:
    * ProtocolId, Destination, Iface Name, Iface Index
-   * @throw fbnl::NlException on failed
+   * @throw rnl::NlException on failed
    */
   Route buildMulticastRoute() const;
 
@@ -216,7 +216,7 @@ class RouteBuilder {
    * Build link route
    * @required parameter:
    * ProtocolId, Destination, Iface Name, Iface Index
-   * @throw fbnl::NlException on failed
+   * @throw rnl::NlException on failed
    */
   Route buildLinkRoute() const;
 
@@ -695,5 +695,5 @@ using NlNeighbors =
 // keyed by link name
 using NlLinks = std::unordered_map<std::string, LinkAttribute>;
 
-} // namespace fbnl
+} // namespace rnl
 } // namespace openr

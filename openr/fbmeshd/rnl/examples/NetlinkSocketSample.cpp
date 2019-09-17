@@ -20,7 +20,7 @@
 #include <folly/system/Shell.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <openr/nl/NetlinkSocket.h>
+#include <openr/fbmeshd/rnl/NetlinkSocket.h>
 
 extern "C" {
 #include <netlink/route/link/veth.h>
@@ -32,7 +32,7 @@ using folly::gen::mapped;
 using folly::gen::unsplit;
 
 using namespace openr;
-using namespace openr::fbnl;
+using namespace openr::rnl;
 using namespace folly::literals::shell_literals;
 
 namespace {
@@ -77,8 +77,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   linkEventFunc(
-      const std::string&,
-      const openr::fbnl::Link& linkEntry) noexcept override {
+      const std::string&, const openr::rnl::Link& linkEntry) noexcept override {
     std::string ifName = linkEntry.getLinkName();
     LOG(INFO) << "**Link : " << ifName << (linkEntry.isUp() ? " UP" : " DOWN");
     LOG(INFO) << "============================================================";
@@ -87,7 +86,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   void
   addrEventFunc(
       const std::string&,
-      const openr::fbnl::IfAddress& addrEntry) noexcept override {
+      const openr::rnl::IfAddress& addrEntry) noexcept override {
     bool isValid = addrEntry.isValid();
     LOG(INFO)
         << "**Address : "
@@ -100,7 +99,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   void
   neighborEventFunc(
       const std::string&,
-      const openr::fbnl::Neighbor& neighborEntry) noexcept override {
+      const openr::rnl::Neighbor& neighborEntry) noexcept override {
     LOG(INFO)
         << "** Neighbor entry: " << neighborEntry.getDestination().str()
         << " -> " << neighborEntry.getLinkAddress().value().toString()
@@ -111,7 +110,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   void
   routeEventFunc(
       const std::string&,
-      const openr::fbnl::Route& routeEntry) noexcept override {
+      const openr::rnl::Route& routeEntry) noexcept override {
     LOG(INFO) << "** Route entry: "
               << "Dest : "
               << folly::IPAddress::networkToString(routeEntry.getDestination());
@@ -225,14 +224,14 @@ main(int argc, char* argv[]) {
    * So in IPv6 even if we set different weight values we got the same weight
    * for each nexthop.
    */
-  fbnl::RouteBuilder rtBuilderV6;
+  rnl::RouteBuilder rtBuilderV6;
   // Set basic attributes
   rtBuilderV6.setDestination(kPrefix1)
       .setProtocolId(kAqRouteProtoId)
       .setScope(RT_SCOPE_UNIVERSE)
       .setType(RTN_UNICAST)
       .setRouteTable(RT_TABLE_MAIN);
-  fbnl::NextHopBuilder nhBuilder;
+  rnl::NextHopBuilder nhBuilder;
   nhBuilder.setIfIndex(ifIndex).setGateway(kNextHopIp1).setWeight(1);
   rtBuilderV6.addNextHop(nhBuilder.build());
   nhBuilder.reset();
@@ -252,7 +251,7 @@ main(int argc, char* argv[]) {
    * Add IPv4 route with two nexthops
    * IPv4 alread support ECMP and non-ECMP features
    */
-  fbnl::RouteBuilder rtBuilderV4;
+  rnl::RouteBuilder rtBuilderV4;
   rtBuilderV4.setDestination(kPrefix2)
       .setProtocolId(kAqRouteProtoId)
       .setScope(RT_SCOPE_UNIVERSE)

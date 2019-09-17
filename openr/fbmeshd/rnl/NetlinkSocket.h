@@ -17,7 +17,7 @@
 #include <openr/fbmeshd/rnl/NetlinkTypes.h>
 
 namespace openr {
-namespace fbnl {
+namespace rnl {
 
 using EventVariant = boost::variant<Route, Neighbor, IfAddress, Link>;
 
@@ -77,28 +77,28 @@ class NetlinkSocket {
     virtual void
     linkEventFunc(
         const std::string& /* ifName */,
-        const openr::fbnl::Link& /* linkEntry */) noexcept {
+        const openr::rnl::Link& /* linkEntry */) noexcept {
       LOG(FATAL) << "linkEventFunc is not implemented";
     }
 
     virtual void
     neighborEventFunc(
         const std::string& /* ifName */,
-        const openr::fbnl::Neighbor& /* neighborEntry */) noexcept {
+        const openr::rnl::Neighbor& /* neighborEntry */) noexcept {
       LOG(FATAL) << "neighborEventFunc is not implemented";
     }
 
     virtual void
     addrEventFunc(
         const std::string& /* ifName */,
-        const openr::fbnl::IfAddress& /* addrEntry */) noexcept {
+        const openr::rnl::IfAddress& /* addrEntry */) noexcept {
       LOG(FATAL) << "addrEventFunc is not implemented";
     }
 
     virtual void
     routeEventFunc(
         const std::string& /* ifName */,
-        const openr::fbnl::Route& /* routeEntry */) noexcept {
+        const openr::rnl::Route& /* routeEntry */) noexcept {
       LOG(FATAL) << "routeEventFunc is not implemented";
     }
 
@@ -143,22 +143,22 @@ class NetlinkSocket {
         : linkName(ifName), eventHandler(handler) {}
 
     void
-    operator()(openr::fbnl::Route const& route) const {
+    operator()(openr::rnl::Route const& route) const {
       eventHandler->routeEventFunc(linkName, route);
     }
 
     void
-    operator()(openr::fbnl::IfAddress const& addr) const {
+    operator()(openr::rnl::IfAddress const& addr) const {
       eventHandler->addrEventFunc(linkName, addr);
     }
 
     void
-    operator()(openr::fbnl::Neighbor const& neigh) const {
+    operator()(openr::rnl::Neighbor const& neigh) const {
       eventHandler->neighborEventFunc(linkName, neigh);
     }
 
     void
-    operator()(openr::fbnl::Link const& link) const {
+    operator()(openr::rnl::Link const& link) const {
       eventHandler->linkEventFunc(linkName, link);
     }
   };
@@ -166,7 +166,7 @@ class NetlinkSocket {
   explicit NetlinkSocket(
       fbzmq::ZmqEventLoop* evl,
       EventsHandler* handler = nullptr,
-      std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock = nullptr);
+      std::unique_ptr<openr::rnl::NetlinkProtocolSocket> nlSock = nullptr);
 
   virtual ~NetlinkSocket();
 
@@ -178,10 +178,10 @@ class NetlinkSocket {
    * always provide unique nextHops and not cumulative list.
    * Currently we do not enforce checks from local cache,
    * but kernel will reject the request
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    *
    * Add multicast route, see RouteBuilder::buildMulticastRoute()
-   * @throws fbnl::NlException if the route already existed
+   * @throws rnl::NlException if the route already existed
    */
   virtual folly::Future<folly::Unit> addRoute(Route route);
 
@@ -196,7 +196,7 @@ class NetlinkSocket {
    * exactly the same destination and nexthops as in route table.
    * For convience, one can just set destination, this will delete all nextHops
    * accociated with it.
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<folly::Unit> delRoute(Route route);
 
@@ -211,7 +211,7 @@ class NetlinkSocket {
    * Add/Update routes in 'newRouteDb'
    * Basically when there's mismatch between backend kernel and route table in
    * application, we sync kernel routing table with given data source
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<folly::Unit> syncUnicastRoutes(
       uint8_t protocolId, NlUnicastRoutes newRouteDb);
@@ -226,56 +226,56 @@ class NetlinkSocket {
   /**
    * Delete routes that not in the 'newRouteDb' but in kernel
    * Add/Update routes in 'newRouteDb'
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<folly::Unit> syncLinkRoutes(
       uint8_t protocolId, NlLinkRoutes newRouteDb);
 
   /**
    * Get cached unicast routing by protocol ID
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<NlUnicastRoutes> getCachedUnicastRoutes(
       uint8_t protocolId) const;
 
   /**
    * Get cached MPLS routes by protocol ID
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<NlMplsRoutes> getCachedMplsRoutes(
       uint8_t protocolId) const;
 
   /**
    * Get cached multicast routing by protocol ID
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<NlMulticastRoutes> getCachedMulticastRoutes(
       uint8_t protocolId) const;
 
   /**
    * Get cached link route by protocol ID
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<NlLinkRoutes> getCachedLinkRoutes(
       uint8_t protocolId) const;
 
   /**
    * Get number of all cached routes
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<int64_t> getRouteCount() const;
 
   /**
    * Get number of all cached MPLS routes
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<int64_t> getMplsRouteCount() const;
 
   /**
    * Add Interface address e.g. ip addr add 192.168.1.1/24 dev em1
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
-  virtual folly::Future<folly::Unit> addIfAddress(fbnl::IfAddress ifAddr);
+  virtual folly::Future<folly::Unit> addIfAddress(rnl::IfAddress ifAddr);
 
   /**
    * Delete Interface address e.g.
@@ -284,11 +284,11 @@ class NetlinkSocket {
    * Prefix, ifIndex are mandatory, the specific address and
    * interface tuple will be deleted
    */
-  virtual folly::Future<folly::Unit> delIfAddress(fbnl::IfAddress ifAddr);
+  virtual folly::Future<folly::Unit> delIfAddress(rnl::IfAddress ifAddr);
 
   /**
    * Sync addrs on the specific iface, the iface in addrs should be the same,
-   * otherwiese the method will throw fbnl::NlException.
+   * otherwiese the method will throw rnl::NlException.
    * There are two steps to sync address
    * 1. Add 'addrs' to the iface
    * 2. Delete addresses according to ifIndex, family, scope
@@ -303,18 +303,18 @@ class NetlinkSocket {
    * be deleted.
    */
   virtual folly::Future<folly::Unit> syncIfAddress(
-      int ifIndex, std::vector<fbnl::IfAddress> addrs, int family, int scope);
+      int ifIndex, std::vector<rnl::IfAddress> addrs, int family, int scope);
 
   /**
    * Get iface address list on ifIndex filtered on family and scope
    */
-  virtual folly::Future<std::vector<fbnl::IfAddress>> getIfAddrs(
+  virtual folly::Future<std::vector<rnl::IfAddress>> getIfAddrs(
       int ifIndex, int family, int scope);
 
   /**
    * Get interface index from name
    * -1 means no such interface
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<int> getIfIndex(const std::string& ifName);
 
@@ -325,7 +325,7 @@ class NetlinkSocket {
 
   /**
    * Get interface name form index
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<std::string> getIfName(int ifIndex) const;
 
@@ -333,7 +333,7 @@ class NetlinkSocket {
    * Get all links entries
    * This will invoke subscriber methods even if eventLoop is not yet
    * running. Subscriber method will be invoked in calling thread context
-   * @throws fbnl::NlException
+   * @throws rnl::NlException
    */
   virtual folly::Future<NlLinks> getAllLinks();
 
@@ -402,10 +402,10 @@ class NetlinkSocket {
   void checkUnicastRoute(const Route& route);
 
   void doSyncIfAddress(
-      int ifIndex, std::vector<fbnl::IfAddress> addrs, int family, int scope);
+      int ifIndex, std::vector<rnl::IfAddress> addrs, int family, int scope);
 
   void doGetIfAddrs(
-      int ifIndex, int family, int scope, std::vector<fbnl::IfAddress>& addrs);
+      int ifIndex, int family, int scope, std::vector<rnl::IfAddress>& addrs);
 
   void removeNeighborCacheEntries(const std::string& ifName);
 
@@ -450,12 +450,12 @@ class NetlinkSocket {
   // Indicating to run which event type's handler
   folly::AtomicBitSet<MAX_EVENT_TYPE> eventFlags_;
 
-  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock_{nullptr};
+  std::unique_ptr<openr::rnl::NetlinkProtocolSocket> nlSock_{nullptr};
 
   std::mutex neighborListenerMutex_;
   std::function<void(const NeighborUpdate& neighborUpdate)> neighborListener_{
       nullptr};
 };
 
-} // namespace fbnl
+} // namespace rnl
 } // namespace openr

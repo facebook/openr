@@ -17,10 +17,10 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <openr/nl/NetlinkSocket.h>
+#include <openr/fbmeshd/rnl/NetlinkSocket.h>
 
 using namespace openr;
-using namespace openr::fbnl;
+using namespace openr::rnl;
 using namespace fbzmq;
 using namespace folly::literals::shell_literals;
 
@@ -74,9 +74,9 @@ buildRoute(
     int protocolId,
     const std::vector<folly::IPAddress>& nexthops,
     const folly::CIDRNetwork& dest) {
-  fbnl::RouteBuilder rtBuilder;
+  rnl::RouteBuilder rtBuilder;
   auto route = rtBuilder.setDestination(dest).setProtocolId(protocolId);
-  fbnl::NextHopBuilder nhBuilder;
+  rnl::NextHopBuilder nhBuilder;
   for (const auto& nh : nexthops) {
     nhBuilder.setIfIndex(ifIndex).setGateway(nh);
     rtBuilder.addNextHop(nhBuilder.build());
@@ -125,7 +125,7 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
     folly::Subprocess proc1(std::move(cmd));
     EXPECT_EQ(0, proc1.wait().exitStatus());
 
-    nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
+    nlProtocolSocket = std::make_unique<openr::rnl::NetlinkProtocolSocket>(
         &nlProtocolSocketEventLoop);
     nlProtocolSocketThread = std::thread([&]() {
       nlProtocolSocket->init();
@@ -155,7 +155,7 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
 
  protected:
   ZmqEventLoop nlProtocolSocketEventLoop;
-  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
+  std::unique_ptr<openr::rnl::NetlinkProtocolSocket> nlProtocolSocket;
   std::thread nlProtocolSocketThread;
 };
 
@@ -181,8 +181,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
   void
   linkEventFunc(
-      const std::string&,
-      const openr::fbnl::Link& linkEntry) noexcept override {
+      const std::string&, const openr::rnl::Link& linkEntry) noexcept override {
     std::string ifName = linkEntry.getLinkName();
     VLOG(3) << "**Link : " << ifName << (linkEntry.isUp() ? " UP" : " DOWN");
     if (ifName.find(ifNamePrefix) == std::string::npos) {
@@ -202,7 +201,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   void
   addrEventFunc(
       const std::string&,
-      const openr::fbnl::IfAddress& addrEntry) noexcept override {
+      const openr::rnl::IfAddress& addrEntry) noexcept override {
     bool isValid = addrEntry.isValid();
     std::string ifName = netlinkSocket->getIfName(addrEntry.getIfIndex()).get();
     VLOG(3) << "**Address : "
@@ -227,7 +226,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   void
   neighborEventFunc(
       const std::string&,
-      const openr::fbnl::Neighbor& neighborEntry) noexcept override {
+      const openr::rnl::Neighbor& neighborEntry) noexcept override {
     std::string ifName =
         netlinkSocket->getIfName(neighborEntry.getIfIndex()).get();
     VLOG(3)
@@ -260,7 +259,7 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   void
   routeEventFunc(
       const std::string&,
-      const openr::fbnl::Route& routeEntry) noexcept override {
+      const openr::rnl::Route& routeEntry) noexcept override {
     VLOG(3) << "** Route entry: "
             << "Dest : "
             << folly::IPAddress::networkToString(routeEntry.getDestination())
@@ -913,14 +912,14 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrAddRemoveTestNetlink) {
     // Now add interface addresses using NetlinkSocket and check if events
     // are created
     int ifIndexX = netlinkSocket.getIfIndex(kVethNameX).get();
-    fbnl::IfAddressBuilder ifBuilder;
+    rnl::IfAddressBuilder ifBuilder;
     auto ifAddr = ifBuilder.setPrefix(kIpAddr1)
                       .setIfIndex(ifIndexX)
                       .setScope(RT_SCOPE_UNIVERSE)
                       .build();
     netlinkSocket.addIfAddress(std::move(ifAddr));
 
-    fbnl::IfAddressBuilder ifBuilderV4;
+    rnl::IfAddressBuilder ifBuilderV4;
     auto ifAddrV4 = ifBuilderV4.setPrefix(kIpAddr3)
                         .setIfIndex(ifIndexX)
                         .setScope(RT_SCOPE_UNIVERSE)
@@ -968,14 +967,14 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrAddRemoveTestNetlink) {
     // Now delete interface addresses using NetlinkSocket and check if events
     // are created
     int ifIndexX = netlinkSocket.getIfIndex(kVethNameX).get();
-    fbnl::IfAddressBuilder ifBuilder;
+    rnl::IfAddressBuilder ifBuilder;
     auto ifAddr = ifBuilder.setPrefix(kIpAddr1)
                       .setIfIndex(ifIndexX)
                       .setScope(RT_SCOPE_UNIVERSE)
                       .build();
     netlinkSocket.delIfAddress(std::move(ifAddr));
 
-    fbnl::IfAddressBuilder ifBuilderV4;
+    rnl::IfAddressBuilder ifBuilderV4;
     auto ifAddrV4 = ifBuilderV4.setPrefix(kIpAddr3)
                         .setIfIndex(ifIndexX)
                         .setScope(RT_SCOPE_UNIVERSE)
@@ -1037,7 +1036,7 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
       &zmqLoop, myHandler.get(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
   netlinkSocket.unsubscribeAllEvents();
-  netlinkSocket.subscribeEvent(fbnl::LINK_EVENT);
+  netlinkSocket.subscribeEvent(rnl::LINK_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -1075,7 +1074,7 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
   // Now bring the links down and disable link event handler
   myHandler->linkAddEventCount = 0;
   myHandler->linkDelEventCount = 0;
-  netlinkSocket.unsubscribeEvent(fbnl::LINK_EVENT);
+  netlinkSocket.unsubscribeEvent(rnl::LINK_EVENT);
 
   timeout = setTimeout();
   std::thread eventThread2([&]() { zmqLoop.run(); });
@@ -1150,7 +1149,7 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only enable neighbor event
   netlinkSocket.unsubscribeAllEvents();
-  netlinkSocket.subscribeEvent(fbnl::NEIGH_EVENT);
+  netlinkSocket.subscribeEvent(rnl::NEIGH_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -1181,7 +1180,7 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
   EXPECT_EQ(0, myHandler->routeDelEventCount);
 
   // Unsubscribe neighbor event
-  netlinkSocket.unsubscribeEvent(fbnl::NEIGH_EVENT);
+  netlinkSocket.unsubscribeEvent(rnl::NEIGH_EVENT);
   myHandler->neighborAddEventCount = 0;
 
   // Now delete both the neighbor entries from the system
@@ -1239,7 +1238,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only subscribe addr event
   netlinkSocket.unsubscribeAllEvents();
-  netlinkSocket.subscribeEvent(fbnl::ADDR_EVENT);
+  netlinkSocket.subscribeEvent(rnl::ADDR_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -1289,7 +1288,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
   // Now remove the addresses
   myHandler->addrAddEventCount = 0;
   // Unsubscribe addr event
-  netlinkSocket.unsubscribeEvent(fbnl::ADDR_EVENT);
+  netlinkSocket.unsubscribeEvent(rnl::ADDR_EVENT);
 
   timeout = setTimeout();
   std::thread eventThread2([&]() { zmqLoop.run(); });
@@ -1492,7 +1491,7 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteFlagTest) {
   myHandler->setNetlinkSocket(&netlinkSocket);
   // Only subscribe route event
   netlinkSocket.unsubscribeAllEvents();
-  netlinkSocket.subscribeEvent(fbnl::ROUTE_EVENT);
+  netlinkSocket.subscribeEvent(rnl::ROUTE_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received
@@ -1560,7 +1559,7 @@ TEST_F(NetlinkSocketSubscribeFixture, RouteFlagTest) {
   EXPECT_TRUE(CompareNextHops(nexthops2, myHandler->routes.at(kPrefix2)));
 
   myHandler->routeAddEventCount = 0;
-  netlinkSocket.unsubscribeEvent(fbnl::ROUTE_EVENT);
+  netlinkSocket.unsubscribeEvent(rnl::ROUTE_EVENT);
   timeout = setTimeout();
   std::thread eventThread2([&]() { zmqLoop.run(); });
   zmqLoop.waitUntilRunning();
@@ -1732,7 +1731,7 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrScaleTest) {
   NetlinkSocket netlinkSocket(
       &zmqLoop, myHandler.get(), std::move(nlProtocolSocket));
   myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.subscribeEvent(fbnl::ADDR_EVENT);
+  netlinkSocket.subscribeEvent(rnl::ADDR_EVENT);
 
   // Run the zmq event loop in its own thread
   // We will either timeout if expected events are not received

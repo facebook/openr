@@ -78,7 +78,7 @@ isInterfaceUp(std::string interface) {
 
 SyncRoutes80211s::SyncRoutes80211s(
     Routing* routing,
-    std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket,
+    std::unique_ptr<openr::rnl::NetlinkProtocolSocket> nlProtocolSocket,
     folly::MacAddress nodeAddr,
     const std::string& interface)
     : routing_{routing},
@@ -99,9 +99,9 @@ SyncRoutes80211s::doSyncRoutes() {
   auto isGate = routing_->getGatewayStatus();
   auto meshPaths = routing_->getMeshPaths();
 
-  openr::fbnl::NlUnicastRoutes unicastRouteDb;
-  openr::fbnl::NlLinkRoutes linkRouteDb;
-  std::vector<fbnl::IfAddress> meshAddrs;
+  openr::rnl::NlUnicastRoutes unicastRouteDb;
+  openr::rnl::NlLinkRoutes linkRouteDb;
+  std::vector<rnl::IfAddress> meshAddrs;
 
   const auto kTaygaIfName{"tayga"};
   auto taygaIfIndex = netlinkSocket_.getIfIndex(kTaygaIfName).get();
@@ -122,10 +122,10 @@ SyncRoutes80211s::doSyncRoutes() {
     if (taygaIfIndex != 0 && taygaIfUp) {
       unicastRouteDb.emplace(
           destination,
-          fbnl::RouteBuilder{}
+          rnl::RouteBuilder{}
               .setDestination(destination)
               .setProtocolId(98)
-              .addNextHop(fbnl::NextHopBuilder{}
+              .addNextHop(rnl::NextHopBuilder{}
                               .setGateway(folly::IPAddressV6{
                                   folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
                                   mpath.nextHop})
@@ -137,10 +137,10 @@ SyncRoutes80211s::doSyncRoutes() {
         getMeshIPV6FromMacAddress(mpath.dst), 128);
     unicastRouteDb.emplace(
         destination,
-        fbnl::RouteBuilder{}
+        rnl::RouteBuilder{}
             .setDestination(destination)
             .setProtocolId(98)
-            .addNextHop(fbnl::NextHopBuilder{}
+            .addNextHop(rnl::NextHopBuilder{}
                             .setGateway(folly::IPAddressV6{
                                 folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
                                 mpath.nextHop})
@@ -185,7 +185,7 @@ SyncRoutes80211s::doSyncRoutes() {
   if (taygaIfIndex != 0 && taygaIfUp) {
     linkRouteDb.emplace(
         std::make_pair(destination, kTaygaIfName),
-        fbnl::RouteBuilder{}
+        rnl::RouteBuilder{}
             .setDestination(destination)
             .setProtocolId(98)
             .setRouteIfIndex(taygaIfIndex)
@@ -195,7 +195,7 @@ SyncRoutes80211s::doSyncRoutes() {
     destination = folly::CIDRNetwork{folly::IPAddressV4{"172.16.0.0"}, 16};
     linkRouteDb.emplace(
         std::make_pair(destination, kTaygaIfName),
-        fbnl::RouteBuilder{}
+        rnl::RouteBuilder{}
             .setDestination(destination)
             .setProtocolId(98)
             .setRouteIfIndex(taygaIfIndex)
@@ -203,7 +203,7 @@ SyncRoutes80211s::doSyncRoutes() {
             .buildLinkRoute());
   }
 
-  meshAddrs.push_back(fbnl::IfAddressBuilder{}
+  meshAddrs.push_back(rnl::IfAddressBuilder{}
                           .setPrefix(folly::CIDRNetwork{
                               getMeshIPV6FromMacAddress(nodeAddr_), 64})
                           .setIfIndex(meshIfIndex)
@@ -225,7 +225,7 @@ SyncRoutes80211s::doSyncRoutes() {
     if (isGate) {
       linkRouteDb.emplace(
           std::make_pair(destination, kTaygaIfName),
-          fbnl::RouteBuilder{}
+          rnl::RouteBuilder{}
               .setDestination(destination)
               .setProtocolId(98)
               .setRouteIfIndex(taygaIfIndex)
@@ -238,7 +238,7 @@ SyncRoutes80211s::doSyncRoutes() {
       // ip route add default dev tayga mtu 1500 advmss 1460
       linkRouteDb.emplace(
           std::make_pair(defaultV4Prefix, kTaygaIfName),
-          fbnl::RouteBuilder{}
+          rnl::RouteBuilder{}
               .setDestination(defaultV4Prefix)
               .setProtocolId(98)
               .setMtu(1500)
@@ -249,10 +249,10 @@ SyncRoutes80211s::doSyncRoutes() {
 
       unicastRouteDb.emplace(
           destination,
-          fbnl::RouteBuilder{}
+          rnl::RouteBuilder{}
               .setDestination(destination)
               .setProtocolId(98)
-              .addNextHop(fbnl::NextHopBuilder{}
+              .addNextHop(rnl::NextHopBuilder{}
                               .setGateway(folly::IPAddressV6{
                                   folly::IPAddressV6::LinkLocalTag::LINK_LOCAL,
                                   meshPaths.at(currentGate_->first).nextHop})

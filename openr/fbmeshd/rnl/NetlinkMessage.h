@@ -25,7 +25,7 @@
 #include <openr/fbmeshd/rnl/NetlinkTypes.h>
 
 namespace openr {
-namespace fbnl {
+namespace rnl {
 class NetlinkSocket;
 
 constexpr uint16_t kMaxNlPayloadSize{4096};
@@ -149,42 +149,42 @@ class NetlinkProtocolSocket {
   ~NetlinkProtocolSocket();
 
   // Set netlinkSocket Link event callback
-  void setLinkEventCB(std::function<void(fbnl::Link, bool)> linkEventCB);
+  void setLinkEventCB(std::function<void(rnl::Link, bool)> linkEventCB);
 
   // Set netlinkSocket Addr event callback
-  void setAddrEventCB(std::function<void(fbnl::IfAddress, bool)> addrEventCB);
+  void setAddrEventCB(std::function<void(rnl::IfAddress, bool)> addrEventCB);
 
   // Set netlinkSocket Addr event callback
   void setNeighborEventCB(
-      std::function<void(fbnl::Neighbor, bool)> neighborEventCB);
+      std::function<void(rnl::Neighbor, bool)> neighborEventCB);
 
   // process message
   void processMessage(
       const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead);
 
   // synchronous add route and nexthop paths
-  ResultCode addRoute(const openr::fbnl::Route& route);
+  ResultCode addRoute(const openr::rnl::Route& route);
 
   // synchronous delete route
-  ResultCode deleteRoute(const openr::fbnl::Route& route);
+  ResultCode deleteRoute(const openr::rnl::Route& route);
 
   // synchronous add label route
-  ResultCode addLabelRoute(const openr::fbnl::Route& route);
+  ResultCode addLabelRoute(const openr::rnl::Route& route);
 
   // synchronous delete label route
-  ResultCode deleteLabelRoute(const openr::fbnl::Route& route);
+  ResultCode deleteLabelRoute(const openr::rnl::Route& route);
 
   // synchronous add given list of IP or label routes and their nexthop paths
-  ResultCode addRoutes(const std::vector<openr::fbnl::Route> routes);
+  ResultCode addRoutes(const std::vector<openr::rnl::Route> routes);
 
   // synchronous delete a list of given IP or label routes
-  ResultCode deleteRoutes(const std::vector<openr::fbnl::Route> routes);
+  ResultCode deleteRoutes(const std::vector<openr::rnl::Route> routes);
 
   // synchronous add interface address
-  ResultCode addIfAddress(const openr::fbnl::IfAddress& ifAddr);
+  ResultCode addIfAddress(const openr::rnl::IfAddress& ifAddr);
 
   // synchronous delete interface address
-  ResultCode deleteIfAddress(const openr::fbnl::IfAddress& ifAddr);
+  ResultCode deleteIfAddress(const openr::rnl::IfAddress& ifAddr);
 
   // add netlink message to the queue
   void addNetlinkMessage(std::vector<std::unique_ptr<NetlinkMessage>> nlmsg);
@@ -202,16 +202,16 @@ class NetlinkProtocolSocket {
   uint32_t getAckCount() const;
 
   // get all link interfaces from kernel using Netlink
-  std::vector<fbnl::Link> getAllLinks();
+  std::vector<rnl::Link> getAllLinks();
 
   // get all interface addresses from kernel using Netlink
-  std::vector<fbnl::IfAddress> getAllIfAddresses();
+  std::vector<rnl::IfAddress> getAllIfAddresses();
 
   // get all neighbors from kernel using Netlink
-  std::vector<fbnl::Neighbor> getAllNeighbors();
+  std::vector<rnl::Neighbor> getAllNeighbors();
 
   // get all routes from kernel using Netlink
-  std::vector<fbnl::Route> getAllRoutes();
+  std::vector<rnl::Route> getAllRoutes();
 
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
@@ -220,11 +220,11 @@ class NetlinkProtocolSocket {
   fbzmq::ZmqEventLoop* evl_{nullptr};
 
   // Event callbacks
-  std::function<void(fbnl::Link, bool)> linkEventCB_;
+  std::function<void(rnl::Link, bool)> linkEventCB_;
 
-  std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
+  std::function<void(rnl::IfAddress, bool)> addrEventCB_;
 
-  std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
+  std::function<void(rnl::Neighbor, bool)> neighborEventCB_;
 
   // netlink message queue
   std::queue<std::unique_ptr<NetlinkMessage>> msgQueue_;
@@ -264,10 +264,10 @@ class NetlinkProtocolSocket {
    * the kernel, which are solely used for the getAll... methods. These caches
    * are cleared when we invoke a new getAllLinks/Addresses/Neighbors/Routes
    */
-  std::vector<fbnl::Link> linkCache_{};
-  std::vector<fbnl::IfAddress> addressCache_{};
-  std::vector<fbnl::Neighbor> neighborCache_{};
-  std::vector<fbnl::Route> routeCache_{};
+  std::vector<rnl::Link> linkCache_{};
+  std::vector<rnl::IfAddress> addressCache_{};
+  std::vector<rnl::Neighbor> neighborCache_{};
+  std::vector<rnl::Route> routeCache_{};
 };
-} // namespace fbnl
+} // namespace rnl
 } // namespace openr

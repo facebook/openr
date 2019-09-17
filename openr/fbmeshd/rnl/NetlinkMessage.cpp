@@ -15,7 +15,7 @@
 #include "openr/fbmeshd/rnl/NetlinkSocket.h"
 
 namespace openr {
-namespace fbnl {
+namespace rnl {
 
 uint32_t gSequenceNumber{0};
 
@@ -174,19 +174,19 @@ NetlinkProtocolSocket::init() {
 
 void
 NetlinkProtocolSocket::setLinkEventCB(
-    std::function<void(fbnl::Link, bool)> linkEventCB) {
+    std::function<void(rnl::Link, bool)> linkEventCB) {
   linkEventCB_ = linkEventCB;
 }
 
 void
 NetlinkProtocolSocket::setAddrEventCB(
-    std::function<void(fbnl::IfAddress, bool)> addrEventCB) {
+    std::function<void(rnl::IfAddress, bool)> addrEventCB) {
   addrEventCB_ = addrEventCB;
 }
 
 void
 NetlinkProtocolSocket::setNeighborEventCB(
-    std::function<void(fbnl::Neighbor, bool)> neighborEventCB) {
+    std::function<void(rnl::Neighbor, bool)> neighborEventCB) {
   neighborEventCB_ = neighborEventCB;
 }
 
@@ -303,7 +303,7 @@ NetlinkProtocolSocket::processMessage(
     case RTM_NEWLINK: {
       // process link information received from netlink
       auto linkMessage = std::make_unique<NetlinkLinkMessage>();
-      fbnl::Link link = linkMessage->parseMessage(nlh);
+      rnl::Link link = linkMessage->parseMessage(nlh);
 
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
         // Synchronous event - do not generate link events
@@ -319,7 +319,7 @@ NetlinkProtocolSocket::processMessage(
     case RTM_NEWADDR: {
       // process interface address information received from netlink
       auto addrMessage = std::make_unique<NetlinkAddrMessage>();
-      fbnl::IfAddress addr = addrMessage->parseMessage(nlh);
+      rnl::IfAddress addr = addrMessage->parseMessage(nlh);
 
       if (!addr.getPrefix().hasValue()) {
         break;
@@ -356,7 +356,7 @@ NetlinkProtocolSocket::processMessage(
     case RTM_NEWNEIGH: {
       // process neighbor information received from netlink
       auto neighMessage = std::make_unique<NetlinkNeighborMessage>();
-      fbnl::Neighbor neighbor = neighMessage->parseMessage(nlh);
+      rnl::Neighbor neighbor = neighMessage->parseMessage(nlh);
 
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
         // Synchronous event - do not generate neighbor events
@@ -491,8 +491,8 @@ NetlinkProtocolSocket::getReturnStatus(
 }
 
 ResultCode
-NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
-  auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
+NetlinkProtocolSocket::addRoute(const openr::rnl::Route& route) {
+  auto rtmMsg = std::make_unique<openr::rnl::NetlinkRouteMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(rtmMsg->getFuture());
   ResultCode status{ResultCode::SUCCESS};
@@ -507,12 +507,12 @@ NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
 }
 
 ResultCode
-NetlinkProtocolSocket::addRoutes(const std::vector<openr::fbnl::Route> routes) {
+NetlinkProtocolSocket::addRoutes(const std::vector<openr::rnl::Route> routes) {
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   std::vector<folly::Future<int>> futures;
 
   for (const auto& route : routes) {
-    auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
+    auto rtmMsg = std::make_unique<openr::rnl::NetlinkRouteMessage>();
     ResultCode status{ResultCode::SUCCESS};
     if (route.getFamily() == AF_MPLS) {
       status = rtmMsg->addLabelRoute(route);
@@ -534,8 +534,8 @@ NetlinkProtocolSocket::addRoutes(const std::vector<openr::fbnl::Route> routes) {
 }
 
 ResultCode
-NetlinkProtocolSocket::deleteRoute(const openr::fbnl::Route& route) {
-  auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
+NetlinkProtocolSocket::deleteRoute(const openr::rnl::Route& route) {
+  auto rtmMsg = std::make_unique<openr::rnl::NetlinkRouteMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(rtmMsg->getFuture());
   ResultCode status{ResultCode::SUCCESS};
@@ -552,8 +552,8 @@ NetlinkProtocolSocket::deleteRoute(const openr::fbnl::Route& route) {
 }
 
 ResultCode
-NetlinkProtocolSocket::addLabelRoute(const openr::fbnl::Route& route) {
-  auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
+NetlinkProtocolSocket::addLabelRoute(const openr::rnl::Route& route) {
+  auto rtmMsg = std::make_unique<openr::rnl::NetlinkRouteMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(rtmMsg->getFuture());
   ResultCode status{ResultCode::SUCCESS};
@@ -568,8 +568,8 @@ NetlinkProtocolSocket::addLabelRoute(const openr::fbnl::Route& route) {
 }
 
 ResultCode
-NetlinkProtocolSocket::deleteLabelRoute(const openr::fbnl::Route& route) {
-  auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
+NetlinkProtocolSocket::deleteLabelRoute(const openr::rnl::Route& route) {
+  auto rtmMsg = std::make_unique<openr::rnl::NetlinkRouteMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(rtmMsg->getFuture());
   ResultCode status{ResultCode::SUCCESS};
@@ -587,12 +587,12 @@ NetlinkProtocolSocket::deleteLabelRoute(const openr::fbnl::Route& route) {
 
 ResultCode
 NetlinkProtocolSocket::deleteRoutes(
-    const std::vector<openr::fbnl::Route> routes) {
+    const std::vector<openr::rnl::Route> routes) {
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   std::vector<folly::Future<int>> futures;
 
   for (const auto& route : routes) {
-    auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
+    auto rtmMsg = std::make_unique<openr::rnl::NetlinkRouteMessage>();
     ResultCode status{ResultCode::SUCCESS};
     if (route.getFamily() == AF_MPLS) {
       status = rtmMsg->deleteLabelRoute(route);
@@ -617,8 +617,8 @@ NetlinkProtocolSocket::deleteRoutes(
 }
 
 ResultCode
-NetlinkProtocolSocket::addIfAddress(const openr::fbnl::IfAddress& ifAddr) {
-  auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
+NetlinkProtocolSocket::addIfAddress(const openr::rnl::IfAddress& ifAddr) {
+  auto addrMsg = std::make_unique<openr::rnl::NetlinkAddrMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(addrMsg->getFuture());
 
@@ -637,8 +637,8 @@ NetlinkProtocolSocket::addIfAddress(const openr::fbnl::IfAddress& ifAddr) {
 }
 
 ResultCode
-NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
-  auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
+NetlinkProtocolSocket::deleteIfAddress(const openr::rnl::IfAddress& ifAddr) {
+  auto addrMsg = std::make_unique<openr::rnl::NetlinkAddrMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(addrMsg->getFuture());
 
@@ -657,12 +657,12 @@ NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   return getReturnStatus(futures, std::unordered_set<int>{EADDRNOTAVAIL});
 }
 
-std::vector<fbnl::Link>
+std::vector<rnl::Link>
 NetlinkProtocolSocket::getAllLinks() {
   // Refresh internal cache
   linkCache_.clear();
   // Send Netlink message to get links
-  auto linkMsg = std::make_unique<openr::fbnl::NetlinkLinkMessage>();
+  auto linkMsg = std::make_unique<openr::rnl::NetlinkLinkMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(linkMsg->getFuture());
   linkMsg->init(RTM_GETLINK, 0);
@@ -673,11 +673,11 @@ NetlinkProtocolSocket::getAllLinks() {
   return std::move(linkCache_);
 }
 
-std::vector<fbnl::IfAddress>
+std::vector<rnl::IfAddress>
 NetlinkProtocolSocket::getAllIfAddresses() {
   // Refresh internal cache
   addressCache_.clear();
-  auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
+  auto addrMsg = std::make_unique<openr::rnl::NetlinkAddrMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(addrMsg->getFuture());
 
@@ -692,12 +692,12 @@ NetlinkProtocolSocket::getAllIfAddresses() {
   return std::move(addressCache_);
 }
 
-std::vector<fbnl::Neighbor>
+std::vector<rnl::Neighbor>
 NetlinkProtocolSocket::getAllNeighbors() {
   // Refresh internal cache
   neighborCache_.clear();
   // Send Netlink message to get neighbors
-  auto neighMsg = std::make_unique<openr::fbnl::NetlinkNeighborMessage>();
+  auto neighMsg = std::make_unique<openr::rnl::NetlinkNeighborMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(neighMsg->getFuture());
   neighMsg->init(RTM_GETNEIGH, 0);
@@ -708,13 +708,13 @@ NetlinkProtocolSocket::getAllNeighbors() {
   return std::move(neighborCache_);
 }
 
-std::vector<fbnl::Route>
+std::vector<rnl::Route>
 NetlinkProtocolSocket::getAllRoutes() {
   routeCache_.clear();
-  auto routeMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
+  auto routeMsg = std::make_unique<openr::rnl::NetlinkRouteMessage>();
   std::vector<folly::Future<int>> futures;
   futures.emplace_back(routeMsg->getFuture());
-  fbnl::RouteBuilder builder; // to create empty route
+  rnl::RouteBuilder builder; // to create empty route
   routeMsg->init(RTM_GETROUTE, 0, builder.build());
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   msg.emplace_back(std::move(routeMsg));
@@ -723,5 +723,5 @@ NetlinkProtocolSocket::getAllRoutes() {
   return std::move(routeCache_);
 }
 
-} // namespace fbnl
+} // namespace rnl
 } // namespace openr

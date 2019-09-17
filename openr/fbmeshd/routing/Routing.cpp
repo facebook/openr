@@ -15,7 +15,8 @@
 #include <folly/MacAddress.h>
 #include <folly/io/async/AsyncUDPSocket.h>
 #include <folly/system/ThreadName.h>
-#include <openr/nl/NetlinkSocket.h>
+
+#include <openr/fbmeshd/rnl/NetlinkSocket.h>
 
 using namespace std::chrono_literals;
 using namespace openr::fbmeshd;

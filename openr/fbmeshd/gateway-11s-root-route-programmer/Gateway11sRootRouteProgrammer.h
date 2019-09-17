@@ -12,9 +12,9 @@
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Context.h>
-#include <openr/nl/NetlinkSocket.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
+#include <openr/fbmeshd/rnl/NetlinkSocket.h>
 
 namespace openr {
 namespace fbmeshd {
@@ -46,7 +46,7 @@ class Gateway11sRootRouteProgrammer : public fbzmq::ZmqEventLoop {
 
   std::unique_ptr<fbzmq::ZmqTimeout> timer_;
 
-  openr::fbnl::NetlinkSocket netlinkSocket_;
+  openr::rnl::NetlinkSocket netlinkSocket_;
 
   folly::Optional<std::pair<folly::MacAddress, uint32_t>> currentRoot_;
 
