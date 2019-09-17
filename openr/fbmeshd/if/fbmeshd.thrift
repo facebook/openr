@@ -72,3 +72,17 @@ struct MeshPathFramePANN {
   8: bool isGate
   9: bool replyRequested
 }
+
+/*
+* rnl thrift objects
+*/
+
+enum MplsActionCode {
+  PUSH = 0
+  SWAP = 1
+  PHP = 2      # Pen-ultimate hop popping => POP and FORWARD
+  POP_AND_LOOKUP = 3
+}
+
+const map<i16, i16> protocolIdtoPriority = {99:10, 253:20, 64:11}
+const i16 kUnknownProtAdminDistance = 255

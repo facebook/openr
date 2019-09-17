@@ -318,16 +318,16 @@ NetlinkRouteMessage::addMultiPathNexthop(
 
     if (action.hasValue()) {
       switch (action.value()) {
-      case thrift::MplsActionCode::PUSH:
+      case openr::fbmeshd::thrift::MplsActionCode::PUSH:
         result = addLabelNexthop(rta, rtnh, path);
         break;
 
-      case thrift::MplsActionCode::SWAP:
-      case thrift::MplsActionCode::PHP:
+      case openr::fbmeshd::thrift::MplsActionCode::SWAP:
+      case openr::fbmeshd::thrift::MplsActionCode::PHP:
         result = addSwapOrPHPNexthop(rta, rtnh, path);
         break;
 
-      case thrift::MplsActionCode::POP_AND_LOOKUP:
+      case openr::fbmeshd::thrift::MplsActionCode::POP_AND_LOOKUP:
         result = addPopNexthop(rta, rtnh, path);
         break;
 
@@ -470,17 +470,18 @@ NetlinkRouteMessage::setMplsAction(
     rnl::NextHopBuilder& nhBuilder, unsigned char family) const {
   // Inferring MPLS action from nexthop fields
   if (nhBuilder.getPushLabels() != folly::none) {
-    nhBuilder.setLabelAction(thrift::MplsActionCode::PUSH);
+    nhBuilder.setLabelAction(openr::fbmeshd::thrift::MplsActionCode::PUSH);
   } else if (family == AF_MPLS) {
     if (nhBuilder.getGateway() != folly::none &&
         nhBuilder.getSwapLabel() != folly::none) {
-      nhBuilder.setLabelAction(thrift::MplsActionCode::SWAP);
+      nhBuilder.setLabelAction(openr::fbmeshd::thrift::MplsActionCode::SWAP);
     } else if (
         nhBuilder.getGateway() != folly::none &&
         nhBuilder.getSwapLabel() == folly::none) {
-      nhBuilder.setLabelAction(thrift::MplsActionCode::PHP);
+      nhBuilder.setLabelAction(openr::fbmeshd::thrift::MplsActionCode::PHP);
     } else {
-      nhBuilder.setLabelAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+      nhBuilder.setLabelAction(
+          openr::fbmeshd::thrift::MplsActionCode::POP_AND_LOOKUP);
     }
   }
 }

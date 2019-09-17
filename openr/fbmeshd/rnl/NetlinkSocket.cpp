@@ -6,7 +6,7 @@
  */
 
 #include <openr/fbmeshd/rnl/NetlinkSocket.h>
-#include <openr/if/gen-cpp2/Platform_constants.h>
+#include <openr/fbmeshd/if/gen-cpp2/fbmeshd_constants.h>
 
 namespace openr {
 namespace rnl {
@@ -426,12 +426,13 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   // if user did not speicify priority
   if (!route.getPriority()) {
     const auto routePair =
-        openr::thrift::Platform_constants::protocolIdtoPriority().find(
+        openr::fbmeshd::thrift::fbmeshd_constants::protocolIdtoPriority().find(
             route.getProtocolId());
     if (routePair ==
-        openr::thrift::Platform_constants::protocolIdtoPriority().end()) {
-      route.setPriority(
-          openr::thrift::Platform_constants::kUnknowProtAdminDistance());
+        openr::fbmeshd::thrift::fbmeshd_constants::protocolIdtoPriority()
+            .end()) {
+      route.setPriority(openr::fbmeshd::thrift::fbmeshd_constants::
+                            kUnknownProtAdminDistance());
     } else {
       route.setPriority(routePair->second);
     }

@@ -22,7 +22,6 @@
 
 #include <openr/fbmeshd/rnl/NetlinkMessage.h>
 #include <openr/fbmeshd/rnl/NetlinkTypes.h>
-#include <openr/if/gen-cpp2/Network_types.h>
 
 #ifndef MPLS_IPTUNNEL_DST
 #define MPLS_IPTUNNEL_DST 1

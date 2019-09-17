@@ -19,7 +19,7 @@
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/fbmeshd/if/gen-cpp2/fbmeshd_types.h>
 
 extern "C" {
 #include <net/if.h>
@@ -69,7 +69,7 @@ class NextHopBuilder final {
 
   NextHopBuilder& setWeight(uint8_t weight);
 
-  NextHopBuilder& setLabelAction(thrift::MplsActionCode);
+  NextHopBuilder& setLabelAction(openr::fbmeshd::thrift::MplsActionCode);
 
   NextHopBuilder& setSwapLabel(uint32_t swapLabel);
 
@@ -81,7 +81,8 @@ class NextHopBuilder final {
 
   uint8_t getWeight() const;
 
-  folly::Optional<thrift::MplsActionCode> getLabelAction() const;
+  folly::Optional<openr::fbmeshd::thrift::MplsActionCode> getLabelAction()
+      const;
 
   folly::Optional<uint32_t> getSwapLabel() const;
 
@@ -93,7 +94,7 @@ class NextHopBuilder final {
   folly::Optional<int> ifIndex_;
   folly::Optional<folly::IPAddress> gateway_;
   uint8_t weight_{0}; // default weight is 0
-  folly::Optional<thrift::MplsActionCode> labelAction_;
+  folly::Optional<openr::fbmeshd::thrift::MplsActionCode> labelAction_;
   folly::Optional<uint32_t> swapLabel_;
   folly::Optional<std::vector<int32_t>> pushLabels_;
   folly::Optional<uint8_t> family_;
@@ -113,7 +114,8 @@ class NextHop final {
 
   std::string str() const;
 
-  folly::Optional<thrift::MplsActionCode> getLabelAction() const;
+  folly::Optional<openr::fbmeshd::thrift::MplsActionCode> getLabelAction()
+      const;
 
   folly::Optional<uint32_t> getSwapLabel() const;
 
@@ -144,7 +146,7 @@ class NextHop final {
   folly::Optional<int> ifIndex_;
   folly::Optional<folly::IPAddress> gateway_;
   uint8_t weight_{0}; // default weight is 0
-  folly::Optional<thrift::MplsActionCode> labelAction_;
+  folly::Optional<openr::fbmeshd::thrift::MplsActionCode> labelAction_;
   folly::Optional<uint32_t> swapLabel_;
   folly::Optional<std::vector<int32_t>> pushLabels_;
   folly::Optional<uint8_t> family_;

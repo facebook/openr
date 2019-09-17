@@ -741,7 +741,7 @@ NextHopBuilder::setWeight(uint8_t weight) {
 }
 
 NextHopBuilder&
-NextHopBuilder::setLabelAction(thrift::MplsActionCode action) {
+NextHopBuilder::setLabelAction(openr::fbmeshd::thrift::MplsActionCode action) {
   labelAction_ = action;
   return *this;
 }
@@ -773,7 +773,7 @@ NextHopBuilder::getWeight() const {
   return weight_;
 }
 
-folly::Optional<thrift::MplsActionCode>
+folly::Optional<openr::fbmeshd::thrift::MplsActionCode>
 NextHopBuilder::getLabelAction() const {
   return labelAction_;
 }
@@ -844,7 +844,7 @@ NextHop::getWeight() const {
   return weight_;
 }
 
-folly::Optional<thrift::MplsActionCode>
+folly::Optional<openr::fbmeshd::thrift::MplsActionCode>
 NextHop::getLabelAction() const {
   return labelAction_;
 }

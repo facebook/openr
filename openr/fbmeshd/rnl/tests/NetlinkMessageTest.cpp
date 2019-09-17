@@ -24,10 +24,10 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <openr/fbmeshd/if/gen-cpp2/fbmeshd_types.h>
 #include <openr/fbmeshd/rnl/NetlinkMessage.h>
 #include <openr/fbmeshd/rnl/NetlinkRoute.h>
 #include <openr/fbmeshd/rnl/NetlinkTypes.h>
-#include <openr/if/gen-cpp2/Network_types.h>
 
 extern "C" {
 #include <net/if.h>
@@ -293,7 +293,7 @@ class NlMessageFixture : public ::testing::Test {
   buildNextHop(
       folly::Optional<std::vector<int32_t>> pushLabels,
       folly::Optional<uint32_t> swapLabel,
-      folly::Optional<thrift::MplsActionCode> action,
+      folly::Optional<openr::fbmeshd::thrift::MplsActionCode> action,
       folly::Optional<folly::IPAddress> gateway,
       int ifIndex) {
     openr::rnl::NextHopBuilder nhBuilder;
@@ -351,19 +351,19 @@ class NlMessageFixture : public ::testing::Test {
     paths.push_back(buildNextHop(
         outLabel4,
         folly::none,
-        thrift::MplsActionCode::PUSH,
+        openr::fbmeshd::thrift::MplsActionCode::PUSH,
         ipAddrY1V4,
         ifIndexY));
     paths.push_back(buildNextHop(
         outLabel5,
         folly::none,
-        thrift::MplsActionCode::PUSH,
+        openr::fbmeshd::thrift::MplsActionCode::PUSH,
         ipAddrY1V4,
         ifIndexY));
     paths.push_back(buildNextHop(
         outLabel6,
         folly::none,
-        thrift::MplsActionCode::PUSH,
+        openr::fbmeshd::thrift::MplsActionCode::PUSH,
         ipAddrY1V4,
         ifIndexY));
 
@@ -388,13 +388,13 @@ class NlMessageFixture : public ::testing::Test {
     paths.push_back(buildNextHop(
         outLabel1,
         folly::none,
-        thrift::MplsActionCode::PUSH,
+        openr::fbmeshd::thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
         ifIndexZ));
     paths.push_back(buildNextHop(
         outLabel2,
         folly::none,
-        thrift::MplsActionCode::PUSH,
+        openr::fbmeshd::thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
         ifIndexZ));
     paths.push_back(buildNextHop(
@@ -402,7 +402,7 @@ class NlMessageFixture : public ::testing::Test {
     paths.push_back(buildNextHop(
         outLabel4,
         folly::none,
-        thrift::MplsActionCode::PUSH,
+        openr::fbmeshd::thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
         ifIndexZ));
     struct v6Addr addr6 {
@@ -622,7 +622,7 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
   paths.push_back(buildNextHop(
       outLabel1,
       folly::none,
-      thrift::MplsActionCode::PUSH,
+      openr::fbmeshd::thrift::MplsActionCode::PUSH,
       ipAddrY1V6,
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
@@ -661,7 +661,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
     paths.push_back(buildNextHop(
         outLabel6,
         folly::none,
-        thrift::MplsActionCode::PUSH,
+        openr::fbmeshd::thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
         ifIndexZ));
   }
@@ -706,7 +706,7 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
     paths.push_back(buildNextHop(
         outLabel5,
         folly::none,
-        thrift::MplsActionCode::PHP,
+        openr::fbmeshd::thrift::MplsActionCode::PHP,
         ipAddress,
         ifIndexZ));
   }
@@ -725,7 +725,7 @@ TEST_F(NlMessageFixture, PopLabel) {
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
-      thrift::MplsActionCode::POP_AND_LOOKUP,
+      openr::fbmeshd::thrift::MplsActionCode::POP_AND_LOOKUP,
       folly::none,
       ifIndexLo));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
@@ -761,13 +761,13 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
-      thrift::MplsActionCode::POP_AND_LOOKUP,
+      openr::fbmeshd::thrift::MplsActionCode::POP_AND_LOOKUP,
       folly::none,
       ifIndexLo));
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
-      thrift::MplsActionCode::POP_AND_LOOKUP,
+      openr::fbmeshd::thrift::MplsActionCode::POP_AND_LOOKUP,
       folly::none,
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
@@ -804,7 +804,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
   paths.push_back(buildNextHop(
       folly::none,
       swapLabel,
-      thrift::MplsActionCode::SWAP,
+      openr::fbmeshd::thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
@@ -841,14 +841,14 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
   paths.push_back(buildNextHop(
       folly::none,
       swapLabel,
-      thrift::MplsActionCode::SWAP,
+      openr::fbmeshd::thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
       ifIndexZ));
 
   paths.push_back(buildNextHop(
       folly::none,
       swapLabel1,
-      thrift::MplsActionCode::SWAP,
+      openr::fbmeshd::thrift::MplsActionCode::SWAP,
       ipAddrY2V6,
       ifIndexZ));
 
@@ -886,7 +886,7 @@ TEST_F(NlMessageFixture, NlErrorMessage) {
   paths.push_back(buildNextHop(
       folly::none,
       swapLabel,
-      thrift::MplsActionCode::SWAP,
+      openr::fbmeshd::thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
       invalidIfindex));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
@@ -908,7 +908,7 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   paths1.push_back(buildNextHop(
       folly::none,
       swapLabel,
-      thrift::MplsActionCode::SWAP,
+      openr::fbmeshd::thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
       ifIndexZ));
   routes.emplace_back(
@@ -919,7 +919,7 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   paths2.push_back(buildNextHop(
       folly::none,
       folly::none,
-      thrift::MplsActionCode::PUSH,
+      openr::fbmeshd::thrift::MplsActionCode::PUSH,
       ipAddrY1V6,
       ifIndexZ));
   routes.emplace_back(
@@ -992,7 +992,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
-      thrift::MplsActionCode::PHP,
+      openr::fbmeshd::thrift::MplsActionCode::PHP,
       ipAddrY1V4,
       ifIndexY));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel5, paths);
@@ -1028,7 +1028,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
-      thrift::MplsActionCode::PHP,
+      openr::fbmeshd::thrift::MplsActionCode::PHP,
       ipAddrY1V6,
       ifIndexZ));
   auto route1 = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
@@ -1047,7 +1047,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
-      thrift::MplsActionCode::PHP,
+      openr::fbmeshd::thrift::MplsActionCode::PHP,
       ipAddrY2V6,
       ifIndexZ));
 
@@ -1087,7 +1087,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   paths.push_back(buildNextHop(
       outLabel4,
       folly::none,
-      thrift::MplsActionCode::PUSH,
+      openr::fbmeshd::thrift::MplsActionCode::PUSH,
       ipAddrY1V4,
       ifIndexY));
   paths.push_back(buildNextHop(
@@ -1130,7 +1130,11 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
   std::vector<int32_t> labels(16);
   std::iota(std::begin(labels), std::end(labels), 701);
   paths.push_back(buildNextHop(
-      labels, folly::none, thrift::MplsActionCode::PUSH, ipAddrY1V4, ifIndexY));
+      labels,
+      folly::none,
+      openr::fbmeshd::thrift::MplsActionCode::PUSH,
+      ipAddrY1V4,
+      ifIndexY));
   paths.push_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
@@ -1243,7 +1247,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   paths.push_back(buildNextHop(
       folly::none,
       swapLabel,
-      thrift::MplsActionCode::SWAP,
+      openr::fbmeshd::thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
       ifIndexZ));
   std::vector<openr::rnl::Route> labelRoutes;
