@@ -1161,14 +1161,15 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
     const auto& ifIndex = kv.second.ifIndex;
     const auto& networks = kv.second.networks;
 
-    std::vector<folly::CIDRNetwork> v4Networks;
-    std::vector<folly::CIDRNetwork> v6LinkLocalNetworks;
+    // Sort networks and use the lowest one (other node will do similar)
+    std::set<folly::CIDRNetwork> v4Networks;
+    std::set<folly::CIDRNetwork> v6LinkLocalNetworks;
     for (const auto& ntwk : networks) {
       const auto& ipNetwork = toIPNetwork(ntwk, false);
       if (ipNetwork.first.isV4()) {
-        v4Networks.emplace_back(ipNetwork);
+        v4Networks.emplace(ipNetwork);
       } else if (ipNetwork.first.isV6() && ipNetwork.first.isLinkLocal()) {
-        v6LinkLocalNetworks.emplace_back(ipNetwork);
+        v6LinkLocalNetworks.emplace(ipNetwork);
       }
     }
 
@@ -1189,9 +1190,9 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
     folly::CIDRNetwork v4Network{folly::IPAddress("0.0.0.0"), 32};
     if (enableV4_) {
       CHECK(v4Networks.size());
-      v4Network = v4Networks.front();
+      v4Network = *v4Networks.begin();
     }
-    folly::CIDRNetwork v6LinkLocalNetwork = v6LinkLocalNetworks.front();
+    folly::CIDRNetwork v6LinkLocalNetwork = *v6LinkLocalNetworks.begin();
 
     newInterfaceDb.emplace(
         ifName, Interface(ifIndex, v4Network, v6LinkLocalNetwork));
