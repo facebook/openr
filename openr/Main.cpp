@@ -280,18 +280,18 @@ main(int argc, char** argv) {
   }
 
   // Create ThreadManager for thrift services
-  std::shared_ptr<ThreadManager> thriftThreadMgr;
+  std::shared_ptr<ThreadManager> thriftThreadMgr{nullptr};
 
-  auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
-  auto nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
-  std::shared_ptr<openr::fbnl::NetlinkSocket> nlSocket;
-  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
-  std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
-  std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer;
-  std::unique_ptr<std::thread> netlinkFibServerThread;
-  std::unique_ptr<std::thread> netlinkSystemServerThread;
-
+  std::unique_ptr<fbzmq::ZmqEventLoop> nlEventLoop{nullptr};
+  std::unique_ptr<fbzmq::ZmqEventLoop> nlProtocolSocketEventLoop{nullptr};
+  std::shared_ptr<openr::fbnl::NetlinkSocket> nlSocket{nullptr};
+  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket{nullptr};
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer{nullptr};
+  std::unique_ptr<std::thread> netlinkFibServerThread{nullptr};
+  std::unique_ptr<std::thread> netlinkSystemServerThread{nullptr};
   std::unique_ptr<PlatformPublisher> eventPublisher{nullptr};
+
   if (FLAGS_enable_netlink_fib_handler or FLAGS_enable_netlink_system_handler) {
     thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
         2 /* num of threads */, false /* task stats */);
@@ -303,6 +303,7 @@ main(int argc, char** argv) {
         context, PlatformPublisherUrl{FLAGS_platform_pub_url});
 
     // Create Netlink Protocol object in a new thread
+    nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
     nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
         nlProtocolSocketEventLoop.get());
     auto nlProtocolSocketThread = std::thread([&]() {
@@ -315,6 +316,7 @@ main(int argc, char** argv) {
     nlProtocolSocketEventLoop->waitUntilRunning();
     allThreads.emplace_back(std::move(nlProtocolSocketThread));
 
+    nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
     nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
         nlEventLoop.get(), eventPublisher.get(), std::move(nlProtocolSocket));
     // Subscribe selected network events
@@ -917,6 +919,10 @@ main(int argc, char** argv) {
 
   if (nlSocket) {
     nlSocket.reset();
+  }
+
+  if (nlProtocolSocket) {
+    nlProtocolSocket.reset();
   }
 
   if (eventPublisher) {
