@@ -12,6 +12,7 @@
 #include <utility>
 
 #include <folly/Format.h>
+#include <openr/common/Util.h>
 
 size_t
 std::hash<openr::Link>::operator()(openr::Link const& link) const {
@@ -446,6 +447,206 @@ LinkState::hasHolds() const {
     }
   }
   return false;
+}
+
+std::shared_ptr<Link>
+LinkState::maybeMakeLink(
+    const std::string& nodeName, const thrift::Adjacency& adj) const {
+  // only return Link if it is bidirectional.
+  auto search = adjacencyDatabases_.find(adj.otherNodeName);
+  if (search != adjacencyDatabases_.end()) {
+    for (const auto& otherAdj : search->second.adjacencies) {
+      if (nodeName == otherAdj.otherNodeName &&
+          adj.otherIfName == otherAdj.ifName &&
+          adj.ifName == otherAdj.otherIfName) {
+        return std::make_shared<Link>(
+            nodeName, adj, adj.otherNodeName, otherAdj);
+      }
+    }
+  }
+  return nullptr;
+}
+
+std::vector<std::shared_ptr<Link>>
+LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
+  std::vector<std::shared_ptr<Link>> links;
+  links.reserve(adjDb.adjacencies.size());
+  for (const auto& adj : adjDb.adjacencies) {
+    auto linkPtr = maybeMakeLink(adjDb.thisNodeName, adj);
+    if (nullptr != linkPtr) {
+      links.emplace_back(linkPtr);
+    }
+  }
+  links.shrink_to_fit();
+  std::sort(links.begin(), links.end(), LinkState::LinkPtrLess{});
+  return links;
+}
+
+std::pair<
+    bool /* topology has changed*/,
+    bool /* route attributes has changed (nexthop addr, node/adj label */>
+LinkState::updateAdjacencyDatabase(
+    thrift::AdjacencyDatabase const& newAdjacencyDb,
+    LinkStateMetric holdUpTtl,
+    LinkStateMetric holdDownTtl) {
+  auto const& nodeName = newAdjacencyDb.thisNodeName;
+  VLOG(1) << "Updating adjacency database for node " << nodeName;
+
+  for (auto const& adj : newAdjacencyDb.adjacencies) {
+    VLOG(3) << "  neighbor: " << adj.otherNodeName
+            << ", remoteIfName: " << getRemoteIfName(adj)
+            << ", ifName: " << adj.ifName << ", metric: " << adj.metric
+            << ", overloaded: " << adj.isOverloaded << ", rtt: " << adj.rtt;
+  }
+
+  // Default construct if it did not exist
+  thrift::AdjacencyDatabase priorAdjacencyDb(
+      std::move(adjacencyDatabases_[nodeName]));
+  // replace
+  adjacencyDatabases_[nodeName] = newAdjacencyDb;
+
+  // for comparing old and new state, we order the links based on the tuple
+  // <nodeName1, iface1, nodeName2, iface2>, this allows us to easily discern
+  // topology changes in the single loop below
+  auto oldLinks = orderedLinksFromNode(nodeName);
+  auto newLinks = getOrderedLinkSet(newAdjacencyDb);
+
+  // fill these sets with the appropriate links
+  std::unordered_set<Link> linksUp;
+  std::unordered_set<Link> linksDown;
+
+  bool topoChanged = updateNodeOverloaded(
+      nodeName, newAdjacencyDb.isOverloaded, holdUpTtl, holdDownTtl);
+
+  bool routeAttrChanged = false;
+
+  // If changed locally we will need to update POP route for local node
+  routeAttrChanged |= priorAdjacencyDb.nodeLabel != newAdjacencyDb.nodeLabel;
+
+  auto newIter = newLinks.begin();
+  auto oldIter = oldLinks.begin();
+  while (newIter != newLinks.end() || oldIter != oldLinks.end()) {
+    if (newIter != newLinks.end() &&
+        (oldIter == oldLinks.end() || **newIter < **oldIter)) {
+      // newIter is pointing at a Link not currently present, record this as a
+      // link to add and advance newIter
+      (*newIter)->setHoldUpTtl(holdUpTtl);
+      topoChanged |= (*newIter)->isUp();
+      // even if we are holding a change, we apply the change to our link state
+      // and check for holds when running spf. this ensures we don't add the
+      // same hold twice
+      addLink(*newIter);
+      VLOG(1) << "addLink " << (*newIter)->toString();
+      ++newIter;
+      continue;
+    }
+    if (oldIter != oldLinks.end() &&
+        (newIter == newLinks.end() || **oldIter < **newIter)) {
+      // oldIter is pointing at a Link that is no longer present, record this
+      // as a link to remove and advance oldIter.
+      // If this link was previously overloaded or had a hold up, this does not
+      // change the topology.
+      topoChanged |= (*oldIter)->isUp();
+      removeLink(*oldIter);
+      VLOG(1) << "removeLink " << (*oldIter)->toString();
+      ++oldIter;
+      continue;
+    }
+    // The newIter and oldIter point to the same link. This link did not go up
+    // or down. The topology may still have changed though if the link overlaod
+    // or metric changed
+    auto& newLink = **newIter;
+    auto& oldLink = **oldIter;
+
+    // change the metric on the link object we already have
+    if (newLink.getMetricFromNode(nodeName) !=
+        oldLink.getMetricFromNode(nodeName)) {
+      LOG(INFO) << folly::sformat(
+          "Metric change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getMetricFromNode(nodeName),
+          newLink.getMetricFromNode(nodeName));
+      topoChanged = oldLink.setMetricFromNode(
+          nodeName,
+          newLink.getMetricFromNode(nodeName),
+          holdUpTtl,
+          holdDownTtl);
+    }
+
+    if (newLink.getOverloadFromNode(nodeName) !=
+        oldLink.getOverloadFromNode(nodeName)) {
+      LOG(INFO) << folly::sformat(
+          "Overload change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getOverloadFromNode(nodeName),
+          newLink.getOverloadFromNode(nodeName));
+      topoChanged = oldLink.setOverloadFromNode(
+          nodeName,
+          newLink.getOverloadFromNode(nodeName),
+          holdUpTtl,
+          holdDownTtl);
+    }
+
+    // Check if adjacency label has changed
+    if (newLink.getAdjLabelFromNode(nodeName) !=
+        oldLink.getAdjLabelFromNode(nodeName)) {
+      VLOG(1) << folly::sformat(
+          "AdjLabel change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          oldLink.getAdjLabelFromNode(nodeName),
+          newLink.getAdjLabelFromNode(nodeName));
+
+      // Route attribute changes only when adjLabel has changed for local node
+      routeAttrChanged |= true;
+
+      // change the adjLabel on the link object we already have
+      oldLink.setAdjLabelFromNode(
+          nodeName, newLink.getAdjLabelFromNode(nodeName));
+    }
+
+    // check if local nextHops Changed
+    if (newLink.getNhV4FromNode(nodeName) !=
+        oldLink.getNhV4FromNode(nodeName)) {
+      VLOG(1) << folly::sformat(
+          "V4-NextHop address change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          toString(oldLink.getNhV4FromNode(nodeName)),
+          toString(newLink.getNhV4FromNode(nodeName)));
+
+      routeAttrChanged |= true;
+      oldLink.setNhV4FromNode(nodeName, newLink.getNhV4FromNode(nodeName));
+    }
+    if (newLink.getNhV6FromNode(nodeName) !=
+        oldLink.getNhV6FromNode(nodeName)) {
+      VLOG(1) << folly::sformat(
+          "V4-NextHop address change on link {}: {} => {}",
+          newLink.directionalToString(nodeName),
+          toString(oldLink.getNhV6FromNode(nodeName)),
+          toString(newLink.getNhV6FromNode(nodeName)));
+
+      routeAttrChanged |= true;
+      oldLink.setNhV6FromNode(nodeName, newLink.getNhV6FromNode(nodeName));
+    }
+    ++newIter;
+    ++oldIter;
+  }
+
+  return std::make_pair(topoChanged, routeAttrChanged);
+}
+
+bool
+LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
+  VLOG(1) << "Deleting adjacency database for node " << nodeName;
+  auto search = adjacencyDatabases_.find(nodeName);
+
+  if (search == adjacencyDatabases_.end()) {
+    LOG(WARNING) << "Trying to delete adjacency db for nonexisting node "
+                 << nodeName;
+    return false;
+  }
+  removeNode(nodeName);
+  adjacencyDatabases_.erase(search);
+  return true;
 }
 
 } // namespace openr

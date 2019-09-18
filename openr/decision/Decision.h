@@ -129,7 +129,9 @@ class SpfSolver {
   bool deleteAdjacencyDatabase(const std::string& nodeName);
 
   // get adjacency databases
-  std::unordered_map<std::string /* nodeName */, thrift::AdjacencyDatabase>
+  std::unordered_map<
+      std::string /* nodeName */,
+      thrift::AdjacencyDatabase> const&
   getAdjacencyDatabases();
 
   // update prefixes for a given router. Returns true if this has caused any

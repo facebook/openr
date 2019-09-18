@@ -181,6 +181,11 @@ class LinkState {
 
   void removeNode(const std::string& nodeName);
 
+  bool
+  hasNode(const std::string& nodeName) const {
+    return 0 != adjacencyDatabases_.count(nodeName);
+  }
+
   const LinkSet& linksFromNode(const std::string& nodeName) const;
 
   std::vector<std::shared_ptr<Link>> orderedLinksFromNode(
@@ -208,7 +213,36 @@ class LinkState {
     return linkMap_.size();
   }
 
+  // update adjacencies for the given router
+  std::pair<
+      bool /* topology has changed */,
+      bool /* route attributes has changed (nexthop addr, node/adj label */>
+  updateAdjacencyDatabase(
+      thrift::AdjacencyDatabase const& adjacencyDb,
+      LinkStateMetric holdUpTtl,
+      LinkStateMetric holdDownTtl);
+
+  // delete a node's adjacency database
+  // return true if this has caused any change in graph
+  bool deleteAdjacencyDatabase(const std::string& nodeName);
+
+  // get adjacency databases
+  std::unordered_map<
+      std::string /* nodeName */,
+      thrift::AdjacencyDatabase> const&
+  getAdjacencyDatabases() const {
+    return adjacencyDatabases_;
+  }
+
  private:
+  // returns Link object if the reverse adjancency is present in
+  // adjacencyDatabases_.at(adj.otherNodeName), else returns nullptr
+  std::shared_ptr<Link> maybeMakeLink(
+      const std::string& nodeName, const thrift::Adjacency& adj) const;
+
+  std::vector<std::shared_ptr<Link>> getOrderedLinkSet(
+      const thrift::AdjacencyDatabase& adjDb) const;
+
   // this stores the same link object accessible from either nodeName
   std::unordered_map<std::string /* nodeName */, LinkSet> linkMap_;
 
@@ -217,6 +251,10 @@ class LinkState {
 
   std::unordered_map<std::string /* nodeName */, HoldableValue<bool>>
       nodeOverloads_;
+
+  // the latest AdjacencyDatabase we've received from each node
+  std::unordered_map<std::string, thrift::AdjacencyDatabase>
+      adjacencyDatabases_;
 
 }; // class LinkState
 } // namespace openr
