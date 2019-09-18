@@ -296,7 +296,7 @@ TEST(SpfSolver, Counters) {
   EXPECT_EQ(counters.at("decision.num_nodes_v4_loopbacks"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes_v6_loopbacks"), 4);
   EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 1);
-  EXPECT_EQ(counters.at("decision.missing_loopback_addr.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.missing_loopback_addr.sum.60"), 1);
   EXPECT_EQ(counters.at("decision.incompatible_forwarding_type.count.60"), 1);
   EXPECT_EQ(counters.at("decision.skipped_unicast_route.count.60"), 1);
   EXPECT_EQ(counters.at("decision.skipped_mpls_route.count.60"), 1);
@@ -416,76 +416,6 @@ TEST(ShortestPathTest, UnknownNode) {
 
   routeDb = spfSolver.buildPaths("2");
   EXPECT_FALSE(routeDb.hasValue());
-}
-
-/**
- * Test to verify prefixDatabase update
- */
-TEST(SpfSolver, PrefixUpdate) {
-  std::string nodeName("1");
-  SpfSolver spfSolver(
-      nodeName, false /* disable v4 */, false /* disable LFA */);
-
-  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
-  EXPECT_FALSE(spfSolver.updatePrefixDatabase(prefixDb1));
-  EXPECT_EQ(prefixDb1, spfSolver.getPrefixDatabases().at(nodeName));
-
-  auto prefixDb1Updated = prefixDb1;
-  prefixDb1Updated.prefixEntries.at(0).type = thrift::PrefixType::BREEZE;
-  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1Updated));
-  EXPECT_FALSE(spfSolver.updatePrefixDatabase(prefixDb1Updated));
-  EXPECT_EQ(prefixDb1Updated, spfSolver.getPrefixDatabases().at(nodeName));
-
-  prefixDb1Updated = prefixDb1;
-  prefixDb1Updated.prefixEntries.at(0).forwardingType =
-      thrift::PrefixForwardingType::SR_MPLS;
-  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1Updated));
-  EXPECT_FALSE(spfSolver.updatePrefixDatabase(prefixDb1Updated));
-  EXPECT_EQ(prefixDb1Updated, spfSolver.getPrefixDatabases().at(nodeName));
-}
-
-TEST(SpfSolver, getNodeHostLoopbacksV4) {
-  std::string nodeName("1");
-  SpfSolver spfSolver(
-      nodeName, false /* disable v4 */, false /* disable LFA */);
-
-  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1V4));
-  std::pair<std::string, thrift::BinaryAddress> pair1(
-      "1", addr1V4.prefixAddress);
-  EXPECT_THAT(
-      spfSolver.getNodeHostLoopbacksV4(), testing::UnorderedElementsAre(pair1));
-
-  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2V4));
-  std::pair<std::string, thrift::BinaryAddress> pair2(
-      "2", addr2V4.prefixAddress);
-  EXPECT_THAT(
-      spfSolver.getNodeHostLoopbacksV4(),
-      testing::UnorderedElementsAre(pair1, pair2));
-
-  EXPECT_TRUE(spfSolver.deletePrefixDatabase("1"));
-  EXPECT_THAT(
-      spfSolver.getNodeHostLoopbacksV4(), testing::UnorderedElementsAre(pair2));
-}
-
-TEST(SpfSolver, getNodeHostLoopbacksV6) {
-  std::string nodeName("1");
-  SpfSolver spfSolver(
-      nodeName, false /* disable v4 */, false /* disable LFA */);
-
-  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
-  std::pair<std::string, thrift::BinaryAddress> pair1("1", addr1.prefixAddress);
-  EXPECT_THAT(
-      spfSolver.getNodeHostLoopbacksV6(), testing::UnorderedElementsAre(pair1));
-
-  EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
-  std::pair<std::string, thrift::BinaryAddress> pair2("2", addr2.prefixAddress);
-  EXPECT_THAT(
-      spfSolver.getNodeHostLoopbacksV6(),
-      testing::UnorderedElementsAre(pair1, pair2));
-
-  EXPECT_TRUE(spfSolver.deletePrefixDatabase("1"));
-  EXPECT_THAT(
-      spfSolver.getNodeHostLoopbacksV6(), testing::UnorderedElementsAre(pair2));
 }
 
 /**

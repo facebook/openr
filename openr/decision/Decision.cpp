@@ -29,6 +29,7 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
+#include <openr/decision/PrefixState.h>
 
 using namespace std;
 
@@ -149,7 +150,7 @@ class SpfSolver::SpfSolverImpl {
     tData_.addStatExportType("decision.adj_db_update", fbzmq::COUNT);
     tData_.addStatExportType(
         "decision.incompatible_forwarding_type", fbzmq::COUNT);
-    tData_.addStatExportType("decision.missing_loopback_addr", fbzmq::COUNT);
+    tData_.addStatExportType("decision.missing_loopback_addr", fbzmq::SUM);
     tData_.addStatExportType("decision.no_route_to_label", fbzmq::COUNT);
     tData_.addStatExportType("decision.no_route_to_prefix", fbzmq::COUNT);
     tData_.addStatExportType("decision.path_build_ms", fbzmq::AVG);
@@ -194,12 +195,6 @@ class SpfSolver::SpfSolverImpl {
   bool decrementHolds();
 
   std::unordered_map<std::string, int64_t> getCounters();
-
-  std::unordered_map<std::string, thrift::BinaryAddress> const&
-  getNodeHostLoopbacksV4();
-
-  std::unordered_map<std::string, thrift::BinaryAddress> const&
-  getNodeHostLoopbacksV6();
 
   fbzmq::ThreadData&
   getThreadData() noexcept {
@@ -252,12 +247,6 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
 
-  // return a loopback address for each node in the the set
-  std::vector<thrift::NextHopThrift> getLoopbackVias(
-      std::unordered_set<std::string> const& nodes,
-      bool const isV4,
-      folly::Optional<int64_t> const& igpMetric);
-
   // Give source node-name and dstNodeNames, this function returns the set of
   // nexthops (along with LFA if enabled) towards these set of dstNodeNames
   std::pair<
@@ -303,6 +292,8 @@ class SpfSolver::SpfSolverImpl {
 
   LinkState linkState_;
 
+  PrefixState prefixState_;
+
   // Save all direct next-hop distance from a given source node to a destination
   // node. We update it as we compute all LFA routes from perspective of source
   std::unordered_map<
@@ -311,15 +302,6 @@ class SpfSolver::SpfSolverImpl {
           string /* otherNodeName */,
           pair<Metric, unordered_set<string /* nextHopNodeName */>>>>
       spfResults_;
-
-  // For each prefix in the network, stores a set of nodes that advertise it
-  std::unordered_map<
-      thrift::IpPrefix,
-      std::unordered_map<std::string, thrift::PrefixEntry>>
-      prefixes_;
-  std::unordered_map<std::string, std::set<thrift::IpPrefix>> nodeToPrefixes_;
-  std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
-  std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
 
   // track some stats
   fbzmq::ThreadData tData_;
@@ -555,129 +537,21 @@ SpfSolver::SpfSolverImpl::getAdjacencyDatabases() {
 
 bool
 SpfSolver::SpfSolverImpl::updatePrefixDatabase(
-    const thrift::PrefixDatabase& prefixDb) {
+    thrift::PrefixDatabase const& prefixDb) {
   auto const& nodeName = prefixDb.thisNodeName;
   VLOG(1) << "Updating prefix database for node " << nodeName;
   tData_.addStatValue("decision.prefix_db_update", 1, fbzmq::COUNT);
-
-  // Get old and new set of prefixes - NOTE explicit copy
-  const std::set<thrift::IpPrefix> oldPrefixSet = nodeToPrefixes_[nodeName];
-
-  // update the entry
-  auto& newPrefixSet = nodeToPrefixes_[nodeName];
-  newPrefixSet.clear();
-  for (const auto& prefixEntry : prefixDb.prefixEntries) {
-    newPrefixSet.emplace(prefixEntry.prefix);
-  }
-
-  // Boolean to indicate update in prefix entry
-  bool isUpdated{false};
-
-  // Remove old prefixes first
-  for (const auto& prefix : oldPrefixSet) {
-    if (newPrefixSet.count(prefix)) {
-      continue;
-    }
-    VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
-            << nodeName;
-    auto& nodeList = prefixes_.at(prefix);
-    nodeList.erase(nodeName);
-    isUpdated = true;
-    if (nodeList.empty()) {
-      prefixes_.erase(prefix);
-    }
-  }
-  for (const auto& prefixEntry : prefixDb.prefixEntries) {
-    auto& nodeList = prefixes_[prefixEntry.prefix];
-    auto nodePrefixIt = nodeList.find(nodeName);
-
-    // Add or Update prefix
-    if (nodePrefixIt == nodeList.end()) {
-      VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
-              << " has been advertised by node " << nodeName;
-      nodeList.emplace(nodeName, prefixEntry);
-      isUpdated = true;
-    } else if (nodePrefixIt->second != prefixEntry) {
-      VLOG(1) << "Prefix " << toString(prefixEntry.prefix)
-              << " has been updated by node " << nodeName;
-      nodeList[nodeName] = prefixEntry;
-      isUpdated = true;
-    } else {
-      // This prefix has no change. Skip rest of code!
-      continue;
-    }
-
-    // Keep track of loopback addresses (v4 / v6) for each node
-    if (thrift::PrefixType::LOOPBACK == prefixEntry.type) {
-      auto addrSize = prefixEntry.prefix.prefixAddress.addr.size();
-      if (addrSize == folly::IPAddressV4::byteCount() &&
-          folly::IPAddressV4::bitCount() == prefixEntry.prefix.prefixLength) {
-        nodeHostLoopbacksV4_[nodeName] = prefixEntry.prefix.prefixAddress;
-      }
-      if (addrSize == folly::IPAddressV6::byteCount() &&
-          folly::IPAddressV6::bitCount() == prefixEntry.prefix.prefixLength) {
-        nodeHostLoopbacksV6_[nodeName] = prefixEntry.prefix.prefixAddress;
-      }
-    }
-  }
-
-  return isUpdated;
+  return prefixState_.updatePrefixDatabase(prefixDb);
 }
 
 bool
 SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
-  VLOG(1) << "Deleting prefix database for node " << nodeName;
-  auto search = nodeToPrefixes_.find(nodeName);
-  if (search == nodeToPrefixes_.end()) {
-    LOG(INFO) << "Trying to delete non-existent prefix db for node "
-              << nodeName;
-    return false;
-  }
-
-  bool isUpdated = false;
-  for (const auto& prefix : search->second) {
-    try {
-      auto& nodeList = prefixes_.at(prefix);
-      nodeList.erase(nodeName);
-      isUpdated = true;
-      VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
-              << nodeName;
-      if (nodeList.empty()) {
-        prefixes_.erase(prefix);
-      }
-    } catch (std::out_of_range const& e) {
-      LOG(FATAL) << "std::out_of_range prefix error for " << nodeName;
-    }
-  }
-
-  nodeToPrefixes_.erase(search);
-  nodeHostLoopbacksV4_.erase(nodeName);
-  nodeHostLoopbacksV6_.erase(nodeName);
-  return isUpdated;
+  return prefixState_.deletePrefixDatabase(nodeName);
 }
 
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
 SpfSolver::SpfSolverImpl::getPrefixDatabases() {
-  std::unordered_map<std::string, thrift::PrefixDatabase> prefixDatabases;
-  for (auto const& kv : nodeToPrefixes_) {
-    thrift::PrefixDatabase prefixDb;
-    prefixDb.thisNodeName = kv.first;
-    for (auto const& prefix : kv.second) {
-      prefixDb.prefixEntries.emplace_back(prefixes_.at(prefix).at(kv.first));
-    }
-    prefixDatabases.emplace(kv.first, std::move(prefixDb));
-  }
-  return prefixDatabases;
-}
-
-std::unordered_map<std::string, thrift::BinaryAddress> const&
-SpfSolver::SpfSolverImpl::getNodeHostLoopbacksV4() {
-  return nodeHostLoopbacksV4_;
-}
-
-std::unordered_map<std::string, thrift::BinaryAddress> const&
-SpfSolver::SpfSolverImpl::getNodeHostLoopbacksV6() {
-  return nodeHostLoopbacksV6_;
+  return prefixState_.getPrefixDatabases();
 }
 
 /**
@@ -893,7 +767,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   //
   // Create unicastRoutes - IP and IP2MPLS routes
   //
-  for (const auto& kv : prefixes_) {
+  for (const auto& kv : prefixState_.prefixes()) {
     const auto& prefix = kv.first;
     const auto& nodePrefixes = kv.second;
 
@@ -969,7 +843,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
         routeDb.unicastRoutes.emplace_back(std::move(route.value()));
       }
     }
-  } // for prefixes_
+  } // for prefixState_.prefixes()
 
   //
   // Create MPLS routes for all nodeLabel
@@ -1185,18 +1059,26 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     return folly::none;
   }
   CHECK_NOTNULL(bestData);
-  auto bestNexthop = getLoopbackVias({bestNode}, isV4, bestIgpMetric);
+  auto bestNexthop =
+      prefixState_.getLoopbackVias({bestNode}, isV4, bestIgpMetric);
   if (bestNexthop.size() != 1) {
+    tData_.addStatValue("decision.missing_loopback_addr", 1, fbzmq::SUM);
     LOG(ERROR) << "Cannot find the best paths loopback address. "
                << "Skipping route for prefix: " << toString(prefix);
     return folly::none;
+  }
+
+  auto loopbacks = prefixState_.getLoopbackVias(nodes, isV4, bestIgpMetric);
+  int64_t diff = nodes.size() - loopbacks.size();
+  if (diff > 0) {
+    tData_.addStatValue("decision.missing_loopback_addr", diff, fbzmq::SUM);
   }
 
   return thrift::UnicastRoute{FRAGILE,
                               prefix,
                               {},
                               thrift::AdminDistance::EBGP,
-                              getLoopbackVias(nodes, isV4, bestIgpMetric),
+                              std::move(loopbacks),
                               thrift::PrefixType::BGP,
                               *bestData,
                               bgpDryRun_, /* doNotProgram */
@@ -1309,27 +1191,6 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRoute(
   }
 
   return std::move(route);
-}
-
-std::vector<thrift::NextHopThrift>
-SpfSolver::SpfSolverImpl::getLoopbackVias(
-    std::unordered_set<std::string> const& nodes,
-    bool const isV4,
-    folly::Optional<int64_t> const& igpMetric) {
-  std::vector<thrift::NextHopThrift> result;
-  result.reserve(nodes.size());
-  auto const& hostLoopBacks =
-      isV4 ? nodeHostLoopbacksV4_ : nodeHostLoopbacksV6_;
-  for (auto const& node : nodes) {
-    if (!hostLoopBacks.count(node)) {
-      LOG(ERROR) << "No loopback for node " << node;
-      tData_.addStatValue("decision.missing_loopback_addr", 1, fbzmq::COUNT);
-    } else {
-      result.emplace_back(
-          createNextHop(hostLoopBacks.at(node), "", igpMetric.value_or(0)));
-    }
-  }
-  return result;
 }
 
 std::pair<Metric, std::unordered_set<std::string>>
@@ -1579,9 +1440,11 @@ SpfSolver::SpfSolverImpl::getCounters() {
   counters["decision.num_complete_adjacencies"] = linkState_.numLinks();
   // When node has no adjacencies then linkState reports 0
   counters["decision.num_nodes"] = std::max(linkState_.numNodes(), 1ul);
-  counters["decision.num_prefixes"] = prefixes_.size();
-  counters["decision.num_nodes_v4_loopbacks"] = nodeHostLoopbacksV4_.size();
-  counters["decision.num_nodes_v6_loopbacks"] = nodeHostLoopbacksV6_.size();
+  counters["decision.num_prefixes"] = prefixState_.prefixes().size();
+  counters["decision.num_nodes_v4_loopbacks"] =
+      prefixState_.getNodeHostLoopbacksV4().size();
+  counters["decision.num_nodes_v6_loopbacks"] =
+      prefixState_.getNodeHostLoopbacksV6().size();
 
   return counters;
 }
@@ -1665,16 +1528,6 @@ SpfSolver::decrementHolds() {
 std::unordered_map<std::string, int64_t>
 SpfSolver::getCounters() {
   return impl_->getCounters();
-}
-
-std::unordered_map<std::string, thrift::BinaryAddress> const&
-SpfSolver::getNodeHostLoopbacksV4() {
-  return impl_->getNodeHostLoopbacksV4();
-}
-
-std::unordered_map<std::string, thrift::BinaryAddress> const&
-SpfSolver::getNodeHostLoopbacksV6() {
-  return impl_->getNodeHostLoopbacksV6();
 }
 
 //

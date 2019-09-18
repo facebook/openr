@@ -320,6 +320,7 @@ add_library(openrlib
   openr/ctrl-server/OpenrCtrlHandler.cpp
   openr/decision/Decision.cpp
   openr/decision/LinkState.cpp
+  openr/decision/PrefixState.cpp
   openr/dual/Dual.cpp
   openr/fib/Fib.cpp
   openr/health-checker/HealthChecker.cpp
@@ -837,6 +838,25 @@ if(BUILD_TESTS)
 
   install(TARGETS
     link_state_test
+    DESTINATION sbin/tests/openr/decision
+  )
+
+  add_executable(prefix_state_test
+    openr/decision/tests/PrefixStateTest.cpp
+  )
+
+  target_link_libraries(prefix_state_test
+    openrlib
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+  )
+
+  add_test(PrefixStateTest prefix_state_test)
+
+  install(TARGETS
+    prefix_state_test
     DESTINATION sbin/tests/openr/decision
   )
 
