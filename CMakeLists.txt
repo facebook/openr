@@ -885,6 +885,9 @@ if(BUILD_TESTS)
   add_executable(kvstore_client_test
     openr/kvstore/tests/KvStoreClientTest.cpp
   )
+  add_executable(kvstore_thrift_client_test
+    openr/kvstore/tests/KvStoreThriftClientTest.cpp
+  )
 
   target_link_libraries(kvstore_test
     openrlib
@@ -900,16 +903,24 @@ if(BUILD_TESTS)
     ${GTEST}
     ${GTEST_MAIN}
   )
+  target_link_libraries(kvstore_thrift_client_test
+    openrlib
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST}
+    ${GTEST_MAIN}
+  )
 
   add_test(KvStoreTest kvstore_test)
   add_test(KvStoreClientTest kvstore_client_test)
+  add_test(KvStoreThriftClientTest kvstore_thrift_client_test)
 
   install(TARGETS
     kvstore_test
     kvstore_client_test
+    kvstore_thrift_client_test
     DESTINATION sbin/tests/openr/kvstore
   )
-
 
   add_executable(link_monitor_test
     openr/link-monitor/tests/LinkMonitorTest.cpp
