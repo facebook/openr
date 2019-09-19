@@ -58,7 +58,7 @@ PrefixManager::PrefixManager(
               << " prefixes from disk";
     for (const auto& entry : maybePrefixDb.value().prefixEntries) {
       LOG(INFO) << "  > " << toString(entry.prefix);
-      prefixMap_[entry.prefix] = entry;
+      prefixMap_[entry.prefix].emplace(entry.type, entry);
     }
     // Prefixes will be advertised after prefixHoldUntilTimePoint_
   }
@@ -92,7 +92,7 @@ PrefixManager::PrefixManager(
       if (perPrefixKeys_) {
         // advertise all prefixes
         for (const auto& kv : prefixMap_) {
-          prefixesToUpdate_.emplace_back(kv.second.prefix, kv.second.type);
+          prefixesToUpdate_.emplace(kv.first);
         }
       }
       updateKvStore();
@@ -144,7 +144,7 @@ PrefixManager::processKeyPrefixUpdate(
       // Prefix entry exists in prefix manager. We should not be here since
       // active prefix entry will be in persistent DB. But send a prefix key
       // update just in case.
-      advertisePrefix(it->second);
+      advertisePrefix(it->second.begin()->second);
     }
   } else {
     // old key format, send prefix key update
@@ -164,9 +164,11 @@ PrefixManager::persistPrefixDb() {
   thrift::PrefixDatabase persistentPrefixDb;
   persistentPrefixDb.thisNodeName = nodeId_;
   for (const auto& kv : prefixMap_) {
-    if ((not kv.second.ephemeral.hasValue()) ||
-        (not kv.second.ephemeral.value())) {
-      persistentPrefixDb.prefixEntries.emplace_back(kv.second);
+    for (const auto& kv2 : kv.second) {
+      if ((not kv2.second.ephemeral.hasValue()) ||
+          (not kv2.second.ephemeral.value())) {
+        persistentPrefixDb.prefixEntries.emplace_back(kv2.second);
+      }
     }
   }
 
@@ -218,14 +220,13 @@ PrefixManager::updateKvStorePrefixKeys() {
   // Incremental prefix updates, either add or delete from kvstore
   // Check prefixMap_ to decide whether to add or delete
   for (const auto& ipPrefix : prefixesToUpdate_) {
-    auto it = prefixMap_.find(ipPrefix.first);
+    auto it = prefixMap_.find(ipPrefix);
     if (it == prefixMap_.end()) {
       thrift::PrefixEntry prefixEntry;
-      prefixEntry.prefix = ipPrefix.first;
-      prefixEntry.type = ipPrefix.second;
+      prefixEntry.prefix = ipPrefix;
       advertisePrefixWithdraw(prefixEntry);
     } else {
-      advertisePrefix(it->second);
+      advertisePrefix(it->second.begin()->second);
     }
   }
   prefixesToUpdate_.clear();
@@ -247,12 +248,13 @@ PrefixManager::updateKvStore() {
   thrift::PrefixDatabase prefixDb;
   prefixDb.thisNodeName = nodeId_;
   for (const auto& kv : prefixMap_) {
-    prefixDb.prefixEntries.emplace_back(kv.second);
+    prefixDb.prefixEntries.emplace_back(kv.second.begin()->second);
   }
 
   const auto prefixDbKey = folly::sformat(
       "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_);
-  LOG(INFO) << "Updating all prefixes in KvStore " << prefixDbKey;
+  LOG(INFO) << "Updating all " << prefixDb.prefixEntries.size()
+            << " prefixes in KvStore " << prefixDbKey;
   kvStoreClient_.persistKey(
       prefixDbKey, serializePrefixDb(std::move(prefixDb)), ttlKeyInKvStore_);
 }
@@ -330,15 +332,19 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
   }
   case thrift::PrefixManagerCommand::GET_ALL_PREFIXES: {
     for (const auto& kv : prefixMap_) {
-      response.prefixes.emplace_back(kv.second);
+      for (const auto& kv2 : kv.second) {
+        response.prefixes.emplace_back(kv2.second);
+      }
     }
     response.success = true;
     break;
   }
   case thrift::PrefixManagerCommand::GET_PREFIXES_BY_TYPE: {
     for (const auto& kv : prefixMap_) {
-      if (kv.second.type == thriftReq.type) {
-        response.prefixes.emplace_back(kv.second);
+      for (const auto& kv2 : kv.second) {
+        if (kv2.second.type == thriftReq.type) {
+          response.prefixes.emplace_back(kv2.second);
+        }
       }
     }
     response.success = true;
@@ -408,27 +414,29 @@ PrefixManager::getPrefixWithdrawCounter() {
 // helpers for modifying our Prefix Db
 bool
 PrefixManager::addOrUpdatePrefixes(
-    const std::vector<thrift::PrefixEntry>& prefixes) {
+    const std::vector<thrift::PrefixEntry>& prefixEntries) {
   bool updated{false};
-  for (const auto& prefix : prefixes) {
-    LOG(INFO) << "Advertising prefix " << toString(prefix.prefix)
+  for (const auto& prefixEntry : prefixEntries) {
+    LOG(INFO) << "Advertising prefix " << toString(prefixEntry.prefix)
               << ", client: "
               << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
-                     prefix.type);
-    auto it = prefixMap_.find(prefix.prefix);
-    if (it == prefixMap_.end()) {
+                     prefixEntry.type);
+    bool prefixUpdated{false};
+
+    auto& prefixes = prefixMap_[prefixEntry.prefix];
+    auto it = prefixes.find(prefixEntry.type);
+    if (it == prefixes.end()) {
       // Add missing prefix
-      prefixMap_.emplace(prefix.prefix, prefix);
-      updated = true;
-      if (perPrefixKeys_) {
-        prefixesToUpdate_.emplace_back(prefix.prefix, prefix.type);
-      }
-    } else if (it->second != prefix) {
-      it->second = prefix;
-      updated = true;
-      if (perPrefixKeys_) {
-        prefixesToUpdate_.emplace_back(prefix.prefix, prefix.type);
-      }
+      prefixes.emplace(prefixEntry.type, prefixEntry);
+      prefixUpdated = true;
+    } else if (it->second != prefixEntry) {
+      it->second = prefixEntry;
+      prefixUpdated = true;
+    }
+
+    updated |= prefixUpdated;
+    if (prefixUpdated and perPrefixKeys_) {
+      prefixesToUpdate_.emplace(prefixEntry.prefix);
     }
   }
 
@@ -441,12 +449,18 @@ PrefixManager::removePrefixes(
   // Verify all prefixes exist
   for (const auto& prefix : prefixes) {
     auto it = prefixMap_.find(prefix.prefix);
-    if ((it == prefixMap_.end()) or (it->second.type != prefix.type)) {
+    if (it == prefixMap_.end()) {
+      LOG(ERROR) << "Cannot withdraw prefix " << toString(prefix.prefix);
+      return false;
+    }
+
+    auto it2 = it->second.find(prefix.type);
+    if (it2 == it->second.end()) {
       // Missing prefix or invalid type
-      LOG(INFO) << "Cannot withdraw prefix " << toString(prefix.prefix)
-                << ", client: "
-                << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
-                       prefix.type);
+      LOG(ERROR) << "Cannot withdraw prefix " << toString(prefix.prefix)
+                 << ", client: "
+                 << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
+                        prefix.type);
       return false;
     }
   }
@@ -456,9 +470,13 @@ PrefixManager::removePrefixes(
               << ", client: "
               << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
                      prefix.type);
-    if (prefixMap_.erase(prefix.prefix)) {
+    auto& prefixEntries = prefixMap_.at(prefix.prefix);
+    if (prefixEntries.erase(prefix.type)) {
+      if (not prefixEntries.size()) {
+        prefixMap_.erase(prefix.prefix);
+      }
       if (perPrefixKeys_) {
-        prefixesToUpdate_.emplace_back(prefix.prefix, prefix.type);
+        prefixesToUpdate_.emplace(prefix.prefix);
       }
     }
   }
@@ -473,15 +491,33 @@ PrefixManager::syncPrefixesByType(
   // Remove old prefixes
   std::unordered_set<thrift::IpPrefix> newPrefixes;
   for (auto const& prefix : prefixes) {
+    CHECK(type == prefix.type);
     newPrefixes.emplace(prefix.prefix);
   }
   for (auto it = prefixMap_.begin(); it != prefixMap_.end();) {
-    if (it->second.type == type and newPrefixes.count(it->first) == 0) {
-      if (perPrefixKeys_) {
-        prefixesToUpdate_.emplace_back(it->second.prefix, it->second.type);
+    // Iterate over each type
+    for (auto it2 = it->second.begin(); it2 != it->second.end();) {
+      // Skip prefixes not of our type
+      if (it2->first != type) {
+        ++it2;
+        continue;
       }
+
+      // Erase prefixes not present in newPrefixes
+      if (newPrefixes.count(it->first) == 0) {
+        if (perPrefixKeys_) {
+          prefixesToUpdate_.emplace(it->first);
+        }
+        it2 = it->second.erase(it2);
+        updated = true;
+      } else {
+        ++it2;
+      }
+    }
+
+    // If no type left then remove prefix from prefixMap_
+    if (not it->second.size()) {
       it = prefixMap_.erase(it);
-      updated = true;
     } else {
       ++it;
     }
@@ -496,15 +532,17 @@ PrefixManager::syncPrefixesByType(
 bool
 PrefixManager::removePrefixesByType(thrift::PrefixType type) {
   bool changed = false;
-  for (auto iter = prefixMap_.begin(); iter != prefixMap_.end();) {
-    if (iter->second.type == type) {
-      if (perPrefixKeys_) {
-        prefixesToUpdate_.emplace_back(iter->second.prefix, iter->second.type);
-      }
+  for (auto it = prefixMap_.begin(); it != prefixMap_.end();) {
+    if (it->second.erase(type)) {
       changed = true;
-      iter = prefixMap_.erase(iter);
+      if (perPrefixKeys_) {
+        prefixesToUpdate_.emplace(it->first);
+      }
+    }
+    if (not it->second.size()) {
+      it = prefixMap_.erase(it);
     } else {
-      ++iter;
+      ++it;
     }
   }
   return changed;
@@ -525,11 +563,12 @@ bool
 PrefixManager::isAnyExistingPrefixPersistentByType(
     thrift::PrefixType type) const {
   for (const auto& kv : prefixMap_) {
-    if (kv.second.type != type) {
+    auto it = kv.second.find(type);
+    if (it == kv.second.end()) {
       continue;
     }
-    if ((not kv.second.ephemeral.hasValue()) ||
-        (not kv.second.ephemeral.value())) {
+
+    if (not it->second.ephemeral.value_or(false)) {
       return true;
     }
   }
@@ -540,10 +579,13 @@ bool
 PrefixManager::isAnyExistingPrefixPersistent(
     const std::vector<thrift::PrefixEntry>& prefixes) const {
   for (const auto& prefix : prefixes) {
-    auto iter = prefixMap_.find(prefix.prefix);
-    if (iter != prefixMap_.end()) {
-      if ((not iter->second.ephemeral.hasValue()) ||
-          (not iter->second.ephemeral.value())) {
+    auto it = prefixMap_.find(prefix.prefix);
+    if (it == prefixMap_.end()) {
+      continue;
+    }
+    auto it2 = it->second.find(prefix.type);
+    if (it2 != it->second.end()) {
+      if (not it2->second.ephemeral.value_or(false)) {
         return true;
       }
     }

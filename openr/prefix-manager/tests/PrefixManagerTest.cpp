@@ -430,6 +430,95 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
 }
 
 /**
+ * Test prefix advertisement in KvStore with multiple clients.
+ * NOTE: Priority LOOPBACK > DEFAULT > BGP
+ * 1. Inject prefix1 with client-bgp - Verify KvStore
+ * 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
+ * 3. Withdraw prefix1 with client-loopback - Verify KvStore
+ * 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+ */
+TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
+  const auto loopback_prefix =
+      createPrefixEntry(addr1, thrift::PrefixType::LOOPBACK);
+  const auto default_prefix =
+      createPrefixEntry(addr1, thrift::PrefixType::DEFAULT);
+  const auto bgp_prefix = createPrefixEntry(addr1, thrift::PrefixType::BGP);
+
+  std::string keyStr{"prefix:node-1"};
+  if (perPrefixKeys_) {
+    keyStr = PrefixKey("node-1", toIPNetwork(addr1), 0).getPrefixKey();
+  }
+
+  // Synchronization primitive
+  folly::Baton baton;
+  folly::Optional<thrift::PrefixEntry> expectedPrefix;
+
+  kvStoreClient->subscribeKey(
+      keyStr,
+      [&](std::string const& _, folly::Optional<thrift::Value> val) mutable {
+        ASSERT_TRUE(val.hasValue());
+        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            val->value.value(), serializer);
+        EXPECT_EQ(db.thisNodeName, "node-1");
+        if (expectedPrefix.hasValue()) {
+          ASSERT_EQ(db.prefixEntries.size(), 1);
+          EXPECT_EQ(expectedPrefix, db.prefixEntries.at(0));
+        } else {
+          if (perPrefixKeys_) {
+            ASSERT_EQ(db.prefixEntries.size(), 1);
+            EXPECT_EQ(addr1, db.prefixEntries.at(0).prefix);
+            EXPECT_TRUE(db.deletePrefix);
+          } else {
+            // We will have no keys
+            EXPECT_EQ(db.prefixEntries.size(), 0);
+          }
+        }
+        // Signal verification
+        baton.post();
+      });
+
+  // Start event loop in it's own thread
+  std::thread evlThread([&]() { evl.run(); });
+  evl.waitUntilRunning();
+
+  //
+  // 1. Inject prefix1 with client-bgp - Verify KvStore
+  //
+  expectedPrefix = bgp_prefix;
+  prefixManagerClient->addPrefixes({bgp_prefix});
+  baton.wait();
+  baton.reset();
+
+  //
+  // 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
+  //
+  expectedPrefix = loopback_prefix; // lowest client-id will win
+  prefixManagerClient->addPrefixes({loopback_prefix, default_prefix});
+  baton.wait();
+  baton.reset();
+
+  //
+  // 3. Withdraw prefix1 with client-loopback - Verify KvStore
+  //
+  expectedPrefix = default_prefix;
+  prefixManagerClient->withdrawPrefixes({loopback_prefix});
+  baton.wait();
+  baton.reset();
+
+  //
+  // 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+  //
+  expectedPrefix = folly::none;
+  prefixManagerClient->withdrawPrefixes({bgp_prefix, default_prefix});
+  baton.wait();
+  baton.reset();
+
+  // Nuke test environment
+  evl.stop();
+  evlThread.join();
+}
+
+/**
  * test to check prefix key add, withdraw does not trigger update for all
  * the prefixes managed by the prefix manager. This test does not apply to
  * the old key format

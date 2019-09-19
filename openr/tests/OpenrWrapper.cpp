@@ -473,6 +473,10 @@ OpenrWrapper<Serializer>::getIpPrefix() {
     for (const auto& key : keys.value()) {
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
           key.second.value.value(), serializer_);
+      if (prefixDb.deletePrefix) {
+        // Skip prefixes which are about to be deleted
+        continue;
+      }
 
       for (auto& prefix : prefixDb.prefixEntries) {
         if (prefix.type == thrift::PrefixType::PREFIX_ALLOCATOR) {

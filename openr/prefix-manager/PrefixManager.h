@@ -134,8 +134,13 @@ class PrefixManager final : public OpenrEventLoop {
   // kvStoreClient for persisting our prefix db
   KvStoreClient kvStoreClient_;
 
-  // the current prefix db this node is advertising
-  std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry> prefixMap_;
+  // The current prefix db this node is advertising. In-case if multiple entries
+  // exists for a given prefix, lowest prefix-type is preferred. This is to
+  // bring deterministic behavior for advertising routes.
+  std::unordered_map<
+      thrift::IpPrefix,
+      std::map<thrift::PrefixType, thrift::PrefixEntry>> // IMP: Ordered
+      prefixMap_;
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
@@ -150,8 +155,7 @@ class PrefixManager final : public OpenrEventLoop {
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // IP perfixes to advertisze to kvstore (either add or delete)
-  std::vector<std::pair<thrift::IpPrefix, thrift::PrefixType>>
-      prefixesToUpdate_{};
+  std::unordered_set<thrift::IpPrefix> prefixesToUpdate_{};
 }; // PrefixManager
 
 } // namespace openr
