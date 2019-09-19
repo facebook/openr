@@ -138,8 +138,8 @@ PrefixState::getLoopbackVias(
     if (!hostLoopBacks.count(node)) {
       LOG(ERROR) << "No loopback for node " << node;
     } else {
-      result.emplace_back(
-          createNextHop(hostLoopBacks.at(node), "", igpMetric.value_or(0)));
+      result.emplace_back(createNextHop(
+          hostLoopBacks.at(node), folly::none, igpMetric.value_or(0)));
     }
   }
   return result;

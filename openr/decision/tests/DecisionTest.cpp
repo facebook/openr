@@ -839,8 +839,8 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr2.prefixAddress, "", 10),
-                  createNextHop(addr3.prefixAddress, "", 10))))));
+                  createNextHop(addr2.prefixAddress, folly::none, 10),
+                  createNextHop(addr3.prefixAddress, folly::none, 10))))));
 
   //
   // Increase cost towards node3 to 20; prefix -> {node2}
@@ -857,7 +857,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr2.prefixAddress, "", 10))))));
+                  createNextHop(addr2.prefixAddress, folly::none, 10))))));
 
   //
   // mark link towards node2 as drained; prefix1 -> {node3}
@@ -875,7 +875,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr3.prefixAddress, "", 20))))));
+                  createNextHop(addr3.prefixAddress, folly::none, 20))))));
 
   //
   // Set cost towards node2 to 20 (still drained); prefix1 -> {node3}
@@ -893,7 +893,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr3.prefixAddress, "", 20))))));
+                  createNextHop(addr3.prefixAddress, folly::none, 20))))));
 
   //
   // Undrain link; prefix1 -> {node2, node3}
@@ -910,8 +910,8 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr2.prefixAddress, "", 20),
-                  createNextHop(addr3.prefixAddress, "", 20))))));
+                  createNextHop(addr2.prefixAddress, folly::none, 20),
+                  createNextHop(addr3.prefixAddress, folly::none, 20))))));
 }
 
 //

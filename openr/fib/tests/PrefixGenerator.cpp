@@ -60,8 +60,7 @@ PrefixGenerator::getRandomNextHops(
         "fe80::{}", folly::sformat("{:02x}", folly::Random::rand32() >> 16)));
 
     // Create nexthop
-    const auto path =
-        createNextHop(toBinaryAddress(ipv6Addr), ifname.c_str(), 1);
+    const auto path = createNextHop(toBinaryAddress(ipv6Addr), ifname, 1);
     nextHops.push_back(path);
   }
   return nextHops;

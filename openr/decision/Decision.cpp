@@ -1244,7 +1244,8 @@ SpfSolver::SpfSolverImpl::getCounters() {
   counters["decision.num_partial_adjacencies"] = numPartialAdjacencies;
   counters["decision.num_complete_adjacencies"] = linkState_.numLinks();
   // When node has no adjacencies then linkState reports 0
-  counters["decision.num_nodes"] = std::max(linkState_.numNodes(), 1ul);
+  counters["decision.num_nodes"] =
+      std::max(linkState_.numNodes(), static_cast<size_t>(1ul));
   counters["decision.num_prefixes"] = prefixState_.prefixes().size();
   counters["decision.num_nodes_v4_loopbacks"] =
       prefixState_.getNodeHostLoopbacksV4().size();

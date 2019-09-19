@@ -842,13 +842,13 @@ createThriftValue(
 thrift::NextHopThrift
 createNextHop(
     thrift::BinaryAddress addr,
-    const std::string& ifName,
+    folly::Optional<std::string> ifName,
     int32_t metric,
     folly::Optional<thrift::MplsAction> maybeMplsAction,
     bool useNonShortestRoute) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
-  nextHop.address.ifName = ifName;
+  nextHop.address.ifName = std::move(ifName);
   nextHop.metric = metric;
   nextHop.mplsAction = maybeMplsAction;
   nextHop.useNonShortestRoute = useNonShortestRoute;

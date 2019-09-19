@@ -25,71 +25,81 @@ const auto prefix2 = toIpPrefix("::ffff:10.2.2.2/128");
 const auto prefix3 = toIpPrefix("::ffff:10.3.3.3/128");
 
 const auto path1_2_1 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_1", 1);
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_1"),
+    1);
 const auto path1_2_2 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_2", 2);
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_2"),
+    2);
 const auto path1_2_3 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_3", 3);
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_3"),
+    3);
 const auto path1_3_1 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_1", 1);
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_1"),
+    1);
 const auto path1_3_2 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_2", 2);
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_2"),
+    2);
 
 const auto path1_2_1_swap = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
-    "iface_1_2_1",
+    std::string("iface_1_2_1"),
     1,
     createMplsAction(thrift::MplsActionCode::SWAP, 1));
 const auto path1_2_2_swap = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
-    "iface_1_2_2",
+    std::string("iface_1_2_2"),
     2,
     createMplsAction(thrift::MplsActionCode::SWAP, 1));
 const auto path1_2_3_swap = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
-    "iface_1_2_3",
+    std::string("iface_1_2_3"),
     3,
     createMplsAction(thrift::MplsActionCode::SWAP, 1));
 const auto path1_3_1_swap = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::3")),
-    "iface_1_3_1",
+    std::string("iface_1_3_1"),
     1,
     createMplsAction(thrift::MplsActionCode::SWAP, 1));
 const auto path1_3_2_swap = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::3")),
-    "iface_1_3_2",
+    std::string("iface_1_3_2"),
     2,
     createMplsAction(thrift::MplsActionCode::SWAP, 1));
 
 const auto path1_2_1_php = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
-    "iface_1_2_1",
+    std::string("iface_1_2_1"),
     1,
     createMplsAction(thrift::MplsActionCode::PHP));
 const auto path1_2_2_php = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
-    "iface_1_2_2",
+    std::string("iface_1_2_2"),
     2,
     createMplsAction(thrift::MplsActionCode::PHP));
 const auto path1_2_3_php = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
-    "iface_1_2_3",
+    std::string("iface_1_2_3"),
     3,
     createMplsAction(thrift::MplsActionCode::PHP));
 const auto path1_3_1_php = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::3")),
-    "iface_1_3_1",
+    std::string("iface_1_3_1"),
     1,
     createMplsAction(thrift::MplsActionCode::PHP));
 const auto path1_3_2_php = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::3")),
-    "iface_1_3_2",
+    std::string("iface_1_3_2"),
     2,
     createMplsAction(thrift::MplsActionCode::PHP));
 
 const auto path1_2_2_pop = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
-    "iface_1_2_1",
+    std::string("iface_1_2_1"),
     2,
     createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP));
 

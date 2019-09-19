@@ -354,7 +354,7 @@ thrift::Value createThriftValue(
 
 thrift::NextHopThrift createNextHop(
     thrift::BinaryAddress addr,
-    const std::string& ifName = "",
+    folly::Optional<std::string> ifName = folly::none,
     int32_t metric = 0,
     folly::Optional<thrift::MplsAction> maybeMplsAction = folly::none,
     bool useNonShortestRoute = false);

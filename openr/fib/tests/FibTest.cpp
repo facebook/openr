@@ -56,23 +56,41 @@ const auto prefix3 = toIpPrefix("::ffff:10.3.3.3/128");
 const auto prefix4 = toIpPrefix("::ffff:10.4.4.4/128");
 
 const auto path1_2_1 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_1", 1);
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_1"),
+    1);
 const auto path1_2_2 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_2", 2);
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_2"),
+    2);
 const auto path1_2_3 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_1_2_3", 1);
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_3"),
+    1);
 const auto path1_3_1 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_1", 2);
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_1"),
+    2);
 const auto path1_3_2 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::3")), "iface_1_3_2", 2);
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_2"),
+    2);
 const auto path3_2_1 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_3_2_1", 1);
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_3_2_1"),
+    1);
 const auto path3_2_2 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")), "iface_3_2_2", 2);
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_3_2_2"),
+    2);
 const auto path3_4_1 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::4")), "iface_3_4_1", 2);
+    toBinaryAddress(folly::IPAddress("fe80::4")),
+    std::string("iface_3_4_1"),
+    2);
 const auto path3_4_2 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::4")), "iface_3_4_2", 2);
+    toBinaryAddress(folly::IPAddress("fe80::4")),
+    std::string("iface_3_4_2"),
+    2);
 
 bool
 checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
