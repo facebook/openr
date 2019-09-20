@@ -54,12 +54,14 @@ class CountersCmd(MonitorCmd):
         self, client: OpenrCtrl.Client, prefix: str = "", json: bool = False
     ) -> None:
         resp = client.getCounters()
-        self.print_counters(resp, prefix, json)
+        self.print_counters(client, resp, prefix, json)
 
-    def print_counters(self, resp: Dict, prefix: str, json: bool) -> None:
+    def print_counters(
+        self, client: OpenrCtrl.Client, resp: Dict, prefix: str, json: bool
+    ) -> None:
         """ print the Kv Store counters """
 
-        host_id = utils.get_connected_node_name(self.cli_opts)
+        host_id = client.getMyNodeName()
         caption = "{}'s counters".format(host_id)
 
         rows = []

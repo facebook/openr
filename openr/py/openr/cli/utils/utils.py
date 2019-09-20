@@ -138,15 +138,6 @@ def get_fib_agent_client(
     return client
 
 
-def get_connected_node_name(cli_opts: bunch.Bunch) -> str:
-    """ get the identity of the connected node by querying link monitor"""
-
-    identity = None
-    with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
-        identity = client.getInterfaces().thisNodeName
-    return identity
-
-
 def get_route_nexthops(
     route: network_types.UnicastRoute
 ) -> List[network_types.NextHopThrift]:
@@ -168,7 +159,8 @@ def parse_nodes(cli_opts, nodes):
     """
 
     if not nodes:
-        nodes = get_connected_node_name(cli_opts)
+        with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
+            nodes = client.getMyNodeName()
     nodes = set(nodes.strip().split(","))
 
     return nodes

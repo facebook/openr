@@ -120,7 +120,7 @@ class DecisionAdjCmd(DecisionCmdBase):
 class PathCmd(DecisionCmdBase):
     def _run(self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int) -> None:
         if not src or not dst:
-            host_id = utils.get_connected_node_name(self.cli_opts)
+            host_id = client.getMyNodeName()
             src = src or host_id
             dst = dst or host_id
 

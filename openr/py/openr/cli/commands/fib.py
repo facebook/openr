@@ -76,7 +76,8 @@ class FibCountersCmd(FibAgentCmd):
     def print_counters(self, counters, json_opt):
         """ print the Fib counters """
 
-        host_id = utils.get_connected_node_name(self.cli_opts)
+        with utils.get_openr_ctrl_client(self.cli_opts.host, self.cli_opts) as client:
+            host_id = client.getMyNodeName()
         caption = "{}'s Fib counters".format(host_id)
 
         if json_opt:
@@ -105,7 +106,8 @@ class FibRoutesInstalledCmd(FibAgentCmd):
             print("Exception: {}".format(e))
             return 1
 
-        host_id = utils.get_connected_node_name(self.cli_opts)
+        with utils.get_openr_ctrl_client(self.cli_opts.host, self.cli_opts) as client:
+            host_id = client.getMyNodeName()
         client_id = self.client.client_id
 
         try:

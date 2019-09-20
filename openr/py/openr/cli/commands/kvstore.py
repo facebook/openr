@@ -259,7 +259,7 @@ class NodesCmd(KvStoreCmdBase):
         adj_keys = client.getKvStoreKeyValsFiltered(
             self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         )
-        host_id = utils.get_connected_node_name(self.cli_opts)
+        host_id = client.getMyNodeName()
         self.print_kvstore_nodes(
             self.get_connected_nodes(adj_keys, host_id), prefix_keys, host_id
         )
@@ -383,7 +383,7 @@ class KvCompareCmd(KvStoreCmdBase):
             nodes = set(nodes.strip().split(","))
             if "all" in nodes:
                 nodes = list(all_nodes_to_ips.keys())
-            host_id = utils.get_connected_node_name(self.cli_opts)
+            host_id = client.getMyNodeName()
             if host_id in nodes:
                 nodes.remove(host_id)
 
@@ -490,12 +490,14 @@ class KvCompareCmd(KvStoreCmdBase):
 class PeersCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client) -> None:
         peers = client.getKvStorePeers()
-        self.print_peers(peers)
+        self.print_peers(client, peers)
 
-    def print_peers(self, peers: kv_store_types.PeersMap) -> None:
+    def print_peers(
+        self, client: OpenrCtrl.Client, peers: kv_store_types.PeersMap
+    ) -> None:
         """ print the Kv Store peers """
 
-        host_id = utils.get_connected_node_name(self.cli_opts)
+        host_id = client.getMyNodeName()
         caption = "{}'s peers".format(host_id)
 
         rows = []
