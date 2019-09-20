@@ -265,6 +265,30 @@ TEST(NetlinkTypes, RouteEqualTest) {
   EXPECT_EQ(1, route5.getNextHops().size());
 }
 
+TEST(NetlinkTypes, NextHopBuilderReset) {
+  NextHopBuilder nhBuilder;
+  nhBuilder.setIfIndex(1)
+      .setWeight(10)
+      .setGateway(folly::IPAddress("face:cafe:3::3"))
+      .setLabelAction(thrift::MplsActionCode::PHP)
+      .setSwapLabel(20)
+      .setPushLabels({30, 40});
+
+  EXPECT_TRUE(nhBuilder.getIfIndex().hasValue());
+  EXPECT_TRUE(nhBuilder.getGateway().hasValue());
+  EXPECT_TRUE(nhBuilder.getLabelAction().hasValue());
+  EXPECT_TRUE(nhBuilder.getSwapLabel().hasValue());
+  EXPECT_TRUE(nhBuilder.getPushLabels().hasValue());
+
+  nhBuilder.reset();
+
+  EXPECT_FALSE(nhBuilder.getIfIndex().hasValue());
+  EXPECT_FALSE(nhBuilder.getGateway().hasValue());
+  EXPECT_FALSE(nhBuilder.getLabelAction().hasValue());
+  EXPECT_FALSE(nhBuilder.getSwapLabel().hasValue());
+  EXPECT_FALSE(nhBuilder.getPushLabels().hasValue());
+}
+
 TEST(NetlinkTypes, RouteMoveTest) {
   folly::CIDRNetwork dst{folly::IPAddress("fc00:cafe:3::3"), 128};
   folly::IPAddress gateway("face:cafe:3::3");

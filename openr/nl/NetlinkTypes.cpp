@@ -720,6 +720,10 @@ NextHopBuilder::reset() {
   ifIndex_.clear();
   weight_ = 0;
   gateway_.clear();
+  labelAction_.clear();
+  swapLabel_.clear();
+  pushLabels_.clear();
+  family_.clear();
 }
 
 NextHopBuilder&
