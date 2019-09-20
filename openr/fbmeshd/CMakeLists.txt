@@ -9,7 +9,25 @@ cmake_minimum_required (VERSION 3.9)
 project (fbmeshd)
 enable_testing()
 
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-noexcept-type")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
+
+# Enable LTO by default
+option(BUILD_WITH_LTO "BUILD_WITH_LTO" ON)
+if (BUILD_WITH_LTO)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
+endif()
+
+include_directories(${CMAKE_SOURCE_DIR})
+
 find_library(NL3 nl-3)
+find_library(NLROUTE3 nl-route-3)
 find_library(FBZMQ fbzmq)
 find_library(FOLLY folly PATHS)
 find_library(THRIFT thrift PATHS)
@@ -33,6 +51,9 @@ set(
   CACHE PATH "thrift include directory"
 )
 find_program(THRIFT1 thrift1)
+# Next two lines will need to be removed on modern thrift, a la D16356056
+find_path(THRIFT_COMPILER_INCLUDE thrift/templates)
+set(THRIFT_TEMPLATES ${THRIFT_COMPILER_INCLUDE}/thrift/templates)
 include(${CMAKE_SOURCE_DIR}/ThriftLibrary.cmake)
 
 set(THRIFT_DIR ${CMAKE_BINARY_DIR}/thrift-out)
@@ -98,7 +119,6 @@ target_include_directories(fbmeshd
 )
 
 target_link_libraries(fbmeshd
-  openrlib
   ${FBZMQ}
   ${THRIFT}
   ${THRIFTCPP2}
@@ -112,6 +132,7 @@ target_link_libraries(fbmeshd
   ${ASYNC}
   ${CONCURRENCY}
   ${NL3}
+  ${NLROUTE3}
   ${SAE_LIBRARY}
   -lboost_program_options
   -lpthread
