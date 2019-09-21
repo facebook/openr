@@ -34,6 +34,7 @@
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Flags.h>
+#include <openr/common/ThriftUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
@@ -801,33 +802,13 @@ main(int argc, char** argv) {
 
   // setup the SSL policy
   if (FLAGS_enable_secure_thrift_server) {
-    CHECK(fileExists(FLAGS_x509_ca_path));
-    CHECK(fileExists(FLAGS_x509_cert_path));
-    auto& keyPath = FLAGS_x509_key_path;
-    if (!keyPath.empty()) {
-      CHECK(fileExists(keyPath));
-    } else {
-      keyPath = FLAGS_x509_cert_path;
-    }
     // TODO Change to REQUIRED after we have everyone using certs
-    thriftCtrlServer.setSSLPolicy(apache::thrift::SSLPolicy::PERMITTED);
-    // Allow non-secure clients on localhost (e.g. breeze / fbmeshd)
-    thriftCtrlServer.setAllowPlaintextOnLoopback(true);
-
-    auto sslContext = std::make_shared<wangle::SSLContextConfig>();
-    sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
-    sslContext->clientCAFile = FLAGS_x509_ca_path;
-    sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
-    sslContext->setNextProtocols(Constants::getNextProtocolsForThriftServers());
     // TODO Change to VERIFY_REQ_CLIENT_CERT after we have everyone using certs
-    sslContext->clientVerification =
-        folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
-    sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
-    thriftCtrlServer.setSSLConfig(sslContext);
-    if (fileExists(FLAGS_tls_ticket_seed_path)) {
-      thriftCtrlServer.watchTicketPathForChanges(
-          FLAGS_tls_ticket_seed_path, true);
-    }
+    setupThriftServerTls(
+        thriftCtrlServer,
+        Constants::kOpenrCtrlSessionContext.toString(),
+        apache::thrift::SSLPolicy::PERMITTED,
+        folly::SSLContext::SSLVerifyPeerEnum::VERIFY);
   }
   // set the port and interface
   thriftCtrlServer.setPort(FLAGS_openr_ctrl_port);

@@ -218,6 +218,7 @@ class Constants {
       "SPARK::ROUTER::CLIENT"};
 
   static constexpr folly::StringPiece kOpenrCtrlSessionContext{"OpenrCtrl"};
+  static constexpr folly::StringPiece kPluginSessionContext{"OpenrPlugin"};
 
   // max interval to update TTL for each key in kvstore w/ finite TTL
   static constexpr std::chrono::milliseconds kMaxTtlUpdateInterval{2h};
