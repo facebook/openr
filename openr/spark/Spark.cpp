@@ -1139,7 +1139,7 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
   auto maybeMsg = request.readThriftObj<thrift::InterfaceDatabase>(serializer_);
   if (maybeMsg.hasError()) {
     LOG(ERROR) << "processInterfaceDbUpdate recv failed: " << maybeMsg.error();
-    folly::makeUnexpected(fbzmq::Error());
+    return folly::makeUnexpected(fbzmq::Error());
   }
   auto ifDb = maybeMsg.value();
 
