@@ -191,6 +191,13 @@ main(int argc, char* argv[]) {
   signalHandler.registerSignalHandler(SIGINT);
   signalHandler.registerSignalHandler(SIGTERM);
 
+  folly::EventBase routingEventLoop;
+
+  FollySignalHandler follySignalHandler{routingEventLoop, evl};
+  follySignalHandler.registerSignalHandler(SIGABRT);
+  follySignalHandler.registerSignalHandler(SIGINT);
+  follySignalHandler.registerSignalHandler(SIGTERM);
+
   AuthsaeCallbackHelpers::init(evl);
 
   Nl80211Handler nlHandler{
@@ -222,29 +229,16 @@ main(int argc, char* argv[]) {
         }));
   }
 
-  folly::EventBase routingEventLoop;
-
-  FollySignalHandler follySignalHandler{routingEventLoop, evl};
-  follySignalHandler.registerSignalHandler(SIGABRT);
-  follySignalHandler.registerSignalHandler(SIGINT);
-  follySignalHandler.registerSignalHandler(SIGTERM);
-
+  LOG(INFO) << "Creating MetricManager80211s...";
   std::unique_ptr<MetricManager80211s> metricManager80211s =
       std::make_unique<MetricManager80211s>(
+          &routingEventLoop,
           kMetricManagerInterval,
           nlHandler,
           FLAGS_routing_metric_manager_ewma_factor_log2,
           kMetricManagerHysteresisFactorLog2,
           kMetricManagerBaseBitrate,
           FLAGS_routing_metric_manager_rssi_weight);
-
-  static constexpr auto metricManager80211sId{"MetricManager80211s"};
-  allThreads.emplace_back(std::thread([&metricManager80211s]() noexcept {
-    LOG(INFO) << "Starting MetricManager80211s thread...";
-    folly::setThreadName(metricManager80211sId);
-    metricManager80211s->run();
-    LOG(INFO) << "MetricManager80211s thread stopped.";
-  }));
 
   std::unique_ptr<Routing> routing = std::make_unique<Routing>(
       &routingEventLoop,
@@ -385,9 +379,6 @@ main(int argc, char* argv[]) {
 
   gatewayConnectivityMonitor.stop();
   gatewayConnectivityMonitor.waitUntilStopped();
-
-  metricManager80211s->stop();
-  metricManager80211s->waitUntilStopped();
 
   syncRoutes80211s->stop();
   syncRoutes80211s->waitUntilStopped();

@@ -12,21 +12,26 @@
 using namespace openr::fbmeshd;
 
 MetricManager80211s::MetricManager80211s(
+    folly::EventBase* evb,
     std::chrono::milliseconds interval,
     Nl80211Handler& nlHandler,
     uint32_t ewmaFactor,
     uint32_t hysteresisFactor,
     uint32_t baseBitrate,
     double rssiWeight)
-    : nlHandler_{nlHandler},
+    : evb_{evb},
+      nlHandler_{nlHandler},
       ewmaFactor_{ewmaFactor},
       hysteresisFactor_{hysteresisFactor},
       baseBitrate_{baseBitrate},
       rssiWeight_{rssiWeight} {
   // Set timer to update metrics
   metricManagerTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { updateMetrics(); });
-  metricManagerTimer_->scheduleTimeout(interval, true);
+      folly::AsyncTimeout::make(*evb_, [this, interval]() noexcept {
+        updateMetrics();
+        metricManagerTimer_->scheduleTimeout(interval);
+      });
+  metricManagerTimer_->scheduleTimeout(interval);
 }
 
 uint32_t

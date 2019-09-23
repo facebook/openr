@@ -9,8 +9,8 @@
 
 #include <chrono>
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/async/ZmqTimeout.h>
+#include <folly/io/async/AsyncTimeout.h>
+#include <folly/io/async/EventBase.h>
 
 #include <openr/fbmeshd/802.11s/Nl80211Handler.h>
 #include <openr/fbmeshd/routing/MetricManager.h>
@@ -18,7 +18,7 @@
 namespace openr {
 namespace fbmeshd {
 
-class MetricManager80211s : public MetricManager, public fbzmq::ZmqEventLoop {
+class MetricManager80211s : public MetricManager {
  public:
   struct Metric {
     uint32_t ewmaMetric{0};
@@ -27,6 +27,7 @@ class MetricManager80211s : public MetricManager, public fbzmq::ZmqEventLoop {
   };
 
   MetricManager80211s(
+      folly::EventBase* evb,
       std::chrono::milliseconds interval,
       Nl80211Handler& nlHandler,
       uint32_t ewmaFactor,
@@ -52,13 +53,14 @@ class MetricManager80211s : public MetricManager, public fbzmq::ZmqEventLoop {
   uint32_t bitrateToAirtime(uint32_t rate);
   uint32_t rssiToAirtime(int32_t rssi);
 
+  folly::EventBase* evb_;
   Nl80211Handler& nlHandler_;
   std::unordered_map<folly::MacAddress, Metric> metrics_;
   uint32_t ewmaFactor_;
   uint32_t hysteresisFactor_;
   uint32_t baseBitrate_;
   double rssiWeight_;
-  std::unique_ptr<fbzmq::ZmqTimeout> metricManagerTimer_;
+  std::unique_ptr<folly::AsyncTimeout> metricManagerTimer_;
 };
 
 } // namespace fbmeshd
