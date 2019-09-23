@@ -207,7 +207,8 @@ main(int argc, char* argv[]) {
     return returnValue;
   }
 
-  RouteUpdateMonitor routeMonitor{evl, nlHandler};
+  LOG(INFO) << "Creating RouteUpdateMonitor...";
+  RouteUpdateMonitor routeMonitor{&routingEventLoop, nlHandler};
 
   std::unique_ptr<Gateway11sRootRouteProgrammer> gateway11sRootRouteProgrammer;
   static constexpr auto gateway11sRootRouteProgrammerId{

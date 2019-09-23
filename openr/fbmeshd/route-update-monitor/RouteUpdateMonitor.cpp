@@ -15,8 +15,10 @@
 using namespace openr::fbmeshd;
 
 RouteUpdateMonitor::RouteUpdateMonitor(
-    fbzmq::ZmqEventLoop& zmqLoop, Nl80211Handler& nlHandler)
-    : zmqLoop_{zmqLoop}, nlHandler_{nlHandler} {
+    folly::EventBase* evb, Nl80211Handler& nlHandler)
+    : folly::EventHandler(), nlHandler_{nlHandler} {
+  VLOG(8) << folly::sformat("RouteUpdateMonitor::{}()", __func__);
+
   sock_ = nl_socket_alloc();
   eventSock_ = nl_socket_alloc();
 
@@ -74,15 +76,15 @@ RouteUpdateMonitor::RouteUpdateMonitor(
     }
   }
 
-  zmqLoop_.addSocketFd(
-      nl_socket_get_fd(eventSock_), POLLIN, [this](int) noexcept {
-        VLOG(10) << folly::sformat(
-            "RouteUpdateMonitor::{}() select returned", __func__);
-        nl_recvmsgs_default(eventSock_);
-      });
+  initHandler(evb, folly::NetworkSocket::fromFd(nl_socket_get_fd(eventSock_)));
+  registerHandler(folly::EventHandler::READ | folly::EventHandler::PERSIST);
 }
 
 RouteUpdateMonitor::~RouteUpdateMonitor() {
+  VLOG(8) << folly::sformat("RouteUpdateMonitor::{}()", __func__);
+
+  unregisterHandler();
+
   nl_cache_free(routeCache_);
   nl_socket_free(eventSock_);
   nl_socket_free(sock_);
@@ -103,7 +105,7 @@ RouteUpdateMonitor::hasDefaultRoute() {
 
 void
 RouteUpdateMonitor::processRouteUpdate() {
-  VLOG(8) << __func__;
+  VLOG(8) << folly::sformat("RouteUpdateMonitor::{}()", __func__);
   if (nl_cache_refill(sock_, routeCache_) < 0) {
     LOG(ERROR) << "Could not refill routing cache";
     return;
@@ -111,3 +113,14 @@ RouteUpdateMonitor::processRouteUpdate() {
   bool isConnected = hasDefaultRoute();
   nlHandler_.setMeshConnectedToGate(isConnected);
 }
+
+void
+RouteUpdateMonitor::handlerReady(uint16_t events) noexcept {
+  VLOG(8) << folly::sformat("RouteUpdateMonitor::{}()", __func__);
+  uint16_t relevantEvents = uint16_t(events & folly::EventHandler::READ);
+  if (relevantEvents == folly::EventHandler::READ) {
+    VLOG(8) << folly::sformat(
+        "RouteUpdateMonitor::{}() received from socket", __func__);
+    nl_recvmsgs_default(eventSock_);
+  }
+};
