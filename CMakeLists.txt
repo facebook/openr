@@ -24,285 +24,257 @@ if (BUILD_WITH_LTO)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR})
+include_directories(${CMAKE_BINARY_DIR})
+
+set(
+  CMAKE_MODULE_PATH
+  "${CMAKE_SOURCE_DIR}/build/fbcode_builder/CMake"
+  ${CMAKE_MODULE_PATH}
+)
+include(FBThriftCppLibrary)
 
 find_library(ASYNC async PATHS)
 find_library(CONCURRENCY concurrency PATHS)
 find_library(DOUBLE-CONVERSION double-conversion)
-find_library(FBZMQ fbzmq)
-find_library(FOLLY folly PATHS)
-find_library(FOLLY_EXCEPTION_TRACER folly_exception_tracer PATHS)
-find_library(FIZZ fizz PATHS)
-find_library(GFLAGS gflags)
-find_library(GLOG glog)
+find_package(fbzmq REQUIRED)
+find_package(folly REQUIRED)
+find_package(fizz REQUIRED)
+find_package(fmt REQUIRED)
+find_package(Gflags REQUIRED)
+find_package(Glog REQUIRED)
 find_library(NL3 nl-3)
 find_library(NLROUTE3 nl-route-3)
 find_library(PROTOCOL protocol PATHS)
 find_library(RE2 re2)
 find_library(SODIUM sodium)
 find_library(SIGAR sigar)
-find_library(THRIFT thrift PATHS)
-find_library(THRIFTCPP2 thriftcpp2 PATHS)
-find_library(THRIFTPROTOCOL thriftprotocol PATHS)
-find_library(TRANSPORT transport PATHS)
+find_package(FBThrift REQUIRED)
+find_package(wangle REQUIRED)
+find_package(yarpl REQUIRED)
+find_package(rsocket REQUIRED)
+find_package(Threads REQUIRED)
 find_library(ZMQ zmq)
 find_library(ZSTD zstd)
 find_library(BENCHMARK follybenchmark PATHS)
 
-# FOLLY_EXCEPTION_TRACER may not be found
-if(NOT FOLLY_EXCEPTION_TRACER)
-  set(FOLLY_EXCEPTION_TRACER "")
+find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
+find_path(RE2_INCLUDE_DIR re2/re2.h)
+find_path(SIGAR_INCLUDE_DIR sigar.h)
+find_path(ZMQ_INCLUDE_DIR zmq.h)
+
+set(FOLLY_EXCEPTION_TRACER)
+if (TARGET Folly::folly_exception_tracer)
+  set(FOLLY_EXCEPTION_TRACER Folly::folly_exception_tracer)
 endif()
 
-find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
-find_path(FBZMQ_THRIFT_PATH fbzmq/service/if)
-
-# Include Thrift
-set(
-  THRIFT_GENERATE_THRIFT_INCLUDE_DIRECTORIES
-  ${CMAKE_SOURCE_DIR}
-  ${FBZMQ_THRIFT_PATH}
-  CACHE PATH "thrift include directory"
-)
-find_program(THRIFT1 thrift1)
-include(${CMAKE_SOURCE_DIR}/ThriftLibrary.cmake)
-
-set(THRIFT_DIR ${CMAKE_BINARY_DIR}/thrift-out)
-include_directories(${THRIFT_DIR})
-
-file(MAKE_DIRECTORY ${THRIFT_DIR}/openr/if)
-file(MAKE_DIRECTORY ${THRIFT_DIR}/common/fb303/if)
-
-thrift_object(
-  "fb303" #file_name
-  "FacebookService" #services
-  "cpp2" #language
-  "optionals" #options
-  "${CMAKE_SOURCE_DIR}/common/fb303/if" #file_path
-  "${THRIFT_DIR}/common/fb303/if" #output_path
-  "common/fb303/if" #include_prefix
+include_directories(
+  ${Boost_INCLUDE_DIRS}
+  ${FBTHRIFT_INCLUDE_DIR}
+  ${FOLLY_INCLUDE_DIR}
+  ${RE2_INCLUDE_DIR}
+  ${SIGAR_INCLUDE_DIR}
+  ${ZMQ_INCLUDE_DIR}
 )
 
-thrift_object(
-  "PersistentStore" #file_name
-  "" #services
-  "cpp2" #language
-  "optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
-)
+SET(OPENR_THRIFT_LIBS)
 
-thrift_object(
-  "KvStore" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  dual_cpp2
+  openr/if/Dual.thrift
+  OPTIONS
+    json
+    optionals
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} dual_cpp2)
 
-add_dependencies(
-  KvStore-cpp2-obj
-  Dual-cpp2-obj
+
+add_fbthrift_cpp_library(
+  network_cpp2
+  openr/if/Network.thrift
+  OPTIONS
+    json
+    optionals
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} network_cpp2)
 
-thrift_object(
-  "Lsdb" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  fb303_cpp2
+  common/fb303/if/fb303.thrift
+  SERVICES
+    FacebookService
+  OPTIONS
+    optionals
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} fb303_cpp2)
 
-thrift_object(
-  "Dual" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  persistent_store_cpp2
+  openr/if/PersistentStore.thrift
+  OPTIONS
+    json
+    optionals
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} persistent_store_cpp2)
 
-thrift_object(
-  "OpenrCtrl" #file_name
-  "OpenrCtrl" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  kv_store_cpp2
+  openr/if/KvStore.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    dual_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} kv_store_cpp2)
 
-thrift_object(
-  "OpenrCtrlCpp" #file_name
-  "OpenrCtrlCpp" #services
-  "cpp2" #language
-  "json,optionals,stream" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  lsdb_cpp2
+  openr/if/Lsdb.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    network_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} lsdb_cpp2)
 
-add_dependencies(
-  OpenrCtrlCpp-cpp2-obj
-  OpenrCtrl-cpp2-obj
+add_fbthrift_cpp_library(
+  fib_cpp2
+  openr/if/Fib.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    network_cpp2
+    lsdb_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} fib_cpp2)
 
-add_dependencies(
-  OpenrCtrl-cpp2-obj
-  fb303-cpp2-obj
-  Decision-cpp2-obj
-  Dual-cpp2-obj
-  Fib-cpp2-obj
-  KvStore-cpp2-obj
-  LinkMonitor-cpp2-obj
-  Lsdb-cpp2-obj
-  Network-cpp2-obj
-  HealthChecker-cpp2-obj
+add_fbthrift_cpp_library(
+  health_checker_cpp2
+  openr/if/HealthChecker.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    network_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} health_checker_cpp2)
 
-add_dependencies(
-  Lsdb-cpp2-obj
-  Network-cpp2-obj
-  HealthChecker-cpp2-obj
+add_fbthrift_cpp_library(
+  spark_cpp2
+  openr/if/Spark.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    network_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} spark_cpp2)
 
-thrift_object(
-  "Network" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  link_monitor_cpp2
+  openr/if/LinkMonitor.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    lsdb_cpp2
+    spark_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} link_monitor_cpp2)
 
-thrift_object(
-  "Fib" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  platform_cpp2
+  openr/if/Platform.thrift
+  SERVICES
+    FibService
+    SystemService
+    NeighborListenerClientForFibagent
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    fb303_cpp2
+    network_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} platform_cpp2)
 
-add_dependencies(
-  Fib-cpp2-obj
-  Network-cpp2-obj
-  Lsdb-cpp2-obj
+add_fbthrift_cpp_library(
+  alloc_prefix_cpp2
+  openr/if/AllocPrefix.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    network_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} alloc_prefix_cpp2)
 
-thrift_object(
-  "HealthChecker" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  prefix_manager_cpp2
+  openr/if/PrefixManager.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    lsdb_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} prefix_manager_cpp2)
 
-add_dependencies(
-  HealthChecker-cpp2-obj
-  Network-cpp2-obj
+add_fbthrift_cpp_library(
+  decision_cpp2
+  openr/if/Decision.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    lsdb_cpp2
+    fib_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} decision_cpp2)
 
-thrift_object(
-  "LinkMonitor" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
+add_fbthrift_cpp_library(
+  openr_ctrl_cpp2
+  openr/if/OpenrCtrl.thrift
+  SERVICES
+    OpenrCtrl
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    decision_cpp2
+    fb303_cpp2
+    dual_cpp2
+    fib_cpp2
+    health_checker_cpp2
+    kv_store_cpp2
+    link_monitor_cpp2
+    lsdb_cpp2
+    network_cpp2
+    fbzmq::monitor_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp2)
 
-add_dependencies(
-  LinkMonitor-cpp2-obj
-  Lsdb-cpp2-obj
-  Spark-cpp2-obj
+add_fbthrift_cpp_library(
+  openr_ctrl_cpp_cpp2
+  openr/if/OpenrCtrlCpp.thrift
+  SERVICES
+    OpenrCtrlCpp
+  OPTIONS
+    json
+    optionals
+    stream
+  DEPENDS
+    openr_ctrl_cpp2
+    kv_store_cpp2
+    fbzmq::monitor_cpp2
 )
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp_cpp2)
 
-thrift_object(
-  "Platform" #file_name
-  "FibService;SystemService;NeighborListenerClientForFibagent" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
-)
-
-add_dependencies(
-  Platform-cpp2-obj
-  fb303-cpp2-obj
-  Network-cpp2-obj
-)
-
-thrift_object(
-  "Spark" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
-)
-
-add_dependencies(
-  Spark-cpp2-obj
-  Network-cpp2-obj
-)
-
-thrift_object(
-  "AllocPrefix" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
-)
-
-add_dependencies(
-  AllocPrefix-cpp2-obj
-  Network-cpp2-obj
-)
-
-thrift_object(
-  "PrefixManager" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
-)
-
-add_dependencies(
-  PrefixManager-cpp2-obj
-  Lsdb-cpp2-obj
-)
-
-thrift_object(
-  "Decision" #file_name
-  "" #services
-  "cpp2" #language
-  "json,optionals" #options
-  "${CMAKE_SOURCE_DIR}/openr/if" #file_path
-  "${THRIFT_DIR}/openr/if" #output_path
-  "openr/if" #include_prefix
-)
-
-add_dependencies(
-  Decision-cpp2-obj
-  Fib-cpp2-obj
-  Lsdb-cpp2-obj
+install(TARGETS
+  ${OPENR_THRIFT_LIBS}
+  DESTINATION lib
 )
 
 add_library(openrlib
@@ -314,6 +286,7 @@ add_library(openrlib
   openr/common/OpenrEventLoop.cpp
   openr/common/Util.cpp
   openr/common/Constants.cpp
+  openr/common/ThriftUtil.cpp
   openr/config-store/PersistentStore.cpp
   openr/config-store/PersistentStoreClient.cpp
   openr/config-store/PersistentStoreWrapper.cpp
@@ -345,22 +318,6 @@ add_library(openrlib
   openr/fib/tests/PrefixGenerator.cpp
   openr/tests/OpenrThriftServerWrapper.cpp
   openr/watchdog/Watchdog.cpp
-  $<TARGET_OBJECTS:fb303-cpp2-obj>
-  $<TARGET_OBJECTS:AllocPrefix-cpp2-obj>
-  $<TARGET_OBJECTS:Decision-cpp2-obj>
-  $<TARGET_OBJECTS:Fib-cpp2-obj>
-  $<TARGET_OBJECTS:HealthChecker-cpp2-obj>
-  $<TARGET_OBJECTS:KvStore-cpp2-obj>
-  $<TARGET_OBJECTS:LinkMonitor-cpp2-obj>
-  $<TARGET_OBJECTS:Lsdb-cpp2-obj>
-  $<TARGET_OBJECTS:Dual-cpp2-obj>
-  $<TARGET_OBJECTS:Network-cpp2-obj>
-  $<TARGET_OBJECTS:OpenrCtrl-cpp2-obj>
-  $<TARGET_OBJECTS:OpenrCtrlCpp-cpp2-obj>
-  $<TARGET_OBJECTS:PersistentStore-cpp2-obj>
-  $<TARGET_OBJECTS:Platform-cpp2-obj>
-  $<TARGET_OBJECTS:PrefixManager-cpp2-obj>
-  $<TARGET_OBJECTS:Spark-cpp2-obj>
 )
 
 if (BUILD_SHARED_LIBS)
@@ -373,20 +330,19 @@ target_include_directories(openrlib
 )
 
 target_link_libraries(openrlib
-  ${FBZMQ}
+  ${OPENR_THRIFT_LIBS}
+  fbzmq::fbzmq
+  fbzmq::monitor_cpp2
   ${DOUBLE-CONVERSION}
   ${ZMQ}
-  ${GLOG}
-  ${GFLAGS}
-  ${THRIFT}
-  ${THRIFTPROTOCOL}
-  ${THRIFTCPP2}
+  glog::glog
+  gflags
+  FBThrift::thriftcpp2
   ${ASYNC}
   ${PROTOCOL}
-  ${TRANSPORT}
   ${CONCURRENCY}
   ${ZSTD}
-  ${FOLLY}
+  Folly::folly
   ${FOLLY_EXCEPTION_TRACER}
   ${SODIUM}
   ${SIGAR}
@@ -404,31 +360,30 @@ install(TARGETS
   DESTINATION lib
 )
 
-add_executable(openr
+add_executable(openr_bin
   openr/Main.cpp
   openr/common/Flags.cpp
 )
 
-target_include_directories(openr
+target_include_directories(openr_bin
   PRIVATE
   ${LIBNL3-HEADERS}/libnl3
 )
 
-target_link_libraries(openr
+target_link_libraries(openr_bin
   openrlib
-  ${FBZMQ}
+  ${OPENR_THRIFT_LIBS}
+  fbzmq::fbzmq
   ${ZMQ}
   ${GLOG}
   ${GFLAGS}
   ${THRIFT}
   ${ZSTD}
-  ${THRIFTCPP2}
+  FBThrift::thriftcpp2
   ${ASYNC}
   ${PROTOCOL}
-  ${TRANSPORT}
   ${CONCURRENCY}
-  ${THRIFTPROTOCOL}
-  ${FOLLY}
+  Folly::folly
   ${FOLLY_EXCEPTION_TRACER}
   ${SODIUM}
   ${SIGAR}
@@ -441,8 +396,9 @@ target_link_libraries(openr
 )
 
 install(TARGETS
-  openr
+  openr_bin
   DESTINATION sbin
+  RENAME openr
 )
 
 option(BUILD_TOOLS "BUILD_TOOLS" ON)
@@ -493,18 +449,16 @@ target_include_directories(platform_linux
 
 target_link_libraries(platform_linux
   openrlib
+  ${OPENR_THRIFT_LIBS}
   ${GLOG}
   ${GFLAGS}
-  ${FOLLY}
+  Folly::folly
   ${FOLLY_EXCEPTION_TRACER}
-  ${THRIFT}
+  FBThrift::thriftcpp2
   ${ZSTD}
-  ${THRIFTCPP2}
   ${ASYNC}
   ${PROTOCOL}
-  ${TRANSPORT}
   ${CONCURRENCY}
-  ${THRIFTPROTOCOL}
   ${SODIUM}
   ${SIGAR}
   ${ZMQ}
@@ -555,28 +509,6 @@ install(
   FILES_MATCHING PATTERN "*.thrift"
 )
 
-# generated thrift headers
-install(
-  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/openr
-  DESTINATION include
-  FILES_MATCHING PATTERN "*.h"
-)
-install(
-  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/openr
-  DESTINATION include
-  FILES_MATCHING PATTERN "*.tcc"
-)
-install(
-  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/common
-  DESTINATION include
-  FILES_MATCHING PATTERN "*.h"
-)
-install(
-  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/thrift-out/common
-  DESTINATION include
-  FILES_MATCHING PATTERN "*.tcc"
-)
-
 #
 # Tests
 #
@@ -588,10 +520,12 @@ if(BUILD_TESTS)
 
   enable_testing()
 
-  find_library(GMOCK gmock)
-  find_library(GMOCK_MAIN gmock_main)
-  find_library(GTEST gtest)
-  find_library(GTEST_MAIN gtest_main)
+  find_package(GMock MODULE REQUIRED)
+
+  include_directories(
+    ${GTEST_INCLUDE_DIRS}
+    ${GMOCK_INCLUDE_DIRS}
+  )
 
   add_executable(netlink_socket_sample
     openr/nl/examples/NetlinkSocketSample.cpp
@@ -604,9 +538,10 @@ if(BUILD_TESTS)
 
   target_link_libraries(netlink_socket_sample
     openrlib
+    ${OPENR_THRIFT_LIBS}
     ${GLOG}
     ${GFLAGS}
-    ${FOLLY}
+    Folly::folly
     ${FOLLY_EXCEPTION_TRACER}
     -lpthread
     ${NLROUTE3}
@@ -625,6 +560,16 @@ if(BUILD_TESTS)
     openr/tests/MockSystemHandler.cpp
   )
 
+  add_library(openr_module_test_base
+    openr/tests/OpenrModuleTestBase.cpp
+  )
+
+  target_link_libraries(openr_module_test_base
+    openrlib
+    fbzmq::fbzmq
+    FBThrift::thriftcpp2
+  )
+
   target_include_directories(openr_system_test
     PRIVATE
     ${LIBNL3-HEADERS}/libnl3
@@ -632,23 +577,20 @@ if(BUILD_TESTS)
 
   target_link_libraries(openr_system_test
     openrlib
-    ${FBZMQ}
+    ${OPENR_THRIFT_LIBS}
+    fbzmq::fbzmq
     ${ZMQ}
     ${GLOG}
     ${GFLAGS}
-    ${THRIFT}
-    ${THRIFTCPP2}
     ${PROTOCOL}
-    ${THRIFTPROTOCOL}
+    FBThrift::thriftcpp2
     ${ZSTD}
-    ${FOLLY}
+    Folly::folly
     ${FOLLY_EXCEPTION_TRACER}
     ${SODIUM}
     ${SIGAR}
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
     ${SIGAR}
     -lboost_system
     -lboost_context
@@ -681,17 +623,15 @@ if(BUILD_TESTS)
 
   target_link_libraries(prefix_allocator_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
   target_link_libraries(range_allocator_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   if(ADD_ROOT_TESTS)
@@ -720,10 +660,9 @@ if(BUILD_TESTS)
 
   target_link_libraries(openr_ctrl_handler_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(ExponentialBackoffTest openr_ctrl_handler_test)
@@ -743,17 +682,15 @@ if(BUILD_TESTS)
 
   target_link_libraries(exp_backoff_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
   target_link_libraries(util_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(ExponentialBackoffTest exp_backoff_test)
@@ -771,10 +708,9 @@ if(BUILD_TESTS)
 
   target_link_libraries(config_store_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(PersistentStoreTest config_store_test)
@@ -790,10 +726,10 @@ if(BUILD_TESTS)
 
   target_link_libraries(decision_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    openr_module_test_base
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(DecisionTest decision_test)
@@ -809,10 +745,9 @@ if(BUILD_TESTS)
 
   target_link_libraries(dual_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(DualTest dual_test)
@@ -828,10 +763,9 @@ if(BUILD_TESTS)
 
   target_link_libraries(link_state_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(LinkStateTest link_state_test)
@@ -866,10 +800,9 @@ if(BUILD_TESTS)
 
   target_link_libraries(health_checker_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(HealthCheckerTest health_checker_test)
@@ -891,17 +824,15 @@ if(BUILD_TESTS)
 
   target_link_libraries(kvstore_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
   target_link_libraries(kvstore_client_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
   target_link_libraries(kvstore_thrift_client_test
     openrlib
@@ -934,10 +865,10 @@ if(BUILD_TESTS)
 
   target_link_libraries(link_monitor_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    openr_module_test_base
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(LinkMonitorTest link_monitor_test)
@@ -959,10 +890,10 @@ if(BUILD_TESTS)
 
   target_link_libraries(fib_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    openr_module_test_base
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   if(ADD_ROOT_TESTS)
@@ -1007,31 +938,27 @@ if(BUILD_TESTS)
 
   target_link_libraries(netlink_types_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
   target_link_libraries(netlink_socket_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
   target_link_libraries(netlink_message_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
   target_link_libraries(netlink_socket_subscribe_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(NetlinkTypesTest netlink_types_test)
@@ -1055,10 +982,9 @@ if(BUILD_TESTS)
 
   target_link_libraries(prefix_manager_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(PrefixManagerTest prefix_manager_test)
@@ -1079,17 +1005,15 @@ if(BUILD_TESTS)
 
   target_link_libraries(spark_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
   target_link_libraries(mock_io_provider_test
     openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${OPENR_THRIFT_LIBS}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
   )
 
   add_test(SparkTest spark_test)
