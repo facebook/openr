@@ -159,6 +159,14 @@ startEventLoop(
 
 int
 main(int argc, char** argv) {
+  // Register the signals to handle before anything else. This guarantees that
+  // any threads created below will inherit the signal mask
+  ZmqEventLoop mainEventLoop;
+  StopEventLoopSignalHandler handler(&mainEventLoop);
+  handler.registerSignalHandler(SIGINT);
+  handler.registerSignalHandler(SIGQUIT);
+  handler.registerSignalHandler(SIGTERM);
+
   // Set version string to show when `openr --version` is invoked
   std::stringstream ss;
   BuildInfo::log(ss);
@@ -179,13 +187,6 @@ main(int argc, char** argv) {
   // Export and log build information
   BuildInfo::exportBuildInfo();
   LOG(INFO) << ss.str();
-
-  // start signal handler before any thread
-  ZmqEventLoop mainEventLoop;
-  StopEventLoopSignalHandler handler(&mainEventLoop);
-  handler.registerSignalHandler(SIGINT);
-  handler.registerSignalHandler(SIGQUIT);
-  handler.registerSignalHandler(SIGTERM);
 
   // init sodium security library
   if (::sodium_init() == -1) {
