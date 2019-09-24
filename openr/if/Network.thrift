@@ -27,6 +27,7 @@ enum MplsActionCode {
   SWAP = 1
   PHP = 2      # Pen-ultimate hop popping => POP and FORWARD
   POP_AND_LOOKUP = 3
+  NOOP = 4,
 }
 
 struct MplsAction {
