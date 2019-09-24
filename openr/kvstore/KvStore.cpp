@@ -811,8 +811,7 @@ KvStore::requestFullSyncFromPeers() {
 
     VLOG(1) << "Sending full-sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
-    latestSentPeerSync_.emplace(
-        peerCmdSocketId, std::chrono::steady_clock::now());
+    latestSentPeerSync_[peerCmdSocketId] = std::chrono::steady_clock::now();
 
     auto const ret = sendMessageToPeer(peerCmdSocketId, dumpRequest);
 
