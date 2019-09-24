@@ -691,7 +691,8 @@ NetlinkSocket::syncUnicastRoutes(
                                      syncDb = std::move(newRouteDb),
                                      protocolId]() mutable {
     try {
-      LOG(INFO) << "Syncing " << syncDb.size() << " routes";
+      LOG(INFO) << "Syncing " << syncDb.size() << " routes for protocol "
+                << static_cast<int>(protocolId);
       doSyncUnicastRoutes(protocolId, std::move(syncDb));
       p.setValue();
       LOG(INFO) << "Sync done.";
