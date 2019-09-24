@@ -52,7 +52,7 @@ getOpenrCtrlPlainTextClient(
     folly::EventBase& evb,
     const folly::IPAddress& addr,
     int32_t port = Constants::kOpenrCtrlPort,
-    std::chrono::milliseconds connectTimeout = Constants::kPlatformConnTimeout,
+    std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processingTimeout =
         std::chrono::milliseconds(10000),
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress()) {
