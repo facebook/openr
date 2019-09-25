@@ -285,7 +285,10 @@ TEST(SpfSolver, Counters) {
   spfSolver.updatePrefixDatabase(prefixDb4);
 
   // Perform SPF run to generate some counters
-  spfSolver.buildPaths("1");
+  const auto routeDb = spfSolver.buildPaths("1");
+  for (const auto& uniRoute : routeDb.value().unicastRoutes) {
+    EXPECT_NE(toString(uniRoute.dest), "10.1.0.0/16");
+  }
 
   // Verify counters
   const auto counters = spfSolver.getCounters();
@@ -1256,7 +1259,8 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
   EXPECT_EQ(36, routeMap.size());
 
   // validate router 1
-
+  const auto counters = spfSolver->getCounters();
+  EXPECT_EQ(counters.at("decision.spf_runs.count.0"), 4);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
       NextHops({createNextHopFromAdj(adj12, v4Enabled, 20),
@@ -1505,6 +1509,9 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
   // Adj label routes => 4 * 2 = 8
   EXPECT_EQ(36, routeMap.size());
 
+  const auto counters = spfSolver->getCounters();
+  // 4 nodes * 3 peer per node * 2 (run spf because we run 2 shortest path)
+  EXPECT_EQ(counters.at("decision.spf_runs.count.0"), 24);
   auto pushCode = thrift::MplsActionCode::PUSH;
   auto push1 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{1});
   auto push2 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{2});

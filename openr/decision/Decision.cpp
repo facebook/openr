@@ -53,6 +53,34 @@ namespace {
 // Default HWM is 1k. We set it to 0 to buffer all received messages.
 const int kStoreSubReceiveHwm{0};
 
+// check if path A is part of path B.
+// Example:
+// path A: a->b->c
+// path B: d->a->b->c->d
+// return True
+bool
+pathAInPathB(const Path& a, const Path& b) {
+  for (int i = 0; i < b.size(); i++) {
+    if (b[i].second == a[0].second) {
+      if (a.size() > (b.size() - i)) {
+        continue;
+      }
+      bool equal = true;
+      for (int j = 0; j < a.size(); j++) {
+        if (a[j].second != b[i + j].second) {
+          equal = false;
+          break;
+        }
+      }
+      if (equal) {
+        return equal;
+      }
+    }
+  }
+
+  return false;
+}
+
 // Classes needed for running Dijkstra
 class DijkstraQNode {
  public:
@@ -240,11 +268,21 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
 
-  folly::Optional<thrift::UnicastRoute> createOpenRKsp2EdRoute(
+  // given curNode and the dst nodes, find 2spf paths from curNode to each
+  // dstNode
+  std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
+  createOpenRKsp2EdRouteForNodes(
       std::string const& myNodeName,
-      thrift::IpPrefix const& prefix,
+      std::unordered_set<std::string> const& nodes);
+
+  // Given prefixes and the nodes who announce it, get the kspf routes.
+  folly::Optional<thrift::UnicastRoute> selectKsp2Routes(
+      const thrift::IpPrefix& prefix,
+      const string& myNodeName,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
-      bool const isV4);
+      const std::unordered_map<
+          std::string,
+          std::vector<std::pair<Path, Metric>>>& routeToNodes);
 
   // Give source node-name and dstNodeNames, this function returns the set of
   // nexthops (along with LFA if enabled) towards these set of dstNodeNames
@@ -604,6 +642,13 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   //
   // Create unicastRoutes - IP and IP2MPLS routes
   //
+  std::unordered_map<
+      thrift::IpPrefix,
+      std::unordered_map<std::string, thrift::PrefixEntry>>
+      prefixToPerformKsp;
+
+  std::unordered_set<std::string> nodesForKsp;
+
   for (const auto& kv : prefixState_.prefixes()) {
     const auto& prefix = kv.first;
     const auto& nodePrefixes = kv.second;
@@ -674,13 +719,32 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
         routeDb.unicastRoutes.emplace_back(std::move(route.value()));
       }
     } else {
-      auto route =
-          createOpenRKsp2EdRoute(myNodeName, prefix, nodePrefixes, isV4Prefix);
-      if (route.hasValue()) {
-        routeDb.unicastRoutes.emplace_back(std::move(route.value()));
+      for (const auto& nodePrefix : nodePrefixes) {
+        if (nodePrefix.second.forwardingType !=
+            thrift::PrefixForwardingType::SR_MPLS) {
+          LOG(ERROR) << nodePrefix.first << " has incompatible forwarding type "
+                     << TEnumTraits<thrift::PrefixForwardingType>::findName(
+                            nodePrefix.second.forwardingType)
+                     << " for algorithm KSP2_ED_ECMP;";
+          tData_.addStatValue(
+              "decision.incompatible_forwarding_type", 1, fbzmq::COUNT);
+          continue;
+        }
+        prefixToPerformKsp[prefix] = nodePrefixes;
+        nodesForKsp.insert(nodePrefix.first);
       }
     }
   } // for prefixState_.prefixes()
+
+  auto routeToNodes = createOpenRKsp2EdRouteForNodes(myNodeName, nodesForKsp);
+
+  for (const auto& kv : prefixToPerformKsp) {
+    auto unicastRoute =
+        selectKsp2Routes(kv.first, myNodeName, kv.second, routeToNodes);
+    if (unicastRoute.hasValue()) {
+      routeDb.unicastRoutes.emplace_back(std::move(unicastRoute.value()));
+    }
+  }
 
   //
   // Create MPLS routes for all nodeLabel
@@ -923,84 +987,68 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
 }
 
 folly::Optional<thrift::UnicastRoute>
-SpfSolver::SpfSolverImpl::createOpenRKsp2EdRoute(
-    std::string const& myNodeName,
-    thrift::IpPrefix const& prefix,
+SpfSolver::SpfSolverImpl::selectKsp2Routes(
+    const thrift::IpPrefix& prefix,
+    const string& myNodeName,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
-    bool const isV4) {
-  // Sanity checks - forwarding-type must be SR_MPLS
-  for (auto const& np : nodePrefixes) {
-    if (np.second.forwardingType != thrift::PrefixForwardingType::SR_MPLS) {
-      LOG(ERROR) << "Prefix " << toString(prefix) << " announced by "
-                 << np.first << " has incompatible forwarding type "
-                 << TEnumTraits<thrift::PrefixForwardingType>::findName(
-                        np.second.forwardingType)
-                 << " for algorithm KSP2_ED_ECMP;";
-      tData_.addStatValue(
-          "decision.incompatible_forwarding_type", 1, fbzmq::COUNT);
-      return folly::none;
+    const std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>&
+        routeToNodes) {
+  thrift::UnicastRoute route;
+  route.dest = prefix;
+
+  std::vector<std::pair<Path, Metric>> paths;
+
+  // get the shortest
+  std::vector<std::pair<Path, Metric>> shortestRoutes;
+  std::vector<std::pair<Path, Metric>> secShortestRoutes;
+  for (const auto& kv : nodePrefixes) {
+    auto routesIter = routeToNodes.find(kv.first);
+    if (routesIter == routeToNodes.end()) {
+      continue;
     }
-  }
+    Metric min_cost = std::numeric_limits<Metric>::max();
 
-  // Sequence of unique paths (nodes starting from neighbor to destination)
-  std::vector<std::pair<Path, Metric>> dstPaths;
+    for (const auto& path : routesIter->second) {
+      min_cost = std::min(min_cost, path.second);
+    }
 
-  // Prepare list of possible destination nodes
-  std::set<std::string> dstNodeNames;
-  for (auto& np : nodePrefixes) {
-    dstNodeNames.emplace(np.first);
-  }
-
-  // Step-1 Get all shortest paths and min-cost nodes to whom we will be
-  // forwarding
-  auto const& spf1 = spfResults_.at(myNodeName);
-  auto const& minMetricNodes1 = getMinCostNodes(spf1, dstNodeNames);
-  auto const& minCost1 = minMetricNodes1.first;
-  auto const& minCostNodes1 = minMetricNodes1.second;
-
-  // Step-2 Prepare set of links to ignore from subsequent SPF for finding
-  //        second shortest paths. Collect all shortest paths
-  LinkState::LinkSet linksToIgnore;
-  for (auto const& minCostDst : minCostNodes1) {
-    auto minPaths = traceEdgeDisjointPaths(myNodeName, minCostDst, spf1);
-    for (auto& minPath : minPaths) {
-      for (auto& nodeLink : minPath) {
-        linksToIgnore.insert(nodeLink.second);
+    for (const auto& path : routeToNodes.at(kv.first)) {
+      if (path.second == min_cost) {
+        shortestRoutes.push_back(path);
+        continue;
       }
-      dstPaths.emplace_back(std::make_pair(std::move(minPath), minCost1));
+      secShortestRoutes.push_back(path);
     }
   }
 
-  // Step-3 Collect all second shortest paths
-  if (linksToIgnore.size()) {
-    auto const spf2 = runSpf(myNodeName, true, linksToIgnore);
-    auto const& minMetricNodes2 = getMinCostNodes(spf2, dstNodeNames);
-    auto const& minCost2 = minMetricNodes2.first;
-    auto const& minCostNodes2 = minMetricNodes2.second;
-
-    for (auto const& minCostDst : minCostNodes2) {
-      auto minPaths =
-          traceEdgeDisjointPaths(myNodeName, minCostDst, spf2, linksToIgnore);
-      for (auto& minPath : minPaths) {
-        dstPaths.emplace_back(std::make_pair(std::move(minPath), minCost2));
+  paths.reserve(shortestRoutes.size() + secShortestRoutes.size());
+  paths.insert(paths.end(), shortestRoutes.begin(), shortestRoutes.end());
+  // when get to second shortes routes, we want to make sure the shortest route
+  // is not part of second shortest route to avoid double spraying issue
+  for (const auto& secPath : secShortestRoutes) {
+    bool add = true;
+    for (const auto& firPath : shortestRoutes) {
+      // this could happen for anycast VIPs.
+      // for example, in a full mesh topology contains A, B and C. B and C both
+      // annouce a prefix P. When A wants to talk to P, it's shortes paths are
+      // A->B and A->C. And it is second shortest path is A->B->C and A->C->B.
+      // In this case,  A->B->C containser A->B already, so we want to avoid
+      // this.
+      if (pathAInPathB(firPath.first, secPath.first)) {
+        add = false;
+        break;
       }
     }
+    if (add) {
+      paths.push_back(secPath);
+    }
   }
 
-  // Step-4 Convert all paths
-  if (not dstPaths.size()) {
-    LOG(WARNING) << "No route to prefix " << toString(prefix)
-                 << ", advertised by: " << folly::join(", ", dstNodeNames);
-    tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+  if (paths.size() == 0) {
     return folly::none;
   }
 
-  thrift::UnicastRoute route;
-  route.dest = prefix;
-  for (auto& pathAndCost : dstPaths) {
-    // NOTE: Here we're forwarding according to the node-labels instead of
-    // explicit link labels. This gives unique nexthops when there are no
-    // parallel links in network between two nodes.
+  for (const auto& pathAndCost : paths) {
     std::vector<int32_t> labels;
     for (auto& nodeLink : pathAndCost.first) {
       auto& otherNodeName = nodeLink.second->getOtherNodeName(nodeLink.first);
@@ -1019,16 +1067,72 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRoute(
       mplsAction = createMplsAction(
           thrift::MplsActionCode::PUSH, folly::none, std::move(labels));
     }
+
+    auto const& prefixStr = prefix.prefixAddress.addr;
+    bool isV4Prefix = prefixStr.size() == folly::IPAddressV4::byteCount();
+
     route.nextHops.emplace_back(createNextHop(
-        isV4 ? firstLink->getNhV4FromNode(myNodeName)
-             : firstLink->getNhV6FromNode(myNodeName),
+        isV4Prefix ? firstLink->getNhV4FromNode(myNodeName)
+                   : firstLink->getNhV6FromNode(myNodeName),
         firstLink->getIfaceFromNode(myNodeName),
         pathCost,
         std::move(mplsAction),
         true /* useNonShortestRoute */));
   }
-
   return std::move(route);
+}
+
+std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
+SpfSolver::SpfSolverImpl::createOpenRKsp2EdRouteForNodes(
+    std::string const& myNodeName,
+    std::unordered_set<std::string> const& nodes) {
+  std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
+      pathsToNodes;
+
+  // Prepare list of possible destination nodes
+  for (const auto& node : nodes) {
+    std::set<std::string> dstNodeNames;
+    dstNodeNames.emplace(node);
+
+    // Step-1 Get all shortest paths and min-cost nodes to whom we will be
+    // forwarding
+    auto const& spf1 = spfResults_.at(myNodeName);
+    auto const& minMetricNodes1 = getMinCostNodes(spf1, dstNodeNames);
+    auto const& minCost1 = minMetricNodes1.first;
+    auto const& minCostNodes1 = minMetricNodes1.second;
+
+    // Step-2 Prepare set of links to ignore from subsequent SPF for finding
+    //        second shortest paths. Collect all shortest paths
+    LinkState::LinkSet linksToIgnore;
+    for (auto const& minCostDst : minCostNodes1) {
+      auto minPaths = traceEdgeDisjointPaths(myNodeName, minCostDst, spf1);
+      for (auto& minPath : minPaths) {
+        for (auto& nodeLink : minPath) {
+          linksToIgnore.insert(nodeLink.second);
+        }
+        // dstPaths.emplace_back(std::make_pair(std::move(minPath), minCost1));
+        pathsToNodes[node].push_back(
+            std::make_pair(std::move(minPath), minCost1));
+      }
+    }
+
+    // Step-3 Collect all second shortest paths
+    if (linksToIgnore.size()) {
+      auto const spf2 = runSpf(myNodeName, true, linksToIgnore);
+      auto const& minMetricNodes2 = getMinCostNodes(spf2, dstNodeNames);
+      auto const& minCost2 = minMetricNodes2.first;
+      auto const& minCostNodes2 = minMetricNodes2.second;
+      for (auto const& minCostDst : minCostNodes2) {
+        auto minPaths =
+            traceEdgeDisjointPaths(myNodeName, minCostDst, spf2, linksToIgnore);
+        for (auto& minPath : minPaths) {
+          pathsToNodes[node].push_back(
+              std::make_pair(std::move(minPath), minCost2));
+        }
+      }
+    }
+  }
+  return pathsToNodes;
 }
 
 std::pair<Metric, std::unordered_set<std::string>>
