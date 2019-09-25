@@ -39,15 +39,28 @@ enum class PacketValidationResult {
 };
 
 //
-// Define SparkNeighborState for Spark2 usage. This is used to define
+// Define SparkNeighState for Spark2 usage. This is used to define
 // transition state for neighbors as part of the Finite State Machine.
 //
-enum class SparkNeighborState {
-  IDLE = 1,
-  WARM = 2,
-  NEGOTIATE = 3,
-  ESTABLISHED = 4,
-  RESTART = 5,
+enum class SparkNeighState {
+  IDLE = 0,
+  WARM = 1,
+  NEGOTIATE = 2,
+  ESTABLISHED = 3,
+  RESTART = 4,
+  UNEXPECTED_STATE = 5,
+};
+
+enum class SparkNeighEvent {
+  HELLO_RCVD_INFO = 0,
+  HELLO_RCVD_NO_INFO = 1,
+  HELLO_RCVD_RESTART = 2,
+  HEARTBEAT_RCVD = 3,
+  HANDSHAKE_RCVD = 4,
+  HEARTBEAT_TIMER_EXPIRE = 5,
+  NEGOTIATE_TIMER_EXPIRE = 6,
+  GR_TIMER_EXPIRE = 7,
+  UNEXPECTED_EVENT = 8,
 };
 
 //
@@ -69,6 +82,8 @@ class Spark final : public OpenrEventLoop {
       std::chrono::milliseconds myHoldTime,
       std::chrono::milliseconds myKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime,
+      std::chrono::milliseconds myHandshakeTime,
+      std::chrono::milliseconds myNegotiateHoldTime,
       folly::Optional<int> ipTos,
       bool enableV4,
       bool enableSubnetValidation,
@@ -108,6 +123,12 @@ class Spark final : public OpenrEventLoop {
   // (2) validate hello packet sequence number. detects neighbor restart if
   //     sequence number gets wrapped up again.
   // (3) performs various other validation e.g. domain, subnet validation etc.
+  PacketValidationResult sanityCheckHelloPkt(
+      std::string const& domainName,
+      std::string const& neighborName,
+      std::string const& remoteIfName,
+      uint32_t const& remoteVersion);
+
   PacketValidationResult validateHelloPacket(
       std::string const& ifName, thrift::SparkHelloPacket const& helloPacket);
 
@@ -155,6 +176,121 @@ class Spark final : public OpenrEventLoop {
       folly::Optional<std::unordered_set<std::string>> areas,
       const std::string& nodeName);
 
+  // function to receive and parse received pkt
+  bool parsePacket(
+      thrift::SparkHelloPacket& pkt /* packet( type will be renamed later) */,
+      std::string& ifName /* interface */,
+      std::chrono::microseconds& recvTime /* kernel timestamp when recved */);
+
+  //
+  // Spark2 related function call
+  //
+
+  /*
+   * Spark2 neighbor state tracking
+   */
+  struct Spark2Neighbor {
+    Spark2Neighbor(
+        std::string const& domainName,
+        std::string const& nodeName,
+        std::string const& remoteIfName,
+        uint32_t label,
+        uint64_t seqNum);
+
+    // doamin name
+    const std::string domainName;
+
+    // node name
+    const std::string nodeName;
+
+    // interface name
+    const std::string remoteIfName;
+
+    // SR Label to reach Neighbor over this specific adjacency. Generated
+    // using ifIndex to this neighbor. Only local within the node.
+    const uint32_t label{0};
+
+    // Last sequence number received from neighbor
+    uint64_t seqNum{0};
+
+    // neighbor state
+    SparkNeighState state;
+
+    // timer to periodically send out handshake pkt
+    std::unique_ptr<fbzmq::ZmqTimeout> negotiateTimer{nullptr};
+
+    // negotiate stage hold-timer
+    std::unique_ptr<fbzmq::ZmqTimeout> negotiateHoldTimer{nullptr};
+
+    // heartbeat hold-timer
+    std::unique_ptr<fbzmq::ZmqTimeout> heartbeatHoldTimer{nullptr};
+
+    // graceful restart hold-timer
+    std::unique_ptr<fbzmq::ZmqTimeout> gracefulRestartTimer{nullptr};
+
+    // KvStore related port. Info passed to LinkMonitor for neighborEvent
+    int32_t kvStorePubPort{0};
+    int32_t kvStoreCmdPort{0};
+
+    // hold time
+    std::chrono::seconds heartbeatHoldTime{0};
+    std::chrono::seconds gracefulRestartHoldTime{0};
+
+    // v4/v6 network address
+    folly::CIDRNetwork v4Network;
+    folly::CIDRNetwork v6LinkLocalNetwork;
+
+    // Timestamps of last hello packet received from this neighbor.
+    // All timestamps are derived from std::chrono::steady_clock.
+    std::chrono::microseconds neighborTimestamp{0};
+    std::chrono::microseconds localTimestamp{0};
+
+    // Currently RTT value being used to neighbor. Must be initialized to zero
+    std::chrono::microseconds rtt{0};
+
+    // Lastest measured RTT on receipt of every hello packet
+    std::chrono::microseconds rttLatest{0};
+  };
+
+  std::unordered_map<
+      std::string /* ifName */,
+      std::unordered_map<std::string /* neighborName */, Spark2Neighbor>>
+      spark2Neighbors_{};
+
+  // utility call to send SparkNeighborEvent
+  void notifySparkNeighborEvent(
+      thrift::SparkNeighborEventType type,
+      std::string const& ifName,
+      thrift::SparkNeighbor const& originator,
+      int64_t rtt,
+      int32_t label,
+      bool supportFloodOptimization);
+
+  // utility call to send handshake msg
+  void sendHandshakeMsg();
+
+  // process helloMsg in Spark2 context
+  void processHelloMsg(
+      thrift::SparkHelloMsg& helloMsg, std::string const& ifName);
+
+  // process heartbeatMsg in Spark2 context
+  void processHeartbeatMsg();
+
+  // process handshakeMsg to update spark2Neighbors_ db
+  void processHandshakeMsg();
+
+  // process timeout for negotiate stage
+  void processNegotiateTimeout(
+      std::string const& ifName, std::string const& neighborName);
+
+  // Util function to convert ENUM SparlNeighborState to string
+  static std::string sparkNeighborStateToStr(SparkNeighState state);
+
+  // Util function for state transition
+  static SparkNeighState getNextState(
+      folly::Optional<SparkNeighState> const& currState,
+      SparkNeighEvent const& event);
+
   //
   // Private state
   //
@@ -179,6 +315,12 @@ class Spark final : public OpenrEventLoop {
   // usual keep alive interval
   const std::chrono::milliseconds fastInitKeepAliveTime_{0};
 
+  // handshake msg sendout interval
+  const std::chrono::milliseconds myHandshakeTime_{0};
+
+  // the negotiate hold time all interfaces.
+  const std::chrono::milliseconds myNegotiateHoldTime_{0};
+
   // This flag indicates that we will also exchange v4 transportAddress in
   // Spark HelloMessage
   const bool enableV4_{false};
@@ -194,6 +336,10 @@ class Spark final : public OpenrEventLoop {
 
   // the multicast socket we use
   int mcastFd_{-1};
+
+  // state transition matrix for Finite-State-Machine
+  static const std::vector<std::vector<folly::Optional<SparkNeighState>>>
+      stateMap_;
 
   //
   // zmq sockets section
@@ -307,19 +453,6 @@ class Spark final : public OpenrEventLoop {
       std::string /* ifName */,
       std::unordered_map<std::string /* neighborName */, Neighbor>>
       neighbors_{};
-
-  // function to receive and parse received pkt
-  bool parsePacket(
-      thrift::SparkHelloPacket& pkt /* packet( type will be renamed later) */,
-      std::string& ifName /* interface */,
-      std::chrono::microseconds& recvTime /* kernel timestamp when recved */);
-
-  /*
-   * Spark 2 specific function/var
-   */
-  void processHelloMsg();
-  void processHeartbeatMsg();
-  void processHandshakeMsg();
 
   // to serdeser messages over ZMQ sockets
   apache::thrift::CompactSerializer serializer_;

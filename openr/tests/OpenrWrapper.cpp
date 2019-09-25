@@ -137,6 +137,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       sparkHoldTime, // hold time ms
       sparkKeepAliveTime, // keep alive ms
       sparkFastInitKeepAliveTime, // fastInitKeepAliveTime ms
+      std::chrono::milliseconds{0}, /* spark2_handshake_time */
+      std::chrono::milliseconds{0}, /* spark2_negotiate_hold_time */
       folly::none, // ip-tos
       v4Enabled, // enable v4
       true, // enable subnet validation

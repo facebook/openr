@@ -40,6 +40,8 @@ SparkWrapper::SparkWrapper(
       myHoldTime,
       myKeepAliveTime,
       myFastInitKeepAliveTime /* fastInitKeepAliveTime */,
+      std::chrono::milliseconds{0}, /* spark2_handshake_time */
+      std::chrono::milliseconds{0}, /* spark2_negotiate_hold_time */
       folly::none /* ip-tos */,
       enableV4,
       enableSubnetValidation,

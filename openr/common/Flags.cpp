@@ -187,6 +187,16 @@ DEFINE_string(
     spark_report_url, "inproc://spark_server_report", "Spark Report URL");
 DEFINE_string(spark_cmd_url, "inproc://spark_server_cmd", "Spark Cmd URL");
 DEFINE_int32(
+    spark2_handshake_time_ms,
+    500,
+    "Handshake msg interval (in milliseconds) to negotiate param for "
+    "adjacency establishment.");
+DEFINE_int32(
+    spark2_negotiate_hold_time_s,
+    5,
+    "How long (in seconds) to stay in negotiate state. Should form "
+    "adjacency within this period of time.");
+DEFINE_int32(
     health_checker_ping_interval_s,
     10,
     "Time interval (in seconds) to send health check pings to other nodes in "
