@@ -24,7 +24,11 @@ SparkWrapper::SparkWrapper(
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
     std::shared_ptr<IoProvider> ioProvider,
-    folly::Optional<std::unordered_set<std::string>> areas)
+    folly::Optional<std::unordered_set<std::string>> areas,
+    bool enableSpark2,
+    std::chrono::milliseconds myHandshakeTime,
+    std::chrono::milliseconds myNegotiateHoldTime,
+    std::chrono::milliseconds myHeartbeatHoldTime)
     : myNodeName_(myNodeName),
       ioProvider_(std::move(ioProvider)),
       reqSock_(zmqContext),
@@ -40,9 +44,9 @@ SparkWrapper::SparkWrapper(
       myHoldTime,
       myKeepAliveTime,
       myFastInitKeepAliveTime, // fastInitKeepAliveTime
-      std::chrono::milliseconds{0}, // spark2_handshake_time
-      std::chrono::milliseconds{0}, // spark2_negotiate_hold_time
-      std::chrono::milliseconds{0}, // spark2_heartbeat_hold_time
+      myHandshakeTime, // spark2_handshake_time
+      myNegotiateHoldTime, // spark2_negotiate_hold_time
+      myHeartbeatHoldTime, // spark2_heartbeat_hold_time
       folly::none /* ip-tos */,
       enableV4,
       enableSubnetValidation,
@@ -53,8 +57,8 @@ SparkWrapper::SparkWrapper(
       OpenrCtrlThriftPort{2018},
       version,
       zmqContext,
-      false,
-      false,
+      true,
+      enableSpark2,
       areas);
 
   // start spark
@@ -137,6 +141,35 @@ SparkWrapper::recvNeighborEvent(
     return folly::makeUnexpected(maybeMsg.error());
   }
   return maybeMsg.value();
+}
+
+//
+// Lame-ass attempt to skip unexpected messages, such as RTT
+// change event. Trying 3 times is a wild guess, no logic.
+//
+folly::Optional<thrift::SparkNeighborEvent>
+SparkWrapper::waitForEvent(
+    const thrift::SparkNeighborEventType eventType,
+    folly::Optional<std::chrono::milliseconds> timeout) noexcept {
+  // TODO: remove this magic number case for stability
+  for (auto i = 0; i < 3; i++) {
+    auto maybeEvent = recvNeighborEvent(timeout);
+    if (maybeEvent.hasError()) {
+      LOG(ERROR) << "recvNeighborEvent failed: " << maybeEvent.error();
+      continue;
+    }
+    auto& event = maybeEvent.value();
+    if (eventType == event.eventType) {
+      return event;
+    }
+  }
+  return folly::none;
+}
+
+std::pair<folly::IPAddress, folly::IPAddress>
+SparkWrapper::getTransportAddrs(const thrift::SparkNeighborEvent& event) {
+  return {toIPAddress(event.neighbor.transportAddressV4),
+          toIPAddress(event.neighbor.transportAddressV6)};
 }
 
 } // namespace openr

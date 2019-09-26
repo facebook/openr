@@ -41,7 +41,11 @@ class SparkWrapper {
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
       std::shared_ptr<IoProvider> ioProvider,
-      folly::Optional<std::unordered_set<std::string>> areas);
+      folly::Optional<std::unordered_set<std::string>> areas,
+      bool enableSpark2,
+      std::chrono::milliseconds myHandshakeTime,
+      std::chrono::milliseconds myNegotiateHoldTime,
+      std::chrono::milliseconds myHeartbeatHoldTime);
 
   ~SparkWrapper();
 
@@ -60,6 +64,13 @@ class SparkWrapper {
   folly::Expected<thrift::SparkNeighborEvent, fbzmq::Error> recvNeighborEvent(
       folly::Optional<std::chrono::milliseconds> timeout = folly::none);
 
+  folly::Optional<thrift::SparkNeighborEvent> waitForEvent(
+      const thrift::SparkNeighborEventType eventType,
+      folly::Optional<std::chrono::milliseconds> timeout =
+          folly::none) noexcept;
+
+  static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
+      const thrift::SparkNeighborEvent& event);
   //
   // Private state
   //

@@ -78,31 +78,6 @@ const std::chrono::milliseconds kHoldTime(100);
 
 // the keep-alive for spark hello messages
 const std::chrono::milliseconds kKeepAliveTime(20);
-
-//
-// Lame-ass attempt to skip unexpected messages, such as RTT
-// change event. Trying 3 times is a wild guess, no logic.
-//
-folly::Optional<thrift::SparkNeighborEvent>
-waitForEvent(
-    std::shared_ptr<SparkWrapper> const spark,
-    const thrift::SparkNeighborEventType eventType,
-    folly::Optional<std::chrono::milliseconds> timeout = folly::none) noexcept {
-  // XXX: hardcode_it
-  for (auto i = 0; i < 3; i++) {
-    auto maybeEvent = spark->recvNeighborEvent(timeout);
-    if (maybeEvent.hasError()) {
-      LOG(ERROR) << "recvNeighborEvent failed: " << maybeEvent.error();
-      continue;
-    }
-    auto event = maybeEvent.value();
-    if (eventType == event.eventType) {
-      return event;
-    }
-  }
-  return folly::none;
-};
-
 } // namespace
 
 //
@@ -128,13 +103,6 @@ class SparkFixture : public testing::Test {
     LOG(INFO) << "Stopping mockIoProvider thread.";
     mockIoProvider->stop();
     mockIoProviderThread->join();
-  }
-
-  // extract IPs from a spark neighbor event
-  pair<folly::IPAddress, folly::IPAddress>
-  getTransportAddrs(const thrift::SparkNeighborEvent& event) {
-    return {toIPAddress(event.neighbor.transportAddressV4),
-            toIPAddress(event.neighbor.transportAddressV6)};
   }
 
   // helper function to create a spark instance
@@ -163,7 +131,11 @@ class SparkFixture : public testing::Test {
         version,
         context,
         mockIoProvider,
-        areas);
+        areas,
+        false, // enable Spark2 functionality
+        std::chrono::milliseconds{0},
+        std::chrono::milliseconds{0},
+        std::chrono::milliseconds{0});
   }
 
   fbzmq::Context context;
@@ -216,21 +188,25 @@ TEST_F(SparkFixture, UnidirectionalTest) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-2", event->neighbor.nodeName);
-    EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(*event));
+    EXPECT_EQ(
+        make_pair(ip2V4.first, ip2V6.first),
+        SparkWrapper::getTransportAddrs(*event));
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-1", event->neighbor.nodeName);
-    EXPECT_EQ(make_pair(ip1V4.first, ip1V6.first), getTransportAddrs(*event));
+    EXPECT_EQ(
+        make_pair(ip1V4.first, ip1V6.first),
+        SparkWrapper::getTransportAddrs(*event));
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
@@ -251,14 +227,14 @@ TEST_F(SparkFixture, UnidirectionalTest) {
 
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported down adjacency to node-2";
   }
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported down adjacency to node-1";
   }
@@ -316,13 +292,13 @@ TEST_F(SparkFixture, GracefulRestart) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
@@ -348,8 +324,8 @@ TEST_F(SparkFixture, GracefulRestart) {
   // node-1 should report node-2 as restarting because of sequence number
   // wrapping
   {
-    auto event = waitForEvent(
-        spark1, thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
+    auto event = spark1->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported node-2 as RESTARTING";
   }
@@ -359,7 +335,7 @@ TEST_F(SparkFixture, GracefulRestart) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -406,7 +382,7 @@ TEST_F(SparkFixture, HoldTimerExpired) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-2", event->neighbor.nodeName);
@@ -415,7 +391,7 @@ TEST_F(SparkFixture, HoldTimerExpired) {
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-1", event->neighbor.nodeName);
@@ -443,7 +419,7 @@ TEST_F(SparkFixture, HoldTimerExpired) {
   // node-1 should report node-2 as down because of hold timer expired
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported node-2 as down because hold-timer expired";
   }
@@ -451,7 +427,7 @@ TEST_F(SparkFixture, HoldTimerExpired) {
   // node-1 should report node-2 as up
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
@@ -459,7 +435,7 @@ TEST_F(SparkFixture, HoldTimerExpired) {
   // node-2 will eventually report node-1 as up
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -555,14 +531,14 @@ TEST_F(SparkFixture, IfaceRemovalTest) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -582,7 +558,7 @@ TEST_F(SparkFixture, IfaceRemovalTest) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported down adjacency to node-2";
   }
@@ -593,7 +569,7 @@ TEST_F(SparkFixture, IfaceRemovalTest) {
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported down adjacency to node-1";
   }
@@ -614,14 +590,14 @@ TEST_F(SparkFixture, IfaceRemovalTest) {
 
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported UP adjacency to node-2";
   }
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported UP adjacency to node-2";
   }
@@ -670,14 +646,14 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -698,7 +674,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-3", event->neighbor.nodeName);
@@ -713,7 +689,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   //
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-3", event->neighbor.nodeName);
@@ -749,7 +725,9 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface3, event.ifName);
     EXPECT_EQ("node-1", event.neighbor.nodeName);
-    EXPECT_EQ(make_pair(ip1V4.first, ip1V6.first), getTransportAddrs(event));
+    EXPECT_EQ(
+        make_pair(ip1V4.first, ip1V6.first),
+        SparkWrapper::getTransportAddrs(event));
     EXPECT_EQ(1, expectedLabels.count(event.label));
 
     event = events.at("node-2");
@@ -758,7 +736,9 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface3, event.ifName);
     EXPECT_EQ("node-2", event.neighbor.nodeName);
-    EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(event));
+    EXPECT_EQ(
+        make_pair(ip2V4.first, ip2V6.first),
+        SparkWrapper::getTransportAddrs(event));
     EXPECT_EQ(1, expectedLabels.count(event.label));
 
     // Label of discovered neighbors must be different on the same interface
@@ -779,7 +759,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   {
     LOG(INFO) << "Waiting for node-1 to report down adjacency to node-3";
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ("node-3", event->neighbor.nodeName);
     LOG(INFO) << "node-1 reported down adjacency for node-3";
@@ -791,7 +771,7 @@ TEST_F(SparkFixture, TestAdjUpDownChanges) {
   {
     LOG(INFO) << "Waiting for node-2 to report down adjacency to node-3";
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ("node-3", event->neighbor.nodeName);
     LOG(INFO) << "node-2 reported down adjacency for node-3";
@@ -871,14 +851,18 @@ TEST_F(SparkFixture, HubAndSpoke) {
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface1_2, event.ifName);
     EXPECT_EQ("node-2", event.neighbor.nodeName);
-    EXPECT_EQ(make_pair(ip2V4.first, ip2V6.first), getTransportAddrs(event));
+    EXPECT_EQ(
+        make_pair(ip2V4.first, ip2V6.first),
+        SparkWrapper::getTransportAddrs(event));
 
     event = events["node-3"];
 
     EXPECT_EQ(thrift::SparkNeighborEventType::NEIGHBOR_UP, event.eventType);
     EXPECT_EQ(iface1_3, event.ifName);
     EXPECT_EQ("node-3", event.neighbor.nodeName);
-    EXPECT_EQ(make_pair(ip3V4.first, ip3V6.first), getTransportAddrs(event));
+    EXPECT_EQ(
+        make_pair(ip3V4.first, ip3V6.first),
+        SparkWrapper::getTransportAddrs(event));
 
     LOG(INFO) << "node-1 reported adjacencies UP to node-2, node-3";
   }
@@ -965,7 +949,7 @@ TEST_F(SparkFixture, RttTest) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     // 25% tolerance
     EXPECT_GE(event->rttUs, (200 - 50) * 1000);
@@ -976,7 +960,7 @@ TEST_F(SparkFixture, RttTest) {
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     // 25% tolerance
     EXPECT_GE(event->rttUs, (200 - 50) * 1000);
@@ -999,8 +983,8 @@ TEST_F(SparkFixture, RttTest) {
   // wait for sparks to detect RTT change. We will get only single update
   //
   {
-    auto event = waitForEvent(
-        spark1, thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
+    auto event = spark1->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
     ASSERT_TRUE(event.hasValue());
     // 25% tolerance
     EXPECT_GE(event->rttUs, (220 - 55) * 1000);
@@ -1010,8 +994,8 @@ TEST_F(SparkFixture, RttTest) {
   }
 
   {
-    auto event = waitForEvent(
-        spark2, thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
+    auto event = spark2->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
     ASSERT_TRUE(event.hasValue());
     // 25% tolerance
     EXPECT_GE(event->rttUs, (220 - 55) * 1000);
@@ -1343,14 +1327,14 @@ TEST_F(SparkFixture, FastInitTest) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -1389,7 +1373,7 @@ TEST_F(SparkFixture, FastInitTest) {
   //
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -1475,14 +1459,14 @@ TEST_F(SparkFixture, dropPacketsTest) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported adjacency to node-2";
   }
 
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
@@ -1602,13 +1586,13 @@ TEST_F(SparkFixture, VersionTest) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "Version test: node-1 reported adjacency to node-2";
   }
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "Version test: node-2 reported adjacency to node-1";
   }
@@ -1722,14 +1706,14 @@ TEST_F(SparkFixture, AreaTest) {
   //
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(event.value().neighbor.nodeName, "node-2");
     LOG(INFO) << "node-1 Formed adj with " << event.value().neighbor.nodeName;
   }
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(event.value().neighbor.nodeName, "node-1");
     LOG(INFO) << "node-2 Formed adj with " << event.value().neighbor.nodeName;
@@ -1758,14 +1742,14 @@ TEST_F(SparkFixture, AreaTest) {
 
   {
     auto event =
-        waitForEvent(spark1, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(event.value().neighbor.nodeName, "node-3");
     LOG(INFO) << "node-1 Formed adj with " << event.value().neighbor.nodeName;
   }
   {
     auto event =
-        waitForEvent(spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(event.value().neighbor.nodeName, "node-3");
     LOG(INFO) << "node-2 Formed adj with " << event.value().neighbor.nodeName;
@@ -1773,7 +1757,7 @@ TEST_F(SparkFixture, AreaTest) {
   // wait for UP event from nodes 1 and 2.
   {
     auto event =
-        waitForEvent(spark3, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark3->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_TRUE(
         event.value().neighbor.nodeName == "node-1" ||
@@ -1782,7 +1766,7 @@ TEST_F(SparkFixture, AreaTest) {
   }
   {
     auto event =
-        waitForEvent(spark3, thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        spark3->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_TRUE(
         event.value().neighbor.nodeName == "node-1" ||
@@ -1810,21 +1794,21 @@ TEST_F(SparkFixture, AreaTest) {
   // add interface
   EXPECT_TRUE(spark4->updateInterfaceDb({{iface4, ifIndex4, ip4V4, ip4V6}}));
   {
-    auto event = waitForEvent(
-        spark2, thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
+    auto event = spark2->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
     ASSERT_FALSE(event.hasValue());
     LOG(INFO) << "node-4 received no UP event for node-2";
   }
   {
-    auto event = waitForEvent(
-        spark4, thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
+    auto event = spark4->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(event.value().neighbor.nodeName, "node-1");
     LOG(INFO) << "node-4 Formed adj with " << event.value().neighbor.nodeName;
   }
   {
-    auto event = waitForEvent(
-        spark3, thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
+    auto event = spark3->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
     ASSERT_FALSE(event.hasValue());
     LOG(INFO) << "node-3 received no UP event for node-4";
   }
