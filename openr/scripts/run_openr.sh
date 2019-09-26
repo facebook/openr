@@ -114,6 +114,7 @@ ENABLE_FLOOD_OPTIMIZATION=false
 IS_FLOOD_ROOT=false
 USE_FLOOD_OPTIMIZATION=false
 ENABLE_SPARK2=false
+PLUGIN_ARGS=
 
 #
 # Some sanity checks before we start OpenR
@@ -242,6 +243,7 @@ ARGS="\
   --max_log_size=1 \
   --v=${VERBOSITY} \
   --vmodule=${VMODULE} \
+  ${PLUGIN_ARGS} \
   ${OPENR_ARGS}"
 
 if [[ -n $LOG_FILE ]]; then
