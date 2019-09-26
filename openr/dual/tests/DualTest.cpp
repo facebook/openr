@@ -106,14 +106,14 @@ validateRouteInfo(const Dual::RouteInfo& info) {
     LOG(ERROR) << "not in PASSIVE state";
     return false;
   }
-  if (not info.nexthop.hasValue()) {
+  if (not info.nexthop.has_value()) {
     if (info.distance != std::numeric_limits<int64_t>::max()) {
       LOG(ERROR) << "nexthop: none but distance != intf";
       return false;
     }
   }
   if (info.distance == std::numeric_limits<int64_t>::max()) {
-    if (info.nexthop.hasValue()) {
+    if (info.nexthop.has_value()) {
       LOG(ERROR) << "distance: inf but nexthop: " << *info.nexthop;
       return false;
     }
@@ -252,10 +252,10 @@ class DualTestNode final : public DualNode {
   void
   processNexthopChange(
       const std::string& rootId,
-      const folly::Optional<std::string>& oldNh,
-      const folly::Optional<std::string>& newNh) noexcept override {
-    std::string oldNhStr = oldNh.hasValue() ? *oldNh : "none";
-    std::string newNhStr = newNh.hasValue() ? *newNh : "none";
+      const std::optional<std::string>& oldNh,
+      const std::optional<std::string>& newNh) noexcept override {
+    std::string oldNhStr = oldNh.has_value() ? *oldNh : "none";
+    std::string newNhStr = newNh.has_value() ? *newNh : "none";
     VLOG(1) << "node: " << nodeId << " at root: " << rootId << " nexthop"
             << " change " << oldNhStr << " -> " << newNhStr;
     return;
@@ -520,7 +520,7 @@ class DualBaseFixture : public ::testing::Test {
         return false;
       }
 
-      if (not nexthop.hasValue() or
+      if (not nexthop.has_value() or
           distance == std::numeric_limits<int64_t>::max()) {
         // skip disconnected node
         continue;

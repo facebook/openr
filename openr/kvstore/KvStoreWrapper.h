@@ -33,8 +33,8 @@ class KvStoreWrapper {
       std::chrono::seconds dbSyncInterval,
       std::chrono::seconds monitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      folly::Optional<KvStoreFilters> filters = folly::none,
-      KvStoreFloodRate kvstoreRate = folly::none,
+      std::optional<KvStoreFilters> filters = std::nullopt,
+      KvStoreFloodRate kvstoreRate = std::nullopt,
       std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
       bool enableFloodOptimization = false,
       bool isFloodRoot = false);
@@ -81,7 +81,7 @@ class KvStoreWrapper {
    * if we pass a prefix, only return keys that match it
    */
   std::unordered_map<std::string /* key */, thrift::Value> dumpAll(
-      folly::Optional<KvStoreFilters> filters = folly::none);
+      std::optional<KvStoreFilters> filters = std::nullopt);
 
   /**
    * API to get dump hashes from KvStore.

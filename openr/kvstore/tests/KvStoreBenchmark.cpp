@@ -78,8 +78,8 @@ class KvStoreTestFixture {
   createKvStore(
       const std::string& nodeId,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      folly::Optional<KvStoreFilters> filters = folly::none,
-      KvStoreFloodRate kvStoreRate = folly::none,
+      std::optional<KvStoreFilters> filters = std::nullopt,
+      KvStoreFloodRate kvStoreRate = std::nullopt,
       std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
       bool enableFloodOptimization = false,
       bool isFloodRoot = false,

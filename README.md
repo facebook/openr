@@ -48,7 +48,7 @@ The code of conduct is described in [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 We have tried `OpenR` on Ubuntu-14.04, Ubuntu-16.04 and CentOS-7.
 This should work on all Linux based platforms without any issues.
 
-* Compiler supporting C++14 or higher
+* Compiler supporting C++17 or higher
 * libzmq-4.0.6 or greater
 
 

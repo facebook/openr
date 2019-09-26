@@ -92,8 +92,8 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   createKvStore(
       std::string nodeId,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      folly::Optional<KvStoreFilters> filters = folly::none,
-      KvStoreFloodRate kvStoreRate = folly::none,
+      std::optional<KvStoreFilters> filters = std::nullopt,
+      KvStoreFloodRate kvStoreRate = std::nullopt,
       std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
       bool enableFloodOptimization = false,
       bool isFloodRoot = false,
@@ -874,8 +874,7 @@ TEST(KvStore, TtlVerification) {
 TEST_F(KvStoreTestFixture, LeafNode) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
-  folly::Optional<KvStoreFilters> kvFilters0{
-      KvStoreFilters({"e2e"}, {"store0"})};
+  std::optional<KvStoreFilters> kvFilters0{KvStoreFilters({"e2e"}, {"store0"})};
   auto store0 = createKvStore("store0", emptyPeers, std::move(kvFilters0));
   auto store1 = createKvStore("store1", emptyPeers);
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
@@ -1015,12 +1014,12 @@ TEST_F(KvStoreTestFixture, LeafNode) {
 
   // Request dumpAll from store1 with a key prefix provided,
   // must return 2 keys
-  folly::Optional<KvStoreFilters> kvFilters1{KvStoreFilters({"e2e"}, {})};
+  std::optional<KvStoreFilters> kvFilters1{KvStoreFilters({"e2e"}, {})};
   EXPECT_EQ(expectedKeyPrefixVals, store1->dumpAll(std::move(kvFilters1)));
 
   // Request dumpAll from store1 with a originator prefix provided,
   // must return 2 keys
-  folly::Optional<KvStoreFilters> kvFilters2{KvStoreFilters({""}, {"store0"})};
+  std::optional<KvStoreFilters> kvFilters2{KvStoreFilters({""}, {"store0"})};
   EXPECT_EQ(expectedOrignatorVals, store1->dumpAll(std::move(kvFilters2)));
 
   expectedOrignatorVals["e2exyz"] = thriftVal2;
@@ -1028,14 +1027,13 @@ TEST_F(KvStoreTestFixture, LeafNode) {
 
   // Request dumpAll from store1 with a key prefix and
   // originator prefix provided, must return 4 keys
-  folly::Optional<KvStoreFilters> kvFilters3{
-      KvStoreFilters({"e2e"}, {"store0"})};
+  std::optional<KvStoreFilters> kvFilters3{KvStoreFilters({"e2e"}, {"store0"})};
   EXPECT_EQ(expectedOrignatorVals, store1->dumpAll(std::move(kvFilters3)));
 
   // try dumpAll with multiple key and originator prefix
   expectedOrignatorVals["test3"] = thriftVal6;
   expectedOrignatorVals["e2"] = thriftVal5;
-  folly::Optional<KvStoreFilters> kvFilters4{
+  std::optional<KvStoreFilters> kvFilters4{
       KvStoreFilters({"e2e", "test3"}, {"store0", "storex"})};
   EXPECT_EQ(expectedOrignatorVals, store1->dumpAll(std::move(kvFilters4)));
 }
@@ -1250,32 +1248,32 @@ TEST_F(KvStoreTestFixture, DualTest) {
   auto r0 = createKvStore(
       "r0",
       emptyPeers,
-      folly::none,
-      folly::none,
+      std::nullopt,
+      std::nullopt,
       Constants::kTtlDecrement,
       true,
       true /* isRoot */);
   auto r1 = createKvStore(
       "r1",
       emptyPeers,
-      folly::none,
-      folly::none,
+      std::nullopt,
+      std::nullopt,
       Constants::kTtlDecrement,
       true,
       true /* isRoot */);
   auto n0 = createKvStore(
       "n0",
       emptyPeers,
-      folly::none,
-      folly::none,
+      std::nullopt,
+      std::nullopt,
       Constants::kTtlDecrement,
       true,
       false /* isRoot */);
   auto n1 = createKvStore(
       "n1",
       emptyPeers,
-      folly::none,
-      folly::none,
+      std::nullopt,
+      std::nullopt,
       Constants::kTtlDecrement,
       true,
       false /* isRoot */);
@@ -2235,7 +2233,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
     }
   }
   // Verify myStore database. we only want keys with "0" prefix
-  folly::Optional<KvStoreFilters> kvFilters{KvStoreFilters({"0"}, {})};
+  std::optional<KvStoreFilters> kvFilters{KvStoreFilters({"0"}, {})};
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll(std::move(kvFilters)));
 }
 
@@ -2412,7 +2410,7 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto store0 = createKvStore("store0", emptyPeers);
   auto store1 =
-      createKvStore("store1", emptyPeers, folly::none, folly::none, ttlDecr);
+      createKvStore("store1", emptyPeers, std::nullopt, std::nullopt, ttlDecr);
   store0->run();
   store1->run();
 
@@ -2492,8 +2490,8 @@ TEST_F(KvStoreTestFixture, RateLimiterSync) {
   auto store0 = createKvStore(
       "store0",
       emptyPeers,
-      folly::none,
-      folly::none, /* rate-limited */
+      std::nullopt,
+      std::nullopt, /* rate-limited */
       Constants::kTtlDecrement,
       false, /* flood-optimization */
       false, /* is-root */
@@ -2501,7 +2499,7 @@ TEST_F(KvStoreTestFixture, RateLimiterSync) {
   auto store1 = createKvStore(
       "store1",
       emptyPeers,
-      folly::none,
+      std::nullopt,
       kvStoreRate, /* rate-limited */
       Constants::kTtlDecrement,
       false, /* flood-optimization */
@@ -2510,8 +2508,8 @@ TEST_F(KvStoreTestFixture, RateLimiterSync) {
   auto store2 = createKvStore(
       "store2",
       emptyPeers,
-      folly::none,
-      folly::none, /* rate-limited */
+      std::nullopt,
+      std::nullopt, /* rate-limited */
       Constants::kTtlDecrement,
       false, /* flood-optimization */
       false, /* is-root */
@@ -2577,7 +2575,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
 
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto store0 = createKvStore("store0", emptyPeers);
-  auto store1 = createKvStore("store1", emptyPeers, folly::none, kvStoreRate);
+  auto store1 = createKvStore("store1", emptyPeers, std::nullopt, kvStoreRate);
   store0->run();
   store1->run();
 

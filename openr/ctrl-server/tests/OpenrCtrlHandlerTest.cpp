@@ -57,8 +57,8 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::seconds(1),
         std::chrono::seconds(1),
         std::unordered_map<std::string, thrift::PeerSpec>(),
-        folly::none,
-        folly::none,
+        std::nullopt,
+        std::nullopt,
         std::chrono::milliseconds(1),
         true /* enableFloodOptimization */,
         true /* isFloodRoot */);

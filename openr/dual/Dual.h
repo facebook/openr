@@ -73,8 +73,8 @@ class Dual {
       const std::string& rootId,
       const std::unordered_map<std::string, int64_t>& localDistance,
       std::function<void(
-          const folly::Optional<std::string>& oldNh,
-          const folly::Optional<std::string>& newNh)> nexthopChangeCb);
+          const std::optional<std::string>& oldNh,
+          const std::optional<std::string>& newNh)> nexthopChangeCb);
 
   // peer up event
   // input: (neighbor-id, link-metric)
@@ -145,7 +145,7 @@ class Dual {
     // distance used to evaluate whether a feasible condition is met or not
     int64_t feasibleDistance{std::numeric_limits<int64_t>::max()};
     // my current nexthop towards destination, none if invalid
-    folly::Optional<std::string> nexthop{folly::none};
+    std::optional<std::string> nexthop{std::nullopt};
     // state machine
     DualStateMachine sm;
     // neighbor exchanged information <report-distance, expect-reply-flag>
@@ -285,8 +285,8 @@ class Dual {
 
   // callback when nexthop changed
   const std::function<void(
-      const folly::Optional<std::string>& oldNh,
-      const folly::Optional<std::string>& newNh)>
+      const std::optional<std::string>& oldNh,
+      const std::optional<std::string>& newNh)>
       nexthopCb_{nullptr};
 
   // spt children
@@ -329,8 +329,8 @@ class DualNode {
   // for a given root-id
   virtual void processNexthopChange(
       const std::string& rootId,
-      const folly::Optional<std::string>& oldNh,
-      const folly::Optional<std::string>& newNh) noexcept = 0;
+      const std::optional<std::string>& oldNh,
+      const std::optional<std::string>& newNh) noexcept = 0;
 
   // peer up from neighbor at link-metric cost
   void peerUp(const std::string& neighbor, int64_t cost);
@@ -360,7 +360,7 @@ class DualNode {
   // get SPT-peers for a given root-id
   // return empty-set if dual for root-id is not ready
   std::unordered_set<std::string> getSptPeers(
-      const folly::Optional<std::string>& rootId) const noexcept;
+      const std::optional<std::string>& rootId) const noexcept;
 
   // get route-info for a given root-id
   // return none if root-id is not discoveried yet

@@ -66,8 +66,8 @@ Dual::Dual(
     const std::string& rootId,
     const std::unordered_map<std::string, int64_t>& localDistance,
     std::function<void(
-        const folly::Optional<std::string>& oldNh,
-        const folly::Optional<std::string>& newNh)> nexthopChangeCb)
+        const std::optional<std::string>& oldNh,
+        const std::optional<std::string>& newNh)> nexthopChangeCb)
     : nodeId(nodeId),
       rootId(rootId),
       localDistances_(localDistance),
@@ -103,7 +103,7 @@ Dual::routeAffected() {
     return false;
   }
 
-  if (info_.nexthop.hasValue() and *info_.nexthop == nodeId) {
+  if (info_.nexthop.has_value() and *info_.nexthop == nodeId) {
     // my nextHop is myself
     return false;
   }
@@ -134,10 +134,10 @@ Dual::routeAffected() {
 
   // nexthop MUST has value, if it's none, it will be handled in
   // above "distance changed" or "no valid route found" cases
-  CHECK(info_.nexthop.hasValue());
+  CHECK(info_.nexthop.has_value());
   if (nexthops.count(*info_.nexthop) == 0) {
     // nextHop changed
-    auto oldnh = info_.nexthop.hasValue() ? *info_.nexthop : "none";
+    auto oldnh = info_.nexthop.has_value() ? *info_.nexthop : "none";
     VLOG(2) << rootId << "::" << nodeId << ": nexthop changed " << oldnh
             << " -> " << folly::join(",", nexthops);
     return true;
@@ -261,7 +261,7 @@ Dual::tryLocalOrDiffusing(
   std::string newNexthop;
   int64_t newDistance;
   bool fc = meetFeasibleCondition(newNexthop, newDistance);
-  if (not info_.nexthop.hasValue()) {
+  if (not info_.nexthop.has_value()) {
     CHECK_EQ(fc, true) << "my nexthop was invalid, must meet FC";
   }
   if (fc) {
@@ -282,12 +282,12 @@ Dual::tryLocalOrDiffusing(
     if (success) {
       info_.sm.processEvent(event, false);
     }
-    if (info_.nexthop.hasValue() and not neighborUp(*info_.nexthop)) {
+    if (info_.nexthop.has_value() and not neighborUp(*info_.nexthop)) {
       // current successor is down
       if (nexthopCb_) {
-        nexthopCb_(info_.nexthop, folly::none);
+        nexthopCb_(info_.nexthop, std::nullopt);
       }
-      info_.nexthop = folly::none;
+      info_.nexthop = std::nullopt;
     }
   }
 }
@@ -374,7 +374,7 @@ Dual::hasValidRoute() const noexcept {
   return (
       info_.sm.state == DualState::PASSIVE and
       info_.distance != std::numeric_limits<int64_t>::max() and
-      info_.nexthop.hasValue());
+      info_.nexthop.has_value());
 }
 
 std::unordered_set<std::string>
@@ -409,11 +409,11 @@ Dual::peerUp(
   // reset parent, if I chose this neighbor as parent before, but I didn't
   // receive peer-down event(non-graceful shutdown), reset nexthop and distance
   // as-if we received peer-down event before.
-  if (info_.nexthop.hasValue() and *info_.nexthop == neighbor) {
+  if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
     if (nexthopCb_) {
-      nexthopCb_(info_.nexthop, folly::none);
+      nexthopCb_(info_.nexthop, std::nullopt);
     }
-    info_.nexthop = folly::none;
+    info_.nexthop = std::nullopt;
     info_.distance = std::numeric_limits<int64_t>::max();
   }
 
@@ -518,7 +518,7 @@ Dual::peerCostChange(
   } else {
     // active
     // only update d while leaving rd, fd as-is
-    if (info_.nexthop.hasValue() and *info_.nexthop == neighbor) {
+    if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
       info_.distance = addDistances(
           cost, info_.neighborInfos[*info_.nexthop].reportDistance);
     }
@@ -555,7 +555,7 @@ Dual::processUpdate(
   } else {
     // active
     // only update d while leaving rd, fd as-is
-    if (info_.nexthop.hasValue() and *info_.nexthop == neighbor) {
+    if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
       info_.distance = addDistances(localDistances_[*info_.nexthop], rd);
     }
     info_.sm.processEvent(DualEvent::OTHERS);
@@ -611,7 +611,7 @@ Dual::processQuery(
   info_.neighborInfos[neighbor].reportDistance = rd;
   info_.cornet.emplace(neighbor);
   DualEvent event = DualEvent::OTHERS;
-  if (info_.nexthop.hasValue() and *info_.nexthop == neighbor) {
+  if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
     event = DualEvent::QUERY_FROM_SUCCESSOR;
   }
 
@@ -620,7 +620,7 @@ Dual::processQuery(
     tryLocalOrDiffusing(event, true /* need reply */, msgsToSend);
   } else {
     // active
-    if (info_.nexthop.hasValue() and *info_.nexthop == neighbor) {
+    if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
       info_.distance = addDistances(
           localDistances_[*info_.nexthop],
           info_.neighborInfos[*info_.nexthop].reportDistance);
@@ -677,7 +677,7 @@ Dual::processReply(
 
   int64_t d;
   int64_t dmin = std::numeric_limits<int64_t>::max();
-  folly::Optional<std::string> newNh = folly::none;
+  std::optional<std::string> newNh{std::nullopt};
   for (const auto& kv : localDistances_) {
     const auto& nb = kv.first;
     const auto& ld = kv.second;
@@ -800,9 +800,8 @@ DualNode::getSptRootId() const noexcept {
 }
 
 std::unordered_set<std::string>
-DualNode::getSptPeers(const folly::Optional<std::string>& rootId) const
-    noexcept {
-  if (not rootId.hasValue()) {
+DualNode::getSptPeers(const std::optional<std::string>& rootId) const noexcept {
+  if (not rootId.has_value()) {
     // none rootId, return empty peers
     return {};
   }
@@ -958,8 +957,8 @@ DualNode::addDual(const std::string& rootId) {
   }
 
   auto nexthopCb = [this, rootId](
-                       const folly::Optional<std::string>& oldNh,
-                       const folly::Optional<std::string>& newNh) {
+                       const std::optional<std::string>& oldNh,
+                       const std::optional<std::string>& newNh) {
     processNexthopChange(rootId, oldNh, newNh);
   };
   duals_.emplace(rootId, Dual(nodeId, rootId, localDistances_, nexthopCb));

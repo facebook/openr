@@ -438,7 +438,7 @@ main(int argc, char** argv) {
   monitor.waitUntilRunning();
   allThreads.emplace_back(std::move(monitorThread));
 
-  folly::Optional<KvStoreFilters> kvFilters = folly::none;
+  std::optional<KvStoreFilters> kvFilters = std::nullopt;
   // Add key prefixes to allow if set as leaf node
   if (FLAGS_set_leaf_node) {
     std::vector<std::string> keyPrefixList;
@@ -462,7 +462,7 @@ main(int argc, char** argv) {
       FLAGS_kvstore_flood_msg_per_sec, FLAGS_kvstore_flood_msg_burst_size));
   if (FLAGS_kvstore_flood_msg_per_sec <= 0 ||
       FLAGS_kvstore_flood_msg_burst_size <= 0) {
-    kvstoreRate = folly::none;
+    kvstoreRate = std::nullopt;
   }
 
   const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};

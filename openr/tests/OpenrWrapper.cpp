@@ -72,7 +72,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create kvstore
   //
 
-  folly::Optional<KvStoreFilters> filters = folly::none;
+  std::optional<KvStoreFilters> filters{std::nullopt};
   kvStore_ = std::make_unique<KvStore>(
       context_,
       nodeId_,

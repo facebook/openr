@@ -54,7 +54,7 @@ using TtlCountdownQueue = boost::heap::priority_queue<
     boost::heap::stable<true>>;
 
 // Kvstore flooding rate <messages/sec, burst size>
-using KvStoreFloodRate = folly::Optional<std::pair<const size_t, const size_t>>;
+using KvStoreFloodRate = std::optional<std::pair<const size_t, const size_t>>;
 
 class KvStoreFilters {
  public:
@@ -119,11 +119,11 @@ class KvStore final : public OpenrEventLoop, public DualNode {
       // initial list of peers to connect to
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       // KvStore key filters
-      folly::Optional<KvStoreFilters> filters = folly::none,
+      std::optional<KvStoreFilters> filters = std::nullopt,
       // ZMQ high water mark
       int zmqHwm = Constants::kHighWaterMark,
       // Kvstore flooding rate
-      KvStoreFloodRate floodRate = folly::none,
+      KvStoreFloodRate floodRate = std::nullopt,
       // TTL decrement factor
       std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
       bool enableFloodOptimization = false,
@@ -136,7 +136,7 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   static std::unordered_map<std::string, thrift::Value> mergeKeyValues(
       std::unordered_map<std::string, thrift::Value>& kvStore,
       std::unordered_map<std::string, thrift::Value> const& update,
-      folly::Optional<KvStoreFilters> const& filters = folly::none);
+      std::optional<KvStoreFilters> const& filters = std::nullopt);
 
   // compare two thrift::Values to figure out which value is better to
   // use, it will compare following attributes in order
@@ -188,14 +188,14 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // callbacks when nexthop changed for a given root-id
   void processNexthopChange(
       const std::string& rootId,
-      const folly::Optional<std::string>& oldNh,
-      const folly::Optional<std::string>& newNh) noexcept override;
+      const std::optional<std::string>& oldNh,
+      const std::optional<std::string>& newNh) noexcept override;
 
   // get flooding peers for a given spt-root-id
   // if rootId is none => flood to all physical peers
   // else only flood to formed SPT-peers for rootId
   std::unordered_set<std::string> getFloodPeers(
-      const folly::Optional<std::string>& rootId);
+      const std::optional<std::string>& rootId);
 
   // collect router-client send failure statistics in following form
   // "kvstore.send_failure.dst-peer-id.error-code"
@@ -267,7 +267,7 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // @return: Number of KV updates applied
   size_t mergePublication(
       thrift::Publication const& rcvdPublication,
-      folly::Optional<std::string> senderId = folly::none);
+      std::optional<std::string> senderId = std::nullopt);
 
   // This function wraps `processRequestMsgHelper` and updates send/received
   // bytes counters.
@@ -372,7 +372,7 @@ class KvStore final : public OpenrEventLoop, public DualNode {
       peers_;
 
   // key/value filters
-  folly::Optional<KvStoreFilters> filters_;
+  std::optional<KvStoreFilters> filters_{std::nullopt};
 
   // the socket to publish changes to kv-store
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock_;
@@ -423,17 +423,16 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   std::unique_ptr<folly::BasicTokenBucket<>> floodLimiter_{nullptr};
 
   // Kvstore flooding rate
-  KvStoreFloodRate floodRate_ = folly::none;
+  KvStoreFloodRate floodRate_{std::nullopt};
 
   // timer to send pending kvstore publication
   std::unique_ptr<fbzmq::ZmqTimeout> pendingPublicationTimer_{nullptr};
 
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>
-  std::unordered_map<
-      folly::Optional<std::string>,
-      std::unordered_set<std::string>>
-      publicationBuffer_{};
+  std::
+      unordered_map<std::optional<std::string>, std::unordered_set<std::string>>
+          publicationBuffer_{};
 
   // max parallel syncs allowed. It's initialized with '2' and doubles
   // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync

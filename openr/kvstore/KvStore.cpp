@@ -80,7 +80,7 @@ KvStore::KvStore(
     std::chrono::seconds monitorSubmitInterval,
     // initializer for mutable state
     std::unordered_map<std::string, thrift::PeerSpec> peers,
-    folly::Optional<KvStoreFilters> filters,
+    std::optional<KvStoreFilters> filters,
     int zmqHwm,
     KvStoreFloodRate floodRate,
     std::chrono::milliseconds ttlDecr,
@@ -128,7 +128,7 @@ KvStore::KvStore(
       folly::none,
       fbzmq::NonblockingFlag{true});
 
-  if (floodRate_.hasValue()) {
+  if (floodRate_.has_value()) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
         floodRate_.value().first, // messages per sec
         floodRate_.value().second); // burst size
@@ -285,7 +285,7 @@ std::unordered_map<std::string, thrift::Value>
 KvStore::mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
     std::unordered_map<std::string, thrift::Value> const& keyVals,
-    folly::Optional<KvStoreFilters> const& filters) {
+    std::optional<KvStoreFilters> const& filters) {
   // the publication to build if we update our KV store
   std::unordered_map<std::string, thrift::Value> kvUpdates;
 
@@ -296,7 +296,8 @@ KvStore::mergeKeyValues(
     auto const& key = kv.first;
     auto const& value = kv.second;
 
-    if (filters.hasValue() && not filters->keyMatch(kv.first, kv.second)) {
+    if (filters.has_value() &&
+        not filters.value().keyMatch(kv.first, kv.second)) {
       VLOG(4) << "key: " << key << " not adding from " << value.originatorId;
       continue;
     }
@@ -795,7 +796,7 @@ KvStore::requestFullSyncFromPeers() {
     thrift::KvStoreRequest dumpRequest;
     thrift::KeyDumpParams params;
 
-    if (filters_.hasValue()) {
+    if (filters_.has_value()) {
       std::string keyPrefix =
           folly::join(",", filters_.value().getKeyPrefixes());
       params.prefix = keyPrefix;
@@ -1124,7 +1125,12 @@ KvStore::processFloodTopoGet() noexcept {
     thrift::SptInfo sptInfo;
     sptInfo.passive = info.sm.state == DualState::PASSIVE;
     sptInfo.cost = info.distance;
-    sptInfo.parent = info.nexthop;
+    // convert from std::optional to folly::optional
+    folly::Optional<std::string> nexthop = folly::none;
+    if (info.nexthop.has_value()) {
+      nexthop = info.nexthop.value();
+    }
+    sptInfo.parent = nexthop;
     sptInfo.children = kv.second.children();
     sptInfos.infos.emplace(rootId, sptInfo);
   }
@@ -1134,7 +1140,11 @@ KvStore::processFloodTopoGet() noexcept {
 
   // set flood root-id and peers
   sptInfos.floodRootId = DualNode::getSptRootId();
-  sptInfos.floodPeers = getFloodPeers(sptInfos.floodRootId);
+  std::optional<std::string> floodRootId{std::nullopt};
+  if (sptInfos.floodRootId.hasValue()) {
+    floodRootId = sptInfos.floodRootId.value();
+  }
+  sptInfos.floodPeers = getFloodPeers(floodRootId);
   return sptInfos;
 }
 
@@ -1217,11 +1227,11 @@ KvStore::unsetChildAll(const std::string& peerName) noexcept {
 void
 KvStore::processNexthopChange(
     const std::string& rootId,
-    const folly::Optional<std::string>& oldNh,
-    const folly::Optional<std::string>& newNh) noexcept {
+    const std::optional<std::string>& oldNh,
+    const std::optional<std::string>& newNh) noexcept {
   // sanity check
-  std::string oldNhStr = oldNh.hasValue() ? *oldNh : "none";
-  std::string newNhStr = newNh.hasValue() ? *newNh : "none";
+  std::string oldNhStr = oldNh.has_value() ? *oldNh : "none";
+  std::string newNhStr = newNh.has_value() ? *newNh : "none";
   CHECK(oldNh != newNh)
       << rootId
       << ": callback invoked while nexthop does not change: " << oldNhStr;
@@ -1231,7 +1241,7 @@ KvStore::processNexthopChange(
             << " -> " << newNhStr;
 
   // set new parent if any
-  if (newNh.hasValue()) {
+  if (newNh.has_value()) {
     // peers_ MUST have this new parent
     // if peers_ does not have this peer, that means KvStore already recevied
     // NEIGHBOR-DOWN event (so does dual), but dual still think I should have
@@ -1260,7 +1270,7 @@ KvStore::processNexthopChange(
   }
 
   // unset old parent if any
-  if (oldNh.hasValue() and peers_.count(*oldNh)) {
+  if (oldNh.has_value() and peers_.count(*oldNh)) {
     // valid old parent AND it's still my peer, unset it
     CHECK_NE(nodeId_, *oldNh) << "old nexthop was myself";
     // unset it
@@ -1465,12 +1475,16 @@ KvStore::bufferPublication(thrift::Publication&& publication) {
   tData_.addStatValue("kvstore.rate_limit_suppress", 1, fbzmq::COUNT);
   tData_.addStatValue(
       "kvstore.rate_limit_keys", publication.keyVals.size(), fbzmq::AVG);
+  std::optional<std::string> floodRootId{std::nullopt};
+  if (publication.floodRootId.hasValue()) {
+    floodRootId = publication.floodRootId.value();
+  }
   // update or add keys
   for (auto const& kv : publication.keyVals) {
-    publicationBuffer_[publication.floodRootId].emplace(kv.first);
+    publicationBuffer_[floodRootId].emplace(kv.first);
   }
   for (auto const& key : publication.expiredKeys) {
-    publicationBuffer_[publication.floodRootId].emplace(key);
+    publicationBuffer_[floodRootId].emplace(key);
   }
 }
 
@@ -1486,7 +1500,12 @@ KvStore::floodBufferedUpdates() {
   // merge publication per root-id
   for (const auto& kv : publicationBuffer_) {
     thrift::Publication publication{};
-    publication.floodRootId = kv.first;
+    // convert from std::optional to folly::Optional
+    folly::Optional<std::string> floodRootId{folly::none};
+    if (kv.first.has_value()) {
+      floodRootId = kv.first.value();
+    }
+    publication.floodRootId = floodRootId;
     for (const auto& key : kv.second) {
       auto kvStoreIt = kvStore_.find(key);
       if (kvStoreIt != kvStore_.end()) {
@@ -1549,7 +1568,7 @@ KvStore::finalizeFullSync(
 }
 
 std::unordered_set<std::string>
-KvStore::getFloodPeers(const folly::Optional<std::string>& rootId) {
+KvStore::getFloodPeers(const std::optional<std::string>& rootId) {
   auto sptPeers = DualNode::getSptPeers(rootId);
   bool floodToAll = false;
   if (not enableFloodOptimization_ or not useFloodOptimization_ or
@@ -1607,7 +1626,7 @@ KvStore::floodPublication(
 
   // Find from whom we might have got this publication. Last entry is our ID
   // and hence second last entry is the node from whom we get this publication
-  folly::Optional<std::string> senderId;
+  std::optional<std::string> senderId;
   if (publication.nodeIds.hasValue() and publication.nodeIds->size()) {
     senderId = publication.nodeIds->back();
   }
@@ -1633,7 +1652,7 @@ KvStore::floodPublication(
     return;
   }
 
-  if (setFloodRoot and not senderId.hasValue()) {
+  if (setFloodRoot and not senderId.has_value()) {
     // I'm the initiator, set flood-root-id
     publication.floodRootId = DualNode::getSptRootId();
   }
@@ -1650,14 +1669,18 @@ KvStore::floodPublication(
   floodRequest.cmd = thrift::Command::KEY_SET;
   floodRequest.keySetParams = params;
 
-  const auto& floodPeers = getFloodPeers(params.floodRootId);
+  std::optional<std::string> floodRootId{std::nullopt};
+  if (params.floodRootId.hasValue()) {
+    floodRootId = params.floodRootId.value();
+  }
+  const auto& floodPeers = getFloodPeers(floodRootId);
   for (const auto& peer : floodPeers) {
-    if (senderId.hasValue() && senderId.value() == peer) {
+    if (senderId.has_value() && senderId.value() == peer) {
       // Do not flood towards senderId from whom we received this publication
       continue;
     }
     VLOG(4) << "Forwarding publication, received from: "
-            << (senderId.hasValue() ? senderId.value() : "N/A")
+            << (senderId.has_value() ? senderId.value() : "N/A")
             << ", to: " << peer << ", via: " << nodeId_;
 
     tData_.addStatValue("kvstore.sent_publications", 1, fbzmq::COUNT);
@@ -1680,13 +1703,13 @@ KvStore::floodPublication(
 size_t
 KvStore::mergePublication(
     const thrift::Publication& rcvdPublication,
-    folly::Optional<std::string> senderId) {
+    std::optional<std::string> senderId) {
   // Add counters
   tData_.addStatValue("kvstore.received_publications", 1, fbzmq::COUNT);
   tData_.addStatValue(
       "kvstore.received_key_vals", rcvdPublication.keyVals.size(), fbzmq::SUM);
 
-  const bool needFinalizeFullSync = senderId.hasValue() and
+  const bool needFinalizeFullSync = senderId.has_value() and
       rcvdPublication.tobeUpdatedKeys.hasValue() and
       not rcvdPublication.tobeUpdatedKeys->empty();
 

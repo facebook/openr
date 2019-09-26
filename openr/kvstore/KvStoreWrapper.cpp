@@ -27,7 +27,7 @@ KvStoreWrapper::KvStoreWrapper(
     std::chrono::seconds dbSyncInterval,
     std::chrono::seconds monitorSubmitInterval,
     std::unordered_map<std::string, thrift::PeerSpec> peers,
-    folly::Optional<KvStoreFilters> filters,
+    std::optional<KvStoreFilters> filters,
     KvStoreFloodRate kvStoreRate,
     std::chrono::milliseconds ttlDecr,
     bool enableFloodOptimization,
@@ -209,12 +209,12 @@ KvStoreWrapper::getKey(std::string key) {
 }
 
 std::unordered_map<std::string /* key */, thrift::Value>
-KvStoreWrapper::dumpAll(folly::Optional<KvStoreFilters> filters) {
+KvStoreWrapper::dumpAll(std::optional<KvStoreFilters> filters) {
   // Prepare request
   thrift::KvStoreRequest request;
   thrift::KeyDumpParams params;
 
-  if (filters.hasValue()) {
+  if (filters.has_value()) {
     std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
     params.prefix = keyPrefix;
     params.originatorIds = filters.value().getOrigniatorIdList();
