@@ -16,7 +16,7 @@ import sys
 import time
 from builtins import str
 from itertools import combinations
-from typing import Any, Callable, Dict, List, Set
+from typing import Any, Callable, Dict, List, Pattern, Set
 
 import bunch
 import hexdump
@@ -769,7 +769,13 @@ class SnoopCmd(KvStoreCmdBase):
             except zmq.error.Again:
                 pass
 
-    def print_expired_keys(self, msg, regex, pattern, global_dbs):
+    def print_expired_keys(
+        self,
+        msg: kv_store_types.Publication,
+        regex: str,
+        pattern: Pattern[str],
+        global_dbs: Dict,
+    ):
         rows = []
         if len(msg.expiredKeys):
             print("Traversal List: {}".format(msg.nodeIds))
@@ -783,14 +789,35 @@ class SnoopCmd(KvStoreCmdBase):
             global_dbs.publications.pop(key, None)
             if key.startswith(Consts.ADJ_DB_MARKER):
                 global_dbs.adjs.pop(key.split(":")[1], None)
+
             if key.startswith(Consts.PREFIX_DB_MARKER):
-                global_dbs.prefixes.pop(key.split(":")[1], None)
+                prefix_match = re.match(Consts.PER_PREFIX_KEY_REGEX, key)
+                # in case of per prefix key expire, the prefix DB entry does not
+                # contain any prefixes. The prefix must be constructed from the
+                # key. Update the prefix set of the corresponding node.
+                if prefix_match:
+                    prefix_set = set()
+                    addr_str = prefix_match.group("ipaddr")
+                    prefix_len = prefix_match.group("plen")
+                    prefix_set.add("{}/{}".format(addr_str, prefix_len))
+                    node_prefix_set = global_dbs.prefixes[prefix_match.group("node")]
+                    node_prefix_set = node_prefix_set - prefix_set
+                else:
+                    global_dbs.prefixes.pop(key.split(":")[1], None)
 
         if rows:
             self.print_timestamp()
             print(printing.render_vertical_table(rows))
 
-    def print_delta(self, msg, regex, pattern, ttl, delta, global_dbs):
+    def print_delta(
+        self,
+        msg: kv_store_types.Publication,
+        regex: str,
+        pattern: Pattern[str],
+        ttl: bool,
+        delta: bool,
+        global_dbs: Dict,
+    ):
 
         for key, value in msg.keyVals.items():
             if not key.startswith(regex) and not pattern.match(key):
@@ -825,7 +852,12 @@ class SnoopCmd(KvStoreCmdBase):
             )
 
     def print_prefix_delta(
-        self, key, value, delta, global_prefix_db, global_publication_db
+        self,
+        key: str,
+        value: kv_store_types.Publication,
+        delta: bool,
+        global_prefix_db: Dict,
+        global_publication_db: Dict,
     ):
         _, reported_node_name = key.split(":", 1)
         prefix_db = serializer.deserialize_thrift_object(
@@ -833,7 +865,7 @@ class SnoopCmd(KvStoreCmdBase):
         )
         if delta:
             lines = "\n".join(
-                utils.sprint_prefixes_db_delta(global_prefix_db, prefix_db)
+                utils.sprint_prefixes_db_delta(global_prefix_db, prefix_db, key)
             )
         else:
             lines = utils.sprint_prefixes_db_full(prefix_db)
@@ -846,9 +878,16 @@ class SnoopCmd(KvStoreCmdBase):
                 lines,
             )
 
-        utils.update_global_prefix_db(global_prefix_db, prefix_db)
+        utils.update_global_prefix_db(global_prefix_db, prefix_db, key)
 
-    def print_adj_delta(self, key, value, delta, global_adj_db, global_publication_db):
+    def print_adj_delta(
+        self,
+        key: str,
+        value: kv_store_types.Value,
+        delta: bool,
+        global_adj_db: Dict,
+        global_publication_db: Dict,
+    ):
         _, reported_node_name = key.split(":", 1)
         new_adj_db = serializer.deserialize_thrift_object(
             value.value, lsdb_types.AdjacencyDatabase

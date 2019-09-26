@@ -8,6 +8,7 @@
 #
 
 
+import re
 from builtins import object
 
 from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
@@ -43,3 +44,14 @@ class Consts(object):
     PROTO_FACTORY = TCompactProtocolFactory
 
     OPENR_CONFIG_FILE = "/etc/sysconfig/openr"
+
+    # per prefix key regex for the following formats
+    # prefix:e00.0002.node2:area1:[192.168.0.2/32]
+    # prefix:e00.0002.node2:area2:[da00:cafe:babe:51:61ee::/80]
+    PER_PREFIX_KEY_REGEX = (
+        re.escape(PREFIX_DB_MARKER)
+        + r"(?P<node>[A-Za-z0-9_-].*):"
+        + r"(?P<area>[A-Za-z0-9_-].*):"
+        + r"\[(?P<ipaddr>[a-fA-F0-9\.\:].*)/"
+        + r"(?P<plen>[0-9]{1,3})\]"
+    )

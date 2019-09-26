@@ -12,6 +12,7 @@ import copy
 import datetime
 import ipaddress
 import json
+import re
 import sys
 from builtins import chr, input, map
 from collections import defaultdict
@@ -1021,7 +1022,7 @@ def sprint_pub_update(global_publication_db, key, value):
     return printing.render_horizontal_table(rows, tablefmt="plain") if rows else ""
 
 
-def update_global_prefix_db(global_prefix_db, prefix_db):
+def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = None):
     """ update the global prefix map with a single publication
 
         :param global_prefix_map map(node, set([str])): map of all prefixes
@@ -1032,15 +1033,21 @@ def update_global_prefix_db(global_prefix_db, prefix_db):
 
     assert isinstance(prefix_db, lsdb_types.PrefixDatabase)
 
-    this_node = prefix_db.thisNodeName
-
     prefix_set = set()
     for prefix_entry in prefix_db.prefixEntries:
         addr_str = ipnetwork.sprint_addr(prefix_entry.prefix.prefixAddress.addr)
         prefix_len = prefix_entry.prefix.prefixLength
         prefix_set.add("{}/{}".format(addr_str, prefix_len))
 
-    global_prefix_db[this_node] = prefix_set
+    # per prefix key format contains only one key, it can be an 'add' or 'delete'
+    if key and re.match(Consts.PER_PREFIX_KEY_REGEX, key):
+        node_prefix_set = global_prefix_db[prefix_db.thisNodeName]
+        if prefix_db.deletePrefix:
+            node_prefix_set = node_prefix_set - prefix_set
+        else:
+            node_prefix_set.update(prefix_set)
+    else:
+        global_prefix_db[prefix_db.thisNodeName] = prefix_set
 
     return
 
@@ -1098,9 +1105,15 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
     return strs
 
 
-def sprint_prefixes_db_delta(global_prefixes_db, prefix_db):
+def sprint_prefixes_db_delta(
+    global_prefixes_db: Dict, prefix_db: Dict, key: str = None
+):
     """ given serialzied prefixes for a single node, output the delta
             between those prefixes and global prefixes snapshot
+
+        prefix could be entire prefix DB or per prefix key
+        entire prefix DB: prefix:<node name>
+        per prefix key: prefix:<node name>:<area>:<[IP addr/prefix len]
 
         :global_prefixes_db map(node, set([str])): global prefixes
         :prefix_db lsdb_types.PrefixDatabase: latest from kv store
@@ -1111,12 +1124,22 @@ def sprint_prefixes_db_delta(global_prefixes_db, prefix_db):
     this_node_name = prefix_db.thisNodeName
     prev_prefixes = global_prefixes_db.get(this_node_name, set())
 
+    added_prefixes = set()
+    removed_prefixes = set()
     cur_prefixes = set()
+
     for prefix_entry in prefix_db.prefixEntries:
         cur_prefixes.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
 
-    added_prefixes = cur_prefixes - prev_prefixes
-    removed_prefixes = prev_prefixes - cur_prefixes
+    # per prefix key format contains only one key, it can be an 'add' or 'delete'
+    if key and re.match(Consts.PER_PREFIX_KEY_REGEX, key):
+        if prefix_db.deletePrefix:
+            removed_prefixes = cur_prefixes
+        else:
+            added_prefixes = cur_prefixes
+    else:
+        added_prefixes = cur_prefixes - prev_prefixes
+        removed_prefixes = prev_prefixes - cur_prefixes
 
     strs = ["+ {}".format(prefix) for prefix in added_prefixes]
     strs.extend(["- {}".format(prefix) for prefix in removed_prefixes])
