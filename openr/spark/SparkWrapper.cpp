@@ -39,9 +39,10 @@ SparkWrapper::SparkWrapper(
       static_cast<uint16_t>(6666),
       myHoldTime,
       myKeepAliveTime,
-      myFastInitKeepAliveTime /* fastInitKeepAliveTime */,
-      std::chrono::milliseconds{0}, /* spark2_handshake_time */
-      std::chrono::milliseconds{0}, /* spark2_negotiate_hold_time */
+      myFastInitKeepAliveTime, // fastInitKeepAliveTime
+      std::chrono::milliseconds{0}, // spark2_handshake_time
+      std::chrono::milliseconds{0}, // spark2_negotiate_hold_time
+      std::chrono::milliseconds{0}, // spark2_heartbeat_hold_time
       folly::none /* ip-tos */,
       enableV4,
       enableSubnetValidation,
@@ -49,6 +50,7 @@ SparkWrapper::SparkWrapper(
       monitorCmdUrl,
       KvStorePubPort{10001},
       KvStoreCmdPort{10002},
+      OpenrCtrlThriftPort{2018},
       version,
       zmqContext,
       false,

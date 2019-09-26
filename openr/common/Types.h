@@ -23,6 +23,9 @@ BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalCmdUrl);
 BOOST_STRONG_TYPEDEF(uint16_t, KvStorePubPort);
 BOOST_STRONG_TYPEDEF(uint16_t, KvStoreCmdPort);
 
+// OpenrCtrl Thrift port
+BOOST_STRONG_TYPEDEF(uint16_t, OpenrCtrlThriftPort);
+
 // Monitor URLs
 BOOST_STRONG_TYPEDEF(std::string, MonitorSubmitUrl);
 BOOST_STRONG_TYPEDEF(std::string, MonitorPubUrl);

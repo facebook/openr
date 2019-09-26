@@ -139,6 +139,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       sparkFastInitKeepAliveTime, // fastInitKeepAliveTime ms
       std::chrono::milliseconds{0}, /* spark2_handshake_time */
       std::chrono::milliseconds{0}, /* spark2_negotiate_hold_time */
+      std::chrono::milliseconds{0}, /* spark2_heartbeat_hold_time */
       folly::none, // ip-tos
       v4Enabled, // enable v4
       true, // enable subnet validation
@@ -146,6 +147,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStorePubPort{0}, // these port numbers won't be used
       KvStoreCmdPort{0},
+      OpenrCtrlThriftPort{0},
       std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       context_);

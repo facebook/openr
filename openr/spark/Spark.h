@@ -84,6 +84,7 @@ class Spark final : public OpenrEventLoop {
       std::chrono::milliseconds fastInitKeepAliveTime,
       std::chrono::milliseconds myHandshakeTime,
       std::chrono::milliseconds myNegotiateHoldTime,
+      std::chrono::milliseconds myHeartbeatHoldTime,
       folly::Optional<int> ipTos,
       bool enableV4,
       bool enableSubnetValidation,
@@ -91,6 +92,7 @@ class Spark final : public OpenrEventLoop {
       MonitorSubmitUrl const& monitorSubmitUrl,
       KvStorePubPort kvStorePubPort,
       KvStoreCmdPort kvStoreCmdPort,
+      OpenrCtrlThriftPort openrCtrlThriftPort,
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
       bool enableFloodOptimization = false,
@@ -182,6 +184,10 @@ class Spark final : public OpenrEventLoop {
       std::string& ifName /* interface */,
       std::chrono::microseconds& recvTime /* kernel timestamp when recved */);
 
+  // function to validate v4Address with its subnet
+  PacketValidationResult validateV4AddressSubnet(
+      std::string const& ifName, thrift::BinaryAddress neighV4Addr);
+
   //
   // Spark2 related function call
   //
@@ -196,6 +202,21 @@ class Spark final : public OpenrEventLoop {
         std::string const& remoteIfName,
         uint32_t label,
         uint64_t seqNum);
+
+    // util function to transfer to SparkNeighbor
+    thrift::SparkNeighbor
+    toThrift() const {
+      thrift::SparkNeighbor res;
+      res.domainName = domainName;
+      res.nodeName = nodeName;
+      res.holdTime = gracefulRestartHoldTime.count();
+      res.transportAddressV4 = transportAddressV4;
+      res.transportAddressV6 = transportAddressV6;
+      res.kvStorePubPort = kvStorePubPort;
+      res.kvStoreCmdPort = kvStoreCmdPort;
+      res.ifName = remoteIfName;
+      return res;
+    }
 
     // doamin name
     const std::string domainName;
@@ -231,14 +252,15 @@ class Spark final : public OpenrEventLoop {
     // KvStore related port. Info passed to LinkMonitor for neighborEvent
     int32_t kvStorePubPort{0};
     int32_t kvStoreCmdPort{0};
+    int32_t openrCtrlThriftPort{0};
 
     // hold time
-    std::chrono::seconds heartbeatHoldTime{0};
-    std::chrono::seconds gracefulRestartHoldTime{0};
+    std::chrono::milliseconds heartbeatHoldTime{0};
+    std::chrono::milliseconds gracefulRestartHoldTime{0};
 
     // v4/v6 network address
-    folly::CIDRNetwork v4Network;
-    folly::CIDRNetwork v6LinkLocalNetwork;
+    thrift::BinaryAddress transportAddressV4;
+    thrift::BinaryAddress transportAddressV6;
 
     // Timestamps of last hello packet received from this neighbor.
     // All timestamps are derived from std::chrono::steady_clock.
@@ -266,8 +288,12 @@ class Spark final : public OpenrEventLoop {
       int32_t label,
       bool supportFloodOptimization);
 
+  // utility call to transform Spark2Neighbor to SparkNeighor
+  thrift::SparkNeighbor buildNeighborFromSpark2Neighbor(
+      Spark2Neighbor const& neighbor);
+
   // utility call to send handshake msg
-  void sendHandshakeMsg();
+  void sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished);
 
   // process helloMsg in Spark2 context
   void processHelloMsg(
@@ -277,7 +303,11 @@ class Spark final : public OpenrEventLoop {
   void processHeartbeatMsg();
 
   // process handshakeMsg to update spark2Neighbors_ db
-  void processHandshakeMsg();
+  void processHandshakeMsg(
+      thrift::SparkHandshakeMsg& handshakeMsg, std::string const& ifName);
+
+  // process timeout for heartbeat
+  void processHeartbeatTimeout();
 
   // process timeout for negotiate stage
   void processNegotiateTimeout(
@@ -315,11 +345,17 @@ class Spark final : public OpenrEventLoop {
   // usual keep alive interval
   const std::chrono::milliseconds fastInitKeepAliveTime_{0};
 
-  // handshake msg sendout interval
+  // Spark2 handshake msg sendout interval
   const std::chrono::milliseconds myHandshakeTime_{0};
 
-  // the negotiate hold time all interfaces.
+  // Spark2 heartbeat msg sendout interval
+  const std::chrono::milliseconds myHeartbeatTime_{0};
+
+  // Spark2 negotiate stage hold time
   const std::chrono::milliseconds myNegotiateHoldTime_{0};
+
+  // Spark2 heartbeat msg hold time
+  const std::chrono::milliseconds myHeartbeatHoldTime_{0};
 
   // This flag indicates that we will also exchange v4 transportAddress in
   // Spark HelloMessage
@@ -352,6 +388,7 @@ class Spark final : public OpenrEventLoop {
   // this is used to inform peers about my kvstore tcp ports
   const uint16_t kKvStorePubPort_;
   const uint16_t kKvStoreCmdPort_;
+  const uint16_t kOpenrCtrlThriftPort_;
 
   // current version and supported version
   const thrift::OpenrVersions kVersion_;

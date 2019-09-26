@@ -197,6 +197,11 @@ DEFINE_int32(
     "How long (in seconds) to stay in negotiate state. Should form "
     "adjacency within this period of time.");
 DEFINE_int32(
+    spark2_heartbeat_hold_time_s,
+    5,
+    "How long (in seconds) to keep neighbor adjacency without receiving "
+    "any heartbeat packet in stable state.");
+DEFINE_int32(
     health_checker_ping_interval_s,
     10,
     "Time interval (in seconds) to send health check pings to other nodes in "

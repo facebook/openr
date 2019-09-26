@@ -577,8 +577,9 @@ main(int argc, char** argv) {
             std::chrono::seconds(FLAGS_spark_hold_time_s),
             std::chrono::seconds(FLAGS_spark_keepalive_time_s),
             std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
-            std::chrono::seconds(FLAGS_spark2_handshake_time_ms),
+            std::chrono::milliseconds(FLAGS_spark2_handshake_time_ms),
             std::chrono::seconds(FLAGS_spark2_negotiate_hold_time_s),
+            std::chrono::seconds(FLAGS_spark2_heartbeat_hold_time_s),
             maybeIpTos,
             FLAGS_enable_v4,
             FLAGS_enable_subnet_validation,
@@ -586,6 +587,7 @@ main(int argc, char** argv) {
             monitorSubmitUrl,
             KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
             KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
+            OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
             std::make_pair(
                 Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
             context,

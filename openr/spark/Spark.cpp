@@ -257,6 +257,7 @@ Spark::Spark(
     std::chrono::milliseconds fastInitKeepAliveTime,
     std::chrono::milliseconds myHandshakeTime,
     std::chrono::milliseconds myNegotiateHoldTime,
+    std::chrono::milliseconds myHeartbeatHoldTime,
     folly::Optional<int> maybeIpTos,
     bool enableV4,
     bool enableSubnetValidation,
@@ -264,6 +265,7 @@ Spark::Spark(
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStorePubPort kvStorePubPort,
     KvStoreCmdPort kvStoreCmdPort,
+    OpenrCtrlThriftPort openrCtrlThriftPort,
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
     bool enableFloodOptimization,
@@ -278,6 +280,7 @@ Spark::Spark(
       fastInitKeepAliveTime_(fastInitKeepAliveTime),
       myHandshakeTime_(myHandshakeTime),
       myNegotiateHoldTime_(myNegotiateHoldTime),
+      myHeartbeatHoldTime_(myHeartbeatHoldTime),
       enableV4_(enableV4),
       enableSubnetValidation_(enableSubnetValidation),
       reportUrl_(reportUrl),
@@ -287,6 +290,7 @@ Spark::Spark(
               openr::Constants::kSparkReportServerId.toString()}),
       kKvStorePubPort_(kvStorePubPort),
       kKvStoreCmdPort_(kvStoreCmdPort),
+      kOpenrCtrlThriftPort_(openrCtrlThriftPort),
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
       enableFloodOptimization_(enableFloodOptimization),
       enableSpark2_(enableSpark2),
@@ -573,30 +577,8 @@ Spark::validateHelloPacket(
 
   // validate v4 address subnet
   if (enableV4_ and enableSubnetValidation_) {
-    // make sure v4 address is already specified on neighbor
-    auto const& myV4Network = interfaceDb_.at(ifName).v4Network;
-    auto const& myV4Addr = myV4Network.first;
-    auto const& myV4PrefixLen = myV4Network.second;
-    auto const& neighV4Addr = originator.transportAddressV4;
-    try {
-      toIPAddress(neighV4Addr);
-    } catch (const folly::IPAddressFormatException& ex) {
-      LOG(ERROR) << "Neighbor V4 address is not known";
-      tData_.addStatValue(
-          "spark.invalid_keepalive.missing_v4_addr", 1, fbzmq::SUM);
-      return PacketValidationResult::FAILURE;
-    }
-
-    // validate subnet of v4 address
-    auto const& neighCidrNetwork =
-        folly::sformat("{}/{}", toString(neighV4Addr), myV4PrefixLen);
-
-    if (!myV4Addr.inSubnet(neighCidrNetwork)) {
-      LOG(ERROR) << "Neighbor V4 address " << toString(neighV4Addr)
-                 << " is not in the same subnet with local V4 address "
-                 << myV4Addr.str() << "/" << +myV4PrefixLen;
-      tData_.addStatValue(
-          "spark.invalid_keepalive.different_subnet", 1, fbzmq::SUM);
+    if (PacketValidationResult::FAILURE ==
+        validateV4AddressSubnet(ifName, originator.transportAddressV4)) {
       return PacketValidationResult::FAILURE;
     }
   }
@@ -844,6 +826,95 @@ Spark::parsePacket(
   return true;
 }
 
+PacketValidationResult
+Spark::validateV4AddressSubnet(
+    std::string const& ifName, thrift::BinaryAddress neighV4Addr) {
+  // validate v4 address subnet
+  // make sure v4 address is already specified on neighbor
+  auto const& myV4Network = interfaceDb_.at(ifName).v4Network;
+  auto const& myV4Addr = myV4Network.first;
+  auto const& myV4PrefixLen = myV4Network.second;
+
+  try {
+    toIPAddress(neighV4Addr);
+  } catch (const folly::IPAddressFormatException& ex) {
+    LOG(ERROR) << "Neighbor V4 address is not known";
+    tData_.addStatValue(
+        "spark.invalid_keepalive.missing_v4_addr", 1, fbzmq::SUM);
+    return PacketValidationResult::FAILURE;
+  }
+
+  // validate subnet of v4 address
+  auto const& neighCidrNetwork =
+      folly::sformat("{}/{}", toString(neighV4Addr), myV4PrefixLen);
+
+  if (!myV4Addr.inSubnet(neighCidrNetwork)) {
+    LOG(ERROR) << "Neighbor V4 address " << toString(neighV4Addr)
+               << " is not in the same subnet with local V4 address "
+               << myV4Addr.str() << "/" << +myV4PrefixLen;
+    tData_.addStatValue(
+        "spark.invalid_keepalive.different_subnet", 1, fbzmq::SUM);
+    return PacketValidationResult::FAILURE;
+  }
+  return PacketValidationResult::SUCCESS;
+}
+
+void
+Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
+  SCOPE_FAIL {
+    LOG(ERROR) << "Failed sending Handshake packet on " << ifName;
+  };
+
+  // in some cases, getting link-local address may fail and throw
+  // e.g. when iface has not yet auto-configured it, or iface is removed but
+  // down event has not arrived yet
+  //
+  const auto& interfaceEntry = interfaceDb_.at(ifName);
+  const auto ifIndex = interfaceEntry.ifIndex;
+  const auto v4Addr = interfaceEntry.v4Network.first;
+  const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
+
+  // build handshake msg
+  thrift::SparkHandshakeMsg handshakeMsg;
+  handshakeMsg.nodeName = myNodeName_;
+  handshakeMsg.isAdjEstablished = isAdjEstablished;
+  handshakeMsg.holdTime = myHeartbeatHoldTime_.count();
+  handshakeMsg.gracefulRestartTime = myHoldTime_.count();
+  handshakeMsg.transportAddressV6 = toBinaryAddress(v6Addr);
+  handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
+  handshakeMsg.area = ""; // area string NOT supported yet
+  handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
+  handshakeMsg.kvStorePubPort = kKvStorePubPort_;
+  handshakeMsg.kvStoreCmdPort = kKvStoreCmdPort_;
+
+  thrift::SparkHelloPacket pkt;
+  pkt.handshakeMsg = handshakeMsg;
+
+  auto packet = util::writeThriftObjStr(pkt, serializer_);
+
+  // send the pkt
+  folly::SocketAddress dstAddr(
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
+
+  if (kMinIpv6Mtu < packet.size()) {
+    LOG(ERROR) << "Handshake packet is too big, can't send it out.";
+    return;
+  }
+
+  auto bytesSent = IoProvider::sendMessage(
+      mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
+
+  if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
+    VLOG(1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
+            << ifName << " failed due to error " << folly::errnoStr(errno);
+    return;
+  }
+
+  // update counters for number of pkts and total size of pkts sent
+  tData_.addStatValue("spark.handshake.bytes_sent", packet.size(), fbzmq::SUM);
+  tData_.addStatValue("spark.handshake.packets_sent", 1, fbzmq::SUM);
+}
+
 void
 Spark::notifySparkNeighborEvent(
     thrift::SparkNeighborEventType eventType,
@@ -868,6 +939,11 @@ Spark::notifySparkNeighborEvent(
   if (ret.hasError()) {
     LOG(ERROR) << "Error sending spark event: " << ret.error();
   }
+}
+
+void
+Spark::processHeartbeatTimeout() {
+  CHECK(false) << "Not implemente yet";
 }
 
 void
@@ -898,11 +974,6 @@ Spark::processNegotiateTimeout(
   // stop sending out handshake msg, no longer in NEGOTIATE stage
   // remove negotiate timer, will be recreated when [WARM] -> [NEGOTIATE]
   neighbor.negotiateTimer.reset();
-}
-
-void
-Spark::sendHandshakeMsg() {
-  CHECK(false) << "Not implemented yet";
 }
 
 void
@@ -964,34 +1035,26 @@ Spark::processHelloMsg(
   // Up till now, node knows about this neighbor and perform SM check
   auto& neighbor = neighborIt->second;
 
-  VLOG(3) << "Current state for neighborNode: " << neighborName << " is: ["
-          << sparkNeighborStateToStr(neighbor.state) << "].";
+  VLOG(3) << "Current state for neighbor: (" << neighborName << ") is: ["
+          << sparkNeighborStateToStr(neighbor.state) << "]";
 
   // build SparkNeighbor to report to LinkMonitor
-  thrift::SparkNeighbor originator;
-  originator.domainName = neighbor.domainName;
-  originator.nodeName = neighbor.nodeName;
-  originator.holdTime = 0; /* hold-time is NOT used in linkMonitor */
-  originator.transportAddressV4 = toBinaryAddress(neighbor.v4Network.first);
-  originator.transportAddressV6 =
-      toBinaryAddress(neighbor.v6LinkLocalNetwork.first);
-  originator.kvStorePubPort = neighbor.kvStorePubPort;
-  originator.kvStoreCmdPort = neighbor.kvStoreCmdPort;
-  originator.ifName = neighbor.remoteIfName;
+  const thrift::SparkNeighbor originator = neighbor.toThrift();
 
   if (neighbor.state == SparkNeighState::WARM) {
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
     if (neighborInfos.find(myNodeName_) == neighborInfos.end()) {
-      LOG(INFO) << "Node: (" << neighborName << ") still NOT know about: ("
-                << myNodeName_ << "), ignore it.";
       // if a neighbor is in fast initial state and does not see us yet,
       // then reply to this neighbor in fast frequency
+      VLOG(3) << "Not seeing myself: (" << myNodeName_ << ") in neighborInfo";
       if (helloMsg.solicitResponse) {
         scheduleTimeout(
             std::chrono::milliseconds(0),
             [this, ifName]() noexcept { sendHelloPacket(ifName); });
+
+        LOG(INFO) << "Reply to neighbor's helloMsg since it is under fastInit";
       }
     } else {
       //
@@ -1010,10 +1073,11 @@ Spark::processHelloMsg(
                 << myRemoteSeqNum << "), my Seq#: (" << mySeqNum_ << ").";
       } else {
         // Starts timer to periodically send hankshake msg
-        auto negotiateTimer = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
-          // periodically send out handshake msg
-          sendHandshakeMsg();
-        });
+        auto negotiateTimer =
+            fbzmq::ZmqTimeout::make(this, [this, ifName]() noexcept {
+              // periodically send out handshake msg
+              sendHandshakeMsg(ifName, false);
+            });
         const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
         neighbor.negotiateTimer = std::move(negotiateTimer);
         neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_, isPeriodic);
@@ -1075,8 +1139,78 @@ Spark::processHelloMsg(
 }
 
 void
-Spark::processHandshakeMsg() {
-  CHECK(false) << "Not implemented yet";
+Spark::processHandshakeMsg(
+    thrift::SparkHandshakeMsg& handshakeMsg, std::string const& ifName) {
+  auto const& neighborName = handshakeMsg.nodeName;
+  auto& ifNeighbors = spark2Neighbors_.at(ifName);
+  auto neighborIt = ifNeighbors.find(neighborName);
+
+  CHECK(neighborIt != ifNeighbors.end())
+      << "neighbor: (" << neighborName << ") is NOT found";
+
+  auto& neighbor = neighborIt->second;
+
+  // for quick convergence purpose, reply immediately if neighbor
+  // hasn't form adjacency with us yet
+  if (!handshakeMsg.isAdjEstablished) {
+    sendHandshakeMsg(ifName, neighbor.state == SparkNeighState::ESTABLISHED);
+  }
+
+  // In case when we process handshakeMsg, negotiate timer already expired
+  if (neighbor.state != SparkNeighState::NEGOTIATE) {
+    LOG(INFO) << "For neighborNode (" << neighborName << "): current state: ["
+              << sparkNeighborStateToStr(neighbor.state) << "]"
+              << ", expected state: [NEGOTIIATE]";
+    return;
+  }
+
+  if (enableV4_ and enableSubnetValidation_) {
+    if (PacketValidationResult::FAILURE ==
+        validateV4AddressSubnet(ifName, handshakeMsg.transportAddressV4)) {
+      LOG(ERROR) << "V4 subnet validation failed for handshakeMsg from: "
+                 << ifName;
+      return;
+    }
+  }
+
+  // update Spark2 neighborState
+  neighbor.kvStorePubPort = handshakeMsg.kvStorePubPort;
+  neighbor.kvStoreCmdPort = handshakeMsg.kvStoreCmdPort;
+  neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort;
+  neighbor.transportAddressV4 = handshakeMsg.transportAddressV4;
+  neighbor.transportAddressV6 = handshakeMsg.transportAddressV6;
+
+  // update neighbor holdTime as "NEGOTIATING" process
+  neighbor.heartbeatHoldTime = std::max(
+      std::chrono::milliseconds(handshakeMsg.holdTime), myHeartbeatHoldTime_);
+  neighbor.gracefulRestartHoldTime = std::max(
+      std::chrono::milliseconds(handshakeMsg.gracefulRestartTime), myHoldTime_);
+
+  // state transition
+  SparkNeighState prevState = neighbor.state;
+  neighbor.state =
+      getNextState(neighbor.state, SparkNeighEvent::HANDSHAKE_RCVD);
+
+  SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
+               << "] -> [" << sparkNeighborStateToStr(neighbor.state)
+               << "] for neighborNode: (" << neighborName << ") on interface: ("
+               << ifName << ").";
+
+  // stop sending out handshake msg, no longer in NEGOTIATE stage
+  neighbor.negotiateTimer.reset();
+
+  // remove negotiate hold timer, no longer in NEGOTIATE stage
+  neighbor.negotiateHoldTimer.reset();
+
+  // notify LinkMonitor about neighbor UP state
+  const thrift::SparkNeighbor originator = neighbor.toThrift();
+  notifySparkNeighborEvent(
+      thrift::SparkNeighborEventType::NEIGHBOR_UP,
+      ifName,
+      originator,
+      neighbor.rtt.count(),
+      neighbor.label,
+      true /* support flood-optimization */);
 }
 
 void
@@ -1105,7 +1239,7 @@ Spark::processHelloPacket() {
       processHeartbeatMsg();
       return;
     } else if (helloPacket.handshakeMsg.hasValue()) {
-      processHandshakeMsg();
+      processHandshakeMsg(helloPacket.handshakeMsg.value(), ifName);
       return;
     } else {
       LOG(INFO)
@@ -1637,18 +1771,7 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
                   << ifName << " down";
 
         // build SparkNeighbor to pass to LinkMonitor for backward compatibility
-        thrift::SparkNeighbor neighborNode;
-        neighborNode.domainName = neighbor.domainName;
-        neighborNode.nodeName = neighbor.nodeName;
-        neighborNode.holdTime = 0; /* hold-time is NOT used in linkMonitor */
-        neighborNode.transportAddressV4 =
-            toBinaryAddress(neighbor.v4Network.first);
-        neighborNode.transportAddressV6 =
-            toBinaryAddress(neighbor.v6LinkLocalNetwork.first);
-        neighborNode.kvStorePubPort = neighbor.kvStorePubPort;
-        neighborNode.kvStoreCmdPort = neighbor.kvStoreCmdPort;
-        neighborNode.ifName = neighbor.remoteIfName;
-
+        const thrift::SparkNeighbor neighborNode = neighbor.toThrift();
         notifySparkNeighborEvent(
             thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
             ifName,

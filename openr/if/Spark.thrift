@@ -154,6 +154,10 @@ struct SparkHandshakeMsg {
   7: i32 openrCtrlThriftPort
   8: i32 kvStorePubPort
   9: i32 kvStoreCmdPort
+
+  // area string
+  10: string area
+
 }
 
 //
