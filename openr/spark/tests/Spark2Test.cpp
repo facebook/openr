@@ -156,23 +156,23 @@ TEST_F(Spark2Fixture, UnidirectionTest) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start one spark2 instance
-  auto spark1 = createSpark2(kDomainName, "node-1", 1);
+  auto node1 = createSpark2(kDomainName, "node-1", 1);
 
   // start another spark2 instance
-  auto spark2 = createSpark2(kDomainName, "node-2", 2);
+  auto node2 = createSpark2(kDomainName, "node-2", 2);
 
   // start tracking iface1
-  EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
 
   // start tracking iface2
-  EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   LOG(INFO) << "Start to receive messages from Spark2";
 
   // Now wait for sparks to detect each other
   {
     auto event =
-        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-2", event->neighbor.nodeName);
@@ -184,7 +184,7 @@ TEST_F(Spark2Fixture, UnidirectionTest) {
 
   {
     auto event =
-        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-1", event->neighbor.nodeName);
@@ -207,16 +207,117 @@ TEST_F(Spark2Fixture, UnidirectionTest) {
   // wait for sparks to lose each other
   {
     auto event =
-        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-1 reported down adjacency to node-2";
   }
 
   {
     auto event =
-        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
     LOG(INFO) << "node-2 reported down adjacency to node-1";
+  }
+}
+
+TEST_F(Spark2Fixture, GRTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture GracefulRestartTest finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 100}}},
+      {iface2, {{iface1, 100}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start one spark2 instance
+  auto node1 = createSpark2(
+      kDomainName,
+      "node-1",
+      1,
+      std::chrono::milliseconds(1000),
+      std::chrono::milliseconds(200));
+
+  // start another spark2 instance
+  auto node2 = createSpark2(
+      kDomainName,
+      "node-2",
+      2,
+      std::chrono::milliseconds(1000),
+      std::chrono::milliseconds(200));
+
+  // start tracking iface1
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+
+  // start tracking iface2
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  LOG(INFO) << "Start to receive messages from Spark2";
+
+  // Now wait for sparks to detect each other
+  {
+    auto event =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-1 reported adjacency to node-2";
+  }
+
+  {
+    auto event =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-2 reported adjacency to node-1";
+  }
+
+  // Kill node2
+  LOG(INFO) << "Kill and restart node-2";
+
+  node2.reset();
+
+  // node-1 should report node-2 as 'RESTARTING' when it received GRMsg from
+  // node-2
+  {
+    auto event = node1->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-1 reported node-2 as RESTARTING";
+  }
+
+  node2 = createSpark2(
+      kDomainName,
+      "node-2",
+      3, /* spark2Id change */
+      std::chrono::milliseconds(1000), /* GR hold time */
+      std::chrono::milliseconds(200) /* helloMsg interval */);
+
+  LOG(INFO) << "Adding iface2 to node-2 to let it start helloMsg adverstising";
+
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  // node-1 should report node-2 as 'RESTARTED' when it receive helloMsg
+  // with wrapped seqNum
+  {
+    auto event =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
+    ASSERT_TRUE(event.hasValue());
+  }
+
+  // node-2 should ultimately report node-1 as 'UP'
+  {
+    auto event =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+  }
+
+  // should NOT receive any event( e.g.NEIGHBOR_DOWN)
+  {
+    EXPECT_TRUE(node1->recvNeighborEvent(kHoldTime * 2).hasError());
+    EXPECT_TRUE(node2->recvNeighborEvent(kHoldTime * 2).hasError());
   }
 }
 

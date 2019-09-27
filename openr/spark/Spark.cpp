@@ -976,6 +976,27 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
 }
 
 void
+Spark::logStateTransition(
+    std::string const& neighborName,
+    std::string const& ifName,
+    SparkNeighState const& oldState,
+    SparkNeighState const& newState) {
+  SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(oldState)
+               << "] -> [" << sparkNeighborStateToStr(newState) << "] "
+               << "for neighbor: (" << neighborName << ") on interface: ("
+               << ifName << ").";
+}
+
+void
+Spark::checkNeighborState(
+    Spark2Neighbor const& neighbor, SparkNeighState const& state) {
+  CHECK(neighbor.state == state)
+      << "Neighbor: (" << neighbor.nodeName << "), "
+      << "Expected state: [" << sparkNeighborStateToStr(state) << "], "
+      << "Actual state: [" << sparkNeighborStateToStr(neighbor.state) << "].";
+}
+
+void
 Spark::neighborUpWrapper(
     Spark2Neighbor& neighbor,
     std::string const& ifName,
@@ -996,11 +1017,10 @@ Spark::neighborUpWrapper(
       true /* support flood-optimization */);
 
   // create heartbeat hold timer when promote to "ESTABLISHED"
-  auto heartbeatHoldTimer =
+  neighbor.heartbeatHoldTimer =
       fbzmq::ZmqTimeout::make(this, [this, ifName, neighborName]() noexcept {
         processHeartbeatTimeout(ifName, neighborName);
       });
-  neighbor.heartbeatHoldTimer = std::move(heartbeatHoldTimer);
   neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
 
   // add neighborName to collection
@@ -1067,19 +1087,14 @@ Spark::processHeartbeatTimeout(
     ifNeighbors.erase(neighborName);
   };
 
-  CHECK(neighbor.state == SparkNeighState::ESTABLISHED)
-      << "Neighbor: " << neighborName
-      << " is in state: " << sparkNeighborStateToStr(neighbor.state);
+  // neighbor must in 'ESTABLISHED' state
+  checkNeighborState(neighbor, SparkNeighState::ESTABLISHED);
 
   // state transition
-  SparkNeighState prevState = neighbor.state;
+  SparkNeighState oldState = neighbor.state;
   neighbor.state =
-      getNextState(neighbor.state, SparkNeighEvent::HEARTBEAT_TIMER_EXPIRE);
-
-  SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
-               << "] -> [" << sparkNeighborStateToStr(neighbor.state) << "] "
-               << "for neighborNode: (" << neighborName << ") on interface: ("
-               << ifName << ").";
+      getNextState(oldState, SparkNeighEvent::HEARTBEAT_TIMER_EXPIRE);
+  logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // bring down neighborship and cleanup spark2 neighbor state
   neighborDownWrapper(neighbor, ifName, neighborName);
@@ -1088,31 +1103,84 @@ Spark::processHeartbeatTimeout(
 void
 Spark::processNegotiateTimeout(
     std::string const& ifName, std::string const& neighborName) {
+  // spark2 neighbor must exist if the negotiate hold-time expired
+  auto& neighbor = spark2Neighbors_.at(ifName).at(neighborName);
+
+  LOG(INFO) << "Negotiate timer expired for: " << neighborName
+            << " on interface " << ifName;
+
+  // neighbor must in 'NEGOTIATE' state
+  checkNeighborState(neighbor, SparkNeighState::NEGOTIATE);
+
+  // state transition
+  SparkNeighState oldState = neighbor.state;
+  neighbor.state =
+      getNextState(oldState, SparkNeighEvent::NEGOTIATE_TIMER_EXPIRE);
+  logStateTransition(neighborName, ifName, oldState, neighbor.state);
+
+  // stop sending out handshake msg, no longer in NEGOTIATE stage
+  neighbor.negotiateTimer.reset();
+}
+
+void
+Spark::processGRTimeout(
+    std::string const& ifName, std::string const& neighborName) {
   // spark2 neighbor must exist if the negotiate hold-timer call back gets
   // called.
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
   auto& neighbor = ifNeighbors.at(neighborName);
 
-  LOG(INFO) << "Negotiate timer expired for: " << neighborName
+  // remove from tracked neighbor at the end
+  SCOPE_EXIT {
+    allocatedLabels_.erase(neighbor.label);
+    ifNeighbors.erase(neighborName);
+  };
+
+  LOG(INFO) << "Graceful restart timer expired for: " << neighborName
             << " on interface " << ifName;
 
-  CHECK(neighbor.state == SparkNeighState::NEGOTIATE)
-      << "Neighbor: " << neighborName
-      << " is in state: " << sparkNeighborStateToStr(neighbor.state);
+  // neighbor must in "RESTART" state
+  checkNeighborState(neighbor, SparkNeighState::RESTART);
 
   // state transition
-  SparkNeighState prevState = neighbor.state;
-  neighbor.state =
-      getNextState(neighbor.state, SparkNeighEvent::NEGOTIATE_TIMER_EXPIRE);
+  SparkNeighState oldState = neighbor.state;
+  neighbor.state = getNextState(oldState, SparkNeighEvent::GR_TIMER_EXPIRE);
+  logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
-  SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
-               << "] -> [" << sparkNeighborStateToStr(neighbor.state) << "] "
-               << "for neighborNode: (" << neighborName << ") on interface: ("
-               << ifName << ").";
+  // bring down neighborship and cleanup spark2 neighbor state
+  neighborDownWrapper(neighbor, ifName, neighborName);
+}
 
-  // stop sending out handshake msg, no longer in NEGOTIATE stage
-  // remove negotiate timer, will be recreated when [WARM] -> [NEGOTIATE]
-  neighbor.negotiateTimer.reset();
+void
+Spark::processGRMsg(
+    std::string const& neighborName,
+    std::string const& ifName,
+    Spark2Neighbor& neighbor) {
+  // notify link-monitor for RESTARTING event
+  notifySparkNeighborEvent(
+      thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
+      ifName,
+      neighbor.toThrift(),
+      neighbor.rtt.count(),
+      neighbor.label,
+      false /* supportDual: doesn't matter in DOWN event*/);
+
+  // start graceful-restart timer
+  neighbor.gracefulRestartHoldTimer =
+      fbzmq::ZmqTimeout::make(this, [this, ifName, neighborName]() noexcept {
+        // change the state back to IDLE
+        processGRTimeout(ifName, neighborName);
+      });
+  neighbor.gracefulRestartHoldTimer->scheduleTimeout(
+      neighbor.gracefulRestartHoldTime);
+
+  // state transition
+  SparkNeighState oldState = neighbor.state;
+  neighbor.state = getNextState(oldState, SparkNeighEvent::HELLO_RCVD_RESTART);
+  logStateTransition(neighborName, ifName, oldState, neighbor.state);
+
+  // neihbor is restarting, shutdown heartbeat hold timer
+  neighbor.heartbeatHoldTimer.reset();
 }
 
 void
@@ -1157,17 +1225,13 @@ Spark::processHelloMsg(
             remoteSeqNum /* seqNum reported by neighborNode */));
 
     auto& neighbor = ifNeighbors.at(neighborName);
-    CHECK(neighbor.state == SparkNeighState::IDLE);
+    checkNeighborState(neighbor, SparkNeighState::IDLE);
 
     // state transition
-    SparkNeighState prevState = neighbor.state;
+    SparkNeighState oldState = neighbor.state;
     neighbor.state =
-        getNextState(neighbor.state, SparkNeighEvent::HELLO_RCVD_NO_INFO);
-
-    SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
-                 << "] -> [" << sparkNeighborStateToStr(neighbor.state) << "] "
-                 << "for neighborNode: (" << neighborName << ") on interface: ("
-                 << ifName << ").";
+        getNextState(oldState, SparkNeighEvent::HELLO_RCVD_NO_INFO);
+    logStateTransition(neighborName, ifName, oldState, neighbor.state);
     return;
   }
 
@@ -1209,52 +1273,51 @@ Spark::processHelloMsg(
                 << myRemoteSeqNum << "), my Seq#: (" << mySeqNum_ << ").";
       } else {
         // Starts timer to periodically send hankshake msg
-        auto negotiateTimer =
+        neighbor.negotiateTimer =
             fbzmq::ZmqTimeout::make(this, [this, ifName]() noexcept {
               // periodically send out handshake msg
               sendHandshakeMsg(ifName, false);
             });
         const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
-        neighbor.negotiateTimer = std::move(negotiateTimer);
         neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_, isPeriodic);
 
         // Starts negotiate hold-timer
-        auto negotiateHoldTimer = fbzmq::ZmqTimeout::make(
+        neighbor.negotiateHoldTimer = fbzmq::ZmqTimeout::make(
             this, [this, ifName, neighborName]() noexcept {
               // prevent to stucking in NEGOTIATE forever
               processNegotiateTimeout(ifName, neighborName);
             });
-        neighbor.negotiateHoldTimer = std::move(negotiateHoldTimer);
         neighbor.negotiateHoldTimer->scheduleTimeout(myNegotiateHoldTime_);
 
         // Neighbor is aware of us. Promote to NEGOTIATE state
-        SparkNeighState prevState = neighbor.state;
+        SparkNeighState oldState = neighbor.state;
         neighbor.state =
-            getNextState(neighbor.state, SparkNeighEvent::HELLO_RCVD_INFO);
-
-        SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
-                     << "] -> [" << sparkNeighborStateToStr(neighbor.state)
-                     << "] for neighborNode: (" << neighborName
-                     << ") on interface: (" << ifName << ").";
+            getNextState(oldState, SparkNeighEvent::HELLO_RCVD_INFO);
+        logStateTransition(neighborName, ifName, oldState, neighbor.state);
       }
     }
   } else if (neighbor.state == SparkNeighState::ESTABLISHED) {
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
+    // Check if neighbor is undergoing 'Graceful-Restart'
+    if (helloMsg.restarting) {
+      LOG(INFO) << "Adjacent neighbor (" << neighborName << "), "
+                << "from remote interface: (" << remoteIfName << "), "
+                << "on interface: (" << ifName << ") is restarting.";
+      processGRMsg(neighborName, ifName, neighbor);
+      return;
+    }
+
     if (neighborInfos.find(myNodeName_) == neighborInfos.end()) {
       //
       // Did NOT find our own info in peer's hello msg. Peer doesn't want to
       // form adjacency with us. Drop neighborship.
       //
-      SparkNeighState prevState = neighbor.state;
+      SparkNeighState oldState = neighbor.state;
       neighbor.state =
-          getNextState(neighbor.state, SparkNeighEvent::HELLO_RCVD_NO_INFO);
-
-      SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
-                   << "] -> [" << sparkNeighborStateToStr(neighbor.state)
-                   << "] for neighborNode: (" << neighborName
-                   << ") on interface: (" << ifName << ").";
+          getNextState(oldState, SparkNeighEvent::HELLO_RCVD_NO_INFO);
+      logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
       // bring down neighborship and cleanup spark2 neighbor state
       neighborDownWrapper(neighbor, ifName, neighborName);
@@ -1264,7 +1327,54 @@ Spark::processHelloMsg(
       ifNeighbors.erase(neighborName);
     }
   } else if (neighbor.state == SparkNeighState::RESTART) {
-    CHECK(false) << "Not implemented yet";
+    // Neighbor is undergoing restart. Will reply immediately for hello msg for
+    // quick adjacency establishment.
+    if (neighborInfos.find(myNodeName_) == neighborInfos.end()) {
+      LOG(INFO) << "Neighbor: (" << neighborName
+                << ") is still NOT aware of us. "
+                << "Reply to helloMsg immediately.";
+      sendHelloPacket(ifName);
+    } else {
+      if (neighbor.seqNum < remoteSeqNum) {
+        // By going here, it means this node missed ALL of the helloMsg sent-out
+        // after neighbor 'restarting' itself. Will let GR timer to handle it.
+        LOG(WARNING) << "Unexpected Seq#:" << remoteSeqNum
+                     << " received from neighbor: (" << neighborName
+                     << "), local Seq#: (" << neighbor.seqNum << ").";
+      } else {
+        // Neighbor is back from 'restarting' state. Go back to 'ESTABLISHED'
+        LOG(INFO) << "Node: (" << neighborName << ") is back from restart. "
+                  << "Received Seq#: (" << remoteSeqNum << "), local Seq#: ("
+                  << neighbor.seqNum << ").";
+
+        // Update local seqNum maintained for this neighbor
+        neighbor.seqNum = remoteSeqNum;
+
+        notifySparkNeighborEvent(
+            thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
+            ifName,
+            neighbor.toThrift(),
+            neighbor.rtt.count(),
+            neighbor.label,
+            true /* support flood-optimization */);
+
+        // start heartbeat timer again to make sure neighbor is alive
+        neighbor.heartbeatHoldTimer = fbzmq::ZmqTimeout::make(
+            this, [this, ifName, neighborName]() noexcept {
+              processHeartbeatTimeout(ifName, neighborName);
+            });
+        neighbor.heartbeatHoldTimer->scheduleTimeout(
+            neighbor.heartbeatHoldTime);
+
+        // stop the graceful-restart hold-timer
+        neighbor.gracefulRestartHoldTimer.reset();
+
+        SparkNeighState oldState = neighbor.state;
+        neighbor.state =
+            getNextState(oldState, SparkNeighEvent::HELLO_RCVD_INFO);
+        logStateTransition(neighborName, ifName, oldState, neighbor.state);
+      }
+    }
   }
 }
 
@@ -1284,6 +1394,9 @@ Spark::processHandshakeMsg(
   // hasn't form adjacency with us yet
   if (!handshakeMsg.isAdjEstablished) {
     sendHandshakeMsg(ifName, neighbor.state == SparkNeighState::ESTABLISHED);
+    LOG(INFO) << "Neighbor: (" << neighborName
+              << ") has NOT forming adj with us yet. "
+              << "Reply to handshakeMsg immediately.";
   }
 
   // Will extend heartbeat hold-timer In case:
@@ -1296,9 +1409,9 @@ Spark::processHandshakeMsg(
 
   // In case when we process handshakeMsg, negotiate timer already expired
   if (neighbor.state != SparkNeighState::NEGOTIATE) {
-    LOG(INFO) << "For neighborNode (" << neighborName << "): current state: ["
-              << sparkNeighborStateToStr(neighbor.state) << "]"
-              << ", expected state: [NEGOTIIATE]";
+    VLOG(3) << "For neighborNode (" << neighborName << "): current state: ["
+            << sparkNeighborStateToStr(neighbor.state) << "]"
+            << ", expected state: [NEGOTIIATE]";
     return;
   }
 
@@ -1325,14 +1438,9 @@ Spark::processHandshakeMsg(
       std::chrono::milliseconds(handshakeMsg.gracefulRestartTime), myHoldTime_);
 
   // state transition
-  SparkNeighState prevState = neighbor.state;
-  neighbor.state =
-      getNextState(neighbor.state, SparkNeighEvent::HANDSHAKE_RCVD);
-
-  SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
-               << "] -> [" << sparkNeighborStateToStr(neighbor.state)
-               << "] for neighborNode: (" << neighborName << ") on interface: ("
-               << ifName << ").";
+  SparkNeighState oldState = neighbor.state;
+  neighbor.state = getNextState(oldState, SparkNeighEvent::HANDSHAKE_RCVD);
+  logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
   // bring up neighborship and set corresponding spark2 state
   neighborUpWrapper(neighbor, ifName, neighborName);
@@ -1345,17 +1453,23 @@ Spark::processHeartbeatMsg(
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
   auto neighborIt = ifNeighbors.find(neighborName);
 
-  CHECK(neighborIt != ifNeighbors.end())
-      << "neighbor: (" << neighborName << ") is NOT found";
+  // under GR case, when node restarts, it will needs several helloMsg to
+  // establish neighborship. During this time, heartbeatMsg from peer
+  // will NOT be processed.
+  if (neighborIt == ifNeighbors.end()) {
+    VLOG(3) << "I am NOT aware of neighbor: (" << neighborName
+            << "). Ignore it.";
+    return;
+  }
 
   auto& neighbor = neighborIt->second;
 
   // In case receiving heartbeat msg when it is NOT in established state,
   // Just ignore it.
   if (neighbor.state != SparkNeighState::ESTABLISHED) {
-    LOG(INFO) << "For neighborNode (" << neighborName << "): current state: ["
-              << sparkNeighborStateToStr(neighbor.state) << "]"
-              << ", expected state: [ESTABLISHED]";
+    VLOG(3) << "For neighborNode (" << neighborName << "): current state: ["
+            << sparkNeighborStateToStr(neighbor.state) << "]"
+            << ", expected state: [ESTABLISHED]";
     return;
   }
 
@@ -1387,8 +1501,7 @@ Spark::processHelloPacket() {
       processHandshakeMsg(helloPacket.handshakeMsg.value(), ifName);
       return;
     } else {
-      LOG(INFO)
-          << "No valid Spark2 msg to process. Fallback to old Spark processing";
+      VLOG(3) << "No valid Spark2 msg. Fallback to old Spark processing";
     }
   }
 

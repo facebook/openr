@@ -248,7 +248,7 @@ class Spark final : public OpenrEventLoop {
     std::unique_ptr<fbzmq::ZmqTimeout> heartbeatHoldTimer{nullptr};
 
     // graceful restart hold-timer
-    std::unique_ptr<fbzmq::ZmqTimeout> gracefulRestartTimer{nullptr};
+    std::unique_ptr<fbzmq::ZmqTimeout> gracefulRestartHoldTimer{nullptr};
 
     // KvStore related port. Info passed to LinkMonitor for neighborEvent
     int32_t kvStorePubPort{0};
@@ -280,6 +280,17 @@ class Spark final : public OpenrEventLoop {
       std::unordered_map<std::string /* neighborName */, Spark2Neighbor>>
       spark2Neighbors_{};
 
+  // util function to log Spark neighbor state transition
+  void logStateTransition(
+      std::string const& neighborName,
+      std::string const& ifName,
+      SparkNeighState const& oldState,
+      SparkNeighState const& newState);
+
+  // util function to check SparkNeighState
+  void checkNeighborState(
+      Spark2Neighbor const& neighbor, SparkNeighState const& state);
+
   // wrapper call to declare neighborship down
   void neighborUpWrapper(
       Spark2Neighbor& neighbor,
@@ -301,15 +312,18 @@ class Spark final : public OpenrEventLoop {
       int32_t label,
       bool supportFloodOptimization);
 
-  // utility call to transform Spark2Neighbor to SparkNeighor
-  thrift::SparkNeighbor buildNeighborFromSpark2Neighbor(
-      Spark2Neighbor const& neighbor);
 
   // utility call to send handshake msg
   void sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished);
 
   // utility call to send heartbeat msg
   void sendHeartbeatMsg(std::string const& ifName);
+
+  // wrapper function to process GR msg
+  void processGRMsg(
+      std::string const& neighborName,
+      std::string const& ifName,
+      Spark2Neighbor& neighbor);
 
   // process helloMsg in Spark2 context
   void processHelloMsg(
@@ -329,6 +343,10 @@ class Spark final : public OpenrEventLoop {
 
   // process timeout for negotiate stage
   void processNegotiateTimeout(
+      std::string const& ifName, std::string const& neighborName);
+
+  // process timeout for graceful restart
+  void processGRTimeout(
       std::string const& ifName, std::string const& neighborName);
 
   // Util function to convert ENUM SparlNeighborState to string
