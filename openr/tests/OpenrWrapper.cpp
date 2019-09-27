@@ -138,6 +138,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       sparkKeepAliveTime, // keep alive ms
       sparkFastInitKeepAliveTime, // fastInitKeepAliveTime ms
       std::chrono::milliseconds{0}, /* spark2_handshake_time */
+      std::chrono::milliseconds{0}, /* spark2_heartbeat_time */
       std::chrono::milliseconds{0}, /* spark2_negotiate_hold_time */
       std::chrono::milliseconds{0}, /* spark2_heartbeat_hold_time */
       folly::none, // ip-tos

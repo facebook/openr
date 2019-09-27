@@ -83,6 +83,7 @@ class Spark final : public OpenrEventLoop {
       std::chrono::milliseconds myKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime,
       std::chrono::milliseconds myHandshakeTime,
+      std::chrono::milliseconds myHeartbeatTime,
       std::chrono::milliseconds myNegotiateHoldTime,
       std::chrono::milliseconds myHeartbeatHoldTime,
       folly::Optional<int> ipTos,
@@ -279,6 +280,18 @@ class Spark final : public OpenrEventLoop {
       std::unordered_map<std::string /* neighborName */, Spark2Neighbor>>
       spark2Neighbors_{};
 
+  // wrapper call to declare neighborship down
+  void neighborUpWrapper(
+      Spark2Neighbor& neighbor,
+      std::string const& ifName,
+      std::string const& neighborName);
+
+  // wrapper call to declare neighborship down
+  void neighborDownWrapper(
+      Spark2Neighbor const& neighbor,
+      std::string const& ifName,
+      std::string const& neighborName);
+
   // utility call to send SparkNeighborEvent
   void notifySparkNeighborEvent(
       thrift::SparkNeighborEventType type,
@@ -295,19 +308,24 @@ class Spark final : public OpenrEventLoop {
   // utility call to send handshake msg
   void sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished);
 
+  // utility call to send heartbeat msg
+  void sendHeartbeatMsg(std::string const& ifName);
+
   // process helloMsg in Spark2 context
   void processHelloMsg(
-      thrift::SparkHelloMsg& helloMsg, std::string const& ifName);
+      thrift::SparkHelloMsg const& helloMsg, std::string const& ifName);
 
   // process heartbeatMsg in Spark2 context
-  void processHeartbeatMsg();
+  void processHeartbeatMsg(
+      thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName);
 
   // process handshakeMsg to update spark2Neighbors_ db
   void processHandshakeMsg(
-      thrift::SparkHandshakeMsg& handshakeMsg, std::string const& ifName);
+      thrift::SparkHandshakeMsg const& handshakeMsg, std::string const& ifName);
 
   // process timeout for heartbeat
-  void processHeartbeatTimeout();
+  void processHeartbeatTimeout(
+      std::string const& ifName, std::string const& neighborName);
 
   // process timeout for negotiate stage
   void processNegotiateTimeout(
@@ -433,6 +451,18 @@ class Spark final : public OpenrEventLoop {
       std::string /* ifName */,
       std::unique_ptr<fbzmq::ZmqTimeout>>
       ifNameToHelloTimers_;
+
+  // heartbeat packet send timers for each interface
+  std::unordered_map<
+      std::string /* ifName */,
+      std::unique_ptr<fbzmq::ZmqTimeout>>
+      ifNameToHeartbeatTimers_;
+
+  // number of active neighbors for each interface
+  std::unordered_map<
+      std::string /* ifName */,
+      std::unordered_set<std::string> /* neighbors */>
+      ifNameToActiveNeighbors_;
 
   // Ordered set to keep track of allocated labels
   std::set<int32_t> allocatedLabels_;

@@ -44,6 +44,7 @@ class SparkWrapper {
       folly::Optional<std::unordered_set<std::string>> areas,
       bool enableSpark2,
       std::chrono::milliseconds myHandshakeTime,
+      std::chrono::milliseconds myHeartbeatTime,
       std::chrono::milliseconds myNegotiateHoldTime,
       std::chrono::milliseconds myHeartbeatHoldTime);
 

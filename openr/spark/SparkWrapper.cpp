@@ -27,6 +27,7 @@ SparkWrapper::SparkWrapper(
     folly::Optional<std::unordered_set<std::string>> areas,
     bool enableSpark2,
     std::chrono::milliseconds myHandshakeTime,
+    std::chrono::milliseconds myHeartbeatTime,
     std::chrono::milliseconds myNegotiateHoldTime,
     std::chrono::milliseconds myHeartbeatHoldTime)
     : myNodeName_(myNodeName),
@@ -45,6 +46,7 @@ SparkWrapper::SparkWrapper(
       myKeepAliveTime,
       myFastInitKeepAliveTime, // fastInitKeepAliveTime
       myHandshakeTime, // spark2_handshake_time
+      myHeartbeatTime, // spark2_heartbeat_time
       myNegotiateHoldTime, // spark2_negotiate_hold_time
       myHeartbeatHoldTime, // spark2_heartbeat_hold_time
       folly::none /* ip-tos */,

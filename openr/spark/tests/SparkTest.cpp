@@ -135,6 +135,7 @@ class SparkFixture : public testing::Test {
         false, // enable Spark2 functionality
         std::chrono::milliseconds{0},
         std::chrono::milliseconds{0},
+        std::chrono::milliseconds{0},
         std::chrono::milliseconds{0});
   }
 

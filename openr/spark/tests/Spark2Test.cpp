@@ -66,6 +66,9 @@ const std::chrono::milliseconds kKeepAliveTime(50);
 // the time interval for spark2 handhshake msg
 const std::chrono::milliseconds kHandshakeTime(50);
 
+// the time interval for spark2 handhshake msg
+const std::chrono::milliseconds kHeartbeatTime(50);
+
 // the hold time for spark2 negotiate stage
 const std::chrono::milliseconds kNegotiateHoldTime(500);
 
@@ -106,6 +109,7 @@ class Spark2Fixture : public testing::Test {
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       std::chrono::milliseconds myHandshakeTime = kHandshakeTime,
+      std::chrono::milliseconds myHeartbeatTime = kHeartbeatTime,
       std::chrono::milliseconds myNegotiateHoldTime = kNegotiateHoldTime,
       std::chrono::milliseconds myHeartbeatHoldTime = kHeartbeatHoldTime) {
     return std::make_unique<SparkWrapper>(
@@ -125,6 +129,7 @@ class Spark2Fixture : public testing::Test {
         folly::none, // no area support yet
         true, // Spark2 enabled
         myHandshakeTime,
+        myHeartbeatTime,
         myNegotiateHoldTime,
         myHeartbeatHoldTime);
   }
@@ -135,9 +140,9 @@ class Spark2Fixture : public testing::Test {
   CompactSerializer serializer_;
 };
 
-TEST_F(Spark2Fixture, NodeUpTest) {
+TEST_F(Spark2Fixture, UnidirectionTest) {
   SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fxiture-NodeUpTest finished";
+    LOG(INFO) << "Spark2Fxiture UnidirectionTest finished";
   };
 
   // Define interface names for the test
@@ -164,9 +169,7 @@ TEST_F(Spark2Fixture, NodeUpTest) {
 
   LOG(INFO) << "Start to receive messages from Spark2";
 
-  //
   // Now wait for sparks to detect each other
-  //
   {
     auto event =
         spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
@@ -189,6 +192,31 @@ TEST_F(Spark2Fixture, NodeUpTest) {
         std::make_pair(ip1V4.first, ip1V6.first),
         SparkWrapper::getTransportAddrs(*event));
     LOG(INFO) << "node-2 reported adjacency to node-1";
+  }
+
+  LOG(INFO) << "Stopping communications from iface2 to iface1";
+
+  // stop packet flowing iface2 -> iface1. Expect both ends drops
+  //  1. node1 drops due to: heartbeat hold timer expired
+  //  2. node2 drops due to: helloMsg doesn't contains neighborInfo
+  connectedPairs = {
+      {iface1, {{iface2, 100}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // wait for sparks to lose each other
+  {
+    auto event =
+        spark1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-1 reported down adjacency to node-2";
+  }
+
+  {
+    auto event =
+        spark2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-2 reported down adjacency to node-1";
   }
 }
 

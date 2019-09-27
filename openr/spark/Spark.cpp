@@ -256,6 +256,7 @@ Spark::Spark(
     std::chrono::milliseconds myKeepAliveTime,
     std::chrono::milliseconds fastInitKeepAliveTime,
     std::chrono::milliseconds myHandshakeTime,
+    std::chrono::milliseconds myHeartbeatTime,
     std::chrono::milliseconds myNegotiateHoldTime,
     std::chrono::milliseconds myHeartbeatHoldTime,
     folly::Optional<int> maybeIpTos,
@@ -279,6 +280,7 @@ Spark::Spark(
       myKeepAliveTime_(myKeepAliveTime),
       fastInitKeepAliveTime_(fastInitKeepAliveTime),
       myHandshakeTime_(myHandshakeTime),
+      myHeartbeatTime_(myHeartbeatTime),
       myNegotiateHoldTime_(myNegotiateHoldTime),
       myHeartbeatHoldTime_(myHeartbeatHoldTime),
       enableV4_(enableV4),
@@ -868,7 +870,6 @@ Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
   // in some cases, getting link-local address may fail and throw
   // e.g. when iface has not yet auto-configured it, or iface is removed but
   // down event has not arrived yet
-  //
   const auto& interfaceEntry = interfaceDb_.at(ifName);
   const auto ifIndex = interfaceEntry.ifIndex;
   const auto v4Addr = interfaceEntry.v4Network.first;
@@ -916,6 +917,118 @@ Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
 }
 
 void
+Spark::sendHeartbeatMsg(std::string const& ifName) {
+  SCOPE_EXIT {
+    // increment seq# after packet has been sent (even if it didnt go out)
+    ++mySeqNum_;
+  };
+
+  SCOPE_FAIL {
+    LOG(ERROR) << "Failed sending Heartbeat packet on " << ifName;
+  };
+
+  if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
+    VLOG(3) << "Interface: " << ifName
+            << " hasn't have any active neighbor yet."
+            << " Skip sending out heartbeatMsg.";
+    return;
+  }
+
+  // in some cases, getting link-local address may fail and throw
+  // e.g. when iface has not yet auto-configured it, or iface is removed but
+  // down event has not arrived yet
+  const auto& interfaceEntry = interfaceDb_.at(ifName);
+  const auto ifIndex = interfaceEntry.ifIndex;
+  const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
+
+  // build heartbeat msg
+  thrift::SparkHeartbeatMsg heartbeatMsg;
+  heartbeatMsg.nodeName = myNodeName_;
+  heartbeatMsg.seqNum = mySeqNum_;
+
+  thrift::SparkHelloPacket pkt;
+  pkt.heartbeatMsg = heartbeatMsg;
+
+  auto packet = util::writeThriftObjStr(pkt, serializer_);
+
+  // send the pkt
+  folly::SocketAddress dstAddr(
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
+
+  if (kMinIpv6Mtu < packet.size()) {
+    LOG(ERROR) << "Handshake packet is too big, can't send it out.";
+    return;
+  }
+
+  auto bytesSent = IoProvider::sendMessage(
+      mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
+
+  if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
+    VLOG(1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
+            << ifName << " failed due to error " << folly::errnoStr(errno);
+    return;
+  }
+
+  // update counters for number of pkts and total size of pkts sent
+  tData_.addStatValue(
+      "spark.heartbeat_packet_sent_size", packet.size(), fbzmq::SUM);
+  tData_.addStatValue("spark.heartbeat_packet_sent", 1, fbzmq::SUM);
+}
+
+void
+Spark::neighborUpWrapper(
+    Spark2Neighbor& neighbor,
+    std::string const& ifName,
+    std::string const& neighborName) {
+  // stop sending out handshake msg, no longer in NEGOTIATE stage
+  neighbor.negotiateTimer.reset();
+
+  // remove negotiate hold timer, no longer in NEGOTIATE stage
+  neighbor.negotiateHoldTimer.reset();
+
+  // notify LinkMonitor about neighbor UP state
+  notifySparkNeighborEvent(
+      thrift::SparkNeighborEventType::NEIGHBOR_UP,
+      ifName,
+      neighbor.toThrift(),
+      neighbor.rtt.count(),
+      neighbor.label,
+      true /* support flood-optimization */);
+
+  // create heartbeat hold timer when promote to "ESTABLISHED"
+  auto heartbeatHoldTimer =
+      fbzmq::ZmqTimeout::make(this, [this, ifName, neighborName]() noexcept {
+        processHeartbeatTimeout(ifName, neighborName);
+      });
+  neighbor.heartbeatHoldTimer = std::move(heartbeatHoldTimer);
+  neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
+
+  // add neighborName to collection
+  ifNameToActiveNeighbors_[ifName].emplace(neighborName);
+}
+
+void
+Spark::neighborDownWrapper(
+    Spark2Neighbor const& neighbor,
+    std::string const& ifName,
+    std::string const& neighborName) {
+  // notify LinkMonitor about neighbor DOWN state
+  notifySparkNeighborEvent(
+      thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+      ifName,
+      neighbor.toThrift(),
+      neighbor.rtt.count(),
+      neighbor.label,
+      true /* support flood-optimization */);
+
+  // remove neighborship on this interface
+  ifNameToActiveNeighbors_.at(ifName).erase(neighborName);
+  if (ifNameToActiveNeighbors_.at(ifName).empty()) {
+    ifNameToActiveNeighbors_.erase(ifName);
+  }
+}
+
+void
 Spark::notifySparkNeighborEvent(
     thrift::SparkNeighborEventType eventType,
     std::string const& ifName,
@@ -942,8 +1055,34 @@ Spark::notifySparkNeighborEvent(
 }
 
 void
-Spark::processHeartbeatTimeout() {
-  CHECK(false) << "Not implemente yet";
+Spark::processHeartbeatTimeout(
+    std::string const& ifName, std::string const& neighborName) {
+  // spark2 neighbor must exist
+  auto& ifNeighbors = spark2Neighbors_.at(ifName);
+  auto& neighbor = ifNeighbors.at(neighborName);
+
+  // remove from tracked neighbor at the end
+  SCOPE_EXIT {
+    allocatedLabels_.erase(neighbor.label);
+    ifNeighbors.erase(neighborName);
+  };
+
+  CHECK(neighbor.state == SparkNeighState::ESTABLISHED)
+      << "Neighbor: " << neighborName
+      << " is in state: " << sparkNeighborStateToStr(neighbor.state);
+
+  // state transition
+  SparkNeighState prevState = neighbor.state;
+  neighbor.state =
+      getNextState(neighbor.state, SparkNeighEvent::HEARTBEAT_TIMER_EXPIRE);
+
+  SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
+               << "] -> [" << sparkNeighborStateToStr(neighbor.state) << "] "
+               << "for neighborNode: (" << neighborName << ") on interface: ("
+               << ifName << ").";
+
+  // bring down neighborship and cleanup spark2 neighbor state
+  neighborDownWrapper(neighbor, ifName, neighborName);
 }
 
 void
@@ -978,7 +1117,7 @@ Spark::processNegotiateTimeout(
 
 void
 Spark::processHelloMsg(
-    thrift::SparkHelloMsg& helloMsg, std::string const& ifName) {
+    thrift::SparkHelloMsg const& helloMsg, std::string const& ifName) {
   auto const& neighborName = helloMsg.nodeName;
   auto const& domainName = helloMsg.domainName;
   auto const& remoteIfName = helloMsg.ifName;
@@ -1038,9 +1177,6 @@ Spark::processHelloMsg(
   VLOG(3) << "Current state for neighbor: (" << neighborName << ") is: ["
           << sparkNeighborStateToStr(neighbor.state) << "]";
 
-  // build SparkNeighbor to report to LinkMonitor
-  const thrift::SparkNeighbor originator = neighbor.toThrift();
-
   if (neighbor.state == SparkNeighState::WARM) {
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
@@ -1054,7 +1190,7 @@ Spark::processHelloMsg(
             std::chrono::milliseconds(0),
             [this, ifName]() noexcept { sendHelloPacket(ifName); });
 
-        LOG(INFO) << "Reply to neighbor's helloMsg since it is under fastInit";
+        VLOG(3) << "Reply to neighbor's helloMsg since it is under fastInit";
       }
     } else {
       //
@@ -1115,21 +1251,15 @@ Spark::processHelloMsg(
       neighbor.state =
           getNextState(neighbor.state, SparkNeighEvent::HELLO_RCVD_NO_INFO);
 
-      // notify neighbor down to linkMonitor
-      notifySparkNeighborEvent(
-          thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-          ifName,
-          originator,
-          neighbor.rtt.count(),
-          neighbor.label,
-          true /* support flood-optimization */);
-
       SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(prevState)
                    << "] -> [" << sparkNeighborStateToStr(neighbor.state)
                    << "] for neighborNode: (" << neighborName
                    << ") on interface: (" << ifName << ").";
 
-      // remove from spark2Neighbors_ collection
+      // bring down neighborship and cleanup spark2 neighbor state
+      neighborDownWrapper(neighbor, ifName, neighborName);
+
+      // remove from tracked neighbor at the end
       allocatedLabels_.erase(neighbor.label);
       ifNeighbors.erase(neighborName);
     }
@@ -1140,7 +1270,7 @@ Spark::processHelloMsg(
 
 void
 Spark::processHandshakeMsg(
-    thrift::SparkHandshakeMsg& handshakeMsg, std::string const& ifName) {
+    thrift::SparkHandshakeMsg const& handshakeMsg, std::string const& ifName) {
   auto const& neighborName = handshakeMsg.nodeName;
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
   auto neighborIt = ifNeighbors.find(neighborName);
@@ -1154,6 +1284,14 @@ Spark::processHandshakeMsg(
   // hasn't form adjacency with us yet
   if (!handshakeMsg.isAdjEstablished) {
     sendHandshakeMsg(ifName, neighbor.state == SparkNeighState::ESTABLISHED);
+  }
+
+  // Will extend heartbeat hold-timer In case:
+  //  1. Already declare neighbor in ESTABLISHED state;
+  //  2. Receive handshakeMsg before heartbeatMsg from neighbor;
+  if (neighbor.heartbeatHoldTimer) {
+    // Reset the hold-timer for neighbor as we have received a keep-alive msg
+    neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
   }
 
   // In case when we process handshakeMsg, negotiate timer already expired
@@ -1196,26 +1334,33 @@ Spark::processHandshakeMsg(
                << "] for neighborNode: (" << neighborName << ") on interface: ("
                << ifName << ").";
 
-  // stop sending out handshake msg, no longer in NEGOTIATE stage
-  neighbor.negotiateTimer.reset();
-
-  // remove negotiate hold timer, no longer in NEGOTIATE stage
-  neighbor.negotiateHoldTimer.reset();
-
-  // notify LinkMonitor about neighbor UP state
-  const thrift::SparkNeighbor originator = neighbor.toThrift();
-  notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_UP,
-      ifName,
-      originator,
-      neighbor.rtt.count(),
-      neighbor.label,
-      true /* support flood-optimization */);
+  // bring up neighborship and set corresponding spark2 state
+  neighborUpWrapper(neighbor, ifName, neighborName);
 }
 
 void
-Spark::processHeartbeatMsg() {
-  CHECK(false) << "Not implemented yet";
+Spark::processHeartbeatMsg(
+    thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName) {
+  auto const& neighborName = heartbeatMsg.nodeName;
+  auto& ifNeighbors = spark2Neighbors_.at(ifName);
+  auto neighborIt = ifNeighbors.find(neighborName);
+
+  CHECK(neighborIt != ifNeighbors.end())
+      << "neighbor: (" << neighborName << ") is NOT found";
+
+  auto& neighbor = neighborIt->second;
+
+  // In case receiving heartbeat msg when it is NOT in established state,
+  // Just ignore it.
+  if (neighbor.state != SparkNeighState::ESTABLISHED) {
+    LOG(INFO) << "For neighborNode (" << neighborName << "): current state: ["
+              << sparkNeighborStateToStr(neighbor.state) << "]"
+              << ", expected state: [ESTABLISHED]";
+    return;
+  }
+
+  // Reset the hold-timer for neighbor as we have received a keep-alive msg
+  neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
 }
 
 void
@@ -1236,7 +1381,7 @@ Spark::processHelloPacket() {
       processHelloMsg(helloPacket.helloMsg.value(), ifName);
       return;
     } else if (helloPacket.heartbeatMsg.hasValue()) {
-      processHeartbeatMsg();
+      processHeartbeatMsg(helloPacket.heartbeatMsg.value(), ifName);
       return;
     } else if (helloPacket.handshakeMsg.hasValue()) {
       processHandshakeMsg(helloPacket.handshakeMsg.value(), ifName);
@@ -1770,17 +1915,10 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
         LOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
                   << ifName << " down";
 
-        // build SparkNeighbor to pass to LinkMonitor for backward compatibility
-        const thrift::SparkNeighbor neighborNode = neighbor.toThrift();
-        notifySparkNeighborEvent(
-            thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-            ifName,
-            neighborNode,
-            neighbor.rtt.count(),
-            neighbor.label,
-            false /* doesn't matter in DOWN event*/);
+        neighborDownWrapper(neighbor, ifName, neighborName);
       }
       spark2Neighbors_.erase(ifName);
+      ifNameToHeartbeatTimers_.erase(ifName);
     }
 
     for (const auto& kv : neighbors_.at(ifName)) {
@@ -1870,6 +2008,15 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
         auto result = spark2Neighbors_.emplace(
             ifName, std::unordered_map<std::string, Spark2Neighbor>{});
         CHECK(result.second);
+
+        // heartbeatTimers will start as soon as intf is in UP state
+        auto heartbeatTimer = fbzmq::ZmqTimeout::make(
+            this, [this, ifName]() noexcept { sendHeartbeatMsg(ifName); });
+
+        const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
+        ifNameToHeartbeatTimers_.emplace(ifName, std::move(heartbeatTimer));
+        ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
+            myHeartbeatTime_, isPeriodic);
       }
     }
 

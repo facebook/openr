@@ -187,6 +187,10 @@ DEFINE_string(
     spark_report_url, "inproc://spark_server_report", "Spark Report URL");
 DEFINE_string(spark_cmd_url, "inproc://spark_server_cmd", "Spark Cmd URL");
 DEFINE_int32(
+    spark2_heartbeat_time_s,
+    1,
+    "Heartbeat msg interval (in seconds) to keep alive for this node");
+DEFINE_int32(
     spark2_handshake_time_ms,
     500,
     "Handshake msg interval (in milliseconds) to negotiate param for "

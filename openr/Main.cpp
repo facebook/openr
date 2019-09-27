@@ -578,6 +578,7 @@ main(int argc, char** argv) {
             std::chrono::seconds(FLAGS_spark_keepalive_time_s),
             std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
             std::chrono::milliseconds(FLAGS_spark2_handshake_time_ms),
+            std::chrono::seconds(FLAGS_spark2_heartbeat_time_s),
             std::chrono::seconds(FLAGS_spark2_negotiate_hold_time_s),
             std::chrono::seconds(FLAGS_spark2_heartbeat_hold_time_s),
             maybeIpTos,
