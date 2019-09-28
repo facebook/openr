@@ -108,6 +108,10 @@ class Spark final : public OpenrEventLoop {
     ioProvider_ = std::move(ioProvider);
   }
 
+  // get the current state of neighborNode, used for unit-testing
+  folly::Optional<SparkNeighState> getSparkNeighState(
+      std::string const& ifName, std::string const& neighborName);
+
   // override eventloop stop()
   void stop() override;
 

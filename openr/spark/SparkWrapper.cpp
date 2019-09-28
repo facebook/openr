@@ -174,4 +174,10 @@ SparkWrapper::getTransportAddrs(const thrift::SparkNeighborEvent& event) {
           toIPAddress(event.neighbor.transportAddressV6)};
 }
 
+folly::Optional<SparkNeighState>
+SparkWrapper::getSparkNeighState(
+    std::string const& ifName, std::string const& neighborName) {
+  return spark_->getSparkNeighState(ifName, neighborName);
+}
+
 } // namespace openr

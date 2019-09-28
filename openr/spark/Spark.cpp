@@ -25,6 +25,8 @@
 #include <folly/ScopeGuard.h>
 #include <folly/SocketAddress.h>
 #include <folly/String.h>
+#include <folly/futures/Future.h>
+#include <folly/futures/Promise.h>
 #include <folly/gen/Base.h>
 
 #include <openr/common/Constants.h>
@@ -996,6 +998,34 @@ Spark::checkNeighborState(
       << "Actual state: [" << sparkNeighborStateToStr(neighbor.state) << "].";
 }
 
+folly::Optional<SparkNeighState>
+Spark::getSparkNeighState(
+    std::string const& ifName, std::string const& neighborName) {
+  folly::Promise<folly::Optional<SparkNeighState>> promise;
+  auto future = promise.getFuture();
+
+  runInEventLoop(
+      [this, promise = std::move(promise), &ifName, &neighborName]() mutable {
+        if (spark2Neighbors_.find(ifName) == spark2Neighbors_.end()) {
+          LOG(ERROR) << "No interface: " << ifName
+                     << " in spark2Neighbor collection";
+          promise.setValue(folly::none);
+        } else {
+          auto& ifNeighbors = spark2Neighbors_.at(ifName);
+          auto neighborIt = ifNeighbors.find(neighborName);
+          if (neighborIt == ifNeighbors.end()) {
+            LOG(ERROR) << "No neighborName: " << neighborName
+                       << " in spark2Neighbor colelction";
+            promise.setValue(folly::none);
+          } else {
+            auto& neighbor = neighborIt->second;
+            promise.setValue(neighbor.state);
+          }
+        }
+      });
+  return std::move(future).get();
+}
+
 void
 Spark::neighborUpWrapper(
     Spark2Neighbor& neighbor,
@@ -1086,6 +1116,9 @@ Spark::processHeartbeatTimeout(
     allocatedLabels_.erase(neighbor.label);
     ifNeighbors.erase(neighborName);
   };
+
+  LOG(INFO) << "Heartbeat timer expired for: " << neighborName
+            << " on interface " << ifName;
 
   // neighbor must in 'ESTABLISHED' state
   checkNeighborState(neighbor, SparkNeighState::ESTABLISHED);

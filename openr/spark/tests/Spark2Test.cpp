@@ -58,7 +58,7 @@ const std::string kSparkReportUrl("inproc://spark_server_report");
 const std::string kSparkCounterCmdUrl("inproc://spark_server_counter_cmd");
 
 // the hold time we use during the tests
-const std::chrono::milliseconds kHoldTime(500);
+const std::chrono::milliseconds kGRHoldTime(500);
 
 // the keep-alive for spark2 hello messages
 const std::chrono::milliseconds kKeepAliveTime(50);
@@ -73,7 +73,7 @@ const std::chrono::milliseconds kHeartbeatTime(50);
 const std::chrono::milliseconds kNegotiateHoldTime(500);
 
 // the hold time for spark2 heartbeat msg
-const std::chrono::milliseconds kHeartbeatHoldTime(500);
+const std::chrono::milliseconds kHeartbeatHoldTime(200);
 }; // namespace
 
 class Spark2Fixture : public testing::Test {
@@ -103,7 +103,7 @@ class Spark2Fixture : public testing::Test {
       std::string const& domainName,
       std::string const& myNodeName,
       uint32_t spark2Id,
-      std::chrono::milliseconds holdTime = kHoldTime,
+      std::chrono::milliseconds grHoldTime = kGRHoldTime,
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
@@ -115,7 +115,7 @@ class Spark2Fixture : public testing::Test {
     return std::make_unique<SparkWrapper>(
         domainName,
         myNodeName,
-        holdTime,
+        grHoldTime,
         keepAliveTime,
         fastInitKeepAliveTime,
         true,
@@ -150,8 +150,8 @@ TEST_F(Spark2Fixture, UnidirectionTest) {
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
-      {iface1, {{iface2, 100}}},
-      {iface2, {{iface1, 100}}},
+      {iface1, {{iface2, 10}}},
+      {iface2, {{iface1, 10}}},
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
@@ -200,7 +200,7 @@ TEST_F(Spark2Fixture, UnidirectionTest) {
   //  1. node1 drops due to: heartbeat hold timer expired
   //  2. node2 drops due to: helloMsg doesn't contains neighborInfo
   connectedPairs = {
-      {iface1, {{iface2, 100}}},
+      {iface1, {{iface2, 10}}},
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
@@ -230,8 +230,8 @@ TEST_F(Spark2Fixture, GRTest) {
 
   // connect interfaces directly
   ConnectedIfPairs connectedPairs = {
-      {iface1, {{iface2, 100}}},
-      {iface2, {{iface1, 100}}},
+      {iface1, {{iface2, 10}}},
+      {iface2, {{iface1, 10}}},
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
@@ -305,6 +305,7 @@ TEST_F(Spark2Fixture, GRTest) {
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
     ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-1 reported node-2 as 'RESTARTED'";
   }
 
   // node-2 should ultimately report node-1 as 'UP'
@@ -312,12 +313,205 @@ TEST_F(Spark2Fixture, GRTest) {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    EXPECT_TRUE(node1->recvNeighborEvent(kHoldTime * 2).hasError());
-    EXPECT_TRUE(node2->recvNeighborEvent(kHoldTime * 2).hasError());
+    EXPECT_TRUE(node1->recvNeighborEvent(kGRHoldTime * 2).hasError());
+    EXPECT_TRUE(node2->recvNeighborEvent(kGRHoldTime * 2).hasError());
+  }
+}
+
+TEST_F(Spark2Fixture, GRTimerExpireTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture GRTimerExpiredTest finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 10}}},
+      {iface2, {{iface1, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start one spark2 instance
+  auto node1 = createSpark2(kDomainName, "node-1", 1);
+
+  // start another spark2 instance
+  auto node2 = createSpark2(kDomainName, "node-2", 2);
+
+  // start tracking iface1
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+
+  // start tracking iface2
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  LOG(INFO) << "Start to receive messages from Spark2";
+
+  // Now wait for sparks to detect each other
+  {
+    auto event =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-1 reported adjacency to node-2";
+  }
+
+  {
+    auto event =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-2 reported adjacency to node-1";
+  }
+
+  {
+    // Kill node2
+    LOG(INFO) << "Kill and restart node-2";
+
+    auto startTime = std::chrono::steady_clock::now();
+    node2.reset();
+
+    // Since node2 doesn't come back, will lose adj and declare DOWN
+    auto event =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-1 reporte down adjacency to node-2";
+
+    // Make sure 'down' event is triggered by GRTimer expire
+    // and NOT related with heartbeat holdTimer( no hearbeatTimer started )
+    auto endTime = std::chrono::steady_clock::now();
+    ASSERT_TRUE(endTime - startTime >= kGRHoldTime);
+    ASSERT_TRUE(endTime - startTime <= kGRHoldTime + kHeartbeatHoldTime);
+  }
+}
+
+TEST_F(Spark2Fixture, HeartbeatTimerExpireTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture GracefulRestartTest finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 10}}},
+      {iface2, {{iface1, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start one spark2 instance
+  auto node1 = createSpark2(kDomainName, "node-1", 1);
+
+  // start another spark2 instance
+  auto node2 = createSpark2(kDomainName, "node-2", 2);
+
+  // start tracking iface1
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+
+  // start tracking iface2
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  LOG(INFO) << "Start to receive messages from Spark2";
+
+  // Now wait for sparks to detect each other
+  {
+    auto event =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-1 reported adjacency to node-2";
+  }
+
+  {
+    auto event =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+    LOG(INFO) << "node-2 reported adjacency to node-1";
+  }
+
+  // record time for future comparison
+  auto startTime = std::chrono::steady_clock::now();
+
+  // remove underneath connections between to nodes
+  connectedPairs = {};
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // wait for sparks to lose each other
+  {
+    auto event =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    ASSERT_TRUE(event.hasValue());
+
+    // record time for expiration time test
+    auto endTime = std::chrono::steady_clock::now();
+    ASSERT_TRUE(endTime - startTime >= kHeartbeatHoldTime);
+    ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
+
+    LOG(INFO) << "node-1 reported down adjacency to node-2";
+  }
+
+  {
+    auto event =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    ASSERT_TRUE(event.hasValue());
+
+    // record time for expiration time test
+    auto endTime = std::chrono::steady_clock::now();
+    ASSERT_TRUE(endTime - startTime >= kHeartbeatHoldTime);
+    ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
+
+    LOG(INFO) << "node-2 reported down adjacency to node-1";
+  }
+}
+
+TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture IgnoreUnidirectionalPeerTest finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start one spark2 instance
+  auto node1 = createSpark2(kDomainName, "node-1", 1);
+
+  // start another spark2 instance
+  auto node2 = createSpark2(kDomainName, "node-2", 2);
+
+  // start tracking iface1
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+
+  // start tracking iface2
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  {
+    EXPECT_TRUE(node1->recvNeighborEvent(kGRHoldTime * 2).hasError());
+    LOG(INFO) << "node-1 doesn't have any neighbor event";
+
+    EXPECT_TRUE(node2->recvNeighborEvent(kGRHoldTime * 2).hasError());
+    LOG(INFO) << "node-2 doesn't have any neighbor event";
+  }
+
+  {
+    // check for neighbor state on node1, should be WARM
+    // since will NOT receive helloMsg containing my own info
+    EXPECT_TRUE(
+        node1->getSparkNeighState(iface1, "node-2") == SparkNeighState::WARM);
+    LOG(INFO) << "node-1 have neighbor: node-2 in WARM state";
+
+    // check for neighbor state on node2, should return folly::none
+    // since node2 can't receive pkt from node1
+    EXPECT_FALSE(node2->getSparkNeighState(iface2, "node-1").hasValue());
+    LOG(INFO) << "node-2 doesn't have any neighbor";
   }
 }
 

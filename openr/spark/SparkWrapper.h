@@ -70,8 +70,13 @@ class SparkWrapper {
       folly::Optional<std::chrono::milliseconds> timeout =
           folly::none) noexcept;
 
+  // utility call to check neighbor state
+  folly::Optional<SparkNeighState> getSparkNeighState(
+      std::string const& ifName, std::string const& neighborName);
+
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
       const thrift::SparkNeighborEvent& event);
+
   //
   // Private state
   //
