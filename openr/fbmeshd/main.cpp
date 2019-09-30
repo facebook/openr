@@ -29,6 +29,7 @@
 #include <openr/fbmeshd/gateway-11s-root-route-programmer/Gateway11sRootRouteProgrammer.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/GatewayConnectivityMonitor.h>
 #include <openr/fbmeshd/gateway-connectivity-monitor/RouteDampener.h>
+#include <openr/fbmeshd/notifier/Notifier.h>
 #include <openr/fbmeshd/route-update-monitor/RouteUpdateMonitor.h>
 #include <openr/fbmeshd/routing/MetricManager80211s.h>
 #include <openr/fbmeshd/routing/PeriodicPinger.h>
@@ -169,6 +170,7 @@ const auto kMetricManagerInterval{3s};
 const auto kMetricManagerHysteresisFactorLog2{2};
 const auto kMetricManagerBaseBitrate{60};
 const auto kPeriodicPingerInterval{10s};
+const auto kWatchdogNotifyInterval{3s};
 
 } // namespace
 
@@ -197,6 +199,10 @@ main(int argc, char* argv[]) {
   follySignalHandler.registerSignalHandler(SIGABRT);
   follySignalHandler.registerSignalHandler(SIGINT);
   follySignalHandler.registerSignalHandler(SIGTERM);
+
+  LOG(INFO) << "Creating watchdog notifier...";
+  std::unique_ptr<Notifier> notifier =
+      std::make_unique<Notifier>(&routingEventLoop, kWatchdogNotifyInterval);
 
   AuthsaeCallbackHelpers::init(evl);
 

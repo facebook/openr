@@ -97,6 +97,7 @@ add_executable(fbmeshd
     openr/fbmeshd/gateway-connectivity-monitor/Socket.cpp
     openr/fbmeshd/gateway-connectivity-monitor/StatsClient.cpp
     openr/fbmeshd/nl/GenericNetlinkFamily.cpp
+    openr/fbmeshd/notifier/Notifier.cpp
     openr/fbmeshd/rnl/NetlinkMessage.cpp
     openr/fbmeshd/rnl/NetlinkRoute.cpp
     openr/fbmeshd/rnl/NetlinkSocket.cpp
