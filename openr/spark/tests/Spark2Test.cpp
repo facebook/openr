@@ -140,66 +140,78 @@ class Spark2Fixture : public testing::Test {
   CompactSerializer serializer_;
 };
 
-TEST_F(Spark2Fixture, UnidirectionTest) {
+class SimpleSpark2Fixture : public Spark2Fixture {
+ protected:
+  void
+  createAndConnectSpark2Nodes() {
+    // Define interface names for the test
+    mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+    // connect interfaces directly
+    ConnectedIfPairs connectedPairs = {
+        {iface1, {{iface2, 10}}},
+        {iface2, {{iface1, 10}}},
+    };
+    mockIoProvider->setConnectedPairs(connectedPairs);
+
+    // start one spark2 instance
+    node1 = createSpark2(kDomainName, "node-1", 1);
+
+    // start another spark2 instance
+    node2 = createSpark2(kDomainName, "node-2", 2);
+
+    // start tracking iface1
+    EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+
+    // start tracking iface2
+    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+    LOG(INFO) << "Start to receive messages from Spark2";
+
+    // Now wait for sparks to detect each other
+    {
+      auto event =
+          node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+      ASSERT_TRUE(event.hasValue());
+      EXPECT_EQ(iface1, event->ifName);
+      EXPECT_EQ("node-2", event->neighbor.nodeName);
+      EXPECT_EQ(
+          std::make_pair(ip2V4.first, ip2V6.first),
+          SparkWrapper::getTransportAddrs(*event));
+      LOG(INFO) << "node-1 reported adjacency to node-2";
+    }
+
+    {
+      auto event =
+          node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+      ASSERT_TRUE(event.hasValue());
+      EXPECT_EQ(iface2, event->ifName);
+      EXPECT_EQ("node-1", event->neighbor.nodeName);
+      EXPECT_EQ(
+          std::make_pair(ip1V4.first, ip1V6.first),
+          SparkWrapper::getTransportAddrs(*event));
+      LOG(INFO) << "node-2 reported adjacency to node-1";
+    }
+  }
+
+  std::shared_ptr<SparkWrapper> node1;
+  std::shared_ptr<SparkWrapper> node2;
+};
+
+TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fxiture UnidirectionTest finished";
   };
 
-  // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
-
-  // connect interfaces directly
-  ConnectedIfPairs connectedPairs = {
-      {iface1, {{iface2, 10}}},
-      {iface2, {{iface1, 10}}},
-  };
-  mockIoProvider->setConnectedPairs(connectedPairs);
-
-  // start one spark2 instance
-  auto node1 = createSpark2(kDomainName, "node-1", 1);
-
-  // start another spark2 instance
-  auto node2 = createSpark2(kDomainName, "node-2", 2);
-
-  // start tracking iface1
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-
-  // start tracking iface2
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
-
-  LOG(INFO) << "Start to receive messages from Spark2";
-
-  // Now wait for sparks to detect each other
-  {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    EXPECT_EQ(iface1, event->ifName);
-    EXPECT_EQ("node-2", event->neighbor.nodeName);
-    EXPECT_EQ(
-        std::make_pair(ip2V4.first, ip2V6.first),
-        SparkWrapper::getTransportAddrs(*event));
-    LOG(INFO) << "node-1 reported adjacency to node-2";
-  }
-
-  {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    EXPECT_EQ(iface2, event->ifName);
-    EXPECT_EQ("node-1", event->neighbor.nodeName);
-    EXPECT_EQ(
-        std::make_pair(ip1V4.first, ip1V6.first),
-        SparkWrapper::getTransportAddrs(*event));
-    LOG(INFO) << "node-2 reported adjacency to node-1";
-  }
+  // create Spark2 instances and establish connections
+  createAndConnectSpark2Nodes();
 
   LOG(INFO) << "Stopping communications from iface2 to iface1";
 
   // stop packet flowing iface2 -> iface1. Expect both ends drops
   //  1. node1 drops due to: heartbeat hold timer expired
   //  2. node2 drops due to: helloMsg doesn't contains neighborInfo
-  connectedPairs = {
+  ConnectedIfPairs connectedPairs = {
       {iface1, {{iface2, 10}}},
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
@@ -220,59 +232,13 @@ TEST_F(Spark2Fixture, UnidirectionTest) {
   }
 }
 
-TEST_F(Spark2Fixture, GRTest) {
+TEST_F(SimpleSpark2Fixture, GRTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture GracefulRestartTest finished";
   };
 
-  // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
-
-  // connect interfaces directly
-  ConnectedIfPairs connectedPairs = {
-      {iface1, {{iface2, 10}}},
-      {iface2, {{iface1, 10}}},
-  };
-  mockIoProvider->setConnectedPairs(connectedPairs);
-
-  // start one spark2 instance
-  auto node1 = createSpark2(
-      kDomainName,
-      "node-1",
-      1,
-      std::chrono::milliseconds(1000),
-      std::chrono::milliseconds(200));
-
-  // start another spark2 instance
-  auto node2 = createSpark2(
-      kDomainName,
-      "node-2",
-      2,
-      std::chrono::milliseconds(1000),
-      std::chrono::milliseconds(200));
-
-  // start tracking iface1
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-
-  // start tracking iface2
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
-
-  LOG(INFO) << "Start to receive messages from Spark2";
-
-  // Now wait for sparks to detect each other
-  {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-1 reported adjacency to node-2";
-  }
-
-  {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-2 reported adjacency to node-1";
-  }
+  // create Spark2 instances and establish connections
+  createAndConnectSpark2Nodes();
 
   // Kill node2
   LOG(INFO) << "Kill and restart node-2";
@@ -323,58 +289,22 @@ TEST_F(Spark2Fixture, GRTest) {
   }
 }
 
-TEST_F(Spark2Fixture, GRTimerExpireTest) {
+TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture GRTimerExpiredTest finished";
   };
 
-  // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+  // create Spark2 instances and establish connections
+  createAndConnectSpark2Nodes();
 
-  // connect interfaces directly
-  ConnectedIfPairs connectedPairs = {
-      {iface1, {{iface2, 10}}},
-      {iface2, {{iface1, 10}}},
-  };
-  mockIoProvider->setConnectedPairs(connectedPairs);
+  // Kill node2
+  LOG(INFO) << "Kill and restart node-2";
 
-  // start one spark2 instance
-  auto node1 = createSpark2(kDomainName, "node-1", 1);
+  auto startTime = std::chrono::steady_clock::now();
+  node2.reset();
 
-  // start another spark2 instance
-  auto node2 = createSpark2(kDomainName, "node-2", 2);
-
-  // start tracking iface1
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-
-  // start tracking iface2
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
-
-  LOG(INFO) << "Start to receive messages from Spark2";
-
-  // Now wait for sparks to detect each other
+  // Since node2 doesn't come back, will lose adj and declare DOWN
   {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-1 reported adjacency to node-2";
-  }
-
-  {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-2 reported adjacency to node-1";
-  }
-
-  {
-    // Kill node2
-    LOG(INFO) << "Kill and restart node-2";
-
-    auto startTime = std::chrono::steady_clock::now();
-    node2.reset();
-
-    // Since node2 doesn't come back, will lose adj and declare DOWN
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
     ASSERT_TRUE(event.hasValue());
@@ -388,55 +318,19 @@ TEST_F(Spark2Fixture, GRTimerExpireTest) {
   }
 }
 
-TEST_F(Spark2Fixture, HeartbeatTimerExpireTest) {
+TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
   SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture GracefulRestartTest finished";
+    LOG(INFO) << "Spark2Fixture HeartbeatTimerExpireTest finished";
   };
 
-  // Define interface names for the test
-  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
-
-  // connect interfaces directly
-  ConnectedIfPairs connectedPairs = {
-      {iface1, {{iface2, 10}}},
-      {iface2, {{iface1, 10}}},
-  };
-  mockIoProvider->setConnectedPairs(connectedPairs);
-
-  // start one spark2 instance
-  auto node1 = createSpark2(kDomainName, "node-1", 1);
-
-  // start another spark2 instance
-  auto node2 = createSpark2(kDomainName, "node-2", 2);
-
-  // start tracking iface1
-  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-
-  // start tracking iface2
-  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
-
-  LOG(INFO) << "Start to receive messages from Spark2";
-
-  // Now wait for sparks to detect each other
-  {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-1 reported adjacency to node-2";
-  }
-
-  {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
-    LOG(INFO) << "node-2 reported adjacency to node-1";
-  }
+  // create Spark2 instances and establish connections
+  createAndConnectSpark2Nodes();
 
   // record time for future comparison
   auto startTime = std::chrono::steady_clock::now();
 
   // remove underneath connections between to nodes
-  connectedPairs = {};
+  ConnectedIfPairs connectedPairs = {};
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // wait for sparks to lose each other
@@ -453,6 +347,8 @@ TEST_F(Spark2Fixture, HeartbeatTimerExpireTest) {
     LOG(INFO) << "node-1 reported down adjacency to node-2";
   }
 
+  LOG(INFO) << "Waiting for node-2 to time-out node-1";
+
   {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
@@ -464,6 +360,79 @@ TEST_F(Spark2Fixture, HeartbeatTimerExpireTest) {
     ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
 
     LOG(INFO) << "node-2 reported down adjacency to node-1";
+  }
+}
+
+TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture InterfaceRemovalTest finished";
+  };
+
+  // create Spark2 instances and establish connections
+  createAndConnectSpark2Nodes();
+
+  auto startTime = std::chrono::steady_clock::now();
+
+  // tell node1 to remove interface to mimick request from linkMonitor
+  EXPECT_TRUE(node1->updateInterfaceDb({}));
+
+  LOG(INFO) << "Waiting for node-1 to report loss of adj to node-2";
+
+  // since the removal of intf happens instantly. down event should
+  // be reported ASAP.
+  {
+    auto event =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    ASSERT_TRUE(event.hasValue());
+
+    auto endTime = std::chrono::steady_clock::now();
+    ASSERT_TRUE(
+        endTime - startTime <= std::min(kGRHoldTime, kHeartbeatHoldTime));
+    LOG(INFO)
+        << "node-1 reported down adjacency to node-2 due to interface removal";
+  }
+
+  {
+    auto event =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    ASSERT_TRUE(event.hasValue());
+
+    auto endTime = std::chrono::steady_clock::now();
+    ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
+    LOG(INFO)
+        << "node-2 reported down adjacency to node-2 due to heartbeat expired";
+  }
+
+  {
+    // should NOT receive any event after down adj
+    EXPECT_TRUE(node1->recvNeighborEvent(kGRHoldTime).hasError());
+    EXPECT_TRUE(node2->recvNeighborEvent(kGRHoldTime).hasError());
+  }
+
+  // Resume interface connection
+  LOG(INFO) << "Bringing iface-1 back online";
+
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  startTime = std::chrono::steady_clock::now();
+
+  {
+    auto event =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+
+    auto endTime = std::chrono::steady_clock::now();
+    ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
+    LOG(INFO) << "node-1 reported up adjacency to node-2";
+  }
+
+  {
+    auto event =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event.hasValue());
+
+    auto endTime = std::chrono::steady_clock::now();
+    ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
+    LOG(INFO) << "node-2 reported up adjacency to node-1";
   }
 }
 

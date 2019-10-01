@@ -1518,7 +1518,6 @@ Spark::processHelloPacket() {
   std::chrono::microseconds myRecvTime;
 
   if (!parsePacket(helloPacket, ifName, myRecvTime)) {
-    LOG(ERROR) << "Failed to parse packet. Ignore it";
     return;
   }
 
