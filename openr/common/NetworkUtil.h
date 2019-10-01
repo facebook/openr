@@ -154,4 +154,14 @@ toString(const thrift::NextHopThrift& nextHop) {
                                     : "");
 }
 
+inline std::string
+toString(const thrift::UnicastRoute& route) {
+  std::vector<std::string> lines;
+  lines.emplace_back(folly::sformat("> Prefix: {}", toString(route.dest)));
+  for (const auto& nh : route.nextHops) {
+    lines.emplace_back("  " + toString(nh));
+  }
+  return folly::join("\n", lines);
+}
+
 } // namespace openr

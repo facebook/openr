@@ -151,8 +151,16 @@ service SystemService {
 //    ClientId: 0 => ProtocolId: 253, Priority: 20
 // For TG breeze CLI client
 //    ClientId: 64 => ProtocolId: 64, Priority: 11
-const map<i16, i16> clientIdtoProtocolId = {786:99, 0:253, 64:64}
-const map<i16, i16> protocolIdtoPriority = {99:10, 253:20, 64:11}
+const map<i16, i16> clientIdtoProtocolId = {
+    786: 99,  // Open/R
+    0: 253,   // BGP
+    64: 64,   // CLI Routes
+}
+const map<i16, i16> protocolIdtoPriority = {
+    99: 10,   // Open/R
+    253: 20,  // BGP
+    64: 11,   // CLI Routes
+}
 const i16 kUnknowProtAdminDistance = 255
 
 /**
