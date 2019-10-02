@@ -22,10 +22,6 @@
 #include <glog/logging.h>
 #include <openr/nl/NetlinkSocket.h>
 
-extern "C" {
-#include <netlink/route/link/veth.h>
-}
-
 using folly::gen::as;
 using folly::gen::from;
 using folly::gen::mapped;
@@ -46,9 +42,6 @@ const folly::IPAddress kNextHopIp4("169.254.0.2");
 const folly::CIDRNetwork kPrefix1{folly::IPAddress("fc00:cafe:3::3"), 128};
 const folly::CIDRNetwork kPrefix2{folly::IPAddress("192.168.0.11"), 32};
 const std::chrono::milliseconds kEventLoopTimeout(5000);
-struct rtnl_link* kLink = nullptr;
-struct nl_sock* kSocket = nullptr;
-
 } // namespace
 
 /**
@@ -142,31 +135,28 @@ SetUp() {
   folly::Subprocess proc1(std::move(cmd));
   proc1.wait();
 
-  // Not handling errors here ...
-  kLink = rtnl_link_veth_alloc();
-  kSocket = nl_socket_alloc();
-  nl_connect(kSocket, NETLINK_ROUTE);
-  rtnl_link_set_name(kLink, kVethNameX.c_str());
-  rtnl_link_set_name(rtnl_link_veth_get_peer(kLink), kVethNameY.c_str());
-  int err = rtnl_link_add(kSocket, kLink, NLM_F_CREATE);
-  if (err != 0) {
-    LOG(ERROR) << "Failed to add veth link: " << nl_geterror(err);
-  }
+  // add veth interface pair
+  cmd = "ip link add {} type veth peer name {}"_shellify(
+      kVethNameX.c_str(), kVethNameY.c_str());
+  folly::Subprocess proc2(std::move(cmd));
+  proc2.wait();
 
   // Bring up interface
   cmd = "ip link set dev {} up"_shellify(kVethNameX.c_str());
-  folly::Subprocess proc2(std::move(cmd));
-  proc2.wait();
-  cmd = "ip link set dev {} up"_shellify(kVethNameY.c_str());
   folly::Subprocess proc3(std::move(cmd));
   proc3.wait();
+  cmd = "ip link set dev {} up"_shellify(kVethNameY.c_str());
+  folly::Subprocess proc4(std::move(cmd));
+  proc4.wait();
 }
 
 void
 TearDown() {
-  rtnl_link_delete(kSocket, kLink);
-  nl_socket_free(kSocket);
-  rtnl_link_veth_release(kLink);
+  // cleanup virtual interfaces
+  auto cmd = "ip link del {} 2>/dev/null"_shellify(kVethNameX.c_str());
+  folly::Subprocess proc(std::move(cmd));
+  // Ignore result
+  proc.wait();
 }
 
 int

@@ -14,9 +14,13 @@
 #include <folly/Benchmark.h>
 #include <folly/Exception.h>
 #include <folly/Format.h>
+#include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
 #include <folly/Random.h>
+#include <folly/Subprocess.h>
+#include <folly/gen/Base.h>
 #include <folly/init/Init.h>
+#include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 #include <openr/fib/tests/PrefixGenerator.h>
 #include <openr/nl/NetlinkSocket.h>
@@ -24,12 +28,10 @@
 
 extern "C" {
 #include <net/if.h>
-#include <netlink/route/link/veth.h>
-#include <netlink/route/route.h>
-#include <sys/ioctl.h>
 }
 
 using namespace openr::fbnl;
+using namespace folly::literals::shell_literals;
 
 namespace {
 // Virtual interfaces
@@ -50,34 +52,19 @@ const int16_t kFibId{static_cast<int16_t>(thrift::FibClient::OPENR)};
 // which the Benchmark test can use to add routes (via interface)
 class NetlinkFibWrapper {
  public:
-  struct RouteCallbackContext {
-    struct nl_cache* routeCache{nullptr};
-    std::vector<Route> results;
-  };
-
-  struct AddressCallbackContext {
-    struct nl_cache* linkeCache{nullptr};
-    std::vector<IfAddress> results;
-  };
-
   NetlinkFibWrapper() {
-    // Allocate socket
-    socket_ = nl_socket_alloc();
-    nl_connect(socket_, NETLINK_ROUTE);
-    rtnl_link_alloc_cache(socket_, AF_UNSPEC, &linkCache_);
-    rtnl_addr_alloc_cache(socket_, &addrCache_);
-    rtnl_route_alloc_cache(socket_, AF_UNSPEC, 0, &routeCache_);
+    // cleanup old interfaces in any
+    auto cmd = "ip link del {} 2>/dev/null"_shellify(kVethNameX.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    // Ignore result
+    proc.wait();
 
-    // Virtual interface and virtual link
-    link_ = rtnl_link_veth_alloc();
-    auto peerLink = rtnl_link_veth_get_peer(link_);
-    rtnl_link_set_name(link_, kVethNameX.c_str());
-    rtnl_link_set_name(peerLink, kVethNameY.c_str());
-    nl_object_put(OBJ_CAST(peerLink));
+    // add veth interface pair
+    cmd = "ip link add {} type veth peer name {}"_shellify(
+        kVethNameX.c_str(), kVethNameY.c_str());
+    folly::Subprocess proc1(std::move(cmd));
+    proc1.wait();
 
-    rtnl_link_add(socket_, link_, NLM_F_CREATE);
-
-    nl_cache_refill(socket_, linkCache_);
     addAddress(kVethNameX, "169.254.0.101");
     addAddress(kVethNameY, "169.254.0.102");
 
@@ -114,6 +101,12 @@ class NetlinkFibWrapper {
   }
 
   ~NetlinkFibWrapper() {
+    // cleanup virtual interfaces
+    auto cmd = "ip link del {} 2>/dev/null"_shellify(kVethNameX.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    // Ignore result
+    proc.wait();
+
     if (evl.isRunning()) {
       evl.stop();
       eventThread.join();
@@ -124,13 +117,6 @@ class NetlinkFibWrapper {
     }
 
     nlSocket.reset();
-
-    rtnl_link_delete(socket_, link_);
-    nl_cache_free(linkCache_);
-    nl_cache_free(addrCache_);
-    nl_cache_free(routeCache_);
-    nl_socket_free(socket_);
-    rtnl_link_veth_release(link_);
   }
 
   fbzmq::Context context;
@@ -151,39 +137,17 @@ class NetlinkFibWrapper {
  private:
   void
   addAddress(const std::string& ifName, const std::string& address) {
-    int ifIndex = rtnl_link_name2i(linkCache_, ifName.c_str());
-
-    auto addrMask = std::make_pair(folly::IPAddress(address), 16);
-    struct nl_addr* nlAddr = nl_addr_build(
-        addrMask.first.family(),
-        (void*)addrMask.first.bytes(),
-        addrMask.first.byteCount());
-    nl_addr_set_prefixlen(nlAddr, addrMask.second);
-
-    struct rtnl_addr* addr = rtnl_addr_alloc();
-    rtnl_addr_set_local(addr, nlAddr);
-    rtnl_addr_set_ifindex(addr, ifIndex);
-    rtnl_addr_add(socket_, addr, 0);
-    nl_addr_put(nlAddr);
-    rtnl_addr_put(addr);
+    auto cmd =
+        "ip addr add {} dev {}"_shellify(address.c_str(), ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    proc.wait();
   }
 
   static void
   bringUpIntf(const std::string& ifName) {
-    // Prepare socket
-    auto sockFd = socket(PF_INET, SOCK_DGRAM, 0);
-
-    // Prepare request
-    struct ifreq ifr;
-    memset(&ifr, 0, sizeof(ifr));
-    folly::strlcpy(ifr.ifr_name, ifName.c_str(), IFNAMSIZ);
-
-    // Get existing flags
-    ioctl(sockFd, SIOCGIFFLAGS, static_cast<void*>(&ifr));
-
-    // Mutate flags and set them back
-    ifr.ifr_flags |= IFF_UP;
-    ioctl(sockFd, SIOCSIFFLAGS, static_cast<void*>(&ifr));
+    auto cmd = "ip link set dev {} up"_shellify(ifName.c_str());
+    folly::Subprocess proc(std::move(cmd));
+    proc.wait();
   }
 };
 
