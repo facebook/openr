@@ -29,65 +29,6 @@ RouteBuilder::build() const {
 }
 
 Route
-RouteBuilder::buildFromObject(struct rtnl_route* obj) {
-  return loadFromObject(obj).build();
-}
-
-RouteBuilder&
-RouteBuilder::loadFromObject(struct rtnl_route* obj) {
-  CHECK_NOTNULL(obj);
-  setScope(rtnl_route_get_scope(obj));
-  setRouteTable(rtnl_route_get_table(obj));
-  setFlags(rtnl_route_get_flags(obj));
-  setProtocolId(rtnl_route_get_protocol(obj));
-  setType(rtnl_route_get_type(obj));
-  setPriority(rtnl_route_get_priority(obj));
-  struct nl_addr* dst = rtnl_route_get_dst(obj);
-
-  // Special handling for default routes
-  // All others can be constructed from binary address form
-  folly::CIDRNetwork prefix;
-  std::array<char, kIpAddrBufSize> ipAddrBuf{""};
-  if (nl_addr_get_prefixlen(dst) == 0) {
-    if (nl_addr_get_family(dst) == AF_INET6) {
-      VLOG(3) << "Creating a V6 default route";
-      prefix = folly::IPAddress::createNetwork("::/0");
-    } else if (nl_addr_get_family(dst) == AF_INET) {
-      VLOG(3) << "Creating a V4 default route";
-      prefix = folly::IPAddress::createNetwork("0.0.0.0/0");
-    } else {
-      throw fbnl::NlException("Unknown address family for default route");
-    }
-  } else {
-    // route object dst is the prefix. parse it
-    try {
-      const auto ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
-          static_cast<const unsigned char*>(nl_addr_get_binary_addr(dst)),
-          nl_addr_get_len(dst)));
-      prefix = {ipAddress, nl_addr_get_prefixlen(dst)};
-    } catch (std::exception const& e) {
-      throw fbnl::NlException(folly::sformat(
-          "Error creating prefix for addr: {}",
-          nl_addr2str(dst, ipAddrBuf.data(), ipAddrBuf.size())));
-    }
-  }
-  setDestination(prefix);
-  auto nextHopFunc = [](struct rtnl_nexthop * nhObj, void* ctx) noexcept->void {
-    struct nl_addr* gw = rtnl_route_nh_get_gateway(nhObj);
-    int ifIndex = rtnl_route_nh_get_ifindex(nhObj);
-    // One of gateway or ifIndex must be set
-    if (!gw && 0 == ifIndex) {
-      return;
-    }
-    RouteBuilder* rtBuilder = reinterpret_cast<RouteBuilder*>(ctx);
-    NextHopBuilder nhBuilder;
-    rtBuilder->addNextHop(nhBuilder.buildFromObject(nhObj));
-  };
-  rtnl_route_foreach_nexthop(obj, nextHopFunc, static_cast<void*>(this));
-  return *this;
-}
-
-Route
 RouteBuilder::buildMulticastRoute() const {
   if (!routeIfIndex_.hasValue() || routeIfIndex_.value() == 0 ||
       !routeIfName_.hasValue()) {
@@ -331,16 +272,7 @@ Route::Route(const RouteBuilder& builder)
       routeIfName_(builder.getRouteIfName()),
       mplsLabel_(builder.getMplsLabel()) {}
 
-Route::~Route() {
-  if (route_) {
-    rtnl_route_put(route_);
-    route_ = nullptr;
-  }
-  if (routeKey_) {
-    rtnl_route_put(routeKey_);
-    routeKey_ = nullptr;
-  }
-}
+Route::~Route() {}
 
 Route::Route(Route&& other) noexcept {
   *this = std::move(other);
@@ -366,23 +298,6 @@ Route::operator=(Route&& other) noexcept {
   routeIfName_ = std::move(other.routeIfName_);
   family_ = std::move(other.family_);
   mplsLabel_ = std::move(other.mplsLabel_);
-  if (route_) {
-    rtnl_route_put(route_);
-    route_ = nullptr;
-  }
-  if (other.route_) {
-    route_ = other.route_;
-    other.route_ = nullptr;
-  }
-  if (routeKey_) {
-    rtnl_route_put(routeKey_);
-    routeKey_ = nullptr;
-  }
-  if (other.routeKey_) {
-    routeKey_ = other.routeKey_;
-    other.routeKey_ = nullptr;
-  }
-
   return *this;
 }
 
@@ -410,21 +325,6 @@ Route::operator=(const Route& other) {
   routeIfName_ = other.routeIfName_;
   family_ = other.family_;
   mplsLabel_ = other.mplsLabel_;
-  // Free our route_ if any
-  if (route_) {
-    rtnl_route_put(route_);
-    route_ = nullptr;
-  }
-  // Free our routeKey_ if any
-  if (routeKey_) {
-    rtnl_route_put(routeKey_);
-    routeKey_ = nullptr;
-  }
-
-  // NOTE: We are not copying other.route_ so that this object can be passed
-  // between threads without actually copying underlying netlink object to
-  // other threads
-
   return *this;
 }
 
@@ -575,140 +475,12 @@ Route::str() const {
   return result;
 }
 
-struct rtnl_route*
-Route::createRtnlRouteKey() {
-  auto route = rtnl_route_alloc();
-  if (route == nullptr) {
-    throw fbnl::NlException("Cannot allocate route object");
-  }
-  SCOPE_FAIL {
-    rtnl_route_put(route);
-  };
-
-  rtnl_route_set_scope(route, scope_);
-  rtnl_route_set_type(route, type_);
-  rtnl_route_set_family(route, dst_.first.family());
-  rtnl_route_set_table(route, routeTable_);
-  rtnl_route_set_protocol(route, protocolId_);
-
-  // Set destination
-  struct nl_addr* nlAddr = buildAddrObject(dst_);
-  // route object takes a ref if dst is successfully set
-  // so we should always drop our ref, success or failure
-  SCOPE_EXIT {
-    nl_addr_put(nlAddr);
-  };
-  int err = rtnl_route_set_dst(route, nlAddr);
-  if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
-        "Failed to set dst for route {} : {}",
-        folly::IPAddress::networkToString(dst_),
-        nl_geterror(err)));
-  }
-
-  return route;
-}
-
-struct rtnl_route*
-Route::getRtnlRouteRef() {
-  // Only build object once
-  if (route_) {
-    return route_;
-  }
-
-  route_ = createRtnlRouteKey();
-  SCOPE_FAIL {
-    rtnl_route_put(route_);
-    route_ = nullptr;
-  };
-
-  if (priority_.hasValue()) {
-    rtnl_route_set_priority(route_, priority_.value());
-  }
-
-  if (flags_.hasValue()) {
-    rtnl_route_set_flags(route_, flags_.value());
-  }
-
-  if (tos_.hasValue()) {
-    rtnl_route_set_tos(route_, tos_.value());
-  }
-
-  if (mtu_.hasValue()) {
-    rtnl_route_set_metric(route_, RTAX_MTU, mtu_.value());
-  }
-
-  if (advMss_.hasValue()) {
-    rtnl_route_set_metric(route_, RTAX_ADVMSS, advMss_.value());
-  }
-
-  // Add next hops
-  // 1. check dst and nexthop's family
-  for (const auto& nextHop : nextHops_) {
-    auto gateway = nextHop.getGateway();
-    if (gateway.hasValue() && gateway.value().family() != dst_.first.family()) {
-      throw fbnl::NlException(
-          "Different address family for destination and Nexthop gateway");
-    }
-  }
-  // 2. build nexthop and add it to route
-  for (auto nextHop : nextHops_) {
-    rtnl_route_add_nexthop(route_, nextHop.getRtnlNexthopObj());
-  }
-
-  return route_;
-}
-
-struct rtnl_route*
-Route::getRtnlRouteKeyRef() {
-  // Only build object once
-  if (routeKey_) {
-    return routeKey_;
-  }
-
-  routeKey_ = createRtnlRouteKey();
-  return routeKey_;
-}
-
-struct nl_addr*
-Route::buildAddrObject(const folly::CIDRNetwork& addr) {
-  struct nl_addr* nlAddr_ = nl_addr_build(
-      addr.first.family(), (void*)(addr.first.bytes()), addr.first.byteCount());
-  if (nlAddr_ == nullptr) {
-    throw fbnl::NlException("Failed to create nl addr");
-  }
-  nl_addr_set_prefixlen(nlAddr_, addr.second);
-  return nlAddr_;
-}
-
 void
 Route::setPriority(uint32_t priority) {
   priority_ = priority;
 }
 
 /*=================================NextHop====================================*/
-
-NextHop
-NextHopBuilder::buildFromObject(struct rtnl_nexthop* obj) const {
-  CHECK_NOTNULL(obj);
-  NextHopBuilder builder;
-
-  // set ifindex, rtnl_nexthop defaut ifindex to 0
-  auto ifindex = rtnl_route_nh_get_ifindex(obj);
-  if (ifindex != 0) {
-    builder.setIfIndex(ifindex);
-  }
-
-  // Get the gateway IP from nextHop
-  struct nl_addr* gw = rtnl_route_nh_get_gateway(obj);
-  if (!gw) {
-    return builder.build();
-  }
-  auto gwAddr = folly::IPAddress::fromBinary(folly::ByteRange(
-      (const unsigned char*)nl_addr_get_binary_addr(gw), nl_addr_get_len(gw)));
-  builder.setGateway(gwAddr).setWeight(rtnl_route_nh_get_weight(obj));
-  return builder.build();
-}
 
 NextHop
 NextHopBuilder::build() const {
@@ -896,124 +668,11 @@ NextHop::str() const {
   return result;
 }
 
-struct rtnl_nexthop*
-NextHop::getRtnlNexthopObj() const {
-  if (ifIndex_.hasValue() && gateway_.hasValue()) {
-    return buildNextHopInternal(ifIndex_.value(), gateway_.value());
-  } else if (ifIndex_.hasValue()) {
-    return buildNextHopInternal(ifIndex_.value());
-  } else if (gateway_.hasValue()) {
-    return buildNextHopInternal(gateway_.value());
-  }
-  throw NlException("Invalid nexthop");
-}
-
-struct rtnl_nexthop*
-NextHop::buildNextHopInternal(const int ifIdx) const {
-  // We create a nextHop oject here but by adding it to route
-  // the route object owns it
-  // Once we destroy the route object, it will internally free this nextHop
-  struct rtnl_nexthop* nextHop = rtnl_route_nh_alloc();
-  if (nextHop == nullptr) {
-    throw fbnl::NlException("Failed to create nextHop");
-  }
-  rtnl_route_nh_set_weight(nextHop, weight_);
-  rtnl_route_nh_set_ifindex(nextHop, ifIdx);
-  return nextHop;
-}
-
-struct rtnl_nexthop*
-NextHop::buildNextHopInternal(
-    int ifIdx, const folly::IPAddress& gateway) const {
-  struct nl_addr* nlGateway = nl_addr_build(
-      gateway.family(), (void*)(gateway.bytes()), gateway.byteCount());
-  if (nlGateway == nullptr) {
-    throw fbnl::NlException("Failed to create nl addr for gateway");
-  }
-  // nextHop object takes a ref if gateway is successfully set
-  // Either way, success or failure, we drop our ref
-  SCOPE_EXIT {
-    nl_addr_put(nlGateway);
-  };
-
-  // We create a nextHop oject here but by adding it to route
-  // the route object owns it
-  // Once we destroy the route object, it will internally free this nextHop
-  struct rtnl_nexthop* nextHop = rtnl_route_nh_alloc();
-  if (nextHop == nullptr) {
-    throw fbnl::NlException("Failed to create nextHop");
-  }
-
-  if (gateway.isV4()) {
-    rtnl_route_nh_set_flags(nextHop, RTNH_F_ONLINK);
-  }
-  rtnl_route_nh_set_weight(nextHop, weight_);
-  rtnl_route_nh_set_ifindex(nextHop, ifIdx);
-  rtnl_route_nh_set_gateway(nextHop, nlGateway);
-  return nextHop;
-}
-
-// build nexthop with nexthop = global ip addresses
-struct rtnl_nexthop*
-NextHop::buildNextHopInternal(const folly::IPAddress& gateway) const {
-  if (gateway.isLinkLocal()) {
-    throw fbnl::NlException(folly::sformat(
-        "Missing interface name for link local nexthop address {}",
-        gateway.str()));
-  }
-
-  struct nl_addr* nlGateway = nl_addr_build(
-      gateway.family(), (void*)(gateway.bytes()), gateway.byteCount());
-  if (nlGateway == nullptr) {
-    throw fbnl::NlException("Failed to create nl addr for gateway");
-  }
-  // nextHop object takes a ref if gateway is successfully set
-  // Either way, success or failure, we drop our ref
-  SCOPE_EXIT {
-    nl_addr_put(nlGateway);
-  };
-
-  // We create a nextHop oject here but by adding it to route
-  // the route object owns it
-  // Once we destroy the route object, it will internally free this nextHop
-  struct rtnl_nexthop* nextHop = rtnl_route_nh_alloc();
-  if (nextHop == nullptr) {
-    throw fbnl::NlException("Failed to create nextHop");
-  }
-  rtnl_route_nh_set_weight(nextHop, weight_);
-
-  rtnl_route_nh_set_gateway(nextHop, nlGateway);
-  return nextHop;
-}
-
 /*================================IfAddress===================================*/
 
 IfAddress
 IfAddressBuilder::build() const {
   return IfAddress(*this);
-}
-
-IfAddress
-IfAddressBuilder::buildFromObject(struct rtnl_addr* addr) {
-  return loadFromObject(addr).build();
-}
-
-IfAddressBuilder&
-IfAddressBuilder::loadFromObject(struct rtnl_addr* addr) {
-  reset();
-  struct nl_addr* ipaddr = rtnl_addr_get_local(addr);
-  if (!ipaddr) {
-    throw fbnl::NlException("Failed to get ip address");
-  }
-  folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
-      static_cast<const unsigned char*>(nl_addr_get_binary_addr(ipaddr)),
-      nl_addr_get_len(ipaddr)));
-
-  uint8_t prefixLen = nl_addr_get_prefixlen(ipaddr);
-  setIfIndex(rtnl_addr_get_ifindex(addr));
-  setFlags(rtnl_addr_get_flags(addr));
-  setPrefix(std::make_pair(ipAddress, prefixLen));
-  return *this;
 }
 
 IfAddressBuilder&
@@ -1101,12 +760,7 @@ IfAddress::IfAddress(const IfAddressBuilder& builder)
       flags_(builder.getFlags()),
       family_(builder.getFamily()) {}
 
-IfAddress::~IfAddress() {
-  if (ifAddr_) {
-    rtnl_addr_put(ifAddr_);
-    ifAddr_ = nullptr;
-  }
-}
+IfAddress::~IfAddress() {}
 
 IfAddress::IfAddress(IfAddress&& other) noexcept {
   *this = std::move(other);
@@ -1124,16 +778,6 @@ IfAddress::operator=(IfAddress&& other) noexcept {
   scope_ = std::move(other.scope_);
   flags_ = std::move(other.flags_);
   family_ = std::move(other.family_);
-  // release old object
-  if (ifAddr_) {
-    rtnl_addr_put(ifAddr_);
-    ifAddr_ = nullptr;
-  }
-  if (other.ifAddr_) {
-    ifAddr_ = other.ifAddr_;
-    other.ifAddr_ = nullptr;
-  }
-
   return *this;
 }
 
@@ -1153,14 +797,6 @@ IfAddress::operator=(const IfAddress& other) {
   scope_ = other.scope_;
   flags_ = other.flags_;
   family_ = other.family_;
-  // release old object
-  if (ifAddr_) {
-    rtnl_addr_put(ifAddr_);
-    ifAddr_ = nullptr;
-  }
-  // NOTE: We are not copying other.ifAddr_ so that this object can be
-  // passed between threads without actually copying underlying netlink object
-  // to other threads
 
   return *this;
 }
@@ -1217,55 +853,6 @@ IfAddress::str() const {
       isValid_ ? "Yes" : "No");
 }
 
-// Will construct rtnl_addr object on the first time call, then will return
-// the same object pointer
-struct rtnl_addr*
-IfAddress::getRtnlAddrRef() {
-  if (ifAddr_) {
-    return ifAddr_;
-  }
-
-  ifAddr_ = rtnl_addr_alloc();
-  if (nullptr == ifAddr_) {
-    throw fbnl::NlException("Failed to create rtnl_addr object");
-  }
-  SCOPE_FAIL {
-    rtnl_addr_put(ifAddr_);
-    ifAddr_ = nullptr;
-  };
-  rtnl_addr_set_ifindex(ifAddr_, ifIndex_);
-
-  // Get local addr
-  if (prefix_.hasValue()) {
-    struct nl_addr* localAddr = nl_addr_build(
-        prefix_->first.family(),
-        (void*)(prefix_->first.bytes()),
-        prefix_->first.byteCount());
-    if (nullptr == localAddr) {
-      throw fbnl::NlException("Failed to create local addr");
-    }
-    nl_addr_set_prefixlen(localAddr, prefix_->second);
-    // Setting the local address will automatically set the address family
-    // and the prefix length to the correct values.
-    // rtnl_addr_set_local will increase reference for localAddr so we will
-    // drop our reference afterwards.
-    rtnl_addr_set_local(ifAddr_, localAddr);
-    nl_addr_put(localAddr);
-  }
-
-  if (family_.hasValue()) {
-    rtnl_addr_set_family(ifAddr_, family_.value());
-  }
-  if (scope_.hasValue()) {
-    rtnl_addr_set_scope(ifAddr_, scope_.value());
-  }
-  if (flags_.hasValue()) {
-    rtnl_addr_set_flags(ifAddr_, flags_.value());
-  }
-
-  return ifAddr_;
-}
-
 bool
 operator==(const IfAddress& lhs, const IfAddress& rhs) {
   return (
@@ -1276,56 +863,6 @@ operator==(const IfAddress& lhs, const IfAddress& rhs) {
 }
 
 /*================================Neighbor====================================*/
-
-Neighbor
-NeighborBuilder::buildFromObject(
-    struct rtnl_neigh* neighbor, bool deleted) const {
-  CHECK_NOTNULL(neighbor);
-  NeighborBuilder builder;
-  // The destination IP
-  struct nl_addr* dst = rtnl_neigh_get_dst(neighbor);
-  if (!dst) {
-    LOG(ERROR) << "Invalid destination for neighbor";
-    throw fbnl::NlException("Failed to get destination IP from neighbor entry");
-  }
-  const auto ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
-      static_cast<const unsigned char*>(nl_addr_get_binary_addr(dst)),
-      nl_addr_get_len(dst)));
-  int state = rtnl_neigh_get_state(neighbor);
-  bool isReachable = deleted ? false : isNeighborReachable(state);
-  builder.setDestination(ipAddress)
-      .setIfIndex(rtnl_neigh_get_ifindex(neighbor))
-      .setState(state, deleted);
-
-  // link address exists only for reachable states, so it may not
-  // always exist
-  folly::MacAddress macAddress;
-  if (isReachable) {
-    struct nl_addr* linkAddress = rtnl_neigh_get_lladdr(neighbor);
-    if (!linkAddress) {
-      LOG(ERROR) << "Invalid link address for neigbbor";
-      throw fbnl::NlException("Failed to get link address from neighbor entry");
-    }
-    // Skip entries with invalid mac-addresses
-    if (nl_addr_get_len(linkAddress) != folly::MacAddress::SIZE) {
-      LOG(ERROR) << "Invalid link address for neigbbor";
-      throw fbnl::NlException("Invalid mac address");
-    }
-    macAddress = folly::MacAddress::fromBinary(folly::ByteRange(
-        static_cast<const unsigned char*>(nl_addr_get_binary_addr(linkAddress)),
-        nl_addr_get_len(linkAddress)));
-  }
-  builder.setLinkAddress(macAddress);
-
-  std::array<char, 128> stateBuf = {""};
-  VLOG(4) << "Built neighbor entry: "
-          << " family " << rtnl_neigh_get_family(neighbor) << " IfIndex "
-          << rtnl_neigh_get_ifindex(neighbor) << " : " << ipAddress.str()
-          << " -> " << macAddress.toString() << " state "
-          << rtnl_neigh_state2str(state, stateBuf.data(), stateBuf.size());
-
-  return builder.build();
-}
 
 Neighbor
 NeighborBuilder::build() const {
@@ -1389,12 +926,7 @@ Neighbor::Neighbor(const NeighborBuilder& builder)
       linkAddress_(builder.getLinkAddress()),
       state_(builder.getState()) {}
 
-Neighbor::~Neighbor() {
-  if (neigh_) {
-    rtnl_neigh_put(neigh_);
-    neigh_ = nullptr;
-  }
-}
+Neighbor::~Neighbor() {}
 
 Neighbor::Neighbor(Neighbor&& other) noexcept {
   *this = std::move(other);
@@ -1411,15 +943,6 @@ Neighbor::operator=(Neighbor&& other) noexcept {
   destination_ = other.destination_;
   linkAddress_ = other.linkAddress_;
   state_ = other.state_;
-  if (neigh_) {
-    rtnl_neigh_put(neigh_);
-    neigh_ = nullptr;
-  }
-  if (other.neigh_) {
-    neigh_ = other.neigh_;
-    other.neigh_ = nullptr;
-  }
-
   return *this;
 }
 
@@ -1438,14 +961,6 @@ Neighbor::operator=(const Neighbor& other) {
   destination_ = other.destination_;
   linkAddress_ = other.linkAddress_;
   state_ = other.state_;
-  if (neigh_) {
-    rtnl_neigh_put(neigh_);
-    neigh_ = nullptr;
-  }
-  // NOTE: We are not copying other.neigh_ so that this object can be
-  // passed between threads without actually copying underlying netlink object
-  // to other threads
-
   return *this;
 }
 
@@ -1483,9 +998,7 @@ std::string
 Neighbor::str() const {
   std::string stateStr{"n/a"};
   if (state_.hasValue()) {
-    std::array<char, 32> buf{""};
-    rtnl_neigh_state2str(state_.value(), buf.data(), buf.size() - 1);
-    stateStr = std::string(buf.data());
+    stateStr = std::to_string(state_.value());
   }
 
   return folly::sformat(
@@ -1495,52 +1008,6 @@ Neighbor::str() const {
       ifIndex_,
       linkAddress_.hasValue() ? linkAddress_->toString() : "n/a",
       stateStr);
-}
-
-struct rtnl_neigh*
-Neighbor::getRtnlNeighRef() {
-  if (neigh_) {
-    return neigh_;
-  }
-
-  neigh_ = rtnl_neigh_alloc();
-  if (!neigh_) {
-    throw fbnl::NlException("create neighbor object failed");
-  }
-  SCOPE_FAIL {
-    rtnl_neigh_put(neigh_);
-  };
-
-  rtnl_neigh_set_ifindex(neigh_, ifIndex_);
-  if (state_.hasValue()) {
-    rtnl_neigh_set_state(neigh_, state_.value());
-  }
-
-  struct nl_addr* dst = nl_addr_build(
-      destination_.family(),
-      (void*)(destination_.bytes()),
-      destination_.byteCount());
-  if (dst == nullptr) {
-    throw fbnl::NlException("Failed to create dst addr");
-  }
-  SCOPE_EXIT {
-    nl_addr_put(dst);
-  };
-  rtnl_neigh_set_dst(neigh_, dst);
-
-  if (linkAddress_.hasValue()) {
-    struct nl_addr* llAddr = nl_addr_build(
-        AF_UNSPEC,
-        (void*)linkAddress_.value().bytes(),
-        folly::MacAddress::SIZE);
-    if (llAddr == nullptr) {
-      throw fbnl::NlException("Failed to create link addr");
-    }
-    rtnl_neigh_set_lladdr(neigh_, llAddr);
-    nl_addr_put(llAddr);
-  }
-
-  return neigh_;
 }
 
 bool
@@ -1554,22 +1021,6 @@ operator==(const Neighbor& lhs, const Neighbor& rhs) {
 }
 
 /*==================================Link======================================*/
-
-Link
-LinkBuilder::buildFromObject(struct rtnl_link* link) const {
-  CHECK_NOTNULL(link);
-  std::string linkName("unknown");
-  const char* linkNameStr = rtnl_link_get_name(link);
-  if (linkNameStr) {
-    linkName.assign(linkNameStr);
-  }
-
-  LinkBuilder builder;
-  builder.setIfIndex(rtnl_link_get_ifindex(link))
-      .setFlags(rtnl_link_get_flags(link))
-      .setLinkName(linkName);
-  return builder.build();
-}
 
 Link
 LinkBuilder::build() const {
@@ -1614,12 +1065,7 @@ Link::Link(const LinkBuilder& builder)
       ifIndex_(builder.getIfIndex()),
       flags_(builder.getFlags()) {}
 
-Link::~Link() {
-  if (link_) {
-    rtnl_link_put(link_);
-    link_ = nullptr;
-  }
-}
+Link::~Link() {}
 
 Link::Link(Link&& other) noexcept {
   *this = std::move(other);
@@ -1634,15 +1080,6 @@ Link::operator=(Link&& other) noexcept {
   linkName_ = std::move(other.linkName_);
   ifIndex_ = std::move(other.ifIndex_);
   flags_ = std::move(other.flags_);
-  if (link_) {
-    rtnl_link_put(link_);
-    link_ = nullptr;
-  }
-  if (other.link_) {
-    link_ = other.link_;
-    other.link_ = nullptr;
-  }
-
   return *this;
 }
 
@@ -1659,15 +1096,6 @@ Link::operator=(const Link& other) {
   linkName_ = other.linkName_;
   ifIndex_ = other.ifIndex_;
   flags_ = other.flags_;
-
-  if (link_) {
-    rtnl_link_put(link_);
-    link_ = nullptr;
-  }
-  // NOTE: We are not copying other.link_ so that this object can be
-  // passed between threads without actually copying underlying netlink object
-  // to other threads
-
   return *this;
 }
 
@@ -1686,23 +1114,6 @@ Link::getFlags() const {
   return flags_;
 }
 
-struct rtnl_link*
-Link::getRtnlLinkRef() {
-  if (link_) {
-    return link_;
-  }
-
-  link_ = rtnl_link_alloc();
-  if (!link_) {
-    throw fbnl::NlException("Allocate link object failed");
-  }
-  rtnl_link_set_ifindex(link_, ifIndex_);
-  rtnl_link_set_flags(link_, flags_);
-  rtnl_link_set_name(link_, linkName_.c_str());
-
-  return link_;
-}
-
 bool
 Link::isUp() const {
   return !!(flags_ & IFF_RUNNING);
@@ -1715,14 +1126,11 @@ Link::isLoopback() const {
 
 std::string
 Link::str() const {
-  std::array<char, 128> flagsBuf{""};
-  rtnl_link_flags2str(flags_, flagsBuf.data(), flagsBuf.size() - 1);
-
   return folly::sformat(
       "link {} intf-index {}, flags {}",
       linkName_,
       ifIndex_,
-      std::string(flagsBuf.data()));
+      std::to_string(flags_));
 }
 
 bool

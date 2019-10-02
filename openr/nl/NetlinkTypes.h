@@ -22,15 +22,8 @@
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 
 extern "C" {
+#include <linux/rtnetlink.h>
 #include <net/if.h>
-#include <netlink/cache.h>
-#include <netlink/errno.h>
-#include <netlink/netlink.h>
-#include <netlink/route/addr.h>
-#include <netlink/route/link.h>
-#include <netlink/route/neighbour.h>
-#include <netlink/route/route.h>
-#include <netlink/socket.h>
 }
 
 namespace openr {
@@ -58,7 +51,6 @@ class NextHopBuilder final {
   NextHopBuilder() {}
   ~NextHopBuilder() {}
 
-  NextHop buildFromObject(struct rtnl_nexthop* obj) const;
   NextHop build() const;
 
   void reset();
@@ -99,7 +91,6 @@ class NextHopBuilder final {
   folly::Optional<uint8_t> family_;
 };
 
-// Wrapper class for rtnl_nexthop
 // NOTE: No special copy+move constructor and assignment operators for this one
 class NextHop final {
  public:
@@ -120,25 +111,6 @@ class NextHop final {
   folly::Optional<std::vector<int32_t>> getPushLabels() const;
 
   uint8_t getFamily() const;
-  /**
-   * This method Will construct rtnl_nexthop object and return it. Owner is
-   * responsible for freeing it up. Use this method carefully.
-   *
-   * NOTE: This method is different from `getRtnl<>Ref` which all other types
-   * provides. Reason: Usually rtnl_nexthop object will be added to rtnl_route
-   * object which will manage the next-hop object.
-   */
-  struct rtnl_nexthop* getRtnlNexthopObj() const;
-
- private:
-  // Nexthop build helpers
-  struct rtnl_nexthop* buildNextHopInternal(
-      int ifIdx, const folly::IPAddress& gateway) const;
-
-  struct rtnl_nexthop* buildNextHopInternal(
-      const folly::IPAddress& gateway) const;
-
-  struct rtnl_nexthop* buildNextHopInternal(int ifIdx) const;
 
  private:
   folly::Optional<int> ifIndex_;
@@ -199,10 +171,6 @@ class RouteBuilder {
    * @throw fbnl::NlException on failed
    */
   Route build() const;
-
-  Route buildFromObject(struct rtnl_route* obj);
-
-  RouteBuilder& loadFromObject(struct rtnl_route* obj);
 
   /**
    * Build multicast route
@@ -308,7 +276,6 @@ class RouteBuilder {
   folly::Optional<uint32_t> mplsLabel_;
 };
 
-// Wrapper class for rtnl_route
 class Route final {
  public:
   explicit Route(const RouteBuilder& builder);
@@ -354,22 +321,7 @@ class Route final {
 
   std::string str() const;
 
-  /**
-   * This method Will construct rtnl_route object on the first time call,
-   * then will return the same object pointer. It will just return the pointer
-   * without increase the ref count. Caller shouldn't do rtnl_route_put
-   * without explicit increase of it's ref count
-   * getRtnlRouteRef => Returns full rtnl_route object including nexthops
-   * getRtnlRouteKeyRef => Returns partial rtnl_route object just containining
-   *                       key (prefix) and no nexthhops
-   */
-  struct rtnl_route* getRtnlRouteRef();
-  struct rtnl_route* getRtnlRouteKeyRef();
-
  private:
-  struct nl_addr* buildAddrObject(const folly::CIDRNetwork& addr);
-  struct rtnl_route* createRtnlRouteKey();
-
   uint8_t type_{RTN_UNICAST};
   uint8_t routeTable_{RT_TABLE_MAIN};
   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
@@ -384,8 +336,6 @@ class Route final {
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
   folly::Optional<std::string> routeIfName_;
-  struct rtnl_route* route_{nullptr};
-  struct rtnl_route* routeKey_{nullptr};
   folly::Optional<uint32_t> mplsLabel_;
 };
 
@@ -398,10 +348,6 @@ class IfAddressBuilder final {
   ~IfAddressBuilder() {}
 
   IfAddress build() const;
-
-  IfAddress buildFromObject(struct rtnl_addr* addr);
-
-  IfAddressBuilder& loadFromObject(struct rtnl_addr* addr);
 
   // Required
   IfAddressBuilder& setIfIndex(int ifIndex);
@@ -441,7 +387,6 @@ class IfAddressBuilder final {
   folly::Optional<uint8_t> family_;
 };
 
-// Wrapper class fo rtnl_addr
 class IfAddress final {
  public:
   explicit IfAddress(const IfAddressBuilder& builder);
@@ -470,14 +415,6 @@ class IfAddress final {
 
   std::string str() const;
 
-  /**
-   * Will construct rtnl_addr object on the first time call, then will return
-   * the same object pointer. It will just return the pointer
-   * without increase the ref count. Caller shouldn't do rtnl_addr_put
-   * without explicit increase of it's ref count
-   */
-  struct rtnl_addr* getRtnlAddrRef();
-
  private:
   folly::Optional<folly::CIDRNetwork> prefix_;
   int ifIndex_{0};
@@ -485,7 +422,6 @@ class IfAddress final {
   folly::Optional<uint8_t> scope_;
   folly::Optional<uint8_t> flags_;
   folly::Optional<uint8_t> family_;
-  struct rtnl_addr* ifAddr_{nullptr};
 };
 
 bool operator==(const IfAddress& lhs, const IfAddress& rhs);
@@ -495,9 +431,6 @@ class NeighborBuilder final {
  public:
   NeighborBuilder() {}
   ~NeighborBuilder() {}
-
-  // Only support V6 neighbor
-  Neighbor buildFromObject(struct rtnl_neigh* obj, bool deleted = false) const;
 
   /**
    * Build Neighbor object to add/del neighbors
@@ -546,7 +479,6 @@ class NeighborBuilder final {
   folly::Optional<int> state_;
 };
 
-// Wrapper class for rtnl_neigh
 class Neighbor final {
  public:
   explicit Neighbor(const NeighborBuilder& builder);
@@ -572,15 +504,12 @@ class Neighbor final {
 
   std::string str() const;
 
-  struct rtnl_neigh* getRtnlNeighRef();
-
  private:
   int ifIndex_{0};
   bool isReachable_{false};
   folly::IPAddress destination_;
   folly::Optional<folly::MacAddress> linkAddress_;
   folly::Optional<int> state_;
-  struct rtnl_neigh* neigh_{nullptr};
 };
 
 bool operator==(const Neighbor& lhs, const Neighbor& rhs);
@@ -591,8 +520,6 @@ class LinkBuilder final {
  public:
   LinkBuilder() {}
   ~LinkBuilder() {}
-
-  Link buildFromObject(struct rtnl_link* link) const;
 
   Link build() const;
 
@@ -637,13 +564,10 @@ class Link final {
 
   std::string str() const;
 
-  struct rtnl_link* getRtnlLinkRef();
-
  private:
   std::string linkName_;
   int ifIndex_{0};
   uint32_t flags_{0};
-  struct rtnl_link* link_{nullptr};
 };
 
 bool operator==(const Link& lhs, const Link& rhs);
