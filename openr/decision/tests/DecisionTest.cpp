@@ -217,6 +217,31 @@ validatePopLabelRoute(
   EXPECT_EQ(routeMap.at(routeKey), NextHops({labelPopNextHop}));
 }
 
+void
+printRouteDb(const folly::Optional<thrift::RouteDatabase>& routeDb) {
+  for (const auto ucRoute : routeDb.value().unicastRoutes) {
+    LOG(INFO) << "dest: " << toString(ucRoute.dest);
+    if (ucRoute.adminDistance.has_value()) {
+      LOG(INFO) << "ad_dis: "
+                << static_cast<int>(ucRoute.adminDistance.value());
+    }
+    if (ucRoute.prefixType.hasValue()) {
+      LOG(INFO) << "prefix_type: "
+                << static_cast<int>(ucRoute.prefixType.value());
+    }
+
+    LOG(INFO) << "doNotInstall: " << ucRoute.doNotInstall;
+
+    for (const auto nh : ucRoute.nextHops) {
+      LOG(INFO) << "nexthops: " << toString(nh);
+    }
+    if (ucRoute.bestNexthop.hasValue()) {
+      const auto nh = ucRoute.bestNexthop.value();
+      LOG(INFO) << "best next hop: " << toString(nh);
+    }
+  }
+}
+
 } // anonymous namespace
 
 //
@@ -653,11 +678,11 @@ TEST(BGPRedistribution, BasicOperation) {
       bgpPrefix1,
       {},
       thrift::AdminDistance::EBGP,
-      {createNextHop(addr1.prefixAddress)},
+      {createNextHop(adj21.nextHopV6, adj21.ifName, adj21.metric)},
       thrift::PrefixType::BGP,
       data1,
       false,
-      createNextHop(addr1.prefixAddress));
+      {createNextHop(addr1.prefixAddress)});
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
 
@@ -700,7 +725,7 @@ TEST(BGPRedistribution, BasicOperation) {
       bgpPrefix1,
       {},
       thrift::AdminDistance::EBGP,
-      {createNextHop(addr2.prefixAddress)},
+      {createNextHop(adj12.nextHopV6, adj12.ifName, adj12.metric)},
       thrift::PrefixType::BGP,
       data2,
       false,
@@ -737,8 +762,7 @@ TEST(BGPRedistribution, BasicOperation) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr2.prefixAddress),
-                  createNextHop(addr1.prefixAddress))))));
+                  createNextHop(adj31.nextHopV6, adj31.ifName, 10))))));
 
   // dicsonnect the network, each node will consider it's BGP route the best,
   // and thus not program anything
@@ -842,8 +866,8 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr2.prefixAddress, folly::none, 10),
-                  createNextHop(addr3.prefixAddress, folly::none, 10))))));
+                  createNextHop(adj12.nextHopV6, adj12.ifName, 10),
+                  createNextHop(adj13.nextHopV6, adj13.ifName, 10))))));
 
   //
   // Increase cost towards node3 to 20; prefix -> {node2}
@@ -860,7 +884,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr2.prefixAddress, folly::none, 10))))));
+                  createNextHop(adj12.nextHopV6, adj12.ifName, 10))))));
 
   //
   // mark link towards node2 as drained; prefix1 -> {node3}
@@ -878,7 +902,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr3.prefixAddress, folly::none, 20))))));
+                  createNextHop(adj13.nextHopV6, adj13.ifName, 20))))));
 
   //
   // Set cost towards node2 to 20 (still drained); prefix1 -> {node3}
@@ -896,7 +920,7 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr3.prefixAddress, folly::none, 20))))));
+                  createNextHop(adj13.nextHopV6, adj13.ifName, 20))))));
 
   //
   // Undrain link; prefix1 -> {node2, node3}
@@ -913,8 +937,8 @@ TEST(BGPRedistribution, IgpMetric) {
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
-                  createNextHop(addr2.prefixAddress, folly::none, 20),
-                  createNextHop(addr3.prefixAddress, folly::none, 20))))));
+                  createNextHop(adj12.nextHopV6, adj12.ifName, 20),
+                  createNextHop(adj13.nextHopV6, adj13.ifName, 20))))));
 }
 
 //

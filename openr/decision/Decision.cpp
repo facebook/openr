@@ -876,7 +876,8 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
     bool const isV4) {
   std::string bestNode;
-  std::unordered_set<std::string> nodes;
+  // order is intended to comply with API used later.
+  std::set<std::string> nodes;
   folly::Optional<thrift::MetricVector> bestVector{folly::none};
   folly::Optional<int64_t> bestIgpMetric;
   std::string const* bestData = nullptr;
@@ -960,30 +961,37 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     return folly::none;
   }
   CHECK_NOTNULL(bestData);
-  auto bestNexthop =
+
+  auto bestNextHop =
       prefixState_.getLoopbackVias({bestNode}, isV4, bestIgpMetric);
-  if (bestNexthop.size() != 1) {
+  if (bestNextHop.size() != 1) {
     tData_.addStatValue("decision.missing_loopback_addr", 1, fbzmq::SUM);
     LOG(ERROR) << "Cannot find the best paths loopback address. "
                << "Skipping route for prefix: " << toString(prefix);
     return folly::none;
   }
 
-  auto loopbacks = prefixState_.getLoopbackVias(nodes, isV4, bestIgpMetric);
-  int64_t diff = nodes.size() - loopbacks.size();
-  if (diff > 0) {
-    tData_.addStatValue("decision.missing_loopback_addr", diff, fbzmq::SUM);
-  }
+  const auto nextHopsWithMetric =
+      getNextHopsWithMetric(myNodeName, nodes, false);
+
+  auto allNextHops = getNextHopsThrift(
+      myNodeName,
+      nodes,
+      isV4,
+      false,
+      nextHopsWithMetric.first,
+      nextHopsWithMetric.second,
+      folly::none);
 
   return thrift::UnicastRoute{FRAGILE,
                               prefix,
                               {},
                               thrift::AdminDistance::EBGP,
-                              std::move(loopbacks),
+                              std::move(allNextHops),
                               thrift::PrefixType::BGP,
                               *bestData,
                               bgpDryRun_, /* doNotProgram */
-                              bestNexthop.at(0)};
+                              bestNextHop.at(0)};
 }
 
 folly::Optional<thrift::UnicastRoute>
