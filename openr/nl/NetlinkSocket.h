@@ -345,6 +345,9 @@ class NetlinkSocket {
    */
   virtual folly::Future<NlNeighbors> getAllReachableNeighbors();
 
+  // get all routes from kernel
+  std::vector<fbnl::Route> getAllRoutes() const;
+
   /**
    * Subscribe specific event
    * No effect for invalid event types

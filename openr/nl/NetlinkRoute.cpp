@@ -547,7 +547,10 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
       singleNextHopFlag = false;
       auto nextHops = parseNextHops(routeAttr, routeEntry->rtm_family);
       for (auto& nh : nextHops) {
-        routeBuilder.addNextHop(nh);
+        // don't add empty nexthop
+        if (nh.getGateway().hasValue() || nh.getIfIndex().hasValue()) {
+          routeBuilder.addNextHop(nh);
+        }
       }
     } break;
     }
@@ -556,7 +559,11 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
   if (singleNextHopFlag) {
     setMplsAction(nhBuilder, routeEntry->rtm_family);
     // add single nexthop
-    routeBuilder.addNextHop(nhBuilder.build());
+    auto nh = nhBuilder.build();
+    // don't add empty nexthop
+    if (nh.getGateway().hasValue() || nh.getIfIndex().hasValue()) {
+      routeBuilder.addNextHop(nh);
+    }
   }
 
   auto route = routeBuilder.build();

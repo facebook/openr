@@ -1129,6 +1129,11 @@ NetlinkSocket::updateRouteCache() {
   }
 }
 
+std::vector<fbnl::Route>
+NetlinkSocket::getAllRoutes() const {
+  return nlSock_->getAllRoutes();
+}
+
 void
 NetlinkSocket::subscribeEvent(NetlinkEventType event) {
   if (event >= MAX_EVENT_TYPE) {
