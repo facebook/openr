@@ -30,15 +30,8 @@
 #include <openr/nl/NetlinkTypes.h>
 
 extern "C" {
+#include <linux/rtnetlink.h>
 #include <net/if.h>
-#include <netlink/cache.h>
-#include <netlink/netlink.h>
-#include <netlink/route/addr.h>
-#include <netlink/route/link.h>
-#include <netlink/route/link/veth.h>
-#include <netlink/route/route.h>
-#include <netlink/socket.h>
-#include <sys/ioctl.h>
 #include <sys/socket.h>
 }
 
