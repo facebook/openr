@@ -116,6 +116,32 @@ class Spark final : public OpenrEventLoop {
   void stop() override;
 
  private:
+  //
+  // Interface tracking
+  //
+  class Interface {
+   public:
+    Interface(
+        int ifIndex,
+        const folly::CIDRNetwork& v4Network,
+        const folly::CIDRNetwork& v6LinkLocalNetwork)
+        : ifIndex(ifIndex),
+          v4Network(v4Network),
+          v6LinkLocalNetwork(v6LinkLocalNetwork) {}
+
+    bool
+    operator==(const Interface& interface) const {
+      return (
+          (ifIndex == interface.ifIndex) &&
+          (v4Network == interface.v4Network) &&
+          (v6LinkLocalNetwork == interface.v6LinkLocalNetwork));
+    }
+
+    int ifIndex{0};
+    folly::CIDRNetwork v4Network;
+    folly::CIDRNetwork v6LinkLocalNetwork;
+  };
+
   // Spark is non-copyable
   Spark(Spark const&) = delete;
   Spark& operator=(Spark const&) = delete;
@@ -167,6 +193,19 @@ class Spark final : public OpenrEventLoop {
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& request) override;
 
+  // util function to delete interface in spark
+  void deleteInterfaceFromDb(const std::set<std::string>& toDel);
+
+  // util function to add interface in spark
+  void addInterfaceToDb(
+      const std::set<std::string>& toAdd,
+      const std::unordered_map<std::string, Interface>& newInterfaceDb);
+
+  // util function yo update interface in spark
+  void updateInterfaceInDb(
+      const std::set<std::string>& toUpdate,
+      const std::unordered_map<std::string, Interface>& newInterfaceDb);
+
   // find an interface name in the interfaceDb given an ifIndex
   folly::Optional<std::string> findInterfaceFromIfindex(int ifIndex);
 
@@ -196,10 +235,6 @@ class Spark final : public OpenrEventLoop {
   //
   // Spark2 related function call
   //
-
-  /*
-   * Spark2 neighbor state tracking
-   */
   struct Spark2Neighbor {
     Spark2Neighbor(
         std::string const& domainName,
@@ -438,32 +473,6 @@ class Spark final : public OpenrEventLoop {
 
   // enable Spark2 or not
   const bool enableSpark2_{false};
-
-  //
-  // Interface tracking
-  //
-  class Interface {
-   public:
-    Interface(
-        int ifIndex,
-        const folly::CIDRNetwork& v4Network,
-        const folly::CIDRNetwork& v6LinkLocalNetwork)
-        : ifIndex(ifIndex),
-          v4Network(v4Network),
-          v6LinkLocalNetwork(v6LinkLocalNetwork) {}
-
-    bool
-    operator==(const Interface& interface) const {
-      return (
-          (ifIndex == interface.ifIndex) &&
-          (v4Network == interface.v4Network) &&
-          (v6LinkLocalNetwork == interface.v6LinkLocalNetwork));
-    }
-
-    int ifIndex{0};
-    folly::CIDRNetwork v4Network;
-    folly::CIDRNetwork v6LinkLocalNetwork;
-  };
 
   // Map of interface entries keyed by ifName
   std::unordered_map<std::string, Interface> interfaceDb_{};

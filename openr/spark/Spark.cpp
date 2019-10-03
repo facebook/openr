@@ -2085,9 +2085,24 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
       existingIfaces.begin(),
       existingIfaces.end(),
       std::inserter(toUpdate, toUpdate.begin()));
-  //
+
   // remove the interfaces no longer in newdb
-  //
+  deleteInterfaceFromDb(toDel);
+
+  // Adding interfaces
+  addInterfaceToDb(toAdd, newInterfaceDb);
+
+  // Updating interface. If ifindex changes, we need to unsubscribe old ifindex
+  // from mcast and subscribe new one
+  updateInterfaceInDb(toUpdate, newInterfaceDb);
+
+  thrift::SparkIfDbUpdateResult result;
+  result.isSuccess = true;
+  return fbzmq::Message::fromThriftObj(result, serializer_);
+}
+
+void
+Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
   for (const auto& ifName : toDel) {
     LOG(INFO) << "Removing " << ifName << " from Spark. "
               << "It is down, declaring all neighbors down";
@@ -2154,10 +2169,12 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
     ifNameToHelloTimers_.erase(ifName);
     interfaceDb_.erase(ifName);
   }
+}
 
-  //
-  // Adding interfaces
-  //
+void
+Spark::addInterfaceToDb(
+    const std::set<std::string>& toAdd,
+    const std::unordered_map<std::string, Interface>& newInterfaceDb) {
   for (const auto& ifName : toAdd) {
     auto newInterface = newInterfaceDb.at(ifName);
     auto ifIndex = newInterface.ifIndex;
@@ -2189,22 +2206,20 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
       CHECK(result.second);
     }
 
-    {
-      if (enableSpark2_) {
-        // create place-holders for newly added interface
-        auto result = spark2Neighbors_.emplace(
-            ifName, std::unordered_map<std::string, Spark2Neighbor>{});
-        CHECK(result.second);
+    if (enableSpark2_) {
+      // create place-holders for newly added interface
+      auto result = spark2Neighbors_.emplace(
+          ifName, std::unordered_map<std::string, Spark2Neighbor>{});
+      CHECK(result.second);
 
-        // heartbeatTimers will start as soon as intf is in UP state
-        auto heartbeatTimer = fbzmq::ZmqTimeout::make(
-            this, [this, ifName]() noexcept { sendHeartbeatMsg(ifName); });
+      // heartbeatTimers will start as soon as intf is in UP state
+      auto heartbeatTimer = fbzmq::ZmqTimeout::make(
+          this, [this, ifName]() noexcept { sendHeartbeatMsg(ifName); });
 
-        const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
-        ifNameToHeartbeatTimers_.emplace(ifName, std::move(heartbeatTimer));
-        ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
-            myHeartbeatTime_, isPeriodic);
-      }
+      const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
+      ifNameToHeartbeatTimers_.emplace(ifName, std::move(heartbeatTimer));
+      ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
+          myHeartbeatTime_, isPeriodic);
     }
 
     auto rollHelper = [](std::chrono::milliseconds timeDuration) {
@@ -2247,11 +2262,12 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
     helloTimer->scheduleTimeout(rollFast());
     ifNameToHelloTimers_[ifName] = std::move(helloTimer);
   }
+}
 
-  //
-  // Updating interface. If ifindex changes, we need to unsubscribe old ifindex
-  // from mcast and subscribe new one
-  //
+void
+Spark::updateInterfaceInDb(
+    const std::set<std::string>& toUpdate,
+    const std::unordered_map<std::string, Interface>& newInterfaceDb) {
   for (const auto& ifName : toUpdate) {
     auto& interface = interfaceDb_.at(ifName);
     auto& newInterface = newInterfaceDb.at(ifName);
@@ -2298,9 +2314,6 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
 
     interface = std::move(newInterface);
   }
-  thrift::SparkIfDbUpdateResult result;
-  result.isSuccess = true;
-  return fbzmq::Message::fromThriftObj(result, serializer_);
 }
 
 folly::Optional<std::string>
