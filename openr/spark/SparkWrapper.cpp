@@ -145,17 +145,22 @@ SparkWrapper::recvNeighborEvent(
   return maybeMsg.value();
 }
 
-//
-// Lame-ass attempt to skip unexpected messages, such as RTT
-// change event. Trying 3 times is a wild guess, no logic.
-//
 folly::Optional<thrift::SparkNeighborEvent>
 SparkWrapper::waitForEvent(
     const thrift::SparkNeighborEventType eventType,
-    folly::Optional<std::chrono::milliseconds> timeout) noexcept {
-  // TODO: remove this magic number case for stability
-  for (auto i = 0; i < 3; i++) {
-    auto maybeEvent = recvNeighborEvent(timeout);
+    folly::Optional<std::chrono::milliseconds> rcvdTimeout,
+    folly::Optional<std::chrono::milliseconds> procTimeout) noexcept {
+  auto startTime = std::chrono::steady_clock::now();
+
+  while (true) {
+    // check if it is beyond procTimeout
+    auto endTime = std::chrono::steady_clock::now();
+    if (endTime - startTime > procTimeout.value()) {
+      LOG(ERROR) << "Timeout receiving event. Time limit: "
+                 << procTimeout.value().count();
+      break;
+    }
+    auto maybeEvent = recvNeighborEvent(rcvdTimeout);
     if (maybeEvent.hasError()) {
       LOG(ERROR) << "recvNeighborEvent failed: " << maybeEvent.error();
       continue;

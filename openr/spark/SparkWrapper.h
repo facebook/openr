@@ -7,7 +7,8 @@
 
 #pragma once
 
-#include "Spark.h"
+#include <openr/common/Constants.h>
+#include <openr/spark/Spark.h>
 
 namespace openr {
 
@@ -67,8 +68,9 @@ class SparkWrapper {
 
   folly::Optional<thrift::SparkNeighborEvent> waitForEvent(
       const thrift::SparkNeighborEventType eventType,
-      folly::Optional<std::chrono::milliseconds> timeout =
-          folly::none) noexcept;
+      folly::Optional<std::chrono::milliseconds> rcvdTimeout = folly::none,
+      folly::Optional<std::chrono::milliseconds> procTimeout =
+          Constants::kPlatformProcTimeout) noexcept;
 
   // utility call to check neighbor state
   folly::Optional<SparkNeighState> getSparkNeighState(
