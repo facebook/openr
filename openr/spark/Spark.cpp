@@ -1037,15 +1037,6 @@ Spark::neighborUpWrapper(
   // remove negotiate hold timer, no longer in NEGOTIATE stage
   neighbor.negotiateHoldTimer.reset();
 
-  // notify LinkMonitor about neighbor UP state
-  notifySparkNeighborEvent(
-      thrift::SparkNeighborEventType::NEIGHBOR_UP,
-      ifName,
-      neighbor.toThrift(),
-      neighbor.rtt.count(),
-      neighbor.label,
-      true /* support flood-optimization */);
-
   // create heartbeat hold timer when promote to "ESTABLISHED"
   neighbor.heartbeatHoldTimer =
       fbzmq::ZmqTimeout::make(this, [this, ifName, neighborName]() noexcept {
@@ -1055,6 +1046,39 @@ Spark::neighborUpWrapper(
 
   // add neighborName to collection
   ifNameToActiveNeighbors_[ifName].emplace(neighborName);
+
+  // TODO: This is purely for backward compatibility.
+  // Remove this after fully on Spark2.
+  //
+  // neighbor is under GR from old spark.
+  // Should report NEIGHBOR_RESTARTED to honor GR
+  if (neighbors_.find(ifName) != neighbors_.end()) {
+    auto& oldIfNeighbors = neighbors_.at(ifName);
+    auto oldNeighborIt = oldIfNeighbors.find(neighborName);
+    if (oldNeighborIt != oldIfNeighbors.end()) {
+      auto& oldNeighbor = oldNeighborIt->second;
+      if (oldNeighbor.numRecvRestarting > 0) {
+        notifySparkNeighborEvent(
+            thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
+            ifName,
+            neighbor.toThrift(),
+            neighbor.rtt.count(),
+            neighbor.label,
+            true /* support flood-optimization */);
+        oldNeighbor.numRecvRestarting = 0;
+        return;
+      }
+    }
+  }
+
+  // notify LinkMonitor about neighbor UP state
+  notifySparkNeighborEvent(
+      thrift::SparkNeighborEventType::NEIGHBOR_UP,
+      ifName,
+      neighbor.toThrift(),
+      neighbor.rtt.count(),
+      neighbor.label,
+      true /* support flood-optimization */);
 }
 
 void
@@ -1265,6 +1289,24 @@ Spark::processHelloMsg(
     neighbor.state =
         getNextState(oldState, SparkNeighEvent::HELLO_RCVD_NO_INFO);
     logStateTransition(neighborName, ifName, oldState, neighbor.state);
+
+    // backward compatibility check
+    if (neighbors_.find(ifName) != neighbors_.end()) {
+      // Let's say we have neighborship between:
+      //  spark <=> spark2
+      //
+      // Since spark is NOT sending spark2Msg, spark2 instance
+      // will still hold non-spark2 data structures. Right now
+      // when spark is restarting itself to run with
+      // `enableSpark2=True`, we must purge away old holdTimer
+      // related stuff. Otherwise, neighborHoldTimer will bring
+      // neighbor down.
+      auto& oldIfNeighbors = neighbors_.at(ifName);
+      auto oldNeighborIt = oldIfNeighbors.find(neighborName);
+      if (oldNeighborIt != oldIfNeighbors.end()) {
+        oldNeighborIt->second.holdTimer->cancelTimeout();
+      }
+    }
     return;
   }
 
