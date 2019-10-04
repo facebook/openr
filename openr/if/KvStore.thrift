@@ -190,6 +190,8 @@ struct KvStoreRequest {
   5: optional PeerDelParams peerDelParams
   9: optional Dual.DualMessages dualMessages
   10: optional FloodTopoSetParams floodTopoSetParams
+  // area identifier to identify the KvStoreDb instance
+  11: optional string area
 }
 
 //

@@ -1990,7 +1990,9 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
   SCOPE_FAIL {
     thrift::SparkIfDbUpdateResult result;
     result.isSuccess = false;
-    return fbzmq::Message::fromThriftObj(result, serializer_);
+    folly::Expected<fbzmq::Message, fbzmq::Error> reply{
+        fbzmq::Message::fromThriftObj(result, serializer_)};
+    return reply;
   };
 
   auto maybeMsg = request.readThriftObj<thrift::InterfaceDatabase>(serializer_);
@@ -2410,7 +2412,8 @@ Spark::findCommonArea(
             << commonArea[0];
     return commonArea[0];
   }
-  return folly::none;
+  // return default area if the remote node does not support areas
+  return openr::Constants::kDefaultArea.toString();
 }
 
 } // namespace openr

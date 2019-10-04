@@ -87,71 +87,91 @@ class KvStoreFilters {
   KeyPrefix keyPrefixObjList_;
 };
 
-// The class represent a server that stores KV pairs in internal map.
-// it listens for submission on REP socket, subscribes to peers via
-// SUB socket, and publishes to peers via PUB socket. The configuration
+// structure for common params across all instances of KvStoreDb
+struct KvStoreParams {
+  // the name of this node (unique in domain)
+  std::string nodeId;
+  // the socket to publish changes to kv-store
+  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock;
+  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock;
+  // ZMQ high water
+  int zmqHwm;
+  // IP ToS
+  folly::Optional<int> maybeIpTos;
+  // how often to request full db sync from peers
+  std::chrono::seconds dbSyncInterval;
+  // KvStore key filters
+  std::optional<KvStoreFilters> filters;
+  // Kvstore flooding rate
+  KvStoreFloodRate floodRate = std::nullopt;
+  // TTL decrement factor
+  std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
+  bool enableFloodOptimization{false};
+  bool isFloodRoot{false};
+  bool useFloodOptimization{false};
+  std::shared_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient{nullptr};
+
+  KvStoreParams(
+      std::string nodeid,
+      fbzmq::Context& zmqContext,
+      fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalpubSock,
+      // ZMQ high water mark
+      int zmqhwm,
+      // IP QoS
+      folly::Optional<int> maybeipTos,
+      // how often to request full db sync from peers
+      std::chrono::seconds dbsyncInterval,
+      std::optional<KvStoreFilters> filter,
+      // Kvstore flooding rate
+      KvStoreFloodRate floodrate,
+      // TTL decrement factor
+      std::chrono::milliseconds ttldecr,
+      bool enablefloodOptimization,
+      bool isfloodRoot,
+      bool usefloodOptimization)
+      : nodeId(nodeid),
+        localPubSock(zmqContext),
+        globalPubSock(std::move(globalpubSock)),
+        zmqHwm(zmqhwm),
+        maybeIpTos(std::move(maybeipTos)),
+        dbSyncInterval(dbsyncInterval),
+        filters(std::move(filter)),
+        floodRate(std::move(floodrate)),
+        ttlDecr(ttldecr),
+        enableFloodOptimization(enablefloodOptimization),
+        isFloodRoot(isfloodRoot),
+        useFloodOptimization(usefloodOptimization) {}
+};
+
+// The class represents a KV Store DB and stores KV pairs in internal map.
+// KV store DB instance is created for each area.
+// This class processes messages received from KvStore server. The configuration
 // is passed via constructor arguments.
 
-class KvStore final : public OpenrEventLoop, public DualNode {
+class KvStoreDb : public DualNode {
  public:
-  KvStore(
-      // the zmq context to use for IO
-      fbzmq::Context& zmqContext,
-      // the name of this node (unique in domain)
-      std::string nodeId,
-      // the url we use to publish our updates to
-      // local subscribers
-      KvStoreLocalPubUrl localPubUrl,
-      // the url we use to publish our updates to
-      // any subscriber (often encrypted)
-      KvStoreGlobalPubUrl globalPubUrl,
-      // the url to receive command from local and
-      // non local clients (often encrypted channel)
-      KvStoreGlobalCmdUrl globalCmdUrl,
-      // the url to submit to monitor
-      MonitorSubmitUrl monitorSubmitUrl,
-      // IP TOS value to set on sockets using TCP
-      folly::Optional<int> ipTos,
-      // how often to request full db sync from peers
-      std::chrono::seconds dbSyncInterval,
-      // how often to submit to monitor
-      std::chrono::seconds monitorSubmitInterval,
-      // initial list of peers to connect to
-      std::unordered_map<std::string, thrift::PeerSpec> peers,
-      // KvStore key filters
-      std::optional<KvStoreFilters> filters = std::nullopt,
-      // ZMQ high water mark
-      int zmqHwm = Constants::kHighWaterMark,
-      // Kvstore flooding rate
-      KvStoreFloodRate floodRate = std::nullopt,
-      // TTL decrement factor
-      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
-      bool enableFloodOptimization = false,
-      bool isFloodRoot = false,
-      bool useFloodOptimization = false);
+  KvStoreDb(
+      fbzmq::ZmqEventLoop* evl,
+      KvStoreParams& kvParams,
+      const std::string& area,
+      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peersyncSock,
+      bool isFloodRoot,
+      const std::string& nodeId,
+      std::unordered_map<std::string, thrift::PeerSpec> peers);
 
-  // process the key-values publication, and attempt to
-  // merge it in existing map (first argument)
-  // Return a publication made out of the updated values
-  static std::unordered_map<std::string, thrift::Value> mergeKeyValues(
-      std::unordered_map<std::string, thrift::Value>& kvStore,
-      std::unordered_map<std::string, thrift::Value> const& update,
-      std::optional<KvStoreFilters> const& filters = std::nullopt);
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
+      thrift::KvStoreRequest& thriftReq);
 
-  // compare two thrift::Values to figure out which value is better to
-  // use, it will compare following attributes in order
-  // <version>, <orginatorId>, <value>, <ttl-version>
-  // return 1 if v1 is better,
-  //       -1 if v2 is better,
-  //        0 if equal,
-  //       -2 if unknown
-  // unknown can happen if value is missing (only hash is provided)
-  static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
+  // Extracts the counters and submit them to monitor
+  std::unordered_map<std::string, int64_t> getCounters();
 
  private:
   // disable copying
-  KvStore(KvStore const&) = delete;
-  KvStore& operator=(KvStore const&) = delete;
+  KvStoreDb(KvStoreDb const&) = delete;
+  KvStoreDb& operator=(KvStoreDb const&) = delete;
+
+  // Kv store parameters
+  KvStoreParams& kvParams_;
 
   //
   // Private methods
@@ -269,13 +289,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
       thrift::Publication const& rcvdPublication,
       std::optional<std::string> senderId = std::nullopt);
 
-  // This function wraps `processRequestMsgHelper` and updates send/received
-  // bytes counters.
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& msg) override;
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
-      fbzmq::Message&& msg);
-
   // process spanning-tree-set command to set/unset a child for a given root
   void processFloodTopoSet(
       const thrift::FloodTopoSetParams& setParams) noexcept;
@@ -291,13 +304,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
 
   // this will poll the sockets listening to the requests
   void attachCallbacks();
-
-  // count number of prefixes in kvstore
-  int getPrefixCount() const;
-
-  // Extracts the counters and submit them to monitor
-  fbzmq::thrift::CounterMap getCounters();
-  void submitCounters();
 
   // Submit full-sync event to monitor
   void logSyncEvent(
@@ -316,48 +322,15 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // Send message via socket
   folly::Expected<size_t, fbzmq::Error> sendMessageToPeer(
       const std::string& peerSocketId, const thrift::KvStoreRequest& request);
+
   //
   // Private variables
   //
+  // area identified of this KvStoreDb instance
+  const std::string area_{};
 
-  //
-  // Immutable state
-  //
-
-  // zmq context
-  fbzmq::Context& zmqContext_;
-
-  // unique among all nodes, identifies this particular node
-  const std::string nodeId_;
-
-  // we only encrypt inter-node traffic and don't encrypt intra-node traffic
-  // tcp*_ sockets are used to communicate with external node
-  // inproc*_ sockets within a node
-
-  // The ZMQ URL we'll be using for publications
-  const std::string localPubUrl_;
-  const std::string globalPubUrl_;
-
-  // The ZMQ URL we'll be listening for commands on
-  const std::string globalCmdUrl_;
-
-  // base interval to run syncs with (jitter will be added)
-  const std::chrono::seconds dbSyncInterval_;
-
-  // Interval to submit to monitor. Default value is high
-  // to avoid submission of counters in testing.
-  const std::chrono::seconds monitorSubmitInterval_;
-
-  // ZMQ high water mark for PUB sockets
-  const int hwm_{openr::Constants::kHighWaterMark};
-
-  // TTL decrement at flooding publications
-  const std::chrono::milliseconds ttlDecr_{1};
-
-  // Dual parameters
-  const bool enableFloodOptimization_{false};
-  const bool isFloodRoot_{false};
-  const bool useFloodOptimization_{false};
+  // zmq ROUTER socket for requesting full dumps from peers
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
 
   //
   // Mutable state
@@ -370,16 +343,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
       std::string /* node-name */,
       std::pair<thrift::PeerSpec, std::string /* socket-id */>>
       peers_;
-
-  // key/value filters
-  std::optional<KvStoreFilters> filters_{std::nullopt};
-
-  // the socket to publish changes to kv-store
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock_;
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock_;
-
-  // zmq ROUTER socket for requesting full dumps from peers
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peerSyncSock_;
 
   // set of peers to perform full sync from. We use exponential backoff to try
   // repetitively untill we succeeed (without overwhelming anyone with too
@@ -396,9 +359,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // store keys mapped to (version, originatoId, value)
   std::unordered_map<std::string, thrift::Value> kvStore_;
 
-  // Timer for submitting to monitor periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_;
-
   // TTL count down queue
   TtlCountdownQueue ttlCountdownQueue_;
 
@@ -407,9 +367,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
 
   // Data-struct for maintaining stats/counters
   fbzmq::ThreadData tData_;
-
-  // client to interact with monitor
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // Map of latest peer sync up request send to each peer
   // this is used to measure full-dump sync time between this node and each of
@@ -421,9 +378,6 @@ class KvStore final : public OpenrEventLoop, public DualNode {
 
   // Kvstore rate limiter
   std::unique_ptr<folly::BasicTokenBucket<>> floodLimiter_{nullptr};
-
-  // Kvstore flooding rate
-  KvStoreFloodRate floodRate_{std::nullopt};
 
   // timer to send pending kvstore publication
   std::unique_ptr<fbzmq::ZmqTimeout> pendingPublicationTimer_{nullptr};
@@ -438,6 +392,138 @@ class KvStore final : public OpenrEventLoop, public DualNode {
   // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
   // response received
   int32_t fullSycnReqInProgress_{2};
+
+  // event loop
+  fbzmq::ZmqEventLoop* evl_{nullptr};
 };
 
+// The class represent a server on either the thrift server port or the
+// it listens for submission on REP socket. The configuration
+// is passed via constructor arguments. This class instantiates KV Store DB
+// for each area. The list of areas is passed in the constructor.
+// The messages received are either sent to a specific instance of
+// KvStore DB or to all instances.
+
+class KvStore final : public OpenrEventLoop {
+ public:
+  KvStore(
+      // the zmq context to use for IO
+      fbzmq::Context& zmqContext,
+      // the name of this node (unique in domain)
+      std::string nodeId,
+      // the url we use to publish our updates to
+      // local subscribers
+      KvStoreLocalPubUrl localPubUrl,
+      // the url we use to publish our updates to
+      // any subscriber (often encrypted)
+      KvStoreGlobalPubUrl globalPubUrl,
+      // the url to receive command from local and
+      // non local clients (often encrypted channel)
+      KvStoreGlobalCmdUrl globalCmdUrl,
+      // the url to submit to monitor
+      MonitorSubmitUrl monitorSubmitUrl,
+      // IP TOS value to set on sockets using TCP
+      folly::Optional<int> ipTos,
+      // how often to request full db sync from peers
+      std::chrono::seconds dbSyncInterval,
+      // how often to submit to monitor
+      std::chrono::seconds monitorSubmitInterval,
+      // initial list of peers to connect to
+      std::unordered_map<std::string, thrift::PeerSpec> peers,
+      // KvStore key filters
+      std::optional<KvStoreFilters> filters = std::nullopt,
+      // ZMQ high water mark
+      int zmqHwm = Constants::kHighWaterMark,
+      // Kvstore flooding rate
+      KvStoreFloodRate floodRate = std::nullopt,
+      // TTL decrement factor
+      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
+      bool enableFloodOptimization = false,
+      bool isFloodRoot = false,
+      bool useFloodOptimization = false,
+      std::unordered_set<std::string> areas = {
+          openr::Constants::kDefaultArea.toString()});
+
+  // process the key-values publication, and attempt to
+  // merge it in existing map (first argument)
+  // Return a publication made out of the updated values
+  static std::unordered_map<std::string, thrift::Value> mergeKeyValues(
+      std::unordered_map<std::string, thrift::Value>& kvStore,
+      std::unordered_map<std::string, thrift::Value> const& update,
+      std::optional<KvStoreFilters> const& filters = std::nullopt);
+
+  // compare two thrift::Values to figure out which value is better to
+  // use, it will compare following attributes in order
+  // <version>, <orginatorId>, <value>, <ttl-version>
+  // return 1 if v1 is better,
+  //       -1 if v2 is better,
+  //        0 if equal,
+  //       -2 if unknown
+  // unknown can happen if value is missing (only hash is provided)
+  static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
+
+ private:
+  // disable copying
+  KvStore(KvStore const&) = delete;
+  KvStore& operator=(KvStore const&) = delete;
+
+  //
+  // Private methods
+  //
+
+  // This function wraps `processRequestMsgHelper` and updates send/received
+  // bytes counters.
+  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& msg) override;
+
+  // Extracts the counters and submit them to monitor
+  fbzmq::thrift::CounterMap getCounters();
+  void submitCounters();
+
+  //
+  // Private variables
+  //
+
+  //
+  // Non mutable state
+  //
+
+  // we only encrypt inter-node traffic and don't encrypt intra-node traffic
+  // tcp*_ sockets are used to communicate with external node
+  // inproc*_ sockets within a node
+
+  // The ZMQ URL we'll be using for publications
+  const std::string localPubUrl_;
+  const std::string globalPubUrl_;
+
+  // The ZMQ URL we'll be listening for commands on
+  const std::string globalCmdUrl_;
+
+  // Interval to submit to monitor. Default value is high
+  // to avoid submission of counters in testing.
+  const std::chrono::seconds monitorSubmitInterval_;
+
+  std::optional<KvStoreFilters> filters_ = std::nullopt;
+  //
+  // Mutable state
+  //
+
+  // Timer for submitting to monitor periodically
+  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_;
+
+  // client to interact with monitor
+  std::shared_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+
+  // kvstore parameters common to all kvstoreDB
+  KvStoreParams kvParams_;
+
+  // map of area IDs and instance of KvStoreDb
+  std::unordered_map<std::string /* area ID */, KvStoreDb> kvStoreDb_{};
+
+  // Data-struct for maintaining stats/counters
+  fbzmq::ThreadData tData_;
+
+  // the serializer/deserializer helper we'll be using
+  apache::thrift::CompactSerializer serializer_;
+};
 } // namespace openr

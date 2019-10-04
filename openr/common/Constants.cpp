@@ -11,15 +11,14 @@ namespace openr {
 
 constexpr double Constants::kRttChangeThreashold;
 constexpr folly::StringPiece Constants::kAdjDbMarker;
+constexpr folly::StringPiece Constants::kDefaultArea;
 constexpr folly::StringPiece Constants::kErrorResponse;
 constexpr folly::StringPiece Constants::kEventLogCategory;
 constexpr folly::StringPiece Constants::kFibTimeMarker;
 constexpr folly::StringPiece Constants::kGlobalCmdLocalIdTemplate;
-constexpr folly::StringPiece Constants::kGlobalPubIdTemplate;
 constexpr folly::StringPiece Constants::kGlobalSubIdTemplate;
 constexpr folly::StringPiece Constants::kNodeLabelRangePrefix;
 constexpr folly::StringPiece Constants::kOpenrCtrlSessionContext;
-constexpr folly::StringPiece Constants::kPeerSyncIdTemplate;
 constexpr folly::StringPiece Constants::kPlatformHost;
 constexpr folly::StringPiece Constants::kPrefixAllocMarker;
 constexpr folly::StringPiece Constants::kPrefixDbMarker;

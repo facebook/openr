@@ -22,6 +22,8 @@ class Constants {
   //
   // Common
   //
+  // default area of a node
+  static constexpr folly::StringPiece kDefaultArea{"0"};
 
   // the string we expect as an error response to a query
   static constexpr folly::StringPiece kErrorResponse{"ERR"};
@@ -203,10 +205,6 @@ class Constants {
 
   static constexpr folly::StringPiece kGlobalCmdLocalIdTemplate{
       "{}::{}::TCP::CMD::LOCAL"};
-  // ID template for peer sync socket
-  static constexpr folly::StringPiece kPeerSyncIdTemplate{"{}::TCP::SYNC"};
-  // ID template for the global PUB socket
-  static constexpr folly::StringPiece kGlobalPubIdTemplate{"{}::TCP::PUB"};
   // ID template for the global SUB socket
   static constexpr folly::StringPiece kGlobalSubIdTemplate{"{}::TCP::SUB"};
 

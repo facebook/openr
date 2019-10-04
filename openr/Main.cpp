@@ -49,7 +49,6 @@
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/plugin/Plugin.h>
 #include <openr/prefix-manager/PrefixManager.h>
-#include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
 #include <openr/watchdog/Watchdog.h>
 
@@ -465,6 +464,13 @@ main(int argc, char** argv) {
     kvstoreRate = std::nullopt;
   }
 
+  folly::Optional<std::unordered_set<std::string>> areas = folly::none;
+  auto nodeAreas = folly::gen::split(FLAGS_areas, ",") |
+      folly::gen::eachTo<std::string>() |
+      folly::gen::as<std::unordered_set<std::string>>();
+  if (nodeAreas.size()) {
+    areas = nodeAreas;
+  }
   const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
   // Start KVStore
   startEventLoop(
@@ -557,13 +563,6 @@ main(int argc, char** argv) {
   //
   // If enabled, start the spark service.
   //
-  folly::Optional<std::unordered_set<std::string>> areas = folly::none;
-  auto nodeAreas = folly::gen::split(FLAGS_areas, ",") |
-      folly::gen::eachTo<std::string>() |
-      folly::gen::as<std::unordered_set<std::string>>();
-  if (nodeAreas.size()) {
-    areas = nodeAreas;
-  }
   if (FLAGS_enable_spark) {
     startEventLoop(
         allThreads,

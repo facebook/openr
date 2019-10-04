@@ -95,7 +95,10 @@ OpenrEventLoop::processCmdSocketRequest(
   }
 
   auto req = maybeReq.value();
-
+  if (req.empty()) {
+    LOG(ERROR) << "Empty request received";
+    return;
+  }
   auto maybeReply = processRequestMsg(std::move(req.back()));
   req.pop_back();
 
@@ -114,7 +117,6 @@ OpenrEventLoop::processCmdSocketRequest(
       LOG(ERROR) << "Error sending response. " << sndRet.error();
     }
   }
-
   return;
 }
 

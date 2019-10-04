@@ -26,7 +26,9 @@ DEFINE_int32(
 // Flag to enable or disable plugin module.
 DEFINE_bool(enable_plugin, false, "Enable plugin module");
 DEFINE_string(
-    areas, "", "Comma separated list of areas name specified as string");
+    areas,
+    openr::Constants::kDefaultArea.toString(),
+    "Comma separated list of areas name specified as string");
 DEFINE_int32(
     link_monitor_pub_port,
     openr::Constants::kLinkMonitorPubPort,
