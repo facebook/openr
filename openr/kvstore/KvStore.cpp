@@ -363,8 +363,6 @@ KvStore::mergeKeyValues(
 
 /**
  * Compare two values to find out which value is better
- * TODO: this function can be leveraged in mergeKeyValues to perform same
- * logic of which value if better to use
  */
 int
 KvStore::compareValues(const thrift::Value& v1, const thrift::Value& v2) {
@@ -1056,7 +1054,6 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
               << "KeyPrefixes:" << keyDumpParamsVal.prefix << " Originator IDs:"
               << folly::join(",", keyDumpParamsVal.originatorIds);
     }
-    // TODO, add per request id counters in thrift server
     tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
 
     std::vector<std::string> keyPrefixList;
