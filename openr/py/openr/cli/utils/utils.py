@@ -1009,16 +1009,23 @@ def sprint_pub_update(global_publication_db, key, value):
     """
 
     rows = []
-    old_version, old_originator_id = global_publication_db.get(key, (None, None))
+    old_value = global_publication_db.get(key, kv_store_types.Value())
 
-    if old_version != value.version:
-        rows.append(["version:", old_version, "-->", value.version])
-    if old_originator_id != value.originatorId:
-        rows.append(["originatorId:", old_originator_id, "-->", value.originatorId])
-    ttl = "INF" if value.ttl == Consts.CONST_TTL_INF else value.ttl
-    rows.append(["ttlVersion:", "", "-->", value.ttlVersion])
-    rows.append(["ttl:", "", "-->", ttl])
-    global_publication_db[key] = (value.version, value.originatorId)
+    if old_value.version != value.version:
+        rows.append(["version:", old_value.version, "-->", value.version])
+    if old_value.originatorId != value.originatorId:
+        rows.append(
+            ["originatorId:", old_value.originatorId, "-->", value.originatorId]
+        )
+    if old_value.ttlVersion != value.ttlVersion:
+        rows.append(["ttlVersion:", old_value.ttlVersion, "-->", value.ttlVersion])
+    if old_value.ttl != value.ttl:
+        if not rows:
+            print("Unexpected update with value but only ttl change")
+        old_ttl = "INF" if old_value.ttl == Consts.CONST_TTL_INF else old_value.ttl
+        ttl = "INF" if value.ttl == Consts.CONST_TTL_INF else value.ttl
+        rows.append(["ttl:", old_ttl, "-->", ttl])
+    global_publication_db[key] = value
     return printing.render_horizontal_table(rows, tablefmt="plain") if rows else ""
 
 

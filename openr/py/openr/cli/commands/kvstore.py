@@ -831,6 +831,9 @@ class SnoopCmd(KvStoreCmdBase):
                         "ttl: {}, ttlVersion: {}".format(value.ttl, value.ttlVersion),
                     )
                 continue
+                value = global_dbs.publications[key]
+                value.ttlVersion = value.ttlVersion
+                value.ttl = value.ttl
 
             if key.startswith(Consts.ADJ_DB_MARKER):
                 self.print_adj_delta(
@@ -920,7 +923,7 @@ class SnoopCmd(KvStoreCmdBase):
             {
                 "prefixes": {},
                 "adjs": {},
-                "publications": {},  # map(key -> (version, originatorId))
+                "publications": {},  # map(key -> kv_store_types.Value)
             }
         )
 
@@ -932,7 +935,7 @@ class SnoopCmd(KvStoreCmdBase):
             global_dbs.prefixes = utils.build_global_prefix_db(resp)
             global_dbs.adjs = utils.build_global_adj_db(resp)
             for key, value in resp.keyVals.items():
-                global_dbs.publications[key] = (value.version, value.originatorId)
+                global_dbs.publications[key] = value
             print("Done. Loaded {} initial key-values".format(len(resp.keyVals)))
         else:
             print("Skipping retrieval of KvStore snapshot")
