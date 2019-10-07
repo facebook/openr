@@ -49,7 +49,9 @@ locale.getpreferredencoding = getpreferredencoding
 # make host eager (option callback is called before others) sice some default
 # options can depend on this
 @breeze_option("--host", "-H", help="Host to connect to", is_eager=True)
-@breeze_option("--timeout", "-t", help="Timeout for socket communication in ms")
+@breeze_option(
+    "--timeout", "-t", type=click.INT, help="Timeout for socket communication in ms"
+)
 @breeze_option("--color/--no-color", help="Enable coloring display")
 @breeze_option("--verbose/--no-verbose", help="Print verbose information")
 @click.option(
