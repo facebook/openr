@@ -40,7 +40,6 @@ constexpr int32_t Constants::kFibAgentPort;
 constexpr int32_t Constants::kHealthCheckerPort;
 constexpr int32_t Constants::kKvStorePubPort;
 constexpr int32_t Constants::kKvStoreRepPort;
-constexpr int32_t Constants::kLinkMonitorPubPort;
 constexpr int32_t Constants::kMaxSrLabel;
 constexpr int32_t Constants::kMonitorPubPort;
 constexpr int32_t Constants::kMonitorRepPort;

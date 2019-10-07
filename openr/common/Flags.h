@@ -23,8 +23,6 @@ DECLARE_bool(enable_plugin);
 
 DECLARE_string(areas);
 
-DECLARE_int32(link_monitor_pub_port);
-
 DECLARE_int32(monitor_pub_port);
 DECLARE_int32(monitor_rep_port);
 

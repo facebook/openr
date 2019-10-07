@@ -258,9 +258,6 @@ class Constants {
   // Decision publisher port for emitting realtime route-db updates
   static constexpr int32_t kDecisionPubPort{60003};
 
-  // The port link monitor publishes on
-  static constexpr int32_t kLinkMonitorPubPort{60005};
-
   // The port monitor publishes on
   static constexpr int32_t kMonitorPubPort{60007};
 

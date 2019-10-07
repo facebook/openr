@@ -67,8 +67,11 @@ namespace {
 // Local constants
 //
 
-// the URL for Decision module
-const DecisionPubUrl kDecisionPubUrl{"ipc:///tmp/decision-pub-url"};
+// the URL for Decision module pub
+const DecisionPubUrl kDecisionPubUrl{"inproc://tmp/decision-pub-url"};
+
+// the URL for LinkMonitor module pub
+const LinkMonitorGlobalPubUrl kLinkMonitorPubUrl{"inproc://tmp/lm-pub-url"};
 
 const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
 
@@ -718,8 +721,7 @@ main(int argc, char** argv) {
           FLAGS_assume_drained,
           prefixManagerLocalCmdUrl,
           PlatformPublisherUrl{FLAGS_platform_pub_url},
-          LinkMonitorGlobalPubUrl{
-              folly::sformat("tcp://*:{}", FLAGS_link_monitor_pub_port)},
+          kLinkMonitorPubUrl,
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms),
@@ -774,8 +776,7 @@ main(int argc, char** argv) {
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
           decisionGRWindow.hasValue(), /* waitOnDecision */
           kDecisionPubUrl,
-          LinkMonitorGlobalPubUrl{
-              folly::sformat("tcp://[::1]:{}", FLAGS_link_monitor_pub_port)},
+          kLinkMonitorPubUrl,
           monitorSubmitUrl,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,

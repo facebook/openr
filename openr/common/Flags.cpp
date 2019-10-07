@@ -30,10 +30,6 @@ DEFINE_string(
     openr::Constants::kDefaultArea.toString(),
     "Comma separated list of areas name specified as string");
 DEFINE_int32(
-    link_monitor_pub_port,
-    openr::Constants::kLinkMonitorPubPort,
-    "The port link monitor publishes on");
-DEFINE_int32(
     monitor_pub_port,
     openr::Constants::kMonitorPubPort,
     "The port monitor publishes on");
