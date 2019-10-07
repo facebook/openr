@@ -13,7 +13,6 @@ import sys
 from typing import Optional
 
 import bunch
-import zmq
 from openr.cli.utils.options import getDefaultOptions
 from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import consts
