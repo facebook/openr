@@ -1047,7 +1047,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     }
     SYSLOG(INFO) << "Setting overload bit for node";
     config_.isOverloaded = true;
-    advertiseAdjacencies(); // TODO: Use throttle here
+    advertiseAdjacencies();
     break;
 
   case thrift::LinkMonitorCommand::UNSET_OVERLOAD:
@@ -1057,7 +1057,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     }
     SYSLOG(INFO) << "Unsetting overload bit for node";
     config_.isOverloaded = false;
-    advertiseAdjacencies(); // TODO: Use throttle here
+    advertiseAdjacencies();
     break;
 
   case thrift::LinkMonitorCommand::SET_LINK_OVERLOAD:
@@ -1073,14 +1073,14 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     }
     SYSLOG(INFO) << "Setting overload bit for interface " << req.interfaceName;
     config_.overloadedLinks.insert(req.interfaceName);
-    advertiseAdjacencies(); // TODO: Use throttle here
+    advertiseAdjacenciesThrottled_->operator()();
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD:
     if (config_.overloadedLinks.erase(req.interfaceName)) {
       SYSLOG(INFO) << "Unsetting overload bit for interface "
                    << req.interfaceName;
-      advertiseAdjacencies(); // TODO: Use throttle here
+      advertiseAdjacenciesThrottled_->operator()();
     } else {
       LOG(WARNING) << "Got unset-overload-bit request for unknown link "
                    << req.interfaceName;
@@ -1107,14 +1107,14 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     SYSLOG(INFO) << "Overriding metric for interface " << req.interfaceName
                  << " to " << req.overrideMetric;
     config_.linkMetricOverrides[req.interfaceName] = req.overrideMetric;
-    advertiseAdjacencies(); // TODO: Use throttle here
+    advertiseAdjacenciesThrottled_->operator()();
     break;
 
   case thrift::LinkMonitorCommand::UNSET_LINK_METRIC:
     if (config_.linkMetricOverrides.erase(req.interfaceName)) {
       SYSLOG(INFO) << "Removing metric override for interface "
                    << req.interfaceName;
-      advertiseAdjacencies(); // TODO: Use throttle here
+      advertiseAdjacenciesThrottled_->operator()();
     } else {
       LOG(WARNING) << "Got link-metric-unset request for unknown interface "
                    << req.interfaceName;
@@ -1189,7 +1189,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
       LOG(INFO) << "Overriding metric for adjacency " << req.adjNodeName.value()
                 << " " << req.interfaceName << " to " << req.overrideMetric;
       config_.adjMetricOverrides[adjKey] = req.overrideMetric;
-      advertiseAdjacencies(); // TODO: Use throttle here
+      advertiseAdjacenciesThrottled_->operator()();
 
     } else {
       LOG(WARNING) << "SET_ADJ_METRIC - adjacency is not yet formed for: "
@@ -1214,7 +1214,7 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
 
       if (adjacencies_.count(
               std::make_pair(req.adjNodeName.value(), req.interfaceName))) {
-        advertiseAdjacencies(); // TODO: Use throttle here
+        advertiseAdjacenciesThrottled_->operator()();
       }
     } else {
       LOG(WARNING) << "Got adj-metric-unset request for unknown adjacency"
