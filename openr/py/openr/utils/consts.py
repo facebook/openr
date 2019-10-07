@@ -15,7 +15,7 @@ from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 
 
 class Consts(object):
-    TIMEOUT_MS = 5000
+    TIMEOUT_MS = 10000  # 10 seconds
     CONST_TTL_INF = -2 ** 31
     IP_TOS = 192
     ADJ_DB_MARKER = "adj:"

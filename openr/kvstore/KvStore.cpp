@@ -378,6 +378,8 @@ KvStore::compareValues(const thrift::Value& v1, const thrift::Value& v2) {
 
   // compare value
   if (v1.hash.hasValue() and v2.hash.hasValue() and *v1.hash == *v2.hash) {
+    // TODO: `ttlVersion` and `ttl` value can be different on neighbor nodes.
+    // The ttl-update should never be sent over the full-sync
     // hashes are same => (version, orginatorId, value are same)
     // compare ttl-version
     if (v1.ttlVersion != v2.ttlVersion) {
