@@ -115,6 +115,7 @@ Fib::Fib(
   // Initialize stats keys
   tData_.addStatExportType("fib.convergence_time_ms", fbzmq::AVG);
   tData_.addStatExportType("fib.local_route_program_time_ms", fbzmq::AVG);
+  tData_.addStatExportType("fib.num_of_route_updates", fbzmq::SUM);
   tData_.addStatExportType("fib.process_interface_db", fbzmq::COUNT);
   tData_.addStatExportType("fib.process_route_db", fbzmq::COUNT);
   tData_.addStatExportType("fib.sync_fib_calls", fbzmq::COUNT);
@@ -509,20 +510,27 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
     if (maybePerfEvents_) {
       addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_DEBOUNCE");
     }
+    uint32_t numOfRouteUpdates = 0;
     createFibClient(evb_, socket_, client_, thriftPort_);
     if (routeDbDelta.unicastRoutesToDelete.size()) {
+      numOfRouteUpdates += routeDbDelta.unicastRoutesToDelete.size();
       client_->sync_deleteUnicastRoutes(
           kFibId_, routeDbDelta.unicastRoutesToDelete);
     }
     if (patchedUnicastRoutesToUpdate.size()) {
+      numOfRouteUpdates += patchedUnicastRoutesToUpdate.size();
       client_->sync_addUnicastRoutes(kFibId_, patchedUnicastRoutesToUpdate);
     }
     if (enableSegmentRouting_ && routeDbDelta.mplsRoutesToDelete.size()) {
+      numOfRouteUpdates += routeDbDelta.mplsRoutesToDelete.size();
       client_->sync_deleteMplsRoutes(kFibId_, routeDbDelta.mplsRoutesToDelete);
     }
     if (enableSegmentRouting_ && mplsRoutesToUpdate.size()) {
+      numOfRouteUpdates += mplsRoutesToUpdate.size();
       client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
     }
+    tData_.addStatValue(
+        "fib.num_of_route_updates", numOfRouteUpdates, fbzmq::SUM);
     dirtyRouteDb_ = false;
     logPerfEvents();
     LOG(INFO) << "Done processing route add/update";
