@@ -38,6 +38,15 @@ struct ProcessPublicationResult {
   bool prefixesChanged{false};
 };
 
+struct BestPathCalResult {
+  bool success{false};
+  std::string bestNode{""};
+  std::set<std::string> nodes;
+  folly::Optional<int64_t> bestIgpMetric{folly::none};
+  std::string const* bestData{nullptr};
+  folly::Optional<thrift::MetricVector> bestVector{folly::none};
+};
+
 namespace detail {
 /**
  * Keep track of hash for pending SPF calculation because of certain

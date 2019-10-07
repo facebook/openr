@@ -268,6 +268,13 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
 
+  // helper function to find the nodes for the nexthop for bgp route
+  BestPathCalResult findDstNodesForBgpRoute(
+      std::string const& myNodeName,
+      thrift::IpPrefix const& prefix,
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+      bool const isV4);
+
   // given curNode and the dst nodes, find 2spf paths from curNode to each
   // dstNode
   std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
@@ -869,20 +876,14 @@ SpfSolver::SpfSolverImpl::createOpenRRoute(
           folly::none));
 }
 
-folly::Optional<thrift::UnicastRoute>
-SpfSolver::SpfSolverImpl::createBGPRoute(
+BestPathCalResult
+SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
     bool const isV4) {
-  std::string bestNode;
-  // order is intended to comply with API used later.
-  std::set<std::string> nodes;
-  folly::Optional<thrift::MetricVector> bestVector{folly::none};
-  folly::Optional<int64_t> bestIgpMetric;
-  std::string const* bestData = nullptr;
+  BestPathCalResult ret;
   const auto& mySpfResult = spfResults_.at(myNodeName);
-
   for (auto const& kv : nodePrefixes) {
     auto const& nodeName = kv.first;
     auto const& prefixEntry = kv.second;
@@ -913,8 +914,9 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     // Associate IGP_COST to prefixEntry
     if (bgpUseIgpMetric_) {
       const auto igpMetric = static_cast<int64_t>(it->second.first);
-      if (not bestIgpMetric.hasValue() or *bestIgpMetric > igpMetric) {
-        bestIgpMetric = igpMetric;
+      if (not ret.bestIgpMetric.hasValue() or
+          *(ret.bestIgpMetric) > igpMetric) {
+        ret.bestIgpMetric = igpMetric;
       }
       metricVector.metrics.emplace_back(MetricVectorUtils::createMetricEntity(
           static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST),
@@ -927,43 +929,65 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
               << toString(prefix) << " for node " << nodeName;
     }
 
-    switch (!bestVector.hasValue() ? MetricVectorUtils::CompareResult::WINNER
-                                   : MetricVectorUtils::compareMetricVectors(
-                                         metricVector, *bestVector)) {
+    switch (ret.bestVector.hasValue()
+                ? MetricVectorUtils::compareMetricVectors(
+                      metricVector, *(ret.bestVector))
+                : MetricVectorUtils::CompareResult::WINNER) {
     case MetricVectorUtils::CompareResult::WINNER:
-      nodes.clear();
+      ret.nodes.clear();
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_WINNER:
-      bestVector = std::move(metricVector);
-      bestData = &(prefixEntry.data);
-      bestNode = nodeName;
+      ret.bestVector = std::move(metricVector);
+      ret.bestData = &(prefixEntry.data);
+      ret.bestNode = nodeName;
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_LOOSER:
-      nodes.emplace(nodeName);
+      ret.nodes.emplace(nodeName);
       break;
     case MetricVectorUtils::CompareResult::TIE:
       LOG(ERROR) << "Tie ordering prefix entries. Skipping route for prefix: "
                  << toString(prefix);
-      return folly::none;
+      return ret;
     case MetricVectorUtils::CompareResult::ERROR:
       LOG(ERROR) << "Error ordering prefix entries. Skipping route for prefix: "
                  << toString(prefix);
-      return folly::none;
+      return ret;
     default:
       break;
     }
   }
-  if (nodes.empty() or nodes.count(myNodeName)) {
+  ret.success = true;
+  return ret;
+}
+
+folly::Optional<thrift::UnicastRoute>
+SpfSolver::SpfSolverImpl::createBGPRoute(
+    std::string const& myNodeName,
+    thrift::IpPrefix const& prefix,
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+    bool const isV4) {
+  std::string bestNode;
+  // order is intended to comply with API used later.
+  std::set<std::string> nodes;
+  folly::Optional<thrift::MetricVector> bestVector{folly::none};
+
+  const auto dstInfo =
+      findDstNodesForBgpRoute(myNodeName, prefix, nodePrefixes, isV4);
+  if (not dstInfo.success) {
+    return folly::none;
+  }
+
+  if (dstInfo.nodes.empty() or dstInfo.nodes.count(myNodeName)) {
     // do not program a route if we are advertising a best path to it or there
     // is no path to it
     LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
     tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
     return folly::none;
   }
-  CHECK_NOTNULL(bestData);
+  CHECK_NOTNULL(dstInfo.bestData);
 
-  auto bestNextHop =
-      prefixState_.getLoopbackVias({bestNode}, isV4, bestIgpMetric);
+  auto bestNextHop = prefixState_.getLoopbackVias(
+      {dstInfo.bestNode}, isV4, dstInfo.bestIgpMetric);
   if (bestNextHop.size() != 1) {
     tData_.addStatValue("decision.missing_loopback_addr", 1, fbzmq::SUM);
     LOG(ERROR) << "Cannot find the best paths loopback address. "
@@ -972,11 +996,11 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
   }
 
   const auto nextHopsWithMetric =
-      getNextHopsWithMetric(myNodeName, nodes, false);
+      getNextHopsWithMetric(myNodeName, dstInfo.nodes, false);
 
   auto allNextHops = getNextHopsThrift(
       myNodeName,
-      nodes,
+      dstInfo.nodes,
       isV4,
       false,
       nextHopsWithMetric.first,
@@ -989,7 +1013,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               thrift::AdminDistance::EBGP,
                               std::move(allNextHops),
                               thrift::PrefixType::BGP,
-                              *bestData,
+                              *(dstInfo.bestData),
                               bgpDryRun_, /* doNotProgram */
                               bestNextHop.at(0)};
 }
