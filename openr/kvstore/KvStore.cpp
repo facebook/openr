@@ -830,6 +830,10 @@ KvStoreDb::delPeers(std::vector<std::string> const& peers) {
     }
 
     peersToSyncWith_.erase(peerName);
+    auto const& peerCmdSocketId = it->second.second;
+    if (latestSentPeerSync_.count(peerCmdSocketId)) {
+      latestSentPeerSync_.erase(peerCmdSocketId);
+    }
     peers_.erase(it);
   }
 
