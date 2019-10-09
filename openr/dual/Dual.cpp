@@ -439,8 +439,8 @@ Dual::peerUp(
   }
 
   // send neighbor all route-table entries whose report-distance is valid
-  // TODO: here we might already send neighbor a update from tryLocalOrDiffusing
-  // (#updates sent can be optimized)
+  // NOTE: here we might already send neighbor a update from tryLocalOrDiffusing
+  // (2nd update will just be ignored by our neighbor)
 
   thrift::DualMessage msg;
   msg.dstId = rootId;

@@ -300,7 +300,6 @@ class DualBaseFixture : public ::testing::Test {
 
   void
   addLink(const std::string& node1, const std::string& node2, int64_t cost) {
-    // TODO: lookup is not efficient, keep as-is for simplicity, use map later
     for (const auto& edge : edges) {
       if ((edge.name1 == node1 and edge.name2 == node2) or
           (edge.name1 == node2 and edge.name2 == node1)) {

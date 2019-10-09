@@ -1900,9 +1900,12 @@ KvStoreDb::sendDualMessages(
   dualRequest.dualMessages = msgs;
   dualRequest.area = area_;
   const auto ret = sendMessageToPeer(neighborCmdSocketId, dualRequest);
-  // TODO: for dual.query, we need to use a blocking socket to get a ack
-  // from destination node to know if it receives or not
-  // due to zmq async fashion, ret here is always true even on failure
+  // NOTE: we rely on zmq (on top of tcp) to reliably deliver message,
+  // if we switch to other protocols, we need to make sure its reliability.
+  // Due to zmq async fashion, in case of failure (means the other side
+  // is going down), it's ok to lose this pending message since later on,
+  // neighor will inform us it's gone. and we will delete it from our dual
+  // peers.
   if (ret.hasError()) {
     LOG(ERROR) << "failed to send dual messages to " << neighbor << " using id "
                << neighborCmdSocketId << ", error: " << ret.error();
