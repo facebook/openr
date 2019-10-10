@@ -13,6 +13,7 @@
 #include <folly/Memory.h>
 #include <folly/Optional.h>
 
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 
@@ -37,7 +38,9 @@ class KvStoreWrapper {
       KvStoreFloodRate kvstoreRate = std::nullopt,
       std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
       bool enableFloodOptimization = false,
-      bool isFloodRoot = false);
+      bool isFloodRoot = false,
+      const std::unordered_set<std::string>& areas = {
+          openr::thrift::KvStore_constants::kDefaultArea()});
 
   ~KvStoreWrapper() {
     stop();
@@ -60,13 +63,16 @@ class KvStoreWrapper {
   bool setKey(
       std::string key,
       thrift::Value value,
-      folly::Optional<std::vector<std::string>> nodeIds = folly::none);
+      folly::Optional<std::vector<std::string>> nodeIds = folly::none,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * API to retrieve an existing key-value from KvStore. Returns empty if none
    * exists.
    */
-  folly::Optional<thrift::Value> getKey(std::string key);
+  folly::Optional<thrift::Value> getKey(
+      std::string key,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * APIs to set key-values into the KvStore. Returns true on success else
@@ -81,20 +87,23 @@ class KvStoreWrapper {
    * if we pass a prefix, only return keys that match it
    */
   std::unordered_map<std::string /* key */, thrift::Value> dumpAll(
-      std::optional<KvStoreFilters> filters = std::nullopt);
+      std::optional<KvStoreFilters> filters = std::nullopt,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * API to get dump hashes from KvStore.
    * if we pass a prefix, only return keys that match it
    */
   std::unordered_map<std::string /* key */, thrift::Value> dumpHashes(
-      std::string const& prefix = "");
+      std::string const& prefix = "",
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * API to get key vals on which hash differs from provided keyValHashes.
    */
   std::unordered_map<std::string /* key */, thrift::Value> syncKeyVals(
-      thrift::KeyVals const& keyValHashes);
+      thrift::KeyVals const& keyValHashes,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * API to listen for a publication on PUB socket. This blocks until a
@@ -110,19 +119,26 @@ class KvStoreWrapper {
   /*
    * Get flooding topology information
    */
-  thrift::SptInfos getFloodTopo();
+  thrift::SptInfos getFloodTopo(
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * APIs to manage (add/remove) KvStore peers. Returns true on success else
    * returns false.
    */
-  bool addPeer(std::string peerName, thrift::PeerSpec spec);
-  bool delPeer(std::string peerName);
+  bool addPeer(
+      std::string peerName,
+      thrift::PeerSpec spec,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+  bool delPeer(
+      std::string peerName,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * APIs to get existing peers of a KvStore.
    */
-  std::unordered_map<std::string /* peerName */, thrift::PeerSpec> getPeers();
+  std::unordered_map<std::string /* peerName */, thrift::PeerSpec> getPeers(
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Utility function to get peer-spec for owned KvStore

@@ -97,7 +97,9 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
       std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
       bool enableFloodOptimization = false,
       bool isFloodRoot = false,
-      std::chrono::seconds dbSyncInterval = kDbSyncInterval) {
+      std::chrono::seconds dbSyncInterval = kDbSyncInterval,
+      std::unordered_set<std::string> areas = {
+          openr::thrift::KvStore_constants::kDefaultArea()}) {
     auto ptr = std::make_unique<KvStoreWrapper>(
         context,
         nodeId,
@@ -108,7 +110,8 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
         kvStoreRate,
         ttlDecr,
         enableFloodOptimization,
-        isFloodRoot);
+        isFloodRoot,
+        areas);
     stores_.emplace_back(std::move(ptr));
     return stores_.back().get();
   }
@@ -2856,6 +2859,200 @@ TEST_F(KvStoreTestFixture, FullSync) {
   auto v4 = storeA->getKey(k4);
   EXPECT_EQ(v4->version, 6);
   EXPECT_EQ(v4->value.value(), "b");
+}
+
+/* Kvstore tests related to area */
+
+/* Verify flooding is containted within an area. Add a key in one area and
+   verify that key is not flooded into another area
+
+   Topology:
+
+   StoreA (pod-area)  --- (pod area) StoreB (plane area) -- (plane area) StoreC
+*/
+TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  std::string podArea{"pod-area"};
+  std::string planeArea{"plane-area"};
+
+  // Create another ZmqEventLoop instance for looping clients
+  fbzmq::ZmqEventLoop evl;
+  auto scheduleAt = std::chrono::milliseconds{0}.count();
+
+  auto storeA = createKvStore(
+      "storeA",
+      emptyPeers,
+      std::nullopt,
+      std::nullopt,
+      Constants::kTtlDecrement,
+      false,
+      false,
+      kDbSyncInterval,
+      {podArea});
+
+  auto storeB = createKvStore(
+      "storeB",
+      emptyPeers,
+      std::nullopt,
+      std::nullopt,
+      Constants::kTtlDecrement,
+      false,
+      false,
+      kDbSyncInterval,
+      {podArea, planeArea});
+
+  auto storeC = createKvStore(
+      "storeC",
+      emptyPeers,
+      std::nullopt,
+      std::nullopt,
+      Constants::kTtlDecrement,
+      false,
+      false,
+      kDbSyncInterval,
+      {planeArea});
+
+  std::unordered_map<std::string, thrift::Value> expectedKeyValsPod{};
+  std::unordered_map<std::string, thrift::Value> expectedKeyValsPlane{};
+
+  evl.scheduleTimeout(std::chrono::milliseconds(scheduleAt), [&]() noexcept {
+    storeA->run();
+    storeB->run();
+    storeC->run();
+
+    storeA->addPeer("storeB", storeB->getPeerSpec(), podArea);
+    storeB->addPeer("storeA", storeA->getPeerSpec(), podArea);
+    storeB->addPeer("storeC", storeC->getPeerSpec(), planeArea);
+    storeC->addPeer("storeB", storeB->getPeerSpec(), planeArea);
+    // verify get peers command
+    std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
+        {storeA->nodeId, storeA->getPeerSpec()},
+    };
+    std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
+        {storeC->nodeId, storeC->getPeerSpec()},
+    };
+    EXPECT_EQ(expectedPeersPod, storeB->getPeers(podArea));
+    EXPECT_EQ(expectedPeersPlane, storeB->getPeers(planeArea));
+
+    const std::string k0{"pod-area-0"};
+    const std::string k1{"pod-area-1"};
+    const std::string k2{"plane-area-0"};
+    const std::string k3{"plane-area-1"};
+
+    thrift::Value thriftVal0 = createThriftValue(
+        1 /* version */,
+        "storeA" /* originatorId */,
+        std::string("valueA") /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        0 /* hash */);
+    thriftVal0.hash = generateHash(
+        thriftVal0.version, thriftVal0.originatorId, thriftVal0.value);
+
+    thrift::Value thriftVal1 = createThriftValue(
+        1 /* version */,
+        "storeB" /* originatorId */,
+        std::string("valueB") /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        0 /* hash */);
+    thriftVal1.hash = generateHash(
+        thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+
+    thrift::Value thriftVal2 = createThriftValue(
+        1 /* version */,
+        "storeC" /* originatorId */,
+        std::string("valueC") /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        0 /* hash */);
+    thriftVal2.hash = generateHash(
+        thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+
+    thrift::Value thriftVal3 = createThriftValue(
+        1 /* version */,
+        "storeC" /* originatorId */,
+        std::string("valueC") /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        0 /* hash */);
+    thriftVal3.hash = generateHash(
+        thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
+
+    // set key in default area, but storeA does not have default area, this
+    // should fail
+    EXPECT_FALSE(storeA->setKey(k0, thriftVal0));
+    // set key in the correct area
+    EXPECT_TRUE(storeA->setKey(k0, thriftVal0, folly::none, podArea));
+    // store A should not have the key in default area
+    EXPECT_FALSE(storeA->getKey(k0).hasValue());
+    // store A should have the key in pod-area
+    EXPECT_TRUE(storeA->getKey(k0, podArea).hasValue());
+    // store B should have the key in pod-area
+    EXPECT_TRUE(storeB->getKey(k0, podArea).hasValue());
+    // store B should NOT have the key in plane-area
+    EXPECT_FALSE(storeB->getKey(k0, planeArea).hasValue());
+
+    // set key in store C and verify it's present in plane area in store B and
+    // not present in POD area in storeB and storeA
+    // set key in the correct area
+    EXPECT_TRUE(storeC->setKey(k2, thriftVal2, folly::none, planeArea));
+    // store B should have the key in planeArea
+    EXPECT_TRUE(storeB->getKey(k2, planeArea).hasValue());
+    // store B should NOT have the key in podArea
+    EXPECT_FALSE(storeB->getKey(k2, podArea).hasValue());
+    // store A should NOT have the key in podArea
+    EXPECT_FALSE(storeA->getKey(k2, podArea).hasValue());
+
+    // pod area expected key values
+    expectedKeyValsPod[k0] = thriftVal0;
+    expectedKeyValsPod[k1] = thriftVal1;
+
+    // plane area expected key values
+    expectedKeyValsPlane[k2] = thriftVal2;
+    expectedKeyValsPlane[k3] = thriftVal3;
+
+    // add another key in both plane and pod area
+    EXPECT_TRUE(storeB->setKey(k1, thriftVal1, folly::none, podArea));
+    EXPECT_TRUE(storeC->setKey(k3, thriftVal3, folly::none, planeArea));
+  });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+        // pod area
+        EXPECT_EQ(expectedKeyValsPod, storeA->dumpAll(std::nullopt, podArea));
+        EXPECT_EQ(expectedKeyValsPod, storeB->dumpAll(std::nullopt, podArea));
+
+        // plane area
+        EXPECT_EQ(
+            expectedKeyValsPlane, storeB->dumpAll(std::nullopt, planeArea));
+        EXPECT_EQ(
+            expectedKeyValsPlane, storeC->dumpAll(std::nullopt, planeArea));
+
+        // counters will have total count from all instances of kvstore
+        // check for counters on StoreB that has 2 instances. Number of keys
+        // must be the total of both areas number of keys must be 4, 2 from
+        // podArea and 2 from planArea number of peers at storeB must be 2 - one
+        // from each area
+        auto counters = storeB->getCounters();
+        EXPECT_EQ(4, counters.at("kvstore.num_keys").value);
+        EXPECT_EQ(2, counters.at("kvstore.num_peers").value);
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 1), [&]() noexcept {
+        evl.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
 }
 
 int
