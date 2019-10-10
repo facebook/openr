@@ -538,7 +538,7 @@ Spark::sanityCheckHelloPkt(
   if (neighborName == myNodeName_) {
     VLOG(2) << "Ignore packet from self (" << myNodeName_ << ")";
     tData_.addStatValue("spark.invalid_keepalive.looped_packet", 1, fbzmq::SUM);
-    return PacketValidationResult::FAILURE;
+    return PacketValidationResult::SKIP_LOOPED_SELF;
   }
   // domain check
   if (domainName != myDomainName_) {
@@ -572,11 +572,14 @@ Spark::validateHelloPacket(
   uint32_t const& remoteVersion =
       static_cast<uint32_t>(helloPacket.payload.version);
 
-  if (PacketValidationResult::FAILURE ==
-      sanityCheckHelloPkt(
-          domainName, neighborName, remoteIfName, remoteVersion)) {
+  auto sanityCheckResult = sanityCheckHelloPkt(
+      domainName, neighborName, remoteIfName, remoteVersion);
+  if (PacketValidationResult::SKIP_LOOPED_SELF == sanityCheckResult) {
+    return sanityCheckResult;
+  }
+  if (PacketValidationResult::FAILURE == sanityCheckResult) {
     LOG(ERROR) << "Sanity check of Hello pkt failed";
-    return PacketValidationResult::FAILURE;
+    return sanityCheckResult;
   }
 
   // validate v4 address subnet
@@ -1581,6 +1584,9 @@ Spark::processHelloPacket() {
 
   // Step 3: old spark way of processing logic
   auto validationResult = validateHelloPacket(ifName, helloPacket);
+  if (PacketValidationResult::SKIP_LOOPED_SELF == validationResult) {
+    return;
+  }
   if (validationResult == PacketValidationResult::FAILURE) {
     LOG(ERROR) << "Ignoring invalid packet received from "
                << helloPacket.payload.originator.nodeName << " on " << ifName;

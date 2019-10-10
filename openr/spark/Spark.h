@@ -36,6 +36,7 @@ enum class PacketValidationResult {
   SUCCESS = 1,
   FAILURE = 2,
   NEIGHBOR_RESTART = 3,
+  SKIP_LOOPED_SELF = 4,
 };
 
 //
@@ -350,7 +351,6 @@ class Spark final : public OpenrEventLoop {
       int64_t rtt,
       int32_t label,
       bool supportFloodOptimization);
-
 
   // utility call to send handshake msg
   void sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished);
