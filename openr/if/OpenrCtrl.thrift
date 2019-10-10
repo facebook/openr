@@ -49,10 +49,10 @@ service OpenrCtrl extends fb303.FacebookService {
   // @deprecated - do not use these directly. Instead use specific thrift APIs
   //
 
-  binary command(1: OpenrModuleType module, 2: binary request)
+  binary command(1: OpenrModuleType openrModule, 2: binary request)
     throws (1: OpenrError error)
 
-  bool hasModule(1: OpenrModuleType module)
+  bool hasModule(1: OpenrModuleType openrModule)
     throws (1: OpenrError error)
 
   //
