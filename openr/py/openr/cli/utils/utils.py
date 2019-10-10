@@ -1048,7 +1048,7 @@ def update_global_prefix_db(global_prefix_db: Dict, prefix_db: Dict, key: str = 
 
     # per prefix key format contains only one key, it can be an 'add' or 'delete'
     if key and re.match(Consts.PER_PREFIX_KEY_REGEX, key):
-        node_prefix_set = global_prefix_db[prefix_db.thisNodeName]
+        node_prefix_set = global_prefix_db.get(prefix_db.thisNodeName, set())
         if prefix_db.deletePrefix:
             node_prefix_set = node_prefix_set - prefix_set
         else:

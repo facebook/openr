@@ -859,7 +859,6 @@ class SnoopCmd(KvStoreCmdBase):
         global_prefix_db: Dict,
         global_publication_db: Dict,
     ):
-        _, reported_node_name = key.split(":", 1)
         prefix_db = serializer.deserialize_thrift_object(
             value.value, lsdb_types.PrefixDatabase
         )
@@ -873,7 +872,7 @@ class SnoopCmd(KvStoreCmdBase):
         if lines:
             self.print_timestamp()
             self.print_publication_delta(
-                "{}'s prefixes".format(reported_node_name),
+                "{}'s prefixes".format(prefix_db.thisNodeName),
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
             )
@@ -888,7 +887,6 @@ class SnoopCmd(KvStoreCmdBase):
         global_adj_db: Dict,
         global_publication_db: Dict,
     ):
-        _, reported_node_name = key.split(":", 1)
         new_adj_db = serializer.deserialize_thrift_object(
             value.value, lsdb_types.AdjacencyDatabase
         )
@@ -907,7 +905,7 @@ class SnoopCmd(KvStoreCmdBase):
         if lines:
             self.print_timestamp()
             self.print_publication_delta(
-                "{}'s adjacencies".format(reported_node_name),
+                "{}'s adjacencies".format(new_adj_db.thisNodeName),
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
             )
