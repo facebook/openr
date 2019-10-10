@@ -111,6 +111,120 @@ class MultipleStoreFixture : public ::testing::Test {
   std::vector<fbzmq::SocketUrl> urls;
 };
 
+/*
+ * Class to create topology with multiple areas
+ * Topology:
+ *
+ *  StoreA (pod-area)  --- (pod area) StoreB (plane area) -- (plane area) StoreC
+ */
+class MultipleAreaFixture : public ::testing::Test {
+ public:
+  void
+  SetUp() override {
+    auto makeStore =
+        [this](std::string nodeId, std::unordered_set<std::string> areas) {
+          const auto peers =
+              std::unordered_map<std::string, thrift::PeerSpec>{};
+          return std::make_shared<KvStoreWrapper>(
+              context,
+              nodeId,
+              60s /* db sync interval */,
+              600s /* counter submit interval */,
+              peers,
+              std::nullopt,
+              std::nullopt,
+              Constants::kTtlDecrement,
+              false,
+              false,
+              areas);
+        };
+
+    store1 = makeStore(node1, std::unordered_set<std::string>{planeArea});
+    store2 =
+        makeStore(node2, std::unordered_set<std::string>{planeArea, podArea});
+    store3 = makeStore(node3, std::unordered_set<std::string>{podArea});
+
+    store1->run();
+    store2->run();
+    store3->run();
+
+    // add peers
+    peers1.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(node2),
+        std::forward_as_tuple(store2->getPeerSpec()));
+    peers2PlaneArea.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(node1),
+        std::forward_as_tuple(store1->getPeerSpec()));
+    peers2PodArea.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(node3),
+        std::forward_as_tuple(store3->getPeerSpec()));
+    peers3.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(node2),
+        std::forward_as_tuple(store2->getPeerSpec()));
+
+    // Create and initialize kvstore-clients
+    client1 = std::make_shared<KvStoreClient>(
+        context, &evl, node1, store1->localCmdUrl, store1->localPubUrl);
+
+    client2 = std::make_shared<KvStoreClient>(
+        context,
+        &evl,
+        node2,
+        store2->localCmdUrl,
+        store2->localPubUrl,
+        persistKeyTimer);
+
+    client3 = std::make_shared<KvStoreClient>(
+        context, &evl, node3, store3->localCmdUrl, store3->localPubUrl);
+
+    urls = {fbzmq::SocketUrl{store1->localCmdUrl},
+            fbzmq::SocketUrl{store2->localCmdUrl},
+            fbzmq::SocketUrl{store3->localCmdUrl}};
+  }
+
+  void
+  setUpPeers() {
+    // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
+    EXPECT_TRUE(client1->addPeers(peers1, planeArea).hasValue());
+    EXPECT_TRUE(client2->addPeers(peers2PlaneArea, planeArea).hasValue());
+    EXPECT_TRUE(client2->addPeers(peers2PodArea, podArea).hasValue());
+    EXPECT_TRUE(client3->addPeers(peers3, podArea).hasValue());
+  }
+
+  void
+  TearDown() override {
+    store1->stop();
+    store2->stop();
+    store3->stop();
+  }
+
+  fbzmq::Context context;
+
+  fbzmq::ZmqEventLoop evl;
+
+  std::shared_ptr<KvStoreWrapper> store1, store2, store3;
+
+  std::shared_ptr<KvStoreClient> client1, client2, client3;
+
+  const std::string podArea{"pod-area"};
+  const std::string planeArea{"plane-area"};
+  const std::string node1{"node1"};
+  const std::string node2{"node2"};
+  const std::string node3{"node3"};
+  const std::chrono::milliseconds persistKeyTimer{100};
+  std::vector<fbzmq::SocketUrl> urls;
+  std::unordered_map<std::string, thrift::PeerSpec> peers1;
+  std::unordered_map<std::string, thrift::PeerSpec> peers2PlaneArea;
+  std::unordered_map<std::string, thrift::PeerSpec> peers2PodArea;
+  std::unordered_map<std::string, thrift::PeerSpec> peers3;
+
+  apache::thrift::CompactSerializer serializer;
+};
+
 /**
  * All stores for multi-get are failing
  */
@@ -1093,6 +1207,315 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
   // Stop server
   LOG(INFO) << "Stopping store";
   store->stop();
+}
+
+/*
+ * area related tests for KvStoreClient. Things to test:
+ * - Flooding is contained within area - basic verification
+ * - setKey, getKey, clearKey, unsetKey
+ * - key TTL refresh, key expiry
+ *
+ * Topology:
+ *
+ *  node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
+ */
+
+TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
+  // Create another ZmqEventLoop instance for looping clients
+  fbzmq::ZmqEventLoop evl;
+  auto scheduleAt = std::chrono::milliseconds{0}.count();
+
+  evl.scheduleTimeout(std::chrono::milliseconds(scheduleAt), [&]() noexcept {
+    // test addPeers in invalid area, following result must be false
+    EXPECT_FALSE(client1->addPeers(peers1).hasValue());
+    EXPECT_FALSE(client2->addPeers(peers2PlaneArea).hasValue());
+    EXPECT_FALSE(client3->addPeers(peers3).hasValue());
+    // add peers in valid area,
+    // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
+    setUpPeers();
+  });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
+        // test addPeers
+        auto maybePeers = client1->getPeers(planeArea);
+        EXPECT_TRUE(maybePeers.hasValue());
+        EXPECT_EQ(maybePeers.value(), peers1);
+
+        auto maybePeers2 = client2->getPeers(planeArea);
+        EXPECT_TRUE(maybePeers2.hasValue());
+        EXPECT_EQ(maybePeers2.value(), peers2PlaneArea);
+
+        auto maybePeers3 = client2->getPeers(podArea);
+        EXPECT_TRUE(maybePeers3.hasValue());
+        EXPECT_EQ(maybePeers3.value(), peers2PodArea);
+
+        auto maybePeers4 = client3->getPeers(podArea);
+        EXPECT_TRUE(maybePeers4.hasValue());
+        EXPECT_EQ(maybePeers4.value(), peers3);
+      });
+
+  // test for key set, get and key flood within area
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
+        thrift::Value valuePlane1;
+        valuePlane1.version = 1;
+        valuePlane1.value = "test_value1";
+        // key set within invalid area, must return false
+        EXPECT_FALSE(
+            client1
+                ->setKey(
+                    "plane_key1",
+                    fbzmq::util::writeThriftObjStr(valuePlane1, serializer),
+                    100,
+                    Constants::kTtlInfInterval)
+                .hasValue());
+
+        EXPECT_TRUE(
+            client1
+                ->setKey(
+                    "plane_key1",
+                    fbzmq::util::writeThriftObjStr(valuePlane1, serializer),
+                    100,
+                    Constants::kTtlInfInterval,
+                    planeArea)
+                .hasValue());
+
+        // set key in pod are on node3
+        thrift::Value valuePod1;
+        valuePod1.version = 1;
+        valuePod1.value = "test_value1";
+        EXPECT_TRUE(
+            client3
+                ->setKey(
+                    "pod_key1",
+                    fbzmq::util::writeThriftObjStr(valuePlane1, serializer),
+                    100,
+                    Constants::kTtlInfInterval,
+                    podArea)
+                .hasValue());
+      });
+
+  // get keys from pod and play area and ensure keys are not leaked across
+  // areas
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
+        // get key from default area, must be false
+        auto maybeThriftVal1 = store1->getKey("pod_key1");
+        ASSERT_FALSE(maybeThriftVal1.hasValue());
+
+        // get pod key from plane area, must be false
+        auto maybeThriftVal2 = store1->getKey("pod_key1", planeArea);
+        ASSERT_FALSE(maybeThriftVal2.hasValue());
+
+        // get plane key from pod area, must be false
+        auto maybeThriftVal3 = store3->getKey("plane_key1", podArea);
+        ASSERT_FALSE(maybeThriftVal3.hasValue());
+
+        // get pod key from pod area from store2, verifies flooding
+        auto maybeThriftVal4 = store2->getKey("pod_key1", podArea);
+        ASSERT_TRUE(maybeThriftVal4.hasValue());
+
+        // get plane key from plane area from store2, verifies flooding
+        auto maybeThriftVal5 = store2->getKey("plane_key1", planeArea);
+        ASSERT_TRUE(maybeThriftVal5.hasValue());
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        evl.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
+}
+
+TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
+  // Create another ZmqEventLoop instance for looping clients
+  const std::chrono::milliseconds ttl{Constants::kTtlThreshold.count() + 100};
+
+  auto scheduleAt = std::chrono::milliseconds{0}.count();
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt), [&]() noexcept { setUpPeers(); });
+
+  // add key in plane and pod area into node1 and node3 respectively
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        EXPECT_TRUE(client1
+                        ->setKey(
+                            "test_ttl_key_plane",
+                            "test_ttl_value_plane",
+                            1,
+                            ttl,
+                            planeArea)
+                        .hasValue());
+        client3->persistKey(
+            "test_ttl_key_pod", "test_ttl_value_pod", ttl, podArea);
+      });
+
+  // check if key is flooding as expected by checking in node2
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
+        // plane key must be present in node2 (plane area) and not in node3
+        EXPECT_TRUE(
+            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+        EXPECT_FALSE(client3->getKey("test_ttl_key_plane", podArea).hasValue());
+
+        // pod key - should present in node2 (Pod area) and absent in node1
+        EXPECT_TRUE(client2->getKey("test_ttl_key_pod", podArea).hasValue());
+        EXPECT_FALSE(client1->getKey("test_ttl_key_pod", planeArea).hasValue());
+      });
+
+  // schecdule after 2 * TTL, check key refresh is working fine
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += ttl.count() * 2), [&]() noexcept {
+        // plane key must be present
+        EXPECT_TRUE(
+            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+
+        // pod key must be present
+        EXPECT_TRUE(client2->getKey("test_ttl_key_pod", podArea).hasValue());
+        EXPECT_TRUE(client3->getKey("test_ttl_key_pod", podArea).hasValue());
+      });
+
+  // verify dumpAllWithPrefixMultiple
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        auto maybe = KvStoreClient::dumpAllWithPrefixMultiple(
+            context, urls, "test_", 1000ms, 192, planeArea);
+        // there will be plane area key "test_ttl_key_plane"
+        ASSERT_TRUE(maybe.first.hasValue());
+        EXPECT_EQ(maybe.first.value().size(), 1);
+
+        // only one key in pod Area too, "test_ttl_pod_area"
+        maybe = KvStoreClient::dumpAllWithPrefixMultiple(
+            context, urls, "test_", 1000ms, 192, podArea);
+        // there will be plane area key "test_ttl_key_plane"
+        ASSERT_TRUE(maybe.first.hasValue());
+        EXPECT_EQ(maybe.first.value().size(), 1);
+      });
+
+  // unset key, this stops key ttl refresh
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        // plane key must be present
+        client1->unsetKey("test_ttl_key_plane", planeArea);
+        client3->unsetKey("test_ttl_key_pod", podArea);
+      });
+
+  // schecdule after 2 * TTL - keys should not be present as they've expired
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += ttl.count() * 2), [&]() noexcept {
+        // keys should be expired now
+        EXPECT_FALSE(
+            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+
+        // pod key must be present
+        EXPECT_FALSE(client2->getKey("test_ttl_key_pod", podArea).hasValue());
+        EXPECT_FALSE(client3->getKey("test_ttl_key_pod", podArea).hasValue());
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        evl.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
+}
+
+/*
+ * this test checks if the checkPersistKeyInStore() works when multiple
+ * areas are instantiated in the KvStore, with one area having emtpy
+ * persistKeyDB.
+ *
+ * 1. add key in node2 by calling persistKey()
+ * 2. use the kvstore API to delete the key in node2 be setting a short TTL
+ * 3. verify key is deleted from node2 kvstore
+ * 4. wait until checkPersistKeyInStore() kicks in to repopulate the key
+ * 5. verify kvstore in node2 has the key
+ */
+TEST_F(MultipleAreaFixture, PersistKeyArea) {
+  // Create another ZmqEventLoop instance for looping clients
+  const std::chrono::milliseconds ttl{Constants::kTtlThreshold.count() + 100};
+
+  auto scheduleAt = std::chrono::milliseconds{0}.count();
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt), [&]() noexcept { setUpPeers(); });
+
+  // add key in plane area of node2, no keys are present in pod area
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        client2->persistKey(
+            "test_ttl_key_plane", "test_ttl_value_plane", ttl, planeArea);
+      });
+
+  // verify at node1 that key is flooded in plane area
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
+        EXPECT_TRUE(
+            client1->getKey("test_ttl_key_plane", planeArea).hasValue());
+      });
+
+  // expire the key in node2 kvstore by setting a low ttl value
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        thrift::Value keyExpVal = createThriftValue(
+            1,
+            node2,
+            std::string("test_ttl_value_plane"),
+            1, /* ttl in msec */
+            500 /* ttl version */,
+            0 /* hash */);
+
+        store2->setKey("test_ttl_key_plane", keyExpVal, folly::none, planeArea);
+      });
+
+  // key is expired in node2
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 1), [&]() noexcept {
+        EXPECT_FALSE(
+            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+      });
+
+  // checkPersistKey should kick in and repopulate the key node1 kvstore,
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += persistKeyTimer.count() + 100),
+      [&]() noexcept {
+        EXPECT_TRUE(
+            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        evl.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  std::thread evlThread([&]() {
+    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    evl.run();
+    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  });
+  evl.waitUntilRunning();
+  evl.waitUntilStopped();
+  evlThread.join();
 }
 
 int
