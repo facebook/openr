@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 #include <openr/health-checker/HealthChecker.h>
 
 using namespace openr;
@@ -167,22 +168,20 @@ class HealthCheckerTestFixture : public ::testing::Test {
 };
 
 TEST_F(HealthCheckerTestFixture, BasicOperation) {
-  auto adjPublication = thrift::Publication(
-      apache::thrift::FRAGILE,
+  auto adjPublication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})}},
       {},
       {},
       {},
-      "");
-  auto prefixPublication = thrift::Publication(
-      apache::thrift::FRAGILE,
+      std::string(""));
+  auto prefixPublication = createThriftPublication(
       {{"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
   replyInitialSyncReq(adjPublication);
   replyInitialSyncReq(prefixPublication);
   LOG(INFO) << "Sent initial sync";
@@ -191,8 +190,7 @@ TEST_F(HealthCheckerTestFixture, BasicOperation) {
   EXPECT_EQ(counters1.at("health_checker.nodes_to_ping_size").value, 0);
   EXPECT_EQ(counters1.at("health_checker.nodes_info_size").value, 2);
 
-  auto nextPub = thrift::Publication(
-      apache::thrift::FRAGILE,
+  auto nextPub = createThriftPublication(
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23, adj24})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})},
@@ -200,7 +198,7 @@ TEST_F(HealthCheckerTestFixture, BasicOperation) {
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   kvStorePub.sendThriftObj(nextPub, serializer);
 

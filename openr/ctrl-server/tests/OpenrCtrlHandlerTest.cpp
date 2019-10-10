@@ -430,12 +430,15 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     thrift::KeySetParams setParams;
     setParams.keyVals = keyVals;
 
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParams);
+    openrCtrlThriftClient_->sync_setKvStoreKeyVals(
+        setParams, thrift::KvStore_constants::kDefaultArea());
 
     setParams.solicitResponse = false;
-    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParams);
+    openrCtrlThriftClient_->sync_setKvStoreKeyVals(
+        setParams, thrift::KvStore_constants::kDefaultArea());
 
-    openrCtrlThriftClient_->sync_setKvStoreKeyValsOneWay(setParams);
+    openrCtrlThriftClient_->sync_setKvStoreKeyValsOneWay(
+        setParams, thrift::KvStore_constants::kDefaultArea());
   }
 
   {

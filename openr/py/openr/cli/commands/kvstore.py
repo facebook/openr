@@ -26,7 +26,7 @@ from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients import kvstore_subscriber
-from openr.KvStore import ttypes as kv_store_types
+from openr.KvStore import constants as kv_store_constants, ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
@@ -524,7 +524,9 @@ class EraseKeyCmd(KvStoreCmdBase):
 
         print(keyVals)
 
-        client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals))
+        client.setKvStoreKeyVals(
+            kv_store_types.KeySetParams(keyVals), kv_store_constants.kDefaultArea
+        )
 
         print("Success: key {} will be erased soon from all KvStores.".format(key))
 
@@ -562,7 +564,9 @@ class SetKeyCmd(KvStoreCmdBase):
 
         # Advertise publication back to KvStore
         keyVals = {key: val}
-        client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals))
+        client.setKvStoreKeyVals(
+            kv_store_types.KeySetParams(keyVals), kv_store_constants.kDefaultArea
+        )
         print(
             "Success: Set key {} with version {} and ttl {} successfully"
             " in KvStore. This does not guarantee that value is updated"

@@ -22,8 +22,6 @@ class Constants {
   //
   // Common
   //
-  // default area of a node
-  static constexpr folly::StringPiece kDefaultArea{"0"};
 
   // the string we expect as an error response to a query
   static constexpr folly::StringPiece kErrorResponse{"ERR"};

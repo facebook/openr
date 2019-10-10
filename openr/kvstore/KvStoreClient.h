@@ -23,6 +23,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrClient.h>
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 
@@ -79,11 +80,13 @@ class KvStoreClient {
    * Key will expire and be removed in ttl time after client stops updating,
    * e.g., client process terminates. Client will update TTL every ttl/3 when
    * running.
+   * By default key is published to default area kvstore instance.
    */
   void persistKey(
       std::string const& key,
       std::string const& value,
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Advertise the key-value into KvStore with specified version. If version is
@@ -102,15 +105,20 @@ class KvStoreClient {
       std::string const& key,
       std::string const& value,
       uint32_t version = 0,
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
   folly::Expected<folly::Unit, fbzmq::Error> setKey(
-      std::string const& key, thrift::Value const& value);
+      std::string const& key,
+      thrift::Value const& value,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Unset key from KvStore. It really doesn't delete the key from KvStore,
    * instead it just leave it as it is.
    */
-  void unsetKey(std::string const& key);
+  void unsetKey(
+      std::string const& key,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Clear key's value by seeting default value of empty string or value passed
@@ -119,7 +127,8 @@ class KvStoreClient {
   void clearKey(
       std::string const& key,
       std::string value = "",
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Get key from KvStore. It gets from local snapshot KeyVals of the kvstore.
@@ -127,7 +136,9 @@ class KvStoreClient {
    *    1. zmq socket error
    *    2. "key not found" error upon non-existing key.
    */
-  folly::Expected<thrift::Value, fbzmq::Error> getKey(std::string const& key);
+  folly::Expected<thrift::Value, fbzmq::Error> getKey(
+      std::string const& key,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Dump the entries of my KV store whose keys match the given prefix
@@ -136,7 +147,9 @@ class KvStoreClient {
   folly::Expected<
       std::unordered_map<std::string /* key */, thrift::Value /* value */>,
       fbzmq::Error>
-  dumpAllWithPrefix(const std::string& prefix = "");
+  dumpAllWithPrefix(
+      const std::string& prefix = "",
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   // helper for deserialization
   template <typename ThriftType>
@@ -177,7 +190,8 @@ class KvStoreClient {
       const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
       const std::string& prefix,
       folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none,
-      folly::Optional<int> maybeIpTos = folly::none);
+      folly::Optional<int> maybeIpTos = folly::none,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Similar to the above but parses the values according to the ThrifType
@@ -206,7 +220,8 @@ class KvStoreClient {
       const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
       const std::string& prefix,
       folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none,
-      folly::Optional<int> maybeIpTos = folly::none);
+      folly::Optional<int> maybeIpTos = folly::none,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /*
    * This will be a static method to do a full-dump of KvStore key-val to
@@ -239,7 +254,8 @@ class KvStoreClient {
   folly::Optional<thrift::Value> subscribeKey(
       std::string const& key,
       KeyCallback callback,
-      bool fetchInitValue = false);
+      bool fetchInitValue = false,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
   void unsubscribeKey(std::string const& key);
 
   // Set callback for all kv publications
@@ -259,11 +275,14 @@ class KvStoreClient {
    *     2. server error returned by KvStore
    */
   folly::Expected<folly::Unit, fbzmq::Error> addPeers(
-      std::unordered_map<std::string, thrift::PeerSpec> peers);
+      std::unordered_map<std::string, thrift::PeerSpec> peers,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
   folly::Expected<folly::Unit, fbzmq::Error> delPeer(
-      std::string const& peerName);
+      std::string const& peerName,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
   folly::Expected<folly::Unit, fbzmq::Error> delPeers(
-      const std::vector<std::string>& peerNames);
+      const std::vector<std::string>& peerNames,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * APIs to send PEER_DUMP command to KvStore.
@@ -271,9 +290,10 @@ class KvStoreClient {
    *      1. zme socket error
    *      2. server error returned by KvStore
    */
-  folly::
-      Expected<std::unordered_map<std::string, thrift::PeerSpec>, fbzmq::Error>
-      getPeers();
+  folly::Expected<
+      std::unordered_map<std::string, thrift::PeerSpec>,
+      fbzmq::Error>
+  getPeers(const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   fbzmq::ZmqEventLoop*
   getEventLoop() const noexcept {
@@ -311,14 +331,16 @@ class KvStoreClient {
       std::string const& key,
       std::string const& value,
       uint32_t version = 0,
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval);
+      std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Utility function to SET keys in KvStore. Will throw an exception if things
    * goes wrong.
    */
   folly::Expected<folly::Unit, fbzmq::Error> setKeysHelper(
-      std::unordered_map<std::string, thrift::Value> keyVals);
+      std::unordered_map<std::string, thrift::Value> keyVals,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Utility function to del peers in KvStore
@@ -327,7 +349,8 @@ class KvStoreClient {
    *    2. server error returned by KvStore
    */
   folly::Expected<folly::Unit, fbzmq::Error> delPeersHelper(
-      const std::vector<std::string>& peerNames);
+      const std::vector<std::string>& peerNames,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Helper function to advertise the pending keys considering the exponential
@@ -343,7 +366,8 @@ class KvStoreClient {
       std::string const& key,
       uint32_t version,
       uint32_t ttlVersion,
-      int64_t ttl);
+      int64_t ttl,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Helper function to advertise TTL update
@@ -357,7 +381,8 @@ class KvStoreClient {
       fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>& sock,
       apache::thrift::CompactSerializer& serializer,
       std::string const& prefix,
-      folly::Optional<std::chrono::milliseconds> recvTimeout);
+      folly::Optional<std::chrono::milliseconds> recvTimeout,
+      std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Create KvStoreCmd socket on the fly. REQ-REP sockets needs reset if
@@ -429,7 +454,10 @@ class KvStoreClient {
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> kvStoreSubSock_;
 
   // Locally advertised authorative key-vals using `persistKey`
-  std::unordered_map<std::string, thrift::Value> persistedKeyVals_;
+  std::unordered_map<
+      std::string /* area */,
+      std::unordered_map<std::string /* key */, thrift::Value>>
+      persistedKeyVals_;
 
   // Subscribed keys to their callback functions
   std::unordered_map<std::string, KeyCallback> keyCallbacks_;
@@ -448,14 +476,19 @@ class KvStoreClient {
 
   // backoff associated with each key for freshing TTL
   std::unordered_map<
-      std::string /* key */,
-      std::pair<
-          thrift::Value /* value */,
-          ExponentialBackoff<std::chrono::milliseconds>>>
+      std::string /* area */,
+      std::unordered_map<
+          std::string /* key */,
+          std::pair<
+              thrift::Value /* value */,
+              ExponentialBackoff<std::chrono::milliseconds>>>>
       keyTtlBackoffs_;
 
   // Set of local keys to be re-advertised.
-  std::unordered_set<std::string> keysToAdvertise_;
+  std::unordered_map<
+      std::string /* area */,
+      std::unordered_set<std::string /* key */>>
+      keysToAdvertise_;
 
   // Serializer object for thrift-obj <-> string conversion
   apache::thrift::CompactSerializer serializer_;

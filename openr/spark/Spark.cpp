@@ -28,6 +28,7 @@
 #include <folly/futures/Future.h>
 #include <folly/futures/Promise.h>
 #include <folly/gen/Base.h>
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
@@ -2419,7 +2420,8 @@ Spark::findCommonArea(
     return commonArea[0];
   }
   // return default area if the remote node does not support areas
-  return openr::Constants::kDefaultArea.toString();
+  std::string area{openr::thrift::KvStore_constants::kDefaultArea()};
+  return area;
 }
 
 } // namespace openr

@@ -352,6 +352,14 @@ thrift::Value createThriftValue(
     int64_t ttlVersion = 0,
     folly::Optional<int64_t> hash = folly::none);
 
+thrift::Publication createThriftPublication(
+    const std::unordered_map<std::string, thrift::Value>& kv,
+    const std::vector<std::string>& expiredKeys,
+    const folly::Optional<std::vector<std::string>>& nodeIds = folly::none,
+    const folly::Optional<std::vector<std::string>>& keysToUpdate = folly::none,
+    const folly::Optional<std::string>& floodRootId = folly::none,
+    const folly::Optional<std::string>& area = folly::none);
+
 thrift::NextHopThrift createNextHop(
     thrift::BinaryAddress addr,
     folly::Optional<std::string> ifName = folly::none,

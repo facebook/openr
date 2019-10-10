@@ -149,9 +149,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
 
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
-      std::unique_ptr<thrift::KeySetParams> setParams) override;
+      std::unique_ptr<thrift::KeySetParams> setParams,
+      std::unique_ptr<std::string> area) override;
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyValsOneWay(
-      std::unique_ptr<thrift::KeySetParams> setParams) override;
+      std::unique_ptr<thrift::KeySetParams> setParams,
+      std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
       std::unique_ptr<thrift::DualMessages> messages) override;

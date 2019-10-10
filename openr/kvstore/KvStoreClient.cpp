@@ -189,63 +189,79 @@ KvStoreClient::checkPersistKeyInStore() {
   thrift::KvStoreRequest request;
   thrift::KeyGetParams params;
 
-  if (persistedKeyVals_.empty()) {
-    return;
-  }
+  std::chrono::milliseconds timeout{checkPersistKeyPeriod_.value()};
+  // go through persisted keys map for each area
+  for (const auto& persistKeyValsEntry : persistedKeyVals_) {
+    const auto& area = persistKeyValsEntry.first;
+    auto& persistedKeyVals = persistKeyValsEntry.second;
 
-  for (auto const& key : persistedKeyVals_) {
-    params.keys.push_back(key.first);
-  }
-
-  request.cmd = thrift::Command::KEY_GET;
-  request.keyGetParams = params;
-
-  // Send request
-  prepareKvStoreCmdSock();
-  kvStoreCmdSock_->sendThriftObj(request, serializer_);
-
-  // Receive response
-  auto maybePublication = kvStoreCmdSock_->recvThriftObj<thrift::Publication>(
-      serializer_, recvTimeout_);
-
-  if (not maybePublication) {
-    kvStoreCmdSock_.reset();
-    LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
-               << "Exception: " << maybePublication.error();
-    // retry in 1 sec
-    checkPersistKeyTimer_->scheduleTimeout(1000ms);
-    return;
-  }
-
-  auto& publication = *maybePublication;
-  std::unordered_map<std::string, thrift::Value> keyVals;
-  for (auto const& key : persistedKeyVals_) {
-    auto rxkey = publication.keyVals.find(key.first);
-    if (rxkey == publication.keyVals.end()) {
-      keyVals.emplace(key.first, persistedKeyVals_[key.first]);
+    if (persistedKeyVals.empty()) {
+      continue;
     }
-  }
-  // Advertise to KvStore
-  if (not keyVals.empty()) {
-    const auto ret = setKeysHelper(std::move(keyVals));
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
-                 << "Exception: " << ret.error();
+
+    for (auto const& key : persistedKeyVals) {
+      params.keys.push_back(key.first);
     }
+
+    request.cmd = thrift::Command::KEY_GET;
+    request.keyGetParams = params;
+    request.area = area;
+
+    // Send request
+    prepareKvStoreCmdSock();
+    kvStoreCmdSock_->sendThriftObj(request, serializer_);
+
+    // Receive response
+    auto maybePublication = kvStoreCmdSock_->recvThriftObj<thrift::Publication>(
+        serializer_, recvTimeout_);
+
+    if (not maybePublication) {
+      kvStoreCmdSock_.reset();
+      LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
+                 << "Exception: " << maybePublication.error();
+      // retry in 1 sec
+      timeout = 1000ms;
+      checkPersistKeyTimer_->scheduleTimeout(1000ms);
+      continue;
+    }
+
+    auto& publication = *maybePublication;
+    std::unordered_map<std::string, thrift::Value> keyVals;
+    for (auto const& key : persistedKeyVals) {
+      auto rxkey = publication.keyVals.find(key.first);
+      if (rxkey == publication.keyVals.end()) {
+        keyVals.emplace(key.first, persistedKeyVals.at(key.first));
+      }
+    }
+    // Advertise to KvStore
+    if (not keyVals.empty()) {
+      const auto ret = setKeysHelper(std::move(keyVals), area);
+      if (ret.hasError()) {
+        LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
+                   << "Exception: " << ret.error();
+      }
+    }
+    processPublication(publication);
   }
-  processPublication(publication);
-  checkPersistKeyTimer_->scheduleTimeout(checkPersistKeyPeriod_.value());
+
+  timeout = std::min(timeout, checkPersistKeyPeriod_.value());
+  checkPersistKeyTimer_->scheduleTimeout(timeout);
 }
 
 void
 KvStoreClient::persistKey(
     std::string const& key,
     std::string const& value,
-    std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */) {
-  VLOG(3) << "KvStoreClient: persistKey called for key " << key;
+    std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */,
+    std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
+  VLOG(3) << "KvStoreClient: persistKey called for key:" << key
+          << " area:" << area;
 
+  auto& persistedKeyVals = persistedKeyVals_[area];
+  const auto& keyTtlBackoffs = keyTtlBackoffs_[area];
+  auto& keysToAdvertise = keysToAdvertise_[area];
   // Look it up in the existing
-  auto keyIt = persistedKeyVals_.find(key);
+  auto keyIt = persistedKeyVals.find(key);
 
   // Default thrift value to use with invalid version=0
   thrift::Value thriftValue = createThriftValue(
@@ -254,9 +270,9 @@ KvStoreClient::persistKey(
 
   // Retrieve the existing value for the key. If key is persisted before then
   // it is the one we have cached locally else we need to fetch it from KvStore
-  if (keyIt == persistedKeyVals_.end()) {
+  if (keyIt == persistedKeyVals.end()) {
     // Get latest value from KvStore
-    auto maybeValue = getKey(key);
+    auto maybeValue = getKey(key, area);
     if (maybeValue.hasValue()) {
       thriftValue = maybeValue.value();
       // TTL update pub is never saved in kvstore
@@ -264,8 +280,8 @@ KvStoreClient::persistKey(
     }
   } else {
     thriftValue = keyIt->second;
-    auto ttlIt = keyTtlBackoffs_.find(key);
-    if (ttlIt != keyTtlBackoffs_.end()) {
+    auto ttlIt = keyTtlBackoffs.find(key);
+    if (ttlIt != keyTtlBackoffs.end()) {
       thriftValue.ttlVersion = ttlIt->second.first.ttlVersion;
     }
   }
@@ -285,7 +301,7 @@ KvStoreClient::persistKey(
   }
 
   // Cache it in persistedKeyVals_. Override the existing one
-  persistedKeyVals_[key] = thriftValue;
+  persistedKeyVals[key] = thriftValue;
 
   // Override existing backoff as well
   backoffs_[key] = ExponentialBackoff<std::chrono::milliseconds>(
@@ -299,14 +315,14 @@ KvStoreClient::persistKey(
 
   // Add keys to list of pending keys
   if (valueChange) {
-    keysToAdvertise_.insert(key);
+    keysToAdvertise.insert(key);
   }
 
   // Best effort to advertise pending keys
   advertisePendingKeys();
 
   scheduleTtlUpdates(
-      key, thriftValue.version, thriftValue.ttlVersion, ttl.count());
+      key, thriftValue.version, thriftValue.ttlVersion, ttl.count(), area);
 }
 
 thrift::Value
@@ -314,7 +330,8 @@ KvStoreClient::buildThriftValue(
     std::string const& key,
     std::string const& value,
     uint32_t version /* = 0 */,
-    std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */) {
+    std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   // Create 'thrift::Value' object which will be sent to KvStore
   thrift::Value thriftValue = createThriftValue(
       version, nodeId_, value, ttl.count(), 0 /* ttl version */, 0 /* hash */);
@@ -322,7 +339,7 @@ KvStoreClient::buildThriftValue(
 
   // Use one version number higher than currently in KvStore if not specified
   if (!version) {
-    auto maybeValue = getKey(key);
+    auto maybeValue = getKey(key, area);
     if (maybeValue.hasValue()) {
       thriftValue.version = maybeValue->version + 1;
     } else {
@@ -337,36 +354,39 @@ KvStoreClient::setKey(
     std::string const& key,
     std::string const& value,
     uint32_t version /* = 0 */,
-    std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */) {
+    std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   VLOG(3) << "KvStoreClient: setKey called for key " << key;
 
   // Build new key-value pair
-  thrift::Value thriftValue = buildThriftValue(key, value, version, ttl);
+  thrift::Value thriftValue = buildThriftValue(key, value, version, ttl, area);
 
   std::unordered_map<std::string, thrift::Value> keyVals;
   keyVals.emplace(key, thriftValue);
 
   // Advertise new key-value to KvStore
-  const auto ret = setKeysHelper(std::move(keyVals));
+  const auto ret = setKeysHelper(std::move(keyVals), area);
 
   scheduleTtlUpdates(
-      key, thriftValue.version, thriftValue.ttlVersion, ttl.count());
+      key, thriftValue.version, thriftValue.ttlVersion, ttl.count(), area);
 
   return ret;
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
 KvStoreClient::setKey(
-    std::string const& key, thrift::Value const& thriftValue) {
+    std::string const& key,
+    thrift::Value const& thriftValue,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   CHECK(thriftValue.value);
 
   std::unordered_map<std::string, thrift::Value> keyVals;
   keyVals.emplace(key, thriftValue);
 
-  const auto ret = setKeysHelper(std::move(keyVals));
+  const auto ret = setKeysHelper(std::move(keyVals), area);
 
   scheduleTtlUpdates(
-      key, thriftValue.version, thriftValue.ttlVersion, thriftValue.ttl);
+      key, thriftValue.version, thriftValue.ttlVersion, thriftValue.ttl, area);
 
   return ret;
 }
@@ -376,20 +396,22 @@ KvStoreClient::scheduleTtlUpdates(
     std::string const& key,
     uint32_t version,
     uint32_t ttlVersion,
-    int64_t ttl) {
+    int64_t ttl,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   // infinite TTL does not need update
+
+  auto& keyTtlBackoffs = keyTtlBackoffs_[area];
   if (ttl == Constants::kTtlInfinity) {
     // in case ttl is finite before
-    keyTtlBackoffs_.erase(key);
+    keyTtlBackoffs.erase(key);
     return;
   }
 
   // do not send value to reduce update overhead
-  thrift::Value ttlThriftValue(
-      apache::thrift::FRAGILE,
+  thrift::Value ttlThriftValue = createThriftValue(
       version,
       nodeId_,
-      "" /* value */,
+      std::string("") /* value */,
       ttl,
       ttlVersion /* ttl version */,
       0 /* hash */);
@@ -398,7 +420,7 @@ KvStoreClient::scheduleTtlUpdates(
 
   // renew before Ttl expires about every ttl/3, i.e., try twice
   // use ExponentialBackoff to track remaining time
-  keyTtlBackoffs_[key] = std::make_pair(
+  keyTtlBackoffs[key] = std::make_pair(
       ttlThriftValue,
       ExponentialBackoff<std::chrono::milliseconds>(
           std::chrono::milliseconds(ttl / 4),
@@ -406,26 +428,29 @@ KvStoreClient::scheduleTtlUpdates(
 
   // Delay first ttl advertisement by (ttl / 4). We have just advertised key or
   // update and would like to avoid sending unncessary immediate ttl update
-  keyTtlBackoffs_.at(key).second.reportError();
+  keyTtlBackoffs.at(key).second.reportError();
 
   advertiseTtlUpdates();
 }
 
 void
-KvStoreClient::unsetKey(std::string const& key) {
+KvStoreClient::unsetKey(
+    std::string const& key,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   VLOG(3) << "KvStoreClient: unsetKey called for key " << key;
 
-  persistedKeyVals_.erase(key);
+  persistedKeyVals_[area].erase(key);
   backoffs_.erase(key);
-  keyTtlBackoffs_.erase(key);
-  keysToAdvertise_.erase(key);
+  keyTtlBackoffs_[area].erase(key);
+  keysToAdvertise_[area].erase(key);
 }
 
 void
 KvStoreClient::clearKey(
     std::string const& key,
     std::string keyValue,
-    std::chrono::milliseconds ttl) {
+    std::chrono::milliseconds ttl,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   VLOG(1) << "KvStoreClient: clear key called for key " << key;
 
   // erase keys
@@ -433,7 +458,7 @@ KvStoreClient::clearKey(
 
   // if key doesn't exist in KvStore no need to add it as "empty". This
   // condition should not exist.
-  auto maybeValue = getKey(key);
+  auto maybeValue = getKey(key, area);
   if (!maybeValue.hasValue()) {
     return;
   }
@@ -448,15 +473,18 @@ KvStoreClient::clearKey(
   std::unordered_map<std::string, thrift::Value> keyVals;
   keyVals.emplace(key, std::move(thriftValue));
   // Advertise to KvStore
-  const auto ret = setKeysHelper(std::move(keyVals));
+  const auto ret = setKeysHelper(std::move(keyVals), area);
   if (!ret) {
     LOG(ERROR) << "Error sending SET_KEY request to KvStore: " << ret.error();
   }
 }
 
 folly::Expected<thrift::Value, fbzmq::Error>
-KvStoreClient::getKey(std::string const& key) {
-  VLOG(3) << "KvStoreClient: getKey called for key " << key;
+KvStoreClient::getKey(
+    std::string const& key,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
+  VLOG(3) << "KvStoreClient: getKey called for key " << key << ", area "
+          << area;
 
   // use thrift-port talking to kvstore
   if (useThriftClient_) {
@@ -493,6 +521,7 @@ KvStoreClient::getKey(std::string const& key) {
 
   request.cmd = thrift::Command::KEY_GET;
   request.keyGetParams = params;
+  request.area = area;
 
   // Send request
   prepareKvStoreCmdSock();
@@ -520,7 +549,8 @@ KvStoreClient::dumpImpl(
     fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>& sock,
     apache::thrift::CompactSerializer& serializer,
     std::string const& prefix,
-    folly::Optional<std::chrono::milliseconds> recvTimeout) {
+    folly::Optional<std::chrono::milliseconds> recvTimeout,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   // Prepare request
   thrift::KvStoreRequest request;
   thrift::KeyDumpParams params;
@@ -528,6 +558,7 @@ KvStoreClient::dumpImpl(
   params.prefix = prefix;
   request.cmd = thrift::Command::KEY_DUMP;
   request.keyDumpParams = params;
+  request.area = area;
 
   // Send request
   sock.sendThriftObj(request, serializer);
@@ -551,8 +582,9 @@ KvStoreClient::dumpAllWithPrefixMultiple(
     fbzmq::Context& context,
     const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
     const std::string& prefix,
-    folly::Optional<std::chrono::milliseconds> recvTimeout,
-    folly::Optional<int> maybeIpTos) {
+    folly::Optional<std::chrono::milliseconds> recvTimeout /* folly::none */,
+    folly::Optional<int> maybeIpTos /* folly::none */,
+    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
   // this protects the shared map
   std::mutex m;
   // we'll aggregate responses into this map
@@ -599,7 +631,7 @@ KvStoreClient::dumpAllWithPrefixMultiple(
         }
       }
 
-      auto maybe = dumpImpl(sock, serializer, prefix, recvTimeout);
+      auto maybe = dumpImpl(sock, serializer, prefix, recvTimeout, area);
 
       if (not maybe.hasValue()) {
         VLOG(4) << "Dumping from " << std::string(url)
@@ -717,11 +749,14 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
 }
 
 folly::Expected<std::unordered_map<std::string, thrift::Value>, fbzmq::Error>
-KvStoreClient::dumpAllWithPrefix(const std::string& prefix /* = "" */) {
+KvStoreClient::dumpAllWithPrefix(
+    const std::string& prefix /* = "" */,
+    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
   CHECK(!useThriftClient_) << "dumpAllWithPrefix() NOT supported over Thrift";
 
   prepareKvStoreCmdSock();
-  auto maybePub = dumpImpl(*kvStoreCmdSock_, serializer_, prefix, recvTimeout_);
+  auto maybePub =
+      dumpImpl(*kvStoreCmdSock_, serializer_, prefix, recvTimeout_, area);
   if (maybePub.hasError()) {
     kvStoreCmdSock_.reset();
     return folly::makeUnexpected(maybePub.error());
@@ -731,13 +766,16 @@ KvStoreClient::dumpAllWithPrefix(const std::string& prefix /* = "" */) {
 
 folly::Optional<thrift::Value>
 KvStoreClient::subscribeKey(
-    std::string const& key, KeyCallback callback, bool fetchKeyValue) {
+    std::string const& key,
+    KeyCallback callback,
+    bool fetchKeyValue,
+    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   VLOG(3) << "KvStoreClient: subscribeKey called for key " << key;
   CHECK(bool(callback)) << "Callback function for " << key << " is empty";
   keyCallbacks_[key] = std::move(callback);
 
   if (fetchKeyValue) {
-    auto maybeValue = getKey(key);
+    auto maybeValue = getKey(key, area);
     if (maybeValue.hasValue()) {
       return maybeValue.value();
     }
@@ -776,7 +814,8 @@ KvStoreClient::setKvCallback(KeyCallback callback) {
 
 folly::Expected<folly::Unit, fbzmq::Error>
 KvStoreClient::addPeers(
-    std::unordered_map<std::string, thrift::PeerSpec> peers) {
+    std::unordered_map<std::string, thrift::PeerSpec> peers,
+    std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   VLOG(3) << "KvStoreClient: addPeers called for " << peers.size() << " peers.";
 
   CHECK(!useThriftClient_) << "addPeers() NOT supported over Thrift";
@@ -788,6 +827,7 @@ KvStoreClient::addPeers(
   params.peers = std::move(peers);
   request.cmd = thrift::Command::PEER_ADD;
   request.peerAddParams = params;
+  request.area = area;
 
   // Send request
   prepareKvStoreCmdSock();
@@ -812,24 +852,29 @@ KvStoreClient::addPeers(
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::delPeer(std::string const& peerName) {
+KvStoreClient::delPeer(
+    std::string const& peerName,
+    std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   VLOG(3) << "KvStoreClient: delPeer called for peer " << peerName;
 
   std::vector<std::string> peerNames;
   peerNames.push_back(peerName);
-  return delPeersHelper(peerNames);
+  return delPeersHelper(peerNames, area);
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::delPeers(const std::vector<std::string>& peerNames) {
+KvStoreClient::delPeers(
+    const std::vector<std::string>& peerNames,
+    const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   VLOG(3) << "KvStoreClient: delPeers called for " << peerNames.size()
           << "peers";
 
-  return delPeersHelper(peerNames);
+  return delPeersHelper(peerNames, area);
 }
 
 folly::Expected<std::unordered_map<std::string, thrift::PeerSpec>, fbzmq::Error>
-KvStoreClient::getPeers() {
+KvStoreClient::getPeers(
+    const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   VLOG(3) << "KvStoreClient: getPeers called";
 
   CHECK(!useThriftClient_) << "getPeers() NOT supported over Thrift";
@@ -837,6 +882,7 @@ KvStoreClient::getPeers() {
   // Prepare request
   thrift::KvStoreRequest request;
   request.cmd = thrift::Command::PEER_DUMP;
+  request.area = area;
 
   // Send request
   prepareKvStoreCmdSock();
@@ -873,6 +919,16 @@ KvStoreClient::processExpiredKeys(thrift::Publication const& publication) {
 void
 KvStoreClient::processPublication(thrift::Publication const& publication) {
   // Go through received key-values and find out the ones which need update
+  std::string area{thrift::KvStore_constants::kDefaultArea()};
+
+  if (publication.area.hasValue()) {
+    area = publication.area.value();
+  }
+
+  auto& persistedKeyVals = persistedKeyVals_[area];
+  auto& keyTtlBackoffs = keyTtlBackoffs_[area];
+  auto& keysToAdvertise = keysToAdvertise_[area];
+
   for (auto const& kv : publication.keyVals) {
     auto const& key = kv.first;
     auto const& rcvdValue = kv.second;
@@ -887,19 +943,19 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
     }
 
     // Update local keyVals as per need
-    auto it = persistedKeyVals_.find(key);
+    auto it = persistedKeyVals.find(key);
     auto cb = keyCallbacks_.find(key);
     // set key w/ finite TTL
-    auto sk = keyTtlBackoffs_.find(key);
+    auto sk = keyTtlBackoffs.find(key);
 
     // key set but not persisted
-    if (sk != keyTtlBackoffs_.end() and it == persistedKeyVals_.end()) {
+    if (sk != keyTtlBackoffs.end() and it == persistedKeyVals.end()) {
       auto& setValue = sk->second.first;
       if (rcvdValue.version > setValue.version or
           (rcvdValue.version == setValue.version and
            rcvdValue.originatorId > setValue.originatorId)) {
         // key lost, cancel TTL update
-        keyTtlBackoffs_.erase(sk);
+        keyTtlBackoffs.erase(sk);
       } else if (
           rcvdValue.version == setValue.version and
           rcvdValue.originatorId == setValue.originatorId and
@@ -907,7 +963,7 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
         // If version, value and originatorId is same then we should look up
         // ttlVersion and update local value if rcvd ttlVersion is higher
         // NOTE: We don't need to advertise the value back
-        if (sk != keyTtlBackoffs_.end() and
+        if (sk != keyTtlBackoffs.end() and
             sk->second.first.ttlVersion < rcvdValue.ttlVersion) {
           VLOG(1) << "Bumping TTL version for (key, version, originatorId) "
                   << folly::sformat(
@@ -922,7 +978,7 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
       }
     }
 
-    if (it == persistedKeyVals_.end()) {
+    if (it == persistedKeyVals.end()) {
       // We need to alert callback if a key is not persisted and we
       // received a change notification for it.
       if (cb != keyCallbacks_.end()) {
@@ -972,7 +1028,7 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
     }
 
     // copy ttlVersion from ttl backoff map
-    if (sk != keyTtlBackoffs_.end()) {
+    if (sk != keyTtlBackoffs.end()) {
       currentValue.ttlVersion = sk->second.first.ttlVersion;
     }
 
@@ -981,7 +1037,7 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
     // update to latest ttlVersion works fine
     if (currentValue.ttlVersion < rcvdValue.ttlVersion) {
       currentValue.ttlVersion = rcvdValue.ttlVersion;
-      if (sk != keyTtlBackoffs_.end()) {
+      if (sk != keyTtlBackoffs.end()) {
         sk->second.first.ttlVersion = rcvdValue.ttlVersion;
       }
     }
@@ -991,7 +1047,7 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
     }
 
     if (valueChange) {
-      keysToAdvertise_.insert(key);
+      keysToAdvertise.insert(key);
     }
   } // for
 
@@ -1004,55 +1060,61 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
 
 void
 KvStoreClient::advertisePendingKeys() {
-  // Return immediately if there is nothing to advertise
-  if (keysToAdvertise_.empty()) {
-    return;
-  }
-
-  // Build set of keys to advertise
   std::chrono::milliseconds timeout = Constants::kMaxBackoff;
 
-  std::unordered_map<std::string, thrift::Value> keyVals;
-  std::vector<std::string> keys;
-  for (auto const& key : keysToAdvertise_) {
-    const auto& thriftValue = persistedKeyVals_.at(key);
-
-    // Proceed only if backoff is active
-    auto& backoff = backoffs_.at(key);
-    auto const& eventType = backoff.canTryNow() ? "Advertising" : "Skipping";
-    VLOG(1) << eventType << " (key, version, originatorId, ttlVersion) "
-            << folly::sformat(
-                   "({}, {}, {}, {})",
-                   key,
-                   thriftValue.version,
-                   thriftValue.originatorId,
-                   thriftValue.ttlVersion);
-    VLOG(2) << "With value: " << folly::humanify(thriftValue.value.value());
-
-    if (not backoff.canTryNow()) {
-      timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+  // advertise pending key for each area
+  for (auto& keysToAdvertiseEntry : keysToAdvertise_) {
+    auto& keysToAdvertise = keysToAdvertiseEntry.second;
+    auto& area = keysToAdvertiseEntry.first;
+    // Return immediately if there is nothing to advertise
+    if (keysToAdvertise.empty()) {
       continue;
     }
+    auto& persistedKeyVals = persistedKeyVals_[keysToAdvertiseEntry.first];
 
-    // Apply backoff
-    backoff.reportError();
-    timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+    // Build set of keys to advertise
+    std::unordered_map<std::string, thrift::Value> keyVals;
+    std::vector<std::string> keys;
+    for (auto const& key : keysToAdvertise) {
+      const auto& thriftValue = persistedKeyVals.at(key);
 
-    // Set in keyVals which is going to be advertise to the kvStore.
-    DCHECK(thriftValue.value);
-    keyVals.emplace(key, thriftValue);
-    keys.push_back(key);
-  }
+      // Proceed only if backoff is active
+      auto& backoff = backoffs_.at(key);
+      auto const& eventType = backoff.canTryNow() ? "Advertising" : "Skipping";
+      VLOG(1) << eventType << " (key, version, originatorId, ttlVersion) "
+              << folly::sformat(
+                     "({}, {}, {}, {})",
+                     key,
+                     thriftValue.version,
+                     thriftValue.originatorId,
+                     thriftValue.ttlVersion);
+      VLOG(2) << "With value: " << folly::humanify(thriftValue.value.value());
 
-  // Advertise to KvStore
-  const auto ret = setKeysHelper(std::move(keyVals));
-  if (ret) {
-    for (auto const& key : keys) {
-      keysToAdvertise_.erase(key);
+      if (not backoff.canTryNow()) {
+        timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+        continue;
+      }
+
+      // Apply backoff
+      backoff.reportError();
+      timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+
+      // Set in keyVals which is going to be advertise to the kvStore.
+      DCHECK(thriftValue.value);
+      keyVals.emplace(key, thriftValue);
+      keys.push_back(key);
     }
-  } else {
-    LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
-               << "Will retry again. Error: " << ret.error();
+
+    // Advertise to KvStore
+    const auto ret = setKeysHelper(std::move(keyVals), area);
+    if (ret) {
+      for (auto const& key : keys) {
+        keysToAdvertise.erase(key);
+      }
+    } else {
+      LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
+                 << "Will retry again. Error: " << ret.error();
+    }
   }
 
   // Schedule next-timeout for processing/clearing backoffs
@@ -1065,51 +1127,60 @@ KvStoreClient::advertiseTtlUpdates() {
   // Build set of keys to advertise ttl updates
   auto timeout = Constants::kMaxTtlUpdateInterval;
 
-  std::unordered_map<std::string, thrift::Value> keyVals;
+  // advertise TTL updates for each area
+  for (auto& keyTtlBackoffsEntry : keyTtlBackoffs_) {
+    auto& keyTtlBackoffs = keyTtlBackoffsEntry.second;
+    auto& persistedKeyVals = persistedKeyVals_[keyTtlBackoffsEntry.first];
+    auto& area = keyTtlBackoffsEntry.first;
 
-  for (auto& kv : keyTtlBackoffs_) {
-    const auto& key = kv.first;
-    auto& backoff = kv.second.second;
-    if (not backoff.canTryNow()) {
-      VLOG(2) << "Skipping key: " << key;
-      timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
-      continue;
-    }
+    std::unordered_map<std::string, thrift::Value> keyVals;
 
-    // Apply backoff
-    backoff.reportError();
-    timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
-
-    auto& thriftValue = kv.second.first;
-    const auto it = persistedKeyVals_.find(key);
-    if (it != persistedKeyVals_.end()) {
-      // we may have got a newer vesion for persisted key
-      if (thriftValue.version < it->second.version) {
-        thriftValue.version = it->second.version;
-        thriftValue.ttlVersion = it->second.ttlVersion;
+    for (auto& kv : keyTtlBackoffs) {
+      const auto& key = kv.first;
+      auto& backoff = kv.second.second;
+      if (not backoff.canTryNow()) {
+        VLOG(2) << "Skipping key: " << key << ", area: " << area;
+        timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+        continue;
       }
+
+      // Apply backoff
+      backoff.reportError();
+      timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
+
+      auto& thriftValue = kv.second.first;
+      const auto it = persistedKeyVals.find(key);
+      if (it != persistedKeyVals.end()) {
+        // we may have got a newer vesion for persisted key
+        if (thriftValue.version < it->second.version) {
+          thriftValue.version = it->second.version;
+          thriftValue.ttlVersion = it->second.ttlVersion;
+        }
+      }
+      // bump ttl version
+      thriftValue.ttlVersion++;
+      // Set in keyVals which is going to be advertised to the kvStore.
+      DCHECK(not thriftValue.value);
+
+      VLOG(1)
+          << "Advertising ttl update (key, version, originatorId, ttlVersion, area)"
+          << folly::sformat(
+                 " ({}, {}, {}, {}, {})",
+                 key,
+                 thriftValue.version,
+                 thriftValue.originatorId,
+                 thriftValue.ttlVersion,
+                 area);
+      keyVals.emplace(key, thriftValue);
     }
-    // bump ttl version
-    thriftValue.ttlVersion++;
-    // Set in keyVals which is going to be advertised to the kvStore.
-    DCHECK(not thriftValue.value);
 
-    VLOG(1) << "Advertising ttl update (key, version, originatorId, ttlVersion)"
-            << folly::sformat(
-                   " ({}, {}, {}, {})",
-                   key,
-                   thriftValue.version,
-                   thriftValue.originatorId,
-                   thriftValue.ttlVersion);
-    keyVals.emplace(key, thriftValue);
-  }
-
-  // Advertise to KvStore
-  if (not keyVals.empty()) {
-    const auto ret = setKeysHelper(std::move(keyVals));
-    if (not ret) {
-      LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
-                 << "Will retry again. Exception: " << ret.error().errString;
+    // Advertise to KvStore
+    if (not keyVals.empty()) {
+      const auto ret = setKeysHelper(std::move(keyVals), area);
+      if (not ret) {
+        LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
+                   << "Will retry again. Exception: " << ret.error().errString;
+      }
     }
   }
 
@@ -1120,7 +1191,8 @@ KvStoreClient::advertiseTtlUpdates() {
 
 folly::Expected<folly::Unit, fbzmq::Error>
 KvStoreClient::setKeysHelper(
-    std::unordered_map<std::string, thrift::Value> keyVals) {
+    std::unordered_map<std::string, thrift::Value> keyVals,
+    std::string const& area) {
   // Return if nothing to advertise.
   if (keyVals.empty()) {
     return folly::Unit();
@@ -1131,7 +1203,8 @@ KvStoreClient::setKeysHelper(
             << ", version: " << kv.second.version
             << ", originatorId: " << kv.second.originatorId
             << ", ttlVersion: " << kv.second.ttlVersion
-            << ", val: " << (kv.second.value.hasValue() ? "valid" : "null");
+            << ", val: " << (kv.second.value.hasValue() ? "valid" : "null")
+            << ", area: " << area;
     if (not kv.second.value.hasValue()) {
       // avoid empty optinal exception
       continue;
@@ -1151,7 +1224,7 @@ KvStoreClient::setKeysHelper(
     thrift::KeySetParams keySetParams;
     keySetParams.keyVals = std::move(keyVals);
     try {
-      openrCtrlClient_->sync_setKvStoreKeyVals(keySetParams);
+      openrCtrlClient_->sync_setKvStoreKeyVals(keySetParams, area);
     } catch (const std::exception& ex) {
       LOG(ERROR) << "Failed to set key-val from KvStore. Exception: "
                  << folly::exceptionStr(ex);
@@ -1168,6 +1241,7 @@ KvStoreClient::setKeysHelper(
   params.keyVals = std::move(keyVals);
   request.cmd = thrift::Command::KEY_SET;
   request.keySetParams = params;
+  request.area = area;
 
   // Send request to KvStore
   prepareKvStoreCmdSock();
@@ -1189,7 +1263,9 @@ KvStoreClient::setKeysHelper(
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::delPeersHelper(const std::vector<std::string>& peerNames) {
+KvStoreClient::delPeersHelper(
+    const std::vector<std::string>& peerNames,
+    const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   CHECK(!useThriftClient_) << "delPeersHelper() NOT supported over Thrift";
 
   // Prepare request
@@ -1199,6 +1275,7 @@ KvStoreClient::delPeersHelper(const std::vector<std::string>& peerNames) {
   params.peerNames = peerNames;
   request.cmd = thrift::Command::PEER_DEL;
   request.peerDelParams = params;
+  request.area = area;
 
   // Send request
   prepareKvStoreCmdSock();

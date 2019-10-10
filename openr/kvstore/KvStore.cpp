@@ -413,7 +413,7 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
   }
 
   auto& thriftRequest = maybeThriftReq.value();
-  std::string area{openr::Constants::kDefaultArea.toString()};
+  std::string area{openr::thrift::KvStore_constants::kDefaultArea()};
   if (thriftRequest.area.hasValue()) {
     area = thriftRequest.area.value();
   }
@@ -572,6 +572,7 @@ KvStoreDb::updateTtlCountdownQueue(const thrift::Publication& publication) {
 thrift::Publication
 KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
   thrift::Publication thriftPub;
+  thriftPub.area = area_;
 
   for (auto const& key : keys) {
     // if requested key if found, respond with version and value
@@ -589,6 +590,7 @@ KvStoreDb::getKeyVals(std::vector<std::string> const& keys) {
 thrift::Publication
 KvStoreDb::dumpAllWithFilters(KvStoreFilters const& kvFilters) const {
   thrift::Publication thriftPub;
+  thriftPub.area = area_;
 
   for (auto const& kv : kvStore_) {
     if (not kvFilters.keyMatch(kv.first, kv.second)) {
@@ -604,6 +606,7 @@ KvStoreDb::dumpAllWithFilters(KvStoreFilters const& kvFilters) const {
 thrift::Publication
 KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
   thrift::Publication thriftPub;
+  thriftPub.area = area_;
   for (auto const& kv : kvStore_) {
     if (not kvFilters.keyMatch(kv.first, kv.second)) {
       continue;
@@ -629,6 +632,7 @@ KvStoreDb::dumpDifference(
     std::unordered_map<std::string, thrift::Value> const& myKeyVal,
     std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const {
   thrift::Publication thriftPub;
+  thriftPub.area = area_;
 
   thriftPub.tobeUpdatedKeys = std::vector<std::string>{};
   std::unordered_set<std::string> allKeys;
@@ -1531,14 +1535,15 @@ KvStoreDb::cleanupTtlCountdownQueue() {
         it->second.ttlVersion == top.ttlVersion) {
       expiredKeys.emplace_back(top.key);
       LOG(WARNING)
-          << "Delete expired (key, version, originatorId, ttlVersion, node) "
+          << "Delete expired (key, version, originatorId, ttlVersion, node, area) "
           << folly::sformat(
-                 "({}, {}, {}, {}, {})",
+                 "({}, {}, {}, {}, {}, {})",
                  top.key,
                  it->second.version,
                  it->second.originatorId,
                  it->second.ttlVersion,
-                 kvParams_.nodeId);
+                 kvParams_.nodeId,
+                 area_);
       logKvEvent("KEY_EXPIRE", top.key);
       kvStore_.erase(it);
     }

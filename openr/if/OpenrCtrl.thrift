@@ -187,9 +187,15 @@ service OpenrCtrl extends fb303.FacebookService {
   /**
    * Set/Update key-values in KvStore.
    */
-  void setKvStoreKeyVals(1: KvStore.KeySetParams setParams)
-    throws (1: OpenrError error)
-  oneway void setKvStoreKeyValsOneWay(1: KvStore.KeySetParams setParams);
+  void setKvStoreKeyVals(
+    1: KvStore.KeySetParams setParams,
+    2: string area = KvStore.kDefaultArea
+  ) throws (1: OpenrError error)
+
+  oneway void setKvStoreKeyValsOneWay(
+    1: KvStore.KeySetParams setParams,
+    2: string area
+  )
 
   /**
    * Send Dual message

@@ -632,11 +632,13 @@ OpenrCtrlHandler::semifuture_getKvStoreHashFiltered(
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
-    std::unique_ptr<thrift::KeySetParams> setParams) {
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
   const bool solicitResponse = setParams->solicitResponse;
   thrift::KvStoreRequest request;
   request.cmd = thrift::Command::KEY_SET;
   request.keySetParams = std::move(*setParams);
+  request.area = std::move(*area);
 
   return processThriftRequest(
       thrift::OpenrModuleType::KVSTORE,
@@ -646,9 +648,10 @@ OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setKvStoreKeyValsOneWay(
-    std::unique_ptr<thrift::KeySetParams> setParams) {
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
   setParams->solicitResponse = false; // Disable solicit response
-  return semifuture_setKvStoreKeyVals(std::move(setParams));
+  return semifuture_setKvStoreKeyVals(std::move(setParams), std::move(area));
 }
 
 folly::SemiFuture<folly::Unit>

@@ -10,6 +10,7 @@
 #include <folly/IPAddress.h>
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
+#include <folly/Optional.h>
 #include <folly/Random.h>
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
@@ -3225,8 +3226,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   // publish the link state info to KvStore
   //
 
-  auto publication = thrift::Publication(
-      FRAGILE,
+  auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
@@ -3234,7 +3234,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       {},
       {},
       {},
-      "");
+      std::string(""));
   auto routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   auto routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
@@ -3257,8 +3257,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   // Some tricks here; we need to bump the time-stamp on router 2's data, so
   // it can override existing; for router 3 we publish new key-value
 
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
        {"adj:4", createAdjValue("4", 1, {})}, // No adjacencies
@@ -3266,7 +3265,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       {},
       {},
       {},
-      "");
+      std::string(""));
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
 
@@ -3315,13 +3314,12 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       NextHops({createNextHopFromAdj(adj32, false, 10)}));
 
   // remove 3
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       thrift::KeyVals{},
       {"adj:3", "prefix:3", "adj:4"} /* expired keys */,
       {},
       {},
-      "");
+      std::string(""));
 
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
@@ -3358,8 +3356,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   auto adj21_2 =
       createAdjacency("1", "2/1-2", "1/2-2", "fe80::1", "192.168.0.1", 800, 0);
 
-  auto publication = thrift::Publication(
-      FRAGILE,
+  auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12_1, adj12_2})},
        {"adj:2", createAdjValue("2", 1, {adj21_1, adj21_2})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
@@ -3367,7 +3364,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       {},
       {},
       {},
-      "");
+      std::string(""));
   auto routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   auto routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
@@ -3383,8 +3380,12 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       NextHops({createNextHopFromAdj(adj12_1, false, 100),
                 createNextHopFromAdj(adj12_2, false, 800)}));
 
-  publication = thrift::Publication(
-      FRAGILE, {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {}, {}, {}, "");
+  publication = createThriftPublication(
+      {{"adj:2", createAdjValue("2", 2, {adj21_2})}},
+      {},
+      {},
+      {},
+      std::string(""));
 
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
@@ -3401,13 +3402,12 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       NextHops({createNextHopFromAdj(adj12_2, false, 800)}));
 
   // restore the original state
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -3427,13 +3427,12 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   auto adj21_1_overloaded = adj21_1;
   adj21_1_overloaded.isOverloaded = true;
 
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"adj:2", createAdjValue("2", 2, {adj21_1_overloaded, adj21_2})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -3461,8 +3460,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // publish the link state info to KvStore
   //
 
-  auto publication = thrift::Publication(
-      FRAGILE,
+  auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
@@ -3470,7 +3468,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   auto counters = getCountersMap();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -3492,15 +3490,14 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   // Some tricks here; we need to bump the time-stamp on router 2's data, so
   // it can override existing; for router 3 we publish new key-value
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"adj:3", createAdjValue("3", 1, {adj32})},
        {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   sendKvPublication(publication);
 
@@ -3509,14 +3506,13 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // Some tricks here; we need to bump the time-stamp on router 3's data, so
   // it can override existing;
 
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"adj:4", createAdjValue("4", 1, {adj43})},
        {"adj:3", createAdjValue("3", 5, {adj32, adj34})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   sendKvPublication(publication);
 
@@ -3530,13 +3526,12 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   //
   // Only publish prefix updates
   //
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"prefix:4", createPrefixValue("4", 1, {addr4})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
   sendKvPublication(publication);
 
   /* sleep override */
@@ -3552,17 +3547,20 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   // Some tricks here; we need to bump the time-stamp on router 4's data, so
   // it can override existing;
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"prefix:4", createPrefixValue("4", 2, {addr4, addr5})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
   sendKvPublication(publication);
 
-  publication = thrift::Publication(
-      FRAGILE, {{"adj:2", createAdjValue("2", 5, {adj21})}}, {}, {}, {}, "");
+  publication = createThriftPublication(
+      {{"adj:2", createAdjValue("2", 5, {adj21})}},
+      {},
+      {},
+      {},
+      std::string(""));
   sendKvPublication(publication);
 
   /* sleep override */
@@ -3578,31 +3576,28 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   // Some tricks here; we need to bump the time-stamp on router 4's data, so
   // it can override existing;
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"prefix:4", createPrefixValue("4", 5, {addr4})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
   sendKvPublication(publication);
 
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"prefix:4", createPrefixValue("4", 7, {addr4, addr6})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
   sendKvPublication(publication);
 
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"prefix:4", createPrefixValue("4", 8, {addr4, addr5, addr6})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
   sendKvPublication(publication);
 
   /* sleep override */
@@ -3624,8 +3619,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   // those must be ignored by the decision module
   //
 
-  auto publication = thrift::Publication(
-      FRAGILE,
+  auto publication = createThriftPublication(
       {{"adj2:1", createAdjValue("1", 1, {adj12})},
        {"adji2:2", createAdjValue("2", 1, {adj21})},
        {"prefix2:1", createPrefixValue("1", 1, {addr1})},
@@ -3633,7 +3627,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   auto counters = getCountersMap();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -3659,8 +3653,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   // SPF run.
   //
 
-  auto const publication = thrift::Publication(
-      FRAGILE,
+  auto const publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
@@ -3668,7 +3661,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   auto counters = getCountersMap();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
@@ -3723,8 +3716,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
   // SPF run.
   //
 
-  auto publication = thrift::Publication(
-      FRAGILE,
+  auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12, adj13})},
        {"adj:2", createAdjValue("2", 1, {adj21, adj23})},
        {"adj:3", createAdjValue("3", 1, {adj31, adj32})},
@@ -3734,7 +3726,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   sendKvPublication(publication);
 
@@ -3792,14 +3784,13 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
    */
   adj12.metric = 100;
   adj21.metric = 100;
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
@@ -3878,8 +3869,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   // publish initial link state info to KvStore, This should trigger the
   // SPF run.
   //
-  auto publication = thrift::Publication(
-      FRAGILE,
+  auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj14, adj12, adj13})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
        {"adj:3", createAdjValue("3", 1, {adj31})},
@@ -3892,7 +3882,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   sendKvPublication(publication);
 
@@ -3951,14 +3941,13 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   adj12.metric = 100;
   adj21.metric = 100;
 
-  publication = thrift::Publication(
-      FRAGILE,
+  publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 2, {adj12, adj13, adj14})},
        {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
       {},
       {},
       {},
-      "");
+      std::string(""));
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);

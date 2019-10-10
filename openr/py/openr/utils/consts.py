@@ -45,6 +45,8 @@ class Consts(object):
 
     OPENR_CONFIG_FILE = "/etc/sysconfig/openr"
 
+    OPENR_DEFAULT_AREA = "0"
+
     # per prefix key regex for the following formats
     # prefix:e00.0002.node2:area1:[192.168.0.2/32]
     # prefix:e00.0002.node2:area2:[da00:cafe:babe:51:61ee::/80]

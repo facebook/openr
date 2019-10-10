@@ -31,6 +31,7 @@
 #include <openr/common/Util.h>
 #include <openr/dual/Dual.h>
 #include <openr/if/gen-cpp2/Dual_types.h>
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace openr {
@@ -442,7 +443,7 @@ class KvStore final : public OpenrEventLoop {
       bool isFloodRoot = false,
       bool useFloodOptimization = false,
       std::unordered_set<std::string> areas = {
-          openr::Constants::kDefaultArea.toString()});
+          openr::thrift::KvStore_constants::kDefaultArea()});
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)

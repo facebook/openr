@@ -13,6 +13,8 @@ namespace py3 openr.thrift
 
 include "Dual.thrift"
 
+const string kDefaultArea = "0"
+
 // a value as reported in get replies/publications
 struct Value {
   // current version of this value
@@ -216,6 +218,9 @@ struct Publication {
   // optional flood root-id, indicating which SPT this publication should be
   // flooded on; if none, flood to all peers
   6: optional string floodRootId;
+
+  // area to which this publication belogs
+  7: optional string area;
 }
 
 // Dump of the current peers: sent in

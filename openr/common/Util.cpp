@@ -839,6 +839,24 @@ createThriftValue(
   return value;
 }
 
+thrift::Publication
+createThriftPublication(
+    const std::unordered_map<std::string, thrift::Value>& kv,
+    const std::vector<std::string>& expiredKeys,
+    const folly::Optional<std::vector<std::string>>& nodeIds,
+    const folly::Optional<std::vector<std::string>>& keysToUpdate,
+    const folly::Optional<std::string>& floodRootId,
+    const folly::Optional<std::string>& area) {
+  thrift::Publication pub;
+  pub.keyVals = kv;
+  pub.expiredKeys = expiredKeys;
+  pub.nodeIds = nodeIds;
+  pub.tobeUpdatedKeys = keysToUpdate;
+  pub.floodRootId = floodRootId;
+  pub.area = area;
+  return pub;
+}
+
 thrift::NextHopThrift
 createNextHop(
     thrift::BinaryAddress addr,

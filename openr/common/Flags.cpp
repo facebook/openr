@@ -6,6 +6,7 @@
  */
 
 #include "openr/common/Flags.h"
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 
 DEFINE_int32(
     openr_ctrl_port,
@@ -27,7 +28,7 @@ DEFINE_int32(
 DEFINE_bool(enable_plugin, false, "Enable plugin module");
 DEFINE_string(
     areas,
-    openr::Constants::kDefaultArea.toString(),
+    openr::thrift::KvStore_constants::kDefaultArea(),
     "Comma separated list of areas name specified as string");
 DEFINE_int32(
     monitor_pub_port,

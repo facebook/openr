@@ -51,9 +51,10 @@ KvStoreClient::dumpAllWithPrefixMultipleAndParse(
     const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
     const std::string& prefix,
     folly::Optional<std::chrono::milliseconds> recvTimeout,
-    folly::Optional<int> maybeIpTos) {
+    folly::Optional<int> maybeIpTos,
+    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
   auto val = dumpAllWithPrefixMultiple(
-      context, kvStoreCmdUrls, prefix, recvTimeout, maybeIpTos);
+      context, kvStoreCmdUrls, prefix, recvTimeout, maybeIpTos, area);
   if (not val.first) {
     return std::make_pair(folly::none, val.second);
   }
