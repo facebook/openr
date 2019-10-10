@@ -298,45 +298,42 @@ class NodesCmd(KvStoreCmdBase):
         information.
         """
 
-        def _parse_nodes(rows, value):
+        def _parse_loopback_addrs(addrs, value):
+            v4_addrs = addrs["v4"]
+            v6_addrs = addrs["v6"]
             prefix_db = serializer.deserialize_thrift_object(
                 value.value, lsdb_types.PrefixDatabase
             )
-            marker = "* " if prefix_db.thisNodeName == host_id else "> "
-            row = ["{}{}".format(marker, prefix_db.thisNodeName)]
-            loopback_prefixes = [
-                p.prefix
-                for p in prefix_db.prefixEntries
-                if p.type == network_types.PrefixType.LOOPBACK
-            ]
-            loopback_prefixes.sort(
-                key=lambda x: len(x.prefixAddress.addr), reverse=True
-            )
 
-            # pick the very first most specific prefix
-            loopback_v6 = None
-            loopback_v4 = None
-            for p in loopback_prefixes:
-                if len(p.prefixAddress.addr) == 16 and (
-                    loopback_v6 is None or p.prefixLength > loopback_v6.prefixLength
-                ):
-                    loopback_v6 = p
-                if len(p.prefixAddress.addr) == 4 and (
-                    loopback_v4 is None or p.prefixLength > loopback_v4.prefixLength
-                ):
-                    loopback_v4 = p
+            for prefixEntry in prefix_db.prefixEntries:
+                p = prefixEntry.prefix
+                if prefixEntry.type != network_types.PrefixType.LOOPBACK:
+                    continue
 
-            row.append(ipnetwork.sprint_prefix(loopback_v6) if loopback_v6 else "N/A")
-            row.append(ipnetwork.sprint_prefix(loopback_v4) if loopback_v4 else "N/A")
-            row.append(
-                "Reachable"
-                if prefix_db.thisNodeName in connected_nodes
-                else "Unreachable"
-            )
-            rows.append(row)
+                if len(p.prefixAddress.addr) == 16 and p.prefixLength == 128:
+                    v6_addrs[prefix_db.thisNodeName] = ipnetwork.sprint_prefix(p)
 
+                if len(p.prefixAddress.addr) == 4 and p.prefixLength == 32:
+                    v4_addrs[prefix_db.thisNodeName] = ipnetwork.sprint_prefix(p)
+
+        # Extract loopback addresses
+        addrs = {"v4": {}, "v6": {}}
+        self.iter_publication(addrs, prefix_keys, {"all"}, _parse_loopback_addrs)
+
+        # Create rows to print
         rows = []
-        self.iter_publication(rows, prefix_keys, {"all"}, _parse_nodes)
+        for node in set(list(addrs["v4"].keys()) + list(addrs["v6"].keys())):
+            marker = "* " if node == host_id else "> "
+            loopback_v4 = addrs["v4"].get(node, "N/A")
+            loopback_v6 = addrs["v6"].get(node, "N/A")
+            rows.append(
+                [
+                    f"{marker}{node}",
+                    loopback_v6,
+                    loopback_v4,
+                    "Reachable" if node in connected_nodes else "Unreachable",
+                ]
+            )
 
         label = ["Node", "V6-Loopback", "V4-Loopback", "Status"]
 
