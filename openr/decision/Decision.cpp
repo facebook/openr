@@ -980,8 +980,10 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
   if (dstInfo.nodes.empty() or dstInfo.nodes.count(myNodeName)) {
     // do not program a route if we are advertising a best path to it or there
     // is no path to it
-    LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
-    tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+    if (not dstInfo.nodes.count(myNodeName)) {
+      LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
+      tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+    }
     return folly::none;
   }
   CHECK_NOTNULL(dstInfo.bestData);
