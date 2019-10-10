@@ -241,6 +241,11 @@ def parse_prefix_database(
             prefix_db.value, lsdb_types.PrefixDatabase
         )
 
+    if prefix_db.deletePrefix:
+        # In per prefix-key, deletePrefix flag is set to indicate prefix
+        # withdrawl
+        return
+
     if prefix_db.thisNodeName not in prefix_dbs:
         prefix_dbs[prefix_db.thisNodeName] = lsdb_types.PrefixDatabase(
             f"{prefix_db.thisNodeName}", []

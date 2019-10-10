@@ -57,7 +57,9 @@ PrefixManager::PrefixManager(
     LOG(INFO) << "Successfully loaded " << maybePrefixDb->prefixEntries.size()
               << " prefixes from disk";
     for (const auto& entry : maybePrefixDb.value().prefixEntries) {
-      LOG(INFO) << "  > " << toString(entry.prefix);
+      LOG(INFO) << "  > " << toString(entry.prefix) << ", type "
+                << apache::thrift::TEnumTraits<thrift::PrefixType>::findName(
+                       entry.type);
       prefixMap_[entry.prefix].emplace(entry.type, entry);
     }
     // Prefixes will be advertised after prefixHoldUntilTimePoint_
@@ -165,8 +167,7 @@ PrefixManager::persistPrefixDb() {
   persistentPrefixDb.thisNodeName = nodeId_;
   for (const auto& kv : prefixMap_) {
     for (const auto& kv2 : kv.second) {
-      if ((not kv2.second.ephemeral.hasValue()) ||
-          (not kv2.second.ephemeral.value())) {
+      if (not kv2.second.ephemeral.value_or(false)) {
         persistentPrefixDb.prefixEntries.emplace_back(kv2.second);
       }
     }
