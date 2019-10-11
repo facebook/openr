@@ -239,13 +239,23 @@ Spark::Spark2Neighbor::Spark2Neighbor(
     std::string const& nodeName,
     std::string const& remoteIfName,
     uint32_t label,
-    uint64_t seqNum)
+    uint64_t seqNum,
+    const std::chrono::milliseconds& samplingPeriod,
+    std::function<void(const int64_t&)> rttChangeCb)
     : domainName(domainName),
       nodeName(nodeName),
       remoteIfName(remoteIfName),
       label(label),
       seqNum(seqNum),
-      state(SparkNeighState::IDLE) {
+      state(SparkNeighState::IDLE),
+      stepDetector(
+          samplingPeriod /* sampling period */,
+          kFastWndSize /* fast window size */,
+          kSlowWndSize /* slow window size */,
+          kLoThreshold /* lower threshold */,
+          kHiThreshold /* upper threshold */,
+          kAbsThreshold /* absolute threshold */,
+          rttChangeCb /* callback function */) {
   CHECK(!(this->domainName.empty()));
   CHECK(!(this->nodeName.empty()));
   CHECK(!(this->remoteIfName.empty()));
@@ -868,6 +878,138 @@ Spark::validateV4AddressSubnet(
 }
 
 void
+Spark::processRttChange(
+    std::string const& ifName,
+    std::string const& neighborName,
+    int64_t const newRtt) {
+  // Neighbor must exist if this callback is fired
+  auto& spark2Neighbor = spark2Neighbors_.at(ifName).at(neighborName);
+
+  // only report RTT change if the neighbor is adjacent
+  if (spark2Neighbor.state != SparkNeighState::ESTABLISHED) {
+    VLOG(2) << "Neighbor: " << neighborName << " over iface: " << ifName
+            << " is in state: " << sparkNeighborStateToStr(spark2Neighbor.state)
+            << ". Skip RTT change notification.";
+    return;
+  }
+
+  LOG(INFO) << "RTT for spark2Neighbor " << neighborName << " has changed "
+            << "from " << spark2Neighbor.rtt.count() / 1000.0 << "ms to "
+            << newRtt / 1000.0 << "ms over interface " << ifName;
+
+  spark2Neighbor.rtt = std::chrono::microseconds(newRtt);
+  notifySparkNeighborEvent(
+      thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE,
+      ifName,
+      spark2Neighbor.toThrift(),
+      spark2Neighbor.rtt.count(),
+      spark2Neighbor.label,
+      false);
+}
+
+void
+Spark::updateNeighborRtt(
+    std::chrono::microseconds const& myRecvTime,
+    std::chrono::microseconds const& mySentTime,
+    std::chrono::microseconds const& nbrRecvTime,
+    std::chrono::microseconds const& nbrSentTime,
+    std::string const& neighborName,
+    std::string const& remoteIfName,
+    std::string const& ifName) {
+  VLOG(4) << "RTT timestamps in order: " << mySentTime.count() << ", "
+          << nbrRecvTime.count() << ", " << nbrSentTime.count() << ", "
+          << myRecvTime.count();
+
+  if (!mySentTime.count() || !nbrRecvTime.count()) {
+    LOG(ERROR) << "Missing timestamp to deduce RTT";
+    return;
+  }
+
+  if (nbrSentTime < nbrRecvTime) {
+    LOG(ERROR) << "Time anomaly. nbrSentTime: [" << nbrSentTime.count()
+               << "] < nbrRecvTime: [" << nbrRecvTime.count() << "]";
+    return;
+  }
+
+  if (myRecvTime < mySentTime) {
+    LOG(ERROR) << "Time anomaly. myRecvTime: [" << myRecvTime.count()
+               << "] < mySentTime: [" << mySentTime.count() << "]";
+    return;
+  }
+
+  // Measure only if neighbor is reflecting our previous hello packet.
+  auto rtt = (myRecvTime - mySentTime) - (nbrSentTime - nbrRecvTime);
+  VLOG(3) << "Measured new RTT for neighbor " << neighborName
+          << " from remote iface " << remoteIfName << " over interface "
+          << ifName << " as " << rtt.count() / 1000.0 << "ms.";
+  // Mask off to millisecond accuracy!
+  //
+  // Reason => Relying on microsecond accuracy is too inaccurate. For
+  // practical Wide Area Networks(WAN) scenario. Having accuracy up to
+  // milliseconds is sufficient.
+  //
+  // Further, load on system can heavily influence rtt measurement in
+  // microseconds as we do calculation in user-space. Also when Open/R
+  // process restarts on neighbor node, measurement will more likely
+  // to be the same as previous one.
+  rtt = std::max(rtt / 1000 * 1000, std::chrono::microseconds(1000));
+
+  // It is possible for things to go wrong in RTT calculation because of
+  // clock adjustment.
+  // Next measurements will correct this wrong measurement.
+  if (rtt.count() < 0) {
+    LOG(ERROR) << "Time anomaly. Measured negative RTT. "
+               << rtt.count() / 1000.0 << "ms.";
+    return;
+  }
+
+  // to serve both Spark and Spark2 usage, will feed RTT info to
+  // stepDetector whenever it is available.
+  if (neighbors_.find(ifName) != neighbors_.end()) {
+    auto& ifNeighbors = neighbors_.at(ifName);
+    auto neighborIt = ifNeighbors.find(neighborName);
+    if (neighborIt != ifNeighbors.end()) {
+      auto& neighbor = neighborIt->second;
+
+      // Add it to step detector
+      neighbor.stepDetector.addValue(
+          std::chrono::duration_cast<std::chrono::milliseconds>(myRecvTime),
+          rtt.count());
+      // Set initial value if empty
+      if (!neighbor.rtt.count()) {
+        VLOG(2) << "Setting initial value for RTT for neighbor "
+                << neighborName;
+        neighbor.rtt = rtt;
+      }
+      // Update rttLatest
+      neighbor.rttLatest = rtt;
+    }
+  }
+
+  // for Spark2 stepDetector usage
+  if (spark2Neighbors_.find(ifName) != spark2Neighbors_.end()) {
+    auto& spark2IfNeighbors = spark2Neighbors_.at(ifName);
+    auto spark2NeighborIt = spark2IfNeighbors.find(neighborName);
+    if (spark2NeighborIt != spark2IfNeighbors.end()) {
+      auto& spark2Neighbor = spark2NeighborIt->second;
+
+      // Add it to step detector
+      spark2Neighbor.stepDetector.addValue(
+          std::chrono::duration_cast<std::chrono::milliseconds>(myRecvTime),
+          rtt.count());
+      // Set initial value if empty
+      if (!spark2Neighbor.rtt.count()) {
+        VLOG(2) << "Setting initial value for RTT for spark2Neighbor "
+                << neighborName;
+        spark2Neighbor.rtt = rtt;
+      }
+      // Update rttLatest
+      spark2Neighbor.rttLatest = rtt;
+    }
+  }
+}
+
+void
 Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
   SCOPE_FAIL {
     LOG(ERROR) << "Failed sending Handshake packet on " << ifName;
@@ -1246,13 +1388,16 @@ Spark::processGRMsg(
 
 void
 Spark::processHelloMsg(
-    thrift::SparkHelloMsg const& helloMsg, std::string const& ifName) {
+    thrift::SparkHelloMsg const& helloMsg,
+    std::string const& ifName,
+    std::chrono::microseconds const& myRecvTimeInUs) {
   auto const& neighborName = helloMsg.nodeName;
   auto const& domainName = helloMsg.domainName;
   auto const& remoteIfName = helloMsg.ifName;
   auto const& neighborInfos = helloMsg.neighborInfos;
   auto const& remoteVersion = static_cast<uint32_t>(helloMsg.version);
   auto const& remoteSeqNum = static_cast<uint64_t>(helloMsg.seqNum);
+  auto const& nbrSentTimeInUs = std::chrono::microseconds(helloMsg.sentTsInUs);
 
   if (PacketValidationResult::FAILURE ==
       sanityCheckHelloPkt(
@@ -1275,6 +1420,12 @@ Spark::processHelloMsg(
   auto neighborIt = ifNeighbors.find(neighborName);
 
   if (neighborIt == ifNeighbors.end()) {
+    // Report RTT change
+    // capture ifName & originator by copy
+    auto rttChangeCb = [this, ifName, neighborName](const int64_t& newRtt) {
+      processRttChange(ifName, neighborName, newRtt);
+    };
+
     ifNeighbors.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(neighborName),
@@ -1283,16 +1434,12 @@ Spark::processHelloMsg(
             neighborName, /* neighborNode name */
             remoteIfName, /* remote interface on neighborNode */
             getNewLabelForIface(ifName), /* label for Segment Routing */
-            remoteSeqNum /* seqNum reported by neighborNode */));
+            remoteSeqNum, /* seqNum reported by neighborNode */
+            myKeepAliveTime_,
+            std::move(rttChangeCb)));
 
     auto& neighbor = ifNeighbors.at(neighborName);
     checkNeighborState(neighbor, SparkNeighState::IDLE);
-
-    // state transition
-    SparkNeighState oldState = neighbor.state;
-    neighbor.state =
-        getNextState(oldState, SparkNeighEvent::HELLO_RCVD_NO_INFO);
-    logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
     // backward compatibility check
     if (neighbors_.find(ifName) != neighbors_.end()) {
@@ -1311,20 +1458,47 @@ Spark::processHelloMsg(
         oldNeighborIt->second.holdTimer->cancelTimeout();
       }
     }
-    return;
   }
 
   // Up till now, node knows about this neighbor and perform SM check
-  auto& neighbor = neighborIt->second;
+  auto& neighbor = ifNeighbors.at(neighborName);
+
+  // Update timestamps for received hello packet for neighbor
+  neighbor.neighborTimestamp = nbrSentTimeInUs;
+  neighbor.localTimestamp = myRecvTimeInUs;
+
+  // Deduce RTT for this neighbor and update timestamps
+  auto tsIt = neighborInfos.find(myNodeName_);
+  if (tsIt != neighborInfos.end()) {
+    auto& ts = tsIt->second;
+    updateNeighborRtt(
+        // recvTime of neighbor helloPkt
+        myRecvTimeInUs,
+        // sentTime of my helloPkt recorded by neighbor
+        std::chrono::microseconds(ts.lastNbrMsgSentTsInUs),
+        // recvTime of my helloPkt recorded by neighbor
+        std::chrono::microseconds(ts.lastMyMsgRcvdTsInUs),
+        // sentTime of neighbor helloPkt
+        nbrSentTimeInUs,
+        neighborName,
+        remoteIfName,
+        ifName);
+  }
 
   VLOG(3) << "Current state for neighbor: (" << neighborName << ") is: ["
           << sparkNeighborStateToStr(neighbor.state) << "]";
 
-  if (neighbor.state == SparkNeighState::WARM) {
+  if (neighbor.state == SparkNeighState::IDLE) {
+    // state transition
+    SparkNeighState oldState = neighbor.state;
+    neighbor.state =
+        getNextState(oldState, SparkNeighEvent::HELLO_RCVD_NO_INFO);
+    logStateTransition(neighborName, ifName, oldState, neighbor.state);
+  } else if (neighbor.state == SparkNeighState::WARM) {
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
-    if (neighborInfos.find(myNodeName_) == neighborInfos.end()) {
+    if (tsIt == neighborInfos.end()) {
       // if a neighbor is in fast initial state and does not see us yet,
       // then reply to this neighbor in fast frequency
       VLOG(3) << "Not seeing myself: (" << myNodeName_ << ") in neighborInfo";
@@ -1388,7 +1562,7 @@ Spark::processHelloMsg(
       return;
     }
 
-    if (neighborInfos.find(myNodeName_) == neighborInfos.end()) {
+    if (tsIt == neighborInfos.end()) {
       //
       // Did NOT find our own info in peer's hello msg. Peer doesn't want to
       // form adjacency with us. Drop neighborship.
@@ -1408,7 +1582,7 @@ Spark::processHelloMsg(
   } else if (neighbor.state == SparkNeighState::RESTART) {
     // Neighbor is undergoing restart. Will reply immediately for hello msg for
     // quick adjacency establishment.
-    if (neighborInfos.find(myNodeName_) == neighborInfos.end()) {
+    if (tsIt == neighborInfos.end()) {
       LOG(INFO) << "Neighbor: (" << neighborName
                 << ") is still NOT aware of us. "
                 << "Reply to helloMsg immediately.";
@@ -1570,7 +1744,7 @@ Spark::processHelloPacket() {
   // Step 2: Spark2 specific msg processing
   if (enableSpark2_) {
     if (helloPacket.helloMsg.hasValue()) {
-      processHelloMsg(helloPacket.helloMsg.value(), ifName);
+      processHelloMsg(helloPacket.helloMsg.value(), ifName, myRecvTime);
       return;
     } else if (helloPacket.heartbeatMsg.hasValue()) {
       processHeartbeatMsg(helloPacket.heartbeatMsg.value(), ifName);
@@ -1651,64 +1825,18 @@ Spark::processHelloPacket() {
     auto& tstamps = it->second;
     auto mySentTime = std::chrono::microseconds(tstamps.lastNbrMsgSentTsInUs);
     auto nbrRecvTime = std::chrono::microseconds(tstamps.lastMyMsgRcvdTsInUs);
-    auto myRecvTimeMs =
-        std::chrono::duration_cast<std::chrono::milliseconds>(myRecvTime);
-
-    VLOG(4) << "RTT timestamps in order: " << mySentTime.count() << ", "
-            << nbrRecvTime.count() << ", " << nbrSentTime.count() << ", "
-            << myRecvTime.count();
-
-    // Measure only if neighbor is reflecting our previous hello packet.
-    if (mySentTime.count() and nbrRecvTime.count()) {
-      bool useRtt = true;
-      if (nbrSentTime < nbrRecvTime) {
-        useRtt = false;
-        LOG(ERROR) << "Time anomaly. nbrSentTime: " << nbrSentTime.count()
-                   << " < "
-                   << " nbrRecvTime : " << nbrRecvTime.count();
-      }
-      if (myRecvTime < mySentTime) {
-        useRtt = false;
-        LOG(ERROR) << "Time anomaly. myRecvTime: " << myRecvTime.count()
-                   << " < "
-                   << " mySentTime : " << mySentTime.count();
-      }
-      if (useRtt) {
-        auto rtt = (myRecvTime - mySentTime) - (nbrSentTime - nbrRecvTime);
-        VLOG(3) << "Measured new RTT for neighbor " << originator.nodeName
-                << " from iface " << originator.ifName << " over interface "
-                << ifName << " as " << rtt.count() / 1000.0 << "ms.";
-        // Mask off to millisecond accuracy!
-        // Reason => Relying on microsecond accuracy is too inaccurate. For
-        // practical scenarios like Backbone network having accuracy upto
-        // milliseconds is sufficient. Further load on system can heavily
-        // infuence rtt at microseconds but not much at milliseconds and hence
-        // when node comes back up measurement will more likely to be the same
-        // as the previous one.
-        rtt = std::max(rtt / 1000 * 1000, std::chrono::microseconds(1000));
-
-        // It is possible for things to go wrong in RTT calculation because of
-        // clock adjustment.
-        // Next measurements will correct this wrong measurement.
-        if (rtt.count() < 0) {
-          LOG(ERROR) << "Time anomaly. Measured negative RTT. "
-                     << rtt.count() / 1000.0 << "ms.";
-        } else {
-          // Add it to step detector
-          neighbor.stepDetector.addValue(myRecvTimeMs, rtt.count());
-
-          // Set initial value if empty
-          if (!neighbor.rtt.count()) {
-            VLOG(2) << "Setting initial value for RTT for neighbor "
-                    << originator.nodeName;
-            neighbor.rtt = rtt;
-          }
-
-          // Update rttLatest
-          neighbor.rttLatest = rtt;
-        }
-      }
-    }
+    updateNeighborRtt(
+        // recvTime of neighbor helloPkt
+        myRecvTime,
+        // sentTime of my helloPkt recorded by neighbor
+        mySentTime,
+        // recvTime of my helloPkt recorded by neighbor
+        nbrRecvTime,
+        // sentTime of neighbor helloPkt
+        nbrSentTime,
+        originator.nodeName,
+        originator.ifName,
+        ifName);
   }
 
   //
@@ -1948,6 +2076,7 @@ Spark::sendHelloPacket(
     helloMsg.version = openrVer;
     helloMsg.solicitResponse = inFastInitState;
     helloMsg.restarting = restarting;
+    helloMsg.sentTsInUs = getCurrentTimeInUs().count();
 
     // bake neighborInfo into helloMsg
     for (const auto& kv : spark2Neighbors_.at(ifName)) {

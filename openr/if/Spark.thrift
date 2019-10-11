@@ -126,6 +126,7 @@ struct SparkHelloMsg {
   6: OpenrVersion version
   7: bool solicitResponse = 0
   8: bool restarting = 0
+  9: i64 sentTsInUs;
 }
 
 struct SparkHeartbeatMsg {

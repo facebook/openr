@@ -233,6 +233,16 @@ class Spark final : public OpenrEventLoop {
   PacketValidationResult validateV4AddressSubnet(
       std::string const& ifName, thrift::BinaryAddress neighV4Addr);
 
+  // function wrapper to update RTT for neighbor
+  void updateNeighborRtt(
+      std::chrono::microseconds const& myRecvTimeInUs,
+      std::chrono::microseconds const& mySentTimeInUs,
+      std::chrono::microseconds const& nbrRecvTimeInUs,
+      std::chrono::microseconds const& nbrSentTimeInUs,
+      std::string const& neighborName,
+      std::string const& remoteIfName,
+      std::string const& ifName);
+
   //
   // Spark2 related function call
   //
@@ -242,7 +252,9 @@ class Spark final : public OpenrEventLoop {
         std::string const& nodeName,
         std::string const& remoteIfName,
         uint32_t label,
-        uint64_t seqNum);
+        uint64_t seqNum,
+        std::chrono::milliseconds const& samplingPeriod,
+        std::function<void(const int64_t&)> rttChangeCb);
 
     // util function to transfer to SparkNeighbor
     thrift::SparkNeighbor
@@ -313,6 +325,9 @@ class Spark final : public OpenrEventLoop {
 
     // Lastest measured RTT on receipt of every hello packet
     std::chrono::microseconds rttLatest{0};
+
+    // detect rtt changes
+    StepDetector<int64_t, std::chrono::milliseconds> stepDetector;
   };
 
   std::unordered_map<
@@ -352,6 +367,12 @@ class Spark final : public OpenrEventLoop {
       int32_t label,
       bool supportFloodOptimization);
 
+  // callback function for rtt change
+  void processRttChange(
+      std::string const& ifName,
+      std::string const& neighborName,
+      int64_t const newRtt);
+
   // utility call to send handshake msg
   void sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished);
 
@@ -366,7 +387,9 @@ class Spark final : public OpenrEventLoop {
 
   // process helloMsg in Spark2 context
   void processHelloMsg(
-      thrift::SparkHelloMsg const& helloMsg, std::string const& ifName);
+      thrift::SparkHelloMsg const& helloMsg,
+      std::string const& ifName,
+      std::chrono::microseconds const& myRecvTimeInUs);
 
   // process heartbeatMsg in Spark2 context
   void processHeartbeatMsg(

@@ -199,6 +199,46 @@ class SimpleSpark2Fixture : public Spark2Fixture {
   std::shared_ptr<SparkWrapper> node2;
 };
 
+TEST_F(SimpleSpark2Fixture, RttTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture RttTest finished";
+  };
+
+  // create Spark2 instances and establish connections
+  createAndConnectSpark2Nodes();
+
+  LOG(INFO) << "Change rtt between nodes to 40ms (asymmetric)";
+
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 15}}},
+      {iface2, {{iface1, 25}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // wait for spark nodes to detecct Rtt change
+  {
+    auto event = node1->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
+    ASSERT_TRUE(event.hasValue());
+    // 25% tolerance
+    EXPECT_GE(event->rttUs, (40 - 10) * 1000);
+    EXPECT_LE(event->rttUs, (40 + 10) * 1000);
+    LOG(INFO) << "node-1 reported new RTT to node-2 to be "
+              << event->rttUs / 1000.0 << "ms";
+  }
+
+  {
+    auto event = node2->waitForEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
+    ASSERT_TRUE(event.hasValue());
+    // 25% tolerance
+    EXPECT_GE(event->rttUs, (40 - 10) * 1000);
+    EXPECT_LE(event->rttUs, (40 + 10) * 1000);
+    LOG(INFO) << "node-2 reported new RTT to node-1 to be "
+              << event->rttUs / 1000.0 << "ms";
+  }
+}
+
 TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fxiture UnidirectionTest finished";
@@ -280,8 +320,16 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    EXPECT_TRUE(node1->recvNeighborEvent(kGRHoldTime * 2).hasError());
-    EXPECT_TRUE(node2->recvNeighborEvent(kGRHoldTime * 2).hasError());
+    EXPECT_FALSE(
+        node1
+            ->waitForEvent(
+                thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
+            .hasValue());
+    EXPECT_FALSE(
+        node2
+            ->waitForEvent(
+                thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
+            .hasValue());
   }
 }
 
@@ -572,8 +620,16 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    EXPECT_TRUE(node1->recvNeighborEvent(kGRHoldTime * 2).hasError());
-    EXPECT_TRUE(node2->recvNeighborEvent(kGRHoldTime * 2).hasError());
+    EXPECT_FALSE(
+        node1
+            ->waitForEvent(
+                thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
+            .hasValue());
+    EXPECT_FALSE(
+        node2
+            ->waitForEvent(
+                thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
+            .hasValue());
   }
 }
 
