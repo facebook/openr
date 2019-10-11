@@ -382,6 +382,23 @@ PrefixManager::submitCounters() {
   auto counters = tData_.getCounters();
   counters["prefix_manager.zmq_event_queue_size"] = getEventQueueSize();
 
+  // Count total route number
+  counters["prefix_manager.num_routes"] = prefixMap_.size();
+
+  // Count route number for each client type
+  std::unordered_map<thrift::PrefixType, int64_t> prefixCountMap;
+  for (const auto& kv : prefixMap_) {
+    for (const auto& kv2 : kv.second) {
+      prefixCountMap[kv2.first] += 1;
+    }
+  }
+  for (const auto& kv : prefixCountMap) {
+    auto typeName = folly::sformat(
+        "prefix_manager.num_routes.{}",
+        apache::thrift::TEnumTraits<thrift::PrefixType>::findName(kv.first));
+    counters[typeName] = kv.second;
+  }
+
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 

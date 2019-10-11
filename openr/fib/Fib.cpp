@@ -680,6 +680,15 @@ Fib::submitCounters() {
   counters["fib.require_routedb_sync"] = syncRoutesTimer_->isScheduled();
   counters["fib.zmq_event_queue_size"] = getEventQueueSize();
 
+  // Count the number of bgp routes
+  int64_t bgpCounter = 0;
+  for (const auto& route : routeDb_.unicastRoutes) {
+    if (route.second.bestNexthop.hasValue()) {
+      bgpCounter++;
+    }
+  }
+  counters["fib.num_routes.BGP"] = bgpCounter;
+
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
