@@ -579,6 +579,8 @@ main(int argc, char** argv) {
             std::chrono::seconds(FLAGS_spark_hold_time_s),
             std::chrono::seconds(FLAGS_spark_keepalive_time_s),
             std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
+            std::chrono::seconds(FLAGS_spark2_hello_time_s),
+            std::chrono::milliseconds(FLAGS_spark2_hello_fastinit_time_ms),
             std::chrono::milliseconds(FLAGS_spark2_handshake_time_ms),
             std::chrono::seconds(FLAGS_spark2_heartbeat_time_s),
             std::chrono::seconds(FLAGS_spark2_negotiate_hold_time_s),
@@ -596,6 +598,7 @@ main(int argc, char** argv) {
             context,
             FLAGS_enable_flood_optimization,
             FLAGS_enable_spark2,
+            FLAGS_spark2_increase_hello_interval,
             areas));
   }
 

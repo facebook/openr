@@ -280,6 +280,16 @@ isMplsLabelValid(int32_t const mplsLabel) {
  */
 void checkMplsAction(thrift::MplsAction const& mplsAction);
 
+thrift::SparkNeighbor createSparkNeighbor(
+    const std::string& domainName,
+    const std::string& nodeName,
+    int64_t holdTime,
+    const thrift::BinaryAddress& v4Addr,
+    const thrift::BinaryAddress& v6Addr,
+    int64_t kvStorePubPort,
+    int64_t kvStoreCmdPort,
+    const std::string& ifName);
+
 thrift::SparkPayload createSparkPayload(
     int32_t version,
     const thrift::SparkNeighbor& originator,

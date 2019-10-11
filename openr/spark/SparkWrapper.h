@@ -19,6 +19,32 @@ struct SparkInterfaceEntry {
   folly::CIDRNetwork v6LinkLocalNetwork;
 };
 
+struct SparkTimeConfig {
+  SparkTimeConfig(
+      std::chrono::milliseconds helloTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds helloFastInitTime =
+          std::chrono::milliseconds{0},
+      std::chrono::milliseconds handshakeTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds heartbeatTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds negotiateHoldTime =
+          std::chrono::milliseconds{0},
+      std::chrono::milliseconds heartbeatHoldTime =
+          std::chrono::milliseconds{0})
+      : myHelloTime(helloTime),
+        myHelloFastInitTime(helloFastInitTime),
+        myHandshakeTime(handshakeTime),
+        myHeartbeatTime(heartbeatTime),
+        myNegotiateHoldTime(negotiateHoldTime),
+        myHeartbeatHoldTime(heartbeatHoldTime) {}
+
+  std::chrono::milliseconds myHelloTime;
+  std::chrono::milliseconds myHelloFastInitTime;
+  std::chrono::milliseconds myHandshakeTime;
+  std::chrono::milliseconds myHeartbeatTime;
+  std::chrono::milliseconds myNegotiateHoldTime;
+  std::chrono::milliseconds myHeartbeatHoldTime;
+};
+
 /**
  * A utility class to wrap and interact with Spark. It exposes the APIs to
  * send commands to and receive publications from Spark.
@@ -44,10 +70,8 @@ class SparkWrapper {
       std::shared_ptr<IoProvider> ioProvider,
       folly::Optional<std::unordered_set<std::string>> areas,
       bool enableSpark2,
-      std::chrono::milliseconds myHandshakeTime,
-      std::chrono::milliseconds myHeartbeatTime,
-      std::chrono::milliseconds myNegotiateHoldTime,
-      std::chrono::milliseconds myHeartbeatHoldTime);
+      bool increaseHelloInterval,
+      SparkTimeConfig timeConfig);
 
   ~SparkWrapper();
 

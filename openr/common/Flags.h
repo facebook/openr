@@ -132,6 +132,9 @@ DECLARE_bool(is_flood_root);
 DECLARE_bool(use_flood_optimization);
 
 DECLARE_bool(enable_spark2);
+DECLARE_bool(spark2_increase_hello_interval);
+DECLARE_int32(spark2_hello_time_s);
+DECLARE_int32(spark2_hello_fastinit_time_ms);
 DECLARE_int32(spark2_heartbeat_time_s);
 DECLARE_int32(spark2_handshake_time_ms);
 DECLARE_int32(spark2_negotiate_hold_time_s);

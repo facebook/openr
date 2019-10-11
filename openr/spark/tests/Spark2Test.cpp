@@ -63,6 +63,9 @@ const std::chrono::milliseconds kGRHoldTime(500);
 // the keep-alive for spark2 hello messages
 const std::chrono::milliseconds kKeepAliveTime(50);
 
+// the time interval for spark2 hello msg
+const std::chrono::milliseconds kHelloTime(200);
+
 // the time interval for spark2 handhshake msg
 const std::chrono::milliseconds kHandshakeTime(50);
 
@@ -104,15 +107,19 @@ class Spark2Fixture : public testing::Test {
       std::string const& myNodeName,
       uint32_t spark2Id,
       bool enableSpark2 = true,
+      bool increaseHelloInterval = true,
       std::chrono::milliseconds grHoldTime = kGRHoldTime,
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-      std::chrono::milliseconds myHandshakeTime = kHandshakeTime,
-      std::chrono::milliseconds myHeartbeatTime = kHeartbeatTime,
-      std::chrono::milliseconds myNegotiateHoldTime = kNegotiateHoldTime,
-      std::chrono::milliseconds myHeartbeatHoldTime = kHeartbeatHoldTime) {
+      SparkTimeConfig timeConfig = SparkTimeConfig(
+          kHelloTime,
+          kKeepAliveTime,
+          kHandshakeTime,
+          kHeartbeatTime,
+          kNegotiateHoldTime,
+          kHeartbeatHoldTime)) {
     return std::make_unique<SparkWrapper>(
         domainName,
         myNodeName,
@@ -129,10 +136,8 @@ class Spark2Fixture : public testing::Test {
         mockIoProvider,
         folly::none, // no area support yet
         enableSpark2,
-        myHandshakeTime,
-        myHeartbeatTime,
-        myNegotiateHoldTime,
-        myHeartbeatHoldTime);
+        increaseHelloInterval,
+        timeConfig);
   }
 
   fbzmq::Context context;
@@ -544,10 +549,10 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
   mockIoProvider->setConnectedPairs(connectedPairs);
 
   // start one spark2 instance
-  auto node1 = createSpark(kDomainName, "node-1", 1);
+  auto node1 = createSpark(kDomainName, "node-1", 1, true, false);
 
   // start one old spark instance
-  auto node2 = createSpark(kDomainName, "node-2", 2, false);
+  auto node2 = createSpark(kDomainName, "node-2", 2, false, false);
 
   // start tracking iface1
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));

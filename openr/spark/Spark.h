@@ -83,6 +83,8 @@ class Spark final : public OpenrEventLoop {
       std::chrono::milliseconds myHoldTime,
       std::chrono::milliseconds myKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime,
+      std::chrono::milliseconds myHelloTime,
+      std::chrono::milliseconds myHelloFastInitTime,
       std::chrono::milliseconds myHandshakeTime,
       std::chrono::milliseconds myHeartbeatTime,
       std::chrono::milliseconds myNegotiateHoldTime,
@@ -99,6 +101,7 @@ class Spark final : public OpenrEventLoop {
       fbzmq::Context& zmqContext,
       bool enableFloodOptimization = false,
       bool enableSpark2 = false,
+      bool increaseHelloInterval = false,
       folly::Optional<std::unordered_set<std::string>> areas = folly::none);
 
   ~Spark() override = default;
@@ -443,6 +446,12 @@ class Spark final : public OpenrEventLoop {
   // usual keep alive interval
   const std::chrono::milliseconds fastInitKeepAliveTime_{0};
 
+  // Spark2 hello msg sendout interval
+  const std::chrono::milliseconds myHelloTime_{0};
+
+  // Spark2 hello msg sendout interval under fast-init case
+  const std::chrono::milliseconds myHelloFastInitTime_{0};
+
   // Spark2 handshake msg sendout interval
   const std::chrono::milliseconds myHandshakeTime_{0};
 
@@ -496,6 +505,9 @@ class Spark final : public OpenrEventLoop {
 
   // enable Spark2 or not
   const bool enableSpark2_{false};
+
+  // increase Hello interval in Spark2
+  const bool increaseHelloInterval_{false};
 
   // Map of interface entries keyed by ifName
   std::unordered_map<std::string, Interface> interfaceDb_{};

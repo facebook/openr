@@ -132,11 +132,9 @@ class SparkFixture : public testing::Test {
         context,
         mockIoProvider,
         areas,
-        false, // enable Spark2 functionality
-        std::chrono::milliseconds{0},
-        std::chrono::milliseconds{0},
-        std::chrono::milliseconds{0},
-        std::chrono::milliseconds{0});
+        false, // disable Spark2 functionality
+        false, // do NOT increase hello interval
+        SparkTimeConfig());
   }
 
   fbzmq::Context context;

@@ -268,6 +268,8 @@ Spark::Spark(
     std::chrono::milliseconds myHoldTime,
     std::chrono::milliseconds myKeepAliveTime,
     std::chrono::milliseconds fastInitKeepAliveTime,
+    std::chrono::milliseconds myHelloTime,
+    std::chrono::milliseconds myHelloFastInitTime,
     std::chrono::milliseconds myHandshakeTime,
     std::chrono::milliseconds myHeartbeatTime,
     std::chrono::milliseconds myNegotiateHoldTime,
@@ -284,6 +286,7 @@ Spark::Spark(
     fbzmq::Context& zmqContext,
     bool enableFloodOptimization,
     bool enableSpark2,
+    bool increaseHelloInterval,
     folly::Optional<std::unordered_set<std::string>> areas)
     : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::SPARK, zmqContext),
       myDomainName_(myDomainName),
@@ -292,6 +295,8 @@ Spark::Spark(
       myHoldTime_(myHoldTime),
       myKeepAliveTime_(myKeepAliveTime),
       fastInitKeepAliveTime_(fastInitKeepAliveTime),
+      myHelloTime_(myHelloTime),
+      myHelloFastInitTime_(myHelloFastInitTime),
       myHandshakeTime_(myHandshakeTime),
       myHeartbeatTime_(myHeartbeatTime),
       myNegotiateHoldTime_(myNegotiateHoldTime),
@@ -309,6 +314,7 @@ Spark::Spark(
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
       enableFloodOptimization_(enableFloodOptimization),
       enableSpark2_(enableSpark2),
+      increaseHelloInterval_(increaseHelloInterval),
       ioProvider_(std::make_shared<IoProvider>()),
       areas_(std::move(areas)) {
   CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
@@ -1118,9 +1124,8 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   }
 
   // update counters for number of pkts and total size of pkts sent
-  tData_.addStatValue(
-      "spark.heartbeat_packet_sent_size", packet.size(), fbzmq::SUM);
-  tData_.addStatValue("spark.heartbeat_packet_sent", 1, fbzmq::SUM);
+  tData_.addStatValue("spark.heartbeat.bytes_sent", packet.size(), fbzmq::SUM);
+  tData_.addStatValue("spark.heartbeat.packets_sent", 1, fbzmq::SUM);
 }
 
 void
@@ -1488,6 +1493,14 @@ Spark::processHelloMsg(
   VLOG(3) << "Current state for neighbor: (" << neighborName << ") is: ["
           << sparkNeighborStateToStr(neighbor.state) << "]";
 
+  // for neighbor in fast initial state and does not see us yet,
+  // reply for quick convergence
+  if (helloMsg.solicitResponse) {
+    sendHelloPacket(ifName);
+
+    VLOG(3) << "Reply to neighbor's helloMsg since it is under fastInit";
+  }
+
   if (neighbor.state == SparkNeighState::IDLE) {
     // state transition
     SparkNeighState oldState = neighbor.state;
@@ -1498,18 +1511,7 @@ Spark::processHelloMsg(
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
-    if (tsIt == neighborInfos.end()) {
-      // if a neighbor is in fast initial state and does not see us yet,
-      // then reply to this neighbor in fast frequency
-      VLOG(3) << "Not seeing myself: (" << myNodeName_ << ") in neighborInfo";
-      if (helloMsg.solicitResponse) {
-        scheduleTimeout(
-            std::chrono::milliseconds(0),
-            [this, ifName]() noexcept { sendHelloPacket(ifName); });
-
-        VLOG(3) << "Reply to neighbor's helloMsg since it is under fastInit";
-      }
-    } else {
+    if (tsIt != neighborInfos.end()) {
       //
       // My node's Seq# seen from neighbor should NOT be higher than ours
       // since it always received helloMsg sent previously. If it is the
@@ -1582,12 +1584,7 @@ Spark::processHelloMsg(
   } else if (neighbor.state == SparkNeighState::RESTART) {
     // Neighbor is undergoing restart. Will reply immediately for hello msg for
     // quick adjacency establishment.
-    if (tsIt == neighborInfos.end()) {
-      LOG(INFO) << "Neighbor: (" << neighborName
-                << ") is still NOT aware of us. "
-                << "Reply to helloMsg immediately.";
-      sendHelloPacket(ifName);
-    } else {
+    if (tsIt != neighborInfos.end()) {
       if (neighbor.seqNum < remoteSeqNum) {
         // By going here, it means this node missed ALL of the helloMsg sent-out
         // after neighbor 'restarting' itself. Will let GR timer to handle it.
@@ -1657,6 +1654,7 @@ Spark::processHandshakeMsg(
   //  2. Receive handshakeMsg before heartbeatMsg from neighbor;
   if (neighbor.heartbeatHoldTimer) {
     // Reset the hold-timer for neighbor as we have received a keep-alive msg
+    LOG(INFO) << "Extend heartbeat timer for neighbor: " << neighborName;
     neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
   }
 
@@ -2022,48 +2020,8 @@ Spark::sendHelloPacket(
   const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
   thrift::OpenrVersion openrVer(kVersion_.version);
 
-  thrift::SparkNeighbor myself(
-      apache::thrift::FRAGILE,
-      myDomainName_,
-      myNodeName_,
-      myHoldTime_.count(),
-      "", /* DEPRECATED - public key */
-      toBinaryAddress(v6Addr),
-      toBinaryAddress(v4Addr),
-      kKvStorePubPort_,
-      kKvStoreCmdPort_,
-      ifName);
-
-  // create the hello packet payload
-  auto payload = createSparkPayload(
-      openrVer,
-      myself,
-      mySeqNum_,
-      std::map<std::string, thrift::ReflectedNeighborInfo>{},
-      getCurrentTimeInUs().count(),
-      inFastInitState,
-      enableFloodOptimization_,
-      restarting,
-      areas_);
-
-  // add all neighbors we have heard from on this interface
-  for (const auto& kv : neighbors_.at(ifName)) {
-    std::string const& neighborName = kv.first;
-    auto& neighbor = kv.second;
-
-    // Add timestamp and sequence number from last hello. Will be 0 if we
-    // haven't heard before from the neighbor.
-    // Refer to thrift for definition of timestampts.
-    auto& neighborInfo = payload.neighborInfos[neighborName];
-    neighborInfo.seqNum = neighbor.seqNum;
-    neighborInfo.lastNbrMsgSentTsInUs = neighbor.neighborTimestamp.count();
-    neighborInfo.lastMyMsgRcvdTsInUs = neighbor.localTimestamp.count();
-  }
-
   // build the hello packet from payload and empty signature
   thrift::SparkHelloPacket helloPacket;
-  helloPacket.payload = std::move(payload);
-  helloPacket.signature = "";
 
   if (enableSpark2_) {
     thrift::SparkHelloMsg helloMsg;
@@ -2093,6 +2051,51 @@ Spark::sendHelloPacket(
     helloPacket.helloMsg = helloMsg;
   }
 
+  // TODO: deprecate the payload setup once old spark msg
+  // no longer is use
+  // ATTN: original payload will be skipped ONLY when
+  // both flag got enabled.
+  if (!(enableSpark2_ && increaseHelloInterval_)) {
+    thrift::SparkNeighbor myself = createSparkNeighbor(
+        myDomainName_,
+        myNodeName_,
+        myHoldTime_.count(),
+        toBinaryAddress(v4Addr),
+        toBinaryAddress(v6Addr),
+        kKvStorePubPort_,
+        kKvStoreCmdPort_,
+        ifName);
+
+    // create the hello packet payload
+    auto payload = createSparkPayload(
+        openrVer,
+        myself,
+        mySeqNum_,
+        std::map<std::string, thrift::ReflectedNeighborInfo>{},
+        getCurrentTimeInUs().count(),
+        inFastInitState,
+        enableFloodOptimization_,
+        restarting,
+        areas_);
+
+    // add all neighbors we have heard from on this interface
+    for (const auto& kv : neighbors_.at(ifName)) {
+      std::string const& neighborName = kv.first;
+      auto& neighbor = kv.second;
+
+      // Add timestamp and sequence number from last hello. Will be 0 if we
+      // haven't heard before from the neighbor.
+      // Refer to thrift for definition of timestampts.
+      auto& neighborInfo = payload.neighborInfos[neighborName];
+      neighborInfo.seqNum = neighbor.seqNum;
+      neighborInfo.lastNbrMsgSentTsInUs = neighbor.neighborTimestamp.count();
+      neighborInfo.lastMyMsgRcvdTsInUs = neighbor.localTimestamp.count();
+    }
+
+    helloPacket.payload = std::move(payload);
+    helloPacket.signature = "";
+  }
+
   auto packet = util::writeThriftObjStr(helloPacket, serializer_);
 
   // send the payload
@@ -2114,9 +2117,8 @@ Spark::sendHelloPacket(
   }
 
   // update counters for number of pkts and total size of pkts sent
-  tData_.addStatValue(
-      "spark.hello_packet_sent_size", packet.size(), fbzmq::SUM);
-  tData_.addStatValue("spark.hello_packet_sent", 1, fbzmq::SUM);
+  tData_.addStatValue("spark.hello.bytes_sent", packet.size(), fbzmq::SUM);
+  tData_.addStatValue("spark.hello.packets_sent", 1, fbzmq::SUM);
 
   VLOG(4) << "Sent " << bytesSent << " bytes in hello packet";
 }
@@ -2370,8 +2372,12 @@ Spark::addInterfaceToDb(
       };
     };
 
-    auto roll = rollHelper(myKeepAliveTime_);
-    auto rollFast = rollHelper(fastInitKeepAliveTime_);
+    auto roll = (enableSpark2_ && increaseHelloInterval_)
+        ? rollHelper(myHelloTime_)
+        : rollHelper(myKeepAliveTime_);
+    auto rollFast = (enableSpark2_ && increaseHelloInterval_)
+        ? rollHelper(myHelloFastInitTime_)
+        : rollHelper(fastInitKeepAliveTime_);
     auto timePoint = std::chrono::steady_clock::now();
 
     // NOTE: We do not send hello packet immediately after adding new interface
@@ -2381,11 +2387,24 @@ Spark::addInterfaceToDb(
     auto helloTimer = fbzmq::ZmqTimeout::make(
         this, [this, ifName, timePoint, roll, rollFast]() mutable noexcept {
           VLOG(3) << "Sending hello multicast packet on interface " << ifName;
-          // We will send atleast 3 and atmost 4 packets in fast mode. Only one
-          // packet is enough for discovering neighbors in fast mode, however we
-          // send multiple for redundancy to overcome packet drops and compute
-          bool inFastInitState = (std::chrono::steady_clock::now() -
-                                  timePoint) <= 3 * fastInitKeepAliveTime_;
+          bool inFastInitState = false;
+          if (enableSpark2_ && increaseHelloInterval_) {
+            // Under Spark2 context, hello pkt will be sent in relatively low
+            // frequency. However, when node comes up initially or restarting,
+            // send multiple helloMsg to promote to 'NEGOTIATE' state ASAP.
+            // To form adj, at least 2 helloMsg is needed( i.e. with second
+            // hello contain myNodeName_ info ). To give enough margin, send
+            // 3 times of necessary packets.
+            inFastInitState = (std::chrono::steady_clock::now() - timePoint) <=
+                6 * myHelloFastInitTime_;
+          } else {
+            // We will send atleast 3 and atmost 4 packets in fast mode. Only
+            // one packet is enough for discovering neighbors in fast mode,
+            // however we send multiple for redundancy to overcome packet drops
+            // and compute
+            inFastInitState = (std::chrono::steady_clock::now() - timePoint) <=
+                3 * fastInitKeepAliveTime_;
+          }
           sendHelloPacket(ifName, inFastInitState);
 
           // Schedule next run (add 20% variance)

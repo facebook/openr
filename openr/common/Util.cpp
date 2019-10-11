@@ -694,6 +694,29 @@ createSparkNeighborEvent(
   return event;
 }
 
+thrift::SparkNeighbor
+createSparkNeighbor(
+    const std::string& domainName,
+    const std::string& nodeName,
+    int64_t holdTime,
+    const thrift::BinaryAddress& v4Addr,
+    const thrift::BinaryAddress& v6Addr,
+    int64_t kvStorePubPort,
+    int64_t kvStoreCmdPort,
+    const std::string& ifName) {
+  thrift::SparkNeighbor neighbor;
+  neighbor.domainName = domainName;
+  neighbor.nodeName = nodeName;
+  neighbor.holdTime = holdTime;
+  neighbor.publicKey = "";
+  neighbor.transportAddressV4 = v4Addr;
+  neighbor.transportAddressV6 = v6Addr;
+  neighbor.kvStorePubPort = kvStorePubPort;
+  neighbor.kvStoreCmdPort = kvStoreCmdPort;
+  neighbor.ifName = ifName;
+  return neighbor;
+}
+
 thrift::SparkPayload
 createSparkPayload(
     int32_t version,

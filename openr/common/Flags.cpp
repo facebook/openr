@@ -186,6 +186,14 @@ DEFINE_string(
     spark_report_url, "inproc://spark_server_report", "Spark Report URL");
 DEFINE_string(spark_cmd_url, "inproc://spark_server_cmd", "Spark Cmd URL");
 DEFINE_int32(
+    spark2_hello_time_s,
+    20,
+    "Hello msg interval (in seconds) to do node advertisement");
+DEFINE_int32(
+    spark2_hello_fastinit_time_ms,
+    500,
+    "Fast init hello msg interval (in milliseconds) to do node advertisement");
+DEFINE_int32(
     spark2_heartbeat_time_s,
     1,
     "Heartbeat msg interval (in seconds) to keep alive for this node");
@@ -359,6 +367,10 @@ DEFINE_bool(
     false,
     "Enable this to use formed flooding topology to flood updates");
 DEFINE_bool(enable_spark2, false, "Enable Spark2 support");
+DEFINE_bool(
+    spark2_increase_hello_interval,
+    false,
+    "Increase Spark2 hello msg interval");
 DEFINE_bool(
     prefix_fwd_type_mpls,
     false,

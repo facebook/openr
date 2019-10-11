@@ -26,10 +26,8 @@ SparkWrapper::SparkWrapper(
     std::shared_ptr<IoProvider> ioProvider,
     folly::Optional<std::unordered_set<std::string>> areas,
     bool enableSpark2,
-    std::chrono::milliseconds myHandshakeTime,
-    std::chrono::milliseconds myHeartbeatTime,
-    std::chrono::milliseconds myNegotiateHoldTime,
-    std::chrono::milliseconds myHeartbeatHoldTime)
+    bool increaseHelloInterval,
+    SparkTimeConfig timeConfig)
     : myNodeName_(myNodeName),
       ioProvider_(std::move(ioProvider)),
       reqSock_(zmqContext),
@@ -45,10 +43,12 @@ SparkWrapper::SparkWrapper(
       myHoldTime,
       myKeepAliveTime,
       myFastInitKeepAliveTime, // fastInitKeepAliveTime
-      myHandshakeTime, // spark2_handshake_time
-      myHeartbeatTime, // spark2_heartbeat_time
-      myNegotiateHoldTime, // spark2_negotiate_hold_time
-      myHeartbeatHoldTime, // spark2_heartbeat_hold_time
+      timeConfig.myHelloTime, // spark2_hello_time
+      timeConfig.myHelloFastInitTime, // spark2_hello_fast_init_time
+      timeConfig.myHandshakeTime, // spark2_handshake_time
+      timeConfig.myHeartbeatTime, // spark2_heartbeat_time
+      timeConfig.myNegotiateHoldTime, // spark2_negotiate_hold_time
+      timeConfig.myHeartbeatHoldTime, // spark2_heartbeat_hold_time
       folly::none /* ip-tos */,
       enableV4,
       enableSubnetValidation,
@@ -61,6 +61,7 @@ SparkWrapper::SparkWrapper(
       zmqContext,
       true,
       enableSpark2,
+      increaseHelloInterval,
       areas);
 
   // start spark
