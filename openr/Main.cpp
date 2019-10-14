@@ -859,8 +859,11 @@ main(int argc, char** argv) {
 
   // Call external module for platform specific implementations
   if (FLAGS_enable_plugin) {
-    pluginStart(PluginArgs{
-        FLAGS_node_name, context, prefixManagerLocalCmdUrl, kDecisionPubUrl});
+    pluginStart(PluginArgs{FLAGS_node_name,
+                           context,
+                           prefixManagerLocalCmdUrl,
+                           kDecisionPubUrl,
+                           FLAGS_prefix_algo_type_ksp2_ed_ecmp});
   }
 
   // Wait for main-event loop to return

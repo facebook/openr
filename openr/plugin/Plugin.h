@@ -16,6 +16,7 @@ struct PluginArgs {
   fbzmq::Context& zmqContext;
   PrefixManagerLocalCmdUrl prefixManagerUrl;
   DecisionPubUrl decisionPubUrl;
+  bool enableSegmentRouting;
 };
 
 void pluginStart(const PluginArgs& /* pluginArgs */);

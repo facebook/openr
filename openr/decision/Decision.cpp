@@ -275,6 +275,14 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
 
+  BestPathCalResult getBestAnnouncingNodes(
+      std::string const& myNodeName,
+      thrift::IpPrefix const& prefix,
+      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+      bool const isV4,
+      bool const hasBgp,
+      bool const useKsp2EdAlgo);
+
   // given curNode and the dst nodes, find 2spf paths from curNode to each
   // dstNode
   std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
@@ -286,7 +294,7 @@ class SpfSolver::SpfSolverImpl {
   folly::Optional<thrift::UnicastRoute> selectKsp2Routes(
       const thrift::IpPrefix& prefix,
       const string& myNodeName,
-      std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+      std::set<std::string> const& nodePrefixes,
       const std::unordered_map<
           std::string,
           std::vector<std::pair<Path, Metric>>>& routeToNodes);
@@ -649,9 +657,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   //
   // Create unicastRoutes - IP and IP2MPLS routes
   //
-  std::unordered_map<
-      thrift::IpPrefix,
-      std::unordered_map<std::string, thrift::PrefixEntry>>
+  std::unordered_map<thrift::IpPrefix, std::set<std::string>>
       prefixToPerformKsp;
 
   std::unordered_set<std::string> nodesForKsp;
@@ -692,12 +698,6 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
         tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
         continue;
       }
-      if (hasKsp2EdEcmp) {
-        LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
-                   << " which is advertised with KSP2_ED_ECMP algorithm.";
-        tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
-        continue;
-      }
     }
 
     // skip adding route for prefixes advertised by this node
@@ -726,19 +726,13 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
         routeDb.unicastRoutes.emplace_back(std::move(route.value()));
       }
     } else {
-      for (const auto& nodePrefix : nodePrefixes) {
-        if (nodePrefix.second.forwardingType !=
-            thrift::PrefixForwardingType::SR_MPLS) {
-          LOG(ERROR) << nodePrefix.first << " has incompatible forwarding type "
-                     << TEnumTraits<thrift::PrefixForwardingType>::findName(
-                            nodePrefix.second.forwardingType)
-                     << " for algorithm KSP2_ED_ECMP;";
-          tData_.addStatValue(
-              "decision.incompatible_forwarding_type", 1, fbzmq::COUNT);
-          continue;
+      const auto nodes = getBestAnnouncingNodes(
+          myNodeName, prefix, nodePrefixes, isV4Prefix, hasBGP, true);
+      if (nodes.success && nodes.nodes.size() != 0) {
+        prefixToPerformKsp[prefix] = nodes.nodes;
+        for (const auto& node : nodes.nodes) {
+          nodesForKsp.insert(node);
         }
-        prefixToPerformKsp[prefix] = nodePrefixes;
-        nodesForKsp.insert(nodePrefix.first);
       }
     }
   } // for prefixState_.prefixes()
@@ -839,6 +833,55 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   return routeDb;
 } // buildRouteDb
 
+BestPathCalResult
+SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
+    std::string const& myNodeName,
+    thrift::IpPrefix const& prefix,
+    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+    bool const isV4,
+    bool const hasBgp,
+    bool const useKsp2EdAlgo) {
+  BestPathCalResult dstNodes;
+  if (useKsp2EdAlgo) {
+    for (const auto& nodePrefix : nodePrefixes) {
+      if (nodePrefix.second.forwardingType !=
+          thrift::PrefixForwardingType::SR_MPLS) {
+        LOG(ERROR) << nodePrefix.first << " has incompatible forwarding type "
+                   << TEnumTraits<thrift::PrefixForwardingType>::findName(
+                          nodePrefix.second.forwardingType)
+                   << " for algorithm KSP2_ED_ECMP;";
+        tData_.addStatValue(
+            "decision.incompatible_forwarding_type", 1, fbzmq::COUNT);
+        return dstNodes;
+      }
+    }
+  }
+
+  // if it is openr route, all nodes are considered as best nodes.
+  if (not hasBgp) {
+    for (const auto& kv : nodePrefixes) {
+      if (kv.first == myNodeName) {
+        dstNodes.nodes.clear();
+        return dstNodes;
+      }
+      dstNodes.nodes.insert(kv.first);
+    }
+    dstNodes.success = true;
+    return dstNodes;
+  }
+
+  // for bgp route, we need to run best path calculation algorithm to get
+  // the nodes
+  const auto bestPathCalRes =
+      findDstNodesForBgpRoute(myNodeName, prefix, nodePrefixes, isV4);
+  if (bestPathCalRes.success && (not bestPathCalRes.nodes.count(myNodeName))) {
+    return bestPathCalRes;
+  }
+  LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
+  tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+  return dstNodes;
+}
+
 folly::Optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::createOpenRRoute(
     std::string const& myNodeName,
@@ -846,10 +889,13 @@ SpfSolver::SpfSolverImpl::createOpenRRoute(
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
     bool const isV4) {
   // Prepare list of nodes announcing the prefix
-  std::set<std::string> prefixNodes;
-  for (auto const& nodePrefix : nodePrefixes) {
-    prefixNodes.emplace(nodePrefix.first);
+  const auto dstNodes = getBestAnnouncingNodes(
+      myNodeName, prefix, nodePrefixes, isV4, false, false);
+  if (not dstNodes.success) {
+    return folly::none;
   }
+
+  std::set<std::string> prefixNodes = dstNodes.nodes;
 
   const bool perDestination = getPrefixForwardingType(nodePrefixes) ==
       thrift::PrefixForwardingType::SR_MPLS;
@@ -1024,7 +1070,7 @@ folly::Optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::selectKsp2Routes(
     const thrift::IpPrefix& prefix,
     const string& myNodeName,
-    std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
+    std::set<std::string> const& nodes,
     const std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>&
         routeToNodes) {
   thrift::UnicastRoute route;
@@ -1035,8 +1081,8 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
   // get the shortest
   std::vector<std::pair<Path, Metric>> shortestRoutes;
   std::vector<std::pair<Path, Metric>> secShortestRoutes;
-  for (const auto& kv : nodePrefixes) {
-    auto routesIter = routeToNodes.find(kv.first);
+  for (const auto& node : nodes) {
+    auto routesIter = routeToNodes.find(node);
     if (routesIter == routeToNodes.end()) {
       continue;
     }
@@ -1046,7 +1092,7 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
       min_cost = std::min(min_cost, path.second);
     }
 
-    for (const auto& path : routeToNodes.at(kv.first)) {
+    for (const auto& path : routeToNodes.at(node)) {
       if (path.second == min_cost) {
         shortestRoutes.push_back(path);
         continue;
@@ -1144,7 +1190,6 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRouteForNodes(
         for (auto& nodeLink : minPath) {
           linksToIgnore.insert(nodeLink.second);
         }
-        // dstPaths.emplace_back(std::make_pair(std::move(minPath), minCost1));
         pathsToNodes[node].push_back(
             std::make_pair(std::move(minPath), minCost1));
       }

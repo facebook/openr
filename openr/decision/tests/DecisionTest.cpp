@@ -121,11 +121,18 @@ const thrift::NextHopThrift labelPopNextHop{
 const std::chrono::milliseconds debounceTimeout{500};
 
 thrift::PrefixDatabase
-getPrefixDbWithKspfAlgo(thrift::PrefixDatabase const& prefixDb) {
+getPrefixDbWithKspfAlgo(
+    thrift::PrefixDatabase const& prefixDb,
+    folly::Optional<thrift::PrefixType> prefixType = folly::none) {
   thrift::PrefixDatabase newPrefixDb = prefixDb;
   for (auto& p : newPrefixDb.prefixEntries) {
     p.forwardingType = thrift::PrefixForwardingType::SR_MPLS;
     p.forwardingAlgorithm = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+    if (prefixType.hasValue() and
+        (prefixType.value() == thrift::PrefixType::BGP)) {
+      p.type = thrift::PrefixType::BGP;
+      p.mv = thrift::MetricVector();
+    }
   }
   return newPrefixDb;
 }
@@ -1219,13 +1226,18 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
 //
 // Test both IP v4 & v6
 //
-class SimpleRingTopologyFixture : public ::testing::TestWithParam<bool> {
+class SimpleRingTopologyFixture
+    : public ::testing::TestWithParam<
+          std::tuple<bool, folly::Optional<thrift::PrefixType>>> {
  public:
-  SimpleRingTopologyFixture() : v4Enabled(GetParam()) {}
+  SimpleRingTopologyFixture() : v4Enabled(std::get<0>(GetParam())) {}
 
  protected:
   void
-  CustomSetUp(bool calculateLfas, bool useKsp2Ed) {
+  CustomSetUp(
+      bool calculateLfas,
+      bool useKsp2Ed,
+      folly::Optional<thrift::PrefixType> prefixType = folly::none) {
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(nodeName, v4Enabled, calculateLfas);
     adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
@@ -1251,13 +1263,13 @@ class SimpleRingTopologyFixture : public ::testing::TestWithParam<bool> {
     auto pdb3 = v4Enabled ? prefixDb3V4 : prefixDb3;
     auto pdb4 = v4Enabled ? prefixDb4V4 : prefixDb4;
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb1) : pdb1));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb1, prefixType) : pdb1));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb2) : pdb2));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb2, prefixType) : pdb2));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb3) : pdb3));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb3, prefixType) : pdb3));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb4) : pdb4));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb4, prefixType) : pdb4));
   }
 
   thrift::AdjacencyDatabase adjacencyDb1, adjacencyDb2, adjacencyDb3,
@@ -1269,7 +1281,13 @@ class SimpleRingTopologyFixture : public ::testing::TestWithParam<bool> {
 };
 
 INSTANTIATE_TEST_CASE_P(
-    SimpleRingTopologyInstance, SimpleRingTopologyFixture, ::testing::Bool());
+    SimpleRingTopologyInstance,
+    SimpleRingTopologyFixture,
+    ::testing::Values(
+        std::make_tuple(true, folly::none),
+        std::make_tuple(false, folly::none),
+        std::make_tuple(true, thrift::PrefixType::BGP),
+        std::make_tuple(false, thrift::PrefixType::BGP)));
 
 //
 // Verify SpfSolver finds the shortest path
@@ -1526,7 +1544,10 @@ TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
 // Validate KSP2_ED_ECMP routes on SimpleRingTopology
 //
 TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
-  CustomSetUp(true /* multipath - ignored */, true /* useKsp2Ed */);
+  CustomSetUp(
+      true /* multipath - ignored */,
+      true /* useKsp2Ed */,
+      std::get<1>(GetParam()));
   auto routeMap = getRouteMap(*spfSolver, {"1", "2", "3", "4"});
 
   // Unicast routes => 4 * (4 - 1) = 12
@@ -1677,6 +1698,104 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
 
   validatePopLabelRoute(routeMap, "4", adjacencyDb4.nodeLabel);
   validateAdjLabelRoutes(routeMap, "4", adjacencyDb4.adjacencies);
+}
+
+TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
+  CustomSetUp(
+      true /* multipath - ignored */,
+      true /* useKsp2Ed */,
+      thrift::PrefixType::BGP);
+  thrift::MetricVector mv1, mv2;
+  int64_t numMetrics = 5;
+  mv1.metrics.resize(numMetrics);
+  mv2.metrics.resize(numMetrics);
+  for (int64_t i = 0; i < numMetrics; ++i) {
+    mv1.metrics[i].type = mv2.metrics[i].type = i;
+    mv1.metrics[i].priority = mv2.metrics[i].priority = i;
+    mv1.metrics[i].op = mv2.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    mv1.metrics[i].isBestPathTieBreaker = mv2.metrics[i].isBestPathTieBreaker =
+        false;
+    mv1.metrics[i].metric = mv2.metrics[i].metric = {i};
+  }
+
+  auto prefixDBs = spfSolver->getPrefixDatabases();
+  auto prefixDBOne = prefixDBs["1"];
+  auto prefixDBTwo = prefixDBs["2"];
+
+  // set metric vector for two prefixes in two nodes to be same
+  prefixDBOne.prefixEntries[0].mv = mv1;
+  prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[0]);
+
+  spfSolver->updatePrefixDatabase(prefixDBOne);
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+
+  auto routeMap = getRouteMap(*spfSolver, {"3"});
+
+  const auto counters = spfSolver->getCounters();
+  // run spf once for 3 peers from node 3, then run second spf for node 2 and 4
+  // from node 3 only
+  EXPECT_EQ(counters.at("decision.spf_runs.count.0"), 5);
+  auto pushCode = thrift::MplsActionCode::PUSH;
+  auto push2 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{2});
+  auto push12 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{1, 2});
+
+  // in router 3, we are expecting addr1 to be null because it is a bgp route
+  // with same metric vector from two nodes
+  // in current setup, if we don't setup tie break to be true, in case of tie,
+  // we counld not determine which node to be best dest node, hence we will not
+  // program routes to it.
+  EXPECT_EQ(
+      routeMap.find(make_pair("3", toString(v4Enabled ? addr1V4 : addr1))),
+      routeMap.end());
+
+  // decrease mv for the second node, now router 3 should point to 1
+  prefixDBTwo.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .metric.front()--;
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  routeMap = getRouteMap(*spfSolver, {"3"});
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 10, folly::none, true),
+                createNextHopFromAdj(adj34, v4Enabled, 30, push12, true)}));
+
+  // increase mv for the second node by 2, now router 3 should point to 2
+  prefixDBTwo.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .metric.front() += 2;
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  routeMap = getRouteMap(*spfSolver, {"3"});
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 20, push2, true),
+                createNextHopFromAdj(adj34, v4Enabled, 20, push2, true)}));
+
+  // set the tie breaker to be true. in this case, both nodes will be selected
+  prefixDBTwo.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .isBestPathTieBreaker = true;
+
+  prefixDBOne.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .isBestPathTieBreaker = true;
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  spfSolver->updatePrefixDatabase(prefixDBOne);
+  routeMap = getRouteMap(*spfSolver, {"3"});
+
+  // createNextHopFromAdj(adj34, v4Enabled, 30, push12, true) getting ignored
+  // because in kspf, we will ignore second shortest path if it starts with
+  // one of shortest path for anycast prefix
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
+      NextHops(
+          {createNextHopFromAdj(adj31, v4Enabled, 20, push2, true),
+           createNextHopFromAdj(adj34, v4Enabled, 20, push2, true),
+           createNextHopFromAdj(adj31, v4Enabled, 10, folly::none, true)}));
 }
 
 //
@@ -2042,13 +2161,17 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
 //    ---*20*---
 //
 */
-class ParallelAdjRingTopologyFixture : public ::testing::Test {
+class ParallelAdjRingTopologyFixture
+    : public ::testing::TestWithParam<folly::Optional<thrift::PrefixType>> {
  public:
   ParallelAdjRingTopologyFixture() {}
 
  protected:
   void
-  CustomSetUp(bool calculateLfas, bool useKsp2Ed) {
+  CustomSetUp(
+      bool calculateLfas,
+      bool useKsp2Ed,
+      folly::Optional<thrift::PrefixType> prefixType = folly::none) {
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(nodeName, false, calculateLfas);
     // R1 -> R2
@@ -2112,13 +2235,17 @@ class ParallelAdjRingTopologyFixture : public ::testing::Test {
     // Prefix db's
 
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb1) : prefixDb1));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb1, prefixType)
+                  : prefixDb1));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb2) : prefixDb2));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb2, prefixType)
+                  : prefixDb2));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb3) : prefixDb3));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb3, prefixType)
+                  : prefixDb3));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb4) : prefixDb4));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb4, prefixType)
+                  : prefixDb4));
   }
 
   thrift::Adjacency adj12_1, adj12_2, adj12_3, adj13_1, adj21_1, adj21_2,
@@ -2129,6 +2256,11 @@ class ParallelAdjRingTopologyFixture : public ::testing::Test {
 
   std::unique_ptr<SpfSolver> spfSolver;
 };
+
+INSTANTIATE_TEST_CASE_P(
+    ParallelAdjRingTopologyInstance,
+    ParallelAdjRingTopologyFixture,
+    ::testing::Values(folly::none, thrift::PrefixType::BGP));
 
 TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
   CustomSetUp(false /* shortest path */, false /* useKsp2Ed */);
@@ -2409,8 +2541,9 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
 //
 // Use the same topology, but test KSP2_ED_ECMP routing
 //
-TEST_F(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
-  CustomSetUp(true /* multipath, ignored */, true /* useKsp2Ed */);
+TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
+  folly::Optional<thrift::PrefixType> prefixType = GetParam();
+  CustomSetUp(true /* multipath, ignored */, true /* useKsp2Ed */, prefixType);
 
   auto pushCode = thrift::MplsActionCode::PUSH;
   auto push1 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{1});
@@ -2514,6 +2647,127 @@ TEST_F(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
       routeMap[make_pair("4", toString(addr1))],
       NextHops({createNextHopFromAdj(adj42_1, false, 22, push1, true),
                 createNextHopFromAdj(adj43_1, false, 22, push1, true)}));
+}
+
+TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
+  CustomSetUp(
+      true /* multipath, ignored */,
+      true /* useKsp2Ed */,
+      thrift::PrefixType::BGP);
+
+  auto pushCode = thrift::MplsActionCode::PUSH;
+  auto push1 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{1});
+  auto push2 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{2});
+  auto push3 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{3});
+  auto push4 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{4});
+  auto push34 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{3, 4});
+  auto push43 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{4, 3});
+  auto push12 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{1, 2});
+  auto push21 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{2, 1});
+
+  //
+  // Verify parallel link case between node-1 and node-2
+  auto routeMap = getRouteMap(*spfSolver, {"1"});
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2))],
+      NextHops({createNextHopFromAdj(adj12_1, false, 11, folly::none, true),
+                createNextHopFromAdj(adj12_2, false, 11, folly::none, true),
+                createNextHopFromAdj(adj12_3, false, 20, folly::none, true)}));
+
+  //
+  // Bring down adj12_2 and adj34_2 to make our nexthop validations easy
+  // Then validate routing table of all the nodes
+  //
+
+  adjacencyDb1.adjacencies.at(1).isOverloaded = true;
+  adjacencyDb3.adjacencies.at(2).isOverloaded = true;
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb3).first);
+
+  thrift::MetricVector mv1, mv2;
+  int64_t numMetrics = 5;
+  mv1.metrics.resize(numMetrics);
+  mv2.metrics.resize(numMetrics);
+  for (int64_t i = 0; i < numMetrics; ++i) {
+    mv1.metrics[i].type = mv2.metrics[i].type = i;
+    mv1.metrics[i].priority = mv2.metrics[i].priority = i;
+    mv1.metrics[i].op = mv2.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    mv1.metrics[i].isBestPathTieBreaker = mv2.metrics[i].isBestPathTieBreaker =
+        false;
+    mv1.metrics[i].metric = mv2.metrics[i].metric = {i};
+  }
+
+  auto prefixDBs = spfSolver->getPrefixDatabases();
+  auto prefixDBOne = prefixDBs["1"];
+  auto prefixDBTwo = prefixDBs["2"];
+
+  // set metric vector for addr1 prefixes in two nodes to be same
+  prefixDBOne.prefixEntries[0].mv = mv1;
+  prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[0]);
+
+  spfSolver->updatePrefixDatabase(prefixDBOne);
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+
+  routeMap = getRouteMap(*spfSolver, {"3"});
+
+  // validate router 3
+  EXPECT_EQ(routeMap.find(make_pair("3", toString(addr1))), routeMap.end());
+
+  // decrease mv for the second node, now router 3 should point to 1
+  prefixDBTwo.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .metric.front()--;
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  routeMap = getRouteMap(*spfSolver, {"3"});
+
+  // validate router 3
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(addr1))],
+      NextHops({createNextHopFromAdj(adj31_1, false, 11, folly::none, true),
+                createNextHopFromAdj(adj34_1, false, 33, push12, true)}));
+
+  // decrease mv for the second node, now router 3 should point to 2
+  prefixDBTwo.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .metric.front() += 2;
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  routeMap = getRouteMap(*spfSolver, {"3"});
+
+  // validate router 3
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(addr1))],
+      NextHops({createNextHopFromAdj(adj31_1, false, 22, push2, true),
+                createNextHopFromAdj(adj34_1, false, 22, push2, true)}));
+
+  // set the tie breaker to be true. in this case, both nodes will be selected
+  prefixDBTwo.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .isBestPathTieBreaker = true;
+
+  prefixDBOne.prefixEntries.back()
+      .mv.value()
+      .metrics[numMetrics - 1]
+      .isBestPathTieBreaker = true;
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  spfSolver->updatePrefixDatabase(prefixDBOne);
+  routeMap = getRouteMap(*spfSolver, {"3"});
+
+  // createNextHopFromAdj(adj34, v4Enabled, 30, push12, true) getting ignored
+  // because in kspf, we will ignore second shortest path if it starts with
+  // one of shortest path for anycast prefix
+  EXPECT_EQ(
+      routeMap[make_pair("3", toString(addr1))],
+      NextHops({createNextHopFromAdj(adj31_1, false, 22, push2, true),
+                createNextHopFromAdj(adj34_1, false, 22, push2, true),
+                createNextHopFromAdj(adj31_1, false, 11, folly::none, true)}));
 }
 
 /**
