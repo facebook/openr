@@ -2001,6 +2001,9 @@ Decision::processPendingPrefixUpdates() {
     return;
   }
 
+  if (maybePerfEvents) {
+    addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_DEBOUNCE");
+  }
   // update routeDb once for all updates received
   LOG(INFO) << "Decision: updating new routeDb.";
   auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
