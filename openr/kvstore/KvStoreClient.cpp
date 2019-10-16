@@ -711,6 +711,10 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
     if (!client) {
       continue;
     }
+
+    VLOG(3) << "Successfully connected to Open/R with addr: "
+            << sockAddr.getAddressStr();
+
     calls.emplace_back(client->semifuture_getKvStoreKeyValsFiltered(params));
   }
 
@@ -720,16 +724,25 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
         fbzmq::Error(0, "Failed to dump key-val from Open/R instances"));
   }
 
-  folly::collectAllSemiFuture(calls.begin(), calls.end())
-      .via(&evb)
-      .thenValue([&](auto&& results) {
-        LOG(INFO) << "Merge values received from Open/R instances";
+  folly::collectAllSemiFuture(calls).via(&evb).thenValue(
+      [&](std::vector<folly::Try<openr::thrift::Publication>>&& results) {
+        LOG(INFO) << "Merge values received from Open/R instances"
+                  << ", results size: " << results.size();
 
         // loop semifuture collection to merge all values
         for (auto& result : results) {
-          CHECK(result.hasValue());
-          auto& pub = result.value();
-          KvStore::mergeKeyValues(merged, pub.keyVals);
+          VLOG(3) << "hasException: " << result.hasException()
+                  << ", hasValue: " << result.hasValue();
+
+          // folly::Try will contain either value or exception
+          // Do NOT CHECK(result.hasValue()) since exception can happen.
+          if (result.hasException()) {
+            LOG(WARNING) << "Exception happened: "
+                         << folly::exceptionStr(result.exception());
+          } else if (result.hasValue()) {
+            VLOG(3) << "KvStore publication received";
+            KvStore::mergeKeyValues(merged, result.value().keyVals);
+          }
         }
         evb.terminateLoopSoon();
       });
