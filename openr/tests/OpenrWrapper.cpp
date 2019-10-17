@@ -249,7 +249,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nodeId_,
       static_cast<int32_t>(60100), // fib agent port
       true, // dry run mode
-      false, // periodic sync
       false, // segment routing
       false, // ordered Fib
       fibColdStartDuration,

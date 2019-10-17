@@ -53,7 +53,6 @@ class Fib final : public OpenrEventLoop {
   Fib(std::string myNodeName,
       int32_t thriftPort,
       bool dryrun,
-      bool enableFibSync,
       bool enableSegmentRouting,
       bool enableOrderedFib,
       std::chrono::seconds coldStartDuration,
@@ -146,6 +145,8 @@ class Fib final : public OpenrEventLoop {
   RouteDatabaseMap routeDb_;
   // Route DB containing only dry run or not installed routes
   RouteDatabaseMap doNotInstallRouteDb_;
+
+  // Events to capture and indicate performance of protocol convergence.
   std::deque<thrift::PerfEvents> perfDb_;
 
   // indicates we've received a decision route publication and therefore have
@@ -173,9 +174,6 @@ class Fib final : public OpenrEventLoop {
 
   // In dry run we do not make actual thrift call to manipulate routes
   bool dryrun_{true};
-
-  // Enable periodic syncFib to FibAgent
-  bool enableFibSync_{false};
 
   // Enable segment routing
   const bool enableSegmentRouting_{false};
@@ -210,9 +208,6 @@ class Fib final : public OpenrEventLoop {
 
   // periodically send alive msg to switch agent
   std::unique_ptr<fbzmq::ZmqTimeout> healthChecker_{nullptr};
-
-  // periodically send sync msg to switch agent
-  std::unique_ptr<fbzmq::ZmqTimeout> syncFibTimer_{nullptr};
 
   // Timer for submitting to monitor periodically
   std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};

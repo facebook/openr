@@ -25,7 +25,6 @@ Fib::Fib(
     std::string myNodeName,
     int32_t thriftPort,
     bool dryrun,
-    bool enableFibSync,
     bool enableSegmentRouting,
     bool enableOrderedFib,
     std::chrono::seconds coldStartDuration,
@@ -40,7 +39,6 @@ Fib::Fib(
       myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),
-      enableFibSync_(enableFibSync),
       enableSegmentRouting_(enableSegmentRouting),
       enableOrderedFib_(enableOrderedFib),
       coldStartDuration_(coldStartDuration),
@@ -93,18 +91,6 @@ Fib::Fib(
   if (not dryrun_) {
     healthChecker_->scheduleTimeout(
         Constants::kHealthCheckInterval, true /* schedule periodically */);
-  }
-
-  syncFibTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
-    if (hasRoutesFromDecision_) {
-      syncRouteDbDebounced();
-    }
-  });
-
-  // Only schedule sync Fib in non dry run and enable sync mode
-  if (not dryrun_ and enableFibSync_) {
-    syncFibTimer_->scheduleTimeout(
-        Constants::kPlatformSyncInterval, true /* schedule periodically */);
   }
 
   prepare();

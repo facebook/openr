@@ -89,7 +89,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         nodeName,
         -1, /* thrift port */
         true, /* dryrun */
-        false, /* periodic syncFib */
         true, /* enableSegmentRouting */
         false, /* enableOrderedFib */
         std::chrono::seconds(2),

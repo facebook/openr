@@ -79,7 +79,6 @@ DECLARE_string(spark_cmd_url);
 
 DECLARE_int32(health_checker_ping_interval_s);
 DECLARE_bool(enable_health_checker);
-DECLARE_bool(enable_fib_sync);
 DECLARE_int32(health_check_option);
 DECLARE_int32(health_check_pct);
 

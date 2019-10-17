@@ -160,7 +160,6 @@ class FibTestFixture : public ::testing::Test {
         "node-1",
         port, /* thrift port */
         false, /* dryrun */
-        true, /* periodic syncFib */
         false, /* segment route */
         false, /* orderedFib */
         std::chrono::seconds(2),
