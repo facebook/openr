@@ -1017,8 +1017,8 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
   std::set<std::string> nodes;
   folly::Optional<thrift::MetricVector> bestVector{folly::none};
 
-  const auto dstInfo =
-      findDstNodesForBgpRoute(myNodeName, prefix, nodePrefixes, isV4);
+  const auto dstInfo = getBestAnnouncingNodes(
+      myNodeName, prefix, nodePrefixes, isV4, true, false);
   if (not dstInfo.success) {
     return folly::none;
   }
