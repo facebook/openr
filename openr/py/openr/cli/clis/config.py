@@ -60,7 +60,7 @@ class ConfigPrefixManagerCli(object):
     @click.command()
     @click.pass_obj
     def config_prefix_manager(cli_opts):  # noqa: B902
-        """ Dump link monitor config """
+        """ Dump prefix manager config """
 
         config.ConfigPrefixManagerCmd(cli_opts).run()
 

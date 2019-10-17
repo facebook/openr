@@ -8,20 +8,44 @@
 #
 
 
+from typing import Tuple
+
 from openr.AllocPrefix import ttypes as ap_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.LinkMonitor import ttypes as lm_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.OpenrCtrl.ttypes import OpenrError
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
 
 
-class ConfigPrefixAllocatorCmd(OpenrCtrlCmd):
+class ConfigStoreCmdBase(OpenrCtrlCmd):
+    def getConfigWrapper(
+        self, client: OpenrCtrl.Client, config_key: str
+    ) -> Tuple[str, str]:
+        blob = None
+        exception_str = None
+        try:
+            blob = client.getConfigKey(config_key)
+        except OpenrError as ex:
+            exception_str = "Exception getting key for {}: {}".format(config_key, ex)
+
+        return (blob, exception_str)
+
+
+class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client):
-        prefix_alloc_blob = client.getConfigKey(Consts.PREFIX_ALLOC_KEY)
+        (prefix_alloc_blob, exception_str) = self.getConfigWrapper(
+            client, Consts.PREFIX_ALLOC_KEY
+        )
+
+        if prefix_alloc_blob is None:
+            print(exception_str)
+            return
+
         prefix_alloc = deserialize_thrift_object(
             prefix_alloc_blob, ap_types.AllocPrefix
         )
@@ -44,9 +68,20 @@ class ConfigPrefixAllocatorCmd(OpenrCtrlCmd):
         print(printing.render_vertical_table(rows, caption=caption))
 
 
-class ConfigLinkMonitorCmd(OpenrCtrlCmd):
+class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client) -> None:
-        lm_config_blob = client.getConfigKey(Consts.LINK_MONITOR_KEY)
+        # After link-monitor thread starts, it will hold for
+        # "adjHoldUntilTimePoint_" time before populate config information.
+        # During this short time-period, Exception can be hit if dump cmd
+        # kicks during this time period.
+        (lm_config_blob, exception_str) = self.getConfigWrapper(
+            client, Consts.LINK_MONITOR_KEY
+        )
+
+        if lm_config_blob is None:
+            print(exception_str)
+            return
+
         lm_config = deserialize_thrift_object(
             lm_config_blob, lm_types.LinkMonitorConfig
         )
@@ -80,9 +115,16 @@ class ConfigLinkMonitorCmd(OpenrCtrlCmd):
         print(printing.render_horizontal_table(rows, column_labels=column_labels))
 
 
-class ConfigPrefixManagerCmd(OpenrCtrlCmd):
+class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client) -> None:
-        prefix_mgr_config_blob = client.getConfigKey(Consts.PREFIX_MGR_KEY)
+        (prefix_mgr_config_blob, exception_str) = self.getConfigWrapper(
+            client, Consts.PREFIX_MGR_KEY
+        )
+
+        if prefix_mgr_config_blob is None:
+            print(exception_str)
+            return
+
         prefix_mgr_config = deserialize_thrift_object(
             prefix_mgr_config_blob, lsdb_types.PrefixDatabase
         )
@@ -94,13 +136,13 @@ class ConfigPrefixManagerCmd(OpenrCtrlCmd):
         print()
 
 
-class ConfigEraseCmd(OpenrCtrlCmd):
+class ConfigEraseCmd(ConfigStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, key: str) -> None:
         client.eraseConfigKey(key)
         print("Key erased")
 
 
-class ConfigStoreCmd(OpenrCtrlCmd):
+class ConfigStoreCmd(ConfigStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, key: str, value: str) -> None:
         client.setConfigKey(key, value)
         print("Key-Value stored")
