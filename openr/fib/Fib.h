@@ -141,20 +141,25 @@ class Fib final : public OpenrEventLoop {
 
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
-  RouteDatabaseMap routeDb_;
+  struct RouteState {
+    // Non modified copy of Unicast and MPLS routes received from Decision
+    std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute> unicastRoutes;
+    std::unordered_map<uint32_t, thrift::MplsRoute> mplsRoutes;
+
+    // indicates we've received a decision route publication and therefore have
+    // routes to sync. will not synce routes with system until this is set
+    bool hasRoutesFromDecision{false};
+
+    // Flag to indicate the result of previous route programming attempt.
+    // If set, it means what currently cached in local routes has not been 100%
+    // successfully synced with agent, we have to trigger an enforced full fib
+    // sync with agent again
+    bool dirtyRouteDb{false};
+  };
+  RouteState routeState_;
 
   // Events to capture and indicate performance of protocol convergence.
   std::deque<thrift::PerfEvents> perfDb_;
-
-  // indicates we've received a decision route publication and therefore have
-  // routes to sync. will not synce routes with system until this is set
-  bool hasRoutesFromDecision_{false};
-
-  // Flag to indicate the result of previous route programming attempt.
-  // If set, it means what currently cached in local routeDb_ has not been 100%
-  // successfully synced with agent, we have to trigger an enforced full fib
-  // sync with agent again
-  bool dirtyRouteDb_{false};
 
   // Create timestamp of recently logged perf event
   int64_t recentPerfEventCreateTs_{0};

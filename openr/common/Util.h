@@ -34,12 +34,6 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 
 namespace openr {
-struct RouteDatabaseMap {
-  std::string thisNodeName;
-  folly::Optional<thrift::PerfEvents> perfEvents;
-  std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute> unicastRoutes;
-  std::unordered_map<uint32_t, thrift::MplsRoute> mplsRoutes;
-};
 
 /**
  * Class to store re2 objects, provides API to match string with regex
