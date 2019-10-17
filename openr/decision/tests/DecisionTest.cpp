@@ -1698,6 +1698,28 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
 
   validatePopLabelRoute(routeMap, "4", adjacencyDb4.nodeLabel);
   validateAdjLabelRoutes(routeMap, "4", adjacencyDb4.adjacencies);
+
+  // this is to test corner cases for traceEdgeDisjointPaths algorithm.
+  // In this example, node 3 is overloaded, and link between node 1 and node 2
+  // are overloaded. In such case, there is no route from node 1 to node 2 and 4
+  adjacencyDb1.adjacencies[0].isOverloaded = true;
+  adjacencyDb3.isOverloaded = true;
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb1).first);
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb3).first);
+  routeMap = getRouteMap(*spfSolver, {"1"});
+
+  EXPECT_EQ(
+      routeMap.find(make_pair("1", toString(v4Enabled ? addr4V4 : addr4))),
+      routeMap.end());
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
+      NextHops(
+          {createNextHopFromAdj(adj13, v4Enabled, 10, folly::none, true)}));
+
+  EXPECT_EQ(
+      routeMap.find(make_pair("1", toString(v4Enabled ? addr2V4 : addr2))),
+      routeMap.end());
 }
 
 TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {

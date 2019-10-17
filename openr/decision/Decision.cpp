@@ -573,11 +573,16 @@ SpfSolver::SpfSolverImpl::traceEdgeDisjointPaths(
     // Iterate over all neighbors to expand spurPath further
     for (auto& link : linkState_.linksFromNode(spurNode)) {
       // Skip ignored links
-      if (!link->isUp() or linksToIgnore.count(link)) {
+      // in some scenario, the nbrnode may not be
+      // accessible from srcNode, even though link between
+      // spur node and nbrnode is still up. For example,
+      // if spurnode is overloaded, and the only link between
+      // nbrnode and rest of graph is through spurnode.
+      auto& nbrName = link->getOtherNodeName(spurNode);
+      if (!link->isUp() or linksToIgnore.count(link) or
+          spfResult.find(nbrName) == spfResult.end()) {
         continue;
       }
-
-      auto& nbrName = link->getOtherNodeName(spurNode);
       auto& nbrIface = link->getIfaceFromNode(nbrName);
       auto nbrMetric = spfResult.at(nbrName).first;
       auto spurMetric = spfResult.at(spurNode).first;
