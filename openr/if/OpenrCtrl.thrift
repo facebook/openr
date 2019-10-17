@@ -110,15 +110,11 @@ service OpenrCtrl extends fb303.FacebookService {
 
   /**
    * Get route database from decision module. Since Decision has global
-   * topology information, any node can be retrieved
+   * topology information, any node can be retrieved.
+   *
+   * NOTE: Current node's routes are returned if `nodeName` is empty.
    */
   Fib.RouteDatabase getRouteDbComputed(1: string nodeName)
-    throws (1: OpenrError error)
-
-  /**
-   * Get route database of the current node which are not installable.
-   */
-  Fib.RouteDatabase getRouteDbUnInstallable()
     throws (1: OpenrError error)
 
   //

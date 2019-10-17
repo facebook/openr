@@ -25,6 +25,9 @@ class DecisionCli(object):
         self.decision.add_command(
             DecisionRoutesComputedCli().routes, name="routes-computed"
         )
+        self.decision.add_command(
+            DecisionRoutesUnInstallableCli().routes, name="routes-uninstallable"
+        )
 
         # for TG backward compatibility. Deprecated.
         self.decision.add_command(DecisionRoutesComputedCli().routes, name="routes")
@@ -84,6 +87,30 @@ class DecisionRoutesComputedCli(object):
 
         nodes = parse_nodes(cli_opts, nodes)
         decision.DecisionRoutesComputedCmd(cli_opts).run(nodes, prefixes, labels, json)
+
+
+class DecisionRoutesUnInstallableCli(object):
+    @click.command()
+    @click.option(
+        "--prefixes",
+        "-p",
+        default="",
+        multiple=True,
+        help="Get route for specific IPs or Prefixes.",
+    )
+    @click.option(
+        "--labels",
+        "-l",
+        type=click.INT,
+        multiple=True,
+        help="Get route for specific labels.",
+    )
+    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.pass_obj
+    def routes(cli_opts, prefixes, labels, json):  # noqa: B902
+        """ Request un installable routing table of the current host """
+
+        decision.DecisionRoutesUnInstallableCmd(cli_opts).run(prefixes, labels, json)
 
 
 class DecisionPrefixesCli(object):

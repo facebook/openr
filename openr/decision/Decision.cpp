@@ -1688,8 +1688,6 @@ Decision::processRequestMsg(fbzmq::Message&& request) {
   case thrift::DecisionCommand::ROUTE_DB_GET: {
     auto nodeName = thriftReq.nodeName;
     if (nodeName.empty()) {
-      VLOG(1) << "Decision: Routes requested with no specific node name. "
-              << "Returning " << myNodeName_ << " routes.";
       nodeName = myNodeName_;
     }
 

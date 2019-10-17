@@ -142,8 +142,6 @@ class Fib final : public OpenrEventLoop {
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
   RouteDatabaseMap routeDb_;
-  // Route DB containing only dry run or not installed routes
-  RouteDatabaseMap doNotInstallRouteDb_;
 
   // Events to capture and indicate performance of protocol convergence.
   std::deque<thrift::PerfEvents> perfDb_;

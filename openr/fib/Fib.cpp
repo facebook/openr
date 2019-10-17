@@ -229,18 +229,6 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
     // send the thrift::PerfDatabase
     return fbzmq::Message::fromThriftObj(dumpPerfDb(), serializer_);
     break;
-  case thrift::FibCommand::ROUTE_DB_UNINSTALLABLE_GET: {
-    VLOG(2) << "Fib: Do not install RouteDb requested";
-    // send the thrift::RouteDatabase
-    thrift::RouteDatabase retRouteDb;
-    retRouteDb.thisNodeName = doNotInstallRouteDb_.thisNodeName;
-    retRouteDb.perfEvents = doNotInstallRouteDb_.perfEvents;
-    for (const auto& route : doNotInstallRouteDb_.unicastRoutes) {
-      retRouteDb.unicastRoutes.emplace_back(route.second);
-    }
-    return fbzmq::Message::fromThriftObj(retRouteDb, serializer_);
-    break;
-  }
   default:
     LOG(ERROR) << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());
@@ -255,12 +243,10 @@ Fib::mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta const& routeDelta) {
   // Add unicast routes to update
   for (const auto& route : routeDelta.unicastRoutesToUpdate) {
     if (route.doNotInstall) {
-      doNotInstallRouteDb_.unicastRoutes[route.dest] = route;
       // Remove routes that should not be programmed
       routeDb_.unicastRoutes.erase(route.dest);
     } else {
       routeDb_.unicastRoutes[route.dest] = route;
-      doNotInstallRouteDb_.unicastRoutes.erase(route.dest);
     }
   }
 
@@ -271,7 +257,6 @@ Fib::mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta const& routeDelta) {
 
   // Delete unicast routes
   for (auto& dest : routeDelta.unicastRoutesToDelete) {
-    doNotInstallRouteDb_.unicastRoutes.erase(dest);
     routeDb_.unicastRoutes.erase(dest);
   }
 

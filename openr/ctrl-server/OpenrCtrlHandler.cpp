@@ -453,25 +453,6 @@ OpenrCtrlHandler::semifuture_getRouteDb() {
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
-OpenrCtrlHandler::semifuture_getRouteDbUnInstallable() {
-  folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
-
-  thrift::FibRequest request;
-  request.cmd = thrift::FibCommand::ROUTE_DB_UNINSTALLABLE_GET;
-
-  auto reply = requestReplyThrift<thrift::RouteDatabase>(
-      thrift::OpenrModuleType::FIB, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::RouteDatabase>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
-}
-
-folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDbComputed(
     std::unique_ptr<std::string> nodeName) {
   folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
