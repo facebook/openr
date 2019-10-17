@@ -1635,8 +1635,15 @@ Spark::processHandshakeMsg(
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
   auto neighborIt = ifNeighbors.find(neighborName);
 
-  CHECK(neighborIt != ifNeighbors.end())
-      << "neighbor: (" << neighborName << ") is NOT found";
+  // under quick flapping of Openr, msg can come out-of-order.
+  // handshakeMsg will ONLY be processed when:
+  //  1). neighbor is tracked on ifName;
+  //  2). neighbor is under NEGOTIATE stage;
+  if (neighborIt == ifNeighbors.end()) {
+    VLOG(3) << "Neighbor: (" << neighborName
+            << "). is NOT found. Ignore handshakeMsg.";
+    return;
+  }
 
   auto& neighbor = neighborIt->second;
 
