@@ -91,7 +91,7 @@ class Fib final : public OpenrEventLoop {
   /**
    * Build a new route database by adding routeDelta to current database
    */
-  void mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta& routeDelta);
+  void mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta const& routeDelta);
 
   /**
    * Process interface status information from LinkMonitor. We remove all
@@ -137,11 +137,10 @@ class Fib final : public OpenrEventLoop {
   void submitCounters();
 
   // log perf events
-  void logPerfEvents();
+  void logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents);
 
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.
-  folly::Optional<thrift::PerfEvents> maybePerfEvents_;
   RouteDatabaseMap routeDb_;
   // Route DB containing only dry run or not installed routes
   RouteDatabaseMap doNotInstallRouteDb_;

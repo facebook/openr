@@ -251,9 +251,9 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
  * Rebuild routeDb_ from routeDelta
  */
 void
-Fib::mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta& routeDelta) {
+Fib::mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta const& routeDelta) {
   // Add unicast routes to update
-  for (auto& route : routeDelta.unicastRoutesToUpdate) {
+  for (const auto& route : routeDelta.unicastRoutesToUpdate) {
     if (route.doNotInstall) {
       doNotInstallRouteDb_.unicastRoutes[route.dest] = route;
       // Remove routes that should not be programmed
@@ -287,8 +287,7 @@ Fib::processRouteDb(thrift::RouteDatabaseDelta&& routeDelta) {
   // Update perfEvents_ .. We replace existing perf events with new one as
   // convergence is going to be based on new data, not the old.
   if (routeDelta.perfEvents) {
-    maybePerfEvents_ = routeDelta.perfEvents;
-    addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_ROUTE_DB_RECVD");
+    addPerfEvent(*routeDelta.perfEvents, myNodeName_, "FIB_ROUTE_DB_RECVD");
   }
 
   // Update routeDb_
@@ -305,8 +304,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
   tData_.addStatValue("fib.process_interface_db", 1, fbzmq::COUNT);
 
   if (interfaceDb.perfEvents) {
-    maybePerfEvents_.assign(std::move(interfaceDb.perfEvents));
-    addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_INTF_DB_RECEIVED");
+    addPerfEvent(*interfaceDb.perfEvents, myNodeName_, "FIB_INTF_DB_RECEIVED");
   }
 
   // Find interfaces which were up before and we detected them down
@@ -325,6 +323,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
   }
 
   thrift::RouteDatabaseDelta routeDbDelta;
+  routeDbDelta.perfEvents = std::move(interfaceDb.perfEvents);
 
   for (auto it = routeDb_.unicastRoutes.begin();
        it != routeDb_.unicastRoutes.end();) {
@@ -474,7 +473,7 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   if (dryrun_) {
     // Do not program routes in case of dryrun
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
-    logPerfEvents();
+    logPerfEvents(routeDbDelta.perfEvents);
     return;
   }
 
@@ -493,9 +492,6 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
 
   // Make thrift calls to do real programming
   try {
-    if (maybePerfEvents_) {
-      addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_DEBOUNCE");
-    }
     uint32_t numOfRouteUpdates = 0;
     createFibClient(evb_, socket_, client_, thriftPort_);
     if (routeDbDelta.unicastRoutesToDelete.size()) {
@@ -518,7 +514,7 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
     tData_.addStatValue(
         "fib.num_of_route_updates", numOfRouteUpdates, fbzmq::SUM);
     dirtyRouteDb_ = false;
-    logPerfEvents();
+    logPerfEvents(routeDbDelta.perfEvents);
     LOG(INFO) << "Done processing route add/update";
   } catch (const std::exception& e) {
     tData_.addStatValue("fib.thrift.failure.add_del_route", 1, fbzmq::COUNT);
@@ -561,14 +557,10 @@ Fib::syncRouteDb() {
       }
     }
 
-    logPerfEvents();
     return true;
   }
 
   try {
-    if (maybePerfEvents_) {
-      addPerfEvent(*maybePerfEvents_, myNodeName_, "FIB_DEBOUNCE");
-    }
     createFibClient(evb_, socket_, client_, thriftPort_);
     tData_.addStatValue("fib.sync_fib_calls", 1, fbzmq::COUNT);
 
@@ -581,7 +573,6 @@ Fib::syncRouteDb() {
     }
 
     dirtyRouteDb_ = false;
-    logPerfEvents();
     LOG(INFO) << "Done syncing latest routeDb with fib-agent";
     return true;
   } catch (std::exception const& e) {
@@ -679,32 +670,32 @@ Fib::submitCounters() {
 }
 
 void
-Fib::logPerfEvents() {
-  if (!maybePerfEvents_ or !maybePerfEvents_->events.size()) {
+Fib::logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents) {
+  if (not perfEvents.hasValue() or not perfEvents->events.size()) {
     return;
   }
 
   // Ignore bad perf event sample if creation time of first event is
   // less than creation time of our recently logged perf events.
-  if (recentPerfEventCreateTs_ >= maybePerfEvents_->events[0].unixTs) {
+  if (recentPerfEventCreateTs_ >= perfEvents->events[0].unixTs) {
     LOG(WARNING) << "Ignoring perf event with old create timestamp "
-                 << maybePerfEvents_->events[0].unixTs << ", expected > "
+                 << perfEvents->events[0].unixTs << ", expected > "
                  << recentPerfEventCreateTs_;
     return;
   } else {
-    recentPerfEventCreateTs_ = maybePerfEvents_->events[0].unixTs;
+    recentPerfEventCreateTs_ = perfEvents->events[0].unixTs;
   }
 
   // Add latest event information (this function is meant to be called after
   // routeDb has synced)
-  addPerfEvent(*maybePerfEvents_, myNodeName_, "OPENR_FIB_ROUTES_PROGRAMMED");
+  addPerfEvent(*perfEvents, myNodeName_, "OPENR_FIB_ROUTES_PROGRAMMED");
 
   if (enableOrderedFib_) {
     // Export convergence duration counter
     // this is the local time it takes to program a route after an event
     // we are using this for ordered fib programing
     auto localDuration = getDurationBetweenPerfEvents(
-        *maybePerfEvents_, "DECISION_RECEIVED", "OPENR_FIB_ROUTES_PROGRAMMED");
+        *perfEvents, "DECISION_RECEIVED", "OPENR_FIB_ROUTES_PROGRAMMED");
     if (localDuration.hasError()) {
       LOG(WARNING) << "Ignoring perf event with bad local duration "
                    << localDuration.error();
@@ -721,7 +712,7 @@ Fib::logPerfEvents() {
   }
 
   // Ignore perf events with very off total duration
-  auto totalDuration = getTotalPerfEventsDuration(*maybePerfEvents_);
+  auto totalDuration = getTotalPerfEventsDuration(*perfEvents);
   if (totalDuration.count() < 0 or
       totalDuration > Constants::kConvergenceMaxDuration) {
     LOG(WARNING) << "Ignoring perf event with bad total duration "
@@ -729,19 +720,18 @@ Fib::logPerfEvents() {
     return;
   }
 
-  // Add new entry to perf DB and purge extra entries
-  perfDb_.push_back(*maybePerfEvents_);
-  while (perfDb_.size() >= Constants::kPerfBufferSize) {
-    perfDb_.pop_front();
-  }
-
   // Log event
-  auto eventStrs = sprintPerfEvents(*maybePerfEvents_);
-  maybePerfEvents_ = folly::none;
+  auto eventStrs = sprintPerfEvents(*perfEvents);
   LOG(INFO) << "OpenR convergence performance. "
             << "Duration=" << totalDuration.count();
   for (auto& str : eventStrs) {
     VLOG(2) << "  " << str;
+  }
+
+  // Add new entry to perf DB and purge extra entries
+  perfDb_.push_back(std::move(perfEvents).value());
+  while (perfDb_.size() >= Constants::kPerfBufferSize) {
+    perfDb_.pop_front();
   }
 
   // Export convergence duration counter
