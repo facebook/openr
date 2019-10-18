@@ -332,7 +332,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
               thrift::InterfaceInfo(
                   FRAGILE,
                   true, // isUp
-                  100, // ifIndex
+                  121, // ifIndex
                   {}, // v4Addrs: TO BE DEPRECATED SOON
                   {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
                   {} // networks
@@ -343,7 +343,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
               thrift::InterfaceInfo(
                   FRAGILE,
                   true, // isUp
-                  100, // ifIndex
+                  122, // ifIndex
                   {}, // v4Addrs: TO BE DEPRECATED SOON
                   {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
                   {} // networks
@@ -357,12 +357,15 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   // Mimic decision pub sock publishing RouteDatabaseDelta
   thrift::RouteDatabaseDelta routeDbDelta;
   routeDbDelta.thisNodeName = "node-1";
-  routeDbDelta.unicastRoutesToUpdate.emplace_back(
-      createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
+  routeDbDelta.unicastRoutesToUpdate = {
+      createUnicastRoute(prefix2, {path1_2_1, path1_2_2}),
+      createUnicastRoute(prefix1, {path1_2_1})};
   decisionPub.sendThriftObj(routeDbDelta, serializer).value();
 
-  // add routes
   mockFibHandler->waitForUpdateUnicastRoutes();
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 2);
 
   // Mimic interface going down
   thrift::InterfaceDatabase intfChange_1(
@@ -374,7 +377,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
               thrift::InterfaceInfo(
                   FRAGILE,
                   false, // isUp
-                  100, // ifIndex
+                  121, // ifIndex
                   {}, // v4Addrs: TO BE DEPRECATED SOON
                   {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
                   {} // networks
@@ -385,12 +388,25 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   intfChange_1.perfEvents = folly::none;
   lmPub.sendThriftObj(intfChange_1, serializer).value();
 
-  // update routes
+  mockFibHandler->waitForDeleteUnicastRoutes();
   mockFibHandler->waitForUpdateUnicastRoutes();
-
-  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 3);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
+
+  //
+  // Send new route for prefix2 (see it gets updated right through)
+  //
+  routeDbDelta.unicastRoutesToUpdate = {
+      createUnicastRoute(prefix1, {path1_2_2})};
+  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+
+  mockFibHandler->waitForUpdateUnicastRoutes();
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 4);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 2);
 
   // Mimic interface going down
   // the route entry associated with the prefix shall be removed this time
@@ -403,7 +419,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
               thrift::InterfaceInfo(
                   FRAGILE,
                   false, // isUp
-                  100, // ifIndex
+                  122, // ifIndex
                   {}, // v4Addrs: TO BE DEPRECATED SOON
                   {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
                   {} // networks
@@ -414,12 +430,22 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   intfChange_2.perfEvents = folly::none;
   lmPub.sendThriftObj(intfChange_2, serializer).value();
 
-  // remove routes
-  mockFibHandler->waitForUpdateUnicastRoutes();
-
-  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
+  mockFibHandler->waitForDeleteUnicastRoutes();
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 4);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 3);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
+
+  //
+  // Bring up both of these interfaces and verify that route appears back
+  //
+  lmPub.sendThriftObj(intfDb, serializer).value();
+
+  mockFibHandler->waitForUpdateUnicastRoutes();
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 6);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 3);
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 2);
 }
 
 TEST_F(FibTestFixture, basicAddAndDelete) {
@@ -446,25 +472,22 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
-
-  countAdd = mockFibHandler->getAddRoutesCount();
-  int64_t countDel = mockFibHandler->getDelRoutesCount();
-  EXPECT_EQ(countAdd, 1);
-  EXPECT_EQ(countDel, 0);
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
 
   // delete one route
   routeDbDelta.unicastRoutesToUpdate.clear();
   routeDbDelta.unicastRoutesToDelete.emplace_back(prefix3);
   decisionPub.sendThriftObj(routeDbDelta, serializer).value();
-  mockFibHandler->waitForUpdateUnicastRoutes();
 
-  countDel = mockFibHandler->getDelRoutesCount();
-  EXPECT_EQ(countAdd, 1);
-  EXPECT_EQ(countDel, 1);
+  mockFibHandler->waitForDeleteUnicastRoutes();
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
 
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
   EXPECT_EQ(routes.front().dest, prefix1);
+
   // add back that route
   routeDbDelta.unicastRoutesToUpdate.clear();
   routeDbDelta.unicastRoutesToDelete.clear();
@@ -473,8 +496,8 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   decisionPub.sendThriftObj(routeDbDelta, serializer).value();
   mockFibHandler->waitForUpdateUnicastRoutes();
   countAdd = mockFibHandler->getAddRoutesCount();
-  EXPECT_EQ(countAdd, 2);
-  EXPECT_EQ(countDel, 1);
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 3);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
 }

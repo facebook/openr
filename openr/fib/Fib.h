@@ -86,12 +86,7 @@ class Fib final : public OpenrEventLoop {
   /**
    * Process new route updates received from Decision module
    */
-  void processRouteDb(thrift::RouteDatabaseDelta&& routeDelta);
-
-  /**
-   * Build a new route database by adding routeDelta to current database
-   */
-  void mergeRouteDatabaseDelta(thrift::RouteDatabaseDelta const& routeDelta);
+  void processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta);
 
   /**
    * Process interface status information from LinkMonitor. We remove all
@@ -149,6 +144,16 @@ class Fib final : public OpenrEventLoop {
     // indicates we've received a decision route publication and therefore have
     // routes to sync. will not synce routes with system until this is set
     bool hasRoutesFromDecision{false};
+
+    // Set of routes whose nexthops are auto-resized on link failure.
+    // Populated
+    // - when nexthop shrink happens on interface down
+    // Cleared on
+    // - receiving new route for prefix or label
+    // - full route sync happens
+    // - interface up event happens for disabled nexthop
+    std::unordered_set<thrift::IpPrefix> dirtyPrefixes;
+    std::unordered_set<uint32_t> dirtyLabels;
 
     // Flag to indicate the result of previous route programming attempt.
     // If set, it means what currently cached in local routes has not been 100%

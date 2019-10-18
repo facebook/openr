@@ -70,6 +70,7 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   // Wait for adding/deleting routes to complete
   void waitForUpdateUnicastRoutes();
+  void waitForDeleteUnicastRoutes();
 
   // Wait for synchronizing Fib to complete
   void waitForSyncFib();
@@ -103,6 +104,7 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   // A baton for synchronization
   folly::Baton<> updateUnicastRoutesBaton_;
+  folly::Baton<> deleteUnicastRoutesBaton_;
   folly::Baton<> syncFibBaton_;
 };
 
