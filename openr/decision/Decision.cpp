@@ -294,7 +294,7 @@ class SpfSolver::SpfSolverImpl {
   folly::Optional<thrift::UnicastRoute> selectKsp2Routes(
       const thrift::IpPrefix& prefix,
       const string& myNodeName,
-      std::set<std::string> const& nodePrefixes,
+      BestPathCalResult const& bestPathCalResult,
       const std::unordered_map<
           std::string,
           std::vector<std::pair<Path, Metric>>>& routeToNodes);
@@ -662,8 +662,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   //
   // Create unicastRoutes - IP and IP2MPLS routes
   //
-  std::unordered_map<thrift::IpPrefix, std::set<std::string>>
-      prefixToPerformKsp;
+  std::unordered_map<thrift::IpPrefix, BestPathCalResult> prefixToPerformKsp;
 
   std::unordered_set<std::string> nodesForKsp;
 
@@ -734,7 +733,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       const auto nodes = getBestAnnouncingNodes(
           myNodeName, prefix, nodePrefixes, isV4Prefix, hasBGP, true);
       if (nodes.success && nodes.nodes.size() != 0) {
-        prefixToPerformKsp[prefix] = nodes.nodes;
+        prefixToPerformKsp[prefix] = nodes;
         for (const auto& node : nodes.nodes) {
           nodesForKsp.insert(node);
         }
@@ -1075,7 +1074,7 @@ folly::Optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::selectKsp2Routes(
     const thrift::IpPrefix& prefix,
     const string& myNodeName,
-    std::set<std::string> const& nodes,
+    BestPathCalResult const& bestPathCalResult,
     const std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>&
         routeToNodes) {
   thrift::UnicastRoute route;
@@ -1086,7 +1085,9 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
   // get the shortest
   std::vector<std::pair<Path, Metric>> shortestRoutes;
   std::vector<std::pair<Path, Metric>> secShortestRoutes;
-  for (const auto& node : nodes) {
+  std::pair<Path, Metric> bestPath;
+
+  for (const auto& node : bestPathCalResult.nodes) {
     auto routesIter = routeToNodes.find(node);
     if (routesIter == routeToNodes.end()) {
       continue;
@@ -1100,6 +1101,11 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
     for (const auto& path : routeToNodes.at(node)) {
       if (path.second == min_cost) {
         shortestRoutes.push_back(path);
+        // Openr need to redistribute route to BGP, we should choose shortest
+        // path to the best node from BGP perspective.
+        if (node == bestPathCalResult.bestNode) {
+          bestPath = path;
+        }
         continue;
       }
       secShortestRoutes.push_back(path);
@@ -1161,9 +1167,28 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
                    : firstLink->getNhV6FromNode(myNodeName),
         firstLink->getIfaceFromNode(myNodeName),
         pathCost,
-        std::move(mplsAction),
+        mplsAction,
         true /* useNonShortestRoute */));
+
+    if (pathAndCost == bestPath) {
+      // whether use bestIgpMetric is controlled by bgpUseIgpMetric_
+      route.bestNexthop = createNextHop(
+          isV4Prefix ? firstLink->getNhV4FromNode(myNodeName)
+                     : firstLink->getNhV6FromNode(myNodeName),
+          firstLink->getIfaceFromNode(myNodeName),
+          bestPathCalResult.bestIgpMetric.hasValue()
+              ? bestPathCalResult.bestIgpMetric.value()
+              : 0,
+          mplsAction,
+          true /* useNonShortestRoute */);
+    }
   }
+  if (bestPathCalResult.bestData != nullptr) {
+    route.data = *(bestPathCalResult.bestData);
+    // in order to announce it back to BGP, we have to have the data
+    route.prefixType = thrift::PrefixType::BGP;
+  }
+
   return std::move(route);
 }
 

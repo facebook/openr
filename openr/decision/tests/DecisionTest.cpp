@@ -158,6 +158,10 @@ using RouteMap = unordered_map<
     pair<string /* node name */, string /* prefix or label */>,
     NextHops>;
 
+using PrefixRoutes = unordered_map<
+    pair<string /* node name */, string /* prefix or label */>,
+    thrift::UnicastRoute>;
+
 // Note: routeMap will be modified
 void
 fillRouteMap(
@@ -198,6 +202,35 @@ getRouteMap(SpfSolver& spfSolver, const vector<string>& nodes) {
   }
 
   return routeMap;
+}
+
+// Note: routeMap will be modified
+void
+fillPrefixRoutes(
+    const string& node,
+    PrefixRoutes& prefixRoutes,
+    const thrift::RouteDatabase& routeDb) {
+  for (auto const& route : routeDb.unicastRoutes) {
+    auto prefix = toString(route.dest);
+    prefixRoutes[make_pair(node, prefix)] = route;
+  }
+}
+
+PrefixRoutes
+getUnicastRoutes(SpfSolver& spfSolver, const vector<string>& nodes) {
+  PrefixRoutes prefixRoutes;
+
+  for (string const& node : nodes) {
+    auto routeDb = spfSolver.buildPaths(node);
+    if (not routeDb.hasValue()) {
+      continue;
+    }
+
+    EXPECT_EQ(node, routeDb->thisNodeName);
+    fillPrefixRoutes(node, prefixRoutes, routeDb.value());
+  }
+
+  return prefixRoutes;
 }
 
 void
@@ -1776,12 +1809,28 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       .mv.value()
       .metrics[numMetrics - 1]
       .metric.front()--;
+
+  // change data to some special case for verification
+  prefixDBOne.prefixEntries.back().data = "123";
   spfSolver->updatePrefixDatabase(prefixDBTwo);
+  spfSolver->updatePrefixDatabase(prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"});
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
       NextHops({createNextHopFromAdj(adj31, v4Enabled, 10, folly::none, true),
                 createNextHopFromAdj(adj34, v4Enabled, 30, push12, true)}));
+
+  auto route = getUnicastRoutes(
+      *spfSolver, {"3"})[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))];
+
+  EXPECT_EQ(
+      route.bestNexthop,
+      createNextHopFromAdj(adj31, v4Enabled, 0, folly::none, true));
+
+  EXPECT_EQ(route.doNotInstall, false);
+  EXPECT_EQ(route.data, "123");
+
+  EXPECT_EQ(route.prefixType, thrift::PrefixType::BGP);
 
   // increase mv for the second node by 2, now router 3 should point to 2
   prefixDBTwo.prefixEntries.back()
@@ -1794,6 +1843,19 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
       NextHops({createNextHopFromAdj(adj31, v4Enabled, 20, push2, true),
                 createNextHopFromAdj(adj34, v4Enabled, 20, push2, true)}));
+
+  route = getUnicastRoutes(
+      *spfSolver, {"3"})[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))];
+  EXPECT_THAT(
+      route.bestNexthop,
+      AnyOf(
+          createNextHopFromAdj(adj34, v4Enabled, 0, push2, true),
+          createNextHopFromAdj(adj31, v4Enabled, 0, push2, true)));
+
+  EXPECT_EQ(route.doNotInstall, false);
+  EXPECT_EQ(route.data, "");
+
+  EXPECT_EQ(route.prefixType, thrift::PrefixType::BGP);
 
   // set the tie breaker to be true. in this case, both nodes will be selected
   prefixDBTwo.prefixEntries.back()
@@ -1818,6 +1880,25 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
           {createNextHopFromAdj(adj31, v4Enabled, 20, push2, true),
            createNextHopFromAdj(adj34, v4Enabled, 20, push2, true),
            createNextHopFromAdj(adj31, v4Enabled, 10, folly::none, true)}));
+
+  route = getUnicastRoutes(
+      *spfSolver, {"3"})[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))];
+  EXPECT_THAT(
+      route.bestNexthop,
+      AnyOf(
+          createNextHopFromAdj(adj31, v4Enabled, 0, folly::none, true),
+          createNextHopFromAdj(adj34, v4Enabled, 0, push2, true),
+          createNextHopFromAdj(adj31, v4Enabled, 0, push2, true)));
+
+  EXPECT_EQ(route.doNotInstall, false);
+
+  if (route.bestNexthop ==
+      createNextHopFromAdj(adj31, v4Enabled, 10, folly::none, true)) {
+    EXPECT_EQ(route.data, "123");
+  } else {
+    EXPECT_EQ(route.data, "");
+  }
+  EXPECT_EQ(route.prefixType, thrift::PrefixType::BGP);
 }
 
 //
