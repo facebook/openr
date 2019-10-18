@@ -87,9 +87,7 @@ MockNetlinkFibHandler::addUnicastRoutes(
       unicastRouteDb_.emplace(prefix, newNextHops);
     }
   }
-  SYNCHRONIZED(countAddRoutes_) {
-    countAddRoutes_ += routes->size();
-  }
+  addRoutesCount_ += routes->size();
   updateUnicastRoutesBaton_.post();
 }
 
@@ -104,9 +102,7 @@ MockNetlinkFibHandler::deleteUnicastRoutes(
       unicastRouteDb_.erase(myPrefix);
     }
   }
-  SYNCHRONIZED(countDelRoutes_) {
-    countDelRoutes_ += prefixes->size();
-  }
+  delRoutesCount_ += prefixes->size();
   deleteUnicastRoutesBaton_.post();
 }
 
@@ -131,10 +127,45 @@ MockNetlinkFibHandler::syncFib(
       unicastRouteDb_.emplace(prefix, newNextHops);
     }
   }
-  SYNCHRONIZED(countSync_) {
-    countSync_++;
-  }
+  fibSyncCount_++;
   syncFibBaton_.post();
+}
+
+void
+MockNetlinkFibHandler::addMplsRoutes(
+    int16_t, std::unique_ptr<std::vector<openr::thrift::MplsRoute>> routes) {
+  SYNCHRONIZED(mplsRouteDb_) {
+    for (auto& route : *routes) {
+      mplsRouteDb_[route.topLabel] = std::move(route.nextHops);
+    }
+  }
+  addMplsRoutesCount_ += routes->size();
+  updateMplsRoutesBaton_.post();
+}
+
+void
+MockNetlinkFibHandler::deleteMplsRoutes(
+    int16_t, std::unique_ptr<std::vector<int32_t>> labels) {
+  SYNCHRONIZED(mplsRouteDb_) {
+    for (auto& label : *labels) {
+      mplsRouteDb_.erase(label);
+    }
+  }
+  delMplsRoutesCount_ += labels->size();
+  deleteMplsRoutesBaton_.post();
+}
+
+void
+MockNetlinkFibHandler::syncMplsFib(
+    int16_t, std::unique_ptr<std::vector<openr::thrift::MplsRoute>> routes) {
+  SYNCHRONIZED(mplsRouteDb_) {
+    mplsRouteDb_.clear();
+    for (auto& route : *routes) {
+      mplsRouteDb_[route.topLabel] = std::move(route.nextHops);
+    }
+  }
+  fibMplsSyncCount_ += routes->size();
+  syncMplsFibBaton_.post();
 }
 
 int64_t
@@ -177,31 +208,18 @@ MockNetlinkFibHandler::getRouteTableByClient(
   }
 }
 
-int64_t
-MockNetlinkFibHandler::getFibSyncCount() {
-  int64_t res = 0;
-  SYNCHRONIZED(countSync_) {
-    res = countSync_;
+void
+MockNetlinkFibHandler::getMplsRouteTableByClient(
+    std::vector<openr::thrift::MplsRoute>& routes, int16_t) {
+  SYNCHRONIZED(mplsRouteDb_) {
+    routes.clear();
+    for (auto const& kv : mplsRouteDb_) {
+      thrift::MplsRoute route;
+      route.topLabel = kv.first;
+      route.nextHops = kv.second;
+      routes.emplace_back(std::move(route));
+    }
   }
-  return res;
-}
-
-int64_t
-MockNetlinkFibHandler::getAddRoutesCount() {
-  int64_t res = 0;
-  SYNCHRONIZED(countAddRoutes_) {
-    res = countAddRoutes_;
-  }
-  return res;
-}
-
-int64_t
-MockNetlinkFibHandler::getDelRoutesCount() {
-  int64_t res = 0;
-  SYNCHRONIZED(countDelRoutes_) {
-    res = countDelRoutes_;
-  }
-  return res;
 }
 
 void
@@ -220,44 +238,57 @@ void
 MockNetlinkFibHandler::waitForSyncFib() {
   syncFibBaton_.wait();
   syncFibBaton_.reset();
+}
+
+void
+MockNetlinkFibHandler::waitForUpdateMplsRoutes() {
+  updateMplsRoutesBaton_.wait();
+  updateMplsRoutesBaton_.reset();
 };
+
+void
+MockNetlinkFibHandler::waitForDeleteMplsRoutes() {
+  deleteMplsRoutesBaton_.wait();
+  deleteMplsRoutesBaton_.reset();
+}
+
+void
+MockNetlinkFibHandler::waitForSyncMplsFib() {
+  syncMplsFibBaton_.wait();
+  syncMplsFibBaton_.reset();
+}
 
 void
 MockNetlinkFibHandler::stop() {
   SYNCHRONIZED(unicastRouteDb_) {
     unicastRouteDb_.clear();
   }
-  SYNCHRONIZED(countSync_) {
-    countSync_ = 0;
-  }
-  SYNCHRONIZED(countAddRoutes_) {
-    countAddRoutes_ = 0;
-  }
-  SYNCHRONIZED(countDelRoutes_) {
-    countDelRoutes_ = 0;
-  }
+  fibSyncCount_ = 0;
+  addRoutesCount_ = 0;
+  delRoutesCount_ = 0;
+  fibMplsSyncCount_ = 0;
+  addMplsRoutesCount_ = 0;
+  delMplsRoutesCount_ = 0;
 }
 
 void
 MockNetlinkFibHandler::restart() {
   // mimic the behavior of Fib agent get restarted
-  SYNCHRONIZED(unicastRouteDb_) {
-    LOG(INFO) << "Restarting fib agent";
-    unicastRouteDb_.clear();
-  }
+  LOG(INFO) << "Restarting fib agent";
+  unicastRouteDb_->clear();
+  mplsRouteDb_->clear();
+
   SYNCHRONIZED(startTime_) {
     startTime_ = std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
                      .count();
   }
-  SYNCHRONIZED(countSync_) {
-    countSync_ = 0;
-  }
-  SYNCHRONIZED(countAddRoutes_) {
-    countAddRoutes_ = 0;
-  }
-  SYNCHRONIZED(countDelRoutes_) {
-    countDelRoutes_ = 0;
-  }
+  fibSyncCount_ = 0;
+  addRoutesCount_ = 0;
+  delRoutesCount_ = 0;
+  fibMplsSyncCount_ = 0;
+  addMplsRoutesCount_ = 0;
+  delMplsRoutesCount_ = 0;
 }
+
 } // namespace openr

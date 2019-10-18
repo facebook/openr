@@ -650,6 +650,8 @@ Fib::submitCounters() {
 
   // Add some more flat counters
   counters["fib.num_routes"] = routeState_.unicastRoutes.size();
+  counters["fib.num_dirty_prefixes"] = routeState_.dirtyPrefixes.size();
+  counters["fib.num_dirty_labels"] = routeState_.dirtyLabels.size();
   counters["fib.require_routedb_sync"] = syncRoutesTimer_->isScheduled();
   counters["fib.zmq_event_queue_size"] = getEventQueueSize();
 
