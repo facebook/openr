@@ -84,6 +84,15 @@ const auto addr2V4 = toIpPrefix("10.2.2.2/32");
 const auto addr3V4 = toIpPrefix("10.3.3.3/32");
 const auto addr4V4 = toIpPrefix("10.4.4.4/32");
 
+const auto bgpAddr1 = toIpPrefix("2401:1::10.1.1.1/32");
+const auto bgpAddr2 = toIpPrefix("2401:2::10.2.2.2/32");
+const auto bgpAddr3 = toIpPrefix("2401:3::10.3.3.3/32");
+const auto bgpAddr4 = toIpPrefix("2401:4::10.4.4.4/32");
+const auto bgpAddr1V4 = toIpPrefix("10.11.1.1/16");
+const auto bgpAddr2V4 = toIpPrefix("10.22.2.2/16");
+const auto bgpAddr3V4 = toIpPrefix("10.33.3.3/16");
+const auto bgpAddr4V4 = toIpPrefix("10.43.4.4/16");
+
 const auto prefixDb1 = createPrefixDb("1", {createPrefixEntry(addr1)});
 const auto prefixDb2 = createPrefixDb("2", {createPrefixEntry(addr2)});
 const auto prefixDb3 = createPrefixDb("3", {createPrefixEntry(addr3)});
@@ -123,17 +132,32 @@ const std::chrono::milliseconds debounceTimeout{500};
 thrift::PrefixDatabase
 getPrefixDbWithKspfAlgo(
     thrift::PrefixDatabase const& prefixDb,
-    folly::Optional<thrift::PrefixType> prefixType = folly::none) {
+    folly::Optional<thrift::PrefixType> prefixType = folly::none,
+    folly::Optional<thrift::IpPrefix> prefix = folly::none) {
   thrift::PrefixDatabase newPrefixDb = prefixDb;
+
   for (auto& p : newPrefixDb.prefixEntries) {
     p.forwardingType = thrift::PrefixForwardingType::SR_MPLS;
     p.forwardingAlgorithm = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     if (prefixType.hasValue() and
-        (prefixType.value() == thrift::PrefixType::BGP)) {
+        (prefixType.value() == thrift::PrefixType::BGP) and
+        (not prefix.hasValue())) {
       p.type = thrift::PrefixType::BGP;
       p.mv = thrift::MetricVector();
     }
   }
+
+  if (prefix.hasValue()) {
+    thrift::PrefixEntry entry;
+    entry.prefix = prefix.value();
+    entry.forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+    entry.forwardingAlgorithm = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+    entry.mv = thrift::MetricVector();
+    entry.type = thrift::PrefixType::BGP;
+    newPrefixDb.prefixEntries.push_back(entry);
+    return newPrefixDb;
+  }
+
   return newPrefixDb;
 }
 
@@ -1270,7 +1294,8 @@ class SimpleRingTopologyFixture
   CustomSetUp(
       bool calculateLfas,
       bool useKsp2Ed,
-      folly::Optional<thrift::PrefixType> prefixType = folly::none) {
+      folly::Optional<thrift::PrefixType> prefixType = folly::none,
+      bool createNewBgpRoute = false) {
     std::string nodeName("1");
     spfSolver = std::make_unique<SpfSolver>(nodeName, v4Enabled, calculateLfas);
     adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
@@ -1295,14 +1320,44 @@ class SimpleRingTopologyFixture
     auto pdb2 = v4Enabled ? prefixDb2V4 : prefixDb2;
     auto pdb3 = v4Enabled ? prefixDb3V4 : prefixDb3;
     auto pdb4 = v4Enabled ? prefixDb4V4 : prefixDb4;
+
+    auto bgp1 = v4Enabled ? bgpAddr1V4 : bgpAddr1;
+    auto bgp2 = v4Enabled ? bgpAddr2V4 : bgpAddr2;
+    auto bgp3 = v4Enabled ? bgpAddr3V4 : bgpAddr3;
+    auto bgp4 = v4Enabled ? bgpAddr4V4 : bgpAddr4;
+
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb1, prefixType) : pdb1));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(
+                        pdb1,
+                        prefixType,
+                        createNewBgpRoute
+                            ? folly::make_optional<thrift::IpPrefix>(bgp1)
+                            : folly::none)
+                  : pdb1));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb2, prefixType) : pdb2));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(
+                        pdb2,
+                        prefixType,
+                        createNewBgpRoute
+                            ? folly::make_optional<thrift::IpPrefix>(bgp2)
+                            : folly::none)
+                  : pdb2));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb3, prefixType) : pdb3));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(
+                        pdb3,
+                        prefixType,
+                        createNewBgpRoute
+                            ? folly::make_optional<thrift::IpPrefix>(bgp3)
+                            : folly::none)
+                  : pdb3));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(pdb4, prefixType) : pdb4));
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(
+                        pdb4,
+                        prefixType,
+                        createNewBgpRoute
+                            ? folly::make_optional<thrift::IpPrefix>(bgp4)
+                            : folly::none)
+                  : pdb4));
   }
 
   thrift::AdjacencyDatabase adjacencyDb1, adjacencyDb2, adjacencyDb3,
@@ -1759,7 +1814,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   CustomSetUp(
       true /* multipath - ignored */,
       true /* useKsp2Ed */,
-      thrift::PrefixType::BGP);
+      thrift::PrefixType::BGP,
+      true);
   thrift::MetricVector mv1, mv2;
   int64_t numMetrics = 5;
   mv1.metrics.resize(numMetrics);
@@ -1778,8 +1834,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   auto prefixDBTwo = prefixDBs["2"];
 
   // set metric vector for two prefixes in two nodes to be same
-  prefixDBOne.prefixEntries[0].mv = mv1;
-  prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[0]);
+  prefixDBOne.prefixEntries[1].mv = mv1;
+  prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[1]);
 
   spfSolver->updatePrefixDatabase(prefixDBOne);
   spfSolver->updatePrefixDatabase(prefixDBTwo);
@@ -1787,9 +1843,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   auto routeMap = getRouteMap(*spfSolver, {"3"});
 
   const auto counters = spfSolver->getCounters();
-  // run spf once for 3 peers from node 3, then run second spf for node 2 and 4
-  // from node 3 only
-  EXPECT_EQ(counters.at("decision.spf_runs.count.0"), 5);
+  // run 2 spfs for all peers
+  EXPECT_EQ(counters.at("decision.spf_runs.count.0"), 6);
   auto pushCode = thrift::MplsActionCode::PUSH;
   auto push2 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{2});
   auto push12 =
@@ -1801,7 +1856,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // we counld not determine which node to be best dest node, hence we will not
   // program routes to it.
   EXPECT_EQ(
-      routeMap.find(make_pair("3", toString(v4Enabled ? addr1V4 : addr1))),
+      routeMap.find(
+          make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))),
       routeMap.end());
 
   // decrease mv for the second node, now router 3 should point to 1
@@ -1816,21 +1872,22 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   spfSolver->updatePrefixDatabase(prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"});
   EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
+      routeMap[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
       NextHops({createNextHopFromAdj(adj31, v4Enabled, 10, folly::none, true),
                 createNextHopFromAdj(adj34, v4Enabled, 30, push12, true)}));
 
   auto route = getUnicastRoutes(
-      *spfSolver, {"3"})[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))];
+      *spfSolver,
+      {"3"})[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
 
   EXPECT_EQ(
-      route.bestNexthop,
-      createNextHopFromAdj(adj31, v4Enabled, 0, folly::none, true));
-
-  EXPECT_EQ(route.doNotInstall, false);
-  EXPECT_EQ(route.data, "123");
-
-  EXPECT_EQ(route.prefixType, thrift::PrefixType::BGP);
+      route.bestNexthop.value(),
+      createNextHop(
+          v4Enabled ? addr1V4.prefixAddress : addr1.prefixAddress,
+          folly::none,
+          0,
+          folly::none,
+          false));
 
   // increase mv for the second node by 2, now router 3 should point to 2
   prefixDBTwo.prefixEntries.back()
@@ -1840,22 +1897,22 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   spfSolver->updatePrefixDatabase(prefixDBTwo);
   routeMap = getRouteMap(*spfSolver, {"3"});
   EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
+      routeMap[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
       NextHops({createNextHopFromAdj(adj31, v4Enabled, 20, push2, true),
                 createNextHopFromAdj(adj34, v4Enabled, 20, push2, true)}));
 
   route = getUnicastRoutes(
-      *spfSolver, {"3"})[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))];
-  EXPECT_THAT(
+      *spfSolver,
+      {"3"})[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
+
+  EXPECT_EQ(
       route.bestNexthop,
-      AnyOf(
-          createNextHopFromAdj(adj34, v4Enabled, 0, push2, true),
-          createNextHopFromAdj(adj31, v4Enabled, 0, push2, true)));
-
-  EXPECT_EQ(route.doNotInstall, false);
-  EXPECT_EQ(route.data, "");
-
-  EXPECT_EQ(route.prefixType, thrift::PrefixType::BGP);
+      createNextHop(
+          v4Enabled ? addr2V4.prefixAddress : addr2.prefixAddress,
+          folly::none,
+          0,
+          folly::none,
+          false));
 
   // set the tie breaker to be true. in this case, both nodes will be selected
   prefixDBTwo.prefixEntries.back()
@@ -1875,25 +1932,31 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // because in kspf, we will ignore second shortest path if it starts with
   // one of shortest path for anycast prefix
   EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
+      routeMap[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
       NextHops(
           {createNextHopFromAdj(adj31, v4Enabled, 20, push2, true),
            createNextHopFromAdj(adj34, v4Enabled, 20, push2, true),
            createNextHopFromAdj(adj31, v4Enabled, 10, folly::none, true)}));
 
   route = getUnicastRoutes(
-      *spfSolver, {"3"})[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))];
-  EXPECT_THAT(
-      route.bestNexthop,
-      AnyOf(
-          createNextHopFromAdj(adj31, v4Enabled, 0, folly::none, true),
-          createNextHopFromAdj(adj34, v4Enabled, 0, push2, true),
-          createNextHopFromAdj(adj31, v4Enabled, 0, push2, true)));
+      *spfSolver,
+      {"3"})[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
+  const auto bestNextHop1 = createNextHop(
+      v4Enabled ? addr1V4.prefixAddress : addr1.prefixAddress,
+      folly::none,
+      0,
+      folly::none,
+      false);
 
-  EXPECT_EQ(route.doNotInstall, false);
+  const auto bestNextHop2 = createNextHop(
+      v4Enabled ? addr2V4.prefixAddress : addr2.prefixAddress,
+      folly::none,
+      0,
+      folly::none,
+      false);
+  EXPECT_THAT(route.bestNexthop.value(), AnyOf(bestNextHop1, bestNextHop2));
 
-  if (route.bestNexthop ==
-      createNextHopFromAdj(adj31, v4Enabled, 10, folly::none, true)) {
+  if (route.bestNexthop == bestNextHop1) {
     EXPECT_EQ(route.data, "123");
   } else {
     EXPECT_EQ(route.data, "");

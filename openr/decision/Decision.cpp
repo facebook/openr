@@ -1169,24 +1169,19 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
         pathCost,
         mplsAction,
         true /* useNonShortestRoute */));
-
-    if (pathAndCost == bestPath) {
-      // whether use bestIgpMetric is controlled by bgpUseIgpMetric_
-      route.bestNexthop = createNextHop(
-          isV4Prefix ? firstLink->getNhV4FromNode(myNodeName)
-                     : firstLink->getNhV6FromNode(myNodeName),
-          firstLink->getIfaceFromNode(myNodeName),
-          bestPathCalResult.bestIgpMetric.hasValue()
-              ? bestPathCalResult.bestIgpMetric.value()
-              : 0,
-          mplsAction,
-          true /* useNonShortestRoute */);
-    }
   }
   if (bestPathCalResult.bestData != nullptr) {
+    auto bestNextHop = prefixState_.getLoopbackVias(
+        {bestPathCalResult.bestNode},
+        prefix.prefixAddress.addr.size() == folly::IPAddressV4::byteCount(),
+        bestPathCalResult.bestIgpMetric);
+    if (bestNextHop.size() != 1) {
+      return route;
+    }
     route.data = *(bestPathCalResult.bestData);
     // in order to announce it back to BGP, we have to have the data
     route.prefixType = thrift::PrefixType::BGP;
+    route.bestNexthop = bestNextHop[0];
   }
 
   return std::move(route);
