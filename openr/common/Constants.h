@@ -235,6 +235,9 @@ class Constants {
   static constexpr uint16_t kPerfBufferSize{10};
   static constexpr std::chrono::seconds kConvergenceMaxDuration{3s};
 
+  // hold time for longPoll requests in openrCtrl thrift server
+  static constexpr std::chrono::milliseconds kLongPollReqHoldTime{20000};
+
   //
   // Prefix manager specific
   //

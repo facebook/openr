@@ -15,6 +15,7 @@
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 
@@ -76,6 +77,62 @@ OpenrCtrlHandler::OpenrCtrlHandler(
               kv.second.next(maybePublication.value());
             }
           }
+
+          bool isAdjChanged = false;
+          // check if any of KeyVal has 'adj' update
+          for (auto& kv : maybePublication.value().keyVals) {
+            auto& key = kv.first;
+            auto& val = kv.second;
+            // check if we have any value update.
+            // Ttl refreshing won't update any value.
+            if (!val.value.hasValue()) {
+              continue;
+            }
+
+            // "adj:*" key has changed. Update local collection
+            if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+              VLOG(3) << "Adj key: " << key << " change received";
+              isAdjChanged = true;
+              break;
+            }
+          }
+
+          if (isAdjChanged) {
+            // thrift::Publication contains "adj:*" key change.
+            // Clean ALL pending promises
+            longPollReqs_.withWLock([&](auto& longPollReqs) {
+              for (auto& kv : longPollReqs) {
+                auto& p = kv.second.first;
+                p.setValue(true);
+              }
+              longPollReqs.clear();
+            });
+          } else {
+            longPollReqs_.withWLock([&](auto& longPollReqs) {
+              auto now = getUnixTimeStampMs();
+              std::vector<int64_t> reqsToClean;
+              for (auto& kv : longPollReqs) {
+                auto& clientId = kv.first;
+                auto& req = kv.second;
+
+                auto& p = req.first;
+                auto& timeStamp = req.second;
+                if (now - timeStamp >=
+                    Constants::kLongPollReqHoldTime.count()) {
+                  LOG(INFO) << "Elapsed time: " << now - timeStamp
+                            << " is over hold limit: "
+                            << Constants::kLongPollReqHoldTime.count();
+                  reqsToClean.emplace_back(clientId);
+                  p.setException(thrift::OpenrError("Request timed out"));
+                }
+              }
+
+              // cleanup expired requests since no ADJ change observed
+              for (auto& clientId : reqsToClean) {
+                longPollReqs.erase(clientId);
+              }
+            });
+          }
         });
   });
 
@@ -122,6 +179,9 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   for (auto& publisher : publishers) {
     std::move(publisher).complete();
   }
+
+  LOG(INFO) << "Cleanup all pending request(s).";
+  longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
 }
 
 void
@@ -609,6 +669,46 @@ OpenrCtrlHandler::semifuture_getKvStoreHashFiltered(
   }
 
   return p.getSemiFuture();
+}
+
+folly::SemiFuture<bool>
+OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
+    std::unique_ptr<thrift::KeyVals> snapshot) {
+  folly::Promise<bool> p;
+  folly::SemiFuture<bool> sf = p.getSemiFuture();
+
+  auto timeStamp = getUnixTimeStampMs();
+  auto requestId = pendingRequestId_++;
+
+  thrift::KvStoreRequest request;
+  thrift::KeyDumpParams params;
+
+  // Only care about "adj:" key
+  params.prefix = Constants::kAdjDbMarker;
+  // Only dump difference between KvStore and client snapshot
+  params.keyValHashes = std::move(*snapshot);
+  request.cmd = thrift::Command::KEY_DUMP;
+  request.keyDumpParams = std::move(params);
+
+  auto reply = requestReplyThrift<thrift::Publication>(
+      thrift::OpenrModuleType::KVSTORE, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else if (
+      reply->keyVals.size() or
+      (reply->tobeUpdatedKeys.hasValue() and
+       reply->tobeUpdatedKeys.value().size())) {
+    VLOG(3) << "AdjKey hash change. Notify immediately";
+    p.setValue(true);
+  } else {
+    // Client provided data is consistent with KvStore.
+    // Store req for future processing when there is publication
+    // from KvStore.
+    longPollReqs_.withWLock([&](auto& longPollReq) {
+      longPollReq.emplace(requestId, std::make_pair(std::move(p), timeStamp));
+    });
+  }
+  return sf;
 }
 
 folly::SemiFuture<folly::Unit>

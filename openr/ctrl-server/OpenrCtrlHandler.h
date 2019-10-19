@@ -179,6 +179,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       thrift::Publication>>
   semifuture_subscribeAndGetKvStore() override;
 
+  // Long poll support
+  folly::SemiFuture<bool> semifuture_longPollKvStoreAdj(
+      std::unique_ptr<thrift::KeyVals> snapshot) override;
+
   //
   // LinkMonitor APIs
   //
@@ -231,9 +235,22 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   //
   // APIs to expose state of private variables
   //
-  size_t
+  inline size_t
   getNumKvStorePublishers() {
     return kvStorePublishers_->size();
+  }
+
+  inline size_t
+  getNumPendingLongPollReqs() {
+    return longPollReqs_->size();
+  }
+
+  //
+  // API to cleanup private variables
+  //
+  inline void
+  cleanupPendingLongPollReqs() {
+    longPollReqs_->clear();
   }
 
  private:
@@ -250,6 +267,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       thrift::OpenrModuleType module, InputType&& request, bool oneway);
 
   void authorizeConnection();
+
   const std::string nodeName_;
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
   std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
@@ -274,6 +292,13 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       int64_t,
       apache::thrift::StreamPublisher<thrift::Publication>>>
       kvStorePublishers_;
+
+  // pending longPoll requests from clients, which consists of
+  // 1). promise; 2). timestamp when req received on server
+  std::atomic<int64_t> pendingRequestId_{0};
+  folly::Synchronized<
+      std::unordered_map<int64_t, std::pair<folly::Promise<bool>, int64_t>>>
+      longPollReqs_;
 
 }; // class OpenrCtrlHandler
 } // namespace openr

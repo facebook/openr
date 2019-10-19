@@ -72,6 +72,7 @@ constexpr std::chrono::milliseconds Constants::kServiceProcTimeout;
 constexpr std::chrono::milliseconds Constants::kTtlDecrement;
 constexpr std::chrono::milliseconds Constants::kTtlInfInterval;
 constexpr std::chrono::milliseconds Constants::kTtlThreshold;
+constexpr std::chrono::milliseconds Constants::kLongPollReqHoldTime;
 constexpr std::chrono::seconds Constants::kConvergenceMaxDuration;
 constexpr std::chrono::seconds Constants::kKeepAliveIntvl;
 constexpr std::chrono::seconds Constants::kKeepAliveTime;

@@ -172,7 +172,7 @@ service OpenrCtrl extends fb303.FacebookService {
    * Get raw key-values from KvStore with more control over filter
    */
   KvStore.Publication getKvStoreKeyValsFiltered(1: KvStore.KeyDumpParams filter)
-    throws (1: OpenrError errror)
+    throws (1: OpenrError error)
 
   /**
    * Get kvstore metadata (no values) with filter
@@ -192,6 +192,13 @@ service OpenrCtrl extends fb303.FacebookService {
     1: KvStore.KeySetParams setParams,
     2: string area
   )
+
+  /**
+   * Long poll API to get KvStore
+   * Will return true/false with our own KeyVal snapshot provided
+   */
+  bool longPollKvStoreAdj(1: KvStore.KeyVals snapshot)
+    throws (1: OpenrError error)
 
   /**
    * Send Dual message
