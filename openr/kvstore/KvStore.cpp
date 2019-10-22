@@ -916,7 +916,7 @@ KvStoreDb::requestFullSyncFromPeers() {
     // if pending response is above the limit wait until
     // kStoreFullSyncResponseTimeout before sending next sync request
     if (latestSentPeerSync_.size() >= fullSycnReqInProgress_) {
-      LOG(INFO) << fullSycnReqInProgress_ << " full dump sync in progress";
+      LOG(INFO) << fullSycnReqInProgress_ << " full-sync in progress";
       timeout = Constants::kStoreFullSyncResponseTimeout;
       break;
     }
@@ -928,8 +928,8 @@ KvStoreDb::requestFullSyncFromPeers() {
   if (not peersToSyncWith_.empty() ||
       latestSentPeerSync_.size() >= fullSycnReqInProgress_) {
     LOG_IF(INFO, peersToSyncWith_.size())
-        << peersToSyncWith_.size() << " peers still require sync.";
-    LOG(INFO) << "Scheduling full sync after " << timeout.count() << "ms.";
+        << peersToSyncWith_.size() << " peers still require full-sync.";
+    LOG(INFO) << "Scheduling full-sync after " << timeout.count() << "ms.";
     // schedule next timeout
     fullSyncTimer_->scheduleTimeout(timeout);
   }
@@ -1055,15 +1055,6 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
     }
 
     auto& keyDumpParamsVal = thriftReq.keyDumpParams.value();
-    if (keyDumpParamsVal.keyValHashes.hasValue()) {
-      VLOG(3) << "Dump keys requested along with "
-              << keyDumpParamsVal.keyValHashes.value().size()
-              << " keyValHashes item(s) provided from peer";
-    } else {
-      VLOG(3) << "Dump all keys requested - "
-              << "KeyPrefixes:" << keyDumpParamsVal.prefix << " Originator IDs:"
-              << folly::join(",", keyDumpParamsVal.originatorIds);
-    }
     tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
 
     std::vector<std::string> keyPrefixList;
@@ -1078,6 +1069,19 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
     updatePublicationTtl(thriftPub);
     // I'm the initiator, set flood-root-id
     thriftPub.floodRootId = DualNode::getSptRootId();
+
+    if (keyDumpParamsVal.keyValHashes.hasValue() and
+        keyDumpParamsVal.prefix.empty()) {
+      // This usually comes from neighbor nodes
+      size_t numMissingKeys = 0;
+      if (thriftPub.tobeUpdatedKeys.hasValue()) {
+        numMissingKeys = thriftPub.tobeUpdatedKeys->size();
+      }
+      LOG(INFO) << "Processed full-sync request with "
+                << keyDumpParamsVal.keyValHashes.value().size()
+                << " keyValHashes item(s). Sending " << thriftPub.keyVals.size()
+                << " key-vals and " << numMissingKeys << " missing keys";
+    }
     return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
   case thrift::Command::HASH_DUMP: {
@@ -1384,9 +1388,14 @@ KvStoreDb::processSyncResponse() noexcept {
 
   const auto& syncPub = maybeSyncPub.value();
   const size_t kvUpdateCnt = mergePublication(syncPub, requestId);
-  LOG(INFO) << "Sync response received from " << requestId << " with "
-            << syncPub.keyVals.size() << " key value pairs which incured "
-            << kvUpdateCnt << " key-value updates";
+  size_t numMissingKeys = 0;
+  if (syncPub.tobeUpdatedKeys.hasValue()) {
+    numMissingKeys = syncPub.tobeUpdatedKeys->size();
+  }
+
+  LOG(INFO) << "full-sync response received from " << requestId << " with "
+            << syncPub.keyVals.size() << " key-vals and " << numMissingKeys
+            << " missing keys. Incured " << kvUpdateCnt << " key-value updates";
 
   if (latestSentPeerSync_.count(requestId)) {
     auto syncDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
