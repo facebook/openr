@@ -30,6 +30,18 @@ enum MplsActionCode {
   NOOP = 4,
 }
 
+// For mimicing FBOSS agent thrift interfaces
+enum PortAdminState {
+  DISABLED = 0
+  ENABLED = 1
+}
+
+// For mimicing FBOSS agent thrift interfaces
+enum PortOperState {
+  DOWN = 0
+  UP = 1
+}
+
 struct MplsAction {
   1: MplsActionCode action;
   2: optional i32 swapLabel;          // Required if action == SWAP
@@ -103,4 +115,21 @@ struct UnicastRoute {
   7: bool doNotInstall = false
 
   41: optional NextHopThrift bestNexthop
+}
+
+// For mimicing FBOSS agent thrift interfaces
+struct LinkNeighborThrift {
+  1: i32 localPort
+  2: i32 localVlan
+  11: string printablePortId
+  12: optional string systemName
+}
+
+// For mimicing FBOSS agent thrift interfaces
+struct PortInfoThrift {
+  1: i32 portId
+  2: i64 speedMbps
+  3: PortAdminState adminState
+  4: PortOperState operState
+  12: string name
 }

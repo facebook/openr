@@ -176,7 +176,6 @@ service FibService extends fb303.FacebookService {
   //
   // Unicast Routes API
   //
-
   void addUnicastRoute(
     1: i16 clientId,
     2: Network.UnicastRoute route,
@@ -237,6 +236,17 @@ service FibService extends fb303.FacebookService {
 
   void sendNeighborDownInfo(
     1: list<string> neighborIp
+    )
+    throws (1: PlatformError error)
+
+  //
+  // FBOSS Agent API (for emulation only)
+  //
+  list<Network.LinkNeighborThrift> getLldpNeighbors()
+    throws (1: PlatformError error)
+
+  Network.PortInfoThrift getPortInfo(
+    1: i32 portId
     )
     throws (1: PlatformError error)
 }
