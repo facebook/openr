@@ -293,18 +293,13 @@ KvStore::mergeKeyValues(
     }
 
     if (!updateAllNeeded and !updateTtlNeeded) {
-      VLOG(4) << "(mergeKeyValues) no need to update anything for key: '" << key
+      VLOG(3) << "(mergeKeyValues) no need to update anything for key: '" << key
               << "'";
       continue;
     }
 
-    VLOG(2) << "Updating key: " << key << "\n  Value: "
-            << (kvStoreIt != kvStore.end() && kvStoreIt->second.value.hasValue()
-                    ? kvStoreIt->second.value.value()
-                    : "null")
-            << " -> " << (value.value.hasValue() ? value.value.value() : "null")
-            << "\n  Version: " << myVersion << " -> " << newVersion
-            << "\n  Originator: "
+    VLOG(3) << "Updating key: " << key << "\n  Version: " << myVersion << " -> "
+            << newVersion << "\n  Originator: "
             << (kvStoreIt != kvStore.end() ? kvStoreIt->second.originatorId
                                            : "null")
             << " -> " << value.originatorId << "\n  TtlVersion: "
@@ -315,8 +310,6 @@ KvStore::mergeKeyValues(
 
     // grab the new value (this will copy, intended)
     thrift::Value newValue = value;
-
-    VLOG(4) << "(mergeKeyValues) Inserting/Updating key: '" << key << "'";
 
     if (updateAllNeeded) {
       ++valUpdateCnt;
