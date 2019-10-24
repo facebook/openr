@@ -149,15 +149,6 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
       fbnl::RouteBuilder& rtBuilder,
       const std::vector<thrift::NextHopThrift>& nhop) const;
 
-  // This function only gets used when enable_recursive_lookup flags is set
-  // Do recursive look up among static routes for current nexthop
-  // if an entry is found, replace current nexthop with final nexthop
-  // E.g. if "10.0.0.0/32 via 127.0.0.1 protoco static" exits,
-  //     "ip add 1.1.1.1/32 via 10.0.0.0" will be resolved to
-  //     "ip add 1.1.1.1/32 via 127.0.0.1"
-  fbnl::NextHopSet lookupNexthop(const thrift::BinaryAddress& nh) const
-      noexcept;
-
   // Used to interact with Linux kernel routing table
   std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket_;
 
@@ -172,12 +163,6 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
 
   // ZmqTimeout timer to check for openr aliveness
   std::unique_ptr<fbzmq::ZmqTimeout> keepAliveCheckTimer_;
-
-  // cached static routes for recursive lookup
-  fbnl::NlUnicastRoutes staticRouteCache_;
-
-  // ZmqTimeout timer to periodically sync static routes
-  std::unique_ptr<fbzmq::ZmqTimeout> syncStaticRouteTimer_;
 };
 
 } // namespace openr
