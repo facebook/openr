@@ -948,7 +948,7 @@ TEST(KvStoreClient, SubscribeApiTest) {
   auto store = std::make_shared<KvStoreWrapper>(
       context,
       nodeId,
-      std::chrono::seconds(60) /* db sync interval */,
+      std::chrono::seconds(1) /* db sync interval */,
       std::chrono::seconds(3600) /* counter submit interval */,
       emptyPeers);
   store->run();
@@ -1074,7 +1074,9 @@ TEST(KvStoreClient, SubscribeApiTest) {
 
   // Schedule timeout for terminating the event loop
   evl.scheduleTimeout(
-      std::chrono::milliseconds(60), [&]() noexcept { evl.stop(); });
+      std::chrono::milliseconds(60 + kSyncMaxWaitTime.count()), [&]() noexcept {
+        evl.stop();
+      });
 
   // Start the event loop
   std::thread evlThread([&]() {
@@ -1147,7 +1149,7 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
         1,
         nodeId,
         std::string("test_key_val"),
-        1000, /* ttl in msec */
+        10000, /* ttl in msec */
         500 /* ttl version */,
         0 /* hash */);
     store->setKey("test_key1", testValue1);
@@ -1166,7 +1168,7 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
         1,
         nodeId,
         std::string("test_key_val"),
-        1000, /* ttl in msec */
+        10000, /* ttl in msec */
         500 /* ttl version */,
         0 /* hash */);
     store->setKey("test_key2", testValue1);
@@ -1184,12 +1186,15 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
         1,
         nodeId,
         std::string("test_key_val"),
-        1000, /* ttl in msec */
+        10000, /* ttl in msec */
         500 /* ttl version */,
         0 /* hash */);
     store->setKey("test_key3", testValue1);
-    evl.stop();
   });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(150 + kSyncMaxWaitTime.count()),
+      [&]() noexcept { evl.stop(); });
 
   // Start the event loop
   std::thread evlThread([&]() {
