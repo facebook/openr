@@ -1037,7 +1037,7 @@ Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
   handshakeMsg.gracefulRestartTime = myHoldTime_.count();
   handshakeMsg.transportAddressV6 = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
-  handshakeMsg.area = ""; // area string NOT supported yet
+  handshakeMsg.area = openr::thrift::KvStore_constants::kDefaultArea();
   handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
   handshakeMsg.kvStorePubPort = kKvStorePubPort_;
   handshakeMsg.kvStoreCmdPort = kKvStoreCmdPort_;
@@ -1404,9 +1404,14 @@ Spark::processHelloMsg(
   auto const& remoteSeqNum = static_cast<uint64_t>(helloMsg.seqNum);
   auto const& nbrSentTimeInUs = std::chrono::microseconds(helloMsg.sentTsInUs);
 
-  if (PacketValidationResult::FAILURE ==
-      sanityCheckHelloPkt(
-          domainName, neighborName, remoteIfName, remoteVersion)) {
+  auto sanityCheckResult = sanityCheckHelloPkt(
+      domainName, neighborName, remoteIfName, remoteVersion);
+  if (PacketValidationResult::SKIP_LOOPED_SELF == sanityCheckResult) {
+    VLOG(4) << "Received self-looped hello pkt";
+    return;
+  }
+
+  if (PacketValidationResult::FAILURE == sanityCheckResult) {
     LOG(ERROR) << "Sanity check of Hello pkt failed";
     return;
   }

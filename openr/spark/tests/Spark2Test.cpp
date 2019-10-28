@@ -625,16 +625,51 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    EXPECT_FALSE(
-        node1
-            ->waitForEvent(
-                thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
-            .hasValue());
-    EXPECT_FALSE(
-        node2
-            ->waitForEvent(
-                thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
-            .hasValue());
+    EXPECT_FALSE(node1
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .hasValue());
+    EXPECT_FALSE(node2
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .hasValue());
+  }
+}
+
+TEST_F(Spark2Fixture, LoopedHelloPktTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture LoopedHelloPktTest finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}});
+
+  // connect iface1 directly with itself to mimick
+  // self-looped helloPkt
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface1, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start one spark2 instance
+  auto node1 = createSpark(kDomainName, "node-1", 1);
+
+  // start tracking iface1.
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+
+  // should NOT receive any event( e.g.NEIGHBOR_DOWN)
+  {
+    EXPECT_FALSE(node1
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .hasValue());
+    EXPECT_FALSE(node1->getSparkNeighState(iface1, "node-1").hasValue());
   }
 }
 
