@@ -2065,48 +2065,44 @@ Spark::sendHelloPacket(
 
   // TODO: deprecate the payload setup once old spark msg
   // no longer is use
-  // ATTN: original payload will be skipped ONLY when
-  // both flag got enabled.
-  if (!(enableSpark2_ && increaseHelloInterval_)) {
-    thrift::SparkNeighbor myself = createSparkNeighbor(
-        myDomainName_,
-        myNodeName_,
-        myHoldTime_.count(),
-        toBinaryAddress(v4Addr),
-        toBinaryAddress(v6Addr),
-        kKvStorePubPort_,
-        kKvStoreCmdPort_,
-        ifName);
+  thrift::SparkNeighbor myself = createSparkNeighbor(
+      myDomainName_,
+      myNodeName_,
+      myHoldTime_.count(),
+      toBinaryAddress(v4Addr),
+      toBinaryAddress(v6Addr),
+      kKvStorePubPort_,
+      kKvStoreCmdPort_,
+      ifName);
 
-    // create the hello packet payload
-    auto payload = createSparkPayload(
-        openrVer,
-        myself,
-        mySeqNum_,
-        std::map<std::string, thrift::ReflectedNeighborInfo>{},
-        getCurrentTimeInUs().count(),
-        inFastInitState,
-        enableFloodOptimization_,
-        restarting,
-        areas_);
+  // create the hello packet payload
+  auto payload = createSparkPayload(
+      openrVer,
+      myself,
+      mySeqNum_,
+      std::map<std::string, thrift::ReflectedNeighborInfo>{},
+      getCurrentTimeInUs().count(),
+      inFastInitState,
+      enableFloodOptimization_,
+      restarting,
+      areas_);
 
-    // add all neighbors we have heard from on this interface
-    for (const auto& kv : neighbors_.at(ifName)) {
-      std::string const& neighborName = kv.first;
-      auto& neighbor = kv.second;
+  // add all neighbors we have heard from on this interface
+  for (const auto& kv : neighbors_.at(ifName)) {
+    std::string const& neighborName = kv.first;
+    auto& neighbor = kv.second;
 
-      // Add timestamp and sequence number from last hello. Will be 0 if we
-      // haven't heard before from the neighbor.
-      // Refer to thrift for definition of timestampts.
-      auto& neighborInfo = payload.neighborInfos[neighborName];
-      neighborInfo.seqNum = neighbor.seqNum;
-      neighborInfo.lastNbrMsgSentTsInUs = neighbor.neighborTimestamp.count();
-      neighborInfo.lastMyMsgRcvdTsInUs = neighbor.localTimestamp.count();
-    }
-
-    helloPacket.payload = std::move(payload);
-    helloPacket.signature = "";
+    // Add timestamp and sequence number from last hello. Will be 0 if we
+    // haven't heard before from the neighbor.
+    // Refer to thrift for definition of timestampts.
+    auto& neighborInfo = payload.neighborInfos[neighborName];
+    neighborInfo.seqNum = neighbor.seqNum;
+    neighborInfo.lastNbrMsgSentTsInUs = neighbor.neighborTimestamp.count();
+    neighborInfo.lastMyMsgRcvdTsInUs = neighbor.localTimestamp.count();
   }
+
+  helloPacket.payload = std::move(payload);
+  helloPacket.signature = "";
 
   auto packet = util::writeThriftObjStr(helloPacket, serializer_);
 
