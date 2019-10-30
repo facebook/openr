@@ -1,0 +1,14 @@
+---
+- hosts: 127.0.0.1
+  connection: local
+  become: yes
+  environment:
+    http_proxy: http://proxy-wsa.esl.cisco.com:80
+    https_proxy: http://proxy-wsa.esl.cisco.com:80
+
+  tasks:
+
+  - name: install sshpass on the system
+    apt:
+      name: sshpass
+      state: latest

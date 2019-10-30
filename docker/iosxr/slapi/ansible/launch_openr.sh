@@ -5,7 +5,7 @@ set -x
 if [[ $1 == "" ]]; then
    echo "No rtr name provided, bailing out..."
 else
-   $rtr_name=$1
+   rtr_name=$1
 fi
 
 route_batch_flag=$2

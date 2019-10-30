@@ -1,0 +1,9 @@
+# DOCKER_OPTS can be used to add insecure private registries to be supported 
+# by the docker daemon
+# eg : DOCKER_OPTS="--insecure-registry foo --insecure-registry bar"
+
+# Following are the valid configs
+# DOCKER_OPTS="<space>--insecure-registry<space>foo"
+# DOCKER_OPTS+="<space>--insecure-registry<space>bar"
+
+DOCKER_OPTS=" --insecure-registry 11.11.11.2:5000"

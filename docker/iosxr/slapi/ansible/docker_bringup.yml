@@ -1,0 +1,94 @@
+---
+- hosts: routers_shell
+  gather_facts: no
+  become: yes
+
+  vars:
+    connect_vars:
+       host: "{{ ansible_host }}"
+       username: "{{ ansible_user }}"
+       password: "{{ ansible_ssh_pass }}"
+    up: "sudo -i /misc/app_host/launch_openr.sh {{ inventory_hostname }} route_batch"
+    down: "sudo -i docker rm -f openr"
+
+  tasks:
+
+
+  - name: Copy modified docker sysconfig file to rtr
+    copy:
+      src: "./sysconfig_docker"
+      dest: "/misc/app_host/etc/sysconfig/docker"
+      owner: root
+      group: root
+      mode: a+x
+
+  - name: Copy over modified mounted docker sysconfig file to host docker sysconfig
+    shell: source /pkg/bin/ztp_helper.sh && echo -ne "run ssh 10.0.2.16 cp /misc/app_host/etc/sysconfig/docker /etc/sysconfig/docker\n" | xrcmd "admin"
+
+  - name: Restart the docker daemon
+    shell: source /pkg/bin/ztp_helper.sh && echo -ne "run ssh 10.0.2.16 service docker restart\n" | xrcmd "admin"
+
+  # Pause for 5 minutes to build app cache.
+  - name: Pause the playbook for about 30 seconds as docker daemon restarts due to sysconfig change
+    pause:
+      seconds: 30
+
+
+  - name: Pull the openr image from private registry
+    shell: sudo -i docker pull 11.11.11.2:5000/openr-xr 
+
+  - name: Tag the downloaded docker image
+    shell: sudo -i docker tag 11.11.11.2:5000/openr-xr akshshar/openr-xr
+
+  - name: Copy run_openr script to rtr
+    copy:
+      src: "{{ inventory_hostname }}"
+      dest: "/misc/app_host/{{ inventory_hostname }}"
+      owner: root 
+      group: root 
+      mode: a+x 
+      force: yes
+
+  - name: Copy launch_openr script to rtr
+    copy:
+      src: "./launch_openr.sh"
+      dest: "/misc/app_host/"
+      owner: root 
+      group: root 
+      mode: a+x 
+      force: yes
+
+  - name: Copy bash_trap script to rtr
+    copy:
+      src: "./bash_trap.sh"
+      dest: "/misc/app_host/"
+      owner: root 
+      group: root 
+      mode: a+x 
+      force: yes
+
+  - name: Check docker container is running
+    shell: sudo -i docker inspect --format={{ '{{.State.Running}}' }}  openr
+    args:
+      executable: /bin/bash
+    register: status
+    ignore_errors: yes
+  - debug: var=output.stdout_lines
+
+ 
+  - name: Clean up docker container if running 
+    shell: "{{ down }}"
+    args:
+      executable: /bin/bash
+    register: output
+    when: status.stdout == "true"
+  - debug: var=output.stdout_lines
+
+
+  - name: Bring up the docker container 
+    shell: "{{ up }}"
+    args:
+      executable: /bin/bash
+    register: output
+    ignore_errors: yes
+  - debug: var=output.stdout_lines  

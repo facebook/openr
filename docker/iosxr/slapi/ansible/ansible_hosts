@@ -1,0 +1,7 @@
+[routers_cli]
+rtr1 ansible_user="vagrant" ansible_password="vagrant" ansible_host=11.11.11.23 
+rtr2 ansible_user="vagrant" ansible_password="vagrant" ansible_host=11.11.11.33
+
+[routers_shell]
+rtr1 ansible_user="vagrant" ansible_password="vagrant" ansible_sudo_pass="vagrant" ansible_host=11.11.11.23 ansible_port=57722 hostname=rtr1
+rtr2 ansible_user="vagrant" ansible_password="vagrant" ansible_sudo_pass="vagrant" ansible_host=11.11.11.23 ansible_port=57722 hostname=rtr2

@@ -1,0 +1,47 @@
+---
+- hosts: 127.0.0.1
+  connection: local
+  become: yes
+  environment:
+    http_proxy: http://proxy-wsa.esl.cisco.com:80
+    https_proxy: http://proxy-wsa.esl.cisco.com:80
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3  
+
+  tasks:
+
+  - name: install pip3 on the system
+    apt:
+      name: python3-pip
+      state: latest
+
+  - name: Install the docker module for Ansible 
+    pip:
+      name:  docker
+      state: present
+
+  - name: Create mount volume for registry
+    file:
+      path: /tmp/registry
+      state: directory
+
+  - name: Deploy the local registry server
+    docker_container:
+        name: registry
+        image: registry:2
+        volumes:  /tmp/registry:/var/lib/registry
+        ports:
+        - "5000:5000"
+        restart_policy: always
+        state: started
+        force_kill: yes
+        interactive: yes
+        restart: yes
+
+  - name: Tag and push openr image to local registry
+    docker_image:
+      name: akshshar/openr-xr 
+      repository: localhost:5000/openr-xr
+      tag: latest
+      push: yes
