@@ -417,7 +417,7 @@ NetlinkFibHandler::getStatus() {
 openr::thrift::SwitchRunState
 NetlinkFibHandler::getSwitchRunState() {
   VLOG(3) << "Received getSwitchRunState";
-  return openr::thrift::SwitchRunState::UNINITIALIZED;
+  return openr::thrift::SwitchRunState::CONFIGURED;
 }
 
 folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
