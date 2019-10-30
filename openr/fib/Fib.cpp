@@ -53,6 +53,7 @@ Fib::Fib(
   syncRoutesTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
     if (routeState_.hasRoutesFromDecision) {
       if (syncRouteDb()) {
+        hasSyncedFib_ = true;
         expBackoff_.reportSuccess();
       } else {
         // Apply exponential backoff and schedule next run
@@ -476,10 +477,13 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
     // if so, skip partial sync
     LOG(INFO) << "Pending full sync is scheduled, skip delta sync for now...";
     return;
-  } else if (routeState_.dirtyRouteDb) {
-    // If previous route programming attempt failed, enforce full sync
-    LOG(INFO) << "Previous route programming failed, skip delta sync to enforce"
-              << " full fib sync...";
+  } else if (routeState_.dirtyRouteDb or not hasSyncedFib_) {
+    if (hasSyncedFib_) {
+      LOG(INFO) << "Previous route programming failed or, skip delta sync to "
+                << "enforce full fib sync...";
+    } else {
+      LOG(INFO) << "Syncing fib on startup...";
+    }
     syncRouteDbDebounced();
     return;
   }

@@ -154,6 +154,8 @@ checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
 
 class FibTestFixture : public ::testing::Test {
  public:
+  explicit FibTestFixture(bool waitOnDecision = false)
+      : waitOnDecision_(waitOnDecision) {}
   void
   SetUp() override {
     mockFibHandler = std::make_shared<MockNetlinkFibHandler>();
@@ -180,7 +182,7 @@ class FibTestFixture : public ::testing::Test {
         true, /* segment route */
         false, /* orderedFib */
         std::chrono::seconds(2),
-        false, /* waitOnDecision */
+        waitOnDecision_,
         DecisionPubUrl{"inproc://decision-pub"},
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
@@ -252,8 +254,11 @@ class FibTestFixture : public ::testing::Test {
 
   std::shared_ptr<MockNetlinkFibHandler> mockFibHandler;
 
+ private:
   // thriftServer to talk to Fib
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
+
+  bool waitOnDecision_{false};
 };
 
 TEST_F(FibTestFixture, processRouteDb) {
@@ -630,6 +635,45 @@ TEST_F(FibTestFixture, fibRestart) {
   EXPECT_EQ(routes.size(), 1);
   mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
   EXPECT_EQ(mplsRoutes.size(), 2);
+}
+
+class FibTestFixtureWaitOnDecision : public FibTestFixture {
+ public:
+  FibTestFixtureWaitOnDecision() : FibTestFixture(true) {}
+};
+
+TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
+  // Make sure fib starts with clean route database
+  std::vector<thrift::UnicastRoute> routes;
+  std::vector<thrift::MplsRoute> mplsRoutes;
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
+  EXPECT_EQ(mplsRoutes.size(), 0);
+
+  // Mimic decision pub sock publishing RouteDatabaseDelta
+  thrift::RouteDatabaseDelta routeDbDelta;
+  routeDbDelta.thisNodeName = "node-1";
+  routeDbDelta.unicastRoutesToUpdate = {
+      createUnicastRoute(prefix1, {path1_2_1, path1_2_2})};
+  routeDbDelta.mplsRoutesToUpdate = {
+      createMplsRoute(label1, {mpls_path1_2_1, mpls_path1_2_2}),
+      createMplsRoute(label2, {mpls_path1_2_2})};
+
+  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+
+  // initial syncFib debounce
+  mockFibHandler->waitForSyncFib();
+  mockFibHandler->waitForSyncMplsFib();
+
+  // ensure no other calls occured
+  EXPECT_EQ(mockFibHandler->getFibSyncCount(), 1);
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 0);
+
+  EXPECT_EQ(mockFibHandler->getFibMplsSyncCount(), 2);
+  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 0);
+  EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 0);
 }
 
 int

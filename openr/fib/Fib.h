@@ -231,6 +231,9 @@ class Fib final : public OpenrEventLoop {
   // it means that FibAgent has restarted and we need to perform sync.
   int64_t latestAliveSince_{0};
 
+  // moves to true after initial sync
+  bool hasSyncedFib_{false};
+
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
 };
 
