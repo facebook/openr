@@ -44,16 +44,26 @@ class LongPollFixture : public ::testing::Test {
     openrThriftServerWrapper_->run();
 
     // initialize openrCtrlClient talking to server
-    openrCtrlThriftClient_ =
-        getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
-            evb_,
-            folly::IPAddress("::1"),
-            openrThriftServerWrapper_->getOpenrCtrlThriftPort());
+    client1_ = getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
+        evb_,
+        folly::IPAddress("::1"),
+        openrThriftServerWrapper_->getOpenrCtrlThriftPort());
+
+    // Create client to have client-side timeout longer than OpenrCtrlServer
+    // side default. This mimick we are NOT timeout but receive "false"
+    // indicating no changes.
+    client2_ = getOpenrCtrlPlainTextClient<apache::thrift::HeaderClientChannel>(
+        evb_,
+        folly::IPAddress("::1"),
+        openrThriftServerWrapper_->getOpenrCtrlThriftPort(),
+        Constants::kServiceConnTimeout,
+        Constants::kLongPollReqHoldTime + std::chrono::milliseconds(10000));
   }
 
   void
   TearDown() override {
-    openrCtrlThriftClient_.reset();
+    client1_.reset();
+    client2_.reset();
     openrThriftServerWrapper_->stop();
     kvStoreWrapper_->stop();
   }
@@ -70,8 +80,8 @@ class LongPollFixture : public ::testing::Test {
   fbzmq::ZmqEventLoop evl_;
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
-  std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient>
-      openrCtrlThriftClient_{nullptr};
+  std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient> client1_{nullptr};
+  std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient> client2_{nullptr};
 };
 
 TEST_F(LongPollFixture, LongPollSuccess) {
@@ -105,7 +115,7 @@ TEST_F(LongPollFixture, LongPollSuccess) {
     // By default, the processing timeout value for client is 10s.
     LOG(INFO) << "Start long poll...";
     thrift::KeyVals snapshot;
-    isAdjChanged = openrCtrlThriftClient_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged = client1_->sync_longPollKvStoreAdj(snapshot);
     endTime = std::chrono::steady_clock::now();
     LOG(INFO) << "Finished long poll...";
   } catch (std::exception& ex) {
@@ -151,7 +161,7 @@ TEST_F(LongPollFixture, LongPollTimeout) {
     // By default, the processing timeout value for client is 10s.
     LOG(INFO) << "Start long poll...";
     thrift::KeyVals snapshot;
-    isAdjChanged = openrCtrlThriftClient_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged = client1_->sync_longPollKvStoreAdj(snapshot);
   } catch (std::exception& ex) {
     LOG(INFO) << "Exception happened: " << folly::exceptionStr(ex);
     isTimeout = true;
@@ -182,18 +192,18 @@ TEST_F(LongPollFixture, LongPollPendingAdj) {
 
   // inject key to kvstore and openrCtrlThriftServer should have adj key
   kvStoreWrapper_->setKey(
-      adjKey_, createThriftValue(1, nodeName_, std::string("value1")));
+      adjKey_, createThriftValue(2, nodeName_, std::string("value1")));
 
   try {
     // mimicking scenario that server has different value for the same key
     thrift::KeyVals snapshot;
     snapshot.emplace(
-        adjKey_, createThriftValue(2, "Valar-Dohaeris", std::string("value1")));
+        adjKey_, createThriftValue(1, "Valar-Dohaeris", std::string("value1")));
 
     // By default, the processing timeout value for client is 10s.
     LOG(INFO) << "Start long poll...";
     startTime = std::chrono::steady_clock::now();
-    isAdjChanged = openrCtrlThriftClient_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged = client1_->sync_longPollKvStoreAdj(snapshot);
     endTime = std::chrono::steady_clock::now();
     LOG(INFO) << "Finished long poll...";
   } catch (std::exception& ex) {
@@ -209,16 +219,33 @@ TEST_F(LongPollFixture, LongPollPendingAdj) {
   // Server will NOT push notification since there is no diff.
   //
   isTimeout = false;
-  isAdjChanged = false;
+  isAdjChanged = true;
+
+  // mimick there is a new publication from kvstore.
+  // This publication should clean up pending req.
+  evl_.scheduleTimeout(
+      Constants::kLongPollReqHoldTime + std::chrono::milliseconds(5000),
+      [&]() noexcept {
+        LOG(INFO) << "Prefix key set...";
+        kvStoreWrapper_->setKey(
+            prefixKey_, createThriftValue(1, nodeName_, std::string("value1")));
+
+        // stop the evl
+        evl_.stop();
+      });
+
+  // start eventloop
+  std::thread evlThread([&]() { evl_.run(); });
+  evl_.waitUntilRunning();
+
   try {
     thrift::KeyVals snapshot;
     snapshot.emplace(
-        adjKey_, createThriftValue(1, nodeName_, std::string("value1")));
+        adjKey_, createThriftValue(2, nodeName_, std::string("value1")));
 
-    // By default, the processing timeout value for client is 10s.
     LOG(INFO) << "Start long poll...";
     startTime = std::chrono::steady_clock::now();
-    isAdjChanged = openrCtrlThriftClient_->sync_longPollKvStoreAdj(snapshot);
+    isAdjChanged = client2_->sync_longPollKvStoreAdj(snapshot);
     endTime = std::chrono::steady_clock::now();
     LOG(INFO) << "Finished long poll...";
   } catch (std::exception& ex) {
@@ -227,11 +254,11 @@ TEST_F(LongPollFixture, LongPollPendingAdj) {
   }
 
   ASSERT_FALSE(isAdjChanged);
-  ASSERT_TRUE(isTimeout);
+  ASSERT_FALSE(isTimeout);
 
-  // Explicitly cleanup pending longPollReq
-  openrThriftServerWrapper_->getOpenrCtrlHandler()
-      ->cleanupPendingLongPollReqs();
+  // wait for evl before cleanup
+  evl_.waitUntilStopped();
+  evlThread.join();
 }
 
 int

@@ -123,7 +123,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
                             << " is over hold limit: "
                             << Constants::kLongPollReqHoldTime.count();
                   reqsToClean.emplace_back(clientId);
-                  p.setException(thrift::OpenrError("Request timed out"));
+                  p.setValue(false);
                 }
               }
 
@@ -694,16 +694,14 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
       thrift::OpenrModuleType::KVSTORE, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));
-  } else if (
-      reply->keyVals.size() or
-      (reply->tobeUpdatedKeys.hasValue() and
-       reply->tobeUpdatedKeys.value().size())) {
-    VLOG(3) << "AdjKey hash change. Notify immediately";
+  } else if (reply->keyVals.size()) {
+    VLOG(3) << "AdjKey has changed. Notify immediately";
     p.setValue(true);
   } else {
     // Client provided data is consistent with KvStore.
     // Store req for future processing when there is publication
     // from KvStore.
+    VLOG(3) << "No adj change detected. Store req as pending request";
     longPollReqs_.withWLock([&](auto& longPollReq) {
       longPollReq.emplace(requestId, std::make_pair(std::move(p), timeStamp));
     });
