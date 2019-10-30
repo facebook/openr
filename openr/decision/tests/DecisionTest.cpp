@@ -3546,12 +3546,15 @@ class DecisionTestFixture : public ::testing::Test {
   createAdjValue(
       const string& node,
       int64_t version,
-      const vector<thrift::Adjacency>& adjs) {
+      const vector<thrift::Adjacency>& adjs,
+      bool overloaded = false) {
+    auto adjDB = createAdjDb(node, adjs, 0);
+    adjDB.isOverloaded = overloaded;
     return thrift::Value(
         FRAGILE,
         version,
         "originator-1",
-        fbzmq::util::writeThriftObjStr(createAdjDb(node, adjs, 0), serializer),
+        fbzmq::util::writeThriftObjStr(adjDB, serializer),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
@@ -4343,6 +4346,49 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
       NextHops({createNextHopFromAdj(adj41, false, 15)}));
+
+  /**
+   * Overload node-2 and node-4. Now we on node-1 will only route p2 toward
+   * node-3 but will still have route p4 toward node-4 since it's unicast
+   *
+   *  node4(p4)
+   *     |
+   *   5 |
+   *     |         10     (overloaded)
+   *  node1(p1) --------- node2(p2)
+   *     |
+   *     | 10
+   *     |
+   *  node3(p2)
+   */
+
+  publication = createThriftPublication(
+      {{"adj:2", createAdjValue("2", 1, {adj21}, true /* overloaded */)},
+       {"adj:4", createAdjValue("4", 1, {adj41}, true /* overloaded */)}},
+      {},
+      {},
+      {},
+      std::string(""));
+
+  // Send same publication again to Decision using pub socket
+  sendKvPublication(publication);
+
+  // wait for SPF to finish
+  /* sleep override */
+  std::this_thread::sleep_for(2 * debounceTimeout);
+
+  routeMapList = dumpRouteDb({"1"});
+  RouteMap routeMap2;
+  for (auto kv : routeMapList) {
+    fillRouteMap(kv.first, routeMap2, kv.second);
+  }
+  EXPECT_EQ(
+      routeMap2[make_pair("1", toString(addr2))],
+      NextHops({createNextHopFromAdj(adj13, false, 10)}));
+
+  EXPECT_EQ(
+      routeMap2[make_pair("1", toString(addr4))],
+      NextHops({createNextHopFromAdj(adj14, false, 5)}));
 
   /**
    * Increase the distance between node-1 and node-2 to 100. Now we on node-1

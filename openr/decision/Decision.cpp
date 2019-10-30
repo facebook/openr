@@ -283,6 +283,9 @@ class SpfSolver::SpfSolverImpl {
       bool const hasBgp,
       bool const useKsp2EdAlgo);
 
+  // helper to filter overloaded nodes for anycast addresses
+  BestPathCalResult maybeFilterDrainedNodes(BestPathCalResult&& result) const;
+
   // given curNode and the dst nodes, find 2spf paths from curNode to each
   // dstNode
   std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
@@ -871,19 +874,33 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
       dstNodes.nodes.insert(kv.first);
     }
     dstNodes.success = true;
-    return dstNodes;
+    return maybeFilterDrainedNodes(std::move(dstNodes));
   }
 
   // for bgp route, we need to run best path calculation algorithm to get
   // the nodes
-  const auto bestPathCalRes =
+  auto bestPathCalRes =
       findDstNodesForBgpRoute(myNodeName, prefix, nodePrefixes, isV4);
   if (bestPathCalRes.success && (not bestPathCalRes.nodes.count(myNodeName))) {
-    return bestPathCalRes;
+    return maybeFilterDrainedNodes(std::move(bestPathCalRes));
   }
   LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
   tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
   return dstNodes;
+}
+
+BestPathCalResult
+SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
+    BestPathCalResult&& result) const {
+  BestPathCalResult filtered = result;
+  for (auto iter = filtered.nodes.begin(); iter != filtered.nodes.end();) {
+    if (linkState_.isNodeOverloaded(*iter)) {
+      iter = filtered.nodes.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+  return filtered.nodes.empty() ? result : filtered;
 }
 
 folly::Optional<thrift::UnicastRoute>
