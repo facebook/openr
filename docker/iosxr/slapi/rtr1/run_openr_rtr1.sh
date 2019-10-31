@@ -29,8 +29,13 @@ DOMAIN=openr
 
 # List of comma separated list of prefixes to announce
 # e.g. "face:cafe::1/128,face:b00c::/64"
-#ROUTE_LIST=$(python /root/increment_ipv4_prefix1.py)
-ROUTE_LIST=
+
+if [[ $1=="route_batch" ]]; then
+    ROUTE_LIST=$(python /root/increment_ipv4_prefix1.py)
+else
+    ROUTE_LIST=
+fi
+
 PREFIXES="50.1.1.1/32,${ROUTE_LIST},face:cafe::10/128,face:b00c::10/128"
 
 # Used to assign elected address if prefix allocator is enabled
