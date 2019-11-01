@@ -84,7 +84,7 @@ class LongPollFixture : public ::testing::Test {
   std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient> client2_{nullptr};
 };
 
-TEST_F(LongPollFixture, LongPollSuccess) {
+TEST_F(LongPollFixture, LongPollAdjAdded) {
   //
   // This UT mimicks the basic functionality of long poll API to make sure
   // server will return to client if there is "adj:" key change received.
@@ -137,7 +137,7 @@ TEST_F(LongPollFixture, LongPollSuccess) {
 TEST_F(LongPollFixture, LongPollTimeout) {
   //
   // This UT mimicks the scenario there is a client side timeout since
-  // there is NOT "adj:" key change.
+  // there is NO "adj:" key change.
   //
   bool isTimeout = false;
   bool isAdjChanged = false;
@@ -180,10 +180,11 @@ TEST_F(LongPollFixture, LongPollTimeout) {
   evlThread.join();
 }
 
-TEST_F(LongPollFixture, LongPollPendingAdj) {
+TEST_F(LongPollFixture, LongPollAdjModified) {
   //
-  // Test1: mimicks the scenario that before client send req. There is already
-  // "adj:" key published before client subscribe. Should push immediately.
+  // This UT mimicks the scenario that before client send req.
+  // There is already "adj:" key published before client subscribe.
+  // Should push immediately.
   //
   bool isTimeout = false;
   bool isAdjChanged = false;
@@ -211,15 +212,23 @@ TEST_F(LongPollFixture, LongPollPendingAdj) {
     isTimeout = true;
   }
 
-  ASSERT_TRUE(isAdjChanged);
   ASSERT_FALSE(isTimeout);
+  // make sure when there is publication, processing delay is less than 50ms
+  ASSERT_LE(endTime - startTime, std::chrono::milliseconds(50));
+  ASSERT_TRUE(isAdjChanged);
+}
 
+TEST_F(LongPollFixture, LongPollAdjUnchanged) {
   //
-  // Test2: mimicks the scenario that client already hold the same adj key.
+  // This UT mimicks the scenario that client already hold the same adj key.
   // Server will NOT push notification since there is no diff.
   //
-  isTimeout = false;
-  isAdjChanged = true;
+  bool isTimeout = false;
+  bool isAdjChanged = true;
+
+  // inject key to kvstore and openrCtrlThriftServer should have adj key
+  kvStoreWrapper_->setKey(
+      adjKey_, createThriftValue(1, nodeName_, std::string("value1")));
 
   // mimick there is a new publication from kvstore.
   // This publication should clean up pending req.
@@ -241,12 +250,10 @@ TEST_F(LongPollFixture, LongPollPendingAdj) {
   try {
     thrift::KeyVals snapshot;
     snapshot.emplace(
-        adjKey_, createThriftValue(2, nodeName_, std::string("value1")));
+        adjKey_, createThriftValue(1, nodeName_, std::string("value1")));
 
     LOG(INFO) << "Start long poll...";
-    startTime = std::chrono::steady_clock::now();
     isAdjChanged = client2_->sync_longPollKvStoreAdj(snapshot);
-    endTime = std::chrono::steady_clock::now();
     LOG(INFO) << "Finished long poll...";
   } catch (std::exception& ex) {
     LOG(INFO) << "Exception happened: " << folly::exceptionStr(ex);
@@ -259,6 +266,40 @@ TEST_F(LongPollFixture, LongPollPendingAdj) {
   // wait for evl before cleanup
   evl_.waitUntilStopped();
   evlThread.join();
+}
+
+TEST_F(LongPollFixture, LongPollAdjExpired) {
+  //
+  // This UT mimicks the scenario that client hold adj key,
+  // but server doesn't have this adj key( e.g. adj key expiration )
+  //
+  bool isTimeout = false;
+  bool isAdjChanged = false;
+
+  std::chrono::steady_clock::time_point startTime;
+  std::chrono::steady_clock::time_point endTime;
+
+  try {
+    // mimicking scenario that server has different value for the same key
+    thrift::KeyVals snapshot;
+    snapshot.emplace(
+        adjKey_, createThriftValue(1, "Valar-Dohaeris", std::string("value1")));
+
+    // By default, the processing timeout value for client is 10s.
+    LOG(INFO) << "Start long poll...";
+    startTime = std::chrono::steady_clock::now();
+    isAdjChanged = client1_->sync_longPollKvStoreAdj(snapshot);
+    endTime = std::chrono::steady_clock::now();
+    LOG(INFO) << "Finished long poll...";
+  } catch (std::exception& ex) {
+    LOG(INFO) << "Exception happened: " << folly::exceptionStr(ex);
+    isTimeout = true;
+  }
+
+  ASSERT_FALSE(isTimeout);
+  // make sure when there is publication, processing delay is less than 50ms
+  ASSERT_LE(endTime - startTime, std::chrono::milliseconds(50));
+  ASSERT_TRUE(isAdjChanged);
 }
 
 int

@@ -683,10 +683,19 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
   thrift::KvStoreRequest request;
   thrift::KeyDumpParams params;
 
+  // build thrift::KeyVals with "adj:" key ONLY
+  // to ensure KvStore ONLY compare "adj:" key
+  thrift::KeyVals adjKeyVals;
+  for (auto& kv : *snapshot) {
+    if (kv.first.find(Constants::kAdjDbMarker.toString()) == 0) {
+      adjKeyVals.emplace(kv.first, kv.second);
+    }
+  }
+
   // Only care about "adj:" key
   params.prefix = Constants::kAdjDbMarker;
   // Only dump difference between KvStore and client snapshot
-  params.keyValHashes = std::move(*snapshot);
+  params.keyValHashes = std::move(adjKeyVals);
   request.cmd = thrift::Command::KEY_DUMP;
   request.keyDumpParams = std::move(params);
 
@@ -694,8 +703,13 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
       thrift::OpenrModuleType::KVSTORE, std::move(request));
   if (reply.hasError()) {
     p.setException(thrift::OpenrError(reply.error().errString));
-  } else if (reply->keyVals.size()) {
-    VLOG(3) << "AdjKey has changed. Notify immediately";
+  } else if (reply->keyVals.size() > 0) {
+    VLOG(3) << "AdjKey has been added/modified. Notify immediately";
+    p.setValue(true);
+  } else if (
+      reply->tobeUpdatedKeys.hasValue() &&
+      reply->tobeUpdatedKeys.value().size() > 0) {
+    VLOG(3) << "AdjKey has been deleted/expired. Notify immediately";
     p.setValue(true);
   } else {
     // Client provided data is consistent with KvStore.
