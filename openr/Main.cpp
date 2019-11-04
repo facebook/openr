@@ -57,8 +57,6 @@ using namespace openr;
 
 using namespace folly::gen;
 
-using apache::thrift::CompactSerializer;
-using apache::thrift::FRAGILE;
 using apache::thrift::concurrency::ThreadManager;
 using openr::thrift::OpenrModuleType;
 

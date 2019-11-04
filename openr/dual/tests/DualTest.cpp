@@ -48,10 +48,8 @@ using Graph = boost::adjacency_list<
     Vertex,
     boost::property<boost::edge_weight_t, Weight>>;
 using VertexDescriptor = boost::graph_traits<Graph>::vertex_descriptor;
-using EdgeDescriptor = boost::graph_traits<Graph>::edge_descriptor;
 using EdgeProperty = boost::property<boost::edge_weight_t, Weight>;
 using IndexMap = boost::property_map<Graph, boost::vertex_index_t>::type;
-using WeightMap = boost::property_map<Graph, boost::edge_weight_t>;
 using PredecessorMap = boost::iterator_property_map<
     VertexDescriptor*,
     IndexMap,

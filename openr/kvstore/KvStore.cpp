@@ -16,7 +16,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 
-using namespace std::chrono_literals;
 using namespace std::chrono;
 
 namespace openr {

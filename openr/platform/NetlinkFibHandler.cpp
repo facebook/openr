@@ -15,17 +15,12 @@
 
 #include <folly/Format.h>
 #include <folly/gen/Base.h>
-#include <folly/gen/Core.h>
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/platform/NetlinkFibHandler.h>
 
-using apache::thrift::FRAGILE;
-using folly::gen::as;
-using folly::gen::from;
-using folly::gen::mapped;
 
 namespace openr {
 

@@ -7,7 +7,6 @@
 
 #include "LinkMonitor.h"
 
-#include <syslog.h>
 #include <functional>
 
 #include <fbzmq/service/if/gen-cpp2/Monitor_types.h>

@@ -25,9 +25,7 @@
 #include <openr/nl/NetlinkTypes.h>
 
 using namespace fbzmq;
-using namespace std::chrono_literals;
 
-using apache::thrift::FRAGILE;
 
 namespace {
 

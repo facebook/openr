@@ -22,10 +22,6 @@
 #include <glog/logging.h>
 #include <openr/nl/NetlinkSocket.h>
 
-using folly::gen::as;
-using folly::gen::from;
-using folly::gen::mapped;
-using folly::gen::unsplit;
 
 using namespace openr;
 using namespace openr::fbnl;

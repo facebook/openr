@@ -25,7 +25,6 @@
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
-#include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
@@ -40,13 +39,9 @@
 using namespace std;
 using namespace openr;
 
-using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 using apache::thrift::ThriftServer;
 using apache::thrift::util::ScopedServerThread;
-using ::testing::_;
-using ::testing::InSequence;
-using ::testing::InvokeWithoutArgs;
 
 const int16_t kFibId{static_cast<int16_t>(thrift::FibClient::OPENR)};
 

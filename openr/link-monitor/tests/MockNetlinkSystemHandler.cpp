@@ -20,12 +20,10 @@
 #include <glog/logging.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
-#include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/common/NetworkUtil.h>
 
-using namespace fbzmq;
 using apache::thrift::FRAGILE;
 
 namespace openr {

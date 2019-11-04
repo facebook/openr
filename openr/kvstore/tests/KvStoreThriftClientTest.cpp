@@ -22,8 +22,6 @@
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 using namespace openr;
-using apache::thrift::ThriftServer;
-using apache::thrift::util::ScopedServerThread;
 
 namespace {
 // ttl used in test for (K,V) pair

@@ -26,7 +26,6 @@
 
 using namespace openr;
 using apache::thrift::CompactSerializer;
-using namespace std::chrono_literals;
 using namespace std::chrono;
 
 namespace {
@@ -2034,7 +2033,6 @@ TEST_F(KvStoreTestFixture, BasicSync) {
  * Also verify the publication propagation via nodeIds attribute
  */
 TEST_F(KvStoreTestFixture, TieBreaking) {
-  using namespace folly::gen;
 
   const std::string kOriginBase = "store";
   const unsigned int kNumStores = 16;

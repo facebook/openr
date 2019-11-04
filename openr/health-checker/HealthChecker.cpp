@@ -11,7 +11,6 @@
 #include <folly/Random.h>
 #include <openr/common/Util.h>
 
-using apache::thrift::FRAGILE;
 
 namespace {
 const int kMaxPingPacketSize = 1028;

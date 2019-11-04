@@ -9,9 +9,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
-#include <syslog.h>
 
-using apache::thrift::FRAGILE;
 
 namespace openr {
 

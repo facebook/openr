@@ -23,12 +23,9 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace std;
-using namespace folly;
 
 using namespace openr;
-using namespace testing;
 
-using apache::thrift::CompactSerializer;
 
 using namespace std::chrono_literals;
 

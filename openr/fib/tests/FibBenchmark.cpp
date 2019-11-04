@@ -55,8 +55,6 @@ const uint8_t kNumOfNexthops = 128;
 
 namespace openr {
 
-using apache::thrift::CompactSerializer;
-using apache::thrift::FRAGILE;
 using apache::thrift::ThriftServer;
 using apache::thrift::util::ScopedServerThread;
 

@@ -10,7 +10,6 @@
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Memory.h>
-#include <folly/Random.h>
 #include <folly/ScopeGuard.h>
 #include <folly/SocketAddress.h>
 #include <gflags/gflags.h>
