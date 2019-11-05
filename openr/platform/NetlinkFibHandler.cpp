@@ -21,12 +21,10 @@
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/platform/NetlinkFibHandler.h>
 
-
 namespace openr {
 
 namespace {
 
-const std::chrono::seconds kRoutesHoldTimeout{30};
 const std::chrono::seconds kSyncStaticRouteTimeout{30};
 
 // iproute2 protocol IDs in the kernel are a shared resource
@@ -68,25 +66,6 @@ NetlinkFibHandler::NetlinkFibHandler(
               });
         }
       });
-
-  keepAliveCheckTimer_ = fbzmq::ZmqTimeout::make(zmqEventLoop, [&]() noexcept {
-    auto now = std::chrono::steady_clock::now();
-    if (now - recentKeepAliveTs_ > kRoutesHoldTimeout) {
-      LOG(WARNING) << "Open/R health check: FAIL. Expiring routes!";
-      auto emptyRoutes = std::make_unique<std::vector<thrift::UnicastRoute>>();
-      auto ret = future_syncFib(0 /* clientId */, std::move(emptyRoutes));
-      std::move(ret).thenValue([](folly::Unit) {
-        LOG(WARNING) << "Expired routes on health check failure!";
-      });
-    } else {
-      VLOG(2) << "Open/R health check: PASS";
-    }
-  });
-
-  zmqEventLoop->runInEventLoop([&]() {
-    const bool isPeriodic = true;
-    keepAliveCheckTimer_->scheduleTimeout(kRoutesHoldTimeout, isPeriodic);
-  });
 }
 
 NetlinkFibHandler::~NetlinkFibHandler() {}
@@ -398,8 +377,6 @@ NetlinkFibHandler::future_syncMplsFib(
 
 int64_t
 NetlinkFibHandler::aliveSince() {
-  VLOG(3) << "Received KeepAlive from OpenR";
-  recentKeepAliveTs_ = std::chrono::steady_clock::now();
   return startTime_;
 }
 

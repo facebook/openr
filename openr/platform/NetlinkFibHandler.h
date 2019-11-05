@@ -157,12 +157,6 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
 
   // ZMQ Eventloop pointer
   fbzmq::ZmqEventLoop* evl_{nullptr};
-
-  // Recent timepoint of aliveSince
-  std::chrono::steady_clock::time_point recentKeepAliveTs_;
-
-  // ZmqTimeout timer to check for openr aliveness
-  std::unique_ptr<fbzmq::ZmqTimeout> keepAliveCheckTimer_;
 };
 
 } // namespace openr
