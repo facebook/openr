@@ -70,17 +70,25 @@ class FibRoutesInstalledCli(object):
         multiple=True,
         help="Get route for specific labels.",
     )
+    @click.option(
+        "--client-id",
+        type=click.INT,
+        help="Retrieve routes for client. Defaults to 786 (Open/R). Use 0 for BGP",
+    )
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def routes(
         cli_opts: Bunch,  # noqa: B902
         prefixes: List[str],
         labels: List[int],
+        client_id: int,
         json: bool,
     ):
         """ Get and print all the routes on fib agent """
 
-        return_code = fib.FibRoutesInstalledCmd(cli_opts).run(prefixes, labels, json)
+        return_code = fib.FibRoutesInstalledCmd(cli_opts).run(
+            prefixes, labels, json, client_id
+        )
         sys.exit(return_code)
 
 
