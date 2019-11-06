@@ -1636,11 +1636,11 @@ def get_routes_json(
     return data
 
 
-def get_shortest_routes(
+def get_routes(
     route_db: fib_types.RouteDatabase
 ) -> (List[network_types.UnicastRoute], List[network_types.MplsRoute]):
     """
-    Find all shortest routes for each prefix in routeDb
+    Find all routes for each prefix in routeDb
 
     :param route_db: RouteDatabase
     :return (
@@ -1655,15 +1655,19 @@ def get_shortest_routes(
     )
     mpls_routes = sorted(route_db.mplsRoutes, key=lambda x: x.topLabel)
 
-    shortest_unicast_routes = []
-    shortest_mpls_routes = []
+    ret_unicast_routes = []
+    ret_mpls_routes = []
     for route in unicast_routes:
         if not route.nextHops:
             continue
 
         min_metric = min(route.nextHops, key=lambda x: x.metric).metric
-        nextHops = [nh for nh in route.nextHops if nh.metric == min_metric]
-        shortest_unicast_routes.append(
+        nextHops = [
+            nh
+            for nh in route.nextHops
+            if nh.metric == min_metric or nh.useNonShortestRoute
+        ]
+        ret_unicast_routes.append(
             network_types.UnicastRoute(
                 dest=route.dest,
                 deprecatedNexthops=[nh.address for nh in nextHops],
@@ -1674,14 +1678,12 @@ def get_shortest_routes(
     for route in mpls_routes:
         if not route.nextHops:
             continue
-
         min_metric = min(route.nextHops, key=lambda x: x.metric).metric
         nextHops = [nh for nh in route.nextHops if nh.metric == min_metric]
-        shortest_mpls_routes.append(
+        ret_mpls_routes.append(
             network_types.MplsRoute(topLabel=route.topLabel, nextHops=nextHops)
         )
-
-    return (shortest_unicast_routes, shortest_mpls_routes)
+    return (ret_unicast_routes, ret_mpls_routes)
 
 
 def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> None:

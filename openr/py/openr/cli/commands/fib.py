@@ -185,12 +185,10 @@ class FibValidateRoutesCmd(FibAgentCmd):
                 # fetch link_db from link-monitor module
                 lm_links = client.getInterfaces().interfaceDetails
 
-            (decision_unicast_routes, decision_mpls_routes) = utils.get_shortest_routes(
+            (decision_unicast_routes, decision_mpls_routes) = utils.get_routes(
                 decision_route_db
             )
-            (fib_unicast_routes, fib_mpls_routes) = utils.get_shortest_routes(
-                fib_route_db
-            )
+            (fib_unicast_routes, fib_mpls_routes) = utils.get_routes(fib_route_db)
             # fetch route from net_agent module
             agent_unicast_routes = self.client.getRouteTableByClient(
                 self.client.client_id
