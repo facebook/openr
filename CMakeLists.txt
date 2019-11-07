@@ -42,8 +42,6 @@ find_package(fizz REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Gflags REQUIRED)
 find_package(Glog REQUIRED)
-find_library(NL3 nl-3)
-find_library(NLROUTE3 nl-route-3)
 find_library(PROTOCOL protocol PATHS)
 find_library(RE2 re2)
 find_library(SODIUM sodium)
@@ -57,7 +55,6 @@ find_library(ZMQ zmq)
 find_library(ZSTD zstd)
 find_library(BENCHMARK follybenchmark PATHS)
 
-find_path(LIBNL3-HEADERS libnl3/netlink/netlink.h)
 find_path(RE2_INCLUDE_DIR re2/re2.h)
 find_path(SIGAR_INCLUDE_DIR sigar.h)
 find_path(ZMQ_INCLUDE_DIR zmq.h)
@@ -324,11 +321,6 @@ if (BUILD_SHARED_LIBS)
   set_target_properties(openrlib PROPERTIES VERSION 1.0.0 SOVERSION 1)
 endif()
 
-target_include_directories(openrlib
-  PRIVATE
-  ${LIBNL3-HEADERS}/libnl3
-)
-
 target_link_libraries(openrlib
   ${OPENR_THRIFT_LIBS}
   fbzmq::fbzmq
@@ -350,8 +342,6 @@ target_link_libraries(openrlib
   -lboost_system
   -lboost_context
   -lpthread
-  ${NLROUTE3}
-  ${NL3}
   -lcrypto
 )
 
@@ -363,11 +353,6 @@ install(TARGETS
 add_executable(openr_bin
   openr/Main.cpp
   openr/common/Flags.cpp
-)
-
-target_include_directories(openr_bin
-  PRIVATE
-  ${LIBNL3-HEADERS}/libnl3
 )
 
 target_link_libraries(openr_bin
@@ -390,8 +375,6 @@ target_link_libraries(openr_bin
   -lboost_system
   -lboost_context
   -lpthread
-  ${NLROUTE3}
-  ${NL3}
   -lcrypto
 )
 
@@ -442,11 +425,6 @@ add_executable(platform_linux
   openr/platform/NetlinkSystemHandler.cpp
 )
 
-target_include_directories(platform_linux
-  PRIVATE
-  ${LIBNL3-HEADERS}/libnl3
-)
-
 target_link_libraries(platform_linux
   openrlib
   ${OPENR_THRIFT_LIBS}
@@ -467,8 +445,6 @@ target_link_libraries(platform_linux
   -lboost_system
   -lboost_context
   -lpthread
-  ${NLROUTE3}
-  ${NL3}
 )
 
 install(TARGETS
@@ -532,11 +508,6 @@ if(BUILD_TESTS)
     openr/nl/examples/NetlinkSocketSample.cpp
   )
 
-  target_include_directories(netlink_socket_sample
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-
   target_link_libraries(netlink_socket_sample
     openrlib
     ${OPENR_THRIFT_LIBS}
@@ -545,8 +516,6 @@ if(BUILD_TESTS)
     Folly::folly
     ${FOLLY_EXCEPTION_TRACER}
     -lpthread
-    ${NLROUTE3}
-    ${NL3}
   )
 
   install(TARGETS
@@ -571,11 +540,6 @@ if(BUILD_TESTS)
     FBThrift::thriftcpp2
   )
 
-  target_include_directories(openr_system_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-
   target_link_libraries(openr_system_test
     openrlib
     ${OPENR_THRIFT_LIBS}
@@ -596,8 +560,6 @@ if(BUILD_TESTS)
     -lboost_system
     -lboost_context
     -lpthread
-    ${NLROUTE3}
-    ${NL3}
     -lcrypto
   )
 
@@ -611,11 +573,6 @@ if(BUILD_TESTS)
   add_executable(prefix_allocator_test
     openr/allocators/tests/PrefixAllocatorTest.cpp
     openr/allocators/tests/MockSystemServiceHandler.cpp
-  )
-
-  target_include_directories(prefix_allocator_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
   )
 
   add_executable(range_allocator_test
@@ -652,11 +609,6 @@ if(BUILD_TESTS)
   add_executable(openr_ctrl_handler_test
     openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
     openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
-  )
-
-  target_include_directories(openr_ctrl_handler_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
   )
 
   target_link_libraries(openr_ctrl_handler_test
@@ -859,11 +811,6 @@ if(BUILD_TESTS)
     openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
   )
 
-  target_include_directories(link_monitor_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-
   target_link_libraries(link_monitor_test
     openrlib
     openr_module_test_base
@@ -882,11 +829,6 @@ if(BUILD_TESTS)
   add_executable(fib_test
     openr/fib/tests/FibTest.cpp
     openr/fib/tests/MockNetlinkFibHandler.cpp
-  )
-
-  target_include_directories(fib_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
   )
 
   target_link_libraries(fib_test
@@ -918,23 +860,6 @@ if(BUILD_TESTS)
   )
   add_executable(netlink_socket_subscribe_test
     openr/nl/tests/NetlinkSocketSubscribeTest.cpp
-  )
-
-  target_include_directories(netlink_types_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-  target_include_directories(netlink_socket_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-  target_include_directories(netlink_message_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-  target_include_directories(netlink_socket_subscribe_test
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
   )
 
   target_link_libraries(netlink_types_test
@@ -1034,11 +959,6 @@ if(BUILD_TESTS)
     openr/config-store/tests/PersistentStoreBenchmark.cpp
   )
 
-  target_include_directories(config_store_benchmark
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-
   target_link_libraries(config_store_benchmark
     openrlib
     ${FOLLY}
@@ -1054,11 +974,6 @@ if(BUILD_TESTS)
   add_executable(fib_benchmark
     openr/fib/tests/FibBenchmark.cpp
     openr/fib/tests/MockNetlinkFibHandler.cpp
-  )
-
-  target_include_directories(fib_benchmark
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
   )
 
   target_link_libraries(fib_benchmark
@@ -1082,11 +997,6 @@ if(BUILD_TESTS)
     openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
   )
 
-  target_include_directories(netlink_fib_handler_benchmark
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-
   target_link_libraries(netlink_fib_handler_benchmark
     openrlib
     ${FOLLY}
@@ -1107,11 +1017,6 @@ if(BUILD_TESTS)
     openr/decision/tests/DecisionBenchmark.cpp
   )
 
-  target_include_directories(decision_benchmark
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
-  )
-
   target_link_libraries(decision_benchmark
     openrlib
     ${FOLLY}
@@ -1126,11 +1031,6 @@ if(BUILD_TESTS)
 
   add_executable(kvstore_benchmark
     openr/kvstore/tests/KvStoreBenchmark.cpp
-  )
-
-  target_include_directories(kvstore_benchmark
-    PRIVATE
-    ${LIBNL3-HEADERS}/libnl3
   )
 
   target_link_libraries(kvstore_benchmark
