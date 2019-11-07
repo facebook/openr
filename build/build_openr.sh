@@ -36,6 +36,7 @@ install_openr() {
   make install
   chmod +x "/usr/local/sbin/run_openr.sh"
   cd "$BUILD_DIR/../openr/py"
+  pip install networkx==2.2
   pip install cffi
   pip install future
   pip install invoke==1.1.0
