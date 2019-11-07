@@ -53,22 +53,20 @@ jobs:
       run: python build/fbcode_builder/getdeps.py fetch --no-tests automake
     - name: Fetch libtool
       run: python build/fbcode_builder/getdeps.py fetch --no-tests libtool
-    - name: Fetch libnl
-      run: python build/fbcode_builder/getdeps.py fetch --no-tests libnl
     - name: Fetch bison
       run: python build/fbcode_builder/getdeps.py fetch --no-tests bison
-    - name: Fetch flex
-      run: python build/fbcode_builder/getdeps.py fetch --no-tests flex
     - name: Fetch libsodium
       run: python build/fbcode_builder/getdeps.py fetch --no-tests libsodium
-    - name: Fetch libzmq
-      run: python build/fbcode_builder/getdeps.py fetch --no-tests libzmq
     - name: Fetch fizz
       run: python build/fbcode_builder/getdeps.py fetch --no-tests fizz
+    - name: Fetch flex
+      run: python build/fbcode_builder/getdeps.py fetch --no-tests flex
     - name: Fetch wangle
       run: python build/fbcode_builder/getdeps.py fetch --no-tests wangle
     - name: Fetch fbthrift
       run: python build/fbcode_builder/getdeps.py fetch --no-tests fbthrift
+    - name: Fetch libzmq
+      run: python build/fbcode_builder/getdeps.py fetch --no-tests libzmq
     - name: Fetch fbzmq
       run: python build/fbcode_builder/getdeps.py fetch --no-tests fbzmq
     - name: Build boost
@@ -109,22 +107,20 @@ jobs:
       run: python build/fbcode_builder/getdeps.py build --no-tests automake
     - name: Build libtool
       run: python build/fbcode_builder/getdeps.py build --no-tests libtool
-    - name: Build libnl
-      run: python build/fbcode_builder/getdeps.py build --no-tests libnl
     - name: Build bison
       run: python build/fbcode_builder/getdeps.py build --no-tests bison
-    - name: Build flex
-      run: python build/fbcode_builder/getdeps.py build --no-tests flex
     - name: Build libsodium
       run: python build/fbcode_builder/getdeps.py build --no-tests libsodium
-    - name: Build libzmq
-      run: python build/fbcode_builder/getdeps.py build --no-tests libzmq
     - name: Build fizz
       run: python build/fbcode_builder/getdeps.py build --no-tests fizz
+    - name: Build flex
+      run: python build/fbcode_builder/getdeps.py build --no-tests flex
     - name: Build wangle
       run: python build/fbcode_builder/getdeps.py build --no-tests wangle
     - name: Build fbthrift
       run: python build/fbcode_builder/getdeps.py build --no-tests fbthrift
+    - name: Build libzmq
+      run: python build/fbcode_builder/getdeps.py build --no-tests libzmq
     - name: Build fbzmq
       run: python build/fbcode_builder/getdeps.py build --no-tests fbzmq
     - name: Build openr
