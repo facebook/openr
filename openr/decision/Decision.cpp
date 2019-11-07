@@ -1078,7 +1078,6 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
 
   return thrift::UnicastRoute{FRAGILE,
                               prefix,
-                              {},
                               thrift::AdminDistance::EBGP,
                               std::move(allNextHops),
                               thrift::PrefixType::BGP,

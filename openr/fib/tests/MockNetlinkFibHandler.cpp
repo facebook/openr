@@ -200,7 +200,6 @@ MockNetlinkFibHandler::getRouteTableByClient(
       thrift::UnicastRoute route;
       route.dest = toIpPrefix(prefix);
       route.nextHops = std::move(thriftNextHops);
-      route.deprecatedNexthops = createDeprecatedNexthops(route.nextHops);
       routes.emplace_back(std::move(route));
     }
   }

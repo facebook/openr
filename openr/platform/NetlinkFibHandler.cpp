@@ -127,9 +127,6 @@ NetlinkFibHandler::toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb) {
     thrift::UnicastRoute route;
     route.dest = toIpPrefix(kv.first);
     route.nextHops = buildNextHops(kv.second.getNextHops());
-    // DEPRECATED - Only for backward compatibility
-    route.deprecatedNexthops = createDeprecatedNexthops(route.nextHops);
-
     routes.emplace_back(std::move(route));
   }
   return routes;

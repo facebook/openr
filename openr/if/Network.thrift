@@ -105,7 +105,6 @@ enum PrefixType {
 
 struct UnicastRoute {
   1: required IpPrefix dest
-  2: list<BinaryAddress> deprecatedNexthops  # DEPRECATED - Use nextHops instead
   3: optional AdminDistance adminDistance
   4: list<NextHopThrift> nextHops
 
@@ -115,6 +114,9 @@ struct UnicastRoute {
   7: bool doNotInstall = false
 
   41: optional NextHopThrift bestNexthop
+
+  # DEPREDCATED - Use nextHops instead
+  # 2: list<BinaryAddress> deprecatedNexthops
 }
 
 // For mimicing FBOSS agent thrift interfaces

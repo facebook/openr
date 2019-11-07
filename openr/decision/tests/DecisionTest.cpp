@@ -741,7 +741,6 @@ TEST(BGPRedistribution, BasicOperation) {
   thrift::UnicastRoute route1(
       FRAGILE,
       bgpPrefix1,
-      {},
       thrift::AdminDistance::EBGP,
       {createNextHop(adj21.nextHopV6, adj21.ifName, adj21.metric)},
       thrift::PrefixType::BGP,
@@ -788,7 +787,6 @@ TEST(BGPRedistribution, BasicOperation) {
   thrift::UnicastRoute route2(
       FRAGILE,
       bgpPrefix1,
-      {},
       thrift::AdminDistance::EBGP,
       {createNextHop(adj12.nextHopV6, adj12.ifName, adj12.metric)},
       thrift::PrefixType::BGP,

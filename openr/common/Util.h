@@ -236,12 +236,6 @@ std::vector<thrift::NextHopThrift> getBestNextHopsMpls(
     std::vector<thrift::NextHopThrift> const& nextHops);
 
 /**
- * Create deprecated nexthops
- */
-std::vector<thrift::BinaryAddress> createDeprecatedNexthops(
-    std::vector<thrift::NextHopThrift> const& nextHops);
-
-/**
  * Find delta between two route databases
  */
 thrift::RouteDatabaseDelta findDeltaRoutes(

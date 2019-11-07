@@ -139,20 +139,6 @@ def get_fib_agent_client(
     return client
 
 
-def get_route_nexthops(
-    route: network_types.UnicastRoute
-) -> List[network_types.NextHopThrift]:
-    """
-    DEPRECATED: this function is meant to keep backward functionality with old
-    vs new way of expressing route nexthops
-    """
-
-    if route.nextHops:  # Checks for both null and empty list
-        return route.nextHops
-
-    return [network_types.NextHopThrift(address=nh) for nh in route.deprecatedNexthops]
-
-
 def parse_nodes(cli_opts, nodes):
     """ parse nodes from user input
 
@@ -1212,9 +1198,7 @@ def build_routes(
     nhs = build_nexthops(nexthops)
     return [
         network_types.UnicastRoute(
-            dest=p,
-            deprecatedNexthops=nhs,
-            nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs],
+            dest=p, nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs]
         )
         for p in prefixes
     ]
@@ -1235,7 +1219,7 @@ def get_route_as_dict_in_str(
     if route_type == "unicast":
         routes_dict = {
             ipnetwork.sprint_prefix(route.dest): sorted(
-                ip_nexthop_to_str(nh, True) for nh in get_route_nexthops(route)
+                ip_nexthop_to_str(nh, True) for nh in route.nextHops
             )
             for route in routes
         }
@@ -1444,7 +1428,7 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=Fal
         dest = ipnetwork.sprint_prefix(route.dest)
         # record invalid nexthops in dict<error, list<nexthops>>
         invalid_nexthop = defaultdict(list)
-        for nextHop in get_route_nexthops(route):
+        for nextHop in route.nextHops:
             nh = nextHop.address
             if nh.ifName not in interfaces or not interfaces[nh.ifName].info.isUp:
                 invalid_nexthop[MISSING_NEXTHOP].append(ip_nexthop_to_str(nextHop))
@@ -1575,7 +1559,7 @@ def build_unicast_route(
         dest, filter_for_networks
     ):
         return None
-    nexthops = [ip_nexthop_to_str(nh) for nh in get_route_nexthops(route)]
+    nexthops = [ip_nexthop_to_str(nh) for nh in route.nextHops]
     return dest, nexthops
 
 
@@ -1619,7 +1603,7 @@ def get_routes_json(
             continue
         route_data = {
             "dest": dest,
-            "nexthops": [ip_nexthop_to_str(nh) for nh in get_route_nexthops(route)],
+            "nexthops": [ip_nexthop_to_str(nh) for nh in route.nextHops],
         }
         data["routes"].append(route_data)
 
@@ -1668,11 +1652,7 @@ def get_routes(
             if nh.metric == min_metric or nh.useNonShortestRoute
         ]
         ret_unicast_routes.append(
-            network_types.UnicastRoute(
-                dest=route.dest,
-                deprecatedNexthops=[nh.address for nh in nextHops],
-                nextHops=nextHops,
-            )
+            network_types.UnicastRoute(dest=route.dest, nextHops=nextHops)
         )
 
     for route in mpls_routes:

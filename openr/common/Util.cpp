@@ -529,15 +529,6 @@ getBestNextHopsMpls(std::vector<thrift::NextHopThrift> const& allNextHops) {
   return bestNextHops;
 }
 
-std::vector<thrift::BinaryAddress>
-createDeprecatedNexthops(const std::vector<thrift::NextHopThrift>& nextHops) {
-  std::vector<thrift::BinaryAddress> deprecatedNexthops;
-  for (auto const& nextHop : nextHops) {
-    deprecatedNexthops.emplace_back(nextHop.address);
-  }
-  return deprecatedNexthops;
-}
-
 thrift::RouteDatabaseDelta
 findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,
@@ -943,8 +934,6 @@ createUnicastRoutesWithBestNexthops(
   for (auto const& route : routes) {
     auto newRoute =
         createUnicastRoute(route.dest, getBestNextHopsUnicast(route.nextHops));
-    // NOTE: remove after UnicastRoute.deprecatedNexthops is removed
-    newRoute.deprecatedNexthops = createDeprecatedNexthops(newRoute.nextHops);
     newRoutes.emplace_back(std::move(newRoute));
   }
 
@@ -974,8 +963,6 @@ createUnicastRoutesWithBestNextHopsMap(
   for (auto const& route : unicastRoutes) {
     auto newRoute = createUnicastRoute(
         route.first, getBestNextHopsUnicast(route.second.nextHops));
-    // NOTE: remove after UnicastRoute.deprecatedNexthops is removed
-    newRoute.deprecatedNexthops = createDeprecatedNexthops(newRoute.nextHops);
     newRoutes.emplace_back(std::move(newRoute));
   }
 
