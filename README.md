@@ -3,7 +3,7 @@
 `OpenR: Open Routing`
 ---------------------
 
-[![Build Status](https://travis-ci.org/facebook/openr.svg?branch=master)](https://travis-ci.org/facebook/openr)
+[![Build Status](https://github.com/facebook/openr/workflows/CI/badge.svg)](https://github.com/facebook/openr/actions?workflow=CI)
 
 Open Routing, OpenR, is Facebook's internally designed and developed routing
 protocol/platform. Originally built for performing routing on the `Terragraph`
@@ -57,9 +57,8 @@ This should work on all Linux based platforms without any issues.
 #### Repo Directory Structure
 
 At the top level of this repo are the `build` and `openr` directories. Under the
-former is a tool, `fbcode_builder`, that contains scripts for generating a
-docker context to build the project. The `openr` directory contains the
-source for the project.
+former is a tool, `fbcode_builder`, that contains scripts for building the
+project. The `openr` directory contains the source for the project.
 
 #### Dependencies
 
@@ -89,10 +88,6 @@ see the script for those instances and the required versions.
 
 > `libnl` also requires custom patch, included herewith, for correct handling
 of add/remove multicast routes.
-
-#### Build using Docker
-
-Learn more [here.](https://github.com/facebook/openr/blob/master/build/fbcode_builder/README.md)
 
 #### Build Steps
 
