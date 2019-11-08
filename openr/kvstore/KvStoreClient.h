@@ -223,6 +223,17 @@ class KvStoreClient {
       folly::Optional<int> maybeIpTos = folly::none,
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
+  template <typename ThriftType>
+  static std::pair<
+      folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
+      std::vector<fbzmq::SocketUrl> /* unreached url */>
+  dumpAllWithPrefixMultipleAndParse(
+      const std::vector<folly::SocketAddress>& sockAddrs,
+      const std::string& prefix,
+      std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
+      std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
+      const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
+
   /*
    * This will be a static method to do a full-dump of KvStore key-val to
    * multiple KvStore instances. It will fetch values from different KvStore
@@ -235,9 +246,9 @@ class KvStoreClient {
    *
    * @return merged thrift::Value
    */
-  static folly::Expected<
-      std::unordered_map<std::string, thrift::Value>,
-      fbzmq::Error>
+  static std::pair<
+      folly::Optional<std::unordered_map<std::string /* key */, thrift::Value>>,
+      std::vector<fbzmq::SocketUrl> /* unreached url */>
   dumpAllWithThriftClientFromMultiple(
       const std::vector<folly::SocketAddress>& sockAddrs,
       const std::string& prefix,

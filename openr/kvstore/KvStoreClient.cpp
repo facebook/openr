@@ -677,7 +677,9 @@ KvStoreClient::dumpAllWithPrefixMultiple(
 /*
  * static method to dump KvStore key-val over multiple instances
  */
-folly::Expected<std::unordered_map<std::string, thrift::Value>, fbzmq::Error>
+std::pair<
+    folly::Optional<std::unordered_map<std::string /* key */, thrift::Value>>,
+    std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStoreClient::dumpAllWithThriftClientFromMultiple(
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
@@ -687,6 +689,8 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
   folly::EventBase evb;
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
   std::unordered_map<std::string, thrift::Value> merged;
+  std::vector<fbzmq::SocketUrl> unreachedUrls;
+
   thrift::KeyDumpParams params;
   params.prefix = keyPrefix;
 
@@ -709,6 +713,7 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
                  << ". Exception: " << folly::exceptionStr(ex);
     }
     if (!client) {
+      unreachedUrls.push_back(fbzmq::SocketUrl{sockAddr.getAddressStr()});
       continue;
     }
 
@@ -720,8 +725,7 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
 
   // can't connect to ANY single Open/R instance
   if (calls.empty()) {
-    return folly::makeUnexpected(
-        fbzmq::Error(0, "Failed to dump key-val from Open/R instances"));
+    return std::make_pair(folly::none, unreachedUrls);
   }
 
   folly::collectAllSemiFuture(calls).via(&evb).thenValue(
@@ -758,7 +762,7 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
 
   LOG(INFO) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
 
-  return merged;
+  return std::make_pair(merged, unreachedUrls);
 }
 
 folly::Expected<std::unordered_map<std::string, thrift::Value>, fbzmq::Error>

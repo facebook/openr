@@ -61,4 +61,22 @@ KvStoreClient::dumpAllWithPrefixMultipleAndParse(
   return std::make_pair(parseThriftValues<ThriftType>(*val.first), val.second);
 }
 
+// static
+template <typename ThriftType>
+std::pair<
+    folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
+    std::vector<fbzmq::SocketUrl> /* unreached url */>
+KvStoreClient::dumpAllWithPrefixMultipleAndParse(
+    const std::vector<folly::SocketAddress>& sockAddrs,
+    const std::string& keyPrefix,
+    std::chrono::milliseconds connectTimeout,
+    std::chrono::milliseconds processTimeout,
+    const folly::SocketAddress& bindAddr) {
+  auto val = dumpAllWithThriftClientFromMultiple(
+      sockAddrs, keyPrefix, connectTimeout, processTimeout, bindAddr);
+  if (not val.first) {
+    return std::make_pair(folly::none, val.second);
+  }
+  return std::make_pair(parseThriftValues<ThriftType>(*val.first), val.second);
+}
 } // namespace openr

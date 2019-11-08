@@ -18,6 +18,7 @@
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
@@ -133,6 +134,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   const std::string localhost_{"::1"};
 
   fbzmq::Context context_{};
+  apache::thrift::CompactSerializer serializer;
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_;
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper2_;
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper1_;
@@ -236,9 +238,7 @@ TEST_F(SingleKvStoreTestFixture, SetGetKeyTest) {
 
 TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const std::string key1{"test_key1"};
-  const std::string val1{"test_value1"};
   const std::string key2{"test_key2"};
-  const std::string val2{"test_value2"};
 
   std::vector<folly::SocketAddress> sockAddrs;
   const std::string prefix = "";
@@ -248,10 +248,11 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   sockAddrs.push_back(folly::SocketAddress{localhost_, port2});
 
   // Step1: verify there is NOTHING inside kvStore instances
-  auto preMaybeValue =
+  auto preDb =
       KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
-  EXPECT_FALSE(preMaybeValue.hasError());
-  EXPECT_TRUE(preMaybeValue.value().empty());
+  EXPECT_TRUE(preDb.first.hasValue());
+  EXPECT_TRUE(preDb.first.value().empty());
+  EXPECT_TRUE(preDb.second.empty());
 
   // Step2: initilize kvStoreClient connecting to different thriftServers
   fbzmq::ZmqEventLoop evl;
@@ -263,19 +264,48 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   EXPECT_TRUE(nullptr != client2);
 
   // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
-  EXPECT_TRUE(client1->setKey(key1, val1));
-  EXPECT_TRUE(client2->setKey(key2, val2));
+  evl.runInEventLoop([&]() noexcept {
+    thrift::Value value;
+    value.version = 1;
+    {
+      value.value = "test_value1";
+      EXPECT_TRUE(client1->setKey(
+          key1, fbzmq::util::writeThriftObjStr(value, serializer), 100));
+    }
+    {
+      value.value = "test_value2";
+      client2->setKey(
+          key2, fbzmq::util::writeThriftObjStr(value, serializer), 200);
+    }
+
+    evl.stop();
+  });
+
+  evl.run();
 
   // Step4: verify we can fetch 2 keys from different servers as aggregation
   // result
-  auto postMaybeValue =
-      KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
-  EXPECT_FALSE(postMaybeValue.hasError());
+  {
+    auto postDb =
+        KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+    ASSERT_TRUE(postDb.first.hasValue());
+    auto pub = postDb.first.value();
+    EXPECT_TRUE(pub.size() == 2);
+    EXPECT_TRUE(pub.count(key1));
+    EXPECT_TRUE(pub.count(key2));
+  }
 
-  auto pub = postMaybeValue.value();
-  EXPECT_TRUE(pub.size() == 2);
-  EXPECT_TRUE(pub.count(key1));
-  EXPECT_TRUE(pub.count(key2));
+  // Step5: verify dumpAllWithPrefixMultipleAndParse API
+  {
+    auto maybe =
+        KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
+            sockAddrs, "test_");
+    ASSERT_TRUE(maybe.first.hasValue());
+    auto pub = maybe.first.value();
+    EXPECT_EQ(2, pub.size());
+    EXPECT_EQ("test_value1", pub[key1].value);
+    EXPECT_EQ("test_value2", pub[key2].value);
+  }
 }
 
 int
