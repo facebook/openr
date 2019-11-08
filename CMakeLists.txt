@@ -34,6 +34,7 @@ set(
 include(FBThriftCppLibrary)
 
 find_library(ASYNC async PATHS)
+find_package(Boost REQUIRED COMPONENTS system context)
 find_library(CONCURRENCY concurrency PATHS)
 find_library(DOUBLE-CONVERSION double-conversion)
 find_package(fbzmq REQUIRED)
@@ -65,7 +66,7 @@ if (TARGET Folly::folly_exception_tracer)
 endif()
 
 include_directories(
-  ${Boost_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIR}
   ${FBTHRIFT_INCLUDE_DIR}
   ${FOLLY_INCLUDE_DIR}
   ${RE2_INCLUDE_DIR}
@@ -339,8 +340,7 @@ target_link_libraries(openrlib
   ${SODIUM}
   ${SIGAR}
   ${RE2}
-  -lboost_system
-  -lboost_context
+  ${Boost_LIBRARIES}
   -lpthread
   -lcrypto
 )
@@ -372,8 +372,7 @@ target_link_libraries(openr_bin
   ${FOLLY_EXCEPTION_TRACER}
   ${SODIUM}
   ${SIGAR}
-  -lboost_system
-  -lboost_context
+  ${Boost_LIBRARIES}
   -lpthread
   -lcrypto
 )
@@ -407,8 +406,7 @@ if(BUILD_TOOLS)
     ${FOLLY_EXCEPTION_TRACER}
     ${SODIUM}
     ${SIGAR}
-    -lboost_system
-    -lboost_context
+    ${Boost_LIBRARIES}
     -lpthread
     -lcrypto
   )
@@ -442,8 +440,7 @@ target_link_libraries(platform_linux
   ${SIGAR}
   ${ZMQ}
   ${SIGAR}
-  -lboost_system
-  -lboost_context
+  ${Boost_LIBRARIES}
   -lpthread
 )
 
@@ -557,8 +554,7 @@ if(BUILD_TESTS)
     ${LIBGMOCK_LIBRARIES}
     ${GTEST_BOTH_LIBRARIES}
     ${SIGAR}
-    -lboost_system
-    -lboost_context
+    ${Boost_LIBRARIES}
     -lpthread
     -lcrypto
   )
