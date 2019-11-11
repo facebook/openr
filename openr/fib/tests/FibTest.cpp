@@ -232,6 +232,24 @@ class FibTestFixture : public ::testing::Test {
     return std::move(*resp);
   }
 
+  std::vector<thrift::UnicastRoute>
+  getUnicastRoutesFiltered(std::unique_ptr<std::vector<std::string>> prefixes) {
+    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+                    ->semifuture_getUnicastRoutesFiltered(std::move(prefixes))
+                    .get();
+    EXPECT_TRUE(resp);
+    return *resp;
+  }
+
+  std::vector<thrift::UnicastRoute>
+  getUnicastRoutes() {
+    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+                    ->semifuture_getUnicastRoutes()
+                    .get();
+    EXPECT_TRUE(resp);
+    return *resp;
+  }
+
   int port{0};
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread fibThriftThread;
@@ -669,6 +687,149 @@ TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
   EXPECT_EQ(mockFibHandler->getFibMplsSyncCount(), 2);
   EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 0);
   EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 0);
+}
+
+TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
+  // Make sure fib starts with clean route database
+  std::vector<thrift::UnicastRoute> routes;
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+
+  // initial syncFib debounce
+  mockFibHandler->waitForSyncFib();
+
+  const auto prefix1 = toIpPrefix("192.168.20.16/28");
+  const auto prefix2 = toIpPrefix("192.168.0.0/16");
+  const auto prefix3 = toIpPrefix("fd00::48:2:0/128");
+  const auto prefix4 = toIpPrefix("fd00::48:2:0/126");
+
+  const auto route1 = createUnicastRoute(prefix1, {});
+  const auto route2 = createUnicastRoute(prefix2, {});
+  const auto route3 = createUnicastRoute(prefix3, {});
+  const auto route4 = createUnicastRoute(prefix4, {});
+
+  // add routes to DB and update DB
+  thrift::RouteDatabaseDelta routeDb;
+  routeDb.thisNodeName = "node-1";
+  routeDb.unicastRoutesToUpdate.emplace_back(route1);
+  routeDb.unicastRoutesToUpdate.emplace_back(route2);
+  routeDb.unicastRoutesToUpdate.emplace_back(route3);
+  routeDb.unicastRoutesToUpdate.emplace_back(route4);
+  decisionPub.sendThriftObj(routeDb, serializer).value();
+  mockFibHandler->waitForUpdateUnicastRoutes();
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 4);
+
+  // input filter prefix list
+  auto filter =
+      std::unique_ptr<std::vector<std::string>>(new std::vector<std::string>({
+          "192.168.20.16/28", // match prefix1
+          "192.168.20.19", // match prefix1
+          "192.168.0.0", // match prefix2
+          "192.168.0.0/18", // match prefix2
+          "10.46.8.0", // no match
+          "fd00::48:2:0/127", // match prefix4
+          "fd00::48:2:0/125" // no match
+      }));
+
+  // expected routesDB after filtering - delete duplicate entries
+  thrift::RouteDatabase expectedDb;
+  expectedDb.thisNodeName = "node-1";
+  expectedDb.unicastRoutes.emplace_back(route1);
+  expectedDb.unicastRoutes.emplace_back(route2);
+  expectedDb.unicastRoutes.emplace_back(route4);
+  // check if match correctly
+  thrift::RouteDatabase responseDb;
+  const auto& responseRoutes = getUnicastRoutesFiltered(std::move(filter));
+  responseDb.unicastRoutes = responseRoutes;
+  EXPECT_TRUE(checkEqualRoutes(expectedDb, responseDb));
+
+  // check when get empty input - return all unicast routes
+  thrift::RouteDatabase allRouteDb;
+  allRouteDb.unicastRoutes.emplace_back(route1);
+  allRouteDb.unicastRoutes.emplace_back(route2);
+  allRouteDb.unicastRoutes.emplace_back(route3);
+  allRouteDb.unicastRoutes.emplace_back(route4);
+  auto emptyParamRet =
+      std::unique_ptr<std::vector<std::string>>(new std::vector<std::string>());
+  const auto& allRoutes = getUnicastRoutesFiltered(std::move(emptyParamRet));
+  thrift::RouteDatabase allRoutesRespDb;
+  allRoutesRespDb.unicastRoutes = allRoutes;
+  EXPECT_TRUE(checkEqualRoutes(allRouteDb, allRoutesRespDb));
+
+  // check getUnicastRoutes() API - return all unicast routes
+  const auto& allRoute = getUnicastRoutes();
+  thrift::RouteDatabase allRoutesApiDb;
+  allRoutesApiDb.unicastRoutes = allRoute;
+  EXPECT_TRUE(checkEqualRoutes(allRouteDb, allRoutesApiDb));
+
+  // check when no result found
+  auto notFoundFilter = std::unique_ptr<std::vector<std::string>>(
+      new std::vector<std::string>({"10.46.8.0", "10.46.8.0/24"}));
+  const auto& notFoundResp =
+      getUnicastRoutesFiltered(std::move(notFoundFilter));
+  EXPECT_EQ(notFoundResp.size(), 0);
+}
+
+TEST_F(FibTestFixture, longestPrefixMatchTest) {
+  std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute> unicastRoutes;
+  const auto& dbPrefix1 = toIpPrefix("192.168.0.0/16");
+  const auto& dbPrefix2 = toIpPrefix("192.168.0.0/20");
+  const auto& dbPrefix3 = toIpPrefix("192.168.0.0/24");
+  const auto& dbPrefix4 = toIpPrefix("192.168.20.16/28");
+  unicastRoutes[dbPrefix1] = createUnicastRoute(dbPrefix1, {});
+  unicastRoutes[dbPrefix2] = createUnicastRoute(dbPrefix2, {});
+  unicastRoutes[dbPrefix3] = createUnicastRoute(dbPrefix3, {});
+  unicastRoutes[dbPrefix4] = createUnicastRoute(dbPrefix4, {});
+
+  const auto inputPrefix1 =
+      folly::IPAddress::tryCreateNetwork("192.168.20.19").value();
+  const auto inputPrefix2 =
+      folly::IPAddress::tryCreateNetwork("192.168.20.16/28").value();
+  const auto inputPrefix3 =
+      folly::IPAddress::tryCreateNetwork("192.168.0.0").value();
+  const auto inputPrefix4 =
+      folly::IPAddress::tryCreateNetwork("192.168.0.0/14").value();
+  const auto inputPrefix5 =
+      folly::IPAddress::tryCreateNetwork("192.168.0.0/18").value();
+  const auto inputPrefix6 =
+      folly::IPAddress::tryCreateNetwork("192.168.0.0/22").value();
+  const auto inputPrefix7 =
+      folly::IPAddress::tryCreateNetwork("192.168.0.0/26").value();
+
+  // input 192.168.20.19 matched 192.168.20.16/28
+  const auto& result1 = Fib::longestPrefixMatch(inputPrefix1, unicastRoutes);
+  EXPECT_TRUE(result1.has_value());
+  EXPECT_EQ(result1.value(), dbPrefix4);
+
+  // input 192.168.20.16/28 matched 192.168.20.16/28
+  const auto& result2 = Fib::longestPrefixMatch(inputPrefix2, unicastRoutes);
+  EXPECT_TRUE(result2.has_value());
+  EXPECT_EQ(result2.value(), dbPrefix4);
+
+  // input 192.168.0.0 matched 192.168.0.0/24
+  const auto& result3 = Fib::longestPrefixMatch(inputPrefix3, unicastRoutes);
+  EXPECT_TRUE(result3.has_value());
+  EXPECT_EQ(result3.value(), dbPrefix3);
+  //
+  // input 192.168.0.0/14 has no match
+  const auto& result4 = Fib::longestPrefixMatch(inputPrefix4, unicastRoutes);
+  EXPECT_TRUE(not result4.has_value());
+
+  // input 192.168.0.0/18 matched 192.168.0.0/16
+  const auto& result5 = Fib::longestPrefixMatch(inputPrefix5, unicastRoutes);
+  EXPECT_TRUE(result5.has_value());
+  EXPECT_EQ(result5.value(), dbPrefix1);
+
+  // input 192.168.0.0/22 matched 192.168.0.0/20
+  const auto& result6 = Fib::longestPrefixMatch(inputPrefix6, unicastRoutes);
+  EXPECT_TRUE(result6.has_value());
+  EXPECT_EQ(result6.value(), dbPrefix2);
+
+  // input 192.168.0.0/26 matched 192.168.0.0/24
+  const auto& result7 = Fib::longestPrefixMatch(inputPrefix7, unicastRoutes);
+  EXPECT_TRUE(result7.has_value());
+  EXPECT_EQ(result7.value(), dbPrefix3);
 }
 
 int

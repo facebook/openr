@@ -39,8 +39,14 @@ struct PerfDatabase {
 enum FibCommand {
   ROUTE_DB_GET = 1,
   PERF_DB_GET = 2,
+  UNICAST_ROUTES_GET = 3;
+}
+
+struct UnicastRouteFilter {
+  1: list<string> prefixes
 }
 
 struct FibRequest {
   1: FibCommand cmd
+  2: optional UnicastRouteFilter unicastRouteFilter
 }

@@ -105,6 +105,13 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
   semifuture_getRouteDbComputed(std::unique_ptr<std::string> nodeName) override;
 
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
+  semifuture_getUnicastRoutesFiltered(
+      std::unique_ptr<std::vector<::std::string>> prefixes) override;
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
+  semifuture_getUnicastRoutes() override;
+
   //
   // Performance stats APIs
   //

@@ -117,6 +117,21 @@ service OpenrCtrl extends fb303.FacebookService {
   Fib.RouteDatabase getRouteDbComputed(1: string nodeName)
     throws (1: OpenrError error)
 
+  /**
+   * Get unicast routes after applying a list of prefix filter.
+   * Perform longest prefix match for each input filter among the prefixes
+   * in from FIB module.
+   * Return all unicast routes if the input list is empty.
+   */
+  list<Network.UnicastRoute> getUnicastRoutesFiltered(1: list<string> prefixes)
+    throws (1: OpenrError error)
+
+  /**
+   * Get all unicast routes of the current node, retrieved from FIB module.
+   */
+  list<Network.UnicastRoute> getUnicastRoutes()
+    throws (1: OpenrError error)
+
   //
   // Performance stats APIs
   //

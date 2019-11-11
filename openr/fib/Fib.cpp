@@ -227,10 +227,79 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
     // send the thrift::PerfDatabase
     return fbzmq::Message::fromThriftObj(dumpPerfDb(), serializer_);
     break;
+  case thrift::FibCommand::UNICAST_ROUTES_GET: {
+    VLOG(2) << "Fib: RouteDb get filtered routes requested";
+    // return and send the vector<thrift::UnicastRoute>
+    std::vector<thrift::UnicastRoute> retRouteVec;
+    // the matched prefix after longest prefix matching and avoid duplicates
+    std::set<thrift::IpPrefix> matchPrefixSet;
+
+    // if the params is empty, return all routes
+    const auto& filters = thriftReq.unicastRouteFilter;
+    if (not filters.has_value() || filters.value().prefixes.size() == 0) {
+      for (const auto& routes : routeState_.unicastRoutes) {
+        retRouteVec.emplace_back(routes.second);
+      }
+      return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
+      break;
+    }
+
+    // get the params: list of prefix filters
+    const auto& prefixFilterVec = thriftReq.unicastRouteFilter.value().prefixes;
+
+    // longest prefix matching for each input string
+    for (const auto& prefixStr : prefixFilterVec) {
+      // try to convert the string prefix into CIDRNetwork
+      const auto maybePrefix =
+          folly::IPAddress::tryCreateNetwork(prefixStr, -1, true);
+      if (maybePrefix.hasError()) {
+        LOG(ERROR) << "Invalid IP address as prefix: " << prefixStr;
+        return folly::makeUnexpected(fbzmq::Error());
+      }
+      const auto inputPrefix = maybePrefix.value();
+
+      // do longest prefix match, add the matched prefix to the result set
+      const auto& matchedPrefix =
+          Fib::longestPrefixMatch(inputPrefix, routeState_.unicastRoutes);
+      if (matchedPrefix.has_value()) {
+        matchPrefixSet.insert(matchedPrefix.value());
+      }
+    }
+    // get the routes from the prefix set
+    for (const auto& prefix : matchPrefixSet) {
+      retRouteVec.emplace_back(routeState_.unicastRoutes[prefix]);
+    }
+    return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
+    break;
+  }
   default:
     LOG(ERROR) << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());
   }
+}
+
+std::optional<thrift::IpPrefix>
+Fib::longestPrefixMatch(
+    const folly::CIDRNetwork& inputPrefix,
+    const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
+        unicastRoutes) {
+  std::optional<thrift::IpPrefix> matchedPrefix;
+  uint8_t maxMask = 0;
+  const auto& inputIP = inputPrefix.first;
+  const auto& inputMask = inputPrefix.second;
+
+  // longest prefix matching
+  for (const auto& route : unicastRoutes) {
+    const auto& dbIP = toIPAddress(route.first.prefixAddress);
+    const auto& dbMask = route.first.prefixLength;
+
+    if (maxMask < dbMask && inputMask >= dbMask &&
+        inputIP.mask(dbMask) == dbIP) {
+      maxMask = dbMask;
+      matchedPrefix = route.first;
+    }
+  }
+  return matchedPrefix;
 }
 
 void

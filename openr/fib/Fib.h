@@ -75,6 +75,18 @@ class Fib final : public OpenrEventLoop {
       std::unique_ptr<thrift::FibServiceAsyncClient>& client,
       int32_t port);
 
+  /**
+   * Perform longest prefix match among all prefixes in route database.
+   * @param inputPrefix - a prefix that need to be matched
+   * @param unicastRoutes - current unicast routes in RouteDatabase
+   *
+   * @return the matched IpPrefix if prefix matching succeed.
+   */
+  static std::optional<thrift::IpPrefix> longestPrefixMatch(
+      const folly::CIDRNetwork& inputPrefix,
+      const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
+          unicastRoutes);
+
  private:
   // No-copy
   Fib(const Fib&) = delete;

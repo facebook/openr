@@ -381,6 +381,19 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
     EXPECT_EQ(0, db.unicastRoutes.size());
     EXPECT_EQ(0, db.mplsRoutes.size());
   }
+
+  {
+    std::vector<thrift::UnicastRoute> filterRet;
+    std::vector<std::string> prefixes{"10.46.2.0", "10.46.2.0/24"};
+    openrCtrlThriftClient_->sync_getUnicastRoutesFiltered(filterRet, prefixes);
+    EXPECT_EQ(0, filterRet.size());
+  }
+
+  {
+    std::vector<thrift::UnicastRoute> allRouteRet;
+    openrCtrlThriftClient_->sync_getUnicastRoutes(allRouteRet);
+    EXPECT_EQ(0, allRouteRet.size());
+  }
 }
 
 TEST_F(OpenrCtrlFixture, PerfApis) {
