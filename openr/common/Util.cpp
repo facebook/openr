@@ -818,7 +818,8 @@ createPrefixEntry(
     thrift::PrefixForwardingType forwardingType,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
     folly::Optional<bool> ephemeral,
-    folly::Optional<thrift::MetricVector> mv) {
+    folly::Optional<thrift::MetricVector> mv,
+    folly::Optional<int64_t> minNexthop) {
   thrift::PrefixEntry prefixEntry;
   prefixEntry.prefix = prefix;
   prefixEntry.type = type;
@@ -827,6 +828,7 @@ createPrefixEntry(
   prefixEntry.forwardingAlgorithm = forwardingAlgorithm;
   prefixEntry.ephemeral = ephemeral;
   prefixEntry.mv = mv;
+  prefixEntry.minNexthop = minNexthop;
   return prefixEntry;
 }
 

@@ -724,15 +724,15 @@ TEST(BGPRedistribution, BasicOperation) {
   }
 
   // only node1 advertises the BGP prefix, it will have the best path
-  prefixDb1WithBGP.prefixEntries.emplace_back(
-      FRAGILE,
+  prefixDb1WithBGP.prefixEntries.push_back(createPrefixEntry(
       bgpPrefix1,
       thrift::PrefixType::BGP,
       data1,
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
       false,
-      mv1);
+      mv1,
+      folly::none));
 
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1WithBGP));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
@@ -753,15 +753,15 @@ TEST(BGPRedistribution, BasicOperation) {
   // add the prefix to node2 with the same metric vector. we expect the bgp
   // route to be gone since both nodes have same metric vector we can't
   // determine a best path
-  prefixDb2WithBGP.prefixEntries.emplace_back(
-      FRAGILE,
+  prefixDb2WithBGP.prefixEntries.push_back(createPrefixEntry(
       bgpPrefix1,
       thrift::PrefixType::BGP,
       data2,
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
       false,
-      mv2);
+      mv2,
+      folly::none));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
   routeDb = spfSolver.buildPaths("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(1));

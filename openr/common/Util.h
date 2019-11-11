@@ -340,7 +340,8 @@ thrift::PrefixEntry createPrefixEntry(
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm =
         thrift::PrefixForwardingAlgorithm::SP_ECMP,
     folly::Optional<bool> ephemeral = folly::none,
-    folly::Optional<thrift::MetricVector> mv = folly::none);
+    folly::Optional<thrift::MetricVector> mv = folly::none,
+    folly::Optional<int64_t> minNexthop = folly::none);
 
 thrift::Value createThriftValue(
     int64_t version,
