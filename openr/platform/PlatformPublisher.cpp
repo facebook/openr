@@ -20,6 +20,7 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 
+using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 
 namespace openr {
@@ -105,10 +106,13 @@ PlatformPublisher::addrEventFunc(
     const std::string& ifName,
     const openr::fbnl::IfAddress& addrEntry) noexcept {
   VLOG(4) << "Handling Address Event in NetlinkSystemHandler...";
+  thrift::IpPrefix prefix{};
   publishAddrEvent(thrift::AddrEntry(
       FRAGILE,
       ifName,
-      toIpPrefix(addrEntry.getPrefix().value()),
+      addrEntry.getPrefix().hasValue()
+          ? toIpPrefix(addrEntry.getPrefix().value())
+          : prefix,
       addrEntry.isValid()));
 }
 
@@ -121,7 +125,9 @@ PlatformPublisher::neighborEventFunc(
       FRAGILE,
       ifName,
       toBinaryAddress(neighborEntry.getDestination()),
-      neighborEntry.getLinkAddress().value().toString(),
+      neighborEntry.getLinkAddress().hasValue()
+          ? neighborEntry.getLinkAddress().value().toString()
+          : "",
       neighborEntry.isReachable()));
 }
 
