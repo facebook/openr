@@ -2723,7 +2723,6 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   auto push21 =
       createMplsAction(pushCode, folly::none, std::vector<int32_t>{2, 1});
 
-  //
   // Verify parallel link case between node-1 and node-2
   auto routeMap = getRouteMap(*spfSolver, {"1"});
 
@@ -2732,6 +2731,65 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
       NextHops({createNextHopFromAdj(adj12_1, false, 11, folly::none, true),
                 createNextHopFromAdj(adj12_2, false, 11, folly::none, true),
                 createNextHopFromAdj(adj12_3, false, 20, folly::none, true)}));
+
+  auto prefixDBs = spfSolver->getPrefixDatabases();
+  auto prefixDBFour = prefixDBs["4"];
+
+  // start to test minNexthop feature by injecting an ondeman prefix with
+  // threshold to be 4 at the beginning.
+  auto newPrefix = createPrefixEntry(
+      bgpAddr1,
+      thrift::PrefixType::LOOPBACK,
+      "",
+      thrift::PrefixForwardingType::SR_MPLS,
+      thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP,
+      folly::none,
+      folly::none,
+      folly::make_optional<int64_t>(4));
+
+  prefixDBFour.prefixEntries.push_back(newPrefix);
+  spfSolver->updatePrefixDatabase(prefixDBFour);
+  routeMap = getRouteMap(*spfSolver, {"1"});
+
+  // in theory, kspf will choose adj12_2, adj13_1 as nexthops,
+  // but since we set threhold to be 4, this route will get ignored.
+  EXPECT_EQ(routeMap.find(make_pair("1", toString(bgpAddr1))), routeMap.end());
+
+  // updating threshold hold to be 2.
+  // becasue we use edge disjoint algorithm, we should expect adj12_2 and
+  // adj13_1 as nexthop
+  prefixDBFour.prefixEntries.pop_back();
+  newPrefix.minNexthop = folly::make_optional<int64_t>(2);
+  prefixDBFour.prefixEntries.push_back(newPrefix);
+  spfSolver->updatePrefixDatabase(prefixDBFour);
+  routeMap = getRouteMap(*spfSolver, {"1"});
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(bgpAddr1))],
+      NextHops({createNextHopFromAdj(adj12_2, false, 22, push4, true),
+                createNextHopFromAdj(adj13_1, false, 22, push4, true)}));
+
+  for (const auto& nexthop : routeMap[make_pair("1", toString(bgpAddr1))]) {
+    LOG(INFO) << (toString(nexthop));
+  }
+
+  // Let node 3 announcing same prefix with limit 4. In this case,
+  // threshold should be 4 instead of 2. And the ip is an anycast from node
+  // 3 and 4. so nexthops should be adj12_2, adj13_1(shortes to node 4)
+  // and adj13_1 shortest to node 3. The second shortes are all eliminated
+  // becasue of purging logic we have for any cast ip.
+  auto prefixDBThr = prefixDBs["3"];
+  newPrefix.minNexthop = folly::make_optional<int64_t>(4);
+  prefixDBThr.prefixEntries.push_back(newPrefix);
+  spfSolver->updatePrefixDatabase(prefixDBThr);
+  routeMap = getRouteMap(*spfSolver, {"1"});
+
+  EXPECT_EQ(routeMap.find(make_pair("1", toString(bgpAddr1))), routeMap.end());
+
+  // Revert the setup to normal state
+  prefixDBFour.prefixEntries.pop_back();
+  prefixDBThr.prefixEntries.pop_back();
+  spfSolver->updatePrefixDatabase(prefixDBFour);
+  spfSolver->updatePrefixDatabase(prefixDBThr);
 
   //
   // Bring down adj12_2 and adj34_2 to make our nexthop validations easy
@@ -2883,11 +2941,17 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   EXPECT_EQ(routeMap.find(make_pair("3", toString(addr1))), routeMap.end());
 
   // decrease mv for the second node, now router 3 should point to 1
+  // also set the threshold hold on non-best node to be 4. Threshold
+  // on best node is 2. In such case, we should allow the route to be
+  // programmed and announced.
   prefixDBTwo.prefixEntries.back()
       .mv.value()
       .metrics[numMetrics - 1]
       .metric.front()--;
+  prefixDBTwo.prefixEntries.back().minNexthop = 4;
+  prefixDBOne.prefixEntries.back().minNexthop = 2;
   spfSolver->updatePrefixDatabase(prefixDBTwo);
+  spfSolver->updatePrefixDatabase(prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"});
 
   // validate router 3
@@ -2895,6 +2959,23 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
       routeMap[make_pair("3", toString(addr1))],
       NextHops({createNextHopFromAdj(adj31_1, false, 11, folly::none, true),
                 createNextHopFromAdj(adj34_1, false, 33, push12, true)}));
+
+  // node 1 is the preferred node. Set threshold on Node 1 to be 4.
+  // threshold on  node 2 is 2. In such case, threshold should be respected
+  // and we should not program/annouce any routes
+  prefixDBTwo.prefixEntries.back().minNexthop = 2;
+  prefixDBOne.prefixEntries.back().minNexthop = 4;
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  spfSolver->updatePrefixDatabase(prefixDBOne);
+  routeMap = getRouteMap(*spfSolver, {"3"});
+
+  // validate router 3
+  EXPECT_EQ(routeMap.find(make_pair("3", toString(addr1))), routeMap.end());
+  // reset min nexthop to rest of checks
+  prefixDBTwo.prefixEntries.back().minNexthop = folly::none;
+  prefixDBOne.prefixEntries.back().minNexthop = folly::none;
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  spfSolver->updatePrefixDatabase(prefixDBOne);
 
   // decrease mv for the second node, now router 3 should point to 2
   prefixDBTwo.prefixEntries.back()
