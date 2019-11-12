@@ -906,9 +906,8 @@ SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
   for (const auto& node : nodes.nodes) {
     auto npKv = nodePrefixes.find(node);
     if (npKv != nodePrefixes.end()) {
-      maxMinNexthopForPrefix = (not maxMinNexthopForPrefix.has_value() &&
-                                npKv->second.minNexthop.hasValue()) ||
-              (npKv->second.minNexthop.hasValue() &&
+      maxMinNexthopForPrefix = npKv->second.minNexthop.hasValue() &&
+              (not maxMinNexthopForPrefix.has_value() ||
                npKv->second.minNexthop.value() > maxMinNexthopForPrefix.value())
           ? npKv->second.minNexthop.value()
           : maxMinNexthopForPrefix;
