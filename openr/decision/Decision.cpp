@@ -1109,7 +1109,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               std::move(allNextHops),
                               thrift::PrefixType::BGP,
                               *(dstInfo.bestData),
-                              bgpDryRun_, /* doNotProgram */
+                              bgpDryRun_, /* doNotInstall */
                               bestNextHop.at(0)};
 }
 

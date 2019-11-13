@@ -311,14 +311,20 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
     addPerfEvent(*routeDelta.perfEvents, myNodeName_, "FIB_ROUTE_DB_RECVD");
   }
 
+  // Before anything, get rid of doNotInstall routes
+  auto i = routeDelta.unicastRoutesToUpdate.begin();
+  while (i != routeDelta.unicastRoutesToUpdate.end()) {
+    if (i->doNotInstall) {
+      LOG(INFO) << "Not installing route for prefix " << toString(i->dest);
+      i = routeDelta.unicastRoutesToUpdate.erase(i);
+    } else {
+      ++i;
+    }
+  }
+
   // Add/Update unicast routes to update
   for (const auto& route : routeDelta.unicastRoutesToUpdate) {
-    if (route.doNotInstall) {
-      // Remove routes that should not be programmed
-      routeState_.unicastRoutes.erase(route.dest);
-    } else {
-      routeState_.unicastRoutes[route.dest] = route;
-    }
+    routeState_.unicastRoutes[route.dest] = route;
     routeState_.dirtyPrefixes.erase(route.dest);
   }
 

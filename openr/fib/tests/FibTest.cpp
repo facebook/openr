@@ -832,6 +832,55 @@ TEST_F(FibTestFixture, longestPrefixMatchTest) {
   EXPECT_EQ(result7.value(), dbPrefix3);
 }
 
+TEST_F(FibTestFixture, doNotInstall) {
+  // Make sure fib starts with clean route database
+  std::vector<thrift::UnicastRoute> routes;
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+
+  const auto prefix1 = toIpPrefix("192.168.20.16/28");
+  const auto prefix2 = toIpPrefix("192.168.0.0/16");
+  const auto prefix3 = toIpPrefix("fd00::48:2:0/128");
+  const auto prefix4 = toIpPrefix("fd00::48:2:0/126");
+
+  auto route1 = createUnicastRoute(prefix1, {});
+  auto route2 = createUnicastRoute(prefix2, {});
+  auto route3 = createUnicastRoute(prefix3, {});
+  auto route4 = createUnicastRoute(prefix4, {});
+
+  route1.doNotInstall = true;
+  route3.doNotInstall = true;
+
+  // add routes to DB and update DB
+  {
+    thrift::RouteDatabaseDelta routeDb;
+    routeDb.thisNodeName = "node-1";
+    routeDb.unicastRoutesToUpdate.emplace_back(route1);
+    routeDb.unicastRoutesToUpdate.emplace_back(route2);
+    decisionPub.sendThriftObj(routeDb, serializer).value();
+  }
+  mockFibHandler->waitForSyncFib();
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+
+  // only 1 route is installable
+  EXPECT_EQ(routes.size(), 1);
+
+  // add routes to DB and update DB
+  {
+    thrift::RouteDatabaseDelta routeDb;
+    routeDb.thisNodeName = "node-1";
+    routeDb.unicastRoutesToUpdate.emplace_back(route3);
+    routeDb.unicastRoutesToUpdate.emplace_back(route4);
+    decisionPub.sendThriftObj(routeDb, serializer).value();
+  }
+
+  mockFibHandler->waitForUpdateUnicastRoutes();
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+
+  // now 2 routes are installable
+  EXPECT_EQ(routes.size(), 2);
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
