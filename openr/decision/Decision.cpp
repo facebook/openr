@@ -892,9 +892,14 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
       findDstNodesForBgpRoute(myNodeName, prefix, nodePrefixes, isV4);
   if (bestPathCalRes.success && (not bestPathCalRes.nodes.count(myNodeName))) {
     return maybeFilterDrainedNodes(std::move(bestPathCalRes));
+  } else if (not bestPathCalRes.success) {
+    LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
+    tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+  } else {
+    VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
+            << ". Best path originated by self.";
   }
-  LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
-  tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+
   return dstNodes;
 }
 
