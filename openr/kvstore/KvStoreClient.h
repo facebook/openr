@@ -378,6 +378,7 @@ class KvStoreClient {
       uint32_t version,
       uint32_t ttlVersion,
       int64_t ttl,
+      bool advertiseImmediately,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**

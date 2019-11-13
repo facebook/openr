@@ -1536,13 +1536,15 @@ KvStoreDb::cleanupTtlCountdownQueue() {
         it->second.ttlVersion == top.ttlVersion) {
       expiredKeys.emplace_back(top.key);
       LOG(WARNING)
-          << "Delete expired (key, version, originatorId, ttlVersion, node, area) "
+          << "Delete expired (key, version, originatorId, ttlVersion, ttl, "
+          << "node, area) "
           << folly::sformat(
-                 "({}, {}, {}, {}, {}, {})",
+                 "({}, {}, {}, {}, {}, {}, {})",
                  top.key,
                  it->second.version,
                  it->second.originatorId,
                  it->second.ttlVersion,
+                 it->second.ttl,
                  kvParams_.nodeId,
                  area_);
       logKvEvent("KEY_EXPIRE", top.key);

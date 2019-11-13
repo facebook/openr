@@ -23,11 +23,8 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace std;
-
-using namespace openr;
-
-
 using namespace std::chrono_literals;
+using namespace openr;
 
 namespace {
 
@@ -722,6 +719,99 @@ TEST(KvStoreClient, PersistKeyTest) {
   evlThread.join();
 
   // Stop store
+  LOG(INFO) << "Stopping store";
+  store->stop();
+}
+
+/**
+ * Test ttl change with persist key while keeping value and version same
+ * - Set key with ttl 1s
+ *   - Verify key is set and remains after ttl + 1s (2s)
+ *   - Verify "1s < ttl"
+ * - Update key with ttl 3s
+ *   - Verify key remains set after ttl + 1s (4s)
+ *   - Verify "1s < ttl < 3s"
+ * - Update key with ttl 1s
+ *   - Verify key remains set after ttl + 1s (2s)
+ *   - Verify "1s < ttl"
+ */
+TEST(KvStoreClient, PersistKeyChangeTtlTest) {
+  fbzmq::Context context;
+  const std::string nodeId{"test_store"};
+
+  // Initialize and start KvStore with one fake peer
+  auto store = std::make_shared<KvStoreWrapper>(
+      context,
+      nodeId,
+      std::chrono::seconds(60) /* db sync interval */,
+      std::chrono::seconds(600) /* counter submit interval */,
+      std::unordered_map<std::string, thrift::PeerSpec>{});
+  store->run();
+
+  // Create another ZmqEventLoop instance for looping clients
+  fbzmq::ZmqEventLoop evl;
+
+  // Create and initialize kvstore-client, with persist key timer
+  auto client1 = std::make_shared<KvStoreClient>(
+      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl, 1000ms);
+
+  // Schedule callback to set keys from client1 (this will be executed first)
+  const std::string testKey{"test-key"};
+  const std::string testValue{"test-value"};
+  evl.scheduleTimeout(std::chrono::seconds(0), [&]() noexcept {
+    // Set key with ttl=1s
+    client1->persistKey(testKey, testValue, std::chrono::seconds(1));
+  });
+
+  // Verify key exists after (ttl + 1s) = 2s
+  evl.scheduleTimeout(std::chrono::seconds(2), [&]() noexcept {
+    // Ensure key exists
+    auto maybeVal = client1->getKey(testKey);
+    ASSERT_TRUE(maybeVal.hasValue());
+    EXPECT_EQ(1, maybeVal->version);
+    EXPECT_EQ(testValue, maybeVal->value);
+    EXPECT_LT(0, maybeVal->ttl);
+    EXPECT_GE(1000, maybeVal->ttl);
+    EXPECT_LE(6, maybeVal->ttlVersion); // can be flaky under stress
+
+    // Set key with higher ttl=3s
+    client1->persistKey(testKey, testValue, std::chrono::seconds(3));
+  });
+
+  // Verify key exists after (ttl + 1s) = 4s (+ 2s offset)
+  evl.scheduleTimeout(std::chrono::seconds(6), [&]() noexcept {
+    // Ensure key exists
+    auto maybeVal = client1->getKey(testKey);
+    ASSERT_TRUE(maybeVal.hasValue());
+    EXPECT_EQ(1, maybeVal->version);
+    EXPECT_EQ(testValue, maybeVal->value);
+    EXPECT_LT(1000, maybeVal->ttl);
+    EXPECT_GE(3000, maybeVal->ttl);
+    EXPECT_LE(9, maybeVal->ttlVersion); // can be flaky under stress
+
+    // Set key with lower ttl=3s
+    client1->persistKey(testKey, testValue, std::chrono::seconds(1));
+  });
+
+  // Verify key exists after (ttl + 1s) = 2s (+ 6s offset)
+  evl.scheduleTimeout(std::chrono::seconds(8), [&]() noexcept {
+    // Ensure key exists
+    auto maybeVal = client1->getKey(testKey);
+    ASSERT_TRUE(maybeVal.hasValue());
+    EXPECT_EQ(1, maybeVal->version);
+    EXPECT_EQ(testValue, maybeVal->value);
+    EXPECT_LT(0, maybeVal->ttl);
+    EXPECT_GE(1000, maybeVal->ttl);
+    EXPECT_LE(12, maybeVal->ttlVersion); // can be flaky under stress
+
+    // Set key with lower ttl=3s
+    client1->persistKey(testKey, testValue, std::chrono::seconds(3));
+    evl.stop();
+  });
+
+  LOG(INFO) << "Running event loop";
+  evl.run();
+  LOG(INFO) << "Event-loop stopepd";
   LOG(INFO) << "Stopping store";
   store->stop();
 }

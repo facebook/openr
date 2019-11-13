@@ -265,7 +265,12 @@ KvStoreClient::persistKey(
 
   // Default thrift value to use with invalid version=0
   thrift::Value thriftValue = createThriftValue(
-      0, nodeId_, value, ttl.count(), 0 /* ttl version */, 0 /* hash */);
+      0,
+      nodeId_,
+      value,
+      ttl.count(),
+      0 /* ttl version */,
+      folly::none /* hash */);
   CHECK(thriftValue.value);
 
   // Retrieve the existing value for the key. If key is persisted before then
@@ -300,6 +305,11 @@ KvStoreClient::persistKey(
     valueChange = true;
   }
 
+  // We must update ttl value to new one. When ttl changes but value doesn't
+  // then we should advertise ttl immediately so that new ttl is in effect
+  const bool hasTtlChanged = ttl.count() != thriftValue.ttl;
+  thriftValue.ttl = ttl.count();
+
   // Cache it in persistedKeyVals_. Override the existing one
   persistedKeyVals[key] = thriftValue;
 
@@ -322,7 +332,12 @@ KvStoreClient::persistKey(
   advertisePendingKeys();
 
   scheduleTtlUpdates(
-      key, thriftValue.version, thriftValue.ttlVersion, ttl.count(), area);
+      key,
+      thriftValue.version,
+      thriftValue.ttlVersion,
+      ttl.count(),
+      hasTtlChanged,
+      area);
 }
 
 thrift::Value
@@ -368,7 +383,12 @@ KvStoreClient::setKey(
   const auto ret = setKeysHelper(std::move(keyVals), area);
 
   scheduleTtlUpdates(
-      key, thriftValue.version, thriftValue.ttlVersion, ttl.count(), area);
+      key,
+      thriftValue.version,
+      thriftValue.ttlVersion,
+      ttl.count(),
+      false /* advertiseImmediately */,
+      area);
 
   return ret;
 }
@@ -386,7 +406,12 @@ KvStoreClient::setKey(
   const auto ret = setKeysHelper(std::move(keyVals), area);
 
   scheduleTtlUpdates(
-      key, thriftValue.version, thriftValue.ttlVersion, thriftValue.ttl, area);
+      key,
+      thriftValue.version,
+      thriftValue.ttlVersion,
+      thriftValue.ttl,
+      false /* advertiseImmediately */,
+      area);
 
   return ret;
 }
@@ -397,6 +422,7 @@ KvStoreClient::scheduleTtlUpdates(
     uint32_t version,
     uint32_t ttlVersion,
     int64_t ttl,
+    bool advertiseImmediately,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   // infinite TTL does not need update
 
@@ -428,7 +454,9 @@ KvStoreClient::scheduleTtlUpdates(
 
   // Delay first ttl advertisement by (ttl / 4). We have just advertised key or
   // update and would like to avoid sending unncessary immediate ttl update
-  keyTtlBackoffs.at(key).second.reportError();
+  if (not advertiseImmediately) {
+    keyTtlBackoffs.at(key).second.reportError();
+  }
 
   advertiseTtlUpdates();
 }
@@ -1098,13 +1126,14 @@ KvStoreClient::advertisePendingKeys() {
       // Proceed only if backoff is active
       auto& backoff = backoffs_.at(key);
       auto const& eventType = backoff.canTryNow() ? "Advertising" : "Skipping";
-      VLOG(1) << eventType << " (key, version, originatorId, ttlVersion) "
+      VLOG(1) << eventType << " (key, version, originatorId, ttlVersion, ttl) "
               << folly::sformat(
-                     "({}, {}, {}, {})",
+                     "({}, {}, {}, {}, {})",
                      key,
                      thriftValue.version,
                      thriftValue.originatorId,
-                     thriftValue.ttlVersion);
+                     thriftValue.ttlVersion,
+                     thriftValue.ttl);
       VLOG(2) << "With value: " << folly::humanify(thriftValue.value.value());
 
       if (not backoff.canTryNow()) {
