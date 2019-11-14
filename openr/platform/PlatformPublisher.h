@@ -45,13 +45,13 @@ class PlatformPublisher final : public fbnl::NetlinkSocket::EventsHandler {
   PlatformPublisher(const PlatformPublisher&) = delete;
   PlatformPublisher& operator=(const PlatformPublisher&) = delete;
 
-  void publishPlatformEvent(const thrift::PlatformEvent& msg) const;
+  void publishPlatformEvent(const thrift::PlatformEvent& msg);
 
-  void publishLinkEvent(const thrift::LinkEntry& link) const;
+  void publishLinkEvent(const thrift::LinkEntry& link);
 
-  void publishAddrEvent(const thrift::AddrEntry& address) const;
+  void publishAddrEvent(const thrift::AddrEntry& address);
 
-  void publishNeighborEvent(const thrift::NeighborEntry& neighbor) const;
+  void publishNeighborEvent(const thrift::NeighborEntry& neighbor);
 
   void stop();
 

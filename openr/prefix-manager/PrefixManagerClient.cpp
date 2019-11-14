@@ -17,8 +17,15 @@ namespace openr {
 PrefixManagerClient::PrefixManagerClient(
     const PrefixManagerLocalCmdUrl& localCmdUrl,
     fbzmq::Context& context,
-    folly::Optional<std::chrono::milliseconds> recvTimeout)
-    : prefixManagerCmdSock_{context}, recvTimeout_{recvTimeout} {
+    folly::Optional<std::chrono::milliseconds> recvTimeout,
+    folly::EventBase* evb)
+    : prefixManagerCmdSock_{context,
+                            folly::none,
+                            folly::none,
+                            evb != nullptr ? fbzmq::NonblockingFlag{true}
+                                           : fbzmq::NonblockingFlag{false},
+                            evb},
+      recvTimeout_{recvTimeout} {
   CHECK(prefixManagerCmdSock_.connect(fbzmq::SocketUrl{localCmdUrl}));
 }
 

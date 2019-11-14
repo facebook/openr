@@ -7,10 +7,11 @@
 
 #pragma once
 
-#include <folly/Optional.h>
 #include <chrono>
 
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/Optional.h>
+#include <folly/io/async/EventBase.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -21,10 +22,15 @@ namespace openr {
 
 class PrefixManagerClient {
  public:
+  /**
+   * Initialize with non-null evb for asynchronous read/writes on socket.
+   * Compatible with fibers
+   */
   PrefixManagerClient(
       const PrefixManagerLocalCmdUrl& localCmdUrl,
       fbzmq::Context& context,
-      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none);
+      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none,
+      folly::EventBase* evb = nullptr);
   virtual ~PrefixManagerClient() = default;
 
   folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error> addPrefixes(

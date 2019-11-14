@@ -41,7 +41,7 @@ PlatformPublisher::PlatformPublisher(
 }
 
 void
-PlatformPublisher::publishLinkEvent(const thrift::LinkEntry& link) const {
+PlatformPublisher::publishLinkEvent(const thrift::LinkEntry& link) {
   // advertise change of link, prompting subscriber modules to
   // take immediate action
   thrift::PlatformEvent msg;
@@ -51,7 +51,7 @@ PlatformPublisher::publishLinkEvent(const thrift::LinkEntry& link) const {
 }
 
 void
-PlatformPublisher::publishAddrEvent(const thrift::AddrEntry& address) const {
+PlatformPublisher::publishAddrEvent(const thrift::AddrEntry& address) {
   // advertise change of address, prompting subscriber modules to
   // take immediate action
   thrift::PlatformEvent msg;
@@ -61,8 +61,7 @@ PlatformPublisher::publishAddrEvent(const thrift::AddrEntry& address) const {
 }
 
 void
-PlatformPublisher::publishNeighborEvent(
-    const thrift::NeighborEntry& neighbor) const {
+PlatformPublisher::publishNeighborEvent(const thrift::NeighborEntry& neighbor) {
   // advertise change of neighbor, prompting subscriber modules to
   // take immediate action
   thrift::PlatformEvent msg;
@@ -72,8 +71,7 @@ PlatformPublisher::publishNeighborEvent(
 }
 
 void
-PlatformPublisher::publishPlatformEvent(
-    const thrift::PlatformEvent& msg) const {
+PlatformPublisher::publishPlatformEvent(const thrift::PlatformEvent& msg) {
   VLOG(3) << "Publishing PlatformEvent...";
   thrift::PlatformEventType eventType = msg.eventType;
   // send header of event in the first 2 byte
