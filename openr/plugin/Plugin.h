@@ -17,7 +17,6 @@ struct PluginArgs {
   PrefixManagerLocalCmdUrl prefixManagerUrl;
   DecisionPubUrl decisionPubUrl;
   bool enableSegmentRouting;
-  size_t bgpMinNexthop = 0;
 };
 
 void pluginStart(const PluginArgs& /* pluginArgs */);

@@ -60,8 +60,6 @@ using namespace folly::gen;
 using apache::thrift::concurrency::ThreadManager;
 using openr::thrift::OpenrModuleType;
 
-DECLARE_int32(bgp_min_nexthop);
-
 namespace {
 //
 // Local constants
@@ -862,8 +860,7 @@ main(int argc, char** argv) {
                            context,
                            prefixManagerLocalCmdUrl,
                            kDecisionPubUrl,
-                           FLAGS_prefix_algo_type_ksp2_ed_ecmp,
-                           static_cast<size_t>(FLAGS_bgp_min_nexthop)});
+                           FLAGS_prefix_algo_type_ksp2_ed_ecmp});
   }
 
   // Wait for main-event loop to return
