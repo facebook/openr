@@ -1838,6 +1838,8 @@ Decision::updateNodePrefixDatabase(
   thrift::PrefixDatabase nodePrefixDb;
   nodePrefixDb.thisNodeName = nodeName;
   nodePrefixDb.perfEvents = prefixDb.perfEvents;
+  nodePrefixDb.perPrefixKey = true;
+
   // create and return prefixDB for the node
   for (const auto& prefix : nodePrefixEntries) {
     nodePrefixDb.prefixEntries.emplace_back(prefix.second);

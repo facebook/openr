@@ -258,4 +258,7 @@ struct PrefixDatabase {
 
   // Optional attribute to measure convergence performance
   4: optional PerfEvents perfEvents;
+  // Set to true if prefix was added by 'per prefix key' format.
+  // this value is local to the node, and not used by remote nodes
+  6: optional bool perPrefixKey
 }

@@ -109,6 +109,17 @@ TEST_P(GetLoopbackViasTest, basicOperation) {
               return false;
             }));
   }
+
+  // delete loopback for each node
+  for (auto const& node : nodes) {
+    auto const& prefixDb = prefixDbs_.at(node);
+    for (auto const& prefixEntry : prefixDb.prefixEntries) {
+      state_.deleteLoopbackPrefix(prefixEntry.prefix, node);
+    }
+  }
+
+  const auto loopbacks2 = state_.getLoopbackVias(nodes, isV4, folly::none);
+  EXPECT_EQ(loopbacks2.size(), 0);
 }
 
 INSTANTIATE_TEST_CASE_P(

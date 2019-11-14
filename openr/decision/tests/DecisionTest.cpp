@@ -3648,15 +3648,35 @@ class DecisionTestFixture : public ::testing::Test {
     for (const auto& prefix : prefixes) {
       prefixEntries.emplace_back(createPrefixEntry(prefix));
     }
-    return thrift::Value(
-        FRAGILE,
+    return createThriftValue(
         version,
-        "originator-1",
+        node,
         fbzmq::util::writeThriftObjStr(
             createPrefixDb(node, prefixEntries), serializer),
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
+  }
+
+  std::unordered_map<std::string, thrift::Value>
+  createPerPrefixKeyValue(
+      const string& node,
+      int64_t version,
+      const vector<thrift::IpPrefix>& prefixes) {
+    std::unordered_map<std::string, thrift::Value> keyVal{};
+    for (const auto& prefix : prefixes) {
+      const auto prefixKey =
+          PrefixKey(node, folly::IPAddress::createNetwork(toString(prefix)), 0);
+      keyVal[prefixKey.getPrefixKey()] = createThriftValue(
+          version,
+          node,
+          fbzmq::util::writeThriftObjStr(
+              createPrefixDb(node, {createPrefixEntry(prefix)}), serializer),
+          Constants::kTtlInfinity /* ttl */,
+          0 /* ttl version */,
+          0 /* hash */);
+    }
+    return keyVal;
   }
 
   std::unordered_map<std::string, int64_t>
@@ -4642,6 +4662,104 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(adjUpdateCnt, counters["decision.adj_db_update.count.0"]);
   EXPECT_EQ(prefixUpdateCnt, counters["decision.prefix_db_update.count.0"]);
+}
+
+/*
+ * The following topology is used:
+ *
+ * 1---2
+ *
+ * Test case to test if old prefix key expiry does not delete prefixes from
+ * FIB when migrating from old prefix key format to 'per prefix key' format
+ *
+ *  node1 [old key format]   ------- node2 [prefix:node1 {p1, p2, p3}]
+ *
+ *  now change node1 to 'per prefix key'
+ *
+ *  node1 [per prefix key]   ------- node2 [prefix:node1 {p1, p2, p3},
+ *                                          prefix:node1:p1,
+ *                                          prefix:node1:p2,
+ *                                          prefix:node1:p3]
+ *
+ *  "prefix:node1 {p1, p2, p3}" -- will expire, but p1, p2, p3 shouldn't be
+ *  removed from decision.
+ */
+
+TEST_F(DecisionTestFixture, PerPrefixKeyExpiry) {
+  //
+  // publish the link state info to KvStore
+  //
+
+  auto publication0 = createThriftPublication(
+      {{"adj:1", createAdjValue("1", 1, {adj12})},
+       {"adj:2", createAdjValue("2", 1, {adj21})},
+       {"prefix:1", createPrefixValue("1", 1, {addr1})},
+       {"prefix:2",
+        createPrefixValue("2", 1, {addr2, addr5, addr6, addr1V4, addr4V4})}},
+      {},
+      {},
+      {},
+      std::string(""));
+  auto routeDbBefore = dumpRouteDb({"1"})["1"];
+  sendKvPublication(publication0);
+  auto routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(5, routeDbDelta.unicastRoutesToUpdate.size());
+  auto routeDb = dumpRouteDb({"1"})["1"];
+  auto routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
+
+  RouteMap routeMap;
+  fillRouteMap("1", routeMap, routeDb);
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr2))],
+      NextHops({createNextHopFromAdj(adj12, false, 10)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr5))],
+      NextHops({createNextHopFromAdj(adj12, false, 10)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr6))],
+      NextHops({createNextHopFromAdj(adj12, false, 10)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr1V4))],
+      NextHops({createNextHopFromAdj(adj12, true, 10)}));
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(addr4V4))],
+      NextHops({createNextHopFromAdj(adj12, true, 10)}));
+
+  // expire prefix:2, must delete all 5 routes
+  auto publication =
+      createThriftPublication({}, {"prefix:2"}, {}, {}, std::string(""));
+  sendKvPublication(publication);
+  routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(5, routeDbDelta.unicastRoutesToDelete.size());
+
+  // add 5 routes using old foramt
+  sendKvPublication(publication0);
+  routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(5, routeDbDelta.unicastRoutesToUpdate.size());
+
+  // re-add 4 routes using per prefix key format, one of the old key must
+  // be deleted
+  auto perPrefixKeyValue =
+      createPerPrefixKeyValue("2", 1, {addr2, addr6, addr1V4, addr4V4});
+  publication =
+      createThriftPublication(perPrefixKeyValue, {}, {}, {}, std::string(""));
+  sendKvPublication(publication);
+  routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
+
+  auto routeDb1 = dumpRouteDb({"1"})["1"];
+  // again send expire 'prefix:2' key, this time there shouldn't be any updates
+  // in add or delete routes.
+  LOG(INFO) << "Sending prefix key expiry";
+  publication =
+      createThriftPublication({}, {"prefix:2"}, {}, {}, std::string(""));
+  sendKvPublication(publication);
+  auto routeDb2 = dumpRouteDb({"1"})["1"];
+  EXPECT_EQ(routeDb1, routeDb2);
 }
 
 int

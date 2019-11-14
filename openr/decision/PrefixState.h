@@ -25,6 +25,10 @@ class PrefixState {
     return prefixes_;
   }
 
+  // update loopback prefix deletes
+  void deleteLoopbackPrefix(
+      thrift::IpPrefix const& prefix, const std::string& nodename);
+
   // returns true if the prefixDb changed
   bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
 
@@ -58,6 +62,8 @@ class PrefixState {
   std::unordered_map<std::string, std::set<thrift::IpPrefix>> nodeToPrefixes_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
+  // maintain list of nodes that advertised per prefix keys
+  std::unordered_map<std::string, bool> nodePerPrefixKey_;
 }; // class PrefixState
 
 } // namespace openr

@@ -11,9 +11,33 @@
 
 namespace openr {
 
+void
+PrefixState::deleteLoopbackPrefix(
+    thrift::IpPrefix const& prefix, const std::string& nodeName) {
+  auto addrSize = prefix.prefixAddress.addr.size();
+  if (addrSize == folly::IPAddressV4::byteCount() &&
+      folly::IPAddressV4::bitCount() == prefix.prefixLength) {
+    if (prefix.prefixAddress == nodeHostLoopbacksV4_[nodeName]) {
+      nodeHostLoopbacksV4_.erase(nodeName);
+    }
+  }
+  if (addrSize == folly::IPAddressV6::byteCount() &&
+      folly::IPAddressV6::bitCount() == prefix.prefixLength) {
+    if (nodeHostLoopbacksV6_[nodeName] == prefix.prefixAddress) {
+      nodeHostLoopbacksV6_.erase(nodeName);
+    }
+  }
+}
+
 bool
 PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   auto const& nodeName = prefixDb.thisNodeName;
+
+  if (prefixDb.perPrefixKey.value_or(false)) {
+    nodePerPrefixKey_[nodeName] = true;
+  } else {
+    nodePerPrefixKey_[nodeName] = false;
+  }
 
   // Get old and new set of prefixes - NOTE explicit copy
   const std::set<thrift::IpPrefix> oldPrefixSet = nodeToPrefixes_[nodeName];
@@ -41,6 +65,7 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     if (nodeList.empty()) {
       prefixes_.erase(prefix);
     }
+    deleteLoopbackPrefix(prefix, nodeName);
   }
   for (const auto& prefixEntry : prefixDb.prefixEntries) {
     auto& nodeList = prefixes_[prefixEntry.prefix];
@@ -76,6 +101,11 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     }
   }
 
+  if (!newPrefixSet.size()) {
+    nodeToPrefixes_.erase(nodeName);
+    nodePerPrefixKey_.erase(nodeName);
+  }
+
   return isUpdated;
 }
 
@@ -86,6 +116,13 @@ PrefixState::deletePrefixDatabase(const std::string& nodeName) {
   if (search == nodeToPrefixes_.end()) {
     LOG(INFO) << "Trying to delete non-existent prefix db for node "
               << nodeName;
+    return false;
+  }
+
+  // if node advertised per prefix keys don't process the old format key
+  // expiry. All the old prefixes from the old prefix key format would
+  // already have been deleted when the per prefix key updates arrived
+  if (nodePerPrefixKey_.at(nodeName)) {
     return false;
   }
 
@@ -106,6 +143,7 @@ PrefixState::deletePrefixDatabase(const std::string& nodeName) {
   }
 
   nodeToPrefixes_.erase(search);
+  nodePerPrefixKey_.erase(nodeName);
   nodeHostLoopbacksV4_.erase(nodeName);
   nodeHostLoopbacksV6_.erase(nodeName);
   return isUpdated;
