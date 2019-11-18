@@ -8,8 +8,11 @@
 #
 
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import specs.fbthrift as fbthrift
 import specs.fbzmq as fbzmq
+import specs.fmt as fmt
 import specs.folly as folly
 import specs.re2 as re2
 from shell_quoting import ShellQuoted, path_join
@@ -45,7 +48,7 @@ def fbcode_builder_spec(builder):
     ]
 
     return {
-        "depends_on": [folly, fbthrift, fbzmq, re2],
+        "depends_on": [fmt, folly, fbthrift, fbzmq, re2],
         "steps": [
             builder.github_project_workdir("thom311/libnl", "."),
             builder.step("Build and install thom311/libnl", libnl_build_commands),
