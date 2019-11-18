@@ -51,7 +51,9 @@ KeyPrefix::keyMatch(std::string const& key) const {
 }
 
 PrefixKey::PrefixKey(
-    std::string const& node, folly::CIDRNetwork const& prefix, int area)
+    std::string const& node,
+    folly::CIDRNetwork const& prefix,
+    const std::string& area)
     : node_(node),
       prefix_(prefix),
       prefixArea_(area),
@@ -65,13 +67,14 @@ PrefixKey::PrefixKey(
 
 folly::Expected<PrefixKey, std::string>
 PrefixKey::fromStr(const std::string& key) {
-  int plen{0}, area{0};
+  int plen{0};
+  std::string area{};
   std::string node{};
   std::string ipstr{};
   folly::CIDRNetwork ipaddress;
   auto patt = RE2::FullMatch(key, getPrefixRE2(), &node, &area, &ipstr, &plen);
   if (!patt) {
-    return folly::makeUnexpected(std::string("Invalid key format"));
+    return folly::makeUnexpected(folly::sformat("Invalid key format {}", key));
   }
 
   try {
@@ -99,7 +102,7 @@ PrefixKey::getPrefixKey() const {
   return prefixKeyString_;
 }
 
-int
+std::string
 PrefixKey::getPrefixArea() const {
   return prefixArea_;
 }

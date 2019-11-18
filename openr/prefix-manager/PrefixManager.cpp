@@ -188,7 +188,7 @@ PrefixManager::advertisePrefixWithdraw(const thrift::PrefixEntry& prefixEntry) {
   auto prefixKey = PrefixKey(
       nodeId_,
       folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
-      0);
+      thrift::KvStore_constants::kDefaultArea());
   VLOG(1) << "Withdrawing prefix " << prefixKey.getPrefixKey()
           << " from KvStore";
   kvStoreClient_.clearKey(
@@ -207,7 +207,7 @@ PrefixManager::advertisePrefix(const thrift::PrefixEntry& prefixEntry) {
   const auto prefixKey = PrefixKey(
       nodeId_,
       folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
-      0);
+      thrift::KvStore_constants::kDefaultArea());
   VLOG(1) << "Advertising prefix " << prefixKey.getPrefixKey()
           << " to KvStore ";
   kvStoreClient_.persistKey(

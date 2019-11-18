@@ -53,7 +53,7 @@ class Consts(object):
     PER_PREFIX_KEY_REGEX = (
         re.escape(PREFIX_DB_MARKER)
         + r"(?P<node>[A-Za-z0-9_-].*):"
-        + r"(?P<area>[A-Za-z0-9_-].*):"
+        + r"(?P<area>[A-Za-z0-9].*):"
         + r"\[(?P<ipaddr>[a-fA-F0-9\.\:].*)/"
         + r"(?P<plen>[0-9]{1,3})\]"
     )

@@ -342,7 +342,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
     auto prefixKey = PrefixKey(
         "node-1",
         folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
-        0);
+        thrift::KvStore_constants::kDefaultArea());
 
     keyStr = prefixKey.getPrefixKey();
   }
@@ -446,7 +446,11 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
 
   std::string keyStr{"prefix:node-1"};
   if (perPrefixKeys_) {
-    keyStr = PrefixKey("node-1", toIPNetwork(addr1), 0).getPrefixKey();
+    keyStr = PrefixKey(
+                 "node-1",
+                 toIPNetwork(addr1),
+                 thrift::KvStore_constants::kDefaultArea())
+                 .getPrefixKey();
   }
 
   // Synchronization primitive
@@ -535,11 +539,11 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
   auto prefixKey1 = PrefixKey(
       "node-1",
       folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
-      0);
+      thrift::KvStore_constants::kDefaultArea());
   auto prefixKey2 = PrefixKey(
       "node-1",
       folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
-      0);
+      thrift::KvStore_constants::kDefaultArea());
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evl.scheduleTimeout(
@@ -640,7 +644,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   auto prefixKey = PrefixKey(
       "node-1",
       folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
-      0);
+      thrift::KvStore_constants::kDefaultArea());
   if (perPrefixKeys_) {
     prefixKeyStr = prefixKey.getPrefixKey();
   }
@@ -819,11 +823,11 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   auto prefixKey1 = PrefixKey(
       "node-2",
       folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
-      0);
+      thrift::KvStore_constants::kDefaultArea());
   auto prefixKey2 = PrefixKey(
       "node-2",
       folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
-      0);
+      thrift::KvStore_constants::kDefaultArea());
 
   // insert two prefixes
   evl.scheduleTimeout(

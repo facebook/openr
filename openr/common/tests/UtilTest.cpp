@@ -108,7 +108,7 @@ struct PrefixKeyEntry {
   std::string pkey{};
   std::string node{};
   folly::CIDRNetwork ipaddr;
-  int area{0};
+  std::string area{thrift::KvStore_constants::kDefaultArea()};
   thrift::IpPrefix ipPrefix;
   folly::IPAddress addr;
   int plen{0};
@@ -128,7 +128,7 @@ TEST(UtilTest, PrefixKeyTest) {
   strToItems.push_back(k1);
 
   // this should fail, all paremeters expected to by folly::none
-  k1.pkey = "prefix:node-name:e:[ff00::1/100]";
+  k1.pkey = "prefix:node-name:e.1:[ff00::1/100]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
 
@@ -143,12 +143,26 @@ TEST(UtilTest, PrefixKeyTest) {
   strToItems.push_back(k1);
 
   // this should pass
-  k1.pkey = "prefix:nodename0:33:[ff00::1/128]";
+  k1.pkey = "prefix:nodename0:0:[ff00::1/128]";
   k1.node = "nodename0";
   k1.ipaddr = folly::IPAddress::createNetwork("ff00::1/128");
-  k1.area = 33;
+  k1.area = "0";
   k1.ipPrefix = toIpPrefix("ff00::1/128");
   k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename0:pod108:[ff00::0/64]";
+  k1.node = "nodename0";
+  k1.ipaddr = folly::IPAddress::createNetwork("ff00::0/64");
+  k1.area = "pod108";
+  k1.ipPrefix = toIpPrefix("ff00::0/64");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should fail
+  k1.pkey = "prefix:nodename0:pod-108:[ff00::0/64]";
+  k1.shouldPass = false;
   strToItems.push_back(k1);
 
   // this should fail, all paremeters expected to by folly::none
@@ -165,7 +179,7 @@ TEST(UtilTest, PrefixKeyTest) {
   k1.pkey = "prefix:nodename.0.0:10:[192.168.0.0/3]";
   k1.node = "nodename.0.0";
   k1.ipaddr = folly::IPAddress::createNetwork("192.168.0.0/3");
-  k1.area = 10;
+  k1.area = "10";
   k1.ipPrefix = toIpPrefix("192.168.0.0/3");
   k1.shouldPass = true;
   strToItems.push_back(k1);
@@ -174,7 +188,7 @@ TEST(UtilTest, PrefixKeyTest) {
   k1.pkey = "prefix:nodename.0.0:99:[::0/0]";
   k1.node = "nodename.0.0";
   k1.ipaddr = folly::IPAddress::createNetwork("::0/0");
-  k1.area = 99;
+  k1.area = "99";
   k1.ipPrefix = toIpPrefix("::0/0");
   k1.shouldPass = true;
   strToItems.push_back(k1);
@@ -183,7 +197,7 @@ TEST(UtilTest, PrefixKeyTest) {
   k1.pkey = "prefix:nodename.0.0:10:[0.0.0.0/19]";
   k1.node = "nodename.0.0";
   k1.ipaddr = folly::IPAddress::createNetwork("0.0.0.0/19");
-  k1.area = 10;
+  k1.area = "10";
   k1.ipPrefix = toIpPrefix("0.0.0.0/19");
   k1.shouldPass = true;
   strToItems.push_back(k1);
@@ -194,7 +208,7 @@ TEST(UtilTest, PrefixKeyTest) {
   strToItems.push_back(k1);
 
   // this should fail
-  k1.pkey = "prefix:nodename.0.0:99h:[0.0.0.0/19]";
+  k1.pkey = "prefix:nodename.0.0:99-h:[0.0.0.0/19]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
 
@@ -218,7 +232,7 @@ TEST(UtilTest, PrefixKeyTest) {
   k2.node = "ebb.0.0";
   k2.addr = folly::IPAddress("ff00::0");
   k2.plen = 16;
-  k2.area = 1;
+  k2.area = "1";
   k2.pkey = "prefix:ebb.0.0:1:[ff00::/16]";
   itemsToStr.push_back(k2);
 
@@ -226,15 +240,15 @@ TEST(UtilTest, PrefixKeyTest) {
   k2.node = "ebb-0-0";
   k2.addr = folly::IPAddress("ff00::1");
   k2.plen = 16;
-  k2.area = 01;
-  k2.pkey = "prefix:ebb-0-0:1:[ff00::/16]";
+  k2.area = "01";
+  k2.pkey = "prefix:ebb-0-0:01:[ff00::/16]";
   itemsToStr.push_back(k2);
 
   // address will be masked
   k2.node = "ebb-0-0";
   k2.addr = folly::IPAddress("192.168.0.1");
   k2.plen = 16;
-  k2.area = 1;
+  k2.area = "1";
   k2.pkey = "prefix:ebb-0-0:1:[192.168.0.0/16]";
   itemsToStr.push_back(k2);
 

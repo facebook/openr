@@ -28,6 +28,7 @@
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/AllocPrefix_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
@@ -58,7 +59,9 @@ class PrefixKey {
  public:
   // constructor using IP address, type and and subtype
   PrefixKey(
-      std::string const& node, folly::CIDRNetwork const& prefix, int area);
+      std::string const& node,
+      folly::CIDRNetwork const& prefix,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   // construct PrefixKey object from a give key string
   static folly::Expected<PrefixKey, std::string> fromStr(
@@ -71,7 +74,7 @@ class PrefixKey {
   folly::CIDRNetwork getCIDRNetwork() const;
 
   // return prefix sub type
-  int getPrefixArea() const;
+  std::string getPrefixArea() const;
 
   // return prefix key string to be used to flood to kvstore
   std::string getPrefixKey() const;
@@ -83,7 +86,7 @@ class PrefixKey {
   getPrefixRE2() {
     static const RE2 prefixKeyPattern{folly::sformat(
         "{}(?P<node>[a-zA-Z\\d\\.\\-\\_]+):"
-        "(?P<area>[\\d]{{1,2}}):"
+        "(?P<area>[a-zA-Z0-9]+):"
         "\\[(?P<IPAddr>[a-fA-F\\d\\.\\:]+)/"
         "(?P<plen>[\\d]{{1,3}})\\]",
         Constants::kPrefixDbMarker.toString())};
@@ -97,8 +100,8 @@ class PrefixKey {
   // IP address
   folly::CIDRNetwork prefix_;
 
-  // prefix sub type
-  int prefixArea_{0};
+  // prefix area
+  std::string prefixArea_;
 
   // prefix key string
   std::string prefixKeyString_;

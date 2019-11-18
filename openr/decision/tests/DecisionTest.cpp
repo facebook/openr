@@ -3665,8 +3665,10 @@ class DecisionTestFixture : public ::testing::Test {
       const vector<thrift::IpPrefix>& prefixes) {
     std::unordered_map<std::string, thrift::Value> keyVal{};
     for (const auto& prefix : prefixes) {
-      const auto prefixKey =
-          PrefixKey(node, folly::IPAddress::createNetwork(toString(prefix)), 0);
+      const auto prefixKey = PrefixKey(
+          node,
+          folly::IPAddress::createNetwork(toString(prefix)),
+          thrift::KvStore_constants::kDefaultArea());
       keyVal[prefixKey.getPrefixKey()] = createThriftValue(
           version,
           node,
