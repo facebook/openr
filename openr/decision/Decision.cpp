@@ -586,9 +586,11 @@ SpfSolver::SpfSolverImpl::traceEdgeDisjointPaths(
       // spur node and nbrnode is still up. For example,
       // if spurnode is overloaded, and the only link between
       // nbrnode and rest of graph is through spurnode.
+      // if neighbor node is over loaded skip it.
       auto& nbrName = link->getOtherNodeName(spurNode);
       if (!link->isUp() or linksToIgnore.count(link) or
-          spfResult.find(nbrName) == spfResult.end()) {
+          spfResult.find(nbrName) == spfResult.end() or
+          linkState_.isNodeOverloaded(nbrName)) {
         continue;
       }
       auto& nbrIface = link->getIfaceFromNode(nbrName);

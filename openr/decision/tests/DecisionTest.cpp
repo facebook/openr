@@ -41,6 +41,8 @@ const auto adj12 =
     createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 100002);
 const auto adj13 =
     createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 100003);
+const auto adj14 =
+    createAdjacency("4", "1/4", "4/1", "fe80::4", "192.168.0.4", 10, 100004);
 const auto adj12_old_1 =
     createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 1000021);
 const auto adj12_old_2 =
@@ -68,6 +70,8 @@ const auto adj32 =
 const auto adj34 =
     createAdjacency("4", "3/4", "4/3", "fe80::4", "192.168.0.4", 10, 100004);
 // R4 -> R2, R3
+const auto adj41 =
+    createAdjacency("1", "4/1", "1/4", "fe80::1", "192.168.0.1", 10, 100001);
 const auto adj42 =
     createAdjacency("2", "4/2", "2/4", "fe80::2", "192.168.0.2", 10, 100002);
 const auto adj43 =
@@ -1269,6 +1273,182 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
 
   adjacencyDb1 = createAdjDb("1", {adj12_old_2, adj13_old}, 0);
   EXPECT_FALSE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
+}
+
+//
+// Test topology:
+//
+//  1------2
+//  | \     |
+//  |   \   |
+//  3------4
+//
+// Test both IP v4 & v6
+// 1,2,3,4 are simply meshed with each other with 1 parallet links
+//
+class SimpleRingMeshTopologyFixture
+    : public ::testing::TestWithParam<
+          std::tuple<bool, folly::Optional<thrift::PrefixType>>> {
+ public:
+  SimpleRingMeshTopologyFixture() : v4Enabled(std::get<0>(GetParam())) {}
+
+ protected:
+  void
+  CustomSetUp(
+      bool calculateLfas,
+      bool useKsp2Ed,
+      folly::Optional<thrift::PrefixType> prefixType = folly::none,
+      bool createNewBgpRoute = false) {
+    std::string nodeName("1");
+    spfSolver = std::make_unique<SpfSolver>(nodeName, v4Enabled, calculateLfas);
+    adjacencyDb1 = createAdjDb("1", {adj12, adj13, adj14}, 1);
+    adjacencyDb2 = createAdjDb("2", {adj21, adj23, adj24}, 2);
+    adjacencyDb3 = createAdjDb("3", {adj31, adj32, adj34}, 3);
+    adjacencyDb4 = createAdjDb("4", {adj41, adj42, adj43}, 4);
+
+    EXPECT_EQ(
+        std::make_pair(false, true),
+        spfSolver->updateAdjacencyDatabase(adjacencyDb1));
+    EXPECT_EQ(
+        std::make_pair(true, false),
+        spfSolver->updateAdjacencyDatabase(adjacencyDb2));
+    EXPECT_EQ(
+        std::make_pair(true, false),
+        spfSolver->updateAdjacencyDatabase(adjacencyDb3));
+    EXPECT_EQ(
+        std::make_pair(true, false),
+        spfSolver->updateAdjacencyDatabase(adjacencyDb4));
+
+    auto pdb1 = v4Enabled ? prefixDb1V4 : prefixDb1;
+    auto pdb2 = v4Enabled ? prefixDb2V4 : prefixDb2;
+    auto pdb3 = v4Enabled ? prefixDb3V4 : prefixDb3;
+    auto pdb4 = v4Enabled ? prefixDb4V4 : prefixDb4;
+
+    auto bgp1 = v4Enabled ? bgpAddr1V4 : bgpAddr1;
+    auto bgp2 = v4Enabled ? bgpAddr2V4 : bgpAddr2;
+    auto bgp3 = v4Enabled ? bgpAddr3V4 : bgpAddr3;
+    auto bgp4 = v4Enabled ? bgpAddr4V4 : bgpAddr4;
+
+    EXPECT_TRUE(spfSolver->updatePrefixDatabase(
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(
+                        pdb1,
+                        prefixType,
+                        createNewBgpRoute
+                            ? folly::make_optional<thrift::IpPrefix>(bgp1)
+                            : folly::none)
+                  : pdb1));
+    EXPECT_TRUE(spfSolver->updatePrefixDatabase(
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(
+                        pdb2,
+                        prefixType,
+                        createNewBgpRoute
+                            ? folly::make_optional<thrift::IpPrefix>(bgp2)
+                            : folly::none)
+                  : pdb2));
+    EXPECT_TRUE(spfSolver->updatePrefixDatabase(
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(
+                        pdb3,
+                        prefixType,
+                        createNewBgpRoute
+                            ? folly::make_optional<thrift::IpPrefix>(bgp3)
+                            : folly::none)
+                  : pdb3));
+    EXPECT_TRUE(spfSolver->updatePrefixDatabase(
+        useKsp2Ed ? getPrefixDbWithKspfAlgo(
+                        pdb4,
+                        prefixType,
+                        createNewBgpRoute
+                            ? folly::make_optional<thrift::IpPrefix>(bgp4)
+                            : folly::none)
+                  : pdb4));
+  }
+
+  thrift::AdjacencyDatabase adjacencyDb1, adjacencyDb2, adjacencyDb3,
+      adjacencyDb4;
+
+  bool v4Enabled{false};
+
+  std::unique_ptr<SpfSolver> spfSolver;
+};
+
+INSTANTIATE_TEST_CASE_P(
+    SimpleRingMeshTopologyInstance,
+    SimpleRingMeshTopologyFixture,
+    ::testing::Values(
+        std::make_tuple(true, folly::none),
+        std::make_tuple(false, folly::none),
+        std::make_tuple(true, thrift::PrefixType::BGP),
+        std::make_tuple(false, thrift::PrefixType::BGP)));
+
+TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
+  CustomSetUp(
+      false /* multipath - ignored */,
+      true /* useKsp2Ed */,
+      std::get<1>(GetParam()));
+  auto routeMap = getRouteMap(*spfSolver, {"1"});
+
+  auto pushCode = thrift::MplsActionCode::PUSH;
+  auto push1 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{1});
+  auto push2 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{2});
+  auto push3 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{3});
+  auto push4 = createMplsAction(pushCode, folly::none, std::vector<int32_t>{4});
+  auto push24 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{2, 4});
+  auto push34 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{3, 4});
+  auto push43 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{4, 3});
+  auto push13 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{1, 3});
+  auto push42 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{4, 2});
+  auto push12 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{1, 2});
+  auto push31 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{3, 1});
+  auto push21 =
+      createMplsAction(pushCode, folly::none, std::vector<int32_t>{2, 1});
+
+  // validate router 1
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
+      NextHops({createNextHopFromAdj(adj14, v4Enabled, 10, folly::none, true),
+                createNextHopFromAdj(adj12, v4Enabled, 20, push4, true),
+                createNextHopFromAdj(adj13, v4Enabled, 20, push4, true)}));
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", std::to_string(adjacencyDb4.nodeLabel))],
+      NextHops({createNextHopFromAdj(adj14, false, 10, labelPhpAction)}));
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
+      NextHops({createNextHopFromAdj(adj13, v4Enabled, 10, folly::none, true),
+                createNextHopFromAdj(adj12, v4Enabled, 20, push3, true),
+                createNextHopFromAdj(adj14, v4Enabled, 20, push3, true)}));
+  // EXPECT_EQ(
+  //     routeMap[make_pair("1", std::to_string(adjacencyDb3.nodeLabel))],
+  //     NextHops({createNextHopFromAdj(adj13, false, 10, labelPhpAction)}));
+  //
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
+      NextHops({createNextHopFromAdj(adj12, v4Enabled, 10, folly::none, true),
+                createNextHopFromAdj(adj13, v4Enabled, 20, push2, true),
+                createNextHopFromAdj(adj14, v4Enabled, 20, push2, true)}));
+  // EXPECT_EQ(
+  //     routeMap[make_pair("1", std::to_string(adjacencyDb2.nodeLabel))],
+  //     NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
+
+  validatePopLabelRoute(routeMap, "1", adjacencyDb1.nodeLabel);
+  validateAdjLabelRoutes(routeMap, "1", adjacencyDb1.adjacencies);
+
+  adjacencyDb3.isOverloaded = true;
+  EXPECT_TRUE(spfSolver->updateAdjacencyDatabase(adjacencyDb3).first);
+  routeMap = getRouteMap(*spfSolver, {"1"});
+
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
+      NextHops({createNextHopFromAdj(adj14, v4Enabled, 10, folly::none, true),
+                createNextHopFromAdj(adj12, v4Enabled, 20, push4, true)}));
 }
 
 //
