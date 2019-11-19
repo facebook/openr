@@ -25,6 +25,7 @@ void
 OpenrThriftServerWrapper::run() {
   // Create main-event-loop
   mainEvlThread_ = std::thread([&]() { mainEvl_.run(); });
+  mainEvl_.waitUntilRunning();
 
   tm_ = apache::thrift::concurrency::ThreadManager::newSimpleThreadManager(
       1, false);
