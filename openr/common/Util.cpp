@@ -668,6 +668,18 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
   }
 }
 
+thrift::PeerSpec
+createPeerSpec(
+    const std::string& pubUrl,
+    const std::string& cmdUrl,
+    bool supportFloodOptimization) {
+  thrift::PeerSpec peerSpec;
+  peerSpec.pubUrl = pubUrl;
+  peerSpec.cmdUrl = cmdUrl;
+  peerSpec.supportFloodOptimization = supportFloodOptimization;
+  return peerSpec;
+}
+
 thrift::SparkNeighborEvent
 createSparkNeighborEvent(
     thrift::SparkNeighborEventType eventType,

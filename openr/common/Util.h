@@ -271,6 +271,11 @@ isMplsLabelValid(int32_t const mplsLabel) {
  */
 void checkMplsAction(thrift::MplsAction const& mplsAction);
 
+thrift::PeerSpec createPeerSpec(
+    const std::string& pubUrl,
+    const std::string& cmdUrl,
+    bool supportFloodOptimization);
+
 thrift::SparkNeighbor createSparkNeighbor(
     const std::string& domainName,
     const std::string& nodeName,

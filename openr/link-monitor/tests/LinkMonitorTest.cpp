@@ -34,6 +34,7 @@
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -55,38 +56,37 @@ namespace {
 
 re2::RE2::Options regexOpts;
 
-const auto peerSpec_2_1 = thrift::PeerSpec(
-    FRAGILE,
+const auto peerSpec_2_1 = createPeerSpec(
     "tcp://[fe80::2%iface_2_1]:10001",
     "tcp://[fe80::2%iface_2_1]:10002",
     false);
 
-const auto peerSpec_2_2 = thrift::PeerSpec(
-    FRAGILE,
+const auto peerSpec_2_2 = createPeerSpec(
     "tcp://[fe80::2%iface_2_2]:10001",
     "tcp://[fe80::2%iface_2_2]:10002",
     false);
 
-const auto nb2 = thrift::SparkNeighbor(
-    FRAGILE,
+const auto peerSpec_3_1 = createPeerSpec(
+    "tcp://[fe80::3%iface_3_1]:10001",
+    "tcp://[fe80::3%iface_3_1]:10002",
+    false);
+
+const auto nb2 = createSparkNeighbor(
     "domain",
     "node-2",
     0, /* hold time */
-    "", /* DEPRECATED - public key */
-    toBinaryAddress(folly::IPAddress("fe80::2")),
     toBinaryAddress(folly::IPAddress("192.168.0.2")),
+    toBinaryAddress(folly::IPAddress("fe80::2")),
     10001,
     10002,
     "" /* ifName */);
 
-const auto nb3 = thrift::SparkNeighbor(
-    FRAGILE,
+const auto nb3 = createSparkNeighbor(
     "domain",
     "node-3",
     0, /* hold time */
-    "", /* DEPRECATED - public key */
-    toBinaryAddress(folly::IPAddress("fe80::3")),
     toBinaryAddress(folly::IPAddress("192.168.0.3")),
+    toBinaryAddress(folly::IPAddress("fe80::3")),
     10001,
     10002,
     "" /* ifName */);
@@ -120,6 +120,19 @@ const auto adj_2_2 = createThriftAdjacency(
     Constants::kDefaultAdjWeight /* weight */,
     "" /* otherIfName */);
 
+const auto adj_3_1 = createThriftAdjacency(
+    "node-3",
+    "iface_3_1",
+    "fe80::3",
+    "192.168.0.3",
+    1 /* metric */,
+    1 /* label */,
+    false /* overload-bit */,
+    0 /* rtt */,
+    kTimestamp /* timestamp */,
+    Constants::kDefaultAdjWeight /* weight */,
+    "" /* otherIfName */);
+
 const auto staticPrefix1 = toIpPrefix("fc00:face:b00c::/64");
 const auto staticPrefix2 = toIpPrefix("fc00:cafe:babe::/64");
 
@@ -129,24 +142,29 @@ createNeighborEvent(
     const std::string& ifName,
     const thrift::SparkNeighbor& neighbor,
     int64_t rttUs,
-    int32_t label) {
+    int32_t label,
+    const std::string& area = std::string{
+        openr::thrift::KvStore_constants::kDefaultArea()}) {
   return createSparkNeighborEvent(
-      eventType, ifName, neighbor, rttUs, label, false);
+      eventType, ifName, neighbor, rttUs, label, false, area);
 }
 
 thrift::AdjacencyDatabase
 createAdjDatabase(
     const std::string& thisNodeName,
     const std::vector<thrift::Adjacency>& adjacencies,
-    int32_t nodeLabel) {
-  return createAdjDb(thisNodeName, adjacencies, nodeLabel);
+    int32_t nodeLabel,
+    const std::string& area =
+        openr::thrift::KvStore_constants::kDefaultArea()) {
+  return createAdjDb(thisNodeName, adjacencies, nodeLabel, false, area);
 }
 
 void
 printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
   LOG(INFO) << "Node: " << adjDb.thisNodeName
             << ", Overloaded: " << adjDb.isOverloaded
-            << ", Label: " << adjDb.nodeLabel;
+            << ", Label: " << adjDb.nodeLabel
+            << ", area: " << adjDb.area.value();
   for (auto const& adj : adjDb.adjacencies) {
     LOG(INFO) << "  " << adj.otherNodeName << "@" << adj.ifName
               << ", metric: " << adj.metric << ", label: " << adj.adjLabel
@@ -162,9 +180,11 @@ const std::string kConfigStorePath = "/tmp/lm_ut_config_store.bin";
 } // namespace
 
 class LinkMonitorTestFixture : public ::testing::Test {
- public:
+ protected:
   void
-  SetUp() override {
+  SetUp() override {}
+  virtual void
+  SetUp(std::unordered_set<std::string> areas) {
     // Cleanup any existing config file on disk
     system(folly::sformat("rm -rf {}", kConfigStorePath).c_str());
 
@@ -203,7 +223,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
         "test_store1",
         std::chrono::seconds(1) /* db sync interval */,
         std::chrono::seconds(600) /* counter submit interval */,
-        std::unordered_map<std::string, thrift::PeerSpec>{});
+        std::unordered_map<std::string, thrift::PeerSpec>{},
+        std::nullopt,
+        std::nullopt,
+        Constants::kTtlDecrement,
+        false,
+        false,
+        areas);
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
@@ -279,7 +305,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         // link flap backoffs, set low to keep UT runtime low
         std::chrono::milliseconds(1),
         std::chrono::milliseconds(8),
-        Constants::kKvStoreDbTtl);
+        Constants::kKvStoreDbTtl,
+        areas);
 
     linkMonitorThread = std::make_unique<std::thread>([this]() {
       folly::setThreadName("LinkMonitor");
@@ -422,11 +449,18 @@ class LinkMonitorTestFixture : public ::testing::Test {
   folly::Optional<thrift::Value>
   getPublicationValueForKey(
       std::string const& key,
+      std::string const& area =
+          openr::thrift::KvStore_constants::kDefaultArea(),
       std::chrono::seconds timeout = std::chrono::seconds(10)) {
-    VLOG(1) << "Waiting to receive publication for key " << key;
+    LOG(INFO) << "Waiting to receive publication for key " << key << " area "
+              << area;
     auto pub = kvStoreWrapper->recvPublication(timeout);
+    EXPECT_TRUE(pub.area.hasValue());
+    if (pub.area.value() != area) {
+      return folly::none;
+    }
 
-    VLOG(1) << "Received publication with keys";
+    VLOG(1) << "Received publication with keys in area " << pub.area.value();
     for (auto const& kv : pub.keyVals) {
       VLOG(1) << "  " << kv.first;
     }
@@ -442,7 +476,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
   // recv publicatons from kv store until we get what we were
   // expecting for a given key
   void
-  checkNextAdjPub(std::string const& key) {
+  checkNextAdjPub(
+      std::string const& key,
+      std::string const& area =
+          openr::thrift::KvStore_constants::kDefaultArea()) {
     CHECK(!expectedAdjDbs.empty());
 
     printAdjDb(expectedAdjDbs.front());
@@ -450,7 +487,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     while (true) {
       folly::Optional<thrift::Value> value;
       try {
-        value = getPublicationValueForKey(key);
+        value = getPublicationValueForKey(key, area);
         if (not value.hasValue()) {
           continue;
         }
@@ -482,8 +519,12 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   // kvstore shall reveive cmd to add/del peers
   void
-  checkPeerDump(std::string const& nodeName, thrift::PeerSpec peerSpec) {
-    auto const peers = kvStoreWrapper->getPeers();
+  checkPeerDump(
+      std::string const& nodeName,
+      thrift::PeerSpec peerSpec,
+      std::string const& area =
+          openr::thrift::KvStore_constants::kDefaultArea()) {
+    auto const peers = kvStoreWrapper->getPeers(area);
     EXPECT_EQ(peers.count(nodeName), 1);
     if (!peers.count(nodeName)) {
       return;
@@ -493,9 +534,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
   }
 
   std::unordered_set<thrift::IpPrefix>
-  getNextPrefixDb(std::string const& key) {
+  getNextPrefixDb(
+      std::string const& key,
+      std::string const& area =
+          openr::thrift::KvStore_constants::kDefaultArea()) {
     while (true) {
-      auto value = getPublicationValueForKey(key, std::chrono::seconds(3));
+      auto value =
+          getPublicationValueForKey(key, area, std::chrono::seconds(3));
       if (not value.hasValue()) {
         continue;
       }
@@ -544,6 +589,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 // Start LinkMonitor and ensure empty adjacency database and prefixes are
 // received upon initial hold-timeout expiry
 TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   // Verify that we receive empty adjacency database
   expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel));
   checkNextAdjPub("adj:node-1");
@@ -552,6 +598,7 @@ TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
 // receive neighbor up/down events from "spark"
 // form peer connections and inform KvStore of adjacencies
 TEST_F(LinkMonitorTestFixture, BasicOperation) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   const int linkMetric = 123;
   const int adjMetric = 100;
   std::string clientId = Constants::kSparkReportClientId.toString();
@@ -959,6 +1006,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
 // Test throttling
 TEST_F(LinkMonitorTestFixture, Throttle) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   {
     InSequence dummy;
 
@@ -1018,6 +1066,7 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 
 // parallel adjacencies between two nodes via different interfaces
 TEST_F(LinkMonitorTestFixture, ParallelAdj) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   std::string clientId = Constants::kSparkReportClientId.toString();
   {
     InSequence dummy;
@@ -1106,6 +1155,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
 // Verify neighbor-restarting event (including parallel case)
 TEST_F(LinkMonitorTestFixture, NeighborRestart) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   std::string clientId = Constants::kSparkReportClientId.toString();
 
   /* Single link case */
@@ -1260,6 +1310,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
 }
 
 TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -1513,6 +1564,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
 // Test Interface events to Spark
 TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -1575,6 +1627,7 @@ TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
 }
 
 TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
@@ -1759,6 +1812,7 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
 
 // Test getting unique nodeLabels
 TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   size_t kNumNodesToTest = 10;
 
   std::string regexErr;
@@ -1856,6 +1910,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
  * - set link to down state and verify that it removes all associated addresses
  */
 TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   // Verify that initial DB has static prefix entries
   std::unordered_set<thrift::IpPrefix> prefixes;
   prefixes.clear();
@@ -1970,26 +2025,14 @@ TEST(LinkMonitor, getPeersFromAdjacencies) {
   std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies;
   std::unordered_map<std::string, thrift::PeerSpec> peers;
 
-  const auto peerSpec0 = thrift::PeerSpec(
-      FRAGILE,
-      "tcp://[fe80::2%iface0]:10001",
-      "tcp://[fe80::2%iface0]:10002",
-      false);
-  const auto peerSpec1 = thrift::PeerSpec(
-      FRAGILE,
-      "tcp://[fe80::2%iface1]:10001",
-      "tcp://[fe80::2%iface1]:10002",
-      false);
-  const auto peerSpec2 = thrift::PeerSpec(
-      FRAGILE,
-      "tcp://[fe80::2%iface2]:10001",
-      "tcp://[fe80::2%iface2]:10002",
-      false);
-  const auto peerSpec3 = thrift::PeerSpec(
-      FRAGILE,
-      "tcp://[fe80::2%iface3]:10001",
-      "tcp://[fe80::2%iface3]:10002",
-      false);
+  const auto peerSpec0 = createPeerSpec(
+      "tcp://[fe80::2%iface0]:10001", "tcp://[fe80::2%iface0]:10002", false);
+  const auto peerSpec1 = createPeerSpec(
+      "tcp://[fe80::2%iface1]:10001", "tcp://[fe80::2%iface1]:10002", false);
+  const auto peerSpec2 = createPeerSpec(
+      "tcp://[fe80::2%iface2]:10001", "tcp://[fe80::2%iface2]:10002", false);
+  const auto peerSpec3 = createPeerSpec(
+      "tcp://[fe80::2%iface3]:10001", "tcp://[fe80::2%iface3]:10002", false);
 
   // Get peer spec
   adjacencies[{"node1", "iface1"}] = {peerSpec1, thrift::Adjacency()};
@@ -2033,6 +2076,148 @@ TEST(LinkMonitor, getPeersFromAdjacencies) {
   EXPECT_EQ(0, adjacencies.size());
   EXPECT_EQ(0, peers.size());
   EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies));
+
+  // with different areas
+  adjacencies[{"node1", "iface1"}] = {
+      peerSpec1, thrift::Adjacency(), false, "pod"};
+  adjacencies[{"node2", "iface2"}] = {
+      peerSpec2, thrift::Adjacency(), false, "pod"};
+  peers["node1"] = peerSpec1;
+  peers["node2"] = peerSpec2;
+  EXPECT_EQ(2, adjacencies.size());
+  EXPECT_EQ(2, peers.size());
+  EXPECT_EQ(peers, LinkMonitor::getPeersFromAdjacencies(adjacencies, "pod"));
+
+  adjacencies[{"node2", "iface3"}] = {
+      peerSpec3, thrift::Adjacency(), false, "plane"};
+  EXPECT_EQ(3, adjacencies.size());
+  EXPECT_EQ(
+      1, LinkMonitor::getPeersFromAdjacencies(adjacencies, "plane").size());
+}
+
+TEST_F(LinkMonitorTestFixture, AreaTest) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea(), "pod", "plane"});
+
+  // Verify that we receive empty adjacency database in all 3 areas
+  expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel, "plane"));
+  expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel, "pod"));
+  expectedAdjDbs.push(createAdjDatabase("node-1", {}, kNodeLabel));
+  checkNextAdjPub("adj:node-1", "plane");
+  checkNextAdjPub("adj:node-1", "pod");
+  checkNextAdjPub(
+      "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
+
+  // add link up event. AdjDB should get updated with link interface
+  // Will be updated in all areas
+  // TODO: Change this when interfaced base areas is implemented, in which
+  // case only corresponding area kvstore should get the update
+  std::string clientId = Constants::kSparkReportClientId.toString();
+
+  {
+    InSequence dummy;
+
+    mockNlHandler->sendLinkEvent("iface_2_1", 100, true);
+    recvAndReplyIfUpdate();
+    // expect neighbor up first
+    // node-2 neighbor up in iface_2_1
+    auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+    {
+      auto neighborEvent = createNeighborEvent(
+          thrift::SparkNeighborEventType::NEIGHBOR_UP,
+          "iface_2_1",
+          nb2,
+          100 /* rtt-us */,
+          1 /* label */);
+      EXPECT_NO_THROW(sparkReport.sendMultiple(
+          fbzmq::Message::from(clientId).value(),
+          fbzmq::Message(),
+          fbzmq::Message::fromThriftObj(neighborEvent, serializer).value()));
+      LOG(INFO) << "Testing neighbor UP event in default area!";
+
+      checkNextAdjPub(
+          "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
+    }
+
+    // bring up iface3_1, neighbor up event in plane area. Adj db in "plane"
+    // area should contain only 'adj_3_1'
+    mockNlHandler->sendLinkEvent("iface_3_1", 100, true);
+    recvAndReplyIfUpdate();
+    adjDb = createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, "plane");
+    expectedAdjDbs.push(std::move(adjDb));
+    {
+      auto neighborEvent = createNeighborEvent(
+          thrift::SparkNeighborEventType::NEIGHBOR_UP,
+          "iface_3_1",
+          nb3,
+          100 /* rtt-us */,
+          1 /* label */,
+          "plane");
+      sparkReport.sendMultiple(
+          fbzmq::Message::from(clientId).value(),
+          fbzmq::Message(),
+          fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+      LOG(INFO) << "Testing neighbor UP event in plane area!";
+
+      checkNextAdjPub("adj:node-1", "plane");
+    }
+  }
+  // neighbor up on default area
+  {
+    auto adjDb = createAdjDatabase("node-1", {adj_2_1}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP,
+        "iface_2_1",
+        nb2,
+        100 /* rtt-us */,
+        1 /* label */);
+    EXPECT_NO_THROW(sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value()));
+    LOG(INFO) << "Testing neighbor UP event!";
+    checkNextAdjPub(
+        "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
+    checkPeerDump(adj_2_1.otherNodeName, peerSpec_2_1);
+  }
+  // neighbor up on "plane" area
+  {
+    auto adjDb = createAdjDatabase("node-1", {adj_3_1}, kNodeLabel, "plane");
+    expectedAdjDbs.push(std::move(adjDb));
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_UP,
+        "iface_3_1",
+        nb3,
+        100 /* rtt-us */,
+        1 /* label */,
+        "plane");
+    EXPECT_NO_THROW(sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value()));
+    LOG(INFO) << "Testing neighbor UP event!";
+    checkNextAdjPub("adj:node-1", "plane");
+    checkPeerDump(adj_3_1.otherNodeName, peerSpec_3_1, "plane");
+  }
+  // verify neighbor down in "plane" area
+  {
+    auto adjDb = createAdjDatabase("node-1", {}, kNodeLabel, "plane");
+    expectedAdjDbs.push(std::move(adjDb));
+    auto neighborEvent = createNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+        "iface_3_1",
+        nb3,
+        100 /* rtt-us */,
+        1 /* label */,
+        "plane");
+    sparkReport.sendMultiple(
+        fbzmq::Message::from(clientId).value(),
+        fbzmq::Message(),
+        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    LOG(INFO) << "Testing neighbor down event!";
+    checkNextAdjPub("adj:node-1", "plane");
+  }
 }
 
 int
