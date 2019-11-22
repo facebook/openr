@@ -218,7 +218,8 @@ Spark::Neighbor::Neighbor(
     uint64_t seqNum,
     std::unique_ptr<fbzmq::ZmqTimeout> holdTimer,
     const std::chrono::milliseconds& samplingPeriod,
-    std::function<void(const int64_t&)> rttChangeCb)
+    std::function<void(const int64_t&)> rttChangeCb,
+    std::string areaId)
     : info(info),
       holdTimer(std::move(holdTimer)),
       label(label),
@@ -230,7 +231,8 @@ Spark::Neighbor::Neighbor(
           kLoThreshold /* lower threshold */,
           kHiThreshold /* upper threshold */,
           kAbsThreshold /* absolute threshold */,
-          rttChangeCb /* callback function */) {
+          rttChangeCb /* callback function */),
+      area(areaId) /* area Id */ {
   CHECK_NE(this->holdTimer.get(), static_cast<void*>(nullptr));
 }
 
@@ -241,7 +243,8 @@ Spark::Spark2Neighbor::Spark2Neighbor(
     uint32_t label,
     uint64_t seqNum,
     const std::chrono::milliseconds& samplingPeriod,
-    std::function<void(const int64_t&)> rttChangeCb)
+    std::function<void(const int64_t&)> rttChangeCb,
+    const std::string& adjArea)
     : domainName(domainName),
       nodeName(nodeName),
       remoteIfName(remoteIfName),
@@ -255,7 +258,8 @@ Spark::Spark2Neighbor::Spark2Neighbor(
           kLoThreshold /* lower threshold */,
           kHiThreshold /* upper threshold */,
           kAbsThreshold /* absolute threshold */,
-          rttChangeCb /* callback function */) {
+          rttChangeCb /* callback function */),
+      area(adjArea) {
   CHECK(!(this->domainName.empty()));
   CHECK(!(this->nodeName.empty()));
   CHECK(!(this->remoteIfName.empty()));
@@ -626,6 +630,13 @@ Spark::validateHelloPacket(
       processNeighborRttChange(ifName, originator, newRtt);
     };
 
+    // in Spark2 Handshake messages will be used to find common area
+    auto commonArea = findCommonArea(
+        helloPacket.payload.areas, helloPacket.payload.originator.nodeName);
+    if (commonArea.hasError()) {
+      return PacketValidationResult::INVALID_AREA_CONFIGURATION;
+    }
+
     ifNeighbors.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(neighborName),
@@ -635,7 +646,9 @@ Spark::validateHelloPacket(
             helloPacket.payload.seqNum,
             std::move(holdTimer),
             myKeepAliveTime_,
-            std::move(rttChangeCb)));
+            std::move(rttChangeCb),
+            commonArea.value()));
+
     return PacketValidationResult::SUCCESS;
   }
 
@@ -700,7 +713,7 @@ Spark::processNeighborRttChange(
       neighbor.rtt.count(),
       neighbor.label,
       false /* supportFloodOptimization: doesn't matter in RTT event*/,
-      folly::none);
+      neighbor.area);
   auto ret = reportSocket_.sendMultiple(
       fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
           .value(),
@@ -742,7 +755,7 @@ Spark::processNeighborHoldTimeout(
         neighbor.rtt.count(),
         neighbor.label,
         false /* supportFloodOptimization: doesn't matter in GR-expired event*/,
-        folly::none);
+        neighbor.area);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -1037,6 +1050,7 @@ Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
   handshakeMsg.gracefulRestartTime = myHoldTime_.count();
   handshakeMsg.transportAddressV6 = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
+  // should be obtained from interface DB
   handshakeMsg.area = openr::thrift::KvStore_constants::kDefaultArea();
   handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
   handshakeMsg.kvStorePubPort = kKvStorePubPort_;
@@ -1215,7 +1229,8 @@ Spark::neighborUpWrapper(
             neighbor.toThrift(),
             neighbor.rtt.count(),
             neighbor.label,
-            true /* support flood-optimization */);
+            true /* support flood-optimization */,
+            neighbor.area);
         oldNeighbor.numRecvRestarting = 0;
         return;
       }
@@ -1229,7 +1244,8 @@ Spark::neighborUpWrapper(
       neighbor.toThrift(),
       neighbor.rtt.count(),
       neighbor.label,
-      true /* support flood-optimization */);
+      true /* support flood-optimization */,
+      neighbor.area);
 }
 
 void
@@ -1244,7 +1260,8 @@ Spark::neighborDownWrapper(
       neighbor.toThrift(),
       neighbor.rtt.count(),
       neighbor.label,
-      true /* support flood-optimization */);
+      true /* support flood-optimization */,
+      neighbor.area);
 
   // remove neighborship on this interface
   ifNameToActiveNeighbors_.at(ifName).erase(neighborName);
@@ -1260,7 +1277,8 @@ Spark::notifySparkNeighborEvent(
     thrift::SparkNeighbor const& originator,
     int64_t rttUs,
     int32_t label,
-    bool supportFloodOptimization) {
+    bool supportFloodOptimization,
+    const std::string& area) {
   thrift::SparkNeighborEvent event;
   event.eventType = eventType;
   event.ifName = ifName;
@@ -1268,6 +1286,7 @@ Spark::notifySparkNeighborEvent(
   event.rttUs = rttUs;
   event.label = label;
   event.supportFloodOptimization = supportFloodOptimization;
+  event.area = area;
 
   auto ret = reportSocket_.sendMultiple(
       fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
@@ -1371,7 +1390,8 @@ Spark::processGRMsg(
       neighbor.toThrift(),
       neighbor.rtt.count(),
       neighbor.label,
-      false /* supportDual: doesn't matter in DOWN event*/);
+      false /* supportDual: doesn't matter in DOWN event*/,
+      neighbor.area);
 
   // start graceful-restart timer
   neighbor.gracefulRestartHoldTimer =
@@ -1446,7 +1466,8 @@ Spark::processHelloMsg(
             getNewLabelForIface(ifName), /* label for Segment Routing */
             remoteSeqNum, /* seqNum reported by neighborNode */
             myKeepAliveTime_,
-            std::move(rttChangeCb)));
+            std::move(rttChangeCb),
+            std::string{} /* empty area, handshake msg will fill it */));
 
     auto& neighbor = ifNeighbors.at(neighborName);
     checkNeighborState(neighbor, SparkNeighState::IDLE);
@@ -1611,7 +1632,8 @@ Spark::processHelloMsg(
             neighbor.toThrift(),
             neighbor.rtt.count(),
             neighbor.label,
-            true /* support flood-optimization */);
+            true /* support flood-optimization */,
+            neighbor.area);
 
         // start heartbeat timer again to make sure neighbor is alive
         neighbor.heartbeatHoldTimer = fbzmq::ZmqTimeout::make(
@@ -1687,12 +1709,28 @@ Spark::processHandshakeMsg(
     }
   }
 
+  // recevied spark neighbors' area will be matched with configured interface's
+  // area once interface based area identifier is implemented
+  // older spark2 handshake message has default area set to "". Temporary fix
+  // TODO: remove after spark handshake defaults to default area
+  std::unordered_set<std::string> rxArea{};
+  if (handshakeMsg.area == "") {
+    rxArea.insert(openr::thrift::KvStore_constants::kDefaultArea());
+  } else {
+    rxArea.insert(handshakeMsg.area);
+  }
+  auto commonArea = findCommonArea(rxArea, handshakeMsg.nodeName);
+  if (commonArea.hasError()) {
+    return;
+  }
+
   // update Spark2 neighborState
   neighbor.kvStorePubPort = handshakeMsg.kvStorePubPort;
   neighbor.kvStoreCmdPort = handshakeMsg.kvStoreCmdPort;
   neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort;
   neighbor.transportAddressV4 = handshakeMsg.transportAddressV4;
   neighbor.transportAddressV6 = handshakeMsg.transportAddressV6;
+  neighbor.area = commonArea.value();
 
   // update neighbor holdTime as "NEGOTIATING" process
   neighbor.heartbeatHoldTime = std::max(
@@ -1772,19 +1810,12 @@ Spark::processHelloPacket() {
   if (PacketValidationResult::SKIP_LOOPED_SELF == validationResult) {
     return;
   }
-  if (validationResult == PacketValidationResult::FAILURE) {
+  if (validationResult == PacketValidationResult::FAILURE ||
+      validationResult == PacketValidationResult::INVALID_AREA_CONFIGURATION) {
     LOG(ERROR) << "Ignoring invalid packet received from "
                << helloPacket.payload.originator.nodeName << " on " << ifName;
     return;
   }
-
-  folly::Optional<std::string> adjArea = folly::none;
-  auto commonArea = findCommonArea(
-      helloPacket.payload.areas, helloPacket.payload.originator.nodeName);
-  if (commonArea.hasError()) {
-    return;
-  }
-  adjArea = commonArea.value();
 
   // the map of adjacent neighbors should have been already created
   auto const& originator = helloPacket.payload.originator;
@@ -1816,7 +1847,7 @@ Spark::processHelloPacket() {
         neighbor.rtt.count(),
         neighbor.label,
         false /* supportDual: doesn't matter in DOWN event*/,
-        adjArea);
+        neighbor.area);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -1900,7 +1931,7 @@ Spark::processHelloPacket() {
         neighbor.rtt.count(),
         neighbor.label,
         supportFloodOptimization,
-        adjArea);
+        neighbor.area);
     neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
@@ -1951,7 +1982,7 @@ Spark::processHelloPacket() {
         neighbor.rtt.count(),
         neighbor.label,
         supportFloodOptimization,
-        adjArea);
+        neighbor.area);
     neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
@@ -1985,7 +2016,7 @@ Spark::processHelloPacket() {
         neighbor.rtt.count(),
         neighbor.label,
         false /* supportFloodOptimization: doesn't matter in DOWN event*/,
-        folly::none);
+        neighbor.area);
     auto ret = reportSocket_.sendMultiple(
         fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
             .value(),
@@ -2289,7 +2320,7 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
           neighbor.rtt.count(),
           neighbor.label,
           false /* supportFloodOptimization: doesn't matter in DOWN event*/,
-          folly::none);
+          neighbor.area);
       auto ret = reportSocket_.sendMultiple(
           fbzmq::Message::from(
               openr::Constants::kSparkReportClientId.toString())
@@ -2546,7 +2577,7 @@ Spark::submitCounters() {
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
-folly::Expected<folly::Optional<std::string>, folly::Unit>
+folly::Expected<std::string, folly::Unit>
 Spark::findCommonArea(
     folly::Optional<std::unordered_set<std::string>> adjAreas,
     const std::string& nodeName) {
@@ -2561,7 +2592,8 @@ Spark::findCommonArea(
       }
     }
     if (commonArea.size() == 0) {
-      LOG(WARNING) << ": No common area found with: " << nodeName;
+      LOG(WARNING) << myNodeName_
+                   << ": No common area found with: " << nodeName;
       tData_.addStatValue("spark.no_common_area", 1, fbzmq::COUNT);
       return folly::makeUnexpected(folly::unit);
     } else if (commonArea.size() > 1) {

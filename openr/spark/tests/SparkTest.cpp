@@ -1800,14 +1800,18 @@ TEST_F(SparkFixture, AreaTest) {
   }
   {
     auto event = spark4->waitForEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
+        thrift::SparkNeighborEventType::NEIGHBOR_UP,
+        kHoldTime * 5,
+        kHoldTime * 5);
     ASSERT_TRUE(event.hasValue());
     EXPECT_EQ(event.value().neighbor.nodeName, "node-1");
     LOG(INFO) << "node-4 Formed adj with " << event.value().neighbor.nodeName;
   }
   {
     auto event = spark3->waitForEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_UP, kHoldTime * 5);
+        thrift::SparkNeighborEventType::NEIGHBOR_UP,
+        kHoldTime * 5,
+        kHoldTime * 5);
     ASSERT_FALSE(event.hasValue());
     LOG(INFO) << "node-3 received no UP event for node-4";
   }

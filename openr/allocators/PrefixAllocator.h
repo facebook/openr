@@ -251,6 +251,9 @@ class PrefixAllocator : public OpenrEventLoop, public boost::static_visitor<> {
 
   // save alloc index from e2e-network-alllocation <value version, indices set>
   std::pair<int64_t, std::unordered_set<uint32_t>> e2eAllocIndex_{-1, {}};
+
+  // areas
+  const std::string area_{openr::thrift::KvStore_constants::kDefaultArea()};
 };
 
 } // namespace openr

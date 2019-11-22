@@ -784,7 +784,9 @@ Fib::logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents) {
       kvStoreClient_->persistKey(
           Constants::kFibTimeMarker.toString() + myNodeName_,
           std::to_string(tData_.getCounters().at(
-              "fib.local_route_program_time_ms.avg.60")));
+              "fib.local_route_program_time_ms.avg.60")),
+          Constants::kTtlInfInterval,
+          openr::thrift::KvStore_constants::kDefaultArea());
     }
   }
 

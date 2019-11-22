@@ -129,6 +129,9 @@ class HealthChecker final : public OpenrEventLoop {
 
   // DS to hold local stats/counters
   fbzmq::ThreadData tData_;
+
+  // area ID
+  const std::string area_{};
 };
 
 } // namespace openr

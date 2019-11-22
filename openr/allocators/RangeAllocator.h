@@ -19,6 +19,7 @@
 #include <folly/gen/Base.h>
 
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClient.h>
 
@@ -56,8 +57,8 @@ class RangeAllocator {
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
       const bool overrideOwner = true,
       const std::function<bool(T)> checkValueInUseCb = nullptr,
-      const std::chrono::milliseconds rangeAllocTtl =
-          Constants::kRangeAllocTtl);
+      const std::chrono::milliseconds rangeAllocTtl = Constants::kRangeAllocTtl,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * user must call this to start allocation
@@ -174,6 +175,9 @@ class RangeAllocator {
 
   // KvStore TTL for value
   const std::chrono::milliseconds rangeAllocTtl_;
+
+  // area ID
+  const std::string area_{};
 };
 
 } // namespace openr

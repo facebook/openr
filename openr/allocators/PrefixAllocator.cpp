@@ -94,7 +94,8 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
           processStaticPrefixAllocUpdate(value.value());
         }
       },
-      false);
+      false,
+      area_);
 
   // get initial value if missed out in incremental updates (one time only)
   scheduleTimeout(0ms, [this]() noexcept {
@@ -106,7 +107,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
 
     // 1) Get initial value from KvStore!
     auto maybeValue = kvStoreClient_->getKey(
-        Constants::kStaticPrefixAllocParamKey.toString());
+        Constants::kStaticPrefixAllocParamKey.toString(), area_);
     if (maybeValue.hasError()) {
       LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
                  << maybeValue.error();
@@ -153,7 +154,8 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
           processAllocParamUpdate(value.value());
         }
       },
-      false);
+      false,
+      area_);
 
   kvStoreClient_->subscribeKey(
       Constants::kStaticPrefixAllocParamKey.toString(),
@@ -163,7 +165,8 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
           processNetworkAllocationsUpdate(value.value());
         }
       },
-      false);
+      false,
+      area_);
 
   // get initial value if missed out in incremental updates (one time only)
   scheduleTimeout(0ms, [this]() noexcept {
@@ -174,8 +177,8 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
     }
 
     // 1) Get initial value from KvStore!
-    auto maybeValue =
-        kvStoreClient_->getKey(Constants::kSeedPrefixAllocParamKey.toString());
+    auto maybeValue = kvStoreClient_->getKey(
+        Constants::kSeedPrefixAllocParamKey.toString(), area_);
     if (maybeValue.hasError()) {
       LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
                  << maybeValue.error();
@@ -541,7 +544,9 @@ PrefixAllocator::startAllocation(
       false,
       [this](uint32_t allocIndex) noexcept->bool {
         return checkE2eAllocIndex(allocIndex);
-      });
+      },
+      Constants::kRangeAllocTtl,
+      area_);
 
   // start range allocation
   LOG(INFO) << "Starting prefix allocation with seed prefix: "

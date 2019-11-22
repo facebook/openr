@@ -105,8 +105,7 @@ const auto adj_2_1 = createThriftAdjacency(
     0 /* rtt */,
     kTimestamp /* timestamp */,
     Constants::kDefaultAdjWeight /* weight */,
-    "" /* otherIfName */,
-    folly::none);
+    "" /* otherIfName */);
 
 const auto adj_2_2 = createThriftAdjacency(
     "node-2",
@@ -119,8 +118,7 @@ const auto adj_2_2 = createThriftAdjacency(
     0 /* rtt */,
     kTimestamp /* timestamp */,
     Constants::kDefaultAdjWeight /* weight */,
-    "" /* otherIfName */,
-    folly::none);
+    "" /* otherIfName */);
 
 const auto staticPrefix1 = toIpPrefix("fc00:face:b00c::/64");
 const auto staticPrefix2 = toIpPrefix("fc00:cafe:babe::/64");
@@ -133,7 +131,7 @@ createNeighborEvent(
     int64_t rttUs,
     int32_t label) {
   return createSparkNeighborEvent(
-      eventType, ifName, neighbor, rttUs, label, false, folly::none);
+      eventType, ifName, neighbor, rttUs, label, false);
 }
 
 thrift::AdjacencyDatabase

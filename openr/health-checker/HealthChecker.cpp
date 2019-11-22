@@ -63,7 +63,7 @@ HealthChecker::prepare() noexcept {
   const auto adjMap = kvStoreClient_->dumpAllWithPrefix(adjacencyDbMarker_);
   const auto prefixMap = kvStoreClient_->dumpAllWithPrefix(prefixDbMarker_);
   if (not adjMap || not prefixMap) {
-    LOG(ERROR) << "Intial kv store dump failed";
+    LOG(ERROR) << "Initial kv store dump failed";
   } else {
     for (const auto& kv : *adjMap) {
       processKeyVal(kv.first, kv.second);

@@ -45,7 +45,8 @@ RangeAllocator<T>::RangeAllocator(
     const std::chrono::milliseconds maxBackoffDur /* = 2s */,
     const bool overrideOwner /* = true */,
     const std::function<bool(T)> checkValueInUseCb,
-    const std::chrono::milliseconds rangeAllocTtl)
+    const std::chrono::milliseconds rangeAllocTtl,
+    const std::string& area)
     : nodeName_(nodeName),
       keyPrefix_(keyPrefix),
       kvStoreClient_(kvStoreClient),
@@ -54,7 +55,8 @@ RangeAllocator<T>::RangeAllocator(
       overrideOwner_(overrideOwner),
       backoff_(minBackoffDur, maxBackoffDur),
       checkValueInUseCb_(std::move(checkValueInUseCb)),
-      rangeAllocTtl_(rangeAllocTtl) {}
+      rangeAllocTtl_(rangeAllocTtl),
+      area_(area) {}
 
 template <typename T>
 RangeAllocator<T>::~RangeAllocator() {
@@ -69,7 +71,7 @@ RangeAllocator<T>::~RangeAllocator() {
   if (myValue_) {
     const auto myKey = createKey(*myValue_);
     kvStoreClient_->unsubscribeKey(myKey);
-    kvStoreClient_->unsetKey(myKey);
+    kvStoreClient_->unsetKey(myKey, area_);
   }
 }
 
@@ -120,7 +122,7 @@ RangeAllocator<T>::startAllocator(
 template <typename T>
 bool
 RangeAllocator<T>::isRangeConsumed() const {
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_);
+  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
   CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
   T count = 0;
   for (const auto& kv : *maybeKeyMap) {
@@ -136,7 +138,7 @@ RangeAllocator<T>::isRangeConsumed() const {
 template <typename T>
 folly::Optional<T>
 RangeAllocator<T>::getValueFromKvStore() const {
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_);
+  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
   CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
   for (const auto& kv : *maybeKeyMap) {
     if (kv.second.originatorId == nodeName_) {
@@ -161,7 +163,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
 
   // Check for any existing value in KvStore
   const auto newKey = createKey(newVal);
-  const auto maybeThriftVal = kvStoreClient_->getKey(newKey);
+  const auto maybeThriftVal = kvStoreClient_->getKey(newKey, area_);
   if (maybeThriftVal) {
     DCHECK_EQ(1, maybeThriftVal->version);
   }
@@ -207,7 +209,8 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
             details::primitiveToBinary(newVal) /* value */,
             rangeAllocTtl_.count() /* ttl */,
             ttlVersion /* ttl version */,
-            0 /* hash */));
+            0 /* hash */),
+        area_);
     CHECK(ret) << ret.error();
   } else {
     CHECK(shouldOwnMine);
@@ -218,7 +221,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     auto newValue = *maybeThriftVal;
     newValue.ttlVersion += 1; // bump ttl version
     newValue.ttl = rangeAllocTtl_.count(); // reset ttl
-    kvStoreClient_->setKey(newKey, newValue);
+    kvStoreClient_->setKey(newKey, newValue, area_);
     myValue_ = newVal;
     callback_(myValue_);
   }
@@ -233,7 +236,8 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
           keyValUpdated(key, thriftVal.value());
         }
       },
-      false);
+      false,
+      area_);
 }
 
 template <typename T>
@@ -247,7 +251,7 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
   std::uniform_int_distribution<T> dist(allocRange_.first, allocRange_.second);
   auto newVal = dist(gen);
 
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_);
+  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
   CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
   const auto valOwners =
       folly::gen::from(*maybeKeyMap) |
@@ -330,7 +334,7 @@ RangeAllocator<T>::keyValUpdated(
 
     // Unsubscribe to update of lost value
     kvStoreClient_->unsubscribeKey(key);
-    kvStoreClient_->unsetKey(key);
+    kvStoreClient_->unsetKey(key, area_);
     // Schedule allocation for new value
     scheduleAllocate(val);
   }

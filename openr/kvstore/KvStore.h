@@ -442,7 +442,7 @@ class KvStore final : public OpenrEventLoop {
       bool enableFloodOptimization = false,
       bool isFloodRoot = false,
       bool useFloodOptimization = false,
-      std::unordered_set<std::string> areas = {
+      const std::unordered_set<std::string>& areas = {
           openr::thrift::KvStore_constants::kDefaultArea()});
 
   // process the key-values publication, and attempt to

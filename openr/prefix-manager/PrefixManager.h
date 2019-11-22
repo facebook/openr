@@ -39,7 +39,9 @@ class PrefixManager final : public OpenrEventLoop {
       bool enablePerfMeasurement,
       const std::chrono::seconds prefixHoldTime,
       const std::chrono::milliseconds ttlKeyInKvStore,
-      fbzmq::Context& zmqContext);
+      fbzmq::Context& zmqContext,
+      const std::unordered_set<std::string>& area = {
+          openr::thrift::KvStore_constants::kDefaultArea()});
 
   // disable copying
   PrefixManager(PrefixManager const&) = delete;
@@ -156,6 +158,9 @@ class PrefixManager final : public OpenrEventLoop {
 
   // IP perfixes to advertisze to kvstore (either add or delete)
   std::unordered_set<thrift::IpPrefix> prefixesToUpdate_{};
+
+  // area Id
+  const std::unordered_set<std::string> areas_{};
 }; // PrefixManager
 
 } // namespace openr

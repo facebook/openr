@@ -676,7 +676,7 @@ createSparkNeighborEvent(
     int64_t rttUs,
     int32_t label,
     bool supportFloodOptimization,
-    folly::Optional<std::string> area) {
+    std::string area) {
   thrift::SparkNeighborEvent event;
   event.eventType = eventType;
   event.ifName = ifName;
@@ -747,8 +747,7 @@ createThriftAdjacency(
     int32_t rtt,
     int64_t timestamp,
     int64_t weight,
-    const std::string& remoteIfName,
-    folly::Optional<std::string> area) {
+    const std::string& remoteIfName) {
   thrift::Adjacency adj;
   adj.otherNodeName = nodeName;
   adj.ifName = ifName;
@@ -761,7 +760,6 @@ createThriftAdjacency(
   adj.timestamp = timestamp;
   adj.weight = weight;
   adj.otherIfName = remoteIfName;
-  adj.area = area;
   return adj;
 }
 
@@ -786,20 +784,22 @@ createAdjacency(
       metric * 100,
       getUnixTimeStampMs() / 1000,
       weight,
-      remoteIfName,
-      folly::none);
+      remoteIfName);
 }
 
 thrift::AdjacencyDatabase
 createAdjDb(
     const std::string& nodeName,
     const std::vector<thrift::Adjacency>& adjs,
-    int32_t nodeLabel) {
+    int32_t nodeLabel,
+    bool overLoadBit,
+    folly::Optional<std::string> area) {
   thrift::AdjacencyDatabase adjDb;
   adjDb.thisNodeName = nodeName;
-  adjDb.isOverloaded = false;
+  adjDb.isOverloaded = overLoadBit;
   adjDb.adjacencies = adjs;
   adjDb.nodeLabel = nodeLabel;
+  adjDb.area = area;
   return adjDb;
 }
 

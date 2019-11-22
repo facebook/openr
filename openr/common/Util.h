@@ -299,7 +299,8 @@ thrift::SparkNeighborEvent createSparkNeighborEvent(
     int64_t rttUs,
     int32_t label,
     bool supportFloodOptimization,
-    folly::Optional<std::string> area);
+    std::string area = std::string{
+        openr::thrift::KvStore_constants::kDefaultArea()});
 
 thrift::Adjacency createAdjacency(
     const std::string& nodeName,
@@ -322,13 +323,15 @@ thrift::Adjacency createThriftAdjacency(
     int32_t rtt,
     int64_t timestamp,
     int64_t weight,
-    const std::string& remoteIfName,
-    folly::Optional<std::string> area = folly::none);
+    const std::string& remoteIfName);
 
 thrift::AdjacencyDatabase createAdjDb(
     const std::string& nodeName,
     const std::vector<thrift::Adjacency>& adjs,
-    int32_t nodeLabel);
+    int32_t nodeLabel,
+    bool overLoadBit = false,
+    folly::Optional<std::string> area = std::string{
+        openr::thrift::KvStore_constants::kDefaultArea()});
 
 thrift::PrefixDatabase createPrefixDb(
     const std::string& nodeName,
@@ -360,7 +363,8 @@ thrift::Publication createThriftPublication(
     const folly::Optional<std::vector<std::string>>& nodeIds = folly::none,
     const folly::Optional<std::vector<std::string>>& keysToUpdate = folly::none,
     const folly::Optional<std::string>& floodRootId = folly::none,
-    const folly::Optional<std::string>& area = folly::none);
+    const folly::Optional<std::string>& area = std::string{
+        openr::thrift::KvStore_constants::kDefaultArea()});
 
 thrift::NextHopThrift createNextHop(
     thrift::BinaryAddress addr,

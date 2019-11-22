@@ -86,7 +86,7 @@ KvStore::KvStore(
     bool enableFloodOptimization,
     bool isFloodRoot,
     bool useFloodOptimization,
-    std::unordered_set<std::string> areas)
+    const std::unordered_set<std::string>& areas)
     : OpenrEventLoop(
           nodeId,
           thrift::OpenrModuleType::KVSTORE,
@@ -1835,6 +1835,7 @@ KvStoreDb::mergePublication(
   deltaPublication.keyVals = KvStore::mergeKeyValues(
       kvStore_, rcvdPublication.keyVals, kvParams_.filters);
   deltaPublication.floodRootId = rcvdPublication.floodRootId;
+  deltaPublication.area = area_;
 
   const size_t kvUpdateCnt = deltaPublication.keyVals.size();
   tData_.addStatValue("kvstore.updated_key_vals", kvUpdateCnt, fbzmq::SUM);

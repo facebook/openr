@@ -38,6 +38,7 @@ enum class PacketValidationResult {
   FAILURE = 2,
   NEIGHBOR_RESTART = 3,
   SKIP_LOOPED_SELF = 4,
+  INVALID_AREA_CONFIGURATION = 5,
 };
 
 //
@@ -223,7 +224,7 @@ class Spark final : public OpenrEventLoop {
   void submitCounters();
 
   // find common area, must be only one or none
-  folly::Expected<folly::Optional<std::string>, folly::Unit> findCommonArea(
+  folly::Expected<std::string, folly::Unit> findCommonArea(
       folly::Optional<std::unordered_set<std::string>> areas,
       const std::string& nodeName);
 
@@ -258,7 +259,8 @@ class Spark final : public OpenrEventLoop {
         uint32_t label,
         uint64_t seqNum,
         std::chrono::milliseconds const& samplingPeriod,
-        std::function<void(const int64_t&)> rttChangeCb);
+        std::function<void(const int64_t&)> rttChangeCb,
+        const std::string& area);
 
     // util function to transfer to SparkNeighbor
     thrift::SparkNeighbor
@@ -332,6 +334,9 @@ class Spark final : public OpenrEventLoop {
 
     // detect rtt changes
     StepDetector<int64_t, std::chrono::milliseconds> stepDetector;
+
+    // area on which adjacency is formed
+    std::string area{};
   };
 
   std::unordered_map<
@@ -369,7 +374,9 @@ class Spark final : public OpenrEventLoop {
       thrift::SparkNeighbor const& originator,
       int64_t rtt,
       int32_t label,
-      bool supportFloodOptimization);
+      bool supportFloodOptimization,
+      const std::string& area =
+          openr::thrift::KvStore_constants::kDefaultArea());
 
   // callback function for rtt change
   void processRttChange(
@@ -546,7 +553,8 @@ class Spark final : public OpenrEventLoop {
         uint64_t seqNum,
         std::unique_ptr<fbzmq::ZmqTimeout> holdTimer,
         const std::chrono::milliseconds& samplingPeriod,
-        std::function<void(const int64_t&)> rttChangeCb);
+        std::function<void(const int64_t&)> rttChangeCb,
+        std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
     // Neighbor info
     thrift::SparkNeighbor info;
@@ -581,6 +589,9 @@ class Spark final : public OpenrEventLoop {
 
     // detect rtt changes
     StepDetector<int64_t, std::chrono::milliseconds> stepDetector;
+
+    // area on which adjacency is formed
+    std::string area{};
   };
 
   std::unordered_map<

@@ -11,6 +11,7 @@ namespace py openr.Spark
 namespace py3 openr.thrift
 
 include "Network.thrift"
+include "KvStore.thrift"
 
 //
 // The below uses "required" a lot. This helps with
@@ -156,9 +157,8 @@ struct SparkHandshakeMsg {
   8: i32 kvStorePubPort
   9: i32 kvStoreCmdPort
 
-  // area string
+  // area identifier
   10: string area
-
 }
 
 //
@@ -207,8 +207,8 @@ struct SparkNeighborEvent {
   5: required i32 label   // Derived based off of ifIndex (local per node)
   // support flood optimization or not
   6: bool supportFloodOptimization = 0
-  // area on which adjacency will be formed
-  7: optional string area
+  // area ID
+  7: string area = KvStore.kDefaultArea
 }
 
 //

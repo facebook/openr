@@ -102,9 +102,6 @@ struct Adjacency {
 
   // interface the originator (peer) discover this node
   11: string otherIfName = ""
-
-  // openr area on which adjacency is formed
-  12: optional string area
 }
 
 // full link state information of a single router
@@ -126,6 +123,9 @@ struct AdjacencyDatabase {
 
   // Optional attribute to measure convergence performance
   5: optional PerfEvents perfEvents;
+
+  // openr area on which adjacency is formed
+  6: optional string area
 }
 
 //

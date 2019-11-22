@@ -62,26 +62,6 @@ using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 
 //
-// createAdjDb(...) defined in Util.h uses a default overloadBit = false
-//
-inline thrift::AdjacencyDatabase
-createAdjDb(
-    const std::string& nodeName,
-    const std::vector<thrift::Adjacency>& adjs,
-    int32_t nodeLabel,
-    bool overloadBit = false) {
-  auto adjDb = thrift::AdjacencyDatabase(
-      apache::thrift::FRAGILE,
-      nodeName,
-      overloadBit,
-      adjs,
-      nodeLabel,
-      thrift::PerfEvents());
-  adjDb.perfEvents = folly::none;
-  return adjDb;
-}
-
-//
 // Start the decision thread and simulate KvStore communications
 // Expect proper RouteDatabase publications to appear
 //
@@ -359,8 +339,7 @@ createAdjacencyEntry(
       100,
       10000 /* timestamp */,
       1 /* weight */,
-      otherIfName,
-      folly::none));
+      otherIfName));
 }
 
 // Get ifName
@@ -394,8 +373,7 @@ createFabricAdjacency(
       100,
       10000 /* timestamp */,
       1 /* weight */,
-      getFabricIfName(otherName, sourceNodeName),
-      folly::none));
+      getFabricIfName(otherName, sourceNodeName)));
 }
 
 // Add one adjacency to node at grid(row, col)

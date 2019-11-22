@@ -53,10 +53,17 @@ struct AdjacencyValue {
   thrift::PeerSpec peerSpec;
   thrift::Adjacency adjacency;
   bool isRestarting{false};
+  std::string area{};
   AdjacencyValue() {}
   AdjacencyValue(
-      thrift::PeerSpec spec, thrift::Adjacency adj, bool restarting = false)
-      : peerSpec(spec), adjacency(adj), isRestarting(restarting) {}
+      thrift::PeerSpec spec,
+      thrift::Adjacency adj,
+      bool restarting = false,
+      std::string areaId = openr::thrift::KvStore_constants::kDefaultArea())
+      : peerSpec(spec),
+        adjacency(adj),
+        isRestarting(restarting),
+        area(areaId) {}
 };
 
 //
@@ -122,7 +129,9 @@ class LinkMonitor final : public OpenrEventLoop {
       std::chrono::milliseconds flapInitalBackoff,
       std::chrono::milliseconds flapMaxBackoff,
       // ttl for a key in the keyvalue store
-      std::chrono::milliseconds ttlKeyInKvStore);
+      std::chrono::milliseconds ttlKeyInKvStore,
+      const std::unordered_set<std::string>& areas = {
+          openr::thrift::KvStore_constants::kDefaultArea()});
 
   ~LinkMonitor() override = default;
 
@@ -137,7 +146,8 @@ class LinkMonitor final : public OpenrEventLoop {
   // create required peers <nodeName: PeerSpec> map from current adjacencies_
   static std::unordered_map<std::string, thrift::PeerSpec>
   getPeersFromAdjacencies(
-      const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies);
+      const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
  private:
   // make no-copy
@@ -158,10 +168,14 @@ class LinkMonitor final : public OpenrEventLoop {
       const thrift::SparkNeighborEvent& event);
 
   void neighborRestartingEvent(
-      const std::string& remoteNodeName, const std::string& ifName);
+      const std::string& remoteNodeName,
+      const std::string& ifName,
+      const std::string& area);
 
   void neighborDownEvent(
-      const std::string& remoteNodeName, const std::string& ifName);
+      const std::string& remoteNodeName,
+      const std::string& ifName,
+      const std::string& area);
 
   // Used for initial interface discovery and periodic sync with system handler
   // return true if sync is successful
@@ -176,9 +190,17 @@ class LinkMonitor final : public OpenrEventLoop {
   // in this case, the above delta will miss these peers, advertise them
   // if peer-spec matches
   void advertiseKvStorePeers(
+      const std::string& area,
       const std::unordered_map<std::string, thrift::PeerSpec>& upPeers = {});
 
-  // Advertise my adjacencies_ to the KvStore
+  // advertise to all areas
+  void advertiseKvStorePeers(
+      const std::unordered_map<std::string, thrift::PeerSpec>& upPeers = {});
+
+  // Advertise my adjacencies_ to the KvStore to a specific area
+  void advertiseAdjacencies(const std::string& area);
+
+  // Advertise my adjacencies_ to the KvStore to all areas
   void advertiseAdjacencies();
 
   // Advertise interfaces and addresses to Spark/Fib and PrefixManager
@@ -308,7 +330,10 @@ class LinkMonitor final : public OpenrEventLoop {
   std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies_;
 
   // Previously announced KvStore peers
-  std::unordered_map<std::string, thrift::PeerSpec> peers_;
+  std::unordered_map<
+      std::string /* area */,
+      std::unordered_map<std::string /* node name */, thrift::PeerSpec>>
+      peers_;
 
   // all interfaces states, including DOWN one
   // Keyed by interface Name
@@ -342,7 +367,8 @@ class LinkMonitor final : public OpenrEventLoop {
   std::unique_ptr<KvStoreClient> kvStoreClient_;
 
   // RangAlloctor to get unique nodeLabel for this node
-  std::unique_ptr<RangeAllocator<int32_t>> rangeAllocator_;
+  std::unordered_map<std::string /* area */, RangeAllocator<int32_t>>
+      rangeAllocator_;
 
   // client to interact with ZmqMonitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
@@ -352,6 +378,9 @@ class LinkMonitor final : public OpenrEventLoop {
 
   // client to interact with PrefixManager
   std::unique_ptr<PrefixManagerClient> prefixManagerClient_;
+
+  // areas_ configured on this node
+  std::unordered_set<std::string> areas_{};
 }; // LinkMonitor
 
 } // namespace openr

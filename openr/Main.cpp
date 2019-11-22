@@ -465,7 +465,8 @@ main(int argc, char** argv) {
     kvstoreRate = std::nullopt;
   }
 
-  folly::Optional<std::unordered_set<std::string>> areas = folly::none;
+  std::unordered_set<std::string> areas{
+      openr::thrift::KvStore_constants::kDefaultArea()};
   auto nodeAreas = folly::gen::split(FLAGS_areas, ",") |
       folly::gen::eachTo<std::string>() |
       folly::gen::as<std::unordered_set<std::string>>();
@@ -498,12 +499,12 @@ main(int argc, char** argv) {
           std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms),
           FLAGS_enable_flood_optimization,
           FLAGS_is_flood_root,
-          FLAGS_use_flood_optimization));
+          FLAGS_use_flood_optimization,
+          areas));
 
   const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{
       moduleTypeToEvl.at(OpenrModuleType::KVSTORE)->inprocCmdUrl};
 
-  // start prefix manager
   startEventLoop(
       allThreads,
       orderedEventLoops,
@@ -520,13 +521,17 @@ main(int argc, char** argv) {
           FLAGS_enable_perf_measurement,
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms),
-          context));
+          context,
+          areas));
 
   const PrefixManagerLocalCmdUrl prefixManagerLocalCmdUrl{
       moduleTypeToEvl.at(OpenrModuleType::PREFIX_MANAGER)->inprocCmdUrl};
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (FLAGS_enable_prefix_alloc) {
-    // start prefix allocator
+    // start prefix allocator only if default area is configured
+    // prefix allocator is supported only for default area configuration
+    CHECK_EQ(areas.count(openr::thrift::KvStore_constants::kDefaultArea()), 1);
+    CHECK_EQ(areas.size(), 1);
     PrefixAllocatorMode allocMode;
     if (FLAGS_static_prefix_alloc) {
       allocMode = PrefixAllocatorModeStatic();
@@ -726,7 +731,8 @@ main(int argc, char** argv) {
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms),
-          std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms)));
+          std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms),
+          areas));
 
   // Wait for the above two threads to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module
@@ -761,6 +767,12 @@ main(int argc, char** argv) {
           monitorSubmitUrl,
           context));
 
+  // FIB ordering works only in single area configuration
+  // verify 'default area' is configured and it's the only one configured
+  if (FLAGS_enable_ordered_fib_programming) {
+    CHECK_EQ(areas.count(openr::thrift::KvStore_constants::kDefaultArea()), 1);
+    CHECK_EQ(areas.size(), 1);
+  }
   // Define and start Fib Module
   startEventLoop(
       allThreads,
@@ -782,8 +794,9 @@ main(int argc, char** argv) {
           kvStoreLocalPubUrl,
           context));
 
-  // Define and start HealthChecker
-  if (FLAGS_enable_health_checker) {
+  // Define and start HealthChecker only if default area is present
+  if (FLAGS_enable_health_checker &&
+      areas.count(openr::thrift::KvStore_constants::kDefaultArea())) {
     startEventLoop(
         allThreads,
         orderedEventLoops,

@@ -97,7 +97,8 @@ LinkMonitor::LinkMonitor(
     std::chrono::seconds adjHoldTime,
     std::chrono::milliseconds flapInitialBackoff,
     std::chrono::milliseconds flapMaxBackoff,
-    std::chrono::milliseconds ttlKeyInKvStore)
+    std::chrono::milliseconds ttlKeyInKvStore,
+    const std::unordered_set<std::string>& areas)
     : OpenrEventLoop(nodeId, thrift::OpenrModuleType::LINK_MONITOR, zmqContext),
       nodeId_(nodeId),
       platformThriftPort_(platformThriftPort),
@@ -133,10 +134,13 @@ LinkMonitor::LinkMonitor(
           fbzmq::NonblockingFlag{true}),
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff) {
+      expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
+      areas_(areas) {
   // Create throttled adjacency advertiser
   advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       this, Constants::kLinkThrottleTimeout, [this]() noexcept {
+        // will advertise to all areas but will not trigger a adj key update
+        // if nothing changed. For peers no action is taken if nothing changed
         advertiseKvStorePeers();
         advertiseAdjacencies();
       });
@@ -188,26 +192,35 @@ LinkMonitor::LinkMonitor(
 
   if (enableSegmentRouting) {
     // create range allocator to get unique node labels
-    rangeAllocator_ = std::make_unique<RangeAllocator<int32_t>>(
-        nodeId_,
-        Constants::kNodeLabelRangePrefix.toString(),
-        kvStoreClient_.get(),
-        [&](folly::Optional<int32_t> newVal) noexcept {
-          config_.nodeLabel = newVal ? newVal.value() : 0;
-          advertiseAdjacencies();
-        },
-        std::chrono::milliseconds(100),
-        std::chrono::seconds(2),
-        false /* override owner */);
+    for (const auto& area : areas_) {
+      rangeAllocator_.emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(area),
+          std::forward_as_tuple(
+              nodeId_,
+              Constants::kNodeLabelRangePrefix.toString(),
+              kvStoreClient_.get(),
+              [&](folly::Optional<int32_t> newVal) noexcept {
+                config_.nodeLabel = newVal ? newVal.value() : 0;
+                advertiseAdjacencies();
+              },
+              std::chrono::milliseconds(100),
+              std::chrono::seconds(2),
+              false /* override owner */,
+              nullptr,
+              Constants::kRangeAllocTtl,
+              area));
 
-    // Delay range allocation until we have formed all of our adjcencies
-    scheduleTimeoutAt(adjHoldUntilTimePoint_, [this]() {
-      folly::Optional<int32_t> initValue;
-      if (config_.nodeLabel != 0) {
-        initValue = config_.nodeLabel;
-      }
-      rangeAllocator_->startAllocator(Constants::kSrGlobalRange, initValue);
-    });
+      // Delay range allocation until we have formed all of our adjcencies
+      scheduleTimeoutAt(adjHoldUntilTimePoint_, [this, &area]() {
+        folly::Optional<int32_t> initValue;
+        if (config_.nodeLabel != 0) {
+          initValue = config_.nodeLabel;
+        }
+        rangeAllocator_.at(area).startAllocator(
+            Constants::kSrGlobalRange, initValue);
+      });
+    }
   }
 
   // Initialize ZMQ sockets
@@ -336,7 +349,8 @@ LinkMonitor::prepare() noexcept {
         VLOG(1) << "Received neighbor event for " << event.neighbor.nodeName
                 << " from " << event.neighbor.ifName << " at " << event.ifName
                 << " with addrs " << toString(neighborAddrV6) << " and "
-                << (enableV4_ ? toString(neighborAddrV4) : "");
+                << (enableV4_ ? toString(neighborAddrV4) : "")
+                << " Area:" << event.area;
 
         switch (event.eventType) {
         case thrift::SparkNeighborEventType::NEIGHBOR_UP: {
@@ -347,7 +361,8 @@ LinkMonitor::prepare() noexcept {
 
         case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING: {
           logNeighborEvent(event);
-          neighborRestartingEvent(event.neighbor.nodeName, event.ifName);
+          neighborRestartingEvent(
+              event.neighbor.nodeName, event.ifName, event.area);
           break;
         }
 
@@ -359,7 +374,7 @@ LinkMonitor::prepare() noexcept {
 
         case thrift::SparkNeighborEventType::NEIGHBOR_DOWN: {
           logNeighborEvent(event);
-          neighborDownEvent(event.neighbor.nodeName, event.ifName);
+          neighborDownEvent(event.neighbor.nodeName, event.ifName, event.area);
           break;
         }
 
@@ -511,6 +526,7 @@ LinkMonitor::neighborUpEvent(
   const std::string& ifName = event.ifName;
   const std::string& remoteNodeName = event.neighbor.nodeName;
   const std::string& remoteIfName = event.neighbor.ifName;
+  const std::string& area = event.area;
   const auto adjId = std::make_pair(remoteNodeName, ifName);
   const int32_t neighborKvStorePubPort = event.neighbor.kvStorePubPort;
   const int32_t neighborKvStoreCmdPort = event.neighbor.kvStoreCmdPort;
@@ -537,14 +553,13 @@ LinkMonitor::neighborUpEvent(
       useRttMetric_ ? event.rttUs : 0,
       timestamp,
       weight,
-      remoteIfName /* otherIfName */,
-      event.area);
+      remoteIfName /* otherIfName */);
 
-  SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is up on interface "
-               << ifName << ". Remote Interface: " << remoteIfName
-               << ", metric: " << newAdj.metric << ", rttUs: " << event.rttUs
-               << ", addrV4: " << toString(neighborAddrV4)
-               << ", addrV6: " << toString(neighborAddrV6);
+  SYSLOG(INFO)
+      << "Neighbor " << remoteNodeName << " is up on interface " << ifName
+      << ". Remote Interface: " << remoteIfName << ", metric: " << newAdj.metric
+      << ", rttUs: " << event.rttUs << ", addrV4: " << toString(neighborAddrV4)
+      << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area;
   tData_.addStatValue("link_monitor.neighbor_up", 1, fbzmq::SUM);
 
   std::string pubUrl, repUrl;
@@ -572,10 +587,11 @@ LinkMonitor::neighborUpEvent(
   // 2) does not change: the existing connection to a neighbor is retained
   const auto& peerSpec =
       thrift::PeerSpec(FRAGILE, pubUrl, repUrl, event.supportFloodOptimization);
-  adjacencies_[adjId] = AdjacencyValue(peerSpec, std::move(newAdj));
+  adjacencies_[adjId] =
+      AdjacencyValue(peerSpec, std::move(newAdj), false, area);
 
   // Advertise KvStore peers immediately
-  advertiseKvStorePeers({{remoteNodeName, peerSpec}});
+  advertiseKvStorePeers(area, {{remoteNodeName, peerSpec}});
 
   // Advertise new adjancies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
@@ -583,42 +599,49 @@ LinkMonitor::neighborUpEvent(
 
 void
 LinkMonitor::neighborDownEvent(
-    const std::string& remoteNodeName, const std::string& ifName) {
+    const std::string& remoteNodeName,
+    const std::string& ifName,
+    const std::string& area) {
   const auto adjId = std::make_pair(remoteNodeName, ifName);
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is down on interface "
                << ifName;
   tData_.addStatValue("link_monitor.neighbor_down", 1, fbzmq::SUM);
 
-  // remove such adjacencies
-  adjacencies_.erase(adjId);
-
+  auto adjValueIt = adjacencies_.find(adjId);
+  if (adjValueIt != adjacencies_.end()) {
+    // remove such adjacencies
+    adjacencies_.erase(adjValueIt);
+  }
   // advertise both peers and adjacencies
-  advertiseKvStorePeers();
-  advertiseAdjacencies();
+  advertiseKvStorePeers(area);
+  advertiseAdjacencies(area);
 }
 
 void
 LinkMonitor::neighborRestartingEvent(
-    const std::string& remoteNodeName, const std::string& ifName) {
+    const std::string& remoteNodeName,
+    const std::string& ifName,
+    const std::string& area) {
   const auto adjId = std::make_pair(remoteNodeName, ifName);
   SYSLOG(INFO) << "Neighbor " << remoteNodeName
                << " is restarting on interface " << ifName;
 
   // update adjacencies_ restarting-bit and advertise peers
-  if (adjacencies_.count(adjId)) {
-    adjacencies_.at(adjId).isRestarting = true;
+  auto adjValueIt = adjacencies_.find(adjId);
+  if (adjValueIt != adjacencies_.end()) {
+    adjValueIt->second.isRestarting = true;
   }
-  advertiseKvStorePeers();
+  advertiseKvStorePeers(area);
 }
 
 std::unordered_map<std::string, thrift::PeerSpec>
 LinkMonitor::getPeersFromAdjacencies(
-    const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies) {
+    const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
+    const std::string& area) {
   std::unordered_map<std::string, std::string> neighborToIface;
   for (const auto& adjKv : adjacencies) {
-    if (adjKv.second.isRestarting) {
-      // ignore restarting adj
+    if (adjKv.second.area != area || adjKv.second.isRestarting) {
       continue;
     }
     const auto& nodeName = adjKv.first.first;
@@ -644,11 +667,12 @@ LinkMonitor::getPeersFromAdjacencies(
 
 void
 LinkMonitor::advertiseKvStorePeers(
+    const std::string& area,
     const std::unordered_map<std::string, thrift::PeerSpec>& upPeers) {
   // Get old and new peer list. Also update local state
-  const auto oldPeers = std::move(peers_);
-  peers_ = getPeersFromAdjacencies(adjacencies_);
-  const auto& newPeers = peers_;
+  const auto oldPeers = std::move(peers_[area]);
+  peers_[area] = getPeersFromAdjacencies(adjacencies_, area);
+  const auto& newPeers = peers_[area];
 
   // Get list of peers to delete
   std::vector<std::string> toDelPeers;
@@ -662,7 +686,7 @@ LinkMonitor::advertiseKvStorePeers(
 
   // Delete old peers
   if (toDelPeers.size() > 0) {
-    const auto ret = kvStoreClient_->delPeers(toDelPeers);
+    const auto ret = kvStoreClient_->delPeers(toDelPeers, area);
     CHECK(ret) << ret.error();
   }
 
@@ -684,13 +708,13 @@ LinkMonitor::advertiseKvStorePeers(
     const auto& name = upPeer.first;
     const auto& spec = upPeer.second;
     // upPeer MUST already be in current state peers_
-    CHECK(peers_.count(name));
+    CHECK(peers_.at(area).count(name));
 
     if (toAddPeers.count(name)) {
       // already added, skip it
       continue;
     }
-    if (spec != peers_.at(name)) {
+    if (spec != peers_.at(area).at(name)) {
       // spec does not match, skip it
       continue;
     }
@@ -699,28 +723,41 @@ LinkMonitor::advertiseKvStorePeers(
 
   // Add new peers
   if (toAddPeers.size() > 0) {
-    const auto ret = kvStoreClient_->addPeers(std::move(toAddPeers));
+    const auto ret = kvStoreClient_->addPeers(std::move(toAddPeers), area);
     CHECK(ret) << ret.error();
   }
 }
 
 void
-LinkMonitor::advertiseAdjacencies() {
+LinkMonitor::advertiseKvStorePeers(
+    const std::unordered_map<std::string, thrift::PeerSpec>& upPeers) {
+  // Get old and new peer list. Also update local state
+  for (const auto& area : areas_) {
+    advertiseKvStorePeers(area, upPeers);
+  }
+}
+
+void
+LinkMonitor::advertiseAdjacencies(const std::string& area) {
   if (std::chrono::steady_clock::now() < adjHoldUntilTimePoint_) {
     // Too early for advertising my own adjacencies. Let timeout advertise it
     // and skip here.
     return;
   }
 
-  // Update KvStore
   auto adjDb = thrift::AdjacencyDatabase();
   adjDb.thisNodeName = nodeId_;
   adjDb.isOverloaded = config_.isOverloaded;
   adjDb.nodeLabel = config_.nodeLabel;
+  adjDb.area = area;
   for (const auto& adjKv : adjacencies_) {
     // 'second.second' is the adj object for this peer
+    // must match the area
+    if (adjKv.second.area != area) {
+      continue;
+    }
     // NOTE: copy on purpose
-    auto adj = adjKv.second.adjacency;
+    auto adj = folly::copy(adjKv.second.adjacency);
 
     // Set link overload bit
     adj.isOverloaded = config_.overloadedLinks.count(adj.ifName) > 0;
@@ -749,10 +786,10 @@ LinkMonitor::advertiseAdjacencies() {
   }
 
   LOG(INFO) << "Updating adjacency database in KvStore with "
-            << adjDb.adjacencies.size() << " entries.";
+            << adjDb.adjacencies.size() << " entries in area: " << area;
   const auto keyName = adjacencyDbMarker_ + nodeId_;
   std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
-  kvStoreClient_->persistKey(keyName, adjDbStr, ttlKeyInKvStore_);
+  kvStoreClient_->persistKey(keyName, adjDbStr, ttlKeyInKvStore_, area);
   tData_.addStatValue("link_monitor.advertise_adjacencies", 1, fbzmq::SUM);
 
   // Config is most likely to have changed. Update it in `ConfigStore`
@@ -761,6 +798,15 @@ LinkMonitor::advertiseAdjacencies() {
   // Cancel throttle timeout if scheduled
   if (advertiseAdjacenciesThrottled_->isActive()) {
     advertiseAdjacenciesThrottled_->cancel();
+  }
+}
+void
+LinkMonitor::advertiseAdjacencies() {
+  // advertise to all areas. Once area configuration per link is implemented
+  // then adjacencies can be advertised to a specific area
+  for (const auto& area : areas_) {
+    // Update KvStore
+    advertiseAdjacencies(area);
   }
 }
 

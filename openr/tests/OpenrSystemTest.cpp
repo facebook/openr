@@ -50,10 +50,10 @@ using apache::thrift::CompactSerializer;
 
 namespace {
 
-const std::chrono::seconds kMaxOpenrSyncTime(10);
+const std::chrono::seconds kMaxOpenrSyncTime(3);
 
 const std::chrono::seconds kKvStoreDbSyncInterval(1);
-const std::chrono::seconds kKvStoreMonitorSubmitInterval(3600);
+const std::chrono::seconds kKvStoreMonitorSubmitInterval(1);
 const std::chrono::milliseconds kSparkHoldTime(1000);
 const std::chrono::milliseconds kSparkKeepAliveTime(20);
 const std::chrono::milliseconds kSparkFastInitKeepAliveTime(20);

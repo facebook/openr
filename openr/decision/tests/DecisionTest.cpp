@@ -3543,8 +3543,7 @@ addAdj(
       100,
       10000 /* timestamp */,
       1 /* weight */,
-      otherIfName,
-      folly::none));
+      otherIfName));
 }
 
 string

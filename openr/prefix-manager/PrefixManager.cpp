@@ -37,7 +37,8 @@ PrefixManager::PrefixManager(
     bool enablePerfMeasurement,
     const std::chrono::seconds prefixHoldTime,
     const std::chrono::milliseconds ttlKeyInKvStore,
-    fbzmq::Context& zmqContext)
+    fbzmq::Context& zmqContext,
+    const std::unordered_set<std::string>& areas)
     : OpenrEventLoop(
           nodeId, thrift::OpenrModuleType::PREFIX_MANAGER, zmqContext),
       nodeId_(nodeId),
@@ -49,7 +50,8 @@ PrefixManager::PrefixManager(
           std::chrono::steady_clock::now() + prefixHoldTime),
       ttlKeyInKvStore_(ttlKeyInKvStore),
       kvStoreClient_{
-          zmqContext, this, nodeId_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl} {
+          zmqContext, this, nodeId_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl},
+      areas_{areas} {
   // pick up prefixes from disk
   auto maybePrefixDb =
       configStoreClient_.loadThriftObj<thrift::PrefixDatabase>(kConfigKey);
@@ -189,12 +191,16 @@ PrefixManager::advertisePrefixWithdraw(const thrift::PrefixEntry& prefixEntry) {
       nodeId_,
       folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
       thrift::KvStore_constants::kDefaultArea());
-  VLOG(1) << "Withdrawing prefix " << prefixKey.getPrefixKey()
-          << " from KvStore";
-  kvStoreClient_.clearKey(
-      prefixKey.getPrefixKey(),
-      serializePrefixDb(std::move(prefixDb)),
-      ttlKeyInKvStore_);
+  for (const auto& area : areas_) {
+    VLOG(1) << "Withdrawing prefix " << prefixKey.getPrefixKey()
+            << " from KvStore"
+            << " area:" << area;
+    kvStoreClient_.clearKey(
+        prefixKey.getPrefixKey(),
+        serializePrefixDb(std::move(prefixDb)),
+        ttlKeyInKvStore_,
+        area);
+  }
 }
 
 void
@@ -208,12 +214,16 @@ PrefixManager::advertisePrefix(const thrift::PrefixEntry& prefixEntry) {
       nodeId_,
       folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
       thrift::KvStore_constants::kDefaultArea());
-  VLOG(1) << "Advertising prefix " << prefixKey.getPrefixKey()
-          << " to KvStore ";
-  kvStoreClient_.persistKey(
-      prefixKey.getPrefixKey(),
-      serializePrefixDb(std::move(prefixDb)),
-      ttlKeyInKvStore_);
+  for (const auto& area : areas_) {
+    VLOG(1) << "Advertising prefix " << prefixKey.getPrefixKey()
+            << " to KvStore "
+            << " area:" << area;
+    kvStoreClient_.persistKey(
+        prefixKey.getPrefixKey(),
+        serializePrefixDb(std::move(prefixDb)),
+        ttlKeyInKvStore_,
+        area);
+  }
 }
 
 void
@@ -254,10 +264,15 @@ PrefixManager::updateKvStore() {
 
   const auto prefixDbKey = folly::sformat(
       "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_);
-  LOG(INFO) << "Updating all " << prefixDb.prefixEntries.size()
-            << " prefixes in KvStore " << prefixDbKey;
-  kvStoreClient_.persistKey(
-      prefixDbKey, serializePrefixDb(std::move(prefixDb)), ttlKeyInKvStore_);
+  for (const auto& area : areas_) {
+    LOG(INFO) << "Updating all " << prefixDb.prefixEntries.size()
+              << " prefixes in KvStore " << prefixDbKey << " area:" << area;
+    kvStoreClient_.persistKey(
+        prefixDbKey,
+        serializePrefixDb(std::move(prefixDb)),
+        ttlKeyInKvStore_,
+        area);
+  }
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
