@@ -55,3 +55,6 @@ class Consts(object):
         + r"\[(?P<ipaddr>[a-fA-F0-9\.\:].*)/"
         + r"(?P<plen>[0-9]{1,3})\]"
     )
+
+    # Openr version at which area feature was added
+    OPENR_AREA_VERSION = 20191122

@@ -173,6 +173,12 @@ service OpenrCtrl extends fb303.FacebookService {
     throws (1: OpenrError error)
 
   //
+  // Get area feature configuration
+  //
+  KvStore.AreasConfig getAreasConfig()
+    throws (1: OpenrError error)
+
+  //
   // KvStore APIs
   //
 
@@ -184,16 +190,41 @@ service OpenrCtrl extends fb303.FacebookService {
     throws (1: OpenrError error)
 
   /**
+   * with area option
+   */
+  KvStore.Publication getKvStoreKeyValsArea(
+    1: list<string> filterKeys,
+    2: string area =  KvStore.kDefaultArea
+  ) throws (1: OpenrError error)
+
+  /**
    * Get raw key-values from KvStore with more control over filter
    */
   KvStore.Publication getKvStoreKeyValsFiltered(1: KvStore.KeyDumpParams filter)
     throws (1: OpenrError error)
 
   /**
+   * Get raw key-values from KvStore with more control over filter with 'area'
+   * option
+   */
+  KvStore.Publication getKvStoreKeyValsFilteredArea(
+    1: KvStore.KeyDumpParams filter,
+    2: string area = KvStore.kDefaultArea
+  ) throws (1: OpenrError error)
+
+  /**
    * Get kvstore metadata (no values) with filter
    */
   KvStore.Publication getKvStoreHashFiltered(1: KvStore.KeyDumpParams filter)
     throws (1: OpenrError error)
+
+  /**
+   * with area
+   */
+  KvStore.Publication getKvStoreHashFilteredArea(
+    1: KvStore.KeyDumpParams filter,
+    2: string area =  KvStore.kDefaultArea
+  ) throws (1: OpenrError error)
 
   /**
    * Set/Update key-values in KvStore.
@@ -218,38 +249,51 @@ service OpenrCtrl extends fb303.FacebookService {
   /**
    * Send Dual message
    */
-  void processKvStoreDualMessage(1: Dual.DualMessages messages)
-    throws (1: OpenrError error)
+  void processKvStoreDualMessage(
+    1: Dual.DualMessages messages
+    2: string area = KvStore.kDefaultArea
+  ) throws (1: OpenrError error)
 
   /**
    * Set flood-topology parameters. Called by neighbors
    */
-  void updateFloodTopologyChild(1: KvStore.FloodTopoSetParams params)
-    throws (1: OpenrError error)
+  void updateFloodTopologyChild(
+    1: KvStore.FloodTopoSetParams params,
+    2: string area = KvStore.kDefaultArea
+  ) throws (1: OpenrError error)
 
   /**
    * Get spanning tree information
    */
-  KvStore.SptInfos getSpanningTreeInfos() throws (1: OpenrError error);
+  KvStore.SptInfos getSpanningTreeInfos(
+    1: string area
+  ) throws (1: OpenrError error);
 
   /**
    * Add/Update KvStore peer - usually not to be used by external peers unless
    * you know what you're doing.
    */
-  void addUpdateKvStorePeers(1: KvStore.PeersMap peers)
-    throws (1: OpenrError error)
+  void addUpdateKvStorePeers(
+    1: KvStore.PeersMap peers,
+    2: string area = KvStore.kDefaultArea
+  ) throws (1: OpenrError error)
 
   /**
    * Delete KvStore peers
    */
-  void deleteKvStorePeers(1: list<string> peerNames)
-    throws (1: OpenrError error)
+  void deleteKvStorePeers(
+    1: list<string> peerNames,
+    2: string area = KvStore.kDefaultArea
+  ) throws (1: OpenrError error)
 
   /**
    * Get KvStore peers
    */
   KvStore.PeersMap getKvStorePeers() throws (1: OpenrError error)
 
+  KvStore.PeersMap getKvStorePeersArea(
+    1: string area
+  ) throws (1: OpenrError error)
   //
   // LinkMonitor APIs
   //

@@ -139,18 +139,35 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   //
   // KvStore APIs
   //
+  folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>>
+  semifuture_getAreasConfig() override;
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
   semifuture_getKvStoreKeyVals(
       std::unique_ptr<std::vector<std::string>> filterKeys) override;
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_getKvStoreKeyValsArea(
+      std::unique_ptr<std::vector<std::string>> filterKeys,
+      std::unique_ptr<std::string> area) override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
   semifuture_getKvStoreKeyValsFiltered(
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_getKvStoreKeyValsFilteredArea(
+      std::unique_ptr<thrift::KeyDumpParams> filter,
+      std::unique_ptr<std::string> area) override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
   semifuture_getKvStoreHashFiltered(
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+  semifuture_getKvStoreHashFilteredArea(
+      std::unique_ptr<thrift::KeyDumpParams> filter,
+      std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::unique_ptr<thrift::KeySetParams> setParams,
@@ -160,22 +177,29 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
-      std::unique_ptr<thrift::DualMessages> messages) override;
+      std::unique_ptr<thrift::DualMessages> messages,
+      std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<folly::Unit> semifuture_updateFloodTopologyChild(
-      std::unique_ptr<thrift::FloodTopoSetParams> params) override;
+      std::unique_ptr<thrift::FloodTopoSetParams> params,
+      std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
-  semifuture_getSpanningTreeInfos() override;
+  semifuture_getSpanningTreeInfos(std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<folly::Unit> semifuture_addUpdateKvStorePeers(
-      std::unique_ptr<thrift::PeersMap> peers) override;
+      std::unique_ptr<thrift::PeersMap> peers,
+      std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<folly::Unit> semifuture_deleteKvStorePeers(
-      std::unique_ptr<std::vector<std::string>> peerNames) override;
+      std::unique_ptr<std::vector<std::string>> peerNames,
+      std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeers() override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
+  semifuture_getKvStorePeersArea(std::unique_ptr<std::string> area) override;
 
   // Intentionally not use SemiFuture as stream is async by nature and we will
   // immediately create and return the stream handler

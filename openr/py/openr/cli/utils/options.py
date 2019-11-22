@@ -42,6 +42,7 @@ OPTIONS = bunch.Bunch(
         "timeout": Consts.TIMEOUT_MS,
         "verbose": False,
         "zmq_ctx": zmq.Context(),
+        "area": "",
     }
 )
 

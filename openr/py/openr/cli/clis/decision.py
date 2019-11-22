@@ -51,11 +51,12 @@ class PathCli(object):
         help="destination node or prefix, " "default will be the current host",
     )
     @click.option("--max-hop", default=256, help="max hop count")
+    @click.option("--area", default=None, help="area identifier")
     @click.pass_obj
-    def path(cli_opts, src, dst, max_hop):  # noqa: B902
+    def path(cli_opts, src, dst, max_hop, area):  # noqa: B902
         """ path from src to dst """
 
-        decision.PathCmd(cli_opts).run(src, dst, max_hop)
+        decision.PathCmd(cli_opts).run(src, dst, max_hop, area)
 
 
 class DecisionRoutesComputedCli(object):
@@ -164,8 +165,9 @@ class DecisionAdjCli(object):
 class DecisionValidateCli(object):
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.option("--area", default=None, help="area identifier")
     @click.pass_obj
-    def validate(cli_opts, json):  # noqa: B902
+    def validate(cli_opts, json, area):  # noqa: B902
         """
         Check all prefix & adj dbs in Decision against that in KvStore
 
@@ -195,5 +197,5 @@ class DecisionValidateCli(object):
             }
         """
 
-        return_code = decision.DecisionValidateCmd(cli_opts).run(json)
+        return_code = decision.DecisionValidateCmd(cli_opts).run(json, area)
         sys.exit(return_code)

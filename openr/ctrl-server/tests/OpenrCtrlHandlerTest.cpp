@@ -61,7 +61,9 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::nullopt,
         std::chrono::milliseconds(1),
         true /* enableFloodOptimization */,
-        true /* isFloodRoot */);
+        true /* isFloodRoot */,
+        std::unordered_set<std::string>{
+            thrift::KvStore_constants::kDefaultArea(), "plane", "pod"});
     kvStoreWrapper->run();
 
     // Create Decision module
@@ -434,6 +436,30 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   keyVals["key33"] = createThriftValue(1, "node33", std::string("value33"));
   keyVals["key333"] = createThriftValue(1, "node33", std::string("value333"));
 
+  thrift::KeyVals keyValsPod;
+  keyValsPod["keyPod1"] =
+      createThriftValue(1, "node1", std::string("valuePod1"));
+  keyValsPod["keyPod2"] =
+      createThriftValue(1, "node1", std::string("valuePod2"));
+
+  thrift::KeyVals keyValsPlane;
+  keyValsPlane["keyPlane1"] =
+      createThriftValue(1, "node1", std::string("valuePlane1"));
+  keyValsPlane["keyPlane2"] =
+      createThriftValue(1, "node1", std::string("valuePlane2"));
+  //
+  // area list get
+  //
+  {
+    thrift::AreasConfig area;
+    openrCtrlThriftClient_->sync_getAreasConfig(area);
+    EXPECT_EQ(3, area.areas.size());
+    EXPECT_EQ(area.areas.count("plane"), 1);
+    EXPECT_EQ(area.areas.count("pod"), 1);
+    EXPECT_EQ(area.areas.count(thrift::KvStore_constants::kDefaultArea()), 1);
+    EXPECT_EQ(area.areas.count("none"), 0);
+  }
+
   //
   // Key set/get
   //
@@ -451,6 +477,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
     openrCtrlThriftClient_->sync_setKvStoreKeyValsOneWay(
         setParams, thrift::KvStore_constants::kDefaultArea());
+
+    thrift::KeySetParams setParamsPod;
+    setParamsPod.keyVals = keyValsPod;
+    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParamsPod, "pod");
+
+    thrift::KeySetParams setParamsPlane;
+    setParamsPlane.keyVals = keyValsPlane;
+    openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParamsPlane, "plane");
   }
 
   {
@@ -460,6 +494,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(2, pub.keyVals.size());
     EXPECT_EQ(keyVals.at("key2"), pub.keyVals["key2"]);
     EXPECT_EQ(keyVals.at("key11"), pub.keyVals["key11"]);
+  }
+  // pod keys
+  {
+    std::vector<std::string> filterKeys{"keyPod1"};
+    thrift::Publication pub;
+    openrCtrlThriftClient_->sync_getKvStoreKeyValsArea(pub, filterKeys, "pod");
+    EXPECT_EQ(1, pub.keyVals.size());
+    EXPECT_EQ(keyValsPod.at("keyPod1"), pub.keyVals["keyPod1"]);
   }
 
   {
@@ -473,6 +515,19 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(keyVals.at("key3"), pub.keyVals["key3"]);
     EXPECT_EQ(keyVals.at("key33"), pub.keyVals["key33"]);
     EXPECT_EQ(keyVals.at("key333"), pub.keyVals["key333"]);
+  }
+  // with areas
+  {
+    thrift::Publication pub;
+    thrift::KeyDumpParams params;
+    params.prefix = "keyP";
+    params.originatorIds.insert("node1");
+
+    openrCtrlThriftClient_->sync_getKvStoreKeyValsFilteredArea(
+        pub, params, "plane");
+    EXPECT_EQ(2, pub.keyVals.size());
+    EXPECT_EQ(keyValsPlane.at("keyPlane1"), pub.keyVals["keyPlane1"]);
+    EXPECT_EQ(keyValsPlane.at("keyPlane2"), pub.keyVals["keyPlane2"]);
   }
 
   {
@@ -500,18 +555,21 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::DualMessages messages;
-    openrCtrlThriftClient_->sync_processKvStoreDualMessage(messages);
+    openrCtrlThriftClient_->sync_processKvStoreDualMessage(
+        messages, thrift::KvStore_constants::kDefaultArea());
   }
 
   {
     thrift::FloodTopoSetParams params;
     params.rootId = nodeName;
-    openrCtrlThriftClient_->sync_updateFloodTopologyChild(params);
+    openrCtrlThriftClient_->sync_updateFloodTopologyChild(
+        params, thrift::KvStore_constants::kDefaultArea());
   }
 
   {
     thrift::SptInfos ret;
-    openrCtrlThriftClient_->sync_getSpanningTreeInfos(ret);
+    openrCtrlThriftClient_->sync_getSpanningTreeInfos(
+        ret, thrift::KvStore_constants::kDefaultArea());
     EXPECT_EQ(1, ret.infos.size());
     ASSERT_NE(ret.infos.end(), ret.infos.find(nodeName));
     EXPECT_EQ(0, ret.counters.neighborCounters.size());
@@ -535,11 +593,21 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
       {"peer2", createPeerSpec("inproc:://peer2-pub", "inproc://peer2-cmd")},
       {"peer3", createPeerSpec("inproc:://peer3-pub", "inproc://peer3-cmd")}};
 
+  // do the same with non-default area
+  const thrift::PeersMap peersPod{
+      {"peer11", createPeerSpec("inproc:://peer11-pub", "inproc://peer11-cmd")},
+      {"peer21", createPeerSpec("inproc:://peer21-pub", "inproc://peer21-cmd")},
+  };
+
   {
-    openrCtrlThriftClient_->sync_addUpdateKvStorePeers(peers);
+    openrCtrlThriftClient_->sync_addUpdateKvStorePeers(
+        peers, thrift::KvStore_constants::kDefaultArea());
+
+    openrCtrlThriftClient_->sync_addUpdateKvStorePeers(peersPod, "pod");
 
     thrift::PeersMap ret;
-    openrCtrlThriftClient_->sync_getKvStorePeers(ret);
+    openrCtrlThriftClient_->sync_getKvStorePeersArea(
+        ret, thrift::KvStore_constants::kDefaultArea());
 
     EXPECT_EQ(3, ret.size());
     EXPECT_EQ(peers.at("peer1"), ret.at("peer1"));
@@ -549,13 +617,35 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     std::vector<std::string> peersToDel{"peer2"};
-    openrCtrlThriftClient_->sync_deleteKvStorePeers(peersToDel);
+    openrCtrlThriftClient_->sync_deleteKvStorePeers(
+        peersToDel, thrift::KvStore_constants::kDefaultArea());
 
     thrift::PeersMap ret;
-    openrCtrlThriftClient_->sync_getKvStorePeers(ret);
+    openrCtrlThriftClient_->sync_getKvStorePeersArea(
+        ret, thrift::KvStore_constants::kDefaultArea());
     EXPECT_EQ(2, ret.size());
     EXPECT_EQ(peers.at("peer1"), ret.at("peer1"));
     EXPECT_EQ(peers.at("peer3"), ret.at("peer3"));
+  }
+
+  {
+    thrift::PeersMap ret;
+    openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, "pod");
+
+    EXPECT_EQ(2, ret.size());
+    EXPECT_EQ(peersPod.at("peer11"), ret.at("peer11"));
+    EXPECT_EQ(peersPod.at("peer21"), ret.at("peer21"));
+  }
+
+  {
+    std::vector<std::string> peersToDel{"peer21"};
+    openrCtrlThriftClient_->sync_deleteKvStorePeers(peersToDel, "pod");
+
+    thrift::PeersMap ret;
+    openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, "pod");
+    EXPECT_EQ(1, ret.size());
+    EXPECT_EQ(peersPod.at("peer11"), ret.at("peer11"));
+    EXPECT_EQ(ret.count("peer21"), 0);
   }
 
   //
@@ -631,9 +721,19 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
         key, createThriftValue(5, "node1", std::string("value1")));
     kvStoreWrapper->setKey(
         key, createThriftValue(6, "node1", std::string("value1")));
+    kvStoreWrapper->setKey(
+        key,
+        createThriftValue(7, "node1", std::string("value1")),
+        folly::none,
+        "pod");
+    kvStoreWrapper->setKey(
+        key,
+        createThriftValue(8, "node1", std::string("value1")),
+        folly::none,
+        "plane");
 
     // Check we should receive-3 updates
-    while (received < 3) {
+    while (received < 5) {
       std::this_thread::yield();
     }
 

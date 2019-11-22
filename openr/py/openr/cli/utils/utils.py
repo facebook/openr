@@ -18,7 +18,7 @@ from builtins import chr, input, map
 from collections import defaultdict
 from functools import partial
 from itertools import product
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import bunch
 import click
@@ -26,6 +26,7 @@ from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.Fib import ttypes as fib_types
 from openr.KvStore import ttypes as kv_store_types
+from openr.LinkMonitor import ttypes as lm_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.Platform import FibService, ttypes as platform_types
@@ -444,7 +445,8 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
             continue
         adjacencies.append(adj)
 
-    return (adj_db.nodeLabel, adj_db.isOverloaded, adjacencies)
+    area = adj_db.area if adj_db.area is not None else "N/A"
+    return (adj_db.nodeLabel, adj_db.isOverloaded, adjacencies, area)
 
 
 def adj_to_dict(adj):
@@ -465,7 +467,9 @@ def adj_to_dict(adj):
 def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
     """ convert adj db to dict """
 
-    node_label, is_overloaded, adjacencies = dump_adj_db_full(adj_dbs, adj_db, bidir)
+    node_label, is_overloaded, adjacencies, area = dump_adj_db_full(
+        adj_dbs, adj_db, bidir
+    )
 
     if not adjacencies:
         return
@@ -477,6 +481,7 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version):
         "node_label": node_label,
         "overloaded": is_overloaded,
         "adjacencies": adjacencies,
+        "area": area,
     }
     if version:
         adjs_map[adj_db.thisNodeName]["version"] = version
@@ -577,6 +582,7 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
                 else adj["metric"]
             )
             uptime = time_since(adj["timestamp"]) if adj["timestamp"] else ""
+            area = adj["area"] if adj["area"] is not None else "N/A"
 
             rows.append(
                 [
@@ -588,6 +594,7 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
                     adj["nextHopV4"],
                     adj["nextHopV6"],
                     uptime,
+                    area,
                 ]
             )
             seg = printing.render_horizontal_table(
@@ -1143,12 +1150,17 @@ def sprint_prefixes_db_delta(
     return strs
 
 
-def dump_node_kvs(cli_opts: bunch.Bunch, host: str) -> kv_store_types.Publication:
+def dump_node_kvs(
+    cli_opts: bunch.Bunch, host: str, area: str = None
+) -> kv_store_types.Publication:
     pub = None
 
     with get_openr_ctrl_client(host, cli_opts) as client:
         keyDumpParams = kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
-        pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        if area is None:
+            pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        else:
+            pub = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
 
     return pub
 
@@ -1664,15 +1676,18 @@ def get_routes(
     return (ret_unicast_routes, ret_mpls_routes)
 
 
-def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> None:
+def print_spt_infos(
+    spt_infos: kv_store_types.SptInfos, roots: List[str], area: str = None
+) -> None:
     """
     print spanning tree information
     """
 
     output = []
 
+    area = f'Area "{area}": ' if area is not None else ""
     # step0. print current flooding root id
-    print("\n> Current Flood On Root-Id: {}".format(spt_infos.floodRootId))
+    print(f"\n>{area}Current Flood On Root-Id: {spt_infos.floodRootId}")
 
     # step1. print neighbor level counters
     caption = "Neighbor DUAL Counters"
@@ -1738,3 +1753,39 @@ def print_spt_infos(spt_infos: kv_store_types.SptInfos, roots: List[str]) -> Non
         seg = printing.render_horizontal_table(rows, column_labels, tablefmt="plain")
         output.append([cap, seg])
     print(printing.render_vertical_table(output))
+
+
+def area_feature_support(cli_opts: bunch.Bunch) -> bool:
+    openr_version: lm_types.OpenrVersion = {}
+    with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
+        openr_version = client.getOpenrVersion()
+    if openr_version.version >= Consts.OPENR_AREA_VERSION:
+        return True
+    return False
+
+
+def get_areas_list(cli_opts: bunch.Bunch) -> Set[str]:
+    openr_area_config: kv_store_types.AreasConfig = {}
+    with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
+        openr_area_config = client.getAreasConfig()
+    return openr_area_config.areas
+
+
+# This API is used by commands that need one and only one
+# area ID. For older images that don't support area feature, this API will
+# return 'None'. If area ID is passed, API checks if it's valid and returns
+# the same ID
+def get_area_id(cli_opts: bunch.Bunch, area: str) -> str:
+    if not area_feature_support(cli_opts):
+        return None
+
+    # if no area is provided, return area in case only one area is configured
+    areas = get_areas_list(cli_opts)
+    if (area is None or area == "") and 1 == len(areas):
+        (area,) = areas
+        return area
+
+    if area not in areas:
+        print(f"Error: Must specify one of the areas: {areas}")
+        sys.exit(1)
+    return area

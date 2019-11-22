@@ -465,7 +465,8 @@ void
 KvStoreClient::unsetKey(
     std::string const& key,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  VLOG(3) << "KvStoreClient: unsetKey called for key " << key;
+  VLOG(3) << "KvStoreClient: unsetKey called for key " << key << " area "
+          << area;
 
   persistedKeyVals_[area].erase(key);
   backoffs_.erase(key);
@@ -482,7 +483,7 @@ KvStoreClient::clearKey(
   VLOG(1) << "KvStoreClient: clear key called for key " << key;
 
   // erase keys
-  unsetKey(key);
+  unsetKey(key, area);
 
   // if key doesn't exist in KvStore no need to add it as "empty". This
   // condition should not exist.
@@ -1126,14 +1127,16 @@ KvStoreClient::advertisePendingKeys() {
       // Proceed only if backoff is active
       auto& backoff = backoffs_.at(key);
       auto const& eventType = backoff.canTryNow() ? "Advertising" : "Skipping";
-      VLOG(1) << eventType << " (key, version, originatorId, ttlVersion, ttl) "
+      VLOG(1) << eventType
+              << " (key, version, originatorId, ttlVersion, ttl, area) "
               << folly::sformat(
                      "({}, {}, {}, {}, {})",
                      key,
                      thriftValue.version,
                      thriftValue.originatorId,
                      thriftValue.ttlVersion,
-                     thriftValue.ttl);
+                     thriftValue.ttl,
+                     area);
       VLOG(2) << "With value: " << folly::humanify(thriftValue.value.value());
 
       if (not backoff.canTryNow()) {

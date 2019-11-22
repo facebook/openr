@@ -37,12 +37,14 @@ class KvStoreCli(object):
         self.kvstore.add_command(AllocationsCli().list, name="alloc-list")
         self.kvstore.add_command(AllocationsCli().set, name="alloc-set")
         self.kvstore.add_command(AllocationsCli().unset, name="alloc-unset")
+        self.kvstore.add_command(AreasCli().areas, name="areas")
 
     @click.group()
     @breeze_option("--kv_rep_port", type=int, help="KV store rep port")
     @breeze_option("--kv_pub_port", type=int, help="KV store pub port")
+    @breeze_option("--area", type=str, help="area identifier")
     @click.pass_context
-    def kvstore(ctx, kv_rep_port, kv_pub_port):  # noqa: B902
+    def kvstore(ctx, kv_rep_port, kv_pub_port, area):  # noqa: B902
         """ CLI tool to peek into KvStore module. """
         pass
 
@@ -128,6 +130,15 @@ class AdjCli(object):
 
         nodes = parse_nodes(cli_opts, nodes)
         kvstore.AdjCmd(cli_opts).run(nodes, bidir, json)
+
+
+class AreasCli(object):
+    @click.command()
+    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.pass_obj
+    def areas(cli_opts: Bunch, json) -> None:  # noqa: B902
+        """ get list of 'areas' configured """
+        kvstore.Areas(cli_opts).run(json)
 
 
 class FloodCli(object):

@@ -55,6 +55,8 @@ enum Command {
   FLOOD_TOPO_SET = 11, // set or unset flooding-topo child
   FLOOD_TOPO_GET = 12; // get flood-topology information
 
+  AREAS_CONFIG_GET = 13; // get AreasConfig from kvstore
+
   // operations on the store peers
   PEER_ADD  = 4,
   PEER_DEL  = 5,
@@ -176,6 +178,13 @@ struct SptInfos {
   3: optional string floodRootId
   // current flooding peers
   4: PeerNames floodPeers
+}
+
+
+// List of 'areas'
+struct AreasConfig {
+  // list of areas configured
+  1: set<string>  (cpp.type = "std::unordered_set<std::string>") areas
 }
 
 //

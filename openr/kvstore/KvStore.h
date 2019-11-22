@@ -526,5 +526,8 @@ class KvStore final : public OpenrEventLoop {
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
+
+  // list of areas
+  std::unordered_set<std::string> areas_{};
 };
 } // namespace openr

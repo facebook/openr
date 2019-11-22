@@ -10,11 +10,13 @@
 
 import datetime
 import hashlib
+import json
 import re
 import string
 import sys
 import time
 from builtins import str
+from collections import defaultdict
 from itertools import combinations
 from typing import Any, Callable, Dict, List, Pattern, Set
 
@@ -26,7 +28,7 @@ from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients import kvstore_subscriber
-from openr.KvStore import constants as kv_store_constants, ttypes as kv_store_types
+from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
@@ -35,6 +37,23 @@ from openr.utils.consts import Consts
 
 
 class KvStoreCmdBase(OpenrCtrlCmd):
+    def __init__(self, cli_opts: bunch.Bunch):
+        super().__init__(cli_opts)
+        # find out if area feature is supported
+        self.area_feature = utils.area_feature_support(self.cli_opts)
+
+        # get list of areas if area feature is supported.
+        self.areas = set()
+        if self.area_feature:
+            self.areas = utils.get_areas_list(self.cli_opts)
+            if self.cli_opts.area != "":
+                if self.cli_opts.area in self.areas:
+                    self.areas = {self.cli_opts.area}
+                else:
+                    print(f"Invalid area specified: {self.cli_opts.area}")
+                    print(f"Valid areas: {self.areas}")
+                    sys.exit(1)
+
     def print_publication_delta(
         self, title: str, pub_update: List[str], sprint_db: str = ""
     ) -> None:
@@ -82,12 +101,20 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
             parse_func(container, value)
 
-    def get_node_to_ips(self, client: OpenrCtrl.Client) -> Dict:
+    def get_node_to_ips(self, client: OpenrCtrl.Client, area: str = None) -> Dict:
         """ get the dict of all nodes to their IP in the network """
 
         node_dict = {}
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
-        resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        resp = kv_store_types.Publication()
+        if not self.area_feature:
+            resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        else:
+            if area is None:
+                print(f"Error: Must specify one of the areas: {self.areas}")
+                sys.exit(1)
+            resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+
         prefix_maps = utils.collate_prefix_keys(resp.keyVals)
         for node, prefix_db in prefix_maps.items():
             node_dict[node] = self.get_node_ip(prefix_db)
@@ -110,8 +137,17 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         # Else return None
         return None
 
+    def get_area_id(self) -> str:
+        if not self.area_feature:
+            return None
+        if 1 != len(self.areas):
+            print(f"Error: Must specify one of the areas: {self.areas}")
+            sys.exit(1)
+        (area,) = self.areas
+        return area
 
-class PrefixesCmd(KvStoreCmdBase):
+
+class KvPrefixesCmd(KvStoreCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -122,17 +158,51 @@ class PrefixesCmd(KvStoreCmdBase):
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        self.print_prefix({None: resp}, nodes, json, prefix, client_type)
+
+    def print_prefix(
+        self,
+        resp: Dict[str, kv_store_types.Publication],
+        nodes: set,
+        json: bool,
+        prefix: str,
+        client_type: str,
+    ):
+        all_kv = kv_store_types.Publication()
+        all_kv.keyVals = {}
+        for _, val in resp.items():
+            all_kv.keyVals.update(val.keyVals)
         if json:
             utils.print_prefixes_json(
-                resp, nodes, prefix, client_type, self.iter_publication
+                all_kv, nodes, prefix, client_type, self.iter_publication
             )
         else:
             utils.print_prefixes_table(
-                resp, nodes, prefix, client_type, self.iter_publication
+                all_kv, nodes, prefix, client_type, self.iter_publication
             )
 
 
-class KeysCmd(KvStoreCmdBase):
+class PrefixesCmd(KvPrefixesCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        json: bool,
+        prefix: str,
+        client_type: str,
+    ) -> None:
+        if not self.area_feature:
+            super()._run(client, nodes, json, prefix, client_type)
+            return
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        area_kv = {}
+        for area in self.areas:
+            resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+            area_kv[area] = resp
+        self.print_prefix(area_kv, nodes, json, prefix, client_type)
+
+
+class KvKeysCmd(KvStoreCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -145,59 +215,94 @@ class KeysCmd(KvStoreCmdBase):
             prefix, [originator] if originator else None
         )
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
-        self.print_kvstore_keys(resp, ttl, json)
+        self.print_kvstore_keys({None: resp}, ttl, json)
 
     def print_kvstore_keys(
-        self, resp: kv_store_types.Publication, ttl: bool, json: bool
+        self, resp: Dict[str, kv_store_types.Publication], ttl: bool, json: bool
     ) -> None:
         """ print keys from raw publication from KvStore"""
 
         # Export in json format if enabled
         if json:
+            all_kv = {}
+            for _, kv in resp.items():
+                all_kv.update(kv.keyVals)
+
             # Force set value to None
-            for value in resp.keyVals.values():
+            for value in all_kv.values():
                 value.value = None
 
             data = {}
-            for k, v in resp.keyVals.items():
+            for k, v in all_kv.items():
                 data[k] = utils.thrift_to_dict(v)
             print(utils.json_dumps(data))
             return
 
         rows = []
         db_bytes = 0
-        for key, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
-            # 32 bytes comes from version, ttlVersion, ttl and hash which are i64
-            kv_size = 32 + len(key) + len(value.originatorId) + len(value.value)
-            db_bytes += kv_size
+        num_keys = 0
+        for area in resp:
+            keyVals = resp[area].keyVals
+            area_str = "N/A" if area is None else area
+            for key, value in sorted(keyVals.items(), key=lambda x: x[0]):
+                # 32 bytes comes from version, ttlVersion, ttl and hash which are i64
+                kv_size = 32 + len(key) + len(value.originatorId) + len(value.value)
+                db_bytes += kv_size
 
-            hash_offset = "+" if value.hash > 0 else ""
-            row = [
-                key,
-                value.originatorId,
-                value.version,
-                f"{hash_offset}{value.hash:x}",
-                printing.sprint_bytes(kv_size),
-            ]
-            if ttl:
-                ttlStr = (
-                    "Inf"
-                    if value.ttl == Consts.CONST_TTL_INF
-                    else str(datetime.timedelta(milliseconds=value.ttl))
-                )
-                row.append(f"{ttlStr} - {value.ttlVersion}")
-            rows.append(row)
+                hash_offset = "+" if value.hash > 0 else ""
+                row = [
+                    key,
+                    value.originatorId,
+                    value.version,
+                    f"{hash_offset}{value.hash:x}",
+                    printing.sprint_bytes(kv_size),
+                    area_str,
+                ]
+                if ttl:
+                    ttlStr = (
+                        "Inf"
+                        if value.ttl == Consts.CONST_TTL_INF
+                        else str(datetime.timedelta(milliseconds=value.ttl))
+                    )
+                    row.append(f"{ttlStr} - {value.ttlVersion}")
+                rows.append(row)
+                num_keys += len(keyVals)
 
         db_bytes_str = printing.sprint_bytes(db_bytes)
-        caption = f"KvStore Data - {len(resp.keyVals)} keys, {db_bytes_str}"
-        column_labels = ["Key", "Originator", "Ver", "Hash", "Size"]
+        caption = f"KvStore Data - {num_keys} keys, {db_bytes_str}"
+        column_labels = ["Key", "Originator", "Ver", "Hash", "Size", "Area"]
         if ttl:
             column_labels = column_labels + ["TTL - Ver"]
 
         print(printing.render_horizontal_table(rows, column_labels, caption))
 
 
-class KeyValsCmd(KvStoreCmdBase):
+class KeysCmd(KvKeysCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        json: bool,
+        prefix: Any,
+        originator: Any = None,
+        ttl: bool = False,
+    ) -> None:
+        if not self.area_feature:
+            super()._run(client, json, prefix, originator, ttl)
+            return
+
+        keyDumpParams = self.buildKvStoreKeyDumpParams(
+            prefix, [originator] if originator else None
+        )
+
+        area_kv = {}
+        for area in self.areas:
+            resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+            area_kv[area] = resp
+
+        self.print_kvstore_keys(area_kv, ttl, json)
+
+
+class KvKeyValsCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, keys: List[str]) -> None:
         resp = client.getKvStoreKeyVals(keys)
         self.print_kvstore_values(resp)
@@ -218,7 +323,9 @@ class KeyValsCmd(KvStoreCmdBase):
         else:
             return None
 
-    def print_kvstore_values(self, resp: kv_store_types.Publication) -> None:
+    def print_kvstore_values(
+        self, resp: kv_store_types.Publication, area: str = None
+    ) -> None:
         """ print values from raw publication from KvStore"""
 
         rows = []
@@ -247,11 +354,24 @@ class KeyValsCmd(KvStoreCmdBase):
                 ]
             )
 
-        caption = "Dump key-value pairs in KvStore"
+        area = f"in area {area}" if area is not None else ""
+        caption = f"Dump key-value pairs in KvStore {area}"
         print(printing.render_vertical_table(rows, caption=caption))
 
 
-class NodesCmd(KvStoreCmdBase):
+class KeyValsCmd(KvKeyValsCmd):
+    def _run(self, client: OpenrCtrl.Client, keys: List[str]) -> None:
+        if not self.area_feature:
+            super()._run(client, keys)
+            return
+
+        for area in self.areas:
+            resp = client.getKvStoreKeyValsArea(keys, area)
+            if len(resp.keyVals):
+                self.print_kvstore_values(resp, area)
+
+
+class KvNodesCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client) -> None:
         prefix_keys = client.getKvStoreKeyValsFiltered(
             self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
@@ -292,6 +412,7 @@ class NodesCmd(KvStoreCmdBase):
         connected_nodes: Set[str],
         prefix_keys: kv_store_types.Publication,
         host_id: str,
+        node_area: Dict[str, str] = None,
     ) -> None:
         """
         Print kvstore nodes information. Their loopback and reachability
@@ -326,56 +447,170 @@ class NodesCmd(KvStoreCmdBase):
             marker = "* " if node == host_id else "> "
             loopback_v4 = addrs["v4"].get(node, "N/A")
             loopback_v6 = addrs["v6"].get(node, "N/A")
+            area_str = node_area.get(node, "N/A") if node_area is not None else "N/A"
             rows.append(
                 [
                     f"{marker}{node}",
                     loopback_v6,
                     loopback_v4,
                     "Reachable" if node in connected_nodes else "Unreachable",
+                    area_str,
                 ]
             )
 
-        label = ["Node", "V6-Loopback", "V4-Loopback", "Status"]
+        label = ["Node", "V6-Loopback", "V4-Loopback", "Status", "Area"]
 
         print(printing.render_horizontal_table(rows, label))
 
 
-class AdjCmd(KvStoreCmdBase):
+class NodesCmd(KvNodesCmd):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        if not self.area_feature:
+            super()._run(client)
+            return
+
+        all_kv = kv_store_types.Publication()
+        all_kv.keyVals = {}
+        node_area = {}
+        nodes = set()
+        for area in self.areas:
+            prefix_keys = client.getKvStoreKeyValsFilteredArea(
+                self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER), area
+            )
+            all_kv.keyVals.update(prefix_keys.keyVals)
+            adj_keys = client.getKvStoreKeyValsFilteredArea(
+                self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER), area
+            )
+            host_id = client.getMyNodeName()
+            node_set = self.get_connected_nodes(adj_keys, host_id)
+            # save area associated with each node
+            for node in node_set:
+                node_area[node] = area
+            nodes.update(node_set)
+
+        self.print_kvstore_nodes(nodes, all_kv, host_id, node_area)
+
+
+class KvAdjCmd(KvStoreCmdBase):
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
-        adjs_map = utils.adj_dbs_to_dict(
-            publication, nodes, bidir, self.iter_publication
-        )
+        self.print_adj({None: publication}, nodes, bidir, json)
+
+    def print_adj(
+        self, publications: Dict[str, kv_store_types.Publication], nodes, bidir, json
+    ):
+        adjs_list = defaultdict(list)
+        # get list of adjancencies from each area and add it to the final
+        # adjacency DB.
+        adjs_map = {}
+        for area, publication in publications.items():
+            adjs = utils.adj_dbs_to_dict(
+                publication, nodes, bidir, self.iter_publication
+            )
+            # handle case when area has no adjacencies
+            if len(adjs):
+                adjs_map = adjs
+            else:
+                continue
+            for key, val in adjs_map.items():
+                for adj_entry in val["adjacencies"]:
+                    adj_entry["area"] = area
+                adjs_list[key].extend(val["adjacencies"])
+
+        for key, val in adjs_list.items():
+            adjs_map[key]["adjacencies"] = val
+
         if json:
             utils.print_json(adjs_map)
         else:
             utils.print_adjs_table(adjs_map, self.enable_color)
 
 
-class FloodCmd(KvStoreCmdBase):
+class AdjCmd(KvAdjCmd):
+    def _run(
+        self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
+    ) -> None:
+        if not self.area_feature:
+            super()._run(client, nodes, bidir, json)
+            return
+
+        publications = {}
+        for area in self.areas:
+            keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+            publications[area] = client.getKvStoreKeyValsFilteredArea(
+                keyDumpParams, area
+            )
+        self.print_adj(publications, nodes, bidir, json)
+
+
+class Areas(KvStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, in_json: bool) -> None:
+        if not self.area_feature:
+            return
+
+        if in_json:
+            print(json.dumps(list(self.areas)))
+        else:
+            print(f"Areas configured: {self.areas}")
+
+
+class KvFloodCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, roots: List[str]) -> None:
         spt_infos = client.getSpanningTreeInfos()
         utils.print_spt_infos(spt_infos, roots)
 
 
-class ShowAdjNodeCmd(KvStoreCmdBase):
+class FloodCmd(KvFloodCmd):
+    def _run(self, client: OpenrCtrl.Client, roots: List[str]) -> None:
+        if not self.area_feature:
+            super()._run(client, roots)
+            return
+
+        for area in self.areas:
+            spt_infos = client.getSpanningTreeInfos(area)
+            utils.print_spt_infos(spt_infos, roots, area)
+
+
+class KvShowAdjNodeCmd(KvStoreCmdBase):
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, node: Any, interface: Any
     ) -> None:
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        self.printAdjNode(publication, nodes)
+
+    def printAdjNode(self, publication, nodes, node, interface):
         adjs_map = utils.adj_dbs_to_dict(
             publication, nodes, True, self.iter_publication
         )
         utils.print_adjs_table(adjs_map, self.enable_color, node, interface)
 
 
+class ShowAdjNodeCmd(KvShowAdjNodeCmd):
+    def _run(
+        self, client: OpenrCtrl.Client, nodes: set, node: Any, interface: Any
+    ) -> None:
+        if not self.area_feature:
+            super()._run(client, nodes, interface)
+            return
+
+        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+        resp = kv_store_types.Publication()
+        resp.keyVals = {}
+        for area in self.areas:
+            publication = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+            resp.keyVals.update(publication.keyVals)
+        self.printAdjNode(resp, nodes, node, interface)
+
+
 class KvCompareCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, nodes: set) -> None:
-        all_nodes_to_ips = self.get_node_to_ips(client)
+        area = self.get_area_id()
+
+        all_nodes_to_ips = self.get_node_to_ips(client, area)
         if nodes:
             nodes = set(nodes.strip().split(","))
             if "all" in nodes:
@@ -385,14 +620,17 @@ class KvCompareCmd(KvStoreCmdBase):
                 nodes.remove(host_id)
 
             keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
-            pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
-            kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips)
+            pub = None
+            if not self.area_feature:
+                pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
+            else:
+                pub = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+            kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips, area)
             for node in kv_dict:
                 self.compare(pub.keyVals, kv_dict[node], host_id, node)
-
         else:
             nodes = list(all_nodes_to_ips.keys())
-            kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips)
+            kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips, area)
             for our_node, other_node in combinations(kv_dict.keys(), 2):
                 self.compare(
                     kv_dict[our_node], kv_dict[other_node], our_node, other_node
@@ -471,45 +709,61 @@ class KvCompareCmd(KvStoreCmdBase):
             )
         )
 
-    def dump_nodes_kvs(self, nodes, all_nodes_to_ips):
+    def dump_nodes_kvs(self, nodes: set, all_nodes_to_ips: Dict, area: str = None):
         """ get the kvs of a set of nodes """
 
         kv_dict = {}
         for node in nodes:
             node_ip = all_nodes_to_ips.get(node, node)
-            kv = utils.dump_node_kvs(self.cli_opts, node_ip)
+            kv = utils.dump_node_kvs(self.cli_opts, node_ip, area)
             if kv is not None:
                 kv_dict[node] = kv.keyVals
                 print("dumped kv from {}".format(node))
         return kv_dict
 
 
-class PeersCmd(KvStoreCmdBase):
+class KvPeersCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client) -> None:
         peers = client.getKvStorePeers()
-        self.print_peers(client, peers)
+        self.print_peers(client, {None: peers})
 
-    def print_peers(
-        self, client: OpenrCtrl.Client, peers: kv_store_types.PeersMap
-    ) -> None:
+    def print_peers(self, client: OpenrCtrl.Client, peers_list: Dict[str, Any]) -> None:
         """ print the Kv Store peers """
 
         host_id = client.getMyNodeName()
         caption = "{}'s peers".format(host_id)
 
         rows = []
-        for (key, value) in sorted(peers.items(), key=lambda x: x[0]):
-            row = [key]
-            row.append("cmd via {}".format(value.cmdUrl))
-            row.append("pub via {}".format(value.pubUrl))
-            rows.append(row)
+        for area, peers in peers_list.items():
+            area = area if area is not None else "N/A"
+            for (key, value) in sorted(peers.items(), key=lambda x: x[0]):
+                row = [f"{key}, area:{area}"]
+                row.append("cmd via {}".format(value.cmdUrl))
+                row.append("pub via {}".format(value.pubUrl))
+                rows.append(row)
 
         print(printing.render_vertical_table(rows, caption=caption))
 
 
+class PeersCmd(KvPeersCmd):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        if not self.area_feature:
+            super()._run(client)
+            return
+        peers_list = {}
+        for area in self.areas:
+            peers_list[area] = client.getKvStorePeersArea(area)
+        self.print_peers(client, peers_list)
+
+
 class EraseKeyCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, key: str) -> None:
-        publication = client.getKvStoreKeyVals([key])
+        area = self.get_area_id()
+        publication = None
+        if area is None:
+            publication = client.getKvStoreKeyVals([key])
+        else:
+            publication = client.getKvStoreKeyValsArea([key], area)
         keyVals = publication.keyVals
 
         if key not in keyVals:
@@ -524,9 +778,10 @@ class EraseKeyCmd(KvStoreCmdBase):
 
         print(keyVals)
 
-        client.setKvStoreKeyVals(
-            kv_store_types.KeySetParams(keyVals), kv_store_constants.kDefaultArea
-        )
+        if area is None:
+            client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals))
+        else:
+            client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals), area)
 
         print("Success: key {} will be erased soon from all KvStores.".format(key))
 
@@ -541,11 +796,16 @@ class SetKeyCmd(KvStoreCmdBase):
         version: Any,
         ttl: int,
     ) -> None:
+        area = self.get_area_id()
         val = kv_store_types.Value()
 
         if version is None:
             # Retrieve existing Value from KvStore
-            publication = client.getKvStoreKeyVals([key])
+            publication = None
+            if area is None:
+                publication = client.getKvStoreKeyVals([key])
+            else:
+                publication = client.getKvStoreKeyValsArea([key], area)
             if key in publication.keyVals:
                 existing_val = publication.keyVals.get(key)
                 print(
@@ -564,9 +824,10 @@ class SetKeyCmd(KvStoreCmdBase):
 
         # Advertise publication back to KvStore
         keyVals = {key: val}
-        client.setKvStoreKeyVals(
-            kv_store_types.KeySetParams(keyVals), kv_store_constants.kDefaultArea
-        )
+        if area is None:
+            client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals))
+        else:
+            client.setKvStoreKeyVals(kv_store_types.KeySetParams(keyVals), area)
         print(
             "Success: Set key {} with version {} and ttl {} successfully"
             " in KvStore. This does not guarantee that value is updated"
@@ -580,8 +841,13 @@ class SetKeyCmd(KvStoreCmdBase):
 
 class KvSignatureCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, prefix: str) -> None:
+        area = self.get_area_id()
         keyDumpParams = self.buildKvStoreKeyDumpParams(prefix)
-        resp = client.getKvStoreHashFiltered(keyDumpParams)
+        resp = None
+        if area is None:
+            resp = client.getKvStoreHashFiltered(keyDumpParams)
+        else:
+            resp = client.getKvStoreHashFilteredArea(keyDumpParams, area)
 
         signature = hashlib.sha256()
         for _, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
@@ -600,6 +866,7 @@ class TopologyCmd(KvStoreCmdBase):
         edge_label: Any,
         json: bool,
     ) -> None:
+        area = self.get_area_id()
 
         try:
             import matplotlib.pyplot as plt
@@ -619,8 +886,12 @@ class TopologyCmd(KvStoreCmdBase):
         rem_pattern = re.compile("|".join(rem_str.keys()))
 
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
-        publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
-        nodes = list(self.get_node_to_ips(client).keys()) if not node else [node]
+        publication = None
+        if area is None:
+            publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        else:
+            publication = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+        nodes = list(self.get_node_to_ips(client, area).keys()) if not node else [node]
         adjs_map = utils.adj_dbs_to_dict(
             publication, nodes, bidir, self.iter_publication
         )
@@ -746,7 +1017,8 @@ class SnoopCmd(KvStoreCmdBase):
         regex: str,
         duration: int,
     ) -> None:
-        global_dbs = self.get_snapshot(client, delta)
+        area = self.get_area_id()
+        global_dbs = self.get_snapshot(client, delta, area)
         pattern = re.compile(regex)
 
         print("Subscribing to KvStore updates. Magic begins here ... \n")
@@ -765,6 +1037,8 @@ class SnoopCmd(KvStoreCmdBase):
             # we do not want to timeout. keep listening for a change
             try:
                 msg = pub_client.listen()
+                if area is not None and msg.area != area:
+                    continue
                 self.print_expired_keys(msg, regex, pattern, global_dbs)
                 self.print_delta(msg, regex, pattern, ttl, delta, global_dbs)
             except zmq.error.Again:
@@ -916,7 +1190,7 @@ class SnoopCmd(KvStoreCmdBase):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def get_snapshot(self, client: OpenrCtrl.Client, delta: Any) -> Dict:
+    def get_snapshot(self, client: OpenrCtrl.Client, delta: Any, area: str) -> Dict:
         # get the active network snapshot first, so we can compute deltas
         global_dbs = bunch.Bunch(
             {
@@ -929,7 +1203,10 @@ class SnoopCmd(KvStoreCmdBase):
         if delta:
             print("Retrieving KvStore snapshot ... ")
             keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
-            resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+            if area is None:
+                resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
+            else:
+                resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
 
             global_dbs.prefixes = utils.build_global_prefix_db(resp)
             global_dbs.adjs = utils.build_global_adj_db(resp)
@@ -941,22 +1218,48 @@ class SnoopCmd(KvStoreCmdBase):
         return global_dbs
 
 
-class AllocationsListCmd(KvStoreCmdBase):
+class KvAllocationsListCmd(KvStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client) -> None:
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
         resp = client.getKvStoreKeyVals([key])
-        if key not in resp.keyVals:
+        self.print_allocations(key, resp.keyVals)
+
+    def print_allocations(
+        self, key: str, keyVals: kv_store_types.KeyVals, area: str = None
+    ) -> None:
+        if key not in keyVals:
             print("Static allocation is not set in KvStore")
         else:
-            utils.print_allocations_table(resp.keyVals.get(key).value)
+            area_str = (
+                "" if area is None else f'Static prefix allocations in area "{area}"'
+            )
+            print(area_str)
+            utils.print_allocations_table(keyVals.get(key).value)
+
+
+class AllocationsListCmd(KvAllocationsListCmd):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        if not self.area_feature:
+            super()._run(client)
+            return
+
+        key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
+        for area in self.areas:
+            resp = client.getKvStoreKeyValsArea([key], area)
+            self.print_allocations(key, resp.keyVals, area)
 
 
 class AllocationsSetCmd(SetKeyCmd):
     def _run(self, client: OpenrCtrl.Client, node_name: str, prefix_str: str) -> None:
+        area = self.get_area_id()
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
 
         # Retrieve previous allocation
-        resp = client.getKvStoreKeyVals([key])
+        resp = None
+        if area is None:
+            resp = client.getKvStoreKeyVals([key])
+        else:
+            resp = client.getKvStoreKeyValsArea([key], area)
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
@@ -986,10 +1289,15 @@ class AllocationsSetCmd(SetKeyCmd):
 
 class AllocationsUnsetCmd(SetKeyCmd):
     def _run(self, client: OpenrCtrl.Client, node_name: str) -> None:
+        area = self.get_area_id()
         key = Consts.STATIC_PREFIX_ALLOC_PARAM_KEY
 
         # Retrieve previous allocation
-        resp = client.getKvStoreKeyVals([key])
+        resp = None
+        if area is None:
+            resp = client.getKvStoreKeyVals([key])
+        else:
+            resp = client.getKvStoreKeyValsArea([key], area)
         allocs = None
         if key in resp.keyVals:
             allocs = serializer.deserialize_thrift_object(
@@ -1001,6 +1309,7 @@ class AllocationsUnsetCmd(SetKeyCmd):
         # Return if there need no change
         if node_name not in allocs.nodePrefixes:
             print("No changes needed. {}'s prefix is not set".format(node_name))
+            return
 
         # Update value in KvStore
         del allocs.nodePrefixes[node_name]

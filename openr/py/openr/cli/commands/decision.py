@@ -127,6 +127,9 @@ class DecisionAdjCmd(DecisionCmdBase):
     ) -> None:
         adj_dbs = client.getDecisionAdjacencyDbs()
         adjs_map = utils.adj_dbs_to_dict(adj_dbs, nodes, bidir, self.iter_dbs)
+        for _, val in adjs_map.items():
+            for adj_entry in val["adjacencies"]:
+                adj_entry["area"] = val.get("area", "N/A")
         if json:
             utils.print_json(adjs_map)
         else:
@@ -134,17 +137,25 @@ class DecisionAdjCmd(DecisionCmdBase):
 
 
 class PathCmd(DecisionCmdBase):
-    def _run(self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int) -> None:
+    def _run(
+        self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int, area: str
+    ) -> None:
         if not src or not dst:
             host_id = client.getMyNodeName()
             src = src or host_id
             dst = dst or host_id
 
-        # Get prefix_dbs from KvStore
         self.prefix_dbs: Dict[str, lsdb_types.PrefixDatabase] = {}
-        pub = client.getKvStoreKeyValsFiltered(
-            kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
-        )
+        area = utils.get_area_id(self.cli_opts, area)
+        # Get prefix_dbs from KvStore
+        if area is None:
+            pub = client.getKvStoreKeyValsFiltered(
+                kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
+            )
+        else:
+            pub = client.getKvStoreKeyValsFilteredArea(
+                kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER), area
+            )
         for value in pub.keyVals.values():
             utils.parse_prefix_database("", "", self.prefix_dbs, value)
 
@@ -404,9 +415,11 @@ class PathCmd(DecisionCmdBase):
 
 
 class DecisionValidateCmd(DecisionCmdBase):
-    def _run(self, client: OpenrCtrl.Client, json=False) -> None:
+    def _run(self, client: OpenrCtrl.Client, json=False, area: str = None) -> None:
         """Returns a status code. 0 = success, 1 = failure"""
-        (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(client)
+        (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
+            client, area
+        )
 
         kvstore_adj_node_names = set()
         kvstore_prefix_node_names = set()
@@ -450,15 +463,21 @@ class DecisionValidateCmd(DecisionCmdBase):
 
         return adjValidateRet or prefixValidateRet
 
-    def get_dbs(self, client: OpenrCtrl.Client) -> Tuple[Dict, Dict, Dict]:
+    def get_dbs(self, client: OpenrCtrl.Client, area: str) -> Tuple[Dict, Dict, Dict]:
         # get LSDB from Decision
         decision_adj_dbs = client.getDecisionAdjacencyDbs()
         decision_prefix_dbs = client.getDecisionPrefixDbs()
 
+        area = utils.get_area_id(self.cli_opts, area)
         # get LSDB from KvStore
-        kvstore_keyvals = client.getKvStoreKeyValsFiltered(
-            kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
-        ).keyVals
+        if area is None:
+            kvstore_keyvals = client.getKvStoreKeyValsFiltered(
+                kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
+            ).keyVals
+        else:
+            kvstore_keyvals = client.getKvStoreKeyValsFilteredArea(
+                kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER), area
+            ).keyVals
 
         return (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals)
 

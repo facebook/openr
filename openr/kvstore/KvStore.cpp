@@ -113,11 +113,12 @@ KvStore::KvStore(
           ttlDecr,
           enableFloodOptimization,
           isFloodRoot,
-          useFloodOptimization) {
+          useFloodOptimization),
+      areas_(areas) {
   CHECK(not nodeId.empty());
   CHECK(not localPubUrl_.empty());
   CHECK(not globalPubUrl_.empty());
-  CHECK(not areas.empty());
+  CHECK(not areas_.empty());
 
   zmqMonitorClient_ =
       std::make_shared<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
@@ -181,7 +182,7 @@ KvStore::KvStore(
   }
 
   // create KvStoreDb instances
-  for (auto const& area : areas) {
+  for (auto const& area : areas_) {
     kvStoreDb_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(area),
@@ -416,6 +417,11 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     fbzmq::thrift::CounterValuesResponse counters;
     counters.counters = getCounters();
     return fbzmq::Message::fromThriftObj(counters, serializer_);
+  } else if (thriftRequest.cmd == thrift::Command::AREAS_CONFIG_GET) {
+    VLOG(3) << "AREAS_CONFIG_GET command requested";
+    auto areaConfig = thrift::AreasConfig{};
+    areaConfig.areas = areas_;
+    return fbzmq::Message::fromThriftObj(areaConfig, serializer_);
   }
 
   VLOG(2) << "Request received for area " << area;
@@ -429,6 +435,8 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     return response;
   } catch (std::out_of_range const& e) {
     LOG(ERROR) << "std::out_of_range for area " << area;
+    return folly::makeUnexpected(
+        fbzmq::Error(0, folly::sformat("Invalid area {}", area)));
   }
   return {folly::makeUnexpected(fbzmq::Error())};
 }
