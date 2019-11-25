@@ -388,6 +388,7 @@ option(BUILD_TOOLS "BUILD_TOOLS" ON)
 if(BUILD_TOOLS)
   add_executable(openr_kvstore_snooper
     openr/kvstore/tools/KvStoreSnooper.cpp
+    openr/common/Flags.cpp
   )
 
   target_link_libraries(openr_kvstore_snooper
@@ -495,6 +496,7 @@ if(BUILD_TESTS)
   enable_testing()
 
   find_package(GMock MODULE REQUIRED)
+  find_package(GTest MODULE REQUIRED)
 
   include_directories(
     ${GTEST_INCLUDE_DIRS}
@@ -503,6 +505,7 @@ if(BUILD_TESTS)
 
   add_executable(netlink_socket_sample
     openr/nl/examples/NetlinkSocketSample.cpp
+    openr/common/Flags.cpp
   )
 
   target_link_libraries(netlink_socket_sample
@@ -520,430 +523,222 @@ if(BUILD_TESTS)
     DESTINATION sbin
   )
 
-  add_executable(openr_system_test
-    openr/tests/OpenrSystemTest.cpp
-    openr/tests/OpenrWrapper.cpp
-    openr/spark/tests/MockIoProvider.cpp
-    openr/tests/MockSystemHandler.cpp
-  )
 
   add_library(openr_module_test_base
-    openr/tests/OpenrModuleTestBase.cpp
+    openr/common/Flags.cpp
   )
-
   target_link_libraries(openr_module_test_base
     openrlib
-    fbzmq::fbzmq
-    FBThrift::thriftcpp2
   )
 
-  target_link_libraries(openr_system_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    fbzmq::fbzmq
-    ${ZMQ}
-    ${GLOG}
-    ${GFLAGS}
-    ${PROTOCOL}
-    FBThrift::thriftcpp2
-    ${ZSTD}
-    Folly::folly
-    ${FOLLY_EXCEPTION_TRACER}
-    ${SODIUM}
-    ${SIGAR}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-    ${SIGAR}
-    ${Boost_LIBRARIES}
-    -lpthread
-    -lcrypto
-  )
+  # function that adds tests, typical usage example:
+  # add_openr_test(TestName test_bin_name
+  #   SOURCES Feature1Test.cpp Feature2Test.cpp
+  #   LIBRARIES additional_library1 -lcrypto
+  #   DESTINATION folder/where/to/place/binary
+  # )
+  function(add_openr_test TEST_NAME BIN_NAME)
+    set(one_value_args DESTINATION)
+    set(multi_value_args SOURCES LIBRARIES)
+    fb_cmake_parse_args(
+      ARG
+      ""
+      "${one_value_args}"
+      "${multi_value_args}"
+      "${ARGN}"
+    )
 
-  add_test(OpenrSystemTest openr_system_test)
+    add_executable(${BIN_NAME} ${ARG_SOURCES})
+    target_link_libraries(${BIN_NAME}
+      openrlib
+      openr_module_test_base
+      ${OPENR_THRIFT_LIBS}
+      ${GTEST_BOTH_LIBRARIES}
+      ${LIBGMOCK_LIBRARIES}
+      ${ARG_LIBRARIES}
+    )
+    add_test(${TEST_NAME} ${BIN_NAME})
+    if(NOT "${ARG_DESTINATION}" STREQUAL "")
+      install(TARGETS
+        ${BIN_NAME}
+        DESTINATION ${ARG_DESTINATION}
+      )
+    endif()
+  endfunction()
 
-  install(TARGETS
-    openr_system_test
+  add_openr_test(OpenrSystemTest openr_system_test
+    SOURCES
+      openr/tests/OpenrSystemTest.cpp
+      openr/tests/OpenrWrapper.cpp
+      openr/spark/tests/MockIoProvider.cpp
+      openr/tests/MockSystemHandler.cpp
+    LIBRARIES
+      fbzmq::fbzmq
+      ${ZMQ}
+      ${GLOG}
+      ${GFLAGS}
+      ${PROTOCOL}
+      FBThrift::thriftcpp2
+      ${ZSTD}
+      Folly::folly
+      ${FOLLY_EXCEPTION_TRACER}
+      ${SODIUM}
+      ${SIGAR}
+      ${Boost_LIBRARIES}
+      -lpthread
+      -lcrypto
     DESTINATION sbin/tests/openr
   )
 
-  add_executable(prefix_allocator_test
-    openr/allocators/tests/PrefixAllocatorTest.cpp
-    openr/allocators/tests/MockSystemServiceHandler.cpp
-  )
-
-  add_executable(range_allocator_test
-    openr/allocators/tests/RangeAllocatorTest.cpp
-  )
-
-  target_link_libraries(prefix_allocator_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-  target_link_libraries(range_allocator_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
   if(ADD_ROOT_TESTS)
-    # this test needs many file descriptors, must increase limit from default
-    # on most systems to run successfully
-    add_test(PrefixAllocatorTest prefix_allocator_test)
+    add_openr_test(PrefixAllocatorTest prefix_allocator_test
+      SOURCES
+        openr/allocators/tests/PrefixAllocatorTest.cpp
+        openr/allocators/tests/MockSystemServiceHandler.cpp
+      DESTINATION sbin/tests/openr/allocators
+    )
   endif()
 
-  add_test(RangeAllocatorTest range_allocator_test)
-
-  install(TARGETS
-    prefix_allocator_test
-    range_allocator_test
+  add_openr_test(RangeAllocatorTest range_allocator_test
+    SOURCES
+      openr/allocators/tests/RangeAllocatorTest.cpp
     DESTINATION sbin/tests/openr/allocators
   )
 
-  add_executable(openr_ctrl_handler_test
-    openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
-    openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
-  )
-
-  target_link_libraries(openr_ctrl_handler_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(ExponentialBackoffTest openr_ctrl_handler_test)
-
-  install(TARGETS
-    openr_ctrl_handler_test
+  add_openr_test(OpenrCtrlHandlerTest openr_ctrl_handler_test
+    SOURCES
+      openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
+      openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
     DESTINATION sbin/tests/openr/ctrl-server
   )
 
-
-  add_executable(exp_backoff_test
-    openr/common/tests/ExponentialBackoffTest.cpp
-  )
-  add_executable(util_test
-    openr/common/tests/UtilTest.cpp
-  )
-
-  target_link_libraries(exp_backoff_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-  target_link_libraries(util_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(ExponentialBackoffTest exp_backoff_test)
-  add_test(UtilTest util_test)
-
-  install(TARGETS
-    exp_backoff_test
-    util_test
+  add_openr_test(ExponentialBackoffTest exp_backoff_test
+    SOURCES
+      openr/common/tests/ExponentialBackoffTest.cpp
     DESTINATION sbin/tests/openr/common
   )
 
-  add_executable(config_store_test
-    openr/config-store/tests/PersistentStoreTest.cpp
+  add_openr_test(UtilTest util_test
+    SOURCES
+      openr/common/tests/UtilTest.cpp
+    DESTINATION sbin/tests/openr/common
   )
 
-  target_link_libraries(config_store_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(PersistentStoreTest config_store_test)
-
-  install(TARGETS
-    config_store_test
+  add_openr_test(PersistentStoreTest config_store_test
+    SOURCES
+      openr/config-store/tests/PersistentStoreTest.cpp
     DESTINATION sbin/tests/openr/config-store
   )
 
-  add_executable(decision_test
-    openr/decision/tests/DecisionTest.cpp
-  )
-
-  target_link_libraries(decision_test
-    openrlib
-    openr_module_test_base
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(DecisionTest decision_test)
-
-  install(TARGETS
-    decision_test
+  add_openr_test(DecisionTest decision_test
+    SOURCES
+      openr/decision/tests/DecisionTest.cpp
     DESTINATION sbin/tests/openr/decision
   )
 
-  add_executable(dual_test
-    openr/dual/tests/DualTest.cpp
-  )
-
-  target_link_libraries(dual_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(DualTest dual_test)
-
-  install(TARGETS
-    dual_test
+  add_openr_test(DualTest dual_test
+    SOURCES
+      openr/dual/tests/DualTest.cpp
     DESTINATION sbin/tests/openr/dual
   )
 
-  add_executable(link_state_test
-    openr/decision/tests/LinkStateTest.cpp
-  )
-
-  target_link_libraries(link_state_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(LinkStateTest link_state_test)
-
-  install(TARGETS
-    link_state_test
+  add_openr_test(LinkStateTest link_state_test
+    SOURCES
+      openr/decision/tests/LinkStateTest.cpp
     DESTINATION sbin/tests/openr/decision
   )
 
-  add_executable(prefix_state_test
-    openr/decision/tests/PrefixStateTest.cpp
-  )
-
-  target_link_libraries(prefix_state_test
-    openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
-  )
-
-  add_test(PrefixStateTest prefix_state_test)
-
-  install(TARGETS
-    prefix_state_test
+  add_openr_test(PrefixStateTest prefix_state_test
+    SOURCES
+      openr/decision/tests/PrefixStateTest.cpp
     DESTINATION sbin/tests/openr/decision
   )
 
-  add_executable(health_checker_test
-    openr/health-checker/tests/HealthCheckerTest.cpp
-  )
-
-  target_link_libraries(health_checker_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(HealthCheckerTest health_checker_test)
-
-  install(TARGETS
-    health_checker_test
+  add_openr_test(HealthCheckerTest health_checker_test
+    SOURCES
+      openr/health-checker/tests/HealthCheckerTest.cpp
     DESTINATION sbin/tests/openr/health-checker
   )
 
-  add_executable(kvstore_test
-    openr/kvstore/tests/KvStoreTest.cpp
-  )
-  add_executable(kvstore_client_test
-    openr/kvstore/tests/KvStoreClientTest.cpp
-  )
-  add_executable(kvstore_thrift_client_test
-    openr/kvstore/tests/KvStoreThriftClientTest.cpp
-  )
-
-  target_link_libraries(kvstore_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-  target_link_libraries(kvstore_client_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-  target_link_libraries(kvstore_thrift_client_test
-    openrlib
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
-  )
-
-  add_test(KvStoreTest kvstore_test)
-  add_test(KvStoreClientTest kvstore_client_test)
-  add_test(KvStoreThriftClientTest kvstore_thrift_client_test)
-
-  install(TARGETS
-    kvstore_test
-    kvstore_client_test
-    kvstore_thrift_client_test
+  add_openr_test(KvStoreTest kvstore_test
+    SOURCES
+      openr/kvstore/tests/KvStoreTest.cpp
     DESTINATION sbin/tests/openr/kvstore
   )
 
-  add_executable(link_monitor_test
-    openr/link-monitor/tests/LinkMonitorTest.cpp
-    openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
+  add_openr_test(KvStoreClientTest kvstore_client_test
+    SOURCES
+      openr/kvstore/tests/KvStoreClientTest.cpp
+    DESTINATION sbin/tests/openr/kvstore
   )
 
-  target_link_libraries(link_monitor_test
-    openrlib
-    openr_module_test_base
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
+  add_openr_test(KvStoreThriftClientTest kvstore_thrift_client_test
+    SOURCES
+      openr/kvstore/tests/KvStoreThriftClientTest.cpp
+    DESTINATION sbin/tests/openr/kvstore
   )
 
-  add_test(LinkMonitorTest link_monitor_test)
-
-  install(TARGETS
-    link_monitor_test
+  add_openr_test(LinkMonitorTest link_monitor_test
+    SOURCES
+      openr/link-monitor/tests/LinkMonitorTest.cpp
+      openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
     DESTINATION sbin/tests/openr/link-monitor
-  )
-
-  add_executable(fib_test
-    openr/fib/tests/FibTest.cpp
-    openr/fib/tests/MockNetlinkFibHandler.cpp
-  )
-
-  target_link_libraries(fib_test
-    openrlib
-    openr_module_test_base
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
   )
 
   if(ADD_ROOT_TESTS)
     # This test fails under Travis, so adding it as an exception
-    add_test(FibTest fib_test)
+    add_openr_test(FibTest fib_test
+      SOURCES
+        openr/fib/tests/FibTest.cpp
+        openr/fib/tests/MockNetlinkFibHandler.cpp
+      DESTINATION sbin/tests/openr/fib
+    )
   endif()
 
-  install(TARGETS
-    fib_test
-    DESTINATION sbin/tests/openr/fib
-  )
-
-  add_executable(netlink_message_test
-    openr/nl/tests/NetlinkMessageTest.cpp
-  )
-  add_executable(netlink_types_test
-    openr/nl/tests/NetlinkTypesTest.cpp
-  )
-  add_executable(netlink_socket_test
-    openr/nl/tests/NetlinkSocketTest.cpp
-  )
-  add_executable(netlink_socket_subscribe_test
-    openr/nl/tests/NetlinkSocketSubscribeTest.cpp
-  )
-
-  target_link_libraries(netlink_types_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-  target_link_libraries(netlink_socket_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-  target_link_libraries(netlink_message_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-  target_link_libraries(netlink_socket_subscribe_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(NetlinkTypesTest netlink_types_test)
-  if(ADD_ROOT_TESTS)
-    # these tests must be run by root user
-    add_test(NetlinkSocketTest netlink_socket_test)
-    add_test(NetlinkMessageTest netlink_message_test)
-    add_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test)
-  endif()
-
-  install(TARGETS
-    netlink_types_test
-    netlink_socket_test
-    netlink_socket_subscribe_test
+  add_openr_test(NetlinkTypesTest netlink_types_test
+    SOURCES
+      openr/nl/tests/NetlinkTypesTest.cpp
     DESTINATION sbin/tests/openr/nl
   )
 
-  add_executable(prefix_manager_test
-    openr/prefix-manager/tests/PrefixManagerTest.cpp
-  )
+  if(ADD_ROOT_TESTS)
+    # these tests must be run by root user
+    add_openr_test(NetlinkSocketTest netlink_socket_test
+      SOURCES
+        openr/nl/tests/NetlinkSocketTest.cpp
+      DESTINATION sbin/tests/openr/nl
+    )
 
-  target_link_libraries(prefix_manager_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
+    add_openr_test(NetlinkMessageTest netlink_message_test
+      SOURCES
+        openr/nl/tests/NetlinkMessageTest.cpp
+      DESTINATION sbin/tests/openr/nl
+    )
 
-  add_test(PrefixManagerTest prefix_manager_test)
+    add_openr_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test
+      SOURCES
+        openr/nl/tests/NetlinkSocketSubscribeTest.cpp
+      DESTINATION sbin/tests/openr/nl
+    )
+  endif()
 
-  install(TARGETS
-    prefix_manager_test
+  add_openr_test(PrefixManagerTest prefix_manager_test
+    SOURCES
+      openr/prefix-manager/tests/PrefixManagerTest.cpp
     DESTINATION sbin/tests/openr/prefix-manager
   )
 
-  add_executable(spark_test
-    openr/spark/tests/SparkTest.cpp
-    openr/spark/tests/MockIoProvider.cpp
-  )
-  add_executable(mock_io_provider_test
-    openr/spark/tests/MockIoProviderTest.cpp
-    openr/spark/tests/MockIoProvider.cpp
+  add_openr_test(SparkTest spark_test
+    SOURCES
+      openr/spark/tests/SparkTest.cpp
+      openr/spark/tests/MockIoProvider.cpp
+    DESTINATION sbin/tests/openr/spark
   )
 
-  target_link_libraries(spark_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-  target_link_libraries(mock_io_provider_test
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${LIBGMOCK_LIBRARIES}
-    ${GTEST_BOTH_LIBRARIES}
-  )
-
-  add_test(SparkTest spark_test)
-  add_test(MockIoProviderTest mock_io_provider_test)
-
-  install(TARGETS
-    spark_test
-    mock_io_provider_test
+  add_openr_test(MockIoProviderTest mock_io_provider_test
+    SOURCES
+      openr/spark/tests/MockIoProviderTest.cpp
+      openr/spark/tests/MockIoProvider.cpp
     DESTINATION sbin/tests/openr/spark
   )
 
@@ -953,6 +748,7 @@ if(BUILD_TESTS)
 
   add_executable(config_store_benchmark
     openr/config-store/tests/PersistentStoreBenchmark.cpp
+    openr/common/Flags.cpp
   )
 
   target_link_libraries(config_store_benchmark
@@ -970,6 +766,7 @@ if(BUILD_TESTS)
   add_executable(fib_benchmark
     openr/fib/tests/FibBenchmark.cpp
     openr/fib/tests/MockNetlinkFibHandler.cpp
+    openr/common/Flags.cpp
   )
 
   target_link_libraries(fib_benchmark
@@ -978,7 +775,7 @@ if(BUILD_TESTS)
     ${FOLLY_EXCEPTION_TRACER}
     ${GMOCK}
     ${GMOCK_MAIN}
-    ${GTEST}
+    ${GTEST_BOTH_LIBRARIES}
     ${GTEST_MAIN}
     ${THRIFTCPP2}
     ${BENCHMARK}
@@ -991,16 +788,15 @@ if(BUILD_TESTS)
 
   add_executable(netlink_fib_handler_benchmark
     openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
+    openr/common/Flags.cpp
   )
 
   target_link_libraries(netlink_fib_handler_benchmark
     openrlib
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST}
-    ${GTEST_MAIN}
+    ${LIBGMOCK_LIBRARIES}
+    ${GTEST_BOTH_LIBRARIES}
     ${BENCHMARK}
   )
 
@@ -1011,6 +807,7 @@ if(BUILD_TESTS)
 
   add_executable(decision_benchmark
     openr/decision/tests/DecisionBenchmark.cpp
+    openr/common/Flags.cpp
   )
 
   target_link_libraries(decision_benchmark
@@ -1027,6 +824,7 @@ if(BUILD_TESTS)
 
   add_executable(kvstore_benchmark
     openr/kvstore/tests/KvStoreBenchmark.cpp
+    openr/common/Flags.cpp
   )
 
   target_link_libraries(kvstore_benchmark
