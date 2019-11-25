@@ -14,54 +14,36 @@ namespace openr {
 OpenrEventLoop::OpenrEventLoop(
     const std::string& nodeName,
     const thrift::OpenrModuleType type,
-    fbzmq::Context& zmqContext,
-    folly::Optional<std::string> tcpUrl,
-    folly::Optional<int> maybeIpTos,
-    int socketHwm)
+    fbzmq::Context& zmqContext)
     : moduleType(type),
       moduleName(apache::thrift::TEnumTraits<thrift::OpenrModuleType>::findName(
           moduleType)),
       inprocCmdUrl(
           folly::sformat("inproc://{}_{}_local_cmd", nodeName, moduleName)),
-      tcpCmdUrl(tcpUrl),
       inprocCmdSock_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
-  runInEventLoop([this, &zmqContext, nodeName, maybeIpTos, socketHwm]() {
-    std::vector<std::pair<int, int>> socketOptions{
-        {ZMQ_SNDHWM, socketHwm},
-        {ZMQ_RCVHWM, socketHwm},
-        {ZMQ_SNDTIMEO, Constants::kReadTimeout.count()},
-        {ZMQ_ROUTER_HANDOVER, 1},
-        {ZMQ_TCP_KEEPALIVE, Constants::kKeepAliveEnable},
-        {ZMQ_TCP_KEEPALIVE_IDLE, Constants::kKeepAliveTime.count()},
-        {ZMQ_TCP_KEEPALIVE_CNT, Constants::kKeepAliveCnt},
-        {ZMQ_TCP_KEEPALIVE_INTVL, Constants::kKeepAliveIntvl.count()}};
-
-    if (maybeIpTos) {
-      socketOptions.emplace_back(ZMQ_TOS, maybeIpTos.value());
-    }
-
-    // INPROC
-    prepareSocket(inprocCmdSock_, inprocCmdUrl, socketOptions);
-
-    // TCP
-    if (tcpCmdUrl) {
-      folly::Optional<fbzmq::IdentityString> id;
-      if (thrift::OpenrModuleType::KVSTORE == moduleType) {
-        id = fbzmq::IdentityString{folly::sformat("{}::TCP::CMD", nodeName)};
-      }
-      tcpCmdSock_ = fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
-          zmqContext, id, folly::none, fbzmq::NonblockingFlag{true});
-      prepareSocket(tcpCmdSock_.value(), tcpCmdUrl.value(), socketOptions);
-    }
-  });
+  runInEventLoop([this]() { prepareSocket(inprocCmdSock_, inprocCmdUrl); });
 }
 
 void
 OpenrEventLoop::prepareSocket(
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
-    std::string url,
-    const std::vector<std::pair<int, int>>& socketOptions) {
+    std::string const& url,
+    folly::Optional<int> maybeIpTos) {
+  std::vector<std::pair<int, int>> socketOptions{
+      {ZMQ_SNDHWM, Constants::kHighWaterMark},
+      {ZMQ_RCVHWM, Constants::kHighWaterMark},
+      {ZMQ_SNDTIMEO, Constants::kReadTimeout.count()},
+      {ZMQ_ROUTER_HANDOVER, 1},
+      {ZMQ_TCP_KEEPALIVE, Constants::kKeepAliveEnable},
+      {ZMQ_TCP_KEEPALIVE_IDLE, Constants::kKeepAliveTime.count()},
+      {ZMQ_TCP_KEEPALIVE_CNT, Constants::kKeepAliveCnt},
+      {ZMQ_TCP_KEEPALIVE_INTVL, Constants::kKeepAliveIntvl.count()}};
+
+  if (maybeIpTos.hasValue()) {
+    socketOptions.emplace_back(ZMQ_TOS, maybeIpTos.value());
+  }
+
   for (const auto& pair : socketOptions) {
     const auto opt = pair.first;
     const auto val = pair.second;

@@ -95,6 +95,9 @@ struct KvStoreParams {
   // the socket to publish changes to kv-store
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock;
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock;
+  // socket for remote commands
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock;
+
   // ZMQ high water
   int zmqHwm;
   // IP ToS
@@ -115,7 +118,8 @@ struct KvStoreParams {
   KvStoreParams(
       std::string nodeid,
       fbzmq::Context& zmqContext,
-      fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalpubSock,
+      fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock,
+      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       // ZMQ high water mark
       int zmqhwm,
       // IP QoS
@@ -132,7 +136,8 @@ struct KvStoreParams {
       bool usefloodOptimization)
       : nodeId(nodeid),
         localPubSock(zmqContext),
-        globalPubSock(std::move(globalpubSock)),
+        globalPubSock(std::move(globalPubSock)),
+        globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
         maybeIpTos(std::move(maybeipTos)),
         dbSyncInterval(dbsyncInterval),

@@ -87,13 +87,7 @@ KvStore::KvStore(
     bool isFloodRoot,
     bool useFloodOptimization,
     const std::unordered_set<std::string>& areas)
-    : OpenrEventLoop(
-          nodeId,
-          thrift::OpenrModuleType::KVSTORE,
-          zmqContext,
-          std::string{globalCmdUrl},
-          maybeIpTos,
-          zmqHwm),
+    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::KVSTORE, zmqContext),
       localPubUrl_(std::move(localPubUrl)),
       globalPubUrl_(std::move(globalPubUrl)),
       monitorSubmitInterval_(monitorSubmitInterval),
@@ -103,6 +97,11 @@ KvStore::KvStore(
           fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
               zmqContext,
               fbzmq::IdentityString{createGlobalPubId(nodeId)},
+              folly::none,
+              fbzmq::NonblockingFlag{true}),
+          fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
+              zmqContext,
+              fbzmq::IdentityString{folly::sformat("{}::TCP::CMD", nodeId)},
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
@@ -180,6 +179,14 @@ KvStore::KvStore(
     LOG(FATAL) << "Error binding to URL '" << globalPubUrl_ << "' "
                << globalPubBind.error();
   }
+
+  //
+  // Prepare global command socket
+  //
+  runInEventLoop([this, globalCmdUrl, maybeIpTos]() {
+    OpenrEventLoop::prepareSocket(
+        kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
+  });
 
   // create KvStoreDb instances
   for (auto const& area : areas_) {

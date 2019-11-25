@@ -31,39 +31,30 @@ class OpenrEventLoop : public fbzmq::ZmqEventLoop {
   const thrift::OpenrModuleType moduleType;
   const std::string moduleName;
   const std::string inprocCmdUrl;
-  const folly::Optional<std::string> tcpCmdUrl;
 
  protected:
   OpenrEventLoop(
       const std::string& nodeName,
       const thrift::OpenrModuleType type,
-      fbzmq::Context& zmqContext,
-      folly::Optional<std::string> tcpUrl = folly::none,
-      folly::Optional<int> maybeIpTos = folly::none,
-      int socketHwm = Constants::kHighWaterMark);
+      fbzmq::Context& zmqContext);
+
+  virtual folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
+      fbzmq::Message&& request) = 0;
+
+  void prepareSocket(
+      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
+      std::string const& url,
+      folly::Optional<int> maybeIpTos = folly::none);
+
+  void processCmdSocketRequest(
+      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
 
  private:
   // disable copying
   OpenrEventLoop(OpenrEventLoop const&) = delete;
   OpenrEventLoop& operator=(OpenrEventLoop const&) = delete;
 
-  void prepareSocket(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
-      std::string url,
-      const std::vector<std::pair<int, int>>& socketOptions);
-
-  void processCmdSocketRequest(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
-
-  virtual folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) = 0;
-
-  // For backward compatibility, we are preserving the endpoints that the
-  // modules previously had. All had inproc socket while some also had tcp
-  // socket. going foraward, we will hopefully remove the tcp socket and
-  // shift any requests coming from outside the process to use secure thrift
+  // REQ/REP socket for communicating with the module
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> inprocCmdSock_;
-
-  folly::Optional<fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>> tcpCmdSock_;
 }; // class OpenrEventLoop
 } // namespace openr
