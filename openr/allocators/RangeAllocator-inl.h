@@ -56,15 +56,22 @@ RangeAllocator<T>::RangeAllocator(
       backoff_(minBackoffDur, maxBackoffDur),
       checkValueInUseCb_(std::move(checkValueInUseCb)),
       rangeAllocTtl_(rangeAllocTtl),
-      area_(area) {}
+      area_(area) {
+  timeout_ = fbzmq::ZmqTimeout::make(eventLoop_, [this]() mutable noexcept {
+    CHECK(allocateValue_.hasValue());
+    auto allocateValue = allocateValue_.value();
+    allocateValue_.clear();
+    tryAllocate(allocateValue);
+  });
+}
 
 template <typename T>
 RangeAllocator<T>::~RangeAllocator() {
   VLOG(2) << "RangeAllocator: Destructing " << nodeName_ << ", " << keyPrefix_;
   // We need to cancel any pending timeout
-  if (timeoutToken_) {
-    eventLoop_->cancelTimeout(timeoutToken_.value());
-    timeoutToken_.clear();
+  if (timeout_) {
+    timeout_.reset();
+    allocateValue_.clear();
   }
 
   // Unsubscribe from KvStoreClient if we have been to
@@ -114,9 +121,8 @@ RangeAllocator<T>::startAllocator(
   // Subscribe to changes in KvStore
   VLOG(2) << "RangeAllocator: Created. Scheduling first tryAllocate. "
           << "Node: " << nodeName_ << ", Prefix: " << keyPrefix_;
-  timeoutToken_ = eventLoop_->scheduleTimeout(
-      backoff_.getTimeRemainingUntilRetry(),
-      [this, initValue]() mutable noexcept { tryAllocate(initValue); });
+  allocateValue_ = initValue;
+  timeout_->scheduleTimeout(backoff_.getTimeRemainingUntilRetry());
 }
 
 template <typename T>
@@ -159,7 +165,6 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
 
   VLOG(1) << "RangeAllocator " << nodeName_ << ": trying to allocate "
           << newVal;
-  timeoutToken_ = folly::none; // Cleanup allocation retry timer
 
   // Check for any existing value in KvStore
   const auto newKey = createKey(newVal);
@@ -282,9 +287,8 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
   }
 
   // Schedule timeout to allocate new value
-  timeoutToken_ = eventLoop_->scheduleTimeout(
-      backoff_.getTimeRemainingUntilRetry(),
-      [this, newVal]() mutable noexcept { tryAllocate(newVal); });
+  allocateValue_ = newVal;
+  timeout_->scheduleTimeout(backoff_.getTimeRemainingUntilRetry());
 }
 
 template <typename T>
@@ -296,7 +300,7 @@ RangeAllocator<T>::keyValUpdated(
   // Some sanity checks
   CHECK_EQ(1, thriftVal.version);
   // no timeout being scheduled
-  CHECK(!timeoutToken_.hasValue());
+  CHECK(!timeout_->isScheduled());
   // only subscribed to requested/allocated value change
   CHECK(myRequestedValue_ or myValue_);
   CHECK_EQ(myValue_ ? *myValue_ : *myRequestedValue_, val);

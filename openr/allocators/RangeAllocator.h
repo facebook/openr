@@ -165,7 +165,8 @@ class RangeAllocator {
   ExponentialBackoff<std::chrono::milliseconds> backoff_;
 
   // Scheduled timeout token
-  folly::Optional<int64_t> timeoutToken_{folly::none};
+  folly::Optional<int64_t> allocateValue_{folly::none};
+  std::unique_ptr<fbzmq::ZmqTimeout> timeout_;
 
   // if allocator has started
   bool hasStarted_{false};
