@@ -172,9 +172,6 @@ main(int argc, char** argv) {
   BuildInfo::log(ss);
   gflags::SetVersionString(ss.str());
 
-  // Initialize all params
-  folly::init(&argc, &argv);
-
   // Initialize syslog
   // We log all messages upto INFO level.
   // LOG_CONS => Log to console on error
@@ -183,6 +180,14 @@ main(int argc, char** argv) {
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   SYSLOG(INFO) << "Starting OpenR daemon.";
+
+  LOG(INFO) << "With args: ";
+  for (int i = 0; i < argc; ++i) {
+    LOG(INFO) << argv[i];
+  }
+
+  // Initialize all params
+  folly::init(&argc, &argv);
 
   // Export and log build information
   BuildInfo::exportBuildInfo();
