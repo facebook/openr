@@ -2567,7 +2567,21 @@ Spark::submitCounters() {
       counters["spark.seq_num." + neighbor.info.nodeName] = neighbor.seqNum;
     }
   }
-  counters["spark.num_tracked_interfaces"] = neighbors_.size();
+  for (auto const& ifaceNeighbors : spark2Neighbors_) {
+    trackedNeighborCount += ifaceNeighbors.second.size();
+    for (auto const& kv : ifaceNeighbors.second) {
+      auto const& neighbor = kv.second;
+      adjacentNeighborCount += neighbor.state == SparkNeighState::ESTABLISHED;
+      counters
+          ["spark.rtt_us." + neighbor.nodeName + "." + ifaceNeighbors.first] =
+              neighbor.rtt.count();
+      counters["spark.rtt_latest_us." + neighbor.nodeName] =
+          neighbor.rttLatest.count();
+      counters["spark.seq_num." + neighbor.nodeName] = neighbor.seqNum;
+    }
+  }
+  counters["spark.num_tracked_interfaces"] =
+      neighbors_.size() ? neighbors_.size() : spark2Neighbors_.size();
   counters["spark.num_tracked_neighbors"] = trackedNeighborCount;
   counters["spark.num_adjacent_neighbors"] = adjacentNeighborCount;
   counters["spark.my_seq_num"] = mySeqNum_;
