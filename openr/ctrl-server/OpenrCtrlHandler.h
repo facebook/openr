@@ -268,7 +268,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   //
   inline size_t
   getNumKvStorePublishers() {
-    return kvStorePublishers_->size();
+    return kvStorePublishers_.wlock()->size();
   }
 
   inline size_t
