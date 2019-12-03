@@ -34,6 +34,8 @@ class OpenrModule : public virtual fbzmq::Runnable {
   const std::string moduleName;
   const std::string inprocCmdUrl;
 
+  virtual std::chrono::seconds getTimestamp() const = 0;
+
  protected:
   OpenrModule(
       const std::string& nodeName,

@@ -24,9 +24,8 @@ namespace openr {
 OpenrCtrlHandler::OpenrCtrlHandler(
     const std::string& nodeName,
     const std::unordered_set<std::string>& acceptablePeerCommonNames,
-    std::unordered_map<
-        thrift::OpenrModuleType,
-        std::shared_ptr<OpenrEventLoop>>& moduleTypeToEvl,
+    std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>&
+        moduleTypeToObj,
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
     fbzmq::ZmqEventLoop& evl,
@@ -34,7 +33,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     : facebook::fb303::FacebookBase2("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
-      moduleTypeToEvl_(moduleTypeToEvl),
+      moduleTypeToObj_(moduleTypeToObj),
       evl_(evl),
       kvStoreSubSock_(context) {
   // Create monitor client
@@ -136,7 +135,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
         });
   });
 
-  for (const auto& kv : moduleTypeToEvl_) {
+  for (const auto& kv : moduleTypeToObj_) {
     auto moduleType = kv.first;
     auto& inprocUrl = kv.second->inprocCmdUrl;
     auto result = moduleSockets_.emplace(

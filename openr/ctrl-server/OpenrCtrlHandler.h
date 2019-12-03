@@ -10,7 +10,7 @@
 #include <common/fb303/cpp/FacebookBase2.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
-#include <openr/common/OpenrEventLoop.h>
+#include <openr/common/OpenrModule.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCpp.h>
 
@@ -25,9 +25,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   OpenrCtrlHandler(
       const std::string& nodeName,
       const std::unordered_set<std::string>& acceptablePeerCommonNames,
-      std::unordered_map<
-          thrift::OpenrModuleType,
-          std::shared_ptr<OpenrEventLoop>>& moduleTypeToEvl,
+      std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>&
+          moduleTypeToObj,
       MonitorSubmitUrl const& monitorSubmitUrl,
       KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
       fbzmq::ZmqEventLoop& evl,
@@ -301,8 +300,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   const std::string nodeName_;
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
-  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
-      moduleTypeToEvl_;
+  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>
+      moduleTypeToObj_;
   std::unordered_map<
       thrift::OpenrModuleType,
       fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>>

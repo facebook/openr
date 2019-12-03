@@ -16,6 +16,12 @@ namespace openr {
 //
 
 class OpenrEventLoop : public OpenrModule, public fbzmq::ZmqEventLoop {
+ public:
+  std::chrono::seconds
+  getTimestamp() const override {
+    return fbzmq::ZmqEventLoop::getTimestamp();
+  }
+
  protected:
   OpenrEventLoop(
       const std::string& nodeName,

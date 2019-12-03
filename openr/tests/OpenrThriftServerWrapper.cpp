@@ -37,7 +37,7 @@ OpenrThriftServerWrapper::run() {
   openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
       nodeName_,
       std::unordered_set<std::string>{},
-      moduleTypeToEvl_,
+      moduleTypeToObj_,
       monitorSubmitUrl_,
       kvStoreLocalPubUrl_,
       mainEvl_,
@@ -61,7 +61,7 @@ OpenrThriftServerWrapper::stop() {
   // ATTN: moduleTypeToEvl maintains <shared_ptr> of OpenrEventLoop.
   //       Must cleanup. Otherwise, there will be additional ref count and
   //       cause OpenrEventLoop binding to the existing addr.
-  moduleTypeToEvl_.clear();
+  moduleTypeToObj_.clear();
   mainEvl_.stop();
   mainEvlThread_.join();
   openrCtrlHandler_.reset();

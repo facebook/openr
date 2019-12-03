@@ -32,18 +32,18 @@ Watchdog::Watchdog(
 }
 
 void
-Watchdog::addEvl(ZmqEventLoop* evl, const std::string& name) {
-  runImmediatelyOrInEventLoop([&, evl, name]() {
-    CHECK_EQ(allEvls_.count(evl), 0);
-    allEvls_[evl] = name;
+Watchdog::addModule(OpenrModule* module, const std::string& name) {
+  runImmediatelyOrInEventLoop([&, module, name]() {
+    CHECK_EQ(allModules_.count(module), 0);
+    allModules_[module] = name;
   });
 }
 
 void
-Watchdog::delEvl(ZmqEventLoop* evl) {
-  runImmediatelyOrInEventLoop([&, evl]() {
-    CHECK_NE(allEvls_.count(evl), 0);
-    allEvls_.erase(evl);
+Watchdog::delModule(OpenrModule* module) {
+  runImmediatelyOrInEventLoop([&, module]() {
+    CHECK_NE(allModules_.count(module), 0);
+    allModules_.erase(module);
   });
 }
 
@@ -90,7 +90,7 @@ Watchdog::updateCounters() {
   auto const& now = std::chrono::duration_cast<std::chrono::seconds>(
       std::chrono::system_clock::now().time_since_epoch());
   std::vector<std::string> stuckThreads;
-  for (auto const& it : allEvls_) {
+  for (auto const& it : allModules_) {
     auto const& name = it.second;
     auto const& lastTs = it.first->getTimestamp();
     VLOG(4) << "Thread " << name << ", " << (now - lastTs).count()

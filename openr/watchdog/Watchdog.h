@@ -19,6 +19,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/OpenrModule.h>
 #include <openr/common/Types.h>
 
 namespace openr {
@@ -37,9 +38,9 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
   Watchdog(Watchdog const&) = delete;
   Watchdog& operator=(Watchdog const&) = delete;
 
-  void addEvl(ZmqEventLoop* evl, const std::string& name);
+  void addModule(OpenrModule* module, const std::string& name);
 
-  void delEvl(ZmqEventLoop* evl);
+  void delModule(OpenrModule* module);
 
   bool memoryLimitExceeded() const;
 
@@ -57,7 +58,7 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
   std::unique_ptr<fbzmq::ZmqTimeout> watchdogTimer_{nullptr};
 
   // mapping of thread name to eventloop pointer
-  std::unordered_map<ZmqEventLoop*, std::string> allEvls_;
+  std::unordered_map<OpenrModule*, std::string> allModules_;
 
   // thread healthcheck interval
   const std::chrono::seconds healthCheckInterval_;

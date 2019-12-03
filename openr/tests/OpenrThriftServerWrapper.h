@@ -26,8 +26,8 @@ class OpenrThriftServerWrapper {
   KvStoreLocalPubUrl const kvStoreLocalPubUrl_;
   fbzmq::Context& context_;
 
-  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrEventLoop>>
-      moduleTypeToEvl_;
+  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>
+      moduleTypeToObj_;
   std::shared_ptr<OpenrCtrlHandler> openrCtrlHandler_{nullptr};
 
  public:
@@ -45,8 +45,8 @@ class OpenrThriftServerWrapper {
 
   inline void
   addModuleType(
-      thrift::OpenrModuleType module, std::shared_ptr<OpenrEventLoop> evl) {
-    moduleTypeToEvl_[module] = evl;
+      thrift::OpenrModuleType type, std::shared_ptr<OpenrModule> module) {
+    moduleTypeToObj_[type] = module;
   }
 
   inline uint16_t
