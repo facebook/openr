@@ -106,8 +106,8 @@ class FibRoutesInstalledCmd(FibAgentCmd):
 
         try:
             mpls_routes = self.client.getMplsRouteTableByClient(client_id)
-        except Exception as e:
-            print("Pls check Open/R version. Exception: {}".format(e))
+        except Exception:
+            pass
 
         if json_opt:
             utils.print_json(
@@ -232,9 +232,6 @@ class FibValidateRoutesCmd(FibAgentCmd):
             agent_mpls_routes = self.client.getMplsRouteTableByClient(
                 self.client.client_id
             )
-        except Exception as e:
-            print("Pls check Open/R version. Exception: {}".format(e))
-        else:
             (ret, _) = utils.compare_route_db(
                 fib_mpls_routes,
                 agent_mpls_routes,
@@ -243,6 +240,8 @@ class FibValidateRoutesCmd(FibAgentCmd):
                 cli_opts.enable_color,
             )
             all_success = all_success and ret
+        except Exception:
+            pass
 
         (ret, _) = utils.validate_route_nexthops(
             fib_unicast_routes,
