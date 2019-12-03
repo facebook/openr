@@ -184,8 +184,14 @@ KvStore::KvStore(
   // Prepare global command socket
   //
   runInEventLoop([this, globalCmdUrl, maybeIpTos]() {
-    OpenrEventLoop::prepareSocket(
+    OpenrModule::prepareSocket(
         kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
+    addSocket(
+        fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
+        ZMQ_POLLIN,
+        [this](int) noexcept {
+          OpenrModule::processCmdSocketRequest(kvParams_.globalCmdSock);
+        });
   });
 
   // create KvStoreDb instances

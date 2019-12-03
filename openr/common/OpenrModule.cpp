@@ -5,13 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/common/OpenrEventLoop.h"
+#include "openr/common/OpenrModule.h"
 
 #include <folly/Format.h>
 
 namespace openr {
 
-OpenrEventLoop::OpenrEventLoop(
+OpenrModule::OpenrModule(
     const std::string& nodeName,
     const thrift::OpenrModuleType type,
     fbzmq::Context& zmqContext)
@@ -21,12 +21,10 @@ OpenrEventLoop::OpenrEventLoop(
       inprocCmdUrl(
           folly::sformat("inproc://{}_{}_local_cmd", nodeName, moduleName)),
       inprocCmdSock_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
-  runInEventLoop([this]() { prepareSocket(inprocCmdSock_, inprocCmdUrl); });
-}
+          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {}
 
 void
-OpenrEventLoop::prepareSocket(
+OpenrModule::prepareSocket(
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
     std::string const& url,
     folly::Optional<int> maybeIpTos) {
@@ -58,20 +56,15 @@ OpenrEventLoop::prepareSocket(
   if (rc.hasError()) {
     LOG(FATAL) << "Error binding to URL '" << url << "'. Error: " << rc.error();
   }
-
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*socket},
-      ZMQ_POLLIN,
-      [this, &socket](int) noexcept { processCmdSocketRequest(socket); });
 }
 
 void
-OpenrEventLoop::processCmdSocketRequest(
+OpenrModule::processCmdSocketRequest(
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept {
   auto maybeReq = cmdSock.recvMultiple();
 
   if (maybeReq.hasError()) {
-    LOG(ERROR) << "OpenrEventLoop::processCmdSocketRequest: Error receiving "
+    LOG(ERROR) << "OpenrModule::processCmdSocketRequest: Error receiving "
                << "command: " << maybeReq.error();
     return;
   }

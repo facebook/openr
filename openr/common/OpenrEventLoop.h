@@ -7,54 +7,29 @@
 
 #pragma once
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/zmq/Zmq.h>
-#include <folly/Expected.h>
-#include <openr/common/Constants.h>
-#include <openr/if/gen-cpp2/OpenrCtrl_types.h>
+#include <openr/common/OpenrModule.h>
 
 namespace openr {
 
 //
-// OpenrEventLoop is an abstract class that defines the essential api and
-// members of all openr modules. Specifically, every openr module:
-//
-// 1. is a ZmqEventLoop
-// 2. has a name
-// 3. should implement a request reply api on at least a inproc bound
-//    ZMQ_ROUTER socket (and maybe other ZMQ sockets, like a globally
-//    reachable one)
+// OpenrEventLoop is an OpenrModule supported by ZmqEventLoop
 //
 
-class OpenrEventLoop : public fbzmq::ZmqEventLoop {
- public:
-  const thrift::OpenrModuleType moduleType;
-  const std::string moduleName;
-  const std::string inprocCmdUrl;
-
+class OpenrEventLoop : public OpenrModule, public fbzmq::ZmqEventLoop {
  protected:
   OpenrEventLoop(
       const std::string& nodeName,
       const thrift::OpenrModuleType type,
-      fbzmq::Context& zmqContext);
-
-  virtual folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) = 0;
-
-  void prepareSocket(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
-      std::string const& url,
-      folly::Optional<int> maybeIpTos = folly::none);
-
-  void processCmdSocketRequest(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
-
- private:
-  // disable copying
-  OpenrEventLoop(OpenrEventLoop const&) = delete;
-  OpenrEventLoop& operator=(OpenrEventLoop const&) = delete;
-
-  // REQ/REP socket for communicating with the module
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> inprocCmdSock_;
+      fbzmq::Context& zmqContext)
+      : OpenrModule(nodeName, type, zmqContext) {
+    runInEventLoop([this]() {
+      prepareSocket(inprocCmdSock_, inprocCmdUrl);
+      addSocket(
+          fbzmq::RawZmqSocketPtr{*inprocCmdSock_},
+          ZMQ_POLLIN,
+          [this](int) noexcept { processCmdSocketRequest(inprocCmdSock_); });
+    });
+  }
 }; // class OpenrEventLoop
+
 } // namespace openr

@@ -281,7 +281,7 @@ add_library(openrlib
   openr/common/BuildInfo.cpp
   openr/common/ExponentialBackoff.cpp
   openr/common/NetworkUtil.cpp
-  openr/common/OpenrEventLoop.cpp
+  openr/common/OpenrModule.cpp
   openr/common/Util.cpp
   openr/common/Constants.cpp
   openr/common/ThriftUtil.cpp
