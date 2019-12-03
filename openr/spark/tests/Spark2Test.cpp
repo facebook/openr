@@ -560,7 +560,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
   // start tracking iface2
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
-  LOG(INFO) << "Wait spark2 and old spark instances to frm adj";
+  LOG(INFO) << "Wait spark2 and old spark instances to form adj";
 
   // Now wait for sparks to detect each other
   {

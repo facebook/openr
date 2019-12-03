@@ -1264,6 +1264,11 @@ Spark::neighborDownWrapper(
       neighbor.area);
 
   // remove neighborship on this interface
+  if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
+    LOG(WARNING) << "Ignore " << ifName << " as there is NO active neighbors.";
+    return;
+  }
+
   ifNameToActiveNeighbors_.at(ifName).erase(neighborName);
   if (ifNameToActiveNeighbors_.at(ifName).empty()) {
     ifNameToActiveNeighbors_.erase(ifName);
