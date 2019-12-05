@@ -81,8 +81,10 @@ class KvStoreClient {
    * e.g., client process terminates. Client will update TTL every ttl/3 when
    * running.
    * By default key is published to default area kvstore instance.
+   *
+   * returns true if call results in value change for KvStore
    */
-  void persistKey(
+  bool persistKey(
       std::string const& key,
       std::string const& value,
       std::chrono::milliseconds ttl = Constants::kTtlInfInterval,

@@ -248,7 +248,7 @@ KvStoreClient::checkPersistKeyInStore() {
   checkPersistKeyTimer_->scheduleTimeout(timeout);
 }
 
-void
+bool
 KvStoreClient::persistKey(
     std::string const& key,
     std::string const& value,
@@ -338,6 +338,8 @@ KvStoreClient::persistKey(
       ttl.count(),
       hasTtlChanged,
       area);
+
+  return valueChange;
 }
 
 thrift::Value
