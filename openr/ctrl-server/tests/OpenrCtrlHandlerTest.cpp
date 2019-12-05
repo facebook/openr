@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <cstdio>
 #include <thread>
 
 #include <fbzmq/service/monitor/ZmqMonitor.h>
@@ -40,9 +41,12 @@ class OpenrCtrlFixture : public ::testing::Test {
     zmqMonitorThread_ = std::thread([&]() { zmqMonitor->run(); });
 
     // Create PersistentStore
+    std::string const configStoreFile = "/tmp/openr-ctrl-handler-test.bin";
+    // start fresh
+    std::remove(configStoreFile.data());
     persistentStore = std::make_unique<PersistentStore>(
         nodeName,
-        "/tmp/openr-ctrl-handler-test.bin",
+        configStoreFile,
         context_,
         Constants::kPersistentStoreInitialBackoff,
         Constants::kPersistentStoreMaxBackoff,
@@ -701,7 +705,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
         handler->semifuture_subscribeAndGetKvStore().get();
 
     // Expect 10 keys in the initial dump
-    EXPECT_EQ(10, responseAndSubscription.response.keyVals.size());
+    EXPECT_EQ(11, responseAndSubscription.response.keyVals.size());
 
     auto subscription =
         std::move(responseAndSubscription.stream)

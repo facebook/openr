@@ -356,10 +356,10 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   EXPECT_EQ(db.thisNodeName, "node-1");
   EXPECT_EQ(db.prefixEntries.size(), 1);
   ASSERT_TRUE(db.perfEvents.hasValue());
-  ASSERT_EQ(1, db.perfEvents->events.size());
+  ASSERT_FALSE(db.perfEvents->events.empty());
   {
-    const auto& perfEvent = db.perfEvents->events.at(0);
-    EXPECT_EQ("PREFIX_DB_UPDATED", perfEvent.eventDescr);
+    const auto& perfEvent = db.perfEvents->events.back();
+    EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
     EXPECT_EQ("node-1", perfEvent.nodeName);
     EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
   }
@@ -383,10 +383,10 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   auto prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 1);
   ASSERT_TRUE(db.perfEvents.hasValue());
-  ASSERT_EQ(1, db.perfEvents->events.size());
+  ASSERT_FALSE(db.perfEvents->events.empty());
   {
-    const auto& perfEvent = db.perfEvents->events.at(0);
-    EXPECT_EQ("PREFIX_DB_UPDATED", perfEvent.eventDescr);
+    const auto& perfEvent = db.perfEvents->events.back();
+    EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
     EXPECT_EQ("node-1", perfEvent.nodeName);
     EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
   }
@@ -400,10 +400,10 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 8);
   ASSERT_TRUE(db.perfEvents.hasValue());
-  ASSERT_EQ(1, db.perfEvents->events.size());
+  ASSERT_FALSE(db.perfEvents->events.empty());
   {
-    const auto& perfEvent = db.perfEvents->events.at(0);
-    EXPECT_EQ("PREFIX_DB_UPDATED", perfEvent.eventDescr);
+    const auto& perfEvent = db.perfEvents->events.back();
+    EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
     EXPECT_EQ("node-1", perfEvent.nodeName);
     EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
   }
@@ -420,10 +420,10 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 5);
   ASSERT_TRUE(db.perfEvents.hasValue());
-  ASSERT_EQ(1, db.perfEvents->events.size());
+  ASSERT_FALSE(db.perfEvents->events.empty());
   {
-    const auto& perfEvent = db.perfEvents->events.at(0);
-    EXPECT_EQ("PREFIX_DB_UPDATED", perfEvent.eventDescr);
+    const auto& perfEvent = db.perfEvents->events.back();
+    EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
     EXPECT_EQ("node-1", perfEvent.nodeName);
     EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
   }
@@ -456,6 +456,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   // Synchronization primitive
   folly::Baton baton;
   folly::Optional<thrift::PrefixEntry> expectedPrefix;
+  bool gotExpected = true;
 
   kvStoreClient->subscribeKey(
       keyStr,
@@ -464,21 +465,20 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             val->value.value(), serializer);
         EXPECT_EQ(db.thisNodeName, "node-1");
-        if (expectedPrefix.hasValue()) {
-          ASSERT_EQ(db.prefixEntries.size(), 1);
+        if (expectedPrefix.hasValue() and db.prefixEntries.size() != 0) {
+          // we should always be advertising one prefix until we withdraw all
+          EXPECT_EQ(db.prefixEntries.size(), 1);
           EXPECT_EQ(expectedPrefix, db.prefixEntries.at(0));
+          gotExpected = true;
         } else {
-          if (perPrefixKeys_) {
-            ASSERT_EQ(db.prefixEntries.size(), 1);
-            EXPECT_EQ(addr1, db.prefixEntries.at(0).prefix);
-            EXPECT_TRUE(db.deletePrefix);
-          } else {
-            // We will have no keys
-            EXPECT_EQ(db.prefixEntries.size(), 0);
-          }
+          EXPECT_TRUE(not perPrefixKeys_ or db.deletePrefix);
+          EXPECT_TRUE(not perPrefixKeys_ or db.prefixEntries.size() == 1);
         }
+
         // Signal verification
-        baton.post();
+        if (gotExpected) {
+          baton.post();
+        }
       });
 
   // Start event loop in it's own thread
@@ -489,6 +489,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   // 1. Inject prefix1 with client-bgp - Verify KvStore
   //
   expectedPrefix = bgp_prefix;
+  gotExpected = false;
   prefixManagerClient->addPrefixes({bgp_prefix});
   baton.wait();
   baton.reset();
@@ -497,6 +498,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   // 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
   //
   expectedPrefix = loopback_prefix; // lowest client-id will win
+  gotExpected = false;
   prefixManagerClient->addPrefixes({loopback_prefix, default_prefix});
   baton.wait();
   baton.reset();
@@ -505,6 +507,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   // 3. Withdraw prefix1 with client-loopback - Verify KvStore
   //
   expectedPrefix = default_prefix;
+  gotExpected = false;
   prefixManagerClient->withdrawPrefixes({loopback_prefix});
   baton.wait();
   baton.reset();
@@ -513,6 +516,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   // 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
   //
   expectedPrefix = folly::none;
+  gotExpected = true;
   prefixManagerClient->withdrawPrefixes({bgp_prefix, default_prefix});
   baton.wait();
   baton.reset();

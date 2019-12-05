@@ -54,6 +54,7 @@ class PrefixManager final : public OpenrEventLoop {
   int64_t getPrefixWithdrawCounter();
 
  private:
+  void outputState();
   // Update persistent store with non-ephemeral prefix entries
   void persistPrefixDb();
 
@@ -75,44 +76,28 @@ class PrefixManager final : public OpenrEventLoop {
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
 
-  // Determine if any prefix entry is persistent (non-ephemeral) in input
-  bool isAnyInputPrefixPersistent(
-      const std::vector<thrift::PrefixEntry>& prefixes) const;
-
-  // Determine if any prefix entry is persistent (non-ephemeral) in prefixMap_
-  bool isAnyExistingPrefixPersistent(
-      const std::vector<thrift::PrefixEntry>& prefixes) const;
-
-  // Determine if any prefix entry is persistent (non-ephemeral) by type in
-  // prefixMap_
-  bool isAnyExistingPrefixPersistentByType(thrift::PrefixType type) const;
-
   // Submit internal state counters to monitor
   void submitCounters();
 
   // prefix counter for a given key
   int64_t getCounter(const std::string& key);
 
-  // key prefix callback
-  void processKeyPrefixUpdate(
-      const std::string& key, folly::Optional<thrift::Value> value) noexcept;
+  // add prefix entry in kvstore, return per prefix key name
+  std::string advertisePrefix(thrift::PrefixEntry& prefixEntry);
 
-  // add prefix entry in kvstore
-  void advertisePrefix(const thrift::PrefixEntry& prefixEntry);
-
-  // called when withdrawing a prefix, add prefix DB into kvstore with
-  // delete prefix DB flag set to true
-  void advertisePrefixWithdraw(const thrift::PrefixEntry& prefixEntry);
-
-  // serialize prefixDb. This also adds miscellaneous information like perf
-  // events
-  std::string serializePrefixDb(thrift::PrefixDatabase&& prefixDb);
+  // add event named updateEvent to perfEvents if it has value and the last
+  // element is not already updateEvent
+  void maybeAddEvent(
+      thrift::PerfEvents& perfEvents, std::string const& updateEvent);
 
   // this node name
   const std::string nodeId_;
 
   // client to interact with ConfigStore
   PersistentStoreClient configStoreClient_;
+
+  // keep track of prefixDB on disk
+  thrift::PrefixDatabase diskState_;
 
   const PrefixDbMarker prefixDbMarker_;
 
@@ -122,13 +107,11 @@ class PrefixManager final : public OpenrEventLoop {
   // enable convergence performance measurement for Adjacencies update
   const bool enablePerfMeasurement_{false};
 
-  // Hold timepoint. Prefix database will not be advertised until we pass this
-  // timepoint.
-  std::chrono::steady_clock::time_point prefixHoldUntilTimePoint_;
-
   // Throttled version of updateKvStore. It batches up multiple calls and
   // send them in one go!
-  std::unique_ptr<fbzmq::ZmqThrottle> updateKvStoreThrottled_;
+  std::unique_ptr<fbzmq::ZmqThrottle> outputStateThrottled_;
+
+  std::unique_ptr<fbzmq::ZmqTimeout> initialOutputStateTimer_;
 
   // TTL for a key in the key value store
   const std::chrono::milliseconds ttlKeyInKvStore_;
@@ -139,9 +122,10 @@ class PrefixManager final : public OpenrEventLoop {
   // The current prefix db this node is advertising. In-case if multiple entries
   // exists for a given prefix, lowest prefix-type is preferred. This is to
   // bring deterministic behavior for advertising routes.
-  std::unordered_map<
-      thrift::IpPrefix,
-      std::map<thrift::PrefixType, thrift::PrefixEntry>> // IMP: Ordered
+  // IMP: Ordered
+  std::map<
+      thrift::PrefixType,
+      std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>>
       prefixMap_;
 
   // the serializer/deserializer helper we'll be using
@@ -156,8 +140,15 @@ class PrefixManager final : public OpenrEventLoop {
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
-  // IP perfixes to advertisze to kvstore (either add or delete)
-  std::unordered_set<thrift::IpPrefix> prefixesToUpdate_{};
+  // track any prefix keys for this node that we see to make sure we withdraw
+  // anything we no longer wish to advertise
+  std::unordered_set<std::string> keysToClear_;
+
+  // perfEvents related to a given prefisEntry
+  std::unordered_map<
+      thrift::PrefixType,
+      std::unordered_map<thrift::IpPrefix, thrift::PerfEvents>>
+      addingEvents_;
 
   // area Id
   const std::unordered_set<std::string> areas_{};
