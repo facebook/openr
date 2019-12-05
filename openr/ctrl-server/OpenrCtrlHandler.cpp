@@ -575,6 +575,49 @@ OpenrCtrlHandler::semifuture_getUnicastRoutes() {
   return p.getSemiFuture();
 }
 
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::MplsRoute>>>
+OpenrCtrlHandler::semifuture_getMplsRoutes() {
+  folly::Promise<std::unique_ptr<std::vector<thrift::MplsRoute>>> p;
+
+  thrift::FibRequest request;
+  request.cmd = thrift::FibCommand::MPLS_ROUTES_GET;
+
+  auto reply = requestReplyThrift<std::vector<thrift::MplsRoute>>(
+      thrift::OpenrModuleType::FIB, std::move(request));
+
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(std::make_unique<std::vector<thrift::MplsRoute>>(
+        std::move(reply.value())));
+  }
+  return p.getSemiFuture();
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::MplsRoute>>>
+OpenrCtrlHandler::semifuture_getMplsRoutesFiltered(
+    std::unique_ptr<std::vector<int32_t>> labels) {
+  folly::Promise<std::unique_ptr<std::vector<thrift::MplsRoute>>> p;
+
+  thrift::FibRequest request;
+  thrift::MslpRouteFilter params;
+
+  params.labels = std::move(*labels);
+  request.cmd = thrift::FibCommand::MPLS_ROUTES_GET;
+  request.mslpRouteFilter = std::move(params);
+
+  auto reply = requestReplyThrift<std::vector<thrift::MplsRoute>>(
+      thrift::OpenrModuleType::FIB, std::move(request));
+
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(std::make_unique<std::vector<thrift::MplsRoute>>(
+        std::move(reply.value())));
+  }
+  return p.getSemiFuture();
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
 OpenrCtrlHandler::semifuture_getPerfDb() {
   folly::Promise<std::unique_ptr<thrift::PerfDatabase>> p;

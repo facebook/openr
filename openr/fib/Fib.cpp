@@ -272,6 +272,37 @@ Fib::processRequestMsg(fbzmq::Message&& request) {
     return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
     break;
   }
+  case thrift::FibCommand::MPLS_ROUTES_GET: {
+    VLOG(2) << "Fib: RouteDb get filtered MPLS routes requested";
+    // return and send the vector<thrift::MplsRoute>
+    std::vector<thrift::MplsRoute> retRouteVec;
+
+    // if the params is empty, return all MPLS routes
+    const auto& filters = thriftReq.mslpRouteFilter;
+    if (not filters.has_value() || filters.value().labels.size() == 0) {
+      for (const auto& routes : routeState_.mplsRoutes) {
+        retRouteVec.emplace_back(routes.second);
+      }
+      return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
+      break;
+    }
+
+    // get the params: list of MPLS label filters -> set of MPLS label filters
+    const auto& labelFilterVec = thriftReq.mslpRouteFilter.value().labels;
+    std::set<int32_t> labelFilterSet;
+    for (const auto& label : labelFilterVec) {
+      labelFilterSet.insert(label);
+    }
+
+    // get the filtered MPLS routes and avoid duplicates
+    for (const auto& routes : routeState_.mplsRoutes) {
+      if (labelFilterSet.find(routes.first) != labelFilterSet.end()) {
+        retRouteVec.emplace_back(routes.second);
+      }
+    }
+    return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
+    break;
+  }
   default:
     LOG(ERROR) << "Unknown command received";
     return folly::makeUnexpected(fbzmq::Error());

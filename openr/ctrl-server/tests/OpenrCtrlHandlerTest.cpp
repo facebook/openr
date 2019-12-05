@@ -400,6 +400,17 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
     openrCtrlThriftClient_->sync_getUnicastRoutes(allRouteRet);
     EXPECT_EQ(0, allRouteRet.size());
   }
+  {
+    std::vector<thrift::MplsRoute> filterRet;
+    std::vector<std::int32_t> labels{1, 2};
+    openrCtrlThriftClient_->sync_getMplsRoutesFiltered(filterRet, labels);
+    EXPECT_EQ(0, filterRet.size());
+  }
+  {
+    std::vector<thrift::MplsRoute> allRouteRet;
+    openrCtrlThriftClient_->sync_getMplsRoutes(allRouteRet);
+    EXPECT_EQ(0, allRouteRet.size());
+  }
 }
 
 TEST_F(OpenrCtrlFixture, PerfApis) {

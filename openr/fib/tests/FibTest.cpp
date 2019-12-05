@@ -147,6 +147,46 @@ checkEqualRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
   return true;
 }
 
+bool
+checkEqualMplsRoutes(thrift::RouteDatabase lhs, thrift::RouteDatabase rhs) {
+  if (lhs.mplsRoutes.size() != rhs.mplsRoutes.size()) {
+    return false;
+  }
+  std::unordered_map<int32_t, std::set<thrift::NextHopThrift>> lhsRoutes;
+  std::unordered_map<int32_t, std::set<thrift::NextHopThrift>> rhsRoutes;
+  for (auto const& route : lhs.mplsRoutes) {
+    lhsRoutes.emplace(
+        route.topLabel,
+        std::set<thrift::NextHopThrift>(
+            route.nextHops.begin(), route.nextHops.end()));
+  }
+  for (auto const& route : rhs.mplsRoutes) {
+    rhsRoutes.emplace(
+        route.topLabel,
+        std::set<thrift::NextHopThrift>(
+            route.nextHops.begin(), route.nextHops.end()));
+  }
+
+  for (auto const& kv : lhsRoutes) {
+    if (rhsRoutes.count(kv.first) == 0) {
+      return false;
+    }
+    if (rhsRoutes.at(kv.first) != kv.second) {
+      return false;
+    }
+  }
+
+  for (auto const& kv : rhsRoutes) {
+    if (lhsRoutes.count(kv.first) == 0) {
+      return false;
+    }
+    if (lhsRoutes.at(kv.first) != kv.second) {
+      return false;
+    }
+  }
+  return true;
+}
+
 class FibTestFixture : public ::testing::Test {
  public:
   explicit FibTestFixture(bool waitOnDecision = false)
@@ -245,6 +285,24 @@ class FibTestFixture : public ::testing::Test {
   getUnicastRoutes() {
     auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
                     ->semifuture_getUnicastRoutes()
+                    .get();
+    EXPECT_TRUE(resp);
+    return *resp;
+  }
+
+  std::vector<thrift::MplsRoute>
+  getMplsRoutesFiltered(std::unique_ptr<std::vector<int32_t>> labels) {
+    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+                    ->semifuture_getMplsRoutesFiltered(std::move(labels))
+                    .get();
+    EXPECT_TRUE(resp);
+    return *resp;
+  }
+
+  std::vector<thrift::MplsRoute>
+  getMplsRoutes() {
+    auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
+                    ->semifuture_getMplsRoutes()
                     .get();
     EXPECT_TRUE(resp);
     return *resp;
@@ -687,6 +745,74 @@ TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
   EXPECT_EQ(mockFibHandler->getFibMplsSyncCount(), 2);
   EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 0);
   EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 0);
+}
+
+TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
+  // Make sure fib starts with clean route database
+  std::vector<thrift::UnicastRoute> routes;
+  std::vector<thrift::MplsRoute> mplsRoutes;
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+  EXPECT_EQ(mplsRoutes.size(), 0);
+
+  // initial syncFib debounce
+  mockFibHandler->waitForSyncFib();
+  mockFibHandler->waitForSyncMplsFib();
+
+  // Mimic decision pub sock publishing RouteDatabaseDelta
+  thrift::RouteDatabaseDelta routeDbDelta;
+  routeDbDelta.thisNodeName = "node-1";
+  const auto& route1 =
+      createMplsRoute(label1, {mpls_path1_2_1, mpls_path1_2_2});
+  const auto& route2 = createMplsRoute(label2, {mpls_path1_2_2});
+  const auto& route3 = createMplsRoute(label3, {mpls_path1_2_1});
+  routeDbDelta.mplsRoutesToUpdate = {route1, route2, route3};
+  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+
+  // wait for mpls
+  mockFibHandler->waitForUpdateMplsRoutes();
+
+  // verify mpls routes in DB
+  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
+  EXPECT_EQ(mplsRoutes.size(), 3);
+  EXPECT_EQ(mockFibHandler->getAddMplsRoutesCount(), 3);
+  EXPECT_EQ(mockFibHandler->getDelMplsRoutesCount(), 0);
+
+  // 1. check the MPLS filtering API
+  auto labels = std::unique_ptr<std::vector<int32_t>>(
+      new std::vector<int32_t>({1, 1, 3})); // matching route1 and route3
+  thrift::RouteDatabase responseDb;
+  const auto& filteredRoutes = getMplsRoutesFiltered(std::move(labels));
+  responseDb.mplsRoutes = filteredRoutes;
+  // expected routesDB after filtering - delete duplicate entries
+  thrift::RouteDatabase expectedDb;
+  expectedDb.thisNodeName = "node-1";
+  expectedDb.mplsRoutes = {route1, route3};
+  EXPECT_TRUE(checkEqualMplsRoutes(responseDb, expectedDb));
+
+  // 2. check getting all MPLS routes API
+  thrift::RouteDatabase allRoutesDb;
+  allRoutesDb.mplsRoutes = getMplsRoutes();
+  // expected routesDB for all MPLS Routes
+  thrift::RouteDatabase allRoutesExpectedDb;
+  allRoutesExpectedDb.thisNodeName = "node-1";
+  allRoutesExpectedDb.mplsRoutes = {route1, route2, route3};
+  expectedDb.mplsRoutes = {route1, route2, route3};
+  EXPECT_TRUE(checkEqualMplsRoutes(allRoutesDb, allRoutesExpectedDb));
+
+  // 3. check filtering API with empty input list - return all MPLS routes
+  auto emptyLabels =
+      std::unique_ptr<std::vector<int32_t>>(new std::vector<int32_t>({}));
+  thrift::RouteDatabase responseAllDb;
+  responseAllDb.mplsRoutes = getMplsRoutesFiltered(std::move(emptyLabels));
+  EXPECT_TRUE(checkEqualMplsRoutes(responseAllDb, allRoutesExpectedDb));
+
+  // 4. check if no result found
+  auto notFoundFilter = std::unique_ptr<std::vector<std::int32_t>>(
+      new std::vector<std::int32_t>({4, 5}));
+  const auto& notFoundResp = getMplsRoutesFiltered(std::move(notFoundFilter));
+  EXPECT_EQ(notFoundResp.size(), 0);
 }
 
 TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {

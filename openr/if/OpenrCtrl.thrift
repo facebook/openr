@@ -132,6 +132,20 @@ service OpenrCtrl extends fb303.FacebookService {
   list<Network.UnicastRoute> getUnicastRoutes()
     throws (1: OpenrError error)
 
+  /**
+   * Get Mpls routes after applying a list of prefix filter.
+   * Return all Mpls routes if the input list is empty.
+   */
+  list<Network.MplsRoute> getMplsRoutesFiltered(1: list<i32> labels)
+    throws (1: OpenrError error)
+
+  /**
+   * Get all Mpls routes of the current node, retrieved from FIB module.
+   */
+  list<Network.MplsRoute> getMplsRoutes()
+    throws (1: OpenrError error)
+
+
   //
   // Performance stats APIs
   //
