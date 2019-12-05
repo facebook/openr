@@ -67,12 +67,15 @@ TEST_F(PrefixStateTestFixture, basicOperation) {
   EXPECT_FALSE(state_.updatePrefixDatabase(prefixDb1Updated));
   EXPECT_EQ(prefixDb1Updated, state_.getPrefixDatabases().at(dbEntry.first));
 
-  EXPECT_TRUE(state_.deletePrefixDatabase(dbEntry.first));
+  thrift::PrefixDatabase emptyPrefixDb;
+  emptyPrefixDb.thisNodeName = dbEntry.first;
+  EXPECT_TRUE(state_.updatePrefixDatabase(emptyPrefixDb));
   auto modifiedPrefixDbs = prefixDbs_;
   modifiedPrefixDbs.erase(dbEntry.first);
   EXPECT_NE(prefixDbs_, modifiedPrefixDbs);
   EXPECT_EQ(state_.getPrefixDatabases(), modifiedPrefixDbs);
-  EXPECT_FALSE(state_.deletePrefixDatabase(dbEntry.first));
+  emptyPrefixDb.thisNodeName = dbEntry.first;
+  EXPECT_FALSE(state_.updatePrefixDatabase(emptyPrefixDb));
   EXPECT_TRUE(state_.updatePrefixDatabase(dbEntry.second));
 }
 
@@ -134,7 +137,9 @@ TEST_F(PrefixStateTestFixture, getNodeHostLoopbacksV4) {
       state_.getNodeHostLoopbacksV4(),
       testing::UnorderedElementsAre(pair1, pair2));
 
-  EXPECT_TRUE(state_.deletePrefixDatabase("0"));
+  thrift::PrefixDatabase emptyPrefixDb;
+  emptyPrefixDb.thisNodeName = "0";
+  EXPECT_TRUE(state_.updatePrefixDatabase(emptyPrefixDb));
   EXPECT_THAT(
       state_.getNodeHostLoopbacksV4(), testing::UnorderedElementsAre(pair2));
 }
@@ -148,7 +153,9 @@ TEST_F(PrefixStateTestFixture, getNodeHostLoopbacksV6) {
       state_.getNodeHostLoopbacksV6(),
       testing::UnorderedElementsAre(pair1, pair2));
 
-  EXPECT_TRUE(state_.deletePrefixDatabase("0"));
+  thrift::PrefixDatabase emptyPrefixDb;
+  emptyPrefixDb.thisNodeName = "0";
+  EXPECT_TRUE(state_.updatePrefixDatabase(emptyPrefixDb));
   EXPECT_THAT(
       state_.getNodeHostLoopbacksV6(), testing::UnorderedElementsAre(pair2));
 }

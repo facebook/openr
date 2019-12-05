@@ -33,12 +33,6 @@ bool
 PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
   auto const& nodeName = prefixDb.thisNodeName;
 
-  if (prefixDb.perPrefixKey.value_or(false)) {
-    nodePerPrefixKey_[nodeName] = true;
-  } else {
-    nodePerPrefixKey_[nodeName] = false;
-  }
-
   // Get old and new set of prefixes - NOTE explicit copy
   const std::set<thrift::IpPrefix> oldPrefixSet = nodeToPrefixes_[nodeName];
 
@@ -101,51 +95,10 @@ PrefixState::updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb) {
     }
   }
 
-  if (!newPrefixSet.size()) {
+  if (newPrefixSet.empty()) {
     nodeToPrefixes_.erase(nodeName);
-    nodePerPrefixKey_.erase(nodeName);
   }
 
-  return isUpdated;
-}
-
-bool
-PrefixState::deletePrefixDatabase(const std::string& nodeName) {
-  VLOG(1) << "Deleting prefix database for node " << nodeName;
-  auto search = nodeToPrefixes_.find(nodeName);
-  if (search == nodeToPrefixes_.end()) {
-    LOG(INFO) << "Trying to delete non-existent prefix db for node "
-              << nodeName;
-    return false;
-  }
-
-  // if node advertised per prefix keys don't process the old format key
-  // expiry. All the old prefixes from the old prefix key format would
-  // already have been deleted when the per prefix key updates arrived
-  if (nodePerPrefixKey_.at(nodeName)) {
-    return false;
-  }
-
-  bool isUpdated = false;
-  for (const auto& prefix : search->second) {
-    try {
-      auto& nodeList = prefixes_.at(prefix);
-      nodeList.erase(nodeName);
-      isUpdated = true;
-      VLOG(1) << "Prefix " << toString(prefix) << " has been withdrawn by "
-              << nodeName;
-      if (nodeList.empty()) {
-        prefixes_.erase(prefix);
-      }
-    } catch (std::out_of_range const& e) {
-      LOG(FATAL) << "std::out_of_range prefix error for " << nodeName;
-    }
-  }
-
-  nodeToPrefixes_.erase(search);
-  nodePerPrefixKey_.erase(nodeName);
-  nodeHostLoopbacksV4_.erase(nodeName);
-  nodeHostLoopbacksV6_.erase(nodeName);
   return isUpdated;
 }
 

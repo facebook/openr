@@ -4928,19 +4928,20 @@ TEST_F(DecisionTestFixture, PerPrefixKeyExpiry) {
   publication =
       createThriftPublication(perPrefixKeyValue, {}, {}, {}, std::string(""));
   sendKvPublication(publication);
-  routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
-  EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
-  EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
 
   auto routeDb1 = dumpRouteDb({"1"})["1"];
-  // again send expire 'prefix:2' key, this time there shouldn't be any updates
-  // in add or delete routes.
+  // expect to still have all 5 routes
+  EXPECT_EQ(5, routeDb1.unicastRoutes.size());
+  // again send expire 'prefix:2' key, now we expect the one extra route to
+  // be deleted
   LOG(INFO) << "Sending prefix key expiry";
   publication =
       createThriftPublication({}, {"prefix:2"}, {}, {}, std::string(""));
   sendKvPublication(publication);
-  auto routeDb2 = dumpRouteDb({"1"})["1"];
-  EXPECT_EQ(routeDb1, routeDb2);
+  routeDbDelta = recvMyRouteDb(decisionPub, "1", serializer);
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
+  EXPECT_EQ(addr5, routeDbDelta.unicastRoutesToDelete.at(0));
 }
 
 int

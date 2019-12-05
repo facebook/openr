@@ -147,10 +147,6 @@ class SpfSolver {
   // routeDb change
   bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
 
-  // delete a node's prefix database
-  // return true if this has caused any change in routeDb
-  bool deletePrefixDatabase(const std::string& nodeName);
-
   // get prefix databases
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
@@ -337,11 +333,12 @@ class Decision : public OpenrEventLoop {
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
-  // node to prefix entries database for nodes advertising per prefix keys
+  // need to store all this for backward compatibility, otherwise a key update
+  // can lead to mistakenly withdrawing some prefixes
   std::unordered_map<
       std::string,
       std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>>
-      nodePrefixDatabase_{};
+      perPrefixPrefixEntries_, fullDbPrefixEntries_;
 };
 
 } // namespace openr

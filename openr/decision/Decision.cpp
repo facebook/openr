@@ -211,9 +211,6 @@ class SpfSolver::SpfSolverImpl {
   // returns true if the prefixDb changed
   bool updatePrefixDatabase(const thrift::PrefixDatabase& prefixDb);
 
-  // returns true if the PrefixDatabase existed
-  bool deletePrefixDatabase(const std::string& nodeName);
-
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
@@ -440,11 +437,6 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
   VLOG(1) << "Updating prefix database for node " << nodeName;
   tData_.addStatValue("decision.prefix_db_update", 1, fbzmq::COUNT);
   return prefixState_.updatePrefixDatabase(prefixDb);
-}
-
-bool
-SpfSolver::SpfSolverImpl::deletePrefixDatabase(const std::string& nodeName) {
-  return prefixState_.deletePrefixDatabase(nodeName);
 }
 
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
@@ -1573,11 +1565,6 @@ SpfSolver::updatePrefixDatabase(const thrift::PrefixDatabase& prefixDb) {
   return impl_->updatePrefixDatabase(prefixDb);
 }
 
-bool
-SpfSolver::deletePrefixDatabase(const std::string& nodeName) {
-  return impl_->deletePrefixDatabase(nodeName);
-}
-
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
 SpfSolver::getPrefixDatabases() {
   return impl_->getPrefixDatabases();
@@ -1818,33 +1805,38 @@ Decision::updateNodePrefixDatabase(
   auto const& nodeName = prefixDb.thisNodeName;
 
   auto prefixKey = PrefixKey::fromStr(key);
-  if (!prefixKey.hasValue()) {
-    // either node will advertise per prefix or entire prefix DB,
-    // not a combination. Erase from nodePrefixDatabase_ if node switches format
-    nodePrefixDatabase_.erase(nodeName);
-    return prefixDb;
-  }
-
-  auto& nodePrefixEntries = nodePrefixDatabase_[nodeName];
-  if (prefixDb.prefixEntries.size()) {
-    LOG_IF(ERROR, prefixDb.prefixEntries.size() > 1)
-        << "Received more than one prefix, only the first prefix is processed";
+  if (prefixKey.hasValue()) {
+    // per prefix key
     if (prefixDb.deletePrefix) {
-      nodePrefixEntries.erase(prefixDb.prefixEntries[0].prefix);
+      perPrefixPrefixEntries_[nodeName].erase(prefixKey.value().getIpPrefix());
     } else {
-      nodePrefixEntries[prefixDb.prefixEntries[0].prefix] =
-          prefixDb.prefixEntries[0];
+      if (prefixDb.prefixEntries.empty()) {
+        LOG(ERROR) << "Received no entries for prefix db";
+      } else {
+        LOG_IF(ERROR, prefixDb.prefixEntries.size() > 1)
+            << "Received more than one prefix, only the first prefix is processed";
+        perPrefixPrefixEntries_[nodeName][prefixKey.value().getIpPrefix()] =
+            prefixDb.prefixEntries[0];
+      }
+    }
+  } else {
+    fullDbPrefixEntries_[nodeName].clear();
+    for (auto const& entry : prefixDb.prefixEntries) {
+      fullDbPrefixEntries_[nodeName][entry.prefix] = entry;
     }
   }
 
   thrift::PrefixDatabase nodePrefixDb;
   nodePrefixDb.thisNodeName = nodeName;
   nodePrefixDb.perfEvents = prefixDb.perfEvents;
-  nodePrefixDb.perPrefixKey = true;
-
-  // create and return prefixDB for the node
-  for (const auto& prefix : nodePrefixEntries) {
-    nodePrefixDb.prefixEntries.emplace_back(prefix.second);
+  nodePrefixDb.prefixEntries.reserve(perPrefixPrefixEntries_[nodeName].size());
+  for (auto& kv : perPrefixPrefixEntries_[nodeName]) {
+    nodePrefixDb.prefixEntries.emplace_back(kv.second);
+  }
+  for (auto& kv : fullDbPrefixEntries_[nodeName]) {
+    if (not perPrefixPrefixEntries_[nodeName].count(kv.first)) {
+      nodePrefixDb.prefixEntries.emplace_back(kv.second);
+    }
   }
   return nodePrefixDb;
 }
@@ -1941,23 +1933,13 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     }
 
     if (key.find(prefixDbMarker_) == 0) {
-      auto prefixStr = PrefixKey::fromStr(key);
-      if (prefixStr.hasValue()) {
-        // delete single prefix from the prefix DB for a given node
-        thrift::PrefixDatabase deletePrefixDb;
-        deletePrefixDb.prefixEntries.emplace_back(
-            createPrefixEntry(prefixStr.value().getIpPrefix()));
-        deletePrefixDb.thisNodeName = prefixStr.value().getNodeName();
-        deletePrefixDb.deletePrefix = true;
-        auto nodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
-        if (spfSolver_->updatePrefixDatabase(nodePrefixDb)) {
-          res.prefixesChanged = true;
-        }
-      } else {
-        if (spfSolver_->deletePrefixDatabase(nodeName)) {
-          res.prefixesChanged = true;
-          pendingPrefixUpdates_.addUpdate(myNodeName_, folly::none);
-        }
+      // manually build delete prefix db to signal delete just as a client would
+      thrift::PrefixDatabase deletePrefixDb;
+      deletePrefixDb.thisNodeName = nodeName;
+      deletePrefixDb.deletePrefix = true;
+      auto nodePrefixDb = updateNodePrefixDatabase(key, deletePrefixDb);
+      if (spfSolver_->updatePrefixDatabase(nodePrefixDb)) {
+        res.prefixesChanged = true;
       }
       continue;
     }

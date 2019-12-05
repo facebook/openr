@@ -32,9 +32,6 @@ class PrefixState {
   // returns true if the prefixDb changed
   bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
 
-  // returns true if the PrefixDatabase existed
-  bool deletePrefixDatabase(const std::string& nodeName);
-
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases() const;
 
@@ -62,8 +59,6 @@ class PrefixState {
   std::unordered_map<std::string, std::set<thrift::IpPrefix>> nodeToPrefixes_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV4_;
   std::unordered_map<std::string, thrift::BinaryAddress> nodeHostLoopbacksV6_;
-  // maintain list of nodes that advertised per prefix keys
-  std::unordered_map<std::string, bool> nodePerPrefixKey_;
 }; // class PrefixState
 
 } // namespace openr
