@@ -243,6 +243,7 @@ class KvKeysCmd(KvStoreCmdBase):
         num_keys = 0
         for area in resp:
             keyVals = resp[area].keyVals
+            num_keys += len(keyVals)
             area_str = "N/A" if area is None else area
             for key, value in sorted(keyVals.items(), key=lambda x: x[0]):
                 # 32 bytes comes from version, ttlVersion, ttl and hash which are i64
@@ -266,7 +267,6 @@ class KvKeysCmd(KvStoreCmdBase):
                     )
                     row.append(f"{ttlStr} - {value.ttlVersion}")
                 rows.append(row)
-                num_keys += len(keyVals)
 
         db_bytes_str = printing.sprint_bytes(db_bytes)
         caption = f"KvStore Data - {num_keys} keys, {db_bytes_str}"
