@@ -6,42 +6,45 @@
  */
 
 #include <openr/common/BuildInfo.h>
+#include <openr/common/CMakeBuildInfo.h>
+
+#include <folly/Format.h>
 
 namespace openr {
 
 const char*
 BuildInfo::getBuildUser() {
-  return "";
+  return BuildInfo_kUser;
 }
 
 const char*
 BuildInfo::getBuildTime() {
-  return "";
+  return BuildInfo_kTime;
 }
 
 uint64_t
 BuildInfo::getBuildTimeUnix() {
-  return 0;
+  return BuildInfo_kTimeUnix;
 }
 
 const char*
 BuildInfo::getBuildHost() {
-  return "";
+  return BuildInfo_kHost;
 }
 
 const char*
 BuildInfo::getBuildPath() {
-  return "";
+  return BuildInfo_kPath;
 }
 
 const char*
 BuildInfo::getBuildRevision() {
-  return "";
+  return BuildInfo_kRevision;
 }
 
 uint64_t
 BuildInfo::getBuildRevisionCommitTimeUnix() {
-  return 0;
+  return BuildInfo_kRevisionCommitTimeUnix;
 }
 
 const char*
@@ -71,7 +74,7 @@ BuildInfo::getBuildPackageRelease() {
 
 const char*
 BuildInfo::getBuildPlatform() {
-  return "";
+  return BuildInfo_kPlatform;
 }
 
 const char*
@@ -86,18 +89,33 @@ BuildInfo::getBuildType() {
 
 const char*
 BuildInfo::getBuildTool() {
-  return "";
+  return BuildInfo_kBuildTool;
 }
 
 const char*
 BuildInfo::getBuildMode() {
-  return "";
+  return BuildInfo_kBuildMode;
 }
 
 void
-BuildInfo::log(std::ostream& /* os */) {
-  // NOTE: Not logging anything. Replace this with your own implementation
-  // if your usecase wants to log build information!
+BuildInfo::log(std::ostream& os) {
+  os << folly::format(
+      "\n  Built by: {}\n"
+      "  Built on: {} ({})\n"
+      "  Built at: {}\n"
+      "  Build tool: {}\n"
+      "  Build path: {}\n"
+      "  Build Revision: {}\n"
+      "  Build Platform: {} ({})",
+      BuildInfo::getBuildUser(),
+      BuildInfo::getBuildTime(),
+      BuildInfo::getBuildTimeUnix(),
+      BuildInfo::getBuildHost(),
+      BuildInfo::getBuildTool(),
+      BuildInfo::getBuildPath(),
+      BuildInfo::getBuildRevision(),
+      BuildInfo::getBuildPlatform(),
+      BuildInfo::getBuildMode());
 }
 
 void

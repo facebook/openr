@@ -29,9 +29,11 @@ include_directories(${CMAKE_BINARY_DIR})
 set(
   CMAKE_MODULE_PATH
   "${CMAKE_SOURCE_DIR}/build/fbcode_builder/CMake"
+  "${CMAKE_SOURCE_DIR}"
   ${CMAKE_MODULE_PATH}
 )
 include(FBThriftCppLibrary)
+include(FBGenCMakeBuildInfo)
 
 find_library(ASYNC async PATHS)
 find_package(Boost REQUIRED COMPONENTS system context)
@@ -270,6 +272,8 @@ add_fbthrift_cpp_library(
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp_cpp2)
 
+add_build_info(build_info)
+
 install(TARGETS
   ${OPENR_THRIFT_LIBS}
   DESTINATION lib
@@ -323,6 +327,7 @@ if (BUILD_SHARED_LIBS)
 endif()
 
 target_link_libraries(openrlib
+  build_info
   ${OPENR_THRIFT_LIBS}
   fbzmq::fbzmq
   fbzmq::monitor_cpp2
