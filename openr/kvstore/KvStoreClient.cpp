@@ -252,7 +252,7 @@ bool
 KvStoreClient::persistKey(
     std::string const& key,
     std::string const& value,
-    std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */,
+    std::chrono::milliseconds const ttl /* = Constants::kTtlInfInterval */,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   VLOG(3) << "KvStoreClient: persistKey called for key:" << key
           << " area:" << area;
@@ -285,6 +285,10 @@ KvStoreClient::persistKey(
     }
   } else {
     thriftValue = keyIt->second;
+    if (thriftValue.value.value() == value and thriftValue.ttl == ttl.count()) {
+      // this is a no op, return early and change no state
+      return false;
+    }
     auto ttlIt = keyTtlBackoffs.find(key);
     if (ttlIt != keyTtlBackoffs.end()) {
       thriftValue.ttlVersion = ttlIt->second.first.ttlVersion;
@@ -339,7 +343,7 @@ KvStoreClient::persistKey(
       hasTtlChanged,
       area);
 
-  return valueChange;
+  return true;
 }
 
 thrift::Value

@@ -82,12 +82,13 @@ class KvStoreClient {
    * running.
    * By default key is published to default area kvstore instance.
    *
-   * returns true if call results in value change for KvStore
+   * returns true if call results in state change for this client, i.e. we
+   * change the value or ttl for the persistented key or start persisting a key
    */
   bool persistKey(
       std::string const& key,
       std::string const& value,
-      std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
+      std::chrono::milliseconds const ttl = Constants::kTtlInfInterval,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
