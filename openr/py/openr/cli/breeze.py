@@ -32,7 +32,7 @@ from openr.cli.clis import (
     prefix_mgr,
     tech_support,
 )
-from openr.cli.utils.options import OPTIONS, breeze_option
+from openr.cli.utils.options import OPTIONS, breeze_option, str2cert
 
 
 click.disable_unicode_literals_warning = True
@@ -54,19 +54,18 @@ locale.getpreferredencoding = getpreferredencoding
 )
 @breeze_option("--color/--no-color", help="Enable coloring display")
 @breeze_option("--verbose/--no-verbose", help="Print verbose information")
-@click.option(
-    "--ports-config-file",
-    "-f",
-    default=None,
-    type=str,
-    help="DEPRECATED Perfer setting in openr.cli.utils.default_option_overrides"
-    ". JSON file for ports config",
-)
 @breeze_option("--ssl/--no-ssl", help="Prefer SSL thrift to connect to OpenR")
 @breeze_option(
     "--prefer-zmq/--no-prefer-zmq",
     help="Prefer zmq to connect to OpenR. Skip trying to connect "
     "with thrift all together",
+)
+@breeze_option(
+    "--cert-reqs",
+    type=click.Choice(["none", "optional", "required"], case_sensitive=False),
+    callback=str2cert,
+    help="If we are connecting to an SSL server, this indicates whether to "
+    "verify peer certificate",
 )
 @breeze_option(
     "--cert-file",
@@ -88,29 +87,24 @@ locale.getpreferredencoding = getpreferredencoding
     help="If we are connecting to an SSL server, this is the common "
     "name we deem acceptable to connect to.",
 )
+@click.option(
+    "--ports-config-file",
+    "-f",
+    default=None,
+    type=str,
+    help="DEPRECATED Perfer setting in openr.cli.utils.default_option_overrides"
+    ". JSON file for ports config",
+)
 @click.pass_context
-def cli(
-    ctx,
-    host,
-    timeout,
-    ports_config_file,
-    color,
-    ssl,
-    prefer_zmq,
-    cert_file,
-    key_file,
-    ca_file,
-    acceptable_peer_name,
-    verbose,
-):
+def cli(ctx, *args, **kwargs):
     """ Command line tools for Open/R. """
 
     # Default config options
     ctx.obj = OPTIONS
 
     # Get override port configs
-    if ports_config_file:
-        with open(ports_config_file, "r") as f:
+    if "ports_config_file" in kwargs and kwargs["ports_config_file"] is not None:
+        with open(kwargs["ports_config_file"], "r") as f:
             override_ports_config = json.load(f)
             for key, value in override_ports_config.items():
                 ctx.obj[key] = value

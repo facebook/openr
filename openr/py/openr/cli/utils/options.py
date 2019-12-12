@@ -9,6 +9,7 @@
 
 import copy
 import re
+import ssl
 from typing import Any, Callable, Tuple
 
 import bunch
@@ -19,11 +20,18 @@ from openr.Platform import ttypes as platform_types
 from openr.utils.consts import Consts
 
 
+SSL_CERT_REQS = {
+    "none": ssl.CERT_NONE,
+    "optional": ssl.CERT_OPTIONAL,
+    "required": ssl.CERT_REQUIRED,
+}
+
 OPTIONS = bunch.Bunch(
     {
         "acceptable_peer_name": "",
         "ca_file": "",
         "cert_file": "",
+        "cert_reqs": ssl.CERT_NONE,
         "client_id": platform_types.FibClient.OPENR,
         "color": True,
         "config_store_url": Consts.CONFIG_STORE_URL,
@@ -38,7 +46,7 @@ OPTIONS = bunch.Bunch(
         "openr_ctrl_port": Consts.CTRL_PORT,
         "prefer_zmq": False,
         "proto_factory": Consts.PROTO_FACTORY,
-        "ssl": True,
+        "ssl": False,
         "timeout": Consts.TIMEOUT_MS,
         "verbose": False,
         "zmq_ctx": zmq.Context(),
@@ -64,6 +72,13 @@ def nameFromOpt(opt: str) -> str:
     return re.sub("^-+", "", opt.split("/")[0]).replace("-", "_")
 
 
+def str2cert(ctx, param, value) -> None:
+    name = getNameFromOpts(param.opts)
+    OPTIONS[name] = (
+        SSL_CERT_REQS[value] if value is not None else getDefaultOption(OPTIONS, name)
+    )
+
+
 def getNameFromOpts(opts: Tuple[Any, ...]) -> str:
     names = [nameFromOpt(n) for n in opts if nameFromOpt(n) in OPTIONS]
     assert len(names) == 1, "Exaclty one parameter must correspond to an option"
@@ -77,7 +92,7 @@ def set_option(ctx, param, value) -> None:
 
 def breeze_option(*args: Any, **kwargs: Any) -> Callable[[Any], Any]:
     assert "default" not in kwargs and getNameFromOpts(args) in OPTIONS
-    assert "callback" not in kwargs
     kwargs["default"] = None
-    kwargs["callback"] = set_option
+    if "callback" not in kwargs:
+        kwargs["callback"] = set_option
     return click.option(*args, **kwargs)

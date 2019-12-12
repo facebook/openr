@@ -70,6 +70,7 @@ class OpenrCtrlSecureClient(OpenrCtrlClient):
     def __init__(
         self,
         host: str,
+        cert_reqs: int,
         ca_file: str,
         cert_file: str,
         key_file: str,
@@ -77,14 +78,15 @@ class OpenrCtrlSecureClient(OpenrCtrlClient):
         port: int = consts.Consts.CTRL_PORT,
         timeout_ms: int = 5000,
     ) -> None:
+        verify_name = acceptable_peer_name if acceptable_peer_name != "" else None
         socket = TSSLSocket.TSSLSocket(
             host=host,
             port=port,
-            cert_reqs=ssl.CERT_REQUIRED,
+            cert_reqs=cert_reqs,
             ca_certs=ca_file,
             certfile=cert_file,
             keyfile=key_file,
-            verify_name=acceptable_peer_name,
+            verify_name=verify_name,
         )
         socket.setTimeout(timeout_ms)
         OpenrCtrlClient.__init__(self, host, THeaderTransport.THeaderTransport(socket))
@@ -102,6 +104,7 @@ def get_openr_ctrl_client(
     if options.ssl:
         return OpenrCtrlSecureClient(
             host,
+            options.cert_reqs,
             options.ca_file,
             options.cert_file,
             options.key_file,
