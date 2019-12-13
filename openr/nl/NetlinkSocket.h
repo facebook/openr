@@ -9,7 +9,7 @@
 
 #include <boost/variant.hpp>
 #include <fbzmq/async/ZmqEventLoop.h>
-#include <folly/AtomicBitSet.h>
+#include <folly/ConcurrentBitSet.h>
 #include <folly/IPAddress.h>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
@@ -451,7 +451,7 @@ class NetlinkSocket {
   NlLinks links_{};
 
   // Indicating to run which event type's handler
-  folly::AtomicBitSet<MAX_EVENT_TYPE> eventFlags_;
+  folly::ConcurrentBitSet<MAX_EVENT_TYPE> eventFlags_;
 
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock_{nullptr};
 
