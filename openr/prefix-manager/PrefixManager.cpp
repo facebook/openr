@@ -91,9 +91,11 @@ PrefixManager::PrefixManager(
         // we're not currently persisting this key, it may be that we no longer
         // want it advertised
         if (value.hasValue() and value.value().value.has_value()) {
-          if (not fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-                      value.value().value.value(), serializer_)
-                      .deletePrefix) {
+          const auto prefixDb =
+              fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+                  value.value().value.value(), serializer_);
+          if (not prefixDb.deletePrefix && nodeId_ == prefixDb.thisNodeName) {
+            LOG(INFO) << "keysToClear_.emplace(" << key << ")";
             keysToClear_.emplace(key);
             outputStateThrottled_->operator()();
           }
