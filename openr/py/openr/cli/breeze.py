@@ -56,11 +56,6 @@ locale.getpreferredencoding = getpreferredencoding
 @breeze_option("--verbose/--no-verbose", help="Print verbose information")
 @breeze_option("--ssl/--no-ssl", help="Prefer SSL thrift to connect to OpenR")
 @breeze_option(
-    "--prefer-zmq/--no-prefer-zmq",
-    help="Prefer zmq to connect to OpenR. Skip trying to connect "
-    "with thrift all together",
-)
-@breeze_option(
     "--cert-reqs",
     type=click.Choice(["none", "optional", "required"], case_sensitive=False),
     callback=str2cert,
@@ -87,27 +82,12 @@ locale.getpreferredencoding = getpreferredencoding
     help="If we are connecting to an SSL server, this is the common "
     "name we deem acceptable to connect to.",
 )
-@click.option(
-    "--ports-config-file",
-    "-f",
-    default=None,
-    type=str,
-    help="DEPRECATED Perfer setting in openr.cli.utils.default_option_overrides"
-    ". JSON file for ports config",
-)
 @click.pass_context
 def cli(ctx, *args, **kwargs):
     """ Command line tools for Open/R. """
 
     # Default config options
     ctx.obj = OPTIONS
-
-    # Get override port configs
-    if "ports_config_file" in kwargs and kwargs["ports_config_file"] is not None:
-        with open(kwargs["ports_config_file"], "r") as f:
-            override_ports_config = json.load(f)
-            for key, value in override_ports_config.items():
-                ctx.obj[key] = value
 
 
 def get_breeze_cli():

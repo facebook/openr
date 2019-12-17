@@ -29,6 +29,7 @@ SSL_CERT_REQS = {
 OPTIONS = bunch.Bunch(
     {
         "acceptable_peer_name": "",
+        "area": "",
         "ca_file": "",
         "cert_file": "",
         "cert_reqs": ssl.CERT_NONE,
@@ -44,13 +45,11 @@ OPTIONS = bunch.Bunch(
         "monitor_pub_port": Consts.MONITOR_PUB_PORT,
         "monitor_rep_port": Consts.MONITOR_REP_PORT,
         "openr_ctrl_port": Consts.CTRL_PORT,
-        "prefer_zmq": False,
         "proto_factory": Consts.PROTO_FACTORY,
         "ssl": False,
         "timeout": Consts.TIMEOUT_MS,
         "verbose": False,
         "zmq_ctx": zmq.Context(),
-        "area": "",
     }
 )
 
