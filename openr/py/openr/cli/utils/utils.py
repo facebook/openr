@@ -428,9 +428,10 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
 
     assert isinstance(adj_db, lsdb_types.AdjacencyDatabase)
     this_node_name = adj_db.thisNodeName
+    area = adj_db.area if adj_db.area is not None else "N/A"
 
     if not bidir:
-        return (adj_db.nodeLabel, adj_db.isOverloaded, adj_db.adjacencies)
+        return (adj_db.nodeLabel, adj_db.isOverloaded, adj_db.adjacencies, area)
 
     adjacencies = []
 
@@ -445,7 +446,6 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
             continue
         adjacencies.append(adj)
 
-    area = adj_db.area if adj_db.area is not None else "N/A"
     return (adj_db.nodeLabel, adj_db.isOverloaded, adjacencies, area)
 
 
