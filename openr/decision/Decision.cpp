@@ -1920,9 +1920,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 
   // LSDB deletion
   for (const auto& key : thriftPub.expiredKeys) {
-    std::string prefix, nodeName;
-    folly::split(
-        Constants::kPrefixNameSeparator.toString(), key, prefix, nodeName);
+    std::string nodeName = getNodeNameFromKey(key);
 
     if (key.find(adjacencyDbMarker_) == 0) {
       if (spfSolver_->deleteAdjacencyDatabase(nodeName)) {
