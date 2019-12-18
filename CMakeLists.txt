@@ -283,12 +283,13 @@ add_library(openrlib
   common/fb303/cpp/FacebookBase2.cpp
   openr/allocators/PrefixAllocator.cpp
   openr/common/BuildInfo.cpp
+  openr/common/Constants.cpp
   openr/common/ExponentialBackoff.cpp
   openr/common/NetworkUtil.cpp
+  openr/common/OpenrEventBase.cpp
   openr/common/OpenrModule.cpp
-  openr/common/Util.cpp
-  openr/common/Constants.cpp
   openr/common/ThriftUtil.cpp
+  openr/common/Util.cpp
   openr/config-store/PersistentStore.cpp
   openr/config-store/PersistentStoreClient.cpp
   openr/config-store/PersistentStoreWrapper.cpp
@@ -620,6 +621,12 @@ if(BUILD_TESTS)
   add_openr_test(ExponentialBackoffTest exp_backoff_test
     SOURCES
       openr/common/tests/ExponentialBackoffTest.cpp
+    DESTINATION sbin/tests/openr/common
+  )
+
+  add_openr_test(OpenrEventBaseTest openr_event_base_test
+    SOURCES
+      openr/common/tests/OpenrEventBaseTest.cpp
     DESTINATION sbin/tests/openr/common
   )
 
