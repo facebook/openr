@@ -398,6 +398,10 @@ TEST(SpfSolver, Counters) {
   EXPECT_EQ(counters.at("decision.skipped_unicast_route.count.60"), 1);
   EXPECT_EQ(counters.at("decision.skipped_mpls_route.count.60"), 1);
   EXPECT_EQ(counters.at("decision.no_route_to_label.count.60"), 1);
+
+  // fully disconnect node 2
+  spfSolver.updateAdjacencyDatabase(createAdjDb("1", {adj13}, 1));
+  EXPECT_EQ(spfSolver.getCounters().at("decision.num_partial_adjacencies"), 0);
 }
 
 //
