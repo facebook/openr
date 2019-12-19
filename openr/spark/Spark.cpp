@@ -1193,6 +1193,16 @@ Spark::getSparkNeighState(
   return std::move(future).get();
 }
 
+std::unordered_map<std::string, int64_t>
+Spark::getCounters() {
+  folly::Promise<std::unordered_map<std::string, int64_t>> promise;
+  auto future = promise.getFuture();
+  runInEventLoop([this, promise = std::move(promise)]() mutable {
+    promise.setValue(tData_.getCounters());
+  });
+  return std::move(future).get();
+}
+
 void
 Spark::neighborUpWrapper(
     Spark2Neighbor& neighbor,

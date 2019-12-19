@@ -100,6 +100,11 @@ class SparkWrapper {
   folly::Optional<SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
+  std::unordered_map<std::string, int64_t>
+  getCounters() {
+    return spark_->getCounters();
+  }
+
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
       const thrift::SparkNeighborEvent& event);
 

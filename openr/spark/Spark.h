@@ -113,6 +113,9 @@ class Spark final : public OpenrEventLoop {
   folly::Optional<SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
+  // get counters
+  std::unordered_map<std::string, int64_t> getCounters();
+
   // override eventloop stop()
   void stop() override;
 

@@ -1442,8 +1442,8 @@ TEST_F(SparkFixture, dropPacketsTest) {
       600ms /* hold time */,
       // Make Keep Aive Small so Spark1 will drop some of Spark2's
       // hello packets
-      15ms /* my keep alive time */,
-      10ms /* fast keep alive time */);
+      5ms /* my keep alive time */,
+      5ms /* fast keep alive time */);
 
   // start tracking iface1
   EXPECT_TRUE(spark1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -1470,35 +1470,19 @@ TEST_F(SparkFixture, dropPacketsTest) {
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
-  auto zmqMonitorClient1 = std::make_unique<fbzmq::ZmqMonitorClient>(
-      context,
-      MonitorSubmitUrl{folly::sformat("{}-{}", kSparkCounterCmdUrl, 1)});
-
-  auto zmqMonitorClient2 = std::make_unique<fbzmq::ZmqMonitorClient>(
-      context,
-      MonitorSubmitUrl{folly::sformat("{}-{}", kSparkCounterCmdUrl, 2)});
-
-  // Get the counters from sparks and see what happened
-  auto spark1Counters = zmqMonitorClient1->dumpCounters();
-  // Hack to wait for counters to be submitted
-  while (spark1Counters.find("spark.hello_packet_recv.sum.0") ==
-         spark1Counters.end()) {
-    spark1Counters = zmqMonitorClient1->dumpCounters();
+  // Wait for atleast (2 * Constants::kMaxAllowedPps) packets to be received
+  // before we verify that packets are dropped
+  while (true) {
+    auto counters = spark1->getCounters();
+    auto rcvdMsgs = counters["spark.hello_packet_recv.sum.0"];
+    if (rcvdMsgs > 2 * Constants::kMaxAllowedPps) {
+      break;
+    }
+    std::this_thread::yield();
   }
 
-  auto spark2Counters = zmqMonitorClient2->dumpCounters();
-  while (spark2Counters.find("spark.hello_packet_recv.sum.0") ==
-         spark2Counters.end()) {
-    spark2Counters = zmqMonitorClient2->dumpCounters();
-  }
-
-  std::map<std::basic_string<char>, double> spark1Values, spark2Values;
-  for (auto const& kv : spark1Counters) {
-    spark1Values[kv.first] = kv.second.value;
-  }
-  for (auto const& kv : spark2Counters) {
-    spark2Values[kv.first] = kv.second.value;
-  }
+  auto spark1Values = spark1->getCounters();
+  auto spark2Values = spark2->getCounters();
 
   auto spark1Recv =
       folly::get_default(spark1Values, "spark.hello_packet_recv.sum.0", 0);
