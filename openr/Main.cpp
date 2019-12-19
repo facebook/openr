@@ -49,6 +49,7 @@
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/plugin/Plugin.h>
 #include <openr/prefix-manager/PrefixManager.h>
+#include <openr/spark/IoProvider.h>
 #include <openr/spark/Spark.h>
 #include <openr/watchdog/Watchdog.h>
 
@@ -604,6 +605,7 @@ main(int argc, char** argv) {
             std::make_pair(
                 Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
             context,
+            std::make_shared<IoProvider>(),
             FLAGS_enable_flood_optimization,
             FLAGS_enable_spark2,
             FLAGS_spark2_increase_hello_interval,

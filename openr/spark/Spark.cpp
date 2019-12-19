@@ -288,6 +288,7 @@ Spark::Spark(
     OpenrCtrlThriftPort openrCtrlThriftPort,
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
+    std::shared_ptr<IoProvider> ioProvider,
     bool enableFloodOptimization,
     bool enableSpark2,
     bool increaseHelloInterval,
@@ -319,7 +320,7 @@ Spark::Spark(
       enableFloodOptimization_(enableFloodOptimization),
       enableSpark2_(enableSpark2),
       increaseHelloInterval_(increaseHelloInterval),
-      ioProvider_(std::make_shared<IoProvider>()),
+      ioProvider_(std::move(ioProvider)),
       areas_(std::move(areas)) {
   CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
       << "Keep-alive-time must be less than hold-time.";
@@ -329,6 +330,7 @@ Spark::Spark(
       << "fast-init-keep-alive-time can't be 0";
   CHECK(fastInitKeepAliveTime <= myKeepAliveTime)
       << "fast-init-keep-alive-time must not be bigger than keep-alive-time";
+  CHECK(ioProvider_) << "Got null IoProvider";
 
   // Initialize list of BucketedTimeSeries
   const std::chrono::seconds sec{1};

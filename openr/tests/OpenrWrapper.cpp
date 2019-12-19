@@ -153,7 +153,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       OpenrCtrlThriftPort{0},
       std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-      context_);
+      context_,
+      ioProvider_);
 
   // spark client socket
   sparkReqSock_.connect(fbzmq::SocketUrl{spark_->inprocCmdUrl}).value();
@@ -377,7 +378,6 @@ OpenrWrapper<Serializer>::run() {
   // start spark thread
   std::thread sparkThread([this]() {
     VLOG(1) << nodeId_ << " Spark running.";
-    spark_->setIoProvider(ioProvider_);
     spark_->run();
     VLOG(1) << nodeId_ << " Spark stopped.";
   });

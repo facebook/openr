@@ -110,9 +110,6 @@ class SparkWrapper {
  private:
   std::string myNodeName_{""};
 
-  // io provider
-  std::shared_ptr<IoProvider> ioProvider_;
-
   // this is used to communicate events to downstream consumer
   const std::string reportUrl_{""};
 

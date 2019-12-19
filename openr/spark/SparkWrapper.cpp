@@ -29,7 +29,6 @@ SparkWrapper::SparkWrapper(
     bool increaseHelloInterval,
     SparkTimeConfig timeConfig)
     : myNodeName_(myNodeName),
-      ioProvider_(std::move(ioProvider)),
       reqSock_(zmqContext),
       reportSock_(
           zmqContext,
@@ -59,6 +58,7 @@ SparkWrapper::SparkWrapper(
       OpenrCtrlThriftPort{2018},
       version,
       zmqContext,
+      std::move(ioProvider),
       true,
       enableSpark2,
       increaseHelloInterval,
@@ -80,7 +80,6 @@ void
 SparkWrapper::run() {
   thread_ = std::make_unique<std::thread>([this]() {
     VLOG(1) << "Spark running.";
-    spark_->setIoProvider(ioProvider_);
     spark_->run();
     VLOG(1) << "Spark stopped.";
   });

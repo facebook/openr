@@ -101,18 +101,13 @@ class Spark final : public OpenrEventLoop {
       OpenrCtrlThriftPort openrCtrlThriftPort,
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
+      std::shared_ptr<IoProvider> ioProvider,
       bool enableFloodOptimization = false,
       bool enableSpark2 = false,
       bool increaseHelloInterval = false,
       folly::Optional<std::unordered_set<std::string>> areas = folly::none);
 
   ~Spark() override = default;
-
-  // set the mocked IO provider, used for unit-testing
-  void
-  setIoProvider(std::shared_ptr<IoProvider> ioProvider) {
-    ioProvider_ = std::move(ioProvider);
-  }
 
   // get the current state of neighborNode, used for unit-testing
   folly::Optional<SparkNeighState> getSparkNeighState(
