@@ -30,6 +30,14 @@ class OpenrEventBase : public OpenrModule {
   }
 
   /**
+   * EventBase API aliases
+   */
+  void
+  runInEventBaseThread(folly::EventBase::Func callback) {
+    evb_.runInEventBaseThread(std::move(callback));
+  }
+
+  /**
    * OpenrModule APIs
    */
   std::chrono::seconds

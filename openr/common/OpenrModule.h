@@ -42,6 +42,8 @@ class OpenrModule : public virtual fbzmq::Runnable {
       const thrift::OpenrModuleType type,
       fbzmq::Context& zmqContext);
 
+  virtual ~OpenrModule() {}
+
   virtual folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& request) = 0;
 
