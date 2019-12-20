@@ -13,7 +13,7 @@ namespace {
 std::chrono::seconds
 getElapsedSeconds() {
   return std::chrono::duration_cast<std::chrono::seconds>(
-      std::chrono::steady_clock::now().time_since_epoch());
+      std::chrono::system_clock::now().time_since_epoch());
 }
 
 int
