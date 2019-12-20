@@ -11,7 +11,6 @@
 #include <functional>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
@@ -22,7 +21,7 @@
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/OpenrEventLoop.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
@@ -76,7 +75,7 @@ enum class SparkNeighEvent {
 // and starts hello process on those interfaces.
 //
 
-class Spark final : public OpenrEventLoop {
+class Spark final : public OpenrEventBase {
  public:
   Spark(
       std::string const& myDomainName,

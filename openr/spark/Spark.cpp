@@ -293,7 +293,7 @@ Spark::Spark(
     bool enableSpark2,
     bool increaseHelloInterval,
     folly::Optional<std::unordered_set<std::string>> areas)
-    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::SPARK, zmqContext),
+    : OpenrEventBase(myNodeName, thrift::OpenrModuleType::SPARK, zmqContext),
       myDomainName_(myDomainName),
       myNodeName_(myNodeName),
       udpMcastPort_(udpMcastPort),
@@ -342,8 +342,7 @@ Spark::Spark(
   }
 
   // Initialize ZMQ sockets
-  scheduleTimeout(
-      std::chrono::seconds(0), [this, maybeIpTos]() { prepare(maybeIpTos); });
+  prepare(maybeIpTos);
 
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
@@ -401,7 +400,7 @@ Spark::stop() {
 
   LOG(INFO)
       << "I have sent all restarting packets to my neighbors, ready to go down";
-  ZmqEventLoop::stop();
+  OpenrEventBase::stop();
 }
 
 void
@@ -426,6 +425,8 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
 
   int fd = ioProvider_->socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   mcastFd_ = fd;
+  LOG(INFO) << "Creatd UDP socket for neighbor discovery. fd: " << mcastFd_;
+  CHECK_GT(fd, 0);
 
   if (fd < 0) {
     LOG(FATAL) << "Failed creating Spark UDP socket. Error: "
@@ -536,8 +537,8 @@ Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
 
   // Schedule periodic timer for monitor submission
   const bool isPeriodic = true;
-  monitorTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
+  monitorTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
 
   // Listen for incoming messages on multicast FD
@@ -621,8 +622,8 @@ Spark::validateHelloPacket(
 
   // first time we hear from this guy, add to tracking list
   if (it == ifNeighbors.end()) {
-    auto holdTimer =
-        fbzmq::ZmqTimeout::make(this, [this, ifName, neighborName]() noexcept {
+    auto holdTimer = fbzmq::ZmqTimeout::make(
+        getEvb(), [this, ifName, neighborName]() noexcept {
           processNeighborHoldTimeout(ifName, neighborName);
         });
 
@@ -1171,7 +1172,7 @@ Spark::getSparkNeighState(
   folly::Promise<folly::Optional<SparkNeighState>> promise;
   auto future = promise.getFuture();
 
-  runInEventLoop(
+  runInEventBaseThread(
       [this, promise = std::move(promise), &ifName, &neighborName]() mutable {
         if (spark2Neighbors_.find(ifName) == spark2Neighbors_.end()) {
           LOG(ERROR) << "No interface: " << ifName
@@ -1197,7 +1198,7 @@ std::unordered_map<std::string, int64_t>
 Spark::getCounters() {
   folly::Promise<std::unordered_map<std::string, int64_t>> promise;
   auto future = promise.getFuture();
-  runInEventLoop([this, promise = std::move(promise)]() mutable {
+  runInEventBaseThread([this, promise = std::move(promise)]() mutable {
     promise.setValue(tData_.getCounters());
   });
   return std::move(future).get();
@@ -1215,8 +1216,8 @@ Spark::neighborUpWrapper(
   neighbor.negotiateHoldTimer.reset();
 
   // create heartbeat hold timer when promote to "ESTABLISHED"
-  neighbor.heartbeatHoldTimer =
-      fbzmq::ZmqTimeout::make(this, [this, ifName, neighborName]() noexcept {
+  neighbor.heartbeatHoldTimer = fbzmq::ZmqTimeout::make(
+      getEvb(), [this, ifName, neighborName]() noexcept {
         processHeartbeatTimeout(ifName, neighborName);
       });
   neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
@@ -1411,8 +1412,8 @@ Spark::processGRMsg(
       neighbor.area);
 
   // start graceful-restart timer
-  neighbor.gracefulRestartHoldTimer =
-      fbzmq::ZmqTimeout::make(this, [this, ifName, neighborName]() noexcept {
+  neighbor.gracefulRestartHoldTimer = fbzmq::ZmqTimeout::make(
+      getEvb(), [this, ifName, neighborName]() noexcept {
         // change the state back to IDLE
         processGRTimeout(ifName, neighborName);
       });
@@ -1572,7 +1573,7 @@ Spark::processHelloMsg(
       } else {
         // Starts timer to periodically send hankshake msg
         neighbor.negotiateTimer =
-            fbzmq::ZmqTimeout::make(this, [this, ifName]() noexcept {
+            fbzmq::ZmqTimeout::make(getEvb(), [this, ifName]() noexcept {
               // periodically send out handshake msg
               sendHandshakeMsg(ifName, false);
             });
@@ -1581,7 +1582,7 @@ Spark::processHelloMsg(
 
         // Starts negotiate hold-timer
         neighbor.negotiateHoldTimer = fbzmq::ZmqTimeout::make(
-            this, [this, ifName, neighborName]() noexcept {
+            getEvb(), [this, ifName, neighborName]() noexcept {
               // prevent to stucking in NEGOTIATE forever
               processNegotiateTimeout(ifName, neighborName);
             });
@@ -1654,7 +1655,7 @@ Spark::processHelloMsg(
 
         // start heartbeat timer again to make sure neighbor is alive
         neighbor.heartbeatHoldTimer = fbzmq::ZmqTimeout::make(
-            this, [this, ifName, neighborName]() noexcept {
+            getEvb(), [this, ifName, neighborName]() noexcept {
               processHeartbeatTimeout(ifName, neighborName);
             });
         neighbor.heartbeatHoldTimer->scheduleTimeout(
@@ -2410,7 +2411,7 @@ Spark::addInterfaceToDb(
 
       // heartbeatTimers will start as soon as intf is in UP state
       auto heartbeatTimer = fbzmq::ZmqTimeout::make(
-          this, [this, ifName]() noexcept { sendHeartbeatMsg(ifName); });
+          getEvb(), [this, ifName]() noexcept { sendHeartbeatMsg(ifName); });
 
       const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
       ifNameToHeartbeatTimers_.emplace(ifName, std::move(heartbeatTimer));
@@ -2441,7 +2442,7 @@ Spark::addInterfaceToDb(
     // address. The hello packet will be sent later and will have good chances
     // of making it out if small delay is introduced.
     auto helloTimer = fbzmq::ZmqTimeout::make(
-        this, [this, ifName, timePoint, roll, rollFast]() mutable noexcept {
+        getEvb(), [this, ifName, timePoint, roll, rollFast]() mutable noexcept {
           VLOG(3) << "Sending hello multicast packet on interface " << ifName;
           bool inFastInitState = false;
           if (enableSpark2_ && increaseHelloInterval_) {
@@ -2602,8 +2603,8 @@ Spark::submitCounters() {
   counters["spark.num_tracked_neighbors"] = trackedNeighborCount;
   counters["spark.num_adjacent_neighbors"] = adjacentNeighborCount;
   counters["spark.my_seq_num"] = mySeqNum_;
-  counters["spark.pending_timers"] = getNumPendingTimeouts();
-  counters["spark.zmq_event_queue_size"] = getEventQueueSize();
+  counters["spark.pending_timers"] = getEvb()->timer().count();
+  counters["spark.zmq_event_queue_size"] = getEvb()->getNotificationQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
