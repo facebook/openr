@@ -1035,7 +1035,7 @@ OpenrCtrlHandler::semifuture_getKvStorePeersArea(
   return p.getSemiFuture();
 }
 
-apache::thrift::Stream<thrift::Publication>
+apache::thrift::ServerStream<thrift::Publication>
 OpenrCtrlHandler::subscribeKvStore() {
   // Get new client-ID (monotonically increasing)
   auto clientToken = publisherToken_++;
@@ -1061,8 +1061,9 @@ OpenrCtrlHandler::subscribeKvStore() {
   return std::move(streamAndPublisher.first);
 }
 
-folly::SemiFuture<
-    apache::thrift::ResponseAndStream<thrift::Publication, thrift::Publication>>
+folly::SemiFuture<apache::thrift::ResponseAndServerStream<
+    thrift::Publication,
+    thrift::Publication>>
 OpenrCtrlHandler::semifuture_subscribeAndGetKvStore() {
   return semifuture_getKvStoreKeyValsFiltered(
              std::make_unique<thrift::KeyDumpParams>())
@@ -1070,9 +1071,10 @@ OpenrCtrlHandler::semifuture_subscribeAndGetKvStore() {
           [stream = subscribeKvStore()](
               folly::Try<std::unique_ptr<thrift::Publication>>&& pub) mutable {
             pub.throwIfFailed();
-            return apache::thrift::
-                ResponseAndStream<thrift::Publication, thrift::Publication>{
-                    std::move(*pub.value()), std::move(stream)};
+            return apache::thrift::ResponseAndServerStream<
+                thrift::Publication,
+                thrift::Publication>{std::move(*pub.value()),
+                                     std::move(stream)};
           });
 }
 

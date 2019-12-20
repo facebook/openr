@@ -265,6 +265,7 @@ add_fbthrift_cpp_library(
     json
     optionals
     stream
+    server_stream
   DEPENDS
     openr_ctrl_cpp2
     kv_store_cpp2

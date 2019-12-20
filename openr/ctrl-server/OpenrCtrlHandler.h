@@ -209,9 +209,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   // Intentionally not use SemiFuture as stream is async by nature and we will
   // immediately create and return the stream handler
-  apache::thrift::Stream<thrift::Publication> subscribeKvStore() override;
+  apache::thrift::ServerStream<thrift::Publication> subscribeKvStore() override;
 
-  folly::SemiFuture<apache::thrift::ResponseAndStream<
+  folly::SemiFuture<apache::thrift::ResponseAndServerStream<
       thrift::Publication,
       thrift::Publication>>
   semifuture_subscribeAndGetKvStore() override;
