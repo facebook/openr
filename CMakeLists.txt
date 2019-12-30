@@ -497,6 +497,7 @@ install(
 
 option(BUILD_TESTS "BUILD_TESTS" ON)
 option(ADD_ROOT_TESTS "ADD_ROOT_TESTS" ON)
+option(ENABLE_NETLINK_SOCKET_TESTS "ENABLE_NETLINK_SOCKET_TESTS" ON)
 
 if(BUILD_TESTS)
 
@@ -716,23 +717,25 @@ if(BUILD_TESTS)
 
   if(ADD_ROOT_TESTS)
     # these tests must be run by root user
-    add_openr_test(NetlinkSocketTest netlink_socket_test
-      SOURCES
-        openr/nl/tests/NetlinkSocketTest.cpp
-      DESTINATION sbin/tests/openr/nl
-    )
-
     add_openr_test(NetlinkMessageTest netlink_message_test
       SOURCES
         openr/nl/tests/NetlinkMessageTest.cpp
       DESTINATION sbin/tests/openr/nl
     )
 
-    add_openr_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test
-      SOURCES
-        openr/nl/tests/NetlinkSocketSubscribeTest.cpp
-      DESTINATION sbin/tests/openr/nl
-    )
+    if(ENABLE_NETLINK_SOCKET_TESTS STREQUAL "ON")
+      add_openr_test(NetlinkSocketTest netlink_socket_test
+        SOURCES
+          openr/nl/tests/NetlinkSocketTest.cpp
+        DESTINATION sbin/tests/openr/nl
+      )
+
+      add_openr_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test
+        SOURCES
+          openr/nl/tests/NetlinkSocketSubscribeTest.cpp
+        DESTINATION sbin/tests/openr/nl
+      )
+    endif()
   endif()
 
   add_openr_test(PrefixManagerTest prefix_manager_test
