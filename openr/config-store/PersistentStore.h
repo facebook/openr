@@ -10,14 +10,13 @@
 #include <chrono>
 #include <string>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
-#include <openr/common/OpenrEventLoop.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 
@@ -54,7 +53,7 @@ struct PersistentObject {
  * load/save/erase entries with different value types like thrift-objects,
  * primitive types and strings.
  */
-class PersistentStore : public OpenrEventLoop {
+class PersistentStore : public OpenrEventBase {
  public:
   PersistentStore(
       const std::string& nodeName,

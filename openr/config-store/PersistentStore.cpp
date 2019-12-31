@@ -31,7 +31,7 @@ PersistentStore::PersistentStore(
     std::chrono::milliseconds saveInitialBackoff,
     std::chrono::milliseconds saveMaxBackoff,
     bool dryrun)
-    : OpenrEventLoop(
+    : OpenrEventBase(
           nodeName, thrift::OpenrModuleType::PERSISTENT_STORE, context),
       storageFilePath_(storageFilePath),
       dryrun_(dryrun) {
@@ -41,7 +41,7 @@ PersistentStore::PersistentStore(
         std::make_unique<ExponentialBackoff<std::chrono::milliseconds>>(
             saveInitialBackoff, saveMaxBackoff);
 
-    saveDbTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+    saveDbTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
       if (savePersistentObjectToDisk()) {
         saveDbTimerBackoff_->reportSuccess();
       } else {
