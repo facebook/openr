@@ -34,7 +34,6 @@ using namespace std;
 using namespace folly;
 using namespace openr;
 
-
 DEFINE_int32(seed_prefix_len, 125, "length of seed prefix");
 
 // interval for periodic syncs
@@ -65,7 +64,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     kvStoreWrapper_->run();
     kvStoreClient_ = std::make_unique<KvStoreClient>(
         zmqContext_,
-        &evl_,
+        &evb_,
         myNodeName_,
         kvStoreWrapper_->localCmdUrl,
         kvStoreWrapper_->localPubUrl);
@@ -188,7 +187,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   fbzmq::Context zmqContext_;
 
   // Main thread event loop
-  fbzmq::ZmqEventLoop evl_;
+  OpenrEventBase evb_;
 
   const std::string myNodeName_{"test-node"};
   std::string tempFileName_;
@@ -283,10 +282,10 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
   // restart allocators in round 1 and see if they retain their previous
   // prefixes in round 0
   for (auto round = 0; round < 2; ++round) {
-    // Create another ZmqEventLoop instance for looping clients
+    // Create another OpenrEventBase instance for looping clients
     // Put in outer scope of kvstore client to ensure it's still alive when the
     // client is destroyed
-    fbzmq::ZmqEventLoop evl;
+    OpenrEventBase evl;
     std::atomic<bool> shouldWait{true};
     std::atomic<bool> usingNewSeedPrefix{false};
 
@@ -395,9 +394,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // spin up config store server for this allocator
       auto configStore = std::make_unique<PersistentStore>(
-          folly::sformat("node{}", i),
-          tempFileName,
-          zmqContext);
+          folly::sformat("node{}", i), tempFileName, zmqContext);
       std::string persistentStoreUrl = configStore->inprocCmdUrl;
       threads.emplace_back([&configStore]() noexcept { configStore->run(); });
       configStore->waitUntilRunning();
@@ -408,9 +405,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       tempFileName = folly::sformat("/tmp/openr.{}.{}.{}", tid, round, i);
       tempFileNames.emplace_back(tempFileName);
       auto tempConfigStore = std::make_unique<PersistentStore>(
-          folly::sformat("temp-node{}", i),
-          tempFileName,
-          zmqContext);
+          folly::sformat("temp-node{}", i), tempFileName, zmqContext);
       std::string tempPersistentStoreUrl = tempConfigStore->inprocCmdUrl;
       threads.emplace_back([&tempConfigStore]() noexcept {
         tempConfigStore->run();
@@ -601,7 +596,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
       false);
 
   // Start main event loop in a new thread
-  threads_.emplace_back([&]() noexcept { evl_.run(); });
+  threads_.emplace_back([&]() noexcept { evb_.run(); });
 
   //
   // 1) Set seed prefix in kvStore and verify that we get an elected prefix
@@ -634,7 +629,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   prefixAllocator_->stop();
   prefixAllocator_->waitUntilStopped();
   prefixAllocator_.reset();
-  evl_.runInEventLoop([&]() noexcept {
+  evb_.runInEventBaseThread([&]() noexcept {
     kvStoreClient_->setKey(
         Constants::kSeedPrefixAllocParamKey.toString(),
         "",
@@ -669,8 +664,8 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
 
   // Stop main eventloop
-  evl_.stop();
-  evl_.waitUntilStopped();
+  evb_.stop();
+  evb_.waitUntilStopped();
 }
 
 /**
@@ -725,7 +720,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
       false);
 
   // Start main event loop in a new thread
-  threads_.emplace_back([&]() noexcept { evl_.run(); });
+  threads_.emplace_back([&]() noexcept { evb_.run(); });
 
   //
   // 1) Set seed prefix in kvStore and verify that we get an elected prefix
@@ -821,8 +816,8 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
 
   LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
   // Stop main eventloop
-  evl_.stop();
-  evl_.waitUntilStopped();
+  evb_.stop();
+  evb_.waitUntilStopped();
 }
 
 /**
@@ -872,7 +867,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
       false);
 
   // Start main event loop in a new thread
-  threads_.emplace_back([&]() noexcept { evl_.run(); });
+  threads_.emplace_back([&]() noexcept { evb_.run(); });
 
   //
   // 1) Set static allocation in KvStore
@@ -902,7 +897,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   prefixAllocator_->stop();
   prefixAllocator_->waitUntilStopped();
   prefixAllocator_.reset();
-  evl_.runInEventLoop([&]() noexcept {
+  evb_.runInEventBaseThread([&]() noexcept {
     kvStoreClient_->setKey(
         Constants::kStaticPrefixAllocParamKey.toString(),
         "",
@@ -979,8 +974,8 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   LOG(INFO) << "Step-5: Received withdraw for allocated prefix from KvStore.";
 
   // Stop main eventloop
-  evl_.stop();
-  evl_.waitUntilStopped();
+  evb_.stop();
+  evb_.waitUntilStopped();
 }
 
 INSTANTIATE_TEST_CASE_P(FixtureTest, PrefixAllocatorFixture, ::testing::Bool());

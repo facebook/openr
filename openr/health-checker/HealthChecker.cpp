@@ -11,7 +11,6 @@
 #include <folly/Random.h>
 #include <openr/common/Util.h>
 
-
 namespace {
 const int kMaxPingPacketSize = 1028;
 } // namespace
@@ -31,7 +30,7 @@ HealthChecker::HealthChecker(
     const KvStoreLocalPubUrl& storePubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventLoop(
+    : OpenrEventBase(
           myNodeName, thrift::OpenrModuleType::HEALTH_CHECKER, zmqContext),
       myNodeName_(myNodeName),
       healthCheckOption_(healthCheckOption),
@@ -80,14 +79,14 @@ HealthChecker::prepare() noexcept {
   });
 
   // Schedule periodic timer for sending pings
-  pingTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+  pingTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
     printInfo();
     pingNodes();
   });
   pingTimer_->scheduleTimeout(pingInterval_, true /* isPeriodic */);
   // Schedule periodic timer for monitor submission
-  monitorTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
+  monitorTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(
       Constants::kMonitorSubmitInterval, true /* isPeriodic */);
 }
@@ -504,7 +503,8 @@ HealthChecker::submitCounters() {
   auto counters = tData_.getCounters();
   counters["health_checker.nodes_to_ping_size"] = nodesToPing_.size();
   counters["health_checker.nodes_info_size"] = nodeInfo_.size();
-  counters["health_checker.zmq_event_queue_size"] = getEventQueueSize();
+  counters["health_checker.zmq_event_queue_size"] =
+      getEvb()->getNotificationQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }

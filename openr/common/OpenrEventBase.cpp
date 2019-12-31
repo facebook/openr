@@ -27,6 +27,15 @@ getZmqSocketFd(uintptr_t socketPtr) {
 }
 } // namespace
 
+EventBaseStopSignalHandler::EventBaseStopSignalHandler(folly::EventBase* evb)
+    : folly::AsyncSignalHandler(evb) {}
+
+void
+EventBaseStopSignalHandler::signalReceived(int signal) noexcept {
+  LOG(INFO) << "Caught signal: " << signal << ". Stopping event base ...";
+  getEventBase()->terminateLoopSoon();
+}
+
 OpenrEventBase::ZmqEventHandler::ZmqEventHandler(
     folly::EventBase* evb,
     int fd,

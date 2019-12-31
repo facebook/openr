@@ -18,14 +18,14 @@ namespace openr {
 
 KvStoreClient::KvStoreClient(
     fbzmq::Context& context,
-    fbzmq::ZmqEventLoop* eventLoop,
+    OpenrEventBase* eventBase,
     std::string const& nodeId,
     std::string const& kvStoreLocalCmdUrl,
     std::string const& kvStoreLocalPubUrl,
     folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod,
     folly::Optional<std::chrono::milliseconds> recvTimeout)
     : nodeId_(nodeId),
-      eventLoop_(eventLoop),
+      eventBase_(eventBase),
       context_(context),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
@@ -37,7 +37,7 @@ KvStoreClient::KvStoreClient(
   //
   // sanity check
   //
-  CHECK_NE(eventLoop_, static_cast<void*>(nullptr));
+  CHECK_NE(eventBase_, static_cast<void*>(nullptr));
   CHECK(!nodeId.empty());
   CHECK(!kvStoreLocalCmdUrl.empty());
   CHECK(!kvStoreLocalPubUrl.empty());
@@ -63,19 +63,17 @@ KvStoreClient::KvStoreClient(
   }
 
   // Attach socket callback
-  eventLoop_->addSocket(
-      fbzmq::RawZmqSocketPtr{*kvStoreSubSock_}, ZMQ_POLLIN, [&](int) noexcept {
-        // Read publication from socket and process it
-        auto maybePublication =
-            kvStoreSubSock_.recvThriftObj<thrift::Publication>(
-                serializer_, recvTimeout_);
-        if (maybePublication.hasError()) {
-          LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
-                     << "Exception: " << maybePublication.error();
-        } else {
-          processPublication(maybePublication.value());
-        }
-      });
+  eventBase_->addSocket(*kvStoreSubSock_, ZMQ_POLLIN, [&](int) noexcept {
+    // Read publication from socket and process it
+    auto maybePublication = kvStoreSubSock_.recvThriftObj<thrift::Publication>(
+        serializer_, recvTimeout_);
+    if (maybePublication.hasError()) {
+      LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
+                 << "Exception: " << maybePublication.error();
+    } else {
+      processPublication(maybePublication.value());
+    }
+  });
 
   //
   // initialize timers
@@ -85,16 +83,16 @@ KvStoreClient::KvStoreClient(
 
 KvStoreClient::KvStoreClient(
     fbzmq::Context& context,
-    fbzmq::ZmqEventLoop* eventLoop,
+    OpenrEventBase* eventBase,
     std::string const& nodeId,
     folly::SocketAddress const& sockAddr)
     : useThriftClient_(true),
       sockAddr_(sockAddr),
       nodeId_(nodeId),
-      eventLoop_(eventLoop),
+      eventBase_(eventBase),
       context_(context) {
   // sanity check
-  CHECK_NE(eventLoop_, static_cast<void*>(nullptr));
+  CHECK_NE(eventBase_, static_cast<void*>(nullptr));
   CHECK(!nodeId.empty());
   CHECK(!sockAddr_.empty());
 
@@ -108,15 +106,15 @@ KvStoreClient::~KvStoreClient() {
     return;
   }
 
-  // Removes the KvStore socket from the eventLoop
-  eventLoop_->removeSocket(fbzmq::RawZmqSocketPtr{*kvStoreSubSock_});
+  // Removes the KvStore socket from the eventBase
+  eventBase_->removeSocket(fbzmq::RawZmqSocketPtr{*kvStoreSubSock_});
 }
 
 void
 KvStoreClient::initTimers() {
   // Create timer to advertise pending key-vals
   advertiseKeyValsTimer_ =
-      fbzmq::ZmqTimeout::make(eventLoop_, [this]() noexcept {
+      fbzmq::ZmqTimeout::make(eventBase_->getEvb(), [this]() noexcept {
         VLOG(3) << "Received timeout event.";
 
         // Advertise all pending keys
@@ -134,12 +132,12 @@ KvStoreClient::initTimers() {
 
   // Create ttl timer
   ttlTimer_ = fbzmq::ZmqTimeout::make(
-      eventLoop_, [this]() noexcept { advertiseTtlUpdates(); });
+      eventBase_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
 
   // Create check persistKey timer
   if (checkPersistKeyPeriod_.hasValue()) {
     checkPersistKeyTimer_ = fbzmq::ZmqTimeout::make(
-        eventLoop_, [this]() noexcept { checkPersistKeyInStore(); });
+        eventBase_->getEvb(), [this]() noexcept { checkPersistKeyInStore(); });
 
     checkPersistKeyTimer_->scheduleTimeout(checkPersistKeyPeriod_.value());
   }

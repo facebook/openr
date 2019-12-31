@@ -15,7 +15,6 @@
 #include <folly/Optional.h>
 #include <folly/SocketAddress.h>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -23,6 +22,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrClient.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
@@ -53,7 +53,7 @@ class KvStoreClient {
    */
   KvStoreClient(
       fbzmq::Context& context,
-      fbzmq::ZmqEventLoop* eventLoop,
+      OpenrEventBase* eventBase,
       std::string const& nodeId,
       std::string const& kvStoreLocalCmdUrl,
       std::string const& kvStoreLocalPubUrl,
@@ -67,7 +67,7 @@ class KvStoreClient {
    */
   KvStoreClient(
       fbzmq::Context& context,
-      fbzmq::ZmqEventLoop* eventLoop,
+      OpenrEventBase* eventBase,
       std::string const& nodeId,
       folly::SocketAddress const& socketAddr);
 
@@ -309,9 +309,9 @@ class KvStoreClient {
       fbzmq::Error>
   getPeers(const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
-  fbzmq::ZmqEventLoop*
-  getEventLoop() const noexcept {
-    return eventLoop_;
+  OpenrEventBase*
+  getOpenrEventBase() const noexcept {
+    return eventBase_;
   }
 
  private:
@@ -437,9 +437,9 @@ class KvStoreClient {
   // Our local node identifier
   const std::string nodeId_;
 
-  // ZmqEventLoop pointer for scheduling async events and socket callback
+  // OpenrEventBase pointer for scheduling async events and socket callback
   // registration
-  fbzmq::ZmqEventLoop* const eventLoop_{nullptr};
+  OpenrEventBase* const eventBase_{nullptr};
 
   // ZMQ context for IO processing
   fbzmq::Context& context_;

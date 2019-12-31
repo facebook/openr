@@ -8,7 +8,6 @@
 #pragma once
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
@@ -18,7 +17,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/ExponentialBackoff.h>
-#include <openr/common/OpenrEventLoop.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
@@ -48,7 +47,7 @@ namespace openr {
  * nexthops.
  *
  */
-class Fib final : public OpenrEventLoop {
+class Fib final : public OpenrEventBase {
  public:
   Fib(std::string myNodeName,
       int32_t thriftPort,

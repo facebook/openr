@@ -186,7 +186,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
 
   fbzmq::Context context;
 
-  fbzmq::ZmqEventLoop evl;
+  OpenrEventBase evl;
 
   std::string storageFilePath;
   std::unique_ptr<PersistentStore> configStore;
@@ -532,8 +532,6 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
  * the old key format
  */
 TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
-  // Create ZmqEventLoop
-  fbzmq::ZmqEventLoop evl;
   int waitDuration{0};
   // test only if 'create ip prefixes' is enabled
   if (!perPrefixKeys_) {
@@ -622,9 +620,9 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
 
   // Start the event loop and wait until it is finished execution.
   std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    LOG(INFO) << "main loop starting.";
     evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+    LOG(INFO) << "main loop terminating.";
   });
   evl.waitUntilRunning();
   evl.waitUntilStopped();
@@ -638,8 +636,6 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
  * appropriately udpates Kvstore
  */
 TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
-  // Create ZmqEventLoop
-  fbzmq::ZmqEventLoop evl;
   int waitDuration{0};
   int keyVersion{0};
   std::string prefixKeyStr{"prefix:node-1"};
@@ -782,9 +778,9 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
 
   // Start the event loop and wait until it is finished execution.
   std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    LOG(INFO) << "main loop starting.";
     evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+    LOG(INFO) << "main loop terminating.";
   });
   evl.waitUntilRunning();
   evl.waitUntilStopped();
@@ -792,7 +788,6 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
 }
 
 TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
-  fbzmq::ZmqEventLoop evl;
   int waitDuration{0};
 
   if (!perPrefixKeys_) {
@@ -888,9 +883,9 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
 
   // Start the event loop and wait until it is finished execution.
   std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
+    LOG(INFO) << "main loop starting.";
     evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+    LOG(INFO) << "main loop terminating.";
   });
   evl.waitUntilRunning();
   evl.waitUntilStopped();

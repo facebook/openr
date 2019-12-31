@@ -77,7 +77,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
       auto const& store = stores[i % kNumStores];
       auto client = std::make_unique<KvStoreClient>(
           zmqContext,
-          &eventLoop,
+          &evb,
           createClientName(i),
           store->localCmdUrl,
           store->localPubUrl);
@@ -147,8 +147,8 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
   // All clients loop in same event-loop
   std::vector<std::unique_ptr<KvStoreClient>> clients;
 
-  // ZmqEventLoop for all clients
-  fbzmq::ZmqEventLoop eventLoop;
+  // OpenrEventBase for all clients
+  OpenrEventBase evb;
 
   // owner override allowed
   const bool overrideOwner = GetParam();
@@ -177,12 +177,12 @@ TEST_P(RangeAllocatorFixture, DistinctSeed) {
         CHECK_EQ(clientId + start, newVal.value());
         rcvd++;
         if (rcvd == kNumClients) {
-          LOG(INFO) << "We got everything, stopping eventLoop.";
-          eventLoop.stop();
+          LOG(INFO) << "We got everything, stopping OpenrEventBase.";
+          evb.stop();
         }
       });
 
-  eventLoop.run();
+  evb.run();
 }
 
 /**
@@ -219,12 +219,12 @@ TEST_P(RangeAllocatorFixture, NoSeed) {
             map([](std::pair<int, uint64_t> const& kv) { return kv.second; }) |
             as<std::set<uint64_t>>();
         if (allocatedVals.size() == kNumClients) {
-          LOG(INFO) << "We got everything, stopping eventLoop.";
-          eventLoop.stop();
+          LOG(INFO) << "We got everything, stopping OpenrEventBase.";
+          evb.stop();
         }
       });
 
-  eventLoop.run();
+  evb.run();
 
   for (size_t i = 0; i < allocators.size(); ++i) {
     EXPECT_FALSE(allocators[i]->isRangeConsumed());
@@ -290,8 +290,8 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
         // - All received values are unique
         if (not overrideOwner) {
           // no override
-          LOG(INFO) << "We got everything, stopping eventLoop.";
-          eventLoop.stop();
+          LOG(INFO) << "We got everything, stopping OpenrEventBase.";
+          evb.stop();
           return;
         }
         // Overide mode: client [expectedClientIdStart, expectedClientIdEnd]
@@ -305,13 +305,13 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
             as<std::set<int>>();
 
         if (clientIds == expectedClientIds) {
-          LOG(INFO) << "We got everything, stopping eventLoop.";
-          eventLoop.stop();
+          LOG(INFO) << "We got everything, stopping OpenrEventBase.";
+          evb.stop();
         }
       },
       4s);
 
-  eventLoop.run();
+  evb.run();
 
   EXPECT_TRUE(allocators.front()->isRangeConsumed());
 
@@ -322,7 +322,7 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
 
   // Schedule timeout to remove an allocator (client). This should then free a
   // prefix for the last, unallocated, allocator.
-  eventLoop.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+  auto timer = folly::AsyncTimeout::make(*evb.getEvb(), [&]() noexcept {
     if (not overrideOwner) {
       for (uint32_t i = 0; i < kNumClients; i++) {
         if (allocators[i]->getValue().hasValue()) {
@@ -340,9 +340,10 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
       allocators.pop_back();
     }
   });
+  timer->scheduleTimeout(std::chrono::milliseconds(0));
 
-  VLOG(2) << "Continuing eventLoop...";
-  eventLoop.run();
+  VLOG(2) << "Continuing OpenrEventBase...";
+  evb.run();
 
   EXPECT_TRUE(allocators.front()->isRangeConsumed());
 

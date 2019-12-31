@@ -58,9 +58,9 @@ OpenrThriftServerWrapper::run() {
 
 void
 OpenrThriftServerWrapper::stop() {
-  // ATTN: moduleTypeToEvl maintains <shared_ptr> of OpenrEventLoop.
+  // ATTN: moduleTypeToEvl maintains <shared_ptr> of OpenrModule.
   //       Must cleanup. Otherwise, there will be additional ref count and
-  //       cause OpenrEventLoop binding to the existing addr.
+  //       cause OpenrModule binding to the existing addr.
   moduleTypeToObj_.clear();
   mainEvl_.stop();
   mainEvlThread_.join();

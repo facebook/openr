@@ -69,13 +69,13 @@ class MultipleStoreFixture : public ::testing::Test {
 
     // Create and initialize kvstore-clients
     client1 = std::make_shared<KvStoreClient>(
-        context, &evl, node1, store1->localCmdUrl, store1->localPubUrl);
+        context, &evb, node1, store1->localCmdUrl, store1->localPubUrl);
 
     client2 = std::make_shared<KvStoreClient>(
-        context, &evl, node2, store2->localCmdUrl, store2->localPubUrl);
+        context, &evb, node2, store2->localCmdUrl, store2->localPubUrl);
 
     client3 = std::make_shared<KvStoreClient>(
-        context, &evl, node3, store3->localCmdUrl, store3->localPubUrl);
+        context, &evb, node3, store3->localCmdUrl, store3->localPubUrl);
 
     urls = {fbzmq::SocketUrl{store1->localCmdUrl},
             fbzmq::SocketUrl{store2->localCmdUrl},
@@ -91,7 +91,7 @@ class MultipleStoreFixture : public ::testing::Test {
 
   fbzmq::Context context;
 
-  fbzmq::ZmqEventLoop evl;
+  OpenrEventBase evb;
 
   std::shared_ptr<KvStoreWrapper> store1, store2, store3;
 
@@ -162,18 +162,18 @@ class MultipleAreaFixture : public ::testing::Test {
 
     // Create and initialize kvstore-clients
     client1 = std::make_shared<KvStoreClient>(
-        context, &evl, node1, store1->localCmdUrl, store1->localPubUrl);
+        context, &evb, node1, store1->localCmdUrl, store1->localPubUrl);
 
     client2 = std::make_shared<KvStoreClient>(
         context,
-        &evl,
+        &evb,
         node2,
         store2->localCmdUrl,
         store2->localPubUrl,
         persistKeyTimer);
 
     client3 = std::make_shared<KvStoreClient>(
-        context, &evl, node3, store3->localCmdUrl, store3->localPubUrl);
+        context, &evb, node3, store3->localCmdUrl, store3->localPubUrl);
 
     urls = {fbzmq::SocketUrl{store1->localCmdUrl},
             fbzmq::SocketUrl{store2->localCmdUrl},
@@ -198,7 +198,7 @@ class MultipleAreaFixture : public ::testing::Test {
 
   fbzmq::Context context;
 
-  fbzmq::ZmqEventLoop evl;
+  OpenrEventBase evb;
 
   std::shared_ptr<KvStoreWrapper> store1, store2, store3;
 
@@ -242,7 +242,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   //
   // Submit three values in three different stores
   //
-  evl.runInEventLoop([&]() noexcept {
+  evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     value.version = 1;
     {
@@ -261,10 +261,10 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
           "test_key3", fbzmq::util::writeThriftObjStr(value, serializer), 300);
     }
 
-    evl.stop();
+    evb.stop();
   });
 
-  evl.run();
+  evb.run();
 
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       context, urls, "test_");
@@ -289,7 +289,7 @@ TEST_F(
   //
   // Submit three values in three different stores
   //
-  evl.runInEventLoop([&]() noexcept {
+  evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     {
       value.value = "test_value1";
@@ -307,10 +307,10 @@ TEST_F(
           "test_key", fbzmq::util::writeThriftObjStr(value, serializer), 100);
     }
 
-    evl.stop();
+    evb.stop();
   });
 
-  evl.run();
+  evb.run();
 
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       context, urls, "test_");
@@ -333,7 +333,7 @@ TEST_F(
   //
   // Submit three values in three different stores
   //
-  evl.runInEventLoop([&]() noexcept {
+  evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     value.version = 1;
     {
@@ -352,10 +352,10 @@ TEST_F(
           "test_key", fbzmq::util::writeThriftObjStr(value, serializer), 1);
     }
 
-    evl.stop();
+    evb.stop();
   });
 
-  evl.run();
+  evb.run();
 
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       context, urls, "test_");
@@ -414,15 +414,15 @@ TEST(KvStoreClient, PeerApiTest) {
       peers);
   store->run();
 
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
+  // Create another OpenrEventBase instance for looping clients
+  OpenrEventBase evb;
 
   // Create and initialize kvstore-clients
   auto client = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl);
 
   // Schedule callback to set keys from client
-  evl.runInEventLoop([&]() noexcept {
+  evb.runInEventBaseThread([&]() noexcept {
     // test addPeers
     client->addPeers(peers);
     {
@@ -451,18 +451,18 @@ TEST(KvStoreClient, PeerApiTest) {
       EXPECT_EQ(*maybePeers, peers);
     }
 
-    evl.stop();
+    evb.stop();
   });
 
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 
   // Verify peers INFO from KvStore
   const auto peersResponse = store->getPeers();
@@ -507,27 +507,27 @@ TEST(KvStoreClient, EmptyValueKey) {
   store3->addPeer(store2->nodeId, store2->getPeerSpec());
 
   // add key in store1, check for the key in all stores
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
+  // Create another OpenrEventBase instance for looping clients
+  OpenrEventBase evb;
   int waitDuration{0};
 
   // create kvstore client for store 1
   auto client1 = std::make_shared<KvStoreClient>(
       context,
-      &evl,
+      &evb,
       store1->nodeId,
       store1->localCmdUrl,
       store1->localPubUrl,
       1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
         client1->persistKey("k1", "v1", kTtl);
       });
 
   // check keys on all stores after sometime
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.hasValue());
@@ -546,13 +546,13 @@ TEST(KvStoreClient, EmptyValueKey) {
 
   // set empty value on store1, check for empty value on other stores, and
   // key version is higher
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
         client1->clearKey("k1", "", kTtl);
       });
 
   // check key has empty value on all stores and version is incremented
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.hasValue());
@@ -570,13 +570,13 @@ TEST(KvStoreClient, EmptyValueKey) {
       });
 
   // persist key with new value, and check for new value and higher key version
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
         client1->persistKey("k1", "v2", kTtl);
       });
 
   // check key's value is udpated on all stores and version is incremented
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.hasValue());
@@ -594,13 +594,13 @@ TEST(KvStoreClient, EmptyValueKey) {
       });
 
   // set empty value on store1, and check for key expiry
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
         client1->clearKey("k1", "", kTtl);
       });
 
   // after kTtl duration key must have been deleted due to ttl expiry
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       // add 100 msec more to avoid flakiness
       std::chrono::milliseconds(waitDuration += kTtl.count() + 100),
       [&]() noexcept {
@@ -614,20 +614,20 @@ TEST(KvStoreClient, EmptyValueKey) {
         ASSERT_FALSE(maybeThriftVal.hasValue());
       });
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += kTtl.count()), [&]() noexcept {
-        evl.stop();
+        evb.stop();
       });
 
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 
   // Stop store
   LOG(INFO) << "Stopping stores";
@@ -657,20 +657,20 @@ TEST(KvStoreClient, PersistKeyTest) {
       peers);
   store->run();
 
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
+  // Create another OpenrEventBase instance for looping clients
+  OpenrEventBase evb;
 
   // Create and initialize kvstore-client, with persist key timer
   auto client1 = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl, 1000ms);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl, 1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
-  evl.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     client1->persistKey("test_key3", "test_value3");
   });
 
   // Schedule callback to get persist key from client1
-  evl.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
     // 1st get key
     auto maybeVal1 = client1->getKey("test_key3");
 
@@ -681,7 +681,7 @@ TEST(KvStoreClient, PersistKeyTest) {
 
   // simulate kvstore restart by erasing the test_key3
   // set a TTL of 1ms in the store so that it gets deleted before refresh event
-  evl.scheduleTimeout(std::chrono::milliseconds(3), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(3), [&]() noexcept {
     thrift::Value keyExpVal{apache::thrift::FRAGILE,
                             1,
                             nodeId,
@@ -693,30 +693,30 @@ TEST(KvStoreClient, PersistKeyTest) {
   });
 
   // check after few ms if key is deleted,
-  evl.scheduleTimeout(std::chrono::milliseconds(60), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(60), [&]() noexcept {
     auto maybeVal3 = client1->getKey("test_key3");
     ASSERT_FALSE(maybeVal3.hasValue());
   });
 
   // Schedule after a second, key will be erased and set back in kvstore
   // with persist key check callback
-  evl.scheduleTimeout(std::chrono::milliseconds(3000), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(3000), [&]() noexcept {
     auto maybeVal3 = client1->getKey("test_key3");
     ASSERT_TRUE(maybeVal3.hasValue());
     EXPECT_EQ(1, maybeVal3->version);
     EXPECT_EQ("test_value3", maybeVal3->value);
-    evl.stop();
+    evb.stop();
   });
 
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 
   // Stop store
   LOG(INFO) << "Stopping store";
@@ -748,23 +748,23 @@ TEST(KvStoreClient, PersistKeyChangeTtlTest) {
       std::unordered_map<std::string, thrift::PeerSpec>{});
   store->run();
 
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
+  // Create another OpenrEventBase instance for looping clients
+  OpenrEventBase evb;
 
   // Create and initialize kvstore-client, with persist key timer
   auto client1 = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl, 1000ms);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl, 1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   const std::string testKey{"test-key"};
   const std::string testValue{"test-value"};
-  evl.scheduleTimeout(std::chrono::seconds(0), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::seconds(0), [&]() noexcept {
     // Set key with ttl=1s
     client1->persistKey(testKey, testValue, std::chrono::seconds(1));
   });
 
   // Verify key exists after (ttl + 1s) = 2s
-  evl.scheduleTimeout(std::chrono::seconds(2), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::seconds(2), [&]() noexcept {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.hasValue());
@@ -779,7 +779,7 @@ TEST(KvStoreClient, PersistKeyChangeTtlTest) {
   });
 
   // Verify key exists after (ttl + 1s) = 4s (+ 2s offset)
-  evl.scheduleTimeout(std::chrono::seconds(6), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::seconds(6), [&]() noexcept {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.hasValue());
@@ -794,7 +794,7 @@ TEST(KvStoreClient, PersistKeyChangeTtlTest) {
   });
 
   // Verify key exists after (ttl + 1s) = 2s (+ 6s offset)
-  evl.scheduleTimeout(std::chrono::seconds(8), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::seconds(8), [&]() noexcept {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.hasValue());
@@ -806,11 +806,11 @@ TEST(KvStoreClient, PersistKeyChangeTtlTest) {
 
     // Set key with lower ttl=3s
     client1->persistKey(testKey, testValue, std::chrono::seconds(3));
-    evl.stop();
+    evb.stop();
   });
 
   LOG(INFO) << "Running event loop";
-  evl.run();
+  evb.run();
   LOG(INFO) << "Event-loop stopepd";
   LOG(INFO) << "Stopping store";
   store->stop();
@@ -842,23 +842,23 @@ TEST(KvStoreClient, ApiTest) {
       peers);
   store->run();
 
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
+  // Create another OpenrEventBase instance for looping clients
+  OpenrEventBase evb;
 
   // Create and initialize kvstore-clients
   auto client1 = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl);
   auto client2 = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl);
 
   // Schedule callback to set keys from client1 (this will be executed first)
-  evl.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     client1->persistKey("test_key1", "test_value1");
     client1->setKey("test_key2", "test_value2");
   });
 
   // Schedule callback to add/del peer via client-1 (will be executed next)
-  evl.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
     std::unordered_map<std::string, thrift::PeerSpec> peerMap;
     peerMap.emplace(
         "peer2",
@@ -872,7 +872,7 @@ TEST(KvStoreClient, ApiTest) {
   });
 
   // Schedule callback to persist key2 from client2 (this will be executed next)
-  evl.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
     // 1st get key
     auto maybeVal1 = client2->getKey("test_key2");
     ASSERT_TRUE(maybeVal1.hasValue());
@@ -893,7 +893,7 @@ TEST(KvStoreClient, ApiTest) {
     EXPECT_FALSE(maybeVal3);
   });
 
-  evl.scheduleTimeout(std::chrono::milliseconds(3), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(3), [&]() noexcept {
     VLOG(1) << "Running timeout for `setKey` test";
     const std::string testKey{"set_test_key"};
     const thrift::Value testValue{
@@ -918,7 +918,7 @@ TEST(KvStoreClient, ApiTest) {
   });
 
   // dump keys
-  evl.scheduleTimeout(std::chrono::milliseconds(4), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(4), [&]() noexcept {
     // dump keys
     const auto maybeKeyVals = client1->dumpAllWithPrefix();
     ASSERT_TRUE(maybeKeyVals.hasValue());
@@ -941,7 +941,7 @@ TEST(KvStoreClient, ApiTest) {
   });
 
   // Inject keys w/ TTL
-  evl.scheduleTimeout(std::chrono::milliseconds(5), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(5), [&]() noexcept {
     const thrift::Value testValue1{apache::thrift::FRAGILE,
                                    1,
                                    nodeId,
@@ -964,7 +964,7 @@ TEST(KvStoreClient, ApiTest) {
   });
 
   // Keys shall not expire even after TTL bcoz client is updating their TTL
-  evl.scheduleTimeout(std::chrono::milliseconds(6) + kTtl * 3, [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(6) + kTtl * 3, [&]() noexcept {
     LOG(INFO) << "received response.";
     auto maybeVal1 = client2->getKey("test_ttl_key1");
     ASSERT_TRUE(maybeVal1.hasValue());
@@ -982,7 +982,7 @@ TEST(KvStoreClient, ApiTest) {
     client2 = nullptr;
   });
 
-  evl.scheduleTimeout(std::chrono::milliseconds(7) + kTtl * 6, [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(7) + kTtl * 6, [&]() noexcept {
     // Verify peers INFO from KvStore
     const auto peersResponse = store->getPeers();
     EXPECT_EQ(1, peersResponse.size());
@@ -1008,18 +1008,18 @@ TEST(KvStoreClient, ApiTest) {
     EXPECT_EQ(1, keyValResponse.count("set_test_key"));
 
     // stop the event loop
-    evl.stop();
+    evb.stop();
   });
 
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 
   // Stop store
   LOG(INFO) << "Stopping store";
@@ -1040,19 +1040,19 @@ TEST(KvStoreClient, SubscribeApiTest) {
       emptyPeers);
   store->run();
 
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
+  // Create another OpenrEventBase instance for looping clients
+  OpenrEventBase evb;
 
   // Create and initialize kvstore-clients
   auto client1 = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl);
   auto client2 = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl);
 
   int key1CbCnt = 0;
   int key2CbCnt = 0;
   // Schedule callback to set keys from client1 (this will be executed first)
-  evl.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     client1->subscribeKey(
         "test_key1",
         [&](std::string const& k, folly::Optional<thrift::Value> v) {
@@ -1088,7 +1088,7 @@ TEST(KvStoreClient, SubscribeApiTest) {
   int key2CbCntClient2{0};
 
   // Schedule callback to persist key2 from client2 (this will be executed next)
-  evl.scheduleTimeout(std::chrono::milliseconds(10), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(10), [&]() noexcept {
     client2->persistKey("test_key2", "test_value2-client2");
     client2->subscribeKey(
         "test_key2",
@@ -1105,7 +1105,7 @@ TEST(KvStoreClient, SubscribeApiTest) {
 
   /* test for key callback with the option of getting key Value */
   int keyExpKeySubCbCnt{0}; /* reply count for key regd. with fetchValue=true */
-  evl.scheduleTimeout(std::chrono::milliseconds(11), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(11), [&]() noexcept {
     client2->setKey("test_key_subs_cb", "test_key_subs_cb_val", 11);
 
     folly::Optional<thrift::Value> keyValue;
@@ -1125,7 +1125,7 @@ TEST(KvStoreClient, SubscribeApiTest) {
   /* test for expired keys update */
   int keyExpKeyCbCnt{0}; /* expired key call back count specific to a key */
   int keyExpCbCnt{0}; /* expired key call back count */
-  evl.scheduleTimeout(std::chrono::milliseconds(20), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(20), [&]() noexcept {
     thrift::Value keyExpVal{apache::thrift::FRAGILE,
                             1,
                             nodeId,
@@ -1151,7 +1151,7 @@ TEST(KvStoreClient, SubscribeApiTest) {
           if (!v.hasValue()) {
             EXPECT_EQ("test_key_exp", k);
             keyExpKeyCbCnt++;
-            evl.stop();
+            evb.stop();
           }
         },
         false);
@@ -1159,21 +1159,15 @@ TEST(KvStoreClient, SubscribeApiTest) {
     store->setKey("test_key_exp", keyExpVal);
   });
 
-  // Schedule timeout for terminating the event loop
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(60 + kSyncMaxWaitTime.count()), [&]() noexcept {
-        evl.stop();
-      });
-
   // Start the event loop
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 
   // Verify out expectations
   EXPECT_EQ(1, key1CbCnt);
@@ -1204,14 +1198,14 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
       emptyPeers);
   store->run();
 
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
+  // Create another OpenrEventBase instance for looping clients
+  OpenrEventBase evb;
 
   // Create and initialize kvstore-clients
   auto client1 = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl);
   auto client2 = std::make_shared<KvStoreClient>(
-      context, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+      context, &evb, nodeId, store->localCmdUrl, store->localPubUrl);
 
   std::vector<std::string> keyPrefixList;
   keyPrefixList.emplace_back("test_");
@@ -1221,7 +1215,7 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
   int key1CbCnt = 0;
   // subscribe for key update for keys using kvstore filter
   // using store->setKey should trigger the callback, key1CbCnt++
-  evl.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     client1->subscribeKeyFilter(
         std::move(kvFilters),
         [&](std::string const& k, folly::Optional<thrift::Value> v) {
@@ -1245,12 +1239,12 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
   // subscribe for key update for keys using kvstore filter
   // using kvstoreClient->setKey(), this shouldn't trigger update as the
   // key will be in persistent DB. (key1CbCnt - shoudln't change)
-  evl.scheduleTimeout(std::chrono::milliseconds(25), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(25), [&]() noexcept {
     client1->persistKey("test_key1", "test_value2");
   });
 
   // add another key with same prefix, different key string, key1CbCnt++
-  evl.scheduleTimeout(std::chrono::milliseconds(50), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(50), [&]() noexcept {
     thrift::Value testValue1 = createThriftValue(
         1,
         nodeId,
@@ -1262,13 +1256,13 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
   });
 
   // unsubscribe kvstore key filter and test for callback
-  evl.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
     client1->unSubscribeKeyFilter();
   });
 
   // add another key with same prefix, after unsubscribing,
   // key callback count will not increase
-  evl.scheduleTimeout(std::chrono::milliseconds(150), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(150), [&]() noexcept {
     thrift::Value testValue1 = createThriftValue(
         1,
         nodeId,
@@ -1279,19 +1273,19 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
     store->setKey("test_key3", testValue1);
   });
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(150 + kSyncMaxWaitTime.count()),
-      [&]() noexcept { evl.stop(); });
+      [&]() noexcept { evb.stop(); });
 
   // Start the event loop
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 
   // count must be 2
   EXPECT_EQ(2, key1CbCnt);
@@ -1313,11 +1307,9 @@ TEST(KvStoreClient, SubscribeKeyFilterApiTest) {
  */
 
 TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
   auto scheduleAt = std::chrono::milliseconds{0}.count();
 
-  evl.scheduleTimeout(std::chrono::milliseconds(scheduleAt), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(scheduleAt), [&]() noexcept {
     // test addPeers in invalid area, following result must be false
     EXPECT_FALSE(client1->addPeers(peers1).hasValue());
     EXPECT_FALSE(client2->addPeers(peers2PlaneArea).hasValue());
@@ -1327,7 +1319,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
     setUpPeers();
   });
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // test addPeers
         auto maybePeers = client1->getPeers(planeArea);
@@ -1348,7 +1340,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
       });
 
   // test for key set, get and key flood within area
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         thrift::Value valuePlane1;
         valuePlane1.version = 1;
@@ -1390,7 +1382,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
 
   // get keys from pod and play area and ensure keys are not leaked across
   // areas
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // get key from default area, must be false
         auto maybeThriftVal1 = store1->getKey("pod_key1");
@@ -1413,33 +1405,31 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
         ASSERT_TRUE(maybeThriftVal5.hasValue());
       });
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
-        evl.stop();
+        evb.stop();
       });
 
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 }
 
 TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
-  // Create another ZmqEventLoop instance for looping clients
   const std::chrono::milliseconds ttl{Constants::kTtlThreshold.count() + 100};
-
   auto scheduleAt = std::chrono::milliseconds{0}.count();
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt), [&]() noexcept { setUpPeers(); });
 
   // add key in plane and pod area into node1 and node3 respectively
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
         EXPECT_TRUE(client1
                         ->setKey(
@@ -1454,7 +1444,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
       });
 
   // check if key is flooding as expected by checking in node2
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // plane key must be present in node2 (plane area) and not in node3
         EXPECT_TRUE(
@@ -1467,7 +1457,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
       });
 
   // schecdule after 2 * TTL, check key refresh is working fine
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += ttl.count() * 2), [&]() noexcept {
         // plane key must be present
         EXPECT_TRUE(
@@ -1479,7 +1469,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
       });
 
   // verify dumpAllWithPrefixMultiple
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
         auto maybe = KvStoreClient::dumpAllWithPrefixMultiple(
             context, urls, "test_", 1000ms, 192, planeArea);
@@ -1496,7 +1486,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
       });
 
   // unset key, this stops key ttl refresh
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
         // plane key must be present
         client1->unsetKey("test_ttl_key_plane", planeArea);
@@ -1504,7 +1494,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
       });
 
   // schecdule after 2 * TTL - keys should not be present as they've expired
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += ttl.count() * 2), [&]() noexcept {
         // keys should be expired now
         EXPECT_FALSE(
@@ -1515,20 +1505,20 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
         EXPECT_FALSE(client3->getKey("test_ttl_key_pod", podArea).hasValue());
       });
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
-        evl.stop();
+        evb.stop();
       });
 
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 }
 
 /*
@@ -1543,30 +1533,28 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
  * 5. verify kvstore in node2 has the key
  */
 TEST_F(MultipleAreaFixture, PersistKeyArea) {
-  // Create another ZmqEventLoop instance for looping clients
   const std::chrono::milliseconds ttl{Constants::kTtlThreshold.count() + 100};
-
   auto scheduleAt = std::chrono::milliseconds{0}.count();
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt), [&]() noexcept { setUpPeers(); });
 
   // add key in plane area of node2, no keys are present in pod area
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
         client2->persistKey(
             "test_ttl_key_plane", "test_ttl_value_plane", ttl, planeArea);
       });
 
   // verify at node1 that key is flooded in plane area
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         EXPECT_TRUE(
             client1->getKey("test_ttl_key_plane", planeArea).hasValue());
       });
 
   // expire the key in node2 kvstore by setting a low ttl value
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
         thrift::Value keyExpVal = createThriftValue(
             1,
@@ -1580,34 +1568,34 @@ TEST_F(MultipleAreaFixture, PersistKeyArea) {
       });
 
   // key is expired in node2
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 1), [&]() noexcept {
         EXPECT_FALSE(
             client2->getKey("test_ttl_key_plane", planeArea).hasValue());
       });
 
   // checkPersistKey should kick in and repopulate the key node1 kvstore,
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += persistKeyTimer.count() + 100),
       [&]() noexcept {
         EXPECT_TRUE(
             client2->getKey("test_ttl_key_plane", planeArea).hasValue());
       });
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
-        evl.stop();
+        evb.stop();
       });
 
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
+  std::thread evbThread([&]() {
+    LOG(INFO) << "main loop starting.";
+    evb.run();
+    LOG(INFO) << "main loop terminating.";
   });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.waitUntilRunning();
+  evb.waitUntilStopped();
+  evbThread.join();
 }
 
 int

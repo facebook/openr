@@ -50,19 +50,20 @@ RangeAllocator<T>::RangeAllocator(
     : nodeName_(nodeName),
       keyPrefix_(keyPrefix),
       kvStoreClient_(kvStoreClient),
-      eventLoop_(kvStoreClient->getEventLoop()),
+      eventBase_(kvStoreClient->getOpenrEventBase()),
       callback_(std::move(callback)),
       overrideOwner_(overrideOwner),
       backoff_(minBackoffDur, maxBackoffDur),
       checkValueInUseCb_(std::move(checkValueInUseCb)),
       rangeAllocTtl_(rangeAllocTtl),
       area_(area) {
-  timeout_ = fbzmq::ZmqTimeout::make(eventLoop_, [this]() mutable noexcept {
-    CHECK(allocateValue_.hasValue());
-    auto allocateValue = allocateValue_.value();
-    allocateValue_.clear();
-    tryAllocate(allocateValue);
-  });
+  timeout_ =
+      fbzmq::ZmqTimeout::make(eventBase_->getEvb(), [this]() mutable noexcept {
+        CHECK(allocateValue_.hasValue());
+        auto allocateValue = allocateValue_.value();
+        allocateValue_.clear();
+        tryAllocate(allocateValue);
+      });
 }
 
 template <typename T>

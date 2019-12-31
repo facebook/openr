@@ -13,7 +13,6 @@
 #include <utility>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqThrottle.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
@@ -22,6 +21,7 @@
 #include <folly/CppAttributes.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
+#include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
 #include <glog/logging.h>
 #include <re2/re2.h>
@@ -30,7 +30,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/allocators/RangeAllocator.h>
-#include <openr/common/OpenrEventLoop.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config-store/PersistentStoreClient.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
@@ -73,7 +73,7 @@ struct AdjacencyValue {
 // as an adjacency.
 //
 
-class LinkMonitor final : public OpenrEventLoop {
+class LinkMonitor final : public OpenrEventBase {
  public:
   LinkMonitor(
       //
@@ -353,6 +353,12 @@ class LinkMonitor final : public OpenrEventLoop {
   // Timer for resyncing InterfaceDb from netlink
   std::unique_ptr<fbzmq::ZmqTimeout> interfaceDbSyncTimer_;
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
+
+  // Timer for starting range allocator
+  std::vector<std::unique_ptr<folly::AsyncTimeout>> startAllocationTimers_;
+
+  // Timer for initial hold time expiry
+  std::unique_ptr<folly::AsyncTimeout> adjHoldTimer_;
 
   // DS to hold local stats/counters
   fbzmq::ThreadData tData_;

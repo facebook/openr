@@ -38,7 +38,7 @@ KvStoreAgent::KvStoreAgent(
 
   // every once in a while, we need to change our value
   periodicValueChanger_ =
-      fbzmq::ZmqTimeout::make(this, [this, nodeId]() noexcept {
+      fbzmq::ZmqTimeout::make(getEvb(), [this, nodeId]() noexcept {
         std::srand(std::time(0));
         this->kvStoreClient_->persistKey(
             agentKeyPrefix + nodeId, std::to_string(std::rand()));

@@ -142,8 +142,8 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 };
 
 TEST_F(SingleKvStoreTestFixture, SetGetKeyTest) {
-  // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
+  // Create another OpenrEventBase instance for looping clients
+  OpenrEventBase evl;
 
   const std::string key1{"test_key1"};
   const std::string val1{"test_value1"};
@@ -255,7 +255,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   EXPECT_TRUE(preDb.second.empty());
 
   // Step2: initilize kvStoreClient connecting to different thriftServers
-  fbzmq::ZmqEventLoop evl;
+  OpenrEventBase evl;
   auto client1 = std::make_shared<KvStoreClient>(
       context_, &evl, nodeId1_, folly::SocketAddress{localhost_, port1});
   auto client2 = std::make_shared<KvStoreClient>(
@@ -264,7 +264,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   EXPECT_TRUE(nullptr != client2);
 
   // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
-  evl.runInEventLoop([&]() noexcept {
+  evl.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     value.version = 1;
     {

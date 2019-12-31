@@ -11,7 +11,6 @@
 #include <random>
 #include <string>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <folly/Format.h>
 #include <folly/Optional.h>
@@ -19,6 +18,7 @@
 #include <folly/gen/Base.h>
 
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClient.h>
@@ -133,7 +133,7 @@ class RangeAllocator {
 
   // EventLoop in which KvStoreClient is looping. Used for scheduling
   // asynchronous events.
-  fbzmq::ZmqEventLoop* const eventLoop_{nullptr};
+  OpenrEventBase* const eventBase_{nullptr};
 
   // Callback function to let user know of newly allocated value
   const std::function<void(folly::Optional<T>)> callback_{nullptr};

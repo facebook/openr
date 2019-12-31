@@ -147,7 +147,7 @@ class OpenrWrapper {
   folly::Synchronized<folly::Optional<thrift::IpPrefix>> ipPrefix_;
 
   // event loop to use with KvStoreClient
-  fbzmq::ZmqEventLoop eventLoop_;
+  OpenrEventBase eventBase_;
 
   // sub modules owned by this wrapper
   std::unique_ptr<PersistentStore> configStore_;

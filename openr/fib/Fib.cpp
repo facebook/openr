@@ -35,7 +35,7 @@ Fib::Fib(
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::FIB, zmqContext),
+    : OpenrEventBase(myNodeName, thrift::OpenrModuleType::FIB, zmqContext),
       myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),
@@ -50,7 +50,7 @@ Fib::Fib(
       linkMonPubUrl_(std::move(linkMonPubUrl)),
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)) {
-  syncRoutesTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+  syncRoutesTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
     if (routeState_.hasRoutesFromDecision) {
       if (syncRouteDb()) {
         hasSyncedFib_ = true;
@@ -74,7 +74,7 @@ Fib::Fib(
     syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
   }
 
-  healthChecker_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+  healthChecker_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
     // Make thrift calls to do real programming
     try {
       keepAliveCheck();
@@ -144,8 +144,8 @@ Fib::prepare() noexcept {
 
   // Schedule periodic timer for submission to monitor
   const bool isPeriodic = true;
-  monitorTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
+  monitorTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
 
   // Received publication from Decision module
@@ -763,7 +763,7 @@ Fib::submitCounters() {
   counters["fib.num_dirty_prefixes"] = routeState_.dirtyPrefixes.size();
   counters["fib.num_dirty_labels"] = routeState_.dirtyLabels.size();
   counters["fib.require_routedb_sync"] = syncRoutesTimer_->isScheduled();
-  counters["fib.zmq_event_queue_size"] = getEventQueueSize();
+  counters["fib.zmq_event_queue_size"] = getEvb()->getNotificationQueueSize();
 
   // Count the number of bgp routes
   int64_t bgpCounter = 0;

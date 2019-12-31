@@ -7,9 +7,9 @@
 
 #include "PrefixManager.h"
 
+#include <folly/futures/Future.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <folly/futures/Future.h>
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/kvstore/KvStore.h>
@@ -45,7 +45,7 @@ PrefixManager::PrefixManager(
     const std::chrono::milliseconds ttlKeyInKvStore,
     fbzmq::Context& zmqContext,
     const std::unordered_set<std::string>& areas)
-    : OpenrEventLoop(
+    : OpenrEventBase(
           nodeId, thrift::OpenrModuleType::PREFIX_MANAGER, zmqContext),
       nodeId_(nodeId),
       configStoreClient_{persistentStoreUrl, zmqContext},
@@ -73,7 +73,7 @@ PrefixManager::PrefixManager(
   }
   // Create throttled update state
   outputStateThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
-      this, Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
+      getEvb(), Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
         outputState();
       });
 
@@ -119,7 +119,7 @@ PrefixManager::PrefixManager(
   // initial start up
   // Holdtime zero is used during testing to do inline without delay
   initialOutputStateTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { outputState(); });
+      fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept { outputState(); });
   initialOutputStateTimer_->scheduleTimeout(prefixHoldTime);
 
   zmqMonitorClient_ =
@@ -127,8 +127,8 @@ PrefixManager::PrefixManager(
 
   // Schedule periodic timer for submission to monitor
   const bool isPeriodic = true;
-  monitorTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
+  monitorTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
 }
 
@@ -373,7 +373,8 @@ PrefixManager::submitCounters() {
 
   // Extract/build counters from thread-data
   auto counters = tData_.getCounters();
-  counters["prefix_manager.zmq_event_queue_size"] = getEventQueueSize();
+  counters["prefix_manager.zmq_event_queue_size"] =
+      getEvb()->getNotificationQueueSize();
 
   // Count total route number
   size_t num_prefixes = 0;
@@ -394,7 +395,7 @@ PrefixManager::getCounter(const std::string& key) {
 
   folly::Promise<std::unordered_map<std::string, int64_t>> promise;
   auto future = promise.getFuture();
-  runImmediatelyOrInEventLoop([this, promise = std::move(promise)]() mutable {
+  runInEventBaseThread([this, promise = std::move(promise)]() mutable {
     promise.setValue(tData_.getCounters());
   });
   counters = std::move(future).get();

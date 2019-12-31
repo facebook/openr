@@ -99,7 +99,7 @@ LinkMonitor::LinkMonitor(
     std::chrono::milliseconds flapMaxBackoff,
     std::chrono::milliseconds ttlKeyInKvStore,
     const std::unordered_set<std::string>& areas)
-    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::LINK_MONITOR, zmqContext),
+    : OpenrEventBase(nodeId, thrift::OpenrModuleType::LINK_MONITOR, zmqContext),
       nodeId_(nodeId),
       platformThriftPort_(platformThriftPort),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
@@ -138,7 +138,7 @@ LinkMonitor::LinkMonitor(
       areas_(areas) {
   // Create throttled adjacency advertiser
   advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
-      this, Constants::kLinkThrottleTimeout, [this]() noexcept {
+      getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
         // will advertise to all areas but will not trigger a adj key update
         // if nothing changed. For peers no action is taken if nothing changed
         advertiseKvStorePeers();
@@ -147,12 +147,12 @@ LinkMonitor::LinkMonitor(
 
   // Create throttled interfaces and addresses advertiser
   advertiseIfaceAddrThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
-      this, Constants::kLinkThrottleTimeout, [this]() noexcept {
+      getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
         advertiseIfaceAddr();
       });
   // Create timer. Timer is used for immediate or delayed executions.
   advertiseIfaceAddrTimer_ = fbzmq::ZmqTimeout::make(
-      this, [this]() noexcept { advertiseIfaceAddr(); });
+      getEvb(), [this]() noexcept { advertiseIfaceAddr(); });
 
   LOG(INFO) << "Loading link-monitor config";
   zmqMonitorClient_ =
@@ -212,16 +212,33 @@ LinkMonitor::LinkMonitor(
               area));
 
       // Delay range allocation until we have formed all of our adjcencies
-      scheduleTimeoutAt(adjHoldUntilTimePoint_, [this, &area]() {
-        folly::Optional<int32_t> initValue;
-        if (config_.nodeLabel != 0) {
-          initValue = config_.nodeLabel;
-        }
-        rangeAllocator_.at(area).startAllocator(
-            Constants::kSrGlobalRange, initValue);
-      });
+      auto startAllocTimer =
+          folly::AsyncTimeout::make(*getEvb(), [this, area]() noexcept {
+            folly::Optional<int32_t> initValue;
+            if (config_.nodeLabel != 0) {
+              initValue = config_.nodeLabel;
+            }
+            rangeAllocator_.at(area).startAllocator(
+                Constants::kSrGlobalRange, initValue);
+          });
+      startAllocTimer->scheduleTimeout(adjHoldTime);
+      startAllocationTimers_.emplace_back(std::move(startAllocTimer));
     }
   }
+
+  // Schedule callback to advertise the initial set of adjacencies and prefixes
+  adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    LOG(INFO) << "Hold time expired. Advertising adjacencies and addresses";
+    // Advertise adjacencies and addresses after hold-timeout
+    advertiseAdjacencies();
+    advertiseRedistAddrs();
+
+    // Cancel throttle as we are publishing latest state
+    if (advertiseAdjacenciesThrottled_->isActive()) {
+      advertiseAdjacenciesThrottled_->cancel();
+    }
+  });
+  adjHoldTimer_->scheduleTimeout(adjHoldTime);
 
   // Initialize ZMQ sockets
   prepare();
@@ -475,27 +492,14 @@ LinkMonitor::prepare() noexcept {
         }
       });
 
-  // Schedule callback to advertise the initial set of adjacencies and prefixes
-  scheduleTimeoutAt(adjHoldUntilTimePoint_, [this]() noexcept {
-    LOG(INFO) << "Hold time expired. Advertising adjacencies and addresses";
-    // Advertise adjacencies and addresses after hold-timeout
-    advertiseAdjacencies();
-    advertiseRedistAddrs();
-
-    // Cancel throttle as we are publishing latest state
-    if (advertiseAdjacenciesThrottled_->isActive()) {
-      advertiseAdjacenciesThrottled_->cancel();
-    }
-  });
-
   // Schedule periodic timer for monitor submission
   const bool isPeriodic = true;
-  monitorTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
+  monitorTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
 
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
-  interfaceDbSyncTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+  interfaceDbSyncTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
     auto success = syncInterfaces();
     if (success) {
       VLOG(2) << "InterfaceDb Sync is successful";
@@ -1299,7 +1303,8 @@ LinkMonitor::submitCounters() {
 
   // Add some more flat counters
   counters["link_monitor.adjacencies"] = adjacencies_.size();
-  counters["link_monitor.zmq_event_queue_size"] = getEventQueueSize();
+  counters["link_monitor.zmq_event_queue_size"] =
+      getEvb()->getNotificationQueueSize();
   for (const auto& kv : adjacencies_) {
     auto& adj = kv.second.adjacency;
     counters["link_monitor.metric." + adj.otherNodeName] = adj.metric;

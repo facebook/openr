@@ -93,7 +93,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // kvstore client
   kvStoreClient_ = std::make_unique<KvStoreClient>(
       context_,
-      &eventLoop_,
+      &eventBase_,
       nodeId_,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_});
@@ -314,7 +314,7 @@ OpenrWrapper<Serializer>::run() {
                << "'" << folly::exceptionStr(e);
   }
 
-  eventLoop_.scheduleTimeout(std::chrono::milliseconds(100), [this]() {
+  eventBase_.scheduleTimeout(std::chrono::milliseconds(100), [this]() {
     auto link = thrift::LinkEntry(
         apache::thrift::FRAGILE, "vethLMTest_" + nodeId_, 5, true, 1);
 
@@ -421,11 +421,11 @@ OpenrWrapper<Serializer>::run() {
   watchdog->waitUntilRunning();
   allThreads_.emplace_back(std::move(watchdogThread));
 
-  // start eventLoop_
+  // start eventBase_
   allThreads_.emplace_back([&]() {
-    VLOG(1) << nodeId_ << " Starting eventLoop_";
-    eventLoop_.run();
-    VLOG(1) << nodeId_ << " Stopping eventLoop_";
+    VLOG(1) << nodeId_ << " Starting eventBase_";
+    eventBase_.run();
+    VLOG(1) << nodeId_ << " Stopping eventBase_";
   });
 }
 
@@ -433,8 +433,8 @@ template <class Serializer>
 void
 OpenrWrapper<Serializer>::stop() {
   // stop all modules in reverse order
-  eventLoop_.stop();
-  eventLoop_.waitUntilStopped();
+  eventBase_.stop();
+  eventBase_.waitUntilStopped();
   watchdog->stop();
   watchdog->waitUntilStopped();
   fib_->stop();

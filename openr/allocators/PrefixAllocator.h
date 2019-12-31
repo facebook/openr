@@ -12,7 +12,6 @@
 #include <string>
 
 #include <boost/variant.hpp>
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <folly/IPAddress.h>
@@ -23,6 +22,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStoreClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -57,7 +57,7 @@ using PrefixAllocatorMode = boost::variant<
  * > PrefixAllocatorParams
  *   => elects subprefix from prefix allocator params
  */
-class PrefixAllocator : public OpenrEventLoop, public boost::static_visitor<> {
+class PrefixAllocator : public OpenrEventBase, public boost::static_visitor<> {
  public:
   PrefixAllocator(
       const std::string& myNodeName,
@@ -240,6 +240,9 @@ class PrefixAllocator : public OpenrEventLoop, public boost::static_visitor<> {
   folly::EventBase evb_;
   std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_{nullptr};
   std::unique_ptr<thrift::SystemServiceAsyncClient> client_{nullptr};
+
+  // AsyncTimeout for initialization
+  std::unique_ptr<folly::AsyncTimeout> initTimer_;
 
   /**
    * applyMyPrefix use this state to decide how to program address to kernel

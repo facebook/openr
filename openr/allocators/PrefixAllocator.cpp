@@ -15,7 +15,6 @@
 #include <folly/ScopeGuard.h>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
-
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
@@ -25,7 +24,6 @@
 #include <openr/nl/NetlinkTypes.h>
 
 using namespace fbzmq;
-
 
 namespace {
 
@@ -53,7 +51,7 @@ PrefixAllocator::PrefixAllocator(
     PersistentStoreUrl const& configStoreUrl,
     fbzmq::Context& zmqContext,
     int32_t systemServicePort)
-    : OpenrEventLoop(
+    : OpenrEventBase(
           myNodeName, thrift::OpenrModuleType::PREFIX_ALLOCATOR, zmqContext),
       myNodeName_(myNodeName),
       allocPrefixMarker_(allocPrefixMarker),
@@ -98,7 +96,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
       area_);
 
   // get initial value if missed out in incremental updates (one time only)
-  scheduleTimeout(0ms, [this]() noexcept {
+  initTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     // If we already have received initial value from KvStore then just skip
     // this step
     if (allocParams_.hasValue()) {
@@ -141,6 +139,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
       return;
     }
   });
+  initTimer_->scheduleTimeout(0ms);
 }
 
 void
@@ -169,7 +168,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
       area_);
 
   // get initial value if missed out in incremental updates (one time only)
-  scheduleTimeout(0ms, [this]() noexcept {
+  initTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     // If we already have received initial value from KvStore then just skip
     // this step
     if (allocParams_.hasValue()) {
@@ -212,6 +211,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
       return;
     }
   });
+  initTimer_->scheduleTimeout(0ms);
 }
 
 void
@@ -222,20 +222,23 @@ PrefixAllocator::operator()(PrefixAllocatorParams const& allocParams) {
   CHECK_GT(allocPrefixLen, seedPrefix.second)
       << "Allocation prefix length must be greater than seed prefix length.";
   // Start allocation from user provided seed prefix
-  scheduleTimeout(
-      0ms, [this, allocParams]() noexcept { startAllocation(allocParams); });
+  initTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this, allocParams]() noexcept {
+        startAllocation(allocParams);
+      });
+  initTimer_->scheduleTimeout(0ms);
 }
 
 folly::Optional<uint32_t>
 PrefixAllocator::getMyPrefixIndex() {
-  if (isInEventLoop()) {
+  if (getEvb()->isInEventBaseThread()) {
     return myPrefixIndex_;
   }
 
   // Otherwise enqueue request in eventloop and wait for result to be populated
   folly::Promise<folly::Optional<uint32_t>> promise;
   auto future = promise.getFuture();
-  runInEventLoop([this, promise = std::move(promise)]() mutable {
+  runInEventBaseThread([this, promise = std::move(promise)]() mutable {
     promise.setValue(myPrefixIndex_);
   });
   return std::move(future).get();

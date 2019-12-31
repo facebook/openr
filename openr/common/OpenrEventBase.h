@@ -7,9 +7,21 @@
 
 #pragma once
 
+#include <csignal>
+
+#include <folly/io/async/AsyncSignalHandler.h>
+
 #include <openr/common/OpenrModule.h>
 
 namespace openr {
+
+class EventBaseStopSignalHandler : public folly::AsyncSignalHandler {
+ public:
+  explicit EventBaseStopSignalHandler(folly::EventBase* evb);
+
+ protected:
+  void signalReceived(int signum) noexcept override;
+};
 
 class OpenrEventBase : public OpenrModule {
  public:

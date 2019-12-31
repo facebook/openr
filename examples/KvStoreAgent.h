@@ -7,14 +7,14 @@
 
 #pragma once
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/kvstore/KvStoreClient.h>
 
 namespace openr {
 
-class KvStoreAgent : public fbzmq::ZmqEventLoop {
+class KvStoreAgent : public OpenrEventBase {
  public:
   KvStoreAgent(
       fbzmq::Context& zmqContext,

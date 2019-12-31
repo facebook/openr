@@ -2880,7 +2880,6 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   std::string podArea{"pod-area"};
   std::string planeArea{"plane-area"};
 
-  // Create another ZmqEventLoop instance for looping clients
   folly::EventBase evb;
   auto scheduleTimePoint = std::chrono::steady_clock::now();
 

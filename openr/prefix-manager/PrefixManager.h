@@ -16,7 +16,7 @@
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 
-#include <openr/common/OpenrEventLoop.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStoreClient.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
@@ -26,7 +26,7 @@
 
 namespace openr {
 
-class PrefixManager final : public OpenrEventLoop {
+class PrefixManager final : public OpenrEventBase {
  public:
   PrefixManager(
       const std::string& nodeId,

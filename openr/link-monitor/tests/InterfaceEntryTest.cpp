@@ -13,6 +13,7 @@
 #include <re2/set.h>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/link-monitor/InterfaceEntry.h>
 
 namespace openr {
@@ -33,9 +34,10 @@ toCIDRNetworkSet(std::vector<thrift::PrefixEntry> const& prefixes) {
  * - Verify timers/throttles
  */
 TEST(InterfaceEntry, GetSetTest) {
-  fbzmq::ZmqEventLoop evl;
-  fbzmq::ZmqThrottle throttle(&evl, std::chrono::milliseconds(1), []() {});
-  auto timeout = fbzmq::ZmqTimeout::make(&evl, []() {});
+  OpenrEventBase evl;
+  fbzmq::ZmqThrottle throttle(
+      evl.getEvb(), std::chrono::milliseconds(1), []() {});
+  auto timeout = fbzmq::ZmqTimeout::make(evl.getEvb(), []() {});
   InterfaceEntry interface(
       "iface1",
       std::chrono::milliseconds(1),
@@ -113,9 +115,10 @@ TEST(InterfaceEntry, GetSetTest) {
  * Test exponential backoff functionality of InterfaceEntry
  */
 TEST(InterfaceEntry, BackoffTest) {
-  fbzmq::ZmqEventLoop evl;
-  fbzmq::ZmqThrottle throttle(&evl, std::chrono::milliseconds(1), []() {});
-  auto timeout = fbzmq::ZmqTimeout::make(&evl, []() {});
+  OpenrEventBase evl;
+  fbzmq::ZmqThrottle throttle(
+      evl.getEvb(), std::chrono::milliseconds(1), []() {});
+  auto timeout = fbzmq::ZmqTimeout::make(evl.getEvb(), []() {});
   InterfaceEntry interface(
       "iface1",
       std::chrono::milliseconds(8),

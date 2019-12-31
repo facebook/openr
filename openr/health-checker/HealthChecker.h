@@ -14,7 +14,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
@@ -23,7 +22,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
-#include <openr/common/OpenrEventLoop.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/HealthChecker_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -33,7 +32,7 @@
 
 namespace openr {
 
-class HealthChecker final : public OpenrEventLoop {
+class HealthChecker final : public OpenrEventBase {
  public:
   HealthChecker(
       std::string const& myNodeName,
