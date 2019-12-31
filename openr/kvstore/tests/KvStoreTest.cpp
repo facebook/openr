@@ -159,18 +159,18 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
     std::vector<KvStoreWrapper*> stores;
     for (unsigned int i = 0; i < kNumStores; ++i) {
       const auto nodeId = getNodeId(kOriginBase, i);
-      VLOG(1) << "Creating store " << nodeId;
+      LOG(INFO) << "Creating store " << nodeId;
       stores.push_back(createKvStore(nodeId, emptyPeers));
       stores.back()->run();
     }
 
     // Add neighbors
-    VLOG(1) << "Adding neighbors ...";
+    LOG(INFO) << "Adding neighbors ...";
     for (unsigned int i = 0; i < kNumStores; ++i) {
       const auto nodeId = getNodeId(kOriginBase, i);
       for (const auto j : adjacencyList[i]) {
         const auto neighborId = getNodeId(kOriginBase, j);
-        VLOG(1) << "Adding neighbor " << neighborId << " to store " << nodeId;
+        LOG(INFO) << "Adding neighbor " << neighborId << " to store " << nodeId;
         EXPECT_TRUE(
             stores[i]->addPeer(stores[j]->nodeId, stores[j]->getPeerSpec()));
       }
@@ -185,7 +185,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
     int64_t version = 1;
     CHECK(kNumIter > kNumStores) << "Number of iterations must be > num stores";
     for (unsigned int i = 0; i < kNumIter; ++i, ++version) {
-      VLOG(1) << "KeyValue Synchronization Test. Iteration# " << i;
+      LOG(INFO) << "KeyValue Synchronization Test. Iteration# " << i;
       auto startTime = steady_clock::now();
 
       // we'll save expected keys and values which will be updated in all
@@ -230,7 +230,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
         expectedKeyVals.emplace(key, thriftVal);
         expectedGlobalKeyVals.emplace(key, thriftVal);
       } // for `j < kNumKeys`
-      VLOG(1) << "Done submitting key-value pairs. Iteration# " << i;
+      LOG(INFO) << "Done submitting key-value pairs. Iteration# " << i;
 
       // We just generated kNumKeys `new` keys-vals with random values and
       // submitted each one in a different Publication. So we must receive
@@ -239,7 +239,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
       // publication can be published for all changes and depends on internal
       // implementation of KvStore (we do not rely on it).
       if (not checkTtl) {
-        VLOG(1) << "Expecting publications from stores. Iteration# " << i;
+        LOG(INFO) << "Expecting publications from stores. Iteration# " << i;
         for (unsigned int j = 0; j < kNumStores; ++j) {
           auto& store = stores[j];
 
@@ -279,10 +279,18 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
         }
       } else {
         // wait for all keys to expire
+        size_t iter{0};
         while (true) {
+          LOG(INFO) << "Checking for empty stores. Iter#" << ++iter;
           bool allStoreEmpty = true;
           for (auto& store : stores) {
-            if (not store->dumpAll().empty()) {
+            auto keyVals = store->dumpAll();
+            if (not keyVals.empty()) {
+              LOG(INFO) << store->nodeId << " still has " << keyVals.size()
+                        << " keys remaining";
+              for (auto& kv : keyVals) {
+                LOG(INFO) << "  " << kv.first << ", ttl: " << kv.second.ttl;
+              }
               allStoreEmpty = false;
               break;
             }
@@ -296,7 +304,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
         const auto elapsedTime =
             duration_cast<milliseconds>(steady_clock::now() - startTime)
                 .count();
-        VLOG(2) << "ttl " << ttl << " vs elapsedTime " << elapsedTime;
+        LOG(INFO) << "ttl " << ttl << " vs elapsedTime " << elapsedTime;
         EXPECT_LE(ttl - Constants::kTtlDecrement.count(), elapsedTime);
       }
     } // for `i < kNumIter`
@@ -2033,7 +2041,6 @@ TEST_F(KvStoreTestFixture, BasicSync) {
  * Also verify the publication propagation via nodeIds attribute
  */
 TEST_F(KvStoreTestFixture, TieBreaking) {
-
   const std::string kOriginBase = "store";
   const unsigned int kNumStores = 16;
   const std::string kKeyName = "test-key";
@@ -2874,8 +2881,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   std::string planeArea{"plane-area"};
 
   // Create another ZmqEventLoop instance for looping clients
-  fbzmq::ZmqEventLoop evl;
-  auto scheduleAt = std::chrono::milliseconds{0}.count();
+  folly::EventBase evb;
+  auto scheduleTimePoint = std::chrono::steady_clock::now();
 
   auto storeA = createKvStore(
       "storeA",
@@ -2913,110 +2920,112 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPod{};
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPlane{};
 
-  evl.scheduleTimeout(std::chrono::milliseconds(scheduleAt), [&]() noexcept {
-    storeA->run();
-    storeB->run();
-    storeC->run();
+  evb.scheduleAt(
+      [&]() noexcept {
+        storeA->run();
+        storeB->run();
+        storeC->run();
 
-    storeA->addPeer("storeB", storeB->getPeerSpec(), podArea);
-    storeB->addPeer("storeA", storeA->getPeerSpec(), podArea);
-    storeB->addPeer("storeC", storeC->getPeerSpec(), planeArea);
-    storeC->addPeer("storeB", storeB->getPeerSpec(), planeArea);
-    // verify get peers command
-    std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
-        {storeA->nodeId, storeA->getPeerSpec()},
-    };
-    std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
-        {storeC->nodeId, storeC->getPeerSpec()},
-    };
-    EXPECT_EQ(expectedPeersPod, storeB->getPeers(podArea));
-    EXPECT_EQ(expectedPeersPlane, storeB->getPeers(planeArea));
+        storeA->addPeer("storeB", storeB->getPeerSpec(), podArea);
+        storeB->addPeer("storeA", storeA->getPeerSpec(), podArea);
+        storeB->addPeer("storeC", storeC->getPeerSpec(), planeArea);
+        storeC->addPeer("storeB", storeB->getPeerSpec(), planeArea);
+        // verify get peers command
+        std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
+            {storeA->nodeId, storeA->getPeerSpec()},
+        };
+        std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
+            {storeC->nodeId, storeC->getPeerSpec()},
+        };
+        EXPECT_EQ(expectedPeersPod, storeB->getPeers(podArea));
+        EXPECT_EQ(expectedPeersPlane, storeB->getPeers(planeArea));
 
-    const std::string k0{"pod-area-0"};
-    const std::string k1{"pod-area-1"};
-    const std::string k2{"plane-area-0"};
-    const std::string k3{"plane-area-1"};
+        const std::string k0{"pod-area-0"};
+        const std::string k1{"pod-area-1"};
+        const std::string k2{"plane-area-0"};
+        const std::string k3{"plane-area-1"};
 
-    thrift::Value thriftVal0 = createThriftValue(
-        1 /* version */,
-        "storeA" /* originatorId */,
-        std::string("valueA") /* value */,
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
-    thriftVal0.hash = generateHash(
-        thriftVal0.version, thriftVal0.originatorId, thriftVal0.value);
+        thrift::Value thriftVal0 = createThriftValue(
+            1 /* version */,
+            "storeA" /* originatorId */,
+            std::string("valueA") /* value */,
+            Constants::kTtlInfinity /* ttl */,
+            0 /* ttl version */,
+            0 /* hash */);
+        thriftVal0.hash = generateHash(
+            thriftVal0.version, thriftVal0.originatorId, thriftVal0.value);
 
-    thrift::Value thriftVal1 = createThriftValue(
-        1 /* version */,
-        "storeB" /* originatorId */,
-        std::string("valueB") /* value */,
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
-    thriftVal1.hash = generateHash(
-        thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+        thrift::Value thriftVal1 = createThriftValue(
+            1 /* version */,
+            "storeB" /* originatorId */,
+            std::string("valueB") /* value */,
+            Constants::kTtlInfinity /* ttl */,
+            0 /* ttl version */,
+            0 /* hash */);
+        thriftVal1.hash = generateHash(
+            thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
 
-    thrift::Value thriftVal2 = createThriftValue(
-        1 /* version */,
-        "storeC" /* originatorId */,
-        std::string("valueC") /* value */,
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
-    thriftVal2.hash = generateHash(
-        thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+        thrift::Value thriftVal2 = createThriftValue(
+            1 /* version */,
+            "storeC" /* originatorId */,
+            std::string("valueC") /* value */,
+            Constants::kTtlInfinity /* ttl */,
+            0 /* ttl version */,
+            0 /* hash */);
+        thriftVal2.hash = generateHash(
+            thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
 
-    thrift::Value thriftVal3 = createThriftValue(
-        1 /* version */,
-        "storeC" /* originatorId */,
-        std::string("valueC") /* value */,
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
-    thriftVal3.hash = generateHash(
-        thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
+        thrift::Value thriftVal3 = createThriftValue(
+            1 /* version */,
+            "storeC" /* originatorId */,
+            std::string("valueC") /* value */,
+            Constants::kTtlInfinity /* ttl */,
+            0 /* ttl version */,
+            0 /* hash */);
+        thriftVal3.hash = generateHash(
+            thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
 
-    // set key in default area, but storeA does not have default area, this
-    // should fail
-    EXPECT_FALSE(storeA->setKey(k0, thriftVal0));
-    // set key in the correct area
-    EXPECT_TRUE(storeA->setKey(k0, thriftVal0, folly::none, podArea));
-    // store A should not have the key in default area
-    EXPECT_FALSE(storeA->getKey(k0).hasValue());
-    // store A should have the key in pod-area
-    EXPECT_TRUE(storeA->getKey(k0, podArea).hasValue());
-    // store B should have the key in pod-area
-    EXPECT_TRUE(storeB->getKey(k0, podArea).hasValue());
-    // store B should NOT have the key in plane-area
-    EXPECT_FALSE(storeB->getKey(k0, planeArea).hasValue());
+        // set key in default area, but storeA does not have default area, this
+        // should fail
+        EXPECT_FALSE(storeA->setKey(k0, thriftVal0));
+        // set key in the correct area
+        EXPECT_TRUE(storeA->setKey(k0, thriftVal0, folly::none, podArea));
+        // store A should not have the key in default area
+        EXPECT_FALSE(storeA->getKey(k0).hasValue());
+        // store A should have the key in pod-area
+        EXPECT_TRUE(storeA->getKey(k0, podArea).hasValue());
+        // store B should have the key in pod-area
+        EXPECT_TRUE(storeB->getKey(k0, podArea).hasValue());
+        // store B should NOT have the key in plane-area
+        EXPECT_FALSE(storeB->getKey(k0, planeArea).hasValue());
 
-    // set key in store C and verify it's present in plane area in store B and
-    // not present in POD area in storeB and storeA
-    // set key in the correct area
-    EXPECT_TRUE(storeC->setKey(k2, thriftVal2, folly::none, planeArea));
-    // store B should have the key in planeArea
-    EXPECT_TRUE(storeB->getKey(k2, planeArea).hasValue());
-    // store B should NOT have the key in podArea
-    EXPECT_FALSE(storeB->getKey(k2, podArea).hasValue());
-    // store A should NOT have the key in podArea
-    EXPECT_FALSE(storeA->getKey(k2, podArea).hasValue());
+        // set key in store C and verify it's present in plane area in store B
+        // and not present in POD area in storeB and storeA set key in the
+        // correct area
+        EXPECT_TRUE(storeC->setKey(k2, thriftVal2, folly::none, planeArea));
+        // store B should have the key in planeArea
+        EXPECT_TRUE(storeB->getKey(k2, planeArea).hasValue());
+        // store B should NOT have the key in podArea
+        EXPECT_FALSE(storeB->getKey(k2, podArea).hasValue());
+        // store A should NOT have the key in podArea
+        EXPECT_FALSE(storeA->getKey(k2, podArea).hasValue());
 
-    // pod area expected key values
-    expectedKeyValsPod[k0] = thriftVal0;
-    expectedKeyValsPod[k1] = thriftVal1;
+        // pod area expected key values
+        expectedKeyValsPod[k0] = thriftVal0;
+        expectedKeyValsPod[k1] = thriftVal1;
 
-    // plane area expected key values
-    expectedKeyValsPlane[k2] = thriftVal2;
-    expectedKeyValsPlane[k3] = thriftVal3;
+        // plane area expected key values
+        expectedKeyValsPlane[k2] = thriftVal2;
+        expectedKeyValsPlane[k3] = thriftVal3;
 
-    // add another key in both plane and pod area
-    EXPECT_TRUE(storeB->setKey(k1, thriftVal1, folly::none, podArea));
-    EXPECT_TRUE(storeC->setKey(k3, thriftVal3, folly::none, planeArea));
-  });
+        // add another key in both plane and pod area
+        EXPECT_TRUE(storeB->setKey(k1, thriftVal1, folly::none, podArea));
+        EXPECT_TRUE(storeC->setKey(k3, thriftVal3, folly::none, planeArea));
+      },
+      scheduleTimePoint);
 
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 200), [&]() noexcept {
+  evb.scheduleAt(
+      [&]() noexcept {
         // pod area
         EXPECT_EQ(expectedKeyValsPod, storeA->dumpAll(std::nullopt, podArea));
         EXPECT_EQ(expectedKeyValsPod, storeB->dumpAll(std::nullopt, podArea));
@@ -3035,22 +3044,14 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         auto counters = storeB->getCounters();
         EXPECT_EQ(4, counters.at("kvstore.num_keys").value);
         EXPECT_EQ(2, counters.at("kvstore.num_peers").value);
-      });
+      },
+      scheduleTimePoint + std::chrono::milliseconds(200));
 
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 1), [&]() noexcept {
-        evl.stop();
-      });
+  evb.scheduleAt(
+      [&]() noexcept { evb.terminateLoopSoon(); },
+      scheduleTimePoint + std::chrono::milliseconds(201));
 
-  // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "ZmqEventLoop main loop starting.";
-    evl.run();
-    LOG(INFO) << "ZmqEventLoop main loop terminating.";
-  });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+  evb.loop();
 }
 
 int

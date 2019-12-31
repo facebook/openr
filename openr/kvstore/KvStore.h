@@ -14,7 +14,6 @@
 
 #include <boost/heap/priority_queue.hpp>
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
@@ -22,11 +21,12 @@
 #include <folly/Optional.h>
 #include <folly/TokenBucket.h>
 #include <folly/io/IOBuf.h>
+#include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
-#include <openr/common/OpenrEventLoop.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/dual/Dual.h>
@@ -157,7 +157,7 @@ struct KvStoreParams {
 class KvStoreDb : public DualNode {
  public:
   KvStoreDb(
-      fbzmq::ZmqEventLoop* evl,
+      OpenrEventBase* evb,
       KvStoreParams& kvParams,
       const std::string& area,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peersyncSock,
@@ -388,6 +388,9 @@ class KvStoreDb : public DualNode {
   // timer to send pending kvstore publication
   std::unique_ptr<fbzmq::ZmqTimeout> pendingPublicationTimer_{nullptr};
 
+  // timer for requesting full-sync
+  std::unique_ptr<folly::AsyncTimeout> requestSyncTimer_{nullptr};
+
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>
   std::
@@ -400,7 +403,7 @@ class KvStoreDb : public DualNode {
   int32_t fullSycnReqInProgress_{2};
 
   // event loop
-  fbzmq::ZmqEventLoop* evl_{nullptr};
+  OpenrEventBase* evb_{nullptr};
 };
 
 // The class represent a server on either the thrift server port or the
@@ -410,7 +413,7 @@ class KvStoreDb : public DualNode {
 // The messages received are either sent to a specific instance of
 // KvStore DB or to all instances.
 
-class KvStore final : public OpenrEventLoop {
+class KvStore final : public OpenrEventBase {
  public:
   KvStore(
       // the zmq context to use for IO

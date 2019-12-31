@@ -87,7 +87,7 @@ KvStore::KvStore(
     bool isFloodRoot,
     bool useFloodOptimization,
     const std::unordered_set<std::string>& areas)
-    : OpenrEventLoop(nodeId, thrift::OpenrModuleType::KVSTORE, zmqContext),
+    : OpenrEventBase(nodeId, thrift::OpenrModuleType::KVSTORE, zmqContext),
       localPubUrl_(std::move(localPubUrl)),
       globalPubUrl_(std::move(globalPubUrl)),
       monitorSubmitInterval_(monitorSubmitInterval),
@@ -125,8 +125,8 @@ KvStore::KvStore(
 
   // Schedule periodic timer for counters submission
   const bool isPeriodic = true;
-  monitorTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
+  monitorTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(monitorSubmitInterval_, isPeriodic);
 
   //
@@ -183,16 +183,14 @@ KvStore::KvStore(
   //
   // Prepare global command socket
   //
-  runInEventLoop([this, globalCmdUrl, maybeIpTos]() {
-    OpenrModule::prepareSocket(
-        kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
-    addSocket(
-        fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
-        ZMQ_POLLIN,
-        [this](int) noexcept {
-          OpenrModule::processCmdSocketRequest(kvParams_.globalCmdSock);
-        });
-  });
+  OpenrModule::prepareSocket(
+      kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
+  addSocket(
+      fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
+      ZMQ_POLLIN,
+      [this](int) noexcept {
+        OpenrModule::processCmdSocketRequest(kvParams_.globalCmdSock);
+      });
 
   // create KvStoreDb instances
   for (auto const& area : areas_) {
@@ -482,7 +480,7 @@ KvStore::submitCounters() {
 }
 
 KvStoreDb::KvStoreDb(
-    fbzmq::ZmqEventLoop* evl,
+    OpenrEventBase* evb,
     KvStoreParams& kvParams,
     const std::string& area,
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> peersyncSock,
@@ -493,23 +491,25 @@ KvStoreDb::KvStoreDb(
       kvParams_(kvParams),
       area_(area),
       peerSyncSock_(std::move(peersyncSock)),
-      evl_(evl) {
+      evb_(evb) {
   if (kvParams_.floodRate.has_value()) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
         kvParams_.floodRate.value().first, // messages per sec
         kvParams_.floodRate.value().second); // burst size
-    pendingPublicationTimer_ = fbzmq::ZmqTimeout::make(evl_, [this]() noexcept {
-      if (!floodLimiter_->consume(1)) {
-        pendingPublicationTimer_->scheduleTimeout(
-            Constants::kFloodPendingPublication, false);
-        return;
-      }
-      floodBufferedUpdates();
-    });
+    pendingPublicationTimer_ =
+        fbzmq::ZmqTimeout::make(evb_->getEvb(), [this]() noexcept {
+          if (!floodLimiter_->consume(1)) {
+            pendingPublicationTimer_->scheduleTimeout(
+                Constants::kFloodPendingPublication, false);
+            return;
+          }
+          floodBufferedUpdates();
+        });
   }
 
   LOG(INFO) << "Starting kvstore DB instance for node " << nodeId << " area "
             << area;
+
   // Attach socket callbacks/schedule events
   attachCallbacks();
 
@@ -522,7 +522,7 @@ KvStoreDb::KvStoreDb(
   // Hook up timer with cleanupTtlCountdownQueue(). The actual scheduling
   // happens within updateTtlCountdownQueue()
   ttlCountdownTimer_ = fbzmq::ZmqTimeout::make(
-      evl_, [this]() noexcept { cleanupTtlCountdownQueue(); });
+      evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
 
   // Initialize stats keys
   tData_.addStatExportType("kvstore.cmd_hash_dump", fbzmq::COUNT);
@@ -1435,15 +1435,15 @@ KvStoreDb::processSyncResponse() noexcept {
 void
 KvStoreDb::requestSync() {
   SCOPE_EXIT {
-    auto base = kvParams_.dbSyncInterval.count();
+    auto base = kvParams_.dbSyncInterval.count() * 1000;
     std::default_random_engine generator;
     // add 20% variance
     std::uniform_int_distribution<int> distribution(-0.2 * base, 0.2 * base);
     auto roll = std::bind(distribution, generator);
-    auto period = std::chrono::milliseconds((base + roll()) * 1000);
+    auto period = std::chrono::milliseconds(base + roll());
 
     // Schedule next sync with peers
-    evl_->scheduleTimeout(period, [this]() { requestSync(); });
+    requestSyncTimer_->scheduleTimeout(period);
   };
 
   if (peers_.empty()) {
@@ -1522,7 +1522,7 @@ KvStoreDb::attachCallbacks() {
     }
   }
 
-  evl_->addSocket(
+  evb_->addSocket(
       fbzmq::RawZmqSocketPtr{*peerSyncSock_}, ZMQ_POLLIN, [this](int) noexcept {
         // we received a sync response
         VLOG(3) << "KvStore: sync response received";
@@ -1531,11 +1531,14 @@ KvStoreDb::attachCallbacks() {
 
   // Perform full-sync if there are peers to sync with.
   fullSyncTimer_ = fbzmq::ZmqTimeout::make(
-      evl_, [this]() noexcept { requestFullSyncFromPeers(); });
+      evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
+
+  // Define request sync timer
+  requestSyncTimer_ = folly::AsyncTimeout::make(
+      *evb_->getEvb(), [this]() noexcept { requestSync(); });
 
   // Schedule periodic call to re-sync with one of our peer
-  evl_->scheduleTimeout(
-      std::chrono::milliseconds(0), [this]() noexcept { requestSync(); });
+  requestSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
 }
 
 void

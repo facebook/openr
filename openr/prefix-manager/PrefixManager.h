@@ -16,6 +16,7 @@
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 
+#include <openr/common/OpenrEventLoop.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStoreClient.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
