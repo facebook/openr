@@ -1611,7 +1611,7 @@ Decision::Decision(
     const DecisionPubUrl& decisionPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventLoop(myNodeName, thrift::OpenrModuleType::DECISION, zmqContext),
+    : OpenrEventBase(myNodeName, thrift::OpenrModuleType::DECISION, zmqContext),
       processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       myNodeName_(myNodeName),
       adjacencyDbMarker_(adjacencyDbMarker),
@@ -1625,7 +1625,7 @@ Decision::Decision(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
   routeDb_.thisNodeName = myNodeName_;
   processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
-      this, [this]() noexcept { processPendingUpdates(); });
+      getEvb(), [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(
       myNodeName,
       enableV4,
@@ -1637,8 +1637,8 @@ Decision::Decision(
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
-  coldStartTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { coldStartUpdate(); });
+  coldStartTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { coldStartUpdate(); });
   if (gracefulRestartDuration.hasValue()) {
     coldStartTimer_->scheduleTimeout(gracefulRestartDuration.value());
   }
@@ -1677,8 +1677,8 @@ Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
 
   // Schedule periodic timer for submission to monitor
   const bool isPeriodic = true;
-  monitorTimer_ =
-      fbzmq::ZmqTimeout::make(this, [this]() noexcept { submitCounters(); });
+  monitorTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
 
   // Attach callback for processing publications on storeSub_ socket
@@ -1725,7 +1725,7 @@ Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
 
   // Schedule periodic timer to decremtOrderedFibHolds
   if (enableOrderedFib) {
-    orderedFibTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+    orderedFibTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
       LOG(INFO) << "Decrementing Holds";
       decrementOrderedFibHolds();
       if (spfSolver_->hasHolds()) {
@@ -1796,7 +1796,13 @@ Decision::processRequestMsg(fbzmq::Message&& request) {
 
 std::unordered_map<std::string, int64_t>
 Decision::getCounters() {
-  return spfSolver_->getCounters();
+  folly::Promise<std::unordered_map<std::string, int64_t>> promise;
+  auto future = promise.getFuture();
+  getEvb()->runInEventBaseThread(
+      [this, p = std::move(promise)]() mutable noexcept {
+        p.setValue(spfSolver_->getCounters());
+      });
+  return std::move(future).get();
 }
 
 thrift::PrefixDatabase
@@ -1995,7 +2001,8 @@ Decision::submitCounters() {
 
   // Prepare for submitting counters
   auto counters = spfSolver_->getCounters();
-  counters["decision.zmq_event_queue_size"] = getEventQueueSize();
+  counters["decision.zmq_event_queue_size"] =
+      getEvb()->getNotificationQueueSize();
 
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }

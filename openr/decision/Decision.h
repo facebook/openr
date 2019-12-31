@@ -12,7 +12,6 @@
 #include <unordered_map>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqThrottle.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
@@ -25,6 +24,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
@@ -193,7 +193,7 @@ class SpfSolver {
 // the AdjacencyDatabase of router1 and PrefixDatabase of router2
 //
 
-class Decision : public OpenrEventLoop {
+class Decision : public OpenrEventBase {
  public:
   Decision(
       std::string myNodeName,
