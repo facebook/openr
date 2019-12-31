@@ -30,7 +30,7 @@ namespace openr {
 
 class OpenrModule : public virtual fbzmq::Runnable {
  public:
-  const thrift::OpenrModuleType moduleType;
+  const thrift::OpenrModuleType moduleType{thrift::OpenrModuleType::DEFAULT};
   const std::string moduleName;
   const std::string inprocCmdUrl;
 
@@ -41,6 +41,13 @@ class OpenrModule : public virtual fbzmq::Runnable {
       const std::string& nodeName,
       const thrift::OpenrModuleType type,
       fbzmq::Context& zmqContext);
+
+  /**
+   * NOTE: Default constructor to support transition to OpenrEventBase.
+   * When constructed with default, module REQ/REP functionalitiy won't be
+   * available
+   */
+  OpenrModule() {}
 
   virtual ~OpenrModule() {}
 

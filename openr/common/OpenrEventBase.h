@@ -18,6 +18,12 @@ class OpenrEventBase : public OpenrModule {
       const thrift::OpenrModuleType type,
       fbzmq::Context& zmqContext);
 
+  /**
+   * Default constructor for using polling/timeout functionality. Module
+   * functionality will be disabled by default
+   */
+  OpenrEventBase();
+
   virtual ~OpenrEventBase();
 
   /**
@@ -80,6 +86,13 @@ class OpenrEventBase : public OpenrModule {
 
   void removeSocketFd(int socketFd);
   void removeSocket(uintptr_t socketPtr);
+
+ protected:
+  // Default implementation for `processRequestMsg` to FATAL if invoked.
+  folly::Expected<fbzmq::Message, fbzmq::Error>
+  processRequestMsg(fbzmq::Message&& /* request */) override {
+    LOG(FATAL) << "This method must be implemented by subclass";
+  }
 
  private:
   /**

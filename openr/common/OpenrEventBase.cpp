@@ -118,8 +118,22 @@ OpenrEventBase::OpenrEventBase(
   timeout_->scheduleTimeout(0);
 }
 
+OpenrEventBase::OpenrEventBase() : OpenrModule() {
+  // Periodic timer to update eventbase's timestamp. This is used by Watchdog to
+  // identify stuck threads.
+  timestamp_ = getElapsedSeconds();
+  timeout_ = folly::AsyncTimeout::make(evb_, [this]() noexcept {
+    timestamp_ = getElapsedSeconds();
+    timeout_->scheduleTimeout(std::chrono::seconds(1));
+  });
+  timeout_->scheduleTimeout(0);
+}
+
 OpenrEventBase::~OpenrEventBase() {
-  removeSocket(*inprocCmdSock_);
+  // Only removeSocket if it has been registered (has valid URL)
+  if (not inprocCmdUrl.empty()) {
+    removeSocket(*inprocCmdSock_);
+  }
 }
 
 void

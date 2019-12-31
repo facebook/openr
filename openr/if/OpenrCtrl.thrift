@@ -23,6 +23,7 @@ include "Lsdb.thrift"
 include "Network.thrift"
 
 enum OpenrModuleType {
+  DEFAULT = 0,
   DECISION = 1,
   FIB = 2,
   HEALTH_CHECKER = 3,

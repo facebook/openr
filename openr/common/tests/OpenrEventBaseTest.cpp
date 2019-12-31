@@ -90,6 +90,19 @@ TEST(OpenrEventBaseTest, RunnableApi) {
   evbThread.join();
 }
 
+TEST(OpenrEventBaseTest, DefaultConstructor) {
+  OpenrEventBase evb;
+  folly::Baton waitBaton;
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(100), [&]() { waitBaton.post(); });
+
+  std::thread evbThread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+  waitBaton.wait();
+  evb.stop();
+  evbThread.join();
+}
+
 TEST_F(OpenrEventBaseTestFixture, Timestamp) {
   // Expect non empty timestamp
   auto ts1 = evb.getTimestamp();
