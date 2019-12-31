@@ -68,6 +68,10 @@ OpenrEventBase::ZmqEventHandler::ZmqEventHandler(
 
 void
 OpenrEventBase::ZmqEventHandler::handlerReady(uint16_t events) noexcept {
+  if (not events) {
+    return;
+  }
+
   int zmqEvents{0};
   size_t zmqEventsLen = sizeof(zmqEvents);
   if (events & folly::EventHandler::READ) {
@@ -76,7 +80,8 @@ OpenrEventBase::ZmqEventHandler::handlerReady(uint16_t events) noexcept {
   if (events & folly::EventHandler::WRITE) {
     zmqEvents |= ZMQ_POLLOUT;
   }
-  while (zmqEvents) {
+
+  do {
     // Invoke callback
     callback_(zmqEvents);
 
@@ -87,7 +92,8 @@ OpenrEventBase::ZmqEventHandler::handlerReady(uint16_t events) noexcept {
     } else {
       zmqEvents = 0;
     }
-  }
+    // We loop again only for ZMQ_POLLIN events
+  } while (zmqEvents & ZMQ_POLLIN);
 }
 
 OpenrEventBase::OpenrEventBase(
