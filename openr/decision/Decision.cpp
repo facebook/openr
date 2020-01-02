@@ -20,6 +20,7 @@
 #include <folly/Memory.h>
 #include <folly/Optional.h>
 #include <folly/String.h>
+#include <folly/futures/Future.h>
 #if FOLLY_USE_SYMBOLIZER
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
 #endif

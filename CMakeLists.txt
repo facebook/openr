@@ -266,6 +266,7 @@ add_fbthrift_cpp_library(
     optionals
     stream
     server_stream
+    deprecated_client_streams
   DEPENDS
     openr_ctrl_cpp2
     kv_store_cpp2
@@ -531,14 +532,6 @@ if(BUILD_TESTS)
     DESTINATION sbin
   )
 
-
-  add_library(openr_module_test_base
-    openr/common/Flags.cpp
-  )
-  target_link_libraries(openr_module_test_base
-    openrlib
-  )
-
   # function that adds tests, typical usage example:
   # add_openr_test(TestName test_bin_name
   #   SOURCES Feature1Test.cpp Feature2Test.cpp
@@ -556,10 +549,13 @@ if(BUILD_TESTS)
       "${ARGN}"
     )
 
-    add_executable(${BIN_NAME} ${ARG_SOURCES})
+    add_executable(
+      ${BIN_NAME}
+      ${ARG_SOURCES}
+      openr/common/Flags.cpp
+    )
     target_link_libraries(${BIN_NAME}
       openrlib
-      openr_module_test_base
       ${OPENR_THRIFT_LIBS}
       ${GTEST_BOTH_LIBRARIES}
       ${LIBGMOCK_LIBRARIES}
@@ -617,6 +613,12 @@ if(BUILD_TESTS)
     SOURCES
       openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
       openr/link-monitor/tests/MockNetlinkSystemHandler.cpp
+    DESTINATION sbin/tests/openr/ctrl-server
+  )
+
+  add_openr_test(OpenrCtrlLongPollTest openr_ctrl_longpoll_test
+    SOURCES
+      openr/ctrl-server/tests/OpenrCtrlLongPollTest.cpp
     DESTINATION sbin/tests/openr/ctrl-server
   )
 
