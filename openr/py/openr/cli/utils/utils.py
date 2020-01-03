@@ -29,6 +29,7 @@ from openr.KvStore import ttypes as kv_store_types
 from openr.LinkMonitor import ttypes as lm_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
+from openr.OpenrCtrl import OpenrCtrl
 from openr.Platform import FibService, ttypes as platform_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
@@ -1755,19 +1756,15 @@ def print_spt_infos(
     print(printing.render_vertical_table(output))
 
 
-def area_feature_support(cli_opts: bunch.Bunch) -> bool:
-    openr_version: lm_types.OpenrVersion = {}
-    with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
-        openr_version = client.getOpenrVersion()
+def is_area_feature_supported(client: OpenrCtrl.Client) -> bool:
+    openr_version = client.getOpenrVersion()
     if openr_version.version >= Consts.OPENR_AREA_VERSION:
         return True
     return False
 
 
-def get_areas_list(cli_opts: bunch.Bunch) -> Set[str]:
-    openr_area_config: kv_store_types.AreasConfig = {}
-    with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
-        openr_area_config = client.getAreasConfig()
+def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
+    openr_area_config = client.getAreasConfig()
     return openr_area_config.areas
 
 
@@ -1775,12 +1772,12 @@ def get_areas_list(cli_opts: bunch.Bunch) -> Set[str]:
 # area ID. For older images that don't support area feature, this API will
 # return 'None'. If area ID is passed, API checks if it's valid and returns
 # the same ID
-def get_area_id(cli_opts: bunch.Bunch, area: str) -> str:
-    if not area_feature_support(cli_opts):
+def get_area_id(client: OpenrCtrl.Client, area: str) -> str:
+    if not is_area_feature_supported(client):
         return None
 
     # if no area is provided, return area in case only one area is configured
-    areas = get_areas_list(cli_opts)
+    areas = get_areas_list(client)
     if (area is None or area == "") and 1 == len(areas):
         (area,) = areas
         return area

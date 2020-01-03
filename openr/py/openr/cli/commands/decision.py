@@ -146,7 +146,7 @@ class PathCmd(DecisionCmdBase):
             dst = dst or host_id
 
         self.prefix_dbs: Dict[str, lsdb_types.PrefixDatabase] = {}
-        area = utils.get_area_id(self.cli_opts, area)
+        area = utils.get_area_id(client, area)
         # Get prefix_dbs from KvStore
         if area is None:
             pub = client.getKvStoreKeyValsFiltered(
@@ -468,7 +468,7 @@ class DecisionValidateCmd(DecisionCmdBase):
         decision_adj_dbs = client.getDecisionAdjacencyDbs()
         decision_prefix_dbs = client.getDecisionPrefixDbs()
 
-        area = utils.get_area_id(self.cli_opts, area)
+        area = utils.get_area_id(client, area)
         # get LSDB from KvStore
         if area is None:
             kvstore_keyvals = client.getKvStoreKeyValsFiltered(

@@ -28,6 +28,7 @@ from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients import kvstore_subscriber
+from openr.clients.openr_client import get_openr_ctrl_client
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
@@ -39,13 +40,15 @@ from openr.utils.consts import Consts
 class KvStoreCmdBase(OpenrCtrlCmd):
     def __init__(self, cli_opts: bunch.Bunch):
         super().__init__(cli_opts)
+
+    def _init_area(self, client: OpenrCtrl.Client):
         # find out if area feature is supported
-        self.area_feature = utils.area_feature_support(self.cli_opts)
+        self.area_feature = utils.is_area_feature_supported(client)
 
         # get list of areas if area feature is supported.
         self.areas = set()
         if self.area_feature:
-            self.areas = utils.get_areas_list(self.cli_opts)
+            self.areas = utils.get_areas_list(client)
             if self.cli_opts.area != "":
                 if self.cli_opts.area in self.areas:
                     self.areas = {self.cli_opts.area}
@@ -53,6 +56,16 @@ class KvStoreCmdBase(OpenrCtrlCmd):
                     print(f"Invalid area specified: {self.cli_opts.area}")
                     print(f"Valid areas: {self.areas}")
                     sys.exit(1)
+
+    # @override
+    def run(self, *args, **kwargs) -> None:
+        """
+        run method that invokes _run with client and arguments
+        """
+
+        with get_openr_ctrl_client(self.host, self.cli_opts) as client:
+            self._init_area(client)
+            self._run(client, *args, **kwargs)
 
     def print_publication_delta(
         self, title: str, pub_update: List[str], sprint_db: str = ""
