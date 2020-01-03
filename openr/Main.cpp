@@ -839,8 +839,7 @@ main(int argc, char** argv) {
   // set the port and interface
   thriftCtrlServer.setPort(FLAGS_openr_ctrl_port);
 
-  // enable rocket server to support streaming APIs
-  thriftCtrlServer.enableRocketServer(true);
+  // Needed to support streaming APIs
   thriftCtrlServer.addRoutingHandler(
       std::make_unique<apache::thrift::RSRoutingHandler>());
 
