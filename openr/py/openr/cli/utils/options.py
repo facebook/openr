@@ -14,7 +14,6 @@ from typing import Any, Callable, Tuple
 
 import bunch
 import click
-import zmq
 from openr.cli.utils.default_option_overrides import getDefaultOption
 from openr.Platform import ttypes as platform_types
 from openr.utils.consts import Consts
@@ -43,8 +42,6 @@ OPTIONS = bunch.Bunch(
         "proto_factory": Consts.PROTO_FACTORY,
         "ssl": False,
         "timeout": Consts.TIMEOUT_MS,
-        # TODO: Remove
-        "zmq_ctx": zmq.Context(),
     }
 )
 

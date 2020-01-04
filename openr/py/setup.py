@@ -70,7 +70,7 @@ def generate_thrift_files():
 generate_thrift_files()
 
 # Have different install_requires for Python 2 + 3
-INSTALL_REQUIRES = ["bunch", "click", "hexdump", "networkx", "pyzmq", "tabulate"]
+INSTALL_REQUIRES = ["bunch", "click", "hexdump", "networkx", "tabulate"]
 # Python 2 always needs these dependencies
 if version_info.major < 3:
     INSTALL_REQUIRES.extend(["futures", "ipaddress", "typing"])
