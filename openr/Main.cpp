@@ -67,7 +67,7 @@ namespace {
 //
 
 // the URL for Decision module pub
-const DecisionPubUrl kDecisionPubUrl{"ipc:///tmp/decision-pub-url"};
+const DecisionPubUrl kDecisionPubUrl{"inproc:///tmp/decision-pub-url"};
 
 // the URL for LinkMonitor module pub
 const LinkMonitorGlobalPubUrl kLinkMonitorPubUrl{"inproc://tmp/lm-pub-url"};
