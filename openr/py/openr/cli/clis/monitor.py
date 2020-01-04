@@ -18,7 +18,6 @@ from openr.cli.utils.options import breeze_option
 class MonitorCli(object):
     def __init__(self):
         self.monitor.add_command(CountersCli().counters)
-        self.monitor.add_command(ForceCrashCli().force_crash)
         self.monitor.add_command(MonitorSnoop().snoop)
         self.monitor.add_command(MonitorLogs().logs)
         self.monitor.add_command(MonitorStatistics().statistics)
@@ -42,16 +41,6 @@ class CountersCli(object):
         """ Fetch and display OpenR counters """
 
         monitor.CountersCmd(cli_opts).run(prefix, json)
-
-
-class ForceCrashCli(object):
-    @click.command(name="force-crash")
-    @click.option("--yes", "-y", is_flag=True, help="Assume yes (non-interactive)")
-    @click.pass_obj
-    def force_crash(cli_opts, yes):  # noqa: B902
-        """ Trigger force crash of Open/R """
-
-        monitor.ForceCrashCmd(cli_opts).run(yes)
 
 
 class MonitorSnoop(object):

@@ -32,7 +32,6 @@ class Consts(object):
     MONITOR_REP_PORT = 60008
     FIB_AGENT_PORT = 60100
     CONFIG_STORE_URL = "ipc:///tmp/openr_config_store_cmd"
-    FORCE_CRASH_SERVER_URL = "ipc:///tmp/force_crash_server"
 
     TOPOLOGY_OUTPUT_FILE = "/tmp/openr-topology.png"
 

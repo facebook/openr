@@ -11,7 +11,6 @@
 import json
 import os
 import time
-from builtins import object
 from typing import Dict, List
 
 import tabulate
@@ -80,26 +79,6 @@ class CountersCmd(MonitorCmd):
                 )
             )
             print()
-
-
-class ForceCrashCmd(MonitorCmd):
-    def _run(self, client: OpenrCtrl.Client, yes: bool):
-
-        if not yes:
-            yes = utils.yesno("Are you sure to trigger Open/R crash")
-
-        if not yes:
-            print("Not triggering force crash")
-            return
-
-        print("Triggering force crash")
-        sock = zmq_socket.ZmqSocket(self.cli_opts.zmq_ctx, zmq.REQ, timeout=200)
-        sock.set_sock_opt(zmq.LINGER, 1000)
-        sock.connect(consts.Consts.FORCE_CRASH_SERVER_URL)
-        sock.send(
-            bytes("User {} issuing crash command".format(os.environ["USER"]), "utf-8")
-        )
-        sock.close()
 
 
 class SnoopCmd(MonitorCmd):

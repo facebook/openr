@@ -72,8 +72,6 @@ const DecisionPubUrl kDecisionPubUrl{"ipc:///tmp/decision-pub-url"};
 // the URL for LinkMonitor module pub
 const LinkMonitorGlobalPubUrl kLinkMonitorPubUrl{"inproc://tmp/lm-pub-url"};
 
-const fbzmq::SocketUrl kForceCrashServerUrl{"ipc:///tmp/force_crash_server"};
-
 const std::string inet6Path = "/proc/net/if_inet6";
 } // namespace
 
@@ -240,24 +238,6 @@ main(int argc, char** argv) {
 
   // Set up the zmq context for this process.
   Context context;
-
-  // Register force crash handler
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> forceCrashServer{
-      context, folly::none, folly::none, fbzmq::NonblockingFlag{true}};
-  auto ret = forceCrashServer.bind(kForceCrashServerUrl);
-  if (ret.hasError()) {
-    LOG(ERROR) << "Failed to bind on " << std::string(kForceCrashServerUrl);
-    return 1;
-  }
-  mainEventLoop.addSocket(
-      fbzmq::RawZmqSocketPtr{*forceCrashServer}, ZMQ_POLLIN, [&](int) noexcept {
-        auto msg = forceCrashServer.recvOne();
-        if (msg.hasError()) {
-          LOG(ERROR) << "Failed receiving message on forceCrashServer.";
-        }
-        LOG(FATAL) << "Triggering forceful crash. "
-                   << msg->read<std::string>().value();
-      });
 
   // Set main thread name
   folly::setThreadName("openr");
