@@ -43,9 +43,15 @@ main(int argc, char** argv) {
 
   auto subscription =
       std::move(response.stream)
-          .via(&evb)
-          .subscribe(
-              [&globalKeyVals](openr::thrift::Publication&& pub) mutable {
+          .subscribeExTry(
+              folly::Executor::getKeepAliveToken(&evb),
+              [&globalKeyVals](
+                  folly::Try<openr::thrift::Publication>&& maybePub) mutable {
+                if (maybePub.hasException()) {
+                  LOG(ERROR) << maybePub.exception().what();
+                  return;
+                }
+                auto& pub = maybePub.value();
                 // Print expired key-vals
                 for (const auto& key : pub.expiredKeys) {
                   std::cout << "Expired Key: " << key << std::endl;

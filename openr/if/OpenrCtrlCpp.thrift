@@ -6,9 +6,10 @@
  */
 
 namespace cpp2 openr.thrift
+namespace py3 openr.thrift
 
-include "KvStore.thrift"
-include "OpenrCtrl.thrift"
+include "openr/if/KvStore.thrift"
+include "openr/if/OpenrCtrl.thrift"
 
 /**
  * Extends OpenrCtrl and implements stream APIs as streams are only

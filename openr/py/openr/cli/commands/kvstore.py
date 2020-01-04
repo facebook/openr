@@ -8,6 +8,7 @@
 #
 
 
+import asyncio
 import datetime
 import hashlib
 import json
@@ -18,30 +19,30 @@ import time
 from builtins import str
 from collections import defaultdict
 from itertools import combinations
-from typing import Any, Callable, Dict, List, Pattern, Set
+from typing import Any, Callable, Dict, List, Pattern, Set, Union
 
 import bunch
 import hexdump
 import networkx as nx
-import zmq
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.clients import kvstore_subscriber
-from openr.clients.openr_client import get_openr_ctrl_client
+from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
 from openr.KvStore import ttypes as kv_store_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.utils import ipnetwork, printing, serializer
 from openr.utils.consts import Consts
+from thrift.py3.client import ClientType
 
 
 class KvStoreCmdBase(OpenrCtrlCmd):
     def __init__(self, cli_opts: bunch.Bunch):
         super().__init__(cli_opts)
 
-    def _init_area(self, client: OpenrCtrl.Client):
+    def _init_area(self, client: Union[OpenrCtrl.Client, OpenrCtrlCppClient]):
         # find out if area feature is supported
         self.area_feature = utils.is_area_feature_supported(client)
 
@@ -1022,40 +1023,65 @@ class TopologyCmd(KvStoreCmdBase):
 
 
 class SnoopCmd(KvStoreCmdBase):
-    def _run(
+
+    # @override
+    def run(self, *args, **kwargs) -> None:
+        """
+        Override run method to create py3 client for streaming.
+        """
+
+        async def _wrapper():
+            client_type = ClientType.THRIFT_ROCKET_CLIENT_TYPE
+            async with get_openr_ctrl_cpp_client(
+                self.host, self.cli_opts, client_type=client_type
+            ) as client:
+                # NOTE: No area initialized
+                await self._run(client, *args, **kwargs)
+
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(_wrapper())
+        loop.close()
+
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient,
         delta: bool,
         ttl: bool,
         regex: str,
         duration: int,
     ) -> None:
-        area = self.get_area_id()
-        global_dbs = self.get_snapshot(client, delta, area)
+        # TODO: Fix area specifier for snoop. Intentionally setting to None to
+        # snoop across all area once. It will be easier when we migrate all the
+        # APIs to async
+        # area = await self.get_area_id()
+        area = None
         pattern = re.compile(regex)
 
-        print("Subscribing to KvStore updates. Magic begins here ... \n")
-        pub_client = kvstore_subscriber.KvStoreSubscriber(
-            zmq.Context(),
-            "tcp://[{}]:{}".format(self.host, self.kv_pub_port),
-            timeout=1000,
-        )
+        print("Retrieving and subcribing KvStore ... ")
+        snapshot, updates = await client.subscribeAndGetKvStore()
+        global_dbs = self.process_snapshot(snapshot, area)
+        print("Magic begins here ... \n")
 
         start_time = time.time()
+        awaited_updates = None
         while True:
-            # End loop if it is time!
+            # Break if it is time
             if duration > 0 and time.time() - start_time > duration:
                 break
 
-            # we do not want to timeout. keep listening for a change
-            try:
-                msg = pub_client.listen()
-                if area is not None and msg.area != area:
-                    continue
+            # Await for an update
+            if not awaited_updates:
+                awaited_updates = [updates.__anext__()]
+            done, awaited_updates = await asyncio.wait(awaited_updates, timeout=1)
+            if not done:
+                continue
+            else:
+                msg = await done.pop()
+
+            # filter out messages for area if specified
+            if area is None or msg.area == area:
                 self.print_expired_keys(msg, regex, pattern, global_dbs)
                 self.print_delta(msg, regex, pattern, ttl, delta, global_dbs)
-            except zmq.error.Again:
-                pass
 
     def print_expired_keys(
         self,
@@ -1203,8 +1229,7 @@ class SnoopCmd(KvStoreCmdBase):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def get_snapshot(self, client: OpenrCtrl.Client, delta: Any, area: str) -> Dict:
-        # get the active network snapshot first, so we can compute deltas
+    def process_snapshot(self, resp: kv_store_types.Publication, area: str) -> Dict:
         global_dbs = bunch.Bunch(
             {
                 "prefixes": {},
@@ -1213,21 +1238,17 @@ class SnoopCmd(KvStoreCmdBase):
             }
         )
 
-        if delta:
-            print("Retrieving KvStore snapshot ... ")
-            keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
-            if area is None:
-                resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
-            else:
-                resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+        # Filter key-vals based for an area if specified
+        if area:
+            resp.keyVals = {k: v for k, v in resp.keyVals.items() if v.area == area}
 
-            global_dbs.prefixes = utils.build_global_prefix_db(resp)
-            global_dbs.adjs = utils.build_global_adj_db(resp)
-            for key, value in resp.keyVals.items():
-                global_dbs.publications[key] = value
-            print("Done. Loaded {} initial key-values".format(len(resp.keyVals)))
-        else:
-            print("Skipping retrieval of KvStore snapshot")
+        # Populate global_dbs
+        global_dbs.prefixes = utils.build_global_prefix_db(resp)
+        global_dbs.adjs = utils.build_global_adj_db(resp)
+        for key, value in resp.keyVals.items():
+            global_dbs.publications[key] = value
+
+        print("Done. Loaded {} initial key-values".format(len(resp.keyVals)))
         return global_dbs
 
 

@@ -266,7 +266,6 @@ add_fbthrift_cpp_library(
     optionals
     stream
     server_stream
-    deprecated_client_streams
   DEPENDS
     openr_ctrl_cpp2
     kv_store_cpp2

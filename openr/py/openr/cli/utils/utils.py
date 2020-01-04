@@ -1758,9 +1758,7 @@ def print_spt_infos(
 
 def is_area_feature_supported(client: OpenrCtrl.Client) -> bool:
     openr_version = client.getOpenrVersion()
-    if openr_version.version >= Consts.OPENR_AREA_VERSION:
-        return True
-    return False
+    return openr_version.version >= Consts.OPENR_AREA_VERSION
 
 
 def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
