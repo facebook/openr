@@ -34,21 +34,18 @@ OPTIONS = bunch.Bunch(
         "cert_file": "",
         "cert_reqs": ssl.CERT_NONE,
         "client_id": platform_types.FibClient.OPENR,
-        "color": True,
-        "config_store_url": Consts.CONFIG_STORE_URL,
+        # TODO T59933238: Remove (can be learnt dynamically)
         "enable_color": True,
         "fib_agent_port": Consts.FIB_AGENT_PORT,
         "host": "localhost",
         "key_file": "",
-        "kv_pub_port": Consts.KVSTORE_PUB_PORT,
-        "kv_rep_port": Consts.KVSTORE_REP_PORT,
-        "monitor_pub_port": Consts.MONITOR_PUB_PORT,
-        "monitor_rep_port": Consts.MONITOR_REP_PORT,
+        "monitor_pub_port": Consts.MONITOR_PUB_PORT,  # TODO: Remove
+        "monitor_rep_port": Consts.MONITOR_REP_PORT,  # TODO: Remove
         "openr_ctrl_port": Consts.CTRL_PORT,
         "proto_factory": Consts.PROTO_FACTORY,
         "ssl": False,
         "timeout": Consts.TIMEOUT_MS,
-        "verbose": False,
+        # TODO: Remove
         "zmq_ctx": zmq.Context(),
     }
 )

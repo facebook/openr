@@ -42,7 +42,6 @@ Usage: breeze [OPTIONS] COMMAND [ARGS]...
 Options:
   -H, --host TEXT               Host to connect to (default = localhost)
   -t, --timeout INTEGER         Timeout for socket communication in ms
-  --color / --no-color          Enable coloring display
   --help                        Show this message and exit.
 
 Commands:

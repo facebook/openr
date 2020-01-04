@@ -52,8 +52,6 @@ locale.getpreferredencoding = getpreferredencoding
 @breeze_option(
     "--timeout", "-t", type=click.INT, help="Timeout for socket communication in ms"
 )
-@breeze_option("--color/--no-color", help="Enable coloring display")
-@breeze_option("--verbose/--no-verbose", help="Print verbose information")
 @breeze_option("--ssl/--no-ssl", help="Prefer SSL thrift to connect to OpenR")
 @breeze_option(
     "--cert-reqs",

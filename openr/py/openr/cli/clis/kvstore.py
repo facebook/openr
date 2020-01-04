@@ -40,11 +40,9 @@ class KvStoreCli(object):
         self.kvstore.add_command(AreasCli().areas, name="areas")
 
     @click.group()
-    @breeze_option("--kv_rep_port", type=int, help="KV store rep port")
-    @breeze_option("--kv_pub_port", type=int, help="KV store pub port")
     @breeze_option("--area", type=str, help="area identifier")
     @click.pass_context
-    def kvstore(ctx, kv_rep_port, kv_pub_port, area):  # noqa: B902
+    def kvstore(ctx, area):  # noqa: B902
         """ CLI tool to peek into KvStore module. """
         pass
 

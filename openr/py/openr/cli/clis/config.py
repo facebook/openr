@@ -31,9 +31,8 @@ class ConfigCli(object):
         self.config.add_command(ConfigStoreCli().config_store, name="store")
 
     @click.group()
-    @breeze_option("--config_store_url", help="Config Store IPC URL")
     @click.pass_context
-    def config(ctx, config_store_url):  # noqa: B902
+    def config(ctx):  # noqa: B902
         """ CLI tool to peek into Config Store module. """
         pass
 
