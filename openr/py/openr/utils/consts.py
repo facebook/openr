@@ -26,12 +26,7 @@ class Consts(object):
     STATIC_PREFIX_ALLOC_PARAM_KEY = "e2e-network-allocations"
 
     CTRL_PORT = 2018
-    KVSTORE_REP_PORT = 60002
-    KVSTORE_PUB_PORT = 60001
-    MONITOR_PUB_PORT = 60007
-    MONITOR_REP_PORT = 60008
     FIB_AGENT_PORT = 60100
-    CONFIG_STORE_URL = "ipc:///tmp/openr_config_store_cmd"
 
     TOPOLOGY_OUTPUT_FILE = "/tmp/openr-topology.png"
 

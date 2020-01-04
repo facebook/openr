@@ -30,7 +30,6 @@ class OpenrCtrlCmd(object):
         self.host = cli_opts.host
         self.timeout = cli_opts.timeout
         self.fib_agent_port = cli_opts.fib_agent_port
-        self.monitor_pub_port = cli_opts.monitor_pub_port
 
     def run(self, *args, **kwargs) -> None:
         """

@@ -18,14 +18,12 @@ from openr.cli.utils.options import breeze_option
 class MonitorCli(object):
     def __init__(self):
         self.monitor.add_command(CountersCli().counters)
-        self.monitor.add_command(MonitorSnoop().snoop)
         self.monitor.add_command(MonitorLogs().logs)
         self.monitor.add_command(MonitorStatistics().statistics)
 
     @click.group()
-    @breeze_option("--monitor_rep_port", type=int, help="Monitor rep port")
     @click.pass_context
-    def monitor(ctx, monitor_rep_port):  # noqa: B902
+    def monitor(ctx):  # noqa: B902
         """ CLI tool to peek into Monitor module. """
         pass
 
@@ -41,21 +39,6 @@ class CountersCli(object):
         """ Fetch and display OpenR counters """
 
         monitor.CountersCmd(cli_opts).run(prefix, json)
-
-
-class MonitorSnoop(object):
-    @click.command()
-    @click.option("--log/--no-log", default=True, help="Snoop on log")
-    @click.option("--counters/--no-counters", default=True, help="Snoop on counters")
-    @click.option("--delta/--no-delta", default=True, help="Output incremental changes")
-    @click.option(
-        "--duration", default=0, help="How long to snoop for. Default is infinite"
-    )
-    @click.pass_obj
-    def snoop(cli_opts, log, counters, delta, duration):  # noqa: B902
-        """ Print changed counters """
-
-        monitor.SnoopCmd(cli_opts).run(log, counters, delta, duration)
 
 
 class MonitorLogs(object):

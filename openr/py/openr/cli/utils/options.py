@@ -39,8 +39,6 @@ OPTIONS = bunch.Bunch(
         "fib_agent_port": Consts.FIB_AGENT_PORT,
         "host": "localhost",
         "key_file": "",
-        "monitor_pub_port": Consts.MONITOR_PUB_PORT,  # TODO: Remove
-        "monitor_rep_port": Consts.MONITOR_REP_PORT,  # TODO: Remove
         "openr_ctrl_port": Consts.CTRL_PORT,
         "proto_factory": Consts.PROTO_FACTORY,
         "ssl": False,
