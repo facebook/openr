@@ -36,7 +36,7 @@
 #define BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param_name, ...) \
   BENCHMARK_IMPL_COUNTERS(                                             \
       FB_CONCATENATE(name, FB_CONCATENATE(_, param_name)),             \
-      FB_STRINGIZE(name) "(" FB_STRINGIZE(param_name) ")",             \
+      FOLLY_PP_STRINGIZE(name) "(" FOLLY_PP_STRINGIZE(param_name) ")", \
       counters,                                                        \
       iters,                                                           \
       unsigned,                                                        \
