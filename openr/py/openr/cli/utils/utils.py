@@ -805,25 +805,27 @@ def print_routes_json(
 
     # Filter out all routes based on prefixes and labels
     for routes in route_db_dict.values():
-        filtered_unicast_routes = []
-        for route in routes["unicastRoutes"]:
-            if labels or networks:
-                if networks and ipnetwork.contain_any_prefix(route["dest"], networks):
+        if "unicastRoutes" in routes:
+            filtered_unicast_routes = []
+            for route in routes["unicastRoutes"]:
+                if labels or networks:
+                    if networks and ipnetwork.contain_any_prefix(
+                        route["dest"], networks
+                    ):
+                        filtered_unicast_routes.append(route)
+                else:
                     filtered_unicast_routes.append(route)
-            else:
-                filtered_unicast_routes.append(route)
-        routes["unicastRoutes"] = filtered_unicast_routes
+            routes["unicastRoutes"] = filtered_unicast_routes
 
-        filtered_mpls_routes = []
-        for route in routes["mplsRoutes"]:
-            if labels or prefixes:
-                if labels and int(route["topLabel"]) in labels:
+        if "mplsRoutes" in routes:
+            filtered_mpls_routes = []
+            for route in routes["mplsRoutes"]:
+                if labels or prefixes:
+                    if labels and int(route["topLabel"]) in labels:
+                        filtered_mpls_routes.append(route)
+                else:
                     filtered_mpls_routes.append(route)
-            else:
-                filtered_mpls_routes.append(route)
-        routes["mplsRoutes"] = filtered_mpls_routes
-
-    # Filter
+            routes["mplsRoutes"] = filtered_mpls_routes
 
     print(json_dumps(route_db_dict))
 

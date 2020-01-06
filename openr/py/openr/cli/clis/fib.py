@@ -28,6 +28,9 @@ class FibCli(object):
         self.fib.add_command(FibRoutesComputedCli().routes, name="routes")
         self.fib.add_command(FibRoutesInstalledCli().routes, name="list")
 
+        self.fib.add_command(FibUnicastRoutesCli().routes, name="unicast-routes")
+        self.fib.add_command(FibMplsRoutesCli().routes, name="mpls-routes")
+
         self.fib.add_command(FibCountersCli().counters, name="counters")
         self.fib.add_command(FibAddRoutesCli().add_routes, name="add")
         self.fib.add_command(FibDelRoutesCli().del_routes, name="del")
@@ -114,6 +117,28 @@ class FibRoutesComputedCli(object):
         """ Request routing table of the current host """
 
         fib.FibRoutesComputedCmd(cli_opts).run(prefixes, labels, json)
+
+
+class FibUnicastRoutesCli(object):
+    @click.command()
+    @click.argument("prefix_or_ip", nargs=-1)
+    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.pass_obj
+    def routes(cli_opts, prefix_or_ip, json):  # noqa: B902
+        """ Request unicast routing table of the current host """
+
+        fib.FibUnicastRoutesCmd(cli_opts).run(prefix_or_ip, json)
+
+
+class FibMplsRoutesCli(object):
+    @click.command()
+    @click.argument("labels", nargs=-1)
+    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.pass_obj
+    def routes(cli_opts, labels, json):  # noqa: B902
+        """ Request Mpls routing table of the current host """
+
+        fib.FibMplsRoutesCmd(cli_opts).run(labels, json)
 
 
 class FibAddRoutesCli(object):

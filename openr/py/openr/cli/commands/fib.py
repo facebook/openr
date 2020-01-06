@@ -39,6 +39,45 @@ class FibAgentCmd(object):
             raise
 
 
+class FibUnicastRoutesCmd(OpenrCtrlCmd):
+    def _run(
+        self, client: OpenrCtrl.Client, prefix_or_ip: List[str], json: bool
+    ) -> None:
+        unicast_route_list = client.getUnicastRoutesFiltered(prefix_or_ip)
+        host_name = client.getMyNodeName()
+
+        if json:
+            routes = {
+                "unicastRoutes": [
+                    utils.unicast_route_to_dict(r) for r in unicast_route_list
+                ]
+            }
+            route_dict = {host_name: routes}
+            utils.print_routes_json(route_dict)
+        else:
+            utils.print_unicast_routes(
+                "Unicast Routes for {}".format(host_name), unicast_route_list
+            )
+
+
+class FibMplsRoutesCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client, labels: List[int], json: bool) -> None:
+        int_label_filters = [int(label) for label in labels]
+        mpls_route_list = client.getMplsRoutesFiltered(int_label_filters)
+        host_name = client.getMyNodeName()
+
+        if json:
+            routes = {
+                "mplsRoutes": [utils.mpls_route_to_dict(r) for r in mpls_route_list]
+            }
+            route_dict = {host_name: routes}
+            utils.print_routes_json(route_dict)
+        else:
+            utils.print_mpls_routes(
+                "MPLS Routes for {}".format(host_name), mpls_route_list
+            )
+
+
 class FibRoutesComputedCmd(OpenrCtrlCmd):
     def _run(
         self, client: OpenrCtrl.Client, prefixes: Any, labels: Any, json: bool
