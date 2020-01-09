@@ -142,7 +142,7 @@ class OpenrEventBase : public OpenrModule {
   std::unordered_map<int /* fd */, ZmqEventHandler> fdHandlers_;
 
   // Timestamp
-  std::atomic<std::chrono::seconds> timestamp_;
+  std::atomic<std::chrono::seconds> timestamp_{std::chrono::seconds(0)};
   std::unique_ptr<folly::AsyncTimeout> timeout_;
 };
 
