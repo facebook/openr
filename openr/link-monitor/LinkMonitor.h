@@ -354,12 +354,6 @@ class LinkMonitor final : public OpenrEventBase {
   std::unique_ptr<fbzmq::ZmqTimeout> interfaceDbSyncTimer_;
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
 
-  // Timer for starting range allocator
-  std::vector<std::unique_ptr<folly::AsyncTimeout>> startAllocationTimers_;
-
-  // Timer for initial hold time expiry
-  std::unique_ptr<folly::AsyncTimeout> adjHoldTimer_;
-
   // DS to hold local stats/counters
   fbzmq::ThreadData tData_;
 
@@ -387,6 +381,15 @@ class LinkMonitor final : public OpenrEventBase {
 
   // areas_ configured on this node
   std::unordered_set<std::string> areas_{};
+
+  // Timer for starting range allocator
+  std::vector<std::unique_ptr<folly::AsyncTimeout>> startAllocationTimers_;
+
+  // Timer for initial hold time expiry
+  std::unique_ptr<folly::AsyncTimeout> adjHoldTimer_;
+
+  // Timer for loading config
+  std::unique_ptr<folly::AsyncTimeout> configLoadTimer_;
 }; // LinkMonitor
 
 } // namespace openr

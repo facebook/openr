@@ -161,21 +161,24 @@ LinkMonitor::LinkMonitor(
   // Create config-store client
   configStoreClient_ =
       std::make_unique<PersistentStoreClient>(configStoreUrl, zmqContext);
-  scheduleTimeout(std::chrono::seconds(0), [this, assumeDrained]() noexcept {
-    auto config = configStoreClient_->loadThriftObj<thrift::LinkMonitorConfig>(
-        kConfigKey);
-    if (config.hasValue()) {
-      LOG(INFO) << "Loaded link-monitor config from disk.";
-      config_ = config.value();
-      printLinkMonitorConfig(config_);
-    } else {
-      config_.isOverloaded = assumeDrained;
-      LOG(WARNING) << folly::sformat(
-          "Failed to load link-monitor config. "
-          "Setting node as {}",
-          assumeDrained ? "DRAINED" : "UNDRAINED");
-    }
-  });
+  configLoadTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this, assumeDrained]() noexcept {
+        auto config =
+            configStoreClient_->loadThriftObj<thrift::LinkMonitorConfig>(
+                kConfigKey);
+        if (config.hasValue()) {
+          LOG(INFO) << "Loaded link-monitor config from disk.";
+          config_ = config.value();
+          printLinkMonitorConfig(config_);
+        } else {
+          config_.isOverloaded = assumeDrained;
+          LOG(WARNING) << folly::sformat(
+              "Failed to load link-monitor config. "
+              "Setting node as {}",
+              assumeDrained ? "DRAINED" : "UNDRAINED");
+        }
+      });
+  configLoadTimer_->scheduleTimeout(std::chrono::seconds(0));
 
   prefixManagerClient_ =
       std::make_unique<PrefixManagerClient>(prefixManagerUrl, zmqContext);
