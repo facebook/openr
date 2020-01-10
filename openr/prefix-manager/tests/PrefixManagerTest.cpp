@@ -572,7 +572,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
   // version of first key should still be 1
   evl.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          waitDuration += 4 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
