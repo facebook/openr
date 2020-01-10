@@ -395,7 +395,6 @@ option(BUILD_TOOLS "BUILD_TOOLS" ON)
 if(BUILD_TOOLS)
   add_executable(openr_kvstore_snooper
     openr/kvstore/tools/KvStoreSnooper.cpp
-    openr/common/Flags.cpp
   )
 
   target_link_libraries(openr_kvstore_snooper
@@ -513,7 +512,6 @@ if(BUILD_TESTS)
 
   add_executable(netlink_socket_sample
     openr/nl/examples/NetlinkSocketSample.cpp
-    openr/common/Flags.cpp
   )
 
   target_link_libraries(netlink_socket_sample
@@ -551,7 +549,6 @@ if(BUILD_TESTS)
     add_executable(
       ${BIN_NAME}
       ${ARG_SOURCES}
-      openr/common/Flags.cpp
     )
     target_link_libraries(${BIN_NAME}
       openrlib
@@ -765,7 +762,6 @@ if(BUILD_TESTS)
 
   add_executable(config_store_benchmark
     openr/config-store/tests/PersistentStoreBenchmark.cpp
-    openr/common/Flags.cpp
   )
 
   target_link_libraries(config_store_benchmark
@@ -783,7 +779,6 @@ if(BUILD_TESTS)
   add_executable(fib_benchmark
     openr/fib/tests/FibBenchmark.cpp
     openr/fib/tests/MockNetlinkFibHandler.cpp
-    openr/common/Flags.cpp
   )
 
   target_link_libraries(fib_benchmark
@@ -805,7 +800,6 @@ if(BUILD_TESTS)
 
   add_executable(netlink_fib_handler_benchmark
     openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
-    openr/common/Flags.cpp
   )
 
   target_link_libraries(netlink_fib_handler_benchmark
@@ -824,7 +818,6 @@ if(BUILD_TESTS)
 
   add_executable(decision_benchmark
     openr/decision/tests/DecisionBenchmark.cpp
-    openr/common/Flags.cpp
   )
 
   target_link_libraries(decision_benchmark
@@ -841,7 +834,6 @@ if(BUILD_TESTS)
 
   add_executable(kvstore_benchmark
     openr/kvstore/tests/KvStoreBenchmark.cpp
-    openr/common/Flags.cpp
   )
 
   target_link_libraries(kvstore_benchmark

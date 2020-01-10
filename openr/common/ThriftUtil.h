@@ -7,14 +7,15 @@
 #pragma once
 
 #include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <wangle/ssl/SSLContextConfig.h>
 
 namespace openr {
 
 // Setup thrift server for TLS
 void setupThriftServerTls(
     apache::thrift::ThriftServer& thriftServer,
-    std::string const& context,
     apache::thrift::SSLPolicy sslPolicy,
-    folly::SSLContext::SSLVerifyPeerEnum clientVerification);
+    std::string const& ticketSeedPath,
+    std::shared_ptr<wangle::SSLContextConfig> sslContext);
 
 } // namespace openr

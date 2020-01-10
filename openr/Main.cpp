@@ -807,14 +807,31 @@ main(int argc, char** argv) {
   apache::thrift::ThriftServer thriftCtrlServer;
 
   // setup the SSL policy
+  std::shared_ptr<wangle::SSLContextConfig> sslContext;
   if (FLAGS_enable_secure_thrift_server) {
-    // TODO Change to REQUIRED after we have everyone using certs
+    CHECK(fileExists(FLAGS_x509_ca_path));
+    CHECK(fileExists(FLAGS_x509_cert_path));
+    auto& keyPath = FLAGS_x509_key_path;
+    if (!keyPath.empty()) {
+      CHECK(fileExists(keyPath));
+    } else {
+      keyPath = FLAGS_x509_cert_path;
+    }
+    sslContext = std::make_shared<wangle::SSLContextConfig>();
+    sslContext->setCertificate(FLAGS_x509_cert_path, keyPath, "");
+    sslContext->clientCAFile = FLAGS_x509_ca_path;
+    sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
+    sslContext->setNextProtocols(Constants::getNextProtocolsForThriftServers());
     // TODO Change to VERIFY_REQ_CLIENT_CERT after we have everyone using certs
+    sslContext->clientVerification =
+        folly::SSLContext::SSLVerifyPeerEnum::VERIFY;
+    sslContext->eccCurveName = FLAGS_tls_ecc_curve_name;
     setupThriftServerTls(
         thriftCtrlServer,
-        Constants::kOpenrCtrlSessionContext.toString(),
+        // TODO Change to REQUIRED after we have everyone using certs
         apache::thrift::SSLPolicy::PERMITTED,
-        folly::SSLContext::SSLVerifyPeerEnum::VERIFY);
+        FLAGS_tls_ticket_seed_path,
+        sslContext);
   }
   // set the port and interface
   thriftCtrlServer.setPort(FLAGS_openr_ctrl_port);
@@ -859,7 +876,8 @@ main(int argc, char** argv) {
                            context,
                            prefixManagerLocalCmdUrl,
                            kDecisionPubUrl,
-                           FLAGS_prefix_algo_type_ksp2_ed_ecmp});
+                           FLAGS_prefix_algo_type_ksp2_ed_ecmp,
+                           sslContext});
   }
 
   // Wait for main-event loop to return

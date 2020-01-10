@@ -9,6 +9,7 @@
 
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Types.h>
+#include <wangle/ssl/SSLContextConfig.h>
 
 namespace openr {
 struct PluginArgs {
@@ -17,6 +18,7 @@ struct PluginArgs {
   PrefixManagerLocalCmdUrl prefixManagerUrl;
   DecisionPubUrl decisionPubUrl;
   bool enableSegmentRouting;
+  std::shared_ptr<wangle::SSLContextConfig> sslContext;
 };
 
 void pluginStart(const PluginArgs& /* pluginArgs */);
