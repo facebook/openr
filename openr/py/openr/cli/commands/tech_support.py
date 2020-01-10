@@ -72,8 +72,8 @@ class TechSupportCmd(object):
             self.print_title("openr-tech-support failures")
             print("\n".join(failures))
 
-        print()
-        return -1 if failures else 0
+        ret = 1 if failures else 0
+        sys.exit(ret)
 
     def print_title(self, title):
         print("\n--------  {}  --------\n".format(title))

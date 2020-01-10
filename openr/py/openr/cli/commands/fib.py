@@ -125,7 +125,7 @@ class FibRoutesInstalledCmd(FibAgentCmd):
     def run(
         self,
         prefixes: List[str],
-        labels: List[int],
+        labels: List[int] = (),
         json_opt: bool = False,
         client_id: Optional[int] = None,
     ):

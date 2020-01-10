@@ -202,8 +202,8 @@ class PrefixesCmd(KvPrefixesCmd):
         client: OpenrCtrl.Client,
         nodes: set,
         json: bool,
-        prefix: str,
-        client_type: str,
+        prefix: str = "",
+        client_type: str = "",
     ) -> None:
         if not self.area_feature:
             super()._run(client, nodes, json, prefix, client_type)
