@@ -134,6 +134,10 @@ DEFINE_string(
     "my certificate file containing private & public key pair");
 DEFINE_bool(enable_encryption, false, "Encrypt traffic between AQ instances");
 DEFINE_bool(
+    enable_fib_service_waiting,
+    true,
+    "Wait for Switch FIB agent to be ready before initialize OpenR");
+DEFINE_bool(
     enable_rtt_metric,
     true,
     "Use dynamically learned RTT for interface metric values.");

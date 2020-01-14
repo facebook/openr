@@ -386,7 +386,9 @@ main(int argc, char** argv) {
   });
   mainEventLoop.waitUntilRunning();
 
-  waitForFibService(mainEventLoop);
+  if (FLAGS_enable_fib_service_waiting) {
+    waitForFibService(mainEventLoop);
+  }
 
   // Start config-store URL
   startEventLoop(

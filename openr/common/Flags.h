@@ -58,6 +58,7 @@ DECLARE_string(redistribute_ifaces);
 DECLARE_string(cert_file_path);
 
 DECLARE_bool(enable_encryption);
+DECLARE_bool(enable_fib_service_waiting);
 DECLARE_bool(enable_rtt_metric);
 DECLARE_bool(enable_v4);
 DECLARE_bool(enable_subnet_validation);
