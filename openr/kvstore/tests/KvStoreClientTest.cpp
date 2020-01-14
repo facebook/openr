@@ -220,22 +220,6 @@ class MultipleAreaFixture : public ::testing::Test {
 };
 
 /**
- * All stores for multi-get are failing
- */
-TEST_F(MultipleStoreFixture, dumpWithPrefixAndParseMultiple_allStoresDown) {
-  store1->stop();
-  store2->stop();
-  store3->stop();
-
-  auto maybe = KvStoreClient::dumpAllWithPrefixMultiple(
-      context, urls, "test_", 1000ms, 192);
-
-  ASSERT_FALSE(maybe.first.hasValue());
-  // ALL url should be unreachable
-  EXPECT_EQ(urls.size(), maybe.second.size());
-}
-
-/**
  * Merge different keys from three stores
  */
 TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {

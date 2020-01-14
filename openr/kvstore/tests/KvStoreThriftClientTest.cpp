@@ -306,6 +306,23 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     EXPECT_EQ("test_value1", pub[key1].value);
     EXPECT_EQ("test_value2", pub[key2].value);
   }
+
+  // Step6: shutdown both thriftSevers and verify
+  // dumpAllWithThriftClientFromMultiple() will get nothing.
+  {
+    openrThriftServerWrapper1_->stop();
+    openrThriftServerWrapper2_->stop();
+
+    auto db =
+        KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+    ASSERT_TRUE(db.first.hasValue());
+    ASSERT_TRUE(db.first.value().empty());
+
+    // start thriftSever to make sure TearDown method won't stop non-existing
+    // server
+    openrThriftServerWrapper1_->run();
+    openrThriftServerWrapper2_->run();
+  }
 }
 
 int
