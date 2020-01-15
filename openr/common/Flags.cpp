@@ -106,12 +106,6 @@ DEFINE_bool(
     "whenever OpenR elects new prefix for node. Only effective when prefix "
     "allocator is turned on and set_loopback_address is also turned on");
 DEFINE_string(
-    ifname_prefix,
-    "terra,nic1,nic2",
-    "A comma separated list of strings. Linux interface names with a prefix "
-    "matching at least one will be used for neighbor discovery, provided the "
-    "interface is not excluded by the flag iface_regex_exclude");
-DEFINE_string(
     iface_regex_include,
     "",
     "A comma separated list of extended POSIX regular expressions. Linux "

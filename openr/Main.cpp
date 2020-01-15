@@ -628,26 +628,20 @@ main(int argc, char** argv) {
   re2::RE2::Options regexOpts;
   regexOpts.set_case_sensitive(false);
   std::vector<std::string> regexIncludeStrings;
+  std::string regexErr;
+
+  // iface_regex_include and iface_regex_exclude will together
+  // define RE, which is fed into link-monitor
   folly::split(",", FLAGS_iface_regex_include, regexIncludeStrings, true);
   auto includeRegexList =
       std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-
-  std::string regexErr;
   for (auto& regexStr : regexIncludeStrings) {
     if (-1 == includeRegexList->Add(regexStr, &regexErr)) {
       LOG(FATAL) << "Add iface regex failed " << regexErr;
     }
   }
-  // add prefixes
-  std::vector<std::string> ifNamePrefixes;
-  folly::split(",", FLAGS_ifname_prefix, ifNamePrefixes, true);
-  for (auto& prefix : ifNamePrefixes) {
-    if (-1 == includeRegexList->Add(prefix + ".*", &regexErr)) {
-      LOG(FATAL) << "Invalid regex " << regexErr;
-    }
-  }
   // Compiling empty Re2 Set will cause undefined error
-  if (regexIncludeStrings.empty() && ifNamePrefixes.empty()) {
+  if (regexIncludeStrings.empty()) {
     includeRegexList.reset();
   } else if (!includeRegexList->Compile()) {
     LOG(FATAL) << "Regex compile failed";
@@ -668,6 +662,7 @@ main(int argc, char** argv) {
     LOG(FATAL) << "Regex compile failed";
   }
 
+  // redistribute_ifaces will define ifaces to be advertised
   std::vector<std::string> redistStringList;
   folly::split(",", FLAGS_redistribute_ifaces, redistStringList, true);
   auto redistRegexList =

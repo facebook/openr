@@ -49,7 +49,8 @@ configuration file looks like following
 ```
 DRYRUN=false
 REDISTRIBUTE_IFACES=lo
-IFACE_PREFIXES=eth
+IFACE_REGEX_INCLUDE=eth.*
+IFACE_REGEX_EXCLUDE=
 VERBOSITY=1
 ```
 
@@ -231,15 +232,23 @@ ping all other nodes every 3 seconds.
 HEALTH_CHECKER_PING_INTERVAL_S=3
 ```
 
-#### IFACE_PREFIXES
+#### IFACE_REGEX_INCLUDE
 
 Interface prefixes to perform neighbor discovery on. All interfaces whose
 names start with these are used for neighbor discovery.
 
 ```
-IFACE_PREFIXES=eth,nic,po
+IFACE_REGEX_INCLUDE=eth.*,nic.*,po.*
 ```
 
+#### IFACE_REGEX_EXCLUDE
+
+Regex to exclude interface to perform neighbor discovery on. All interfaces whose
+names start with these are excluded for neighbor discovery.
+
+```
+IFACE_REGEX_EXCLUDE=po[0-3]{3}
+```
 #### MIN_LOG_LEVEL
 
 Log messages at or above this level. Again, the numbers of severity levels INFO,

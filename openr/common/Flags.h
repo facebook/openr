@@ -50,7 +50,6 @@ DECLARE_bool(per_prefix_keys);
 DECLARE_bool(set_loopback_address);
 DECLARE_bool(override_loopback_addr);
 
-DECLARE_string(ifname_prefix);
 DECLARE_string(iface_regex_include);
 DECLARE_string(iface_regex_exclude);
 DECLARE_string(redistribute_ifaces);
