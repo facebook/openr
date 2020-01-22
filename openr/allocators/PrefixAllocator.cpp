@@ -73,7 +73,7 @@ PrefixAllocator::PrefixAllocator(
       prefixManagerLocalCmdUrl, zmqContext);
 
   // Let the magic begin. Start allocation as per allocMode
-  boost::apply_visitor(*this, allocMode);
+  std::visit(*this, allocMode);
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>

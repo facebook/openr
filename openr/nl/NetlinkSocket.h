@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <boost/variant.hpp>
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <folly/ConcurrentBitSet.h>
 #include <folly/IPAddress.h>
@@ -19,7 +18,7 @@
 namespace openr {
 namespace fbnl {
 
-using EventVariant = boost::variant<Route, Neighbor, IfAddress, Link>;
+using EventVariant = std::variant<Route, Neighbor, IfAddress, Link>;
 
 struct PrefixCmp {
   bool
@@ -71,7 +70,7 @@ class NetlinkSocket {
     // Callback invoked by NetlinkSocket when registered event happens
     void
     handleEvent(const std::string& ifName, const EventVariant& event) noexcept {
-      boost::apply_visitor(EventVisitor(ifName, this), event);
+      std::visit(EventVisitor(ifName, this), event);
     }
 
     virtual void
@@ -136,7 +135,7 @@ class NetlinkSocket {
     std::vector<std::string> removed_;
   };
 
-  struct EventVisitor : public boost::static_visitor<> {
+  struct EventVisitor {
     std::string linkName;
     EventsHandler* eventHandler;
     EventVisitor(const std::string& ifName, EventsHandler* handler)

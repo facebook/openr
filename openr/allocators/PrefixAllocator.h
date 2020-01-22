@@ -11,7 +11,6 @@
 #include <functional>
 #include <string>
 
-#include <boost/variant.hpp>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <folly/IPAddress.h>
@@ -40,7 +39,7 @@ enum class PrefixAllocatorModeStatic {};
 enum class PrefixAllocatorModeSeeded {};
 
 using PrefixAllocatorParams = std::pair<folly::CIDRNetwork, uint8_t>;
-using PrefixAllocatorMode = boost::variant<
+using PrefixAllocatorMode = std::variant<
     PrefixAllocatorModeStatic,
     PrefixAllocatorModeSeeded,
     PrefixAllocatorParams>;
@@ -57,7 +56,7 @@ using PrefixAllocatorMode = boost::variant<
  * > PrefixAllocatorParams
  *   => elects subprefix from prefix allocator params
  */
-class PrefixAllocator : public OpenrEventBase, public boost::static_visitor<> {
+class PrefixAllocator : public OpenrEventBase {
  public:
   PrefixAllocator(
       const std::string& myNodeName,
@@ -88,7 +87,7 @@ class PrefixAllocator : public OpenrEventBase, public boost::static_visitor<> {
   PrefixAllocator& operator=(PrefixAllocator const&) = delete;
 
   //
-  // boost visitor functions => 3 different ways to initialize
+  // Visitor init functions => 3 different ways to initialize
   // PrefixAllocator. Only meant to be used internally.
   //
   void operator()(PrefixAllocatorModeStatic const&);
