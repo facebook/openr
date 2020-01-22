@@ -14,6 +14,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/Optional.h>
+#include <folly/init/Init.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -21,6 +22,7 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/tests/OpenrThriftServerWrapper.h>
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -49,7 +51,28 @@ class MultipleStoreFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
-    auto makeStore = [this](std::string nodeId) {
+    // intialize kvstore instances
+    initKvStores();
+
+    // intialize thriftWrapper instances
+    initThriftWrappers();
+  }
+
+  void
+  TearDown() override {
+    thriftWrapper1_->stop();
+    thriftWrapper2_->stop();
+    thriftWrapper3_->stop();
+
+    store1->stop();
+    store2->stop();
+    store3->stop();
+  }
+
+  void
+  initKvStores() {
+    // wrapper to spin up a kvstore through KvStoreWrapper
+    auto makeStoreWrapper = [this](std::string nodeId) {
       const auto peers = std::unordered_map<std::string, thrift::PeerSpec>{};
       return std::make_shared<KvStoreWrapper>(
           context,
@@ -59,50 +82,76 @@ class MultipleStoreFixture : public ::testing::Test {
           peers);
     };
 
-    store1 = makeStore(node1);
-    store2 = makeStore(node2);
-    store3 = makeStore(node3);
+    // spin up KvStore instances through KvStoreWrapper
+    store1 = makeStoreWrapper(node1);
+    store2 = makeStoreWrapper(node2);
+    store3 = makeStoreWrapper(node3);
 
     store1->run();
     store2->run();
     store3->run();
-
-    // Create and initialize kvstore-clients
-    client1 = std::make_shared<KvStoreClient>(
-        context, &evb, node1, store1->localCmdUrl, store1->localPubUrl);
-
-    client2 = std::make_shared<KvStoreClient>(
-        context, &evb, node2, store2->localCmdUrl, store2->localPubUrl);
-
-    client3 = std::make_shared<KvStoreClient>(
-        context, &evb, node3, store3->localCmdUrl, store3->localPubUrl);
-
-    urls = {fbzmq::SocketUrl{store1->localCmdUrl},
-            fbzmq::SocketUrl{store2->localCmdUrl},
-            fbzmq::SocketUrl{store3->localCmdUrl}};
   }
 
   void
-  TearDown() override {
-    store1->stop();
-    store2->stop();
-    store3->stop();
+  initThriftWrappers() {
+    // wrapper to spin up an OpenrThriftServerWrapper for thrift connection
+    auto makeThriftServerWrapper =
+        [this](std::string nodeId, std::string localPubUrl) {
+          return std::make_shared<OpenrThriftServerWrapper>(
+              nodeId,
+              MonitorSubmitUrl{"inproc://monitor_submit"},
+              KvStoreLocalPubUrl{localPubUrl},
+              context);
+        };
+
+    // spin up OpenrThriftServerWrapper for thrift connectivity
+    thriftWrapper1_ = makeThriftServerWrapper(node1, store1->localPubUrl);
+    thriftWrapper1_->addModuleType(
+        thrift::OpenrModuleType::KVSTORE, store1->getKvStore());
+    thriftWrapper1_->run();
+
+    thriftWrapper2_ = makeThriftServerWrapper(node2, store2->localPubUrl);
+    thriftWrapper2_->addModuleType(
+        thrift::OpenrModuleType::KVSTORE, store2->getKvStore());
+    thriftWrapper2_->run();
+
+    thriftWrapper3_ = makeThriftServerWrapper(node3, store3->localPubUrl);
+    thriftWrapper3_->addModuleType(
+        thrift::OpenrModuleType::KVSTORE, store3->getKvStore());
+    thriftWrapper3_->run();
+
+    // Create and initialize kvstore-clients
+    auto port1 = thriftWrapper1_->getOpenrCtrlThriftPort();
+    auto port2 = thriftWrapper2_->getOpenrCtrlThriftPort();
+    auto port3 = thriftWrapper3_->getOpenrCtrlThriftPort();
+    client1 = std::make_shared<KvStoreClient>(
+        context, &evb, node1, folly::SocketAddress{localhost_, port1});
+
+    client2 = std::make_shared<KvStoreClient>(
+        context, &evb, node2, folly::SocketAddress{localhost_, port2});
+
+    client3 = std::make_shared<KvStoreClient>(
+        context, &evb, node3, folly::SocketAddress{localhost_, port3});
+
+    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port1});
+    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port2});
+    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port3});
   }
 
+  apache::thrift::CompactSerializer serializer;
   fbzmq::Context context;
-
   OpenrEventBase evb;
 
   std::shared_ptr<KvStoreWrapper> store1, store2, store3;
-
+  std::shared_ptr<OpenrThriftServerWrapper> thriftWrapper1_, thriftWrapper2_,
+      thriftWrapper3_;
   std::shared_ptr<KvStoreClient> client1, client2, client3;
 
+  const std::string localhost_{"::1"};
   const std::string node1{"test_store1"}, node2{"test_store2"},
       node3{"test_store3"};
 
-  apache::thrift::CompactSerializer serializer;
-
-  std::vector<fbzmq::SocketUrl> urls;
+  std::vector<folly::SocketAddress> sockAddrs_;
 };
 
 /*
@@ -115,7 +164,7 @@ class MultipleAreaFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
-    auto makeStore =
+    auto makeStoreWrapper =
         [this](std::string nodeId, std::unordered_set<std::string> areas) {
           const auto peers =
               std::unordered_map<std::string, thrift::PeerSpec>{};
@@ -133,10 +182,11 @@ class MultipleAreaFixture : public ::testing::Test {
               areas);
         };
 
-    store1 = makeStore(node1, std::unordered_set<std::string>{planeArea});
-    store2 =
-        makeStore(node2, std::unordered_set<std::string>{planeArea, podArea});
-    store3 = makeStore(node3, std::unordered_set<std::string>{podArea});
+    store1 =
+        makeStoreWrapper(node1, std::unordered_set<std::string>{planeArea});
+    store2 = makeStoreWrapper(
+        node2, std::unordered_set<std::string>{planeArea, podArea});
+    store3 = makeStoreWrapper(node3, std::unordered_set<std::string>{podArea});
 
     store1->run();
     store2->run();
@@ -228,7 +278,6 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   //
   evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
-    value.version = 1;
     {
       value.value = "test_value1";
       client1->setKey(
@@ -251,7 +300,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   evb.run();
 
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      context, urls, "test_");
+      sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.first.hasValue());
 
@@ -297,7 +346,7 @@ TEST_F(
   evb.run();
 
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      context, urls, "test_");
+      sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.first.hasValue());
 
@@ -319,7 +368,6 @@ TEST_F(
   //
   evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
-    value.version = 1;
     {
       value.value = "test_value1";
       client1->setKey(
@@ -342,7 +390,7 @@ TEST_F(
   evb.run();
 
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      context, urls, "test_");
+      sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.first.hasValue());
 
@@ -1587,7 +1635,7 @@ main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
+  folly::init(&argc, &argv);
   google::InstallFailureSignalHandler();
 
   // init sodium security library

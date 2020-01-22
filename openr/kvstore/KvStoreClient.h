@@ -197,16 +197,17 @@ class KvStoreClient {
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
-   * Similar to the above but parses the values according to the ThrifType
+   * Similar to the above but parses the values according to the ThriftType
    * passed. This will hide the version/originator & other details
    *
-   * @param ThriftType - decode values as this thrift type. this is handy when
-   *   you dump keys with the same prefix (which we do)
+   * @template param ThriftType - decode values as this thrift type.
+   *  This is handy when you dump keys with the same prefix (which we do)
    *
-   * @param context - usual ZMQ context stuff
-   * @param kvStoreCmdUrls - the URL for the KvStore's CMD socket
-   * @param prefix - the key prefix to use for key dumping; empty dumps all
-   * @param recvTimeout - how to wait on receive operations
+   * @param sockAddrs - (address, port) to connect OpenR instance to
+   * @param prefix - the key prefix used for key dumping. Dump all if empty
+   * @param connectTimeout - timeout value set on connecting
+   * @param processTimeout - timeout value set on porcessing
+   * @param bindAddr - source addr for binding purpose. Default will be ANY
    *
    * @return first member of the pair is key-value map obtained by merging data
    * from all stores. Null value if failed connecting and obtaining snapshot
@@ -214,18 +215,6 @@ class KvStoreClient {
    * Second member is a list of unreached kvstore urls
    *
    */
-  template <typename ThriftType>
-  static std::pair<
-      folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
-      std::vector<fbzmq::SocketUrl> /* unreached url */>
-  dumpAllWithPrefixMultipleAndParse(
-      fbzmq::Context& context,
-      const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
-      const std::string& prefix,
-      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none,
-      folly::Optional<int> maybeIpTos = folly::none,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
-
   template <typename ThriftType>
   static std::pair<
       folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
@@ -242,12 +231,17 @@ class KvStoreClient {
    * multiple KvStore instances. It will fetch values from different KvStore
    * instances and merge them together to finally return thrift::Value
    *
-   * @param ipAddrs - collection of urls to connect to for OpenR instance
-   * @param prefix - the key prefix used for key dumping. Will dump all if empty
-   * @param processTimeout - timeout value set on porcessing
+   * @param sockAddrs - (address, port) to connect OpenR instance to
+   * @param prefix - the key prefix used for key dumping. Dump all if empty
    * @param connectTimeout - timeout value set on connecting
+   * @param processTimeout - timeout value set on porcessing
+   * @param bindAddr - source addr for binding purpose. Default will be ANY
    *
-   * @return merged thrift::Value
+   * @return first member of the pair is key-value map obtained by merging data
+   * from all stores. Null value if failed connecting and obtaining snapshot
+   * from ALL stores. If at least one store responds this will be non-empty.
+   * Second member is a list of unreached kvstore urls
+   *
    */
   static std::pair<
       folly::Optional<std::unordered_map<std::string /* key */, thrift::Value>>,

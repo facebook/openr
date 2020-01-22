@@ -47,26 +47,6 @@ std::pair<
     folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStoreClient::dumpAllWithPrefixMultipleAndParse(
-    fbzmq::Context& context,
-    const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
-    const std::string& prefix,
-    folly::Optional<std::chrono::milliseconds> recvTimeout,
-    folly::Optional<int> maybeIpTos,
-    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  auto val = dumpAllWithPrefixMultiple(
-      context, kvStoreCmdUrls, prefix, recvTimeout, maybeIpTos, area);
-  if (not val.first) {
-    return std::make_pair(folly::none, val.second);
-  }
-  return std::make_pair(parseThriftValues<ThriftType>(*val.first), val.second);
-}
-
-// static
-template <typename ThriftType>
-std::pair<
-    folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
-KvStoreClient::dumpAllWithPrefixMultipleAndParse(
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,

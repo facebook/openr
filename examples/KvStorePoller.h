@@ -11,14 +11,14 @@
 #include <vector>
 
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/SocketAddress.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 
 namespace openr {
 
 class KvStorePoller {
  public:
-  KvStorePoller(
-      std::vector<fbzmq::SocketUrl>& zmqUrls, fbzmq::Context& zmqContext);
+  /* implicit */ KvStorePoller(std::vector<folly::SocketAddress>& sockAddrs);
 
   ~KvStorePoller();
 
@@ -34,8 +34,7 @@ class KvStorePoller {
   getPrefixDatabases(std::chrono::milliseconds pollTimeout);
 
  private:
-  const std::vector<fbzmq::SocketUrl> zmqUrls_;
-  fbzmq::Context& zmqContext_;
+  std::vector<folly::SocketAddress> sockAddrs_;
 
 }; // class KvStorePoller
 } // namespace openr
