@@ -145,7 +145,8 @@ BM_PersistentStoreCreateDestroy(uint32_t iters, size_t numOfStringKeys) {
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
   // Create storeWrapper and perform some operations on it
 
-  auto storeWrapper = std::make_unique<PersistentStoreWrapper>(context, tid);
+  auto storeWrapper =
+      std::make_unique<PersistentStoreWrapper>(context, tid + 1);
   storeWrapper->run();
   auto client = std::make_unique<PersistentStoreClient>(
       PersistentStoreUrl{storeWrapper->sockUrl}, context);
@@ -153,11 +154,17 @@ BM_PersistentStoreCreateDestroy(uint32_t iters, size_t numOfStringKeys) {
   // Generate keys
   auto stringKeys = constructRandomVector(numOfStringKeys);
   writeKeyValueToStore(stringKeys, client, 1);
-  suspender.dismiss(); // Start measuring benchmark time
+
+  // Reset original store
+  storeWrapper.reset();
+
+  // Start measuring benchmark time
+  suspender.dismiss();
 
   for (uint32_t i = 0; i < iters; i++) {
     // Create new storeWrapper and perform some operations on it
-    auto storeWrapper1 = std::make_unique<PersistentStoreWrapper>(context, tid);
+    auto storeWrapper1 =
+        std::make_unique<PersistentStoreWrapper>(context, tid + i + 2);
   }
 }
 
