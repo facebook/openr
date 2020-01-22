@@ -69,6 +69,11 @@ enum LinkMonitorCommand {
    * Command to request build information
    */
   GET_BUILD_INFO = 11,  // replies with OpenrBuildInfo
+
+  /**
+   * Get the current adj status info reported from Spark
+   */
+  DUMP_ADJS = 12,  // AdjacencyDatabase will be sent back
 }
 
 struct LinkMonitorRequest {

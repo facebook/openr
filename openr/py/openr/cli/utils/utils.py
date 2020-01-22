@@ -583,7 +583,11 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
                 else adj["metric"]
             )
             uptime = time_since(adj["timestamp"]) if adj["timestamp"] else ""
-            area = adj["area"] if adj["area"] is not None else "N/A"
+            area = (
+                adj["area"]
+                if "area" in adj.keys() and adj["area"] is not None
+                else "N/A"
+            )
 
             rows.append(
                 [

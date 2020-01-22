@@ -249,6 +249,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
   semifuture_getInterfaces() override;
 
+  folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
+  semifuture_getLinkMonitorAdjacencies() override;
+
   folly::SemiFuture<std::unique_ptr<thrift::OpenrVersions>>
   semifuture_getOpenrVersion() override;
 

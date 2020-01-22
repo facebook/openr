@@ -8,7 +8,7 @@
 #
 
 
-from typing import Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import bunch
 from openr.clients.openr_client import get_openr_ctrl_client
@@ -45,6 +45,26 @@ class OpenrCtrlCmd(object):
         """
 
         raise NotImplementedError
+
+    def iter_dbs(
+        self,
+        container: Any,
+        dbs: Dict,
+        nodes: set,
+        parse_func: Callable[[Any, Dict], None],
+    ):
+        """
+        parse prefix/adj databases
+
+        @param: container - container to store the generated data and returns
+        @param: dbs - decision_types.PrefixDbs or decision_types.AdjDbs
+        @param: nodes - set: the set of nodes for parsing
+        @param: parse_func - function: the parsing function
+        """
+        for (node, db) in sorted(dbs.items()):
+            if "all" not in nodes and node not in nodes:
+                continue
+            parse_func(container, db)
 
     # common function used by decision, kvstore mnodule
     def buildKvStoreKeyDumpParams(

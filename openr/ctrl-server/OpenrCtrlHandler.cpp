@@ -1201,6 +1201,25 @@ OpenrCtrlHandler::semifuture_getInterfaces() {
   return p.getSemiFuture();
 }
 
+folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
+OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
+  folly::Promise<std::unique_ptr<thrift::AdjacencyDatabase>> p;
+
+  thrift::LinkMonitorRequest request;
+  request.cmd = thrift::LinkMonitorCommand::DUMP_ADJS;
+
+  auto reply = requestReplyThrift<thrift::AdjacencyDatabase>(
+      thrift::OpenrModuleType::LINK_MONITOR, std::move(request));
+  if (reply.hasError()) {
+    p.setException(thrift::OpenrError(reply.error().errString));
+  } else {
+    p.setValue(
+        std::make_unique<thrift::AdjacencyDatabase>(std::move(reply.value())));
+  }
+
+  return p.getSemiFuture();
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::OpenrVersions>>
 OpenrCtrlHandler::semifuture_getOpenrVersion() {
   folly::Promise<std::unique_ptr<thrift::OpenrVersions>> p;

@@ -25,33 +25,7 @@ from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
 
 
-class DecisionCmdBase(OpenrCtrlCmd):
-    """
-    Base class for decision module cmd
-    """
-
-    def iter_dbs(
-        self,
-        container: Any,
-        dbs: Dict,
-        nodes: set,
-        parse_func: Callable[[Any, Dict], None],
-    ):
-        """
-        parse prefix databases from decision module
-
-        @param: container - container to store the generated data and returns
-        @param: dbs - decision_types.PrefixDbs or decision_types.AdjDbs
-        @param: nodes - set: the set of nodes for parsing
-        @param: parse_func - function: the parsing function
-        """
-        for (node, db) in sorted(dbs.items()):
-            if "all" not in nodes and node not in nodes:
-                continue
-            parse_func(container, db)
-
-
-class DecisionPrefixesCmd(DecisionCmdBase):
+class DecisionPrefixesCmd(OpenrCtrlCmd):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -71,7 +45,7 @@ class DecisionPrefixesCmd(DecisionCmdBase):
             )
 
 
-class DecisionRoutesComputedCmd(DecisionCmdBase):
+class DecisionRoutesComputedCmd(OpenrCtrlCmd):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -121,7 +95,7 @@ class DecisionRoutesUnInstallableCmd(OpenrCtrlCmd):
             utils.print_route_db(route_db, prefixes, labels)
 
 
-class DecisionAdjCmd(DecisionCmdBase):
+class DecisionAdjCmd(OpenrCtrlCmd):
     def _run(
         self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
     ) -> None:
@@ -136,7 +110,7 @@ class DecisionAdjCmd(DecisionCmdBase):
             utils.print_adjs_table(adjs_map, self.enable_color, None, None)
 
 
-class PathCmd(DecisionCmdBase):
+class PathCmd(OpenrCtrlCmd):
     def _run(
         self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int, area: str
     ) -> None:
@@ -414,7 +388,7 @@ class PathCmd(DecisionCmdBase):
             print()
 
 
-class DecisionValidateCmd(DecisionCmdBase):
+class DecisionValidateCmd(OpenrCtrlCmd):
     def _run(self, client: OpenrCtrl.Client, json=False, area: str = None) -> None:
         """Returns a status code. 0 = success, 1 = failure"""
         (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(

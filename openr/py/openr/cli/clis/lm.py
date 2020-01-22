@@ -20,7 +20,8 @@ from openr.cli.utils.utils import parse_nodes
 class LMCli(object):
     def __init__(self):
 
-        self.lm.add_command(LMLinksCli().links)
+        self.lm.add_command(LMLinksCli().links, name="links")
+        self.lm.add_command(LMAdjCli().adj, name="adj")
         self.lm.add_command(
             SetNodeOverloadCli().set_node_overload, name="set-node-overload"
         )
@@ -65,6 +66,17 @@ class LMLinksCli(object):
         """ Dump all known links of the current host """
 
         lm.LMLinksCmd(cli_opts).run(only_suppressed, json)
+
+
+class LMAdjCli(object):
+    @click.command()
+    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.pass_obj
+    def adj(cli_opts, json):  # noqa: B902
+        """ Dump all formed adjacencies of the current host """
+
+        nodes = parse_nodes(cli_opts, "")
+        lm.LMAdjCmd(cli_opts).run(nodes, json)
 
 
 class SetNodeOverloadCli(object):

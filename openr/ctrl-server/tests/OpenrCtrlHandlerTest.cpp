@@ -808,6 +808,12 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
     openrCtrlThriftClient_->sync_getBuildInfo(info);
     EXPECT_NE("", info.buildMode);
   }
+
+  {
+    thrift::AdjacencyDatabase adjDb;
+    openrCtrlThriftClient_->sync_getLinkMonitorAdjacencies(adjDb);
+    EXPECT_EQ(0, adjDb.adjacencies.size());
+  }
 }
 
 TEST_F(OpenrCtrlFixture, PersistentStoreApis) {

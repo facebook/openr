@@ -1214,6 +1214,41 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
     return fbzmq::Message::fromThriftObj(reply, serializer_);
   }
 
+  case thrift::LinkMonitorCommand::DUMP_ADJS: {
+    VLOG(2) << "Dump Adjs requested, reply with " << adjacencies_.size()
+            << " adjs";
+
+    // build adjacency database
+    auto adjDb = thrift::AdjacencyDatabase();
+    adjDb.thisNodeName = nodeId_;
+    adjDb.isOverloaded = config_.isOverloaded;
+    adjDb.nodeLabel = config_.nodeLabel;
+
+    // fill adjacency details
+    for (const auto& adjKv : adjacencies_) {
+      // NOTE: copy on purpose
+      auto adj = folly::copy(adjKv.second.adjacency);
+
+      // Set link overload bit
+      adj.isOverloaded = config_.overloadedLinks.count(adj.ifName) > 0;
+
+      // Override metric with link metric if it exists
+      adj.metric = folly::get_default(
+          config_.linkMetricOverrides, adj.ifName, adj.metric);
+
+      // Override metric with adj metric if it exists
+      thrift::AdjKey adjKey;
+      adjKey.nodeName = adj.otherNodeName;
+      adjKey.ifName = adj.ifName;
+      adj.metric =
+          folly::get_default(config_.adjMetricOverrides, adjKey, adj.metric);
+
+      adjDb.adjacencies.emplace_back(std::move(adj));
+    }
+
+    return fbzmq::Message::fromThriftObj(adjDb, serializer_);
+  }
+
   case thrift::LinkMonitorCommand::SET_ADJ_METRIC: {
     if (req.overrideMetric < 1) {
       LOG(ERROR) << "Minimum allowed metric value for adjacency is 1. Can't set"

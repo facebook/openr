@@ -309,6 +309,7 @@ service OpenrCtrl extends fb303.FacebookService {
   KvStore.PeersMap getKvStorePeersArea(
     1: string area
   ) throws (1: OpenrError error)
+
   //
   // LinkMonitor APIs
   //
@@ -359,6 +360,12 @@ service OpenrCtrl extends fb303.FacebookService {
    * Get the current link status information
    */
   LinkMonitor.DumpLinksReply getInterfaces() throws (1: OpenrError error)
+
+  /**
+   * Get the current adjacencies information
+   */
+  Lsdb.AdjacencyDatabase getLinkMonitorAdjacencies()
+    throws (1: OpenrError error)
 
   /**
    * Command to request OpenR version

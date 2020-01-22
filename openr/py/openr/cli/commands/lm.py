@@ -242,6 +242,20 @@ class BuildInfoCmd(LMCmdBase):
             )
 
 
+class LMAdjCmd(LMCmdBase):
+    def _run(self, client: OpenrCtrl.Client, nodes: set, json: bool) -> None:
+        adj_db = client.getLinkMonitorAdjacencies()
+
+        # adj_dbs is built with ONLY one single (node, adjDb). Ignpre bidir option
+        adjs_map = utils.adj_dbs_to_dict(
+            {adj_db.thisNodeName: adj_db}, nodes, False, self.iter_dbs
+        )
+        if json:
+            utils.print_json(adjs_map)
+        else:
+            utils.print_adjs_table(adjs_map, self.enable_color, None, None)
+
+
 class LMLinksCmd(LMCmdBase):
     def _run(self, client: OpenrCtrl.Client, only_suppressed: bool, json: bool) -> None:
         links = client.getInterfaces()
