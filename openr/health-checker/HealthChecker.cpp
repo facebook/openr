@@ -52,7 +52,9 @@ HealthChecker::HealthChecker(
       zmqContext, this, myNodeName, storeCmdUrl, storePubUrl);
 
   // Initialize sockets in event loop
-  scheduleTimeout(std::chrono::seconds(0), [this]() noexcept { prepare(); });
+  prepareTimeout_ =
+      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept { prepare(); });
+  prepareTimeout_->scheduleTimeout(std::chrono::seconds(0));
 }
 
 void

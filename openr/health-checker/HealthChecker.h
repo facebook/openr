@@ -19,6 +19,7 @@
 #include <fbzmq/service/stats/ThreadData.h>
 #include <folly/Range.h>
 #include <folly/SocketAddress.h>
+#include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
@@ -115,6 +116,9 @@ class HealthChecker final : public OpenrEventBase {
   // clients to interact with monitor and local kvStore
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
   std::unique_ptr<KvStoreClient> kvStoreClient_;
+
+  // Timer for initializing health checker
+  std::unique_ptr<folly::AsyncTimeout> prepareTimeout_;
 
   // Timer for submitting to monitor periodically
   std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
