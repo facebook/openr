@@ -889,6 +889,16 @@ TEST(KvStoreClient, ApiTest) {
       peers);
   store->run();
 
+  // Initialize thriftWrapper
+  auto thriftWrapper = std::make_shared<OpenrThriftServerWrapper>(
+      nodeId,
+      MonitorSubmitUrl{"inproc://monitor_submit"},
+      KvStoreLocalPubUrl{store->localPubUrl},
+      context);
+  thriftWrapper->addModuleType(
+      thrift::OpenrModuleType::KVSTORE, store->getKvStore());
+  thriftWrapper->run();
+
   // Create another OpenrEventBase instance for looping clients
   OpenrEventBase evb;
 
@@ -966,20 +976,26 @@ TEST(KvStoreClient, ApiTest) {
 
   // dump keys
   evb.scheduleTimeout(std::chrono::milliseconds(4), [&]() noexcept {
-    // dump keys
-    const auto maybeKeyVals = client1->dumpAllWithPrefix();
+    // dump keys using thrift flavor of KvStoreClient
+    const std::string localhost{"::1"};
+    auto port = thriftWrapper->getOpenrCtrlThriftPort();
+    auto client3 = std::make_shared<KvStoreClient>(
+        context, &evb, nodeId, folly::SocketAddress{localhost, port});
+    auto client4 = std::make_shared<KvStoreClient>(
+        context, &evb, nodeId, folly::SocketAddress{localhost, port});
+    const auto maybeKeyVals = client3->dumpAllWithPrefix();
     ASSERT_TRUE(maybeKeyVals.hasValue());
     ASSERT_EQ(3, maybeKeyVals->size());
     EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value);
     EXPECT_EQ("test_value2-client2", maybeKeyVals->at("test_key2").value);
     EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value);
 
-    const auto maybeKeyVals2 = client2->dumpAllWithPrefix();
+    const auto maybeKeyVals2 = client4->dumpAllWithPrefix();
     ASSERT_TRUE(maybeKeyVals2.hasValue());
     EXPECT_EQ(*maybeKeyVals, *maybeKeyVals2);
 
     // dump keys with a given prefix
-    const auto maybePrefixedKeyVals = client1->dumpAllWithPrefix("test");
+    const auto maybePrefixedKeyVals = client3->dumpAllWithPrefix("test");
     ASSERT_TRUE(maybePrefixedKeyVals.hasValue());
     ASSERT_EQ(2, maybePrefixedKeyVals->size());
     EXPECT_EQ("test_value1", maybePrefixedKeyVals->at("test_key1").value);
@@ -1069,6 +1085,9 @@ TEST(KvStoreClient, ApiTest) {
   evbThread.join();
 
   // Stop store
+  LOG(INFO) << "Stopping thriftServer";
+  thriftWrapper->stop();
+
   LOG(INFO) << "Stopping store";
   store->stop();
 }

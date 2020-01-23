@@ -24,7 +24,8 @@ KvStoreClient::KvStoreClient(
     std::string const& kvStoreLocalPubUrl,
     folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod,
     folly::Optional<std::chrono::milliseconds> recvTimeout)
-    : nodeId_(nodeId),
+    : useThriftClient_(false),
+      nodeId_(nodeId),
       eventBase_(eventBase),
       context_(context),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
@@ -697,7 +698,30 @@ folly::Expected<std::unordered_map<std::string, thrift::Value>, fbzmq::Error>
 KvStoreClient::dumpAllWithPrefix(
     const std::string& prefix /* = "" */,
     const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  CHECK(!useThriftClient_) << "dumpAllWithPrefix() NOT supported over Thrift";
+  // use thrift-port talking to kvstore
+  if (useThriftClient_) {
+    // Init openrCtrlClient to talk to kvStore
+    initOpenrCtrlClient();
+
+    if (!openrCtrlClient_) {
+      return folly::makeUnexpected(
+          fbzmq::Error(0, "can't init OpenrCtrlClient"));
+    }
+
+    thrift::Publication pub;
+    thrift::KeyDumpParams keyDumpParams;
+    keyDumpParams.prefix = prefix;
+    try {
+      openrCtrlClient_->sync_getKvStoreKeyValsFilteredArea(
+          pub, keyDumpParams, area);
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << "Failed to dump keys from KvStore. Exception: "
+                 << folly::exceptionStr(ex);
+      openrCtrlClient_ = nullptr;
+      return folly::makeUnexpected(fbzmq::Error(0, ex.what()));
+    }
+    return pub.keyVals;
+  }
 
   prepareKvStoreCmdSock();
   auto maybePub =
