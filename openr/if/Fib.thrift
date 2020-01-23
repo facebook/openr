@@ -35,24 +35,3 @@ struct PerfDatabase {
   1: string thisNodeName
   2: list<Lsdb.PerfEvents> eventInfo
 }
-
-enum FibCommand {
-  ROUTE_DB_GET = 1,
-  PERF_DB_GET = 2,
-  UNICAST_ROUTES_GET = 3,
-  MPLS_ROUTES_GET = 4,
-}
-
-struct UnicastRouteFilter {
-  1: list<string> prefixes
-}
-
-struct MslpRouteFilter {
-  1: list<i32> labels
-}
-
-struct FibRequest {
-  1: FibCommand cmd
-  2: optional UnicastRouteFilter unicastRouteFilter
-  3: optional MslpRouteFilter mslpRouteFilter
-}

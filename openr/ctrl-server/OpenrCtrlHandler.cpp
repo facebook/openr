@@ -16,6 +16,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
+#include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 
@@ -494,21 +495,8 @@ OpenrCtrlHandler::semifuture_getPrefixesByType(thrift::PrefixType prefixType) {
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDb() {
-  folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
-
-  thrift::FibRequest request;
-  request.cmd = thrift::FibCommand::ROUTE_DB_GET;
-
-  auto reply = requestReplyThrift<thrift::RouteDatabase>(
-      thrift::OpenrModuleType::FIB, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::RouteDatabase>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
+  return dynamic_cast<Fib*>(module.get())->getRouteDb();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
@@ -535,106 +523,35 @@ OpenrCtrlHandler::semifuture_getRouteDbComputed(
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
 OpenrCtrlHandler::semifuture_getUnicastRoutesFiltered(
     std::unique_ptr<std::vector<std::string>> prefixes) {
-  folly::Promise<std::unique_ptr<std::vector<thrift::UnicastRoute>>> p;
-
-  thrift::FibRequest request;
-  thrift::UnicastRouteFilter params;
-
-  params.prefixes = std::move(*prefixes);
-  request.cmd = thrift::FibCommand::UNICAST_ROUTES_GET;
-  request.unicastRouteFilter = std::move(params);
-
-  auto reply = requestReplyThrift<std::vector<thrift::UnicastRoute>>(
-      thrift::OpenrModuleType::FIB, std::move(request));
-
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<std::vector<thrift::UnicastRoute>>(
-        std::move(reply.value())));
-  }
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
+  return dynamic_cast<Fib*>(module.get())
+      ->getUnicastRoutes(std::move(*prefixes));
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
 OpenrCtrlHandler::semifuture_getUnicastRoutes() {
   folly::Promise<std::unique_ptr<std::vector<thrift::UnicastRoute>>> p;
-
-  thrift::FibRequest request;
-  request.cmd = thrift::FibCommand::UNICAST_ROUTES_GET;
-
-  auto reply = requestReplyThrift<std::vector<thrift::UnicastRoute>>(
-      thrift::OpenrModuleType::FIB, std::move(request));
-
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<std::vector<thrift::UnicastRoute>>(
-        std::move(reply.value())));
-  }
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
+  return dynamic_cast<Fib*>(module.get())->getUnicastRoutes({});
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::MplsRoute>>>
 OpenrCtrlHandler::semifuture_getMplsRoutes() {
-  folly::Promise<std::unique_ptr<std::vector<thrift::MplsRoute>>> p;
-
-  thrift::FibRequest request;
-  request.cmd = thrift::FibCommand::MPLS_ROUTES_GET;
-
-  auto reply = requestReplyThrift<std::vector<thrift::MplsRoute>>(
-      thrift::OpenrModuleType::FIB, std::move(request));
-
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<std::vector<thrift::MplsRoute>>(
-        std::move(reply.value())));
-  }
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
+  return dynamic_cast<Fib*>(module.get())->getMplsRoutes({});
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::MplsRoute>>>
 OpenrCtrlHandler::semifuture_getMplsRoutesFiltered(
     std::unique_ptr<std::vector<int32_t>> labels) {
-  folly::Promise<std::unique_ptr<std::vector<thrift::MplsRoute>>> p;
-
-  thrift::FibRequest request;
-  thrift::MslpRouteFilter params;
-
-  params.labels = std::move(*labels);
-  request.cmd = thrift::FibCommand::MPLS_ROUTES_GET;
-  request.mslpRouteFilter = std::move(params);
-
-  auto reply = requestReplyThrift<std::vector<thrift::MplsRoute>>(
-      thrift::OpenrModuleType::FIB, std::move(request));
-
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<std::vector<thrift::MplsRoute>>(
-        std::move(reply.value())));
-  }
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
+  return dynamic_cast<Fib*>(module.get())->getMplsRoutes(std::move(*labels));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
 OpenrCtrlHandler::semifuture_getPerfDb() {
-  folly::Promise<std::unique_ptr<thrift::PerfDatabase>> p;
-
-  thrift::FibRequest request;
-  request.cmd = thrift::FibCommand::PERF_DB_GET;
-
-  auto reply = requestReplyThrift<thrift::PerfDatabase>(
-      thrift::OpenrModuleType::FIB, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::PerfDatabase>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
+  return dynamic_cast<Fib*>(module.get())->getPerfDb();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>

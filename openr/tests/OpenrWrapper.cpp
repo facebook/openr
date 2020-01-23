@@ -560,15 +560,8 @@ OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
 template <class Serializer>
 thrift::RouteDatabase
 OpenrWrapper<Serializer>::fibDumpRouteDatabase() {
-  // create a request
-  thrift::FibRequest request;
-  request.cmd = thrift::FibCommand::ROUTE_DB_GET;
-
-  fibReqSock_.sendThriftObj(request, serializer_).value();
-  auto routeDb =
-      fibReqSock_.recvThriftObj<thrift::RouteDatabase>(serializer_).value();
-
-  return routeDb;
+  auto routes = fib_->getRouteDb().get();
+  return std::move(*routes);
 }
 
 template <class Serializer>

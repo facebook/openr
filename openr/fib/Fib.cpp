@@ -193,120 +193,9 @@ Fib::prepare() noexcept {
       });
 }
 
-// Received FibRequest
 folly::Expected<fbzmq::Message, fbzmq::Error>
 Fib::processRequestMsg(fbzmq::Message&& request) {
-  auto maybeThriftObj = request.readThriftObj<thrift::FibRequest>(serializer_);
-  if (maybeThriftObj.hasError()) {
-    LOG(ERROR) << "Error processing Fib Request: " << maybeThriftObj.error();
-    return folly::makeUnexpected(fbzmq::Error());
-  }
-
-  auto& thriftReq = maybeThriftObj.value();
-  VLOG(1) << "Fib: Request command: `"
-          << apache::thrift::TEnumTraits<thrift::FibCommand>::findName(
-                 thriftReq.cmd)
-          << "` received";
-  switch (thriftReq.cmd) {
-  case thrift::FibCommand::ROUTE_DB_GET: {
-    VLOG(2) << "Fib: RouteDb requested";
-    // send the thrift::RouteDatabase
-    thrift::RouteDatabase retRouteDb;
-    retRouteDb.thisNodeName = myNodeName_;
-    for (const auto& route : routeState_.unicastRoutes) {
-      retRouteDb.unicastRoutes.emplace_back(route.second);
-    }
-    for (const auto& route : routeState_.mplsRoutes) {
-      retRouteDb.mplsRoutes.emplace_back(route.second);
-    }
-    return fbzmq::Message::fromThriftObj(retRouteDb, serializer_);
-    break;
-  }
-  case thrift::FibCommand::PERF_DB_GET:
-    VLOG(2) << "Fib: PerfDb requested";
-    // send the thrift::PerfDatabase
-    return fbzmq::Message::fromThriftObj(dumpPerfDb(), serializer_);
-    break;
-  case thrift::FibCommand::UNICAST_ROUTES_GET: {
-    VLOG(2) << "Fib: RouteDb get filtered routes requested";
-    // return and send the vector<thrift::UnicastRoute>
-    std::vector<thrift::UnicastRoute> retRouteVec;
-    // the matched prefix after longest prefix matching and avoid duplicates
-    std::set<thrift::IpPrefix> matchPrefixSet;
-
-    // if the params is empty, return all routes
-    const auto& filters = thriftReq.unicastRouteFilter;
-    if (not filters.has_value() || filters.value().prefixes.size() == 0) {
-      for (const auto& routes : routeState_.unicastRoutes) {
-        retRouteVec.emplace_back(routes.second);
-      }
-      return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
-      break;
-    }
-
-    // get the params: list of prefix filters
-    const auto& prefixFilterVec = thriftReq.unicastRouteFilter.value().prefixes;
-
-    // longest prefix matching for each input string
-    for (const auto& prefixStr : prefixFilterVec) {
-      // try to convert the string prefix into CIDRNetwork
-      const auto maybePrefix =
-          folly::IPAddress::tryCreateNetwork(prefixStr, -1, true);
-      if (maybePrefix.hasError()) {
-        LOG(ERROR) << "Invalid IP address as prefix: " << prefixStr;
-        return folly::makeUnexpected(fbzmq::Error());
-      }
-      const auto inputPrefix = maybePrefix.value();
-
-      // do longest prefix match, add the matched prefix to the result set
-      const auto& matchedPrefix =
-          Fib::longestPrefixMatch(inputPrefix, routeState_.unicastRoutes);
-      if (matchedPrefix.has_value()) {
-        matchPrefixSet.insert(matchedPrefix.value());
-      }
-    }
-    // get the routes from the prefix set
-    for (const auto& prefix : matchPrefixSet) {
-      retRouteVec.emplace_back(routeState_.unicastRoutes[prefix]);
-    }
-    return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
-    break;
-  }
-  case thrift::FibCommand::MPLS_ROUTES_GET: {
-    VLOG(2) << "Fib: RouteDb get filtered MPLS routes requested";
-    // return and send the vector<thrift::MplsRoute>
-    std::vector<thrift::MplsRoute> retRouteVec;
-
-    // if the params is empty, return all MPLS routes
-    const auto& filters = thriftReq.mslpRouteFilter;
-    if (not filters.has_value() || filters.value().labels.size() == 0) {
-      for (const auto& routes : routeState_.mplsRoutes) {
-        retRouteVec.emplace_back(routes.second);
-      }
-      return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
-      break;
-    }
-
-    // get the params: list of MPLS label filters -> set of MPLS label filters
-    const auto& labelFilterVec = thriftReq.mslpRouteFilter.value().labels;
-    std::set<int32_t> labelFilterSet;
-    for (const auto& label : labelFilterVec) {
-      labelFilterSet.insert(label);
-    }
-
-    // get the filtered MPLS routes and avoid duplicates
-    for (const auto& routes : routeState_.mplsRoutes) {
-      if (labelFilterSet.find(routes.first) != labelFilterSet.end()) {
-        retRouteVec.emplace_back(routes.second);
-      }
-    }
-    return fbzmq::Message::fromThriftObj(retRouteVec, serializer_);
-    break;
-  }
-  default:
-    LOG(ERROR) << "Unknown command received";
-    return folly::makeUnexpected(fbzmq::Error());
-  }
+  LOG(FATAL) << "DEPRECATED. Unexpected request received";
 }
 
 std::optional<thrift::IpPrefix>
@@ -331,6 +220,129 @@ Fib::longestPrefixMatch(
     }
   }
   return matchedPrefix;
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
+Fib::getRouteDb() {
+  folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([p = std::move(p), this]() mutable {
+    thrift::RouteDatabase routeDb;
+    routeDb.thisNodeName = myNodeName_;
+    for (const auto& route : routeState_.unicastRoutes) {
+      routeDb.unicastRoutes.emplace_back(route.second);
+    }
+    for (const auto& route : routeState_.mplsRoutes) {
+      routeDb.mplsRoutes.emplace_back(route.second);
+    }
+    p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
+  });
+  return sf;
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
+Fib::getUnicastRoutes(std::vector<std::string> prefixes) {
+  folly::Promise<std::unique_ptr<std::vector<thrift::UnicastRoute>>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread(
+      [p = std::move(p), prefixes = std::move(prefixes), this]() mutable {
+        p.setValue(std::make_unique<std::vector<thrift::UnicastRoute>>(
+            getUnicastRoutesFiltered(std::move(prefixes))));
+      });
+  return sf;
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::MplsRoute>>>
+Fib::getMplsRoutes(std::vector<int32_t> labels) {
+  folly::Promise<std::unique_ptr<std::vector<thrift::MplsRoute>>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread(
+      [p = std::move(p), labels = std::move(labels), this]() mutable {
+        p.setValue(std::make_unique<std::vector<thrift::MplsRoute>>(
+            getMplsRoutesFiltered(std::move(labels))));
+      });
+  return sf;
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
+Fib::getPerfDb() {
+  folly::Promise<std::unique_ptr<thrift::PerfDatabase>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([p = std::move(p), this]() mutable {
+    p.setValue(std::make_unique<thrift::PerfDatabase>(dumpPerfDb()));
+  });
+  return sf;
+}
+
+std::vector<thrift::UnicastRoute>
+Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
+  // return and send the vector<thrift::UnicastRoute>
+  std::vector<thrift::UnicastRoute> retRouteVec;
+  // the matched prefix after longest prefix matching and avoid duplicates
+  std::set<thrift::IpPrefix> matchPrefixSet;
+
+  // if the params is empty, return all routes
+  if (prefixes.empty()) {
+    for (const auto& routes : routeState_.unicastRoutes) {
+      retRouteVec.emplace_back(routes.second);
+    }
+    return retRouteVec;
+  }
+
+  // longest prefix matching for each input string
+  for (const auto& prefixStr : prefixes) {
+    // try to convert the string prefix into CIDRNetwork
+    const auto maybePrefix =
+        folly::IPAddress::tryCreateNetwork(prefixStr, -1, true);
+    if (maybePrefix.hasError()) {
+      LOG(ERROR) << "Invalid IP address as prefix: " << prefixStr;
+      return retRouteVec;
+    }
+    const auto inputPrefix = maybePrefix.value();
+
+    // do longest prefix match, add the matched prefix to the result set
+    const auto& matchedPrefix =
+        Fib::longestPrefixMatch(inputPrefix, routeState_.unicastRoutes);
+    if (matchedPrefix.has_value()) {
+      matchPrefixSet.insert(matchedPrefix.value());
+    }
+  }
+
+  // get the routes from the prefix set
+  for (const auto& prefix : matchPrefixSet) {
+    retRouteVec.emplace_back(routeState_.unicastRoutes.at(prefix));
+  }
+
+  return retRouteVec;
+}
+
+std::vector<thrift::MplsRoute>
+Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
+  // return and send the vector<thrift::MplsRoute>
+  std::vector<thrift::MplsRoute> retRouteVec;
+
+  // if the params is empty, return all MPLS routes
+  if (labels.empty()) {
+    for (const auto& routes : routeState_.mplsRoutes) {
+      retRouteVec.emplace_back(routes.second);
+    }
+    return retRouteVec;
+  }
+
+  // get the params: list of MPLS label filters -> set of MPLS label filters
+  std::set<int32_t> labelFilterSet;
+  for (const auto& label : labels) {
+    labelFilterSet.insert(label);
+  }
+
+  // get the filtered MPLS routes and avoid duplicates
+  for (const auto& routes : routeState_.mplsRoutes) {
+    if (labelFilterSet.find(routes.first) != labelFilterSet.end()) {
+      retRouteVec.emplace_back(routes.second);
+    }
+  }
+
+  return retRouteVec;
 }
 
 void

@@ -86,6 +86,30 @@ class Fib final : public OpenrEventBase {
       const std::unordered_map<thrift::IpPrefix, thrift::UnicastRoute>&
           unicastRoutes);
 
+  /**
+   * NOTE: DEPRECATED! Use getUnicastRoutes or getMplsRoutes.
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getRouteDb();
+
+  /**
+   * Retrieve unicast routes for specified prefixes or IP. Returns all if
+   * no prefix is specified in filter list.
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
+  getUnicastRoutes(std::vector<std::string> prefixes);
+
+  /**
+   * Retrieve mpls routes for specified labels. Returns all if no label is
+   * specified in filter list.
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::MplsRoute>>>
+  getMplsRoutes(std::vector<int32_t> labels);
+
+  /**
+   * Retrieve performance related information from FIB module
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>> getPerfDb();
+
  private:
   // No-copy
   Fib(const Fib&) = delete;
@@ -112,6 +136,18 @@ class Fib final : public OpenrEventBase {
    * Convert local perfDb_ into PerfDataBase
    */
   thrift::PerfDatabase dumpPerfDb() const;
+
+  /**
+   * Retrieve unicast routes with specified filters
+   */
+  std::vector<thrift::UnicastRoute> getUnicastRoutesFiltered(
+      std::vector<std::string> prefixes);
+
+  /**
+   * Retrieve mpls routes with specified filters
+   */
+  std::vector<thrift::MplsRoute> getMplsRoutesFiltered(
+      std::vector<int32_t> labels);
 
   /**
    * Trigger add/del routes thrift calls
