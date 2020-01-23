@@ -63,8 +63,6 @@ DEFINE_string(
     "terragraph",
     "Domain name associated with this OpenR. No adjacencies will be formed "
     "to OpenR of other domains.");
-DEFINE_string(
-    chdir, "/tmp", "Change current directory to this after loading config");
 DEFINE_string(listen_addr, "*", "The IP address to bind to");
 DEFINE_string(
     config_store_filepath,

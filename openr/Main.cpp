@@ -233,9 +233,6 @@ main(int argc, char** argv) {
   // Hold time for advertising Prefix/Adj keys into KvStore
   const std::chrono::seconds kvHoldTime{2 * FLAGS_spark_keepalive_time_s};
 
-  // change directory after the config has been loaded
-  ::chdir(FLAGS_chdir.c_str());
-
   // Set up the zmq context for this process.
   Context context;
 

@@ -23,10 +23,8 @@ DEFINE_int32(
 DEFINE_int32(
     fib_thrift_port, 60100, "Thrift server port for the NetlinkFibHandler");
 DEFINE_string(
-    chdir, "/tmp", "Change current directory to this after loading config");
-DEFINE_string(
     platform_pub_url,
-    "ipc://platform-pub-url",
+    "ipc:///tmp/platform-pub-url",
     "Publisher URL for interface/address notifications");
 DEFINE_bool(
     enable_netlink_fib_handler,
@@ -44,11 +42,6 @@ int
 main(int argc, char** argv) {
   // Init everything
   folly::init(&argc, &argv);
-
-  // change directory if chdir specified
-  if (!FLAGS_chdir.empty()) {
-    ::chdir(FLAGS_chdir.c_str());
-  }
 
   fbzmq::Context context;
   fbzmq::ZmqEventLoop mainEventLoop;

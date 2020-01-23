@@ -32,7 +32,6 @@ DECLARE_int32(fib_handler_port);
 DECLARE_int32(spark_mcast_port);
 DECLARE_string(platform_pub_url);
 DECLARE_string(domain);
-DECLARE_string(chdir);
 DECLARE_string(listen_addr);
 DECLARE_string(config_store_filepath);
 DECLARE_bool(assume_drained);
