@@ -168,35 +168,6 @@ class KvStoreClient {
       std::unordered_map<std::string, thrift::Value> const& keyVals);
 
   /**
-   * This is a one-shot connect and dump method. It allows for simple way
-   * of obtaining full dump in "stateless" fashion - without maintaining any
-   * client. This version connects to multiple stores, and merges values
-   * from all of them, performing conflict resolution. The client will see
-   * the finall merged thrift::Values
-   *
-   * @param context - usual ZMQ context stuff
-   * @param kvStoreCmdUrls - the URL for the KvStore's CMD socket
-   * @param prefix - the key prefix to use for key dumping; empty dumps all
-   * @param recvTimeout - how to wait on receive operations
-   *
-   * @return first member of the pair is key-value map obtained by merging data
-   * from all stores. Null value if failed connecting and obtaining snapshot
-   * from ALL stores. If at least one store responds this will be non-empty.
-   * Second member is a list of unreached kvstore urls
-   */
-
-  static std::pair<
-      folly::Optional<std::unordered_map<std::string /* key */, thrift::Value>>,
-      std::vector<fbzmq::SocketUrl> /* unreached url */>
-  dumpAllWithPrefixMultiple(
-      fbzmq::Context& context,
-      const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
-      const std::string& prefix,
-      folly::Optional<std::chrono::milliseconds> recvTimeout = folly::none,
-      folly::Optional<int> maybeIpTos = folly::none,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
-
-  /**
    * Similar to the above but parses the values according to the ThriftType
    * passed. This will hide the version/originator & other details
    *
@@ -251,7 +222,8 @@ class KvStoreClient {
       const std::string& prefix,
       std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
       std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
-      const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
+      const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * APIs to subscribe/unsubscribe to value change of a key in KvStore

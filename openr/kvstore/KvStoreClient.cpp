@@ -600,113 +600,6 @@ KvStoreClient::dumpImpl(
   return sock.recvThriftObj<thrift::Publication>(serializer, recvTimeout);
 }
 
-// static
-/**
- * For simplicity of logic/code, this implementation shoots out multiple threads
- * to dump multiple stores. While not being very efficient on resource use, it
- * allows for very simple code logic, and does not require event loops: we
- * simply dump each KvStore in its thread directly, merging into shared array
- * as the results arrive.
- */
-std::pair<
-    folly::Optional<std::unordered_map<std::string /* key */, thrift::Value>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
-KvStoreClient::dumpAllWithPrefixMultiple(
-    fbzmq::Context& context,
-    const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
-    const std::string& prefix,
-    folly::Optional<std::chrono::milliseconds> recvTimeout /* folly::none */,
-    folly::Optional<int> maybeIpTos /* folly::none */,
-    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  // this protects the shared map
-  std::mutex m;
-  // we'll aggregate responses into this map
-  std::unordered_map<std::string, thrift::Value> merged;
-  // query threads will be here
-  std::vector<std::thread> threads;
-  std::atomic<size_t> failureCount{0};
-
-  // url to which fail to connect
-  folly::SharedMutex mutex;
-  std::vector<fbzmq::SocketUrl> unreachedUrls;
-
-  auto startTime = std::chrono::steady_clock::now();
-
-  for (auto const& url : kvStoreCmdUrls) {
-    threads.emplace_back([&]() {
-      apache::thrift::CompactSerializer serializer;
-      fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> sock(context);
-      auto ret = sock.connect(url);
-
-      if (not ret.hasValue()) {
-        VLOG(4) << "connect to " << std::string(url)
-                << " has failed: " << ret.error();
-        {
-          folly::SharedMutex::WriteHolder lock(mutex);
-          unreachedUrls.push_back(url);
-        }
-        failureCount++;
-        return;
-      }
-
-      if (maybeIpTos.hasValue()) {
-        const int ipTos = maybeIpTos.value();
-        const auto sockTos = sock.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
-        if (sockTos.hasError()) {
-          VLOG(4) << "Error setting ZMQ_TOS to " << ipTos << " "
-                  << sockTos.error();
-          {
-            folly::SharedMutex::WriteHolder lock(mutex);
-            unreachedUrls.push_back(url);
-          }
-          failureCount++;
-          return;
-        }
-      }
-
-      auto maybe = dumpImpl(sock, serializer, prefix, recvTimeout, area);
-
-      if (not maybe.hasValue()) {
-        VLOG(4) << "Dumping from " << std::string(url)
-                << " has failed: " << maybe.error();
-        {
-          folly::SharedMutex::WriteHolder lock(mutex);
-          unreachedUrls.push_back(url);
-        }
-        failureCount++;
-        return;
-      }
-
-      const auto& dump = maybe.value();
-      {
-        std::lock_guard<std::mutex> g(m);
-        KvStore::mergeKeyValues(merged, dump.keyVals);
-      }
-    });
-  } // for
-
-  // all threads will eventually terminate due to receive timeout, of course
-  // if you specified one. Otherwise we might be stuck waiting for dead
-  // KvStores. Omitting recvTimeout is thus not recommended, unless you use
-  // that for unittesting.
-  for (auto& t : threads) {
-    t.join();
-  }
-
-  if (failureCount >= kvStoreCmdUrls.size()) {
-    return std::make_pair(folly::none, unreachedUrls);
-  }
-
-  const auto elapsedTime =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - startTime)
-          .count();
-
-  LOG(INFO) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
-
-  return std::make_pair(merged, unreachedUrls);
-}
-
 /*
  * static method to dump KvStore key-val over multiple instances
  */
@@ -718,7 +611,8 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
-    const folly::SocketAddress& bindAddr) {
+    const folly::SocketAddress& bindAddr, /* folly::AsyncSocket::anyAddress()*/
+    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
   folly::EventBase evb;
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
   std::unordered_map<std::string, thrift::Value> merged;
@@ -753,7 +647,8 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
     VLOG(3) << "Successfully connected to Open/R with addr: "
             << sockAddr.getAddressStr();
 
-    calls.emplace_back(client->semifuture_getKvStoreKeyValsFiltered(params));
+    calls.emplace_back(
+        client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
   }
 
   // can't connect to ANY single Open/R instance

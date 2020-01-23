@@ -56,6 +56,9 @@ class MultipleStoreFixture : public ::testing::Test {
 
     // intialize thriftWrapper instances
     initThriftWrappers();
+
+    // initialize kvstoreClient instances
+    initKvStoreClient();
   }
 
   void
@@ -119,7 +122,10 @@ class MultipleStoreFixture : public ::testing::Test {
     thriftWrapper3_->addModuleType(
         thrift::OpenrModuleType::KVSTORE, store3->getKvStore());
     thriftWrapper3_->run();
+  }
 
+  void
+  initKvStoreClient() {
     // Create and initialize kvstore-clients
     auto port1 = thriftWrapper1_->getOpenrCtrlThriftPort();
     auto port2 = thriftWrapper2_->getOpenrCtrlThriftPort();
@@ -148,8 +154,7 @@ class MultipleStoreFixture : public ::testing::Test {
   std::shared_ptr<KvStoreClient> client1, client2, client3;
 
   const std::string localhost_{"::1"};
-  const std::string node1{"test_store1"}, node2{"test_store2"},
-      node3{"test_store3"};
+  const std::string node1{"node1"}, node2{"node2"}, node3{"node3"};
 
   std::vector<folly::SocketAddress> sockAddrs_;
 };
@@ -160,10 +165,68 @@ class MultipleStoreFixture : public ::testing::Test {
  *
  *  StoreA (pod-area)  --- (pod area) StoreB (plane area) -- (plane area) StoreC
  */
-class MultipleAreaFixture : public ::testing::Test {
+class MultipleAreaFixture : public MultipleStoreFixture {
  public:
   void
   SetUp() override {
+    // intialize kvstore instances
+    initKvStores();
+
+    // intialize thriftWrapper instances
+    initThriftWrappers();
+
+    // initialize kvstoreClient instances
+    initKvStoreClient();
+  }
+
+  void
+  TearDown() override {
+    thriftWrapper1_->stop();
+    thriftWrapper2_->stop();
+    thriftWrapper3_->stop();
+
+    store1->stop();
+    store2->stop();
+    store3->stop();
+  }
+
+  void
+  initKvStoreClient() {
+    // Create and initialize kvstore-clients
+    auto port1 = thriftWrapper1_->getOpenrCtrlThriftPort();
+    auto port2 = thriftWrapper2_->getOpenrCtrlThriftPort();
+    auto port3 = thriftWrapper3_->getOpenrCtrlThriftPort();
+    client1 = std::make_shared<KvStoreClient>(
+        context, &evb, node1, store1->localCmdUrl, store1->localPubUrl);
+
+    client2 = std::make_shared<KvStoreClient>(
+        context,
+        &evb,
+        node2,
+        store2->localCmdUrl,
+        store2->localPubUrl,
+        persistKeyTimer /* checkPersistKeyPeriod */);
+
+    client3 = std::make_shared<KvStoreClient>(
+        context, &evb, node3, store3->localCmdUrl, store3->localPubUrl);
+
+    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port1});
+    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port2});
+    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port3});
+  }
+
+  void
+  setUpPeers() {
+    // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
+    EXPECT_TRUE(client1->addPeers(peers1, planeArea).hasValue());
+    EXPECT_TRUE(client2->addPeers(peers2PlaneArea, planeArea).hasValue());
+    EXPECT_TRUE(client2->addPeers(peers2PodArea, podArea).hasValue());
+    EXPECT_TRUE(client3->addPeers(peers3, podArea).hasValue());
+  }
+
+  void
+  initKvStores() {
+    // wrapper to spin up a kvstore through KvStoreWrapper
     auto makeStoreWrapper =
         [this](std::string nodeId, std::unordered_set<std::string> areas) {
           const auto peers =
@@ -182,6 +245,7 @@ class MultipleAreaFixture : public ::testing::Test {
               areas);
         };
 
+    // spin up KvStore instances through KvStoreWrapper
     store1 =
         makeStoreWrapper(node1, std::unordered_set<std::string>{planeArea});
     store2 = makeStoreWrapper(
@@ -209,64 +273,15 @@ class MultipleAreaFixture : public ::testing::Test {
         std::piecewise_construct,
         std::forward_as_tuple(node2),
         std::forward_as_tuple(store2->getPeerSpec()));
-
-    // Create and initialize kvstore-clients
-    client1 = std::make_shared<KvStoreClient>(
-        context, &evb, node1, store1->localCmdUrl, store1->localPubUrl);
-
-    client2 = std::make_shared<KvStoreClient>(
-        context,
-        &evb,
-        node2,
-        store2->localCmdUrl,
-        store2->localPubUrl,
-        persistKeyTimer);
-
-    client3 = std::make_shared<KvStoreClient>(
-        context, &evb, node3, store3->localCmdUrl, store3->localPubUrl);
-
-    urls = {fbzmq::SocketUrl{store1->localCmdUrl},
-            fbzmq::SocketUrl{store2->localCmdUrl},
-            fbzmq::SocketUrl{store3->localCmdUrl}};
   }
-
-  void
-  setUpPeers() {
-    // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
-    EXPECT_TRUE(client1->addPeers(peers1, planeArea).hasValue());
-    EXPECT_TRUE(client2->addPeers(peers2PlaneArea, planeArea).hasValue());
-    EXPECT_TRUE(client2->addPeers(peers2PodArea, podArea).hasValue());
-    EXPECT_TRUE(client3->addPeers(peers3, podArea).hasValue());
-  }
-
-  void
-  TearDown() override {
-    store1->stop();
-    store2->stop();
-    store3->stop();
-  }
-
-  fbzmq::Context context;
-
-  OpenrEventBase evb;
-
-  std::shared_ptr<KvStoreWrapper> store1, store2, store3;
-
-  std::shared_ptr<KvStoreClient> client1, client2, client3;
 
   const std::string podArea{"pod-area"};
   const std::string planeArea{"plane-area"};
-  const std::string node1{"node1"};
-  const std::string node2{"node2"};
-  const std::string node3{"node3"};
   const std::chrono::milliseconds persistKeyTimer{100};
-  std::vector<fbzmq::SocketUrl> urls;
   std::unordered_map<std::string, thrift::PeerSpec> peers1;
   std::unordered_map<std::string, thrift::PeerSpec> peers2PlaneArea;
   std::unordered_map<std::string, thrift::PeerSpec> peers2PodArea;
   std::unordered_map<std::string, thrift::PeerSpec> peers3;
-
-  apache::thrift::CompactSerializer serializer;
 };
 
 /**
@@ -1500,18 +1515,28 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
         EXPECT_TRUE(client3->getKey("test_ttl_key_pod", podArea).hasValue());
       });
 
-  // verify dumpAllWithPrefixMultiple
+  // verify dumpAllWithThriftClientFromMultiple
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
-        auto maybe = KvStoreClient::dumpAllWithPrefixMultiple(
-            context, urls, "test_", 1000ms, 192, planeArea);
+        auto maybe = KvStoreClient::dumpAllWithThriftClientFromMultiple(
+            sockAddrs_,
+            "test_",
+            Constants::kServiceConnTimeout,
+            Constants::kServiceProcTimeout,
+            folly::AsyncSocket::anyAddress(),
+            planeArea);
         // there will be plane area key "test_ttl_key_plane"
         ASSERT_TRUE(maybe.first.hasValue());
         EXPECT_EQ(maybe.first.value().size(), 1);
 
         // only one key in pod Area too, "test_ttl_pod_area"
-        maybe = KvStoreClient::dumpAllWithPrefixMultiple(
-            context, urls, "test_", 1000ms, 192, podArea);
+        maybe = KvStoreClient::dumpAllWithThriftClientFromMultiple(
+            sockAddrs_,
+            "test_",
+            Constants::kServiceConnTimeout,
+            Constants::kServiceProcTimeout,
+            folly::AsyncSocket::anyAddress(),
+            podArea);
         // there will be plane area key "test_ttl_key_plane"
         ASSERT_TRUE(maybe.first.hasValue());
         EXPECT_EQ(maybe.first.value().size(), 1);
