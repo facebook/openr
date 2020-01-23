@@ -15,8 +15,7 @@
 #include <openr/nl/NetlinkMessage.h>
 #include <openr/nl/NetlinkTypes.h>
 
-namespace openr {
-namespace fbnl {
+namespace openr::fbnl {
 
 using EventVariant = std::variant<Route, Neighbor, IfAddress, Link>;
 
@@ -459,5 +458,4 @@ class NetlinkSocket {
       nullptr};
 };
 
-} // namespace fbnl
-} // namespace openr
+} // namespace openr::fbnl

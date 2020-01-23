@@ -8,8 +8,7 @@
 #include <openr/nl/NetlinkSocket.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 
-namespace openr {
-namespace fbnl {
+namespace openr::fbnl {
 
 NetlinkSocket::NetlinkSocket(
     fbzmq::ZmqEventLoop* evl,
@@ -1176,5 +1175,4 @@ NetlinkSocket::registerNeighborListener(
   neighborListener_ = std::move(callback);
 }
 
-} // namespace fbnl
-} // namespace openr
+} // namespace openr::fbnl

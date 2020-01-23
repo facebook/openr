@@ -14,8 +14,7 @@
 #include "openr/nl/NetlinkRoute.h"
 #include "openr/nl/NetlinkSocket.h"
 
-namespace openr {
-namespace fbnl {
+namespace openr::fbnl {
 
 uint32_t gSequenceNumber{0};
 
@@ -723,5 +722,4 @@ NetlinkProtocolSocket::getAllRoutes() {
   return std::move(routeCache_);
 }
 
-} // namespace fbnl
-} // namespace openr
+} // namespace openr::fbnl

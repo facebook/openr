@@ -26,8 +26,7 @@ extern "C" {
 #include <net/if.h>
 }
 
-namespace openr {
-namespace fbnl {
+namespace openr::fbnl {
 
 class NlException : public std::runtime_error {
  public:
@@ -619,5 +618,4 @@ using NlNeighbors =
 // keyed by link name
 using NlLinks = std::unordered_map<std::string, LinkAttribute>;
 
-} // namespace fbnl
-} // namespace openr
+} // namespace openr::fbnl

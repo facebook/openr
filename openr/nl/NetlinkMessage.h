@@ -24,8 +24,7 @@
 
 #include <openr/nl/NetlinkTypes.h>
 
-namespace openr {
-namespace fbnl {
+namespace openr::fbnl {
 class NetlinkSocket;
 
 constexpr uint16_t kMaxNlPayloadSize{4096};
@@ -269,5 +268,4 @@ class NetlinkProtocolSocket {
   std::vector<fbnl::Neighbor> neighborCache_{};
   std::vector<fbnl::Route> routeCache_{};
 };
-} // namespace fbnl
-} // namespace openr
+} // namespace openr::fbnl

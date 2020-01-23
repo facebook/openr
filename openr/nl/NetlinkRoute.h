@@ -28,8 +28,7 @@
 #define MPLS_IPTUNNEL_DST 1
 #endif
 
-namespace openr {
-namespace fbnl {
+namespace openr::fbnl {
 
 constexpr uint16_t kMaxLabels{16};
 constexpr uint32_t kLabelBosShift{8};
@@ -214,5 +213,4 @@ class NetlinkNeighborMessage final : public NetlinkMessage {
   struct nlmsghdr* msghdr_{nullptr};
 };
 
-} // namespace fbnl
-} // namespace openr
+} // namespace openr::fbnl
