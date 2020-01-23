@@ -20,7 +20,7 @@ class KvStorePoller {
  public:
   /* implicit */ KvStorePoller(std::vector<folly::SocketAddress>& sockAddrs);
 
-  ~KvStorePoller();
+  ~KvStorePoller() {}
 
   std::pair<
       folly::Optional<
