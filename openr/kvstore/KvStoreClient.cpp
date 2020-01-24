@@ -648,8 +648,13 @@ KvStoreClient::dumpAllWithThriftClientFromMultiple(
     VLOG(3) << "Successfully connected to Open/R with addr: "
             << sockAddr.getAddressStr();
 
-    calls.emplace_back(
-        client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
+    // Keep getKvStoreKeyValsFiltered() for backward compatibility purpose
+    if (area == thrift::KvStore_constants::kDefaultArea()) {
+      calls.emplace_back(client->semifuture_getKvStoreKeyValsFiltered(params));
+    } else {
+      calls.emplace_back(
+          client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
+    }
   }
 
   // can't connect to ANY single Open/R instance
