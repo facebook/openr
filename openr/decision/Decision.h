@@ -20,6 +20,7 @@
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>
 #include <folly/String.h>
+#include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -346,6 +347,9 @@ class Decision : public OpenrEventBase {
 
   // Timer for decrementing link holds for ordered fib programming
   std::unique_ptr<fbzmq::ZmqTimeout> orderedFibTimer_{nullptr};
+
+  // Timer for initial sync - cancellable
+  std::unique_ptr<folly::AsyncTimeout> initialSyncTimer_{nullptr};
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;

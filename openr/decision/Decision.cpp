@@ -1739,9 +1739,11 @@ Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
   }
 
   auto zmqContextPtr = &zmqContext;
-  scheduleTimeout(std::chrono::milliseconds(0), [this, zmqContextPtr] {
-    initialSync(*zmqContextPtr);
-  });
+  initialSyncTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this, zmqContextPtr]() noexcept {
+        initialSync(*zmqContextPtr);
+      });
+  initialSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
