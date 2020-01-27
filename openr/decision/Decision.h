@@ -217,6 +217,23 @@ class Decision : public OpenrEventBase {
 
   std::unordered_map<std::string, int64_t> getCounters();
 
+  /*
+   * Retrieve routeDb from specified node.
+   * If empty nodename specified, will return routeDb of its own
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getDecisionRouteDb(
+      std::string nodeName);
+
+  /*
+   * Retrieve AdjacencyDatabase as map.
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>> getDecisionAdjacencyDbs();
+
+  /*
+   * Retrieve PrefixDatabase as a map.
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>> getDecisionPrefixDbs();
+
  private:
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;

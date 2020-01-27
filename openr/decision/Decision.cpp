@@ -1746,53 +1746,49 @@ Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
 Decision::processRequestMsg(fbzmq::Message&& request) {
-  auto maybeThriftReq =
-      request.readThriftObj<thrift::DecisionRequest>(serializer_);
-  if (maybeThriftReq.hasError()) {
-    LOG(ERROR) << "Decision: Error processing request on REP socket: "
-               << maybeThriftReq.error();
-    return folly::makeUnexpected(fbzmq::Error());
-  }
+  LOG(FATAL) << "DEPRECATED. Unexpected request received";
+}
 
-  auto thriftReq = maybeThriftReq.value();
-  thrift::DecisionReply reply;
-  switch (thriftReq.cmd) {
-  case thrift::DecisionCommand::ROUTE_DB_GET: {
-    auto nodeName = thriftReq.nodeName;
+folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
+Decision::getDecisionRouteDb(std::string nodeName) {
+  folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([p = std::move(p), nodeName, this]() mutable {
+    thrift::RouteDatabase routeDb;
     if (nodeName.empty()) {
       nodeName = myNodeName_;
     }
-
     auto maybeRouteDb = spfSolver_->buildPaths(nodeName);
     if (maybeRouteDb.hasValue()) {
-      reply.routeDb = std::move(maybeRouteDb.value());
+      routeDb = std::move(maybeRouteDb.value());
     } else {
-      reply.routeDb.thisNodeName = nodeName;
+      routeDb.thisNodeName = nodeName;
     }
-    break;
-  }
+    p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
+  });
+  return sf;
+}
 
-  case thrift::DecisionCommand::ADJ_DB_GET: {
-    reply.adjDbs = spfSolver_->getAdjacencyDatabases();
-    break;
-  }
+folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
+Decision::getDecisionAdjacencyDbs() {
+  folly::Promise<std::unique_ptr<thrift::AdjDbs>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([p = std::move(p), this]() mutable {
+    auto adjDbs = spfSolver_->getAdjacencyDatabases();
+    p.setValue(std::make_unique<thrift::AdjDbs>(std::move(adjDbs)));
+  });
+  return sf;
+}
 
-  case thrift::DecisionCommand::PREFIX_DB_GET: {
-    reply.prefixDbs = spfSolver_->getPrefixDatabases();
-    break;
-  }
-
-  default: {
-    LOG(ERROR) << "Unexpected command received: "
-               << folly::get_default(
-                      thrift::_DecisionCommand_VALUES_TO_NAMES,
-                      thriftReq.cmd,
-                      "UNKNOWN");
-    return folly::makeUnexpected(fbzmq::Error());
-  }
-  }
-
-  return fbzmq::Message::fromThriftObj(reply, serializer_);
+folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
+Decision::getDecisionPrefixDbs() {
+  folly::Promise<std::unique_ptr<thrift::PrefixDbs>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([p = std::move(p), this]() mutable {
+    auto prefixDbs = spfSolver_->getPrefixDatabases();
+    p.setValue(std::make_unique<thrift::PrefixDbs>(std::move(prefixDbs)));
+  });
+  return sf;
 }
 
 std::unordered_map<std::string, int64_t>

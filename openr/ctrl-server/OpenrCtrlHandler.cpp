@@ -16,6 +16,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
+#include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
@@ -499,27 +500,6 @@ OpenrCtrlHandler::semifuture_getRouteDb() {
   return dynamic_cast<Fib*>(module.get())->getRouteDb();
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
-OpenrCtrlHandler::semifuture_getRouteDbComputed(
-    std::unique_ptr<std::string> nodeName) {
-  folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
-
-  thrift::DecisionRequest request;
-  request.cmd = thrift::DecisionCommand::ROUTE_DB_GET;
-  request.nodeName = std::move(*nodeName);
-
-  auto reply = requestReplyThrift<thrift::DecisionReply>(
-      thrift::OpenrModuleType::DECISION, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::RouteDatabase>(std::move(reply->routeDb)));
-  }
-
-  return p.getSemiFuture();
-}
-
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
 OpenrCtrlHandler::semifuture_getUnicastRoutesFiltered(
     std::unique_ptr<std::vector<std::string>> prefixes) {
@@ -554,41 +534,27 @@ OpenrCtrlHandler::semifuture_getPerfDb() {
   return dynamic_cast<Fib*>(module.get())->getPerfDb();
 }
 
+//
+// Decision APIs
+//
+//
+folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
+OpenrCtrlHandler::semifuture_getRouteDbComputed(
+    std::unique_ptr<std::string> nodeName) {
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::DECISION);
+  return dynamic_cast<Decision*>(module.get())->getDecisionRouteDb(*nodeName);
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
 OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
-  folly::Promise<std::unique_ptr<thrift::AdjDbs>> p;
-
-  thrift::DecisionRequest request;
-  request.cmd = thrift::DecisionCommand::ADJ_DB_GET;
-
-  auto reply = requestReplyThrift<thrift::DecisionReply>(
-      thrift::OpenrModuleType::DECISION, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::AdjDbs>(std::move(reply->adjDbs)));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::DECISION);
+  return dynamic_cast<Decision*>(module.get())->getDecisionAdjacencyDbs();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
 OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
-  folly::Promise<std::unique_ptr<thrift::PrefixDbs>> p;
-
-  thrift::DecisionRequest request;
-  request.cmd = thrift::DecisionCommand::PREFIX_DB_GET;
-
-  auto reply = requestReplyThrift<thrift::DecisionReply>(
-      thrift::OpenrModuleType::DECISION, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::PrefixDbs>(std::move(reply->prefixDbs)));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::DECISION);
+  return dynamic_cast<Decision*>(module.get())->getDecisionPrefixDbs();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::HealthCheckerInfo>>

@@ -10,7 +10,6 @@ namespace cpp2 openr.thrift
 namespace py openr.Decision
 namespace py3 openr.thrift
 
-include "Fib.thrift"
 include "Lsdb.thrift"
 
 typedef map<string, Lsdb.AdjacencyDatabase>
@@ -22,27 +21,3 @@ typedef map<string, Lsdb.AdjacencyDatabase>
 typedef map<string, Lsdb.PrefixDatabase>
   (cpp.type = "std::unordered_map<std::string, openr::thrift::PrefixDatabase>")
   PrefixDbs
-
-
-// query info in Decision
-enum DecisionCommand {
-  // route database for a given node
-  ROUTE_DB_GET = 1,
-  // adjacency databases
-  ADJ_DB_GET = 2,
-  // prefix databases
-  PREFIX_DB_GET = 3,
-}
-
-struct DecisionRequest {
-  1: DecisionCommand cmd
-  // If nodeName is empty then current node's routes will be returned in
-  // response. Only applies to ROUTE_DB_GET
-  2: string nodeName
-}
-
-struct DecisionReply {
-  1: Fib.RouteDatabase routeDb
-  2: AdjDbs adjDbs
-  3: PrefixDbs prefixDbs
-}

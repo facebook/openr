@@ -95,14 +95,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   semifuture_getPrefixesByType(thrift::PrefixType prefixType) override;
 
   //
-  // Route APIs
+  // Fib APIs
   //
 
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
   semifuture_getRouteDb() override;
-
-  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
-  semifuture_getRouteDbComputed(std::unique_ptr<std::string> nodeName) override;
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
   semifuture_getUnicastRoutesFiltered(
@@ -134,6 +131,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
   semifuture_getDecisionPrefixDbs() override;
+
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
+  semifuture_getRouteDbComputed(std::unique_ptr<std::string> nodeName) override;
 
   //
   // HealthChecker APIs
