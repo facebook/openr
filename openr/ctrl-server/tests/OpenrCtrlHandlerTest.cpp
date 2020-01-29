@@ -671,14 +671,19 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     std::atomic<int> received{0};
     const std::string key{"snoop-key"};
     auto handler = openrThriftServerWrapper_->getOpenrCtrlHandler();
-    auto subscription = handler->subscribeKvStore().subscribe(
-        [&received, key](thrift::Publication&& pub) {
-          EXPECT_EQ(1, pub.keyVals.size());
-          ASSERT_EQ(1, pub.keyVals.count(key));
-          EXPECT_EQ("value1", pub.keyVals.at(key).value.value());
-          EXPECT_EQ(received + 1, pub.keyVals.at(key).version);
-          received++;
-        });
+    auto subscription =
+        handler->subscribeKvStore().toClientStream().subscribeExTry(
+            folly::getEventBase(), [&received, key](auto&& t) {
+              if (!t.hasValue()) {
+                return;
+              }
+              auto& pub = *t;
+              EXPECT_EQ(1, pub.keyVals.size());
+              ASSERT_EQ(1, pub.keyVals.count(key));
+              EXPECT_EQ("value1", pub.keyVals.at(key).value.value());
+              EXPECT_EQ(received + 1, pub.keyVals.at(key).version);
+              received++;
+            });
     EXPECT_EQ(1, handler->getNumKvStorePublishers());
     kvStoreWrapper->setKey(
         key, createThriftValue(1, "node1", std::string("value1")));
@@ -720,7 +725,12 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
     auto subscription =
         std::move(responseAndSubscription.stream)
-            .subscribe([&received, key](thrift::Publication&& pub) {
+            .toClientStream()
+            .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
+              if (!t.hasValue()) {
+                return;
+              }
+              auto& pub = *t;
               EXPECT_EQ(1, pub.keyVals.size());
               ASSERT_EQ(1, pub.keyVals.count(key));
               EXPECT_EQ("value1", pub.keyVals.at(key).value.value());
