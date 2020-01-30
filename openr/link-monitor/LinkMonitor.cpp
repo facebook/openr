@@ -14,6 +14,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/MapUtil.h>
 #include <folly/Memory.h>
+#include <folly/futures/Future.h>
 #include <folly/gen/Base.h>
 #include <folly/system/ThreadName.h>
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>

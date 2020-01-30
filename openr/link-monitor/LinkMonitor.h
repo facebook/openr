@@ -21,6 +21,7 @@
 #include <folly/CppAttributes.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
+#include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
 #include <glog/logging.h>

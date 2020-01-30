@@ -15,6 +15,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
+#include <folly/futures/Future.h>
 
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
@@ -54,6 +55,32 @@ class PrefixManager final : public OpenrEventBase {
   // get prefix withdraw counter
   int64_t getPrefixWithdrawCounter();
 
+  /*
+   * Public API for PrefixManager operations, including:
+   *  - add prefixes
+   *  - withdraw prefixes
+   *  - withdraw prefixes by type
+   *  - sync prefixes by type
+   *  - dump all prefixes
+   */
+  folly::SemiFuture<folly::Unit> advertisePrefixes(
+      std::vector<thrift::PrefixEntry> prefixes);
+
+  folly::SemiFuture<folly::Unit> withdrawPrefixes(
+      std::vector<thrift::PrefixEntry> prefixes);
+
+  folly::SemiFuture<folly::Unit> withdrawPrefixesByType(
+      thrift::PrefixType prefixType);
+
+  folly::SemiFuture<folly::Unit> syncPrefixesByType(
+      thrift::PrefixType prefixType, std::vector<thrift::PrefixEntry> prefixes);
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
+  dumpAllPrefixes();
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
+  dumpAllPrefixesWithType(thrift::PrefixType prefixType);
+
  private:
   void outputState();
   // Update persistent store with non-ephemeral prefix entries
@@ -73,7 +100,7 @@ class PrefixManager final : public OpenrEventBase {
   bool removePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
   bool removePrefixesByType(thrift::PrefixType type);
   // replace all prefixes of @type w/ @prefixes
-  bool syncPrefixesByType(
+  bool syncPrefixes(
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
 

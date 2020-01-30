@@ -19,8 +19,8 @@
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
-#include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/link-monitor/LinkMonitor.h>
+#include <openr/prefix-manager/PrefixManager.h>
 
 namespace openr {
 
@@ -412,98 +412,47 @@ OpenrCtrlHandler::getBuildInfo(thrift::BuildInfo& _buildInfo) {
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_advertisePrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
-  thrift::PrefixManagerRequest request;
-  request.cmd = thrift::PrefixManagerCommand::ADD_PREFIXES;
-  request.prefixes = std::move(*prefixes);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::PREFIX_MANAGER,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
+  return dynamic_cast<PrefixManager*>(module.get())
+      ->advertisePrefixes(std::move(*prefixes));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_withdrawPrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
-  thrift::PrefixManagerRequest request;
-  request.cmd = thrift::PrefixManagerCommand::WITHDRAW_PREFIXES;
-  request.prefixes = std::move(*prefixes);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::PREFIX_MANAGER,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
+  return dynamic_cast<PrefixManager*>(module.get())
+      ->withdrawPrefixes(std::move(*prefixes));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_withdrawPrefixesByType(
     thrift::PrefixType prefixType) {
-  thrift::PrefixManagerRequest request;
-  request.cmd = thrift::PrefixManagerCommand::WITHDRAW_PREFIXES_BY_TYPE;
-  request.type = prefixType;
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::PREFIX_MANAGER,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
+  return dynamic_cast<PrefixManager*>(module.get())
+      ->withdrawPrefixesByType(prefixType);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_syncPrefixesByType(
     thrift::PrefixType prefixType,
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
-  thrift::PrefixManagerRequest request;
-  request.cmd = thrift::PrefixManagerCommand::SYNC_PREFIXES_BY_TYPE;
-  request.prefixes = std::move(*prefixes);
-  request.type = prefixType;
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::PREFIX_MANAGER,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
+  return dynamic_cast<PrefixManager*>(module.get())
+      ->syncPrefixesByType(prefixType, std::move(*prefixes));
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
 OpenrCtrlHandler::semifuture_getPrefixes() {
-  folly::Promise<std::unique_ptr<std::vector<thrift::PrefixEntry>>> p;
-
-  thrift::PrefixManagerRequest request;
-  request.cmd = thrift::PrefixManagerCommand::GET_ALL_PREFIXES;
-
-  auto reply = requestReplyThrift<thrift::PrefixManagerResponse>(
-      thrift::OpenrModuleType::PREFIX_MANAGER, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else if (not reply->success) {
-    p.setException(thrift::OpenrError(reply->message));
-  } else {
-    p.setValue(std::make_unique<std::vector<thrift::PrefixEntry>>(
-        std::move(reply->prefixes)));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
+  return dynamic_cast<PrefixManager*>(module.get())->dumpAllPrefixes();
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
 OpenrCtrlHandler::semifuture_getPrefixesByType(thrift::PrefixType prefixType) {
-  folly::Promise<std::unique_ptr<std::vector<thrift::PrefixEntry>>> p;
-
-  thrift::PrefixManagerRequest request;
-  request.cmd = thrift::PrefixManagerCommand::GET_PREFIXES_BY_TYPE;
-  request.type = prefixType;
-
-  auto reply = requestReplyThrift<thrift::PrefixManagerResponse>(
-      thrift::OpenrModuleType::PREFIX_MANAGER, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else if (not reply->success) {
-    p.setException(thrift::OpenrError(reply->message));
-  } else {
-    p.setValue(std::make_unique<std::vector<thrift::PrefixEntry>>(
-        std::move(reply->prefixes)));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
+  return dynamic_cast<PrefixManager*>(module.get())
+      ->dumpAllPrefixesWithType(prefixType);
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>

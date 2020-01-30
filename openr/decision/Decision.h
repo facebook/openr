@@ -20,6 +20,7 @@
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>
 #include <folly/String.h>
+#include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
