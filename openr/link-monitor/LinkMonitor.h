@@ -149,6 +149,42 @@ class LinkMonitor final : public OpenrEventBase {
       const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
+  /*
+   * Set/unset node overload
+   */
+  folly::SemiFuture<folly::Unit> setNodeOverload(bool isOverloaded);
+
+  /*
+   * Set/unset link/interface overload
+   */
+  folly::SemiFuture<folly::Unit> setInterfaceOverload(
+      std::string interfaceName, bool isOverloaded);
+
+  /*
+   * Set/unset link/interface metric
+   */
+  folly::SemiFuture<folly::Unit> setLinkMetric(
+      std::string interfaceName, std::optional<int32_t> overrideMetric);
+
+  /*
+   * Set/unset node adj metric
+   */
+  folly::SemiFuture<folly::Unit> setAdjacencyMetric(
+      std::string interfaceName,
+      std::string adjNodeName,
+      std::optional<int32_t> overrideMetric);
+
+  /*
+   * Dump interface/link information
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
+
+  /*
+   * Dump adjacency database information
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
+  getLinkMonitorAdjacencies();
+
  private:
   // make no-copy
   LinkMonitor(const LinkMonitor&) = delete;

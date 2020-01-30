@@ -1081,102 +1081,196 @@ LinkMonitor::syncInterfaces() {
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
 LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
-  const auto maybeReq =
-      request.readThriftObj<thrift::LinkMonitorRequest>(serializer_);
-  if (maybeReq.hasError()) {
-    LOG(ERROR) << "Error receiving LinkMonitorRequest: " << maybeReq.error();
-    return folly::makeUnexpected(fbzmq::Error());
-  }
+  LOG(FATAL) << "DEPRECATED. Unexpected request received";
+}
 
-  // NOTE: add commands which set/unset overload bit or metric values will
-  // immediately advertise new adjacencies into the KvStore.
-  const auto& req = maybeReq.value();
-  switch (req.cmd) {
-  case thrift::LinkMonitorCommand::SET_OVERLOAD:
-    if (config_.isOverloaded) {
-      LOG(INFO) << "Skip update. Node already in overloaded state";
-      break;
-    }
-    SYSLOG(INFO) << "Setting overload bit for node";
-    config_.isOverloaded = true;
-    advertiseAdjacencies();
-    break;
-
-  case thrift::LinkMonitorCommand::UNSET_OVERLOAD:
-    if (not config_.isOverloaded) {
-      LOG(INFO) << "Skip update. Node is currently NOT in overloaded state";
-      break;
-    }
-    SYSLOG(INFO) << "Unsetting overload bit for node";
-    config_.isOverloaded = false;
-    advertiseAdjacencies();
-    break;
-
-  case thrift::LinkMonitorCommand::SET_LINK_OVERLOAD:
-    if (0 == interfaces_.count(req.interfaceName)) {
-      LOG(ERROR) << "SET_LINK_OVERLOAD requested for unknown interface: "
-                 << req.interfaceName;
-      break;
-    }
-    if (config_.overloadedLinks.count(req.interfaceName)) {
-      LOG(INFO) << "Skip link overload update. Interface: " << req.interfaceName
-                << " is already overloaded";
-      break;
-    }
-    SYSLOG(INFO) << "Setting overload bit for interface " << req.interfaceName;
-    config_.overloadedLinks.insert(req.interfaceName);
-    advertiseAdjacenciesThrottled_->operator()();
-    break;
-
-  case thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD:
-    if (config_.overloadedLinks.erase(req.interfaceName)) {
-      SYSLOG(INFO) << "Unsetting overload bit for interface "
-                   << req.interfaceName;
-      advertiseAdjacenciesThrottled_->operator()();
+// NOTE: add commands which set/unset overload bit or metric values will
+// immediately advertise new adjacencies into the KvStore.
+folly::SemiFuture<folly::Unit>
+LinkMonitor::setNodeOverload(bool isOverloaded) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p), isOverloaded]() mutable {
+    std::string cmd =
+        isOverloaded ? "SET_NODE_OVERLOAD" : "UNSET_NODE_OVERLOAD";
+    if (config_.isOverloaded == isOverloaded) {
+      LOG(INFO) << "Skip cmd: [" << cmd << "]. Node already in target state: ["
+                << (isOverloaded ? "OVERLOADED" : "NOT OVERLOADED") << "]";
     } else {
-      LOG(WARNING) << "Got unset-overload-bit request for unknown link "
-                   << req.interfaceName;
+      config_.isOverloaded = isOverloaded;
+      SYSLOG(INFO) << (isOverloaded ? "Setting" : "Unsetting")
+                   << " overload bit for node";
+      advertiseAdjacencies();
     }
-    break;
+    p.setValue();
+  });
+  return sf;
+}
 
-  case thrift::LinkMonitorCommand::SET_LINK_METRIC:
-    if (0 == interfaces_.count(req.interfaceName)) {
-      LOG(ERROR) << "SET_LINK_METRIC requested for unknown interface: "
-                 << req.interfaceName;
-      break;
-    }
-    if (req.overrideMetric < 1) {
-      LOG(ERROR) << "Minimum allowed metric value for link is 1. Can't set "
-                 << "a value smaller than that. Got " << req.overrideMetric;
-      break;
-    }
-    if (config_.linkMetricOverrides[req.interfaceName] == req.overrideMetric) {
-      LOG(INFO) << "Skip link metric update. Overridden metric: "
-                << req.overrideMetric
-                << " already set for interface: " << req.interfaceName;
-      break;
-    }
-    SYSLOG(INFO) << "Overriding metric for interface " << req.interfaceName
-                 << " to " << req.overrideMetric;
-    config_.linkMetricOverrides[req.interfaceName] = req.overrideMetric;
-    advertiseAdjacenciesThrottled_->operator()();
-    break;
+folly::SemiFuture<folly::Unit>
+LinkMonitor::setInterfaceOverload(
+    std::string interfaceName, bool isOverloaded) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread(
+      [this, p = std::move(p), interfaceName, isOverloaded]() mutable {
+        std::string cmd =
+            isOverloaded ? "SET_LINK_OVERLOAD" : "UNSET_LINK_OVERLOAD";
+        if (0 == interfaces_.count(interfaceName)) {
+          LOG(ERROR) << "Skip cmd: [" << cmd
+                     << "] due to unknown interface: " << interfaceName;
+          p.setValue();
+          return;
+        }
 
-  case thrift::LinkMonitorCommand::UNSET_LINK_METRIC:
-    if (config_.linkMetricOverrides.erase(req.interfaceName)) {
-      SYSLOG(INFO) << "Removing metric override for interface "
-                   << req.interfaceName;
-      advertiseAdjacenciesThrottled_->operator()();
+        if (isOverloaded && config_.overloadedLinks.count(interfaceName)) {
+          LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
+                    << " is already overloaded";
+          p.setValue();
+          return;
+        }
+
+        if (!isOverloaded && !config_.overloadedLinks.count(interfaceName)) {
+          LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
+                    << " is currently NOT overloaded";
+          p.setValue();
+          return;
+        }
+
+        if (isOverloaded) {
+          config_.overloadedLinks.insert(interfaceName);
+          SYSLOG(INFO) << "Setting overload bit for interface "
+                       << interfaceName;
+        } else {
+          config_.overloadedLinks.erase(interfaceName);
+          SYSLOG(INFO) << "Unsetting overload bit for interface "
+                       << interfaceName;
+        }
+        advertiseAdjacenciesThrottled_->operator()();
+        p.setValue();
+      });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+LinkMonitor::setLinkMetric(
+    std::string interfaceName, std::optional<int32_t> overrideMetric) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread(
+      [this, p = std::move(p), interfaceName, overrideMetric]() mutable {
+        std::string cmd = overrideMetric.has_value() ? "SET_LINK_METRIC"
+                                                     : "UNSET_LINK_METRIC";
+        if (0 == interfaces_.count(interfaceName)) {
+          LOG(ERROR) << "Skip cmd: [" << cmd
+                     << "] due to unknown interface: " << interfaceName;
+          p.setValue();
+          return;
+        }
+
+        if (overrideMetric.has_value() &&
+            config_.linkMetricOverrides.count(interfaceName) &&
+            config_.linkMetricOverrides[interfaceName] ==
+                overrideMetric.value()) {
+          LOG(INFO) << "Skip cmd: " << cmd
+                    << ". Overridden metric: " << overrideMetric.value()
+                    << " already set for interface: " << interfaceName;
+          p.setValue();
+          return;
+        }
+
+        if (!overrideMetric.has_value() &&
+            !config_.linkMetricOverrides.count(interfaceName)) {
+          LOG(INFO) << "Skip cmd: " << cmd
+                    << ". No overridden metric found for interface: "
+                    << interfaceName;
+          p.setValue();
+          return;
+        }
+
+        if (overrideMetric.has_value()) {
+          config_.linkMetricOverrides[interfaceName] = overrideMetric.value();
+          SYSLOG(INFO) << "Overriding metric for interface " << interfaceName
+                       << " to " << overrideMetric.value();
+        } else {
+          config_.linkMetricOverrides.erase(interfaceName);
+          SYSLOG(INFO) << "Removing metric override for interface "
+                       << interfaceName;
+        }
+        advertiseAdjacenciesThrottled_->operator()();
+        p.setValue();
+      });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+LinkMonitor::setAdjacencyMetric(
+    std::string interfaceName,
+    std::string adjNodeName,
+    std::optional<int32_t> overrideMetric) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        interfaceName,
+                        adjNodeName,
+                        overrideMetric]() mutable {
+    std::string cmd = overrideMetric.has_value() ? "SET_ADJACENCY_METRIC"
+                                                 : "UNSET_ADJACENCY_METRIC";
+    thrift::AdjKey adjKey;
+    adjKey.ifName = interfaceName;
+    adjKey.nodeName = adjNodeName;
+
+    // Invalid adj encountered. Ignore
+    if (!adjacencies_.count(std::make_pair(adjNodeName, interfaceName))) {
+      LOG(ERROR) << "Skip cmd: [" << cmd << "] due to unknown adj: ["
+                 << adjNodeName << ":" << interfaceName << "]";
+      p.setValue();
+      return;
+    }
+
+    if (overrideMetric.has_value() &&
+        config_.adjMetricOverrides.count(adjKey) &&
+        config_.adjMetricOverrides[adjKey] == overrideMetric.value()) {
+      LOG(INFO) << "Skip cmd: " << cmd
+                << ". Overridden metric: " << overrideMetric.value()
+                << " already set for: [" << adjNodeName << ":" << interfaceName
+                << "]";
+      p.setValue();
+      return;
+    }
+
+    if (!overrideMetric.has_value() &&
+        !config_.adjMetricOverrides.count(adjKey)) {
+      LOG(INFO) << "Skip cmd: " << cmd << ". No overridden metric found for: ["
+                << adjNodeName << ":" << interfaceName << "]";
+      p.setValue();
+      return;
+    }
+
+    if (overrideMetric.has_value()) {
+      config_.adjMetricOverrides[adjKey] = overrideMetric.value();
+      SYSLOG(INFO) << "Overriding metric for adjacency: [" << adjNodeName << ":"
+                   << interfaceName << "] to " << overrideMetric.value();
     } else {
-      LOG(WARNING) << "Got link-metric-unset request for unknown interface "
-                   << req.interfaceName;
+      config_.adjMetricOverrides.erase(adjKey);
+      SYSLOG(INFO) << "Removing metric override for adjacency: [" << adjNodeName
+                   << ":" << interfaceName << "]";
     }
-    break;
+    advertiseAdjacenciesThrottled_->operator()();
+    p.setValue();
+  });
+  return sf;
+}
 
-  case thrift::LinkMonitorCommand::DUMP_LINKS: {
-    VLOG(2) << "Dump Links requested, replying with " << interfaces_.size()
-            << " links";
+folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
+LinkMonitor::getInterfaces() {
+  VLOG(2) << "Dump Links requested, replying withV " << interfaces_.size()
+          << " links";
 
+  folly::Promise<std::unique_ptr<thrift::DumpLinksReply>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p)]() mutable {
     // reply with the dump of known interfaces and their states
     thrift::DumpLinksReply reply;
     reply.thisNodeName = nodeId_;
@@ -1210,16 +1304,21 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
 
       reply.interfaceDetails.emplace(ifName, std::move(ifDetails));
     }
+    p.setValue(std::make_unique<thrift::DumpLinksReply>(std::move(reply)));
+  });
+  return sf;
+}
 
-    return fbzmq::Message::fromThriftObj(reply, serializer_);
-  }
+folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
+LinkMonitor::getLinkMonitorAdjacencies() {
+  VLOG(2) << "Dump adj requested, reply with " << adjacencies_.size()
+          << " adjs";
 
-  case thrift::LinkMonitorCommand::DUMP_ADJS: {
-    VLOG(2) << "Dump Adjs requested, reply with " << adjacencies_.size()
-            << " adjs";
-
+  folly::Promise<std::unique_ptr<thrift::AdjacencyDatabase>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p)]() mutable {
     // build adjacency database
-    auto adjDb = thrift::AdjacencyDatabase();
+    thrift::AdjacencyDatabase adjDb;
     adjDb.thisNodeName = nodeId_;
     adjDb.isOverloaded = config_.isOverloaded;
     adjDb.nodeLabel = config_.nodeLabel;
@@ -1245,91 +1344,9 @@ LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
 
       adjDb.adjacencies.emplace_back(std::move(adj));
     }
-
-    return fbzmq::Message::fromThriftObj(adjDb, serializer_);
-  }
-
-  case thrift::LinkMonitorCommand::SET_ADJ_METRIC: {
-    if (req.overrideMetric < 1) {
-      LOG(ERROR) << "Minimum allowed metric value for adjacency is 1. Can't set"
-                 << " a value smaller than that. Got " << req.overrideMetric;
-      break;
-    }
-    if (req.adjNodeName == folly::none) {
-      LOG(ERROR) << "SET_ADJ_METRIC - adjacency node name not provided, "
-                 << req.interfaceName;
-      break;
-    }
-    thrift::AdjKey adjKey;
-    adjKey.ifName = req.interfaceName;
-    adjKey.nodeName = req.adjNodeName.value();
-
-    if (adjacencies_.count(
-            std::make_pair(req.adjNodeName.value(), req.interfaceName))) {
-      if (config_.adjMetricOverrides[adjKey] == req.overrideMetric) {
-        LOG(INFO) << "Skip adjacency metric update. Overridden metric: "
-                  << req.overrideMetric
-                  << " already set for adjacency: " << req.adjNodeName.value()
-                  << " " << req.interfaceName;
-        break;
-      }
-      LOG(INFO) << "Overriding metric for adjacency " << req.adjNodeName.value()
-                << " " << req.interfaceName << " to " << req.overrideMetric;
-      config_.adjMetricOverrides[adjKey] = req.overrideMetric;
-      advertiseAdjacenciesThrottled_->operator()();
-
-    } else {
-      LOG(WARNING) << "SET_ADJ_METRIC - adjacency is not yet formed for: "
-                   << req.adjNodeName.value() << " " << req.interfaceName;
-    }
-    break;
-  }
-
-  case thrift::LinkMonitorCommand::UNSET_ADJ_METRIC: {
-    if (req.adjNodeName == folly::none) {
-      LOG(ERROR) << "UNSET_ADJ_METRIC - adjacency node name not provided, "
-                 << req.interfaceName;
-      break;
-    }
-    thrift::AdjKey adjKey;
-    adjKey.ifName = req.interfaceName;
-    adjKey.nodeName = req.adjNodeName.value();
-
-    if (config_.adjMetricOverrides.erase(adjKey)) {
-      LOG(INFO) << "Removing metric override for adjacency "
-                << req.adjNodeName.value() << " " << req.interfaceName;
-
-      if (adjacencies_.count(
-              std::make_pair(req.adjNodeName.value(), req.interfaceName))) {
-        advertiseAdjacenciesThrottled_->operator()();
-      }
-    } else {
-      LOG(WARNING) << "Got adj-metric-unset request for unknown adjacency"
-                   << req.adjNodeName.value() << " " << req.interfaceName;
-    }
-    break;
-  }
-
-  case thrift::LinkMonitorCommand::GET_VERSION: {
-    thrift::OpenrVersions openrVersion(
-        apache::thrift::FRAGILE,
-        Constants::kOpenrVersion,
-        Constants::kOpenrSupportedVersion);
-
-    return fbzmq::Message::fromThriftObj(openrVersion, serializer_);
-  }
-
-  case thrift::LinkMonitorCommand::GET_BUILD_INFO: {
-    auto buildInfo = getBuildInfoThrift();
-    return fbzmq::Message::fromThriftObj(buildInfo, serializer_);
-  }
-
-  default:
-    LOG(ERROR) << "Link Monitor received unknown command: "
-               << static_cast<int>(req.cmd);
-    return folly::makeUnexpected(fbzmq::Error());
-  }
-  return fbzmq::Message::from(Constants::kSuccessResponse.toString());
+    p.setValue(std::make_unique<thrift::AdjacencyDatabase>(std::move(adjDb)));
+  });
+  return sf;
 }
 
 void

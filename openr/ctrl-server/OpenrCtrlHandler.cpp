@@ -20,6 +20,7 @@
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
+#include <openr/link-monitor/LinkMonitor.h>
 
 namespace openr {
 
@@ -395,6 +396,17 @@ OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
 void
 OpenrCtrlHandler::getMyNodeName(std::string& _return) {
   _return = std::string(nodeName_);
+}
+
+void
+OpenrCtrlHandler::getOpenrVersion(thrift::OpenrVersions& _openrVersion) {
+  _openrVersion.version = Constants::kOpenrVersion;
+  _openrVersion.lowestSupportedVersion = Constants::kOpenrSupportedVersion;
+}
+
+void
+OpenrCtrlHandler::getBuildInfo(thrift::BuildInfo& _buildInfo) {
+  _buildInfo = getBuildInfoThrift();
 }
 
 folly::SemiFuture<folly::Unit>
@@ -961,183 +973,99 @@ OpenrCtrlHandler::semifuture_subscribeAndGetKvStore() {
           });
 }
 
+/*
+ * Set/unset node overload
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setNodeOverload() {
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::SET_OVERLOAD;
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::LINK_MONITOR,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())->setNodeOverload(true);
 }
+
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetNodeOverload() {
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::UNSET_OVERLOAD;
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::LINK_MONITOR,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())->setNodeOverload(false);
 }
 
+/*
+ * Set/unset interface/link overload
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setInterfaceOverload(
     std::unique_ptr<std::string> interfaceName) {
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::SET_LINK_OVERLOAD;
-  request.interfaceName = std::move(*interfaceName);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::LINK_MONITOR,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())
+      ->setInterfaceOverload(std::move(*interfaceName), true);
 }
+
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetInterfaceOverload(
     std::unique_ptr<std::string> interfaceName) {
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::UNSET_LINK_OVERLOAD;
-  request.interfaceName = std::move(*interfaceName);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::LINK_MONITOR,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())
+      ->setInterfaceOverload(std::move(*interfaceName), false);
 }
 
+/*
+ * Set/unset interface/link metric
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setInterfaceMetric(
     std::unique_ptr<std::string> interfaceName, int32_t overrideMetric) {
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::SET_LINK_METRIC;
-  request.interfaceName = std::move(*interfaceName);
-  request.overrideMetric = overrideMetric;
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::LINK_MONITOR,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())
+      ->setLinkMetric(std::move(*interfaceName), overrideMetric);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetInterfaceMetric(
     std::unique_ptr<std::string> interfaceName) {
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::UNSET_LINK_METRIC;
-  request.interfaceName = std::move(*interfaceName);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::LINK_MONITOR,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())
+      ->setLinkMetric(std::move(*interfaceName), std::nullopt);
 }
 
+/*
+ * Set/unset node adj metric
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setAdjacencyMetric(
     std::unique_ptr<std::string> interfaceName,
     std::unique_ptr<std::string> adjNodeName,
     int32_t overrideMetric) {
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::SET_ADJ_METRIC;
-  request.interfaceName = std::move(*interfaceName);
-  request.adjNodeName = std::move(*adjNodeName);
-  request.overrideMetric = overrideMetric;
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::LINK_MONITOR,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())
+      ->setAdjacencyMetric(
+          std::move(*interfaceName), std::move(*adjNodeName), overrideMetric);
 }
+
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetAdjacencyMetric(
     std::unique_ptr<std::string> interfaceName,
     std::unique_ptr<std::string> adjNodeName) {
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::UNSET_ADJ_METRIC;
-  request.interfaceName = std::move(*interfaceName);
-  request.adjNodeName = std::move(*adjNodeName);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::LINK_MONITOR,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())
+      ->setAdjacencyMetric(
+          std::move(*interfaceName), std::move(*adjNodeName), std::nullopt);
 }
 
+/*
+ * Dump interface/link information
+ */
 folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
 OpenrCtrlHandler::semifuture_getInterfaces() {
-  folly::Promise<std::unique_ptr<thrift::DumpLinksReply>> p;
-
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::DUMP_LINKS;
-
-  auto reply = requestReplyThrift<thrift::DumpLinksReply>(
-      thrift::OpenrModuleType::LINK_MONITOR, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::DumpLinksReply>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())->getInterfaces();
 }
 
+/*
+ * Dump adjacency database information
+ */
 folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
-  folly::Promise<std::unique_ptr<thrift::AdjacencyDatabase>> p;
-
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::DUMP_ADJS;
-
-  auto reply = requestReplyThrift<thrift::AdjacencyDatabase>(
-      thrift::OpenrModuleType::LINK_MONITOR, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::AdjacencyDatabase>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
-}
-
-folly::SemiFuture<std::unique_ptr<thrift::OpenrVersions>>
-OpenrCtrlHandler::semifuture_getOpenrVersion() {
-  folly::Promise<std::unique_ptr<thrift::OpenrVersions>> p;
-
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::GET_VERSION;
-
-  auto reply = requestReplyThrift<thrift::OpenrVersions>(
-      thrift::OpenrModuleType::LINK_MONITOR, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::OpenrVersions>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
-}
-
-folly::SemiFuture<std::unique_ptr<thrift::BuildInfo>>
-OpenrCtrlHandler::semifuture_getBuildInfo() {
-  folly::Promise<std::unique_ptr<thrift::BuildInfo>> p;
-
-  thrift::LinkMonitorRequest request;
-  request.cmd = thrift::LinkMonitorCommand::GET_BUILD_INFO;
-
-  auto reply = requestReplyThrift<thrift::BuildInfo>(
-      thrift::OpenrModuleType::LINK_MONITOR, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::BuildInfo>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
+  return dynamic_cast<LinkMonitor*>(module.get())->getLinkMonitorAdjacencies();
 }
 
 folly::SemiFuture<folly::Unit>

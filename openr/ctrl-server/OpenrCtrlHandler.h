@@ -252,11 +252,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
   semifuture_getLinkMonitorAdjacencies() override;
 
-  folly::SemiFuture<std::unique_ptr<thrift::OpenrVersions>>
-  semifuture_getOpenrVersion() override;
-
-  folly::SemiFuture<std::unique_ptr<thrift::BuildInfo>>
-  semifuture_getBuildInfo() override;
+  // Explicitly override blocking API call as no ASYNC needed
+  void getOpenrVersion(thrift::OpenrVersions& openrVersion) override;
+  void getBuildInfo(thrift::BuildInfo& buildInfo) override;
 
   //
   // PersistentStore APIs
