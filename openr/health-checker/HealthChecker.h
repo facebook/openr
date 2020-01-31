@@ -19,6 +19,7 @@
 #include <fbzmq/service/stats/ThreadData.h>
 #include <folly/Range.h>
 #include <folly/SocketAddress.h>
+#include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -54,6 +55,10 @@ class HealthChecker final : public OpenrEventBase {
   // non-copyable
   HealthChecker(HealthChecker const&) = delete;
   HealthChecker& operator=(HealthChecker const&) = delete;
+
+  // public API to get healthchecker info
+  folly::SemiFuture<std::unique_ptr<thrift::HealthCheckerInfo>>
+  getHealthCheckerInfo();
 
  private:
   // prepare sockets and timeouts

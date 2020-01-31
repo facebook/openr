@@ -31,17 +31,6 @@ struct HealthCheckerMessage {
   3: i64 seqNum
 }
 
-enum HealthCheckerCmd {
-  PEEK = 0,
-}
-
-struct HealthCheckerRequest {
-  1: HealthCheckerCmd cmd
-  // If nodeName is empty then current node's routes will be returned in
-  // response.
-  2: string nodeName
-}
-
 struct NodeHealthInfo {
   1: list<string>  neighbors
   2: Network.BinaryAddress ipAddress

@@ -452,18 +452,15 @@ HealthChecker::processMessage() {
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
 HealthChecker::processRequestMsg(fbzmq::Message&& msg) {
-  auto maybeThriftReq =
-      msg.readThriftObj<thrift::HealthCheckerRequest>(serializer_);
-  if (maybeThriftReq.hasError()) {
-    LOG(ERROR) << "HealthChecker: Error processing request on REP socket: "
-               << maybeThriftReq.error();
-    return folly::makeUnexpected(maybeThriftReq.error());
-  }
+  LOG(FATAL) << "DEPRECATED. Unexpected request received";
+}
 
-  auto thriftReq = maybeThriftReq.value();
-  thrift::HealthCheckerInfo reply;
-  switch (thriftReq.cmd) {
-  case thrift::HealthCheckerCmd::PEEK: {
+folly::SemiFuture<std::unique_ptr<thrift::HealthCheckerInfo>>
+HealthChecker::getHealthCheckerInfo() {
+  folly::Promise<std::unique_ptr<thrift::HealthCheckerInfo>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p)]() mutable {
+    thrift::HealthCheckerInfo info;
     for (auto const& kv : nodeInfo_) {
       // skip if not pinging the node
       auto const& nodeInfo = kv.second;
@@ -471,19 +468,11 @@ HealthChecker::processRequestMsg(fbzmq::Message&& msg) {
           nodeInfo.lastValSent == 0) {
         continue;
       }
-      reply.nodeInfo[kv.first] = nodeInfo;
+      info.nodeInfo[kv.first] = nodeInfo;
     }
-    break;
-  }
-
-  default: {
-    LOG(ERROR) << "Health Checker received unknown command: "
-               << static_cast<int>(thriftReq.cmd);
-    return folly::makeUnexpected(fbzmq::Error());
-  }
-  }
-
-  return fbzmq::Message::fromThriftObj(reply, serializer_);
+    p.setValue(std::make_unique<thrift::HealthCheckerInfo>(std::move(info)));
+  });
+  return sf;
 }
 
 void

@@ -18,6 +18,7 @@
 #include <openr/common/Util.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
+#include <openr/health-checker/HealthChecker.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
@@ -520,21 +521,8 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
 
 folly::SemiFuture<std::unique_ptr<thrift::HealthCheckerInfo>>
 OpenrCtrlHandler::semifuture_getHealthCheckerInfo() {
-  folly::Promise<std::unique_ptr<thrift::HealthCheckerInfo>> p;
-
-  thrift::HealthCheckerRequest request;
-  request.cmd = thrift::HealthCheckerCmd::PEEK;
-
-  auto reply = requestReplyThrift<thrift::HealthCheckerInfo>(
-      thrift::OpenrModuleType::HEALTH_CHECKER, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<thrift::HealthCheckerInfo>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::HEALTH_CHECKER);
+  return dynamic_cast<HealthChecker*>(module.get())->getHealthCheckerInfo();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>>
