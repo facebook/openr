@@ -136,13 +136,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   semifuture_getRouteDbComputed(std::unique_ptr<std::string> nodeName) override;
 
   //
-  // HealthChecker APIs
-  //
-
-  folly::SemiFuture<std::unique_ptr<thrift::HealthCheckerInfo>>
-  semifuture_getHealthCheckerInfo() override;
-
-  //
   // KvStore APIs
   //
   folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>>

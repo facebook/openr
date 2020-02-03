@@ -22,7 +22,6 @@
 #include <openr/config-store/PersistentStore.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
-#include <openr/health-checker/HealthChecker.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
@@ -107,22 +106,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         context_);
     fibThread_ = std::thread([&]() { fib->run(); });
 
-    // Create HealthChecker module
-    healthChecker = std::make_shared<HealthChecker>(
-        nodeName,
-        thrift::HealthCheckOption::PingNeighborOfNeighbor,
-        uint32_t{50}, /* health check pct */
-        uint16_t{0}, /* make sure it binds to some open port */
-        std::chrono::seconds(2),
-        folly::none, /* maybeIpTos */
-        AdjacencyDbMarker{Constants::kAdjDbMarker.str()},
-        PrefixDbMarker{Constants::kPrefixDbMarker.str()},
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        monitorSubmitUrl_,
-        context_);
-    healthCheckerThread_ = std::thread([&]() { healthChecker->run(); });
-
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
         nodeName,
@@ -204,8 +187,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         thrift::OpenrModuleType::DECISION, decision);
     openrThriftServerWrapper_->addModuleType(thrift::OpenrModuleType::FIB, fib);
     openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::HEALTH_CHECKER, healthChecker);
-    openrThriftServerWrapper_->addModuleType(
         thrift::OpenrModuleType::PREFIX_MANAGER, prefixManager);
     openrThriftServerWrapper_->addModuleType(
         thrift::OpenrModuleType::LINK_MONITOR, linkMonitor);
@@ -236,9 +217,6 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     mockNlHandler->stop();
     systemThriftThread.stop();
-
-    healthChecker->stop();
-    healthCheckerThread_.join();
 
     fib->stop();
     fibThread_.join();
@@ -283,7 +261,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::thread zmqMonitorThread_;
   std::thread decisionThread_;
   std::thread fibThread_;
-  std::thread healthCheckerThread_;
   std::thread prefixManagerThread_;
   std::thread persistentStoreThread_;
   std::thread linkMonitorThread_;
@@ -291,7 +268,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::unique_ptr<fbzmq::ZmqMonitor> zmqMonitor;
   std::shared_ptr<Decision> decision;
   std::shared_ptr<Fib> fib;
-  std::shared_ptr<HealthChecker> healthChecker;
   std::shared_ptr<PrefixManager> prefixManager;
   std::shared_ptr<PersistentStore> persistentStore;
   std::shared_ptr<LinkMonitor> linkMonitor;
@@ -431,12 +407,6 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
     openrCtrlThriftClient_->sync_getDecisionPrefixDbs(db);
     EXPECT_EQ(0, db.size());
   }
-}
-
-TEST_F(OpenrCtrlFixture, HealthCheckerApis) {
-  thrift::HealthCheckerInfo info;
-  openrCtrlThriftClient_->sync_getHealthCheckerInfo(info);
-  EXPECT_EQ(0, info.nodeInfo.size());
 }
 
 TEST_F(OpenrCtrlFixture, KvStoreApis) {

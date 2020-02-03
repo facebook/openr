@@ -16,7 +16,6 @@ include "fbzmq/service/if/Monitor.thrift"
 include "Decision.thrift"
 include "Dual.thrift"
 include "Fib.thrift"
-include "HealthChecker.thrift"
 include "KvStore.thrift"
 include "LinkMonitor.thrift"
 include "Lsdb.thrift"
@@ -26,7 +25,6 @@ enum OpenrModuleType {
   DEFAULT = 0,
   DECISION = 1,
   FIB = 2,
-  HEALTH_CHECKER = 3,
   KVSTORE = 4,
   LINK_MONITOR = 5,
   PERSISTENT_STORE = 9,
@@ -176,16 +174,6 @@ service OpenrCtrl extends fb303.FacebookService {
    * expires
    */
   Decision.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error)
-
-  //
-  // HealthChecker APIs
-  //
-
-  /**
-   * Get health-checker statistics per node
-   */
-  HealthChecker.HealthCheckerInfo getHealthCheckerInfo()
-    throws (1: OpenrError error)
 
   //
   // Get area feature configuration

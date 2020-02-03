@@ -155,6 +155,9 @@ class Constants {
   // time interval to sync between Open/R and Platform
   static constexpr std::chrono::seconds kPlatformSyncInterval{60};
 
+  // time interval for keep alive check between fib and switch agent
+  static constexpr std::chrono::milliseconds kKeepAliveCheckInterval{1000};
+
   // Timeout duration for which if a client connection has no activity, then it
   // will be dropped. We keep it 3 * kPlatformSyncInterval so that thrift
   // connection between OpenR and platform service remains up forever under
@@ -170,13 +173,6 @@ class Constants {
 
   // Protocol ID for OpenR routes
   static constexpr uint8_t kAqRouteProtoId{99};
-
-  //
-  // HealthChecker specific
-  //
-
-  // time interval between sending two health msg
-  static constexpr std::chrono::milliseconds kHealthCheckInterval{1000};
 
   //
   // KvStore specific
@@ -264,9 +260,6 @@ class Constants {
 
   // The port monitor replies on
   static constexpr int32_t kMonitorRepPort{60008};
-
-  // The port health checker sends and recvs udp pings on
-  static constexpr int32_t kHealthCheckerPort{60010};
 
   // Switch agent thrift service port for Platform programming
   static constexpr int32_t kSystemAgentPort{60099};

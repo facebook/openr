@@ -151,17 +151,6 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} fib_cpp2)
 
 add_fbthrift_cpp_library(
-  health_checker_cpp2
-  openr/if/HealthChecker.thrift
-  OPTIONS
-    json
-    optionals
-  DEPENDS
-    network_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} health_checker_cpp2)
-
-add_fbthrift_cpp_library(
   spark_cpp2
   openr/if/Spark.thrift
   OPTIONS
@@ -247,7 +236,6 @@ add_fbthrift_cpp_library(
     fb303_cpp2
     dual_cpp2
     fib_cpp2
-    health_checker_cpp2
     kv_store_cpp2
     link_monitor_cpp2
     lsdb_cpp2
@@ -300,7 +288,6 @@ add_library(openrlib
   openr/decision/PrefixState.cpp
   openr/dual/Dual.cpp
   openr/fib/Fib.cpp
-  openr/health-checker/HealthChecker.cpp
   openr/kvstore/KvStoreClient.cpp
   openr/kvstore/KvStore.cpp
   openr/kvstore/KvStoreWrapper.cpp
@@ -664,12 +651,6 @@ if(BUILD_TESTS)
     SOURCES
       openr/decision/tests/PrefixStateTest.cpp
     DESTINATION sbin/tests/openr/decision
-  )
-
-  add_openr_test(HealthCheckerTest health_checker_test
-    SOURCES
-      openr/health-checker/tests/HealthCheckerTest.cpp
-    DESTINATION sbin/tests/openr/health-checker
   )
 
   add_openr_test(KvStoreTest kvstore_test

@@ -23,7 +23,6 @@ from openr.cli.clis import (
     config,
     decision,
     fib,
-    health_checker,
     kvstore,
     lm,
     monitor,
@@ -94,7 +93,6 @@ def get_breeze_cli():
     cli.add_command(config.ConfigCli().config)
     cli.add_command(decision.DecisionCli().decision)
     cli.add_command(fib.FibCli().fib)
-    cli.add_command(health_checker.HealthCheckerCli().healthchecker)
     cli.add_command(kvstore.KvStoreCli().kvstore)
     cli.add_command(lm.LMCli().lm)
     cli.add_command(monitor.MonitorCli().monitor)

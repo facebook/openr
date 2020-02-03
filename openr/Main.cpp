@@ -40,7 +40,6 @@
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
-#include <openr/health-checker/HealthChecker.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/LinkMonitor.h>
@@ -775,29 +774,7 @@ main(int argc, char** argv) {
           kvStoreLocalPubUrl,
           context));
 
-  // Define and start HealthChecker only if default area is present
-  if (FLAGS_enable_health_checker &&
-      areas.count(openr::thrift::KvStore_constants::kDefaultArea())) {
-    startEventLoop(
-        allThreads,
-        orderedModules,
-        moduleTypeToObj,
-        watchdog,
-        std::make_shared<HealthChecker>(
-            FLAGS_node_name,
-            openr::thrift::HealthCheckOption(FLAGS_health_check_option),
-            FLAGS_health_check_pct,
-            static_cast<uint16_t>(FLAGS_health_checker_port),
-            std::chrono::seconds(FLAGS_health_checker_ping_interval_s),
-            maybeIpTos,
-            AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-            PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-            kvStoreLocalCmdUrl,
-            kvStoreLocalPubUrl,
-            monitorSubmitUrl,
-            context));
-  }
-
+  // Start OpenrCtrl thrift server
   apache::thrift::ThriftServer thriftCtrlServer;
 
   // setup the SSL policy

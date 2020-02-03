@@ -261,7 +261,7 @@ class Fib final : public OpenrEventBase {
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
 
   // periodically send alive msg to switch agent
-  std::unique_ptr<fbzmq::ZmqTimeout> healthChecker_{nullptr};
+  std::unique_ptr<fbzmq::ZmqTimeout> keepAliveTimer_{nullptr};
 
   // Timer for submitting to monitor periodically
   std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};

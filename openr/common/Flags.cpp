@@ -39,10 +39,6 @@ DEFINE_int32(
     openr::Constants::kMonitorRepPort,
     "The port monitor replies on");
 DEFINE_int32(
-    health_checker_port,
-    openr::Constants::kHealthCheckerPort,
-    "The port health checker sends and recvs udp pings on");
-DEFINE_int32(
     system_agent_port,
     openr::Constants::kSystemAgentPort,
     "Switch agent thrift service port for Platform programming.");
@@ -208,23 +204,6 @@ DEFINE_int32(
     5,
     "How long (in seconds) to keep neighbor adjacency without receiving "
     "any heartbeat packet in stable state.");
-DEFINE_int32(
-    health_checker_ping_interval_s,
-    10,
-    "Time interval (in seconds) to send health check pings to other nodes in "
-    "the network.");
-DEFINE_bool(
-    enable_health_checker,
-    false,
-    "If set, will send pings to other nodes in network at interval specified "
-    "by health_checker_ping_interval flag");
-DEFINE_int32(
-    health_check_option,
-    static_cast<uint32_t>(
-        openr::thrift::HealthCheckOption::PingNeighborOfNeighbor),
-    "Health check scenarios, default set as ping neighbor of neighbor");
-DEFINE_int32(
-    health_check_pct, 0, "Health check pct % of nodes in entire topology");
 DEFINE_bool(
     enable_netlink_fib_handler,
     false,

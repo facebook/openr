@@ -48,7 +48,6 @@ Commands:
   config         CLI tool to peek into Config Store module.
   decision       CLI tool to peek into Decision module.
   fib            CLI tool to peek into Fib module.
-  healthchecker  CLI tool to peek into Health Checker module.
   kvstore        CLI tool to peek into KvStore module.
   lm             CLI tool to peek into Link Monitor module.
   monitor        CLI tool to peek into Monitor module.

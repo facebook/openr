@@ -74,7 +74,7 @@ Fib::Fib(
     syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
   }
 
-  healthChecker_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
+  keepAliveTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
     // Make thrift calls to do real programming
     try {
       keepAliveCheck();
@@ -88,8 +88,8 @@ Fib::Fib(
 
   // Only schedule health checker in non dry run mode
   if (not dryrun_) {
-    healthChecker_->scheduleTimeout(
-        Constants::kHealthCheckInterval, true /* schedule periodically */);
+    keepAliveTimer_->scheduleTimeout(
+        Constants::kKeepAliveCheckInterval, true /* schedule periodically */);
   }
 
   prepare();

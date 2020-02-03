@@ -201,17 +201,6 @@ the same time to turn on validation.
 ENABLE_SUBNET_VALIDATION=true
 ```
 
-#### ENABLE_HEALTH_CHECKER
-
-OpenR can measure network health internally by pinging other nodes in the
-network and exports this information as counters or via breeze APIs. By default
-health checker is disabled. The expectation is that each node must have at least
-one v6 loopback addressed announced into the network for the reachability check.
-
-```
-ENABLE_HEALTH_CHECKER=true
-```
-
 #### ENABLE_LFA
 
 With this option, additional Loop-Free Alternate (LFA) routes can be computed,
@@ -221,15 +210,6 @@ be used without need of an SPF run.
 
 ```
 ENABLE_LFA=false
-```
-
-#### HEALTH_CHECKER_PING_INTERVAL_S
-
-Configure ping interval of the health checker. The below option configures it to
-ping all other nodes every 3 seconds.
-
-```
-HEALTH_CHECKER_PING_INTERVAL_S=3
 ```
 
 #### IFACE_REGEX_INCLUDE

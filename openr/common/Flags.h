@@ -10,7 +10,6 @@
 #include <gflags/gflags.h>
 
 #include <openr/common/Constants.h>
-#include <openr/if/gen-cpp2/HealthChecker_types.h>
 
 DECLARE_int32(openr_ctrl_port);
 
@@ -26,7 +25,6 @@ DECLARE_string(areas);
 DECLARE_int32(monitor_pub_port);
 DECLARE_int32(monitor_rep_port);
 
-DECLARE_int32(health_checker_port);
 DECLARE_int32(system_agent_port);
 DECLARE_int32(fib_handler_port);
 DECLARE_int32(spark_mcast_port);
@@ -75,11 +73,6 @@ DECLARE_int32(spark_fastinit_keepalive_time_ms);
 
 DECLARE_string(spark_report_url);
 DECLARE_string(spark_cmd_url);
-
-DECLARE_int32(health_checker_ping_interval_s);
-DECLARE_bool(enable_health_checker);
-DECLARE_int32(health_check_option);
-DECLARE_int32(health_check_pct);
 
 DECLARE_bool(enable_netlink_fib_handler);
 DECLARE_bool(enable_netlink_system_handler);
