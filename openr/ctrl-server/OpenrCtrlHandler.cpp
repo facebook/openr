@@ -16,6 +16,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
+#include <openr/config-store/PersistentStore.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/health-checker/HealthChecker.h>
@@ -1008,48 +1009,23 @@ OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setConfigKey(
     std::unique_ptr<std::string> key, std::unique_ptr<std::string> value) {
-  thrift::StoreRequest request;
-  request.requestType = thrift::StoreRequestType::STORE;
-  request.key = std::move(*key);
-  request.data = std::move(*value);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::PERSISTENT_STORE,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
+  return dynamic_cast<PersistentStore*>(module.get())
+      ->setConfigKey(std::move(*key), std::move(*value));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_eraseConfigKey(std::unique_ptr<std::string> key) {
-  thrift::StoreRequest request;
-  request.requestType = thrift::StoreRequestType::ERASE;
-  request.key = std::move(*key);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::PERSISTENT_STORE,
-      std::move(request),
-      false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
+  return dynamic_cast<PersistentStore*>(module.get())
+      ->eraseConfigKey(std::move(*key));
 }
 
 folly::SemiFuture<std::unique_ptr<std::string>>
 OpenrCtrlHandler::semifuture_getConfigKey(std::unique_ptr<std::string> key) {
-  folly::Promise<std::unique_ptr<std::string>> p;
-
-  thrift::StoreRequest request;
-  request.requestType = thrift::StoreRequestType::LOAD;
-  request.key = std::move(*key);
-
-  auto reply = requestReplyThrift<thrift::StoreResponse>(
-      thrift::OpenrModuleType::PERSISTENT_STORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else if (not reply->success) {
-    p.setException(thrift::OpenrError("key not found"));
-  } else {
-    p.setValue(std::make_unique<std::string>(std::move(reply->data)));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
+  return dynamic_cast<PersistentStore*>(module.get())
+      ->getConfigKey(std::move(*key));
 }
 
 } // namespace openr

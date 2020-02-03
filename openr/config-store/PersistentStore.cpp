@@ -109,19 +109,74 @@ PersistentStore::processRequestMsg(fbzmq::Message&& requestMsg) {
   if (response.success and
       (request->requestType != thrift::StoreRequestType::LOAD)) {
     pObjects_.emplace_back(std::move(pObject));
-
-    if (not saveDbTimerBackoff_) {
-      // This is primarily used for unit testing to save DB immediately
-      // Block the response till file is saved
-      savePersistentObjectToDisk();
-    } else if (not saveDbTimer_->isScheduled()) {
-      saveDbTimer_->scheduleTimeout(
-          saveDbTimerBackoff_->getTimeRemainingUntilRetry());
-    }
+    maybeSaveObjectToDisk();
   }
 
   // Send response
   return fbzmq::Message::fromThriftObj(response, serializer_);
+}
+
+folly::SemiFuture<folly::Unit>
+PersistentStore::setConfigKey(std::string key, std::string value) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p), key, value]() mutable noexcept {
+    SYSLOG(INFO) << "Store key: " << key << ", value: " << value
+                 << " to config-store";
+    // Override previous value if any
+    database_.keyVals[key] = value;
+    auto pObject = toPersistentObject(ActionType::ADD, key, value);
+    pObjects_.emplace_back(std::move(pObject));
+    maybeSaveObjectToDisk();
+    p.setValue();
+  });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+PersistentStore::eraseConfigKey(std::string key) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p), key]() mutable noexcept {
+    SYSLOG(INFO) << "Erase key: " << key << " from config-store";
+    if (database_.keyVals.erase(key) > 0) {
+      auto pObject = toPersistentObject(ActionType::DEL, key, "");
+      pObjects_.emplace_back(std::move(pObject));
+      maybeSaveObjectToDisk();
+    } else {
+      LOG(WARNING) << "Key: " << key << " doesn't exist";
+    }
+    p.setValue();
+  });
+  return sf;
+}
+
+folly::SemiFuture<std::unique_ptr<std::string>>
+PersistentStore::getConfigKey(std::string key) {
+  folly::Promise<std::unique_ptr<std::string>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p), key]() mutable {
+    auto it = database_.keyVals.find(key);
+    if (it != database_.keyVals.end()) {
+      p.setValue(std::make_unique<std::string>(it->second));
+    } else {
+      std::string msg = "Key: " + key + " NOT found";
+      p.setException(thrift::OpenrError(msg));
+    }
+  });
+  return sf;
+}
+
+void
+PersistentStore::maybeSaveObjectToDisk() noexcept {
+  if (not saveDbTimerBackoff_) {
+    // This is primarily used for unit testing to save DB immediately
+    // Block the response till file is saved
+    savePersistentObjectToDisk();
+  } else if (not saveDbTimer_->isScheduled()) {
+    saveDbTimer_->scheduleTimeout(
+        saveDbTimerBackoff_->getTimeRemainingUntilRetry());
+  }
 }
 
 bool
