@@ -737,6 +737,22 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/spark
   )
 
+  add_openr_test(MessagingQueueTest queue_test
+    SOURCES
+      openr/messaging/tests/QueueTest.cpp
+    LIBRARIES
+      Folly::folly
+    DESTINATION sbin/tests/openr/messaging
+  )
+
+  add_openr_test(MessagingReplicateQueueTest replicate_queue_test
+    SOURCES
+      openr/messaging/tests/ReplicateQueueTest.cpp
+    LIBRARIES
+      Folly::folly
+    DESTINATION sbin/tests/openr/messaging
+  )
+
   #
   # benchmarks
   #
