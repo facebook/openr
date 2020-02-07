@@ -1542,6 +1542,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
             "test_",
             Constants::kServiceConnTimeout,
             Constants::kServiceProcTimeout,
+            192, /* IP_TOS */
             folly::AsyncSocket::anyAddress(),
             planeArea);
         // there will be plane area key "test_ttl_key_plane"
@@ -1554,6 +1555,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
             "test_",
             Constants::kServiceConnTimeout,
             Constants::kServiceProcTimeout,
+            192, /* IP_TOS */
             folly::AsyncSocket::anyAddress(),
             podArea);
         // there will be plane area key "test_ttl_key_plane"

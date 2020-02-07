@@ -832,6 +832,8 @@ main(int argc, char** argv) {
   // Intentionally kept this as (1). If you're changing to higher number please
   // address thread safety for private member variables in OpenrCtrlHandler
   thriftCtrlServer.setNumCPUWorkerThreads(1);
+  // Enable TOS reflection on the server socket
+  thriftCtrlServer.setTosReflect(true);
 
   // serve
   allThreads.emplace_back(std::thread([&thriftCtrlServer]() noexcept {

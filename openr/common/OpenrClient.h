@@ -55,33 +55,32 @@ getOpenrCtrlPlainTextClient(
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processingTimeout =
         std::chrono::milliseconds(10000),
-    const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress()) {
+    const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
+    folly::Optional<int> maybeIpTos = folly::none) {
   std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client;
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
+    // NOTE: It is possible to have caching for socket. We're not doing it as
+    // we expect clients to be persistent/sticky.
+
+    // Create a new UNCONNECTED AsyncSocket
+    // ATTN: don't change contructor flavor to connect automatically.
     const folly::SocketAddress sa(addr, port);
-
     apache::thrift::async::TAsyncSocket::UniquePtr transport = nullptr;
-    if (bindAddr == folly::AsyncSocket::anyAddress()) {
-      // Create Socket
-      // NOTE: It is possible to have caching for socket. We're not doing it as
-      // we expect clients to be persistent/sticky.
-      transport = apache::thrift::async::TAsyncSocket::UniquePtr(
-          new apache::thrift::async::TAsyncSocket(
-              &evb, sa, connectTimeout.count()),
-          folly::DelayedDestruction::Destructor());
-    } else {
-      transport = apache::thrift::async::TAsyncSocket::UniquePtr(
-          new apache::thrift::async::TAsyncSocket(&evb),
-          folly::DelayedDestruction::Destructor());
+    transport = apache::thrift::async::TAsyncSocket::UniquePtr(
+        new apache::thrift::async::TAsyncSocket(&evb),
+        folly::DelayedDestruction::Destructor());
 
-      // Bind the src address
-      transport->connect(
-          nullptr,
-          sa,
-          connectTimeout.count(),
-          folly::AsyncSocket::emptyOptionMap,
-          bindAddr);
+    // Build OptionMap for client socket connection
+    folly::AsyncSocket::OptionMap optionMap =
+        folly::AsyncSocket::emptyOptionMap;
+    if (maybeIpTos.hasValue()) {
+      folly::AsyncSocket::OptionKey v6Opts = {IPPROTO_IPV6, IPV6_TCLASS};
+      optionMap.emplace(v6Opts, maybeIpTos.value());
     }
+
+    // Establish connection
+    transport->connect(
+        nullptr, sa, connectTimeout.count(), optionMap, bindAddr);
 
     // Create channel and set timeout
     auto channel = ClientChannel::newChannel(std::move(transport));

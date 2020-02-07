@@ -51,9 +51,17 @@ KvStoreClient::dumpAllWithPrefixMultipleAndParse(
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
-    const folly::SocketAddress& bindAddr) {
+    folly::Optional<int> maybeIpTos /* folly::none */,
+    const folly::SocketAddress& bindAddr /* folly::AsyncSocket::anyAddress()*/,
+    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
   auto val = dumpAllWithThriftClientFromMultiple(
-      sockAddrs, keyPrefix, connectTimeout, processTimeout, bindAddr);
+      sockAddrs,
+      keyPrefix,
+      connectTimeout,
+      processTimeout,
+      maybeIpTos,
+      bindAddr,
+      area);
   if (not val.first) {
     return std::make_pair(folly::none, val.second);
   }

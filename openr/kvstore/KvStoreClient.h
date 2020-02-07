@@ -195,7 +195,9 @@ class KvStoreClient {
       const std::string& prefix,
       std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
       std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
-      const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
+      folly::Optional<int> maybeIpTos = folly::none,
+      const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /*
    * This will be a static method to do a full-dump of KvStore key-val to
@@ -222,6 +224,7 @@ class KvStoreClient {
       const std::string& prefix,
       std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
       std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
+      folly::Optional<int> maybeIpTos = folly::none,
       const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
