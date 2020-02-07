@@ -139,10 +139,10 @@ class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
 class ConfigEraseCmd(ConfigStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, key: str) -> None:
         client.eraseConfigKey(key)
-        print("Key erased")
+        print("Key:{} erased".format(key))
 
 
 class ConfigStoreCmd(ConfigStoreCmdBase):
     def _run(self, client: OpenrCtrl.Client, key: str, value: str) -> None:
         client.setConfigKey(key, value)
-        print("Key-Value stored")
+        print("Key:{}, value:{} stored".format(key, value))

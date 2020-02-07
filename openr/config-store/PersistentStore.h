@@ -12,6 +12,7 @@
 
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/futures/Future.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
@@ -83,6 +84,12 @@ class PersistentStore : public OpenrEventBase {
   folly::Expected<folly::Optional<PersistentObject>, std::string>
   decodePersistentObject(folly::io::Cursor& cursor) noexcept;
 
+  // Public API
+  folly::SemiFuture<folly::Unit> setConfigKey(
+      std::string key, std::string value);
+  folly::SemiFuture<folly::Unit> eraseConfigKey(std::string key);
+  folly::SemiFuture<std::unique_ptr<std::string>> getConfigKey(std::string key);
+
  private:
   // Function to process pending request on reqSocket_
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
@@ -100,6 +107,9 @@ class PersistentStore : public OpenrEventBase {
   // Load TlvFormat from disk
   folly::Expected<folly::Unit, std::string> loadDatabaseTlvFormat(
       const std::unique_ptr<folly::IOBuf>& ioBuf) noexcept;
+
+  // Wrapper function to save persistent object to disk immediately or later
+  void maybeSaveObjectToDisk() noexcept;
 
   // Function to save Persistent Object to local disk.
   bool savePersistentObjectToDisk() noexcept;
