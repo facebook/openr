@@ -7,8 +7,6 @@
 
 #include "openr/common/OpenrEventBase.h"
 
-#include <folly/fibers/FiberManagerMap.h>
-
 namespace openr {
 
 namespace {
@@ -26,14 +24,6 @@ getZmqSocketFd(uintptr_t socketPtr) {
       reinterpret_cast<void*>(socketPtr), ZMQ_FD, &socketFd, &fdLen);
   CHECK_EQ(0, rc) << "Can't get fd for socket. " << fbzmq::Error();
   return socketFd;
-}
-
-folly::fibers::FiberManager::Options
-getFmOptions() {
-  folly::fibers::FiberManager::Options options;
-  // NOTE: We use higher stack size (256KB per fiber)
-  options.stackSize = 256 * 1024;
-  return options;
 }
 } // namespace
 
@@ -119,8 +109,7 @@ OpenrEventBase::OpenrEventBase(
     const std::string& nodeName,
     const thrift::OpenrModuleType type,
     fbzmq::Context& zmqContext)
-    : OpenrModule(nodeName, type, zmqContext),
-      fiberManager_(folly::fibers::getFiberManager(evb_, getFmOptions())) {
+    : OpenrModule(nodeName, type, zmqContext) {
   evb_.runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     prepareSocket(inprocCmdSock_, inprocCmdUrl);
     addSocket(*inprocCmdSock_, ZMQ_POLLIN, [this](int) noexcept {
@@ -138,9 +127,7 @@ OpenrEventBase::OpenrEventBase(
   timeout_->scheduleTimeout(0);
 }
 
-OpenrEventBase::OpenrEventBase()
-    : OpenrModule(),
-      fiberManager_(folly::fibers::getFiberManager(evb_, getFmOptions())) {
+OpenrEventBase::OpenrEventBase() : OpenrModule() {
   // Periodic timer to update eventbase's timestamp. This is used by Watchdog to
   // identify stuck threads.
   timestamp_ = getElapsedSeconds();

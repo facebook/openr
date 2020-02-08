@@ -47,11 +47,6 @@ class OpenrEventBase : public OpenrModule {
     return &evb_;
   }
 
-  folly::fibers::FiberManager*
-  getFiberManager() {
-    return &fiberManager_;
-  }
-
   /**
    * EventBase API aliases
    */
@@ -142,9 +137,6 @@ class OpenrEventBase : public OpenrModule {
 
   // EventBase object for async event polling/scheduling
   folly::EventBase evb_;
-
-  // FiberManager driven by evb_, for scheduling fiber tasks
-  folly::fibers::FiberManager& fiberManager_;
 
   // Data structure to hold fd and their handlers
   std::unordered_map<int /* fd */, ZmqEventHandler> fdHandlers_;

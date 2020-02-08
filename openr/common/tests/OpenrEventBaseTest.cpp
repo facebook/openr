@@ -58,20 +58,6 @@ TEST(OpenrEventBaseTest, CreateDestroy) {
   fbzmq::Context context;
   OpenrTestEvb evb(context);
   EXPECT_TRUE(evb.getEvb() != nullptr);
-  EXPECT_TRUE(evb.getFiberManager() != nullptr);
-}
-
-TEST(OpenrEventBaseTest, FiberTest) {
-  folly::Promise<folly::Unit> p;
-  auto sf = p.getSemiFuture();
-  OpenrEventBase evb;
-  evb.getFiberManager()->addTask([p = std::move(p)]() mutable noexcept {
-    p.setValue(folly::Unit());
-  });
-  evb.getEvb()->loopOnce();
-  EXPECT_TRUE(sf.valid());
-  EXPECT_TRUE(sf.isReady());
-  EXPECT_TRUE(sf.hasValue());
 }
 
 TEST(OpenrEventBaseTest, RunnableApi) {
