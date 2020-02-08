@@ -19,7 +19,7 @@
 
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
-#include <openr/config-store/PersistentStoreClient.h>
+#include <openr/config-store/PersistentStore.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
@@ -31,7 +31,7 @@ class PrefixManager final : public OpenrEventBase {
  public:
   PrefixManager(
       const std::string& nodeId,
-      const PersistentStoreUrl& persistentStoreUrl,
+      PersistentStore* configStore,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
@@ -122,7 +122,7 @@ class PrefixManager final : public OpenrEventBase {
   const std::string nodeId_;
 
   // client to interact with ConfigStore
-  PersistentStoreClient configStoreClient_;
+  PersistentStore* configStore_{nullptr};
 
   // keep track of prefixDB on disk
   thrift::PrefixDatabase diskState_;

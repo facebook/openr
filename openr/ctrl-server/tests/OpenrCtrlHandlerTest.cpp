@@ -50,7 +50,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         Constants::kPersistentStoreInitialBackoff,
         Constants::kPersistentStoreMaxBackoff,
         true /* dryrun */);
-    persistentStoreUrl_ = PersistentStoreUrl{persistentStore->inprocCmdUrl};
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create KvStore module
@@ -109,7 +108,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
         nodeName,
-        persistentStoreUrl_,
+        persistentStore.get(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         monitorSubmitUrl_,
@@ -159,7 +158,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         sparkCmdUrl_,
         sparkReportUrl_,
         monitorSubmitUrl_,
-        persistentStoreUrl_,
+        persistentStore.get(),
         false,
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         platformPubUrl_,
@@ -253,7 +252,6 @@ class OpenrCtrlFixture : public ::testing::Test {
   const SparkReportUrl sparkReportUrl_{"inproc://spark-report"};
   const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
   const LinkMonitorGlobalPubUrl lmPubUrl_{"inproc://link-monitor-pub-url"};
-  PersistentStoreUrl persistentStoreUrl_;
 
   fbzmq::Context context_;
   folly::EventBase evb_;

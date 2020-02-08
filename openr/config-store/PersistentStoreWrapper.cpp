@@ -18,11 +18,8 @@ PersistentStoreWrapper::PersistentStoreWrapper(
     : nodeName(folly::sformat("1-{}", tid)),
       filePath(folly::sformat("/tmp/aq_persistent_store_test_{}", tid)) {
   VLOG(1) << "PersistentStoreWrapper: Creating PersistentStore.";
-  store_ = std::make_shared<PersistentStore>(
+  store_ = std::make_unique<PersistentStore>(
       nodeName, filePath, context, saveInitialBackoff, saveMaxBackoff);
-
-  // set sockUrl as inproc socketUrl
-  sockUrl = store_->inprocCmdUrl;
 }
 
 void

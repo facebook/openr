@@ -1004,21 +1004,28 @@ OpenrCtrlHandler::semifuture_setConfigKey(
     std::unique_ptr<std::string> key, std::unique_ptr<std::string> value) {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
   return dynamic_cast<PersistentStore*>(module.get())
-      ->setConfigKey(std::move(*key), std::move(*value));
+      ->store(std::move(*key), std::move(*value));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_eraseConfigKey(std::unique_ptr<std::string> key) {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
-  return dynamic_cast<PersistentStore*>(module.get())
-      ->eraseConfigKey(std::move(*key));
+  auto sf =
+      dynamic_cast<PersistentStore*>(module.get())->erase(std::move(*key));
+  return std::move(sf).defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<std::unique_ptr<std::string>>
 OpenrCtrlHandler::semifuture_getConfigKey(std::unique_ptr<std::string> key) {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
-  return dynamic_cast<PersistentStore*>(module.get())
-      ->getConfigKey(std::move(*key));
+  auto sf = dynamic_cast<PersistentStore*>(module.get())->load(std::move(*key));
+  return std::move(sf).defer(
+      [](folly::Try<std::optional<std::string>>&& val) mutable {
+        if (val.hasException() or not val->has_value()) {
+          throw thrift::OpenrError("key doesn't exists");
+        }
+        return std::make_unique<std::string>(std::move(val).value().value());
+      });
 }
 
 } // namespace openr

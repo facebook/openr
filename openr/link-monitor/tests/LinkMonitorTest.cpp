@@ -207,7 +207,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         Constants::kPersistentStoreInitialBackoff,
         Constants::kPersistentStoreMaxBackoff,
         true /* dryrun */);
-    kConfigStoreUrl = configStore->inprocCmdUrl;
 
     configStoreThread = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "ConfigStore thread starting";
@@ -235,7 +234,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
-        PersistentStoreUrl{kConfigStoreUrl},
+        configStore.get(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -295,7 +294,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         SparkCmdUrl{"inproc://spark-req"},
         SparkReportUrl{"inproc://spark-report"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
-        PersistentStoreUrl{kConfigStoreUrl},
+        configStore.get(),
         false,
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
@@ -336,9 +335,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // Erase data from config store
     LOG(INFO) << "Erasing data from config store";
-    PersistentStoreClient configStoreClient{PersistentStoreUrl{kConfigStoreUrl},
-                                            context};
-    configStoreClient.erase("link-monitor-config");
+    configStore->erase("link-monitor-config").get();
 
     // stop config store
     LOG(INFO) << "Stopping config store";
@@ -550,7 +547,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   unique_ptr<PersistentStore> configStore;
   unique_ptr<std::thread> configStoreThread;
-  std::string kConfigStoreUrl;
 
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
@@ -899,7 +895,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       SparkCmdUrl{"inproc://spark-req2"},
       SparkReportUrl{"inproc://spark-report2"},
       MonitorSubmitUrl{"inproc://monitor-rep2"},
-      PersistentStoreUrl{kConfigStoreUrl}, /* same config store */
+      configStore.get(),
       false,
       PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url2"},
@@ -1308,7 +1304,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       SparkCmdUrl{"inproc://spark-req"},
       SparkReportUrl{"inproc://spark-report"},
       MonitorSubmitUrl{"inproc://monitor-rep"},
-      PersistentStoreUrl{kConfigStoreUrl},
+      configStore.get(),
       false,
       PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url"},
@@ -1794,7 +1790,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         SparkCmdUrl{"inproc://spark-req"},
         SparkReportUrl{"inproc://spark-report"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
-        PersistentStoreUrl{kConfigStoreUrl},
+        configStore.get(),
         false,
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         PlatformPublisherUrl{"inproc://platform-pub-url"},

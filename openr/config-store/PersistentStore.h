@@ -49,10 +49,6 @@ struct PersistentObject {
  * You can interact with this module via ZMQ-Socket APIs described in
  * PersistentStore.thrift file via `REP` socket.
  *
- * To facilitate the easier communication and avoid boilerplate code to interact
- * with PersistentStore use PersistentStoreClient which allows you to
- * load/save/erase entries with different value types like thrift-objects,
- * primitive types and strings.
  */
 class PersistentStore : public OpenrEventBase {
  public:
@@ -75,20 +71,55 @@ class PersistentStore : public OpenrEventBase {
     return numOfWritesToDisk_;
   }
 
-  // Encode a PersistentObject, this can be private method, but for unit test,
-  // we make it public
+  /**
+   * Encode/Decode a PersistentObject, this can be private method, but for unit
+   * test, we make it public
+   */
   static folly::Expected<std::unique_ptr<folly::IOBuf>, std::string>
   encodePersistentObject(const PersistentObject& pObject) noexcept;
-  // Decode a PersistentObject, this can be private method, but for test,
-  // we make it public
-  folly::Expected<folly::Optional<PersistentObject>, std::string>
+  static folly::Expected<folly::Optional<PersistentObject>, std::string>
   decodePersistentObject(folly::io::Cursor& cursor) noexcept;
 
+  //
   // Public API
-  folly::SemiFuture<folly::Unit> setConfigKey(
-      std::string key, std::string value);
-  folly::SemiFuture<folly::Unit> eraseConfigKey(std::string key);
-  folly::SemiFuture<std::unique_ptr<std::string>> getConfigKey(std::string key);
+  //
+
+  // Store key-value
+  folly::SemiFuture<folly::Unit> store(std::string key, std::string value);
+
+  // Get value for a key. `nullptr` will be returned if key doesn't exists
+  folly::SemiFuture<std::optional<std::string>> load(std::string key);
+
+  // Erase config
+  folly::SemiFuture<bool> erase(std::string key);
+
+  // Utility function to store thrift objects
+  template <typename ThriftType>
+  folly::SemiFuture<folly::Unit>
+  storeThriftObj(std::string key, ThriftType const& value) noexcept {
+    apache::thrift::CompactSerializer serializer;
+    std::string result;
+    serializer.serialize(value, &result);
+    return store(std::move(key), std::move(result));
+  }
+
+  // Utility function to load thrift objects
+  template <typename ThriftType>
+  folly::SemiFuture<folly::Expected<ThriftType, folly::Unit>>
+  loadThriftObj(std::string key) noexcept {
+    auto futureVal = load(std::move(key));
+    return std::move(futureVal).defer(
+        [](folly::Try<std::optional<std::string>>&& value)
+            -> folly::Expected<ThriftType, folly::Unit> {
+          if (value.hasException() or not value->has_value()) {
+            return folly::makeUnexpected(folly::Unit());
+          }
+          apache::thrift::CompactSerializer serializer;
+          ThriftType obj;
+          serializer.deserialize(*value.value(), obj);
+          return obj;
+        });
+  }
 
  private:
   // Function to process pending request on reqSocket_

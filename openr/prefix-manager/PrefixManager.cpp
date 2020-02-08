@@ -34,7 +34,7 @@ getPrefixTypeName(thrift::PrefixType const& type) {
 
 PrefixManager::PrefixManager(
     const std::string& nodeId,
-    const PersistentStoreUrl& persistentStoreUrl,
+    PersistentStore* configStore,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
@@ -48,7 +48,7 @@ PrefixManager::PrefixManager(
     : OpenrEventBase(
           nodeId, thrift::OpenrModuleType::PREFIX_MANAGER, zmqContext),
       nodeId_(nodeId),
-      configStoreClient_{persistentStoreUrl, zmqContext},
+      configStore_{configStore},
       prefixDbMarker_{prefixDbMarker},
       perPrefixKeys_{perPrefixKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
@@ -56,9 +56,10 @@ PrefixManager::PrefixManager(
       kvStoreClient_{
           zmqContext, this, nodeId_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl},
       areas_{areas} {
+  CHECK(configStore_);
   // pick up prefixes from disk
   auto maybePrefixDb =
-      configStoreClient_.loadThriftObj<thrift::PrefixDatabase>(kConfigKey);
+      configStore_->loadThriftObj<thrift::PrefixDatabase>(kConfigKey).get();
   if (maybePrefixDb.hasValue()) {
     LOG(INFO) << "Successfully loaded " << maybePrefixDb->prefixEntries.size()
               << " prefixes from disk";
@@ -154,13 +155,8 @@ PrefixManager::persistPrefixDb() {
     }
   }
   if (diskState_ != persistentPrefixDb) {
-    auto ret =
-        configStoreClient_.storeThriftObj(kConfigKey, persistentPrefixDb);
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error saving persistent prefixDb to file. " << ret.error();
-    } else {
-      diskState_ = std::move(persistentPrefixDb);
-    }
+    configStore_->storeThriftObj(kConfigKey, persistentPrefixDb).get();
+    diskState_ = std::move(persistentPrefixDb);
   }
 }
 

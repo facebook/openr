@@ -15,10 +15,6 @@ For more information about message formats, checkout
 The kvStoreClient running with this module is responsible for making the
 `prefix:<node_name>` key persistent in the network.
 
-#### PersistentStoreClient
-Responsible for writing the current PrefixDatabase to disk, and picking it up
-after restarts.
-
 #### Cmd Socket
 Supports the following commands
 - `ADD_PREFIXES` => Adds the list of prefixes provided as an argument

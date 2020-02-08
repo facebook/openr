@@ -399,8 +399,9 @@ main(int argc, char** argv) {
           std::chrono::milliseconds(FLAGS_persistent_store_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_persistent_store_max_backoff_ms)));
 
-  const PersistentStoreUrl configStoreInProcUrl{
-      moduleTypeToObj.at(OpenrModuleType::PERSISTENT_STORE)->inprocCmdUrl};
+  auto configStore = dynamic_cast<PersistentStore*>(
+      moduleTypeToObj.at(openr::thrift::OpenrModuleType::PERSISTENT_STORE)
+          .get());
 
   // Start monitor Module
   // for each log message it receives, we want to add the openr domain
@@ -496,7 +497,7 @@ main(int argc, char** argv) {
       watchdog,
       std::make_shared<PrefixManager>(
           FLAGS_node_name,
-          configStoreInProcUrl,
+          configStore,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
           monitorSubmitUrl,
@@ -545,7 +546,7 @@ main(int argc, char** argv) {
             FLAGS_prefix_fwd_type_mpls,
             FLAGS_prefix_algo_type_ksp2_ed_ecmp,
             Constants::kPrefixAllocatorSyncInterval,
-            configStoreInProcUrl,
+            configStore,
             context,
             FLAGS_system_agent_port));
   }
@@ -703,7 +704,7 @@ main(int argc, char** argv) {
                   : FLAGS_spark_cmd_url},
           SparkReportUrl{FLAGS_spark_report_url},
           monitorSubmitUrl,
-          configStoreInProcUrl,
+          configStore,
           FLAGS_assume_drained,
           prefixManagerLocalCmdUrl,
           PlatformPublisherUrl{FLAGS_platform_pub_url},

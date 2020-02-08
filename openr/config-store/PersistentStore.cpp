@@ -67,60 +67,19 @@ PersistentStore::~PersistentStore() {
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
 PersistentStore::processRequestMsg(fbzmq::Message&& requestMsg) {
-  thrift::StoreResponse response;
-  auto request = requestMsg.readThriftObj<thrift::StoreRequest>(serializer_);
-  if (request.hasError()) {
-    LOG(ERROR) << "Error while reading request " << request.error();
-    response.success = false;
-    return fbzmq::Message::fromThriftObj(response, serializer_);
-  }
-
-  // Generate response
-  response.key = request->key;
-  PersistentObject pObject;
-  switch (request->requestType) {
-  case thrift::StoreRequestType::STORE: {
-    // Override previous value if any
-    database_.keyVals[request->key] = request->data;
-    pObject = toPersistentObject(ActionType::ADD, request->key, request->data);
-    response.success = true;
-    break;
-  }
-  case thrift::StoreRequestType::LOAD: {
-    auto it = database_.keyVals.find(request->key);
-    const bool success = it != database_.keyVals.end();
-    response.success = success;
-    response.data = success ? it->second : "";
-    break;
-  }
-  case thrift::StoreRequestType::ERASE: {
-    response.success = database_.keyVals.erase(request->key) > 0;
-    pObject = toPersistentObject(ActionType::DEL, request->key, request->data);
-    break;
-  }
-  default: {
-    LOG(ERROR) << "Got unknown request.";
-    response.success = false;
-    break;
-  }
-  }
-
-  // Schedule database save
-  if (response.success and
-      (request->requestType != thrift::StoreRequestType::LOAD)) {
-    pObjects_.emplace_back(std::move(pObject));
-    maybeSaveObjectToDisk();
-  }
-
-  // Send response
-  return fbzmq::Message::fromThriftObj(response, serializer_);
+  LOG(FATAL) << "DEPRECATED. Unexpected request received";
 }
 
 folly::SemiFuture<folly::Unit>
-PersistentStore::setConfigKey(std::string key, std::string value) {
+PersistentStore::store(std::string key, std::string value) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([this, p = std::move(p), key, value]() mutable noexcept {
+  runInEventBaseThread([
+    this,
+    p = std::move(p),
+    key = std::move(key),
+    value = std::move(value)
+  ]() mutable noexcept {
     SYSLOG(INFO) << "Store key: " << key << ", value: " << value
                  << " to config-store";
     // Override previous value if any
@@ -133,37 +92,39 @@ PersistentStore::setConfigKey(std::string key, std::string value) {
   return sf;
 }
 
-folly::SemiFuture<folly::Unit>
-PersistentStore::eraseConfigKey(std::string key) {
-  folly::Promise<folly::Unit> p;
+folly::SemiFuture<bool>
+PersistentStore::erase(std::string key) {
+  folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([this, p = std::move(p), key]() mutable noexcept {
-    SYSLOG(INFO) << "Erase key: " << key << " from config-store";
-    if (database_.keyVals.erase(key) > 0) {
-      auto pObject = toPersistentObject(ActionType::DEL, key, "");
-      pObjects_.emplace_back(std::move(pObject));
-      maybeSaveObjectToDisk();
-    } else {
-      LOG(WARNING) << "Key: " << key << " doesn't exist";
-    }
-    p.setValue();
-  });
+  runInEventBaseThread(
+      [this, p = std::move(p), key = std::move(key)]() mutable noexcept {
+        SYSLOG(INFO) << "Erase key: " << key << " from config-store";
+        if (database_.keyVals.erase(key) > 0) {
+          auto pObject = toPersistentObject(ActionType::DEL, key, "");
+          pObjects_.emplace_back(std::move(pObject));
+          maybeSaveObjectToDisk();
+          p.setValue(true);
+        } else {
+          LOG(WARNING) << "Key: " << key << " doesn't exist";
+          p.setValue(false);
+        }
+      });
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<std::string>>
-PersistentStore::getConfigKey(std::string key) {
-  folly::Promise<std::unique_ptr<std::string>> p;
+folly::SemiFuture<std::optional<std::string>>
+PersistentStore::load(std::string key) {
+  folly::Promise<std::optional<std::string>> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([this, p = std::move(p), key]() mutable {
-    auto it = database_.keyVals.find(key);
-    if (it != database_.keyVals.end()) {
-      p.setValue(std::make_unique<std::string>(it->second));
-    } else {
-      std::string msg = "Key: " + key + " NOT found";
-      p.setException(thrift::OpenrError(msg));
-    }
-  });
+  runInEventBaseThread(
+      [this, p = std::move(p), key = std::move(key)]() mutable {
+        auto it = database_.keyVals.find(key);
+        if (it != database_.keyVals.end()) {
+          p.setValue(it->second);
+        } else {
+          p.setValue(std::nullopt);
+        }
+      });
   return sf;
 }
 

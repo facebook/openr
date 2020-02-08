@@ -33,7 +33,6 @@
 #include <openr/allocators/RangeAllocator.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/config-store/PersistentStore.h>
-#include <openr/config-store/PersistentStoreClient.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
@@ -115,7 +114,7 @@ class LinkMonitor final : public OpenrEventBase {
       SparkCmdUrl sparkCmdUrl,
       SparkReportUrl sparkReportUrl,
       MonitorSubmitUrl const& monitorSubmitUrl,
-      PersistentStoreUrl const& configStoreUrl,
+      PersistentStore* configStore,
       // if set, we will assume drained if no drain state is found in the
       // persitentStore
       bool assumeDrained,
@@ -411,7 +410,7 @@ class LinkMonitor final : public OpenrEventBase {
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // client to interact with ConfigStore
-  std::unique_ptr<PersistentStoreClient> configStoreClient_;
+  PersistentStore* configStore_{nullptr};
 
   // client to interact with PrefixManager
   std::unique_ptr<PrefixManagerClient> prefixManagerClient_;
@@ -424,9 +423,6 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Timer for initial hold time expiry
   std::unique_ptr<folly::AsyncTimeout> adjHoldTimer_;
-
-  // Timer for loading config
-  std::unique_ptr<folly::AsyncTimeout> configLoadTimer_;
 }; // LinkMonitor
 
 } // namespace openr

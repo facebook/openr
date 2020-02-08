@@ -48,7 +48,7 @@ PrefixAllocator::PrefixAllocator(
     bool forwardingTypeMpls,
     bool forwardingAlgoKsp2Ed,
     std::chrono::milliseconds syncInterval,
-    PersistentStoreUrl const& configStoreUrl,
+    PersistentStore* configStore,
     fbzmq::Context& zmqContext,
     int32_t systemServicePort)
     : OpenrEventBase(
@@ -61,9 +61,10 @@ PrefixAllocator::PrefixAllocator(
       forwardingTypeMpls_(forwardingTypeMpls),
       forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
       syncInterval_(syncInterval),
-      configStoreClient_(configStoreUrl, zmqContext),
+      configStore_(configStore),
       zmqMonitorClient_(zmqContext, monitorSubmitUrl),
       systemServicePort_(systemServicePort) {
+  CHECK(configStore_);
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClient>(
       zmqContext, this, myNodeName_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl);
@@ -117,7 +118,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
     // 2) Start prefix allocator from previously configured params. Resume
     // from where we left earlier!
     auto maybeThriftAllocPrefix =
-        configStoreClient_.loadThriftObj<thrift::AllocPrefix>(kConfigKey);
+        configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
     if (maybeThriftAllocPrefix.hasValue()) {
       const auto oldAllocParams = std::make_pair(
           toIPNetwork(maybeThriftAllocPrefix->seedPrefix),
@@ -189,7 +190,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
     // 2) Start prefix allocator from previously configured params. Resume
     // from where we left earlier!
     auto maybeThriftAllocPrefix =
-        configStoreClient_.loadThriftObj<thrift::AllocPrefix>(kConfigKey);
+        configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
     if (maybeThriftAllocPrefix.hasValue()) {
       const auto oldAllocParams = std::make_pair(
           toIPNetwork(maybeThriftAllocPrefix->seedPrefix),
@@ -415,7 +416,7 @@ PrefixAllocator::loadPrefixIndexFromKvStore() {
 folly::Optional<uint32_t>
 PrefixAllocator::loadPrefixIndexFromDisk() {
   auto maybeThriftAllocPrefix =
-      configStoreClient_.loadThriftObj<thrift::AllocPrefix>(kConfigKey);
+      configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
   if (maybeThriftAllocPrefix.hasError()) {
     return folly::none;
   }
@@ -428,7 +429,7 @@ PrefixAllocator::savePrefixIndexToDisk(folly::Optional<uint32_t> prefixIndex) {
 
   if (!prefixIndex) {
     VLOG(4) << "Erasing prefix-allocator info from persistent config.";
-    configStoreClient_.erase(kConfigKey);
+    configStore_->erase(kConfigKey).get();
     return;
   }
 
@@ -444,11 +445,7 @@ PrefixAllocator::savePrefixIndexToDisk(folly::Optional<uint32_t> prefixIndex) {
       static_cast<int64_t>(allocParams_->second),
       static_cast<int64_t>(*prefixIndex));
 
-  auto res = configStoreClient_.storeThriftObj(kConfigKey, thriftAllocPrefix);
-  if (!(res.hasValue() && res.value())) {
-    LOG(ERROR) << "Error saving prefix-allocator info to persistent config. "
-               << res.error();
-  }
+  configStore_->storeThriftObj(kConfigKey, thriftAllocPrefix).get();
 }
 
 uint32_t

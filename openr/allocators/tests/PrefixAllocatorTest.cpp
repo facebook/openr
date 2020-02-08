@@ -84,12 +84,10 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         true /* dryrun */);
     threads_.emplace_back([&]() noexcept { configStore_->run(); });
     configStore_->waitUntilRunning();
-    configStoreClient_ = std::make_unique<PersistentStoreClient>(
-        PersistentStoreUrl{configStore_->inprocCmdUrl}, zmqContext_);
 
     // Erase previous configs (if any)
-    configStoreClient_->erase("prefix-allocator-config");
-    configStoreClient_->erase("prefix-manager-config");
+    configStore_->erase("prefix-allocator-config").get();
+    configStore_->erase("prefix-manager-config").get();
 
     mockServiceHandler_ = std::make_shared<MockSystemServiceHandler>();
     server_ = std::make_shared<apache::thrift::ThriftServer>();
@@ -106,7 +104,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     //
     prefixManager_ = std::make_unique<PrefixManager>(
         myNodeName_,
-        PersistentStoreUrl{configStore_->inprocCmdUrl},
+        configStore_.get(),
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -151,7 +149,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         false /* prefix fwd type MPLS */,
         false /* prefix fwd algo KSP2_ED_ECMP */,
         kSyncInterval,
-        PersistentStoreUrl{configStore_->inprocCmdUrl},
+        configStore_.get(),
         zmqContext_,
         port_);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
@@ -161,7 +159,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   void
   TearDown() override {
     kvStoreClient_.reset();
-    configStoreClient_.reset();
 
     // Stop various modules
     prefixAllocator_->stop();
@@ -195,7 +192,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
   std::unique_ptr<KvStoreClient> kvStoreClient_;
   std::unique_ptr<PersistentStore> configStore_;
-  std::unique_ptr<PersistentStoreClient> configStoreClient_;
   std::unique_ptr<PrefixManager> prefixManager_;
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
 
@@ -395,10 +391,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // spin up config store server for this allocator
       auto configStore = std::make_unique<PersistentStore>(
           folly::sformat("node{}", i), tempFileName, zmqContext);
-      std::string persistentStoreUrl = configStore->inprocCmdUrl;
       threads.emplace_back([&configStore]() noexcept { configStore->run(); });
       configStore->waitUntilRunning();
-      configStores.emplace_back(std::move(configStore));
 
       // Temporary config store for PrefixManager so that they are not being
       // used
@@ -406,17 +400,15 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       tempFileNames.emplace_back(tempFileName);
       auto tempConfigStore = std::make_unique<PersistentStore>(
           folly::sformat("temp-node{}", i), tempFileName, zmqContext);
-      std::string tempPersistentStoreUrl = tempConfigStore->inprocCmdUrl;
       threads.emplace_back([&tempConfigStore]() noexcept {
         tempConfigStore->run();
       });
       tempConfigStore->waitUntilRunning();
-      configStores.emplace_back(std::move(tempConfigStore));
 
       // spin up prefix manager
       auto prefixManager = std::make_unique<PrefixManager>(
           myNodeName,
-          PersistentStoreUrl{tempPersistentStoreUrl},
+          tempConfigStore.get(),
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
           MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -448,11 +440,14 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           false /* prefix fwd type MPLS */,
           false /* prefix fwd algo KSP2_ED_ECMP */,
           kSyncInterval,
-          PersistentStoreUrl{persistentStoreUrl},
+          configStore.get(),
           zmqContext,
           port_);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();
+
+      configStores.emplace_back(std::move(configStore));
+      configStores.emplace_back(std::move(tempConfigStore));
       allocators.emplace_back(std::move(allocator));
     }
 
@@ -637,7 +632,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
         std::chrono::milliseconds(10)); // erase-key
     kvStoreClient_->unsetKey(Constants::kSeedPrefixAllocParamKey.toString());
   });
-  configStoreClient_->erase("prefix-allocator-config");
+  configStore_->erase("prefix-allocator-config").get();
   // wait long enough for key to expire
   // @lint-ignore HOWTOEVEN1
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -905,7 +900,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
         std::chrono::milliseconds(10)); // erase-key
     kvStoreClient_->unsetKey(Constants::kStaticPrefixAllocParamKey.toString());
   });
-  configStoreClient_->erase("prefix-allocator-config");
+  configStore_->erase("prefix-allocator-config").get();
   // wait long enough for key to expire
   // @lint-ignore HOWTOEVEN1
   std::this_thread::sleep_for(std::chrono::milliseconds(100));

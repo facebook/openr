@@ -27,6 +27,10 @@ class PersistentStoreWrapper {
     stop();
   }
 
+  PersistentStore* operator->() {
+    return store_.get();
+  }
+
   /**
    * Synchronous APIs to run and stop PersistentStore. This creates a thread
    * and stop it on destruction.
@@ -40,10 +44,9 @@ class PersistentStoreWrapper {
  public:
   const std::string nodeName;
   const std::string filePath;
-  std::string sockUrl;
 
  private:
-  std::shared_ptr<PersistentStore> store_;
+  std::unique_ptr<PersistentStore> store_;
 
   // Thread in which PersistentStore will be running.
   std::thread storeThread_;

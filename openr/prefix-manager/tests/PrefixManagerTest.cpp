@@ -118,7 +118,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
-        PersistentStoreUrl{configStore->inprocCmdUrl},
+        configStore.get(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -148,9 +148,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
     prefixManagerThread->join();
 
     // Erase data from config store
-    PersistentStoreClient configStoreClient{
-        PersistentStoreUrl{configStore->inprocCmdUrl}, context};
-    configStoreClient.erase("prefix-manager-config");
+    configStore->erase("prefix-manager-config").get();
 
     // stop config store
     configStore->stop();
@@ -798,7 +796,7 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
-      PersistentStoreUrl{configStore->inprocCmdUrl},
+      configStore.get(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -903,7 +901,7 @@ TEST_P(PrefixManagerTestFixture, CheckReload) {
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
-      PersistentStoreUrl{configStore->inprocCmdUrl},
+      configStore.get(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -1065,7 +1063,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
   const auto startTime = std::chrono::steady_clock::now();
   auto prefixManager = std::make_unique<PrefixManager>(
       "node-1",
-      PersistentStoreUrl{configStore->inprocCmdUrl},
+      configStore.get(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},

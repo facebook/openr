@@ -60,7 +60,14 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nodeId_,
       folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_),
       context_);
-  configStoreUrl_ = configStore_->inprocCmdUrl;
+  // start config-store thread
+  std::thread configStoreThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " ConfigStore running.";
+    configStore_->run();
+    VLOG(1) << nodeId_ << " ConfigStore stopped.";
+  });
+  configStore_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(configStoreThread));
 
   // create zmq monitor
   monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
@@ -177,7 +184,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // start prefix manager
   prefixManager_ = std::make_unique<PrefixManager>(
       nodeId_,
-      PersistentStoreUrl{configStoreUrl_},
+      configStore_.get(),
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
@@ -212,7 +219,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       SparkCmdUrl{spark_->inprocCmdUrl},
       SparkReportUrl{sparkReportUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
-      PersistentStoreUrl{configStoreUrl_},
+      configStore_.get(),
       false,
       PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
       PlatformPublisherUrl{platformPubUrl_},
@@ -277,15 +284,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 template <class Serializer>
 void
 OpenrWrapper<Serializer>::run() {
-  // start config-store thread
-  std::thread configStoreThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " ConfigStore running.";
-    configStore_->run();
-    VLOG(1) << nodeId_ << " ConfigStore stopped.";
-  });
-  configStore_->waitUntilRunning();
-  allThreads_.emplace_back(std::move(configStoreThread));
-
   // start monitor thread
   std::thread monitorThread([this]() noexcept {
     VLOG(1) << nodeId_ << " Monitor running.";
@@ -353,7 +351,7 @@ OpenrWrapper<Serializer>::run() {
       false /* prefix fwd type MPLS */,
       false /* prefix fwd algo KSP2_ED_ECMP */,
       Constants::kPrefixAllocatorSyncInterval,
-      PersistentStoreUrl{configStoreUrl_},
+      configStore_.get(),
       context_,
       systemPort_ /* system agent port*/);
 

@@ -280,7 +280,6 @@ add_library(openrlib
   openr/common/ThriftUtil.cpp
   openr/common/Util.cpp
   openr/config-store/PersistentStore.cpp
-  openr/config-store/PersistentStoreClient.cpp
   openr/config-store/PersistentStoreWrapper.cpp
   openr/ctrl-server/OpenrCtrlHandler.cpp
   openr/decision/Decision.cpp

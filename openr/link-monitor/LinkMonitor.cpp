@@ -90,7 +90,7 @@ LinkMonitor::LinkMonitor(
     SparkCmdUrl sparkCmdUrl,
     SparkReportUrl sparkReportUrl,
     MonitorSubmitUrl const& monitorSubmitUrl,
-    PersistentStoreUrl const& configStoreUrl,
+    PersistentStore* configStore,
     bool assumeDrained,
     PrefixManagerLocalCmdUrl const& prefixManagerUrl,
     PlatformPublisherUrl const& platformPubUrl,
@@ -136,7 +136,9 @@ LinkMonitor::LinkMonitor(
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
+      configStore_(configStore),
       areas_(areas) {
+  CHECK(configStore_);
   // Create throttled adjacency advertiser
   advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
@@ -160,26 +162,19 @@ LinkMonitor::LinkMonitor(
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
   // Create config-store client
-  configStoreClient_ =
-      std::make_unique<PersistentStoreClient>(configStoreUrl, zmqContext);
-  configLoadTimer_ =
-      folly::AsyncTimeout::make(*getEvb(), [this, assumeDrained]() noexcept {
-        auto config =
-            configStoreClient_->loadThriftObj<thrift::LinkMonitorConfig>(
-                kConfigKey);
-        if (config.hasValue()) {
-          LOG(INFO) << "Loaded link-monitor config from disk.";
-          config_ = config.value();
-          printLinkMonitorConfig(config_);
-        } else {
-          config_.isOverloaded = assumeDrained;
-          LOG(WARNING) << folly::sformat(
-              "Failed to load link-monitor config. "
-              "Setting node as {}",
-              assumeDrained ? "DRAINED" : "UNDRAINED");
-        }
-      });
-  configLoadTimer_->scheduleTimeout(std::chrono::seconds(0));
+  auto config =
+      configStore_->loadThriftObj<thrift::LinkMonitorConfig>(kConfigKey).get();
+  if (config.hasValue()) {
+    LOG(INFO) << "Loaded link-monitor config from disk.";
+    config_ = config.value();
+    printLinkMonitorConfig(config_);
+  } else {
+    config_.isOverloaded = assumeDrained;
+    LOG(WARNING) << folly::sformat(
+        "Failed to load link-monitor config. "
+        "Setting node as {}",
+        assumeDrained ? "DRAINED" : "UNDRAINED");
+  }
 
   prefixManagerClient_ =
       std::make_unique<PrefixManagerClient>(prefixManagerUrl, zmqContext);
@@ -801,7 +796,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   tData_.addStatValue("link_monitor.advertise_adjacencies", 1, fbzmq::SUM);
 
   // Config is most likely to have changed. Update it in `ConfigStore`
-  configStoreClient_->storeThriftObj(kConfigKey, config_);
+  configStore_->storeThriftObj(kConfigKey, config_); // not awaiting on result
 
   // Cancel throttle timeout if scheduled
   if (advertiseAdjacenciesThrottled_->isActive()) {

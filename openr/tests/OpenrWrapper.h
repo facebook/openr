@@ -175,7 +175,6 @@ class OpenrWrapper {
   const std::string linkMonitorGlobalPubUrl_;
   const std::string decisionPubUrl_;
   std::string kvStoreLocalCmdUrl_;
-  std::string configStoreUrl_;
 
   // client sockets mainly for tests
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> kvStoreReqSock_;

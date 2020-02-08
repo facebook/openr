@@ -30,9 +30,6 @@ BOOST_STRONG_TYPEDEF(uint16_t, OpenrCtrlThriftPort);
 BOOST_STRONG_TYPEDEF(std::string, MonitorSubmitUrl);
 BOOST_STRONG_TYPEDEF(std::string, MonitorPubUrl);
 
-// PersistentStore URL
-BOOST_STRONG_TYPEDEF(std::string, PersistentStoreUrl);
-
 // Decision URLs
 BOOST_STRONG_TYPEDEF(std::string, DecisionPubUrl);
 

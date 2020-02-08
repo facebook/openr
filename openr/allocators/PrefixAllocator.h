@@ -23,7 +23,7 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
-#include <openr/config-store/PersistentStoreClient.h>
+#include <openr/config-store/PersistentStore.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
@@ -79,7 +79,7 @@ class PrefixAllocator : public OpenrEventBase {
       bool forwardingAlgoKsp2Ed,
       // period to check prefix collision
       std::chrono::milliseconds syncInterval,
-      PersistentStoreUrl const& configStoreUrl,
+      PersistentStore* configStore,
       fbzmq::Context& zmqContext,
       int32_t systemServicePort);
 
@@ -223,7 +223,7 @@ class PrefixAllocator : public OpenrEventBase {
   std::unique_ptr<KvStoreClient> kvStoreClient_{nullptr};
 
   // client to interact with ConfigStore
-  PersistentStoreClient configStoreClient_;
+  PersistentStore* configStore_{nullptr};
 
   // RangAlloctor to get unique prefix index for this node
   std::unique_ptr<RangeAllocator<uint32_t>> rangeAllocator_;
