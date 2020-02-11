@@ -252,6 +252,7 @@ class FibTestFixture : public ::testing::Test {
     LOG(INFO) << "Stopping the Fib thread";
     fib->stop();
     fibThread->join();
+    fib.reset();
 
     decisionPub.close();
     decisionRep.close();
