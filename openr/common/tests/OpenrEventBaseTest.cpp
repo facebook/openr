@@ -8,6 +8,7 @@
 #include <sys/eventfd.h>
 
 #include <fbzmq/zmq/Context.h>
+#include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
 #include <folly/synchronization/Baton.h>
 #include <gtest/gtest.h>
@@ -58,6 +59,19 @@ TEST(OpenrEventBaseTest, CreateDestroy) {
   fbzmq::Context context;
   OpenrTestEvb evb(context);
   EXPECT_TRUE(evb.getEvb() != nullptr);
+}
+
+TEST(OpenrEventBaseTest, FiberTest) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  OpenrEventBase evb;
+  evb.getFiberManager()->addTask([p = std::move(p)]() mutable noexcept {
+    p.setValue(folly::Unit());
+  });
+  evb.getEvb()->loopOnce();
+  EXPECT_TRUE(sf.valid());
+  EXPECT_TRUE(sf.isReady());
+  EXPECT_TRUE(sf.hasValue());
 }
 
 TEST(OpenrEventBaseTest, RunnableApi) {
