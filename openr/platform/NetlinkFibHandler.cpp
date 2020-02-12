@@ -558,7 +558,7 @@ NetlinkFibHandler::async_eb_registerForNeighborChanged(
   if (!info->eventBase) {
     info->eventBase = cb->getEventBase();
   }
-
+  info->clients.clear();
   info->clients.emplace(ctx, client);
   LOG(INFO) << "registered for bgp success";
   cb->done();
@@ -584,19 +584,10 @@ NetlinkFibHandler::invokeNeighborListeners(
         brokenClients_.push_back(client.first);
       }
     };
-    if (client.second != nullptr) {
-      try {
-        client.second->neighborsChanged(
-            clientDone,
-            neighborUpdate.getAddedNeighbor(),
-            neighborUpdate.getRemovedNeighbor());
-      } catch (const std::exception& ex) {
-        LOG(ERROR) << "calling neighbor change failed due to : " << ex.what();
-        brokenClients_.push_back(client.first);
-      }
-    } else {
-      LOG(ERROR) << "clients has null pointer";
-    }
+    client.second->neighborsChanged(
+        clientDone,
+        neighborUpdate.getAddedNeighbor(),
+        neighborUpdate.getRemovedNeighbor());
   }
 }
 
