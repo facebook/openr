@@ -132,6 +132,9 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
     auto responseReReLoadKey2 = store->load(keyVal2.first).get();
     EXPECT_TRUE(responseReReLoadKey2);
     EXPECT_EQ(val2, *responseReReLoadKey2);
+
+    // Erase key before we end the test
+    store->erase(keyVal2.first).get();
   }
 }
 

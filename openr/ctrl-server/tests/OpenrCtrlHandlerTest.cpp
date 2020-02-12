@@ -639,7 +639,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     auto subscription =
         handler->subscribeKvStore().toClientStream().subscribeExTry(
             folly::getEventBase(), [&received, key](auto&& t) {
-              if (!t.hasValue()) {
+              // Consider publication only if `key` is present
+              // NOTE: There can be updates to prefix or adj keys
+              if (!t.hasValue() or not t->keyVals.count(key)) {
                 return;
               }
               auto& pub = *t;
@@ -686,13 +688,20 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
         handler->semifuture_subscribeAndGetKvStore().get();
 
     // Expect 10 keys in the initial dump
-    EXPECT_EQ(11, responseAndSubscription.response.keyVals.size());
+    // NOTE: there may be extra keys from PrefixManager & LinkMonitor)
+    EXPECT_LE(10, responseAndSubscription.response.keyVals.size());
+    ASSERT_EQ(1, responseAndSubscription.response.keyVals.count(key));
+    EXPECT_EQ(
+        responseAndSubscription.response.keyVals.at(key),
+        createThriftValue(3, "node1", std::string("value1")));
 
     auto subscription =
         std::move(responseAndSubscription.stream)
             .toClientStream()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
-              if (!t.hasValue()) {
+              // Consider publication only if `key` is present
+              // NOTE: There can be updates to prefix or adj keys
+              if (!t.hasValue() or not t->keyVals.count(key)) {
                 return;
               }
               auto& pub = *t;
