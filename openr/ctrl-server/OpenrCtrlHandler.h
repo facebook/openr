@@ -35,17 +35,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   ~OpenrCtrlHandler() override;
 
   //
-  // Raw APIs to directly interact with Open/R modules
-  //
-
-  folly::SemiFuture<std::unique_ptr<std::string>> semifuture_command(
-      thrift::OpenrModuleType type,
-      std::unique_ptr<std::string> request) override;
-
-  folly::SemiFuture<bool> semifuture_hasModule(
-      thrift::OpenrModuleType type) override;
-
-  //
   // fb303 service APIs
   //
 
@@ -171,9 +160,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
-  folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyValsOneWay(
-      std::unique_ptr<thrift::KeySetParams> setParams,
-      std::unique_ptr<std::string> area) override;
 
   folly::SemiFuture<folly::Unit> semifuture_processKvStoreDualMessage(
       std::unique_ptr<thrift::DualMessages> messages,
@@ -285,18 +271,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   }
 
  private:
-  // For oneway requests, empty message will be returned immediately
-  folly::Expected<fbzmq::Message, fbzmq::Error> requestReplyMessage(
-      thrift::OpenrModuleType module, fbzmq::Message&& request, bool oneway);
-
-  template <typename ReturnType, typename InputType>
-  folly::Expected<ReturnType, fbzmq::Error> requestReplyThrift(
-      thrift::OpenrModuleType module, InputType&& input);
-
-  template <typename InputType>
-  folly::SemiFuture<folly::Unit> processThriftRequest(
-      thrift::OpenrModuleType module, InputType&& request, bool oneway);
-
   void authorizeConnection();
 
   const std::string nodeName_;

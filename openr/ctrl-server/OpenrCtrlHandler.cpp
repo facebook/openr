@@ -20,6 +20,7 @@
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/PersistentStore_types.h>
+#include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
@@ -227,96 +228,6 @@ OpenrCtrlHandler::authorizeConnection() {
   }
 }
 
-folly::Expected<fbzmq::Message, fbzmq::Error>
-OpenrCtrlHandler::requestReplyMessage(
-    thrift::OpenrModuleType module, fbzmq::Message&& request, bool oneway) {
-  // Check module
-  auto moduleIt = moduleSockets_.find(module);
-  if (moduleIt == moduleSockets_.end()) {
-    return folly::makeUnexpected(fbzmq::Error(
-        0, folly::sformat("Unknown module {}", static_cast<int>(module))));
-  }
-
-  // Send request
-  auto& sock = moduleIt->second;
-  auto sendRet = sock.sendOne(std::move(request));
-  if (sendRet.hasError()) {
-    return folly::makeUnexpected(sendRet.error());
-  }
-
-  // Recv response if not oneway
-  if (oneway) {
-    return fbzmq::Message();
-  } else {
-    return sock.recvOne(Constants::kReadTimeout);
-  }
-}
-
-template <typename ReturnType, typename InputType>
-folly::Expected<ReturnType, fbzmq::Error>
-OpenrCtrlHandler::requestReplyThrift(
-    thrift::OpenrModuleType module, InputType&& input) {
-  apache::thrift::CompactSerializer serializer;
-  auto reply = requestReplyMessage(
-      module,
-      fbzmq::Message::fromThriftObj(std::forward<InputType>(input), serializer)
-          .value(),
-      false);
-  if (reply.hasError()) {
-    return folly::makeUnexpected(reply.error());
-  }
-
-  // Recv response
-  return reply->template readThriftObj<ReturnType>(serializer);
-}
-
-template <typename InputType>
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::processThriftRequest(
-    thrift::OpenrModuleType module, InputType&& input, bool oneway) {
-  folly::Promise<folly::Unit> p;
-
-  apache::thrift::CompactSerializer serializer;
-  auto reply = requestReplyMessage(
-      module,
-      fbzmq::Message::fromThriftObj(std::forward<InputType>(input), serializer)
-          .value(),
-      oneway);
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue();
-  }
-
-  return p.getSemiFuture();
-}
-
-folly::SemiFuture<std::unique_ptr<std::string>>
-OpenrCtrlHandler::semifuture_command(
-    thrift::OpenrModuleType module, std::unique_ptr<std::string> request) {
-  authorizeConnection();
-  folly::Promise<std::unique_ptr<std::string>> p;
-
-  auto reply = requestReplyMessage(
-      module, fbzmq::Message::from(std::move(*request)).value(), false);
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(
-        std::make_unique<std::string>(reply->read<std::string>().value()));
-  }
-
-  return p.getSemiFuture();
-}
-
-folly::SemiFuture<bool>
-OpenrCtrlHandler::semifuture_hasModule(thrift::OpenrModuleType type) {
-  authorizeConnection();
-  folly::Promise<bool> p;
-  p.setValue(0 != moduleSockets_.count(type));
-  return p.getSemiFuture();
-}
-
 facebook::fb303::cpp2::fb_status
 OpenrCtrlHandler::getStatus() {
   return facebook::fb303::cpp2::fb_status::ALIVE;
@@ -410,6 +321,9 @@ OpenrCtrlHandler::getBuildInfo(thrift::BuildInfo& _buildInfo) {
   _buildInfo = getBuildInfoThrift();
 }
 
+//
+// PrefixManager APIs
+//
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_advertisePrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
@@ -456,6 +370,9 @@ OpenrCtrlHandler::semifuture_getPrefixesByType(thrift::PrefixType prefixType) {
       ->dumpAllPrefixesWithType(prefixType);
 }
 
+//
+// Fib APIs
+//
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDb() {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
@@ -499,7 +416,6 @@ OpenrCtrlHandler::semifuture_getPerfDb() {
 //
 // Decision APIs
 //
-//
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDbComputed(
     std::unique_ptr<std::string> nodeName) {
@@ -519,144 +435,90 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
   return dynamic_cast<Decision*>(module.get())->getDecisionPrefixDbs();
 }
 
+//
+// KvStore APIs
+//
 folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>>
 OpenrCtrlHandler::semifuture_getAreasConfig() {
-  folly::Promise<std::unique_ptr<thrift::AreasConfig>> p;
-
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::AREAS_CONFIG_GET;
-
-  auto reply = requestReplyThrift<thrift::AreasConfig>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::AreasConfig>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())->getAreasConfig();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
-
-  thrift::KvStoreRequest request;
   thrift::KeyGetParams params;
-
   params.keys = std::move(*filterKeys);
-  request.cmd = thrift::Command::KEY_GET;
-  request.keyGetParams = params;
 
-  auto reply = requestReplyThrift<thrift::Publication>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::Publication>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->getKvStoreKeyVals(std::move(params));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
-
-  thrift::KvStoreRequest request;
   thrift::KeyGetParams params;
-
   params.keys = std::move(*filterKeys);
-  request.cmd = thrift::Command::KEY_GET;
-  request.keyGetParams = params;
-  request.area = std::move(*area);
 
-  auto reply = requestReplyThrift<thrift::Publication>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::Publication>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->getKvStoreKeyVals(std::move(params), std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
-
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams = std::move(*filter);
-
-  auto reply = requestReplyThrift<thrift::Publication>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::Publication>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->dumpKvStoreKeys(std::move(*filter));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
-
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams = std::move(*filter);
-  request.area = std::move(*area);
-
-  auto reply = requestReplyThrift<thrift::Publication>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::Publication>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->dumpKvStoreKeys(std::move(*filter), std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreHashFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->dumpKvStoreHashes(std::move(*filter));
+}
 
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::HASH_DUMP;
-  request.keyDumpParams = std::move(*filter);
+folly::SemiFuture<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
+    std::unique_ptr<thrift::KeyDumpParams> filter,
+    std::unique_ptr<std::string> area) {
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->dumpKvStoreHashes(std::move(*filter), std::move(*area));
+}
 
-  auto reply = requestReplyThrift<thrift::Publication>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::Publication>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->setKvStoreKeyVals(std::move(*setParams), std::move(*area));
 }
 
 folly::SemiFuture<bool>
 OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
     std::unique_ptr<thrift::KeyVals> snapshot) {
   folly::Promise<bool> p;
-  folly::SemiFuture<bool> sf = p.getSemiFuture();
+  auto sf = p.getSemiFuture();
 
   auto timeStamp = getUnixTimeStampMs();
   auto requestId = pendingRequestId_++;
 
-  thrift::KvStoreRequest request;
   thrift::KeyDumpParams params;
 
   // build thrift::KeyVals with "adj:" key ONLY
@@ -672,19 +534,24 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
   params.prefix = Constants::kAdjDbMarker;
   // Only dump difference between KvStore and client snapshot
   params.keyValHashes = std::move(adjKeyVals);
-  request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams = std::move(params);
 
-  auto reply = requestReplyThrift<thrift::Publication>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else if (reply->keyVals.size() > 0) {
+  // Explicitly do SYNC call to get HASH_DUMP from KvStore
+  std::unique_ptr<thrift::Publication> thriftPub{nullptr};
+  try {
+    thriftPub = semifuture_getKvStoreKeyValsFiltered(
+                    std::make_unique<thrift::KeyDumpParams>(params))
+                    .get();
+  } catch (std::exception const& ex) {
+    p.setException(thrift::OpenrError(ex.what()));
+    return sf;
+  }
+
+  if (thriftPub->keyVals.size() > 0) {
     VLOG(3) << "AdjKey has been added/modified. Notify immediately";
     p.setValue(true);
   } else if (
-      reply->tobeUpdatedKeys.hasValue() &&
-      reply->tobeUpdatedKeys.value().size() > 0) {
+      thriftPub->tobeUpdatedKeys.hasValue() &&
+      thriftPub->tobeUpdatedKeys.value().size() > 0) {
     VLOG(3) << "AdjKey has been deleted/expired. Notify immediately";
     p.setValue(true);
   } else {
@@ -699,166 +566,68 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
-    std::unique_ptr<thrift::KeyDumpParams> filter,
-    std::unique_ptr<std::string> area) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
-
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::HASH_DUMP;
-  request.keyDumpParams = std::move(*filter);
-  request.area = std::move(*area);
-
-  auto reply = requestReplyThrift<thrift::Publication>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::Publication>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
-}
-
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
-    std::unique_ptr<thrift::KeySetParams> setParams,
-    std::unique_ptr<std::string> area) {
-  const bool solicitResponse = setParams->solicitResponse;
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::KEY_SET;
-  request.keySetParams = std::move(*setParams);
-  request.area = std::move(*area);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::KVSTORE,
-      std::move(request),
-      not solicitResponse);
-}
-
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::semifuture_setKvStoreKeyValsOneWay(
-    std::unique_ptr<thrift::KeySetParams> setParams,
-    std::unique_ptr<std::string> area) {
-  setParams->solicitResponse = false; // Disable solicit response
-  return semifuture_setKvStoreKeyVals(std::move(setParams), std::move(area));
-}
-
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_processKvStoreDualMessage(
     std::unique_ptr<thrift::DualMessages> messages,
     std::unique_ptr<std::string> area) {
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::DUAL;
-  request.area = std::move(*area);
-  request.dualMessages = std::move(*messages);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::KVSTORE, std::move(request), true /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->processKvStoreDualMessage(std::move(*messages), std::move(*area));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_updateFloodTopologyChild(
     std::unique_ptr<thrift::FloodTopoSetParams> params,
     std::unique_ptr<std::string> area) {
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::FLOOD_TOPO_SET;
-  request.floodTopoSetParams = std::move(*params);
-  request.area = std::move(*area);
-
-  return processThriftRequest(
-      thrift::OpenrModuleType::KVSTORE, std::move(request), true /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->updateFloodTopologyChild(std::move(*params), std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
 OpenrCtrlHandler::semifuture_getSpanningTreeInfos(
     std::unique_ptr<std::string> area) {
-  folly::Promise<std::unique_ptr<thrift::SptInfos>> p;
-
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::FLOOD_TOPO_GET;
-  request.area = std::move(*area);
-
-  auto reply = requestReplyThrift<thrift::SptInfos>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::SptInfos>(std::move(reply.value())));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->getSpanningTreeInfos(std::move(*area));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_addUpdateKvStorePeers(
     std::unique_ptr<thrift::PeersMap> peers,
     std::unique_ptr<std::string> area) {
-  thrift::KvStoreRequest request;
   thrift::PeerAddParams params;
-
   params.peers = std::move(*peers);
-  request.cmd = thrift::Command::PEER_ADD;
-  request.peerAddParams = params;
-  request.area = std::move(*area);
 
-  return processThriftRequest(
-      thrift::OpenrModuleType::KVSTORE, std::move(request), false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->addUpdateKvStorePeers(std::move(params), std::move(*area));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_deleteKvStorePeers(
     std::unique_ptr<std::vector<std::string>> peerNames,
     std::unique_ptr<std::string> area) {
-  thrift::KvStoreRequest request;
   thrift::PeerDelParams params;
-
   params.peerNames = std::move(*peerNames);
-  request.cmd = thrift::Command::PEER_DEL;
-  request.peerDelParams = params;
-  request.area = std::move(*area);
 
-  return processThriftRequest(
-      thrift::OpenrModuleType::KVSTORE, std::move(request), false /* oneway */);
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->deleteKvStorePeers(std::move(params), std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeers() {
-  folly::Promise<std::unique_ptr<thrift::PeersMap>> p;
-
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::PEER_DUMP;
-
-  auto reply = requestReplyThrift<thrift::PeerCmdReply>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::PeersMap>(std::move(reply->peers)));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())->getKvStorePeers();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeersArea(
     std::unique_ptr<std::string> area) {
-  folly::Promise<std::unique_ptr<thrift::PeersMap>> p;
-
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::PEER_DUMP;
-  request.area = std::move(*area);
-
-  auto reply = requestReplyThrift<thrift::PeerCmdReply>(
-      thrift::OpenrModuleType::KVSTORE, std::move(request));
-  if (reply.hasError()) {
-    p.setException(thrift::OpenrError(reply.error().errString));
-  } else {
-    p.setValue(std::make_unique<thrift::PeersMap>(std::move(reply->peers)));
-  }
-
-  return p.getSemiFuture();
+  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
+  return dynamic_cast<KvStore*>(module.get())
+      ->getKvStorePeers(std::move(*area));
 }
 
 apache::thrift::ServerStream<thrift::Publication>
@@ -904,9 +673,9 @@ OpenrCtrlHandler::semifuture_subscribeAndGetKvStore() {
           });
 }
 
-/*
- * Set/unset node overload
- */
+//
+// LinkMonitor APIs
+//
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setNodeOverload() {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
@@ -919,9 +688,6 @@ OpenrCtrlHandler::semifuture_unsetNodeOverload() {
   return dynamic_cast<LinkMonitor*>(module.get())->setNodeOverload(false);
 }
 
-/*
- * Set/unset interface/link overload
- */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setInterfaceOverload(
     std::unique_ptr<std::string> interfaceName) {
@@ -938,9 +704,6 @@ OpenrCtrlHandler::semifuture_unsetInterfaceOverload(
       ->setInterfaceOverload(std::move(*interfaceName), false);
 }
 
-/*
- * Set/unset interface/link metric
- */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setInterfaceMetric(
     std::unique_ptr<std::string> interfaceName, int32_t overrideMetric) {
@@ -957,9 +720,6 @@ OpenrCtrlHandler::semifuture_unsetInterfaceMetric(
       ->setLinkMetric(std::move(*interfaceName), std::nullopt);
 }
 
-/*
- * Set/unset node adj metric
- */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setAdjacencyMetric(
     std::unique_ptr<std::string> interfaceName,
@@ -981,24 +741,21 @@ OpenrCtrlHandler::semifuture_unsetAdjacencyMetric(
           std::move(*interfaceName), std::move(*adjNodeName), std::nullopt);
 }
 
-/*
- * Dump interface/link information
- */
 folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
 OpenrCtrlHandler::semifuture_getInterfaces() {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
   return dynamic_cast<LinkMonitor*>(module.get())->getInterfaces();
 }
 
-/*
- * Dump adjacency database information
- */
 folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
   return dynamic_cast<LinkMonitor*>(module.get())->getLinkMonitorAdjacencies();
 }
 
+//
+// ConfigStore API
+//
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setConfigKey(
     std::unique_ptr<std::string> key, std::unique_ptr<std::string> value) {

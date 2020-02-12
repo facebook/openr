@@ -44,17 +44,6 @@ exception OpenrError {
 service OpenrCtrl extends fb303.FacebookService {
 
   //
-  // Raw APIs to directly interact with Open/R modules
-  // @deprecated - do not use these directly. Instead use specific thrift APIs
-  //
-
-  binary command(1: OpenrModuleType openrModule, 2: binary request)
-    throws (1: OpenrError error)
-
-  bool hasModule(1: OpenrModuleType openrModule)
-    throws (1: OpenrError error)
-
-  //
   // PrefixManager APIs
   //
 
@@ -236,11 +225,6 @@ service OpenrCtrl extends fb303.FacebookService {
     1: KvStore.KeySetParams setParams,
     2: string area = KvStore.kDefaultArea
   ) throws (1: OpenrError error)
-
-  oneway void setKvStoreKeyValsOneWay(
-    1: KvStore.KeySetParams setParams,
-    2: string area
-  )
 
   /**
    * Long poll API to get KvStore

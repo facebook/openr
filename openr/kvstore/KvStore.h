@@ -20,6 +20,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
 #include <folly/TokenBucket.h>
+#include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -171,6 +172,53 @@ class KvStoreDb : public DualNode {
   // Extracts the counters and submit them to monitor
   std::unordered_map<std::string, int64_t> getCounters();
 
+  // get multiple keys at once
+  thrift::Publication getKeyVals(std::vector<std::string> const& keys);
+
+  // dump the entries of my KV store whose keys match the given prefix
+  // if prefix is the empty sting, the full KV store is dumped
+  thrift::Publication dumpAllWithFilters(KvStoreFilters const& kvFilters) const;
+
+  // dump the hashes of my KV store whose keys match the given prefix
+  // if prefix is the empty sting, the full hash store is dumped
+  thrift::Publication dumpHashWithFilters(
+      KvStoreFilters const& kvFilters) const;
+
+  // dump the keys on which hashes differ from given keyVals
+  thrift::Publication dumpDifference(
+      std::unordered_map<std::string, thrift::Value> const& myKeyVal,
+      std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const;
+
+  // Merge received publication with local store and publish out the delta.
+  // If senderId is set, will build <key:value> map from kvStore_ and
+  // rcvdPublication.tobeUpdatedKeys and send back to senderId to update it
+  // @return: Number of KV updates applied
+  size_t mergePublication(
+      thrift::Publication const& rcvdPublication,
+      std::optional<std::string> senderId = std::nullopt);
+
+  // update Time to expire filed in Publication
+  // removeAboutToExpire: knob to remove keys which are about to expire
+  // and hence do not want to include them. Constants::kTtlThreshold
+  void updatePublicationTtl(
+      thrift::Publication& thriftPub, bool removeAboutToExpire = false);
+
+  // add new peers to sync with
+  void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
+
+  // delete some peers we are subscribed to
+  void delPeers(std::vector<std::string> const& peers);
+
+  // dump all peers we are subscribed to
+  thrift::PeerCmdReply dumpPeers();
+
+  // process spanning-tree-set command to set/unset a child for a given root
+  void processFloodTopoSet(
+      const thrift::FloodTopoSetParams& setParams) noexcept;
+
+  // get current snapshot of SPT(s) information
+  thrift::SptInfos processFloodTopoGet() noexcept;
+
  private:
   // disable copying
   KvStoreDb(KvStoreDb const&) = delete;
@@ -230,34 +278,8 @@ class KvStoreDb : public DualNode {
   void collectSendFailureStats(
       const fbzmq::Error& error, const std::string& dstSockId);
 
-  // get multiple keys at once
-  thrift::Publication getKeyVals(std::vector<std::string> const& keys);
-
-  // dump the entries of my KV store whose keys match the given prefix
-  // if prefix is the empty sting, the full KV store is dumped
-  thrift::Publication dumpAllWithFilters(KvStoreFilters const& kvFilters) const;
-
-  // dump the hashes of my KV store whose keys match the given prefix
-  // if prefix is the empty sting, the full hash store is dumped
-  thrift::Publication dumpHashWithFilters(
-      KvStoreFilters const& kvFilters) const;
-
-  // dump the keys on which hashes differ from given keyVals
-  thrift::Publication dumpDifference(
-      std::unordered_map<std::string, thrift::Value> const& myKeyVal,
-      std::unordered_map<std::string, thrift::Value> const& reqKeyVal) const;
-
-  // add new peers to sync with
-  void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
-
-  // delete some peers we are subscribed to
-  void delPeers(std::vector<std::string> const& peers);
-
   // request full-sync (KEY_DUMP) with peersToSyncWith_
   void requestFullSyncFromPeers();
-
-  // dump all peers we are subscribed to
-  thrift::PeerCmdReply dumpPeers();
 
   // add new query entries into ttlCountdownQueue from publication
   // and Reschedule ttl expiry timer if needed
@@ -275,32 +297,11 @@ class KvStoreDb : public DualNode {
       bool rateLimit = true,
       bool setFloodRoot = true);
 
-  // update Time to expire filed in Publication
-  // removeAboutToExpire: knob to remove keys which are about to expire
-  // and hence do not want to include them. Constants::kTtlThreshold
-  void updatePublicationTtl(
-      thrift::Publication& thriftPub, bool removeAboutToExpire = false);
-
   // perform last step as a 3-way full-sync request
   // full-sync initiator sends back key-val to senderId (where we made
   // full-sync request to) who need to update those keys
   void finalizeFullSync(
       const std::vector<std::string>& keys, const std::string& senderId);
-
-  // Merge received publication with local store and publish out the delta.
-  // If senderId is set, will build <key:value> map from kvStore_ and
-  // rcvdPublication.tobeUpdatedKeys and send back to senderId to update it
-  // @return: Number of KV updates applied
-  size_t mergePublication(
-      thrift::Publication const& rcvdPublication,
-      std::optional<std::string> senderId = std::nullopt);
-
-  // process spanning-tree-set command to set/unset a child for a given root
-  void processFloodTopoSet(
-      const thrift::FloodTopoSetParams& setParams) noexcept;
-
-  // get current snapshot of SPT(s) information
-  thrift::SptInfos processFloodTopoGet() noexcept;
 
   // process received KV_DUMP from one of our neighbor
   void processSyncResponse() noexcept;
@@ -471,6 +472,49 @@ class KvStore final : public OpenrEventBase {
   // unknown can happen if value is missing (only hash is provided)
   static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
+  // Public APIs
+  fbzmq::thrift::CounterMap getCounters();
+
+  folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>> getAreasConfig();
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>> getKvStoreKeyVals(
+      thrift::KeyGetParams keyGetParams,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<folly::Unit> setKvStoreKeyVals(
+      thrift::KeySetParams keySetParams,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>> dumpKvStoreKeys(
+      thrift::KeyDumpParams keyDumpParams,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<std::unique_ptr<thrift::Publication>> dumpKvStoreHashes(
+      thrift::KeyDumpParams keyDumpParams,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>> getKvStorePeers(
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<folly::Unit> addUpdateKvStorePeers(
+      thrift::PeerAddParams peerAddParams,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<folly::Unit> deleteKvStorePeers(
+      thrift::PeerDelParams peerDelParams,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<std::unique_ptr<thrift::SptInfos>> getSpanningTreeInfos(
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<folly::Unit> updateFloodTopologyChild(
+      thrift::FloodTopoSetParams floodTopoSetParams,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
+  folly::SemiFuture<folly::Unit> processKvStoreDualMessage(
+      thrift::DualMessages dualMessages,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+
  private:
   // disable copying
   KvStore(KvStore const&) = delete;
@@ -485,8 +529,6 @@ class KvStore final : public OpenrEventBase {
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& msg) override;
 
-  // Extracts the counters and submit them to monitor
-  fbzmq::thrift::CounterMap getCounters();
   void submitCounters();
 
   //

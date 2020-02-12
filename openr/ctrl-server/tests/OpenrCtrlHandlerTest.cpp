@@ -458,9 +458,6 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     openrCtrlThriftClient_->sync_setKvStoreKeyVals(
         setParams, thrift::KvStore_constants::kDefaultArea());
 
-    openrCtrlThriftClient_->sync_setKvStoreKeyValsOneWay(
-        setParams, thrift::KvStore_constants::kDefaultArea());
-
     thrift::KeySetParams setParamsPod;
     setParamsPod.keyVals = keyValsPod;
     openrCtrlThriftClient_->sync_setKvStoreKeyVals(setParamsPod, "pod");
