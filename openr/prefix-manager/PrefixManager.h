@@ -49,12 +49,6 @@ class PrefixManager final : public OpenrEventBase {
   PrefixManager(PrefixManager const&) = delete;
   PrefixManager& operator=(PrefixManager const&) = delete;
 
-  // get prefix add counter
-  int64_t getPrefixAddCounter();
-
-  // get prefix withdraw counter
-  int64_t getPrefixWithdrawCounter();
-
   /*
    * Public API for PrefixManager operations, including:
    *  - add prefixes
@@ -62,24 +56,25 @@ class PrefixManager final : public OpenrEventBase {
    *  - withdraw prefixes by type
    *  - sync prefixes by type
    *  - dump all prefixes
+   *
+   * Returns true if there are changes else false
    */
-  folly::SemiFuture<folly::Unit> advertisePrefixes(
+  folly::SemiFuture<bool> advertisePrefixes(
       std::vector<thrift::PrefixEntry> prefixes);
 
-  folly::SemiFuture<folly::Unit> withdrawPrefixes(
+  folly::SemiFuture<bool> withdrawPrefixes(
       std::vector<thrift::PrefixEntry> prefixes);
 
-  folly::SemiFuture<folly::Unit> withdrawPrefixesByType(
-      thrift::PrefixType prefixType);
+  folly::SemiFuture<bool> withdrawPrefixesByType(thrift::PrefixType prefixType);
 
-  folly::SemiFuture<folly::Unit> syncPrefixesByType(
+  folly::SemiFuture<bool> syncPrefixesByType(
       thrift::PrefixType prefixType, std::vector<thrift::PrefixEntry> prefixes);
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
-  dumpAllPrefixes();
+  getPrefixes();
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
-  dumpAllPrefixesWithType(thrift::PrefixType prefixType);
+  getPrefixesByType(thrift::PrefixType prefixType);
 
  private:
   void outputState();
@@ -106,9 +101,6 @@ class PrefixManager final : public OpenrEventBase {
 
   // Submit internal state counters to monitor
   void submitCounters();
-
-  // prefix counter for a given key
-  int64_t getCounter(const std::string& key);
 
   // add prefix entry in kvstore, return per prefix key name
   std::string advertisePrefix(thrift::PrefixEntry& prefixEntry);

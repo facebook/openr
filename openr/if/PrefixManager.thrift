@@ -17,8 +17,6 @@ enum PrefixManagerCommand {
   WITHDRAW_PREFIXES = 2,
   WITHDRAW_PREFIXES_BY_TYPE = 3,
   SYNC_PREFIXES_BY_TYPE = 6,
-  GET_ALL_PREFIXES = 4,
-  GET_PREFIXES_BY_TYPE = 5,
 }
 
 struct PrefixManagerRequest {
@@ -32,5 +30,4 @@ struct PrefixManagerRequest {
 struct PrefixManagerResponse {
   1: bool success
   2: string message
-  3: list<Lsdb.PrefixEntry> prefixes
 }

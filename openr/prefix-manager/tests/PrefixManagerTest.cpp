@@ -14,7 +14,6 @@
 #include <openr/common/Constants.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/prefix-manager/PrefixManager.h>
-#include <openr/prefix-manager/PrefixManagerClient.h>
 
 using namespace openr;
 
@@ -135,9 +134,6 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
       LOG(INFO) << "PrefixManager thread finishing";
     });
     prefixManager->waitUntilRunning();
-
-    prefixManagerClient = std::make_unique<PrefixManagerClient>(
-        PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl}, context);
   }
 
   void
@@ -193,7 +189,6 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
   // Create the serializer for write/read
   CompactSerializer serializer;
   std::unique_ptr<PrefixManager> prefixManager{nullptr};
-  std::unique_ptr<PrefixManagerClient> prefixManagerClient{nullptr};
   std::unique_ptr<std::thread> prefixManagerThread{nullptr};
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
   std::unique_ptr<KvStoreClient> kvStoreClient{nullptr};
@@ -204,135 +199,117 @@ INSTANTIATE_TEST_CASE_P(
     PrefixManagerInstance, PrefixManagerTestFixture, ::testing::Bool());
 
 TEST_P(PrefixManagerTestFixture, AddRemovePrefix) {
-  auto resp1 = prefixManagerClient->withdrawPrefixes({prefixEntry1});
-  auto resp2 = prefixManagerClient->addPrefixes({prefixEntry1});
-  auto resp3 = prefixManagerClient->addPrefixes({prefixEntry1});
-  auto resp4 = prefixManagerClient->withdrawPrefixes({prefixEntry1});
-  auto resp5 = prefixManagerClient->withdrawPrefixes({prefixEntry3});
-  auto resp6 = prefixManagerClient->addPrefixes({prefixEntry2});
-  auto resp7 = prefixManagerClient->addPrefixes({prefixEntry3});
-  auto resp8 = prefixManagerClient->addPrefixes({prefixEntry4});
-  auto resp9 = prefixManagerClient->addPrefixes({prefixEntry3});
-  auto resp10 = prefixManagerClient->withdrawPrefixes({prefixEntry2});
-  auto resp11 = prefixManagerClient->withdrawPrefixes({prefixEntry3});
-  auto resp12 = prefixManagerClient->withdrawPrefixes({prefixEntry4});
-  auto resp13 = prefixManagerClient->addPrefixes(
-      {prefixEntry1, prefixEntry2, prefixEntry3});
-  auto resp14 =
-      prefixManagerClient->withdrawPrefixes({prefixEntry1, prefixEntry2});
-  auto resp15 =
-      prefixManagerClient->withdrawPrefixes({prefixEntry1, prefixEntry2});
-  auto resp16 = prefixManagerClient->withdrawPrefixes({prefixEntry4});
-  auto resp17 = prefixManagerClient->addPrefixes({ephemeralPrefixEntry9});
-  auto resp18 = prefixManagerClient->withdrawPrefixes({ephemeralPrefixEntry9});
-  EXPECT_FALSE(resp1.value().success);
-  EXPECT_TRUE(resp2.value().success);
-  EXPECT_FALSE(resp3.value().success);
-  EXPECT_TRUE(resp4.value().success);
-  EXPECT_FALSE(resp5.value().success);
-  EXPECT_TRUE(resp6.value().success);
-  EXPECT_TRUE(resp7.value().success);
-  EXPECT_TRUE(resp8.value().success);
-  EXPECT_FALSE(resp9.value().success);
-  EXPECT_TRUE(resp10.value().success);
-  EXPECT_TRUE(resp11.value().success);
-  EXPECT_TRUE(resp12.value().success);
-  EXPECT_TRUE(resp13.value().success);
-  EXPECT_TRUE(resp14.value().success);
-  EXPECT_FALSE(resp15.value().success);
-  EXPECT_FALSE(resp16.value().success);
-  EXPECT_TRUE(resp17.value().success);
-  EXPECT_TRUE(resp18.value().success);
+  // Expect no throw
+  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
+  EXPECT_FALSE(prefixManager->advertisePrefixes({prefixEntry1}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
+  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry3}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry2}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry3}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry4}).get());
+  EXPECT_FALSE(prefixManager->advertisePrefixes({prefixEntry3}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry2}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry3}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry4}).get());
+  EXPECT_TRUE(
+      prefixManager
+          ->advertisePrefixes({prefixEntry1, prefixEntry2, prefixEntry3})
+          .get());
+  EXPECT_TRUE(
+      prefixManager->withdrawPrefixes({prefixEntry1, prefixEntry2}).get());
+  EXPECT_FALSE(
+      prefixManager->withdrawPrefixes({prefixEntry1, prefixEntry2}).get());
+  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry4}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get());
 }
 
 TEST_P(PrefixManagerTestFixture, RemoveUpdateType) {
-  prefixManagerClient->addPrefixes({prefixEntry1});
-  prefixManagerClient->addPrefixes({prefixEntry2});
-  prefixManagerClient->addPrefixes({prefixEntry3});
-  prefixManagerClient->addPrefixes({prefixEntry4});
-  prefixManagerClient->addPrefixes({prefixEntry5});
-  prefixManagerClient->addPrefixes({prefixEntry6});
-  prefixManagerClient->addPrefixes({prefixEntry7});
-  prefixManagerClient->addPrefixes({prefixEntry8});
-  auto resp1 = prefixManagerClient->withdrawPrefixes({prefixEntry1});
-  EXPECT_TRUE(resp1.value().success);
-  auto resp2 =
-      prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
-  EXPECT_TRUE(resp2.value().success);
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry2}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry3}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry4}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry5}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry6}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry7}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry8}).get());
+
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
+  EXPECT_TRUE(
+      prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT).get());
   // can't withdraw twice
-  auto resp3 =
-      prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
-  EXPECT_FALSE(resp3.value().success);
+  EXPECT_FALSE(
+      prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT).get());
+
   // all the DEFAULT type should be gone
-  auto resp4 = prefixManagerClient->withdrawPrefixes({prefixEntry3});
-  EXPECT_FALSE(resp4.value().success);
-  auto resp5 = prefixManagerClient->withdrawPrefixes({prefixEntry5});
-  EXPECT_FALSE(resp5.value().success);
-  auto resp6 = prefixManagerClient->withdrawPrefixes({prefixEntry7});
-  EXPECT_FALSE(resp6.value().success);
+  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry3}).get());
+  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry5}).get());
+  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry7}).get());
+
   // The PREFIX_ALLOCATOR type should still be there to be withdrawed
-  auto resp7 = prefixManagerClient->withdrawPrefixes({prefixEntry2});
-  EXPECT_TRUE(resp7.value().success);
-  auto resp8 = prefixManagerClient->withdrawPrefixes({prefixEntry4});
-  EXPECT_TRUE(resp8.value().success);
-  auto resp9 = prefixManagerClient->withdrawPrefixes({prefixEntry6});
-  EXPECT_TRUE(resp9.value().success);
-  auto resp10 = prefixManagerClient->withdrawPrefixes({prefixEntry8});
-  EXPECT_TRUE(resp10.value().success);
-  auto resp11 = prefixManagerClient->withdrawPrefixesByType(
-      thrift::PrefixType::PREFIX_ALLOCATOR);
-  EXPECT_FALSE(resp11.value().success);
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry2}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry4}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry6}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry8}).get());
+
+  EXPECT_FALSE(
+      prefixManager
+          ->withdrawPrefixesByType(thrift::PrefixType::PREFIX_ALLOCATOR)
+          .get());
+
   // update all allocated prefixes
-  prefixManagerClient->addPrefixes({prefixEntry2, prefixEntry4});
+  EXPECT_TRUE(
+      prefixManager->advertisePrefixes({prefixEntry2, prefixEntry4}).get());
 
   // Test sync logic
-  auto resp12 = prefixManagerClient->syncPrefixesByType(
-      thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry6, prefixEntry8});
-  auto resp13 = prefixManagerClient->syncPrefixesByType(
-      thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry6, prefixEntry8});
-  EXPECT_TRUE(resp12.value().success);
-  EXPECT_FALSE(resp13.value().success);
+  EXPECT_TRUE(prefixManager
+                  ->syncPrefixesByType(
+                      thrift::PrefixType::PREFIX_ALLOCATOR,
+                      {prefixEntry6, prefixEntry8})
+                  .get());
+  EXPECT_FALSE(prefixManager
+                   ->syncPrefixesByType(
+                       thrift::PrefixType::PREFIX_ALLOCATOR,
+                       {prefixEntry6, prefixEntry8})
+                   .get());
 
-  EXPECT_FALSE(
-      prefixManagerClient->withdrawPrefixes({prefixEntry2}).value().success);
-  EXPECT_FALSE(
-      prefixManagerClient->withdrawPrefixes({prefixEntry4}).value().success);
-  EXPECT_TRUE(
-      prefixManagerClient->withdrawPrefixes({prefixEntry6}).value().success);
-  EXPECT_TRUE(
-      prefixManagerClient->withdrawPrefixes({prefixEntry8}).value().success);
+  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry2}).get());
+  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry4}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry6}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry8}).get());
 }
 
 TEST_P(PrefixManagerTestFixture, RemoveInvalidType) {
-  EXPECT_TRUE(prefixManagerClient->addPrefixes({prefixEntry1}).value().success);
-  EXPECT_TRUE(prefixManagerClient->addPrefixes({prefixEntry2}).value().success);
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry2}).get());
 
   // Verify that prefix type has to match for withdrawing prefix
   auto prefixEntryError = prefixEntry1;
   prefixEntryError.type = thrift::PrefixType::PREFIX_ALLOCATOR;
 
   auto resp1 =
-      prefixManagerClient->withdrawPrefixes({prefixEntryError, prefixEntry2});
-  EXPECT_FALSE(resp1.value().success);
+      prefixManager->withdrawPrefixes({prefixEntryError, prefixEntry2}).get();
+  EXPECT_FALSE(resp1);
 
   // Verify that all prefixes are still present
-  auto resp2 = prefixManagerClient->getPrefixes();
-  EXPECT_TRUE(resp2.value().success);
-  EXPECT_EQ(2, resp2.value().prefixes.size());
+  auto resp2 = prefixManager->getPrefixes().get();
+  EXPECT_TRUE(resp2);
+  EXPECT_EQ(2, resp2->size());
 
   // Verify withdrawing of multiple prefixes
   auto resp3 =
-      prefixManagerClient->withdrawPrefixes({prefixEntry1, prefixEntry2});
-  EXPECT_TRUE(resp3.value().success);
+      prefixManager->withdrawPrefixes({prefixEntry1, prefixEntry2}).get();
+  EXPECT_TRUE(resp3);
 
   // Verify that there are no prefixes
-  auto resp4 = prefixManagerClient->getPrefixes();
-  EXPECT_TRUE(resp4.value().success);
-  EXPECT_EQ(0, resp4.value().prefixes.size());
+  auto resp4 = prefixManager->getPrefixes().get();
+  EXPECT_TRUE(resp4);
+  EXPECT_EQ(0, resp4->size());
 }
 
 TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
-  prefixManagerClient->addPrefixes({prefixEntry1});
+  prefixManager->advertisePrefixes({prefixEntry1}).get();
 
   std::string keyStr{"prefix:node-1"};
 
@@ -362,15 +339,15 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
     EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
   }
 
-  prefixManagerClient->withdrawPrefixes({prefixEntry1});
-  prefixManagerClient->addPrefixes({prefixEntry2});
-  prefixManagerClient->addPrefixes({prefixEntry3});
-  prefixManagerClient->addPrefixes({prefixEntry4});
-  prefixManagerClient->addPrefixes({prefixEntry5});
-  prefixManagerClient->addPrefixes({prefixEntry6});
-  prefixManagerClient->addPrefixes({prefixEntry7});
-  prefixManagerClient->addPrefixes({prefixEntry8});
-  prefixManagerClient->addPrefixes({ephemeralPrefixEntry9});
+  prefixManager->withdrawPrefixes({prefixEntry1}).get();
+  prefixManager->advertisePrefixes({prefixEntry2}).get();
+  prefixManager->advertisePrefixes({prefixEntry3}).get();
+  prefixManager->advertisePrefixes({prefixEntry4}).get();
+  prefixManager->advertisePrefixes({prefixEntry5}).get();
+  prefixManager->advertisePrefixes({prefixEntry6}).get();
+  prefixManager->advertisePrefixes({prefixEntry7}).get();
+  prefixManager->advertisePrefixes({prefixEntry8}).get();
+  prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
 
   /* Verify that before throttle expires, we don't see any update */
   std::this_thread::sleep_for(Constants::kPrefixMgrKvThrottleTimeout / 2);
@@ -407,7 +384,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   }
 
   // now make a change and check again
-  prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
+  prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT).get();
 
   // Wait for throttled update to announce to kvstore
   std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
@@ -488,7 +465,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   //
   expectedPrefix = bgp_prefix;
   gotExpected = false;
-  prefixManagerClient->addPrefixes({bgp_prefix});
+  prefixManager->advertisePrefixes({bgp_prefix}).get();
   baton.wait();
   baton.reset();
 
@@ -497,7 +474,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   //
   expectedPrefix = loopback_prefix; // lowest client-id will win
   gotExpected = false;
-  prefixManagerClient->addPrefixes({loopback_prefix, default_prefix});
+  prefixManager->advertisePrefixes({loopback_prefix, default_prefix}).get();
   baton.wait();
   baton.reset();
 
@@ -506,7 +483,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   //
   expectedPrefix = default_prefix;
   gotExpected = false;
-  prefixManagerClient->withdrawPrefixes({loopback_prefix});
+  prefixManager->withdrawPrefixes({loopback_prefix}).get();
   baton.wait();
   baton.reset();
 
@@ -515,7 +492,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   //
   expectedPrefix = folly::none;
   gotExpected = true;
-  prefixManagerClient->withdrawPrefixes({bgp_prefix, default_prefix});
+  prefixManager->withdrawPrefixes({bgp_prefix, default_prefix}).get();
   baton.wait();
   baton.reset();
 
@@ -548,7 +525,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
   // Schedule callback to set keys from client1 (this will be executed first)
   evl.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
-        prefixManagerClient->addPrefixes({prefixEntry1});
+        prefixManager->advertisePrefixes({prefixEntry1});
       });
 
   evl.scheduleTimeout(
@@ -565,7 +542,9 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
   evl.scheduleTimeout(
       std::chrono::milliseconds(
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
-      [&]() noexcept { prefixManagerClient->addPrefixes({prefixEntry2}); });
+      [&]() noexcept {
+        prefixManager->advertisePrefixes({prefixEntry2}).get();
+      });
 
   // version of first key should still be 1
   evl.scheduleTimeout(
@@ -588,7 +567,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
       std::chrono::milliseconds(
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
-        prefixManagerClient->withdrawPrefixes({prefixEntry2});
+        prefixManager->withdrawPrefixes({prefixEntry2}).get();
       });
 
   // version of prefixEntry1 should still be 1
@@ -650,7 +629,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   // Schedule callback to set keys from client1 (this will be executed first)
   evl.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
-        prefixManagerClient->addPrefixes({prefixEntry});
+        prefixManager->advertisePrefixes({prefixEntry}).get();
       });
 
   // Wait for throttled update to announce to kvstore
@@ -707,7 +686,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   evl.scheduleTimeout(
       std::chrono::milliseconds(
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
-      [&]() noexcept { prefixManagerClient->withdrawPrefixes({prefixEntry}); });
+      [&]() noexcept { prefixManager->withdrawPrefixes({prefixEntry}).get(); });
 
   // verify key is withdrawn from kvstore
   evl.scheduleTimeout(
@@ -814,9 +793,6 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   });
   prefixManager2->waitUntilRunning();
 
-  auto prefixManagerClient2 = std::make_unique<PrefixManagerClient>(
-      PrefixManagerLocalCmdUrl{prefixManager2->inprocCmdUrl}, context);
-
   auto prefixKey1 = PrefixKey(
       "node-2",
       folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
@@ -829,8 +805,8 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   // insert two prefixes
   evl.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
-        prefixManagerClient2->addPrefixes({prefixEntry1});
-        prefixManagerClient2->addPrefixes({prefixEntry2});
+        prefixManager2->advertisePrefixes({prefixEntry1}).get();
+        prefixManager2->advertisePrefixes({prefixEntry2}).get();
       });
 
   // check both prefixes are in kvstore
@@ -854,7 +830,7 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       std::chrono::milliseconds(
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
-        prefixManagerClient2->withdrawPrefixes({prefixEntry1});
+        prefixManager2->withdrawPrefixes({prefixEntry1}).get();
       });
 
   // check prefix entry1 should have been expired, prefix 2 should be there
@@ -895,9 +871,10 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
 }
 
 TEST_P(PrefixManagerTestFixture, CheckReload) {
-  prefixManagerClient->addPrefixes({prefixEntry1});
-  prefixManagerClient->addPrefixes({prefixEntry2});
-  prefixManagerClient->addPrefixes({ephemeralPrefixEntry9});
+  prefixManager->advertisePrefixes({prefixEntry1}).get();
+  prefixManager->advertisePrefixes({prefixEntry2}).get();
+  prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
+
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
@@ -919,35 +896,29 @@ TEST_P(PrefixManagerTestFixture, CheckReload) {
   });
   prefixManager2->waitUntilRunning();
 
-  auto prefixManagerClient2 = std::make_unique<PrefixManagerClient>(
-      PrefixManagerLocalCmdUrl{prefixManager2->inprocCmdUrl}, context);
-
   // verify that the new manager has only persistent prefixes.
   // Ephemeral prefixes will not be reloaded.
-  EXPECT_TRUE(
-      prefixManagerClient2->withdrawPrefixes({prefixEntry1}).value().success);
-  EXPECT_TRUE(
-      prefixManagerClient2->withdrawPrefixes({prefixEntry2}).value().success);
-  EXPECT_FALSE(prefixManagerClient2->withdrawPrefixes({ephemeralPrefixEntry9})
-                   .value()
-                   .success);
+  EXPECT_TRUE(prefixManager2->withdrawPrefixes({prefixEntry1}).get());
+  EXPECT_TRUE(prefixManager2->withdrawPrefixes({prefixEntry2}).get());
+  EXPECT_FALSE(prefixManager2->withdrawPrefixes({ephemeralPrefixEntry9}).get());
+
   // cleanup
   prefixManager2->stop();
   prefixManagerThread2->join();
 }
 
 TEST_P(PrefixManagerTestFixture, GetPrefixes) {
-  prefixManagerClient->addPrefixes({prefixEntry1});
-  prefixManagerClient->addPrefixes({prefixEntry2});
-  prefixManagerClient->addPrefixes({prefixEntry3});
-  prefixManagerClient->addPrefixes({prefixEntry4});
-  prefixManagerClient->addPrefixes({prefixEntry5});
-  prefixManagerClient->addPrefixes({prefixEntry6});
-  prefixManagerClient->addPrefixes({prefixEntry7});
+  prefixManager->advertisePrefixes({prefixEntry1});
+  prefixManager->advertisePrefixes({prefixEntry2});
+  prefixManager->advertisePrefixes({prefixEntry3});
+  prefixManager->advertisePrefixes({prefixEntry4});
+  prefixManager->advertisePrefixes({prefixEntry5});
+  prefixManager->advertisePrefixes({prefixEntry6});
+  prefixManager->advertisePrefixes({prefixEntry7});
 
-  auto resp1 = prefixManagerClient->getPrefixes();
-  EXPECT_TRUE(resp1.value().success);
-  auto& prefixes1 = resp1.value().prefixes;
+  auto resp1 = prefixManager->getPrefixes().get();
+  ASSERT_TRUE(resp1);
+  auto& prefixes1 = *resp1;
   EXPECT_EQ(7, prefixes1.size());
   EXPECT_NE(
       std::find(prefixes1.begin(), prefixes1.end(), prefixEntry4),
@@ -957,9 +928,9 @@ TEST_P(PrefixManagerTestFixture, GetPrefixes) {
       prefixes1.end());
 
   auto resp2 =
-      prefixManagerClient->getPrefixesByType(thrift::PrefixType::DEFAULT);
-  EXPECT_TRUE(resp2.value().success);
-  auto& prefixes2 = resp2.value().prefixes;
+      prefixManager->getPrefixesByType(thrift::PrefixType::DEFAULT).get();
+  ASSERT_TRUE(resp2);
+  auto& prefixes2 = *resp2;
   EXPECT_EQ(4, prefixes2.size());
   EXPECT_NE(
       std::find(prefixes2.begin(), prefixes2.end(), prefixEntry3),
@@ -969,63 +940,13 @@ TEST_P(PrefixManagerTestFixture, GetPrefixes) {
       prefixes2.end());
 
   auto resp3 =
-      prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::DEFAULT);
-  EXPECT_TRUE(resp3.value().success);
+      prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT).get();
+  EXPECT_TRUE(resp3);
 
   auto resp4 =
-      prefixManagerClient->getPrefixesByType(thrift::PrefixType::DEFAULT);
-  EXPECT_TRUE(resp4.value().success);
-  EXPECT_EQ(0, resp4.value().prefixes.size());
-}
-
-TEST_P(PrefixManagerTestFixture, PrefixAddCount) {
-  auto count0 = prefixManager->getPrefixAddCounter();
-  EXPECT_EQ(0, count0);
-
-  prefixManagerClient->addPrefixes({prefixEntry1});
-  prefixManagerClient->addPrefixes({prefixEntry2});
-  prefixManagerClient->addPrefixes({prefixEntry3});
-
-  auto count1 = prefixManager->getPrefixAddCounter();
-  EXPECT_EQ(3, count1);
-
-  prefixManagerClient->addPrefixes({prefixEntry1});
-  prefixManagerClient->addPrefixes({prefixEntry2});
-  auto count2 = prefixManager->getPrefixAddCounter();
-  EXPECT_EQ(5, count2);
-
-  prefixManagerClient->withdrawPrefixes({prefixEntry1});
-  auto count3 = prefixManager->getPrefixAddCounter();
-  EXPECT_EQ(5, count3);
-}
-
-TEST_P(PrefixManagerTestFixture, PrefixWithdrawCount) {
-  auto count0 = prefixManager->getPrefixWithdrawCounter();
-  EXPECT_EQ(0, count0);
-
-  prefixManagerClient->withdrawPrefixes({prefixEntry1});
-  auto count1 = prefixManager->getPrefixWithdrawCounter();
-  EXPECT_EQ(0, count1);
-
-  prefixManagerClient->addPrefixes({prefixEntry1});
-  prefixManagerClient->addPrefixes({prefixEntry2});
-  prefixManagerClient->addPrefixes({prefixEntry3});
-
-  auto count2 = prefixManager->getPrefixWithdrawCounter();
-  EXPECT_EQ(0, count2);
-
-  prefixManagerClient->withdrawPrefixes({prefixEntry1});
-  auto count3 = prefixManager->getPrefixWithdrawCounter();
-  EXPECT_EQ(1, count3);
-
-  prefixManagerClient->withdrawPrefixes({prefixEntry4});
-  auto count4 = prefixManager->getPrefixWithdrawCounter();
-  EXPECT_EQ(1, count4);
-
-  prefixManagerClient->withdrawPrefixes({prefixEntry1});
-  prefixManagerClient->withdrawPrefixes({prefixEntry2});
-  auto count5 = prefixManager->getPrefixWithdrawCounter();
-  EXPECT_EQ(2, count5);
+      prefixManager->getPrefixesByType(thrift::PrefixType::DEFAULT).get();
+  EXPECT_TRUE(resp4);
+  EXPECT_EQ(0, resp4->size());
 }
 
 TEST(PrefixManagerTest, HoldTimeout) {
@@ -1104,35 +1025,40 @@ TEST(PrefixManagerTest, HoldTimeout) {
 TEST_P(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
   ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
   // Verify that any action on persistent entries leads to update of store
-  prefixManagerClient->addPrefixes({prefixEntry1, prefixEntry2, prefixEntry3});
+  prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2, prefixEntry3})
+      .get();
   // 3 prefixes leads to 1 write
   ASSERT_EQ(1, configStore->getNumOfDbWritesToDisk());
 
-  prefixManagerClient->withdrawPrefixes({prefixEntry1});
+  prefixManager->withdrawPrefixes({prefixEntry1}).get();
   ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
 
-  prefixManagerClient->syncPrefixesByType(
-      thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry2, prefixEntry4});
+  prefixManager
+      ->syncPrefixesByType(
+          thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry2, prefixEntry4})
+      .get();
   ASSERT_EQ(3, configStore->getNumOfDbWritesToDisk());
 
-  prefixManagerClient->withdrawPrefixesByType(
-      thrift::PrefixType::PREFIX_ALLOCATOR);
+  prefixManager->withdrawPrefixesByType(thrift::PrefixType::PREFIX_ALLOCATOR)
+      .get();
   ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
 
   // Verify that any actions on ephemeral entries does not lead to update of
   // store
-  prefixManagerClient->addPrefixes(
-      {ephemeralPrefixEntry9, ephemeralPrefixEntry10});
+  prefixManager
+      ->advertisePrefixes({ephemeralPrefixEntry9, ephemeralPrefixEntry10})
+      .get();
   ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
 
-  prefixManagerClient->withdrawPrefixes({ephemeralPrefixEntry9});
+  prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get();
   ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
 
-  prefixManagerClient->syncPrefixesByType(
-      thrift::PrefixType::BGP, {ephemeralPrefixEntry10});
+  prefixManager
+      ->syncPrefixesByType(thrift::PrefixType::BGP, {ephemeralPrefixEntry10})
+      .get();
   ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
 
-  prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::BGP);
+  prefixManager->withdrawPrefixesByType(thrift::PrefixType::BGP).get();
   ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
 }
 
@@ -1141,41 +1067,47 @@ TEST_P(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
 TEST_P(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
   ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
   // Verify that any action on persistent entries leads to update of store
-  prefixManagerClient->addPrefixes(
-      {persistentPrefixEntry9, ephemeralPrefixEntry10});
+  prefixManager
+      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
+      .get();
   ASSERT_EQ(1, configStore->getNumOfDbWritesToDisk());
 
   // Change persistance characterstic. Expect disk update
-  prefixManagerClient->syncPrefixesByType(
-      thrift::PrefixType::BGP,
-      {ephemeralPrefixEntry9, persistentPrefixEntry10});
+  prefixManager
+      ->syncPrefixesByType(
+          thrift::PrefixType::BGP,
+          {ephemeralPrefixEntry9, persistentPrefixEntry10})
+      .get();
   ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
 
   // Only ephemeral entry withdrawn, so no update to disk
-  prefixManagerClient->withdrawPrefixes({ephemeralPrefixEntry9});
+  prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get();
   ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
 
   // Persistent entry withdrawn, expect update to disk
-  prefixManagerClient->withdrawPrefixes({persistentPrefixEntry10});
+  prefixManager->withdrawPrefixes({persistentPrefixEntry10}).get();
   ASSERT_EQ(3, configStore->getNumOfDbWritesToDisk());
 
   // Restore the state to mix of ephemeral and persistent of a type
-  prefixManagerClient->addPrefixes(
-      {persistentPrefixEntry9, ephemeralPrefixEntry10});
+  prefixManager
+      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
+      .get();
   ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
 
   // Verify that withdraw by type, updates disk
-  prefixManagerClient->withdrawPrefixesByType(thrift::PrefixType::BGP);
+  prefixManager->withdrawPrefixesByType(thrift::PrefixType::BGP).get();
   ASSERT_EQ(5, configStore->getNumOfDbWritesToDisk());
 
   // Restore the state to mix of ephemeral and persistent of a type
-  prefixManagerClient->addPrefixes(
-      {persistentPrefixEntry9, ephemeralPrefixEntry10});
+  prefixManager
+      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
+      .get();
   ASSERT_EQ(6, configStore->getNumOfDbWritesToDisk());
 
   // Verify that entry in DB being deleted is persistent so file is update
-  prefixManagerClient->syncPrefixesByType(
-      thrift::PrefixType::BGP, {ephemeralPrefixEntry10});
+  prefixManager
+      ->syncPrefixesByType(thrift::PrefixType::BGP, {ephemeralPrefixEntry10})
+      .get();
   ASSERT_EQ(7, configStore->getNumOfDbWritesToDisk());
 }
 

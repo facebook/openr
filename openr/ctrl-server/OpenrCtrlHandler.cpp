@@ -329,7 +329,8 @@ OpenrCtrlHandler::semifuture_advertisePrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
   return dynamic_cast<PrefixManager*>(module.get())
-      ->advertisePrefixes(std::move(*prefixes));
+      ->advertisePrefixes(std::move(*prefixes))
+      .defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<folly::Unit>
@@ -337,7 +338,8 @@ OpenrCtrlHandler::semifuture_withdrawPrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
   return dynamic_cast<PrefixManager*>(module.get())
-      ->withdrawPrefixes(std::move(*prefixes));
+      ->withdrawPrefixes(std::move(*prefixes))
+      .defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<folly::Unit>
@@ -345,7 +347,8 @@ OpenrCtrlHandler::semifuture_withdrawPrefixesByType(
     thrift::PrefixType prefixType) {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
   return dynamic_cast<PrefixManager*>(module.get())
-      ->withdrawPrefixesByType(prefixType);
+      ->withdrawPrefixesByType(prefixType)
+      .defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<folly::Unit>
@@ -354,20 +357,21 @@ OpenrCtrlHandler::semifuture_syncPrefixesByType(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
   return dynamic_cast<PrefixManager*>(module.get())
-      ->syncPrefixesByType(prefixType, std::move(*prefixes));
+      ->syncPrefixesByType(prefixType, std::move(*prefixes))
+      .defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
 OpenrCtrlHandler::semifuture_getPrefixes() {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
-  return dynamic_cast<PrefixManager*>(module.get())->dumpAllPrefixes();
+  return dynamic_cast<PrefixManager*>(module.get())->getPrefixes();
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
 OpenrCtrlHandler::semifuture_getPrefixesByType(thrift::PrefixType prefixType) {
   auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
   return dynamic_cast<PrefixManager*>(module.get())
-      ->dumpAllPrefixesWithType(prefixType);
+      ->getPrefixesByType(prefixType);
 }
 
 //

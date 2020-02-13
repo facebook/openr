@@ -47,11 +47,6 @@ class PrefixManagerClient {
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
 
-  folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error> getPrefixes();
-
-  folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
-  getPrefixesByType(thrift::PrefixType type);
-
  protected:
   virtual folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
   sendRequest(const thrift::PrefixManagerRequest& request);

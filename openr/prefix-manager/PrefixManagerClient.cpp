@@ -66,21 +66,6 @@ PrefixManagerClient::syncPrefixesByType(
 }
 
 folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
-PrefixManagerClient::getPrefixes() {
-  thrift::PrefixManagerRequest req;
-  req.cmd = thrift::PrefixManagerCommand::GET_ALL_PREFIXES;
-  return sendRequest(req);
-}
-
-folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
-PrefixManagerClient::getPrefixesByType(thrift::PrefixType type) {
-  thrift::PrefixManagerRequest req;
-  req.cmd = thrift::PrefixManagerCommand::GET_PREFIXES_BY_TYPE;
-  req.type = type;
-  return sendRequest(req);
-}
-
-folly::Expected<thrift::PrefixManagerResponse, fbzmq::Error>
 PrefixManagerClient::sendRequest(const thrift::PrefixManagerRequest& request) {
   auto maybeReqMsg = fbzmq::Message::fromThriftObj(request, serializer_);
   if (maybeReqMsg.hasError()) {

@@ -331,25 +331,6 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
     }
     break;
   }
-  case thrift::PrefixManagerCommand::GET_ALL_PREFIXES: {
-    for (const auto& kv : prefixMap_) {
-      for (const auto& kv2 : kv.second) {
-        response.prefixes.emplace_back(kv2.second);
-      }
-    }
-    response.success = true;
-    break;
-  }
-  case thrift::PrefixManagerCommand::GET_PREFIXES_BY_TYPE: {
-    auto const search = prefixMap_.find(thriftReq.type);
-    if (search != prefixMap_.end()) {
-      for (const auto& kv : search->second) {
-        response.prefixes.emplace_back(kv.second);
-      }
-    }
-    response.success = true;
-    break;
-  }
   default: {
     LOG(ERROR) << "Unknown command received";
     response.success = false;
@@ -363,70 +344,58 @@ PrefixManager::processRequestMsg(fbzmq::Message&& request) {
   return fbzmq::Message::fromThriftObj(response, serializer_);
 }
 
-folly::SemiFuture<folly::Unit>
+folly::SemiFuture<bool>
 PrefixManager::advertisePrefixes(std::vector<thrift::PrefixEntry> prefixes) {
-  folly::Promise<folly::Unit> p;
+  folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([
     this,
     p = std::move(p),
     prefixes = std::move(prefixes)
-  ]() mutable noexcept {
-    addOrUpdatePrefixes(prefixes);
-    p.setValue();
-  });
+  ]() mutable noexcept { p.setValue(addOrUpdatePrefixes(prefixes)); });
   return sf;
 }
 
-folly::SemiFuture<folly::Unit>
+folly::SemiFuture<bool>
 PrefixManager::withdrawPrefixes(std::vector<thrift::PrefixEntry> prefixes) {
-  folly::Promise<folly::Unit> p;
+  folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([
     this,
     p = std::move(p),
     prefixes = std::move(prefixes)
-  ]() mutable noexcept {
-    removePrefixes(prefixes);
-    p.setValue();
-  });
+  ]() mutable noexcept { p.setValue(removePrefixes(prefixes)); });
   return sf;
 }
 
-folly::SemiFuture<folly::Unit>
+folly::SemiFuture<bool>
 PrefixManager::withdrawPrefixesByType(thrift::PrefixType prefixType) {
-  folly::Promise<folly::Unit> p;
+  folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([
     this,
     p = std::move(p),
     prefixType = std::move(prefixType)
-  ]() mutable noexcept {
-    removePrefixesByType(prefixType);
-    p.setValue();
-  });
+  ]() mutable noexcept { p.setValue(removePrefixesByType(prefixType)); });
   return sf;
 }
 
-folly::SemiFuture<folly::Unit>
+folly::SemiFuture<bool>
 PrefixManager::syncPrefixesByType(
     thrift::PrefixType prefixType, std::vector<thrift::PrefixEntry> prefixes) {
-  folly::Promise<folly::Unit> p;
+  folly::Promise<bool> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([
     this,
     p = std::move(p),
     prefixType = std::move(prefixType),
     prefixes = std::move(prefixes)
-  ]() mutable noexcept {
-    syncPrefixes(prefixType, prefixes);
-    p.setValue();
-  });
+  ]() mutable noexcept { p.setValue(syncPrefixes(prefixType, prefixes)); });
   return sf;
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
-PrefixManager::dumpAllPrefixes() {
+PrefixManager::getPrefixes() {
   folly::Promise<std::unique_ptr<std::vector<thrift::PrefixEntry>>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p)]() mutable noexcept {
@@ -443,7 +412,7 @@ PrefixManager::dumpAllPrefixes() {
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
-PrefixManager::dumpAllPrefixesWithType(thrift::PrefixType prefixType) {
+PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
   folly::Promise<std::unique_ptr<std::vector<thrift::PrefixEntry>>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([
@@ -486,33 +455,6 @@ PrefixManager::submitCounters() {
   zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
-int64_t
-PrefixManager::getCounter(const std::string& key) {
-  std::unordered_map<std::string, int64_t> counters;
-
-  folly::Promise<std::unordered_map<std::string, int64_t>> promise;
-  auto future = promise.getFuture();
-  runInEventBaseThread([this, promise = std::move(promise)]() mutable {
-    promise.setValue(tData_.getCounters());
-  });
-  counters = std::move(future).get();
-
-  if (counters.find(key) != counters.end()) {
-    return counters[key];
-  }
-  return 0;
-}
-
-int64_t
-PrefixManager::getPrefixAddCounter() {
-  return getCounter("prefix_manager.add_prefixes.count.0");
-}
-
-int64_t
-PrefixManager::getPrefixWithdrawCounter() {
-  return getCounter("prefix_manager.withdraw_prefixes.count.0");
-}
-
 // helpers for modifying our Prefix Db
 bool
 PrefixManager::addOrUpdatePrefixes(
@@ -531,6 +473,10 @@ PrefixManager::addOrUpdatePrefixes(
       SYSLOG(INFO) << "Advertising prefix: " << toString(prefixEntry.prefix)
                    << ", client: " << getPrefixTypeName(prefixEntry.type);
     }
+  }
+  if (updated) {
+    persistPrefixDb();
+    outputStateThrottled_->operator()();
   }
   return updated;
 }
@@ -558,6 +504,10 @@ PrefixManager::removePrefixes(
     if (addingEvents_[prefix.type].empty()) {
       addingEvents_.erase(prefix.type);
     }
+  }
+  if (!prefixes.empty()) {
+    persistPrefixDb();
+    outputStateThrottled_->operator()();
   }
   return !prefixes.empty();
 }
@@ -594,6 +544,10 @@ PrefixManager::removePrefixesByType(thrift::PrefixType type) {
   if (search != prefixMap_.end()) {
     changed = true;
     prefixMap_.erase(search);
+  }
+  if (changed) {
+    persistPrefixDb();
+    outputStateThrottled_->operator()();
   }
   return changed;
 }
