@@ -44,7 +44,4 @@ BOOST_STRONG_TYPEDEF(std::string, PlatformPublisherUrl);
 // PrefixManager URL
 BOOST_STRONG_TYPEDEF(std::string, PrefixManagerLocalCmdUrl);
 
-// Spark Urls
-BOOST_STRONG_TYPEDEF(std::string, SparkReportUrl);
-
 } // namespace openr

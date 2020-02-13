@@ -96,7 +96,7 @@ class Spark final : public OpenrEventBase {
       bool enableV4,
       bool enableSubnetValidation,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
-      SparkReportUrl const& reportUrl,
+      messaging::ReplicateQueue<thrift::SparkNeighborEvent>& nbrUpdatesQueue,
       MonitorSubmitUrl const& monitorSubmitUrl,
       KvStorePubPort kvStorePubPort,
       KvStoreCmdPort kvStoreCmdPort,
@@ -496,18 +496,13 @@ class Spark final : public OpenrEventBase {
   static const std::vector<std::vector<folly::Optional<SparkNeighState>>>
       stateMap_;
 
-  //
-  // zmq sockets section
-  //
-
-  // this is used to communicate events to downstream consumer
-  const std::string reportUrl_{""};
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> reportSocket_;
+  // Queue to publish neighbor events
+  messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue_;
 
   // this is used to inform peers about my kvstore tcp ports
-  const uint16_t kKvStorePubPort_;
-  const uint16_t kKvStoreCmdPort_;
-  const uint16_t kOpenrCtrlThriftPort_;
+  const uint16_t kKvStorePubPort_{0};
+  const uint16_t kKvStoreCmdPort_{0};
+  const uint16_t kOpenrCtrlThriftPort_{0};
 
   // current version and supported version
   const thrift::OpenrVersions kVersion_;

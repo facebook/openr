@@ -61,11 +61,9 @@ const folly::CIDRNetwork ip1V6 = folly::IPAddress::createNetwork("fe80::1/128");
 const folly::CIDRNetwork ip2V6 = folly::IPAddress::createNetwork("fe80::2/128");
 const folly::CIDRNetwork ip3V6 = folly::IPAddress::createNetwork("fe80::3/128");
 const folly::CIDRNetwork ip4V6 = folly::IPAddress::createNetwork("fe80::4/128");
+
 // Domain name (same for all Tests except in DomainTest)
 const std::string kDomainName("terragraph");
-
-// the URL for the spark server
-const std::string kSparkReportUrl("inproc://spark_server_report");
 
 // the URL for the spark server
 const std::string kSparkCounterCmdUrl("inproc://spark_server_counter_cmd");
@@ -122,7 +120,6 @@ class SparkFixture : public testing::Test {
         fastInitKeepAliveTime,
         true /* enable v4 */,
         true /* enable subnet validation */,
-        SparkReportUrl{folly::sformat("{}-{}", kSparkReportUrl, sparkNum)},
         MonitorSubmitUrl{
             folly::sformat("{}-{}", kSparkCounterCmdUrl, sparkNum)},
         version,

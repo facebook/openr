@@ -19,7 +19,6 @@ SparkWrapper::SparkWrapper(
     std::chrono::milliseconds myFastInitKeepAliveTime,
     bool enableV4,
     bool enableSubnetValidation,
-    SparkReportUrl const& reportUrl,
     MonitorSubmitUrl const& monitorCmdUrl,
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
@@ -28,12 +27,7 @@ SparkWrapper::SparkWrapper(
     bool enableSpark2,
     bool increaseHelloInterval,
     SparkTimeConfig timeConfig)
-    : myNodeName_(myNodeName),
-      reportSock_(
-          zmqContext,
-          fbzmq::IdentityString{Constants::kSparkReportClientId.toString()},
-          folly::none,
-          fbzmq::NonblockingFlag{false}) {
+    : myNodeName_(myNodeName) {
   spark_ = std::make_shared<Spark>(
       myDomainName,
       myNodeName,
@@ -51,7 +45,7 @@ SparkWrapper::SparkWrapper(
       enableV4,
       enableSubnetValidation,
       interfaceUpdatesQueue_.getReader(),
-      reportUrl,
+      neighborUpdatesQueue_,
       monitorCmdUrl,
       KvStorePubPort{10001},
       KvStoreCmdPort{10002},
@@ -66,8 +60,6 @@ SparkWrapper::SparkWrapper(
 
   // start spark
   run();
-
-  reportSock_.connect(fbzmq::SocketUrl{reportUrl});
 }
 
 SparkWrapper::~SparkWrapper() {
@@ -120,18 +112,18 @@ SparkWrapper::updateInterfaceDb(
 folly::Expected<thrift::SparkNeighborEvent, Error>
 SparkWrapper::recvNeighborEvent(
     folly::Optional<std::chrono::milliseconds> timeout) {
-  fbzmq::Message requestIdMsg, delimMsg, thriftMsg;
-  const auto ret = reportSock_.recvMultipleTimeout(
-      timeout, requestIdMsg, delimMsg, thriftMsg);
-  if (ret.hasError()) {
-    return folly::makeUnexpected(ret.error());
+  auto startTime = std::chrono::steady_clock::now();
+  while (not neighborUpdatesReader_.size()) {
+    // Break if timeout occurs
+    auto now = std::chrono::steady_clock::now();
+    if (timeout.hasValue() && now - startTime > timeout.value()) {
+      return folly::makeUnexpected(Error(-1, std::string("timed out")));
+    }
+    // Yield the thread
+    std::this_thread::yield();
   }
-  const auto maybeMsg =
-      thriftMsg.readThriftObj<thrift::SparkNeighborEvent>(serializer_);
-  if (maybeMsg.hasError()) {
-    return folly::makeUnexpected(maybeMsg.error());
-  }
-  return maybeMsg.value();
+
+  return neighborUpdatesReader_.get().value();
 }
 
 folly::Optional<thrift::SparkNeighborEvent>

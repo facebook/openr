@@ -41,7 +41,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
       kvStoreGlobalPubUrl_(
           folly::sformat("inproc://{}-kvstore-pub-global", nodeId_)),
-      sparkReportUrl_(folly::sformat("inproc://{}-spark-report", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
       kvStoreReqSock_(context),
       fibReqSock_(context),
@@ -150,7 +149,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       v4Enabled, // enable v4
       true, // enable subnet validation
       interfaceUpdatesQueue_.getReader(),
-      SparkReportUrl{sparkReportUrl_},
+      neighborUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStorePubPort{0}, // these port numbers won't be used
       KvStoreCmdPort{0},
@@ -211,7 +210,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /* prefix fwd algo KSP2_ED_ECMP */,
       AdjacencyDbMarker{"adj:"},
       interfaceUpdatesQueue_,
-      SparkReportUrl{sparkReportUrl_},
+      neighborUpdatesQueue_.getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},
       configStore_.get(),
       false,

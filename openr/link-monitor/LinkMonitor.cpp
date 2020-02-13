@@ -88,7 +88,7 @@ LinkMonitor::LinkMonitor(
     bool forwardingAlgoKsp2Ed,
     AdjacencyDbMarker adjacencyDbMarker,
     messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
-    SparkReportUrl sparkReportUrl,
+    messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
     MonitorSubmitUrl const& monitorSubmitUrl,
     PersistentStore* configStore,
     bool assumeDrained,
@@ -115,7 +115,6 @@ LinkMonitor::LinkMonitor(
       forwardingTypeMpls_(forwardingTypeMpls),
       forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
       adjacencyDbMarker_(adjacencyDbMarker),
-      sparkReportUrl_(sparkReportUrl),
       platformPubUrl_(platformPubUrl),
       flapInitialBackoff_(flapInitialBackoff),
       flapMaxBackoff_(flapMaxBackoff),
@@ -123,11 +122,6 @@ LinkMonitor::LinkMonitor(
       adjHoldUntilTimePoint_(std::chrono::steady_clock::now() + adjHoldTime),
       // mutable states
       interfaceUpdatesQueue_(intfUpdatesQueue),
-      sparkReportSock_(
-          zmqContext,
-          fbzmq::IdentityString{Constants::kSparkReportClientId.toString()},
-          folly::none,
-          fbzmq::NonblockingFlag{true}),
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
@@ -234,6 +228,20 @@ LinkMonitor::LinkMonitor(
   });
   adjHoldTimer_->scheduleTimeout(adjHoldTime);
 
+  // Add fiber to process the neighbor events
+  getFiberManager()->addTask(
+      [q = std::move(neighborUpdatesQueue), this]() mutable noexcept {
+        while (true) {
+          auto maybeEvent = q.get();
+          VLOG(1) << "Received neighbor update";
+          if (maybeEvent.hasError()) {
+            LOG(INFO) << "Terminating neighbor update processing fiber";
+            break;
+          }
+          processNeighborEvent(std::move(maybeEvent).value());
+        }
+      });
+
   // Initialize ZMQ sockets
   prepare();
 
@@ -249,15 +257,6 @@ LinkMonitor::prepare() noexcept {
   //
   // Prepare all sockets
   //
-
-  // Subscribe to events published by Spark for neighbor state changes
-  LOG(INFO) << "Connect to Spark for neighbor events";
-  const auto sparkRep =
-      sparkReportSock_.connect(fbzmq::SocketUrl{sparkReportUrl_});
-  if (sparkRep.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << sparkReportUrl_ << "' "
-               << sparkRep.error();
-  }
 
   // Subscribe to link/addr events published by NetlinkAgent
   VLOG(2) << "Connect to PlatformPublisher to subscribe NetlinkEvent on "
@@ -283,105 +282,6 @@ LinkMonitor::prepare() noexcept {
     LOG(FATAL) << "Error connecting to URL '" << platformPubUrl_ << "' "
                << nlSub.error();
   }
-
-  // Listen for messages from spark
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*sparkReportSock_},
-      ZMQ_POLLIN,
-      [this](int) noexcept {
-        VLOG(1) << "LinkMonitor: Spark message received...";
-
-        fbzmq::Message requestIdMsg, delimMsg, thriftMsg;
-        const auto ret =
-            sparkReportSock_.recvMultiple(requestIdMsg, delimMsg, thriftMsg);
-
-        if (ret.hasError()) {
-          LOG(ERROR) << "sparkReportSock: Error receiving command: "
-                     << ret.error();
-          return;
-        }
-
-        const auto requestId = requestIdMsg.read<std::string>().value();
-        const auto delim = delimMsg.read<std::string>().value();
-        if (not delimMsg.empty()) {
-          LOG(ERROR) << "sparkReportSock: Non-empty delimiter: " << delim;
-          return;
-        }
-
-        VLOG(3) << "sparkReportSock, got id: `"
-                << folly::backslashify(requestId) << "` and delim: `"
-                << folly::backslashify(delim) << "`";
-
-        const auto maybeEvent =
-            thriftMsg.readThriftObj<thrift::SparkNeighborEvent>(serializer_);
-
-        if (maybeEvent.hasError()) {
-          LOG(ERROR) << "Error processing Spark event object: "
-                     << maybeEvent.error();
-          return;
-        }
-
-        auto event = maybeEvent.value();
-
-        auto neighborAddrV4 = event.neighbor.transportAddressV4;
-        auto neighborAddrV6 = event.neighbor.transportAddressV6;
-
-        VLOG(1) << "Received neighbor event for " << event.neighbor.nodeName
-                << " from " << event.neighbor.ifName << " at " << event.ifName
-                << " with addrs " << toString(neighborAddrV6) << " and "
-                << (enableV4_ ? toString(neighborAddrV4) : "")
-                << " Area:" << event.area;
-
-        switch (event.eventType) {
-        case thrift::SparkNeighborEventType::NEIGHBOR_UP: {
-          logNeighborEvent(event);
-          neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
-          break;
-        }
-
-        case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING: {
-          logNeighborEvent(event);
-          neighborRestartingEvent(
-              event.neighbor.nodeName, event.ifName, event.area);
-          break;
-        }
-
-        case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
-          logNeighborEvent(event);
-          neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
-          break;
-        }
-
-        case thrift::SparkNeighborEventType::NEIGHBOR_DOWN: {
-          logNeighborEvent(event);
-          neighborDownEvent(event.neighbor.nodeName, event.ifName, event.area);
-          break;
-        }
-
-        case thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE: {
-          if (!useRttMetric_) {
-            break;
-          }
-
-          logNeighborEvent(event);
-
-          int32_t newRttMetric = getRttMetric(event.rttUs);
-          VLOG(1) << "Metric value changed for neighbor "
-                  << event.neighbor.nodeName << " to " << newRttMetric;
-          auto it = adjacencies_.find({event.neighbor.nodeName, event.ifName});
-          if (it != adjacencies_.end()) {
-            auto& adj = it->second.adjacency;
-            adj.metric = newRttMetric;
-            adj.rtt = event.rttUs;
-            advertiseAdjacenciesThrottled_->operator()();
-          }
-          break;
-        }
-
-        default:
-          LOG(ERROR) << "Unknown event type " << (int32_t)event.eventType;
-        }
-      }); // sparkReportSock_ callback
 
   addSocket(
       fbzmq::RawZmqSocketPtr{*nlEventSub_}, ZMQ_POLLIN, [this](int) noexcept {
@@ -1024,6 +924,67 @@ LinkMonitor::syncInterfaces() {
 folly::Expected<fbzmq::Message, fbzmq::Error>
 LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
   LOG(FATAL) << "DEPRECATED. Unexpected request received";
+}
+
+void
+LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
+  auto neighborAddrV4 = event.neighbor.transportAddressV4;
+  auto neighborAddrV6 = event.neighbor.transportAddressV6;
+
+  VLOG(1) << "Received neighbor event for " << event.neighbor.nodeName
+          << " from " << event.neighbor.ifName << " at " << event.ifName
+          << " with addrs " << toString(neighborAddrV6) << " and "
+          << (enableV4_ ? toString(neighborAddrV4) : "")
+          << " Area:" << event.area;
+
+  switch (event.eventType) {
+  case thrift::SparkNeighborEventType::NEIGHBOR_UP: {
+    logNeighborEvent(event);
+    neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
+    break;
+  }
+
+  case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING: {
+    logNeighborEvent(event);
+    neighborRestartingEvent(event.neighbor.nodeName, event.ifName, event.area);
+    break;
+  }
+
+  case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
+    logNeighborEvent(event);
+    neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
+    break;
+  }
+
+  case thrift::SparkNeighborEventType::NEIGHBOR_DOWN: {
+    logNeighborEvent(event);
+    neighborDownEvent(event.neighbor.nodeName, event.ifName, event.area);
+    break;
+  }
+
+  case thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE: {
+    if (!useRttMetric_) {
+      break;
+    }
+
+    logNeighborEvent(event);
+
+    int32_t newRttMetric = getRttMetric(event.rttUs);
+    VLOG(1) << "Metric value changed for neighbor " << event.neighbor.nodeName
+            << " to " << newRttMetric;
+    auto it = adjacencies_.find({event.neighbor.nodeName, event.ifName});
+    if (it != adjacencies_.end()) {
+      auto& adj = it->second.adjacency;
+      adj.metric = newRttMetric;
+      adj.rtt = event.rttUs;
+      advertiseAdjacenciesThrottled_->operator()();
+    }
+    break;
+  }
+
+  default:
+    LOG(ERROR) << "Unknown event type " << (int32_t)event.eventType;
+  }
 }
 
 // NOTE: add commands which set/unset overload bit or metric values will

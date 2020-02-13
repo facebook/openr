@@ -52,9 +52,6 @@ const folly::CIDRNetwork ip2V6 = folly::IPAddress::createNetwork("fe80::2/128");
 const std::string kDomainName("Fire_and_Blood");
 
 // the URL for the spark server
-const std::string kSparkReportUrl("inproc://spark_server_report");
-
-// the URL for the spark server
 const std::string kSparkCounterCmdUrl("inproc://spark_server_counter_cmd");
 
 // the hold time we use during the tests
@@ -128,7 +125,6 @@ class Spark2Fixture : public testing::Test {
         fastInitKeepAliveTime,
         true,
         true,
-        SparkReportUrl{folly::sformat("{}-{}", kSparkReportUrl, spark2Id)},
         MonitorSubmitUrl{
             folly::sformat("{}-{}", kSparkCounterCmdUrl, spark2Id)},
         version,

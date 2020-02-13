@@ -283,7 +283,7 @@ Spark::Spark(
     bool enableV4,
     bool enableSubnetValidation,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
-    SparkReportUrl const& reportUrl,
+    messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue,
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStorePubPort kvStorePubPort,
     KvStoreCmdPort kvStoreCmdPort,
@@ -310,11 +310,7 @@ Spark::Spark(
       myHeartbeatHoldTime_(myHeartbeatHoldTime),
       enableV4_(enableV4),
       enableSubnetValidation_(enableSubnetValidation),
-      reportUrl_(reportUrl),
-      reportSocket_(
-          zmqContext,
-          fbzmq::IdentityString{
-              openr::Constants::kSparkReportServerId.toString()}),
+      neighborUpdatesQueue_(neighborUpdatesQueue),
       kKvStorePubPort_(kvStorePubPort),
       kKvStoreCmdPort_(kvStoreCmdPort),
       kOpenrCtrlThriftPort_(openrCtrlThriftPort),
@@ -358,7 +354,7 @@ Spark::Spark(
         }
       });
 
-  // Initialize ZMQ sockets
+  // Initialize UDP socket for neighbor discovery
   prepare(maybeIpTos);
 
   zmqMonitorClient_ =
@@ -422,24 +418,6 @@ Spark::stop() {
 
 void
 Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
-  VLOG(1) << "Constructing Spark server for node " << myNodeName_;
-
-  // enable handover on report socket to new connection for duplicate identities
-  const int handover = 1;
-  const auto reportSockOpt =
-      reportSocket_.setSockOpt(ZMQ_ROUTER_HANDOVER, &handover, sizeof(int));
-  if (reportSockOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_ROUTER_HANDOVER to " << handover << " "
-               << reportSockOpt.error();
-  }
-
-  // bind report socket to inform downstream consumer
-  const auto rep = reportSocket_.bind(fbzmq::SocketUrl{reportUrl_});
-  if (rep.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << reportUrl_ << "' "
-               << rep.error();
-  }
-
   int fd = ioProvider_->socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   mcastFd_ = fd;
   LOG(INFO) << "Creatd UDP socket for neighbor discovery. fd: " << mcastFd_;
@@ -734,14 +712,7 @@ Spark::processNeighborRttChange(
       neighbor.label,
       false /* supportFloodOptimization: doesn't matter in RTT event*/,
       neighbor.area);
-  auto ret = reportSocket_.sendMultiple(
-      fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
-          .value(),
-      fbzmq::Message(),
-      fbzmq::Message::fromThriftObj(event, serializer_).value());
-  if (ret.hasError()) {
-    LOG(ERROR) << "Error sending spark event: " << ret.error();
-  }
+  neighborUpdatesQueue_.push(std::move(event));
 }
 
 void
@@ -776,14 +747,7 @@ Spark::processNeighborHoldTimeout(
         neighbor.label,
         false /* supportFloodOptimization: doesn't matter in GR-expired event*/,
         neighbor.area);
-    auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
-            .value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(event, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending spark event: " << ret.error();
-    }
+    neighborUpdatesQueue_.push(std::move(event));
   } else {
     VLOG(2) << "Neighbor went down, but was not adjacent, not reporting";
   }
@@ -1322,15 +1286,7 @@ Spark::notifySparkNeighborEvent(
   event.label = label;
   event.supportFloodOptimization = supportFloodOptimization;
   event.area = area;
-
-  auto ret = reportSocket_.sendMultiple(
-      fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
-          .value(),
-      fbzmq::Message(),
-      fbzmq::Message::fromThriftObj(event, serializer_).value());
-  if (ret.hasError()) {
-    LOG(ERROR) << "Error sending spark event: " << ret.error();
-  }
+  neighborUpdatesQueue_.push(std::move(event));
 }
 
 void
@@ -1883,15 +1839,7 @@ Spark::processHelloPacket() {
         neighbor.label,
         false /* supportDual: doesn't matter in DOWN event*/,
         neighbor.area);
-    auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
-            .value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(event, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending spark event: " << ret.error();
-    }
-
+    neighborUpdatesQueue_.push(std::move(event));
     return;
   }
 
@@ -1968,15 +1916,7 @@ Spark::processHelloPacket() {
         supportFloodOptimization,
         neighbor.area);
     neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
-    auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
-            .value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(event, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending spark event: " << ret.error();
-    }
-
+    neighborUpdatesQueue_.push(std::move(event));
     return;
   }
 
@@ -2018,15 +1958,8 @@ Spark::processHelloPacket() {
         neighbor.label,
         supportFloodOptimization,
         neighbor.area);
+    neighborUpdatesQueue_.push(std::move(event));
     neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
-    auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
-            .value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(event, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending spark event: " << ret.error();
-    }
     neighbor.isAdjacent = true;
 
     // Start hold-timer
@@ -2052,19 +1985,9 @@ Spark::processHelloPacket() {
         neighbor.label,
         false /* supportFloodOptimization: doesn't matter in DOWN event*/,
         neighbor.area);
-    auto ret = reportSocket_.sendMultiple(
-        fbzmq::Message::from(openr::Constants::kSparkReportClientId.toString())
-            .value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(event, serializer_).value());
-    if (ret.hasError()) {
-      LOG(ERROR) << "Error sending spark event: " << ret.error();
-    }
+    neighborUpdatesQueue_.push(std::move(event));
     neighbor.isAdjacent = false;
-
-    // Stop hold-timer
-    neighbor.holdTimer->cancelTimeout();
-
+    neighbor.holdTimer->cancelTimeout(); // Stop hold-timer
     return;
   }
 }
@@ -2342,15 +2265,7 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
           neighbor.label,
           false /* supportFloodOptimization: doesn't matter in DOWN event*/,
           neighbor.area);
-      auto ret = reportSocket_.sendMultiple(
-          fbzmq::Message::from(
-              openr::Constants::kSparkReportClientId.toString())
-              .value(),
-          fbzmq::Message(),
-          fbzmq::Message::fromThriftObj(event, serializer_).value());
-      if (ret.hasError()) {
-        LOG(ERROR) << "Error sending spark event: " << ret.error();
-      }
+      neighborUpdatesQueue_.push(std::move(event));
     }
 
     // unsubscribe the socket from mcast group on this interface

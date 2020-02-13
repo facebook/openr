@@ -157,7 +157,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{Constants::kAdjDbMarker.str()},
         interfaceUpdatesQueue_,
-        sparkReportUrl_,
+        neighborUpdatesQueue_.getReader(),
         monitorSubmitUrl_,
         persistentStore.get(),
         false,
@@ -205,6 +205,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   TearDown() override {
     routeUpdatesQueue_.close();
     interfaceUpdatesQueue_.close();
+    neighborUpdatesQueue_.close();
 
     openrThriftServerWrapper_->stop();
 
@@ -250,11 +251,11 @@ class OpenrCtrlFixture : public ::testing::Test {
 
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
-  const SparkReportUrl sparkReportUrl_{"inproc://spark-report"};
   const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
 
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
 
   fbzmq::Context context_;
   folly::EventBase evb_;

@@ -113,7 +113,7 @@ class LinkMonitor final : public OpenrEventBase {
       AdjacencyDbMarker adjacencyDbMarker,
       // URLs for spark, kv-store and monitor
       messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
-      SparkReportUrl sparkReportUrl,
+      messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
       MonitorSubmitUrl const& monitorSubmitUrl,
       PersistentStore* configStore,
       // if set, we will assume drained if no drain state is found in the
@@ -262,6 +262,8 @@ class LinkMonitor final : public OpenrEventBase {
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& request) override;
 
+  void processNeighborEvent(thrift::SparkNeighborEvent&& event);
+
   // Sumbmits the counter/stats to monitor
   void submitCounters();
 
@@ -314,8 +316,6 @@ class LinkMonitor final : public OpenrEventBase {
   const bool forwardingAlgoKsp2Ed_{false};
   // used to match the adjacency database keys
   const std::string adjacencyDbMarker_;
-  // URL for spark report socket
-  const std::string sparkReportUrl_;
   // URL to receive netlink events from PlatformPublisher
   const std::string platformPubUrl_;
   // Backoff timers
@@ -344,8 +344,6 @@ class LinkMonitor final : public OpenrEventBase {
   // Queue to publish interface updates to other modules
   messaging::ReplicateQueue<thrift::InterfaceDatabase>& interfaceUpdatesQueue_;
 
-  // Listen to neighbor events from spark
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> sparkReportSock_;
   // Used to subscribe to netlink events from PlatformPublisher
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> nlEventSub_;
 

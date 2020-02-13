@@ -64,7 +64,6 @@ class SparkWrapper {
       std::chrono::milliseconds myFastInitKeepAliveTime,
       bool enableV4,
       bool enableSubnetValidation,
-      SparkReportUrl const& reportUrl,
       MonitorSubmitUrl const& monitorCmdUrl,
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
@@ -116,8 +115,9 @@ class SparkWrapper {
  private:
   std::string myNodeName_{""};
 
-  // this is used to communicate events to downstream consumer
-  const std::string reportUrl_{""};
+  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
+  messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesReader_{
+      neighborUpdatesQueue_.getReader()};
 
   // DEALER socket for submitting our monitor
   const std::string monitorCmdUrl_{""};

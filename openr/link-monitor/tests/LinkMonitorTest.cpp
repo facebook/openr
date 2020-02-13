@@ -182,6 +182,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {}
+
   virtual void
   SetUp(std::unordered_set<std::string> areas) {
     // Cleanup any existing config file on disk
@@ -250,10 +251,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
       LOG(INFO) << "prefix manager stopped";
     });
 
-    // spark reports neighbor up
-    EXPECT_NO_THROW(
-        sparkReport.bind(fbzmq::SocketUrl{"inproc://spark-report"}).value());
-
     regexOpts.set_case_sensitive(false);
     std::string regexErr;
     auto includeRegexList =
@@ -288,7 +285,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{"adj:"},
         interfaceUpdatesQueue,
-        SparkReportUrl{"inproc://spark-report"},
+        neighborUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
         false,
@@ -315,15 +312,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "LinkMonitor test/basic operations is done";
 
     interfaceUpdatesQueue.close();
+    neighborUpdatesQueue.close();
 
     LOG(INFO) << "Stopping the LinkMonitor thread";
     linkMonitor->stop();
     linkMonitorThread->join();
     linkMonitor.reset();
     LOG(INFO) << "LinkMonitor thread got stopped";
-
-    LOG(INFO) << "Closing sockets";
-    sparkReport.close();
 
     LOG(INFO) << "Stopping prefix manager thread";
     prefixManager->stop();
@@ -526,10 +521,9 @@ class LinkMonitorTestFixture : public ::testing::Test {
   ScopedServerThread systemThriftThread;
 
   fbzmq::Context context{};
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{context};
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> sparkIfDbResp{context};
 
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
+  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue;
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
 
@@ -567,7 +561,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   const int linkMetric = 123;
   const int adjMetric = 100;
-  std::string clientId = Constants::kSparkReportClientId.toString();
 
   {
     InSequence dummy;
@@ -726,10 +719,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    EXPECT_NO_THROW(sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value()));
+    neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -837,10 +827,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -858,9 +845,14 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // stop linkMonitor
   LOG(INFO) << "Mock restarting link monitor!";
 
+  neighborUpdatesQueue.close();
   linkMonitor->stop();
   linkMonitorThread->join();
   linkMonitor.reset();
+
+  // Create new neighbor update queue. Previous one is closed
+  neighborUpdatesQueue =
+      messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
 
   linkMonitor = make_shared<LinkMonitor>(
       context,
@@ -881,7 +873,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       false /* prefix fwd algo KSP2_ED_ECMP */,
       AdjacencyDbMarker{"adj:"},
       interfaceUpdatesQueue,
-      SparkReportUrl{"inproc://spark-report2"},
+      neighborUpdatesQueue.getReader(),
       MonitorSubmitUrl{"inproc://monitor-rep2"},
       configStore.get(),
       false,
@@ -900,14 +892,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   });
   linkMonitor->waitUntilRunning();
 
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{
-      context,
-      fbzmq::IdentityString{"spark_server_id"},
-      folly::none,
-      fbzmq::NonblockingFlag{true}};
-  EXPECT_NO_THROW(
-      sparkReport.bind(fbzmq::SocketUrl{"inproc://spark-report2"}).value());
-
   // 12. neighbor up
   {
     auto neighborEvent = createNeighborEvent(
@@ -916,10 +900,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor up event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -932,10 +913,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -952,7 +930,6 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
       expectedAdjDbs.push(std::move(adjDb));
     }
   }
-  std::string clientId = Constants::kSparkReportClientId.toString();
 
   // neighbor up
   {
@@ -962,10 +939,7 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   // before throttled function kicks in
@@ -978,10 +952,7 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
         nb3,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   // neighbor 3 down immediately
@@ -992,10 +963,7 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
         nb3,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   checkNextAdjPub("adj:node-1");
@@ -1004,7 +972,6 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
 // parallel adjacencies between two nodes via different interfaces
 TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
-  std::string clientId = Constants::kSparkReportClientId.toString();
   {
     InSequence dummy;
 
@@ -1037,10 +1004,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   checkNextAdjPub("adj:node-1");
@@ -1057,10 +1021,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
         nb2,
         100 /* rtt-us */,
         2 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   checkNextAdjPub("adj:node-1");
@@ -1077,10 +1038,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   checkNextAdjPub("adj:node-1");
@@ -1093,7 +1051,6 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 // Verify neighbor-restarting event (including parallel case)
 TEST_F(LinkMonitorTestFixture, NeighborRestart) {
   SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
-  std::string clientId = Constants::kSparkReportClientId.toString();
 
   /* Single link case */
   // neighbor up
@@ -1104,10 +1061,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   // wait for this peer change to propogate
@@ -1123,10 +1077,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   // wait for this peer change to propogate
@@ -1142,10 +1093,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
   /* sleep override */
@@ -1161,10 +1109,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
         nb2,
         100 /* rtt-us */,
         2 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
 
   // wait for this peer change to propogate
@@ -1180,10 +1125,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
   /* sleep override */
@@ -1198,10 +1140,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
   /* sleep override */
@@ -1216,10 +1155,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
   /* sleep override */
@@ -1234,10 +1170,7 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
   }
   // wait for this peer change to propogate
   /* sleep override */
@@ -1253,9 +1186,14 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   const std::set<std::string> ifNames = {linkX, linkY};
 
   // we want much higher backoffs for this test, so lets spin up a different LM
+  neighborUpdatesQueue.close();
   linkMonitor->stop();
   linkMonitorThread->join();
   linkMonitor.reset();
+
+  // Create new neighbor update queue. Previous one is closed
+  neighborUpdatesQueue =
+      messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
 
   std::string regexErr;
   auto includeRegexList =
@@ -1289,7 +1227,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       false /* prefix fwd algo KSP2_ED_ECMP */,
       AdjacencyDbMarker{"adj:"},
       interfaceUpdatesQueue,
-      SparkReportUrl{"inproc://spark-report"},
+      neighborUpdatesQueue.getReader(),
       MonitorSubmitUrl{"inproc://monitor-rep"},
       configStore.get(),
       false,
@@ -1771,7 +1709,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{"adj:"},
         interfaceUpdatesQueue,
-        SparkReportUrl{"inproc://spark-report"},
+        neighborUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
         false,
@@ -1818,6 +1756,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
 
   EXPECT_EQ(kNumNodesToTest, labelSet.size());
   // cleanup
+  neighborUpdatesQueue.close();
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
     linkMonitors[i]->stop();
     linkMonitorThreads[i]->join();
@@ -2032,7 +1971,6 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
   // Will be updated in all areas
   // TODO: Change this when interfaced base areas is implemented, in which
   // case only corresponding area kvstore should get the update
-  std::string clientId = Constants::kSparkReportClientId.toString();
 
   {
     InSequence dummy;
@@ -2050,10 +1988,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
           nb2,
           100 /* rtt-us */,
           1 /* label */);
-      EXPECT_NO_THROW(sparkReport.sendMultiple(
-          fbzmq::Message::from(clientId).value(),
-          fbzmq::Message(),
-          fbzmq::Message::fromThriftObj(neighborEvent, serializer).value()));
+      neighborUpdatesQueue.push(std::move(neighborEvent));
       LOG(INFO) << "Testing neighbor UP event in default area!";
 
       checkNextAdjPub(
@@ -2074,10 +2009,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
           100 /* rtt-us */,
           1 /* label */,
           "plane");
-      sparkReport.sendMultiple(
-          fbzmq::Message::from(clientId).value(),
-          fbzmq::Message(),
-          fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+      neighborUpdatesQueue.push(std::move(neighborEvent));
       LOG(INFO) << "Testing neighbor UP event in plane area!";
 
       checkNextAdjPub("adj:node-1", "plane");
@@ -2093,10 +2025,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
         nb2,
         100 /* rtt-us */,
         1 /* label */);
-    EXPECT_NO_THROW(sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value()));
+    neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub(
         "adj:node-1", openr::thrift::KvStore_constants::kDefaultArea());
@@ -2113,10 +2042,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
         100 /* rtt-us */,
         1 /* label */,
         "plane");
-    EXPECT_NO_THROW(sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value()));
+    neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", "plane");
     checkPeerDump(adj_3_1.otherNodeName, peerSpec_3_1, "plane");
@@ -2132,10 +2058,7 @@ TEST_F(LinkMonitorTestFixture, AreaTest) {
         100 /* rtt-us */,
         1 /* label */,
         "plane");
-    sparkReport.sendMultiple(
-        fbzmq::Message::from(clientId).value(),
-        fbzmq::Message(),
-        fbzmq::Message::fromThriftObj(neighborEvent, serializer).value());
+    neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1", "plane");
   }

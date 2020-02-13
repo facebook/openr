@@ -237,6 +237,7 @@ main(int argc, char** argv) {
   // Queue for inter-module communication
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> routeUpdatesQueue;
   ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
+  ReplicateQueue<openr::thrift::SparkNeighborEvent> neighborUpdatesQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -577,7 +578,7 @@ main(int argc, char** argv) {
             FLAGS_enable_v4,
             FLAGS_enable_subnet_validation,
             interfaceUpdatesQueue.getReader(),
-            SparkReportUrl{FLAGS_spark_report_url},
+            neighborUpdatesQueue,
             monitorSubmitUrl,
             KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
             KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
@@ -700,7 +701,7 @@ main(int argc, char** argv) {
           FLAGS_prefix_algo_type_ksp2_ed_ecmp,
           AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
           interfaceUpdatesQueue,
-          SparkReportUrl{FLAGS_spark_report_url},
+          neighborUpdatesQueue.getReader(),
           monitorSubmitUrl,
           configStore,
           FLAGS_assume_drained,
@@ -857,6 +858,7 @@ main(int argc, char** argv) {
   // Stop all threads (in reverse order of their creation)
   routeUpdatesQueue.close();
   interfaceUpdatesQueue.close();
+  neighborUpdatesQueue.close();
   thriftCtrlServer.stop();
   for (auto riter = orderedModules.rbegin(); orderedModules.rend() != riter;
        ++riter) {
