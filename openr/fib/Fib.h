@@ -24,6 +24,7 @@
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/kvstore/KvStoreClient.h>
+#include <openr/messaging/Queue.h>
 
 namespace openr {
 
@@ -56,7 +57,7 @@ class Fib final : public OpenrEventBase {
       bool enableOrderedFib,
       std::chrono::seconds coldStartDuration,
       bool waitOnDecision,
-      const DecisionPubUrl& decisionPubUrl,
+      messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
       const LinkMonitorGlobalPubUrl& linkMonPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const KvStoreLocalCmdUrl& storeCmdUrl,
@@ -239,12 +240,8 @@ class Fib final : public OpenrEventBase {
   // starts or the agent we are talking with restarts
   const std::chrono::seconds coldStartDuration_;
 
-  // ZMQ sockets for communication with Decision and LinkMonitor modules
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> decisionSub_;
+  // ZMQ socket and url for communication with LinkMonitor module
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> linkMonSub_;
-
-  // ZMQ socket urls
-  const std::string decisionPubUrl_;
   const std::string linkMonPubUrl_;
 
   apache::thrift::CompactSerializer serializer_;

@@ -5,17 +5,20 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <thread>
+
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <thrift/lib/cpp2/util/ScopedServerThread.h>
+
 #include <openr/fib/Fib.h>
 #include <openr/fib/tests/MockNetlinkFibHandler.h>
 #include <openr/fib/tests/PrefixGenerator.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
-#include <thread>
 
 /**
  * Defines a benchmark that allows users to record customized counter during
@@ -74,9 +77,6 @@ class FibWrapper {
     server->setInterface(mockFibHandler);
     fibThriftThread.start(server);
 
-    // Create sockets
-    decisionPub.bind(fbzmq::SocketUrl{"inproc://decision-pub"});
-
     // Creat Fib module and start fib thread
     port = fibThriftThread.getAddress()->getPort();
     fib = std::make_shared<Fib>(
@@ -87,7 +87,7 @@ class FibWrapper {
         false, // orderedFib
         std::chrono::seconds(2),
         false, // waitOnDecision
-        DecisionPubUrl{"inproc://decision-pub"},
+        routeUpdatesQueue.getReader(),
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
@@ -116,12 +116,12 @@ class FibWrapper {
     openrThriftServerWrapper_->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
+    // Close queue
+    routeUpdatesQueue.close();
+
     // This will be invoked before Fib's d-tor
     fib->stop();
     fibThread->join();
-
-    // Close socket
-    decisionPub.close();
 
     // Stop mocked nl platform
     mockFibHandler->stop();
@@ -165,11 +165,9 @@ class FibWrapper {
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread fibThriftThread;
 
-  fbzmq::Context context{};
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> decisionPub{context};
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
 
-  // Create the serializer for write/read
-  apache::thrift::CompactSerializer serializer;
+  fbzmq::Context context{};
 
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;
@@ -209,7 +207,7 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
             kNumOfNexthops, kVethNameY)));
   }
   // Send routeDB to Fib and wait for updating completing
-  fibWrapper->decisionPub.sendThriftObj(routeDbDelta, fibWrapper->serializer);
+  fibWrapper->routeUpdatesQueue.push(routeDbDelta);
   fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
 
   // Customized time counter
@@ -236,7 +234,7 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
     routeDbDelta.perfEvents = perfEvents;
 
     // Send routeDB to Fib for updates
-    fibWrapper->decisionPub.sendThriftObj(routeDbDelta, fibWrapper->serializer);
+    fibWrapper->routeUpdatesQueue.push(routeDbDelta);
     fibWrapper->mockFibHandler->waitForUpdateUnicastRoutes();
 
     // Get time information from perf event

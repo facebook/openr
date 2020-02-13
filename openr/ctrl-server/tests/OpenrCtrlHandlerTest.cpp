@@ -25,6 +25,7 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/link-monitor/tests/MockNetlinkSystemHandler.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
@@ -83,7 +84,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         folly::none,
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-        DecisionPubUrl{decisionPubUrl_},
+        routeUpdatesQueue_,
         monitorSubmitUrl_,
         context_);
     decisionThread_ = std::thread([&]() { decision->run(); });
@@ -97,7 +98,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         false, /* enableOrderedFib */
         std::chrono::seconds(2),
         false, /* waitOnDecision */
-        DecisionPubUrl{"inproc://decision-pub"},
+        routeUpdatesQueue_.getReader(),
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
@@ -203,6 +204,8 @@ class OpenrCtrlFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    routeUpdatesQueue_.close();
+
     openrThriftServerWrapper_->stop();
 
     linkMonitor->stop();
@@ -247,11 +250,12 @@ class OpenrCtrlFixture : public ::testing::Test {
 
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
-  const DecisionPubUrl decisionPubUrl_{"inproc://decision-pub"};
   const SparkCmdUrl sparkCmdUrl_{"inproc://spark-req"};
   const SparkReportUrl sparkReportUrl_{"inproc://spark-report"};
   const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
   const LinkMonitorGlobalPubUrl lmPubUrl_{"inproc://link-monitor-pub-url"};
+
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
 
   fbzmq::Context context_;
   folly::EventBase evb_;

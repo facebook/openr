@@ -1609,7 +1609,7 @@ Decision::Decision(
     folly::Optional<std::chrono::seconds> gracefulRestartDuration,
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
-    const DecisionPubUrl& decisionPubUrl,
+    messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
     : OpenrEventBase(myNodeName, thrift::OpenrModuleType::DECISION, zmqContext),
@@ -1619,11 +1619,9 @@ Decision::Decision(
       prefixDbMarker_(prefixDbMarker),
       storeCmdUrl_(storeCmdUrl),
       storePubUrl_(storePubUrl),
-      decisionPubUrl_(decisionPubUrl),
       storeSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      decisionPub_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}) {
+      routeUpdatesQueue_(routeUpdatesQueue) {
   routeDb_.thisNodeName = myNodeName_;
   processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
       getEvb(), [this]() noexcept { processPendingUpdates(); });
@@ -1649,12 +1647,6 @@ Decision::Decision(
 
 void
 Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
-  const auto pubBind = decisionPub_.bind(fbzmq::SocketUrl{decisionPubUrl_});
-  if (pubBind.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << decisionPubUrl_ << "' "
-               << pubBind.error();
-  }
-
   VLOG(2) << "Decision: Connecting to store '" << storePubUrl_ << "'";
   const auto optRet =
       storeSub_.setSockOpt(ZMQ_RCVHWM, &kStoreSubReceiveHwm, sizeof(int));
@@ -2134,10 +2126,7 @@ Decision::sendRouteUpdate(
   routeDb_ = std::move(db);
 
   // publish the new route state
-  auto sendRc = decisionPub_.sendThriftObj(routeDelta, serializer_);
-  if (sendRc.hasError()) {
-    LOG(ERROR) << "Error publishing new routing table: " << sendRc.error();
-  }
+  routeUpdatesQueue_.push(std::move(routeDelta));
 }
 
 std::chrono::milliseconds

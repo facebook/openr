@@ -29,7 +29,7 @@ Fib::Fib(
     bool enableOrderedFib,
     std::chrono::seconds coldStartDuration,
     bool waitOnDecision,
-    const DecisionPubUrl& decisionPubUrl,
+    messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
     const LinkMonitorGlobalPubUrl& linkMonPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const KvStoreLocalCmdUrl& storeCmdUrl,
@@ -42,11 +42,8 @@ Fib::Fib(
       enableSegmentRouting_(enableSegmentRouting),
       enableOrderedFib_(enableOrderedFib),
       coldStartDuration_(coldStartDuration),
-      decisionSub_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       linkMonSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      decisionPubUrl_(std::move(decisionPubUrl)),
       linkMonPubUrl_(std::move(linkMonPubUrl)),
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)) {
@@ -92,6 +89,21 @@ Fib::Fib(
         Constants::kKeepAliveCheckInterval, true /* schedule periodically */);
   }
 
+  // Fiber to process route database delta
+  getFiberManager()->addTask(
+      [q = std::move(routeUpdatesQueue), this]() mutable noexcept {
+        while (true) {
+          auto maybeThriftObj = q.get(); // perform read
+          if (maybeThriftObj.hasError()) {
+            LOG(INFO) << "Terminating route delta processing fiber";
+            break;
+          }
+
+          CHECK_EQ(myNodeName_, maybeThriftObj.value().thisNodeName);
+          processRouteUpdates(std::move(maybeThriftObj).value());
+        }
+      });
+
   prepare();
 
   zmqMonitorClient_ =
@@ -111,20 +123,6 @@ Fib::Fib(
 
 void
 Fib::prepare() noexcept {
-  VLOG(2) << "Fib: Subscribing to decision module '" << decisionPubUrl_ << "'";
-  const auto decisionSubConnect =
-      decisionSub_.connect(fbzmq::SocketUrl{decisionPubUrl_});
-  if (decisionSubConnect.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << decisionPubUrl_ << "' "
-               << decisionSubConnect.error();
-  }
-  const auto decisionSubOpt = decisionSub_.setSockOpt(ZMQ_SUBSCRIBE, "", 0);
-  if (decisionSubOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
-               << ""
-               << " " << decisionSubOpt.error();
-  }
-
   VLOG(2) << "Fib: Subscribing to Link Monitor module pub url '"
           << linkMonPubUrl_ << "'";
   const auto lmSubConnect =
@@ -147,28 +145,6 @@ Fib::prepare() noexcept {
   monitorTimer_ = fbzmq::ZmqTimeout::make(
       getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
-
-  // Received publication from Decision module
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*decisionSub_}, ZMQ_POLLIN, [this](int) noexcept {
-        VLOG(1) << "Fib: publication received ...";
-        auto maybeThriftObj =
-            decisionSub_.recvThriftObj<thrift::RouteDatabaseDelta>(
-                serializer_, Constants::kReadTimeout);
-        if (maybeThriftObj.hasError()) {
-          LOG(ERROR) << "Error processing decision publication: "
-                     << maybeThriftObj.error();
-          return;
-        }
-        auto& thriftDeltaRouteDb = maybeThriftObj.value();
-
-        if (thriftDeltaRouteDb.thisNodeName != myNodeName_) {
-          LOG(ERROR) << "Received publication from unknown node "
-                     << thriftDeltaRouteDb.thisNodeName;
-        } else {
-          processRouteUpdates(std::move(thriftDeltaRouteDb));
-        }
-      });
 
   // We have received Interface status publication from LinkMonitor
   addSocket(

@@ -85,7 +85,7 @@ class DecisionWrapper {
         folly::none,
         KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
-        DecisionPubUrl{"inproc://decision-pub"},
+        routeUpdatesQueue,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
 
@@ -107,11 +107,6 @@ class DecisionWrapper {
     openrThriftServerWrapper_->addModuleType(
         thrift::OpenrModuleType::DECISION, decision);
     openrThriftServerWrapper_->run();
-
-    const int hwm = 1000;
-    decisionPub.setSockOpt(ZMQ_RCVHWM, &hwm, sizeof(hwm)).value();
-    decisionPub.setSockOpt(ZMQ_SUBSCRIBE, "", 0).value();
-    decisionPub.connect(fbzmq::SocketUrl{"inproc://decision-pub"});
 
     // Make initial sync request with empty route-db
     replyInitialSyncReq(thrift::Publication());
@@ -136,8 +131,7 @@ class DecisionWrapper {
 
   thrift::RouteDatabaseDelta
   recvMyRouteDb() {
-    auto maybeRouteDb =
-        decisionPub.recvThriftObj<thrift::RouteDatabaseDelta>(serializer);
+    auto maybeRouteDb = routeUpdatesQueueReader.get();
     auto routeDb = maybeRouteDb.value();
     return routeDb;
   }
@@ -235,8 +229,10 @@ class DecisionWrapper {
 
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> kvStorePub{zeromqContext};
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> kvStoreRep{zeromqContext};
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> decisionPub{zeromqContext};
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> decisionReq{zeromqContext};
+
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueueReader{
+      routeUpdatesQueue.getReader()};
 
   // KvStore owned by this wrapper.
   std::shared_ptr<Decision> decision{nullptr};

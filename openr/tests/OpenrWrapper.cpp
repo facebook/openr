@@ -45,7 +45,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
       linkMonitorGlobalPubUrl_(
           folly::sformat("inproc://{}-linkmonitor-pub", nodeId_)),
-      decisionPubUrl_(folly::sformat("inproc://{}-decision-pub", nodeId_)),
       kvStoreReqSock_(context),
       sparkReqSock_(context),
       fibReqSock_(context),
@@ -246,7 +245,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       folly::none,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      DecisionPubUrl{decisionPubUrl_},
+      routeUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       context_);
 
@@ -261,7 +260,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false, // ordered Fib
       fibColdStartDuration,
       false, // waitOnDecision
-      DecisionPubUrl{decisionPubUrl_},
+      routeUpdatesQueue_.getReader(),
       LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},

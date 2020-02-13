@@ -173,7 +173,7 @@ class OpenrWrapper {
   const std::string sparkReportUrl_;
   const std::string platformPubUrl_;
   const std::string linkMonitorGlobalPubUrl_;
-  const std::string decisionPubUrl_;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
   std::string kvStoreLocalCmdUrl_;
 
   // client sockets mainly for tests

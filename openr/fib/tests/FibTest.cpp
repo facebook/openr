@@ -34,6 +34,7 @@
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
 using namespace std;
@@ -204,10 +205,6 @@ class FibTestFixture : public ::testing::Test {
     fibThriftThread.start(server);
     port = fibThriftThread.getAddress()->getPort();
 
-    EXPECT_NO_THROW(
-        decisionPub.bind(fbzmq::SocketUrl{"inproc://decision-pub"}).value());
-    EXPECT_NO_THROW(
-        decisionRep.bind(fbzmq::SocketUrl{"inproc://decision-cmd"}).value());
     EXPECT_NO_THROW(lmPub.bind(fbzmq::SocketUrl{"inproc://lm-pub"}).value());
 
     fib = std::make_shared<Fib>(
@@ -218,7 +215,7 @@ class FibTestFixture : public ::testing::Test {
         false, /* orderedFib */
         std::chrono::seconds(2),
         waitOnDecision_,
-        DecisionPubUrl{"inproc://decision-pub"},
+        routeUpdatesQueue.getReader(),
         LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
@@ -248,15 +245,14 @@ class FibTestFixture : public ::testing::Test {
     openrThriftServerWrapper_->stop();
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
+    routeUpdatesQueue.close();
+    lmPub.close();
+
     // this will be invoked before Fib's d-tor
     LOG(INFO) << "Stopping the Fib thread";
     fib->stop();
     fibThread->join();
     fib.reset();
-
-    decisionPub.close();
-    decisionRep.close();
-    lmPub.close();
 
     // stop mocked nl platform
     mockFibHandler->stop();
@@ -313,9 +309,9 @@ class FibTestFixture : public ::testing::Test {
   std::shared_ptr<ThriftServer> server;
   ScopedServerThread fibThriftThread;
 
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+
   fbzmq::Context context{};
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> decisionPub{context};
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> decisionRep{context};
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> lmPub{context};
 
   // Create the serializer for write/read
@@ -355,7 +351,7 @@ TEST_F(FibTestFixture, processRouteDb) {
   routeDbDelta.thisNodeName = "node-1";
   routeDbDelta.unicastRoutesToUpdate.emplace_back(
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   int64_t countAdd = mockFibHandler->getAddRoutesCount();
   // add routes
@@ -376,7 +372,7 @@ TEST_F(FibTestFixture, processRouteDb) {
       createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
   routeDbDelta.unicastRoutesToUpdate.emplace_back(
       createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   // syncFib debounce
   mockFibHandler->waitForUpdateUnicastRoutes();
@@ -398,7 +394,7 @@ TEST_F(FibTestFixture, processRouteDb) {
       createUnicastRoute(prefix2, {path1_2_2, path1_2_3}));
   routeDbDelta.unicastRoutesToUpdate.emplace_back(
       createUnicastRoute(prefix3, {path1_3_2}));
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
   // syncFib debounce
   mockFibHandler->waitForUpdateUnicastRoutes();
   EXPECT_GT(mockFibHandler->getAddRoutesCount(), countAdd);
@@ -462,7 +458,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   routeDbDelta.mplsRoutesToUpdate = {
       createMplsRoute(label2, {mpls_path1_2_1, mpls_path1_2_2}),
       createMplsRoute(label1, {mpls_path1_2_1})};
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   mockFibHandler->waitForUpdateUnicastRoutes();
   mockFibHandler->waitForUpdateMplsRoutes();
@@ -514,7 +510,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   routeDbDelta.unicastRoutesToUpdate = {
       createUnicastRoute(prefix1, {path1_2_2})};
   routeDbDelta.mplsRoutesToUpdate = {createMplsRoute(label1, {mpls_path1_2_2})};
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   mockFibHandler->waitForUpdateUnicastRoutes();
   mockFibHandler->waitForUpdateMplsRoutes();
@@ -600,7 +596,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
       createMplsRoute(label1, {mpls_path1_2_1, mpls_path1_2_2}),
       createMplsRoute(label2, {mpls_path1_2_2}),
       createMplsRoute(label3, {mpls_path1_2_1})};
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   // wait
   mockFibHandler->waitForUpdateUnicastRoutes();
@@ -622,7 +618,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
   routeDbDelta.mplsRoutesToUpdate.clear();
   routeDbDelta.unicastRoutesToDelete = {prefix3};
   routeDbDelta.mplsRoutesToDelete = {label1, label3};
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   mockFibHandler->waitForDeleteUnicastRoutes();
   mockFibHandler->waitForDeleteMplsRoutes();
@@ -646,7 +642,7 @@ TEST_F(FibTestFixture, basicAddAndDelete) {
       createUnicastRoute(prefix3, {path1_3_1, path1_3_2})};
   routeDbDelta.mplsRoutesToUpdate = {
       createMplsRoute(label1, {mpls_path1_2_1, mpls_path1_2_2})};
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   mockFibHandler->waitForUpdateUnicastRoutes();
   mockFibHandler->waitForUpdateMplsRoutes();
@@ -680,7 +676,7 @@ TEST_F(FibTestFixture, fibRestart) {
       createMplsRoute(label1, {mpls_path1_2_1, mpls_path1_2_2}),
       createMplsRoute(label2, {mpls_path1_2_2})};
 
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   // initial syncFib debounce
   mockFibHandler->waitForSyncFib();
@@ -732,7 +728,7 @@ TEST_F(FibTestFixtureWaitOnDecision, WaitOnDecision) {
       createMplsRoute(label1, {mpls_path1_2_1, mpls_path1_2_2}),
       createMplsRoute(label2, {mpls_path1_2_2})};
 
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   // initial syncFib debounce
   mockFibHandler->waitForSyncFib();
@@ -769,7 +765,7 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
   const auto& route2 = createMplsRoute(label2, {mpls_path1_2_2});
   const auto& route3 = createMplsRoute(label3, {mpls_path1_2_1});
   routeDbDelta.mplsRoutesToUpdate = {route1, route2, route3};
-  decisionPub.sendThriftObj(routeDbDelta, serializer).value();
+  routeUpdatesQueue.push(routeDbDelta);
 
   // wait for mpls
   mockFibHandler->waitForUpdateMplsRoutes();
@@ -842,7 +838,7 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
   routeDb.unicastRoutesToUpdate.emplace_back(route2);
   routeDb.unicastRoutesToUpdate.emplace_back(route3);
   routeDb.unicastRoutesToUpdate.emplace_back(route4);
-  decisionPub.sendThriftObj(routeDb, serializer).value();
+  routeUpdatesQueue.push(routeDb);
   mockFibHandler->waitForUpdateUnicastRoutes();
   mockFibHandler->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 4);
@@ -984,7 +980,7 @@ TEST_F(FibTestFixture, doNotInstall) {
     routeDb.thisNodeName = "node-1";
     routeDb.unicastRoutesToUpdate.emplace_back(route1);
     routeDb.unicastRoutesToUpdate.emplace_back(route2);
-    decisionPub.sendThriftObj(routeDb, serializer).value();
+    routeUpdatesQueue.push(routeDb);
   }
   mockFibHandler->waitForSyncFib();
   mockFibHandler->getRouteTableByClient(routes, kFibId);
@@ -998,7 +994,7 @@ TEST_F(FibTestFixture, doNotInstall) {
     routeDb.thisNodeName = "node-1";
     routeDb.unicastRoutesToUpdate.emplace_back(route3);
     routeDb.unicastRoutesToUpdate.emplace_back(route4);
-    decisionPub.sendThriftObj(routeDb, serializer).value();
+    routeUpdatesQueue.push(routeDb);
   }
 
   mockFibHandler->waitForUpdateUnicastRoutes();

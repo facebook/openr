@@ -33,6 +33,7 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
 struct ProcessPublicationResult {
@@ -211,7 +212,7 @@ class Decision : public OpenrEventBase {
       folly::Optional<std::chrono::seconds> gracefulRestartDuration,
       const KvStoreLocalCmdUrl& storeCmdUrl,
       const KvStoreLocalPubUrl& storePubUrl,
-      const DecisionPubUrl& decisionPubUrl,
+      messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
 
@@ -326,10 +327,9 @@ class Decision : public OpenrEventBase {
   // URLs for the sockets
   const std::string storeCmdUrl_;
   const std::string storePubUrl_;
-  const std::string decisionPubUrl_;
 
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> storeSub_;
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> decisionPub_;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue_;
 
   // the pointer to the SPF path calculator
   std::unique_ptr<SpfSolver> spfSolver_;

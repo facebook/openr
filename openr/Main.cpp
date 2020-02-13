@@ -43,6 +43,7 @@
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/LinkMonitor.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/platform/PlatformPublisher.h>
@@ -58,15 +59,13 @@ using namespace openr;
 using namespace folly::gen;
 
 using apache::thrift::concurrency::ThreadManager;
+using openr::messaging::ReplicateQueue;
 using openr::thrift::OpenrModuleType;
 
 namespace {
 //
 // Local constants
 //
-
-// the URL for Decision module pub
-const DecisionPubUrl kDecisionPubUrl{"inproc:///tmp/decision-pub-url"};
 
 // the URL for LinkMonitor module pub
 const LinkMonitorGlobalPubUrl kLinkMonitorPubUrl{"inproc://tmp/lm-pub-url"};
@@ -237,6 +236,9 @@ main(int argc, char** argv) {
 
   // Set main thread name
   folly::setThreadName("openr");
+
+  // Queue for inter-module communication
+  ReplicateQueue<openr::thrift::RouteDatabaseDelta> routeUpdatesQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -744,7 +746,7 @@ main(int argc, char** argv) {
           decisionGRWindow,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
-          kDecisionPubUrl,
+          routeUpdatesQueue,
           monitorSubmitUrl,
           context));
 
@@ -768,7 +770,7 @@ main(int argc, char** argv) {
           FLAGS_enable_ordered_fib_programming,
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
           decisionGRWindow.hasValue(), /* waitOnDecision */
-          kDecisionPubUrl,
+          routeUpdatesQueue.getReader(),
           kLinkMonitorPubUrl,
           monitorSubmitUrl,
           kvStoreLocalCmdUrl,
@@ -849,7 +851,7 @@ main(int argc, char** argv) {
     pluginStart(PluginArgs{FLAGS_node_name,
                            context,
                            prefixManagerLocalCmdUrl,
-                           kDecisionPubUrl,
+                           routeUpdatesQueue.getReader(),
                            FLAGS_prefix_algo_type_ksp2_ed_ecmp,
                            sslContext});
   }
@@ -858,8 +860,8 @@ main(int argc, char** argv) {
   mainEventLoopThread.join();
 
   // Stop all threads (in reverse order of their creation)
+  routeUpdatesQueue.close();
   thriftCtrlServer.stop();
-
   for (auto riter = orderedModules.rbegin(); orderedModules.rend() != riter;
        ++riter) {
     (*riter)->stop();

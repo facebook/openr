@@ -30,9 +30,6 @@ BOOST_STRONG_TYPEDEF(uint16_t, OpenrCtrlThriftPort);
 BOOST_STRONG_TYPEDEF(std::string, MonitorSubmitUrl);
 BOOST_STRONG_TYPEDEF(std::string, MonitorPubUrl);
 
-// Decision URLs
-BOOST_STRONG_TYPEDEF(std::string, DecisionPubUrl);
-
 // markers for some of KvStore keys
 BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
