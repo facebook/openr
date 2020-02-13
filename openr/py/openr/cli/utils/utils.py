@@ -9,6 +9,7 @@
 
 
 import copy
+import curses
 import datetime
 import ipaddress
 import json
@@ -1790,3 +1791,22 @@ def get_area_id(client: OpenrCtrl.Client, area: str) -> str:
         print(f"Error: Must specify one of the areas: {areas}")
         sys.exit(1)
     return area
+
+
+def if_tty_has_colors():
+    """
+    Check if stdout is a terminal and supports colors
+    """
+    is_a_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+    has_color = False
+
+    try:
+        # initialize the terminal to get the Terminfo
+        curses.setupterm()
+        # get the 'colors' info: maximum number of colors on screen
+        if curses.tigetnum("colors") >= 8:
+            has_color = True
+    except Exception:
+        pass
+
+    return is_a_tty and has_color

@@ -11,6 +11,7 @@
 from typing import Any, Callable, Dict, List, Optional
 
 import bunch
+from openr.cli.utils import utils
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.KvStore import ttypes as kv_store_types
 from openr.OpenrCtrl import OpenrCtrl
@@ -26,10 +27,10 @@ class OpenrCtrlCmd(object):
         """ initialize the Config Store client """
 
         self.cli_opts = cli_opts  # type: bunch.Bunch
-        self.enable_color = cli_opts.enable_color
         self.host = cli_opts.host
         self.timeout = cli_opts.timeout
         self.fib_agent_port = cli_opts.fib_agent_port
+        self.enable_color = utils.if_tty_has_colors()
 
     def run(self, *args, **kwargs) -> None:
         """

@@ -33,8 +33,6 @@ OPTIONS = bunch.Bunch(
         "cert_file": "",
         "cert_reqs": ssl.CERT_NONE,
         "client_id": platform_types.FibClient.OPENR,
-        # TODO T59933238: Remove (can be learnt dynamically)
-        "enable_color": True,
         "fib_agent_port": Consts.FIB_AGENT_PORT,
         "host": "localhost",
         "key_file": "",
