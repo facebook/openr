@@ -67,9 +67,6 @@ namespace {
 // Local constants
 //
 
-// the URL for LinkMonitor module pub
-const LinkMonitorGlobalPubUrl kLinkMonitorPubUrl{"inproc://tmp/lm-pub-url"};
-
 const std::string inet6Path = "/proc/net/if_inet6";
 } // namespace
 
@@ -239,6 +236,7 @@ main(int argc, char** argv) {
 
   // Queue for inter-module communication
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -578,6 +576,7 @@ main(int argc, char** argv) {
             maybeIpTos,
             FLAGS_enable_v4,
             FLAGS_enable_subnet_validation,
+            interfaceUpdatesQueue.getReader(),
             SparkReportUrl{FLAGS_spark_report_url},
             monitorSubmitUrl,
             KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
@@ -700,17 +699,13 @@ main(int argc, char** argv) {
           FLAGS_prefix_fwd_type_mpls,
           FLAGS_prefix_algo_type_ksp2_ed_ecmp,
           AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
-          SparkCmdUrl{
-              FLAGS_enable_spark
-                  ? moduleTypeToObj.at(OpenrModuleType::SPARK)->inprocCmdUrl
-                  : FLAGS_spark_cmd_url},
+          interfaceUpdatesQueue,
           SparkReportUrl{FLAGS_spark_report_url},
           monitorSubmitUrl,
           configStore,
           FLAGS_assume_drained,
           prefixManagerLocalCmdUrl,
           PlatformPublisherUrl{FLAGS_platform_pub_url},
-          kLinkMonitorPubUrl,
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms),
@@ -771,7 +766,7 @@ main(int argc, char** argv) {
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
           decisionGRWindow.hasValue(), /* waitOnDecision */
           routeUpdatesQueue.getReader(),
-          kLinkMonitorPubUrl,
+          interfaceUpdatesQueue.getReader(),
           monitorSubmitUrl,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
@@ -861,6 +856,7 @@ main(int argc, char** argv) {
 
   // Stop all threads (in reverse order of their creation)
   routeUpdatesQueue.close();
+  interfaceUpdatesQueue.close();
   thriftCtrlServer.stop();
   for (auto riter = orderedModules.rbegin(); orderedModules.rend() != riter;
        ++riter) {

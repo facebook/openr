@@ -99,7 +99,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::seconds(2),
         false, /* waitOnDecision */
         routeUpdatesQueue_.getReader(),
-        LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
+        interfaceUpdatesQueue_.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -156,14 +156,13 @@ class OpenrCtrlFixture : public ::testing::Test {
         false /* prefix type mpls */,
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{Constants::kAdjDbMarker.str()},
-        sparkCmdUrl_,
+        interfaceUpdatesQueue_,
         sparkReportUrl_,
         monitorSubmitUrl_,
         persistentStore.get(),
         false,
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         platformPubUrl_,
-        lmPubUrl_,
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
         std::chrono::milliseconds(1),
@@ -205,6 +204,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   void
   TearDown() override {
     routeUpdatesQueue_.close();
+    interfaceUpdatesQueue_.close();
 
     openrThriftServerWrapper_->stop();
 
@@ -250,12 +250,11 @@ class OpenrCtrlFixture : public ::testing::Test {
 
  private:
   const MonitorSubmitUrl monitorSubmitUrl_{"inproc://monitor-submit-url"};
-  const SparkCmdUrl sparkCmdUrl_{"inproc://spark-req"};
   const SparkReportUrl sparkReportUrl_{"inproc://spark-report"};
   const PlatformPublisherUrl platformPubUrl_{"inproc://platform-pub-url"};
-  const LinkMonitorGlobalPubUrl lmPubUrl_{"inproc://link-monitor-pub-url"};
 
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
 
   fbzmq::Context context_;
   folly::EventBase evb_;

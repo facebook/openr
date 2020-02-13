@@ -29,7 +29,6 @@ SparkWrapper::SparkWrapper(
     bool increaseHelloInterval,
     SparkTimeConfig timeConfig)
     : myNodeName_(myNodeName),
-      reqSock_(zmqContext),
       reportSock_(
           zmqContext,
           fbzmq::IdentityString{Constants::kSparkReportClientId.toString()},
@@ -51,6 +50,7 @@ SparkWrapper::SparkWrapper(
       folly::none /* ip-tos */,
       enableV4,
       enableSubnetValidation,
+      interfaceUpdatesQueue_.getReader(),
       reportUrl,
       monitorCmdUrl,
       KvStorePubPort{10001},
@@ -66,8 +66,6 @@ SparkWrapper::SparkWrapper(
 
   // start spark
   run();
-
-  reqSock_.connect(fbzmq::SocketUrl{spark_->inprocCmdUrl});
 
   reportSock_.connect(fbzmq::SocketUrl{reportUrl});
 }
@@ -88,6 +86,7 @@ SparkWrapper::run() {
 
 void
 SparkWrapper::stop() {
+  interfaceUpdatesQueue_.close();
   spark_->stop();
   spark_->waitUntilStopped();
   thread_->join();
@@ -114,18 +113,8 @@ SparkWrapper::updateInterfaceDb(
              toIpPrefix(interface.v6LinkLocalNetwork)}));
   }
 
-  reqSock_.sendThriftObj(ifDb, serializer_);
-
-  auto maybeMsg =
-      reqSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(serializer_);
-  if (maybeMsg.hasError()) {
-    LOG(ERROR) << "updateInterfaceDb recv SparkIfDbUpdateResult failed: "
-               << maybeMsg.error();
-    return false;
-  }
-  auto cmdResult = maybeMsg.value();
-
-  return cmdResult.isSuccess;
+  interfaceUpdatesQueue_.push(std::move(ifDb));
+  return true;
 }
 
 folly::Expected<thrift::SparkNeighborEvent, Error>

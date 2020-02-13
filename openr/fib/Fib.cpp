@@ -30,7 +30,7 @@ Fib::Fib(
     std::chrono::seconds coldStartDuration,
     bool waitOnDecision,
     messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
-    const LinkMonitorGlobalPubUrl& linkMonPubUrl,
+    messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
@@ -42,9 +42,6 @@ Fib::Fib(
       enableSegmentRouting_(enableSegmentRouting),
       enableOrderedFib_(enableOrderedFib),
       coldStartDuration_(coldStartDuration),
-      linkMonSub_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      linkMonPubUrl_(std::move(linkMonPubUrl)),
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)) {
   syncRoutesTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
@@ -89,11 +86,12 @@ Fib::Fib(
         Constants::kKeepAliveCheckInterval, true /* schedule periodically */);
   }
 
-  // Fiber to process route database delta
+  // Fiber to process route updates from Decision
   getFiberManager()->addTask(
       [q = std::move(routeUpdatesQueue), this]() mutable noexcept {
         while (true) {
           auto maybeThriftObj = q.get(); // perform read
+          VLOG(1) << "Received route updates";
           if (maybeThriftObj.hasError()) {
             LOG(INFO) << "Terminating route delta processing fiber";
             break;
@@ -104,10 +102,29 @@ Fib::Fib(
         }
       });
 
-  prepare();
+  // Fiber to process interface updates from LinkMonitor
+  getFiberManager()->addTask(
+      [q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
+        while (true) {
+          auto maybeThriftObj = q.get(); // perform read
+          VLOG(1) << "Received interface updates";
+          if (maybeThriftObj.hasError()) {
+            LOG(INFO) << "Terminating interface update processing fiber";
+            break;
+          }
 
+          CHECK_EQ(myNodeName_, maybeThriftObj.value().thisNodeName);
+          processInterfaceDb(std::move(maybeThriftObj).value());
+        }
+      });
+
+  // Schedule periodic timer for submission to monitor
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
+  const bool isPeriodic = true;
+  monitorTimer_ = fbzmq::ZmqTimeout::make(
+      getEvb(), [this]() noexcept { submitCounters(); });
+  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
 
   // Initialize stats keys
   tData_.addStatExportType("fib.convergence_time_ms", fbzmq::AVG);
@@ -119,54 +136,6 @@ Fib::Fib(
   tData_.addStatExportType("fib.thrift.failure.add_del_route", fbzmq::COUNT);
   tData_.addStatExportType("fib.thrift.failure.keepalive", fbzmq::COUNT);
   tData_.addStatExportType("fib.thrift.failure.sync_fib", fbzmq::COUNT);
-}
-
-void
-Fib::prepare() noexcept {
-  VLOG(2) << "Fib: Subscribing to Link Monitor module pub url '"
-          << linkMonPubUrl_ << "'";
-  const auto lmSubConnect =
-      linkMonSub_.connect(fbzmq::SocketUrl{linkMonPubUrl_});
-  if (lmSubConnect.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << linkMonPubUrl_ << "' "
-               << lmSubConnect.error();
-  }
-  const auto linkSubOpt = linkMonSub_.setSockOpt(ZMQ_SUBSCRIBE, "", 0);
-  if (linkSubOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
-               << ""
-               << " " << linkSubOpt.error();
-  }
-
-  LOG(INFO) << "Fib thread attaching socket/timeout callbacks...";
-
-  // Schedule periodic timer for submission to monitor
-  const bool isPeriodic = true;
-  monitorTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { submitCounters(); });
-  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
-
-  // We have received Interface status publication from LinkMonitor
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*linkMonSub_}, ZMQ_POLLIN, [this](int) noexcept {
-        VLOG(1) << "Fib: interface status publication received ...";
-        auto maybeThriftObj =
-            linkMonSub_.recvThriftObj<thrift::InterfaceDatabase>(
-                serializer_, Constants::kReadTimeout);
-        if (maybeThriftObj.hasError()) {
-          LOG(ERROR) << "Error processing link monitor publication"
-                     << maybeThriftObj.error();
-          return;
-        }
-
-        auto& thriftInterfaceDb = maybeThriftObj.value();
-        if (thriftInterfaceDb.thisNodeName != myNodeName_) {
-          LOG(ERROR) << "Received interface updates from unknown node "
-                     << thriftInterfaceDb.thisNodeName;
-        } else {
-          processInterfaceDb(std::move(thriftInterfaceDb));
-        }
-      });
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>

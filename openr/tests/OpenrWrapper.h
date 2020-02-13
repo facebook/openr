@@ -172,13 +172,12 @@ class OpenrWrapper {
   const std::string kvStoreGlobalPubUrl_;
   const std::string sparkReportUrl_;
   const std::string platformPubUrl_;
-  const std::string linkMonitorGlobalPubUrl_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
   std::string kvStoreLocalCmdUrl_;
 
   // client sockets mainly for tests
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> kvStoreReqSock_;
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> sparkReqSock_;
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> fibReqSock_;
 
   // socket to publish platform events

@@ -68,9 +68,6 @@ const std::string kDomainName("terragraph");
 const std::string kSparkReportUrl("inproc://spark_server_report");
 
 // the URL for the spark server
-const std::string kSparkCmdUrl("inproc://spark_server_cmd");
-
-// the URL for the spark server
 const std::string kSparkCounterCmdUrl("inproc://spark_server_counter_cmd");
 
 // the hold time we use during the tests

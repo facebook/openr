@@ -87,14 +87,13 @@ LinkMonitor::LinkMonitor(
     bool forwardingTypeMpls,
     bool forwardingAlgoKsp2Ed,
     AdjacencyDbMarker adjacencyDbMarker,
-    SparkCmdUrl sparkCmdUrl,
+    messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
     SparkReportUrl sparkReportUrl,
     MonitorSubmitUrl const& monitorSubmitUrl,
     PersistentStore* configStore,
     bool assumeDrained,
     PrefixManagerLocalCmdUrl const& prefixManagerUrl,
     PlatformPublisherUrl const& platformPubUrl,
-    LinkMonitorGlobalPubUrl linkMonitorGlobalPubUrl,
     std::chrono::seconds adjHoldTime,
     std::chrono::milliseconds flapInitialBackoff,
     std::chrono::milliseconds flapMaxBackoff,
@@ -116,18 +115,14 @@ LinkMonitor::LinkMonitor(
       forwardingTypeMpls_(forwardingTypeMpls),
       forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
       adjacencyDbMarker_(adjacencyDbMarker),
-      sparkCmdUrl_(sparkCmdUrl),
       sparkReportUrl_(sparkReportUrl),
       platformPubUrl_(platformPubUrl),
-      linkMonitorGlobalPubUrl_(linkMonitorGlobalPubUrl),
       flapInitialBackoff_(flapInitialBackoff),
       flapMaxBackoff_(flapMaxBackoff),
       ttlKeyInKvStore_(ttlKeyInKvStore),
       adjHoldUntilTimePoint_(std::chrono::steady_clock::now() + adjHoldTime),
       // mutable states
-      linkMonitorPubSock_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
-      sparkCmdSock_(zmqContext),
+      interfaceUpdatesQueue_(intfUpdatesQueue),
       sparkReportSock_(
           zmqContext,
           fbzmq::IdentityString{Constants::kSparkReportClientId.toString()},
@@ -254,37 +249,6 @@ LinkMonitor::prepare() noexcept {
   //
   // Prepare all sockets
   //
-  // bind out publisher socket
-  VLOG(2) << "Link Monitor: Binding pub url '" << linkMonitorGlobalPubUrl_
-          << "'";
-  const auto lmPub =
-      linkMonitorPubSock_.bind(fbzmq::SocketUrl{linkMonitorGlobalPubUrl_});
-  if (lmPub.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << linkMonitorGlobalPubUrl_ << "' "
-               << lmPub.error();
-  }
-
-  VLOG(2) << "Connect to Spark to send commands on " << sparkCmdUrl_;
-
-  // Subscribe to events published by Spark for neighbor state changes
-  const auto sparkCmd = sparkCmdSock_.connect(fbzmq::SocketUrl{sparkCmdUrl_});
-  if (sparkCmd.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << sparkCmdUrl_ << "' "
-               << sparkCmd.error();
-  }
-  const int relaxed = 1;
-  const auto sparkCmdOptRelaxed =
-      sparkCmdSock_.setSockOpt(ZMQ_REQ_RELAXED, &relaxed, sizeof(int));
-  if (sparkCmdOptRelaxed.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_REQ_RELAXED option";
-  }
-
-  const int correlate = 1;
-  const auto sparkCmdOptCorrelate =
-      sparkCmdSock_.setSockOpt(ZMQ_REQ_CORRELATE, &correlate, sizeof(int));
-  if (sparkCmdOptCorrelate.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_REQ_CORRELATE option";
-  }
 
   // Subscribe to events published by Spark for neighbor state changes
   LOG(INFO) << "Connect to Spark for neighbor events";
@@ -855,26 +819,8 @@ LinkMonitor::advertiseInterfaces() {
     ifDb.interfaces.emplace(ifName, std::move(interfaceInfo));
   }
 
-  // advertise interface database, prompting FIB to take immediate action
-  // publish entire interface database
-  const auto res1 = linkMonitorPubSock_.sendThriftObj(ifDb, serializer_);
-  if (res1.hasError()) {
-    LOG(ERROR) << "Exception in sending ifDb to linkMonitor for node: "
-               << nodeId_ << " exception: " << res1.error();
-  }
-
-  // inform spark about interface database change
-  const auto res2 = sparkCmdSock_.sendThriftObj(ifDb, serializer_);
-  if (res2.hasError()) {
-    LOG(ERROR) << "Exception in sending ifDb to Spark for node: " << nodeId_
-               << " exception: " << res2.error();
-  }
-  const auto result =
-      sparkCmdSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(
-          serializer_, Constants::kReadTimeout);
-  if (result.hasError()) {
-    LOG(ERROR) << "Failed updating interface to Spark " << result.error();
-  }
+  // publish new interface database to other modules (Fib & Spark)
+  interfaceUpdatesQueue_.push(std::move(ifDb));
 }
 
 void

@@ -18,6 +18,7 @@
 #include <folly/Optional.h>
 #include <folly/SocketAddress.h>
 #include <folly/container/EvictingCacheMap.h>
+#include <folly/fibers/FiberManager.h>
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -28,6 +29,7 @@
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Spark_types.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/spark/IoProvider.h>
 
 namespace openr {
@@ -93,6 +95,7 @@ class Spark final : public OpenrEventBase {
       folly::Optional<int> ipTos,
       bool enableV4,
       bool enableSubnetValidation,
+      messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       SparkReportUrl const& reportUrl,
       MonitorSubmitUrl const& monitorSubmitUrl,
       KvStorePubPort kvStorePubPort,
@@ -192,6 +195,10 @@ class Spark final : public OpenrEventBase {
       std::string const& ifName,
       bool inFastInitState = false,
       bool restarting = false);
+
+  // Function processes interface updates from LinkMonitor and appropriately
+  // enable/disable neighbor discovery
+  void processInterfaceUpdates(thrift::InterfaceDatabase&& interfaceUpdates);
 
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& request) override;

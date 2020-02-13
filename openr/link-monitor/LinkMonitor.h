@@ -40,6 +40,7 @@
 #include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/InterfaceEntry.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
@@ -111,7 +112,7 @@ class LinkMonitor final : public OpenrEventBase {
       // KvStore's adjacency object's key prefix
       AdjacencyDbMarker adjacencyDbMarker,
       // URLs for spark, kv-store and monitor
-      SparkCmdUrl sparkCmdUrl,
+      messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
       SparkReportUrl sparkReportUrl,
       MonitorSubmitUrl const& monitorSubmitUrl,
       PersistentStore* configStore,
@@ -121,8 +122,6 @@ class LinkMonitor final : public OpenrEventBase {
       PrefixManagerLocalCmdUrl const& prefixManagerUrl,
       // URL for platform publisher
       PlatformPublisherUrl const& platformPubUrl,
-      // Link monitor's own URLs
-      LinkMonitorGlobalPubUrl linkMonitorPubUrl,
       // how long to wait before initial adjacency advertisement
       std::chrono::seconds adjHoldTime,
       // link flap backoffs
@@ -315,15 +314,10 @@ class LinkMonitor final : public OpenrEventBase {
   const bool forwardingAlgoKsp2Ed_{false};
   // used to match the adjacency database keys
   const std::string adjacencyDbMarker_;
-  // used to encode interface db information in KvStore
-  // URL to send/remove interfaces from spark
-  const std::string sparkCmdUrl_;
   // URL for spark report socket
   const std::string sparkReportUrl_;
   // URL to receive netlink events from PlatformPublisher
   const std::string platformPubUrl_;
-  // Publish our events to Fib and others
-  const std::string linkMonitorGlobalPubUrl_;
   // Backoff timers
   const std::chrono::milliseconds flapInitialBackoff_;
   const std::chrono::milliseconds flapMaxBackoff_;
@@ -347,10 +341,9 @@ class LinkMonitor final : public OpenrEventBase {
   // LinkMonitor config attributes (defined in LinkMonitor.thrift)
   thrift::LinkMonitorConfig config_;
 
-  // publish our own events (interfaces up/down)
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> linkMonitorPubSock_;
-  // socket to control the spark
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> sparkCmdSock_;
+  // Queue to publish interface updates to other modules
+  messaging::ReplicateQueue<thrift::InterfaceDatabase>& interfaceUpdatesQueue_;
+
   // Listen to neighbor events from spark
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> sparkReportSock_;
   // Used to subscribe to netlink events from PlatformPublisher

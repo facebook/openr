@@ -25,6 +25,7 @@
 #include <folly/ScopeGuard.h>
 #include <folly/SocketAddress.h>
 #include <folly/String.h>
+#include <folly/fibers/FiberManagerMap.h>
 #include <folly/futures/Future.h>
 #include <folly/futures/Promise.h>
 #include <folly/gen/Base.h>
@@ -281,6 +282,7 @@ Spark::Spark(
     folly::Optional<int> maybeIpTos,
     bool enableV4,
     bool enableSubnetValidation,
+    messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     SparkReportUrl const& reportUrl,
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStorePubPort kvStorePubPort,
@@ -340,6 +342,21 @@ Spark::Spark(
         folly::BucketedTimeSeries<int64_t, std::chrono::steady_clock>(
             numBuckets, sec));
   }
+
+  // Fiber to process interface updates from LinkMonitor
+  getFiberManager()->addTask(
+      [q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
+        while (true) {
+          auto interfaceUpdates = q.get(); // perform read
+          VLOG(1) << "Received interface updates";
+          if (interfaceUpdates.hasError()) {
+            LOG(INFO) << "Terminating interface update processing fiber";
+            break;
+          }
+
+          processInterfaceUpdates(std::move(interfaceUpdates).value());
+        }
+      });
 
   // Initialize ZMQ sockets
   prepare(maybeIpTos);
@@ -2182,21 +2199,11 @@ Spark::sendHelloPacket(
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
 Spark::processRequestMsg(fbzmq::Message&& request) {
-  SCOPE_FAIL {
-    thrift::SparkIfDbUpdateResult result;
-    result.isSuccess = false;
-    folly::Expected<fbzmq::Message, fbzmq::Error> reply{
-        fbzmq::Message::fromThriftObj(result, serializer_)};
-    return reply;
-  };
+  LOG(FATAL) << "DEPRECATED. Unexpected request received";
+}
 
-  auto maybeMsg = request.readThriftObj<thrift::InterfaceDatabase>(serializer_);
-  if (maybeMsg.hasError()) {
-    LOG(ERROR) << "processInterfaceDbUpdate recv failed: " << maybeMsg.error();
-    return folly::makeUnexpected(fbzmq::Error());
-  }
-  auto ifDb = maybeMsg.value();
-
+void
+Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
   decltype(interfaceDb_) newInterfaceDb{};
 
   CHECK_EQ(ifDb.thisNodeName, myNodeName_)
@@ -2292,10 +2299,6 @@ Spark::processRequestMsg(fbzmq::Message&& request) {
   // Updating interface. If ifindex changes, we need to unsubscribe old ifindex
   // from mcast and subscribe new one
   updateInterfaceInDb(toUpdate, newInterfaceDb);
-
-  thrift::SparkIfDbUpdateResult result;
-  result.isSuccess = true;
-  return fbzmq::Message::fromThriftObj(result, serializer_);
 }
 
 void

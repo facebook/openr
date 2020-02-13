@@ -205,8 +205,6 @@ class FibTestFixture : public ::testing::Test {
     fibThriftThread.start(server);
     port = fibThriftThread.getAddress()->getPort();
 
-    EXPECT_NO_THROW(lmPub.bind(fbzmq::SocketUrl{"inproc://lm-pub"}).value());
-
     fib = std::make_shared<Fib>(
         "node-1",
         port, /* thrift port */
@@ -216,7 +214,7 @@ class FibTestFixture : public ::testing::Test {
         std::chrono::seconds(2),
         waitOnDecision_,
         routeUpdatesQueue.getReader(),
-        LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
+        interfaceUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
         KvStoreLocalPubUrl{"inproc://kvstore-pub"},
@@ -246,7 +244,7 @@ class FibTestFixture : public ::testing::Test {
     LOG(INFO) << "Openr-ctrl thrift server got stopped";
 
     routeUpdatesQueue.close();
-    lmPub.close();
+    interfaceUpdatesQueue.close();
 
     // this will be invoked before Fib's d-tor
     LOG(INFO) << "Stopping the Fib thread";
@@ -310,9 +308,9 @@ class FibTestFixture : public ::testing::Test {
   ScopedServerThread fibThriftThread;
 
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
 
   fbzmq::Context context{};
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> lmPub{context};
 
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
@@ -447,7 +445,8 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       },
       thrift::PerfEvents());
   intfDb.perfEvents = folly::none;
-  lmPub.sendThriftObj(intfDb, serializer).value();
+  LOG(INFO) << "Pushing interface update";
+  interfaceUpdatesQueue.push(intfDb);
 
   // Mimic decision pub sock publishing RouteDatabaseDelta
   thrift::RouteDatabaseDelta routeDbDelta;
@@ -489,7 +488,8 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       },
       thrift::PerfEvents());
   intfChange_1.perfEvents = folly::none;
-  lmPub.sendThriftObj(intfChange_1, serializer).value();
+  LOG(INFO) << "Pushing interface update";
+  interfaceUpdatesQueue.push(intfChange_1);
 
   mockFibHandler->waitForDeleteUnicastRoutes();
   mockFibHandler->waitForUpdateUnicastRoutes();
@@ -543,7 +543,8 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       },
       thrift::PerfEvents());
   intfChange_2.perfEvents = folly::none;
-  lmPub.sendThriftObj(intfChange_2, serializer).value();
+  LOG(INFO) << "Pushing interface update";
+  interfaceUpdatesQueue.push(intfChange_2);
 
   mockFibHandler->waitForDeleteUnicastRoutes();
   mockFibHandler->waitForDeleteMplsRoutes();
@@ -559,7 +560,8 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   //
   // Bring up both of these interfaces and verify that route appears back
   //
-  lmPub.sendThriftObj(intfDb, serializer).value();
+  LOG(INFO) << "Pushing interface update";
+  interfaceUpdatesQueue.push(intfDb);
 
   mockFibHandler->waitForUpdateUnicastRoutes();
   mockFibHandler->waitForUpdateMplsRoutes();

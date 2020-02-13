@@ -58,7 +58,7 @@ class Fib final : public OpenrEventBase {
       std::chrono::seconds coldStartDuration,
       bool waitOnDecision,
       messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
-      const LinkMonitorGlobalPubUrl& linkMonPubUrl,
+      messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const KvStoreLocalCmdUrl& storeCmdUrl,
       const KvStoreLocalPubUrl& storePubUrl,
@@ -115,9 +115,6 @@ class Fib final : public OpenrEventBase {
   // No-copy
   Fib(const Fib&) = delete;
   Fib& operator=(const Fib&) = delete;
-
-  // Initializes ZMQ sockets
-  void prepare() noexcept;
 
   /**
    * Process new route updates received from Decision module
@@ -239,10 +236,6 @@ class Fib final : public OpenrEventBase {
   // amount of time to wait before send routes to agent either when this module
   // starts or the agent we are talking with restarts
   const std::chrono::seconds coldStartDuration_;
-
-  // ZMQ socket and url for communication with LinkMonitor module
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> linkMonSub_;
-  const std::string linkMonPubUrl_;
 
   apache::thrift::CompactSerializer serializer_;
 

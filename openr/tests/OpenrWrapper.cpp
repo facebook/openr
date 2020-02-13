@@ -43,10 +43,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           folly::sformat("inproc://{}-kvstore-pub-global", nodeId_)),
       sparkReportUrl_(folly::sformat("inproc://{}-spark-report", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
-      linkMonitorGlobalPubUrl_(
-          folly::sformat("inproc://{}-linkmonitor-pub", nodeId_)),
       kvStoreReqSock_(context),
-      sparkReqSock_(context),
       fibReqSock_(context),
       platformPubSock_(context),
       systemPort_(systemPort),
@@ -152,6 +149,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       folly::none, // ip-tos
       v4Enabled, // enable v4
       true, // enable subnet validation
+      interfaceUpdatesQueue_.getReader(),
       SparkReportUrl{sparkReportUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStorePubPort{0}, // these port numbers won't be used
@@ -161,9 +159,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       context_,
       ioProvider_);
-
-  // spark client socket
-  sparkReqSock_.connect(fbzmq::SocketUrl{spark_->inprocCmdUrl}).value();
 
   //
   // create link monitor
@@ -215,14 +210,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /* prefix type mpls */,
       false /* prefix fwd algo KSP2_ED_ECMP */,
       AdjacencyDbMarker{"adj:"},
-      SparkCmdUrl{spark_->inprocCmdUrl},
+      interfaceUpdatesQueue_,
       SparkReportUrl{sparkReportUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       configStore_.get(),
       false,
       PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
       PlatformPublisherUrl{platformPubUrl_},
-      LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
       linkMonitorAdjHoldTime,
       linkFlapInitialBackoff,
       linkFlapMaxBackoff,
@@ -261,7 +255,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       fibColdStartDuration,
       false, // waitOnDecision
       routeUpdatesQueue_.getReader(),
-      LinkMonitorGlobalPubUrl{linkMonitorGlobalPubUrl_},
+      interfaceUpdatesQueue_.getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
@@ -546,12 +540,8 @@ OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
              toIpPrefix(interface.v6LinkLocalNetwork)}));
   }
 
-  sparkReqSock_.sendThriftObj(ifDb, serializer_).value();
-  auto cmdResult =
-      sparkReqSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(serializer_)
-          .value();
-
-  return cmdResult.isSuccess;
+  interfaceUpdatesQueue_.push(std::move(ifDb));
+  return true;
 }
 
 template <class Serializer>

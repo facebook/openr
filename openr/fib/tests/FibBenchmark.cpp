@@ -88,7 +88,7 @@ class FibWrapper {
         std::chrono::seconds(2),
         false, // waitOnDecision
         routeUpdatesQueue.getReader(),
-        LinkMonitorGlobalPubUrl{"inproc://lm-pub"},
+        interfaceUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
         KvStoreLocalPubUrl{"inproc://kvstore-sub"},
@@ -118,6 +118,7 @@ class FibWrapper {
 
     // Close queue
     routeUpdatesQueue.close();
+    interfaceUpdatesQueue.close();
 
     // This will be invoked before Fib's d-tor
     fib->stop();
@@ -166,6 +167,7 @@ class FibWrapper {
   ScopedServerThread fibThriftThread;
 
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
 
   fbzmq::Context context{};
 

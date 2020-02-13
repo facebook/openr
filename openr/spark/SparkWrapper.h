@@ -8,6 +8,7 @@
 #pragma once
 
 #include <openr/common/Constants.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/spark/Spark.h>
 
 namespace openr {
@@ -121,12 +122,12 @@ class SparkWrapper {
   // DEALER socket for submitting our monitor
   const std::string monitorCmdUrl_{""};
 
+  // Queue to send interface updates to spark
+  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
   apache::thrift::CompactSerializer serializer_;
-
-  // ZMQ request socket for interacting with Spark's command socket
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock_;
 
   // ZMQ pair socket for listening realtime updates from Spark
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> reportSock_;

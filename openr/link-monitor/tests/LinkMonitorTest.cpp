@@ -254,10 +254,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     EXPECT_NO_THROW(
         sparkReport.bind(fbzmq::SocketUrl{"inproc://spark-report"}).value());
 
-    // spark responses to if events
-    EXPECT_NO_THROW(
-        sparkIfDbResp.bind(fbzmq::SocketUrl{"inproc://spark-req"}).value());
-
     regexOpts.set_case_sensitive(false);
     std::string regexErr;
     auto includeRegexList =
@@ -291,14 +287,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
         false /* prefix type mpls */,
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{"adj:"},
-        SparkCmdUrl{"inproc://spark-req"},
+        interfaceUpdatesQueue,
         SparkReportUrl{"inproc://spark-report"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
         false,
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
-        LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url"},
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
         std::chrono::milliseconds(1),
@@ -319,6 +314,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
   TearDown() override {
     LOG(INFO) << "LinkMonitor test/basic operations is done";
 
+    interfaceUpdatesQueue.close();
+
     LOG(INFO) << "Stopping the LinkMonitor thread";
     linkMonitor->stop();
     linkMonitorThread->join();
@@ -327,7 +324,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     LOG(INFO) << "Closing sockets";
     sparkReport.close();
-    sparkIfDbResp.close();
 
     LOG(INFO) << "Stopping prefix manager thread";
     prefixManager->stop();
@@ -354,21 +350,17 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Mocked thrift handlers got stopped";
   }
 
-  // emulate spark keeping receiving InterfaceDb until no more udpates
-  // and update sparkIfDb for every update received
-  // return number of updates received
-  int
-  recvAndReplyIfUpdate(std::chrono::seconds timeout = std::chrono::seconds(2)) {
-    int numUpdateRecv = 0;
-    while (true) {
-      auto ifDb = sparkIfDbResp.recvThriftObj<thrift::InterfaceDatabase>(
-          serializer, std::chrono::milliseconds{timeout});
-      if (ifDb.hasError()) {
-        return numUpdateRecv;
-      }
-      sendIfDbResp(true);
-      sparkIfDb = std::move(ifDb.value().interfaces);
-      ++numUpdateRecv;
+  // Receive and process interface updates from the update queue
+  void
+  recvAndReplyIfUpdate() {
+    auto ifDb = interfaceUpdatesReader.get();
+    ASSERT_TRUE(ifDb.hasValue());
+    sparkIfDb = std::move(ifDb.value().interfaces);
+    LOG(INFO) << "----------- Interface Updates ----------";
+    for (const auto& kv : sparkIfDb) {
+      LOG(INFO) << "  Name=" << kv.first << ", Status=" << kv.second.isUp
+                << ", IfIndex=" << kv.second.ifIndex
+                << ", networks=" << kv.second.networks.size();
     }
   }
 
@@ -418,14 +410,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
           min(v6LinkLocalAddrsCount, res[ifName].v6LinkLocalAddrsMinCount);
     }
     return res;
-  }
-
-  // emulate spark sending a response for IfDb
-  void
-  sendIfDbResp(bool isSuccess) {
-    thrift::SparkIfDbUpdateResult result;
-    result.isSuccess = isSuccess;
-    sparkIfDbResp.sendThriftObj(result, serializer);
   }
 
   folly::Optional<thrift::Value>
@@ -544,6 +528,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
   fbzmq::Context context{};
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> sparkReport{context};
   fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> sparkIfDbResp{context};
+
+  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
+  messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
+      interfaceUpdatesQueue.getReader()};
 
   unique_ptr<PersistentStore> configStore;
   unique_ptr<std::thread> configStoreThread;
@@ -892,14 +880,13 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       false /* prefix type MPLS */,
       false /* prefix fwd algo KSP2_ED_ECMP */,
       AdjacencyDbMarker{"adj:"},
-      SparkCmdUrl{"inproc://spark-req2"},
+      interfaceUpdatesQueue,
       SparkReportUrl{"inproc://spark-report2"},
       MonitorSubmitUrl{"inproc://monitor-rep2"},
       configStore.get(),
       false,
       PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url2"},
-      LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
       std::chrono::seconds(1),
       // link flap backoffs, set low to keep UT runtime low
       std::chrono::milliseconds(1),
@@ -1301,18 +1288,17 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       false /* prefix type MPLS */,
       false /* prefix fwd algo KSP2_ED_ECMP */,
       AdjacencyDbMarker{"adj:"},
-      SparkCmdUrl{"inproc://spark-req"},
+      interfaceUpdatesQueue,
       SparkReportUrl{"inproc://spark-report"},
       MonitorSubmitUrl{"inproc://monitor-rep"},
       configStore.get(),
       false,
       PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
       PlatformPublisherUrl{"inproc://platform-pub-url"},
-      LinkMonitorGlobalPubUrl{"inproc://link-monitor-pub-url2"},
       std::chrono::seconds(1),
       // link flap backoffs, set high backoffs for this test
+      std::chrono::milliseconds(2000),
       std::chrono::milliseconds(4000),
-      std::chrono::milliseconds(8000),
       Constants::kKvStoreDbTtl);
 
   linkMonitorThread = std::make_unique<std::thread>([this]() {
@@ -1330,11 +1316,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
+  recvAndReplyIfUpdate(); // Updates will be coalesced by throttling
 
   {
     // Both interfaces report as down on creation
     // expect sparkIfDb to have two interfaces DOWN
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -1361,6 +1347,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
+  recvAndReplyIfUpdate(); // Updates will be coalesced by throttling
 
   // at this point, both interface should have no backoff
   auto links = linkMonitor->getInterfaces().get();
@@ -1371,31 +1358,22 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   }
 
   VLOG(2) << "*** bring down 2 interfaces ***";
+  auto linkDownTs = std::chrono::steady_clock::now();
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
+  recvAndReplyIfUpdate(); // Update will be sent immediately within 1ms
   mockNlHandler->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
+  recvAndReplyIfUpdate(); // Update will be sent immediately within 1ms
 
-  VLOG(2) << "*** bring up 2 interfaces ***";
-  mockNlHandler->sendLinkEvent(
-      linkX /* link name */,
-      kTestVethIfIndex[0] /* ifIndex */,
-      true /* is up */);
-  mockNlHandler->sendLinkEvent(
-      linkY /* link name */,
-      kTestVethIfIndex[1] /* ifIndex */,
-      true /* is up */);
-
-  // at this point, both interface should have backoff=~1s
-  // (1s of debounce + 2s of recvAndReplyIfUpdate)
+  // at this point, both interface should have backoff=~2s
   {
     // we expect all interfaces are down at this point because backoff hasn't
     // been cleared up yet
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
     auto links1 = linkMonitor->getInterfaces().get();
     EXPECT_EQ(2, res.size());
@@ -1406,17 +1384,31 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_GE(
           links1->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 0);
       EXPECT_LE(
-          links1->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 4000);
+          links1->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 2000);
     }
   }
 
-  // expect spark to receive updates max in 4 seconds since first flap. We
-  // already spent 2s in recvAndReplyIfUpdate before.
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+  VLOG(2) << "*** bring up 2 interfaces ***";
+  mockNlHandler->sendLinkEvent(
+      linkX /* link name */,
+      kTestVethIfIndex[0] /* ifIndex */,
+      true /* is up */);
+  mockNlHandler->sendLinkEvent(
+      linkY /* link name */,
+      kTestVethIfIndex[1] /* ifIndex */,
+      true /* is up */);
+  recvAndReplyIfUpdate(); // No-op throttling update
+  recvAndReplyIfUpdate(); // linkX - UP update
+  recvAndReplyIfUpdate(); // linkY - UP update
+  auto linkUpTs = std::chrono::steady_clock::now();
 
+  // Elapsed total time between interface down->up must be greater than
+  // backoff time of 2s. Also ensure upper bound
+  EXPECT_LE(std::chrono::seconds(2), linkUpTs - linkDownTs);
+  EXPECT_GE(std::chrono::seconds(3), linkUpTs - linkDownTs);
+
+  // Expect interface update after backoff time passes with state=UP
   {
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -1436,19 +1428,21 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
 
   // Bringing down the interfaces
   VLOG(2) << "*** bring down 2 interfaces ***";
+  linkDownTs = std::chrono::steady_clock::now();
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
+  recvAndReplyIfUpdate(); // Update will be sent immediately within 1ms
   mockNlHandler->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
-  // at this point, both interface should have backoff=3sec
+  recvAndReplyIfUpdate(); // Update will be sent immediately within 1ms
 
+  // at this point, both interface should have backoff=~4sec
   {
     // expect sparkIfDb to have two interfaces DOWN
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
     auto links2 = linkMonitor->getInterfaces().get();
 
@@ -1463,9 +1457,9 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
       EXPECT_GE(
-          links2->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 4000);
+          links2->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 2000);
       EXPECT_LE(
-          links2->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 8000);
+          links2->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 4000);
     }
   }
 
@@ -1479,13 +1473,20 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
+  recvAndReplyIfUpdate(); // No-op throttling update
+  recvAndReplyIfUpdate(); // linkX - UP update
+  recvAndReplyIfUpdate(); // linkY - UP update
+  linkUpTs = std::chrono::steady_clock::now();
+
+  // Elapsed total time between interface down->up must be greater than
+  // backoff time of 4s. Also ensure upper bound
+  EXPECT_LE(std::chrono::seconds(4), linkUpTs - linkDownTs);
+  EXPECT_GE(std::chrono::seconds(5), linkUpTs - linkDownTs);
 
   // at this point, both interface should have backoff back to init value
-
   {
     // expect sparkIfDb to have two interfaces UP
     // Make sure to wait long enough to clear out backoff timers
-    recvAndReplyIfUpdate(std::chrono::seconds(8));
     auto res = collateIfUpdates(sparkIfDb);
     auto links3 = linkMonitor->getInterfaces().get();
 
@@ -1516,17 +1517,18 @@ TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       false /* is up */);
+  recvAndReplyIfUpdate();
   mockNlHandler->sendLinkEvent(
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
+  recvAndReplyIfUpdate();
 
   // Both interfaces report as down on creation
   // We receive 2 IfUpUpdates in spark for each interface
   // Both with status as false (DOWN)
   // We let spark return success for each
   EXPECT_NO_THROW({
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -1546,13 +1548,14 @@ TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
+  recvAndReplyIfUpdate();
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
       true /* is up */);
+  recvAndReplyIfUpdate();
 
   EXPECT_NO_THROW({
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -1583,13 +1586,13 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       false /* is up */);
+  recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   // Both interfaces report as down on creation
   // We receive 2 IfUpUpdates in spark for each interface
   // Both with status as false (DOWN)
   // We let spark return success for each
   EXPECT_NO_THROW({
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -1603,27 +1606,8 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
     }
   });
 
-  // Emulate add address event: v4 while interfaces are down. No addr events
-  // should be reported.
   mockNlHandler->sendAddrEvent(linkX, "10.0.0.1/31", true /* is valid */);
   mockNlHandler->sendAddrEvent(linkY, "10.0.0.2/31", true /* is valid */);
-
-  EXPECT_NO_THROW({
-    recvAndReplyIfUpdate();
-    auto res = collateIfUpdates(sparkIfDb);
-
-    // messages for 2 interfaces
-    EXPECT_EQ(2, res.size());
-    for (const auto& ifName : ifNames) {
-      EXPECT_EQ(0, res.at(ifName).isUpCount);
-      EXPECT_EQ(1, res.at(ifName).isDownCount);
-      EXPECT_EQ(0, res.at(ifName).v4AddrsMaxCount);
-      EXPECT_EQ(0, res.at(ifName).v4AddrsMinCount);
-      EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
-      EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
-    }
-  });
-
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
@@ -1632,14 +1616,13 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
-
   // Emulate add address event: v6 while interfaces are in UP state. Both
   // v4 and v6 addresses should be reported.
   mockNlHandler->sendAddrEvent(linkX, "fe80::1/128", true /* is valid */);
   mockNlHandler->sendAddrEvent(linkY, "fe80::2/128", true /* is valid */);
+  recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -1657,9 +1640,9 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   // Emulate delete address event: v4
   mockNlHandler->sendAddrEvent(linkX, "10.0.0.1/31", false /* is valid */);
   mockNlHandler->sendAddrEvent(linkY, "10.0.0.2/31", false /* is valid */);
+  recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -1677,9 +1660,9 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   // Emulate delete address event: v6
   mockNlHandler->sendAddrEvent(linkX, "fe80::1/128", false /* is valid */);
   mockNlHandler->sendAddrEvent(linkY, "fe80::2/128", false /* is valid */);
+  recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -1706,9 +1689,9 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
       linkZ /* link name */,
       kTestVethIfIndex[2] /* ifIndex */,
       true /* is up */);
+  recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 3 interfaces
@@ -1734,10 +1717,10 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
       linkZ /* link name */,
       kTestVethIfIndex[2] /* ifIndex */,
       false /* is up */);
+  recvAndReplyIfUpdate(); // coalesced updates by throttling
   {
     // Both interfaces report as down on creation
     // expect sparkIfDb to have two interfaces DOWN
-    recvAndReplyIfUpdate();
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 3 interfaces
@@ -1787,15 +1770,13 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         false /* prefix type MPLS */,
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{"adj:"},
-        SparkCmdUrl{"inproc://spark-req"},
+        interfaceUpdatesQueue,
         SparkReportUrl{"inproc://spark-report"},
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
         false,
         PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
         PlatformPublisherUrl{"inproc://platform-pub-url"},
-        LinkMonitorGlobalPubUrl{
-            folly::sformat("inproc://link-monitor-pub-url{}", i + 1)},
         std::chrono::seconds(1),
         std::chrono::milliseconds(1),
         std::chrono::milliseconds(8),
@@ -1870,12 +1851,9 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
 
   //
   // Send link up event
-  //
-  mockNlHandler->sendLinkEvent("loopback", 101, true);
-
-  //
   // Advertise some dummy and wrong prefixes
   //
+  mockNlHandler->sendLinkEvent("loopback", 101, true);
 
   // push some invalid loopback addresses
   mockNlHandler->sendAddrEvent("loopback", "fe80::1/128", true);
@@ -1890,8 +1868,8 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   mockNlHandler->sendAddrEvent("loopback", "10.128.241.1/24", true);
   mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", true);
 
-  // Get interface-db and reply to spark
-  recvAndReplyIfUpdate();
+  // Get interface updates
+  recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   // verify
   prefixes.clear();
@@ -1924,8 +1902,8 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   mockNlHandler->sendAddrEvent("loopback", "10.128.241.1/24", false);
   mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", false);
 
-  // Get interface-db and reply to spark
-  recvAndReplyIfUpdate();
+  // Get interface updates
+  recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   // verify
   prefixes.clear();
