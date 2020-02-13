@@ -2429,7 +2429,7 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
    * check sync works fine, add a key with TTL > ttlDecr in store1,
    * verify key is synced to store0
    */
-  int64_t ttl1 = 3000;
+  int64_t ttl1 = 6000;
   thrift::Value thriftVal1(
       apache::thrift::FRAGILE,
       1 /* version */,
@@ -2441,17 +2441,16 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   thriftVal1.hash = generateHash(
       thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
   EXPECT_TRUE(store1->setKey("key1", thriftVal1));
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  {
+    /* check key is in store1 */
+    auto getRes1 = store1->getKey("key1");
+    ASSERT_TRUE(getRes1.hasValue());
 
-  /* check key is in store1 */
-  auto getRes1 = store1->getKey("key1");
-  ASSERT_TRUE(getRes1.hasValue());
-
-  /* check key synced from store1 has ttl that is reduced by ttlDecr. */
-  auto getRes = store0->getKey("key1");
-  ASSERT_TRUE(getRes.hasValue());
-  EXPECT_LE(getRes->ttl, ttl1 - ttlDecr.count());
+    /* check key synced from store1 has ttl that is reduced by ttlDecr. */
+    auto getPub0 = store0->recvPublication(std::chrono::seconds(1));
+    ASSERT_EQ(1, getPub0.keyVals.count("key1"));
+    EXPECT_LE(getPub0.keyVals.at("key1").ttl, ttl1 - ttlDecr.count());
+  }
 
   /* Add another key with TTL < ttlDecr, and check it's not synced */
   int64_t ttl2 = ttlDecr.count() - 1;
@@ -2465,18 +2464,19 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
       0 /* hash */);
   thriftVal2.hash = generateHash(
       thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
-
   EXPECT_TRUE(store1->setKey("key2", thriftVal2));
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  /* check key is not synced from store1 */
-  auto getRes2 = store0->getKey("key2");
-  ASSERT_FALSE(getRes2.hasValue());
-  /* check key get returns false from store1, but keys exist (key1 and key2)*/
-  auto getRes3 = store1->getKey("key2");
-  ASSERT_FALSE(getRes3.hasValue());
-  auto nodeCounters = store1->getCounters();
-  EXPECT_EQ(nodeCounters["kvstore.num_keys"].value, 2);
+
+  {
+    /* check key get returns false from store1, but keys exist (key1 and key2)*/
+    auto getRes1 = store1->getKey("key2");
+    ASSERT_FALSE(getRes1.hasValue());
+    auto nodeCounters = store1->getCounters();
+    EXPECT_EQ(nodeCounters["kvstore.num_keys"].value, 2);
+
+    /* check key is not synced from store1 */
+    EXPECT_THROW(
+        store0->recvPublication(std::chrono::seconds(1)), std::runtime_error);
+  }
 }
 
 /**

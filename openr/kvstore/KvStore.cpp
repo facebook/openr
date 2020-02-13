@@ -1953,25 +1953,28 @@ KvStoreDb::floodBufferedUpdates() {
 void
 KvStoreDb::finalizeFullSync(
     const std::vector<std::string>& keys, const std::string& senderId) {
-  if (keys.empty()) {
-    return;
-  }
-  VLOG(1) << " finalizeFullSync back to: " << senderId
-          << " with keys: " << folly::join(",", keys);
-
   // build keyval to be sent
-  std::unordered_map<std::string, thrift::Value> keyVals;
+  thrift::Publication updates;
   for (const auto& key : keys) {
     const auto& it = kvStore_.find(key);
     if (it != kvStore_.end()) {
-      keyVals.emplace(key, it->second);
+      updates.keyVals.emplace(key, it->second);
     }
   }
+
+  // Update ttl values to remove expiring keys. Ignore the response if no
+  // keys to be sent
+  updatePublicationTtl(updates);
+  if (not updates.keyVals.size()) {
+    return;
+  }
+  VLOG(1) << "finalizeFullSync back to: " << senderId
+          << " with keys: " << folly::join(",", keys);
 
   thrift::KvStoreRequest updateRequest;
   thrift::KeySetParams params;
 
-  params.keyVals = std::move(keyVals);
+  params.keyVals = std::move(updates.keyVals);
   params.solicitResponse = false;
   // I'm the initiator, set flood-root-id
   params.floodRootId = DualNode::getSptRootId();
