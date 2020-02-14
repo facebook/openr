@@ -7,18 +7,21 @@
 
 #pragma once
 
-#include <fbzmq/zmq/Zmq.h>
+#include <memory>
+#include <string>
+
 #include <wangle/ssl/SSLContextConfig.h>
 
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
+#include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/messaging/Queue.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
 struct PluginArgs {
   std::string myNodeName;
-  fbzmq::Context& zmqContext;
-  PrefixManagerLocalCmdUrl prefixManagerUrl;
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue;
   messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
   bool enableSegmentRouting{false};
   std::shared_ptr<wangle::SSLContextConfig> sslContext;

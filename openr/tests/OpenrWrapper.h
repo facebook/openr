@@ -17,7 +17,7 @@
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/prefix-manager/PrefixManagerClient.h>
+#include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
 #include <openr/spark/SparkWrapper.h>
 #include <openr/watchdog/Watchdog.h>
@@ -160,7 +160,6 @@ class OpenrWrapper {
   std::unique_ptr<Fib> fib_;
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
   std::unique_ptr<PrefixManager> prefixManager_;
-  std::unique_ptr<PrefixManagerClient> prefixManagerClient_;
 
   // sub module communication zmq urls and ports
   int kvStoreGlobalCmdPort_{0};
@@ -174,6 +173,7 @@ class OpenrWrapper {
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
   std::string kvStoreLocalCmdUrl_;
 
   // client sockets mainly for tests

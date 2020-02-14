@@ -92,7 +92,7 @@ LinkMonitor::LinkMonitor(
     MonitorSubmitUrl const& monitorSubmitUrl,
     PersistentStore* configStore,
     bool assumeDrained,
-    PrefixManagerLocalCmdUrl const& prefixManagerUrl,
+    messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     PlatformPublisherUrl const& platformPubUrl,
     std::chrono::seconds adjHoldTime,
     std::chrono::milliseconds flapInitialBackoff,
@@ -122,6 +122,7 @@ LinkMonitor::LinkMonitor(
       adjHoldUntilTimePoint_(std::chrono::steady_clock::now() + adjHoldTime),
       // mutable states
       interfaceUpdatesQueue_(intfUpdatesQueue),
+      prefixUpdatesQueue_(prefixUpdatesQueue),
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
@@ -164,9 +165,6 @@ LinkMonitor::LinkMonitor(
         "Setting node as {}",
         assumeDrained ? "DRAINED" : "UNDRAINED");
   }
-
-  prefixManagerClient_ =
-      std::make_unique<PrefixManagerClient>(prefixManagerUrl, zmqContext);
 
   //  Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClient>(
@@ -772,8 +770,11 @@ LinkMonitor::advertiseRedistAddrs() {
   }
 
   // Advertise via prefix manager client
-  prefixManagerClient_->syncPrefixesByType(
-      thrift::PrefixType::LOOPBACK, prefixes);
+  thrift::PrefixUpdateRequest request;
+  request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
+  request.type = openr::thrift::PrefixType::LOOPBACK;
+  request.prefixes = std::move(prefixes);
+  prefixUpdatesQueue_.push(std::move(request));
 }
 
 std::chrono::milliseconds

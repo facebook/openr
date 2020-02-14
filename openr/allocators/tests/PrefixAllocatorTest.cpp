@@ -18,17 +18,17 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-
-#include <openr/allocators/PrefixAllocator.h>
-#include <openr/config-store/PersistentStore.h>
-#include <openr/kvstore/KvStoreWrapper.h>
-
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
+
+#include <openr/allocators/PrefixAllocator.h>
+#include <openr/config-store/PersistentStore.h>
+#include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/prefix-manager/PrefixManager.h>
 
 using namespace std;
 using namespace folly;
@@ -104,6 +104,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     //
     prefixManager_ = std::make_unique<PrefixManager>(
         myNodeName_,
+        prefixUpdatesQueue_.getReader(),
         configStore_.get(),
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
@@ -138,7 +139,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         myNodeName_,
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
-        PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
+        prefixUpdatesQueue_,
         MonitorSubmitUrl{"inproc://monitor_submit"},
         kAllocPrefixMarker,
         GetParam() ? PrefixAllocatorMode(PrefixAllocatorModeStatic())
@@ -158,6 +159,8 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   void
   TearDown() override {
+    prefixUpdatesQueue_.close();
+
     kvStoreClient_.reset();
 
     // Stop various modules
@@ -196,6 +199,9 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
 
   std::vector<std::thread> threads_;
+
+  // Queue for publishing prefix-updates to PrefixManager
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
 
   // create serializer object for parsing kvstore key/values
   apache::thrift::CompactSerializer serializer;
@@ -287,6 +293,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
     vector<std::unique_ptr<PersistentStore>> configStores;
     vector<std::unique_ptr<PrefixManager>> prefixManagers;
+    vector<messaging::ReplicateQueue<thrift::PrefixUpdateRequest>> prefixQueues{
+        numAllocators};
     vector<std::unique_ptr<PrefixAllocator>> allocators;
     vector<thread> threads;
 
@@ -408,6 +416,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // spin up prefix manager
       auto prefixManager = std::make_unique<PrefixManager>(
           myNodeName,
+          prefixQueues.at(i).getReader(),
           tempConfigStore.get(),
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
@@ -428,7 +437,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           myNodeName,
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
-          PrefixManagerLocalCmdUrl{prefixManagers.back()->inprocCmdUrl},
+          prefixQueues.at(i),
           MonitorSubmitUrl{"inproc://monitor_submit"},
           kAllocPrefixMarker,
           maybeAllocParams.hasValue()
@@ -497,6 +506,10 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     for (auto& allocator : allocators) {
       allocator->stop();
       allocator->waitUntilStopped();
+    }
+    LOG(INFO) << "Stop all prefix update queues";
+    for (auto& queue : prefixQueues) {
+      queue.close();
     }
     LOG(INFO) << "Stop all prefix managers";
     for (auto& prefixManager : prefixManagers) {

@@ -8,11 +8,13 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <glog/logging.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
 using namespace openr;
@@ -117,6 +119,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
+        prefixUpdatesQueue.getReader(),
         configStore.get(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -138,10 +141,14 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
 
   void
   TearDown() override {
+    // Close queues
+    prefixUpdatesQueue.close();
+
     // this will be invoked before linkMonitorThread's d-tor
     LOG(INFO) << "Stopping the linkMonitor thread";
     prefixManager->stop();
     prefixManagerThread->join();
+    prefixManager.reset();
 
     // Erase data from config store
     configStore->erase("prefix-manager-config").get();
@@ -149,9 +156,12 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
     // stop config store
     configStore->stop();
     configStoreThread->join();
+    configStore.reset();
 
     // stop the kvStore
     kvStoreWrapper->stop();
+    kvStoreClient.reset();
+    kvStoreWrapper.reset();
     LOG(INFO) << "The test KV store is stopped";
   }
 
@@ -179,8 +189,10 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
   }
 
   fbzmq::Context context;
-
   OpenrEventBase evl;
+
+  // Queue for publishing entries to PrefixManager
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
 
   std::string storageFilePath;
   std::unique_ptr<PersistentStore> configStore;
@@ -775,6 +787,7 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
+      prefixUpdatesQueue.getReader(),
       configStore.get(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -866,6 +879,7 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   evlThread.join();
 
   // cleanup
+  prefixUpdatesQueue.close();
   prefixManager2->stop();
   prefixManagerThread2->join();
 }
@@ -878,6 +892,7 @@ TEST_P(PrefixManagerTestFixture, CheckReload) {
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
+      prefixUpdatesQueue.getReader(),
       configStore.get(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -903,6 +918,7 @@ TEST_P(PrefixManagerTestFixture, CheckReload) {
   EXPECT_FALSE(prefixManager2->withdrawPrefixes({ephemeralPrefixEntry9}).get());
 
   // cleanup
+  prefixUpdatesQueue.close();
   prefixManager2->stop();
   prefixManagerThread2->join();
 }
@@ -951,6 +967,7 @@ TEST_P(PrefixManagerTestFixture, GetPrefixes) {
 
 TEST(PrefixManagerTest, HoldTimeout) {
   fbzmq::Context context;
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
 
   // spin up a config store
   auto configStore = std::make_unique<PersistentStore>(
@@ -984,6 +1001,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
   const auto startTime = std::chrono::steady_clock::now();
   auto prefixManager = std::make_unique<PrefixManager>(
       "node-1",
+      prefixUpdatesQueue.getReader(),
       configStore.get(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -1013,6 +1031,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
   CHECK_EQ(1, publication.keyVals.count("prefix:node-1"));
 
   // Stop the test
+  prefixUpdatesQueue.close();
   prefixManager->stop();
   prefixManagerThread.join();
   kvStoreWrapper->stop();
@@ -1109,6 +1128,87 @@ TEST_P(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
       ->syncPrefixesByType(thrift::PrefixType::BGP, {ephemeralPrefixEntry10})
       .get();
   ASSERT_EQ(7, configStore->getNumOfDbWritesToDisk());
+}
+
+TEST_P(PrefixManagerTestFixture, PrefixUpdatesQueue) {
+  // Helper function to receive expected number of updates from KvStore
+  auto recvPublication = [this](int num) {
+    for (int i = 0; i < num; ++i) {
+      EXPECT_NO_THROW(kvStoreWrapper->recvPublication(std::chrono::seconds(1)));
+    }
+  };
+
+  // Receive initial empty prefix database from KvStore when per-prefix key is
+  recvPublication(perPrefixKeys_ ? 0 : 1);
+
+  // ADD_PREFIXES
+  {
+    // Send update request in queue
+    thrift::PrefixUpdateRequest request;
+    request.cmd = thrift::PrefixUpdateCommand::ADD_PREFIXES;
+    request.prefixes = {prefixEntry1, persistentPrefixEntry9};
+    prefixUpdatesQueue.push(std::move(request));
+
+    // Wait for update in KvStore (PrefixManager has processed the update)
+    recvPublication(perPrefixKeys_ ? 2 : 1);
+
+    // Verify
+    auto prefixes = prefixManager->getPrefixes().get();
+    EXPECT_EQ(2, prefixes->size());
+    EXPECT_THAT(*prefixes, testing::Contains(prefixEntry1));
+    EXPECT_THAT(*prefixes, testing::Contains(persistentPrefixEntry9));
+  }
+
+  // WITHDRAW_PREFIXES_BY_TYPE
+  {
+    // Send update request in queue
+    thrift::PrefixUpdateRequest request;
+    request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
+    request.type = thrift::PrefixType::BGP;
+    prefixUpdatesQueue.push(std::move(request));
+
+    // Wait for update in KvStore (PrefixManager has processed the update)
+    recvPublication(1);
+
+    // Verify
+    auto prefixes = prefixManager->getPrefixes().get();
+    EXPECT_EQ(1, prefixes->size());
+    EXPECT_THAT(*prefixes, testing::Contains(prefixEntry1));
+  }
+
+  // SYNC_PREFIXES_BY_TYPE
+  {
+    // Send update request in queue
+    thrift::PrefixUpdateRequest request;
+    request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
+    request.type = thrift::PrefixType::DEFAULT;
+    request.prefixes = {prefixEntry3};
+    prefixUpdatesQueue.push(std::move(request));
+
+    // Wait for update in KvStore (PrefixManager has processed the update)
+    recvPublication(perPrefixKeys_ ? 2 : 1);
+
+    // Verify
+    auto prefixes = prefixManager->getPrefixes().get();
+    EXPECT_EQ(1, prefixes->size());
+    EXPECT_THAT(*prefixes, testing::Contains(prefixEntry3));
+  }
+
+  // WITHDRAW_PREFIXES
+  {
+    // Send update request in queue
+    thrift::PrefixUpdateRequest request;
+    request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
+    request.prefixes = {prefixEntry3};
+    prefixUpdatesQueue.push(std::move(request));
+
+    // Wait for update in KvStore (PrefixManager has processed the update)
+    recvPublication(1);
+
+    // Verify
+    auto prefixes = prefixManager->getPrefixes().get();
+    EXPECT_EQ(0, prefixes->size());
+  }
 }
 
 int

@@ -24,6 +24,7 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/kvstore/KvStoreClient.h>
+#include <openr/messaging/Queue.h>
 
 namespace openr {
 
@@ -31,6 +32,7 @@ class PrefixManager final : public OpenrEventBase {
  public:
   PrefixManager(
       const std::string& nodeId,
+      messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
       PersistentStore* configStore,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
@@ -48,6 +50,8 @@ class PrefixManager final : public OpenrEventBase {
   // disable copying
   PrefixManager(PrefixManager const&) = delete;
   PrefixManager& operator=(PrefixManager const&) = delete;
+
+  void stop() override;
 
   /*
    * Public API for PrefixManager operations, including:
@@ -172,6 +176,9 @@ class PrefixManager final : public OpenrEventBase {
 
   // area Id
   const std::unordered_set<std::string> areas_{};
+
+  // Future for fiber
+  folly::Future<folly::Unit> prefixUpdatesTaskFuture_;
 }; // PrefixManager
 
 } // namespace openr

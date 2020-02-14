@@ -40,6 +40,7 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/platform/PlatformPublisher.h>
+#include <openr/prefix-manager/PrefixManager.h>
 
 using namespace std;
 using namespace openr;
@@ -235,6 +236,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
+        prefixUpdatesQueue.getReader(),
         configStore.get(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -289,7 +291,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
         false,
-        PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
+        prefixUpdatesQueue,
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
@@ -313,6 +315,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     interfaceUpdatesQueue.close();
     neighborUpdatesQueue.close();
+    prefixUpdatesQueue.close();
 
     LOG(INFO) << "Stopping the LinkMonitor thread";
     linkMonitor->stop();
@@ -524,6 +527,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue;
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
       interfaceUpdatesQueue.getReader()};
 
@@ -877,7 +881,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       MonitorSubmitUrl{"inproc://monitor-rep2"},
       configStore.get(),
       false,
-      PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
+      prefixUpdatesQueue,
       PlatformPublisherUrl{"inproc://platform-pub-url2"},
       std::chrono::seconds(1),
       // link flap backoffs, set low to keep UT runtime low
@@ -1231,7 +1235,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       MonitorSubmitUrl{"inproc://monitor-rep"},
       configStore.get(),
       false,
-      PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
+      prefixUpdatesQueue,
       PlatformPublisherUrl{"inproc://platform-pub-url"},
       std::chrono::seconds(1),
       // link flap backoffs, set high backoffs for this test
@@ -1713,7 +1717,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
         false,
-        PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
+        prefixUpdatesQueue,
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         std::chrono::seconds(1),
         std::chrono::milliseconds(1),

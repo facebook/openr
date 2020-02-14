@@ -109,6 +109,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
         nodeName,
+        prefixUpdatesQueue_.getReader(),
         persistentStore.get(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
@@ -161,7 +162,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         monitorSubmitUrl_,
         persistentStore.get(),
         false,
-        PrefixManagerLocalCmdUrl{prefixManager->inprocCmdUrl},
+        prefixUpdatesQueue_,
         platformPubUrl_,
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
@@ -206,6 +207,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     routeUpdatesQueue_.close();
     interfaceUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
+    prefixUpdatesQueue_.close();
 
     openrThriftServerWrapper_->stop();
 
@@ -256,6 +258,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
 
   fbzmq::Context context_;
   folly::EventBase evb_;

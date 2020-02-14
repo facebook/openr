@@ -26,10 +26,11 @@
 #include <openr/config-store/PersistentStore.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreClient.h>
-#include <openr/prefix-manager/PrefixManagerClient.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 #include "RangeAllocator.h"
 
@@ -62,7 +63,7 @@ class PrefixAllocator : public OpenrEventBase {
       const std::string& myNodeName,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
-      const PrefixManagerLocalCmdUrl& prefixManagerLocalCmdUrl,
+      messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const AllocPrefixMarker& allocPrefixMarker,
       // Allocation params
@@ -228,8 +229,8 @@ class PrefixAllocator : public OpenrEventBase {
   // RangAlloctor to get unique prefix index for this node
   std::unique_ptr<RangeAllocator<uint32_t>> rangeAllocator_;
 
-  // PrefixManager client
-  std::unique_ptr<PrefixManagerClient> prefixManagerClient_;
+  // Queue to send prefix update request to PrefixManager
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue_;
 
   // Monitor client for submitting counters/logs
   fbzmq::ZmqMonitorClient zmqMonitorClient_;

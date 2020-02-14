@@ -239,6 +239,7 @@ main(int argc, char** argv) {
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> routeUpdatesQueue;
   ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<openr::thrift::SparkNeighborEvent> neighborUpdatesQueue;
+  ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdatesQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -499,6 +500,7 @@ main(int argc, char** argv) {
       watchdog,
       std::make_shared<PrefixManager>(
           FLAGS_node_name,
+          prefixUpdatesQueue.getReader(),
           configStore,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
@@ -511,8 +513,6 @@ main(int argc, char** argv) {
           context,
           areas));
 
-  const PrefixManagerLocalCmdUrl prefixManagerLocalCmdUrl{
-      moduleTypeToObj.at(OpenrModuleType::PREFIX_MANAGER)->inprocCmdUrl};
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (FLAGS_enable_prefix_alloc) {
     // start prefix allocator only if default area is configured
@@ -538,7 +538,7 @@ main(int argc, char** argv) {
             FLAGS_node_name,
             kvStoreLocalCmdUrl,
             kvStoreLocalPubUrl,
-            prefixManagerLocalCmdUrl,
+            prefixUpdatesQueue,
             monitorSubmitUrl,
             AllocPrefixMarker{Constants::kPrefixAllocMarker.toString()},
             allocMode,
@@ -706,7 +706,7 @@ main(int argc, char** argv) {
           monitorSubmitUrl,
           configStore,
           FLAGS_assume_drained,
-          prefixManagerLocalCmdUrl,
+          prefixUpdatesQueue,
           PlatformPublisherUrl{FLAGS_platform_pub_url},
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
@@ -846,8 +846,7 @@ main(int argc, char** argv) {
   // Call external module for platform specific implementations
   if (FLAGS_enable_plugin) {
     pluginStart(PluginArgs{FLAGS_node_name,
-                           context,
-                           prefixManagerLocalCmdUrl,
+                           prefixUpdatesQueue,
                            routeUpdatesQueue.getReader(),
                            FLAGS_prefix_algo_type_ksp2_ed_ecmp,
                            sslContext});
@@ -860,6 +859,7 @@ main(int argc, char** argv) {
   routeUpdatesQueue.close();
   interfaceUpdatesQueue.close();
   neighborUpdatesQueue.close();
+  prefixUpdatesQueue.close();
   thriftCtrlServer.stop();
   for (auto riter = orderedModules.rbegin(); orderedModules.rend() != riter;
        ++riter) {

@@ -41,7 +41,4 @@ BOOST_STRONG_TYPEDEF(std::string, NetlinkAgentLocalPubUrl);
 // PlatformPublisher Urls (right now we use global for everything)
 BOOST_STRONG_TYPEDEF(std::string, PlatformPublisherUrl);
 
-// PrefixManager URL
-BOOST_STRONG_TYPEDEF(std::string, PrefixManagerLocalCmdUrl);
-
 } // namespace openr

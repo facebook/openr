@@ -34,6 +34,7 @@ getPrefixTypeName(thrift::PrefixType const& type) {
 
 PrefixManager::PrefixManager(
     const std::string& nodeId,
+    messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
     PersistentStore* configStore,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
@@ -77,6 +78,40 @@ PrefixManager::PrefixManager(
       getEvb(), Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
         outputState();
       });
+
+  // Schedule fiber to read prefix updates messages
+  addFiberTask([q = std::move(prefixUpdatesQueue), this]() mutable noexcept {
+    while (true) {
+      auto maybeUpdate = q.get(); // perform read
+      VLOG(1) << "Received prefix update request";
+      if (maybeUpdate.hasError()) {
+        LOG(INFO) << "Terminating route delta processing fiber";
+        break;
+      }
+
+      auto& update = maybeUpdate.value();
+      switch (update.cmd) {
+      case thrift::PrefixUpdateCommand::ADD_PREFIXES:
+        addOrUpdatePrefixes(update.prefixes);
+        break;
+      case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES:
+        removePrefixes(update.prefixes);
+        break;
+      case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE:
+        CHECK(update.type.hasValue());
+        removePrefixesByType(update.type.value());
+        break;
+      case thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE:
+        CHECK(update.type.hasValue());
+        syncPrefixes(update.type.value(), update.prefixes);
+        break;
+      default:
+        LOG(FATAL) << "Unknown command received. "
+                   << static_cast<int>(update.cmd);
+        break;
+      }
+    }
+  });
 
   // register kvstore publication callback
   std::vector<std::string> keyPrefixList;
@@ -131,6 +166,12 @@ PrefixManager::PrefixManager(
   monitorTimer_ = fbzmq::ZmqTimeout::make(
       getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
+}
+
+void
+PrefixManager::stop() {
+  prefixUpdatesTaskFuture_.wait();
+  OpenrEventBase::stop();
 }
 
 void
@@ -281,67 +322,7 @@ PrefixManager::updateKvStore() {
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
 PrefixManager::processRequestMsg(fbzmq::Message&& request) {
-  const auto maybeThriftReq =
-      request.readThriftObj<thrift::PrefixManagerRequest>(serializer_);
-  if (maybeThriftReq.hasError()) {
-    LOG(ERROR) << "processRequest: failed reading thrift::PrefixRequest "
-               << maybeThriftReq.error();
-    return folly::makeUnexpected(fbzmq::Error());
-  }
-
-  const auto& thriftReq = maybeThriftReq.value();
-  thrift::PrefixManagerResponse response;
-  switch (thriftReq.cmd) {
-  case thrift::PrefixManagerCommand::ADD_PREFIXES: {
-    tData_.addStatValue("prefix_manager.add_prefixes", 1, fbzmq::COUNT);
-    if (addOrUpdatePrefixes(thriftReq.prefixes)) {
-      response.success = true;
-    } else {
-      response.success = false;
-      response.message = kErrorNoChanges;
-    }
-
-    break;
-  }
-  case thrift::PrefixManagerCommand::WITHDRAW_PREFIXES: {
-    if (removePrefixes(thriftReq.prefixes)) {
-      response.success = true;
-      tData_.addStatValue("prefix_manager.withdraw_prefixes", 1, fbzmq::COUNT);
-    } else {
-      response.success = false;
-      response.message = kErrorNoPrefixToRemove;
-    }
-    break;
-  }
-  case thrift::PrefixManagerCommand::WITHDRAW_PREFIXES_BY_TYPE: {
-    if (removePrefixesByType(thriftReq.type)) {
-      response.success = true;
-    } else {
-      response.success = false;
-      response.message = kErrorNoPrefixesOfType;
-    }
-    break;
-  }
-  case thrift::PrefixManagerCommand::SYNC_PREFIXES_BY_TYPE: {
-    if (syncPrefixes(thriftReq.type, thriftReq.prefixes)) {
-      response.success = true;
-    } else {
-      response.success = false;
-      response.message = kErrorNoChanges;
-    }
-    break;
-  }
-  default: {
-    LOG(ERROR) << "Unknown command received";
-    response.success = false;
-    response.message = kErrorUnknownCommand;
-    break;
-  }
-  }
-  persistPrefixDb();
-  outputStateThrottled_->operator()();
-
-  return fbzmq::Message::fromThriftObj(response, serializer_);
+  LOG(FATAL) << "DEPRECATED. Unexpected request received";
 }
 
 folly::SemiFuture<bool>

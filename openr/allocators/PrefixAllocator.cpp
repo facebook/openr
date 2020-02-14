@@ -38,7 +38,7 @@ PrefixAllocator::PrefixAllocator(
     const std::string& myNodeName,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
-    const PrefixManagerLocalCmdUrl& prefixManagerLocalCmdUrl,
+    messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const AllocPrefixMarker& allocPrefixMarker,
     const PrefixAllocatorMode& allocMode,
@@ -62,16 +62,13 @@ PrefixAllocator::PrefixAllocator(
       forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
       syncInterval_(syncInterval),
       configStore_(configStore),
+      prefixUpdatesQueue_(prefixUpdatesQueue),
       zmqMonitorClient_(zmqContext, monitorSubmitUrl),
       systemServicePort_(systemServicePort) {
   CHECK(configStore_);
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClient>(
       zmqContext, this, myNodeName_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl);
-
-  // Create PrefixManager client
-  prefixManagerClient_ = std::make_unique<PrefixManagerClient>(
-      prefixManagerLocalCmdUrl, zmqContext);
 
   // Let the magic begin. Start allocation as per allocMode
   std::visit(*this, allocMode);
@@ -651,11 +648,12 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
       ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
       : thrift::PrefixForwardingAlgorithm::SP_ECMP;
   prefixEntry.ephemeral = folly::none;
-  auto ret = prefixManagerClient_->syncPrefixesByType(
-      openr::thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry});
-  if (ret.hasError()) {
-    LOG(ERROR) << "Announcing new prefix failed: " << ret.error();
-  }
+
+  thrift::PrefixUpdateRequest request;
+  request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
+  request.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  request.prefixes = {prefixEntry};
+  prefixUpdatesQueue_.push(std::move(request));
 
   // existing global prefixes
   std::vector<folly::CIDRNetwork> oldPrefixes;
@@ -733,11 +731,10 @@ PrefixAllocator::withdrawMyPrefix() {
   }
 
   // withdraw prefix via prefixMgrClient
-  auto ret = prefixManagerClient_->withdrawPrefixesByType(
-      openr::thrift::PrefixType::PREFIX_ALLOCATOR);
-  if (ret.hasError()) {
-    LOG(ERROR) << "Withdrawing old prefix failed: " << ret.error();
-  }
+  thrift::PrefixUpdateRequest request;
+  request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
+  request.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  prefixUpdatesQueue_.push(std::move(request));
 }
 
 void

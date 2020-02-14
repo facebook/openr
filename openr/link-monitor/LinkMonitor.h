@@ -37,12 +37,12 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
+#include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/InterfaceEntry.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/platform/PlatformPublisher.h>
-#include <openr/prefix-manager/PrefixManagerClient.h>
 #include <openr/spark/Spark.h>
 
 namespace openr {
@@ -119,7 +119,7 @@ class LinkMonitor final : public OpenrEventBase {
       // if set, we will assume drained if no drain state is found in the
       // persitentStore
       bool assumeDrained,
-      PrefixManagerLocalCmdUrl const& prefixManagerUrl,
+      messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       // URL for platform publisher
       PlatformPublisherUrl const& platformPubUrl,
       // how long to wait before initial adjacency advertisement
@@ -344,6 +344,9 @@ class LinkMonitor final : public OpenrEventBase {
   // Queue to publish interface updates to other modules
   messaging::ReplicateQueue<thrift::InterfaceDatabase>& interfaceUpdatesQueue_;
 
+  // Queue to publish prefix updates to PrefixManager
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue_;
+
   // Used to subscribe to netlink events from PlatformPublisher
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> nlEventSub_;
 
@@ -402,9 +405,6 @@ class LinkMonitor final : public OpenrEventBase {
 
   // client to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
-
-  // client to interact with PrefixManager
-  std::unique_ptr<PrefixManagerClient> prefixManagerClient_;
 
   // areas_ configured on this node
   std::unordered_set<std::string> areas_{};

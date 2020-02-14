@@ -176,6 +176,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // start prefix manager
   prefixManager_ = std::make_unique<PrefixManager>(
       nodeId_,
+      prefixUpdatesQueue_.getReader(),
       configStore_.get(),
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
@@ -186,9 +187,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::chrono::seconds(0),
       Constants::kKvStoreDbTtl,
       context_);
-
-  prefixManagerClient_ = std::make_unique<PrefixManagerClient>(
-      PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl}, context_);
 
   linkMonitor_ = std::make_unique<LinkMonitor>(
       context_,
@@ -213,7 +211,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       MonitorSubmitUrl{monitorSubmitUrl_},
       configStore_.get(),
       false,
-      PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
+      prefixUpdatesQueue_,
       PlatformPublisherUrl{platformPubUrl_},
       linkMonitorAdjHoldTime,
       linkFlapInitialBackoff,
@@ -329,7 +327,7 @@ OpenrWrapper<Serializer>::run() {
       nodeId_,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      PrefixManagerLocalCmdUrl{prefixManager_->inprocCmdUrl},
+      prefixUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       AllocPrefixMarker{"allocprefix:"}, // alloc_prefix_marker
       std::make_pair(seedPrefix, allocPrefixLen),
@@ -422,6 +420,7 @@ OpenrWrapper<Serializer>::stop() {
   routeUpdatesQueue_.close();
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();
+  prefixUpdatesQueue_.close();
 
   // stop all modules in reverse order
   eventBase_.stop();
@@ -555,16 +554,22 @@ template <class Serializer>
 bool
 OpenrWrapper<Serializer>::addPrefixEntries(
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  auto resp = prefixManagerClient_->addPrefixes(prefixes);
-  return resp.value().success;
+  thrift::PrefixUpdateRequest request;
+  request.cmd = thrift::PrefixUpdateCommand::ADD_PREFIXES;
+  request.prefixes = prefixes;
+  prefixUpdatesQueue_.push(std::move(request));
+  return true;
 }
 
 template <class Serializer>
 bool
 OpenrWrapper<Serializer>::withdrawPrefixEntries(
     const std::vector<thrift::PrefixEntry>& prefixes) {
-  auto resp = prefixManagerClient_->withdrawPrefixes(prefixes);
-  return resp.value().success;
+  thrift::PrefixUpdateRequest request;
+  request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
+  request.prefixes = prefixes;
+  prefixUpdatesQueue_.push(std::move(request));
+  return true;
 }
 
 template <class Serializer>

@@ -301,7 +301,6 @@ add_library(openrlib
   openr/platform/PlatformPublisher.cpp
   openr/plugin/Plugin.cpp
   openr/prefix-manager/PrefixManager.cpp
-  openr/prefix-manager/PrefixManagerClient.cpp
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
