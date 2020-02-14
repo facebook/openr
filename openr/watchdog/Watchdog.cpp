@@ -10,7 +10,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 
-
 namespace openr {
 
 Watchdog::Watchdog(
@@ -24,26 +23,21 @@ Watchdog::Watchdog(
       previousStatus_(true),
       criticalMemoryMB_(criticalMemoryMB) {
   // Schedule periodic timer for checking thread health
-  watchdogTimer_ = fbzmq::ZmqTimeout::make(this, [this]() noexcept {
+  watchdogTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     updateCounters();
     monitorMemory();
+    // Schedule next timer
+    watchdogTimer_->scheduleTimeout(healthCheckInterval_);
   });
-  watchdogTimer_->scheduleTimeout(healthCheckInterval_, true /* isPeriodic */);
+  watchdogTimer_->scheduleTimeout(healthCheckInterval_);
 }
 
 void
-Watchdog::addModule(OpenrModule* module, const std::string& name) {
-  runImmediatelyOrInEventLoop([&, module, name]() {
-    CHECK_EQ(allModules_.count(module), 0);
-    allModules_[module] = name;
-  });
-}
-
-void
-Watchdog::delModule(OpenrModule* module) {
-  runImmediatelyOrInEventLoop([&, module]() {
-    CHECK_NE(allModules_.count(module), 0);
-    allModules_.erase(module);
+Watchdog::addEvb(OpenrEventBase* evb, const std::string& name) {
+  CHECK(evb);
+  getEvb()->runInEventBaseThreadAndWait([this, evb, name]() {
+    CHECK_EQ(monitorEvbs_.count(evb), 0);
+    monitorEvbs_.emplace(evb, name);
   });
 }
 
@@ -90,9 +84,9 @@ Watchdog::updateCounters() {
   auto const& now = std::chrono::duration_cast<std::chrono::seconds>(
       std::chrono::system_clock::now().time_since_epoch());
   std::vector<std::string> stuckThreads;
-  for (auto const& it : allModules_) {
-    auto const& name = it.second;
-    auto const& lastTs = it.first->getTimestamp();
+  for (auto const& kv : monitorEvbs_) {
+    auto const& name = kv.second;
+    auto const& lastTs = kv.first->getTimestamp();
     VLOG(4) << "Thread " << name << ", " << (now - lastTs).count()
             << " seconds ever since last thread activity";
 

@@ -11,20 +11,16 @@
 #include <string>
 #include <unordered_map>
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/async/ZmqTimeout.h>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/resource-monitor/ResourceMonitor.h>
-#include <fbzmq/service/stats/ThreadData.h>
+#include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
-#include <openr/common/OpenrModule.h>
-#include <openr/common/Types.h>
+#include <openr/common/OpenrEventBase.h>
 
 namespace openr {
 
-class Watchdog final : public fbzmq::ZmqEventLoop {
+class Watchdog final : public OpenrEventBase {
  public:
   Watchdog(
       std::string const& myNodeName,
@@ -32,15 +28,11 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
       std::chrono::seconds healthCheckThreshold,
       uint32_t critialMemoryMB);
 
-  ~Watchdog() override = default;
-
   // non-copyable
   Watchdog(Watchdog const&) = delete;
   Watchdog& operator=(Watchdog const&) = delete;
 
-  void addModule(OpenrModule* module, const std::string& name);
-
-  void delModule(OpenrModule* module);
+  void addEvb(OpenrEventBase* evb, const std::string& name);
 
   bool memoryLimitExceeded() const;
 
@@ -55,10 +47,10 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
   const std::string myNodeName_;
 
   // Timer for checking aliveness periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> watchdogTimer_{nullptr};
+  std::unique_ptr<folly::AsyncTimeout> watchdogTimer_{nullptr};
 
   // mapping of thread name to eventloop pointer
-  std::unordered_map<OpenrModule*, std::string> allModules_;
+  std::unordered_map<OpenrEventBase*, std::string> monitorEvbs_;
 
   // thread healthcheck interval
   const std::chrono::seconds healthCheckInterval_;
@@ -73,10 +65,10 @@ class Watchdog final : public fbzmq::ZmqEventLoop {
   uint32_t criticalMemoryMB_{0};
 
   // amount of time memory usage sustained above memory limit
-  folly::Optional<std::chrono::steady_clock::time_point> memExceedTime_ =
-      folly::none;
+  folly::Optional<std::chrono::steady_clock::time_point> memExceedTime_;
 
   // resource monitor
+  // TODO T62261328: Remove ResourceMonitor (& sigar) dependency
   fbzmq::ResourceMonitor resourceMonitor_{};
 };
 

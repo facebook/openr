@@ -144,7 +144,8 @@ startEventLoop(
   module->waitUntilRunning();
 
   if (watchdog) {
-    watchdog->addModule(module.get(), module->moduleName);
+    watchdog->addEvb(
+        dynamic_cast<OpenrEventBase*>(module.get()), module->moduleName);
   }
 
   orderedModules.emplace_back(module);
