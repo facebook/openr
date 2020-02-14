@@ -32,7 +32,6 @@ class OpenrModule : public virtual fbzmq::Runnable {
  public:
   const thrift::OpenrModuleType moduleType{thrift::OpenrModuleType::DEFAULT};
   const std::string moduleName;
-  const std::string inprocCmdUrl;
 
   virtual std::chrono::seconds getTimestamp() const = 0;
 
@@ -50,20 +49,6 @@ class OpenrModule : public virtual fbzmq::Runnable {
   OpenrModule() {}
 
   virtual ~OpenrModule() {}
-
-  virtual folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) = 0;
-
-  void prepareSocket(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
-      std::string const& url,
-      folly::Optional<int> maybeIpTos = folly::none);
-
-  void processCmdSocketRequest(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
-
-  // REQ/REP socket for communicating with the module
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> inprocCmdSock_;
 
  private:
   // disable copying

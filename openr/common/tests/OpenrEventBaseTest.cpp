@@ -23,13 +23,6 @@ class OpenrTestEvb : public OpenrEventBase {
   explicit OpenrTestEvb(fbzmq::Context& zmqContext)
       : OpenrEventBase("node1", thrift::OpenrModuleType::DECISION, zmqContext) {
   }
-
- protected:
-  folly::Expected<fbzmq::Message, fbzmq::Error>
-  processRequestMsg(fbzmq::Message&& request) override {
-    // Echo request
-    return std::move(request);
-  }
 };
 
 class OpenrEventBaseTestFixture : public ::testing::Test {
@@ -157,58 +150,6 @@ TEST_F(OpenrEventBaseTestFixture, TimeoutTest) {
   const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTs);
   EXPECT_LE(std::chrono::milliseconds(200), elapsedMs);
-}
-
-TEST_F(OpenrEventBaseTestFixture, ProcessRequestMsg) {
-  // create client socket and message
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock{context};
-  EXPECT_TRUE(reqSock.connect(fbzmq::SocketUrl{evb.inprocCmdUrl}).hasValue());
-  const auto msg = fbzmq::Message::from(std::string("test message")).value();
-
-  // Verify message echo
-  {
-    reqSock.sendOne(msg);
-    auto response = reqSock.recvOne(std::chrono::milliseconds(1000));
-    ASSERT_TRUE(response.hasValue());
-    EXPECT_EQ(msg.data(), response.value().data());
-  }
-
-  // Stop eventbase
-  evb.stop();
-  evb.waitUntilStopped();
-
-  // Verify that message doesn't echo anymore
-  {
-    EXPECT_TRUE(reqSock.sendOne(msg).hasValue());
-    auto response = reqSock.recvOne(std::chrono::milliseconds(1000));
-    ASSERT_TRUE(response.hasError());
-  }
-}
-
-TEST_F(OpenrEventBaseTestFixture, ProcessRequestMsgMultiple) {
-  // create client socket and message
-  fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_CLIENT> reqSock{context};
-  EXPECT_TRUE(reqSock.connect(fbzmq::SocketUrl{evb.inprocCmdUrl}).hasValue());
-  const auto msg = fbzmq::Message::from(std::string("test message")).value();
-
-  // Send N requests and receive N responses
-  const size_t numRequests{512};
-  for (int i = 0; i < numRequests; ++i) {
-    EXPECT_TRUE(reqSock.sendMultiple(fbzmq::Message(), msg).hasValue());
-  }
-  for (int i = 0; i < numRequests; ++i) {
-    auto response = reqSock.recvMultiple(std::chrono::milliseconds(1000));
-    ASSERT_TRUE(response.hasValue());
-    ASSERT_EQ(2, response->size());
-    EXPECT_EQ(0, response->at(0).size());
-    EXPECT_EQ(msg.data(), response->at(1).data());
-  }
-
-  // Try to receive once again and make sure it fails
-  {
-    auto response = reqSock.recvMultiple(std::chrono::milliseconds(1000));
-    EXPECT_TRUE(response.hasError());
-  }
 }
 
 TEST_F(OpenrEventBaseTestFixture, ZmqSocketPollTest) {

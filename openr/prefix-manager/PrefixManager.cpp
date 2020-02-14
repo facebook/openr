@@ -320,11 +320,6 @@ PrefixManager::updateKvStore() {
   keysToClear_ = std::move(nowAdvertisingKeys);
 }
 
-folly::Expected<fbzmq::Message, fbzmq::Error>
-PrefixManager::processRequestMsg(fbzmq::Message&& request) {
-  LOG(FATAL) << "DEPRECATED. Unexpected request received";
-}
-
 folly::SemiFuture<bool>
 PrefixManager::advertisePrefixes(std::vector<thrift::PrefixEntry> prefixes) {
   folly::Promise<bool> p;

@@ -1738,11 +1738,6 @@ Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
   initialSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
 }
 
-folly::Expected<fbzmq::Message, fbzmq::Error>
-Decision::processRequestMsg(fbzmq::Message&& request) {
-  LOG(FATAL) << "DEPRECATED. Unexpected request received";
-}
-
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 Decision::getDecisionRouteDb(std::string nodeName) {
   folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;

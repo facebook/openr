@@ -243,9 +243,6 @@ class Decision : public OpenrEventBase {
 
   void prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept;
 
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) override;
-
   // process publication from KvStore
   ProcessPublicationResult processPublication(
       thrift::Publication const& thriftPub);

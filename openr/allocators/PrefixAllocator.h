@@ -112,9 +112,6 @@ class PrefixAllocator : public OpenrEventBase {
   // Private methods
   //
 
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& /* not used */) override;
-
   // Function to process static allocation update from kvstore
   void processStaticPrefixAllocUpdate(thrift::Value const& value);
 

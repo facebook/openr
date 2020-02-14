@@ -921,11 +921,6 @@ LinkMonitor::syncInterfaces() {
   return true;
 }
 
-folly::Expected<fbzmq::Message, fbzmq::Error>
-LinkMonitor::processRequestMsg(fbzmq::Message&& request) {
-  LOG(FATAL) << "DEPRECATED. Unexpected request received";
-}
-
 void
 LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
   auto neighborAddrV4 = event.neighbor.transportAddressV4;

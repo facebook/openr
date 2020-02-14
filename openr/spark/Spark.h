@@ -200,9 +200,6 @@ class Spark final : public OpenrEventBase {
   // enable/disable neighbor discovery
   void processInterfaceUpdates(thrift::InterfaceDatabase&& interfaceUpdates);
 
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) override;
-
   // util function to delete interface in spark
   void deleteInterfaceFromDb(const std::set<std::string>& toDel);
 

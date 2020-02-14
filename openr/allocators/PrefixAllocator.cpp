@@ -74,11 +74,6 @@ PrefixAllocator::PrefixAllocator(
   std::visit(*this, allocMode);
 }
 
-folly::Expected<fbzmq::Message, fbzmq::Error>
-PrefixAllocator::processRequestMsg(fbzmq::Message&& /* not used */) {
-  return folly::makeUnexpected(fbzmq::Error());
-}
-
 void
 PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
   // subscribe for incremental updates of static prefix allocation key

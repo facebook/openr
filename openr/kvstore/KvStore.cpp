@@ -88,6 +88,7 @@ KvStore::KvStore(
     bool useFloodOptimization,
     const std::unordered_set<std::string>& areas)
     : OpenrEventBase(nodeId, thrift::OpenrModuleType::KVSTORE, zmqContext),
+      inprocCmdUrl(folly::sformat("inproc://{}_KVSTORE_local_cmd", nodeId)),
       localPubUrl_(std::move(localPubUrl)),
       globalPubUrl_(std::move(globalPubUrl)),
       monitorSubmitInterval_(monitorSubmitInterval),
@@ -102,6 +103,11 @@ KvStore::KvStore(
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
               fbzmq::IdentityString{folly::sformat("{}::TCP::CMD", nodeId)},
+              folly::none,
+              fbzmq::NonblockingFlag{true}),
+          fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
+              zmqContext,
+              folly::none,
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
@@ -181,15 +187,21 @@ KvStore::KvStore(
   }
 
   //
-  // Prepare global command socket
+  // Prepare global & local command socket
   //
-  OpenrModule::prepareSocket(
-      kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
+  prepareSocket(kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
   addSocket(
       fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
       ZMQ_POLLIN,
       [this](int) noexcept {
-        OpenrModule::processCmdSocketRequest(kvParams_.globalCmdSock);
+        processCmdSocketRequest(kvParams_.globalCmdSock);
+      });
+  prepareSocket(kvParams_.inprocCmdSock, std::string(inprocCmdUrl));
+  addSocket(
+      fbzmq::RawZmqSocketPtr{*kvParams_.inprocCmdSock},
+      ZMQ_POLLIN,
+      [this](int) noexcept {
+        processCmdSocketRequest(kvParams_.inprocCmdSock);
       });
 
   // create KvStoreDb instances
@@ -401,6 +413,78 @@ KvStore::compareValues(const thrift::Value& v1, const thrift::Value& v2) {
     // some value is missing
     return -2; // unknown
   }
+}
+
+void
+KvStore::prepareSocket(
+    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
+    std::string const& url,
+    folly::Optional<int> maybeIpTos) {
+  std::vector<std::pair<int, int>> socketOptions{
+      {ZMQ_SNDHWM, Constants::kHighWaterMark},
+      {ZMQ_RCVHWM, Constants::kHighWaterMark},
+      {ZMQ_SNDTIMEO, Constants::kReadTimeout.count()},
+      {ZMQ_ROUTER_HANDOVER, 1},
+      {ZMQ_TCP_KEEPALIVE, Constants::kKeepAliveEnable},
+      {ZMQ_TCP_KEEPALIVE_IDLE, Constants::kKeepAliveTime.count()},
+      {ZMQ_TCP_KEEPALIVE_CNT, Constants::kKeepAliveCnt},
+      {ZMQ_TCP_KEEPALIVE_INTVL, Constants::kKeepAliveIntvl.count()}};
+
+  if (maybeIpTos.hasValue()) {
+    socketOptions.emplace_back(ZMQ_TOS, maybeIpTos.value());
+  }
+
+  for (const auto& pair : socketOptions) {
+    const auto opt = pair.first;
+    const auto val = pair.second;
+    auto rc = socket.setSockOpt(opt, &val, sizeof(val));
+    if (rc.hasError()) {
+      LOG(FATAL) << "Error setting zmq opt: " << opt << "to " << val
+                 << ". Error: " << rc.error();
+    }
+  }
+
+  auto rc = socket.bind(fbzmq::SocketUrl{url});
+  if (rc.hasError()) {
+    LOG(FATAL) << "Error binding to URL '" << url << "'. Error: " << rc.error();
+  }
+}
+
+void
+KvStore::processCmdSocketRequest(
+    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept {
+  auto maybeReq = cmdSock.recvMultiple();
+
+  if (maybeReq.hasError()) {
+    LOG(ERROR) << "KvStore::processCmdSocketRequest: Error receiving "
+               << "command: " << maybeReq.error();
+    return;
+  }
+
+  auto req = maybeReq.value();
+  if (req.empty()) {
+    LOG(ERROR) << "Empty request received";
+    return;
+  }
+  auto maybeReply = processRequestMsg(std::move(req.back()));
+  req.pop_back();
+
+  // All messages of the multipart request except the last are sent back as they
+  // are ids or empty delims. Add the response at the end of that list.
+  if (maybeReply.hasValue()) {
+    req.emplace_back(std::move(maybeReply.value()));
+  } else {
+    req.emplace_back(
+        fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
+  }
+
+  if (!(thrift::OpenrModuleType::KVSTORE == moduleType && req.back().empty())) {
+    auto sndRet = cmdSock.sendMultiple(req);
+    if (sndRet.hasError()) {
+      LOG(ERROR) << "Error sending response. " << sndRet.error();
+    }
+  }
+  return;
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>

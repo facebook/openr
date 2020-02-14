@@ -490,8 +490,9 @@ main(int argc, char** argv) {
           FLAGS_use_flood_optimization,
           areas));
 
+  auto kvStoreModule = moduleTypeToObj.at(OpenrModuleType::KVSTORE);
   const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{
-      moduleTypeToObj.at(OpenrModuleType::KVSTORE)->inprocCmdUrl};
+      dynamic_cast<KvStore*>(kvStoreModule.get())->inprocCmdUrl};
 
   startEventLoop(
       allThreads,

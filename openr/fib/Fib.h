@@ -127,9 +127,6 @@ class Fib final : public OpenrEventBase {
    */
   void processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb);
 
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) override;
-
   /**
    * Convert local perfDb_ into PerfDataBase
    */

@@ -122,10 +122,6 @@ class PersistentStore : public OpenrEventBase {
   }
 
  private:
-  // Function to process pending request on reqSocket_
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) override;
-
   // Function to save/load `database_` to local disk. Returns true on success
   // else false. Doesn't throw exception.
   bool saveDatabaseToDisk() noexcept;

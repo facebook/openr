@@ -121,13 +121,6 @@ OpenrEventBase::OpenrEventBase(
     fbzmq::Context& zmqContext)
     : OpenrModule(nodeName, type, zmqContext),
       fiberManager_(folly::fibers::getFiberManager(evb_, getFmOptions())) {
-  evb_.runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
-    prepareSocket(inprocCmdSock_, inprocCmdUrl);
-    addSocket(*inprocCmdSock_, ZMQ_POLLIN, [this](int) noexcept {
-      processCmdSocketRequest(inprocCmdSock_);
-    });
-  });
-
   // Periodic timer to update eventbase's timestamp. This is used by Watchdog to
   // identify stuck threads.
   timestamp_ = getElapsedSeconds();
@@ -151,12 +144,7 @@ OpenrEventBase::OpenrEventBase()
   timeout_->scheduleTimeout(0);
 }
 
-OpenrEventBase::~OpenrEventBase() {
-  // Only removeSocket if it has been registered (has valid URL)
-  if (not inprocCmdUrl.empty()) {
-    removeSocket(*inprocCmdSock_);
-  }
-}
+OpenrEventBase::~OpenrEventBase() {}
 
 void
 OpenrEventBase::run() {

@@ -2119,11 +2119,6 @@ Spark::sendHelloPacket(
   VLOG(4) << "Sent " << bytesSent << " bytes in hello packet";
 }
 
-folly::Expected<fbzmq::Message, fbzmq::Error>
-Spark::processRequestMsg(fbzmq::Message&& request) {
-  LOG(FATAL) << "DEPRECATED. Unexpected request received";
-}
-
 void
 Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
   decltype(interfaceDb_) newInterfaceDb{};

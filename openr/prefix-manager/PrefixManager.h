@@ -91,9 +91,6 @@ class PrefixManager final : public OpenrEventBase {
   // update all IP keys in KvStore
   void updateKvStorePrefixKeys();
 
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) override;
-
   // helpers to modify prefix db, returns true if the db is modified
   bool addOrUpdatePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
   bool removePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);

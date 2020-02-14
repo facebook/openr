@@ -65,11 +65,6 @@ PersistentStore::~PersistentStore() {
   saveDatabaseToDisk();
 }
 
-folly::Expected<fbzmq::Message, fbzmq::Error>
-PersistentStore::processRequestMsg(fbzmq::Message&& requestMsg) {
-  LOG(FATAL) << "DEPRECATED. Unexpected request received";
-}
-
 folly::SemiFuture<folly::Unit>
 PersistentStore::store(std::string key, std::string value) {
   folly::Promise<folly::Unit> p;

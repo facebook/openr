@@ -136,11 +136,6 @@ Fib::Fib(
   tData_.addStatExportType("fib.thrift.failure.sync_fib", fbzmq::COUNT);
 }
 
-folly::Expected<fbzmq::Message, fbzmq::Error>
-Fib::processRequestMsg(fbzmq::Message&& request) {
-  LOG(FATAL) << "DEPRECATED. Unexpected request received";
-}
-
 std::optional<thrift::IpPrefix>
 Fib::longestPrefixMatch(
     const folly::CIDRNetwork& inputPrefix,

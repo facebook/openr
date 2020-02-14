@@ -259,9 +259,6 @@ class LinkMonitor final : public OpenrEventBase {
   // specified port.
   void createNetlinkSystemHandlerClient();
 
-  folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& request) override;
-
   void processNeighborEvent(thrift::SparkNeighborEvent&& event);
 
   // Sumbmits the counter/stats to monitor
