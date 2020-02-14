@@ -139,27 +139,6 @@ OpenrCtrlHandler::OpenrCtrlHandler(
           }
         });
   });
-
-  for (const auto& kv : moduleTypeToObj_) {
-    auto moduleType = kv.first;
-    auto& inprocUrl = kv.second->inprocCmdUrl;
-    auto result = moduleSockets_.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(moduleType),
-        std::forward_as_tuple(
-            context, folly::none, folly::none, fbzmq::NonblockingFlag{false}));
-    auto& sock = result.first->second;
-    int enabled = 1;
-    // if we do not get a reply within the timeout, we reset the state
-    sock.setSockOpt(ZMQ_REQ_RELAXED, &enabled, sizeof(int));
-    sock.setSockOpt(ZMQ_REQ_CORRELATE, &enabled, sizeof(int));
-
-    const auto rc = sock.connect(fbzmq::SocketUrl{inprocUrl});
-    if (rc.hasError()) {
-      LOG(FATAL) << "Error connecting to URL '" << kv.second << "' "
-                 << rc.error();
-    }
-  }
 }
 
 OpenrCtrlHandler::~OpenrCtrlHandler() {

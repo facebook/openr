@@ -277,10 +277,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
   std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>
       moduleTypeToObj_;
-  std::unordered_map<
-      thrift::OpenrModuleType,
-      fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>>
-      moduleSockets_;
 
   // Reference to event-loop
   fbzmq::ZmqEventLoop& evl_;
