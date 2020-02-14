@@ -48,9 +48,14 @@ class OpenrEventBase : public OpenrModule {
     return &evb_;
   }
 
-  folly::fibers::FiberManager*
-  getFiberManager() {
-    return &fiberManager_;
+  /**
+   * Add a task to fiber manager. All tasks will be awaited in `stop()`.
+   */
+  template <typename F>
+  void
+  addFiberTask(F&& func) {
+    fiberTaskFutures_.emplace_back(
+        fiberManager_.addTaskFuture(std::move(func)));
   }
 
   /**
@@ -146,6 +151,7 @@ class OpenrEventBase : public OpenrModule {
 
   // FiberManager driven by evb_, for scheduling fiber tasks
   folly::fibers::FiberManager& fiberManager_;
+  std::vector<folly::Future<folly::Unit>> fiberTaskFutures_;
 
   // Data structure to hold fd and their handlers
   std::unordered_map<int /* fd */, ZmqEventHandler> fdHandlers_;

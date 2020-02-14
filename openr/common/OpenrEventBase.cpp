@@ -165,6 +165,9 @@ OpenrEventBase::run() {
 
 void
 OpenrEventBase::stop() {
+  for (auto& future : fiberTaskFutures_) {
+    future.wait();
+  }
   evb_.terminateLoopSoon();
 }
 

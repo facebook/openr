@@ -422,6 +422,11 @@ OpenrWrapper<Serializer>::run() {
 template <class Serializer>
 void
 OpenrWrapper<Serializer>::stop() {
+  // Close all queues
+  routeUpdatesQueue_.close();
+  interfaceUpdatesQueue_.close();
+  neighborUpdatesQueue_.close();
+
   // stop all modules in reverse order
   eventBase_.stop();
   eventBase_.waitUntilStopped();

@@ -340,19 +340,18 @@ Spark::Spark(
   }
 
   // Fiber to process interface updates from LinkMonitor
-  getFiberManager()->addTask(
-      [q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
-        while (true) {
-          auto interfaceUpdates = q.get(); // perform read
-          VLOG(1) << "Received interface updates";
-          if (interfaceUpdates.hasError()) {
-            LOG(INFO) << "Terminating interface update processing fiber";
-            break;
-          }
+  addFiberTask([q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
+    while (true) {
+      auto interfaceUpdates = q.get(); // perform read
+      VLOG(1) << "Received interface updates";
+      if (interfaceUpdates.hasError()) {
+        LOG(INFO) << "Terminating interface update processing fiber";
+        break;
+      }
 
-          processInterfaceUpdates(std::move(interfaceUpdates).value());
-        }
-      });
+      processInterfaceUpdates(std::move(interfaceUpdates).value());
+    }
+  });
 
   // Initialize UDP socket for neighbor discovery
   prepare(maybeIpTos);

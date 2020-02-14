@@ -87,36 +87,34 @@ Fib::Fib(
   }
 
   // Fiber to process route updates from Decision
-  getFiberManager()->addTask(
-      [q = std::move(routeUpdatesQueue), this]() mutable noexcept {
-        while (true) {
-          auto maybeThriftObj = q.get(); // perform read
-          VLOG(1) << "Received route updates";
-          if (maybeThriftObj.hasError()) {
-            LOG(INFO) << "Terminating route delta processing fiber";
-            break;
-          }
+  addFiberTask([q = std::move(routeUpdatesQueue), this]() mutable noexcept {
+    while (true) {
+      auto maybeThriftObj = q.get(); // perform read
+      VLOG(1) << "Received route updates";
+      if (maybeThriftObj.hasError()) {
+        LOG(INFO) << "Terminating route delta processing fiber";
+        break;
+      }
 
-          CHECK_EQ(myNodeName_, maybeThriftObj.value().thisNodeName);
-          processRouteUpdates(std::move(maybeThriftObj).value());
-        }
-      });
+      CHECK_EQ(myNodeName_, maybeThriftObj.value().thisNodeName);
+      processRouteUpdates(std::move(maybeThriftObj).value());
+    }
+  });
 
   // Fiber to process interface updates from LinkMonitor
-  getFiberManager()->addTask(
-      [q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
-        while (true) {
-          auto maybeThriftObj = q.get(); // perform read
-          VLOG(1) << "Received interface updates";
-          if (maybeThriftObj.hasError()) {
-            LOG(INFO) << "Terminating interface update processing fiber";
-            break;
-          }
+  addFiberTask([q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
+    while (true) {
+      auto maybeThriftObj = q.get(); // perform read
+      VLOG(1) << "Received interface updates";
+      if (maybeThriftObj.hasError()) {
+        LOG(INFO) << "Terminating interface update processing fiber";
+        break;
+      }
 
-          CHECK_EQ(myNodeName_, maybeThriftObj.value().thisNodeName);
-          processInterfaceDb(std::move(maybeThriftObj).value());
-        }
-      });
+      CHECK_EQ(myNodeName_, maybeThriftObj.value().thisNodeName);
+      processInterfaceDb(std::move(maybeThriftObj).value());
+    }
+  });
 
   // Schedule periodic timer for submission to monitor
   zmqMonitorClient_ =

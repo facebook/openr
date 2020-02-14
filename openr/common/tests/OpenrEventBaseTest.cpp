@@ -65,7 +65,7 @@ TEST(OpenrEventBaseTest, FiberTest) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
   OpenrEventBase evb;
-  evb.getFiberManager()->addTask([p = std::move(p)]() mutable noexcept {
+  evb.addFiberTask([p = std::move(p)]() mutable noexcept {
     p.setValue(folly::Unit());
   });
   evb.getEvb()->loopOnce();

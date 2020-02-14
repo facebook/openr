@@ -229,18 +229,17 @@ LinkMonitor::LinkMonitor(
   adjHoldTimer_->scheduleTimeout(adjHoldTime);
 
   // Add fiber to process the neighbor events
-  getFiberManager()->addTask(
-      [q = std::move(neighborUpdatesQueue), this]() mutable noexcept {
-        while (true) {
-          auto maybeEvent = q.get();
-          VLOG(1) << "Received neighbor update";
-          if (maybeEvent.hasError()) {
-            LOG(INFO) << "Terminating neighbor update processing fiber";
-            break;
-          }
-          processNeighborEvent(std::move(maybeEvent).value());
-        }
-      });
+  addFiberTask([q = std::move(neighborUpdatesQueue), this]() mutable noexcept {
+    while (true) {
+      auto maybeEvent = q.get();
+      VLOG(1) << "Received neighbor update";
+      if (maybeEvent.hasError()) {
+        LOG(INFO) << "Terminating neighbor update processing fiber";
+        break;
+      }
+      processNeighborEvent(std::move(maybeEvent).value());
+    }
+  });
 
   // Initialize ZMQ sockets
   prepare();
