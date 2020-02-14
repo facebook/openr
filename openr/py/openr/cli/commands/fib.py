@@ -20,8 +20,6 @@ from openr.utils import ipnetwork, printing
 class FibAgentCmd(object):
     def __init__(self, cli_opts):
         """ initialize the Fib agent client """
-
-        self.enable_color = utils.if_tty_has_colors()
         self.cli_opts = cli_opts
         try:
             self.client = utils.get_fib_agent_client(
@@ -245,7 +243,6 @@ class FibValidateRoutesCmd(FibAgentCmd):
             fib_unicast_routes,
             "unicast",
             ["Decision:unicast", "Openr-Fib:unicast"],
-            self.enable_color,
         )
         all_success = all_success and ret
 
@@ -254,7 +251,6 @@ class FibValidateRoutesCmd(FibAgentCmd):
             fib_mpls_routes,
             "mpls",
             ["Decision:mpls", "Openr-Fib:mpls"],
-            self.enable_color,
         )
         all_success = all_success and ret
 
@@ -263,7 +259,6 @@ class FibValidateRoutesCmd(FibAgentCmd):
             agent_unicast_routes,
             "unicast",
             ["Openr-Fib:unicast", "FibAgent:unicast"],
-            self.enable_color,
         )
         all_success = all_success and ret
 
@@ -277,17 +272,13 @@ class FibValidateRoutesCmd(FibAgentCmd):
                 agent_mpls_routes,
                 "mpls",
                 ["Openr-Fib:mpls", "FibAgent:mpls"],
-                self.enable_color,
             )
             all_success = all_success and ret
         except Exception:
             pass
 
         (ret, _) = utils.validate_route_nexthops(
-            fib_unicast_routes,
-            lm_links,
-            ["Openr-Fib:unicast", "LinkMonitor"],
-            self.enable_color,
+            fib_unicast_routes, lm_links, ["Openr-Fib:unicast", "LinkMonitor"]
         )
         all_success = all_success and ret
 

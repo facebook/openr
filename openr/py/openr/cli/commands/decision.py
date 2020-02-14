@@ -107,7 +107,7 @@ class DecisionAdjCmd(OpenrCtrlCmd):
         if json:
             utils.print_json(adjs_map)
         else:
-            utils.print_adjs_table(adjs_map, self.enable_color, None, None)
+            utils.print_adjs_table(adjs_map, None, None)
 
 
 class PathCmd(OpenrCtrlCmd):
@@ -600,13 +600,13 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                 return_code = 1
 
         if return_code == 1:
-            if self.enable_color:
+            if utils.is_color_output_supported():
                 click.echo(click.style("FAIL", bg="red", fg="black"))
             else:
                 click.echo("FAIL")
             print("{} table for {} and {} do not match".format(db_type, *db_sources))
         else:
-            if self.enable_color:
+            if utils.is_color_output_supported():
                 click.echo(click.style("PASS", bg="green", fg="black"))
             else:
                 click.echo("PASS")

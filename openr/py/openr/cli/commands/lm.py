@@ -253,7 +253,7 @@ class LMAdjCmd(LMCmdBase):
         if json:
             utils.print_json(adjs_map)
         else:
-            utils.print_adjs_table(adjs_map, self.enable_color, None, None)
+            utils.print_adjs_table(adjs_map, None, None)
 
 
 class LMLinksCmd(LMCmdBase):
@@ -266,23 +266,19 @@ class LMLinksCmd(LMCmdBase):
         if json:
             self.print_links_json(links)
         else:
-            if self.enable_color:
+            if utils.is_color_output_supported():
                 overload_color = "red" if links.isOverloaded else "green"
                 overload_status = click.style(
                     "{}".format("YES" if links.isOverloaded else "NO"),
                     fg=overload_color,
                 )
                 caption = "Node Overload: {}".format(overload_status)
-                self.print_links_table(
-                    links.interfaceDetails, caption, self.enable_color
-                )
+                self.print_links_table(links.interfaceDetails, caption)
             else:
                 caption = "Node Overload: {}".format(
                     "YES" if links.isOverloaded else "NO"
                 )
-                self.print_links_table(
-                    links.interfaceDetails, caption, self.enable_color
-                )
+                self.print_links_table(links.interfaceDetails, caption)
 
     def interface_info_to_dict(self, interface_info):
         def _update(interface_info_dict, interface_info):
@@ -335,12 +331,10 @@ class LMLinksCmd(LMCmdBase):
         print(utils.json_dumps(links_dict))
 
     @classmethod
-    def build_table_rows(
-        cls, interfaces: Dict[str, object], stylish: bool = False
-    ) -> List[List[str]]:
+    def build_table_rows(cls, interfaces: Dict[str, object]) -> List[List[str]]:
         rows = []
         for (k, v) in sorted(interfaces.items()):
-            raw_row = cls.build_table_row(k, v, stylish)
+            raw_row = cls.build_table_row(k, v)
             addrs = raw_row[3]
             raw_row[3] = ""
             rows.append(raw_row)
@@ -349,7 +343,7 @@ class LMLinksCmd(LMCmdBase):
         return rows
 
     @staticmethod
-    def build_table_row(k: str, v: object, stylish: bool = False) -> List[Any]:
+    def build_table_row(k: str, v: object) -> List[Any]:
         metric_override = v.metricOverride if v.metricOverride else ""
         if v.info.isUp:
             backoff_sec = int(
@@ -357,15 +351,21 @@ class LMLinksCmd(LMCmdBase):
             )
             if backoff_sec == 0:
                 state = "Up"
-            elif not stylish:
+            elif not utils.is_color_output_supported():
                 state = backoff_sec
             else:
                 state = click.style("Hold ({} s)".format(backoff_sec), fg="yellow")
         else:
-            state = click.style("Down", fg="red") if stylish else "Down"
+            state = (
+                click.style("Down", fg="red")
+                if utils.is_color_output_supported()
+                else "Down"
+            )
         if v.isOverloaded:
             metric_override = (
-                click.style("Overloaded", fg="red") if stylish else "Overloaded"
+                click.style("Overloaded", fg="red")
+                if utils.is_color_output_supported()
+                else "Overloaded"
             )
         addrs = []
         for prefix in v.info.networks:
@@ -375,14 +375,14 @@ class LMLinksCmd(LMCmdBase):
         return row
 
     @classmethod
-    def print_links_table(cls, interfaces, caption=None, stylish=False):
+    def print_links_table(cls, interfaces, caption=None):
         """
         @param interfaces: dict<interface-name, InterfaceDetail>
         @param caption: Caption to show on table name
         """
 
         columns = ["Interface", "Status", "Metric Override", "Addresses"]
-        rows = cls.build_table_rows(interfaces, stylish)
+        rows = cls.build_table_rows(interfaces)
 
         print(printing.render_horizontal_table(rows, columns, caption))
         print()

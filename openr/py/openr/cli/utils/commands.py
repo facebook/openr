@@ -30,7 +30,6 @@ class OpenrCtrlCmd(object):
         self.host = cli_opts.host
         self.timeout = cli_opts.timeout
         self.fib_agent_port = cli_opts.fib_agent_port
-        self.enable_color = utils.if_tty_has_colors()
 
     def run(self, *args, **kwargs) -> None:
         """

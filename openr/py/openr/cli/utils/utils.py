@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import bunch
 import click
+from libfb.py.decorators import memoize_forever
 from openr.AllocPrefix import ttypes as alloc_types
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.Fib import ttypes as fib_types
@@ -526,7 +527,7 @@ def print_json(map):
     print(json_dumps(map))
 
 
-def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
+def print_adjs_table(adjs_map, neigh=None, interface=None):
     """ print adjacencies
 
         :param adjacencies as list of dict
@@ -557,7 +558,7 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
         is_overloaded = val["overloaded"]
         if is_overloaded:
             overload_str = "{}".format(is_overloaded)
-            if enable_color:
+            if is_color_output_supported():
                 overload_str = click.style(overload_str, fg="red")
             adj_tokens.append("Overloaded: {}".format(overload_str))
 
@@ -579,7 +580,7 @@ def print_adjs_table(adjs_map, enable_color, neigh=None, interface=None):
 
             overload_status = click.style("Overloaded", fg="red")
             metric = (
-                (overload_status if enable_color else "OVERLOADED")
+                (overload_status if is_color_output_supported() else "OVERLOADED")
                 if adj["isOverloaded"]
                 else adj["metric"]
             )
@@ -1360,7 +1361,6 @@ def compare_route_db(
     routes_b: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
     route_type: str,
     sources: List[str],
-    enable_color: bool,
     quiet: bool = False,
 ) -> (bool, List[str]):
 
@@ -1374,7 +1374,7 @@ def compare_route_db(
     # if all good, then return early
     if not extra_routes_in_a and not extra_routes_in_b and not diff_prefixes:
         if not quiet:
-            if enable_color:
+            if is_color_output_supported():
                 click.echo(click.style("PASS", bg="green", fg="black"))
             else:
                 click.echo("PASS")
@@ -1383,7 +1383,7 @@ def compare_route_db(
 
     # Something failed.. report it
     if not quiet:
-        if enable_color:
+        if is_color_output_supported():
             click.echo(click.style("FAIL", bg="red", fg="black"))
         else:
             click.echo("FAIL")
@@ -1423,7 +1423,7 @@ def compare_route_db(
     return False, error_msg
 
 
-def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=False):
+def validate_route_nexthops(routes, interfaces, sources, quiet=False):
     """
     Validate between fib routes and lm interfaces
 
@@ -1480,7 +1480,7 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=Fal
     # if all good, then return early
     if not invalid_routes:
         if not quiet:
-            if enable_color:
+            if is_color_output_supported():
                 click.echo(click.style("PASS", bg="green", fg="black"))
             else:
                 click.echo("PASS")
@@ -1489,7 +1489,7 @@ def validate_route_nexthops(routes, interfaces, sources, enable_color, quiet=Fal
 
     # Something failed.. report it
     if not quiet:
-        if enable_color:
+        if is_color_output_supported():
             click.echo(click.style("FAIL", bg="red", fg="black"))
         else:
             click.echo("FAIL")
@@ -1793,7 +1793,8 @@ def get_area_id(client: OpenrCtrl.Client, area: str) -> str:
     return area
 
 
-def if_tty_has_colors():
+@memoize_forever
+def is_color_output_supported():
     """
     Check if stdout is a terminal and supports colors
     """

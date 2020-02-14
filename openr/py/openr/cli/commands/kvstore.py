@@ -540,7 +540,7 @@ class KvAdjCmd(KvStoreCmdBase):
         if json:
             utils.print_json(adjs_map)
         else:
-            utils.print_adjs_table(adjs_map, self.enable_color)
+            utils.print_adjs_table(adjs_map)
 
 
 class AdjCmd(KvAdjCmd):
@@ -600,7 +600,7 @@ class KvShowAdjNodeCmd(KvStoreCmdBase):
         adjs_map = utils.adj_dbs_to_dict(
             publication, nodes, True, self.iter_publication
         )
-        utils.print_adjs_table(adjs_map, self.enable_color, node, interface)
+        utils.print_adjs_table(adjs_map, node, interface)
 
 
 class ShowAdjNodeCmd(KvShowAdjNodeCmd):
