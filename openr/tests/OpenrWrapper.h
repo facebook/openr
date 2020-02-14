@@ -178,7 +178,6 @@ class OpenrWrapper {
 
   // client sockets mainly for tests
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> kvStoreReqSock_;
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> fibReqSock_;
 
   // socket to publish platform events
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> platformPubSock_;

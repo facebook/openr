@@ -43,7 +43,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
           folly::sformat("inproc://{}-kvstore-pub-global", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
       kvStoreReqSock_(context),
-      fibReqSock_(context),
       platformPubSock_(context),
       systemPort_(systemPort),
       per_prefix_keys_(per_prefix_keys) {
@@ -259,9 +258,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       context_);
-
-  // FIB client socket
-  fibReqSock_.connect(fbzmq::SocketUrl{fib_->inprocCmdUrl}).value();
 
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(

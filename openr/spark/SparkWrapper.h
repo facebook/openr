@@ -129,9 +129,6 @@ class SparkWrapper {
   // to/from bytes
   apache::thrift::CompactSerializer serializer_;
 
-  // ZMQ pair socket for listening realtime updates from Spark
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT> reportSock_;
-
   // Spark owned by this wrapper.
   std::shared_ptr<Spark> spark_{nullptr};
 
