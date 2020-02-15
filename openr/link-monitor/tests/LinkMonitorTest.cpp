@@ -185,7 +185,11 @@ class LinkMonitorTestFixture : public ::testing::Test {
   SetUp() override {}
 
   virtual void
-  SetUp(std::unordered_set<std::string> areas) {
+  SetUp(
+      std::unordered_set<std::string> areas,
+      std::chrono::milliseconds flapInitalBackoff =
+          std::chrono::milliseconds(1),
+      std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8)) {
     // Cleanup any existing config file on disk
     system(folly::sformat("rm -rf {}", kConfigStorePath).c_str());
 
@@ -295,8 +299,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         PlatformPublisherUrl{"inproc://platform-pub-url"},
         std::chrono::seconds(1),
         // link flap backoffs, set low to keep UT runtime low
-        std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8),
+        flapInitalBackoff,
+        flapMaxBackoff,
         Constants::kKvStoreDbTtl,
         areas);
 
@@ -1184,20 +1188,13 @@ TEST_F(LinkMonitorTestFixture, NeighborRestart) {
 }
 
 TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
-  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  SetUp(
+      {openr::thrift::KvStore_constants::kDefaultArea()},
+      std::chrono::milliseconds(2000),
+      std::chrono::milliseconds(4000));
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
-
-  // we want much higher backoffs for this test, so lets spin up a different LM
-  neighborUpdatesQueue.close();
-  linkMonitor->stop();
-  linkMonitorThread->join();
-  linkMonitor.reset();
-
-  // Create new neighbor update queue. Previous one is closed
-  neighborUpdatesQueue =
-      messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
 
   std::string regexErr;
   auto includeRegexList =
@@ -1212,43 +1209,6 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
   redistRegexList->Add("loopback", &regexErr);
   redistRegexList->Compile();
-
-  linkMonitor = make_shared<LinkMonitor>(
-      context,
-      "node-1",
-      port, // platform pub port
-      KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
-      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
-      std::move(includeRegexList),
-      std::move(excludeRegexList),
-      std::move(redistRegexList), // redistribute interface name
-      std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
-      false /* useRttMetric */,
-      false /* enable perf measurement */,
-      true /* enable v4 */,
-      true /* enable segment routing */,
-      false /* prefix type MPLS */,
-      false /* prefix fwd algo KSP2_ED_ECMP */,
-      AdjacencyDbMarker{"adj:"},
-      interfaceUpdatesQueue,
-      neighborUpdatesQueue.getReader(),
-      MonitorSubmitUrl{"inproc://monitor-rep"},
-      configStore.get(),
-      false,
-      prefixUpdatesQueue,
-      PlatformPublisherUrl{"inproc://platform-pub-url"},
-      std::chrono::seconds(1),
-      // link flap backoffs, set high backoffs for this test
-      std::chrono::milliseconds(2000),
-      std::chrono::milliseconds(4000),
-      Constants::kKvStoreDbTtl);
-
-  linkMonitorThread = std::make_unique<std::thread>([this]() {
-    LOG(INFO) << "LinkMonitor thread starting";
-    linkMonitor->run();
-    LOG(INFO) << "LinkMonitor thread finishing";
-  });
-  linkMonitor->waitUntilRunning();
 
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
