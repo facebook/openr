@@ -38,6 +38,8 @@ std::string grpc_connectivity_state_name(grpc_connectivity_state state) {
       return "TRANSIENT_FAILURE";
     case GRPC_CHANNEL_SHUTDOWN:
       return "SHUTDOWN";
+    case GRPC_CHANNEL_INIT:
+      return "INIT";
   }
   GPR_UNREACHABLE_CODE(return "UNKNOWN");
 }
