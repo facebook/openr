@@ -10,6 +10,7 @@
 #include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
+#include <folly/GLog.h>
 #include <folly/Random.h>
 #include <folly/String.h>
 
@@ -336,6 +337,10 @@ KvStore::mergeKeyValues(
 
     if (updateAllNeeded) {
       ++valUpdateCnt;
+      FB_LOG_EVERY_MS(INFO, 500)
+          << "Updating key: " << key << ", Originator: " << value.originatorId
+          << ", Version: " << newVersion << ", TtlVersion: " << value.ttlVersion
+          << ", Ttl: " << value.ttl;
       //
       // update everything for such key
       //
