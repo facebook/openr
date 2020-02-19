@@ -40,7 +40,7 @@ template <class T>
 bool
 HoldableValue<T>::decrementTtl() {
   if (heldVal_ && 0 == --holdTtl_) {
-    heldVal_.clear();
+    heldVal_.reset();
     return true;
   }
   return false;
@@ -56,7 +56,7 @@ HoldableValue<T>::updateValue(
       // If there was already a hold we need to fall back to fast update.
       // Otherwise, there are cases that could lead to longer transient
       // (less transient?) loops.
-      heldVal_.clear();
+      heldVal_.reset();
       holdTtl_ = 0;
     } else {
       holdTtl_ = isChangeBringingUp(val) ? holdUpTtl : holdDownTtl;

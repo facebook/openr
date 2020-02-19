@@ -246,13 +246,13 @@ RouteBuilder::reset() {
   protocolId_ = DEFAULT_PROTOCOL_ID;
   scope_ = RT_SCOPE_UNIVERSE;
   isValid_ = false;
-  flags_.clear();
-  priority_.clear();
-  tos_.clear();
-  mtu_.clear();
-  advMss_.clear();
+  flags_.reset();
+  priority_.reset();
+  tos_.reset();
+  mtu_.reset();
+  advMss_.reset();
   nextHops_.clear();
-  routeIfName_.clear();
+  routeIfName_.reset();
 }
 
 Route::Route(const RouteBuilder& builder)
@@ -489,13 +489,13 @@ NextHopBuilder::build() const {
 
 void
 NextHopBuilder::reset() {
-  ifIndex_.clear();
+  ifIndex_.reset();
   weight_ = 0;
-  gateway_.clear();
-  labelAction_.clear();
-  swapLabel_.clear();
-  pushLabels_.clear();
-  family_.clear();
+  gateway_.reset();
+  labelAction_.reset();
+  swapLabel_.reset();
+  pushLabels_.reset();
+  family_.reset();
 }
 
 NextHopBuilder&
@@ -746,10 +746,10 @@ void
 IfAddressBuilder::reset() {
   ifIndex_ = 0;
   isValid_ = false;
-  prefix_.clear();
-  scope_.clear();
-  flags_.clear();
-  family_.clear();
+  prefix_.reset();
+  scope_.reset();
+  flags_.reset();
+  family_.reset();
 }
 
 IfAddress::IfAddress(const IfAddressBuilder& builder)
