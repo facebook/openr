@@ -29,8 +29,12 @@ namespace openr {
 OpenrCtrlHandler::OpenrCtrlHandler(
     const std::string& nodeName,
     const std::unordered_set<std::string>& acceptablePeerCommonNames,
-    std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>&
-        moduleTypeToObj,
+    Decision* decision,
+    Fib* fib,
+    KvStore* kvStore,
+    LinkMonitor* linkMonitor,
+    PersistentStore* configStore,
+    PrefixManager* prefixManager,
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
     fbzmq::ZmqEventLoop& evl,
@@ -38,7 +42,12 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     : facebook::fb303::FacebookBase2("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
-      moduleTypeToObj_(moduleTypeToObj),
+      decision_(decision),
+      fib_(fib),
+      kvStore_(kvStore),
+      linkMonitor_(linkMonitor),
+      configStore_(configStore),
+      prefixManager_(prefixManager),
       evl_(evl),
       kvStoreSubSock_(context) {
   // Create monitor client
@@ -306,27 +315,24 @@ OpenrCtrlHandler::getBuildInfo(thrift::BuildInfo& _buildInfo) {
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_advertisePrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
-  return dynamic_cast<PrefixManager*>(module.get())
-      ->advertisePrefixes(std::move(*prefixes))
+  CHECK(prefixManager_);
+  return prefixManager_->advertisePrefixes(std::move(*prefixes))
       .defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_withdrawPrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
-  return dynamic_cast<PrefixManager*>(module.get())
-      ->withdrawPrefixes(std::move(*prefixes))
+  CHECK(prefixManager_);
+  return prefixManager_->withdrawPrefixes(std::move(*prefixes))
       .defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_withdrawPrefixesByType(
     thrift::PrefixType prefixType) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
-  return dynamic_cast<PrefixManager*>(module.get())
-      ->withdrawPrefixesByType(prefixType)
+  CHECK(prefixManager_);
+  return prefixManager_->withdrawPrefixesByType(prefixType)
       .defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
@@ -334,23 +340,21 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_syncPrefixesByType(
     thrift::PrefixType prefixType,
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
-  return dynamic_cast<PrefixManager*>(module.get())
-      ->syncPrefixesByType(prefixType, std::move(*prefixes))
+  CHECK(prefixManager_);
+  return prefixManager_->syncPrefixesByType(prefixType, std::move(*prefixes))
       .defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
 OpenrCtrlHandler::semifuture_getPrefixes() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
-  return dynamic_cast<PrefixManager*>(module.get())->getPrefixes();
+  CHECK(prefixManager_);
+  return prefixManager_->getPrefixes();
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::PrefixEntry>>>
 OpenrCtrlHandler::semifuture_getPrefixesByType(thrift::PrefixType prefixType) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PREFIX_MANAGER);
-  return dynamic_cast<PrefixManager*>(module.get())
-      ->getPrefixesByType(prefixType);
+  CHECK(prefixManager_);
+  return prefixManager_->getPrefixesByType(prefixType);
 }
 
 //
@@ -358,42 +362,41 @@ OpenrCtrlHandler::semifuture_getPrefixesByType(thrift::PrefixType prefixType) {
 //
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDb() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
-  return dynamic_cast<Fib*>(module.get())->getRouteDb();
+  CHECK(fib_);
+  return fib_->getRouteDb();
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
 OpenrCtrlHandler::semifuture_getUnicastRoutesFiltered(
     std::unique_ptr<std::vector<std::string>> prefixes) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
-  return dynamic_cast<Fib*>(module.get())
-      ->getUnicastRoutes(std::move(*prefixes));
+  CHECK(fib_);
+  return fib_->getUnicastRoutes(std::move(*prefixes));
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::UnicastRoute>>>
 OpenrCtrlHandler::semifuture_getUnicastRoutes() {
   folly::Promise<std::unique_ptr<std::vector<thrift::UnicastRoute>>> p;
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
-  return dynamic_cast<Fib*>(module.get())->getUnicastRoutes({});
+  CHECK(fib_);
+  return fib_->getUnicastRoutes({});
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::MplsRoute>>>
 OpenrCtrlHandler::semifuture_getMplsRoutes() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
-  return dynamic_cast<Fib*>(module.get())->getMplsRoutes({});
+  CHECK(fib_);
+  return fib_->getMplsRoutes({});
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::MplsRoute>>>
 OpenrCtrlHandler::semifuture_getMplsRoutesFiltered(
     std::unique_ptr<std::vector<int32_t>> labels) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
-  return dynamic_cast<Fib*>(module.get())->getMplsRoutes(std::move(*labels));
+  CHECK(fib_);
+  return fib_->getMplsRoutes(std::move(*labels));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
 OpenrCtrlHandler::semifuture_getPerfDb() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::FIB);
-  return dynamic_cast<Fib*>(module.get())->getPerfDb();
+  CHECK(fib_);
+  return fib_->getPerfDb();
 }
 
 //
@@ -402,20 +405,20 @@ OpenrCtrlHandler::semifuture_getPerfDb() {
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDbComputed(
     std::unique_ptr<std::string> nodeName) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::DECISION);
-  return dynamic_cast<Decision*>(module.get())->getDecisionRouteDb(*nodeName);
+  CHECK(decision_);
+  return decision_->getDecisionRouteDb(*nodeName);
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
 OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::DECISION);
-  return dynamic_cast<Decision*>(module.get())->getDecisionAdjacencyDbs();
+  CHECK(decision_);
+  return decision_->getDecisionAdjacencyDbs();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
 OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::DECISION);
-  return dynamic_cast<Decision*>(module.get())->getDecisionPrefixDbs();
+  CHECK(decision_);
+  return decision_->getDecisionPrefixDbs();
 }
 
 //
@@ -423,8 +426,8 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
 //
 folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>>
 OpenrCtrlHandler::semifuture_getAreasConfig() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())->getAreasConfig();
+  CHECK(kvStore_);
+  return kvStore_->getAreasConfig();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
@@ -433,9 +436,8 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyVals(
   thrift::KeyGetParams params;
   params.keys = std::move(*filterKeys);
 
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->getKvStoreKeyVals(std::move(params));
+  CHECK(kvStore_);
+  return kvStore_->getKvStoreKeyVals(std::move(params));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
@@ -445,52 +447,46 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
   thrift::KeyGetParams params;
   params.keys = std::move(*filterKeys);
 
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->getKvStoreKeyVals(std::move(params), std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->getKvStoreKeyVals(std::move(params), std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->dumpKvStoreKeys(std::move(*filter));
+  CHECK(kvStore_);
+  return kvStore_->dumpKvStoreKeys(std::move(*filter));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->dumpKvStoreKeys(std::move(*filter), std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->dumpKvStoreKeys(std::move(*filter), std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreHashFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->dumpKvStoreHashes(std::move(*filter));
+  CHECK(kvStore_);
+  return kvStore_->dumpKvStoreHashes(std::move(*filter));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->dumpKvStoreHashes(std::move(*filter), std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->dumpKvStoreHashes(std::move(*filter), std::move(*area));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->setKvStoreKeyVals(std::move(*setParams), std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->setKvStoreKeyVals(std::move(*setParams), std::move(*area));
 }
 
 folly::SemiFuture<bool>
@@ -553,26 +549,25 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_processKvStoreDualMessage(
     std::unique_ptr<thrift::DualMessages> messages,
     std::unique_ptr<std::string> area) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->processKvStoreDualMessage(std::move(*messages), std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->processKvStoreDualMessage(
+      std::move(*messages), std::move(*area));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_updateFloodTopologyChild(
     std::unique_ptr<thrift::FloodTopoSetParams> params,
     std::unique_ptr<std::string> area) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->updateFloodTopologyChild(std::move(*params), std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->updateFloodTopologyChild(
+      std::move(*params), std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
 OpenrCtrlHandler::semifuture_getSpanningTreeInfos(
     std::unique_ptr<std::string> area) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->getSpanningTreeInfos(std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->getSpanningTreeInfos(std::move(*area));
 }
 
 folly::SemiFuture<folly::Unit>
@@ -582,9 +577,8 @@ OpenrCtrlHandler::semifuture_addUpdateKvStorePeers(
   thrift::PeerAddParams params;
   params.peers = std::move(*peers);
 
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->addUpdateKvStorePeers(std::move(params), std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->addUpdateKvStorePeers(std::move(params), std::move(*area));
 }
 
 folly::SemiFuture<folly::Unit>
@@ -594,23 +588,21 @@ OpenrCtrlHandler::semifuture_deleteKvStorePeers(
   thrift::PeerDelParams params;
   params.peerNames = std::move(*peerNames);
 
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->deleteKvStorePeers(std::move(params), std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->deleteKvStorePeers(std::move(params), std::move(*area));
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeers() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())->getKvStorePeers();
+  CHECK(kvStore_);
+  return kvStore_->getKvStorePeers();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeersArea(
     std::unique_ptr<std::string> area) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::KVSTORE);
-  return dynamic_cast<KvStore*>(module.get())
-      ->getKvStorePeers(std::move(*area));
+  CHECK(kvStore_);
+  return kvStore_->getKvStorePeers(std::move(*area));
 }
 
 apache::thrift::ServerStream<thrift::Publication>
@@ -661,46 +653,42 @@ OpenrCtrlHandler::semifuture_subscribeAndGetKvStore() {
 //
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setNodeOverload() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())->setNodeOverload(true);
+  CHECK(linkMonitor_);
+  return linkMonitor_->setNodeOverload(true);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetNodeOverload() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())->setNodeOverload(false);
+  CHECK(linkMonitor_);
+  return linkMonitor_->setNodeOverload(false);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setInterfaceOverload(
     std::unique_ptr<std::string> interfaceName) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())
-      ->setInterfaceOverload(std::move(*interfaceName), true);
+  CHECK(linkMonitor_);
+  return linkMonitor_->setInterfaceOverload(std::move(*interfaceName), true);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetInterfaceOverload(
     std::unique_ptr<std::string> interfaceName) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())
-      ->setInterfaceOverload(std::move(*interfaceName), false);
+  CHECK(linkMonitor_);
+  return linkMonitor_->setInterfaceOverload(std::move(*interfaceName), false);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setInterfaceMetric(
     std::unique_ptr<std::string> interfaceName, int32_t overrideMetric) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())
-      ->setLinkMetric(std::move(*interfaceName), overrideMetric);
+  CHECK(linkMonitor_);
+  return linkMonitor_->setLinkMetric(std::move(*interfaceName), overrideMetric);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetInterfaceMetric(
     std::unique_ptr<std::string> interfaceName) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())
-      ->setLinkMetric(std::move(*interfaceName), std::nullopt);
+  CHECK(linkMonitor_);
+  return linkMonitor_->setLinkMetric(std::move(*interfaceName), std::nullopt);
 }
 
 folly::SemiFuture<folly::Unit>
@@ -708,32 +696,30 @@ OpenrCtrlHandler::semifuture_setAdjacencyMetric(
     std::unique_ptr<std::string> interfaceName,
     std::unique_ptr<std::string> adjNodeName,
     int32_t overrideMetric) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())
-      ->setAdjacencyMetric(
-          std::move(*interfaceName), std::move(*adjNodeName), overrideMetric);
+  CHECK(linkMonitor_);
+  return linkMonitor_->setAdjacencyMetric(
+      std::move(*interfaceName), std::move(*adjNodeName), overrideMetric);
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetAdjacencyMetric(
     std::unique_ptr<std::string> interfaceName,
     std::unique_ptr<std::string> adjNodeName) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())
-      ->setAdjacencyMetric(
-          std::move(*interfaceName), std::move(*adjNodeName), std::nullopt);
+  CHECK(linkMonitor_);
+  return linkMonitor_->setAdjacencyMetric(
+      std::move(*interfaceName), std::move(*adjNodeName), std::nullopt);
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
 OpenrCtrlHandler::semifuture_getInterfaces() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())->getInterfaces();
+  CHECK(linkMonitor_);
+  return linkMonitor_->getInterfaces();
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::LINK_MONITOR);
-  return dynamic_cast<LinkMonitor*>(module.get())->getLinkMonitorAdjacencies();
+  CHECK(linkMonitor_);
+  return linkMonitor_->getLinkMonitorAdjacencies();
 }
 
 //
@@ -742,23 +728,21 @@ OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setConfigKey(
     std::unique_ptr<std::string> key, std::unique_ptr<std::string> value) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
-  return dynamic_cast<PersistentStore*>(module.get())
-      ->store(std::move(*key), std::move(*value));
+  CHECK(configStore_);
+  return configStore_->store(std::move(*key), std::move(*value));
 }
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_eraseConfigKey(std::unique_ptr<std::string> key) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
-  auto sf =
-      dynamic_cast<PersistentStore*>(module.get())->erase(std::move(*key));
+  CHECK(configStore_);
+  auto sf = configStore_->erase(std::move(*key));
   return std::move(sf).defer([](folly::Try<bool>&&) { return folly::Unit(); });
 }
 
 folly::SemiFuture<std::unique_ptr<std::string>>
 OpenrCtrlHandler::semifuture_getConfigKey(std::unique_ptr<std::string> key) {
-  auto module = moduleTypeToObj_.at(thrift::OpenrModuleType::PERSISTENT_STORE);
-  auto sf = dynamic_cast<PersistentStore*>(module.get())->load(std::move(*key));
+  CHECK(configStore_);
+  auto sf = configStore_->load(std::move(*key));
   return std::move(sf).defer(
       [](folly::Try<std::optional<std::string>>&& val) mutable {
         if (val.hasException() or not val->has_value()) {

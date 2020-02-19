@@ -34,13 +34,15 @@ class LongPollFixture : public ::testing::Test {
     // spin up an openrThriftServer
     openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeName_,
+        nullptr /* decision */,
+        nullptr /* fib */,
+        kvStoreWrapper_->getKvStore() /* kvStore */,
+        nullptr /* linkMonitor */,
+        nullptr /* configStore */,
+        nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor-submit-url"},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         context_);
-
-    // add module into thriftServer module map
-    openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper_->getKvStore());
     openrThriftServerWrapper_->run();
 
     // initialize openrCtrlClient talking to server

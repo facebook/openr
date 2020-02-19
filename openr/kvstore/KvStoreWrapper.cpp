@@ -44,7 +44,7 @@ KvStoreWrapper::KvStoreWrapper(
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   // assume useFloodOptimization when enableFloodOptimization is True
   bool useFloodOptimization = enableFloodOptimization;
-  kvStore_ = std::make_shared<KvStore>(
+  kvStore_ = std::make_unique<KvStore>(
       zmqContext,
       nodeId,
       KvStoreLocalPubUrl{localPubUrl},

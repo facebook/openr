@@ -12,7 +12,13 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/OpenrModule.h>
 #include <openr/common/Types.h>
+#include <openr/config-store/PersistentStore.h>
+#include <openr/decision/Decision.h>
+#include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCpp.h>
+#include <openr/kvstore/KvStore.h>
+#include <openr/link-monitor/LinkMonitor.h>
+#include <openr/prefix-manager/PrefixManager.h>
 
 namespace openr {
 class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
@@ -25,8 +31,12 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   OpenrCtrlHandler(
       const std::string& nodeName,
       const std::unordered_set<std::string>& acceptablePeerCommonNames,
-      std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>&
-          moduleTypeToObj,
+      Decision* decision,
+      Fib* fib,
+      KvStore* kvStore,
+      LinkMonitor* linkMonitor,
+      PersistentStore* configStore,
+      PrefixManager* prefixManager,
       MonitorSubmitUrl const& monitorSubmitUrl,
       KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
       fbzmq::ZmqEventLoop& evl,
@@ -275,8 +285,14 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   const std::string nodeName_;
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
-  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>
-      moduleTypeToObj_;
+
+  // Pointers to Open/R modules
+  Decision* decision_{nullptr};
+  Fib* fib_{nullptr};
+  KvStore* kvStore_{nullptr};
+  LinkMonitor* linkMonitor_{nullptr};
+  PersistentStore* configStore_{nullptr};
+  PrefixManager* prefixManager_{nullptr};
 
   // Reference to event-loop
   fbzmq::ZmqEventLoop& evl_;

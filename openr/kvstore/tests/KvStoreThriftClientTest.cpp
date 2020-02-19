@@ -45,11 +45,15 @@ class SingleKvStoreTestFixture : public ::testing::Test {
     // spin up an OpenrThriftServerWrapper
     openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeId_,
+        nullptr /* decision */,
+        nullptr /* fib */,
+        kvStoreWrapper_->getKvStore() /* kvStore */,
+        nullptr /* linkMonitor */,
+        nullptr /* configStore */,
+        nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor_submit"},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         context_);
-    openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper_->getKvStore());
     openrThriftServerWrapper_->run();
   }
 
@@ -89,11 +93,15 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
     // spin up an OpenrThriftServerWrapper
     openrThriftServerWrapper1_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeId1_,
+        nullptr /* decision */,
+        nullptr /* fib */,
+        kvStoreWrapper1_->getKvStore() /* kvStore */,
+        nullptr /* linkMonitor */,
+        nullptr /* configStore */,
+        nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor_submit"},
         KvStoreLocalPubUrl{kvStoreWrapper1_->localPubUrl},
         context_);
-    openrThriftServerWrapper1_->addModuleType(
-        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper1_->getKvStore());
     openrThriftServerWrapper1_->run();
 
     // spin up another kvStore through kvStoreWrapper
@@ -108,11 +116,15 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
     // spin up another OpenrThriftServerWrapper
     openrThriftServerWrapper2_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeId2_,
+        nullptr /* decision */,
+        nullptr /* fib */,
+        kvStoreWrapper2_->getKvStore() /* kvStore */,
+        nullptr /* linkMonitor */,
+        nullptr /* configStore */,
+        nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor_submit"},
         KvStoreLocalPubUrl{kvStoreWrapper2_->localPubUrl},
         context_);
-    openrThriftServerWrapper2_->addModuleType(
-        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper2_->getKvStore());
     openrThriftServerWrapper2_->run();
   }
 

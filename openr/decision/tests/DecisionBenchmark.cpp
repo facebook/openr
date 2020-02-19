@@ -99,13 +99,15 @@ class DecisionWrapper {
     // spin up an openrThriftServer
     openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeName,
+        decision.get() /* decision */,
+        nullptr /* fib */,
+        nullptr /* kvStore */,
+        nullptr /* linkMonitor */,
+        nullptr /* configStore */,
+        nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
         zeromqContext);
-
-    // make sure thrift server know how to access decision module
-    openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::DECISION, decision);
     openrThriftServerWrapper_->run();
 
     // Make initial sync request with empty route-db

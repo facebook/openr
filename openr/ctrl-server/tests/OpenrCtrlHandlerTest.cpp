@@ -174,24 +174,15 @@ class OpenrCtrlFixture : public ::testing::Test {
     // spin up an openrThriftServer
     openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         nodeName,
+        decision.get() /* decision */,
+        fib.get() /* fib */,
+        kvStoreWrapper->getKvStore() /* kvStore */,
+        linkMonitor.get() /* linkMonitor */,
+        persistentStore.get() /* configStore */,
+        prefixManager.get() /* prefixManager */,
         monitorSubmitUrl_,
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         context_);
-
-    // add module into thriftServer module map
-    openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::PERSISTENT_STORE, persistentStore);
-    openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::KVSTORE, kvStoreWrapper->getKvStore());
-    openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::DECISION, decision);
-    openrThriftServerWrapper_->addModuleType(thrift::OpenrModuleType::FIB, fib);
-    openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::PREFIX_MANAGER, prefixManager);
-    openrThriftServerWrapper_->addModuleType(
-        thrift::OpenrModuleType::LINK_MONITOR, linkMonitor);
-
-    // start running openrThriftServer
     openrThriftServerWrapper_->run();
 
     // initialize openrCtrlClient talking to server

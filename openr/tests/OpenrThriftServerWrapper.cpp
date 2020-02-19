@@ -11,13 +11,25 @@ namespace openr {
 
 OpenrThriftServerWrapper::OpenrThriftServerWrapper(
     std::string const& nodeName,
+    Decision* decision,
+    Fib* fib,
+    KvStore* kvStore,
+    LinkMonitor* linkMonitor,
+    PersistentStore* configStore,
+    PrefixManager* prefixManager,
     MonitorSubmitUrl const& monitorSubmitUrl,
     KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
     fbzmq::Context& context)
     : nodeName_(nodeName),
       monitorSubmitUrl_(monitorSubmitUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
-      context_(context) {
+      context_(context),
+      decision_(decision),
+      fib_(fib),
+      kvStore_(kvStore),
+      linkMonitor_(linkMonitor),
+      configStore_(configStore),
+      prefixManager_(prefixManager) {
   CHECK(!nodeName_.empty());
 }
 
@@ -37,7 +49,12 @@ OpenrThriftServerWrapper::run() {
   openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
       nodeName_,
       std::unordered_set<std::string>{},
-      moduleTypeToObj_,
+      decision_,
+      fib_,
+      kvStore_,
+      linkMonitor_,
+      configStore_,
+      prefixManager_,
       monitorSubmitUrl_,
       kvStoreLocalPubUrl_,
       mainEvl_,
@@ -58,10 +75,6 @@ OpenrThriftServerWrapper::run() {
 
 void
 OpenrThriftServerWrapper::stop() {
-  // ATTN: moduleTypeToEvl maintains <shared_ptr> of OpenrModule.
-  //       Must cleanup. Otherwise, there will be additional ref count and
-  //       cause OpenrModule binding to the existing addr.
-  moduleTypeToObj_.clear();
   mainEvl_.stop();
   mainEvlThread_.join();
   openrCtrlHandler_.reset();

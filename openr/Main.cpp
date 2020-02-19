@@ -122,34 +122,42 @@ submitCounters(const ZmqEventLoop& eventLoop, ZmqMonitorClient& monitorClient) {
   monitorClient.setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
-void
-startEventLoop(
+/**
+ * Start an EventBase in a thread, maintain order of thread creation and
+ * returns raw pointer of Derived class.
+ */
+template <typename T>
+T*
+startEventBase(
     std::vector<std::thread>& allThreads,
-    std::vector<std::shared_ptr<OpenrModule>>& orderedModules,
-    std::unordered_map<OpenrModuleType, std::shared_ptr<OpenrModule>>&
-        moduleTypeToObj,
-    std::unique_ptr<Watchdog>& watchdog,
-    std::shared_ptr<OpenrModule> module) {
-  const auto type = module->moduleType;
-  // enforce at most one module of each type
-  CHECK_EQ(0, moduleTypeToObj.count(type));
+    std::vector<std::unique_ptr<OpenrEventBase>>& orderedEvbs,
+    Watchdog* watchdog,
+    const std::string& name,
+    std::unique_ptr<T> evbT) {
+  CHECK(evbT);
+  auto t = evbT.get();
+  auto evb = std::unique_ptr<OpenrEventBase>(
+      reinterpret_cast<OpenrEventBase*>(evbT.release()));
 
-  allThreads.emplace_back(std::thread([module]() noexcept {
-    LOG(INFO) << "Starting " << module->moduleName << " thread ...";
-    folly::setThreadName(module->moduleName);
-    module->run();
-    LOG(INFO) << module->moduleName << " thread got stopped.";
+  // Start a thread
+  allThreads.emplace_back(std::thread([evb = evb.get(), name]() noexcept {
+    LOG(INFO) << "Starting " << name << " thread ...";
+    folly::setThreadName(name);
+    evb->run();
+    LOG(INFO) << name << " thread got stopped.";
   }));
+  evb->waitUntilRunning();
 
-  module->waitUntilRunning();
-
+  // Add to watchdog
   if (watchdog) {
-    watchdog->addEvb(
-        dynamic_cast<OpenrEventBase*>(module.get()), module->moduleName);
+    watchdog->addEvb(evb.get(), name);
   }
 
-  orderedModules.emplace_back(module);
-  moduleTypeToObj.emplace(type, orderedModules.back());
+  // Emplace evb into ordered list of evbs. So that we can destroy
+  // them in revserse order of their creation.
+  orderedEvbs.emplace_back(std::move(evb));
+
+  return t;
 }
 
 int
@@ -243,27 +251,21 @@ main(int argc, char** argv) {
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
-  std::vector<std::shared_ptr<OpenrModule>> orderedModules;
-  std::unordered_map<OpenrModuleType, std::shared_ptr<OpenrModule>>
-      moduleTypeToObj;
-  std::unique_ptr<Watchdog> watchdog{nullptr};
+  std::vector<std::unique_ptr<OpenrEventBase>> orderedEvbs;
+  Watchdog* watchdog{nullptr};
 
   // Watchdog thread to monitor thread aliveness
   if (FLAGS_enable_watchdog) {
-    watchdog = std::make_unique<Watchdog>(
-        FLAGS_node_name,
-        std::chrono::seconds(FLAGS_watchdog_interval_s),
-        std::chrono::seconds(FLAGS_watchdog_threshold_s),
-        FLAGS_memory_limit_mb);
-
-    // Spawn a watchdog thread
-    allThreads.emplace_back(std::thread([&watchdog]() noexcept {
-      LOG(INFO) << "Starting Watchdog thread ...";
-      folly::setThreadName("Watchdog");
-      watchdog->run();
-      LOG(INFO) << "Watchdog thread got stopped.";
-    }));
-    watchdog->waitUntilRunning();
+    watchdog = startEventBase(
+        allThreads,
+        orderedEvbs,
+        nullptr /* watchdog won't monitor itself */,
+        "Watchdog",
+        std::make_unique<Watchdog>(
+            FLAGS_node_name,
+            std::chrono::seconds(FLAGS_watchdog_interval_s),
+            std::chrono::seconds(FLAGS_watchdog_threshold_s),
+            FLAGS_memory_limit_mb));
   }
 
   // Create ThreadManager for thrift services
@@ -390,21 +392,17 @@ main(int argc, char** argv) {
   }
 
   // Start config-store URL
-  startEventLoop(
+  auto configStore = startEventBase(
       allThreads,
-      orderedModules,
-      moduleTypeToObj,
+      orderedEvbs,
       watchdog,
-      std::make_shared<PersistentStore>(
+      "ConfigStore",
+      std::make_unique<PersistentStore>(
           FLAGS_node_name,
           FLAGS_config_store_filepath,
           context,
           std::chrono::milliseconds(FLAGS_persistent_store_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_persistent_store_max_backoff_ms)));
-
-  auto configStore = dynamic_cast<PersistentStore*>(
-      moduleTypeToObj.at(openr::thrift::OpenrModuleType::PERSISTENT_STORE)
-          .get());
 
   // Start monitor Module
   // for each log message it receives, we want to add the openr domain
@@ -463,12 +461,12 @@ main(int argc, char** argv) {
   }
   const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
   // Start KVStore
-  startEventLoop(
+  auto kvStore = startEventBase(
       allThreads,
-      orderedModules,
-      moduleTypeToObj,
+      orderedEvbs,
       watchdog,
-      std::make_shared<KvStore>(
+      "KvStore",
+      std::make_unique<KvStore>(
           context,
           FLAGS_node_name,
           kvStoreLocalPubUrl,
@@ -489,17 +487,14 @@ main(int argc, char** argv) {
           FLAGS_is_flood_root,
           FLAGS_use_flood_optimization,
           areas));
+  const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{kvStore->inprocCmdUrl};
 
-  auto kvStoreModule = moduleTypeToObj.at(OpenrModuleType::KVSTORE);
-  const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{
-      dynamic_cast<KvStore*>(kvStoreModule.get())->inprocCmdUrl};
-
-  startEventLoop(
+  auto prefixManager = startEventBase(
       allThreads,
-      orderedModules,
-      moduleTypeToObj,
+      orderedEvbs,
       watchdog,
-      std::make_shared<PrefixManager>(
+      "PrefixManager",
+      std::make_unique<PrefixManager>(
           FLAGS_node_name,
           prefixUpdatesQueue.getReader(),
           configStore,
@@ -530,12 +525,12 @@ main(int argc, char** argv) {
     } else {
       allocMode = PrefixAllocatorModeSeeded();
     }
-    startEventLoop(
+    startEventBase(
         allThreads,
-        orderedModules,
-        moduleTypeToObj,
+        orderedEvbs,
         watchdog,
-        std::make_shared<PrefixAllocator>(
+        "PrefixAllocator",
+        std::make_unique<PrefixAllocator>(
             FLAGS_node_name,
             kvStoreLocalCmdUrl,
             kvStoreLocalPubUrl,
@@ -557,12 +552,12 @@ main(int argc, char** argv) {
   //
   // If enabled, start the spark service.
   //
-  startEventLoop(
+  auto spark = startEventBase(
       allThreads,
-      orderedModules,
-      moduleTypeToObj,
+      orderedEvbs,
       watchdog,
-      std::make_shared<Spark>(
+      "Spark",
+      std::make_unique<Spark>(
           FLAGS_domain, // My domain
           FLAGS_node_name, // myNodeName
           static_cast<uint16_t>(FLAGS_spark_mcast_port),
@@ -678,12 +673,12 @@ main(int argc, char** argv) {
   }
 
   // Create link monitor instance.
-  startEventLoop(
+  auto linkMonitor = startEventBase(
       allThreads,
-      orderedModules,
-      moduleTypeToObj,
+      orderedEvbs,
       watchdog,
-      std::make_shared<LinkMonitor>(
+      "LinkMonitor",
+      std::make_unique<LinkMonitor>(
           context,
           FLAGS_node_name,
           FLAGS_system_agent_port,
@@ -723,12 +718,12 @@ main(int argc, char** argv) {
         std::chrono::seconds(FLAGS_decision_graceful_restart_window_s);
   }
   // Start Decision Module
-  startEventLoop(
+  auto decision = startEventBase(
       allThreads,
-      orderedModules,
-      moduleTypeToObj,
+      orderedEvbs,
       watchdog,
-      std::make_shared<Decision>(
+      "Decision",
+      std::make_unique<Decision>(
           FLAGS_node_name,
           FLAGS_enable_v4,
           FLAGS_enable_lfa,
@@ -753,12 +748,12 @@ main(int argc, char** argv) {
     CHECK_EQ(areas.size(), 1);
   }
   // Define and start Fib Module
-  startEventLoop(
+  auto fib = startEventBase(
       allThreads,
-      orderedModules,
-      moduleTypeToObj,
+      orderedEvbs,
       watchdog,
-      std::make_shared<Fib>(
+      "Fib",
+      std::make_unique<Fib>(
           FLAGS_node_name,
           FLAGS_fib_handler_port,
           FLAGS_dryrun,
@@ -820,7 +815,12 @@ main(int argc, char** argv) {
   auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
       FLAGS_node_name,
       acceptableNamesSet,
-      moduleTypeToObj,
+      decision,
+      fib,
+      kvStore,
+      linkMonitor,
+      configStore,
+      prefixManager,
       monitorSubmitUrl,
       kvStoreLocalPubUrl,
       mainEventLoop,
@@ -860,7 +860,7 @@ main(int argc, char** argv) {
   neighborUpdatesQueue.close();
   prefixUpdatesQueue.close();
   thriftCtrlServer.stop();
-  for (auto riter = orderedModules.rbegin(); orderedModules.rend() != riter;
+  for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {
     (*riter)->stop();
     (*riter)->waitUntilStopped();
@@ -907,11 +907,6 @@ main(int argc, char** argv) {
 
   if (eventPublisher) {
     eventPublisher.reset();
-  }
-
-  if (watchdog) {
-    watchdog->stop();
-    watchdog->waitUntilStopped();
   }
 
   // Wait for all threads to finish

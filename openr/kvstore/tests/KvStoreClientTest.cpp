@@ -99,28 +99,31 @@ class MultipleStoreFixture : public ::testing::Test {
   initThriftWrappers() {
     // wrapper to spin up an OpenrThriftServerWrapper for thrift connection
     auto makeThriftServerWrapper =
-        [this](std::string nodeId, std::string localPubUrl) {
+        [this](std::string nodeId, std::string localPubUrl, KvStore* kvStore) {
           return std::make_shared<OpenrThriftServerWrapper>(
               nodeId,
+              nullptr /* decision */,
+              nullptr /* fib */,
+              kvStore /* kvStore */,
+              nullptr /* linkMonitor */,
+              nullptr /* configStore */,
+              nullptr /* prefixManager */,
               MonitorSubmitUrl{"inproc://monitor_submit"},
               KvStoreLocalPubUrl{localPubUrl},
               context);
         };
 
     // spin up OpenrThriftServerWrapper for thrift connectivity
-    thriftWrapper1_ = makeThriftServerWrapper(node1, store1->localPubUrl);
-    thriftWrapper1_->addModuleType(
-        thrift::OpenrModuleType::KVSTORE, store1->getKvStore());
+    thriftWrapper1_ = makeThriftServerWrapper(
+        node1, store1->localPubUrl, store1->getKvStore());
     thriftWrapper1_->run();
 
-    thriftWrapper2_ = makeThriftServerWrapper(node2, store2->localPubUrl);
-    thriftWrapper2_->addModuleType(
-        thrift::OpenrModuleType::KVSTORE, store2->getKvStore());
+    thriftWrapper2_ = makeThriftServerWrapper(
+        node2, store2->localPubUrl, store2->getKvStore());
     thriftWrapper2_->run();
 
-    thriftWrapper3_ = makeThriftServerWrapper(node3, store3->localPubUrl);
-    thriftWrapper3_->addModuleType(
-        thrift::OpenrModuleType::KVSTORE, store3->getKvStore());
+    thriftWrapper3_ = makeThriftServerWrapper(
+        node3, store3->localPubUrl, store3->getKvStore());
     thriftWrapper3_->run();
   }
 
@@ -892,11 +895,15 @@ TEST(KvStoreClient, ApiTest) {
   // Initialize thriftWrapper
   auto thriftWrapper = std::make_shared<OpenrThriftServerWrapper>(
       nodeId,
+      nullptr /* decision */,
+      nullptr /* fib */,
+      store->getKvStore() /* kvStore */,
+      nullptr /* linkMonitor */,
+      nullptr /* configStore */,
+      nullptr /* prefixManager */,
       MonitorSubmitUrl{"inproc://monitor_submit"},
       KvStoreLocalPubUrl{store->localPubUrl},
       context);
-  thriftWrapper->addModuleType(
-      thrift::OpenrModuleType::KVSTORE, store->getKvStore());
   thriftWrapper->run();
 
   // Create another OpenrEventBase instance for looping clients

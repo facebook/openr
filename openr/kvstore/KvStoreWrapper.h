@@ -152,9 +152,9 @@ class KvStoreWrapper {
         enableFloodOptimization_);
   }
 
-  std::shared_ptr<KvStore>
+  KvStore*
   getKvStore() {
-    return kvStore_;
+    return kvStore_.get();
   }
 
  public:
@@ -189,7 +189,7 @@ class KvStoreWrapper {
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> subSock_;
 
   // KvStore owned by this wrapper.
-  std::shared_ptr<KvStore> kvStore_;
+  std::unique_ptr<KvStore> kvStore_;
 
   // Thread in which KvStore will be running.
   std::thread kvStoreThread_;

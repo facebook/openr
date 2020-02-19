@@ -230,10 +230,15 @@ class FibTestFixture : public ::testing::Test {
     // spin up an openrThriftServer
     openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
         "node-1",
+        nullptr /* decision */,
+        fib.get() /* fib */,
+        nullptr /* kvStore */,
+        nullptr /* linkMonitor */,
+        nullptr /* configStore */,
+        nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         KvStoreLocalPubUrl{"inproc://kvStore-pub"},
         context);
-    openrThriftServerWrapper_->addModuleType(thrift::OpenrModuleType::FIB, fib);
     openrThriftServerWrapper_->run();
   }
 

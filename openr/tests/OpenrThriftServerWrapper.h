@@ -26,13 +26,17 @@ class OpenrThriftServerWrapper {
   KvStoreLocalPubUrl const kvStoreLocalPubUrl_;
   fbzmq::Context& context_;
 
-  std::unordered_map<thrift::OpenrModuleType, std::shared_ptr<OpenrModule>>
-      moduleTypeToObj_;
   std::shared_ptr<OpenrCtrlHandler> openrCtrlHandler_{nullptr};
 
  public:
   OpenrThriftServerWrapper(
       std::string const& nodeName,
+      Decision* decision,
+      Fib* fib,
+      KvStore* kvStore,
+      LinkMonitor* linkMonitor,
+      PersistentStore* configStore,
+      PrefixManager* prefixManager,
       MonitorSubmitUrl const& monitorSubmitUrl,
       KvStoreLocalPubUrl const& kvstoreLocalPubUrl,
       fbzmq::Context& context);
@@ -43,12 +47,6 @@ class OpenrThriftServerWrapper {
   // stop Open/R thrift server
   void stop();
 
-  inline void
-  addModuleType(
-      thrift::OpenrModuleType type, std::shared_ptr<OpenrModule> module) {
-    moduleTypeToObj_[type] = module;
-  }
-
   inline uint16_t
   getOpenrCtrlThriftPort() {
     return openrCtrlThriftServerThread_.getAddress()->getPort();
@@ -58,6 +56,14 @@ class OpenrThriftServerWrapper {
   getOpenrCtrlHandler() {
     return openrCtrlHandler_;
   }
+
+  // Pointers to Open/R modules
+  Decision* decision_{nullptr};
+  Fib* fib_{nullptr};
+  KvStore* kvStore_{nullptr};
+  LinkMonitor* linkMonitor_{nullptr};
+  PersistentStore* configStore_{nullptr};
+  PrefixManager* prefixManager_{nullptr};
 };
 
 } // namespace openr
