@@ -557,43 +557,41 @@ main(int argc, char** argv) {
   //
   // If enabled, start the spark service.
   //
-  if (FLAGS_enable_spark) {
-    startEventLoop(
-        allThreads,
-        orderedModules,
-        moduleTypeToObj,
-        watchdog,
-        std::make_shared<Spark>(
-            FLAGS_domain, // My domain
-            FLAGS_node_name, // myNodeName
-            static_cast<uint16_t>(FLAGS_spark_mcast_port),
-            std::chrono::seconds(FLAGS_spark_hold_time_s),
-            std::chrono::seconds(FLAGS_spark_keepalive_time_s),
-            std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
-            std::chrono::seconds(FLAGS_spark2_hello_time_s),
-            std::chrono::milliseconds(FLAGS_spark2_hello_fastinit_time_ms),
-            std::chrono::milliseconds(FLAGS_spark2_handshake_time_ms),
-            std::chrono::seconds(FLAGS_spark2_heartbeat_time_s),
-            std::chrono::seconds(FLAGS_spark2_negotiate_hold_time_s),
-            std::chrono::seconds(FLAGS_spark2_heartbeat_hold_time_s),
-            maybeIpTos,
-            FLAGS_enable_v4,
-            FLAGS_enable_subnet_validation,
-            interfaceUpdatesQueue.getReader(),
-            neighborUpdatesQueue,
-            monitorSubmitUrl,
-            KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
-            KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
-            OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
-            std::make_pair(
-                Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-            context,
-            std::make_shared<IoProvider>(),
-            FLAGS_enable_flood_optimization,
-            FLAGS_enable_spark2,
-            FLAGS_spark2_increase_hello_interval,
-            areas));
-  }
+  startEventLoop(
+      allThreads,
+      orderedModules,
+      moduleTypeToObj,
+      watchdog,
+      std::make_shared<Spark>(
+          FLAGS_domain, // My domain
+          FLAGS_node_name, // myNodeName
+          static_cast<uint16_t>(FLAGS_spark_mcast_port),
+          std::chrono::seconds(FLAGS_spark_hold_time_s),
+          std::chrono::seconds(FLAGS_spark_keepalive_time_s),
+          std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
+          std::chrono::seconds(FLAGS_spark2_hello_time_s),
+          std::chrono::milliseconds(FLAGS_spark2_hello_fastinit_time_ms),
+          std::chrono::milliseconds(FLAGS_spark2_handshake_time_ms),
+          std::chrono::seconds(FLAGS_spark2_heartbeat_time_s),
+          std::chrono::seconds(FLAGS_spark2_negotiate_hold_time_s),
+          std::chrono::seconds(FLAGS_spark2_heartbeat_hold_time_s),
+          maybeIpTos,
+          FLAGS_enable_v4,
+          FLAGS_enable_subnet_validation,
+          interfaceUpdatesQueue.getReader(),
+          neighborUpdatesQueue,
+          monitorSubmitUrl,
+          KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
+          KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
+          OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
+          std::make_pair(
+              Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
+          context,
+          std::make_shared<IoProvider>(),
+          FLAGS_enable_flood_optimization,
+          FLAGS_enable_spark2,
+          FLAGS_spark2_increase_hello_interval,
+          areas));
 
   // Static list of prefixes to announce into the network as long as OpenR is
   // running.
