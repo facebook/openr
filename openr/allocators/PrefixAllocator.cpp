@@ -51,9 +51,7 @@ PrefixAllocator::PrefixAllocator(
     PersistentStore* configStore,
     fbzmq::Context& zmqContext,
     int32_t systemServicePort)
-    : OpenrEventBase(
-          myNodeName, thrift::OpenrModuleType::PREFIX_ALLOCATOR, zmqContext),
-      myNodeName_(myNodeName),
+    : myNodeName_(myNodeName),
       allocPrefixMarker_(allocPrefixMarker),
       setLoopbackAddress_(setLoopbackAddress),
       overrideGlobalAddress_(overrideGlobalAddress),

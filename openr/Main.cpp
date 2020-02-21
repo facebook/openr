@@ -60,7 +60,6 @@ using namespace folly::gen;
 
 using apache::thrift::concurrency::ThreadManager;
 using openr::messaging::ReplicateQueue;
-using openr::thrift::OpenrModuleType;
 
 namespace {
 //

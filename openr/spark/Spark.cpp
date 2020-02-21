@@ -295,8 +295,7 @@ Spark::Spark(
     bool enableSpark2,
     bool increaseHelloInterval,
     folly::Optional<std::unordered_set<std::string>> areas)
-    : OpenrEventBase(myNodeName, thrift::OpenrModuleType::SPARK, zmqContext),
-      myDomainName_(myDomainName),
+    : myDomainName_(myDomainName),
       myNodeName_(myNodeName),
       udpMcastPort_(udpMcastPort),
       myHoldTime_(myHoldTime),

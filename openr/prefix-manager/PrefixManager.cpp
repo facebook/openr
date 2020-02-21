@@ -46,9 +46,7 @@ PrefixManager::PrefixManager(
     const std::chrono::milliseconds ttlKeyInKvStore,
     fbzmq::Context& zmqContext,
     const std::unordered_set<std::string>& areas)
-    : OpenrEventBase(
-          nodeId, thrift::OpenrModuleType::PREFIX_MANAGER, zmqContext),
-      nodeId_(nodeId),
+    : nodeId_(nodeId),
       configStore_{configStore},
       prefixDbMarker_{prefixDbMarker},
       perPrefixKeys_{perPrefixKeys},

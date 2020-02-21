@@ -21,18 +21,6 @@ include "LinkMonitor.thrift"
 include "Lsdb.thrift"
 include "Network.thrift"
 
-enum OpenrModuleType {
-  DEFAULT = 0,
-  DECISION = 1,
-  FIB = 2,
-  KVSTORE = 4,
-  LINK_MONITOR = 5,
-  PERSISTENT_STORE = 9,
-  PREFIX_ALLOCATOR = 6,
-  PREFIX_MANAGER = 7,
-  SPARK = 8,
-}
-
 exception OpenrError {
   1: string message
 } ( message = "message" )

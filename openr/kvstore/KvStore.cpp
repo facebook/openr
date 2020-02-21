@@ -16,6 +16,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
+#include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 
 using namespace std::chrono;
 
@@ -88,8 +89,7 @@ KvStore::KvStore(
     bool isFloodRoot,
     bool useFloodOptimization,
     const std::unordered_set<std::string>& areas)
-    : OpenrEventBase(nodeId, thrift::OpenrModuleType::KVSTORE, zmqContext),
-      inprocCmdUrl(folly::sformat("inproc://{}_KVSTORE_local_cmd", nodeId)),
+    : inprocCmdUrl(folly::sformat("inproc://{}_KVSTORE_local_cmd", nodeId)),
       localPubUrl_(std::move(localPubUrl)),
       globalPubUrl_(std::move(globalPubUrl)),
       monitorSubmitInterval_(monitorSubmitInterval),
@@ -483,7 +483,7 @@ KvStore::processCmdSocketRequest(
         fbzmq::Message::from(Constants::kErrorResponse.toString()).value());
   }
 
-  if (!(thrift::OpenrModuleType::KVSTORE == moduleType && req.back().empty())) {
+  if (not req.back().empty()) {
     auto sndRet = cmdSock.sendMultiple(req);
     if (sndRet.hasError()) {
       LOG(ERROR) << "Error sending response. " << sndRet.error();

@@ -8,6 +8,7 @@
 #include <sys/eventfd.h>
 
 #include <fbzmq/zmq/Context.h>
+#include <fbzmq/zmq/Socket.h>
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
 #include <folly/synchronization/Baton.h>
@@ -17,13 +18,6 @@
 
 using namespace ::testing;
 using namespace openr;
-
-class OpenrTestEvb : public OpenrEventBase {
- public:
-  explicit OpenrTestEvb(fbzmq::Context& zmqContext)
-      : OpenrEventBase("node1", thrift::OpenrModuleType::DECISION, zmqContext) {
-  }
-};
 
 class OpenrEventBaseTestFixture : public ::testing::Test {
  protected:
@@ -45,12 +39,11 @@ class OpenrEventBaseTestFixture : public ::testing::Test {
 
  public:
   fbzmq::Context context;
-  OpenrTestEvb evb{context};
+  OpenrEventBase evb;
 };
 
 TEST(OpenrEventBaseTest, CreateDestroy) {
-  fbzmq::Context context;
-  OpenrTestEvb evb(context);
+  OpenrEventBase evb;
   EXPECT_TRUE(evb.getEvb() != nullptr);
 }
 
@@ -68,8 +61,7 @@ TEST(OpenrEventBaseTest, FiberTest) {
 }
 
 TEST(OpenrEventBaseTest, RunnableApi) {
-  fbzmq::Context context;
-  OpenrTestEvb evb(context);
+  OpenrEventBase evb;
 
   // 1. Eventbase is not running
   EXPECT_FALSE(evb.isRunning());

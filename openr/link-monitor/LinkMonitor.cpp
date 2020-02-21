@@ -99,8 +99,7 @@ LinkMonitor::LinkMonitor(
     std::chrono::milliseconds flapMaxBackoff,
     std::chrono::milliseconds ttlKeyInKvStore,
     const std::unordered_set<std::string>& areas)
-    : OpenrEventBase(nodeId, thrift::OpenrModuleType::LINK_MONITOR, zmqContext),
-      nodeId_(nodeId),
+    : nodeId_(nodeId),
       platformThriftPort_(platformThriftPort),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),

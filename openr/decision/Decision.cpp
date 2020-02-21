@@ -1612,8 +1612,7 @@ Decision::Decision(
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventBase(myNodeName, thrift::OpenrModuleType::DECISION, zmqContext),
-      processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
+    : processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       myNodeName_(myNodeName),
       adjacencyDbMarker_(adjacencyDbMarker),
       prefixDbMarker_(prefixDbMarker),

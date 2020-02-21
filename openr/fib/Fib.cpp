@@ -35,8 +35,7 @@ Fib::Fib(
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
     fbzmq::Context& zmqContext)
-    : OpenrEventBase(myNodeName, thrift::OpenrModuleType::FIB, zmqContext),
-      myNodeName_(std::move(myNodeName)),
+    : myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
       dryrun_(dryrun),
       enableSegmentRouting_(enableSegmentRouting),

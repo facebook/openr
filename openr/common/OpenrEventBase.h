@@ -9,10 +9,11 @@
 
 #include <csignal>
 
+#include <fbzmq/async/ZmqEventLoop.h>
+#include <fbzmq/zmq/Socket.h>
 #include <folly/fibers/FiberManager.h>
 #include <folly/io/async/AsyncSignalHandler.h>
-
-#include <openr/common/OpenrModule.h>
+#include <folly/io/async/EventHandler.h>
 
 namespace openr {
 
@@ -24,17 +25,8 @@ class EventBaseStopSignalHandler : public folly::AsyncSignalHandler {
   void signalReceived(int signum) noexcept override;
 };
 
-class OpenrEventBase : public OpenrModule {
+class OpenrEventBase {
  public:
-  OpenrEventBase(
-      const std::string& nodeName,
-      const thrift::OpenrModuleType type,
-      fbzmq::Context& zmqContext);
-
-  /**
-   * Default constructor for using polling/timeout functionality. Module
-   * functionality will be disabled by default
-   */
   OpenrEventBase();
 
   virtual ~OpenrEventBase();
@@ -67,10 +59,10 @@ class OpenrEventBase : public OpenrModule {
   }
 
   /**
-   * OpenrModule APIs
+   * Get latest timestamp of health check timer
    */
   std::chrono::seconds
-  getTimestamp() const override {
+  getTimestamp() const {
     return timestamp_.load();
   }
 
@@ -78,15 +70,15 @@ class OpenrEventBase : public OpenrModule {
    * Runnable interface APIs
    */
 
-  void run() override;
+  virtual void run();
 
-  void stop() override;
+  virtual void stop();
 
-  bool isRunning() const override;
+  bool isRunning() const;
 
-  void waitUntilRunning() override;
+  void waitUntilRunning();
 
-  void waitUntilStopped() override;
+  void waitUntilStopped();
 
   /**
    * Timeout APIs

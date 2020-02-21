@@ -31,10 +31,7 @@ PersistentStore::PersistentStore(
     std::chrono::milliseconds saveInitialBackoff,
     std::chrono::milliseconds saveMaxBackoff,
     bool dryrun)
-    : OpenrEventBase(
-          nodeName, thrift::OpenrModuleType::PERSISTENT_STORE, context),
-      storageFilePath_(storageFilePath),
-      dryrun_(dryrun) {
+    : storageFilePath_(storageFilePath), dryrun_(dryrun) {
   if (saveInitialBackoff != 0ms or saveMaxBackoff != 0ms) {
     // Create timer and backoff mechanism only if backoff is requested
     saveDbTimerBackoff_ =

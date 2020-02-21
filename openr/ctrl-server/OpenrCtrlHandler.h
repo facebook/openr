@@ -10,7 +10,6 @@
 #include <common/fb303/cpp/FacebookBase2.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
-#include <openr/common/OpenrModule.h>
 #include <openr/common/Types.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/decision/Decision.h>

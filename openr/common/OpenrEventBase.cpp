@@ -115,25 +115,8 @@ OpenrEventBase::ZmqEventHandler::handlerReady(uint16_t events) noexcept {
   } while (zmqEvents & ZMQ_POLLIN);
 }
 
-OpenrEventBase::OpenrEventBase(
-    const std::string& nodeName,
-    const thrift::OpenrModuleType type,
-    fbzmq::Context& zmqContext)
-    : OpenrModule(nodeName, type, zmqContext),
-      fiberManager_(folly::fibers::getFiberManager(evb_, getFmOptions())) {
-  // Periodic timer to update eventbase's timestamp. This is used by Watchdog to
-  // identify stuck threads.
-  timestamp_ = getElapsedSeconds();
-  timeout_ = folly::AsyncTimeout::make(evb_, [this]() noexcept {
-    timestamp_ = getElapsedSeconds();
-    timeout_->scheduleTimeout(std::chrono::seconds(1));
-  });
-  timeout_->scheduleTimeout(0);
-}
-
 OpenrEventBase::OpenrEventBase()
-    : OpenrModule(),
-      fiberManager_(folly::fibers::getFiberManager(evb_, getFmOptions())) {
+    : fiberManager_(folly::fibers::getFiberManager(evb_, getFmOptions())) {
   // Periodic timer to update eventbase's timestamp. This is used by Watchdog to
   // identify stuck threads.
   timestamp_ = getElapsedSeconds();

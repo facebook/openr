@@ -276,7 +276,6 @@ add_library(openrlib
   openr/common/ExponentialBackoff.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
-  openr/common/OpenrModule.cpp
   openr/common/ThriftUtil.cpp
   openr/common/Util.cpp
   openr/config-store/PersistentStore.cpp
