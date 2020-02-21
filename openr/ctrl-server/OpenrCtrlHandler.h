@@ -306,7 +306,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   std::atomic<int64_t> publisherToken_{0};
   folly::Synchronized<std::unordered_map<
       int64_t,
-      apache::thrift::StreamPublisher<thrift::Publication>>>
+      apache::thrift::ServerStreamPublisher<thrift::Publication>>>
       kvStorePublishers_;
 
   // pending longPoll requests from clients, which consists of

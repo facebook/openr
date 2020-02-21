@@ -154,7 +154,8 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   evl_.removeSocket(fbzmq::RawZmqSocketPtr{*kvStoreSubSock_});
   kvStoreSubSock_.close();
 
-  std::vector<apache::thrift::StreamPublisher<thrift::Publication>> publishers;
+  std::vector<apache::thrift::ServerStreamPublisher<thrift::Publication>>
+      publishers;
   // NOTE: We're intentionally creating list of publishers to and then invoke
   // `complete()` on them.
   // Reason => `complete()` returns only when callback `onComplete` associated
@@ -611,16 +612,18 @@ OpenrCtrlHandler::subscribeKvStore() {
   auto clientToken = publisherToken_++;
 
   auto streamAndPublisher =
-      createStreamPublisher<thrift::Publication>([this, clientToken]() {
-        SYNCHRONIZED(kvStorePublishers_) {
-          if (kvStorePublishers_.erase(clientToken)) {
-            LOG(INFO) << "KvStore snoop stream-" << clientToken << " ended.";
-          } else {
-            LOG(ERROR) << "Can't remove unknown KvStore snoop stream-"
-                       << clientToken;
-          }
-        }
-      });
+      apache::thrift::ServerStream<thrift::Publication>::createPublisher(
+          [this, clientToken]() {
+            SYNCHRONIZED(kvStorePublishers_) {
+              if (kvStorePublishers_.erase(clientToken)) {
+                LOG(INFO) << "KvStore snoop stream-" << clientToken
+                          << " ended.";
+              } else {
+                LOG(ERROR) << "Can't remove unknown KvStore snoop stream-"
+                           << clientToken;
+              }
+            }
+          });
 
   SYNCHRONIZED(kvStorePublishers_) {
     assert(kvStorePublishers_.count(clientToken) == 0);
