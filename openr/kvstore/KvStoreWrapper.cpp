@@ -127,169 +127,98 @@ KvStoreWrapper::setKey(
     thrift::Value value,
     folly::Optional<std::vector<std::string>> nodeIds,
     std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
+  // Prepare KeySetParams
   thrift::KeySetParams params;
-
   params.keyVals.emplace(std::move(key), std::move(value));
-  params.solicitResponse = true;
   params.nodeIds = std::move(nodeIds);
 
-  request.cmd = thrift::Command::KEY_SET;
-  request.keySetParams = params;
-  request.area = area;
-
-  // Make ZMQ call and wait for response
-  auto sendStatus = reqSock_.sendThriftObj(request, serializer_);
-  if (sendStatus.hasError()) {
-    LOG(ERROR) << "setKey send request failed: " << sendStatus.error();
+  try {
+    kvStore_->setKvStoreKeyVals(std::move(params), area).get();
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
   }
-
-  auto maybeMsg = reqSock_.recvOne();
-  if (maybeMsg.hasError()) {
-    LOG(ERROR) << "setKey recv response failed: " << maybeMsg.error();
-    return false;
-  }
-
-  // Return the result
-  const auto msg = maybeMsg->read<std::string>();
-  return *msg == Constants::kSuccessResponse.toString();
+  return true;
 }
 
 bool
 KvStoreWrapper::setKeys(
     const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
-    folly::Optional<std::vector<std::string>> nodeIds) {
-  // Prepare request
-  thrift::KvStoreRequest request;
+    folly::Optional<std::vector<std::string>> nodeIds,
+    std::string area) {
+  // Prepare KeySetParams
   thrift::KeySetParams params;
-
+  params.nodeIds = std::move(nodeIds);
   for (const auto& keyVal : keyVals) {
     params.keyVals.emplace(keyVal.first, keyVal.second);
   }
-  params.solicitResponse = true;
-  params.nodeIds = std::move(nodeIds);
 
-  request.cmd = thrift::Command::KEY_SET;
-  request.keySetParams = params;
-
-  // Make ZMQ call and wait for response
-  auto sendStatus = reqSock_.sendThriftObj(request, serializer_);
-  if (sendStatus.hasError()) {
-    LOG(ERROR) << "setKey send request failed: " << sendStatus.error();
+  try {
+    kvStore_->setKvStoreKeyVals(std::move(params), area).get();
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
   }
-
   return true;
 }
 
 folly::Optional<thrift::Value>
 KvStoreWrapper::getKey(std::string key, std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
+  // Prepare KeyGetParams
   thrift::KeyGetParams params;
-
   params.keys.push_back(key);
-  request.cmd = thrift::Command::KEY_GET;
-  request.keyGetParams = params;
-  request.area = area;
 
-  // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<thrift::Publication>(serializer_);
-  if (maybeMsg.hasError()) {
-    LOG(ERROR) << "getKey recv response failed: " << maybeMsg.error();
-    return folly::none;
+  thrift::Publication pub;
+  try {
+    pub = *(kvStore_->getKvStoreKeyVals(std::move(params), area).get());
+  } catch (std::exception const& e) {
+    LOG(WARNING) << "Exception to get key from kvstore: "
+                 << folly::exceptionStr(e);
+    return folly::none; // No value found
   }
-  auto publication = maybeMsg.value();
 
   // Return the result
-  auto it = publication.keyVals.find(key);
-  if (it == publication.keyVals.end()) {
+  auto it = pub.keyVals.find(key);
+  if (it == pub.keyVals.end()) {
     return folly::none; // No value found
-  } else {
-    return it->second;
   }
+  return it->second;
 }
 
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::dumpAll(
     std::optional<KvStoreFilters> filters, std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
+  // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
-
   if (filters.has_value()) {
     std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
     params.prefix = keyPrefix;
     params.originatorIds = filters.value().getOrigniatorIdList();
   }
 
-  request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams = params;
-  request.area = area;
-
-  // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<thrift::Publication>(serializer_);
-  if (maybeMsg.hasError()) {
-    throw std::runtime_error(folly::sformat(
-        "dumAll recv response failed: {}", maybeMsg.error().errString));
-  }
-  auto publication = maybeMsg.value();
-
-  // Return the result
-  return publication.keyVals;
+  auto pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
+  return pub.keyVals;
 }
 
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::dumpHashes(std::string const& prefix, std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
+  // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
-
   params.prefix = prefix;
-  request.cmd = thrift::Command::HASH_DUMP;
-  request.keyDumpParams = params;
-  request.area = area;
 
-  // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<thrift::Publication>(serializer_);
-  if (maybeMsg.hasError()) {
-    throw std::runtime_error(folly::sformat(
-        "dumAll recv response failed: {}", maybeMsg.error().errString));
-  }
-  auto publication = maybeMsg.value();
-
-  // Return the result
-  return publication.keyVals;
+  auto pub = *(kvStore_->dumpKvStoreHashes(std::move(params), area).get());
+  return pub.keyVals;
 }
 
 std::unordered_map<std::string /* key */, thrift::Value>
 KvStoreWrapper::syncKeyVals(
     thrift::KeyVals const& keyValHashes, std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
+  // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
-
   params.keyValHashes = keyValHashes;
-  request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams = params;
-  request.area = area;
 
-  // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<thrift::Publication>(serializer_);
-  if (maybeMsg.hasError()) {
-    throw std::runtime_error(folly::sformat(
-        "dumAll recv response failed: {}", maybeMsg.error().errString));
-  }
-  auto publication = maybeMsg.value();
-
-  // Return the result
-  return publication.keyVals;
+  auto pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
+  return pub.keyVals;
 }
 
 thrift::Publication
@@ -310,93 +239,45 @@ KvStoreWrapper::getCounters() {
 
 thrift::SptInfos
 KvStoreWrapper::getFloodTopo(std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::FLOOD_TOPO_GET;
-  request.area = area;
-
-  // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<thrift::SptInfos>(serializer_);
-  if (maybeMsg.hasError()) {
-    LOG(FATAL) << "getFloodTopo recv response failed: " << maybeMsg.error();
-  }
-
-  return std::move(maybeMsg.value());
+  auto sptInfos = *(kvStore_->getSpanningTreeInfos(area).get());
+  return sptInfos;
 }
 
 bool
 KvStoreWrapper::addPeer(
     std::string peerName, thrift::PeerSpec spec, std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
+  // Prepare peerAddParams
   thrift::PeerAddParams params;
-
   params.peers.emplace(peerName, spec);
-  request.cmd = thrift::Command::PEER_ADD;
-  request.peerAddParams = params;
-  request.area = area;
 
-  // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<thrift::PeerCmdReply>(serializer_);
-  if (maybeMsg.hasError()) {
-    LOG(ERROR) << "addPeer recv response failed: " << maybeMsg.error();
+  try {
+    kvStore_->addUpdateKvStorePeers(params, area).get();
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "Failed to add peers: " << folly::exceptionStr(e);
     return false;
   }
-  auto peerCmdReply = maybeMsg.value();
-
-  // Return the result
-  auto it = peerCmdReply.peers.find(peerName);
-  if (it == peerCmdReply.peers.end()) {
-    return false;
-  } else {
-    return it->second == spec;
-  }
+  return true;
 }
 
 bool
 KvStoreWrapper::delPeer(std::string peerName, std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
+  // Prepare peerDelParams
   thrift::PeerDelParams params;
+  params.peerNames.emplace_back(peerName);
 
-  params.peerNames.push_back(peerName);
-  request.cmd = thrift::Command::PEER_DEL;
-  request.peerDelParams = params;
-  request.area = area;
-
-  // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<thrift::PeerCmdReply>(serializer_);
-  if (maybeMsg.hasError()) {
-    LOG(ERROR) << "delPeer recv response failed: " << maybeMsg.error();
+  try {
+    kvStore_->deleteKvStorePeers(params, area).get();
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "Failed to delete peers: " << folly::exceptionStr(e);
     return false;
   }
-  auto peerCmdReply = maybeMsg.value();
-
-  // Return the result
-  return peerCmdReply.peers.find(peerName) == peerCmdReply.peers.end();
+  return true;
 }
 
 std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
 KvStoreWrapper::getPeers(std::string area) {
-  // Prepare request
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::PEER_DUMP;
-  request.area = area;
-
-  // Make ZMQ call and wait for response
-  reqSock_.sendThriftObj(request, serializer_);
-  auto maybeMsg = reqSock_.recvThriftObj<thrift::PeerCmdReply>(serializer_);
-  if (maybeMsg.hasError()) {
-    throw std::runtime_error(folly::sformat(
-        "getPeers recv response failed: {}", maybeMsg.error().errString));
-  }
-  auto peerCmdReply = maybeMsg.value();
-
-  // Return the result
-  return peerCmdReply.peers;
+  auto peers = *(kvStore_->getKvStorePeers(area).get());
+  return peers;
 }
 
 } // namespace openr

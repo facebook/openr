@@ -80,7 +80,8 @@ class KvStoreWrapper {
    */
   bool setKeys(
       const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
-      folly::Optional<std::vector<std::string>> nodeIds = folly::none);
+      folly::Optional<std::vector<std::string>> nodeIds = folly::none,
+      std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * API to get dump from KvStore.
