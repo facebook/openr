@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/io/SocketOptionMap.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
@@ -71,10 +72,10 @@ getOpenrCtrlPlainTextClient(
         folly::DelayedDestruction::Destructor());
 
     // Build OptionMap for client socket connection
-    folly::AsyncSocket::OptionMap optionMap =
-        folly::AsyncSocket::emptyOptionMap;
+    folly::SocketOptionMap optionMap =
+        folly::emptySocketOptionMap;
     if (maybeIpTos.hasValue()) {
-      folly::AsyncSocket::OptionKey v6Opts = {IPPROTO_IPV6, IPV6_TCLASS};
+      folly::SocketOptionKey v6Opts = {IPPROTO_IPV6, IPV6_TCLASS};
       optionMap.emplace(v6Opts, maybeIpTos.value());
     }
 
