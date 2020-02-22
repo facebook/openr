@@ -34,6 +34,7 @@
 #include <openr/if/gen-cpp2/Dual_types.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
 
@@ -93,6 +94,10 @@ class KvStoreFilters {
 struct KvStoreParams {
   // the name of this node (unique in domain)
   std::string nodeId;
+
+  // Queue for publishing KvStore updates to other modules within a process
+  messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue;
+
   // the socket to publish changes to kv-store
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock;
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock;
@@ -119,6 +124,7 @@ struct KvStoreParams {
 
   KvStoreParams(
       std::string nodeid,
+      messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
       fbzmq::Context& zmqContext,
       fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
@@ -138,6 +144,7 @@ struct KvStoreParams {
       bool isfloodRoot,
       bool usefloodOptimization)
       : nodeId(nodeid),
+        kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         localPubSock(zmqContext),
         globalPubSock(std::move(globalPubSock)),
         globalCmdSock(std::move(globalCmdSock)),
@@ -424,6 +431,8 @@ class KvStore final : public OpenrEventBase {
       fbzmq::Context& zmqContext,
       // the name of this node (unique in domain)
       std::string nodeId,
+      // Queue for publishing kvstore updates
+      messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
       // the url we use to publish our updates to
       // local subscribers
       KvStoreLocalPubUrl localPubUrl,
@@ -553,22 +562,16 @@ class KvStore final : public OpenrEventBase {
   // Non mutable state
   //
 
-  // we only encrypt inter-node traffic and don't encrypt intra-node traffic
-  // tcp*_ sockets are used to communicate with external node
-  // inproc*_ sockets within a node
-
   // The ZMQ URL we'll be using for publications
   const std::string localPubUrl_;
   const std::string globalPubUrl_;
-
-  // The ZMQ URL we'll be listening for commands on
-  const std::string globalCmdUrl_;
 
   // Interval to submit to monitor. Default value is high
   // to avoid submission of counters in testing.
   const std::chrono::seconds monitorSubmitInterval_;
 
   std::optional<KvStoreFilters> filters_ = std::nullopt;
+
   //
   // Mutable state
   //

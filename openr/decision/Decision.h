@@ -210,8 +210,7 @@ class Decision : public OpenrEventBase {
       std::chrono::milliseconds debounceMinDur,
       std::chrono::milliseconds debounceMaxDur,
       folly::Optional<std::chrono::seconds> gracefulRestartDuration,
-      const KvStoreLocalCmdUrl& storeCmdUrl,
-      const KvStoreLocalPubUrl& storePubUrl,
+      messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
@@ -240,8 +239,6 @@ class Decision : public OpenrEventBase {
  private:
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
-
-  void prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept;
 
   // process publication from KvStore
   ProcessPublicationResult processPublication(
@@ -302,9 +299,6 @@ class Decision : public OpenrEventBase {
 
   std::chrono::milliseconds getMaxFib();
 
-  // perform full dump of all LSDBs and run initial routing computations
-  void initialSync(fbzmq::Context& zmqContext);
-
   // periodically submit counters to monitor thread
   void submitCounters();
 
@@ -321,11 +315,7 @@ class Decision : public OpenrEventBase {
 
   thrift::RouteDatabase routeDb_;
 
-  // URLs for the sockets
-  const std::string storeCmdUrl_;
-  const std::string storePubUrl_;
-
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> storeSub_;
+  // Queue to publish route changes
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue_;
 
   // the pointer to the SPF path calculator
@@ -345,9 +335,6 @@ class Decision : public OpenrEventBase {
 
   // Timer for decrementing link holds for ordered fib programming
   std::unique_ptr<fbzmq::ZmqTimeout> orderedFibTimer_{nullptr};
-
-  // Timer for initial sync - cancellable
-  std::unique_ptr<folly::AsyncTimeout> initialSyncTimer_{nullptr};
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;

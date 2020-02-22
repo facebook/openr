@@ -68,9 +68,6 @@ using apache::thrift::FRAGILE;
 class DecisionWrapper {
  public:
   explicit DecisionWrapper(const std::string& nodeName) {
-    kvStorePub.bind(fbzmq::SocketUrl{"inproc://kvStore-pub"});
-    kvStoreRep.bind(fbzmq::SocketUrl{"inproc://kvStore-rep"});
-
     decision = std::make_shared<Decision>(
         nodeName, /* node name */
         true, /* enable v4 */
@@ -83,8 +80,7 @@ class DecisionWrapper {
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
         folly::none,
-        KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
-        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
+        kvStoreUpdatesQueue.getReader(),
         routeUpdatesQueue,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
@@ -95,32 +91,10 @@ class DecisionWrapper {
       LOG(INFO) << "Decision thread finishing";
     });
     decision->waitUntilRunning();
-
-    // spin up an openrThriftServer
-    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
-        nodeName,
-        decision.get() /* decision */,
-        nullptr /* fib */,
-        nullptr /* kvStore */,
-        nullptr /* linkMonitor */,
-        nullptr /* configStore */,
-        nullptr /* prefixManager */,
-        MonitorSubmitUrl{"inproc://monitor-rep"},
-        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
-        zeromqContext);
-    openrThriftServerWrapper_->run();
-
-    // Make initial sync request with empty route-db
-    replyInitialSyncReq(thrift::Publication());
-    // Make request from decision to ensure that sockets are ready for use!
-    dumpRouteDb({"random-node"});
   }
 
   ~DecisionWrapper() {
-    LOG(INFO) << "Stopping openr-ctrl thrift server";
-    openrThriftServerWrapper_->stop();
-    LOG(INFO) << "Openr-ctrl thrift server got stopped";
-
+    kvStoreUpdatesQueue.close();
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
     decisionThread->join();
@@ -183,7 +157,7 @@ class DecisionWrapper {
   // publish routeDb
   void
   sendKvPublication(const thrift::Publication& publication) {
-    kvStorePub.sendThriftObj(publication, serializer);
+    kvStoreUpdatesQueue.push(publication);
   }
 
  private:
@@ -196,26 +170,11 @@ class DecisionWrapper {
     std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
 
     for (std::string const& node : allNodes) {
-      auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
-                      ->semifuture_getRouteDbComputed(
-                          std::make_unique<std::string>(node))
-                      .get();
-      routeMap[node] = *resp;
-      VLOG(4) << "---";
+      auto resp = decision->getDecisionRouteDb(node).get();
+      routeMap[node] = std::move(*resp);
     }
 
     return routeMap;
-  }
-
-  void
-  replyInitialSyncReq(const thrift::Publication& publication) {
-    // receive the request for initial routeDb sync
-    auto maybeDumpReq =
-        kvStoreRep.recvThriftObj<thrift::KvStoreRequest>(serializer);
-    auto dumpReq = maybeDumpReq.value();
-
-    // send back routeDb reply
-    kvStoreRep.sendThriftObj(publication, serializer);
   }
 
   //
@@ -229,9 +188,7 @@ class DecisionWrapper {
   // ZMQ context for IO processing
   fbzmq::Context zeromqContext{};
 
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> kvStorePub{zeromqContext};
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> kvStoreRep{zeromqContext};
-
+  messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
   messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
@@ -241,9 +198,6 @@ class DecisionWrapper {
 
   // Thread in which KvStore will be running.
   std::unique_ptr<std::thread> decisionThread{nullptr};
-
-  // thriftServer to talk to decision
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
 // Convert an integer to hex

@@ -77,6 +77,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStore_ = std::make_unique<KvStore>(
       context_,
       nodeId_,
+      kvStoreUpdatesQueue_,
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       KvStoreGlobalPubUrl{kvStoreGlobalPubUrl_},
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
@@ -233,8 +234,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::chrono::milliseconds(10),
       std::chrono::milliseconds(250),
       folly::none,
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      kvStoreUpdatesQueue_.getReader(),
       routeUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       context_);
@@ -421,6 +421,7 @@ OpenrWrapper<Serializer>::stop() {
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();
   prefixUpdatesQueue_.close();
+  kvStoreUpdatesQueue_.close();
 
   // stop all modules in reverse order
   eventBase_.stop();

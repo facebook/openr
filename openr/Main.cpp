@@ -247,6 +247,7 @@ main(int argc, char** argv) {
   ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<openr::thrift::SparkNeighborEvent> neighborUpdatesQueue;
   ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdatesQueue;
+  ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -468,6 +469,7 @@ main(int argc, char** argv) {
       std::make_unique<KvStore>(
           context,
           FLAGS_node_name,
+          kvStoreUpdatesQueue,
           kvStoreLocalPubUrl,
           KvStoreGlobalPubUrl{folly::sformat(
               "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_pub_port)},
@@ -734,8 +736,7 @@ main(int argc, char** argv) {
           std::chrono::milliseconds(FLAGS_decision_debounce_min_ms),
           std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
           decisionGRWindow,
-          kvStoreLocalCmdUrl,
-          kvStoreLocalPubUrl,
+          kvStoreUpdatesQueue.getReader(),
           routeUpdatesQueue,
           monitorSubmitUrl,
           context));
@@ -858,6 +859,7 @@ main(int argc, char** argv) {
   interfaceUpdatesQueue.close();
   neighborUpdatesQueue.close();
   prefixUpdatesQueue.close();
+  kvStoreUpdatesQueue.close();
   thriftCtrlServer.stop();
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {

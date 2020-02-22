@@ -16,6 +16,7 @@
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
 
@@ -55,6 +56,19 @@ class KvStoreWrapper {
    */
   void run() noexcept;
   void stop();
+
+  /**
+   * Get reader for KvStore updates queue
+   */
+  messaging::RQueue<thrift::Publication>
+  getReader() {
+    return kvStoreUpdatesQueue_.getReader();
+  }
+
+  void
+  closeQueue() {
+    kvStoreUpdatesQueue_.close();
+  }
 
   /**
    * APIs to set key-value into the KvStore. Returns true on success else
@@ -182,6 +196,9 @@ class KvStoreWrapper {
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
   apache::thrift::CompactSerializer serializer_;
+
+  // Queue for streaming KvStore updates
+  messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
 
   // ZMQ request socket for interacting with KvStore's command socket
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock_;

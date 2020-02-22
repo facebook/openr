@@ -47,6 +47,7 @@ KvStoreWrapper::KvStoreWrapper(
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
       nodeId,
+      kvStoreUpdatesQueue_,
       KvStoreLocalPubUrl{localPubUrl},
       KvStoreGlobalPubUrl{globalPubUrl},
       KvStoreGlobalCmdUrl{globalCmdUrl},
@@ -111,6 +112,9 @@ KvStoreWrapper::stop() {
   if (!kvStore_->isRunning()) {
     return;
   }
+
+  // Close queue
+  kvStoreUpdatesQueue_.close();
 
   // Destroy socket for communicating with kvstore
   reqSock_.close();

@@ -1607,8 +1607,7 @@ Decision::Decision(
     std::chrono::milliseconds debounceMinDur,
     std::chrono::milliseconds debounceMaxDur,
     folly::Optional<std::chrono::seconds> gracefulRestartDuration,
-    const KvStoreLocalCmdUrl& storeCmdUrl,
-    const KvStoreLocalPubUrl& storePubUrl,
+    messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
@@ -1616,10 +1615,6 @@ Decision::Decision(
       myNodeName_(myNodeName),
       adjacencyDbMarker_(adjacencyDbMarker),
       prefixDbMarker_(prefixDbMarker),
-      storeCmdUrl_(storeCmdUrl),
-      storePubUrl_(storePubUrl),
-      storeSub_(
-          zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       routeUpdatesQueue_(routeUpdatesQueue) {
   routeDb_.thisNodeName = myNodeName_;
   processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
@@ -1641,79 +1636,11 @@ Decision::Decision(
     coldStartTimer_->scheduleTimeout(gracefulRestartDuration.value());
   }
 
-  prepare(zmqContext, enableOrderedFib);
-}
-
-void
-Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
-  VLOG(2) << "Decision: Connecting to store '" << storePubUrl_ << "'";
-  const auto optRet =
-      storeSub_.setSockOpt(ZMQ_RCVHWM, &kStoreSubReceiveHwm, sizeof(int));
-  if (optRet.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_RCVHWM to " << kStoreSubReceiveHwm << " "
-               << optRet.error();
-  }
-  const auto subConnect = storeSub_.connect(fbzmq::SocketUrl{storePubUrl_});
-  if (subConnect.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << storePubUrl_ << "' "
-               << subConnect.error();
-  }
-  const auto subRet = storeSub_.setSockOpt(ZMQ_SUBSCRIBE, "", 0);
-  if (subRet.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
-               << ""
-               << " " << subRet.error();
-  }
-
-  VLOG(2) << "Decision thread attaching socket/event callbacks...";
-
   // Schedule periodic timer for submission to monitor
   const bool isPeriodic = true;
   monitorTimer_ = fbzmq::ZmqTimeout::make(
       getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
-
-  // Attach callback for processing publications on storeSub_ socket
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*storeSub_}, ZMQ_POLLIN, [this](int) noexcept {
-        VLOG(3) << "Decision: publication received...";
-
-        auto maybeThriftPub =
-            storeSub_.recvThriftObj<thrift::Publication>(serializer_);
-        if (maybeThriftPub.hasError()) {
-          LOG(ERROR) << "Error processing KvStore publication: "
-                     << maybeThriftPub.error();
-          return;
-        }
-
-        // Apply publication and update stored update status
-        ProcessPublicationResult res; // default initialized to false
-        try {
-          res = processPublication(maybeThriftPub.value());
-        } catch (const std::exception& e) {
-#if FOLLY_USE_SYMBOLIZER
-          // collect stack strace then fail the process
-          for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
-            LOG(ERROR) << exInfo;
-          }
-#endif
-          // FATAL to produce core dump
-          LOG(FATAL) << "Exception occured in Decision::processPublication - "
-                     << folly::exceptionStr(e);
-        }
-        processUpdatesStatus_.adjChanged |= res.adjChanged;
-        processUpdatesStatus_.prefixesChanged |= res.prefixesChanged;
-        // compute routes with exponential backoff timer if needed
-        if (res.adjChanged || res.prefixesChanged) {
-          if (!processUpdatesBackoff_.atMaxBackoff()) {
-            processUpdatesBackoff_.reportError();
-            processUpdatesTimer_->scheduleTimeout(
-                processUpdatesBackoff_.getTimeRemainingUntilRetry());
-          } else {
-            CHECK(processUpdatesTimer_->isScheduled());
-          }
-        }
-      });
 
   // Schedule periodic timer to decremtOrderedFibHolds
   if (enableOrderedFib) {
@@ -1729,12 +1656,46 @@ Decision::prepare(fbzmq::Context& zmqContext, bool enableOrderedFib) noexcept {
     });
   }
 
-  auto zmqContextPtr = &zmqContext;
-  initialSyncTimer_ =
-      folly::AsyncTimeout::make(*getEvb(), [this, zmqContextPtr]() noexcept {
-        initialSync(*zmqContextPtr);
-      });
-  initialSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  // Add reader to process publication from KvStore
+  addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
+    LOG(INFO) << "Starting KvStore updates processing fiber";
+    while (true) {
+      auto maybeThriftPub = q.get(); // perform read
+      VLOG(2) << "Received KvStore update";
+      if (maybeThriftPub.hasError()) {
+        LOG(INFO) << "Terminating KvStore updates processing fiber";
+        break;
+      }
+
+      // Apply publication and update stored update status
+      ProcessPublicationResult res; // default initialized to false
+      try {
+        res = processPublication(maybeThriftPub.value());
+      } catch (const std::exception& e) {
+#if FOLLY_USE_SYMBOLIZER
+        // collect stack strace then fail the process
+        for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
+          LOG(ERROR) << exInfo;
+        }
+#endif
+        // FATAL to produce core dump
+        LOG(FATAL) << "Exception occured in Decision::processPublication - "
+                   << folly::exceptionStr(e);
+      }
+      processUpdatesStatus_.adjChanged |= res.adjChanged;
+      processUpdatesStatus_.prefixesChanged |= res.prefixesChanged;
+      // compute routes with exponential backoff timer if needed
+      if (res.adjChanged || res.prefixesChanged) {
+        if (!processUpdatesBackoff_.atMaxBackoff()) {
+          processUpdatesBackoff_.reportError();
+          processUpdatesTimer_->scheduleTimeout(
+              processUpdatesBackoff_.getTimeRemainingUntilRetry());
+        } else {
+          CHECK(processUpdatesTimer_->isScheduled());
+        }
+      }
+    }
+  });
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
@@ -1935,48 +1896,6 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   }
 
   return res;
-}
-
-// perform full dump of all LSDBs and run initial routing computations
-void
-Decision::initialSync(fbzmq::Context& zmqContext) {
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> storeReq(zmqContext);
-
-  // we'll be using this to get the full dump from the KvStore
-  const auto reqConnect = storeReq.connect(fbzmq::SocketUrl{storeCmdUrl_});
-  if (reqConnect.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << storeCmdUrl_ << "' "
-               << reqConnect.error();
-  }
-
-  thrift::KvStoreRequest thriftReq;
-  thrift::KeyDumpParams params;
-
-  thriftReq.cmd = thrift::Command::KEY_DUMP;
-  thriftReq.keyDumpParams = params;
-
-  storeReq.sendThriftObj(thriftReq, serializer_);
-
-  VLOG(2) << "Decision process requesting initial state...";
-
-  // receive the full dump of the database
-  auto maybeThriftPub = storeReq.recvThriftObj<thrift::Publication>(
-      serializer_, Constants::kReadTimeout);
-  if (maybeThriftPub.hasError()) {
-    LOG(ERROR) << "Error processing KvStore publication: "
-               << maybeThriftPub.error();
-    return;
-  }
-
-  // Process publication and immediately apply updates
-  auto const& ret = processPublication(maybeThriftPub.value());
-  if (ret.adjChanged) {
-    // Graph changes
-    processPendingAdjUpdates();
-  } else if (ret.prefixesChanged) {
-    // Only Prefix changes, no graph changes
-    processPendingPrefixUpdates();
-  }
 }
 
 // periodically submit counters to Counters thread

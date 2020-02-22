@@ -3687,9 +3687,6 @@ class DecisionTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {
-    kvStorePub.bind(fbzmq::SocketUrl{"inproc://kvStore-pub"});
-    kvStoreRep.bind(fbzmq::SocketUrl{"inproc://kvStore-rep"});
-
     decision = make_shared<Decision>(
         "1", /* node name */
         true, /* enable v4 */
@@ -3702,8 +3699,7 @@ class DecisionTestFixture : public ::testing::Test {
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
         folly::none,
-        KvStoreLocalCmdUrl{"inproc://kvStore-rep"},
-        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
+        kvStoreUpdatesQueue.getReader(),
         routeUpdatesQueue,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
@@ -3714,32 +3710,11 @@ class DecisionTestFixture : public ::testing::Test {
       LOG(INFO) << "Decision thread finishing";
     });
     decision->waitUntilRunning();
-
-    // spin up an openrThriftServer
-    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
-        "1",
-        decision.get() /* decision */,
-        nullptr /* fib */,
-        nullptr /* kvStore */,
-        nullptr /* linkMonitor */,
-        nullptr /* configStore */,
-        nullptr /* prefixManager */,
-        MonitorSubmitUrl{"inproc://monitor-rep"},
-        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
-        zeromqContext);
-    openrThriftServerWrapper_->run();
-
-    // Make initial sync request with empty route-db
-    replyInitialSyncReq(thrift::Publication());
-    // Make request from decision to ensure that sockets are ready for use!
-    dumpRouteDb({"random-node"});
   }
 
   void
   TearDown() override {
-    LOG(INFO) << "Stopping openr-ctrl thrift server";
-    openrThriftServerWrapper_->stop();
-    LOG(INFO) << "Openr-ctrl thrift server got stopped";
+    kvStoreUpdatesQueue.close();
 
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
@@ -3756,14 +3731,10 @@ class DecisionTestFixture : public ::testing::Test {
     std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
 
     for (string const& node : allNodes) {
-      auto resp = openrThriftServerWrapper_->getOpenrCtrlHandler()
-                      ->semifuture_getRouteDbComputed(
-                          std::make_unique<std::string>(node))
-                      .get();
+      auto resp = decision->getDecisionRouteDb(node).get();
       EXPECT_TRUE(resp);
       EXPECT_EQ(node, resp->thisNodeName);
-      routeMap[node] = *resp;
-      VLOG(4) << "---";
+      routeMap[node] = std::move(*resp);
     }
 
     return routeMap;
@@ -3779,23 +3750,10 @@ class DecisionTestFixture : public ::testing::Test {
     return routeDbDelta;
   }
 
-  void
-  replyInitialSyncReq(const thrift::Publication& publication) {
-    // receive the request for initial routeDb sync
-    auto maybeDumpReq =
-        kvStoreRep.recvThriftObj<thrift::KvStoreRequest>(serializer);
-    EXPECT_FALSE(maybeDumpReq.hasError());
-    auto dumpReq = maybeDumpReq.value();
-    EXPECT_EQ(thrift::Command::KEY_DUMP, dumpReq.cmd);
-
-    // send back routeDb reply
-    kvStoreRep.sendThriftObj(publication, serializer);
-  }
-
   // publish routeDb
   void
   sendKvPublication(const thrift::Publication& publication) {
-    kvStorePub.sendThriftObj(publication, serializer);
+    kvStoreUpdatesQueue.push(publication);
   }
 
   // helper function
@@ -3890,8 +3848,7 @@ class DecisionTestFixture : public ::testing::Test {
   // ZMQ context for IO processing
   fbzmq::Context zeromqContext{};
 
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> kvStorePub{zeromqContext};
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> kvStoreRep{zeromqContext};
+  messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
   messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
@@ -3901,9 +3858,6 @@ class DecisionTestFixture : public ::testing::Test {
 
   // Thread in which decision will be running.
   std::unique_ptr<std::thread> decisionThread{nullptr};
-
-  // thriftServer to talk to decision
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
 };
 
 // The following topology is used:

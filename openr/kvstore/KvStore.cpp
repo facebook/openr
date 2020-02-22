@@ -72,6 +72,7 @@ KvStore::KvStore(
     // initializers for immutable state
     fbzmq::Context& zmqContext,
     std::string nodeId,
+    messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     KvStoreLocalPubUrl localPubUrl,
     KvStoreGlobalPubUrl globalPubUrl,
     KvStoreGlobalCmdUrl globalCmdUrl,
@@ -95,6 +96,7 @@ KvStore::KvStore(
       monitorSubmitInterval_(monitorSubmitInterval),
       kvParams_(
           nodeId,
+          kvStoreUpdatesQueue,
           zmqContext,
           fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
               zmqContext,
@@ -2160,6 +2162,7 @@ KvStoreDb::floodPublication(
       fbzmq::Message::fromThriftObj(publication, serializer_).value();
   kvParams_.localPubSock.sendOne(msg);
   kvParams_.globalPubSock.sendOne(msg);
+  kvParams_.kvStoreUpdatesQueue.push(publication);
 
   //
   // Create request and send only keyValue updates to all neighbors

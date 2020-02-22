@@ -82,8 +82,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
         folly::none,
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        kvStoreWrapper->getReader(),
         routeUpdatesQueue_,
         monitorSubmitUrl_,
         context_);
@@ -199,6 +198,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     interfaceUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
+    kvStoreWrapper->closeQueue();
 
     openrThriftServerWrapper_->stop();
 
