@@ -109,8 +109,9 @@ install_folly() {
     git fetch origin
     git checkout "$rev"
   fi
-  autoreconf -ivf
-  ./configure LIBS="-lpthread"
+  cmake .
+  # autoreconf -ivf
+  # ./configure LIBS="-lpthread"
   make
   make install
   ldconfig
