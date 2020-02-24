@@ -406,8 +406,6 @@ std::string getNodeNameFromKey(const std::string& key);
 
 std::string createPeerSyncId(const std::string& node, const std::string& area);
 
-std::string createGlobalPubId(const std::string& node);
-
 namespace MetricVectorUtils {
 
 enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };

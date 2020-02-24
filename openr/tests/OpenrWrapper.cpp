@@ -39,8 +39,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreLocalPubUrl_(folly::sformat("inproc://{}-kvstore-pub", nodeId_)),
       kvStoreGlobalCmdUrl_(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
-      kvStoreGlobalPubUrl_(
-          folly::sformat("inproc://{}-kvstore-pub-global", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
       kvStoreReqSock_(context),
       platformPubSock_(context),
@@ -79,7 +77,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nodeId_,
       kvStoreUpdatesQueue_,
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      KvStoreGlobalPubUrl{kvStoreGlobalPubUrl_},
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       folly::none /* ip-tos */,

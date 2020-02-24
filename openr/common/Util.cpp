@@ -1015,11 +1015,6 @@ createPeerSyncId(const std::string& node, const std::string& area) {
   return folly::to<std::string>(node, area, "::TCP::SYNC");
 };
 
-std::string
-createGlobalPubId(const std::string& node) {
-  return folly::to<std::string>(node, "::TCP::PUB");
-};
-
 namespace MetricVectorUtils {
 
 folly::Optional<const openr::thrift::MetricEntity>

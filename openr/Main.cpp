@@ -471,8 +471,6 @@ main(int argc, char** argv) {
           FLAGS_node_name,
           kvStoreUpdatesQueue,
           kvStoreLocalPubUrl,
-          KvStoreGlobalPubUrl{folly::sformat(
-              "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_pub_port)},
           KvStoreGlobalCmdUrl{folly::sformat(
               "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
           monitorSubmitUrl,

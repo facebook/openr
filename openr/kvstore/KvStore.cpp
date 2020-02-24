@@ -74,7 +74,6 @@ KvStore::KvStore(
     std::string nodeId,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     KvStoreLocalPubUrl localPubUrl,
-    KvStoreGlobalPubUrl globalPubUrl,
     KvStoreGlobalCmdUrl globalCmdUrl,
     MonitorSubmitUrl monitorSubmitUrl,
     folly::Optional<int> maybeIpTos,
@@ -92,17 +91,11 @@ KvStore::KvStore(
     const std::unordered_set<std::string>& areas)
     : inprocCmdUrl(folly::sformat("inproc://{}_KVSTORE_local_cmd", nodeId)),
       localPubUrl_(std::move(localPubUrl)),
-      globalPubUrl_(std::move(globalPubUrl)),
       monitorSubmitInterval_(monitorSubmitInterval),
       kvParams_(
           nodeId,
           kvStoreUpdatesQueue,
           zmqContext,
-          fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
-              zmqContext,
-              fbzmq::IdentityString{createGlobalPubId(nodeId)},
-              folly::none,
-              fbzmq::NonblockingFlag{true}),
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
               fbzmq::IdentityString{folly::sformat("{}::TCP::CMD", nodeId)},
@@ -125,7 +118,6 @@ KvStore::KvStore(
       areas_(areas) {
   CHECK(not nodeId.empty());
   CHECK(not localPubUrl_.empty());
-  CHECK(not globalPubUrl_.empty());
   CHECK(not areas_.empty());
 
   zmqMonitorClient_ =
@@ -142,7 +134,6 @@ KvStore::KvStore(
   // Set various socket options
   //
   auto& localPubSock = kvParams_.localPubSock;
-  auto& globalPubSock = kvParams_.globalPubSock;
 
   // HWM for pub and peer sub sockets
   const auto localPubHwm =
@@ -150,22 +141,6 @@ KvStore::KvStore(
   if (localPubHwm.hasError()) {
     LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << zmqHwm << " "
                << localPubHwm.error();
-  }
-  const auto globalPubHwm =
-      globalPubSock.setSockOpt(ZMQ_SNDHWM, &zmqHwm, sizeof(zmqHwm));
-  if (globalPubHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << zmqHwm << " "
-               << globalPubHwm.error();
-  }
-
-  if (maybeIpTos) {
-    const int ipTos = *maybeIpTos;
-    const auto globalPubTos =
-        globalPubSock.setSockOpt(ZMQ_TOS, &ipTos, sizeof(int));
-    if (globalPubTos.hasError()) {
-      LOG(FATAL) << "Error setting ZMQ_TOS to " << ipTos << " "
-                 << globalPubTos.error();
-    }
   }
 
   //
@@ -179,14 +154,6 @@ KvStore::KvStore(
   if (localPubBind.hasError()) {
     LOG(FATAL) << "Error binding to URL '" << localPubUrl_ << "' "
                << localPubBind.error();
-  }
-
-  VLOG(2) << "KvStore: Binding globalPubUrl '" << globalPubUrl_ << "'";
-  const auto globalPubBind =
-      globalPubSock.bind(fbzmq::SocketUrl{globalPubUrl_});
-  if (globalPubBind.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << globalPubUrl_ << "' "
-               << globalPubBind.error();
   }
 
   //
@@ -2161,7 +2128,6 @@ KvStoreDb::floodPublication(
   auto const msg =
       fbzmq::Message::fromThriftObj(publication, serializer_).value();
   kvParams_.localPubSock.sendOne(msg);
-  kvParams_.globalPubSock.sendOne(msg);
   kvParams_.kvStoreUpdatesQueue.push(publication);
 
   //

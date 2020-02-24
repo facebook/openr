@@ -126,7 +126,6 @@ struct KvStoreParams {
       std::string nodeid,
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
       fbzmq::Context& zmqContext,
-      fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> inprocCmdSock,
       // ZMQ high water mark
@@ -146,7 +145,6 @@ struct KvStoreParams {
       : nodeId(nodeid),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         localPubSock(zmqContext),
-        globalPubSock(std::move(globalPubSock)),
         globalCmdSock(std::move(globalCmdSock)),
         inprocCmdSock(std::move(inprocCmdSock)),
         zmqHwm(zmqhwm),
@@ -436,9 +434,6 @@ class KvStore final : public OpenrEventBase {
       // the url we use to publish our updates to
       // local subscribers
       KvStoreLocalPubUrl localPubUrl,
-      // the url we use to publish our updates to
-      // any subscriber (often encrypted)
-      KvStoreGlobalPubUrl globalPubUrl,
       // the url to receive command from local and
       // non local clients (often encrypted channel)
       KvStoreGlobalCmdUrl globalCmdUrl,
@@ -562,9 +557,8 @@ class KvStore final : public OpenrEventBase {
   // Non mutable state
   //
 
-  // The ZMQ URL we'll be using for publications
+  // The ZMQ URL used for local publications
   const std::string localPubUrl_;
-  const std::string globalPubUrl_;
 
   // Interval to submit to monitor. Default value is high
   // to avoid submission of counters in testing.
