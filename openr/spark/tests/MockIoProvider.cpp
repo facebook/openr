@@ -11,6 +11,8 @@
 #include <cerrno>
 #include <chrono>
 
+#include <glog/logging.h>
+
 #include <folly/Exception.h>
 #include <folly/ScopeGuard.h>
 #include <folly/SocketAddress.h>
@@ -223,8 +225,11 @@ MockIoProvider::sendmsg(int sockFd, const struct msghdr* msg, int /* flags */) {
       continue;
     }
 
-    // this prevents sending to self
-    CHECK(otherFd != sockFd);
+    // ATTN: In UT env, we explicitly allow pkt to send to itself to
+    //       mimick case that pkt looped back to its own intf.
+    if (otherFd == sockFd) {
+      LOG(WARNING) << "Src and dst fd is the same. Pkt looped";
+    }
 
     auto& msgQueue = mailboxes_[otherFd];
 

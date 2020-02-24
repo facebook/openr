@@ -14,7 +14,6 @@
 #include <string>
 #include <utility>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
@@ -23,7 +22,6 @@
 
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
-#include <openr/nl/NetlinkSubscriber.h>
 #include <openr/platform/PlatformPublisher.h>
 
 namespace openr {
@@ -60,10 +58,10 @@ class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   std::unique_ptr<PlatformPublisher> platformPublisher_;
 
   // Interface/nextHop-IP => MacAddress mapping
-  folly::Synchronized<Neighbors> neighborDb_{};
+  folly::Synchronized<fbnl::NlNeighbors> neighborDb_{};
 
   // Interface/link name => link attributes mapping
-  folly::Synchronized<Links> linkDb_{};
+  folly::Synchronized<fbnl::NlLinks> linkDb_{};
 };
 
 } // namespace openr

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -5,24 +7,37 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
+
+from builtins import range
 
 import tabulate
 
 
 def caption_fmt(caption):
-    ''' Format a caption '''
+    """ Format a caption """
 
     if caption:
-        return '\n== {}  ==\n'.format(caption)
-    return ''
+        return "\n== {}  ==\n".format(caption)
+    return ""
 
 
-def render_horizontal_table(data, column_labels=(), caption='', tablefmt="simple"):
-    ''' Render tabular data with one item per line
+def sprint_bytes(bytes: int) -> str:
+    """ Return formatted bytes. e.g. 12KB, 15.1MB """
+
+    if bytes < 1024:
+        return f"{bytes} B"
+    bytes /= 1024
+    if bytes < 1024:
+        return f"{bytes:.2f} KB"
+    bytes /= 1024
+    if bytes < 1024:
+        return f"{bytes:.2f} MB"
+    bytes /= 1024
+    return f"{bytes:.2f} GB"
+
+
+def render_horizontal_table(data, column_labels=(), caption="", tablefmt="simple"):
+    """ Render tabular data with one item per line
 
         :param data:  An iterable (e.g. a tuple() or list) containing the rows
                       of the table, where each row is an iterable containing
@@ -34,15 +49,17 @@ def render_horizontal_table(data, column_labels=(), caption='', tablefmt="simple
                          column label and contents, while 'plain' format does not.
 
         :return: The rendered table (a string).
-    '''
+    """
 
-    return '{}{}{}'.format(caption_fmt(caption),
-                           '\n' if caption else '',
-                           tabulate.tabulate(data, column_labels, tablefmt))
+    return "{}{}{}".format(
+        caption_fmt(caption),
+        "\n" if caption else "",
+        tabulate.tabulate(data, column_labels, tablefmt),
+    )
 
 
-def render_vertical_table(data, column_labels='', caption=''):
-    ''' Render tabular data with one column per line
+def render_vertical_table(data, column_labels="", caption=""):
+    """ Render tabular data with one column per line
 
         :param data:  An iterable (e.g. a tuple() or list) containing the rows
                       of the table, where each row is an iterable containing
@@ -51,19 +68,19 @@ def render_vertical_table(data, column_labels='', caption=''):
         :param caption: Title of the table (a string).
 
         :return: The rendered table (a string).
-    '''
+    """
 
-    table_str = ''
+    table_str = ""
 
     for item in sorted(data, key=lambda x: x[0]):
         if not item:
             break
 
-        item_str = '> {}\n'.format(item[0])
+        item_str = "> {}\n".format(item[0])
         for idx in range(1, len(item)):
             if column_labels:
-                item_str += '{} '.format(column_labels[idx - 1])
-            item_str += '{}\n'.format(item[idx])
-        table_str += '{}\n'.format(item_str)
+                item_str += "{} ".format(column_labels[idx - 1])
+            item_str += "{}\n".format(item[idx])
+        table_str += "{}\n".format(item_str)
 
-    return '{}\n{}'.format(caption_fmt(caption), table_str)
+    return "{}\n{}".format(caption_fmt(caption), table_str)

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -5,31 +7,18 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
 
-from openr.clients import perf_client
+from builtins import range
 
 import tabulate
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.OpenrCtrl import OpenrCtrl
 
 
-class PerfCmd(object):
-    def __init__(self, cli_opts):
-        ''' initialize the Perf client '''
-
-        self.client = perf_client.PerfClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.fib_cmd_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory)
-
-
-class ViewFibCmd(PerfCmd):
-    def run(self):
-        resp = self.client.view_fib()
-        headers = ['Node', 'Events', 'Duration', 'Unix Timestamp']
+class ViewFibCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        resp = client.getPerfDb()
+        headers = ["Node", "Events", "Duration", "Unix Timestamp"]
         for i in range(len(resp.eventInfo)):
             rows = []
             recent_ts = resp.eventInfo[i].events[0].unixTs
@@ -41,6 +30,6 @@ class ViewFibCmd(PerfCmd):
                 total_duration += duration
                 recent_ts = perf_event.unixTs
                 rows.append([node_name, event_name, duration, recent_ts])
-            print('Perf Event Item: {}, total duration: {}ms'.format(i, total_duration))
+            print("Perf Event Item: {}, total duration: {}ms".format(i, total_duration))
             print(tabulate.tabulate(rows, headers=headers))
             print()

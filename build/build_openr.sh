@@ -30,11 +30,11 @@ install_openr() {
     -DBUILD_SHARED_LIBS=OFF \
     -DBUILD_TESTS=ON \
     -DADD_ROOT_TESTS=ON \
-    -DCMAKE_CXX_FLAGS="-Wno-unused-parameter" \
+    -DCMAKE_CXX_FLAGS="-Wno-unused-parameter -fPIC" \
     ../openr/
   make
-  make install
-  chmod +x "/usr/local/sbin/run_openr.sh"
+  sudo make install
+  sudo chmod +x "/usr/local/sbin/run_openr.sh"
   cd "$BUILD_DIR/../openr/py"
   pip install networkx==2.2
   pip install cffi

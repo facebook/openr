@@ -17,11 +17,14 @@
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/prefix-manager/PrefixManagerClient.h>
+#include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/Spark.h>
 #include <openr/spark/SparkWrapper.h>
+#include <openr/watchdog/Watchdog.h>
 
 namespace openr {
+// memory limit for watchdog checks
+const uint32_t memLimitMB{5000};
 
 /**
  * A utility class to wrap OpenR's Main.cpp
@@ -42,12 +45,14 @@ class OpenrWrapper {
       std::chrono::milliseconds sparkHoldTime,
       std::chrono::milliseconds sparkKeepAliveTime,
       std::chrono::milliseconds sparkFastInitKeepAliveTime,
-      bool enableFullMeshReduction,
       std::chrono::seconds linkMonitorAdjHoldTime,
       std::chrono::milliseconds linkFlapInitialBackoff,
       std::chrono::milliseconds linkFlapMaxBackoff,
       std::chrono::seconds fibColdStartDuration,
-      std::shared_ptr<IoProvider> ioProvider);
+      std::shared_ptr<IoProvider> ioProvider,
+      int32_t systemPort,
+      uint32_t memLimit = openr::memLimitMB,
+      bool per_prefix_keys = false);
 
   ~OpenrWrapper() {
     stop();
@@ -84,12 +89,38 @@ class OpenrWrapper {
    * return true upon success and fasle otherwise
    */
   bool sparkUpdateInterfaceDb(
-      const std::vector<InterfaceEntry>& interfaceEntries);
+      const std::vector<SparkInterfaceEntry>& interfaceEntries);
 
   /**
    * get route databse from fib
    */
   thrift::RouteDatabase fibDumpRouteDatabase();
+
+  /**
+   * add prefix entries into prefix manager using prefix manager client
+   */
+  bool addPrefixEntries(const std::vector<thrift::PrefixEntry>& prefixes);
+
+  /**
+   * withdraw prefix entries into prefix manager using prefix manager client
+   */
+  bool withdrawPrefixEntries(const std::vector<thrift::PrefixEntry>& prefixes);
+
+  /**
+   * check if a given prefix exists in routeDb
+   */
+  static bool checkPrefixExists(
+      const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb);
+
+  /*
+   * to get counters
+   */
+  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient{nullptr};
+
+  /*
+   * watchdog thread (used for checking memory limit exceeded)
+   */
+  std::unique_ptr<Watchdog> watchdog;
 
  private:
   // Disable copy constructor
@@ -116,7 +147,7 @@ class OpenrWrapper {
   folly::Synchronized<folly::Optional<thrift::IpPrefix>> ipPrefix_;
 
   // event loop to use with KvStoreClient
-  fbzmq::ZmqEventLoop eventLoop_;
+  OpenrEventBase eventBase_;
 
   // sub modules owned by this wrapper
   std::unique_ptr<PersistentStore> configStore_;
@@ -129,36 +160,33 @@ class OpenrWrapper {
   std::unique_ptr<Fib> fib_;
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
   std::unique_ptr<PrefixManager> prefixManager_;
-  std::unique_ptr<PrefixManagerClient> prefixManagerClient_;
 
   // sub module communication zmq urls and ports
   int kvStoreGlobalCmdPort_{0};
   int kvStoreGlobalPubPort_{0};
-  const std::string configStoreUrl_;
   const std::string monitorSubmitUrl_;
   const std::string monitorPubUrl_;
-  const std::string kvStoreLocalCmdUrl_;
   const std::string kvStoreLocalPubUrl_;
   const std::string kvStoreGlobalCmdUrl_;
   const std::string kvStoreGlobalPubUrl_;
-  const std::string prefixManagerLocalCmdUrl_;
-  const std::string prefixManagerGlobalCmdUrl_;
-  const std::string sparkCmdUrl_;
-  const std::string sparkReportUrl_;
   const std::string platformPubUrl_;
-  const std::string linkMonitorGlobalCmdUrl_;
-  const std::string linkMonitorGlobalPubUrl_;
-  const std::string decisionCmdUrl_;
-  const std::string decisionPubUrl_;
-  const std::string fibCmdUrl_;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
+  std::string kvStoreLocalCmdUrl_;
 
   // client sockets mainly for tests
   fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> kvStoreReqSock_;
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> sparkReqSock_;
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> fibReqSock_;
 
   // socket to publish platform events
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> platformPubSock_;
+
+  int32_t systemPort_;
+
+  // create prefix keys for each prefix separately
+  bool per_prefix_keys_{false};
 };
 
 } // namespace openr

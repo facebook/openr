@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# Copyright (c) Facebook, Inc. and its affiliates.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -22,7 +23,7 @@ import tempfile
 
 from fbcode_builder import FBCodeBuilder
 from shell_quoting import (
-    raw_shell, shell_comment, shell_join, ShellQuoted
+    raw_shell, shell_comment, shell_join, ShellQuoted, path_join
 )
 from utils import recursively_flatten_list, run_command
 
@@ -41,12 +42,30 @@ class DockerFBCodeBuilder(FBCodeBuilder):
         # To allow exercising non-root installs -- we change users after the
         # system packages are installed.  TODO: For users not defined in the
         # image, we should probably `useradd`.
-        return self.step('Setup', [
-            # Docker's FROM does not understand shell quoting.
-            ShellQuoted('FROM {}'.format(self.option('os_image'))),
-            # /bin/sh syntax is a pain
-            ShellQuoted('SHELL ["/bin/bash", "-c"]'),
-        ] + self.install_debian_deps() + [self._change_user()])
+        return self.step(
+            "Setup",
+            [
+                # Docker's FROM does not understand shell quoting.
+                ShellQuoted("FROM {}".format(self.option("os_image"))),
+                # /bin/sh syntax is a pain
+                ShellQuoted('SHELL ["/bin/bash", "-c"]'),
+            ]
+            + self.install_debian_deps()
+            + [self._change_user()]
+            + [self.workdir(self.option("prefix"))]
+            + self.create_python_venv()
+            + self.python_venv()
+            + self.rust_toolchain(),
+        )
+
+    def python_venv(self):
+        # To both avoid calling venv activate on each RUN command AND to ensure
+        # it is present when the resulting container is run add to PATH
+        actions = []
+        if self.option("PYTHON_VENV", "OFF") == "ON":
+            actions = ShellQuoted('ENV PATH={p}:$PATH').format(
+                p=path_join(self.option('prefix'), "venv", "bin"))
+        return(actions)
 
     def step(self, name, actions):
         assert '\n' not in name, 'Name {0} would span > 1 line'.format(name)
@@ -55,6 +74,9 @@ class DockerFBCodeBuilder(FBCodeBuilder):
 
     def run(self, shell_cmd):
         return ShellQuoted('RUN {cmd}').format(cmd=shell_cmd)
+
+    def set_env(self, key, value):
+        return ShellQuoted("ENV {key}={val}").format(key=key, val=value)
 
     def workdir(self, dir):
         return [

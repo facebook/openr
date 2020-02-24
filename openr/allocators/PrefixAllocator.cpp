@@ -15,45 +15,21 @@
 #include <folly/ScopeGuard.h>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
+#include <thrift/lib/cpp/protocol/TProtocolTypes.h>
+#include <thrift/lib/cpp/transport/THeader.h>
+#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
+#include <openr/nl/NetlinkTypes.h>
 
 using namespace fbzmq;
-using namespace std::chrono_literals;
-
-using apache::thrift::FRAGILE;
 
 namespace {
-// seed prefix and allocated prefix length is separate by comma
-const std::string kSeedPrefixAllocLenSeparator = ",";
-// how often to check for seed prefix in kvstore
-const std::chrono::milliseconds kCheckSeedPrefixInterval{1000};
-// key of prefix allocator parameters in kv store
-const std::string kPrefixAllocParamKey{"e2e-network-prefix"};
+
 // key for the persist config on disk
 const std::string kConfigKey{"prefix-allocator-config"};
 
-bool
-isSeedPrefixValid(const folly::CIDRNetwork& prefix, uint32_t allocPrefixLen) {
-  if (!prefix.first.isV6()) {
-    LOG(ERROR) << "Seed prefix is not IP V6";
-    return false;
-  }
-  if (allocPrefixLen < prefix.second) {
-    LOG(ERROR) << "Allocated prefix length is smaller than that of seed prefix";
-    return false;
-  }
-
-  // make sure prefixCount_ can be accommodated in uint32_t
-  if ((allocPrefixLen - prefix.second) >= 32) {
-    // allocated prefix length
-    LOG(ERROR) << "Allocated subprefix size too large, try smaller seed prefix "
-                  "or longer allocated prefix";
-    return false;
-  }
-  return true;
-}
 } // namespace
 
 namespace openr {
@@ -62,134 +38,364 @@ PrefixAllocator::PrefixAllocator(
     const std::string& myNodeName,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
-    const PrefixManagerLocalCmdUrl& prefixManagerLocalCmdUrl,
+    messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const AllocPrefixMarker& allocPrefixMarker,
-    const folly::Optional<folly::CIDRNetwork> seedPrefix,
-    uint32_t allocPrefixLen,
+    const PrefixAllocatorMode& allocMode,
     bool setLoopbackAddress,
     bool overrideGlobalAddress,
     const std::string& loopbackIfaceName,
+    bool forwardingTypeMpls,
+    bool forwardingAlgoKsp2Ed,
     std::chrono::milliseconds syncInterval,
-    PersistentStoreUrl const& configStoreUrl,
-    fbzmq::Context& zmqContext)
+    PersistentStore* configStore,
+    fbzmq::Context& zmqContext,
+    int32_t systemServicePort)
     : myNodeName_(myNodeName),
       allocPrefixMarker_(allocPrefixMarker),
-      seedPrefix_(seedPrefix),
-      allocPrefixLen_(allocPrefixLen),
       setLoopbackAddress_(setLoopbackAddress),
       overrideGlobalAddress_(overrideGlobalAddress),
       loopbackIfaceName_(loopbackIfaceName),
+      forwardingTypeMpls_(forwardingTypeMpls),
+      forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
       syncInterval_(syncInterval),
-      configStoreClient_(configStoreUrl, zmqContext),
-      zmqMonitorClient_(zmqContext, monitorSubmitUrl) {
-
+      configStore_(configStore),
+      prefixUpdatesQueue_(prefixUpdatesQueue),
+      zmqMonitorClient_(zmqContext, monitorSubmitUrl),
+      systemServicePort_(systemServicePort) {
+  CHECK(configStore_);
+  // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClient>(
       zmqContext, this, myNodeName_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl);
 
-  prefixManagerClient_ = std::make_unique<PrefixManagerClient>(
-      prefixManagerLocalCmdUrl, zmqContext);
+  // Let the magic begin. Start allocation as per allocMode
+  std::visit(*this, allocMode);
+}
 
-  // create range allocator to get unique prefixes
-  rangeAllocator_ = std::make_unique<RangeAllocator<uint32_t>>(
-      myNodeName_,
-      allocPrefixMarker_,
-      kvStoreClient_.get(),
-      [this](folly::Optional<uint32_t> newPrefixIndex) noexcept {
-        applyMyPrefix(newPrefixIndex);
+void
+PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
+  // subscribe for incremental updates of static prefix allocation key
+  kvStoreClient_->subscribeKey(
+      Constants::kStaticPrefixAllocParamKey.toString(),
+      [&](std::string const& key, folly::Optional<thrift::Value> value) {
+        CHECK_EQ(Constants::kStaticPrefixAllocParamKey.toString(), key);
+        if (value.hasValue()) {
+          processStaticPrefixAllocUpdate(value.value());
+        }
       },
-      syncInterval_,
-      // no need for randomness since "collision" is harmless
-      syncInterval_ + 1ms,
-      // do not allow override
-      false);
+      false,
+      area_);
 
-  if (!seedPrefix_) {
-    // listen to KvStore for seed prefix
-    // schedule periodic timer
-    // Only if we successfully get a prefix, we cancel this
-    checkSeedPrefixTimer_ =
-        fbzmq::ZmqTimeout::make(this, [this]() { checkSeedPrefix(); });
-    checkSeedPrefixTimer_->scheduleTimeout(
-        kCheckSeedPrefixInterval, true /*periodic*/);
-  } else {
-    // Start allocation from user provided seed prefix
-    scheduleTimeout(0ms, [this]() noexcept {
-      if (isSeedPrefixValid(*seedPrefix_, allocPrefixLen_)) {
-        startAlloc();
-      }
-    });
-  }
+  // get initial value if missed out in incremental updates (one time only)
+  initTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    // If we already have received initial value from KvStore then just skip
+    // this step
+    if (allocParams_.hasValue()) {
+      return;
+    }
+
+    // 1) Get initial value from KvStore!
+    auto maybeValue = kvStoreClient_->getKey(
+        Constants::kStaticPrefixAllocParamKey.toString(), area_);
+    if (maybeValue.hasError()) {
+      LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
+                 << maybeValue.error();
+    } else {
+      processStaticPrefixAllocUpdate(maybeValue.value());
+      return;
+    }
+
+    // 2) Start prefix allocator from previously configured params. Resume
+    // from where we left earlier!
+    auto maybeThriftAllocPrefix =
+        configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
+    if (maybeThriftAllocPrefix.hasValue()) {
+      const auto oldAllocParams = std::make_pair(
+          toIPNetwork(maybeThriftAllocPrefix->seedPrefix),
+          static_cast<uint8_t>(maybeThriftAllocPrefix->allocPrefixLen));
+      allocParams_ = oldAllocParams;
+      applyMyPrefixIndex(maybeThriftAllocPrefix->allocPrefixIndex);
+      return;
+    }
+
+    // If we weren't able to get alloc parameters so far, either from disk
+    // or kvstore then let's bail out, flush out previously elected address
+    // (from PrefixManager and loopback iface).
+    if (!allocParams_.hasValue()) {
+      LOG(WARNING)
+          << "Clearing previous prefix allocation state on failure to load "
+          << "allocation parameters from disk as well as KvStore.";
+      applyState_ = std::make_pair(true, folly::none);
+      applyMyPrefix();
+      return;
+    }
+  });
+  initTimer_->scheduleTimeout(0ms);
 }
 
 void
-PrefixAllocator::checkSeedPrefix() {
-  CHECK(!seedPrefix_) << "seedPrefix must not already exist...";
+PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
+  // subscribe for incremental updates of seed prefix
+  kvStoreClient_->subscribeKey(
+      Constants::kSeedPrefixAllocParamKey.toString(),
+      [&](std::string const& key, folly::Optional<thrift::Value> value) {
+        CHECK_EQ(Constants::kSeedPrefixAllocParamKey.toString(), key);
+        if (value.hasValue()) {
+          processAllocParamUpdate(value.value());
+        }
+      },
+      false,
+      area_);
 
-  auto prefixAllocParams = getValueByKey(kPrefixAllocParamKey);
-  if (!prefixAllocParams) {
-    VLOG(4) << "PrefixAllocator: Did not get value for key from KV Store "
-            << kPrefixAllocParamKey;
-    return;
-  }
+  kvStoreClient_->subscribeKey(
+      Constants::kStaticPrefixAllocParamKey.toString(),
+      [&](std::string const& key, folly::Optional<thrift::Value> value) {
+        CHECK_EQ(Constants::kStaticPrefixAllocParamKey.toString(), key);
+        if (value.hasValue()) {
+          processNetworkAllocationsUpdate(value.value());
+        }
+      },
+      false,
+      area_);
 
-  std::string seedPrefixStr;
-  folly::split(
-      kSeedPrefixAllocLenSeparator,
-      *prefixAllocParams,
-      seedPrefixStr,
-      allocPrefixLen_);
+  // get initial value if missed out in incremental updates (one time only)
+  initTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    // If we already have received initial value from KvStore then just skip
+    // this step
+    if (allocParams_.hasValue()) {
+      return;
+    }
 
-  folly::CIDRNetwork prefix;
-  try {
-    prefix = folly::IPAddress::createNetwork(
-        seedPrefixStr, -1 /* default CIDR */, false /* do not apply mask */);
-  } catch (std::exception const& err) {
-    LOG(ERROR) << "Invalid seed prefix: " << seedPrefixStr
-               << folly::exceptionStr(err);
-    return;
-  }
+    // 1) Get initial value from KvStore!
+    auto maybeValue = kvStoreClient_->getKey(
+        Constants::kSeedPrefixAllocParamKey.toString(), area_);
+    if (maybeValue.hasError()) {
+      LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
+                 << maybeValue.error();
+    } else {
+      processAllocParamUpdate(maybeValue.value());
+      return;
+    }
 
-  if (!isSeedPrefixValid(prefix, allocPrefixLen_)) {
-    LOG(ERROR) << "Invalid seed prefix: "
-               << folly::IPAddress::networkToString(prefix);
-    return;
-  }
+    // 2) Start prefix allocator from previously configured params. Resume
+    // from where we left earlier!
+    auto maybeThriftAllocPrefix =
+        configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
+    if (maybeThriftAllocPrefix.hasValue()) {
+      const auto oldAllocParams = std::make_pair(
+          toIPNetwork(maybeThriftAllocPrefix->seedPrefix),
+          static_cast<uint8_t>(maybeThriftAllocPrefix->allocPrefixLen));
+      startAllocation(oldAllocParams);
+      return;
+    }
 
-  // We got a valid prefix from KvStore. Use it and cancel timer
-  checkSeedPrefixTimer_->cancelTimeout();
-  seedPrefix_.emplace(prefix);
-  startAlloc();
+    // If we weren't able to get alloc parameters so far, either from disk
+    // or kvstore then let's bail out and stop allocation process and
+    // withdraw our prefixes from PrefixManager as well as from loopback
+    // interface.
+    if (!allocParams_.hasValue()) {
+      LOG(WARNING)
+          << "Clearing previous prefix allocation state on failure to load "
+          << "allocation parameters from disk as well as KvStore.";
+      applyState_ = std::make_pair(true, folly::none);
+      applyMyPrefix();
+      return;
+    }
+  });
+  initTimer_->scheduleTimeout(0ms);
 }
 
 void
-PrefixAllocator::startAlloc() {
-  CHECK(seedPrefix_) << "Seed prefix is not set";
-  CHECK(isSeedPrefixValid(*seedPrefix_, allocPrefixLen_))
-      << "Seed prefix is not valid";
-
-  VLOG(2) << "Starting prefix allocation with seed prefix: "
-          << folly::IPAddress::networkToString(*seedPrefix_)
-          << ", allocated prefix length: " << allocPrefixLen_;
-
-  // power 2
-  prefixCount_ = 0x1 << (allocPrefixLen_ - seedPrefix_->second);
-
-  initMyPrefix();
-
-  // start range allocation
-  rangeAllocator_->startAllocator(
-      std::make_pair(0, prefixCount_ - 1), myPrefixIndex_);
-}
-
-bool
-PrefixAllocator::allPrefixAllocated() {
-  CHECK(isInEventLoop());
-  return rangeAllocator_->isRangeConsumed();
+PrefixAllocator::operator()(PrefixAllocatorParams const& allocParams) {
+  // Some sanity checks
+  const auto& seedPrefix = allocParams.first;
+  const auto& allocPrefixLen = allocParams.second;
+  CHECK_GT(allocPrefixLen, seedPrefix.second)
+      << "Allocation prefix length must be greater than seed prefix length.";
+  // Start allocation from user provided seed prefix
+  initTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this, allocParams]() noexcept {
+        startAllocation(allocParams);
+      });
+  initTimer_->scheduleTimeout(0ms);
 }
 
 folly::Optional<uint32_t>
-PrefixAllocator::getMyPrefixIndexFromKvStore() {
+PrefixAllocator::getMyPrefixIndex() {
+  if (getEvb()->isInEventBaseThread()) {
+    return myPrefixIndex_;
+  }
+
+  // Otherwise enqueue request in eventloop and wait for result to be populated
+  folly::Promise<folly::Optional<uint32_t>> promise;
+  auto future = promise.getFuture();
+  runInEventBaseThread([this, promise = std::move(promise)]() mutable {
+    promise.setValue(myPrefixIndex_);
+  });
+  return std::move(future).get();
+}
+
+folly::Expected<PrefixAllocatorParams, fbzmq::Error>
+PrefixAllocator::parseParamsStr(const std::string& paramStr) noexcept {
+  // Parse string to get seed-prefix and alloc-prefix-length
+  std::string seedPrefixStr;
+  uint8_t allocPrefixLen;
+  folly::split(
+      Constants::kSeedPrefixAllocLenSeparator.toString(),
+      paramStr,
+      seedPrefixStr,
+      allocPrefixLen);
+
+  // Validate and convert seed-prefix to strong type, folly::CIDRNetwork
+  PrefixAllocatorParams params;
+  params.second = allocPrefixLen;
+  try {
+    params.first = folly::IPAddress::createNetwork(
+        seedPrefixStr, -1 /* default mask len */);
+  } catch (std::exception const& err) {
+    return folly::makeUnexpected(fbzmq::Error(
+        0, folly::sformat("Invalid seed prefix {}", seedPrefixStr)));
+  }
+
+  // Validate alloc-prefix-length is larger than seed-prefix-length
+  if (allocPrefixLen <= params.first.second) {
+    return folly::makeUnexpected(fbzmq::Error(
+        0,
+        folly::sformat(
+            "Seed prefix ({}) is more specific than alloc prefix len ({})",
+            seedPrefixStr,
+            allocPrefixLen)));
+  }
+
+  // Return parsed parameters
+  return params;
+}
+
+void
+PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
+  CHECK(value.value.hasValue());
+
+  // Parse thrift::Value into thrift::StaticAllocation
+  thrift::StaticAllocation staticAlloc;
+  try {
+    staticAlloc = fbzmq::util::readThriftObjStr<thrift::StaticAllocation>(
+        *value.value, serializer_);
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "Error parsing static prefix allocation value. Error: "
+               << folly::exceptionStr(e);
+    if (allocParams_) {
+      applyMyPrefixIndex(folly::none);
+      allocParams_ = folly::none;
+    }
+    return;
+  }
+  VLOG(1) << "Processing static prefix allocation update";
+
+  // Look for my prefix in static allocation map
+  auto myPrefixIt = staticAlloc.nodePrefixes.find(myNodeName_);
+
+  // Withdraw my prefix if not found
+  if (myPrefixIt == staticAlloc.nodePrefixes.end() and allocParams_) {
+    VLOG(2) << "Lost prefix";
+    applyState_ = std::make_pair(true, folly::none);
+    applyMyPrefixIndex(folly::none);
+    allocParams_ = folly::none;
+  }
+
+  // Advertise my prefix if found
+  if (myPrefixIt != staticAlloc.nodePrefixes.end()) {
+    VLOG(2) << "Received new prefix";
+    const auto prefix = toIPNetwork(myPrefixIt->second);
+    const auto newParams = std::make_pair(prefix, prefix.second);
+    if (allocParams_ == newParams) {
+      LOG(INFO) << "New and old params are same. Skipping";
+    } else if (allocParams_.hasValue()) {
+      // withdraw old prefix
+      applyMyPrefixIndex(folly::none);
+    }
+    // create alloc params so that we share same workflow as of SEEDED mode
+    // seedPrefix length is same as alloc prefix length and my prefix index is 0
+    allocParams_ = std::make_pair(prefix, prefix.second); // seed prefix
+    applyMyPrefixIndex(0); // 0th index is what we own.
+  }
+}
+
+void
+PrefixAllocator::processAllocParamUpdate(thrift::Value const& value) {
+  CHECK(value.value.hasValue());
+  auto maybeParams = parseParamsStr(value.value.value());
+  if (maybeParams.hasError()) {
+    LOG(ERROR) << "Malformed prefix-allocator params. " << maybeParams.error();
+    startAllocation(folly::none);
+  } else {
+    startAllocation(maybeParams.value());
+  }
+}
+
+bool
+PrefixAllocator::checkE2eAllocIndex(uint32_t index) {
+  return (e2eAllocIndex_.second.find(index) != e2eAllocIndex_.second.end());
+}
+
+void
+PrefixAllocator::processNetworkAllocationsUpdate(
+    thrift::Value const& e2eValue) {
+  CHECK(e2eValue.value.hasValue());
+  if (!allocParams_.hasValue()) {
+    return;
+  }
+  uint32_t allocPrefixLen = allocParams_->second;
+  uint32_t prefixLen = allocParams_->first.second;
+
+  thrift::StaticAllocation staticAlloc;
+  try {
+    staticAlloc = fbzmq::util::readThriftObjStr<thrift::StaticAllocation>(
+        *e2eValue.value, serializer_);
+    /* skip if same version */
+    if (e2eAllocIndex_.first == e2eValue.version) {
+      return;
+    }
+    LOG(INFO) << folly::sformat(
+        "Updating prefix index from {}",
+        Constants::kStaticPrefixAllocParamKey.toString());
+    e2eAllocIndex_.second.clear();
+    e2eAllocIndex_.first = e2eValue.version;
+    // extract prefix index from e2e network allocations
+    for (auto const& ip : staticAlloc.nodePrefixes) {
+      const auto pfix = toIPNetwork(ip.second);
+      auto index = bitStrValue(pfix.first, prefixLen, allocPrefixLen - 1);
+      e2eAllocIndex_.second.emplace(index);
+    }
+    // collision after the update, restart allocation process
+    if (myPrefixIndex_.hasValue() &&
+        e2eAllocIndex_.second.find(myPrefixIndex_.value()) !=
+            e2eAllocIndex_.second.end()) {
+      LOG(INFO) << folly::sformat(
+          "Index {} exits in {}, restarting prefix allocator",
+          myPrefixIndex_.value(),
+          Constants::kStaticPrefixAllocParamKey.toString());
+      startAllocation(allocParams_, false);
+    }
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "Error parsing static prefix allocation value. Error: "
+               << folly::exceptionStr(e);
+    return;
+  }
+}
+
+uint32_t
+PrefixAllocator::getPrefixCount(
+    PrefixAllocatorParams const& allocParams) noexcept {
+  auto const& seedPrefix = allocParams.first;
+  auto const& allocPrefixLen = allocParams.second;
+
+  // If range of prefix alloc is greater than 32 bit integer we won't let it
+  // overflow.
+  return (1 << std::min(31, allocPrefixLen - seedPrefix.second));
+}
+
+folly::Optional<uint32_t>
+PrefixAllocator::loadPrefixIndexFromKvStore() {
   VLOG(4) << "See if I am already allocated a prefix in kvstore";
 
   // This is not done at cold start, but rather some time later. So
@@ -198,96 +404,171 @@ PrefixAllocator::getMyPrefixIndexFromKvStore() {
 }
 
 folly::Optional<uint32_t>
-PrefixAllocator::loadPrefixFromDisk() const {
-  CHECK(seedPrefix_) << "Seed prefix is not set";
+PrefixAllocator::loadPrefixIndexFromDisk() {
   auto maybeThriftAllocPrefix =
-      configStoreClient_.loadThriftObj<thrift::AllocPrefix>(kConfigKey);
+      configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
   if (maybeThriftAllocPrefix.hasError()) {
     return folly::none;
   }
-  auto thriftAllocPrefix = maybeThriftAllocPrefix.value();
-
-  auto addr = toIPAddress(thriftAllocPrefix.seedPrefix.prefixAddress);
-  auto prefixLen = thriftAllocPrefix.seedPrefix.prefixLength;
-  folly::CIDRNetwork seedPrefix = {addr, prefixLen};
-  auto allocPrefixLen = static_cast<uint32_t>(thriftAllocPrefix.allocPrefixLen);
-  auto allocPrefixIndex =
-      static_cast<uint32_t>(thriftAllocPrefix.allocPrefixIndex);
-  VLOG(4) << "Loading prefix " << allocPrefixIndex;
-  if (seedPrefix == *seedPrefix_ && allocPrefixLen == allocPrefixLen_) {
-    return allocPrefixIndex;
-  }
-
-  LOG(ERROR)
-      << "Prefix allocation parameters changed, do not use prefix from disk";
-  if (*seedPrefix_ != seedPrefix) {
-    LOG(ERROR) << "Seed prefix changed, new: "
-               << folly::IPAddress::networkToString(*seedPrefix_)
-               << "vs old: " << folly::IPAddress::networkToString(seedPrefix);
-  }
-  if (allocPrefixLen_ != allocPrefixLen) {
-    LOG(ERROR) << "Allocated prefix length changed, new: " << allocPrefixLen_
-               << "vs old: " << allocPrefixLen;
-  }
-  return folly::none;
+  return static_cast<uint32_t>(maybeThriftAllocPrefix->allocPrefixIndex);
 }
 
 void
-PrefixAllocator::savePrefixToDisk(folly::Optional<uint32_t> prefixIndex) {
+PrefixAllocator::savePrefixIndexToDisk(folly::Optional<uint32_t> prefixIndex) {
+  CHECK(allocParams_.hasValue());
+
   if (!prefixIndex) {
     VLOG(4) << "Erasing prefix-allocator info from persistent config.";
-    configStoreClient_.erase(kConfigKey);
+    configStore_->erase(kConfigKey).get();
     return;
   }
 
   VLOG(4) << "Saving prefix-allocator info to persistent config with index "
           << *prefixIndex;
-
   auto prefix = thrift::IpPrefix(
       apache::thrift::FRAGILE,
-      toBinaryAddress(seedPrefix_->first),
-      seedPrefix_->second);
+      toBinaryAddress(allocParams_->first.first),
+      allocParams_->first.second);
   thrift::AllocPrefix thriftAllocPrefix(
       apache::thrift::FRAGILE,
       prefix,
-      static_cast<int64_t>(allocPrefixLen_),
+      static_cast<int64_t>(allocParams_->second),
       static_cast<int64_t>(*prefixIndex));
 
-  auto res = configStoreClient_.storeThriftObj(kConfigKey, thriftAllocPrefix);
-  if (!(res.hasValue() && res.value())) {
-    LOG(ERROR) << "Error saving prefix-allocator info to persistent config. "
-               << res.error();
-  }
+  configStore_->storeThriftObj(kConfigKey, thriftAllocPrefix).get();
 }
 
-void
-PrefixAllocator::initMyPrefix() {
-  VLOG(4) << "Initialize my prefix";
-
+uint32_t
+PrefixAllocator::getInitPrefixIndex() {
   // initialize my prefix per the following preferrence:
   // from file > from kvstore > generate new
-  myPrefixIndex_ = loadPrefixFromDisk();
 
-  if (myPrefixIndex_) {
-    return;
+  // Try to get prefix index from disk
+  const auto diskPrefixIndex = loadPrefixIndexFromDisk();
+  if (diskPrefixIndex.hasValue()) {
+    LOG(INFO) << "Got initial prefix index from disk: " << *diskPrefixIndex;
+    return diskPrefixIndex.value();
   }
-  VLOG(4) << "Initial prefix not loaded from file, try kv store next";
-  const auto myPrefixIndex = getMyPrefixIndexFromKvStore();
-  if (myPrefixIndex) {
-    myPrefixIndex_ = myPrefixIndex;
-    LOG(INFO) << "Got initial prefix from kvstore: " << *myPrefixIndex_;
-  } else {
-    myPrefixIndex_ = hasher(myNodeName_) % prefixCount_;
-    VLOG(4) << "Generate new initial prefix: " << *myPrefixIndex_;
+
+  // Try to get prefix index from KvStore
+  const auto kvstorePrefixIndex = loadPrefixIndexFromKvStore();
+  if (kvstorePrefixIndex.hasValue()) {
+    LOG(INFO) << "Got initial prefix index from KvStore: "
+              << *kvstorePrefixIndex;
+    return kvstorePrefixIndex.value();
   }
+
+  // Generate a new random prefix index
+  if (allocParams_.hasValue()) {
+    uint32_t hashPrefixIndex =
+        hasher(myNodeName_) % getPrefixCount(*allocParams_);
+    LOG(INFO) << "Generate new initial prefix index: " << hashPrefixIndex;
+    return hashPrefixIndex;
+  }
+
+  // `0` is always a valid index in valid range
+  return 0;
 }
 
 void
-PrefixAllocator::applyMyPrefix(folly::Optional<uint32_t> prefixIndex) {
-  CHECK(seedPrefix_) << "Seed prefix is not set";
+PrefixAllocator::startAllocation(
+    folly::Optional<PrefixAllocatorParams> const& allocParams,
+    bool checkParams) {
+  // Some informative logging
+  if (allocParams_.hasValue() and allocParams.hasValue()) {
+    if (checkParams and allocParams_ == allocParams) {
+      LOG(INFO) << "New and old params are same. Skipping";
+      return;
+    }
+    LOG(WARNING)
+        << " Prefix allocation parameters are changing,"
+        << " or duplicate address detected. \n"
+        << "  Old: " << folly::IPAddress::networkToString(allocParams_->first)
+        << ", " << static_cast<int16_t>(allocParams_->second) << "\n"
+        << "  New: " << folly::IPAddress::networkToString(allocParams->first)
+        << ", " << static_cast<int16_t>(allocParams->second);
+  }
+  if (allocParams_.hasValue() and not allocParams.hasValue()) {
+    LOG(WARNING)
+        << "Prefix allocation parameters are not valid anymore. \n"
+        << "  Old: " << folly::IPAddress::networkToString(allocParams_->first)
+        << ", " << static_cast<int16_t>(allocParams_->second) << "\n";
+  }
+  if (not allocParams_.hasValue() and allocParams.hasValue()) {
+    LOG(INFO)
+        << "Prefix allocation parameters have been received. \n"
+        << "  New: " << folly::IPAddress::networkToString(allocParams->first)
+        << ", " << static_cast<int16_t>(allocParams->second);
+  }
+  logPrefixEvent(
+      "ALLOC_PARAMS_UPDATE",
+      folly::none,
+      folly::none,
+      allocParams_ /* old params */,
+      allocParams /* new params */);
+
+  // Update local state
+  rangeAllocator_.reset();
+  if (allocParams_) {
+    applyMyPrefixIndex(folly::none); // Clear local state
+  }
+  CHECK(!myPrefixIndex_.hasValue());
+  allocParams_ = allocParams;
+
+  if (!allocParams_.hasValue()) {
+    return;
+  }
+
+  // create range allocator to get unique prefixes
+  rangeAllocator_ = std::make_unique<RangeAllocator<uint32_t>>(
+      myNodeName_,
+      allocPrefixMarker_,
+      kvStoreClient_.get(),
+      [this](folly::Optional<uint32_t> newPrefixIndex) noexcept {
+        applyMyPrefixIndex(newPrefixIndex);
+      },
+      syncInterval_,
+      // no need for randomness since "collision" is harmless
+      syncInterval_ + 1ms,
+      // do not allow override
+      false,
+      [this](uint32_t allocIndex) noexcept->bool {
+        return checkE2eAllocIndex(allocIndex);
+      },
+      Constants::kRangeAllocTtl,
+      area_);
+
+  // start range allocation
+  LOG(INFO) << "Starting prefix allocation with seed prefix: "
+            << folly::IPAddress::networkToString(allocParams_->first)
+            << ", allocation prefix length: "
+            << static_cast<int16_t>(allocParams_->second);
+  const uint32_t prefixCount = getPrefixCount(*allocParams_);
+  uint32_t startIndex = 0;
+  uint32_t endIndex = prefixCount - 1;
+
+  // For IPv4, if the prefix length is 32
+  // then the first and last IP in that subnet are not valid host addresses.
+  if (allocParams_->first.first.isV4() && allocParams_->second == 32) {
+    startIndex += 1;
+    endIndex -= 1;
+  }
+
+  rangeAllocator_->startAllocator(
+      std::make_pair(startIndex, endIndex), getInitPrefixIndex());
+}
+
+void
+PrefixAllocator::applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex) {
+  // Silently return if nothing changed. For e.g.
+  if (myPrefixIndex_ == prefixIndex) {
+    return;
+  }
+
+  CHECK(allocParams_.hasValue()) << "Alloc parameters are not set.";
 
   // Save information to disk
-  savePrefixToDisk(prefixIndex);
+  savePrefixIndexToDisk(prefixIndex);
 
   if (prefixIndex and !myPrefixIndex_) {
     LOG(INFO) << "Elected new prefixIndex " << *prefixIndex;
@@ -305,53 +586,199 @@ PrefixAllocator::applyMyPrefix(folly::Optional<uint32_t> prefixIndex) {
   myPrefixIndex_ = prefixIndex;
 
   // Create network prefix to announce and loopback address to assign
-  folly::Optional<folly::CIDRNetwork> prefix;
+  folly::Optional<folly::CIDRNetwork> prefix = folly::none;
   if (prefixIndex) {
-    prefix = getNthPrefix(*seedPrefix_, allocPrefixLen_, *prefixIndex, true);
+    auto const& seedPrefix = allocParams_->first;
+    auto const& allocPrefixLen = allocParams_->second;
+    prefix = getNthPrefix(seedPrefix, allocPrefixLen, *prefixIndex);
   }
 
-  // Flush existing loopback addresses
-  if (setLoopbackAddress_) {
-    LOG(INFO) << "Flushing existing addresses from interface "
-              << loopbackIfaceName_;
-    if (!flushIfaceAddrs(
-            loopbackIfaceName_, *seedPrefix_, overrideGlobalAddress_)) {
-      LOG(FATAL) << "Failed to flush addresses on interface "
-                 << loopbackIfaceName_;
+  // Announce my prefix
+  applyState_ = std::make_pair(true, std::move(prefix));
+  applyMyPrefix();
+}
+
+void
+PrefixAllocator::applyMyPrefix() {
+  if (!applyState_.first) {
+    return;
+  }
+  try {
+    if (applyState_.second) {
+      updateMyPrefix(*applyState_.second);
+    } else {
+      withdrawMyPrefix();
     }
+    applyState_.first = false;
+  } catch (const std::exception& ex) {
+    LOG(ERROR)
+        << "Apply prefix failed, will retry in "
+        << Constants::kPrefixAllocatorRetryInterval.count() << " ms address: "
+        << (applyState_.second.hasValue()
+                ? folly::IPAddress::networkToString(applyState_.second.value())
+                : "none");
+    scheduleTimeout(
+        Constants::kPrefixAllocatorRetryInterval, [this]() noexcept {
+          applyMyPrefix();
+        });
+  }
+}
+
+void
+PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
+  CHECK(allocParams_.hasValue()) << "Alloc parameters are not set.";
+  // replace previously allocated prefix with newly allocated one in
+  // PrefixManager
+
+  auto prefixEntry = openr::thrift::PrefixEntry();
+  prefixEntry.prefix = toIpPrefix(prefix);
+  prefixEntry.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  prefixEntry.data = {};
+  prefixEntry.forwardingType = forwardingTypeMpls_
+      ? thrift::PrefixForwardingType::SR_MPLS
+      : thrift::PrefixForwardingType::IP;
+  prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
+      ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
+      : thrift::PrefixForwardingAlgorithm::SP_ECMP;
+  prefixEntry.ephemeral = folly::none;
+
+  thrift::PrefixUpdateRequest request;
+  request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
+  request.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  request.prefixes = {prefixEntry};
+  prefixUpdatesQueue_.push(std::move(request));
+
+  // existing global prefixes
+  std::vector<folly::CIDRNetwork> oldPrefixes;
+  getIfacePrefixes(loopbackIfaceName_, prefix.first.family(), oldPrefixes);
+
+  // desired global prefixes
+  auto loopbackPrefix = createLoopbackPrefix(prefix);
+  std::vector<folly::CIDRNetwork> toSyncPrefixes{loopbackPrefix};
+
+  // get a list of prefixes need to be deleted
+  std::vector<folly::CIDRNetwork> toDeletePrefixes;
+  std::set_difference(
+      oldPrefixes.begin(),
+      oldPrefixes.end(),
+      toSyncPrefixes.begin(),
+      toSyncPrefixes.end(),
+      std::inserter(toDeletePrefixes, toDeletePrefixes.begin()));
+
+  if (toDeletePrefixes.empty() && !oldPrefixes.empty()) {
+    LOG(INFO) << "Prefix not changed";
+    return;
+  }
+
+  // delete unwanted global prefixes
+  for (const auto& toDeletePrefix : toDeletePrefixes) {
+    bool needToDelete = false;
+    if (toDeletePrefix.first.inSubnet(
+            allocParams_->first.first, allocParams_->first.second)) {
+      // delete existing prefix in the subnet as seedPrefix
+      needToDelete = true;
+    } else if (overrideGlobalAddress_ and !toDeletePrefix.first.isLinkLocal()) {
+      // delete non-link-local addresses
+      needToDelete = true;
+    }
+
+    if (!needToDelete or !setLoopbackAddress_) {
+      toSyncPrefixes.emplace_back(toDeletePrefix);
+      continue;
+    }
+
+    LOG(INFO) << "Will delete address "
+              << folly::IPAddress::networkToString(toDeletePrefix)
+              << " on interface " << loopbackIfaceName_;
   }
 
   // Assign new address to loopback
-  if (setLoopbackAddress_ and prefix) {
-    auto loopbackAddr = createLoopbackAddr(*prefix);
-    LOG(INFO) << "Assigning address " << loopbackAddr.str() << " on interface "
+  if (setLoopbackAddress_) {
+    LOG(INFO) << "Assigning address: "
+              << folly::IPAddress::networkToString(loopbackPrefix)
+              << " on interface " << loopbackIfaceName_;
+    toSyncPrefixes.emplace_back(loopbackPrefix);
+    syncIfaceAddrs(
+        loopbackIfaceName_,
+        prefix.first.family(),
+        RT_SCOPE_UNIVERSE,
+        toSyncPrefixes);
+  }
+}
+
+void
+PrefixAllocator::withdrawMyPrefix() {
+  // Flush existing loopback addresses
+  if (setLoopbackAddress_ and allocParams_.hasValue()) {
+    LOG(INFO) << "Flushing existing addresses from interface "
               << loopbackIfaceName_;
-    if (!addIfaceAddr(loopbackIfaceName_, loopbackAddr)) {
-      LOG(FATAL) << "Failed to assign address " << loopbackAddr.str()
-                 << " on interface " << loopbackIfaceName_;
+
+    if (overrideGlobalAddress_) {
+      std::vector<folly::CIDRNetwork> addrs;
+      const auto& prefix = allocParams_->first;
+      syncIfaceAddrs(
+          loopbackIfaceName_, prefix.first.family(), RT_SCOPE_UNIVERSE, addrs);
+    } else {
+      delIfaceAddr(loopbackIfaceName_, allocParams_->first);
     }
   }
 
-  // Announce information in PrefixManager
-  LOG(INFO) << "Syncing prefix information to PrefixManager.";
-  if (prefix) {
-    // replace previously allocated prefix with newly allocated one
-    auto ret = prefixManagerClient_->syncPrefixesByType(
-        openr::thrift::PrefixType::PREFIX_ALLOCATOR,
-        {openr::thrift::PrefixEntry(
-            apache::thrift::FRAGILE,
-            toIpPrefix(*prefix),
-            openr::thrift::PrefixType::PREFIX_ALLOCATOR,
-            {})});
-    if (ret.hasError()) {
-      LOG(ERROR) << "Applying new prefix failed: " << ret.error();
-    }
-  } else {
-    auto ret = prefixManagerClient_->withdrawPrefixesByType(
-        openr::thrift::PrefixType::PREFIX_ALLOCATOR);
-    if (ret.hasError()) {
-      LOG(ERROR) << "Withdrawing old prefix failed: " << ret.error();
-    }
+  // withdraw prefix via prefixMgrClient
+  thrift::PrefixUpdateRequest request;
+  request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
+  request.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  prefixUpdatesQueue_.push(std::move(request));
+}
+
+void
+PrefixAllocator::getIfacePrefixes(
+    const std::string& iface,
+    int family,
+    std::vector<folly::CIDRNetwork>& addrs) {
+  createThriftClient(evb_, socket_, client_, systemServicePort_);
+  std::vector<thrift::IpPrefix> prefixes;
+  client_->sync_getIfaceAddresses(prefixes, iface, family, RT_SCOPE_UNIVERSE);
+  addrs.clear();
+  for (const auto& prefix : prefixes) {
+    addrs.emplace_back(toIPNetwork(prefix));
+  }
+}
+
+void
+PrefixAllocator::syncIfaceAddrs(
+    const std::string& ifName,
+    int family,
+    int scope,
+    const std::vector<folly::CIDRNetwork>& prefixes) {
+  createThriftClient(evb_, socket_, client_, systemServicePort_);
+
+  std::vector<thrift::IpPrefix> addrs;
+  for (const auto& prefix : prefixes) {
+    addrs.emplace_back(toIpPrefix(prefix));
+  }
+  try {
+    client_->sync_syncIfaceAddresses(ifName, family, scope, addrs);
+  } catch (const std::exception& ex) {
+    client_.reset();
+    LOG(ERROR) << "PrefixAllocator sync IfAddress failed";
+    throw;
+  }
+}
+
+void
+PrefixAllocator::delIfaceAddr(
+    const std::string& ifName, const folly::CIDRNetwork& prefix) {
+  createThriftClient(evb_, socket_, client_, systemServicePort_);
+
+  std::vector<thrift::IpPrefix> addrs;
+  addrs.emplace_back(toIpPrefix(prefix));
+  try {
+    client_->sync_removeIfaceAddresses(ifName, addrs);
+  } catch (const std::exception& ex) {
+    client_.reset();
+    LOG(ERROR) << "PrefixAllocator del IfAddress failed: "
+               << folly::IPAddress::networkToString(prefix);
+    throw;
   }
 }
 
@@ -359,52 +786,86 @@ void
 PrefixAllocator::logPrefixEvent(
     std::string event,
     folly::Optional<uint32_t> oldPrefix,
-    folly::Optional<uint32_t> newPrefix) {
+    folly::Optional<uint32_t> newPrefix,
+    folly::Optional<PrefixAllocatorParams> const& oldAllocParams,
+    folly::Optional<PrefixAllocatorParams> const& newAllocParams) {
   fbzmq::LogSample sample{};
 
   sample.addString("event", event);
-  sample.addString("entity", "PrefixAllocator");
   sample.addString("node_name", myNodeName_);
-  if (oldPrefix) {
-    sample.addString("old_prefix",
-      folly::IPAddress::networkToString(
-        getNthPrefix(*seedPrefix_, allocPrefixLen_, *oldPrefix, true)));
+  if (allocParams_.hasValue() && oldPrefix) {
+    auto const& seedPrefix = allocParams_->first;
+    auto const& allocPrefixLen = allocParams_->second;
+    sample.addString(
+        "old_prefix",
+        folly::IPAddress::networkToString(
+            getNthPrefix(seedPrefix, allocPrefixLen, *oldPrefix)));
   }
 
-  if (newPrefix) {
-    sample.addString("new_prefix",
-      folly::IPAddress::networkToString(
-        getNthPrefix(*seedPrefix_, allocPrefixLen_, *newPrefix, true)));
+  if (allocParams_.hasValue() && newPrefix) {
+    auto const& seedPrefix = allocParams_->first;
+    auto const& allocPrefixLen = allocParams_->second;
+    sample.addString(
+        "new_prefix",
+        folly::IPAddress::networkToString(
+            getNthPrefix(seedPrefix, allocPrefixLen, *newPrefix)));
+  }
+
+  if (oldAllocParams.hasValue()) {
+    sample.addString(
+        "old_seed_prefix",
+        folly::IPAddress::networkToString(oldAllocParams->first));
+    sample.addInt("old_alloc_len", oldAllocParams->second);
+  }
+
+  if (newAllocParams.hasValue()) {
+    sample.addString(
+        "new_seed_prefix",
+        folly::IPAddress::networkToString(newAllocParams->first));
+    sample.addInt("new_alloc_len", newAllocParams->second);
   }
 
   zmqMonitorClient_.addEventLog(fbzmq::thrift::EventLog(
       apache::thrift::FRAGILE,
-      Constants::kEventLogCategory,
+      Constants::kEventLogCategory.toString(),
       {sample.toJson()}));
 }
 
-folly::Optional<std::string>
-PrefixAllocator::getValueByKey(const std::string& keyName) noexcept {
-  const auto maybeVal = kvStoreClient_->getKey(keyName);
-  if (maybeVal) {
-    return maybeVal->value;
-  }
-  return folly::none;
-}
-
-folly::Optional<uint32_t>
-PrefixAllocator::getMyPrefixIndex() {
-  if (isInEventLoop()) {
-    return myPrefixIndex_;
+void
+PrefixAllocator::createThriftClient(
+    folly::EventBase& evb,
+    std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+    std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
+    int32_t port) {
+  // Reset client if channel is not good
+  if (socket && (!socket->good() || socket->hangup())) {
+    client.reset();
+    socket.reset();
   }
 
-  // Otherwise enqueue request in eventloop and wait for result to be populated
-  folly::Promise<folly::Optional<uint32_t>> promise;
-  auto future = promise.getFuture();
-  runInEventLoop([this, promise = std::move(promise)]() mutable {
-    promise.setValue(myPrefixIndex_);
-  });
-  return future.get();
+  // Do not create new client if one exists already
+  if (client) {
+    return;
+  }
+
+  // Create socket to thrift server and set some connection parameters
+  socket = apache::thrift::async::TAsyncSocket::newSocket(
+      &evb,
+      Constants::kPlatformHost.toString(),
+      port,
+      Constants::kPlatformConnTimeout.count());
+
+  // Create channel and set timeout
+  auto channel = apache::thrift::HeaderClientChannel::newChannel(socket);
+  channel->setTimeout(Constants::kPlatformProcTimeout.count());
+
+  // Set BinaryProtocol and Framed client type for talkiing with thrift1 server
+  channel->setProtocolId(apache::thrift::protocol::T_BINARY_PROTOCOL);
+  channel->setClientType(THRIFT_FRAMED_DEPRECATED);
+
+  // Reset client_
+  client =
+      std::make_unique<thrift::SystemServiceAsyncClient>(std::move(channel));
 }
 
 } // namespace openr

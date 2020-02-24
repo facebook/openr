@@ -11,8 +11,7 @@
 #include <functional>
 #include <stdexcept>
 
-#include <folly/stats/BucketedTimeSeries-defs.h>
-#include <folly/stats/BucketedTimeSeries.h> // Order of include is IMP
+#include <folly/stats/BucketedTimeSeries.h>
 
 namespace openr {
 

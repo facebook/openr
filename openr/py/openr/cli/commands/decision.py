@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -5,235 +7,307 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
 
-from openr.clients import decision_client
-from openr.cli.utils import utils
-from openr.utils import printing
-from openr.utils.serializer import deserialize_thrift_object
-from openr.Lsdb import ttypes as lsdb_types
-from openr.utils.consts import Consts
-
-from collections import defaultdict
-from ipaddr import IPAddress, IPNetwork
+import ipaddress
 import sys
+from collections import defaultdict
+from typing import Any, Callable, Dict, List, Tuple
+
+import click
+from openr.cli.utils import utils
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.KvStore import ttypes as kv_store_types
+from openr.Lsdb import ttypes as lsdb_types
+from openr.Network import ttypes as network_types
+from openr.OpenrCtrl import OpenrCtrl
+from openr.utils import ipnetwork, printing
+from openr.utils.consts import Consts
+from openr.utils.serializer import deserialize_thrift_object
 
 
-class DecisionCmd(object):
-    def __init__(self, cli_opts):
-        ''' initialize the Decision client '''
-
-        self.host = cli_opts.host
-        self.timeout = cli_opts.timeout
-        self.lm_cmd_port = cli_opts.lm_cmd_port
-        self.kv_rep_port = cli_opts.kv_rep_port
-        self.fib_agent_port = cli_opts.fib_agent_port
-        self.enable_color = cli_opts.enable_color
-
-        self.client = decision_client.DecisionClient(
-            cli_opts.zmq_ctx,
-            "tcp://[{}]:{}".format(cli_opts.host, cli_opts.decision_rep_port),
-            cli_opts.timeout,
-            cli_opts.proto_factory)
-
-    def iter_dbs(self, container, dbs, nodes, parse_func):
-        ''' parse prefix databases from decision module
-
-            :container: container to store the generated data
-            :dbs decision_types.PrefixDbs or decision_types.AdjDbs
-            :nodes set: the set of nodes for parsing
-            :parse_func function: the parsing function
-        '''
-
-        for (node, db) in sorted(dbs.items()):
-            if 'all' not in nodes and node not in nodes:
-                continue
-            parse_func(container, db)
-
-
-class DecisionPrefixesCmd(DecisionCmd):
-    def run(self, nodes, json):
-        prefix_dbs = self.client.get_prefix_dbs()
+class DecisionPrefixesCmd(OpenrCtrlCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        json: bool,
+        prefix: str,
+        client_type: str,
+    ) -> None:
+        prefix_dbs = client.getDecisionPrefixDbs()
         if json:
-            utils.print_prefixes_json(prefix_dbs, nodes, self.iter_dbs)
+            utils.print_prefixes_json(
+                prefix_dbs, nodes, prefix, client_type, self.iter_dbs
+            )
         else:
-            utils.print_prefixes_table(prefix_dbs, nodes, self.iter_dbs)
+            utils.print_prefixes_table(
+                prefix_dbs, nodes, prefix, client_type, self.iter_dbs
+            )
 
 
-class DecisionRoutesCmd(DecisionCmd):
-    def run(self, nodes, json):
-        if 'all' in nodes:
-            nodes = self._get_all_nodes()
+class DecisionRoutesComputedCmd(OpenrCtrlCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        prefixes: Any,
+        labels: Any,
+        json: bool,
+    ) -> None:
+        if "all" in nodes:
+            nodes = self._get_all_nodes(client)
         if json:
             route_db_dict = {}
             for node in nodes:
-                route_db = self.client.get_route_db(node)
+                route_db = client.getRouteDbComputed(node)
                 route_db_dict[node] = utils.route_db_to_dict(route_db)
-            utils.print_routes_json(route_db_dict)
+            utils.print_routes_json(route_db_dict, prefixes, labels)
         else:
             for node in nodes:
-                route_db = self.client.get_route_db(node)
-                utils.print_routes_table(route_db)
+                route_db = client.getRouteDbComputed(node)
+                utils.print_route_db(route_db, prefixes, labels)
 
-    def _get_all_nodes(self):
-        ''' return all the nodes' name in the network '''
+    def _get_all_nodes(self, client: OpenrCtrl.Client) -> set:
+        """ return all the nodes' name in the network """
 
         def _parse(nodes, adj_db):
             nodes.add(adj_db.thisNodeName)
 
         nodes = set()
-        adj_dbs = self.client.get_prefix_dbs()
-        self.iter_dbs(nodes, adj_dbs, ['all'], _parse)
+        adj_dbs = client.getDecisionPrefixDbs()
+        self.iter_dbs(nodes, adj_dbs, ["all"], _parse)
         return nodes
 
 
-class DecisionAdjCmd(DecisionCmd):
-    def run(self, nodes, bidir, json):
-        adj_dbs = self.client.get_adj_dbs()
-        adjs_map = utils.adj_dbs_to_dict(adj_dbs, nodes, bidir, self.iter_dbs)
+class DecisionRoutesUnInstallableCmd(OpenrCtrlCmd):
+    def _run(
+        self, client: OpenrCtrl.Client, prefixes: Any, labels: Any, json: bool
+    ) -> None:
+        route_db = client.getRouteDbComputed("")
+        # Filter out all MPLS routes
+        route_db.mplsRoutes = []
+        # Filter unicast routes on `doNotInstall` attribute
+        route_db.unicastRoutes = [r for r in route_db.unicastRoutes if r.doNotInstall]
         if json:
-            utils.print_adjs_json(adjs_map)
+            route_db_dict = {route_db.thisNodeName: utils.route_db_to_dict(route_db)}
+            utils.print_routes_json(route_db_dict, prefixes, labels)
         else:
-            utils.print_adjs_table(adjs_map, self.enable_color)
+            utils.print_route_db(route_db, prefixes, labels)
 
 
-class PathCmd(DecisionCmd):
-    def run(self, src, dst, max_hop):
+class DecisionAdjCmd(OpenrCtrlCmd):
+    def _run(
+        self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
+    ) -> None:
+        adj_dbs = client.getDecisionAdjacencyDbs()
+        adjs_map = utils.adj_dbs_to_dict(adj_dbs, nodes, bidir, self.iter_dbs)
+        for _, val in adjs_map.items():
+            for adj_entry in val["adjacencies"]:
+                adj_entry["area"] = val.get("area", "N/A")
+        if json:
+            utils.print_json(adjs_map)
+        else:
+            utils.print_adjs_table(adjs_map, None, None)
+
+
+class PathCmd(OpenrCtrlCmd):
+    def _run(
+        self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int, area: str
+    ) -> None:
         if not src or not dst:
-            host_id = utils.get_connected_node_name(self.host, self.lm_cmd_port)
+            host_id = client.getMyNodeName()
             src = src or host_id
             dst = dst or host_id
-        paths = self.get_paths(self.client, src, dst, max_hop)
+
+        self.prefix_dbs: Dict[str, lsdb_types.PrefixDatabase] = {}
+        area = utils.get_area_id(client, area)
+        # Get prefix_dbs from KvStore
+        if area is None:
+            pub = client.getKvStoreKeyValsFiltered(
+                kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
+            )
+        else:
+            pub = client.getKvStoreKeyValsFilteredArea(
+                kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER), area
+            )
+        for value in pub.keyVals.values():
+            utils.parse_prefix_database("", "", self.prefix_dbs, value)
+
+        paths = self.get_paths(client, src, dst, max_hop)
         self.print_paths(paths)
 
-    def get_loopback_addr(self, prefix_dbs, node):
-        ''' get node's loopback addr'''
+    def get_loopback_addr(self, node):
+        """ get node's loopback addr"""
 
         def _parse(loopback_set, prefix_db):
             for prefix_entry in prefix_db.prefixEntries:
-                if (prefix_entry.type == lsdb_types.PrefixType.LOOPBACK and
-                        len(prefix_entry.prefix.prefixAddress.addr) == 16):
-                    loopback_set.add(utils.sprint_prefix(prefix_entry.prefix))
+                # Only consider v6 address
+                if len(prefix_entry.prefix.prefixAddress.addr) != 16:
+                    continue
+
+                # Parse PrefixAllocator address
+                if prefix_entry.type == network_types.PrefixType.PREFIX_ALLOCATOR:
+                    prefix = ipnetwork.sprint_prefix(prefix_entry.prefix)
+                    if prefix_entry.prefix.prefixLength == 128:
+                        prefix = prefix.split("/")[0]
+                    else:
+                        # TODO: we should ideally get address with last bit
+                        # set to 1. `python3.6 ipaddress` libraries does this
+                        # in one line. Alas no easy options with ipaddr
+                        # NOTE: In our current usecase we are just assuming
+                        # that allocated prefix has last 16 bits set to 0
+                        prefix = prefix.split("/")[0] + "1"
+                    loopback_set.add(prefix)
+                    continue
+
+                # Parse LOOPBACK address
+                if prefix_entry.type == network_types.PrefixType.LOOPBACK:
+                    prefix = ipnetwork.sprint_prefix(prefix_entry.prefix)
+                    loopback_set.add(prefix.split("/")[0])
+                    continue
 
         loopback_set = set()
-        self.iter_dbs(loopback_set, prefix_dbs, node, _parse)
-        return loopback_set.pop() if len(loopback_set) > 0 else ''
+        self.iter_dbs(loopback_set, self.prefix_dbs, node, _parse)
+        return loopback_set.pop() if len(loopback_set) > 0 else None
 
-    def get_node_prefixes(self, prefix_dbs, node):
-
+    def get_node_prefixes(self, node, ipv4=False):
         def _parse(prefix_set, prefix_db):
             for prefix_entry in prefix_db.prefixEntries:
-                if len(prefix_entry.prefix.prefixAddress.addr) == 16:
-                    prefix_set.add(utils.sprint_prefix(prefix_entry.prefix))
+                if len(prefix_entry.prefix.prefixAddress.addr) == (4 if ipv4 else 16):
+                    prefix_set.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
 
         prefix_set = set()
-        self.iter_dbs(prefix_set, prefix_dbs, node, _parse)
+        self.iter_dbs(prefix_set, self.prefix_dbs, node, _parse)
         return prefix_set
 
     def get_if2node_map(self, adj_dbs):
-        ''' create a map from interface to node '''
+        """ create a map from interface to node """
 
         def _parse(if2node, adj_db):
+            nexthop_dict = if2node[adj_db.thisNodeName]
             for adj in adj_db.adjacencies:
-                if2node[adj_db.thisNodeName][adj.ifName] = adj.otherNodeName
+                nh6_addr = ipnetwork.sprint_addr(adj.nextHopV6.addr)
+                nh4_addr = ipnetwork.sprint_addr(adj.nextHopV4.addr)
+                nexthop_dict[(adj.ifName, nh6_addr)] = adj.otherNodeName
+                nexthop_dict[(adj.ifName, nh4_addr)] = adj.otherNodeName
 
         if2node = defaultdict(dict)
         self.iter_dbs(if2node, adj_dbs, ["all"], _parse)
         return if2node
 
-    def get_lpm_routes(self, route_db, dst_addr):
-        ''' find the routes to the longest prefix matches of dst. '''
+    def get_lpm_route(self, route_db, dst_addr):
+        """ find the routes to the longest prefix matches of dst. """
 
-        max_prefix_len = 0
-        lpm_routes = []
-        for route in route_db.routes:
-            if IPNetwork(utils.sprint_prefix(route.prefix)).Contains(
-                    IPAddress(dst_addr)):
-                next_hop_prefix_len = route.prefix.prefixLength
+        max_prefix_len = -1
+        lpm_route = None
+        dst_addr = ipaddress.ip_address(dst_addr)
+        for route in route_db.unicastRoutes:
+            prefix = ipaddress.ip_network(ipnetwork.sprint_prefix(route.dest))
+            if dst_addr in prefix:
+                next_hop_prefix_len = route.dest.prefixLength
                 if next_hop_prefix_len == max_prefix_len:
-                    lpm_routes.append(route)
+                    raise Exception(
+                        "Duplicate prefix found in routing table {}".format(
+                            ipnetwork.sprint_prefix(route.dest)
+                        )
+                    )
                 elif next_hop_prefix_len > max_prefix_len:
-                    lpm_routes = [route]
+                    lpm_route = route
                     max_prefix_len = next_hop_prefix_len
 
-        return lpm_routes
+        return lpm_route
 
-    def get_lpm_len_from_node(self, node, dst_addr, prefix_dbs):
-        ''' return the longest prefix match of dst_addr in node's advertising
-        prefix pool '''
+    def get_lpm_len_from_node(self, node, dst_addr):
+        """
+        return the longest prefix match of dst_addr in node's
+        advertising prefix pool
+        """
 
         cur_lpm_len = 0
-        for cur_prefix in self.get_node_prefixes(prefix_dbs, node):
-            if IPNetwork(cur_prefix).Contains(IPAddress(dst_addr)):
-                cur_len = int(cur_prefix.split('/')[1])
+        dst_addr = ipaddress.ip_address(dst_addr)
+        is_ipv4 = isinstance(dst_addr, ipaddress.IPv4Address)
+        for cur_prefix in self.get_node_prefixes(node, is_ipv4):
+            if dst_addr in ipaddress.ip_network(cur_prefix):
+                cur_len = int(cur_prefix.split("/")[1])
                 cur_lpm_len = max(cur_lpm_len, cur_len)
         return cur_lpm_len
 
-    def get_nexthop_nodes(self, route_db, dst_addr, cur_lpm_len,
-                          if2node, fib_routes, in_fib):
-        ''' get the next hop nodes.
+    def get_nexthop_nodes(
+        self, route_db, dst_addr, cur_lpm_len, if2node, fib_routes, in_fib
+    ):
+        """ get the next hop nodes.
         if the longest prefix is coming from the current node,
-        return an empty list to terminate the path searching. '''
+        return an empty list to terminate the path searching. """
 
         next_hop_nodes = []
         is_initialized = fib_routes[route_db.thisNodeName]
 
-        for lpm_route in self.get_lpm_routes(route_db, dst_addr):
-            if lpm_route.prefix.prefixLength <= cur_lpm_len:
-                continue
+        lpm_route = self.get_lpm_route(route_db, dst_addr)
+        is_ipv4 = isinstance(ipaddress.ip_address(dst_addr), ipaddress.IPv4Address)
+        if lpm_route and lpm_route.dest.prefixLength >= cur_lpm_len:
             if in_fib and not is_initialized:
                 fib_routes[route_db.thisNodeName].extend(
                     self.get_fib_path(
                         route_db.thisNodeName,
-                        utils.sprint_prefix(lpm_route.prefix),
+                        ipnetwork.sprint_prefix(lpm_route.dest),
                         self.fib_agent_port,
-                        self.timeout))
-
-            for path in lpm_route.paths:
-                if len(path.nextHop.addr) == 16:
-                    next_hop_node_name = if2node[route_db.thisNodeName][path.ifName]
-                    next_hop_nodes.append([next_hop_node_name, path.ifName, path.metric,
-                                           utils.sprint_addr(path.nextHop.addr)])
-
+                        self.timeout,
+                    )
+                )
+            min_cost = min(p.metric for p in lpm_route.nextHops)
+            for nextHop in [p for p in lpm_route.nextHops if p.metric == min_cost]:
+                if len(nextHop.address.addr) == (4 if is_ipv4 else 16):
+                    nh_addr = ipnetwork.sprint_addr(nextHop.address.addr)
+                    next_hop_node_name = if2node[route_db.thisNodeName][
+                        (nextHop.address.ifName, nh_addr)
+                    ]
+                    next_hop_nodes.append(
+                        [
+                            next_hop_node_name,
+                            nextHop.address.ifName,
+                            nextHop.metric,
+                            nh_addr,
+                        ]
+                    )
         return next_hop_nodes
 
     def get_fib_path(self, src, dst_prefix, fib_agent_port, timeout):
+        src_addr = self.get_loopback_addr(src)
+        if src_addr is None:
+            return []
+
         try:
-            client = utils.get_fib_agent_client(src, fib_agent_port, timeout)
+            client = utils.get_fib_agent_client(src_addr, fib_agent_port, timeout)
             routes = client.getRouteTableByClient(client.client_id)
         except Exception:
-            try:
-                client = utils.get_fib_agent_client(src, fib_agent_port,
-                                                    timeout)
-                routes = client.getRouteTableByClient(client.client_id)
-            except Exception:
-                return []
-
+            return []
         for route in routes:
-            if utils.sprint_prefix(route.dest) == dst_prefix:
-                return route.nexthops
+            if ipnetwork.sprint_prefix(route.dest) == dst_prefix:
+                return [nh.address for nh in route.nextHops]
         return []
 
-    def get_paths(self, client, src, dst, max_hop):
-        ''' calc paths from src to dst using backtracking. can add memoization to
+    def get_paths(
+        self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int
+    ) -> Any:
+        """
+        calc paths from src to dst using backtracking. can add memoization to
         convert to dynamic programming for better scalability when network is large.
-        '''
+        """
 
-        prefix_dbs = client.get_prefix_dbs()
         dst_addr = dst
         # if dst is node, we get its loopback addr
-        if ':' not in dst:
-            dst_addr = self.get_loopback_addr(prefix_dbs, dst).split('/')[0]
+        if ":" not in dst:
+            dst_addr = self.get_loopback_addr(dst)
         try:
-            IPAddress(dst_addr)
+            ipaddress.ip_address(dst_addr)
         except ValueError:
-            print("node name or ip address not valid.")
-            sys.exit(1)
+            try:
+                dst_addr = str(ipaddress.ip_network(dst, strict=False).network_address)
+            except ValueError:
+                print("node name or ip address not valid.")
+                sys.exit(1)
 
-        adj_dbs = client.get_adj_dbs()
+        adj_dbs = client.getDecisionAdjacencyDbs()
         if2node = self.get_if2node_map(adj_dbs)
         fib_routes = defaultdict(list)
 
@@ -243,10 +317,15 @@ class PathCmd(DecisionCmd):
             if hop > max_hop:
                 return
 
-            cur_lpm_len = self.get_lpm_len_from_node(cur, dst_addr, prefix_dbs)
-            next_hop_nodes = self.get_nexthop_nodes(client.get_route_db(cur),
-                                                    dst_addr, cur_lpm_len, if2node,
-                                                    fib_routes, in_fib)
+            cur_lpm_len = self.get_lpm_len_from_node(cur, dst_addr)
+            next_hop_nodes = self.get_nexthop_nodes(
+                client.getRouteDbComputed(cur),
+                dst_addr,
+                cur_lpm_len,
+                if2node,
+                fib_routes,
+                in_fib,
+            )
 
             if len(next_hop_nodes) == 0:
                 if hop != 1:
@@ -265,16 +344,23 @@ class PathCmd(DecisionCmd):
                 # check if next hop node is in fib path
                 is_nexthop_in_fib_path = False
                 for nexthop in fib_routes[cur]:
-                    if next_hop_node[3] == utils.sprint_addr(nexthop.addr) and\
-                            next_hop_node[1] == nexthop.ifName:
+                    if (
+                        next_hop_node[3] == ipnetwork.sprint_addr(nexthop.addr)
+                        and next_hop_node[1] == nexthop.ifName
+                    ):
                         is_nexthop_in_fib_path = True
 
-                _backtracking(next_hop_node_name, path, hop + 1, visited,
-                              is_nexthop_in_fib_path and in_fib)
+                _backtracking(
+                    next_hop_node_name,
+                    path,
+                    hop + 1,
+                    visited,
+                    is_nexthop_in_fib_path and in_fib,
+                )
                 visited.remove(next_hop_node_name)
                 path.pop()
 
-        _backtracking(src, [], 1, set([src]), True)
+        _backtracking(src, [], 1, set(src), True)
         return paths
 
     def print_paths(self, paths):
@@ -282,106 +368,248 @@ class PathCmd(DecisionCmd):
             print("No paths are found!")
             return
 
-        column_labels = ['Hop', 'NextHop Node', 'Interface', 'Metric', 'NextHop-v6']
+        column_labels = ["Hop", "NextHop Node", "Interface", "Metric", "NextHop-v6"]
 
-        print("{} {} found.".format(len(paths),
-                                    'path is' if len(paths) == 1 else 'paths are'))
+        print(
+            "{} {} found.".format(
+                len(paths), "path is" if len(paths) == 1 else "paths are"
+            )
+        )
 
         for idx, path in enumerate(paths):
-            print(printing.render_horizontal_table(
-                path[1], column_labels,
-                caption="Path {}{}".format(idx + 1, "  *" if path[0] else ""),
-                tablefmt="plain"))
+            print(
+                printing.render_horizontal_table(
+                    path[1],
+                    column_labels,
+                    caption="Path {}{}".format(idx + 1, "  *" if path[0] else ""),
+                    tablefmt="plain",
+                )
+            )
             print()
 
 
-class DecisionValidateCmd(DecisionCmd):
-    def run(self):
-
-        print('Decision is in sync with KvStore if nothing shows up')
-        print()
-
-        decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals = self.get_dbs()
+class DecisionValidateCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client, json=False, area: str = None) -> None:
+        """Returns a status code. 0 = success, 1 = failure"""
+        (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
+            client, area
+        )
 
         kvstore_adj_node_names = set()
         kvstore_prefix_node_names = set()
 
         for key, value in sorted(kvstore_keyvals.items()):
-            if (key.startswith(Consts.ADJ_DB_MARKER) or
-                    key.startswith(Consts.PREFIX_DB_MARKER)):
-                self.print_db_delta(key, value, kvstore_adj_node_names,
-                                    kvstore_prefix_node_names, decision_adj_dbs,
-                                    decision_prefix_dbs)
+            if key.startswith(Consts.ADJ_DB_MARKER):
+                return_code = self.print_db_delta_adj(
+                    key, value, kvstore_adj_node_names, decision_adj_dbs, json
+                )
+                if return_code != 0:
+                    return return_code
 
-        decision_adj_node_names = set(decision_adj_dbs.keys())
+        return_code = self.print_db_delta_prefix(
+            kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
+        )
+        if return_code != 0:
+            return return_code
+
+        decision_adj_node_names = {
+            node
+            for node in decision_adj_dbs.keys()
+            if decision_adj_dbs[node].adjacencies
+        }
         decision_prefix_node_names = set(decision_prefix_dbs.keys())
-        self.print_db_diff(decision_adj_node_names, kvstore_adj_node_names,
-                           ['Decision', 'KvStore'], 'adj')
-        self.print_db_diff(decision_prefix_node_names, kvstore_prefix_node_names,
-                           ['Decision', 'KvStore'], 'prefix')
 
-    def get_dbs(self):
+        adjValidateRet = self.print_db_diff(
+            decision_adj_node_names,
+            kvstore_adj_node_names,
+            ["Decision", "KvStore"],
+            "adj",
+            json,
+        )
 
+        prefixValidateRet = self.print_db_diff(
+            decision_prefix_node_names,
+            kvstore_prefix_node_names,
+            ["Decision", "KvStore"],
+            "prefix",
+            json,
+        )
+
+        return adjValidateRet or prefixValidateRet
+
+    def get_dbs(self, client: OpenrCtrl.Client, area: str) -> Tuple[Dict, Dict, Dict]:
         # get LSDB from Decision
-        decision_adj_dbs = self.client.get_adj_dbs()
-        decision_prefix_dbs = self.client.get_prefix_dbs()
+        decision_adj_dbs = client.getDecisionAdjacencyDbs()
+        decision_prefix_dbs = client.getDecisionPrefixDbs()
 
+        area = utils.get_area_id(client, area)
         # get LSDB from KvStore
-        kvstore_keyvals = utils.dump_node_kvs(self.host, self.kv_rep_port).keyVals
+        if area is None:
+            kvstore_keyvals = client.getKvStoreKeyValsFiltered(
+                kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
+            ).keyVals
+        else:
+            kvstore_keyvals = client.getKvStoreKeyValsFilteredArea(
+                kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER), area
+            ).keyVals
 
-        return decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals
+        return (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals)
 
-    def print_db_delta(self, key, value, kvstore_adj_node_names,
-                       kvstore_prefix_node_names, decision_adj_dbs,
-                       decision_prefix_dbs):
-        if key.startswith(Consts.ADJ_DB_MARKER):
-            kvstore_adj_db = deserialize_thrift_object(value.value,
-                                                       lsdb_types.AdjacencyDatabase)
-            node_name = kvstore_adj_db.thisNodeName
-            kvstore_adj_node_names.add(node_name)
-            if node_name not in decision_adj_dbs:
-                print(printing.render_vertical_table(
-                    [["node {}'s adj db is missing in Decision".format(node_name)]]))
-                return
-            decision_adj_db = decision_adj_dbs[node_name]
+    def print_db_delta_adj(
+        self, key, value, kvstore_adj_node_names, decision_adj_dbs, json
+    ):
+        """ Returns status code. 0 = success, 1 = failure"""
+
+        kvstore_adj_db = deserialize_thrift_object(
+            value.value, lsdb_types.AdjacencyDatabase
+        )
+        node_name = kvstore_adj_db.thisNodeName
+        kvstore_adj_node_names.add(node_name)
+        if node_name not in decision_adj_dbs:
+            print(
+                printing.render_vertical_table(
+                    [["node {}'s adj db is missing in Decision".format(node_name)]]
+                )
+            )
+            return 1
+        decision_adj_db = decision_adj_dbs[node_name]
+
+        return_code = 0
+        if json:
+            tags = ("in_decision", "in_kvstore", "changed_in_decision_and_kvstore")
+            adj_list_deltas = utils.find_adj_list_deltas(
+                decision_adj_db.adjacencies, kvstore_adj_db.adjacencies, tags=tags
+            )
+            deltas_json, return_code = utils.adj_list_deltas_json(
+                adj_list_deltas, tags=tags
+            )
+            if return_code:
+                utils.print_json(deltas_json)
+        else:
             lines = utils.sprint_adj_db_delta(kvstore_adj_db, decision_adj_db)
             if lines:
-                print(printing.render_vertical_table(
-                      [["node {}'s adj db in Decision out of sync with KvStore's".
-                        format(node_name)]]))
+                print(
+                    printing.render_vertical_table(
+                        [
+                            [
+                                "node {}'s adj db in Decision out of sync with "
+                                "KvStore's".format(node_name)
+                            ]
+                        ]
+                    )
+                )
                 print("\n".join(lines))
-            return
+                return_code = 1
 
-        if key.startswith(Consts.PREFIX_DB_MARKER):
-            kvstore_prefix_db = deserialize_thrift_object(value.value,
-                                                          lsdb_types.PrefixDatabase)
-            node_name = kvstore_prefix_db.thisNodeName
+        return return_code
+
+    def print_db_delta_prefix(
+        self, kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
+    ):
+        """ Returns status code. 0 = success, 1 = failure"""
+
+        prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
+
+        for node_name, prefix_db in prefix_maps.items():
             kvstore_prefix_node_names.add(node_name)
             if node_name not in decision_prefix_dbs:
-                print(printing.render_vertical_table(
-                      [["node {}'s prefix db is missing in Decision".
-                        format(node_name)]]))
-                return
+                print(
+                    printing.render_vertical_table(
+                        [
+                            [
+                                "node {}'s prefix db is missing in Decision".format(
+                                    node_name
+                                )
+                            ]
+                        ]
+                    )
+                )
+                return 1
             decision_prefix_db = decision_prefix_dbs[node_name]
             decision_prefix_set = {}
-            utils.update_global_prefix_db(
-                decision_prefix_set, decision_prefix_db)
-            lines = utils.sprint_prefixes_db_delta(
-                decision_prefix_set, kvstore_prefix_db)
-            if lines:
-                print(printing.render_vertical_table(
-                      [["node {}'s prefix db in Decision out of sync with KvStore's".
-                        format(node_name)]]))
-                print("\n".join(lines))
-            return
 
-    def print_db_diff(self, nodes_set_a, nodes_set_b, db_sources, db_type):
-        rows = []
-        for node in sorted(nodes_set_a - nodes_set_b):
-            rows.append(["node {}'s {} db in {} but not in {}".format(
-                node, db_type, *db_sources)])
-        for node in sorted(nodes_set_b - nodes_set_a):
-            rows.append(["node {}'s {} db in {} but not in {}".format(
-                node, db_type, *reversed(db_sources))])
-        if rows:
-            print(printing.render_vertical_table(rows))
+            utils.update_global_prefix_db(decision_prefix_set, decision_prefix_db)
+            lines = utils.sprint_prefixes_db_delta(decision_prefix_set, prefix_db)
+            if lines:
+                print(
+                    printing.render_vertical_table(
+                        [
+                            [
+                                "node {}'s prefix db in Decision out of sync with "
+                                "KvStore's".format(node_name)
+                            ]
+                        ]
+                    )
+                )
+                print("\n".join(lines))
+                return 1
+        return 0
+
+    def print_db_diff(
+        self,
+        nodes_set_a: set,
+        nodes_set_b: set,
+        db_sources: List[str],
+        db_type: str,
+        json: bool,
+    ) -> int:
+        """ Returns a status code, 0 = success, 1 = failure"""
+        a_minus_b = sorted(nodes_set_a - nodes_set_b)
+        b_minus_a = sorted(nodes_set_b - nodes_set_a)
+        return_code = 0
+
+        if json:
+            diffs_up = []
+            diffs_down = []
+            for node in a_minus_b:
+                diffs_up.append(node)
+            for node in b_minus_a:
+                diffs_down.append(node)
+
+            if diffs_up or diffs_down:
+                diffs = {
+                    "db_type": db_type,
+                    "db_up": db_sources[0],
+                    "db_down": db_sources[1],
+                    "nodes_up": diffs_up,
+                    "nodes_down": diffs_down,
+                }
+                return_code = 1
+                utils.print_json(diffs)
+
+        else:
+            rows = []
+            for node in a_minus_b:
+                rows.append(
+                    [
+                        "node {}'s {} db in {} but not in {}".format(
+                            node, db_type, *db_sources
+                        )
+                    ]
+                )
+            for node in b_minus_a:
+                rows.append(
+                    [
+                        "node {}'s {} db in {} but not in {}".format(
+                            node, db_type, *reversed(db_sources)
+                        )
+                    ]
+                )
+            if rows:
+                print(printing.render_vertical_table(rows))
+                return_code = 1
+
+        if return_code == 1:
+            if utils.is_color_output_supported():
+                click.echo(click.style("FAIL", bg="red", fg="black"))
+            else:
+                click.echo("FAIL")
+            print("{} table for {} and {} do not match".format(db_type, *db_sources))
+        else:
+            if utils.is_color_output_supported():
+                click.echo(click.style("PASS", bg="green", fg="black"))
+            else:
+                click.echo("PASS")
+            print("{} table for {} and {} match".format(db_type, *db_sources))
+
+        return return_code

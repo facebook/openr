@@ -5,11 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Lsdb
+namespace py3 openr.thrift
 namespace php OpenR_Lsdb
 
-include "IpPrefix.thrift"
+include "Network.thrift"
 
 //
 // Performance measurement related structs
@@ -41,8 +43,12 @@ struct PerfEvents {
 struct InterfaceInfo {
   1: required bool isUp
   2: required i64 ifIndex
-  3: required list<IpPrefix.BinaryAddress> v4Addrs
-  4: required list<IpPrefix.BinaryAddress> v6LinkLocalAddrs
+  // TO BE DEPRECATED SOON
+  3: required list<Network.BinaryAddress> v4Addrs
+  // TO BE DEPRECATED SOON
+  4: required list<Network.BinaryAddress> v6LinkLocalAddrs
+  // ip prefixes of all v4 and v6 link local addresses
+  5: list<Network.IpPrefix> networks
 }
 
 //
@@ -70,8 +76,8 @@ struct Adjacency {
   2: string ifName
 
   // peer's link-local addresses
-  3: IpPrefix.BinaryAddress nextHopV6
-  5: IpPrefix.BinaryAddress nextHopV4
+  3: Network.BinaryAddress nextHopV6
+  5: Network.BinaryAddress nextHopV4
 
   // metric to reach to the neighbor
   4: i32 metric
@@ -117,32 +123,127 @@ struct AdjacencyDatabase {
 
   // Optional attribute to measure convergence performance
   5: optional PerfEvents perfEvents;
+
+  // openr area on which adjacency is formed
+  6: optional string area
 }
 
 //
 // Prefixes
 //
 
-enum PrefixType {
-  LOOPBACK = 1,
-  DEFAULT = 2,
-  BGP = 3,
-  PREFIX_ALLOCATOR = 4,
-  BREEZE = 5,   // Prefixes injected via breeze
+/**
+ * Metric entity type
+ */
+enum MetricEntityType {
+  LOCAL_PREFERENCE = 0,
+  LOCAL_ROUTE = 1,
+  AS_PATH_LEN = 2,
+  ORIGIN_CODE = 3,
+  EXTERNAL_ROUTE = 4,
+  CONFED_EXTERNAL_ROUTE = 5,
+  ROUTER_ID = 6,
+  CLUSTER_LIST_LEN = 7,
+  PEER_IP = 8,
+  OPENR_IGP_COST = 9,
+}
 
-  // Placeholder Types
-  TYPE_1 = 21,
-  TYPE_2 = 22,
-  TYPE_3 = 23,
-  TYPE_4 = 24,
-  TYPE_5 = 25,
+/**
+ * Metric entity priorities.
+ * Large gaps are provided so that in future, we can place other fields
+ * in between if needed
+ */
+enum MetricEntityPriority {
+  LOCAL_PREFERENCE = 9000,
+  LOCAL_ROUTE = 8000,
+  AS_PATH_LEN = 7000,
+  ORIGIN_CODE = 6000,
+  EXTERNAL_ROUTE = 5000,
+  CONFED_EXTERNAL_ROUTE = 4000,
+  OPENR_IGP_COST = 3500,
+  ROUTER_ID = 3000,
+  CLUSTER_LIST_LEN = 2000,
+  PEER_IP = 1000,
+}
+
+// How to compare two MetricEntity
+enum CompareType {
+  // if present only in one metric vector, route with this type will win
+  WIN_IF_PRESENT = 1,
+  // if present only in one metric vector, route without this type will win
+  WIN_IF_NOT_PRESENT = 2,
+  // if present only in one metric vector,
+  // this type will be ignored from comparision and fall through to next
+  IGNORE_IF_NOT_PRESENT = 3,
+}
+
+struct MetricEntity {
+  // Type identifying each entity. (Used only for identification)
+  1: i64 type
+
+  // Priority fields. Initially priorities are assigned as
+  // 10000, 9000, 8000, 7000 etc, this enables us to add any priorities
+  // in between two fields.
+  // Higher value is higher priority.
+  2: i64 priority
+
+  // Compare type defines how to handle cases of backward compatibility and
+  // scenario's where some fields are not populated
+  3: CompareType op
+
+  // All fields without this set will be used for multipath selection
+  // Field/fields with this set will be used for best path tie breaking only
+  4: bool isBestPathTieBreaker
+
+  // List of int64's. Always > win's. -ve numbers will represent < wins
+  5: list<i64> metric
+}
+
+// Expected to be sorted on priority
+struct MetricVector {
+  // Only two metric vectors of same version will be compared.
+  // If we want to come up with new scheme for metric vector at a later date.
+  1: i64 version
+
+  2: list<MetricEntity> metrics
+}
+
+enum PrefixForwardingType {
+  IP = 0, # Default
+  SR_MPLS = 1,
+}
+
+enum PrefixForwardingAlgorithm {
+  SP_ECMP = 0, # Default (Shortest Path ECMP)
+  KSP2_ED_ECMP = 1, # 2-Shortest path edge-disjoint ECMP
 }
 
 struct PrefixEntry {
-  1: IpPrefix.IpPrefix prefix
-  2: PrefixType type
+  1: Network.IpPrefix prefix
+  2: Network.PrefixType type
   // optional additional metadata (encoding depends on PrefixType)
   3: binary data
+  // Default mode of forwarding for prefix is IP. If `forwardingType` is
+  // set then IP -> MPLS route will be programmed at LERs and LSR will perform
+  // label forwarding until packet reaches destination.
+  4: PrefixForwardingType forwardingType = 0
+  # Default forwarding algorithm is shortest path ECMP. Open/R implements
+  # 2-shortest path edge disjoint algorithm for forwarding. Forwarding type
+  # must be set to SR_MPLS. MPLS tunneling will be used for forwarding on
+  # shortest paths
+  7: PrefixForwardingAlgorithm forwardingAlgorithm = 0
+
+  // Indicates if the prefix entry is ephemeral or persistent.
+  // If optional value is not present, then entry is persistent.
+  // Ephemeral entries are not saved into persistent store(file) and will be
+  // lost with restart, if not refreshed before cold start time.
+  5: optional bool ephemeral
+  // Metric vector for externally injected routes into openr
+  6: optional MetricVector mv
+  // If the # of nethops for this prefix is below certain threshold, Decision
+  // will not program/anounce the routes. If this parameter is not set, Decision
+  // will not do extra check # of nexthops.
+  8: optional i64 minNexthop
 }
 
 // all prefixes that are bound to a given router
@@ -152,7 +253,12 @@ struct PrefixDatabase {
   1: string thisNodeName
   // numbering is intentional
   3: list<PrefixEntry> prefixEntries
+  // flag to indicate prefix(s) must be deleted
+  5: bool deletePrefix
 
   // Optional attribute to measure convergence performance
   4: optional PerfEvents perfEvents;
+  // Set to true if prefix was added by 'per prefix key' format.
+  // this value is local to the node, and not used by remote nodes
+  6: optional bool perPrefixKey
 }

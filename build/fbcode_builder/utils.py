@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# Copyright (c) Facebook, Inc. and its affiliates.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -8,6 +9,7 @@ from __future__ import unicode_literals
 import itertools
 import logging
 import os
+import shutil
 import subprocess
 import sys
 
@@ -34,25 +36,34 @@ def make_temp_dir(d):
     try:
         yield d
     finally:
-        if os.path.exists(d):
-            os.rmdir(d)
+        shutil.rmtree(d, ignore_errors=True)
 
 
-@contextmanager
-def push_dir(d):
-    old_dir = os.getcwd()
-    os.chdir(d)
-    try:
-        yield d
-    finally:
-        os.chdir(old_dir)
+def _inner_read_config(path):
+    '''
+    Helper to read a named config file.
+    The grossness with the global is a workaround for this python bug:
+    https://bugs.python.org/issue21591
+    The bug prevents us from defining either a local function or a lambda
+    in the scope of read_fbcode_builder_config below.
+    '''
+    global _project_dir
+    full_path = os.path.join(_project_dir, path)
+    return read_fbcode_builder_config(full_path)
 
 
 def read_fbcode_builder_config(filename):
     # Allow one spec to read another
-    scope = {'read_fbcode_builder_config': read_fbcode_builder_config}
+    # When doing so, treat paths as relative to the config's project directory.
+    # _project_dir is a "local" for _inner_read_config; see the comments
+    # in that function for an explanation of the use of global.
+    global _project_dir
+    _project_dir = os.path.dirname(filename)
+
+    scope = {'read_fbcode_builder_config': _inner_read_config}
     with open(filename) as config_file:
-        exec(config_file.read(), scope)
+        code = compile(config_file.read(), filename, mode='exec')
+    exec(code, scope)
     return scope['config']
 
 

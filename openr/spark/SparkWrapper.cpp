@@ -17,44 +17,49 @@ SparkWrapper::SparkWrapper(
     std::chrono::milliseconds myHoldTime,
     std::chrono::milliseconds myKeepAliveTime,
     std::chrono::milliseconds myFastInitKeepAliveTime,
-    KeyPair keyPair,
-    KnownKeysStore* knownKeysStore,
     bool enableV4,
-    bool enableSignature,
-    SparkReportUrl const& reportUrl,
-    SparkCmdUrl const& cmdUrl,
+    bool enableSubnetValidation,
     MonitorSubmitUrl const& monitorCmdUrl,
+    std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
-    std::shared_ptr<IoProvider> ioProvider)
-    : myNodeName_(myNodeName),
-      ioProvider_(std::move(ioProvider)),
-      reqSock_(zmqContext),
-      reportSock_(zmqContext) {
+    std::shared_ptr<IoProvider> ioProvider,
+    folly::Optional<std::unordered_set<std::string>> areas,
+    bool enableSpark2,
+    bool increaseHelloInterval,
+    SparkTimeConfig timeConfig)
+    : myNodeName_(myNodeName) {
   spark_ = std::make_shared<Spark>(
       myDomainName,
       myNodeName,
       static_cast<uint16_t>(6666),
       myHoldTime,
       myKeepAliveTime,
-      myFastInitKeepAliveTime /* fastInitKeepAliveTime */,
+      myFastInitKeepAliveTime, // fastInitKeepAliveTime
+      timeConfig.myHelloTime, // spark2_hello_time
+      timeConfig.myHelloFastInitTime, // spark2_hello_fast_init_time
+      timeConfig.myHandshakeTime, // spark2_handshake_time
+      timeConfig.myHeartbeatTime, // spark2_heartbeat_time
+      timeConfig.myNegotiateHoldTime, // spark2_negotiate_hold_time
+      timeConfig.myHeartbeatHoldTime, // spark2_heartbeat_hold_time
       folly::none /* ip-tos */,
-      keyPair,
-      knownKeysStore,
       enableV4,
-      enableSignature,
-      reportUrl,
-      cmdUrl,
+      enableSubnetValidation,
+      interfaceUpdatesQueue_.getReader(),
+      neighborUpdatesQueue_,
       monitorCmdUrl,
       KvStorePubPort{10001},
       KvStoreCmdPort{10002},
-      zmqContext);
+      OpenrCtrlThriftPort{2018},
+      version,
+      zmqContext,
+      std::move(ioProvider),
+      true,
+      enableSpark2,
+      increaseHelloInterval,
+      areas);
 
   // start spark
   run();
-
-  reqSock_.connect(fbzmq::SocketUrl{cmdUrl});
-
-  reportSock_.connect(fbzmq::SocketUrl{reportUrl});
 }
 
 SparkWrapper::~SparkWrapper() {
@@ -65,7 +70,6 @@ void
 SparkWrapper::run() {
   thread_ = std::make_unique<std::thread>([this]() {
     VLOG(1) << "Spark running.";
-    spark_->setIoProvider(ioProvider_);
     spark_->run();
     VLOG(1) << "Spark stopped.";
   });
@@ -74,6 +78,7 @@ SparkWrapper::run() {
 
 void
 SparkWrapper::stop() {
+  interfaceUpdatesQueue_.close();
   spark_->stop();
   spark_->waitUntilStopped();
   thread_->join();
@@ -81,7 +86,7 @@ SparkWrapper::stop() {
 
 bool
 SparkWrapper::updateInterfaceDb(
-    const std::vector<InterfaceEntry>& interfaceEntries) {
+    const std::vector<SparkInterfaceEntry>& interfaceEntries) {
   thrift::InterfaceDatabase ifDb(
       apache::thrift::FRAGILE, myNodeName_, {}, thrift::PerfEvents());
   ifDb.perfEvents = folly::none;
@@ -93,38 +98,72 @@ SparkWrapper::updateInterfaceDb(
             apache::thrift::FRAGILE,
             true,
             interface.ifIndex,
-            {toBinaryAddress(interface.v4Addr)},
-            {toBinaryAddress(interface.v6LinkLocalAddr)}));
+            // TO BE DEPRECATED SOON
+            {toBinaryAddress(interface.v4Network.first)},
+            {toBinaryAddress(interface.v4Network.first)},
+            {toIpPrefix(interface.v4Network),
+             toIpPrefix(interface.v6LinkLocalNetwork)}));
   }
 
-  reqSock_.sendThriftObj(ifDb, serializer_);
-
-  auto maybeMsg =
-      reqSock_.recvThriftObj<thrift::SparkIfDbUpdateResult>(serializer_);
-  if (maybeMsg.hasError()) {
-    LOG(ERROR) << "updateInterfaceDb recv SparkIfDbUpdateResult failed: "
-               << maybeMsg.error();
-    return false;
-  }
-  auto cmdResult = maybeMsg.value();
-
-  return cmdResult.isSuccess;
+  interfaceUpdatesQueue_.push(std::move(ifDb));
+  return true;
 }
 
 folly::Expected<thrift::SparkNeighborEvent, Error>
 SparkWrapper::recvNeighborEvent(
     folly::Optional<std::chrono::milliseconds> timeout) {
-  auto maybeMsg = reportSock_.recvThriftObj<thrift::SparkNeighborEvent>(
-      serializer_, timeout);
-  if (maybeMsg.hasError()) {
-    return folly::makeUnexpected(maybeMsg.error());
+  auto startTime = std::chrono::steady_clock::now();
+  while (not neighborUpdatesReader_.size()) {
+    // Break if timeout occurs
+    auto now = std::chrono::steady_clock::now();
+    if (timeout.hasValue() && now - startTime > timeout.value()) {
+      return folly::makeUnexpected(Error(-1, std::string("timed out")));
+    }
+    // Yield the thread
+    std::this_thread::yield();
   }
-  return maybeMsg.value();
+
+  return neighborUpdatesReader_.get().value();
 }
 
-void
-SparkWrapper::setKeyPair(const KeyPair& keyPair) {
-  spark_->setKeyPair(keyPair);
+folly::Optional<thrift::SparkNeighborEvent>
+SparkWrapper::waitForEvent(
+    const thrift::SparkNeighborEventType eventType,
+    folly::Optional<std::chrono::milliseconds> rcvdTimeout,
+    folly::Optional<std::chrono::milliseconds> procTimeout) noexcept {
+  auto startTime = std::chrono::steady_clock::now();
+
+  while (true) {
+    // check if it is beyond procTimeout
+    auto endTime = std::chrono::steady_clock::now();
+    if (endTime - startTime > procTimeout.value()) {
+      LOG(ERROR) << "Timeout receiving event. Time limit: "
+                 << procTimeout.value().count();
+      break;
+    }
+    auto maybeEvent = recvNeighborEvent(rcvdTimeout);
+    if (maybeEvent.hasError()) {
+      LOG(ERROR) << "recvNeighborEvent failed: " << maybeEvent.error();
+      continue;
+    }
+    auto& event = maybeEvent.value();
+    if (eventType == event.eventType) {
+      return event;
+    }
+  }
+  return folly::none;
+}
+
+std::pair<folly::IPAddress, folly::IPAddress>
+SparkWrapper::getTransportAddrs(const thrift::SparkNeighborEvent& event) {
+  return {toIPAddress(event.neighbor.transportAddressV4),
+          toIPAddress(event.neighbor.transportAddressV6)};
+}
+
+folly::Optional<SparkNeighState>
+SparkWrapper::getSparkNeighState(
+    std::string const& ifName, std::string const& neighborName) {
+  return spark_->getSparkNeighState(ifName, neighborName);
 }
 
 } // namespace openr

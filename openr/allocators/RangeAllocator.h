@@ -6,13 +6,11 @@
  */
 
 #pragma once
-#define ZEROMQ_HELPER_KVSTORE_H_
 
 #include <chrono>
 #include <random>
 #include <string>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <folly/Format.h>
 #include <folly/Optional.h>
@@ -20,6 +18,8 @@
 #include <folly/gen/Base.h>
 
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrEventBase.h>
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClient.h>
 
@@ -51,11 +51,14 @@ class RangeAllocator {
       const std::string& nodeName,
       const std::string& keyPrefix,
       KvStoreClient* const kvStoreClient,
-      std::function<void(folly::Optional<T>) noexcept> callback,
+      std::function<void(folly::Optional<T>)> callback,
       const std::chrono::milliseconds minBackoffDur =
           std::chrono::milliseconds(50),
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
-      const bool overrideOwner = true);
+      const bool overrideOwner = true,
+      const std::function<bool(T)> checkValueInUseCb = nullptr,
+      const std::chrono::milliseconds rangeAllocTtl = Constants::kRangeAllocTtl,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * user must call this to start allocation
@@ -130,10 +133,10 @@ class RangeAllocator {
 
   // EventLoop in which KvStoreClient is looping. Used for scheduling
   // asynchronous events.
-  fbzmq::ZmqEventLoop* const eventLoop_{nullptr};
+  OpenrEventBase* const eventBase_{nullptr};
 
   // Callback function to let user know of newly allocated value
-  const std::function<void(folly::Optional<T>) noexcept> callback_{nullptr};
+  const std::function<void(folly::Optional<T>)> callback_{nullptr};
 
   // allow a higher originator ID to grab a key from an existing owner with a
   // lower ID knowingly
@@ -162,12 +165,24 @@ class RangeAllocator {
   ExponentialBackoff<std::chrono::milliseconds> backoff_;
 
   // Scheduled timeout token
-  folly::Optional<int64_t> timeoutToken_{folly::none};
+  folly::Optional<int64_t> allocateValue_{folly::none};
+  std::unique_ptr<fbzmq::ZmqTimeout> timeout_;
 
   // if allocator has started
   bool hasStarted_{false};
+
+  // callback to check if value already exists
+  const std::function<bool(T)> checkValueInUseCb_{nullptr};
+
+  // KvStore TTL for value
+  const std::chrono::milliseconds rangeAllocTtl_;
+
+  // area ID
+  const std::string area_{};
 };
 
 } // namespace openr
 
+#define RANGE_ALLOCATOR_H_
 #include "RangeAllocator-inl.h"
+#undef RANGE_ALLOCATOR_H_

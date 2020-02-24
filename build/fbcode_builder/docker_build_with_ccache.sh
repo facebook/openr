@@ -1,4 +1,5 @@
 #!/bin/bash -uex
+# Copyright (c) Facebook, Inc. and its affiliates.
 set -o pipefail  # Be sure to `|| :` commands that are allowed to fail.
 
 #
@@ -65,7 +66,7 @@ if [[ "$build_timeout" != "" ]] ; then
     echo "Build timed out after $build_timeout" 1>&2
     while true; do
       maybe_container=$(
-        egrep '^( ---> Running in [0-9a-f]+|FBCODE_BUILDER_EXIT)$' "$logfile" |
+        grep -E '^( ---> Running in [0-9a-f]+|FBCODE_BUILDER_EXIT)$' "$logfile" |
           tail -n 1 | awk '{print $NF}'
       )
       if [[ "$maybe_container" == "FBCODE_BUILDER_EXIT" ]] ; then
@@ -108,7 +109,7 @@ if [[ "$img" == "" ]] ; then
   # the build command itself, but since our builds aren't **trying** to
   # break cache, we probably won't randomly hit an ID from another build.
   img=$(
-    egrep '^ ---> (Running in [0-9a-f]+|[0-9a-f]+)$' "$logfile" | tac |
+    grep -E  '^ ---> (Running in [0-9a-f]+|[0-9a-f]+)$' "$logfile" | tac |
       sed 's/Running in /container_/;s/ ---> //;' | (
         while read -r x ; do
           # Both docker commands below print an image ID to stdout on

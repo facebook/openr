@@ -15,10 +15,6 @@ For more information about message formats, checkout
 The kvStoreClient running with this module is responsible for making the
 `prefix:<node_name>` key persistent in the network.
 
-#### PersistentStoreClient
-Responsible for writing the current PrefixDatabase to disk, and picking it up
-after restarts.
-
 #### Cmd Socket
 Supports the following commands
 - `ADD_PREFIXES` => Adds the list of prefixes provided as an argument
@@ -42,8 +38,8 @@ disk when the list changes.
 ### Interacting with PrefixManager
 ---
 
-For c++, we provide a simple `PrefixManagerClient` which implements an API
-for modifying the prefix list advertised from the node.
+Use thrift APIs defined in `openr/if/OpenrCtrl.thrift` for querying, adding,
+removing or updating originating prefixes.
 
 Additionally, you can add and remove prefixes from the `breeze` cli. See
 [docs/Breeze.md](https://github.com/facebook/openr/blob/master/openr/docs/Breeze.md)

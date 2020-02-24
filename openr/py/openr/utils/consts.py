@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -5,37 +7,48 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
+
+import re
+from builtins import object
 
 from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 
 
 class Consts(object):
-    TIMEOUT_MS = 5000
-    CONST_TTL_INF = -2**31
-    ADJ_DB_MARKER = 'adj:'
-    INTERFACE_DB_MARKER = 'intf:'
-    PREFIX_DB_MARKER = 'prefix:'
+    TIMEOUT_MS = 10000  # 10 seconds
+    CONST_TTL_INF = -2 ** 31
+    IP_TOS = 192
+    ADJ_DB_MARKER = "adj:"
+    PREFIX_DB_MARKER = "prefix:"
+    ALL_DB_MARKER = ""
 
-    KVSTORE_REP_PORT = 60002
-    KVSTORE_PUB_PORT = 60001
-    DECISION_REP_PORT = 60004
-    FIB_REP_PORT = 60009
-    HEALTH_CHECKER_CMD_PORT = 60012
-    LINK_MONITOR_CMD_PORT = 60006
-    PREFIX_MGR_CMD_PORT = 60011
-    MONITOR_REP_PORT = 60008
+    SEED_PREFIX_ALLOC_PARAM_KEY = "e2e-network-prefix"
+    STATIC_PREFIX_ALLOC_PARAM_KEY = "e2e-network-allocations"
+
+    CTRL_PORT = 2018
     FIB_AGENT_PORT = 60100
-    CONFIG_STORE_URL_PREFIX = "ipc:///tmp/config_store_cmd"
 
-    TOPOLOGY_OUTPUT_FILE = '/tmp/openr-topology.png'
+    TOPOLOGY_OUTPUT_FILE = "/tmp/openr-topology.png"
 
-    PREFIX_ALLOC_KEY = 'prefix-allocator-config'
-    LINK_MONITOR_KEY = 'link-monitor-config'
-    PREFIX_MGR_KEY = 'prefix-manager-config'
+    PREFIX_ALLOC_KEY = "prefix-allocator-config"
+    LINK_MONITOR_KEY = "link-monitor-config"
+    PREFIX_MGR_KEY = "prefix-manager-config"
 
     # Default serializer/deserializer for communication with OpenR
     PROTO_FACTORY = TCompactProtocolFactory
+
+    OPENR_CONFIG_FILE = "/etc/sysconfig/openr"
+
+    # per prefix key regex for the following formats
+    # prefix:e00.0002.node2:area1:[192.168.0.2/32]
+    # prefix:e00.0002.node2:area2:[da00:cafe:babe:51:61ee::/80]
+    PER_PREFIX_KEY_REGEX = (
+        re.escape(PREFIX_DB_MARKER)
+        + r"(?P<node>[A-Za-z0-9_-].*):"
+        + r"(?P<area>[A-Za-z0-9].*):"
+        + r"\[(?P<ipaddr>[a-fA-F0-9\.\:].*)/"
+        + r"(?P<plen>[0-9]{1,3})\]"
+    )
+
+    # Openr version at which area feature was added
+    OPENR_AREA_VERSION = 20191122

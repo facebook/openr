@@ -5,10 +5,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Platform
+namespace py3 openr.thrift
 
-include "IpPrefix.thrift"
+include "common/fb303/if/fb303.thrift"
+include "Network.thrift"
+
 /**
  * We provide simple API to publish link/address/neighbor updating events
  * through PUB-SUB mechanism to all of its subscriber modules in OpenR
@@ -22,13 +26,13 @@ struct LinkEntry {
 
 struct AddrEntry {
   1: string ifName;
-  2: IpPrefix.IpPrefix ipPrefix;
+  2: Network.IpPrefix ipPrefix;
   3: bool isValid;
 }
 
 struct NeighborEntry {
   1: string ifName;
-  2: IpPrefix.BinaryAddress destination;
+  2: Network.BinaryAddress destination;
   3: string linkAddr;
   4: bool isReachable;
 }
@@ -36,7 +40,7 @@ struct NeighborEntry {
 struct Link {
   1: i64 ifIndex;
   2: bool isUp;
-  3: list<IpPrefix.IpPrefix> networks;
+  3: list<Network.IpPrefix> networks;
   4: string ifName;
   5: i64 weight = 1; // used for weighted ecmp
 }
@@ -55,6 +59,16 @@ enum FibClient {
   CLIENT_3 = 3,
   CLIENT_4 = 4,
   CLIENT_5 = 5,
+}
+
+// SwSwitch run states. SwSwitch moves forward from a
+// lower numbered state to the next
+enum SwitchRunState {
+  UNINITIALIZED = 0,
+  INITIALIZED = 1,
+  CONFIGURED = 2,
+  FIB_SYNCED = 3,
+  EXITING = 4
 }
 
 /**
@@ -97,8 +111,8 @@ service SystemService {
    * 1. query all links keyed by interface names
    * 2. query all reachable neighbors
    */
-  list<Link> getAllLinks(
-  ) throws (1: PlatformError error)
+  list<Link> getAllLinks()
+    throws (1: PlatformError error)
 
   list<NeighborEntry> getAllNeighbors()
     throws (1: PlatformError error)
@@ -113,54 +127,148 @@ service SystemService {
     2: string destAddr,
   ) throws (1: PlatformError error)
 
+  /**
+   * Backward compatibility has been considered
+   * As of now all the production platforms use our own SystemHandler
+   * New platforms need implement those interfaces based on the platform APIs
+   */
+  void addIfaceAddresses(
+    1: string iface,
+    2: list<Network.IpPrefix> addrs)
+    throws (1: PlatformError error)
+
+  void removeIfaceAddresses(
+    1: string iface,
+    2: list<Network.IpPrefix> addrs)
+    throws (1: PlatformError error)
+
+  void syncIfaceAddresses(
+    1: string iface,
+    2: i16 family,
+    3: i16 scope,
+    4: list<Network.IpPrefix> addrs)
+    throws (1: PlatformError error)
+
+  list<Network.IpPrefix> getIfaceAddresses(
+    1: string iface, 2: i16 family, 3: i16 scope)
+    throws (1: PlatformError error)
 }
+
+// static mapping of clientId => protocolId, priority same of admin distance
+// For Open/R
+//    ClientId: 786 => ProtocolId: 99, Priority: 10
+// For BGP
+//    ClientId: 0 => ProtocolId: 253, Priority: 20
+// For TG breeze CLI client
+//    ClientId: 64 => ProtocolId: 64, Priority: 11
+const map<i16, i16> clientIdtoProtocolId = {
+    786: 99,  // Open/R
+    0: 253,   // BGP
+    64: 64,   // CLI Routes
+}
+const map<i16, i16> protocolIdtoPriority = {
+    99: 10,   // Open/R
+    253: 20,  // BGP
+    64: 11,   // CLI Routes
+}
+const i16 kUnknowProtAdminDistance = 255
 
 /**
  * Interface to on-box Fib.
  */
-service FibService {
+service FibService extends fb303.FacebookService {
+
+  /*
+  * get run state
+  */
+  SwitchRunState getSwitchRunState()
+
+  //
+  // Unicast Routes API
+  //
   void addUnicastRoute(
     1: i16 clientId,
-    2: IpPrefix.UnicastRoute route,
+    2: Network.UnicastRoute route,
   ) throws (1: PlatformError error)
 
   void deleteUnicastRoute(
     1: i16 clientId,
-    2: IpPrefix.IpPrefix prefix,
+    2: Network.IpPrefix prefix,
   ) throws (1: PlatformError error)
 
   void addUnicastRoutes(
     1: i16 clientId,
-    2: list<IpPrefix.UnicastRoute> routes,
+    2: list<Network.UnicastRoute> routes,
   ) throws (1: PlatformError error)
 
   void deleteUnicastRoutes(
     1: i16 clientId,
-    2: list<IpPrefix.IpPrefix> prefixes,
+    2: list<Network.IpPrefix> prefixes,
   ) throws (1: PlatformError error)
 
   void syncFib(
     1: i16 clientId,
-    2: list<IpPrefix.UnicastRoute> routes,
+    2: list<Network.UnicastRoute> routes,
   ) throws (1: PlatformError error)
 
-  /**
-   * DEPRECATED ... Use `aliveSince` API instead
-   * openr should periodically call this to let Fib know that it is alive
-   */
-  i64 periodicKeepAlive(
-    1: i16 clientId,
-  )
-
-  /**
-   * Returns the unix time that the service has been running since
-   */
-  i64 aliveSince() (priority = 'IMPORTANT')
-
-  map<string, i64> getCounters()
-
-  // Retreive list of routes per client
-  list<IpPrefix.UnicastRoute> getRouteTableByClient(
+  // Retrieve list of unicast routes per client
+  list<Network.UnicastRoute> getRouteTableByClient(
     1: i16 clientId
   ) throws (1: PlatformError error)
+
+  //
+  // MPLS routes API
+  //
+  void addMplsRoutes(
+    1: i16 clientId,
+    2: list<Network.MplsRoute> routes,
+  ) throws (1: PlatformError error)
+
+  void deleteMplsRoutes(
+    1: i16 clientId,
+    2: list<i32> topLabels,
+  ) throws (1: PlatformError error)
+
+  // Flush previous routes and install new routes without disturbing
+  // traffic. Similar to syncFib API
+  void syncMplsFib(
+    1: i16 clientId,
+    2: list<Network.MplsRoute> routes,
+  ) throws (1: PlatformError error)
+
+  // Retrieve list of MPLS routes per client
+  list<Network.MplsRoute> getMplsRouteTableByClient(
+    1: i16 clientId
+  ) throws (1: PlatformError error)
+
+  void registerForNeighborChanged()
+    throws (1: PlatformError error) (thread='eb')
+
+  void sendNeighborDownInfo(
+    1: list<string> neighborIp
+    )
+    throws (1: PlatformError error)
+
+  //
+  // FBOSS Agent API (for emulation only)
+  //
+  list<Network.LinkNeighborThrift> getLldpNeighbors()
+    throws (1: PlatformError error)
+
+  Network.PortInfoThrift getPortInfo(
+    1: i32 portId
+    )
+    throws (1: PlatformError error)
+}
+
+service NeighborListenerClientForFibagent {
+  /*
+   * Sends list of neighbors that have changed to the subscriber.
+   *
+   * These come in the form of ip address strings which have been added
+   * since the last notification. Changes are not queued between
+   * subscriptions.
+   */
+  void neighborsChanged(1: list<string> added, 2: list<string> removed)
+    throws (1: PlatformError error)
 }

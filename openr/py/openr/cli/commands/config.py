@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 #
 # Copyright (c) 2014-present, Facebook, Inc.
 #
@@ -5,126 +7,142 @@
 # LICENSE file in the root directory of this source tree.
 #
 
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import division
 
-import sys
+from typing import Tuple
 
-from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_object
-from openr.cli.utils import utils
-from openr.utils import printing
-
-from openr.clients import config_store_client
 from openr.AllocPrefix import ttypes as ap_types
+from openr.cli.utils import utils
+from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.LinkMonitor import ttypes as lm_types
 from openr.Lsdb import ttypes as lsdb_types
+from openr.OpenrCtrl import OpenrCtrl
+from openr.OpenrCtrl.ttypes import OpenrError
+from openr.utils import ipnetwork, printing
+from openr.utils.consts import Consts
+from openr.utils.serializer import deserialize_thrift_object
 
 
-class ConfigCmd():
-    def __init__(self, cli_opts):
-        ''' initialize the Config Store client '''
-
-        self.client = config_store_client.ConfigStoreClient(
-            cli_opts.zmq_ctx,
-            cli_opts.config_store_url,
-            cli_opts.timeout,
-            cli_opts.proto_factory)
-
-
-class ConfigPrefixAllocatorCmd(ConfigCmd):
-    def run(self):
+class ConfigStoreCmdBase(OpenrCtrlCmd):
+    def getConfigWrapper(
+        self, client: OpenrCtrl.Client, config_key: str
+    ) -> Tuple[str, str]:
+        blob = None
+        exception_str = None
         try:
-            prefix_alloc_blob = self.client.load(Consts.PREFIX_ALLOC_KEY)
-        except KeyError:
-            print("Cannot load Prefix Allocator config")
-            sys.exit(1)
+            blob = client.getConfigKey(config_key)
+        except OpenrError as ex:
+            exception_str = "Exception getting key for {}: {}".format(config_key, ex)
+
+        return (blob, exception_str)
+
+
+class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client):
+        (prefix_alloc_blob, exception_str) = self.getConfigWrapper(
+            client, Consts.PREFIX_ALLOC_KEY
+        )
+
+        if prefix_alloc_blob is None:
+            print(exception_str)
+            return
 
         prefix_alloc = deserialize_thrift_object(
-            prefix_alloc_blob, ap_types.AllocPrefix)
+            prefix_alloc_blob, ap_types.AllocPrefix
+        )
         self.print_config(prefix_alloc)
 
-    def print_config(self, prefix_alloc):
+    def print_config(self, prefix_alloc: ap_types.AllocPrefix) -> None:
         seed_prefix = prefix_alloc.seedPrefix
-        seed_prefix_addr = utils.sprint_addr(seed_prefix.prefixAddress.addr)
+        seed_prefix_addr = ipnetwork.sprint_addr(seed_prefix.prefixAddress.addr)
 
-        caption = 'Prefix Allocator parameters stored'
+        caption = "Prefix Allocator parameters stored"
         rows = []
-        rows.append(['Seed prefix: {}/{}'.format(seed_prefix_addr,
-                    seed_prefix.prefixLength)])
-        rows.append(['Allocated prefix length: {}'.format(
-                    prefix_alloc.allocPrefixLen)])
-        rows.append(['Allocated prefix index: {}'.format(
-            prefix_alloc.allocPrefixIndex)])
+        rows.append(
+            ["Seed prefix: {}/{}".format(seed_prefix_addr, seed_prefix.prefixLength)]
+        )
+        rows.append(["Allocated prefix length: {}".format(prefix_alloc.allocPrefixLen)])
+        rows.append(
+            ["Allocated prefix index: {}".format(prefix_alloc.allocPrefixIndex)]
+        )
 
         print(printing.render_vertical_table(rows, caption=caption))
 
 
-class ConfigLinkMonitorCmd(ConfigCmd):
-    def run(self):
-        try:
-            lm_config_blob = self.client.load(Consts.LINK_MONITOR_KEY)
-        except KeyError:
-            print("Cannot load Link Monitor config")
-            sys.exit(1)
+class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        # After link-monitor thread starts, it will hold for
+        # "adjHoldUntilTimePoint_" time before populate config information.
+        # During this short time-period, Exception can be hit if dump cmd
+        # kicks during this time period.
+        (lm_config_blob, exception_str) = self.getConfigWrapper(
+            client, Consts.LINK_MONITOR_KEY
+        )
+
+        if lm_config_blob is None:
+            print(exception_str)
+            return
 
         lm_config = deserialize_thrift_object(
-            lm_config_blob, lm_types.LinkMonitorConfig)
+            lm_config_blob, lm_types.LinkMonitorConfig
+        )
         self.print_config(lm_config)
 
-    def print_config(self, lm_config):
-        caption = 'Link Monitor parameters stored'
+    def print_config(self, lm_config: lm_types.LinkMonitorConfig):
+        caption = "Link Monitor parameters stored"
         rows = []
-        rows.append(['isOverloaded: {}'.format(
-                    'Yes' if lm_config.isOverloaded else 'No')])
-        rows.append(['nodeLabel: {}'.format(lm_config.nodeLabel)])
-        rows.append(['overloadedLinks: {}'.format(
-            ', '.join(lm_config.overloadedLinks))])
+        rows.append(
+            ["isOverloaded: {}".format("Yes" if lm_config.isOverloaded else "No")]
+        )
+        rows.append(["nodeLabel: {}".format(lm_config.nodeLabel)])
+        rows.append(
+            ["overloadedLinks: {}".format(", ".join(lm_config.overloadedLinks))]
+        )
         print(printing.render_vertical_table(rows, caption=caption))
 
-        print(printing.render_vertical_table([['linkMetricOverrides:']]))
-        column_labels = ['Interface', 'Metric Override']
+        print(printing.render_vertical_table([["linkMetricOverrides:"]]))
+        column_labels = ["Interface", "Metric Override"]
         rows = []
         for (k, v) in sorted(lm_config.linkMetricOverrides.items()):
             rows.append([k, v])
         print(printing.render_horizontal_table(rows, column_labels=column_labels))
 
+        print(printing.render_vertical_table([["adjMetricOverrides:"]]))
+        column_labels = ["Adjacency", "Metric Override"]
+        rows = []
+        for (k, v) in sorted(lm_config.adjMetricOverrides.items()):
+            adj_str = k.nodeName + " " + k.ifName
+            rows.append([adj_str, v])
+        print(printing.render_horizontal_table(rows, column_labels=column_labels))
 
-class ConfigPrefixManagerCmd(ConfigCmd):
-    def run(self):
-        try:
-            prefix_mgr_config_blob = self.client.load(Consts.PREFIX_MGR_KEY)
-        except KeyError:
-            print("Cannot load Prefix Manager config")
-            sys.exit(1)
+
+class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client) -> None:
+        (prefix_mgr_config_blob, exception_str) = self.getConfigWrapper(
+            client, Consts.PREFIX_MGR_KEY
+        )
+
+        if prefix_mgr_config_blob is None:
+            print(exception_str)
+            return
 
         prefix_mgr_config = deserialize_thrift_object(
-            prefix_mgr_config_blob, lsdb_types.PrefixDatabase)
+            prefix_mgr_config_blob, lsdb_types.PrefixDatabase
+        )
         self.print_config(prefix_mgr_config)
 
-    def print_config(self, prefix_mgr_config):
+    def print_config(self, prefix_mgr_config: lsdb_types.PrefixDatabase):
         print()
         print(utils.sprint_prefixes_db_full(prefix_mgr_config))
         print()
 
 
-class ConfigEraseCmd(ConfigCmd):
-    def run(self, key):
-        success = self.client.erase(key)
-        if success:
-            print("Key erased\n")
-        else:
-            print("Erase failed\n")
-            sys.exit(1)
+class ConfigEraseCmd(ConfigStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, key: str) -> None:
+        client.eraseConfigKey(key)
+        print("Key:{} erased".format(key))
 
 
-class ConfigStoreCmd(ConfigCmd):
-    def run(self, key, value):
-        success = self.client.store(key, value)
-        if success:
-            print("Key stored\n")
-        else:
-            print("Store failed\n")
-            sys.exit(1)
+class ConfigStoreCmd(ConfigStoreCmdBase):
+    def _run(self, client: OpenrCtrl.Client, key: str, value: str) -> None:
+        client.setConfigKey(key, value)
+        print("Key:{}, value:{} stored".format(key, value))

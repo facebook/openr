@@ -13,19 +13,27 @@
 #include <glog/logging.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
+#include <openr/nl/NetlinkSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/platform/NetlinkSystemHandler.h>
+#include <openr/platform/PlatformPublisher.h>
 
 DEFINE_int32(
     system_thrift_port, 60099, "Thrift server port for NetlinkSystemHandler");
 DEFINE_int32(
     fib_thrift_port, 60100, "Thrift server port for the NetlinkFibHandler");
 DEFINE_string(
-    chdir, "/tmp", "Change current directory to this after loading config");
-DEFINE_string(
     platform_pub_url,
-    "ipc://platform-pub-url",
+    "ipc:///tmp/platform-pub-url",
     "Publisher URL for interface/address notifications");
+DEFINE_bool(
+    enable_netlink_fib_handler,
+    true,
+    "If set, netlink fib handler will be started for route programming.");
+DEFINE_bool(
+    enable_netlink_system_handler,
+    true,
+    "If set, netlink system handler will be started");
 
 using openr::NetlinkFibHandler;
 using openr::NetlinkSystemHandler;
@@ -35,80 +43,117 @@ main(int argc, char** argv) {
   // Init everything
   folly::init(&argc, &argv);
 
-  // change directory if chdir specified
-  if (!FLAGS_chdir.empty()) {
-    ::chdir(FLAGS_chdir.c_str());
-  }
-
   fbzmq::Context context;
-  fbzmq::ZmqEventLoop mainEventLoop, platformEvl;
+  fbzmq::ZmqEventLoop mainEventLoop;
 
   fbzmq::StopEventLoopSignalHandler eventLoopHandler(&mainEventLoop);
   eventLoopHandler.registerSignalHandler(SIGINT);
   eventLoopHandler.registerSignalHandler(SIGQUIT);
   eventLoopHandler.registerSignalHandler(SIGTERM);
 
-  auto platformZmqThread = std::thread([&platformEvl]() noexcept {
-    LOG(INFO) << "Starting Netlink Fib Platform ZMQ event loop thread ...";
-    folly::setThreadName("FibPlatform");
-    platformEvl.run();
-    LOG(INFO) << "Stopped Netlink Fib Platform ZMQ event loop thread ...";
-  });
-  platformEvl.waitUntilRunning();
+  std::vector<std::thread> allThreads{};
 
-  auto nlHandler = std::make_shared<NetlinkSystemHandler>(
-      context,
-      openr::PlatformPublisherUrl{FLAGS_platform_pub_url},
-      &platformEvl);
+  auto nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
+  nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
+      nlProtocolSocketEventLoop.get());
+  allThreads.emplace_back(
+      std::thread([&nlProtocolSocket, &nlProtocolSocketEventLoop]() {
+        LOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
+        folly::setThreadName("NetlinkProtolSocketEvl");
+        nlProtocolSocket->init();
+        nlProtocolSocketEventLoop->run();
+        LOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
+      }));
+  nlProtocolSocketEventLoop->waitUntilRunning();
+
+  // Create event publisher to handle event subscription
+  auto eventPublisher = std::make_unique<openr::PlatformPublisher>(
+      context, openr::PlatformPublisherUrl{FLAGS_platform_pub_url});
+
+  auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+  auto nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
+      nlEventLoop.get(), nullptr, std::move(nlProtocolSocket));
+
+  // Subscribe selected network events
+  nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
+  nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);
+
+  auto nlEvlThread = std::thread([&nlEventLoop]() {
+    folly::setThreadName("NetlinkEvl");
+    nlEventLoop->run();
+  });
+  nlEventLoop->waitUntilRunning();
+  allThreads.emplace_back(std::move(nlEvlThread));
 
   apache::thrift::ThriftServer systemServiceServer;
-  auto systemThriftThread =
-      std::thread([nlHandler, &systemServiceServer]() noexcept {
-        folly::setThreadName("SystemService");
-        systemServiceServer.setNWorkerThreads(1);
-        systemServiceServer.setNPoolThreads(1);
-        systemServiceServer.setPort(FLAGS_system_thrift_port);
-        systemServiceServer.setInterface(nlHandler);
+  if (FLAGS_enable_netlink_system_handler) {
+    // start NetlinkSystem thread
+    auto nlHandler =
+        std::make_shared<NetlinkSystemHandler>(&mainEventLoop, nlSocket);
 
-        LOG(INFO) << "Starting System Service server...";
-        systemServiceServer.serve();
-        LOG(INFO) << "Stopped System Service server...";
-      });
+    auto systemThriftThread =
+        std::thread([nlHandler, &systemServiceServer]() noexcept {
+          folly::setThreadName("SystemService");
+          systemServiceServer.setNWorkerThreads(1);
+          systemServiceServer.setNPoolThreads(1);
+          systemServiceServer.setPort(FLAGS_system_thrift_port);
+          systemServiceServer.setInterface(nlHandler);
 
-  auto fibHandler = std::make_shared<NetlinkFibHandler>(&platformEvl);
+          LOG(INFO) << "System Service starting...";
+          systemServiceServer.serve();
+          LOG(INFO) << "System Service stopped.";
+        });
+    allThreads.emplace_back(std::move(systemThriftThread));
+  }
 
   apache::thrift::ThriftServer linuxFibAgentServer;
-  auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
-    folly::setThreadName("FibService");
-    linuxFibAgentServer.setNWorkerThreads(1);
-    linuxFibAgentServer.setNPoolThreads(1);
-    linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
-    linuxFibAgentServer.setInterface(fibHandler);
+  if (FLAGS_enable_netlink_fib_handler) {
+    // start FibService thread
+    auto fibHandler =
+        std::make_shared<NetlinkFibHandler>(&mainEventLoop, nlSocket);
 
-    LOG(INFO) << "Starting Fib Service server...";
-    linuxFibAgentServer.serve();
-  });
+    auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
+      folly::setThreadName("FibService");
+      linuxFibAgentServer.setNWorkerThreads(1);
+      linuxFibAgentServer.setNPoolThreads(1);
+      linuxFibAgentServer.setPort(FLAGS_fib_thrift_port);
+      linuxFibAgentServer.setInterface(fibHandler);
+      linuxFibAgentServer.setDuplex(true);
 
-  LOG(INFO) << "Starting the main loop";
+      LOG(INFO) << "Fib Agent starting...";
+      linuxFibAgentServer.serve();
+      LOG(INFO) << "Fib Agent stopped.";
+    });
+    allThreads.emplace_back(std::move(fibThriftThread));
+  }
+
+  LOG(INFO) << "Main event loop starting...";
   mainEventLoop.run();
-  LOG(INFO) << "Stopping the main loop";
+  LOG(INFO) << "Main event loop stopped.";
 
-  LOG(INFO) << "Main Event loop stopped... Stopping the servers";
-  linuxFibAgentServer.stop();
-  systemServiceServer.stop();
+  nlEventLoop->stop();
+  nlEventLoop->waitUntilStopped();
+  nlProtocolSocketEventLoop->stop();
+  nlProtocolSocketEventLoop->waitUntilStopped();
+
+  if (FLAGS_enable_netlink_fib_handler) {
+    linuxFibAgentServer.stop();
+  }
+  if (FLAGS_enable_netlink_system_handler) {
+    systemServiceServer.stop();
+  }
+  if (nlSocket) {
+    nlSocket.reset();
+  }
+  if (eventPublisher) {
+    eventPublisher.reset();
+  }
 
   // Wait for threads to finish
-  systemThriftThread.join();
-  fibThriftThread.join();
-  LOG(INFO) << "Main Event loop stopped... Server threads stopped";
-
-  platformEvl.stop();
-  platformEvl.waitUntilStopped();
-  LOG(INFO) << "Main Event loop stopped... Platform zmq event loops stopped";
-
-  platformZmqThread.join();
-
-  LOG(INFO) << "All threads stopped ..";
+  for (auto& t : allThreads) {
+    t.join();
+  }
 
   return 0;
 }

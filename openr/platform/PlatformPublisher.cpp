@@ -17,8 +17,8 @@
 #include <glog/logging.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/AddressUtil.h>
-#include <openr/if/gen-cpp2/IpPrefix_types.h>
+#include <openr/common/NetworkUtil.h>
+#include <openr/if/gen-cpp2/Network_types.h>
 
 using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
@@ -29,7 +29,8 @@ PlatformPublisher::PlatformPublisher(
     fbzmq::Context& context, const PlatformPublisherUrl& platformPubUrl)
     : platformPubUrl_(platformPubUrl) {
   // Initialize ZMQ sockets
-  platformPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(context);
+  platformPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
+      context, folly::none, folly::none, fbzmq::NonblockingFlag{true});
   VLOG(2) << "Platform Publisher: Binding pub url '" << platformPubUrl_ << "'";
   const auto platformPub =
       platformPubSock_.bind(fbzmq::SocketUrl{platformPubUrl_});
@@ -40,7 +41,7 @@ PlatformPublisher::PlatformPublisher(
 }
 
 void
-PlatformPublisher::publishLinkEvent(const thrift::LinkEntry& link) const {
+PlatformPublisher::publishLinkEvent(const thrift::LinkEntry& link) {
   // advertise change of link, prompting subscriber modules to
   // take immediate action
   thrift::PlatformEvent msg;
@@ -50,7 +51,7 @@ PlatformPublisher::publishLinkEvent(const thrift::LinkEntry& link) const {
 }
 
 void
-PlatformPublisher::publishAddrEvent(const thrift::AddrEntry& address) const {
+PlatformPublisher::publishAddrEvent(const thrift::AddrEntry& address) {
   // advertise change of address, prompting subscriber modules to
   // take immediate action
   thrift::PlatformEvent msg;
@@ -60,8 +61,7 @@ PlatformPublisher::publishAddrEvent(const thrift::AddrEntry& address) const {
 }
 
 void
-PlatformPublisher::publishNeighborEvent(
-    const thrift::NeighborEntry& neighbor) const {
+PlatformPublisher::publishNeighborEvent(const thrift::NeighborEntry& neighbor) {
   // advertise change of neighbor, prompting subscriber modules to
   // take immediate action
   thrift::PlatformEvent msg;
@@ -71,8 +71,7 @@ PlatformPublisher::publishNeighborEvent(
 }
 
 void
-PlatformPublisher::publishPlatformEvent(
-    const thrift::PlatformEvent& msg) const {
+PlatformPublisher::publishPlatformEvent(const thrift::PlatformEvent& msg) {
   VLOG(3) << "Publishing PlatformEvent...";
   thrift::PlatformEventType eventType = msg.eventType;
   // send header of event in the first 2 byte
@@ -86,6 +85,48 @@ PlatformPublisher::publishPlatformEvent(
                       msg.eventType,
                       "UNKNOWN");
   }
+}
+
+void
+PlatformPublisher::linkEventFunc(
+    const std::string& ifName, const openr::fbnl::Link& linkEntry) noexcept {
+  VLOG(4) << "Handling Link Event in NetlinkSystemHandler...";
+  publishLinkEvent(thrift::LinkEntry(
+      FRAGILE,
+      ifName,
+      linkEntry.getIfIndex(),
+      linkEntry.isUp(),
+      Constants::kDefaultAdjWeight));
+}
+
+void
+PlatformPublisher::addrEventFunc(
+    const std::string& ifName,
+    const openr::fbnl::IfAddress& addrEntry) noexcept {
+  VLOG(4) << "Handling Address Event in NetlinkSystemHandler...";
+  thrift::IpPrefix prefix{};
+  publishAddrEvent(thrift::AddrEntry(
+      FRAGILE,
+      ifName,
+      addrEntry.getPrefix().hasValue()
+          ? toIpPrefix(addrEntry.getPrefix().value())
+          : prefix,
+      addrEntry.isValid()));
+}
+
+void
+PlatformPublisher::neighborEventFunc(
+    const std::string& ifName,
+    const openr::fbnl::Neighbor& neighborEntry) noexcept {
+  VLOG(4) << "Handling Neighbor Event in NetlinkSystemHandler...";
+  publishNeighborEvent(thrift::NeighborEntry(
+      FRAGILE,
+      ifName,
+      toBinaryAddress(neighborEntry.getDestination()),
+      neighborEntry.getLinkAddress().hasValue()
+          ? neighborEntry.getLinkAddress().value().toString()
+          : "",
+      neighborEntry.isReachable()));
 }
 
 void

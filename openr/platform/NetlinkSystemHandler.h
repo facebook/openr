@@ -23,7 +23,7 @@
 
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
-#include <openr/platform/PlatformPublisher.h>
+#include <openr/nl/NetlinkSocket.h>
 
 namespace openr {
 
@@ -37,9 +37,8 @@ namespace openr {
 class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
  public:
   NetlinkSystemHandler(
-      fbzmq::Context& context,
-      const PlatformPublisherUrl& platformPublisherUrl,
-      fbzmq::ZmqEventLoop* zmqEventLoop);
+      fbzmq::ZmqEventLoop* zmqEventLoop,
+      std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket);
 
   ~NetlinkSystemHandler() override;
 
@@ -52,19 +51,51 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   folly::Future<std::unique_ptr<std::vector<thrift::NeighborEntry>>>
   future_getAllNeighbors() override;
 
-  folly::Future<folly::Unit> 
-  future_addNlNeighbor(std::unique_ptr<std::string> ifName, 
-                       std::unique_ptr<std::string> destAddr) override;
+  folly::Future<folly::Unit> future_addIfaceAddresses(
+      std::unique_ptr<std::string> iface,
+      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
 
-  folly::Future<folly::Unit>
-  future_delNlNeighbor(std::unique_ptr<std::string> ifName,
-                       std::unique_ptr<std::string> destAddr) override;
+  folly::Future<folly::Unit> future_removeIfaceAddresses(
+      std::unique_ptr<std::string> iface,
+      std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
+
+  folly::Future<folly::Unit> future_syncIfaceAddresses(
+      std::unique_ptr<std::string> iface,
+      int16_t family,
+      int16_t scope,
+      std::unique_ptr<std::vector<thrift::IpPrefix>> addrs) override;
+
+  folly::Future<std::unique_ptr<std::vector<thrift::IpPrefix>>>
+  future_getIfaceAddresses(
+      std::unique_ptr<std::string> iface,
+      int16_t family,
+      int16_t scope) override;
+
  private:
   void initNetlinkSystemHandler();
 
-  // Implementation class for NetlinkSystemHandler internals
-  class NLSubscriberImpl;
-  std::unique_ptr<NLSubscriberImpl> nlImpl_;
+  void doAddIfaceAddr(
+      const std::string& ifName, const folly::CIDRNetwork& prefix);
+
+  void doRemoveIfaceAddr(
+      const std::string& ifName, const folly::CIDRNetwork& prefix);
+
+  void doSyncIfaceAddrs(
+      const std::string& ifName,
+      int16_t family,
+      int16_t scope,
+      const std::vector<::openr::thrift::IpPrefix>& addrs);
+
+  std::unique_ptr<std::vector<openr::thrift::IpPrefix>> doGetIfaceAddrs(
+      const std::string& iface, int16_t family, int16_t scope);
+
+  std::unique_ptr<std::vector<openr::thrift::Link>> doGetAllLinks();
+
+  std::unique_ptr<std::vector<openr::thrift::NeighborEntry>>
+  doGetAllNeighbors();
+
+  fbzmq::ZmqEventLoop* mainEventLoop_;
+  std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket_;
 };
 
 } // namespace openr

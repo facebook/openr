@@ -25,8 +25,8 @@ ExponentialBackoff<Duration>::ExponentialBackoff(
     : initialBackoff_(initialBackoff),
       maxBackoff_(maxBackoff),
       currentBackoff_(0) {
-  CHECK(initialBackoff > Duration(0)) << "Backoff must be positive a value";
-  CHECK(initialBackoff < maxBackoff) << "Max backoff must be greater than "
+  CHECK(initialBackoff > Duration(0)) << "Backoff must be positive value";
+  CHECK(initialBackoff < maxBackoff) << "Max backoff must be greater than"
                                      << "initial backoff.";
 }
 
@@ -67,6 +67,24 @@ ExponentialBackoff<Duration>::getTimeRemainingUntilRetry() const {
   auto res = std::chrono::duration_cast<Duration>(
       (lastErrorTime_ + currentBackoff_) - std::chrono::steady_clock::now());
   return (res < Duration(0)) ? Duration(0) : res;
+}
+
+template <typename Duration>
+std::chrono::steady_clock::time_point
+ExponentialBackoff<Duration>::getLastErrorTime() const {
+  return lastErrorTime_;
+}
+
+template <typename Duration>
+Duration
+ExponentialBackoff<Duration>::getInitialBackoff() const {
+  return initialBackoff_;
+}
+
+template <typename Duration>
+Duration
+ExponentialBackoff<Duration>::getMaxBackoff() const {
+  return maxBackoff_;
 }
 
 // define template instance for some common usecases

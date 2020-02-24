@@ -7,15 +7,43 @@
 
 #pragma once
 
-#include "Spark.h"
+#include <openr/common/Constants.h>
+#include <openr/messaging/ReplicateQueue.h>
+#include <openr/spark/Spark.h>
 
 namespace openr {
 
-struct InterfaceEntry {
+struct SparkInterfaceEntry {
   std::string ifName;
   int ifIndex;
-  folly::IPAddressV4 v4Addr;
-  folly::IPAddressV6 v6LinkLocalAddr;
+  folly::CIDRNetwork v4Network;
+  folly::CIDRNetwork v6LinkLocalNetwork;
+};
+
+struct SparkTimeConfig {
+  SparkTimeConfig(
+      std::chrono::milliseconds helloTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds helloFastInitTime =
+          std::chrono::milliseconds{0},
+      std::chrono::milliseconds handshakeTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds heartbeatTime = std::chrono::milliseconds{0},
+      std::chrono::milliseconds negotiateHoldTime =
+          std::chrono::milliseconds{0},
+      std::chrono::milliseconds heartbeatHoldTime =
+          std::chrono::milliseconds{0})
+      : myHelloTime(helloTime),
+        myHelloFastInitTime(helloFastInitTime),
+        myHandshakeTime(handshakeTime),
+        myHeartbeatTime(heartbeatTime),
+        myNegotiateHoldTime(negotiateHoldTime),
+        myHeartbeatHoldTime(heartbeatHoldTime) {}
+
+  std::chrono::milliseconds myHelloTime;
+  std::chrono::milliseconds myHelloFastInitTime;
+  std::chrono::milliseconds myHandshakeTime;
+  std::chrono::milliseconds myHeartbeatTime;
+  std::chrono::milliseconds myNegotiateHoldTime;
+  std::chrono::milliseconds myHeartbeatHoldTime;
 };
 
 /**
@@ -34,15 +62,16 @@ class SparkWrapper {
       std::chrono::milliseconds myHoldTime,
       std::chrono::milliseconds myKeepAliveTime,
       std::chrono::milliseconds myFastInitKeepAliveTime,
-      KeyPair keyPair,
-      KnownKeysStore* knownKeysStore,
       bool enableV4,
-      bool enableSignature,
-      SparkReportUrl const& reportUrl,
-      SparkCmdUrl const& cmdUrl,
+      bool enableSubnetValidation,
       MonitorSubmitUrl const& monitorCmdUrl,
+      std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
-      std::shared_ptr<IoProvider> ioProvider);
+      std::shared_ptr<IoProvider> ioProvider,
+      folly::Optional<std::unordered_set<std::string>> areas,
+      bool enableSpark2,
+      bool increaseHelloInterval,
+      SparkTimeConfig timeConfig);
 
   ~SparkWrapper();
 
@@ -54,14 +83,30 @@ class SparkWrapper {
 
   // add interfaceDb for Spark to tracking
   // return true upon success and false otherwise
-  bool updateInterfaceDb(const std::vector<InterfaceEntry>& interfaceEntries);
+  bool updateInterfaceDb(
+      const std::vector<SparkInterfaceEntry>& interfaceEntries);
 
   // receive spark neighbor event
   folly::Expected<thrift::SparkNeighborEvent, fbzmq::Error> recvNeighborEvent(
       folly::Optional<std::chrono::milliseconds> timeout = folly::none);
 
-  // set key pair
-  void setKeyPair(const KeyPair& keyPair);
+  folly::Optional<thrift::SparkNeighborEvent> waitForEvent(
+      const thrift::SparkNeighborEventType eventType,
+      folly::Optional<std::chrono::milliseconds> rcvdTimeout = folly::none,
+      folly::Optional<std::chrono::milliseconds> procTimeout =
+          Constants::kPlatformProcTimeout) noexcept;
+
+  // utility call to check neighbor state
+  folly::Optional<SparkNeighState> getSparkNeighState(
+      std::string const& ifName, std::string const& neighborName);
+
+  std::unordered_map<std::string, int64_t>
+  getCounters() {
+    return spark_->getCounters();
+  }
+
+  static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
+      const thrift::SparkNeighborEvent& event);
 
   //
   // Private state
@@ -70,27 +115,19 @@ class SparkWrapper {
  private:
   std::string myNodeName_{""};
 
-  // io provider
-  std::shared_ptr<IoProvider> ioProvider_;
-
-  // this is used to communicate events to downstream consumer
-  const std::string reportUrl_{""};
-
-  // this is used to add/remove network interfaces for tracking
-  const std::string cmdUrl_{""};
+  messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
+  messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesReader_{
+      neighborUpdatesQueue_.getReader()};
 
   // DEALER socket for submitting our monitor
   const std::string monitorCmdUrl_{""};
 
+  // Queue to send interface updates to spark
+  messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+
   // Thrift serializer object for serializing/deserializing of thrift objects
   // to/from bytes
   apache::thrift::CompactSerializer serializer_;
-
-  // ZMQ request socket for interacting with Spark's command socket
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock_;
-
-  // ZMQ pair socket for listening realtime updates from Spark
-  fbzmq::Socket<ZMQ_PAIR, fbzmq::ZMQ_CLIENT> reportSock_;
 
   // Spark owned by this wrapper.
   std::shared_ptr<Spark> spark_{nullptr};

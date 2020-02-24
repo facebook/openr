@@ -19,9 +19,9 @@ namespace openr {
 class ZmqMonitorPoller : public fbzmq::ZmqEventLoop {
  public:
   ZmqMonitorPoller(
-    std::vector<fbzmq::SocketUrl>& counterUrls,
-    std::vector<fbzmq::SocketUrl>& logSubscriberUrls,
-    fbzmq::Context& zmqContext);
+      std::vector<fbzmq::SocketUrl>& counterUrls,
+      std::vector<fbzmq::SocketUrl>& logSubscriberUrls,
+      fbzmq::Context& zmqContext);
 
  private:
   void recvPublication();

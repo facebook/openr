@@ -20,12 +20,10 @@
 #include <glog/logging.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
-#include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
-#include <openr/common/AddressUtil.h>
+#include <openr/common/NetworkUtil.h>
 
-using namespace fbzmq;
 using apache::thrift::FRAGILE;
 
 namespace openr {
@@ -60,12 +58,12 @@ MockNetlinkSystemHandler::getAllNeighbors(
     std::vector<thrift::NeighborEntry>& neighborDb) {
   VLOG(3) << "Query all reachable neighbors from Netlink";
   SYNCHRONIZED(neighborDb_) {
-    for (const auto kv : neighborDb_) {
+    for (const auto& kv : neighborDb_) {
       thrift::NeighborEntry neighborEntry = thrift::NeighborEntry(
           FRAGILE,
           kv.first.first,
           toBinaryAddress(kv.first.second),
-          kv.second.toString(),
+          kv.second.getLinkAddress()->toString(),
           true);
       neighborDb.push_back(neighborEntry);
     }
@@ -78,7 +76,7 @@ MockNetlinkSystemHandler::sendLinkEvent(
   // Update linkDb_
   SYNCHRONIZED(linkDb_) {
     if (!linkDb_.count(ifName)) {
-      LinkAttributes newLinkEntry;
+      fbnl::LinkAttribute newLinkEntry;
       newLinkEntry.isUp = isUp;
       newLinkEntry.ifIndex = ifIndex;
       linkDb_.emplace(ifName, newLinkEntry);
@@ -96,17 +94,23 @@ MockNetlinkSystemHandler::sendLinkEvent(
 void
 MockNetlinkSystemHandler::sendAddrEvent(
     const std::string& ifName, const std::string& prefix, const bool isValid) {
+  const auto ipNetwork = folly::IPAddress::createNetwork(prefix, -1, false);
+
   // Update linkDb_
   SYNCHRONIZED(linkDb_) {
     if (isValid) {
-      linkDb_[ifName].networks.insert(folly::IPAddress::createNetwork(prefix));
+      linkDb_[ifName].networks.insert(ipNetwork);
     } else {
-      linkDb_[ifName].networks.erase(folly::IPAddress::createNetwork(prefix));
+      linkDb_[ifName].networks.erase(ipNetwork);
     }
   }
 
-  platformPublisher_->publishAddrEvent(
-      thrift::AddrEntry(FRAGILE, ifName, toIpPrefix(prefix), isValid));
+  platformPublisher_->publishAddrEvent(thrift::AddrEntry(
+      FRAGILE,
+      ifName,
+      thrift::IpPrefix(
+          FRAGILE, toBinaryAddress(ipNetwork.first), ipNetwork.second),
+      isValid));
 }
 
 void

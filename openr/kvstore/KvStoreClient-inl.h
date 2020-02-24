@@ -14,21 +14,28 @@ namespace openr {
 
 // static
 template <typename ThriftType>
+ThriftType
+KvStoreClient::parseThriftValue(thrift::Value const& value) {
+  apache::thrift::CompactSerializer serializer;
+
+  DCHECK(value.value.hasValue());
+
+  auto buf =
+      folly::IOBuf::wrapBufferAsValue(value.value->data(), value.value->size());
+  return fbzmq::util::readThriftObj<ThriftType>(buf, serializer);
+}
+
+// static
+template <typename ThriftType>
 std::unordered_map<std::string, ThriftType>
 KvStoreClient::parseThriftValues(
     std::unordered_map<std::string, thrift::Value> const& keyVals) {
-  apache::thrift::CompactSerializer serializer;
   std::unordered_map<std::string, ThriftType> result;
 
   for (auto const& kv : keyVals) {
     // Here: kv.first is the key string, kv.second is thrift::Value
-
-    DCHECK(kv.second.value.hasValue());
-
-    auto buf = folly::IOBuf::wrapBufferAsValue(
-        kv.second.value->data(), kv.second.value->size());
-    auto deser = fbzmq::util::readThriftObj<ThriftType>(buf, serializer);
-    result.emplace(kv.first, std::move(deser));
+    result.emplace(
+        kv.first, KvStoreClient::parseThriftValue<ThriftType>(kv.second));
   } // for
 
   return result;
@@ -40,16 +47,24 @@ std::pair<
     folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStoreClient::dumpAllWithPrefixMultipleAndParse(
-    fbzmq::Context& context,
-    const std::vector<fbzmq::SocketUrl>& kvStoreCmdUrls,
-    const std::string& prefix,
-    folly::Optional<std::chrono::milliseconds> recvTimeout) {
-  auto val =
-      dumpAllWithPrefixMultiple(context, kvStoreCmdUrls, prefix, recvTimeout);
+    const std::vector<folly::SocketAddress>& sockAddrs,
+    const std::string& keyPrefix,
+    std::chrono::milliseconds connectTimeout,
+    std::chrono::milliseconds processTimeout,
+    folly::Optional<int> maybeIpTos /* folly::none */,
+    const folly::SocketAddress& bindAddr /* folly::AsyncSocket::anyAddress()*/,
+    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
+  auto val = dumpAllWithThriftClientFromMultiple(
+      sockAddrs,
+      keyPrefix,
+      connectTimeout,
+      processTimeout,
+      maybeIpTos,
+      bindAddr,
+      area);
   if (not val.first) {
     return std::make_pair(folly::none, val.second);
   }
   return std::make_pair(parseThriftValues<ThriftType>(*val.first), val.second);
 }
-
 } // namespace openr

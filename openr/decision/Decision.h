@@ -12,7 +12,6 @@
 #include <unordered_map>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqThrottle.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
@@ -21,69 +20,93 @@
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>
 #include <folly/String.h>
+#include <folly/futures/Future.h>
+#include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
+struct ProcessPublicationResult {
+  bool adjChanged{false};
+  bool prefixesChanged{false};
+};
+
+struct BestPathCalResult {
+  bool success{false};
+  std::string bestNode{""};
+  std::set<std::string> nodes;
+  folly::Optional<int64_t> bestIgpMetric{folly::none};
+  std::string const* bestData{nullptr};
+  folly::Optional<thrift::MetricVector> bestVector{folly::none};
+};
 
 namespace detail {
-  /**
-   * Keep track of hash for pending SPF calculation because of certain
-   * updates in graph.
-   * Out of all buffered applications we try to keep the perf events for the
-   * oldest appearing event.
-   */
-  struct DecisionPendingUpdates {
+/**
+ * Keep track of hash for pending SPF calculation because of certain
+ * updates in graph.
+ * Out of all buffered applications we try to keep the perf events for the
+ * oldest appearing event.
+ */
+struct DecisionPendingUpdates {
+  void
+  clear() {
+    count_ = 0;
+    minTs_ = folly::none;
+    perfEvents_ = folly::none;
+  }
 
-    void clear() {
-      count_ = 0;
-      minTs_ = folly::none;
-      perfEvents_ = folly::none;
-    }
+  void
+  addUpdate(
+      const std::string& nodeName,
+      const folly::Optional<thrift::PerfEvents>& perfEvents) {
+    ++count_;
 
-    void addUpdate(
-        const std::string& nodeName,
-        const folly::Optional<thrift::PerfEvents>& perfEvents) {
-      ++count_;
-
-      // Skip if perf information is missing
-      if (not perfEvents.hasValue()) {
-        return;
-      }
-
-      // Update local copy of perf evens if it is newer than the one to be added
-      // We do debounce (batch updates) for recomputing routes and in order to
-      // measure convergence performance, it is better to use event which is
-      // oldest.
-      if (!minTs_ or minTs_.value() > perfEvents->events.front().unixTs) {
-        minTs_ = perfEvents->events.front().unixTs;
-        perfEvents_ = perfEvents;
+    // Skip if perf information is missing
+    if (not perfEvents.hasValue()) {
+      if (not perfEvents_) {
+        perfEvents_ = thrift::PerfEvents{};
         addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
+        minTs_ = perfEvents_->events.front().unixTs;
       }
+      return;
     }
 
-    uint32_t getCount() const {
-      return count_;
+    // Update local copy of perf evens if it is newer than the one to be added
+    // We do debounce (batch updates) for recomputing routes and in order to
+    // measure convergence performance, it is better to use event which is
+    // oldest.
+    if (!minTs_ or minTs_.value() > perfEvents->events.front().unixTs) {
+      minTs_ = perfEvents->events.front().unixTs;
+      perfEvents_ = perfEvents;
+      addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
     }
+  }
 
-    folly::Optional<thrift::PerfEvents> getPerfEvents() const {
-      return perfEvents_;
-    }
+  uint32_t
+  getCount() const {
+    return count_;
+  }
 
-   private:
-    uint32_t count_{0};
-    folly::Optional<int64_t> minTs_;
-    folly::Optional<thrift::PerfEvents> perfEvents_;
-  };
+  folly::Optional<thrift::PerfEvents>
+  getPerfEvents() const {
+    return perfEvents_;
+  }
+
+ private:
+  uint32_t count_{0};
+  folly::Optional<int64_t> minTs_;
+  folly::Optional<thrift::PerfEvents> perfEvents_;
+};
 } // namespace detail
 
 // The class to compute shortest-paths using Dijkstra algorithm
@@ -91,7 +114,13 @@ class SpfSolver {
  public:
   // these need to be defined in the .cpp so they can refer
   // to the actual implementation of SpfSolverImpl
-  explicit SpfSolver(bool enableV4);
+  SpfSolver(
+      const std::string& myNodeName,
+      bool enableV4,
+      bool computeLfaPaths,
+      bool enableOrderedFib = false,
+      bool bgpDryRun = false,
+      bool bgpUseIgpMetric = false);
   ~SpfSolver();
 
   //
@@ -99,35 +128,44 @@ class SpfSolver {
   // be defined in the .cpp
   //
 
-  // update adjacencies for the given router; everything is replaced. Returns
-  // true if this has caused any change in graph
-  bool updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
+  // update adjacencies for the given router
+  std::pair<
+      bool /* topology has changed */,
+      bool /* route attributes has changed (nexthop addr, node/adj label */>
+  updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
+
+  bool hasHolds() const;
 
   // delete a node's adjacency database
   // return true if this has caused any change in graph
   bool deleteAdjacencyDatabase(const std::string& nodeName);
 
   // get adjacency databases
-  std::unordered_map<std::string /* nodeName */, thrift::AdjacencyDatabase>
+  std::unordered_map<
+      std::string /* nodeName */,
+      thrift::AdjacencyDatabase> const&
   getAdjacencyDatabases();
 
   // update prefixes for a given router. Returns true if this has caused any
-  // change
+  // routeDb change
   bool updatePrefixDatabase(thrift::PrefixDatabase const& prefixDb);
-
-  // delete a node's prefix database
-  // return true if this has caused any change in graph
-  bool deletePrefixDatabase(const std::string& nodeName);
 
   // get prefix databases
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
-  // compute the routes from perspective of a given router
-  thrift::RouteDatabase buildShortestPaths(const std::string& myNodeName);
+  // Compute all routes from perspective of a given router.
+  // Returns folly::none if myNodeName doesn't have any prefix database
+  folly::Optional<thrift::RouteDatabase> buildPaths(
+      const std::string& myNodeName);
 
-  // compute all LFA routes from perspective of a given router
-  thrift::RouteDatabase buildMultiPaths(const std::string& myNodeName);
+  // Build route database using global prefix database and cached SPF
+  // computation from perspective of a given router.
+  // Returns folly::none if myNodeName doesn't have any prefix database
+  folly::Optional<thrift::RouteDatabase> buildRouteDb(
+      const std::string& myNodeName);
+
+  bool decrementHolds();
 
   std::unordered_map<std::string, int64_t> getCounters();
 
@@ -158,19 +196,22 @@ class SpfSolver {
 // the AdjacencyDatabase of router1 and PrefixDatabase of router2
 //
 
-class Decision : public fbzmq::ZmqEventLoop {
+class Decision : public OpenrEventBase {
  public:
   Decision(
       std::string myNodeName,
       bool enableV4,
+      bool computeLfaPaths,
+      bool enableOrderedFib,
+      bool bgpDryRun,
+      bool bgpUseIgpMetric,
       const AdjacencyDbMarker& adjacencyDbMarker,
       const PrefixDbMarker& prefixDbMarker,
       std::chrono::milliseconds debounceMinDur,
       std::chrono::milliseconds debounceMaxDur,
-      const KvStoreLocalCmdUrl& storeCmdUrl,
-      const KvStoreLocalPubUrl& storePubUrl,
-      const DecisionCmdUrl& decisionCmdUrl,
-      const DecisionPubUrl& decisionPubUrl,
+      folly::Optional<std::chrono::seconds> gracefulRestartDuration,
+      messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
+      messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
 
@@ -178,44 +219,92 @@ class Decision : public fbzmq::ZmqEventLoop {
 
   std::unordered_map<std::string, int64_t> getCounters();
 
+  /*
+   * Retrieve routeDb from specified node.
+   * If empty nodename specified, will return routeDb of its own
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getDecisionRouteDb(
+      std::string nodeName);
+
+  /*
+   * Retrieve AdjacencyDatabase as map.
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>> getDecisionAdjacencyDbs();
+
+  /*
+   * Retrieve PrefixDatabase as a map.
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>> getDecisionPrefixDbs();
+
  private:
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
 
-  void prepare(fbzmq::Context& zmqContext) noexcept;
-
-  // process request
-  void processRequest();
+  // process publication from KvStore
+  ProcessPublicationResult processPublication(
+      thrift::Publication const& thriftPub);
 
   /**
-   * Process received publication and populate the pendingUpdates_
+   * Process received publication and populate the pendingAdjUpdates_
    * attributes which can be applied later on after a debounce timeout.
-   * returns `true` if SPF computation needs to be triggered
    */
-  detail::DecisionPendingUpdates pendingUpdates_;
-  std::unique_ptr<fbzmq::ZmqTimeout> processPendingUpdatesTimer_;
-  ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
-  bool processPublication(thrift::Publication const& thriftPub);
+  detail::DecisionPendingUpdates pendingAdjUpdates_;
 
   /**
-   * Function to process pending publications. First one is immediate processing
-   * while second one is throttled one with timeout
-   * Constants::kSpfThrottleTimeout
+   * Process received publication and populate the pendingPrefixUpdates_
+   * attributes upon receiving prefix update publication
+   */
+  detail::DecisionPendingUpdates pendingPrefixUpdates_;
+
+  // callback timer used on startup to publish routes after
+  // gracefulRestartDuration
+  std::unique_ptr<fbzmq::ZmqTimeout> coldStartTimer_{nullptr};
+
+  /**
+   * Timer to schedule pending update processing
+   * Refer to processUpdatesStatus_ to decide whether spf recalculation or
+   * just route rebuilding is needed.
+   * Apply exponential backoff timeout to avoid churn
+   */
+  std::unique_ptr<fbzmq::ZmqTimeout> processUpdatesTimer_;
+  ExponentialBackoff<std::chrono::milliseconds> processUpdatesBackoff_;
+
+  // store update to-do status
+  ProcessPublicationResult processUpdatesStatus_;
+
+  /**
+   * Caller function of processPendingAdjUpdates and processPendingPrefixUpdates
+   * Check current processUpdatesStatus_ to decide which sub function to call
+   * to further process pending updates
+   * Reset timer and status afterwards.
    */
   void processPendingUpdates();
 
-  // perform full dump of all LSDBs and run initial routing computations
-  void initialSync(fbzmq::Context& zmqContext);
+  /**
+   * Function to process pending adjacency publications.
+   */
+  void processPendingAdjUpdates();
+
+  /**
+   * Function to process prefix updates.
+   */
+  void processPendingPrefixUpdates();
+
+  void decrementOrderedFibHolds();
+
+  void coldStartUpdate();
+
+  void sendRouteUpdate(
+      thrift::RouteDatabase& db, std::string const& eventDescription);
+
+  std::chrono::milliseconds getMaxFib();
 
   // periodically submit counters to monitor thread
   void submitCounters();
 
-  // submit events to monitor
-  void logRouteEvent(const std::string& event, const int numOfRoutes);
-  void logDebounceEvent(
-      const int numUpdates,
-      const std::chrono::milliseconds debounceTime);
-
+  // node to prefix entries database for nodes advertising per prefix keys
+  thrift::PrefixDatabase updateNodePrefixDatabase(
+      const std::string& key, const thrift::PrefixDatabase& prefixDb);
 
   // this node's name and the key markers
   const std::string myNodeName_;
@@ -224,18 +313,17 @@ class Decision : public fbzmq::ZmqEventLoop {
   // the prefix we use to find the prefix db key announcements
   const std::string prefixDbMarker_;
 
-  // URLs for the sockets
-  const std::string storeCmdUrl_;
-  const std::string storePubUrl_;
-  const std::string decisionCmdUrl_;
-  const std::string decisionPubUrl_;
+  thrift::RouteDatabase routeDb_;
 
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> storeSub_;
-  fbzmq::Socket<ZMQ_REP, fbzmq::ZMQ_SERVER> decisionRep_;
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> decisionPub_;
+  // Queue to publish route changes
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue_;
 
   // the pointer to the SPF path calculator
   std::unique_ptr<SpfSolver> spfSolver_;
+
+  // For orderedFib prgramming, we keep track of the fib programming times
+  // across the network
+  std::unordered_map<std::string, std::chrono::milliseconds> fibTimes_;
 
   apache::thrift::CompactSerializer serializer_;
 
@@ -245,8 +333,18 @@ class Decision : public fbzmq::ZmqEventLoop {
   // Timer for submitting to monitor periodically
   std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
 
+  // Timer for decrementing link holds for ordered fib programming
+  std::unique_ptr<fbzmq::ZmqTimeout> orderedFibTimer_{nullptr};
+
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+
+  // need to store all this for backward compatibility, otherwise a key update
+  // can lead to mistakenly withdrawing some prefixes
+  std::unordered_map<
+      std::string,
+      std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>>
+      perPrefixPrefixEntries_, fullDbPrefixEntries_;
 };
 
 } // namespace openr

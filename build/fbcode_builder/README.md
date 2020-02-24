@@ -14,8 +14,8 @@ host or virtual machine that can run a reasonably modern version of Docker:
 ``` sh
 ./make_docker_context.py --help  # See available options for OS & compiler
 # Tiny wrapper that starts a Travis-like build with compile caching:
-os_image=ubuntu:14.04 \
-  gcc_version=4.9 \
+os_image=ubuntu:18.04 \
+  gcc_version=7 \
   make_parallelism=2 \
   travis_cache_dir=~/travis_ccache \
     ./travis_docker_build.sh &> build_at_$(date +'%Y%m%d_%H%M%S').log
@@ -55,4 +55,6 @@ internal continuous-integration platform using the same build-step DSL.
 
 Please follow the ambient style (or PEP-8), and keep the code Python 2.6
 compatible -- since `fbcode_builder`'s only dependency is Docker, we want to
-allow building projects on even fairly ancient base systems.
+allow building projects on even fairly ancient base systems.   We also wish
+to be compatible with Python 3, and would appreciate it if you kept that
+in mind while making changes also.

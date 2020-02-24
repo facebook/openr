@@ -6,9 +6,12 @@
  */
 
 namespace cpp2 openr.thrift
+namespace php Openr
 namespace py openr.Spark
+namespace py3 openr.thrift
 
-include "IpPrefix.thrift"
+include "Network.thrift"
+include "KvStore.thrift"
 
 //
 // The below uses "required" a lot. This helps with
@@ -18,7 +21,7 @@ include "IpPrefix.thrift"
 //
 
 //
-// Describe a single neighbors
+// Describe a single neighbor
 //
 struct SparkNeighbor {
   // the name of the domain to which this neighbor belongs to
@@ -30,12 +33,12 @@ struct SparkNeighbor {
   // how long to retain our data for in milliseconds
   2: required i32 holdTime
 
-  // our public key
-  3: required binary publicKey
+  // DEPRECATED: our public key
+  3: binary publicKey = ""
 
   // our transport addresses (right now - link local)
-  4: IpPrefix.BinaryAddress transportAddressV6
-  5: IpPrefix.BinaryAddress transportAddressV4
+  4: Network.BinaryAddress transportAddressV6
+  5: Network.BinaryAddress transportAddressV4
 
   // neighbor's kvstore global pub/cmd ports
   7: required i32 kvStorePubPort
@@ -46,7 +49,7 @@ struct SparkNeighbor {
 }
 
 //
-// Describe time-stamp information about send/recv of hello
+// Describe timestamp information about send/recv of hello
 // packets. We use this to determine RTT of a node
 //
 struct ReflectedNeighborInfo {
@@ -63,15 +66,22 @@ struct ReflectedNeighborInfo {
 }
 
 //
+// OpenR version
+//
+typedef i32 OpenrVersion
+
+//
 // This is the data embedded in the payload of hello packet
 //
 struct SparkPayload {
+  7: OpenrVersion version = 20180307
+
   1: required SparkNeighbor originator
 
-  // the senders sequence number, inremented on each hello
+  // the senders sequence number, incremented on each hello
   3: required i64 seqNum
 
-  // neighbor to hello packet time-stamp information
+  // neighbor to hello packet timestamp information
   4: required map<string, ReflectedNeighborInfo> neighborInfos;
 
   // current timestamp of this packet. This will be reflected back to neighbor
@@ -80,21 +90,110 @@ struct SparkPayload {
 
   // solicit for an immediate hello packet back cause I am in fast initial state
   6: bool solicitResponse = 0;
+
+  // support flood optimization or not
+  8: bool supportFloodOptimization = 0;
+
+  // indicating I'm going to restart gracefully
+  9: optional bool restarting = 0;
+
+  // list of areas that the advertising node belong to
+  10: optional set<string>  (cpp.template = "std::unordered_set") areas
+}
+
+//
+// Spark2 will define 3 types of msg and fit into SparkPacket thrift structure:
+// 1. SparkHelloMsg;
+//    - Functionality:
+//      1) To advertise its own existence and basic neighbor information;
+//      2) To ask for immediate response for quick adjacency establishment;
+//      3) To notify for its own "RESTART" to neighbors;
+//    - SparkHelloMsg will be sent per interface;
+// 2. SparkHeartbeatMsg;
+//    - Functionality:
+//      To notify its own aliveness by advertising msg periodically;
+//    - SparkHeartbeatMsg will be sent per interface;
+// 3. SparkHandshakeMsg;
+//    - Functionality:
+//      To exchange param information to establish adjacency;
+//    - SparkHandshakeMsg will be sent per (interface, neighbor)
+//
+struct SparkHelloMsg {
+  1: string domainName
+  2: string nodeName
+  3: string ifName
+  4: i64 seqNum
+  5: map<string, ReflectedNeighborInfo> neighborInfos
+  6: OpenrVersion version
+  7: bool solicitResponse = 0
+  8: bool restarting = 0
+  9: i64 sentTsInUs;
+}
+
+struct SparkHeartbeatMsg {
+  1: string nodeName
+  2: i64 seqNum
+}
+
+struct SparkHandshakeMsg {
+  // the name of the node sending handshake msg
+  1: string nodeName
+
+  // used as signal to keep/stop sending handshake msg
+  2: bool isAdjEstablished
+
+  // heartbeat expiration time
+  3: i64 holdTime
+
+  // graceful-restart expiration time
+  4: i64 gracefulRestartTime
+
+  // our transport addresses (right now - link local)
+  5: Network.BinaryAddress transportAddressV6
+  6: Network.BinaryAddress transportAddressV4
+
+  // neighbor's kvstore global pub/cmd ports
+  7: i32 openrCtrlThriftPort
+  8: i32 kvStorePubPort
+  9: i32 kvStoreCmdPort
+
+  // area identifier
+  10: string area
 }
 
 //
 // This is used to create a new timer
 //
 struct SparkHelloPacket {
-  1: required SparkPayload payload
-  2: required binary signature
+  // Will be DEPRECATED after Spark2
+  1: SparkPayload payload
+
+  // Will be DEPRECATED after Spark2
+  2: binary signature
+
+  // - Msg to announce node's presence on link with its
+  //   own params;
+  // - Send out periodically and on receipt of hello msg
+  //   with solicitation flag set;
+  3: optional SparkHelloMsg helloMsg
+
+  // - Msg to announce nodes's aliveness.
+  // - Send out periodically on intf where there is at
+  //   least one neighbor in ESTABLISHED state;
+  4: optional SparkHeartbeatMsg heartbeatMsg
+
+  // - Msg to exchange params to establish adjacency
+  //   with neighbors;
+  // - Send out periodically and on receipt of handshake msg;
+  5: optional SparkHandshakeMsg handshakeMsg
 }
 
 enum SparkNeighborEventType {
   NEIGHBOR_UP         = 1,
   NEIGHBOR_DOWN       = 2,
-  NEIGHBOR_RESTART    = 3,
+  NEIGHBOR_RESTARTED  = 3,
   NEIGHBOR_RTT_CHANGE = 4,
+  NEIGHBOR_RESTARTING = 5,
 }
 
 //
@@ -106,6 +205,10 @@ struct SparkNeighborEvent {
   3: required SparkNeighbor neighbor
   4: required i64 rttUs
   5: required i32 label   // Derived based off of ifIndex (local per node)
+  // support flood optimization or not
+  6: bool supportFloodOptimization = 0
+  // area ID
+  7: string area = KvStore.kDefaultArea
 }
 
 //

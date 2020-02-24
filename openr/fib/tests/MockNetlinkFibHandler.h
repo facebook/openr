@@ -14,16 +14,12 @@
 #include <string>
 #include <utility>
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/async/ZmqTimeout.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
-#include <openr/if/gen-cpp2/LinuxFibService.h>
-#include <openr/if/gen-cpp2/LinuxPlatform_types.h>
 
 namespace openr {
 
@@ -38,7 +34,7 @@ using UnicastRoutes = std::unordered_map<folly::CIDRNetwork, NextHops>;
  * NetlinkEvent Publisher as well as Fib Service on linux platform.
  */
 
-class MockNetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
+class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
  public:
   MockNetlinkFibHandler();
 
@@ -69,13 +65,60 @@ class MockNetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
       std::unique_ptr<std::vector<openr::thrift::UnicastRoute>> routes)
       override;
 
+  void addMplsRoutes(
+      int16_t clientId,
+      std::unique_ptr<std::vector<openr::thrift::MplsRoute>> routes) override;
+
+  void deleteMplsRoutes(
+      int16_t clientId, std::unique_ptr<std::vector<int32_t>> labels) override;
+
+  void syncMplsFib(
+      int16_t clientId,
+      std::unique_ptr<std::vector<openr::thrift::MplsRoute>> routes) override;
+
+  // Wait for adding/deleting routes to complete
+  void waitForUpdateUnicastRoutes();
+  void waitForDeleteUnicastRoutes();
+  void waitForSyncFib();
+  void waitForUpdateMplsRoutes();
+  void waitForDeleteMplsRoutes();
+  void waitForSyncMplsFib();
+
   int64_t aliveSince() override;
 
   void getRouteTableByClient(
       std::vector<openr::thrift::UnicastRoute>& routes,
       int16_t clientId) override;
 
-  int64_t getFibSyncCount();
+  void getMplsRouteTableByClient(
+      std::vector<::openr::thrift::MplsRoute>& routes,
+      int16_t clientId) override;
+
+  size_t
+  getFibSyncCount() {
+    return fibSyncCount_;
+  }
+  size_t
+  getAddRoutesCount() {
+    return addRoutesCount_;
+  }
+
+  size_t
+  getDelRoutesCount() {
+    return delRoutesCount_;
+  }
+  size_t
+  getFibMplsSyncCount() {
+    return fibMplsSyncCount_;
+  }
+  size_t
+  getAddMplsRoutesCount() {
+    return addMplsRoutesCount_;
+  }
+  size_t
+  getDelMplsRoutesCount() {
+    return delMplsRoutesCount_;
+  }
 
   void stop();
 
@@ -88,8 +131,26 @@ class MockNetlinkFibHandler final : public thrift::LinuxFibServiceSvIf {
   // Abstract route Db to hide kernel level routing details from Fib
   folly::Synchronized<UnicastRoutes> unicastRouteDb_{};
 
-  // Number of times Fib syncs with this agent
-  folly::Synchronized<int64_t> countSync_{0};
+  // Mpls Route db
+  folly::Synchronized<
+      std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>>
+      mplsRouteDb_;
+
+  // Stats
+  std::atomic<size_t> fibSyncCount_{0};
+  std::atomic<size_t> addRoutesCount_{0};
+  std::atomic<size_t> delRoutesCount_{0};
+  std::atomic<size_t> fibMplsSyncCount_{0};
+  std::atomic<size_t> addMplsRoutesCount_{0};
+  std::atomic<size_t> delMplsRoutesCount_{0};
+
+  // A baton for synchronization
+  folly::Baton<> updateUnicastRoutesBaton_;
+  folly::Baton<> deleteUnicastRoutesBaton_;
+  folly::Baton<> syncFibBaton_;
+  folly::Baton<> updateMplsRoutesBaton_;
+  folly::Baton<> deleteMplsRoutesBaton_;
+  folly::Baton<> syncMplsFibBaton_;
 };
 
 } // namespace openr

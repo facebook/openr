@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# Copyright (c) Facebook, Inc. and its affiliates.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -86,6 +87,10 @@ class FBCodeBuilder(object):
         # This raises upon detecting options that are specified but unused,
         # because otherwise it is very easy to make a typo in option names.
         self.options_used = set()
+        # Mark 'projects_dir' used even if the build installs no github
+        # projects.  This is needed because driver programs like
+        # `shell_builder.py` unconditionally set this for all builds.
+        self._github_dir = self.option('projects_dir')
         self._github_hashes = dict(_read_project_github_hashes())
 
     def __repr__(self):
@@ -138,6 +143,9 @@ class FBCodeBuilder(object):
         return res
 
     def build(self, steps):
+        if not steps:
+            raise RuntimeError('Please ensure that the config you are passing '
+                               'contains steps')
         return [self.setup(), self.diagnostics()] + steps
 
     def setup(self):
@@ -151,8 +159,9 @@ class FBCodeBuilder(object):
         return self.step('Diagnostics', [
             self.comment('Builder {0}'.format(repr(self))),
             self.run(ShellQuoted('hostname')),
-            self.run(ShellQuoted('cat /etc/issue')),
+            self.run(ShellQuoted('cat /etc/issue || echo no /etc/issue')),
             self.run(ShellQuoted('g++ --version || echo g++ not installed')),
+            self.run(ShellQuoted('cmake --version || echo cmake not installed')),
         ])
 
     def step(self, name, actions):
@@ -161,6 +170,10 @@ class FBCodeBuilder(object):
 
     def run(self, shell_cmd):
         'Run this bash command'
+        raise NotImplementedError
+
+    def set_env(self, key, value):
+        'Set the environment "key" to value "value"'
         raise NotImplementedError
 
     def workdir(self, dir):
@@ -174,52 +187,59 @@ class FBCodeBuilder(object):
         '''
         raise NotImplementedError
 
+    def python_deps(self):
+        return [
+            'wheel',
+            'cython==0.28.6',
+        ]
+
+    def debian_deps(self):
+        return [
+            'autoconf-archive',
+            'bison',
+            'build-essential',
+            'cmake',
+            'curl',
+            'flex',
+            'git',
+            'gperf',
+            'joe',
+            'libboost-all-dev',
+            'libcap-dev',
+            'libdouble-conversion-dev',
+            'libevent-dev',
+            'libgflags-dev',
+            'libgoogle-glog-dev',
+            'libkrb5-dev',
+            'libpcre3-dev',
+            'libpthread-stubs0-dev',
+            'libnuma-dev',
+            'libsasl2-dev',
+            'libsnappy-dev',
+            'libsqlite3-dev',
+            'libssl-dev',
+            'libtool',
+            'netcat-openbsd',
+            'pkg-config',
+            'sudo',
+            'unzip',
+            'wget',
+            'python3-venv',
+        ]
+
     #
     # Specific build helpers
     #
 
     def install_debian_deps(self):
         actions = [
-            self.run(ShellQuoted(
-                'apt-get update && apt-get install -yq '
-                'autoconf-archive '
-                'bison '
-                'build-essential '
-                'cmake '
-                'curl '
-                'flex '
-                'git '
-                'gperf '
-                'joe '
-                'libboost-all-dev '
-                'libcap-dev '
-                'libdouble-conversion-dev '
-                'libevent-dev '
-                'libgflags-dev '
-                'libgoogle-glog-dev '
-                'libkrb5-dev '
-                'libnuma-dev '
-                'libsasl2-dev '
-                'libsnappy-dev '
-                'libsqlite3-dev '
-                'libssl-dev '
-                'libtool '
-                'netcat-openbsd '
-                'pkg-config '
-                'sudo '
-                'unzip '
-                'wget'
-            )),
+            self.run(
+                ShellQuoted('apt-get update && apt-get install -yq {deps}').format(
+                    deps=shell_join(' ', (
+                        ShellQuoted(dep) for dep in self.debian_deps())))
+            ),
         ]
         gcc_version = self.option('gcc_version')
-
-        # We need some extra packages to be able to install GCC 4.9 on 14.04.
-        if self.option('os_image') == 'ubuntu:14.04' and gcc_version == '4.9':
-            actions.append(self.run(ShellQuoted(
-                'apt-get install -yq software-properties-common && '
-                'add-apt-repository ppa:ubuntu-toolchain-r/test && '
-                'apt-get update'
-            )))
 
         # Make the selected GCC the default before building anything
         actions.extend([
@@ -237,21 +257,77 @@ class FBCodeBuilder(object):
             self.run(ShellQuoted('update-alternatives --config gcc')),
         ])
 
-        # Ubuntu 14.04 comes with a CMake version that is too old for mstch.
-        if self.option('os_image') == 'ubuntu:14.04':
-            actions.append(self.run(ShellQuoted(
-                'apt-get install -yq software-properties-common && '
-                'add-apt-repository ppa:george-edison55/cmake-3.x && '
-                'apt-get update && '
-                'apt-get upgrade -yq cmake'
-            )))
-
         actions.extend(self.debian_ccache_setup_steps())
 
         return self.step('Install packages for Debian-based OS', actions)
 
+    def create_python_venv(self):
+        actions = []
+        if self.option("PYTHON_VENV", "OFF") == "ON":
+            actions.append(self.run(ShellQuoted("python3 -m venv {p}").format(
+                p=path_join(self.option('prefix'), "venv"))))
+        return(actions)
+
+    def python_venv(self):
+        actions = []
+        if self.option("PYTHON_VENV", "OFF") == "ON":
+            actions.append(ShellQuoted("source {p}").format(
+                p=path_join(self.option('prefix'), "venv", "bin", "activate")))
+
+            actions.append(self.run(
+                ShellQuoted("python3 -m pip install {deps}").format(
+                    deps=shell_join(' ', (ShellQuoted(dep) for dep in
+                        self.python_deps())))))
+        return(actions)
+
+    def enable_rust_toolchain(self, toolchain="stable", is_bootstrap=True):
+        choices = set(["stable", "beta", "nightly"])
+
+        assert toolchain in choices, (
+            "while enabling rust toolchain: {} is not in {}"
+        ).format(toolchain, choices)
+
+        rust_toolchain_opt = (toolchain, is_bootstrap)
+        prev_opt = self.option("rust_toolchain", rust_toolchain_opt)
+        assert prev_opt == rust_toolchain_opt, (
+            "while enabling rust toolchain: previous toolchain already set to"
+            " {}, but trying to set it to {} now"
+        ).format(prev_opt, rust_toolchain_opt)
+
+        self.add_option("rust_toolchain", rust_toolchain_opt)
+
+    def rust_toolchain(self):
+        actions = []
+        if self.option("rust_toolchain", False):
+            (toolchain, is_bootstrap) = self.option("rust_toolchain")
+            rust_dir = path_join(self.option("prefix"), "rust")
+            actions = [
+                self.set_env("CARGO_HOME", rust_dir),
+                self.set_env("RUSTUP_HOME", rust_dir),
+                self.set_env("RUSTC_BOOTSTRAP", "1" if is_bootstrap else "0"),
+                self.run(
+                    ShellQuoted(
+                        "curl -sSf https://build.travis-ci.com/files/rustup-init.sh"
+                        " | sh -s --"
+                        "   --default-toolchain={r} "
+                        "   --profile=minimal"
+                        "   --no-modify-path"
+                        "   -y"
+                    ).format(p=rust_dir, r=toolchain)
+                ),
+                self.set_env(
+                    "PATH",
+                    ShellQuoted("{p}:$PATH").format(p=path_join(rust_dir, "bin")),
+                ),
+                self.run(ShellQuoted("rustup update")),
+                self.run(ShellQuoted("rustc --version")),
+                self.run(ShellQuoted("rustup --version")),
+                self.run(ShellQuoted("cargo --version")),
+            ]
+        return actions
+
     def debian_ccache_setup_steps(self):
-        raise []  # It's ok to ship a renderer without ccache support.
+        return []  # It's ok to ship a renderer without ccache support.
 
     def github_project_workdir(self, project, path):
         # Only check out a non-default branch if requested. This especially
@@ -266,17 +342,19 @@ class FBCodeBuilder(object):
             self.run(ShellQuoted('git checkout {hash}').format(hash=git_hash)),
         ] if git_hash else []
 
-        base_dir = self.option('projects_dir')
-
         local_repo_dir = self.option('{0}:local_repo_dir'.format(project), '')
         return self.step('Check out {0}, workdir {1}'.format(project, path), [
-            self.workdir(base_dir),
+            self.workdir(self._github_dir),
             self.run(
-                ShellQuoted('git clone https://github.com/{p}').format(p=project)
+                ShellQuoted('git clone {opts} https://github.com/{p}').format(
+                    p=project,
+                    opts=ShellQuoted(self.option('{}:git_clone_opts'.format(project), '')))
             ) if not local_repo_dir else self.copy_local_repo(
                 local_repo_dir, os.path.basename(project)
             ),
-            self.workdir(path_join(base_dir, os.path.basename(project), path)),
+            self.workdir(
+                path_join(self._github_dir, os.path.basename(project), path),
+            ),
         ] + maybe_change_branch)
 
     def fb_github_project_workdir(self, project_and_path, github_org='facebook'):
@@ -291,7 +369,7 @@ class FBCodeBuilder(object):
         ))
 
     def parallel_make(self, make_vars=None):
-        return self.run(ShellQuoted('make -j {n} {vars}').format(
+        return self.run(ShellQuoted('make -j {n} VERBOSE=1 {vars}').format(
             n=self.option('make_parallelism'),
             vars=self._make_vars(make_vars),
         ))
@@ -299,20 +377,31 @@ class FBCodeBuilder(object):
     def make_and_install(self, make_vars=None):
         return [
             self.parallel_make(make_vars),
-            self.run(ShellQuoted('make install {vars}').format(
+            self.run(ShellQuoted('make install VERBOSE=1 {vars}').format(
                 vars=self._make_vars(make_vars),
             )),
         ]
 
-    def configure(self):
+    def configure(self, name=None):
+        autoconf_options = {}
+        if name is not None:
+            autoconf_options.update(
+                self.option('{0}:autoconf_options'.format(name), {})
+            )
         return [
             self.run(ShellQuoted(
                 'LDFLAGS="$LDFLAGS -L"{p}"/lib -Wl,-rpath="{p}"/lib" '
                 'CFLAGS="$CFLAGS -I"{p}"/include" '
                 'CPPFLAGS="$CPPFLAGS -I"{p}"/include" '
                 'PY_PREFIX={p} '
-                './configure --prefix={p}'
-            ).format(p=self.option('prefix'))),
+                './configure --prefix={p} {args}'
+            ).format(
+                p=self.option('prefix'),
+                args=shell_join(' ', (
+                    ShellQuoted('{k}={v}').format(k=k, v=v)
+                    for k, v in autoconf_options.items()
+                )),
+            )),
         ]
 
     def autoconf_install(self, name):
@@ -320,7 +409,7 @@ class FBCodeBuilder(object):
             self.run(ShellQuoted('autoreconf -ivf')),
         ] + self.configure() + self.make_and_install())
 
-    def cmake_configure(self, name):
+    def cmake_configure(self, name, cmake_path='..'):
         cmake_defines = {
             'BUILD_SHARED_LIBS': 'ON',
             'CMAKE_INSTALL_PREFIX': self.option('prefix'),
@@ -332,28 +421,49 @@ class FBCodeBuilder(object):
             self.run(ShellQuoted(
                 'CXXFLAGS="$CXXFLAGS -fPIC -isystem "{p}"/include" '
                 'CFLAGS="$CFLAGS -fPIC -isystem "{p}"/include" '
-                'cmake {args} ..'
+                'cmake {args} {cmake_path}'
             ).format(
                 p=self.option('prefix'),
                 args=shell_join(' ', (
                     ShellQuoted('-D{k}={v}').format(k=k, v=v)
                         for k, v in cmake_defines.items()
                 )),
+                cmake_path=cmake_path,
             )),
         ]
 
-    def cmake_install(self, name):
-        return self.step('Build and install {0}'.format(name),
-                         self.cmake_configure(name) + self.make_and_install())
+    def cmake_install(self, name, cmake_path='..'):
+        return self.step(
+            'Build and install {0}'.format(name),
+            self.cmake_configure(name, cmake_path) + self.make_and_install()
+        )
 
-    def fb_github_autoconf_install(self, project_and_path):
+    def cargo_build(self, name):
+        return self.step(
+            "Build {0}".format(name),
+            [
+                self.run(
+                    ShellQuoted("cargo build -j {n}").format(
+                        n=self.option("make_parallelism")
+                    )
+                )
+            ],
+        )
+
+    def fb_github_autoconf_install(self, project_and_path, github_org='facebook'):
         return [
-            self.fb_github_project_workdir(project_and_path),
+            self.fb_github_project_workdir(project_and_path, github_org),
             self.autoconf_install(project_and_path),
         ]
 
-    def fb_github_cmake_install(self, project_and_path):
+    def fb_github_cmake_install(self, project_and_path, cmake_path='..', github_org='facebook'):
         return [
-            self.fb_github_project_workdir(project_and_path),
-            self.cmake_install(project_and_path),
+            self.fb_github_project_workdir(project_and_path, github_org),
+            self.cmake_install(project_and_path, cmake_path),
+        ]
+
+    def fb_github_cargo_build(self, project_and_path, github_org="facebook"):
+        return [
+            self.fb_github_project_workdir(project_and_path, github_org),
+            self.cargo_build(project_and_path),
         ]

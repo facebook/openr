@@ -19,6 +19,8 @@
 
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
+#include <openr/nl/NetlinkSocket.h>
+#include <openr/nl/NetlinkTypes.h>
 
 namespace openr {
 
@@ -28,7 +30,7 @@ namespace openr {
  * OpenR modules can subscribe through SUB socket. The subscriber modules is
  * LinkMonitor from Open/R side.
  */
-class PlatformPublisher final {
+class PlatformPublisher final : public fbnl::NetlinkSocket::EventsHandler {
  public:
   PlatformPublisher(
       //
@@ -43,16 +45,29 @@ class PlatformPublisher final {
   PlatformPublisher(const PlatformPublisher&) = delete;
   PlatformPublisher& operator=(const PlatformPublisher&) = delete;
 
-  void publishLinkEvent(const thrift::LinkEntry& link) const;
+  void publishPlatformEvent(const thrift::PlatformEvent& msg);
 
-  void publishAddrEvent(const thrift::AddrEntry& address) const;
+  void publishLinkEvent(const thrift::LinkEntry& link);
 
-  void publishNeighborEvent(const thrift::NeighborEntry& neighbor) const;
+  void publishAddrEvent(const thrift::AddrEntry& address);
+
+  void publishNeighborEvent(const thrift::NeighborEntry& neighbor);
 
   void stop();
 
  private:
-  void publishPlatformEvent(const thrift::PlatformEvent& msg) const;
+  // Override method for NetlinkSocket link/address/neighbor events
+  void linkEventFunc(
+      const std::string& ifName,
+      const openr::fbnl::Link& linkEntry) noexcept override;
+
+  void addrEventFunc(
+      const std::string& ifName,
+      const openr::fbnl::IfAddress& addrEntry) noexcept override;
+
+  void neighborEventFunc(
+      const std::string& ifName,
+      const openr::fbnl::Neighbor& neighborEntry) noexcept override;
 
   // Publish link events to, e.g., LinkMonitor and Squire
   const std::string platformPubUrl_;

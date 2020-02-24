@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#ifndef ZEROMQ_HELPER_KVSTORE_H_
+#ifndef RANGE_ALLOCATOR_H_
 #error This file may only be included from RangeAllocator.h
 #endif
 
@@ -40,30 +40,46 @@ RangeAllocator<T>::RangeAllocator(
     const std::string& nodeName,
     const std::string& keyPrefix,
     KvStoreClient* const kvStoreClient,
-    std::function<void(folly::Optional<T>) noexcept> callback,
+    std::function<void(folly::Optional<T>)> callback,
     const std::chrono::milliseconds minBackoffDur /* = 50ms */,
     const std::chrono::milliseconds maxBackoffDur /* = 2s */,
-    const bool overrideOwner /* = true */)
+    const bool overrideOwner /* = true */,
+    const std::function<bool(T)> checkValueInUseCb,
+    const std::chrono::milliseconds rangeAllocTtl,
+    const std::string& area)
     : nodeName_(nodeName),
       keyPrefix_(keyPrefix),
       kvStoreClient_(kvStoreClient),
-      eventLoop_(kvStoreClient->getEventLoop()),
+      eventBase_(kvStoreClient->getOpenrEventBase()),
       callback_(std::move(callback)),
       overrideOwner_(overrideOwner),
-      backoff_(minBackoffDur, maxBackoffDur) {}
+      backoff_(minBackoffDur, maxBackoffDur),
+      checkValueInUseCb_(std::move(checkValueInUseCb)),
+      rangeAllocTtl_(rangeAllocTtl),
+      area_(area) {
+  timeout_ =
+      fbzmq::ZmqTimeout::make(eventBase_->getEvb(), [this]() mutable noexcept {
+        CHECK(allocateValue_.hasValue());
+        auto allocateValue = allocateValue_.value();
+        allocateValue_.clear();
+        tryAllocate(allocateValue);
+      });
+}
 
 template <typename T>
 RangeAllocator<T>::~RangeAllocator() {
   VLOG(2) << "RangeAllocator: Destructing " << nodeName_ << ", " << keyPrefix_;
   // We need to cancel any pending timeout
-  if (timeoutToken_) {
-    eventLoop_->cancelTimeout(timeoutToken_.value());
-    timeoutToken_.clear();
+  if (timeout_) {
+    timeout_.reset();
+    allocateValue_.clear();
   }
 
   // Unsubscribe from KvStoreClient if we have been to
   if (myValue_) {
-    kvStoreClient_->unsubscribeKey(createKey(*myValue_));
+    const auto myKey = createKey(*myValue_);
+    kvStoreClient_->unsubscribeKey(myKey);
+    kvStoreClient_->unsetKey(myKey, area_);
   }
 }
 
@@ -106,15 +122,14 @@ RangeAllocator<T>::startAllocator(
   // Subscribe to changes in KvStore
   VLOG(2) << "RangeAllocator: Created. Scheduling first tryAllocate. "
           << "Node: " << nodeName_ << ", Prefix: " << keyPrefix_;
-  timeoutToken_ = eventLoop_->scheduleTimeout(
-      backoff_.getTimeRemainingUntilRetry(),
-      [this, initValue]() mutable noexcept { tryAllocate(initValue); });
+  allocateValue_ = initValue;
+  timeout_->scheduleTimeout(backoff_.getTimeRemainingUntilRetry());
 }
 
 template <typename T>
 bool
 RangeAllocator<T>::isRangeConsumed() const {
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_);
+  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
   CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
   T count = 0;
   for (const auto& kv : *maybeKeyMap) {
@@ -130,7 +145,7 @@ RangeAllocator<T>::isRangeConsumed() const {
 template <typename T>
 folly::Optional<T>
 RangeAllocator<T>::getValueFromKvStore() const {
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_);
+  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
   CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
   for (const auto& kv : *maybeKeyMap) {
     if (kv.second.originatorId == nodeName_) {
@@ -149,13 +164,12 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   CHECK(!myValue_.hasValue())
       << "We have previously allocated value " << myValue_.value();
 
-  VLOG(2) << "RangeAllocator " << nodeName_ << ": trying to allocate "
+  VLOG(1) << "RangeAllocator " << nodeName_ << ": trying to allocate "
           << newVal;
-  timeoutToken_ = folly::none; // Cleanup allocation retry timer
 
   // Check for any existing value in KvStore
   const auto newKey = createKey(newVal);
-  const auto maybeThriftVal = kvStoreClient_->getKey(newKey);
+  const auto maybeThriftVal = kvStoreClient_->getKey(newKey, area_);
   if (maybeThriftVal) {
     DCHECK_EQ(1, maybeThriftVal->version);
   }
@@ -174,8 +188,15 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
 
   // If we cannot own then we should try some other value
   if (!shouldOwnOther && !shouldOwnMine) {
-    VLOG(2) << "RangeAllocator: failed to allocate " << newVal << " bcoz of "
+    VLOG(1) << "RangeAllocator: failed to allocate " << newVal << " bcoz of "
             << maybeThriftVal->originatorId;
+    scheduleAllocate(newVal);
+    return;
+  }
+  // check if prefix index is already in use
+  if (checkValueInUseCb_ and checkValueInUseCb_(newVal)) {
+    VLOG(1) << "RangeAllocator: failed to allocate " << newVal
+            << " as value already exists";
     scheduleAllocate(newVal);
     return;
   }
@@ -192,9 +213,10 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
             1 /* version */,
             nodeName_ /* originatorId */,
             details::primitiveToBinary(newVal) /* value */,
-            Constants::kRangeAllocTtl.count() /* ttl */,
+            rangeAllocTtl_.count() /* ttl */,
             ttlVersion /* ttl version */,
-            0 /* hash */));
+            0 /* hash */),
+        area_);
     CHECK(ret) << ret.error();
   } else {
     CHECK(shouldOwnMine);
@@ -204,8 +226,8 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     // We set back via KvStoreClient so that ttl is published regularly
     auto newValue = *maybeThriftVal;
     newValue.ttlVersion += 1; // bump ttl version
-    newValue.ttl = Constants::kRangeAllocTtl.count(); // reset ttl
-    kvStoreClient_->setKey(newKey, newValue);
+    newValue.ttl = rangeAllocTtl_.count(); // reset ttl
+    kvStoreClient_->setKey(newKey, newValue, area_);
     myValue_ = newVal;
     callback_(myValue_);
   }
@@ -213,9 +235,15 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   // Subscribe to updates of this newKey
   kvStoreClient_->subscribeKey(
       newKey,
-      [this](const std::string& key, const thrift::Value& thriftVal) noexcept {
-        keyValUpdated(key, thriftVal);
-      });
+      [this](
+          const std::string& key,
+          folly::Optional<thrift::Value> thriftVal) noexcept {
+        if (thriftVal.hasValue()) {
+          keyValUpdated(key, thriftVal.value());
+        }
+      },
+      false,
+      area_);
 }
 
 template <typename T>
@@ -229,7 +257,7 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
   std::uniform_int_distribution<T> dist(allocRange_.first, allocRange_.second);
   auto newVal = dist(gen);
 
-  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_);
+  const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
   CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
   const auto valOwners =
       folly::gen::from(*maybeKeyMap) |
@@ -247,21 +275,21 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
     const auto it = valOwners.find(newVal);
     // not owned yet or owned by higher originator if override is allowed
     if (it == valOwners.end() or (overrideOwner_ and nodeName_ >= it->second)) {
-      // found
-      break;
+      if (!checkValueInUseCb_ or !checkValueInUseCb_(newVal)) {
+        // found
+        break;
+      }
     }
     // try next
     newVal = (newVal < allocRange_.second) ? (newVal + 1) : allocRange_.first;
   }
   if (i == allocRangeSize_) {
     LOG(ERROR) << "All values are owned by higher originatorIds";
-    return;
   }
 
   // Schedule timeout to allocate new value
-  timeoutToken_ = eventLoop_->scheduleTimeout(
-      backoff_.getTimeRemainingUntilRetry(),
-      [this, newVal]() mutable noexcept { tryAllocate(newVal); });
+  allocateValue_ = newVal;
+  timeout_->scheduleTimeout(backoff_.getTimeRemainingUntilRetry());
 }
 
 template <typename T>
@@ -273,7 +301,7 @@ RangeAllocator<T>::keyValUpdated(
   // Some sanity checks
   CHECK_EQ(1, thriftVal.version);
   // no timeout being scheduled
-  CHECK(!timeoutToken_.hasValue());
+  CHECK(!timeout_->isScheduled());
   // only subscribed to requested/allocated value change
   CHECK(myRequestedValue_ or myValue_);
   CHECK_EQ(myValue_ ? *myValue_ : *myRequestedValue_, val);
@@ -311,6 +339,7 @@ RangeAllocator<T>::keyValUpdated(
 
     // Unsubscribe to update of lost value
     kvStoreClient_->unsubscribeKey(key);
+    kvStoreClient_->unsetKey(key, area_);
     // Schedule allocation for new value
     scheduleAllocate(val);
   }

@@ -5,10 +5,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+namespace cpp openr.thrift
 namespace cpp2 openr.thrift
+namespace php Openr
 namespace py openr.LinkMonitor
+namespace py3 openr.thrift
 
 include "Lsdb.thrift"
+include "Spark.thrift"
 
 //
 // LinkMonitor provides simple API to drain/undrain the node
@@ -42,23 +46,53 @@ enum LinkMonitorCommand {
    * can be used to emulate soft-drain of links by using higher metric value
    * for link.
    *
-   * Request must have valid `interfaceName` and `interfaceMetric` values for
+   * Request must have valid `interfaceName` and `overrideMetric` values for
    * SET command. UNSET command only expects `interfaceName`.
    */
   SET_LINK_METRIC     = 6,  // No response will be sent
   UNSET_LINK_METRIC   = 7,  // No response will be sent
+
+  /**
+   * Command to override metric for specific adjacencies.
+   *
+   * Request must have valid 'adjacency' node name
+   */
+  SET_ADJ_METRIC     = 8,  // No response will be sent
+  UNSET_ADJ_METRIC   = 9,  // No response will be sent
+
+  /**
+   * Command to request OpenR version
+   */
+   GET_VERSION = 10, // replies with OpenrVersions
+
+  /**
+   * Command to request build information
+   */
+  GET_BUILD_INFO = 11,  // replies with OpenrBuildInfo
+
+  /**
+   * Get the current adj status info reported from Spark
+   */
+  DUMP_ADJS = 12,  // AdjacencyDatabase will be sent back
 }
 
 struct LinkMonitorRequest {
  1: LinkMonitorCommand cmd
  2: string interfaceName
- 3: i32 interfaceMetric = 1  # Default value (can't be less than 1)
+ 3: i32 overrideMetric = 1  # Default value (can't be less than 1)
+ 4: optional string adjNodeName
+}
+
+struct OpenrVersions {
+ 1: Spark.OpenrVersion version
+ 2: Spark.OpenrVersion lowestSupportedVersion
 }
 
 struct InterfaceDetails {
   1: Lsdb.InterfaceInfo info
   2: bool isOverloaded
   3: optional i32 metricOverride
+  4: optional i64 linkFlapBackOffMs
 }
 
 struct DumpLinksReply {
@@ -66,6 +100,11 @@ struct DumpLinksReply {
  3: bool isOverloaded
  6: map<string, InterfaceDetails>
         (cpp.template = "std::unordered_map") interfaceDetails
+}
+
+struct AdjKey {
+  1: string nodeName;
+  2: string ifName;
 }
 
 //
@@ -89,4 +128,31 @@ struct LinkMonitorConfig {
   // Label allocated to node (via RangeAllocator).
   // `0` indicates null value (no value allocated)
   4: i32 nodeLabel = 0;
+
+  // Custom metric override for adjacency
+  5: map<AdjKey, i32> adjMetricOverrides;
+}
+
+/**
+ * Struct representing build information. Attributes are described in detail
+ * in `openr/common/BuildInfo.h`
+ */
+struct BuildInfo {
+  1: string buildUser;
+  2: string buildTime;
+  3: i64 buildTimeUnix;
+  4: string buildHost;
+  5: string buildPath;
+  6: string buildRevision;
+  7: i64 buildRevisionCommitTimeUnix;
+  8: string buildUpstreamRevision;
+  9: i64 buildUpstreamRevisionCommitTimeUnix;
+  10: string buildPackageName;
+  11: string buildPackageVersion;
+  12: string buildPackageRelease;
+  13: string buildPlatform;
+  14: string buildRule;
+  15: string buildType;
+  16: string buildTool;
+  17: string buildMode;
 }

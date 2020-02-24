@@ -7,6 +7,7 @@
 
 namespace cpp2 openr.thrift
 namespace py openr.PersistentStore
+namespace py3 openr.thrift
 
 enum StoreRequestType {
   STORE = 1;

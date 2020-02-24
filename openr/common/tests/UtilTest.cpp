@@ -20,102 +20,352 @@
 using namespace std;
 using namespace openr;
 
-// create and save a key pair in disk; load it and ensure it's the same as saved
-TEST(UtilTest, KeyPair) {
-  char tempCertKeyFileName[] = "/tmp/certKeyFile.XXXXXX";
-  // get a unique temp file name
-  EXPECT_TRUE(::mkstemp(tempCertKeyFileName));
+const auto prefix1 = toIpPrefix("::ffff:10.1.1.1/128");
+const auto prefix2 = toIpPrefix("::ffff:10.2.2.2/128");
+const auto prefix3 = toIpPrefix("::ffff:10.3.3.3/128");
 
-  // delete the original temp file
-  SCOPE_EXIT {
-    ::unlink(tempCertKeyFileName);
-  };
+const auto path1_2_1 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_1"),
+    1);
+const auto path1_2_2 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_2"),
+    2);
+const auto path1_2_3 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_3"),
+    3);
+const auto path1_3_1 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_1"),
+    1);
+const auto path1_3_2 = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_2"),
+    2);
 
-  //
-  // Init cert
-  //
-  apache::thrift::SimpleJSONSerializer serializer;
+const auto path1_2_1_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_1"),
+    1,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+const auto path1_2_2_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_2"),
+    2,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+const auto path1_2_3_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_3"),
+    3,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+const auto path1_3_1_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_1"),
+    1,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
+const auto path1_3_2_swap = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_2"),
+    2,
+    createMplsAction(thrift::MplsActionCode::SWAP, 1));
 
-  // load non-existent file
-  EXPECT_THROW(loadKeyPairFromFile(tempCertKeyFileName, serializer), exception);
+const auto path1_2_1_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_1"),
+    1,
+    createMplsAction(thrift::MplsActionCode::PHP));
+const auto path1_2_2_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_2"),
+    2,
+    createMplsAction(thrift::MplsActionCode::PHP));
+const auto path1_2_3_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_3"),
+    3,
+    createMplsAction(thrift::MplsActionCode::PHP));
+const auto path1_3_1_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_1"),
+    1,
+    createMplsAction(thrift::MplsActionCode::PHP));
+const auto path1_3_2_php = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::3")),
+    std::string("iface_1_3_2"),
+    2,
+    createMplsAction(thrift::MplsActionCode::PHP));
 
-  // create in memory key pair
-  auto keyPair = fbzmq::util::genKeyPair();
+const auto path1_2_2_pop = createNextHop(
+    toBinaryAddress(folly::IPAddress("fe80::2")),
+    std::string("iface_1_2_1"),
+    2,
+    createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP));
 
-  // save it in file
-  saveKeyPairToFile(tempCertKeyFileName, keyPair, serializer);
+struct PrefixKeyEntry {
+  bool shouldPass{false};
+  std::string pkey{};
+  std::string node{};
+  folly::CIDRNetwork ipaddr;
+  std::string area{thrift::KvStore_constants::kDefaultArea()};
+  thrift::IpPrefix ipPrefix;
+  folly::IPAddress addr;
+  int plen{0};
+};
 
-  // load it from file
-  auto keyPair2 = loadKeyPairFromFile(tempCertKeyFileName, serializer);
+TEST(UtilTest, PrefixKeyTest) {
+  std::vector<PrefixKeyEntry> strToItems;
 
-  EXPECT_EQ(keyPair.privateKey, keyPair2.privateKey);
-  EXPECT_EQ(keyPair.publicKey, keyPair2.publicKey);
+  // tests for parsing prefix key
+
+  // prefix key
+  PrefixKeyEntry k1;
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:[ff00::1]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:node-name:e.1:[ff00::1/100]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:node_name:a:[ff00::1/a]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:nodename:0:0:[ff00::1/129]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename0:0:[ff00::1/128]";
+  k1.node = "nodename0";
+  k1.ipaddr = folly::IPAddress::createNetwork("ff00::1/128");
+  k1.area = "0";
+  k1.ipPrefix = toIpPrefix("ff00::1/128");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename0:pod108:[ff00::0/64]";
+  k1.node = "nodename0";
+  k1.ipaddr = folly::IPAddress::createNetwork("ff00::0/64");
+  k1.area = "pod108";
+  k1.ipPrefix = toIpPrefix("ff00::0/64");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should fail
+  k1.pkey = "prefix:nodename0:pod-108:[ff00::0/64]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:nodename.0.0:3:[ff00::1/2334]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail, all paremeters expected to by folly::none
+  k1.pkey = "prefix:nodename.0.0:33:[192.168.0.1/343]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename.0.0:10:[192.168.0.0/3]";
+  k1.node = "nodename.0.0";
+  k1.ipaddr = folly::IPAddress::createNetwork("192.168.0.0/3");
+  k1.area = "10";
+  k1.ipPrefix = toIpPrefix("192.168.0.0/3");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename.0.0:99:[::0/0]";
+  k1.node = "nodename.0.0";
+  k1.ipaddr = folly::IPAddress::createNetwork("::0/0");
+  k1.area = "99";
+  k1.ipPrefix = toIpPrefix("::0/0");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should pass
+  k1.pkey = "prefix:nodename.0.0:10:[0.0.0.0/19]";
+  k1.node = "nodename.0.0";
+  k1.ipaddr = folly::IPAddress::createNetwork("0.0.0.0/19");
+  k1.area = "10";
+  k1.ipPrefix = toIpPrefix("0.0.0.0/19");
+  k1.shouldPass = true;
+  strToItems.push_back(k1);
+
+  // this should fail
+  k1.pkey = "prefix:nodename.0.0:10:99.0:[0.0.0.0/19]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  // this should fail
+  k1.pkey = "prefix:nodename.0.0:99-h:[0.0.0.0/19]";
+  k1.shouldPass = false;
+  strToItems.push_back(k1);
+
+  for (const auto& keys : strToItems) {
+    auto prefixStr = PrefixKey::fromStr(keys.pkey);
+    if (keys.shouldPass) {
+      EXPECT_EQ(prefixStr.value().getNodeName(), keys.node);
+      EXPECT_EQ(prefixStr.value().getCIDRNetwork(), keys.ipaddr);
+      EXPECT_EQ(prefixStr.value().getPrefixArea(), keys.area);
+      EXPECT_EQ(prefixStr.value().getIpPrefix(), keys.ipPrefix);
+    } else {
+      EXPECT_FALSE(prefixStr.hasValue());
+    }
+  }
+
+  // tests for forming prefix key
+  std::vector<PrefixKeyEntry> itemsToStr;
+
+  PrefixKeyEntry k2;
+
+  k2.node = "ebb.0.0";
+  k2.addr = folly::IPAddress("ff00::0");
+  k2.plen = 16;
+  k2.area = "1";
+  k2.pkey = "prefix:ebb.0.0:1:[ff00::/16]";
+  itemsToStr.push_back(k2);
+
+  // address will be masked
+  k2.node = "ebb-0-0";
+  k2.addr = folly::IPAddress("ff00::1");
+  k2.plen = 16;
+  k2.area = "01";
+  k2.pkey = "prefix:ebb-0-0:01:[ff00::/16]";
+  itemsToStr.push_back(k2);
+
+  // address will be masked
+  k2.node = "ebb-0-0";
+  k2.addr = folly::IPAddress("192.168.0.1");
+  k2.plen = 16;
+  k2.area = "1";
+  k2.pkey = "prefix:ebb-0-0:1:[192.168.0.0/16]";
+  itemsToStr.push_back(k2);
+
+  for (const auto& keys : itemsToStr) {
+    auto ipaddress = folly::IPAddress::createNetwork(
+        folly::sformat("{}/{}", keys.addr.str(), keys.plen));
+    auto prefixStr = PrefixKey(keys.node, ipaddress, keys.area);
+    EXPECT_EQ(prefixStr.getPrefixKey(), keys.pkey);
+  }
+}
+
+TEST(UtilTest, GetNodeNameFromKeyTest) {
+  const std::unordered_map<std::string, std::string> expectedIo = {
+      {"prefix:node1", "node1"},
+      {"prefix:nodename.0.0:10:[0.0.0.0/0]", "nodename.0.0"},
+      {"", ""},
+      {"adj:", ""},
+      {"adj", ""}};
+  for (auto const& io : expectedIo) {
+    EXPECT_EQ(getNodeNameFromKey(io.first), io.second);
+  }
 }
 
 // test getNthPrefix()
 TEST(UtilTest, getNthPrefix) {
-  uint32_t seedPrefixLen = 32;
-  uint32_t allocPrefixLen = seedPrefixLen + 5;
-  folly::CIDRNetwork seedPrefix{folly::IPAddress{"face:b00c::1"},
-                                seedPrefixLen};
+  // v6 allocation parameters
+  const uint32_t seedPrefixLen = 32;
+  const uint32_t allocPrefixLen = seedPrefixLen + 5;
+  const folly::CIDRNetwork seedPrefix{folly::IPAddress{"face:b00c::1"},
+                                      seedPrefixLen};
 
-  // unmasked
-  EXPECT_EQ(
-      folly::CIDRNetwork(folly::IPAddress("face:b00c::1"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 0, false));
-  EXPECT_EQ(
-      folly::CIDRNetwork(folly::IPAddress("face:b00c:800::1"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 1, false));
-  EXPECT_EQ(
-      folly::CIDRNetwork(folly::IPAddress("face:b00c:1800::1"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 3, false));
-  EXPECT_EQ(
-      folly::CIDRNetwork(folly::IPAddress("face:b00c:f800::1"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 31, false));
-
-  // masked
+  // v6
   EXPECT_EQ(
       folly::CIDRNetwork(folly::IPAddress("face:b00c::"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 0, true));
+      getNthPrefix(seedPrefix, allocPrefixLen, 0));
   EXPECT_EQ(
       folly::CIDRNetwork(folly::IPAddress("face:b00c:800::"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 1, true));
+      getNthPrefix(seedPrefix, allocPrefixLen, 1));
   EXPECT_EQ(
       folly::CIDRNetwork(folly::IPAddress("face:b00c:1800::"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 3, true));
+      getNthPrefix(seedPrefix, allocPrefixLen, 3));
   EXPECT_EQ(
       folly::CIDRNetwork(folly::IPAddress("face:b00c:f800::"), allocPrefixLen),
-      getNthPrefix(seedPrefix, allocPrefixLen, 31, true));
+      getNthPrefix(seedPrefix, allocPrefixLen, 31));
+
+  // v4
+  const auto v4SeedPrefix = folly::IPAddress::createNetwork("10.1.0.0/16");
+  EXPECT_EQ(
+      folly::IPAddress::createNetwork("10.1.110.0/24"),
+      getNthPrefix(v4SeedPrefix, 24, 110));
+  EXPECT_EQ(
+      folly::IPAddress::createNetwork("10.1.255.0/24"),
+      getNthPrefix(v4SeedPrefix, 24, 255));
+  EXPECT_EQ(
+      folly::IPAddress::createNetwork("10.1.0.0/16"),
+      getNthPrefix(v4SeedPrefix, 16, 0));
+
+  // Some error cases
+  // 1. prefixIndex is out of range
+  EXPECT_THROW(getNthPrefix(v4SeedPrefix, 24, 256), std::invalid_argument);
+  // 2. alloc block is bigger than seed prefix block
+  EXPECT_THROW(getNthPrefix(v4SeedPrefix, 15, 0), std::invalid_argument);
 }
 
 TEST(UtilTest, checkIncludeExcludeRegex) {
-  using std::regex_constants::extended;
-  using std::regex_constants::icase;
-  using std::regex_constants::optimize;
-  std::vector<std::regex> includeRegexList{
-      std::regex{"eth.*", extended | icase | optimize},
-      std::regex{"terra", extended | icase | optimize},
-  };
-  std::vector<std::regex> excludeRegexList{
-      std::regex{".*po.*", extended | icase | optimize},
-  };
+  // Re2 support POSIX regular expressions by default, so we don't need
+  // extended flag. It's much better than std::regex, so we don't need optimize
+  // flag either
+  re2::RE2::Options options;
+  options.set_case_sensitive(false);
+  auto includeRegexList =
+      std::make_unique<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
+  std::string regexErr;
+  includeRegexList->Add("eth.*", &regexErr);
+  includeRegexList->Add("terra", &regexErr);
+  includeRegexList->Add("po.*", &regexErr);
+  EXPECT_TRUE(includeRegexList->Compile());
+  auto excludeRegexList =
+      std::make_unique<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
+  excludeRegexList->Add(".*pi.*", &regexErr);
+  excludeRegexList->Add("^(po)[0-9]{3}$", &regexErr);
+  EXPECT_TRUE(excludeRegexList->Compile());
+
   EXPECT_TRUE(
       checkIncludeExcludeRegex("eth", includeRegexList, excludeRegexList));
   EXPECT_TRUE(
       checkIncludeExcludeRegex("terra", includeRegexList, excludeRegexList));
   EXPECT_TRUE(
       checkIncludeExcludeRegex("eth1-2-3", includeRegexList, excludeRegexList));
-
+  EXPECT_TRUE(
+      checkIncludeExcludeRegex("Eth1-2-3", includeRegexList, excludeRegexList));
   EXPECT_FALSE(checkIncludeExcludeRegex(
       "helloterra", includeRegexList, excludeRegexList));
   EXPECT_FALSE(
       checkIncludeExcludeRegex("helloeth", includeRegexList, excludeRegexList));
   EXPECT_FALSE(checkIncludeExcludeRegex(
-      "ethpohello", includeRegexList, excludeRegexList));
+      "ethpihello", includeRegexList, excludeRegexList));
   EXPECT_FALSE(
       checkIncludeExcludeRegex("terr", includeRegexList, excludeRegexList));
   EXPECT_FALSE(
       checkIncludeExcludeRegex("hello", includeRegexList, excludeRegexList));
+  EXPECT_FALSE(
+      checkIncludeExcludeRegex("po101", includeRegexList, excludeRegexList));
+  EXPECT_TRUE(
+      checkIncludeExcludeRegex("po1010", includeRegexList, excludeRegexList));
+
+  excludeRegexList.reset();
+  EXPECT_TRUE(
+      checkIncludeExcludeRegex("eth", includeRegexList, excludeRegexList));
+  excludeRegexList =
+      std::make_unique<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
+  excludeRegexList->Add(".*pi.*", &regexErr);
+  excludeRegexList->Add("^(po)[0-9]{3}$", &regexErr);
+  EXPECT_TRUE(excludeRegexList->Compile());
+  includeRegexList.reset();
+  EXPECT_FALSE(
+      checkIncludeExcludeRegex("eth", includeRegexList, excludeRegexList));
 }
 
 TEST(UtilTest, createLoopbackAddr) {
@@ -135,6 +385,24 @@ TEST(UtilTest, createLoopbackAddr) {
     auto network = folly::IPAddress::createNetwork("fc00::1/128");
     auto addr = createLoopbackAddr(network);
     EXPECT_EQ(folly::IPAddress("fc00::1"), addr);
+  }
+
+  {
+    auto network = folly::IPAddress::createNetwork("10.1.0.0/16");
+    auto addr = createLoopbackAddr(network);
+    EXPECT_EQ(folly::IPAddress("10.1.0.1"), addr);
+  }
+
+  {
+    auto network = folly::IPAddress::createNetwork("10.1.0.0/32");
+    auto addr = createLoopbackAddr(network);
+    EXPECT_EQ(folly::IPAddress("10.1.0.0"), addr);
+  }
+
+  {
+    auto network = folly::IPAddress::createNetwork("10.1.0.1/32");
+    auto addr = createLoopbackAddr(network);
+    EXPECT_EQ(folly::IPAddress("10.1.0.1"), addr);
   }
 }
 
@@ -262,18 +530,429 @@ TEST(UtilTest, getTotalPerfEventsDurationTest) {
 
   {
     thrift::PerfEvents perfEvents;
-    thrift::PerfEvent event1{
-      apache::thrift::FRAGILE, "node1", "LINK_UP", 100};
+    thrift::PerfEvent event1{apache::thrift::FRAGILE, "node1", "LINK_UP", 100};
     perfEvents.events.emplace_back(std::move(event1));
     thrift::PerfEvent event2{
-      apache::thrift::FRAGILE, "node1", "DECISION_RECVD", 200};
+        apache::thrift::FRAGILE, "node1", "DECISION_RECVD", 200};
     perfEvents.events.emplace_back(std::move(event2));
     thrift::PerfEvent event3{
-      apache::thrift::FRAGILE, "node1", "SPF_CALCULATE", 300};
+        apache::thrift::FRAGILE, "node1", "SPF_CALCULATE", 300};
     perfEvents.events.emplace_back(std::move(event3));
     auto duration = getTotalPerfEventsDuration(perfEvents);
     EXPECT_EQ(duration.count(), 200);
   }
+}
+
+TEST(UtilTest, getDurationBetweenPerfEventsTest) {
+  {
+    thrift::PerfEvents perfEvents;
+    auto maybeDuration =
+        getDurationBetweenPerfEvents(perfEvents, "LINK_UP", "SPF_CALCULATE");
+    EXPECT_TRUE(maybeDuration.hasError());
+  }
+
+  {
+    thrift::PerfEvents perfEvents;
+    thrift::PerfEvent event1{apache::thrift::FRAGILE, "node1", "LINK_UP", 100};
+    perfEvents.events.emplace_back(std::move(event1));
+    thrift::PerfEvent event2{
+        apache::thrift::FRAGILE, "node1", "DECISION_RECVD", 200};
+    perfEvents.events.emplace_back(std::move(event2));
+    thrift::PerfEvent event3{
+        apache::thrift::FRAGILE, "node1", "SPF_CALCULATE", 300};
+    perfEvents.events.emplace_back(std::move(event3));
+    auto maybeDuration =
+        getDurationBetweenPerfEvents(perfEvents, "LINK_UP", "SPF_CALCULATE");
+    EXPECT_EQ(maybeDuration.value().count(), 200);
+    maybeDuration = getDurationBetweenPerfEvents(
+        perfEvents, "DECISION_RECVD", "SPF_CALCULATE");
+    EXPECT_EQ(maybeDuration.value().count(), 100);
+    maybeDuration = getDurationBetweenPerfEvents(
+        perfEvents, "NO_SUCH_NAME", "SPF_CALCULATE");
+    EXPECT_TRUE(maybeDuration.hasError());
+    maybeDuration = getDurationBetweenPerfEvents(
+        perfEvents, "SPF_CALCULATE", "DECISION_RECVD");
+    EXPECT_TRUE(maybeDuration.hasError());
+    maybeDuration = getDurationBetweenPerfEvents(
+        perfEvents, "DECISION_RECVD", "NO_SUCH_NAME");
+    EXPECT_TRUE(maybeDuration.hasError());
+  }
+}
+
+TEST(UtilTest, getBestNextHopsUnicast) {
+  auto bestNextHops = getBestNextHopsUnicast({path1_2_1, path1_2_2});
+  EXPECT_EQ(bestNextHops.size(), 1);
+  EXPECT_EQ(bestNextHops.at(0).address.ifName, "iface_1_2_1");
+  EXPECT_EQ(
+      bestNextHops.at(0).address.addr,
+      toBinaryAddress(folly::IPAddress("fe80::2")).addr);
+  EXPECT_EQ(bestNextHops.at(0).metric, 1);
+
+  bestNextHops =
+      getBestNextHopsUnicast({path1_2_1, path1_2_2, path1_2_3, path1_3_1});
+  EXPECT_EQ(
+      bestNextHops, std::vector<thrift::NextHopThrift>({path1_2_1, path1_3_1}));
+
+  auto path1_2_2_updated = path1_2_2;
+  path1_2_2_updated.useNonShortestRoute = true;
+  bestNextHops = getBestNextHopsUnicast(
+      {path1_2_1, path1_2_2_updated, path1_2_3, path1_3_1});
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>(
+          {path1_2_1, path1_2_2_updated, path1_3_1}));
+}
+
+TEST(UtilTest, getBestNextHopsMpls) {
+  // Validate pop route
+  auto bestNextHops = getBestNextHopsMpls({path1_2_2_pop});
+  EXPECT_EQ(bestNextHops, std::vector<thrift::NextHopThrift>({path1_2_2_pop}));
+
+  // Validate all swap routes (choose min metric)
+  bestNextHops = getBestNextHopsMpls({
+      path1_2_1_swap,
+      path1_2_2_swap,
+      path1_2_3_swap,
+      path1_3_1_swap,
+      path1_3_2_swap,
+  });
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>({path1_2_1_swap, path1_3_1_swap}));
+
+  // Validate all php routes (choose min metric)
+  bestNextHops = getBestNextHopsMpls({
+      path1_2_1_php,
+      path1_2_2_php,
+      path1_2_3_php,
+      path1_3_1_php,
+      path1_3_2_php,
+  });
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>({path1_2_1_php, path1_3_1_php}));
+
+  // Choose min metric in mix of swap and php
+  bestNextHops = getBestNextHopsMpls(
+      {path1_2_1_swap, path1_2_2_php, path1_3_1_swap, path1_3_2_php});
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>({path1_2_1_swap, path1_3_1_swap}));
+
+  // Choose min metric in mix of swap and php
+  bestNextHops = getBestNextHopsMpls(
+      {path1_2_1_php, path1_2_2_swap, path1_3_1_php, path1_3_2_swap});
+  EXPECT_EQ(
+      bestNextHops,
+      std::vector<thrift::NextHopThrift>({path1_2_1_php, path1_3_1_php}));
+
+  // Prefer PHP over SWAP for metric tie
+  bestNextHops = getBestNextHopsMpls({path1_2_1_swap, path1_3_1_php});
+  EXPECT_EQ(bestNextHops, std::vector<thrift::NextHopThrift>({path1_3_1_php}));
+}
+
+TEST(UtilTest, findDeltaRoutes) {
+  thrift::RouteDatabase oldRouteDb;
+  oldRouteDb.thisNodeName = "node-1";
+  oldRouteDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
+  oldRouteDb.mplsRoutes.emplace_back(
+      createMplsRoute(2, {path1_2_1_swap, path1_2_2_swap}));
+
+  thrift::RouteDatabase newRouteDb;
+  newRouteDb.thisNodeName = "node-1";
+  newRouteDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix2, {path1_2_1, path1_2_2, path1_2_3}));
+  newRouteDb.mplsRoutes.emplace_back(
+      createMplsRoute(2, {path1_2_1_swap, path1_2_2_swap, path1_2_3_swap}));
+
+  const auto& res1 =
+      findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
+
+  EXPECT_EQ(res1.unicastRoutesToUpdate.size(), 1);
+  EXPECT_EQ(res1.unicastRoutesToUpdate, newRouteDb.unicastRoutes);
+  EXPECT_EQ(res1.unicastRoutesToDelete.size(), 0);
+  EXPECT_EQ(res1.mplsRoutesToUpdate.size(), 1);
+  EXPECT_EQ(res1.mplsRoutesToUpdate, newRouteDb.mplsRoutes);
+  EXPECT_EQ(res1.mplsRoutesToDelete.size(), 0);
+
+  // add more unicastRoutes in newRouteDb
+  newRouteDb.unicastRoutes.emplace_back(
+      createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
+  newRouteDb.mplsRoutes.emplace_back(
+      createMplsRoute(3, {path1_3_1_swap, path1_3_2_swap}));
+
+  const auto& res2 =
+      findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
+  EXPECT_EQ(res2.unicastRoutesToUpdate.size(), 2);
+  EXPECT_EQ(res2.unicastRoutesToUpdate, newRouteDb.unicastRoutes);
+  EXPECT_EQ(res2.unicastRoutesToDelete.size(), 0);
+  EXPECT_EQ(res2.mplsRoutesToUpdate.size(), 2);
+  EXPECT_EQ(res2.mplsRoutesToUpdate, newRouteDb.mplsRoutes);
+  EXPECT_EQ(res2.mplsRoutesToDelete.size(), 0);
+
+  // empty out newRouteDb
+  newRouteDb.unicastRoutes.clear();
+  newRouteDb.mplsRoutes.clear();
+  const auto& res3 =
+      findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
+  EXPECT_EQ(res3.unicastRoutesToUpdate.size(), 0);
+  EXPECT_EQ(res3.unicastRoutesToDelete.size(), 1);
+  EXPECT_EQ(res3.unicastRoutesToDelete.at(0), prefix2);
+  EXPECT_EQ(res3.mplsRoutesToUpdate.size(), 0);
+  EXPECT_EQ(res3.mplsRoutesToDelete.size(), 1);
+  EXPECT_EQ(res3.mplsRoutesToDelete.at(0), 2);
+}
+
+TEST(UtilTest, MplsLabelValidate) {
+  EXPECT_TRUE(isMplsLabelValid(0));
+  EXPECT_TRUE(isMplsLabelValid(1132));
+  EXPECT_TRUE(isMplsLabelValid((1 << 20) - 1));
+  EXPECT_FALSE(isMplsLabelValid(1 << 20));
+  EXPECT_FALSE(isMplsLabelValid(1 << 30));
+}
+
+TEST(UtilTest, MplsActionValidate) {
+  //
+  // PHP
+  //
+  {
+    thrift::MplsAction mplsAction;
+    mplsAction.action = thrift::MplsActionCode::PHP;
+    EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
+
+    mplsAction.swapLabel = 1;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.swapLabel = folly::none;
+
+    mplsAction.pushLabels = std::vector<int32_t>();
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.pushLabels = folly::none;
+  }
+
+  //
+  // POP_AND_LOOKUP
+  //
+  {
+    thrift::MplsAction mplsAction;
+    mplsAction.action = thrift::MplsActionCode::POP_AND_LOOKUP;
+    EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
+
+    mplsAction.swapLabel = 1;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.swapLabel = folly::none;
+
+    mplsAction.pushLabels = std::vector<int32_t>();
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.pushLabels = folly::none;
+  }
+
+  //
+  // SWAP
+  //
+  {
+    thrift::MplsAction mplsAction;
+    mplsAction.action = thrift::MplsActionCode::SWAP;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+
+    mplsAction.swapLabel = 1;
+    EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
+
+    mplsAction.pushLabels = std::vector<int32_t>();
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.pushLabels = folly::none;
+  }
+
+  //
+  // PUSH
+  //
+  {
+    thrift::MplsAction mplsAction;
+    mplsAction.action = thrift::MplsActionCode::PUSH;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+
+    mplsAction.swapLabel = 1;
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+    mplsAction.swapLabel = folly::none;
+
+    mplsAction.pushLabels = std::vector<int32_t>();
+    EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
+
+    mplsAction.pushLabels->push_back(1);
+    EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
+  }
+}
+
+TEST(UtilTest, getPrefixForwardingType) {
+  std::unordered_map<std::string, thrift::PrefixEntry> prefixes;
+  prefixes["node1"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes["node2"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+  prefixes["node3"] = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
+
+  EXPECT_EQ(
+      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+
+  prefixes["node3"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  EXPECT_EQ(
+      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+
+  prefixes["node2"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  EXPECT_EQ(
+      thrift::PrefixForwardingType::IP, getPrefixForwardingType(prefixes));
+
+  prefixes["node1"].forwardingType = thrift::PrefixForwardingType::SR_MPLS;
+  EXPECT_EQ(
+      thrift::PrefixForwardingType::SR_MPLS, getPrefixForwardingType(prefixes));
+}
+
+using namespace openr::MetricVectorUtils;
+TEST(MetricVectorUtilsTest, CompareResultInverseOperator) {
+  EXPECT_EQ(CompareResult::WINNER, !CompareResult::LOOSER);
+  EXPECT_EQ(!CompareResult::WINNER, CompareResult::LOOSER);
+
+  EXPECT_EQ(CompareResult::TIE, !CompareResult::TIE);
+
+  EXPECT_EQ(CompareResult::TIE_WINNER, !CompareResult::TIE_LOOSER);
+  EXPECT_EQ(!CompareResult::TIE_WINNER, CompareResult::TIE_LOOSER);
+
+  EXPECT_EQ(CompareResult::ERROR, !CompareResult::ERROR);
+}
+
+TEST(MetricVectorUtilsTest, isDecisive) {
+  EXPECT_TRUE(isDecisive(CompareResult::WINNER));
+  EXPECT_TRUE(isDecisive(CompareResult::LOOSER));
+  EXPECT_TRUE(isDecisive(CompareResult::ERROR));
+
+  EXPECT_FALSE(isDecisive(CompareResult::TIE_WINNER));
+  EXPECT_FALSE(isDecisive(CompareResult::TIE_LOOSER));
+  EXPECT_FALSE(isDecisive(CompareResult::TIE));
+}
+
+TEST(MetricVectorUtilsTest, sortMetricVector) {
+  thrift::MetricVector mv;
+
+  int64_t const numMetrics = 5;
+
+  // default construct some MetricEntities
+  mv.metrics.resize(numMetrics);
+
+  for (int64_t i = 0; i < numMetrics; i++) {
+    mv.metrics[i].type = i;
+    mv.metrics[i].priority = i;
+  }
+
+  EXPECT_FALSE(isSorted(mv));
+  sortMetricVector(mv);
+  EXPECT_TRUE(isSorted(mv));
+}
+
+TEST(MetricVectorUtilsTest, compareMetrics) {
+  EXPECT_EQ(CompareResult::TIE, compareMetrics({}, {}, true));
+  EXPECT_EQ(CompareResult::ERROR, compareMetrics({1}, {}, true));
+  EXPECT_EQ(CompareResult::TIE, compareMetrics({1, 2}, {1, 2}, true));
+
+  EXPECT_EQ(CompareResult::WINNER, compareMetrics({2}, {1}, false));
+  EXPECT_EQ(CompareResult::LOOSER, compareMetrics({2, 1}, {2, 3}, false));
+
+  EXPECT_EQ(CompareResult::TIE_WINNER, compareMetrics({-1}, {-2}, true));
+  EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetrics({1, 1}, {2, 0}, true));
+}
+
+TEST(MetricVectorUtilsTest, resultForLoner) {
+  thrift::MetricEntity entity;
+  entity.op = thrift::CompareType::WIN_IF_PRESENT;
+  entity.isBestPathTieBreaker = false;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::WINNER);
+  entity.isBestPathTieBreaker = true;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::TIE_WINNER);
+
+  entity.op = thrift::CompareType::WIN_IF_NOT_PRESENT;
+  entity.isBestPathTieBreaker = false;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::LOOSER);
+  entity.isBestPathTieBreaker = true;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::TIE_LOOSER);
+
+  entity.op = thrift::CompareType::IGNORE_IF_NOT_PRESENT;
+  entity.isBestPathTieBreaker = false;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::TIE);
+  entity.isBestPathTieBreaker = true;
+  EXPECT_EQ(resultForLoner(entity), CompareResult::TIE);
+}
+
+TEST(MetricVectorUtilsTest, maybeUpdate) {
+  CompareResult result = CompareResult::TIE;
+  maybeUpdate(result, CompareResult::TIE_WINNER);
+  EXPECT_EQ(result, CompareResult::TIE_WINNER);
+
+  maybeUpdate(result, CompareResult::TIE_LOOSER);
+  EXPECT_EQ(result, CompareResult::TIE_WINNER);
+
+  maybeUpdate(result, CompareResult::WINNER);
+  EXPECT_EQ(result, CompareResult::WINNER);
+
+  maybeUpdate(result, CompareResult::TIE_WINNER);
+  EXPECT_EQ(result, CompareResult::WINNER);
+
+  maybeUpdate(result, CompareResult::ERROR);
+  EXPECT_EQ(result, CompareResult::ERROR);
+}
+
+TEST(MetricVectorUtilsTest, compareMetricVectors) {
+  thrift::MetricVector l, r;
+  EXPECT_EQ(CompareResult::TIE, compareMetricVectors(l, r));
+
+  l.version = 1;
+  r.version = 2;
+  EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
+  r.version = 1;
+
+  int64_t numMetrics = 5;
+  l.metrics.resize(numMetrics);
+  r.metrics.resize(numMetrics);
+  for (int64_t i = 0; i < numMetrics; ++i) {
+    l.metrics[i].type = i;
+    l.metrics[i].priority = i;
+    l.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    l.metrics[i].isBestPathTieBreaker = false;
+    l.metrics[i].metric = {i};
+
+    r.metrics[i].type = i;
+    r.metrics[i].priority = i;
+    r.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    r.metrics[i].isBestPathTieBreaker = false;
+    r.metrics[i].metric = {i};
+  }
+
+  EXPECT_EQ(CompareResult::TIE, compareMetricVectors(l, r));
+
+  r.metrics[numMetrics - 2].metric.front()--;
+  EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(r, l));
+
+  r.metrics[numMetrics - 2].isBestPathTieBreaker = true;
+  EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
+  l.metrics[numMetrics - 2].isBestPathTieBreaker = true;
+  EXPECT_EQ(CompareResult::TIE_WINNER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetricVectors(r, l));
+
+  r.metrics.resize(numMetrics - 1);
+  EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(r, l));
+
+  // make type different but keep priority the same
+  l.metrics[0].type--;
+  EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(r, l));
+  l.metrics[0].type++;
+
+  // change op for l loner;
+  l.metrics[numMetrics - 1].op = thrift::CompareType::WIN_IF_NOT_PRESENT;
+  EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(r, l));
+
+  l.metrics[numMetrics - 1].op = thrift::CompareType::IGNORE_IF_NOT_PRESENT;
+  EXPECT_EQ(CompareResult::TIE_WINNER, compareMetricVectors(l, r));
+  EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetricVectors(r, l));
 }
 
 int

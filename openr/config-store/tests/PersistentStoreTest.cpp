@@ -9,26 +9,60 @@
 #include <utility>
 
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/FileUtil.h>
+#include <folly/Random.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include <openr/config-store/PersistentStore.h>
-#include <openr/config-store/PersistentStoreClient.h>
+#include <openr/config-store/PersistentStoreWrapper.h>
 
 namespace openr {
 
+// Load database from disk
+thrift::StoreDatabase
+loadDatabaseFromDisk(const std::string& filePath) {
+  thrift::StoreDatabase newDatabase;
+  std::string fileData("");
+  if (not folly::readFile(filePath.c_str(), fileData)) {
+    return newDatabase;
+  }
+
+  auto ioBuf = folly::IOBuf::wrapBuffer(fileData.c_str(), fileData.size());
+  folly::io::Cursor cursor(ioBuf.get());
+
+  // Read 'kTlvFormatMarker'
+  cursor.readFixedString(kTlvFormatMarker.size());
+  // Iteratively read persistentObject from disk
+  while (true) {
+    auto optionalObject = PersistentStore::decodePersistentObject(cursor);
+    if (optionalObject.hasError()) {
+      LOG(ERROR) << optionalObject.error();
+    }
+
+    // Read finish
+    if (not optionalObject->hasValue()) {
+      break;
+    }
+    auto pObject = std::move(optionalObject->value());
+
+    // Add/Delete persistentObject to/from 'database'
+    if (pObject.type == ActionType::ADD) {
+      newDatabase.keyVals[pObject.key] =
+          pObject.data.has_value() ? pObject.data.value() : "";
+    } else if (pObject.type == ActionType::DEL) {
+      newDatabase.keyVals.erase(pObject.key);
+    }
+  }
+  return newDatabase;
+}
+
 TEST(PersistentStoreTest, LoadStoreEraseTest) {
   fbzmq::Context context;
-
-  auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
-  const std::string filePath{
-      folly::sformat("/tmp/aq_persistent_store_test_{}", tid)};
-  const PersistentStoreUrl sockUrl1{"ipc://aq_persistent_store_test1"};
-  const PersistentStoreUrl sockUrl2{"ipc://aq_persistent_store_test2"};
+  const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
   // Data types to store/load
-  const std::pair<std::string, uint32_t> keyVal1{"key1", 1235};
   const std::pair<std::string, std::string> keyVal2{"key2", "8375"};
   const std::pair<std::string, thrift::StoreDatabase> keyVal3{
       "key3",
@@ -38,70 +72,150 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
               {"fb", "facebook"},
               {"ig", "instagram"},
           })};
+  const std::string val2 = "5321";
 
-  std::unique_ptr<PersistentStoreClient> client;
-  std::unique_ptr<PersistentStore> store;
-  std::unique_ptr<std::thread> storeThread;
+  {
+    PersistentStoreWrapper store(context, tid);
+    store.run();
 
-  //
-  // Create new store and perform some operations on it
-  //
+    // Store and verify Load
+    auto responseStoreKey2 = store->store(keyVal2.first, keyVal2.second).get();
+    EXPECT_EQ(folly::Unit(), responseStoreKey2);
 
-  store = std::make_unique<PersistentStore>(filePath, sockUrl1, context);
-  storeThread = std::make_unique<std::thread>([&]() { store->run(); });
-  store->waitUntilRunning();
-  client = std::make_unique<PersistentStoreClient>(sockUrl1, context);
+    auto responseStoreKey3 =
+        store->storeThriftObj(keyVal3.first, keyVal3.second).get();
+    EXPECT_EQ(folly::Unit(), responseStoreKey3);
 
-  // Store and verify Load
-  EXPECT_TRUE(client->store(keyVal1.first, keyVal1.second).value());
-  EXPECT_TRUE(client->store(keyVal2.first, keyVal2.second).value());
-  EXPECT_TRUE(client->storeThriftObj(keyVal3.first, keyVal3.second).value());
-  EXPECT_EQ(keyVal1.second, client->load<uint32_t>(keyVal1.first).value());
-  EXPECT_EQ(keyVal2.second, client->load<std::string>(keyVal2.first).value());
-  EXPECT_EQ(
-      keyVal3.second,
-      client->loadThriftObj<thrift::StoreDatabase>(keyVal3.first).value());
+    auto responseLoadKey2 = store->load(keyVal2.first).get();
+    EXPECT_TRUE(responseLoadKey2);
+    EXPECT_EQ(keyVal2.second, *responseLoadKey2);
 
-  // Try overriding stuff
-  const uint32_t val1 = 5321;
-  EXPECT_NE(val1, keyVal1.second);
-  EXPECT_TRUE(client->store(keyVal1.first, val1).value());
-  EXPECT_EQ(val1, client->load<uint32_t>(keyVal1.first).value());
-  EXPECT_NE(keyVal1.second, client->load<uint32_t>(keyVal1.first).value());
+    auto responseLoadKey3 =
+        store->loadThriftObj<thrift::StoreDatabase>(keyVal3.first).get();
+    EXPECT_TRUE(responseLoadKey3.hasValue());
+    EXPECT_EQ(keyVal3.second, responseLoadKey3.value());
 
-  // Try some wrong stuff
-  EXPECT_TRUE(
-      client->loadThriftObj<thrift::StoreDatabase>("unknown_key1").hasError());
-  EXPECT_TRUE(client->load<uint32_t>("unknown_key2").hasError());
+    // Try overriding stuff
+    EXPECT_NE(val2, keyVal2.second);
+    auto responseOverrideKey2 = store->store(keyVal2.first, val2).get();
+    EXPECT_EQ(folly::Unit(), responseOverrideKey2);
 
-  // Try erase API. Subsequent erase of same key returns false
-  EXPECT_TRUE(client->erase(keyVal3.first).value());
-  EXPECT_FALSE(client->erase(keyVal3.first).value());
+    auto responseReloadKey2 = store->load(keyVal2.first).get();
+    EXPECT_TRUE(responseReloadKey2);
+    EXPECT_EQ(val2, *responseReloadKey2);
+    EXPECT_NE(keyVal2.second, *responseReloadKey2);
+
+    // Try some wrong stuff
+    EXPECT_TRUE(store->loadThriftObj<thrift::StoreDatabase>("unknown_key1")
+                    .get()
+                    .hasError());
+    EXPECT_FALSE(store->load("unknown_key2").get());
+
+    // Try erase API. Subsequent erase of same key returns false
+    auto responseEraseKey3 = store->erase(keyVal3.first).get();
+    EXPECT_TRUE(responseEraseKey3);
+
+    auto responseReEraseKey3 = store->erase(keyVal3.first).get();
+    EXPECT_FALSE(responseReEraseKey3);
+  }
 
   //
   // Destroy store and re-create it, enforcing dump to file followed by
   // reloading of content on creation. Verify stored content is recovered.
   //
+  {
+    PersistentStoreWrapper store(context, tid);
+    store.run();
 
-  store->stop();
-  storeThread->join();
-  storeThread.reset();
-  store.reset();
+    // Verify key2
 
-  store = std::make_unique<PersistentStore>(filePath, sockUrl2, context);
-  storeThread = std::make_unique<std::thread>([&]() { store->run(); });
-  store->waitUntilRunning();
-  client = std::make_unique<PersistentStoreClient>(sockUrl2, context);
+    auto responseReReLoadKey2 = store->load(keyVal2.first).get();
+    EXPECT_TRUE(responseReReLoadKey2);
+    EXPECT_EQ(val2, *responseReReLoadKey2);
 
-  // Verify key1 and key2
-  EXPECT_EQ(val1, client->load<uint32_t>(keyVal1.first).value());
-  EXPECT_EQ(keyVal2.second, client->load<std::string>(keyVal2.first).value());
+    // Erase key before we end the test
+    store->erase(keyVal2.first).get();
+  }
+}
 
-  // Stop store before exiting
-  store->stop();
-  storeThread->join();
-  storeThread.reset();
-  store.reset();
+TEST(PersistentStoreTest, EncodeDecodePersistentObject) {
+  //
+  // Verify the encodePersistentObject and decodePersistentObject
+  //
+
+  // Encode (ADD, key1, val1), and (DEL, key1),
+  auto keyVal = std::make_pair("key1", "val1");
+  PersistentObject pObjectAdd;
+  pObjectAdd.type = ActionType::ADD;
+  pObjectAdd.key = keyVal.first;
+  pObjectAdd.data = keyVal.second;
+  auto bufAdd = PersistentStore::encodePersistentObject(pObjectAdd);
+  EXPECT_FALSE(bufAdd.hasError());
+
+  PersistentObject pObjectDel;
+  pObjectDel.type = ActionType::DEL;
+  pObjectDel.key = keyVal.first;
+  auto bufDel = PersistentStore::encodePersistentObject(pObjectDel);
+  EXPECT_FALSE(bufDel.hasError());
+
+  auto buf = folly::IOBuf::create((*bufAdd)->length() + (*bufDel)->length());
+  folly::io::Appender appender(buf.get(), 0);
+  appender.push((*bufAdd)->data(), (*bufAdd)->length());
+  appender.push((*bufDel)->data(), (*bufDel)->length());
+
+  // Decode (ADD, key1, val1), and (DEL, key1)
+  folly::io::Cursor cursor(buf.get());
+  auto optionalObject = PersistentStore::decodePersistentObject(cursor);
+  EXPECT_FALSE(optionalObject.hasError());
+  EXPECT_TRUE(optionalObject->hasValue());
+
+  auto pObjectGetAdd = optionalObject->value();
+  EXPECT_EQ(keyVal.first, pObjectGetAdd.key);
+  EXPECT_EQ(keyVal.second, pObjectGetAdd.data.value());
+
+  optionalObject = PersistentStore::decodePersistentObject(cursor);
+  EXPECT_FALSE(optionalObject.hasError());
+  EXPECT_TRUE(optionalObject->hasValue());
+
+  auto pObjectGetDel = optionalObject->value();
+  EXPECT_EQ(keyVal.first, pObjectGetDel.key);
+  EXPECT_EQ(false, pObjectGetDel.data.has_value());
+}
+
+TEST(PersistentStoreTest, BulkStoreLoad) {
+  fbzmq::Context context;
+  const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
+
+  thrift::StoreDatabase database;
+  std::string filePath;
+  {
+    PersistentStoreWrapper store(context, tid);
+    store.run();
+    filePath = store.filePath;
+
+    //
+    // Vefirying whether 100 pobjects can be successfully written to disk
+    //
+
+    for (auto index = 0; index < 100; index++) {
+      const std::pair<std::string, std::string> tmpKeyVal{
+          folly::sformat("key-{}", index),
+          folly::sformat("val-{}", folly::Random::rand32())};
+
+      database.keyVals[tmpKeyVal.first] = tmpKeyVal.second;
+      auto responseStoreTmpKey =
+          store->store(tmpKeyVal.first, tmpKeyVal.second).get();
+      EXPECT_EQ(folly::Unit(), responseStoreTmpKey);
+    }
+
+    // Stop & destroy store before exiting
+  }
+
+  {
+    // Load file from disk
+    auto databaseStore = loadDatabaseFromDisk(filePath);
+    EXPECT_EQ(database, databaseStore);
+  }
 }
 
 } // namespace openr

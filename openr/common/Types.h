@@ -23,23 +23,15 @@ BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalCmdUrl);
 BOOST_STRONG_TYPEDEF(uint16_t, KvStorePubPort);
 BOOST_STRONG_TYPEDEF(uint16_t, KvStoreCmdPort);
 
+// OpenrCtrl Thrift port
+BOOST_STRONG_TYPEDEF(uint16_t, OpenrCtrlThriftPort);
+
 // Monitor URLs
 BOOST_STRONG_TYPEDEF(std::string, MonitorSubmitUrl);
 BOOST_STRONG_TYPEDEF(std::string, MonitorPubUrl);
 
-// PersistentStore URL
-BOOST_STRONG_TYPEDEF(std::string, PersistentStoreUrl);
-
-// Decision URLs
-BOOST_STRONG_TYPEDEF(std::string, DecisionCmdUrl);
-BOOST_STRONG_TYPEDEF(std::string, DecisionPubUrl);
-
-// Fib URL
-BOOST_STRONG_TYPEDEF(std::string, FibCmdUrl);
-
 // markers for some of KvStore keys
 BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
-BOOST_STRONG_TYPEDEF(std::string, InterfaceDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
 
@@ -48,20 +40,5 @@ BOOST_STRONG_TYPEDEF(std::string, NetlinkAgentLocalPubUrl);
 
 // PlatformPublisher Urls (right now we use global for everything)
 BOOST_STRONG_TYPEDEF(std::string, PlatformPublisherUrl);
-
-// PrefixManager URL
-BOOST_STRONG_TYPEDEF(std::string, PrefixManagerGlobalCmdUrl);
-BOOST_STRONG_TYPEDEF(std::string, PrefixManagerLocalCmdUrl);
-
-// LinkMonitor Urls (right now we use global for everything)
-BOOST_STRONG_TYPEDEF(std::string, LinkMonitorGlobalPubUrl);
-BOOST_STRONG_TYPEDEF(std::string, LinkMonitorGlobalCmdUrl);
-
-// Spark Urls
-BOOST_STRONG_TYPEDEF(std::string, SparkCmdUrl);
-BOOST_STRONG_TYPEDEF(std::string, SparkReportUrl);
-
-// HealthChecker Urls
-BOOST_STRONG_TYPEDEF(std::string, HealthCheckerCmdUrl);
 
 } // namespace openr
