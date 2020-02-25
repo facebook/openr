@@ -104,7 +104,7 @@ install_fmt() {
       git clone https://github.com/fmtlib/fmt.git && mkdir fmt/_build
   fi
   cd fmt/_build
-  cmake -DBUILD_SHARED_LIBS=TRUE -DCMAKE_CXX_FLAGS="-fPIC" ..
+  cmake -DBUILD_SHARED_LIBS=TRUE -DCMAKE_CXX_FLAGS="-fPIC" -DCMAKE_CXX_STANDARD=14 ..
   make
   make install
   popd
@@ -123,7 +123,7 @@ install_folly() {
     git checkout "$rev"
   fi
 
-  cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" ..
+  cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" -DCMAKE_CXX_STANDARD=14 ..
   make
   make install
   ldconfig
