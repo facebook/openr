@@ -98,20 +98,50 @@ install_libsodium() {
   popd
 }
 
+install_fmt() {
+  pushd .
+  if [[ ! -e "folly" ]]; then
+      git clone https://github.com/fmtlib/fmt.git && mkdir fmt/_build
+  fi
+  cd fmt/_build
+  cmake -DBUILD_SHARED_LIBS=TRUE -DCMAKE_CXX_FLAGS="-fPIC" ..
+  make
+  make install
+  popd
+}
+
+
 install_folly() {
   pushd .
   if [[ ! -e "folly" ]]; then
     git clone https://github.com/facebook/folly
   fi
   rev=$(find_github_hash facebook/folly)
-  cd folly/folly
+  cd folly/build
   if [[ ! -z "$rev" ]]; then
     git fetch origin
     git checkout "$rev"
   fi
-  cmake .
-  # autoreconf -ivf
-  # ./configure LIBS="-lpthread"
+
+  cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" ..
+  make
+  make install
+  ldconfig
+  popd
+}
+
+install_fizz() {
+  pushd .
+  if [[ ! -e "fizz" ]]; then
+    git clone https://github.com/facebookincubator/fizz
+  fi
+  rev=$(find_github_hash facebook/fizz)
+  cd fizz/build
+  if [[ ! -z "$rev" ]]; then
+    git fetch origin
+    git checkout "$rev"
+  fi
+  cmake -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-fPIC" ../fizz
   make
   make install
   ldconfig
@@ -138,6 +168,19 @@ install_fbthrift() {
   popd
 }
 
+install_sigar() {
+  pushd .
+  if [[ ! -e "sigar" ]]; then
+    git clone https://github.com/hyperic/sigar/
+  fi
+  cd sigar
+  ./autogen.sh
+  ./configure --disable-shared CFLAGS='-fgnu89-inline'
+  make install
+  ldconfig
+  popd
+}
+
 install_fbzmq() {
   pushd .
   if [[ ! -e "fbzmq" ]]; then
@@ -155,7 +198,7 @@ install_fbzmq() {
     -DCMAKE_EXE_LINKER_FLAGS="-static" \
     -DCMAKE_FIND_LIBRARY_SUFFIXES=".a" \
     -DBUILD_TESTS=OFF \
-    ../fbzmq
+    ../fbzmq/
   make
   make install
   ldconfig
@@ -220,6 +263,24 @@ install_gtest() {
   popd
 }
 
+install_re2() {
+  pushd .
+  if [[ ! -e "re2" ]]; then
+    git clone https://github.com/google/re2
+  fi
+  cd re2
+  if [[ ! -e "mybuild" ]]; then
+    mkdir mybuild
+  fi
+  cd mybuild
+  cmake ..
+  make
+  make install
+  ldconfig
+  popd
+}
+
+
 install_libnl() {
   pushd .
   if [[ ! -e "libnl" ]]; then
@@ -239,10 +300,26 @@ install_libnl() {
   popd
 }
 
+install_krb5() {
+  pushd .
+  if [[ ! -e "krb5" ]]; then
+    git clone https://github.com/krb5/krb5
+  fi
+  cd krb5/src
+  git fetch origin
+  git checkout krb5-1.16.1-final
+  set -eu && autoreconf -i
+  ./configure
+  make
+  make install
+  ldconfig
+  popd
+}
+
 #
 # Install required tools and libraries via package managers
 #
-
+apt-get update
 apt-get install -y libdouble-conversion-dev \
   libssl-dev \
   cmake \
@@ -261,7 +338,6 @@ apt-get install -y libdouble-conversion-dev \
   liblz4-dev \
   liblzma-dev \
   scons \
-  libkrb5-dev \
   libsnappy-dev \
   libsasl2-dev \
   libnuma-dev \
@@ -272,24 +348,30 @@ apt-get install -y libdouble-conversion-dev \
   libiberty-dev \
   python-setuptools \
   python3-setuptools \
-  python-pip
+  python-pip \
+  libunwind-dev
 
 #
 # install other dependencies from source
 #
 
-install_glog
 install_gflags
+install_glog # Requires gflags to be build first
 install_gtest
 install_mstch
 install_zstd
+install_fmt # Requires fmt to build before folly
 install_folly
+install_libsodium # Requires sodium to build before fizz
+install_fizz
 install_wangle
-install_libsodium
 install_libzmq
 install_libnl
+install_krb5
 install_fbthrift
+install_sigar
 install_fbzmq
+install_re2
 
-echo "OpenR Dependencies built and installed successfully"
+echo "OpenR built and installed successfully"
 exit 0
