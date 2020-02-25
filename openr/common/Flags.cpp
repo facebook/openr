@@ -13,10 +13,6 @@ DEFINE_int32(
     openr::Constants::kOpenrCtrlPort,
     "Port for the OpenR ctrl thrift service");
 DEFINE_int32(
-    kvstore_pub_port,
-    openr::Constants::kKvStorePubPort,
-    "KvStore publisher port for emitting realtime key-value deltas");
-DEFINE_int32(
     kvstore_rep_port,
     openr::Constants::kKvStoreRepPort,
     "The port KvStore replier listens on");

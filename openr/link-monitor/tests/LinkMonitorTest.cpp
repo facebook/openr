@@ -56,20 +56,14 @@ namespace {
 
 re2::RE2::Options regexOpts;
 
-const auto peerSpec_2_1 = createPeerSpec(
-    "tcp://[fe80::2%iface_2_1]:10001",
-    "tcp://[fe80::2%iface_2_1]:10002",
-    false);
+const auto peerSpec_2_1 =
+    createPeerSpec("tcp://[fe80::2%iface_2_1]:10002", false);
 
-const auto peerSpec_2_2 = createPeerSpec(
-    "tcp://[fe80::2%iface_2_2]:10001",
-    "tcp://[fe80::2%iface_2_2]:10002",
-    false);
+const auto peerSpec_2_2 =
+    createPeerSpec("tcp://[fe80::2%iface_2_2]:10002", false);
 
-const auto peerSpec_3_1 = createPeerSpec(
-    "tcp://[fe80::3%iface_3_1]:10001",
-    "tcp://[fe80::3%iface_3_1]:10002",
-    false);
+const auto peerSpec_3_1 =
+    createPeerSpec("tcp://[fe80::3%iface_3_1]:10002", false);
 
 const auto nb2 = createSparkNeighbor(
     "domain",
@@ -77,7 +71,6 @@ const auto nb2 = createSparkNeighbor(
     0, /* hold time */
     toBinaryAddress(folly::IPAddress("192.168.0.2")),
     toBinaryAddress(folly::IPAddress("fe80::2")),
-    10001,
     10002,
     "" /* ifName */);
 
@@ -87,7 +80,6 @@ const auto nb3 = createSparkNeighbor(
     0, /* hold time */
     toBinaryAddress(folly::IPAddress("192.168.0.3")),
     toBinaryAddress(folly::IPAddress("fe80::3")),
-    10001,
     10002,
     "" /* ifName */);
 
@@ -497,7 +489,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     if (!peers.count(nodeName)) {
       return;
     }
-    EXPECT_EQ(peers.at(nodeName).pubUrl, peerSpec.pubUrl);
     EXPECT_EQ(peers.at(nodeName).cmdUrl, peerSpec.cmdUrl);
   }
 
@@ -1849,14 +1840,10 @@ TEST(LinkMonitor, getPeersFromAdjacencies) {
   std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies;
   std::unordered_map<std::string, thrift::PeerSpec> peers;
 
-  const auto peerSpec0 = createPeerSpec(
-      "tcp://[fe80::2%iface0]:10001", "tcp://[fe80::2%iface0]:10002", false);
-  const auto peerSpec1 = createPeerSpec(
-      "tcp://[fe80::2%iface1]:10001", "tcp://[fe80::2%iface1]:10002", false);
-  const auto peerSpec2 = createPeerSpec(
-      "tcp://[fe80::2%iface2]:10001", "tcp://[fe80::2%iface2]:10002", false);
-  const auto peerSpec3 = createPeerSpec(
-      "tcp://[fe80::2%iface3]:10001", "tcp://[fe80::2%iface3]:10002", false);
+  const auto peerSpec0 = createPeerSpec("tcp://[fe80::2%iface0]:10002", false);
+  const auto peerSpec1 = createPeerSpec("tcp://[fe80::2%iface1]:10002", false);
+  const auto peerSpec2 = createPeerSpec("tcp://[fe80::2%iface2]:10002", false);
+  const auto peerSpec3 = createPeerSpec("tcp://[fe80::2%iface3]:10002", false);
 
   // Get peer spec
   adjacencies[{"node1", "iface1"}] = {peerSpec1, thrift::Adjacency()};

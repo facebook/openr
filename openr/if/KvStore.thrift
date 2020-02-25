@@ -112,7 +112,7 @@ struct KeyDumpParams {
 // This is used in peer add requests and in
 // the dump results
 struct PeerSpec {
-  1: string pubUrl
+  1: string thriftPortUrl
   2: string cmdUrl
   // support flood optimization or not
   3: bool supportFloodOptimization = 0

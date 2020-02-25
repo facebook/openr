@@ -753,7 +753,6 @@ class KvPeersCmd(KvStoreCmdBase):
             for (key, value) in sorted(peers.items(), key=lambda x: x[0]):
                 row = [f"{key}, area:{area}"]
                 row.append("cmd via {}".format(value.cmdUrl))
-                row.append("pub via {}".format(value.pubUrl))
                 rows.append(row)
 
         print(printing.render_vertical_table(rows, caption=caption))

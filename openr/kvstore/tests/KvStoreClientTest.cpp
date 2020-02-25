@@ -428,18 +428,12 @@ TEST(KvStoreClient, PeerApiTest) {
   const std::string peerName1{"peer1"};
   const std::string peerName2{"peer2"};
   const std::string peerName3{"peer3"};
-  const thrift::PeerSpec peerSpec1{apache::thrift::FRAGILE,
-                                   "inproc://fake_pub_url_1",
-                                   "inproc://fake_cmd_url_1",
-                                   false};
-  const thrift::PeerSpec peerSpec2{apache::thrift::FRAGILE,
-                                   "inproc://fake_pub_url_2",
-                                   "inproc://fake_cmd_url_2",
-                                   false};
-  const thrift::PeerSpec peerSpec3{apache::thrift::FRAGILE,
-                                   "inproc://fake_pub_url_3",
-                                   "inproc://fake_cmd_url_3",
-                                   false};
+  const thrift::PeerSpec peerSpec1 =
+      createPeerSpec("inproc://fake_cmd_url_1", false);
+  const thrift::PeerSpec peerSpec2 =
+      createPeerSpec("inproc://fake_cmd_url_2", false);
+  const thrift::PeerSpec peerSpec3 =
+      createPeerSpec("inproc://fake_cmd_url_3", false);
 
   // Initialize and start KvStore with one fake peer
   std::unordered_map<std::string, thrift::PeerSpec> peers;
@@ -692,13 +686,7 @@ TEST(KvStoreClient, PersistKeyTest) {
 
   // Initialize and start KvStore with one fake peer
   std::unordered_map<std::string, thrift::PeerSpec> peers;
-  peers.emplace(
-      "peer1",
-      thrift::PeerSpec(
-          apache::thrift::FRAGILE,
-          "inproc://fake_pub_url_1",
-          "inproc://fake_cmd_url_1",
-          false));
+  peers.emplace("peer1", createPeerSpec("inproc://fake_pub_url_1", false));
   auto store = std::make_shared<KvStoreWrapper>(
       context,
       nodeId,
@@ -877,13 +865,7 @@ TEST(KvStoreClient, ApiTest) {
 
   // Initialize and start KvStore with one fake peer
   std::unordered_map<std::string, thrift::PeerSpec> peers;
-  peers.emplace(
-      "peer1",
-      thrift::PeerSpec(
-          apache::thrift::FRAGILE,
-          "inproc://fake_pub_url_1",
-          "inproc://fake_cmd_url_1",
-          false));
+  peers.emplace("peer1", createPeerSpec("inproc://fake_cmd_url_1", false));
   auto store = std::make_shared<KvStoreWrapper>(
       context,
       nodeId,
@@ -924,13 +906,7 @@ TEST(KvStoreClient, ApiTest) {
   // Schedule callback to add/del peer via client-1 (will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
     std::unordered_map<std::string, thrift::PeerSpec> peerMap;
-    peerMap.emplace(
-        "peer2",
-        thrift::PeerSpec(
-            apache::thrift::FRAGILE,
-            "inproc://fake_pub_url_2",
-            "inproc://fake_cmd_url_2",
-            false));
+    peerMap.emplace("peer2", createPeerSpec("inproc://fake_cmd_url_2", false));
     EXPECT_TRUE(client1->addPeers(peerMap).hasValue());
     EXPECT_TRUE(client1->delPeer("peer1").hasValue());
   });

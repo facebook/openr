@@ -160,11 +160,7 @@ class KvStoreWrapper {
    */
   thrift::PeerSpec
   getPeerSpec() const {
-    return thrift::PeerSpec(
-        apache::thrift::FRAGILE,
-        globalPubUrl,
-        globalCmdUrl,
-        enableFloodOptimization_);
+    return createPeerSpec(globalCmdUrl, enableFloodOptimization_);
   }
 
   KvStore*
@@ -185,7 +181,6 @@ class KvStoreWrapper {
    * Global URLs could be created outside of kvstore, mainly for testing
    */
   const std::string globalCmdUrl;
-  const std::string globalPubUrl;
 
   /**
    * Socket URL for zmq Monitoring

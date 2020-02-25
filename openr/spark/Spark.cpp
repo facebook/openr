@@ -285,7 +285,6 @@ Spark::Spark(
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue,
     MonitorSubmitUrl const& monitorSubmitUrl,
-    KvStorePubPort kvStorePubPort,
     KvStoreCmdPort kvStoreCmdPort,
     OpenrCtrlThriftPort openrCtrlThriftPort,
     std::pair<uint32_t, uint32_t> version,
@@ -310,7 +309,6 @@ Spark::Spark(
       enableV4_(enableV4),
       enableSubnetValidation_(enableSubnetValidation),
       neighborUpdatesQueue_(neighborUpdatesQueue),
-      kKvStorePubPort_(kvStorePubPort),
       kKvStoreCmdPort_(kvStoreCmdPort),
       kOpenrCtrlThriftPort_(openrCtrlThriftPort),
       kVersion_(apache::thrift::FRAGILE, version.first, version.second),
@@ -1035,7 +1033,6 @@ Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
   // should be obtained from interface DB
   handshakeMsg.area = openr::thrift::KvStore_constants::kDefaultArea();
   handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
-  handshakeMsg.kvStorePubPort = kKvStorePubPort_;
   handshakeMsg.kvStoreCmdPort = kKvStoreCmdPort_;
 
   thrift::SparkHelloPacket pkt;
@@ -1714,7 +1711,6 @@ Spark::processHandshakeMsg(
   }
 
   // update Spark2 neighborState
-  neighbor.kvStorePubPort = handshakeMsg.kvStorePubPort;
   neighbor.kvStoreCmdPort = handshakeMsg.kvStoreCmdPort;
   neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort;
   neighbor.transportAddressV4 = handshakeMsg.transportAddressV4;
@@ -2058,7 +2054,6 @@ Spark::sendHelloPacket(
       myHoldTime_.count(),
       toBinaryAddress(v4Addr),
       toBinaryAddress(v6Addr),
-      kKvStorePubPort_,
       kKvStoreCmdPort_,
       ifName);
 

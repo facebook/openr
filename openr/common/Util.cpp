@@ -669,12 +669,8 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
 }
 
 thrift::PeerSpec
-createPeerSpec(
-    const std::string& pubUrl,
-    const std::string& cmdUrl,
-    bool supportFloodOptimization) {
+createPeerSpec(const std::string& cmdUrl, bool supportFloodOptimization) {
   thrift::PeerSpec peerSpec;
-  peerSpec.pubUrl = pubUrl;
   peerSpec.cmdUrl = cmdUrl;
   peerSpec.supportFloodOptimization = supportFloodOptimization;
   return peerSpec;
@@ -707,7 +703,6 @@ createSparkNeighbor(
     int64_t holdTime,
     const thrift::BinaryAddress& v4Addr,
     const thrift::BinaryAddress& v6Addr,
-    int64_t kvStorePubPort,
     int64_t kvStoreCmdPort,
     const std::string& ifName) {
   thrift::SparkNeighbor neighbor;
@@ -717,7 +712,6 @@ createSparkNeighbor(
   neighbor.publicKey = "";
   neighbor.transportAddressV4 = v4Addr;
   neighbor.transportAddressV6 = v6Addr;
-  neighbor.kvStorePubPort = kvStorePubPort;
   neighbor.kvStoreCmdPort = kvStoreCmdPort;
   neighbor.ifName = ifName;
   return neighbor;

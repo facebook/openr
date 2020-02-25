@@ -246,9 +246,6 @@ class Constants {
   // Openr Ctrl thrift server port
   static constexpr int32_t kOpenrCtrlPort{2018};
 
-  // KvStore publisher port for emitting realtime key-value deltas
-  static constexpr int32_t kKvStorePubPort{60001};
-
   // The port KvStore replier listens on
   static constexpr int32_t kKvStoreRepPort{60002};
 

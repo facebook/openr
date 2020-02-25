@@ -154,7 +154,6 @@ struct SparkHandshakeMsg {
 
   // neighbor's kvstore global pub/cmd ports
   7: i32 openrCtrlThriftPort
-  8: i32 kvStorePubPort
   9: i32 kvStoreCmdPort
 
   // area identifier

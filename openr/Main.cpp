@@ -575,7 +575,6 @@ main(int argc, char** argv) {
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
           monitorSubmitUrl,
-          KvStorePubPort{static_cast<uint16_t>(FLAGS_kvstore_pub_port)},
           KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
           OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
           std::make_pair(

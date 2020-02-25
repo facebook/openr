@@ -391,7 +391,6 @@ LinkMonitor::neighborUpEvent(
   const std::string& remoteIfName = event.neighbor.ifName;
   const std::string& area = event.area;
   const auto adjId = std::make_pair(remoteNodeName, ifName);
-  const int32_t neighborKvStorePubPort = event.neighbor.kvStorePubPort;
   const int32_t neighborKvStoreCmdPort = event.neighbor.kvStoreCmdPort;
   auto rttMetric = getRttMetric(event.rttUs);
   auto now = std::chrono::system_clock::now();
@@ -425,14 +424,8 @@ LinkMonitor::neighborUpEvent(
       << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area;
   tData_.addStatValue("link_monitor.neighbor_up", 1, fbzmq::SUM);
 
-  std::string pubUrl, repUrl;
+  std::string repUrl;
   if (!mockMode_) {
-    // use link local address
-    pubUrl = folly::sformat(
-        "tcp://[{}%{}]:{}",
-        toString(neighborAddrV6),
-        ifName,
-        neighborKvStorePubPort);
     repUrl = folly::sformat(
         "tcp://[{}%{}]:{}",
         toString(neighborAddrV6),
@@ -440,7 +433,6 @@ LinkMonitor::neighborUpEvent(
         neighborKvStoreCmdPort);
   } else {
     // use inproc address
-    pubUrl = folly::sformat("inproc://{}-kvstore-pub-global", remoteNodeName);
     repUrl = folly::sformat("inproc://{}-kvstore-cmd-global", remoteNodeName);
   }
 
@@ -448,8 +440,9 @@ LinkMonitor::neighborUpEvent(
   // 1) the min interface changes: the previous min interface's connection will
   // be overridden by KvStoreClient, thus no need to explicitly remove it
   // 2) does not change: the existing connection to a neighbor is retained
-  const auto& peerSpec =
-      thrift::PeerSpec(FRAGILE, pubUrl, repUrl, event.supportFloodOptimization);
+  thrift::PeerSpec peerSpec;
+  peerSpec.cmdUrl = repUrl;
+  peerSpec.supportFloodOptimization = event.supportFloodOptimization;
   adjacencies_[adjId] =
       AdjacencyValue(peerSpec, std::move(newAdj), false, area);
 
@@ -1322,7 +1315,6 @@ LinkMonitor::logPeerEvent(
   sample.addString("event", event);
   sample.addString("node_name", nodeId_);
   sample.addString("peer_name", peerName);
-  sample.addString("pub_url", peerSpec.pubUrl);
   sample.addString("cmd_url", peerSpec.cmdUrl);
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(

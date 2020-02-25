@@ -47,7 +47,6 @@ SparkWrapper::SparkWrapper(
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       monitorCmdUrl,
-      KvStorePubPort{10001},
       KvStoreCmdPort{10002},
       OpenrCtrlThriftPort{2018},
       version,

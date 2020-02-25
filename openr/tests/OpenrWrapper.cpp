@@ -148,7 +148,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
-      KvStorePubPort{0}, // these port numbers won't be used
       KvStoreCmdPort{0},
       OpenrCtrlThriftPort{0},
       std::make_pair(

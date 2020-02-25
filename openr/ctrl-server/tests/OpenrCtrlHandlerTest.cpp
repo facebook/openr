@@ -227,9 +227,8 @@ class OpenrCtrlFixture : public ::testing::Test {
   }
 
   thrift::PeerSpec
-  createPeerSpec(const std::string& pubUrl, const std::string& cmdUrl) {
+  createPeerSpec(const std::string& cmdUrl) {
     thrift::PeerSpec peerSpec;
-    peerSpec.pubUrl = pubUrl;
     peerSpec.cmdUrl = cmdUrl;
     return peerSpec;
   }
@@ -566,15 +565,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // Peers APIs
   //
 
-  const thrift::PeersMap peers{
-      {"peer1", createPeerSpec("inproc:://peer1-pub", "inproc://peer1-cmd")},
-      {"peer2", createPeerSpec("inproc:://peer2-pub", "inproc://peer2-cmd")},
-      {"peer3", createPeerSpec("inproc:://peer3-pub", "inproc://peer3-cmd")}};
+  const thrift::PeersMap peers{{"peer1", createPeerSpec("inproc://peer1-cmd")},
+                               {"peer2", createPeerSpec("inproc://peer2-cmd")},
+                               {"peer3", createPeerSpec("inproc://peer3-cmd")}};
 
   // do the same with non-default area
   const thrift::PeersMap peersPod{
-      {"peer11", createPeerSpec("inproc:://peer11-pub", "inproc://peer11-cmd")},
-      {"peer21", createPeerSpec("inproc:://peer21-pub", "inproc://peer21-cmd")},
+      {"peer11", createPeerSpec("inproc://peer11-cmd")},
+      {"peer21", createPeerSpec("inproc://peer21-cmd")},
   };
 
   {

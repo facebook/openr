@@ -98,7 +98,6 @@ class Spark final : public OpenrEventBase {
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>& nbrUpdatesQueue,
       MonitorSubmitUrl const& monitorSubmitUrl,
-      KvStorePubPort kvStorePubPort,
       KvStoreCmdPort kvStoreCmdPort,
       OpenrCtrlThriftPort openrCtrlThriftPort,
       std::pair<uint32_t, uint32_t> version,
@@ -272,7 +271,6 @@ class Spark final : public OpenrEventBase {
       res.holdTime = gracefulRestartHoldTime.count();
       res.transportAddressV4 = transportAddressV4;
       res.transportAddressV6 = transportAddressV6;
-      res.kvStorePubPort = kvStorePubPort;
       res.kvStoreCmdPort = kvStoreCmdPort;
       res.ifName = remoteIfName;
       return res;
@@ -310,7 +308,6 @@ class Spark final : public OpenrEventBase {
     std::unique_ptr<fbzmq::ZmqTimeout> gracefulRestartHoldTimer{nullptr};
 
     // KvStore related port. Info passed to LinkMonitor for neighborEvent
-    int32_t kvStorePubPort{0};
     int32_t kvStoreCmdPort{0};
     int32_t openrCtrlThriftPort{0};
 
@@ -497,7 +494,6 @@ class Spark final : public OpenrEventBase {
   messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue_;
 
   // this is used to inform peers about my kvstore tcp ports
-  const uint16_t kKvStorePubPort_{0};
   const uint16_t kKvStoreCmdPort_{0};
   const uint16_t kOpenrCtrlThriftPort_{0};
 
