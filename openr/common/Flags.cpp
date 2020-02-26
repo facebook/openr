@@ -348,3 +348,19 @@ DEFINE_bool(
     prefix_algo_type_ksp2_ed_ecmp,
     false,
     "Advertise prefix algorithm type as 2-Shortest paths Edge Disjoint ECMP");
+DEFINE_string(
+    iosxr_slapi_ip,
+    "127.0.0.1",
+    "IP address of SL-API gRPC server running in IOS-XR for RIB programming");
+DEFINE_string(
+    iosxr_slapi_port,
+    "57777",
+    "gRPC TCP port for IOS-XR SL-API");
+DEFINE_bool(
+    enable_iosxrsl_fib_handler,
+    false,
+    "If set, iosxrsl RIB handler will be started for route programming.");
+DEFINE_bool(
+    enable_iosxrsl_system_handler,
+    false,
+    "If set, iosxrsl system (interface, bfd) handler will be started for route programming.");

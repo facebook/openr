@@ -128,3 +128,7 @@ DECLARE_int32(spark2_heartbeat_hold_time_s);
 
 DECLARE_bool(prefix_fwd_type_mpls);
 DECLARE_bool(prefix_algo_type_ksp2_ed_ecmp);
+DECLARE_string(iosxr_slapi_ip);
+DECLARE_string(iosxr_slapi_port);
+DECLARE_bool(enable_iosxrsl_fib_handler);
+DECLARE_bool(enable_iosxrsl_system_handler);

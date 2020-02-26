@@ -45,6 +45,7 @@
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/platform/NetlinkFibHandler.h>
+#include <openr/platform/IosxrslFibHandler.h>
 #include <openr/platform/NetlinkSystemHandler.h>
 #include <openr/platform/PlatformPublisher.h>
 #include <openr/plugin/Plugin.h>
@@ -187,6 +188,9 @@ main(int argc, char** argv) {
   for (int i = 0; i < argc; ++i) {
     LOG(INFO) << argv[i];
   }
+
+  for(int i = 0; i < argc; ++i)
+        std::cout << argv[i] << '\n';
 
   // Initialize all params
   folly::init(&argc, &argv);
@@ -367,6 +371,41 @@ main(int argc, char** argv) {
             LOG(INFO) << "NetlinkSystem server got stopped.";
           });
     }
+  }
+
+  // Start IosxrslFibHandler if specified
+  std::unique_ptr<apache::thrift::ThriftServer> iosxrslFibServer;
+  LOG(INFO) << "#######################";
+  LOG(INFO) << "FLAGS_enable_iosxrsl_fib_handler: " << FLAGS_enable_iosxrsl_fib_handler;
+  LOG(INFO) << "#######################";
+
+  if (FLAGS_enable_iosxrsl_fib_handler) {
+    iosxrslFibServer = std::make_unique<apache::thrift::ThriftServer>();
+    auto fibThriftThread = std::thread([&iosxrslFibServer, &mainEventLoop]() {
+      folly::setThreadName("iosxrslFibService");
+      auto channel = grpc::CreateChannel(
+                         folly::sformat("{}:{}",
+                                        FLAGS_iosxr_slapi_ip,
+                                        FLAGS_iosxr_slapi_port),
+                         grpc::InsecureChannelCredentials());
+      std::vector<VrfData> vrf_set;
+      vrf_set.push_back(VrfData("default", kAqRouteProtoId, 500));
+
+      auto fibHandler = 
+      std::make_shared<IosxrslFibHandler>(&mainEventLoop, 
+                                          vrf_set,
+                                          channel);
+      fibHandler->setVrfContext("default");
+      iosxrslFibServer->setNWorkerThreads(1);
+      iosxrslFibServer->setNPoolThreads(1);
+      iosxrslFibServer->setPort(FLAGS_fib_agent_port);
+      iosxrslFibServer->setInterface(fibHandler);
+
+      LOG(INFO) << "Starting IOSXR-SL Fib server...";
+      iosxrslFibServer->serve();
+      LOG(INFO) << "IOSXR-SL Fib server got stopped.";
+    });
+    allThreads.emplace_back(std::move(fibThriftThread));
   }
 
   const MonitorSubmitUrl monitorSubmitUrl{
@@ -883,6 +922,11 @@ main(int argc, char** argv) {
     netlinkFibServerThread.reset();
     netlinkFibServer.reset();
   }
+
+  if (iosxrslFibServer) {
+    iosxrslFibServer->stop();
+  }
+
   if (netlinkSystemServer) {
     CHECK(netlinkSystemServerThread);
     netlinkSystemServer->stop();

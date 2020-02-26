@@ -296,6 +296,10 @@ add_library(openrlib
   openr/nl/NetlinkSocket.cpp
   openr/nl/NetlinkTypes.cpp
   openr/platform/NetlinkFibHandler.cpp
+  openr/iosxrsl/ServiceLayerAsyncInit.cpp
+  openr/iosxrsl/ServiceLayerRoute.cpp
+  openr/iosxrsl/ServiceLayerRshuttle.cpp
+  openr/platform/IosxrslFibHandler.cpp
   openr/platform/NetlinkSystemHandler.cpp
   openr/platform/PlatformPublisher.cpp
   openr/plugin/Plugin.cpp
@@ -444,6 +448,14 @@ install(TARGETS
 # Install files
 #
 
+install(FILES
+  iosxrsl/ServiceLayerAsyncInit.h
+  iosxrsl/ServiceLayerRoute.h
+  iosxrsl/ServiceLayerRshuttle.h
+  iosxrsl/ServiceLayerException.h
+  DESTINATION include/openr/iosxrsl
+)
+
 # scripts
 install(PROGRAMS
   ${CMAKE_CURRENT_SOURCE_DIR}/openr/scripts/run_openr.sh
@@ -571,6 +583,12 @@ if(BUILD_TESTS)
       ${Boost_LIBRARIES}
       -lpthread
       -lcrypto
+	  -I/usr/local/include/
+	  -L/usr/local/lib
+	  -lgrpc++_unsecure
+	  -lgrpc
+	  -lprotobuf
+	  -liosxrsl
     DESTINATION sbin/tests/openr
   )
 
