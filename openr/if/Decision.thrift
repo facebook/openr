@@ -9,6 +9,7 @@ namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace py openr.Decision
 namespace py3 openr.thrift
+namespace lua openr.Decision
 
 include "Lsdb.thrift"
 

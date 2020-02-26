@@ -8,6 +8,7 @@
 namespace cpp2 openr.thrift
 namespace py openr.AllocPrefix
 namespace py3 openr.thrift
+namespace lua openr.AllocPrefix
 
 include "Network.thrift"
 

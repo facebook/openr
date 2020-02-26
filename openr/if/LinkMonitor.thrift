@@ -10,6 +10,7 @@ namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.LinkMonitor
 namespace py3 openr.thrift
+namespace lua openr.LinkMonitor
 
 include "Lsdb.thrift"
 include "Spark.thrift"

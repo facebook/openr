@@ -9,6 +9,7 @@ namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.Spark
 namespace py3 openr.thrift
+namespace lua openr.Spark
 
 include "Network.thrift"
 include "KvStore.thrift"

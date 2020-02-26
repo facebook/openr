@@ -10,6 +10,7 @@ namespace cpp2 openr.thrift
 namespace php Openr
 namespace py openr.KvStore
 namespace py3 openr.thrift
+namespace lua openr.KvStore
 
 include "Dual.thrift"
 
