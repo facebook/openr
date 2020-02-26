@@ -320,7 +320,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       sockAddrs_, "test_");
 
-  ASSERT_TRUE(maybe.first.hasValue());
+  ASSERT_TRUE(maybe.first.has_value());
 
   {
     auto dump = maybe.first.value();
@@ -366,7 +366,7 @@ TEST_F(
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       sockAddrs_, "test_");
 
-  ASSERT_TRUE(maybe.first.hasValue());
+  ASSERT_TRUE(maybe.first.has_value());
 
   {
     auto dump = maybe.first.value();
@@ -410,7 +410,7 @@ TEST_F(
   auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
       sockAddrs_, "test_");
 
-  ASSERT_TRUE(maybe.first.hasValue());
+  ASSERT_TRUE(maybe.first.has_value());
 
   {
     auto dump = maybe.first.value();
@@ -574,15 +574,15 @@ TEST(KvStoreClient, EmptyValueKey) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("v1", maybeThriftVal.value().value);
 
         maybeThriftVal = store2->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("v1", maybeThriftVal.value().value);
 
         maybeThriftVal = store3->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("v1", maybeThriftVal.value().value);
         EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
         EXPECT_EQ(1, maybeThriftVal.value().version);
@@ -599,15 +599,15 @@ TEST(KvStoreClient, EmptyValueKey) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("", maybeThriftVal.value().value);
 
         maybeThriftVal = store2->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("", maybeThriftVal.value().value);
 
         maybeThriftVal = store3->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("", maybeThriftVal.value().value);
         EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
         EXPECT_EQ(maybeThriftVal.value().version, 2);
@@ -623,15 +623,15 @@ TEST(KvStoreClient, EmptyValueKey) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("v2", maybeThriftVal.value().value);
 
         maybeThriftVal = store2->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("v2", maybeThriftVal.value().value);
 
         maybeThriftVal = store3->getKey("k1");
-        ASSERT_TRUE(maybeThriftVal.hasValue());
+        ASSERT_TRUE(maybeThriftVal.has_value());
         EXPECT_EQ("v2", maybeThriftVal.value().value);
         EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
         EXPECT_EQ(maybeThriftVal.value().version, 3);
@@ -649,13 +649,13 @@ TEST(KvStoreClient, EmptyValueKey) {
       std::chrono::milliseconds(waitDuration += kTtl.count() + 100),
       [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
-        ASSERT_FALSE(maybeThriftVal.hasValue());
+        ASSERT_FALSE(maybeThriftVal.has_value());
 
         maybeThriftVal = store2->getKey("k1");
-        ASSERT_FALSE(maybeThriftVal.hasValue());
+        ASSERT_FALSE(maybeThriftVal.has_value());
 
         maybeThriftVal = store3->getKey("k1");
-        ASSERT_FALSE(maybeThriftVal.hasValue());
+        ASSERT_FALSE(maybeThriftVal.has_value());
       });
 
   evb.scheduleTimeout(
@@ -1165,7 +1165,7 @@ TEST(KvStoreClient, SubscribeApiTest) {
             folly::Optional<thrift::Value> /* v */) {},
         true);
 
-    if (keyValue.hasValue()) {
+    if (keyValue.has_value()) {
       EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value);
       keyExpKeySubCbCnt++;
     }
@@ -1187,7 +1187,7 @@ TEST(KvStoreClient, SubscribeApiTest) {
     client2->setKvCallback([&](
         const std::string& key,
         folly::Optional<thrift::Value> thriftVal) noexcept {
-      if (!thriftVal.hasValue()) {
+      if (!thriftVal.has_value()) {
         EXPECT_EQ("test_key_exp", key);
         keyExpCbCnt++;
       }
@@ -1197,7 +1197,7 @@ TEST(KvStoreClient, SubscribeApiTest) {
     client2->subscribeKey(
         "test_key_exp",
         [&](std::string const& k, folly::Optional<thrift::Value> v) {
-          if (!v.hasValue()) {
+          if (!v.has_value()) {
             EXPECT_EQ("test_key_exp", k);
             keyExpKeyCbCnt++;
             evb.stop();
@@ -1435,23 +1435,23 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // get key from default area, must be false
         auto maybeThriftVal1 = store1->getKey("pod_key1");
-        ASSERT_FALSE(maybeThriftVal1.hasValue());
+        ASSERT_FALSE(maybeThriftVal1.has_value());
 
         // get pod key from plane area, must be false
         auto maybeThriftVal2 = store1->getKey("pod_key1", planeArea);
-        ASSERT_FALSE(maybeThriftVal2.hasValue());
+        ASSERT_FALSE(maybeThriftVal2.has_value());
 
         // get plane key from pod area, must be false
         auto maybeThriftVal3 = store3->getKey("plane_key1", podArea);
-        ASSERT_FALSE(maybeThriftVal3.hasValue());
+        ASSERT_FALSE(maybeThriftVal3.has_value());
 
         // get pod key from pod area from store2, verifies flooding
         auto maybeThriftVal4 = store2->getKey("pod_key1", podArea);
-        ASSERT_TRUE(maybeThriftVal4.hasValue());
+        ASSERT_TRUE(maybeThriftVal4.has_value());
 
         // get plane key from plane area from store2, verifies flooding
         auto maybeThriftVal5 = store2->getKey("plane_key1", planeArea);
-        ASSERT_TRUE(maybeThriftVal5.hasValue());
+        ASSERT_TRUE(maybeThriftVal5.has_value());
       });
 
   evb.scheduleTimeout(
@@ -1529,7 +1529,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
             folly::AsyncSocket::anyAddress(),
             planeArea);
         // there will be plane area key "test_ttl_key_plane"
-        ASSERT_TRUE(maybe.first.hasValue());
+        ASSERT_TRUE(maybe.first.has_value());
         EXPECT_EQ(maybe.first.value().size(), 1);
 
         // only one key in pod Area too, "test_ttl_pod_area"
@@ -1542,7 +1542,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
             folly::AsyncSocket::anyAddress(),
             podArea);
         // there will be plane area key "test_ttl_key_plane"
-        ASSERT_TRUE(maybe.first.hasValue());
+        ASSERT_TRUE(maybe.first.has_value());
         EXPECT_EQ(maybe.first.value().size(), 1);
       });
 

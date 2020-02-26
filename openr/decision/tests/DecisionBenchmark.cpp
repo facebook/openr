@@ -121,7 +121,7 @@ class DecisionWrapper {
       const folly::Optional<thrift::PerfEvents>& perfEvents,
       bool overloadBit = false) {
     auto adjDb = createAdjDb(nodeId, adjs, 0, overloadBit);
-    if (perfEvents.hasValue()) {
+    if (perfEvents.has_value()) {
       adjDb.perfEvents = perfEvents;
     }
     return thrift::Value(
@@ -266,7 +266,7 @@ sendRecvUpdate(
   auto routes2 = decisionWrapper->recvMyRouteDb();
 
   // Extract time from perfevent and accumulate processing time
-  if (routes2.perfEvents.hasValue()) {
+  if (routes2.perfEvents.has_value()) {
     accumulatePerfTimes(routes2.perfEvents.value(), processTimes);
   }
 }
@@ -594,14 +594,14 @@ updateRandomFabricAdjs(
   thrift::Publication newPub;
 
   // Choose a random pod
-  auto podId = selectedNode.hasValue() ? selectedNode.value().first
-                                       : folly::Random::rand32() % numOfPods;
+  auto podId = selectedNode.has_value() ? selectedNode.value().first
+                                        : folly::Random::rand32() % numOfPods;
 
   //
   // If there has been an update, revert the update,
   // otherwise, choose a random rsw for update
   //
-  auto rswIdInPod = selectedNode.hasValue()
+  auto rswIdInPod = selectedNode.has_value()
       ? selectedNode.value().second
       : folly::Random::rand32() % numOfRswsPerPod;
 
@@ -614,10 +614,10 @@ updateRandomFabricAdjs(
     createFabricAdjacency(rwsNodeName, kFswMarker, podId, otherId, adjsRsw);
   }
 
-  auto overloadBit = (selectedNode.hasValue()) ? false : true;
+  auto overloadBit = (selectedNode.has_value()) ? false : true;
 
   // Record the updated rsw
-  selectedNode = (selectedNode.hasValue())
+  selectedNode = (selectedNode.has_value())
       ? folly::none
       : folly::Optional<std::pair<int, int>>(std::make_pair(podId, rswIdInPod));
 
@@ -640,16 +640,16 @@ updateRandomGridAdjs(
 
   // If there has been an update, revert the update,
   // otherwise, choose a random nodeId for update
-  auto row = selectedNode.hasValue() ? selectedNode.value().first
-                                     : folly::Random::rand32() % n;
-  auto col = selectedNode.hasValue() ? selectedNode.value().second
-                                     : folly::Random::rand32() % n;
+  auto row = selectedNode.has_value() ? selectedNode.value().first
+                                      : folly::Random::rand32() % n;
+  auto col = selectedNode.has_value() ? selectedNode.value().second
+                                      : folly::Random::rand32() % n;
 
   auto nodeName = folly::sformat("{}", row * n + col);
   auto adjs = createGridAdjacencys(row, col, n);
-  auto overloadBit = selectedNode.hasValue() ? false : true;
+  auto overloadBit = selectedNode.has_value() ? false : true;
   // Record the updated nodeId
-  selectedNode = selectedNode.hasValue()
+  selectedNode = selectedNode.has_value()
       ? folly::none
       : folly::Optional<std::pair<int, int>>(std::make_pair(row, col));
 

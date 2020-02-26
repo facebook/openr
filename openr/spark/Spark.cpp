@@ -203,13 +203,13 @@ SparkNeighState
 Spark::getNextState(
     folly::Optional<SparkNeighState> const& currState,
     SparkNeighEvent const& event) {
-  CHECK(currState.hasValue()) << "Current state is 'UNEXPECTED'";
+  CHECK(currState.has_value()) << "Current state is 'UNEXPECTED'";
 
   folly::Optional<SparkNeighState> nextState =
       stateMap_[static_cast<uint32_t>(currState.value())]
                [static_cast<uint32_t>(event)];
 
-  CHECK(nextState.hasValue()) << "Next state is 'UNEXPECTED'";
+  CHECK(nextState.has_value()) << "Next state is 'UNEXPECTED'";
   return nextState.value();
 }
 
@@ -790,7 +790,7 @@ Spark::parsePacket(
   }
 
   auto res = findInterfaceFromIfindex(ifIndex);
-  if (!res.hasValue()) {
+  if (!res.has_value()) {
     LOG(ERROR) << "Received packet from " << clientAddr.getAddressStr()
                << " on unknown interface with index " << ifIndex
                << ". Ignoring the packet.";
@@ -1776,13 +1776,13 @@ Spark::processHelloPacket() {
 
   // Step 2: Spark2 specific msg processing
   if (enableSpark2_) {
-    if (helloPacket.helloMsg.hasValue()) {
+    if (helloPacket.helloMsg.has_value()) {
       processHelloMsg(helloPacket.helloMsg.value(), ifName, myRecvTime);
       return;
-    } else if (helloPacket.heartbeatMsg.hasValue()) {
+    } else if (helloPacket.heartbeatMsg.has_value()) {
       processHeartbeatMsg(helloPacket.heartbeatMsg.value(), ifName);
       return;
-    } else if (helloPacket.handshakeMsg.hasValue()) {
+    } else if (helloPacket.handshakeMsg.has_value()) {
       processHandshakeMsg(helloPacket.handshakeMsg.value(), ifName);
       return;
     } else {
@@ -1813,7 +1813,7 @@ Spark::processHelloPacket() {
   neighbor.localTimestamp = myRecvTime;
 
   // check if it's a restarting packet
-  if (helloPacket.payload.restarting.hasValue() and
+  if (helloPacket.payload.restarting.has_value() and
       *helloPacket.payload.restarting) {
     // this neighbor informed us that it's restarting
     neighbor.numRecvRestarting += 1;
@@ -2522,7 +2522,7 @@ Spark::findCommonArea(
   // check area membership
   std::vector<std::string> commonArea{};
 
-  if (areas_.hasValue() && adjAreas.hasValue()) {
+  if (areas_.has_value() && adjAreas.has_value()) {
     for (auto area = areas_.value().begin(); area != areas_.value().end();
          area++) {
       if (adjAreas.value().find(*area) != adjAreas.value().end()) {

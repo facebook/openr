@@ -289,16 +289,16 @@ class NlMessageFixture : public ::testing::Test {
       int ifIndex) {
     openr::fbnl::NextHopBuilder nhBuilder;
 
-    if (pushLabels.hasValue()) {
+    if (pushLabels.has_value()) {
       nhBuilder.setPushLabels(pushLabels.value());
     }
-    if (swapLabel.hasValue()) {
+    if (swapLabel.has_value()) {
       nhBuilder.setSwapLabel(swapLabel.value());
     }
-    if (action.hasValue()) {
+    if (action.has_value()) {
       nhBuilder.setLabelAction(action.value());
     }
-    if (gateway.hasValue()) {
+    if (gateway.has_value()) {
       nhBuilder.setGateway(gateway.value());
     }
     nhBuilder.setIfIndex(ifIndex);
@@ -314,19 +314,19 @@ class NlMessageFixture : public ::testing::Test {
     fbnl::RouteBuilder rtBuilder;
 
     rtBuilder.setProtocolId(protocolId);
-    if (dest.hasValue()) {
+    if (dest.has_value()) {
       rtBuilder.setDestination(dest.value());
     }
-    if (mplsLabel.hasValue()) {
+    if (mplsLabel.has_value()) {
       rtBuilder.setMplsLabel(mplsLabel.value());
     }
-    if (nexthops.hasValue()) {
+    if (nexthops.has_value()) {
       for (const auto& nh : nexthops.value()) {
         rtBuilder.addNextHop(nh);
       }
     }
     // Default values
-    if (dest.hasValue()) {
+    if (dest.has_value()) {
       // Priority only for IPv4 and IPv6 routes
       rtBuilder.setPriority(kAqRouteProtoIdPriority);
     }

@@ -72,7 +72,7 @@ struct DecisionPendingUpdates {
     ++count_;
 
     // Skip if perf information is missing
-    if (not perfEvents.hasValue()) {
+    if (not perfEvents.has_value()) {
       if (not perfEvents_) {
         perfEvents_ = thrift::PerfEvents{};
         addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");

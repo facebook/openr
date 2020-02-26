@@ -53,7 +53,7 @@ NetlinkRouteMessage::init(
   rtmsg_->rtm_flags = rtFlags;
 
   auto rtFlag = route.getFlags();
-  if (rtFlag.hasValue()) {
+  if (rtFlag.has_value()) {
     rtmsg_->rtm_flags |= rtFlag.value();
   }
 }
@@ -107,7 +107,7 @@ NetlinkRouteMessage::addIpNexthop(
 
   // RTA_GATEWAY
   auto const via = path.getGateway();
-  if (!via.hasValue()) {
+  if (!via.has_value()) {
     if (route.getType() == RTN_MULTICAST || route.getScope() == RT_SCOPE_LINK) {
       return ResultCode::SUCCESS;
     }
@@ -140,7 +140,7 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
 
   // labels.size() = 0 implies PHP
   auto maybeLabel = path.getSwapLabel();
-  if (maybeLabel.hasValue()) {
+  if (maybeLabel.has_value()) {
     struct mpls_label swapLabel;
     swapLabel.entry = encodeLabel(maybeLabel.value(), true);
 
@@ -182,7 +182,7 @@ NetlinkRouteMessage::addPopNexthop(
     const openr::fbnl::NextHop& path) const {
   // for each next hop add the ENCAP
   rtnh->rtnh_len = sizeof(*rtnh);
-  if (!path.getIfIndex().hasValue()) {
+  if (!path.getIfIndex().has_value()) {
     LOG(ERROR) << "Loopback interface index not provided for POP";
     return ResultCode::NO_LOOPBACK_INDEX;
   }
@@ -227,7 +227,7 @@ NetlinkRouteMessage::addLabelNexthop(
   std::array<struct mpls_label, kMaxLabels> mplsLabel;
   size_t i = 0;
   auto labels = path.getPushLabels();
-  if (!labels.hasValue()) {
+  if (!labels.has_value()) {
     LOG(ERROR) << "Labels not provided for PUSH action";
     return ResultCode::NO_LABEL;
   }
@@ -259,7 +259,7 @@ NetlinkRouteMessage::addLabelNexthop(
 
   // RTA_GATEWAY
   auto const via = path.getGateway();
-  if (!via.hasValue()) {
+  if (!via.has_value()) {
     LOG(ERROR) << "Nexthop IP not provided";
     return ResultCode::NO_NEXTHOP_IP;
   }
@@ -315,7 +315,7 @@ NetlinkRouteMessage::addMultiPathNexthop(
     rta->rta_len += rtnh->rtnh_len;
     auto action = path.getLabelAction();
 
-    if (action.hasValue()) {
+    if (action.has_value()) {
       switch (action.value()) {
       case thrift::MplsActionCode::PUSH:
         result = addLabelNexthop(rta, rtnh, path);
@@ -449,7 +449,7 @@ NetlinkRouteMessage::parseNextHopAttribute(
   case RTA_ENCAP: {
     // MPLS Labels
     auto pushLabels = parseMplsLabels(routeAttr);
-    if (pushLabels.hasValue()) {
+    if (pushLabels.has_value()) {
       nhBuilder.setPushLabels(pushLabels.value());
     }
   } break;
@@ -547,7 +547,7 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
       auto nextHops = parseNextHops(routeAttr, routeEntry->rtm_family);
       for (auto& nh : nextHops) {
         // don't add empty nexthop
-        if (nh.getGateway().hasValue() || nh.getIfIndex().hasValue()) {
+        if (nh.getGateway().has_value() || nh.getIfIndex().has_value()) {
           routeBuilder.addNextHop(nh);
         }
       }
@@ -560,7 +560,7 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) const {
     // add single nexthop
     auto nh = nhBuilder.build();
     // don't add empty nexthop
-    if (nh.getGateway().hasValue() || nh.getIfIndex().hasValue()) {
+    if (nh.getGateway().has_value() || nh.getIfIndex().has_value()) {
       routeBuilder.addNextHop(nh);
     }
   }
@@ -684,7 +684,7 @@ NetlinkRouteMessage::addLabelRoute(const openr::fbnl::Route& route) {
   }
 
   auto label = route.getMplsLabel();
-  if (!label.hasValue()) {
+  if (!label.has_value()) {
     return ResultCode::NO_LABEL;
   }
 
@@ -709,7 +709,7 @@ NetlinkRouteMessage::deleteLabelRoute(const openr::fbnl::Route& route) {
   rtmsg_->rtm_flags = 0;
   struct mpls_label mlabel;
   auto label = route.getMplsLabel();
-  if (!label.hasValue()) {
+  if (!label.has_value()) {
     LOG(ERROR) << "Label not provided";
     return ResultCode::NO_LABEL;
   }
@@ -821,7 +821,7 @@ NetlinkAddrMessage::addOrDeleteIfAddress(
   } else if (ifAddr.getFamily() != AF_INET && ifAddr.getFamily() != AF_INET6) {
     LOG(ERROR) << "Invalid address family" << ifAddr.str();
     return ResultCode::INVALID_ADDRESS_FAMILY;
-  } else if (!ifAddr.getPrefix().hasValue()) {
+  } else if (!ifAddr.getPrefix().has_value()) {
     // No IP address given
     LOG(ERROR) << "No IP address given to add " << ifAddr.str();
     return ResultCode::NO_IP;
@@ -836,8 +836,8 @@ NetlinkAddrMessage::addOrDeleteIfAddress(
   ifaddrmsg_->ifa_family = ifAddr.getFamily();
   ifaddrmsg_->ifa_prefixlen = prefixLen;
   ifaddrmsg_->ifa_flags =
-      (ifAddr.getFlags().hasValue() ? ifAddr.getFlags().value() : 0);
-  if (ifAddr.getScope().hasValue()) {
+      (ifAddr.getFlags().has_value() ? ifAddr.getFlags().value() : 0);
+  if (ifAddr.getScope().has_value()) {
     ifaddrmsg_->ifa_scope = ifAddr.getScope().value();
   }
   ifaddrmsg_->ifa_index = ifAddr.getIfIndex();

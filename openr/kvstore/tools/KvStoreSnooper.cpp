@@ -63,7 +63,7 @@ main(int argc, char** argv) {
                     openr::KvStore::mergeKeyValues(globalKeyVals, pub.keyVals);
                 for (auto& kv : updatedKeyVals) {
                   std::cout
-                      << (kv.second.value.hasValue() ? "Updated" : "Refreshed")
+                      << (kv.second.value.has_value() ? "Updated" : "Refreshed")
                       << " KeyVal: " << kv.first << std::endl;
                   std::cout << "  version: " << kv.second.version << std::endl;
                   std::cout << "  originatorId: " << kv.second.originatorId

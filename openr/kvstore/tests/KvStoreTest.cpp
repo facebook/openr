@@ -431,7 +431,7 @@ TEST(KvStore, mergeKeyValuesTest) {
 
     EXPECT_EQ(deltaKvIt->second.ttlVersion, newKvIt->second.ttlVersion);
     EXPECT_EQ(deltaKvIt->second.ttl, newKvIt->second.ttl);
-    EXPECT_EQ(deltaKvIt->second.value.hasValue(), false);
+    EXPECT_EQ(deltaKvIt->second.value.has_value(), false);
   }
 
   // update ttl only (same version, originatorId and value,
@@ -644,7 +644,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
 
     // KEY_GET
-    EXPECT_FALSE(kvStore.getKey(key).hasValue());
+    EXPECT_FALSE(kvStore.getKey(key).has_value());
 
     // KEY_DUMP
     EXPECT_EQ(0, kvStore.dumpAll().size());
@@ -670,7 +670,7 @@ TEST(KvStore, TtlVerification) {
 
     // KEY_GET
     auto getRes = kvStore.getKey(key);
-    ASSERT_TRUE(getRes.hasValue());
+    ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     getRes->ttl = thriftValue.ttl;
     getRes->hash = 0;
@@ -716,7 +716,7 @@ TEST(KvStore, TtlVerification) {
 
     // KEY_GET
     auto getRes = kvStore.getKey(key);
-    ASSERT_TRUE(getRes.hasValue());
+    ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     getRes->ttl = thriftValue.ttl;
     getRes->hash = 0;
@@ -768,7 +768,7 @@ TEST(KvStore, TtlVerification) {
 
     // KEY_GET
     auto getRes = kvStore.getKey(key);
-    ASSERT_TRUE(getRes.hasValue());
+    ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     EXPECT_EQ(thriftValue.version, getRes->version);
     EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
@@ -782,7 +782,7 @@ TEST(KvStore, TtlVerification) {
     ASSERT_EQ(1, publication.keyVals.count(key));
     auto& pubValue = publication.keyVals.at(key);
     // TTL decremented by 1 before it gets forwarded out
-    EXPECT_FALSE(pubValue.value.hasValue());
+    EXPECT_FALSE(pubValue.value.has_value());
     EXPECT_GE(thriftValue.ttl, pubValue.ttl + 1);
     EXPECT_EQ(thriftValue.version, pubValue.version);
     EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
@@ -801,7 +801,7 @@ TEST(KvStore, TtlVerification) {
 
     // KEY_GET - ttl should remain infinite
     auto getRes = kvStore.getKey(key);
-    ASSERT_TRUE(getRes.hasValue());
+    ASSERT_TRUE(getRes.has_value());
     EXPECT_EQ(Constants::kTtlInfinity, getRes->ttl);
     EXPECT_EQ(thriftValue.version, getRes->version);
     EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
@@ -815,7 +815,7 @@ TEST(KvStore, TtlVerification) {
     ASSERT_EQ(1, publication.keyVals.count(key));
     auto& pubValue = publication.keyVals.at(key);
     // TTL should remain infinite
-    EXPECT_FALSE(pubValue.value.hasValue());
+    EXPECT_FALSE(pubValue.value.has_value());
     EXPECT_EQ(Constants::kTtlInfinity, pubValue.ttl);
     EXPECT_EQ(thriftValue.version, pubValue.version);
     EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
@@ -834,7 +834,7 @@ TEST(KvStore, TtlVerification) {
 
     // KEY_GET
     auto getRes = kvStore.getKey(key);
-    ASSERT_TRUE(getRes.hasValue());
+    ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     EXPECT_EQ(thriftValue.version, getRes->version);
     EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
@@ -848,7 +848,7 @@ TEST(KvStore, TtlVerification) {
     ASSERT_EQ(1, publication.keyVals.count(key));
     auto& pubValue = publication.keyVals.at(key);
     // TTL decremented by 1 before it gets forwarded out
-    EXPECT_FALSE(pubValue.value.hasValue());
+    EXPECT_FALSE(pubValue.value.has_value());
     EXPECT_GE(thriftValue.ttl, pubValue.ttl + 1);
     EXPECT_EQ(thriftValue.version, pubValue.version);
     EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
@@ -866,7 +866,7 @@ TEST(KvStore, TtlVerification) {
 
     // KEY_GET
     auto getRes = kvStore.getKey(key);
-    ASSERT_TRUE(getRes.hasValue());
+    ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(20000, getRes->ttl); // Previous ttl was set to 20s
     EXPECT_LE(10000, getRes->ttl);
     EXPECT_EQ(value.version, getRes->version);
@@ -914,7 +914,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   expectedOrignatorVals["test1"] = thriftVal;
 
   auto maybeThriftVal = store0->getKey("test1");
-  ASSERT_TRUE(maybeThriftVal.hasValue());
+  ASSERT_TRUE(maybeThriftVal.has_value());
 
   // Set key with a different originator ID
   // This shouldn't be added to Kvstore
@@ -935,7 +935,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   expectedKeyVals["test2"] = thriftVal2;
 
   maybeThriftVal = store0->getKey("test2");
-  ASSERT_FALSE(maybeThriftVal.hasValue());
+  ASSERT_FALSE(maybeThriftVal.has_value());
 
   std::unordered_map<std::string, thrift::Value> expectedKeyPrefixVals;
   // Set key with a different originator ID, but matching prefix
@@ -958,7 +958,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   expectedKeyPrefixVals["e2exyz"] = thriftVal3;
 
   maybeThriftVal = store0->getKey("e2exyz");
-  ASSERT_TRUE(maybeThriftVal.hasValue());
+  ASSERT_TRUE(maybeThriftVal.has_value());
 
   // Add another matching key prefix, different originator ID
   // This should be added to Kvstore.
@@ -980,7 +980,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   expectedKeyPrefixVals["e2e"] = thriftVal4;
 
   maybeThriftVal = store0->getKey("e2e");
-  ASSERT_TRUE(maybeThriftVal.hasValue());
+  ASSERT_TRUE(maybeThriftVal.has_value());
 
   // Add non-matching key prefix, different originator ID..
   // This shouldn't be added to Kvstore.
@@ -1001,7 +1001,7 @@ TEST_F(KvStoreTestFixture, LeafNode) {
   expectedKeyVals["e2"] = thriftVal5;
 
   maybeThriftVal = store0->getKey("e2");
-  ASSERT_FALSE(maybeThriftVal.hasValue());
+  ASSERT_FALSE(maybeThriftVal.has_value());
 
   // Add key in store1 with originator ID of store0
   LOG(INFO) << "Setting key with origninator ID of leaf into a non-leaf node";
@@ -1093,21 +1093,21 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
 
   EXPECT_TRUE(store0->setKey("test1", thriftVal1));
   auto maybeThriftVal = store0->getKey("test1");
-  ASSERT_TRUE(maybeThriftVal.hasValue());
+  ASSERT_TRUE(maybeThriftVal.has_value());
   EXPECT_GE(kTtlMs, maybeThriftVal->ttl);
   maybeThriftVal->ttl = kTtlMs;
   EXPECT_EQ(thriftVal1, *maybeThriftVal);
 
   EXPECT_TRUE(store0->setKey("test2", thriftVal2));
   maybeThriftVal = store0->getKey("test2");
-  ASSERT_TRUE(maybeThriftVal.hasValue());
+  ASSERT_TRUE(maybeThriftVal.has_value());
   EXPECT_GE(kTtlMs, maybeThriftVal->ttl);
   maybeThriftVal->ttl = kTtlMs;
   EXPECT_EQ(thriftVal2, *maybeThriftVal);
 
   EXPECT_TRUE(store1->setKey("test2", thriftVal2));
   maybeThriftVal = store1->getKey("test2");
-  ASSERT_TRUE(maybeThriftVal.hasValue());
+  ASSERT_TRUE(maybeThriftVal.has_value());
   EXPECT_GE(kTtlMs, maybeThriftVal->ttl);
   maybeThriftVal->ttl = kTtlMs;
   EXPECT_EQ(thriftVal2, *maybeThriftVal);
@@ -1118,12 +1118,12 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   std::this_thread::sleep_for(std::chrono::milliseconds(20));
   // key 'test1' should be added with remaining TTL
   maybeThriftVal = store1->getKey("test1");
-  ASSERT_TRUE(maybeThriftVal.hasValue());
+  ASSERT_TRUE(maybeThriftVal.has_value());
   EXPECT_GE(kTtlMs - 200, maybeThriftVal.value().ttl);
 
   // key 'test2' should not be updated, it should have kTtlMs
   maybeThriftVal = store1->getKey("test2");
-  ASSERT_TRUE(maybeThriftVal.hasValue());
+  ASSERT_TRUE(maybeThriftVal.has_value());
   EXPECT_GE(kTtlMs, maybeThriftVal.value().ttl);
 }
 
@@ -1338,13 +1338,13 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo1 = sptInfos.infos.at("r1");
       EXPECT_TRUE(sptInfo1.passive);
       EXPECT_EQ(sptInfo1.cost, 2);
-      EXPECT_TRUE(sptInfo1.parent.hasValue());
+      EXPECT_TRUE(sptInfo1.parent.has_value());
       r0Parent = *sptInfo1.parent;
       EXPECT_TRUE(r0Parent == "n0" or r0Parent == "n1");
       EXPECT_EQ(sptInfo1.children.size(), 0);
 
       // validate flooding-peer-info
-      EXPECT_TRUE(sptInfos.floodRootId.hasValue());
+      EXPECT_TRUE(sptInfos.floodRootId.has_value());
       EXPECT_EQ(*sptInfos.floodRootId, "r0");
       EXPECT_EQ(sptInfos.floodPeers.size(), 2);
       EXPECT_EQ(sptInfos.floodPeers.count("n0"), 1);
@@ -1371,13 +1371,13 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo0 = sptInfos.infos.at("r0");
       EXPECT_TRUE(sptInfo0.passive);
       EXPECT_EQ(sptInfo0.cost, 2);
-      EXPECT_TRUE(sptInfo0.parent.hasValue());
+      EXPECT_TRUE(sptInfo0.parent.has_value());
       r1Parent = *sptInfo0.parent;
       EXPECT_TRUE(r1Parent == "n0" or r1Parent == "n1");
       EXPECT_EQ(sptInfo0.children.size(), 0);
 
       // validate flooding-peer-info
-      EXPECT_TRUE(sptInfos.floodRootId.hasValue());
+      EXPECT_TRUE(sptInfos.floodRootId.has_value());
       EXPECT_EQ(*sptInfos.floodRootId, "r0");
       EXPECT_EQ(sptInfos.floodPeers.size(), 1);
       EXPECT_EQ(sptInfos.floodPeers.count(r1Parent), 1);
@@ -1612,7 +1612,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     EXPECT_EQ(sptInfo1.children.size(), 0);
 
     // validate flooding-peer-info
-    EXPECT_TRUE(sptInfos.floodRootId.hasValue());
+    EXPECT_TRUE(sptInfos.floodRootId.has_value());
     EXPECT_EQ(*sptInfos.floodRootId, "r0");
     EXPECT_EQ(sptInfos.floodPeers.size(), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("n1"), 1);
@@ -1643,7 +1643,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     EXPECT_EQ(sptInfo1.children.count("n1"), 1);
 
     // validate flooding-peer-info
-    EXPECT_TRUE(sptInfos.floodRootId.hasValue());
+    EXPECT_TRUE(sptInfos.floodRootId.has_value());
     EXPECT_EQ(*sptInfos.floodRootId, "r0");
     EXPECT_EQ(sptInfos.floodPeers.size(), 2);
     EXPECT_EQ(sptInfos.floodPeers.count("n0"), 1);
@@ -2126,8 +2126,8 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     EXPECT_EQ(thriftValLast, pub2.keyVals.at(kKeyName));
 
     // Verify nodeIds attribute of publication
-    ASSERT_TRUE(pub1.nodeIds.hasValue());
-    ASSERT_TRUE(pub2.nodeIds.hasValue());
+    ASSERT_TRUE(pub1.nodeIds.has_value());
+    ASSERT_TRUE(pub2.nodeIds.has_value());
     EXPECT_EQ(
         std::vector<std::string>{stores[0]->nodeId}, pub1.nodeIds.value());
     auto expectedNodeIds = nodeIdsSeq;
@@ -2138,7 +2138,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   for (auto& store : stores) {
     LOG(INFO) << "Pulling state from " << store->nodeId;
     auto maybeThriftVal = store->getKey(kKeyName);
-    ASSERT_TRUE(maybeThriftVal.hasValue());
+    ASSERT_TRUE(maybeThriftVal.has_value());
     EXPECT_EQ(thriftValLast, *maybeThriftVal);
   }
 
@@ -2444,7 +2444,7 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   {
     /* check key is in store1 */
     auto getRes1 = store1->getKey("key1");
-    ASSERT_TRUE(getRes1.hasValue());
+    ASSERT_TRUE(getRes1.has_value());
 
     /* check key synced from store1 has ttl that is reduced by ttlDecr. */
     auto getPub0 = store0->recvPublication(std::chrono::seconds(1));
@@ -2469,7 +2469,7 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   {
     /* check key get returns false from store1, but keys exist (key1 and key2)*/
     auto getRes1 = store1->getKey("key2");
-    ASSERT_FALSE(getRes1.hasValue());
+    ASSERT_FALSE(getRes1.has_value());
     auto nodeCounters = store1->getCounters();
     EXPECT_EQ(nodeCounters["kvstore.num_keys"].value, 2);
 
@@ -2674,7 +2674,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   std::this_thread::sleep_for(std::chrono::seconds(wait));
   // check in store0 the ttl version, this should be the same as latest version
   auto getRes = store0->getKey("key2");
-  ASSERT_TRUE(getRes.hasValue());
+  ASSERT_TRUE(getRes.has_value());
   EXPECT_EQ(i2, getRes->ttlVersion);
 
   auto counters2 = getNodeCounters();
@@ -2844,8 +2844,8 @@ TEST_F(KvStoreTestFixture, FullSync) {
   for (const auto& key : allKeys) {
     auto valA = storeA->getKey(key);
     auto valB = storeB->getKey(key);
-    EXPECT_TRUE(valA.hasValue());
-    EXPECT_TRUE(valB.hasValue());
+    EXPECT_TRUE(valA.has_value());
+    EXPECT_TRUE(valB.has_value());
     EXPECT_EQ(valA->value.value(), valB->value.value());
     EXPECT_EQ(valA->version, valB->version);
   }
@@ -2990,24 +2990,24 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         // set key in the correct area
         EXPECT_TRUE(storeA->setKey(k0, thriftVal0, folly::none, podArea));
         // store A should not have the key in default area
-        EXPECT_FALSE(storeA->getKey(k0).hasValue());
+        EXPECT_FALSE(storeA->getKey(k0).has_value());
         // store A should have the key in pod-area
-        EXPECT_TRUE(storeA->getKey(k0, podArea).hasValue());
+        EXPECT_TRUE(storeA->getKey(k0, podArea).has_value());
         // store B should have the key in pod-area
-        EXPECT_TRUE(storeB->getKey(k0, podArea).hasValue());
+        EXPECT_TRUE(storeB->getKey(k0, podArea).has_value());
         // store B should NOT have the key in plane-area
-        EXPECT_FALSE(storeB->getKey(k0, planeArea).hasValue());
+        EXPECT_FALSE(storeB->getKey(k0, planeArea).has_value());
 
         // set key in store C and verify it's present in plane area in store B
         // and not present in POD area in storeB and storeA set key in the
         // correct area
         EXPECT_TRUE(storeC->setKey(k2, thriftVal2, folly::none, planeArea));
         // store B should have the key in planeArea
-        EXPECT_TRUE(storeB->getKey(k2, planeArea).hasValue());
+        EXPECT_TRUE(storeB->getKey(k2, planeArea).has_value());
         // store B should NOT have the key in podArea
-        EXPECT_FALSE(storeB->getKey(k2, podArea).hasValue());
+        EXPECT_FALSE(storeB->getKey(k2, podArea).has_value());
         // store A should NOT have the key in podArea
-        EXPECT_FALSE(storeA->getKey(k2, podArea).hasValue());
+        EXPECT_FALSE(storeA->getKey(k2, podArea).has_value());
 
         // pod area expected key values
         expectedKeyValsPod[k0] = thriftVal0;

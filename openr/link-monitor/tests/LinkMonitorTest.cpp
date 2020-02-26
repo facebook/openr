@@ -415,7 +415,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Waiting to receive publication for key " << key << " area "
               << area;
     auto pub = kvStoreWrapper->recvPublication(timeout);
-    EXPECT_TRUE(pub.area.hasValue());
+    EXPECT_TRUE(pub.area.has_value());
     if (pub.area.value() != area) {
       return folly::none;
     }
@@ -448,7 +448,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
       folly::Optional<thrift::Value> value;
       try {
         value = getPublicationValueForKey(key, area);
-        if (not value.hasValue()) {
+        if (not value.has_value()) {
           continue;
         }
       } catch (std::exception const& e) {
@@ -500,7 +500,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     while (true) {
       auto value =
           getPublicationValueForKey(key, area, std::chrono::seconds(3));
-      if (not value.hasValue()) {
+      if (not value.has_value()) {
         continue;
       }
 
@@ -749,7 +749,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_EQ(1, res->interfaceDetails.size());
     EXPECT_FALSE(res->interfaceDetails.at(interfaceName).isOverloaded);
     EXPECT_FALSE(
-        res->interfaceDetails.at(interfaceName).metricOverride.hasValue());
+        res->interfaceDetails.at(interfaceName).metricOverride.has_value());
 
     LOG(INFO) << "Testing set link metric command!";
     ret = linkMonitor->setLinkMetric(interfaceName, linkMetric).get();
@@ -793,7 +793,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_FALSE(res->isOverloaded);
     EXPECT_FALSE(res->interfaceDetails.at(interfaceName).isOverloaded);
     EXPECT_FALSE(
-        res->interfaceDetails.at(interfaceName).metricOverride.hasValue());
+        res->interfaceDetails.at(interfaceName).metricOverride.has_value());
 
     LOG(INFO) << "Testing set node overload command( AGAIN )!";
     ret = linkMonitor->setNodeOverload(true).get();
@@ -1247,7 +1247,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   EXPECT_EQ(2, links->interfaceDetails.size());
   for (const auto& ifName : ifNames) {
     EXPECT_FALSE(
-        links->interfaceDetails.at(ifName).linkFlapBackOffMs.hasValue());
+        links->interfaceDetails.at(ifName).linkFlapBackOffMs.has_value());
   }
 
   VLOG(2) << "*** bring down 2 interfaces ***";
@@ -1394,7 +1394,7 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
       EXPECT_FALSE(
-          links3->interfaceDetails.at(ifName).linkFlapBackOffMs.hasValue());
+          links3->interfaceDetails.at(ifName).linkFlapBackOffMs.has_value());
     }
   }
 }

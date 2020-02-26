@@ -226,7 +226,7 @@ class NetlinkSocketFixture : public testing::Test {
   CompareNextHops(std::vector<folly::IPAddress>& nexthops, const Route& route) {
     std::vector<folly::IPAddress> actual;
     for (const auto& nh : route.getNextHops()) {
-      if (!nh.getGateway().hasValue()) {
+      if (!nh.getGateway().has_value()) {
         return false;
       }
       actual.push_back(nh.getGateway().value());
@@ -2309,7 +2309,7 @@ TEST_F(NetlinkSocketFixture, GetAddrsTest) {
 TEST_F(NetlinkSocketFixture, LoopbackTest) {
   LOG(INFO) << "Get all links and check if loopback index is set";
   netlinkSocket->getAllLinks();
-  EXPECT_TRUE(netlinkSocket->getLoopbackIfindex().get().hasValue());
+  EXPECT_TRUE(netlinkSocket->getLoopbackIfindex().get().has_value());
 }
 
 int

@@ -102,7 +102,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       folly::sformat("prefix:{}", nodeId_),
       [&](const std::string& /* key */,
           folly::Optional<thrift::Value> value) noexcept {
-        if (!value.hasValue()) {
+        if (!value.has_value()) {
           return;
         }
         // Parse PrefixDb
@@ -455,7 +455,7 @@ template <class Serializer>
 folly::Optional<thrift::IpPrefix>
 OpenrWrapper<Serializer>::getIpPrefix() {
   SYNCHRONIZED(ipPrefix_) {
-    if (ipPrefix_.hasValue()) {
+    if (ipPrefix_.has_value()) {
       return ipPrefix_;
     }
   }

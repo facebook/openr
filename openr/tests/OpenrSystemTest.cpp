@@ -306,10 +306,10 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
   // make sure every openr has a prefix allocated
-  EXPECT_TRUE(openr1->getIpPrefix().hasValue());
-  EXPECT_TRUE(openr2->getIpPrefix().hasValue());
-  EXPECT_TRUE(openr3->getIpPrefix().hasValue());
-  EXPECT_TRUE(openr4->getIpPrefix().hasValue());
+  EXPECT_TRUE(openr1->getIpPrefix().has_value());
+  EXPECT_TRUE(openr2->getIpPrefix().has_value());
+  EXPECT_TRUE(openr3->getIpPrefix().has_value());
+  EXPECT_TRUE(openr4->getIpPrefix().has_value());
 
   // start tracking iface1
   EXPECT_TRUE(
@@ -587,7 +587,7 @@ TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
   // make sure every openr has a prefix allocated
-  EXPECT_TRUE(openr1->getIpPrefix().hasValue());
+  EXPECT_TRUE(openr1->getIpPrefix().has_value());
 
   auto counters1 = openr1->zmqMonitorClient->dumpCounters();
   while (counters1.size() == 0) {

@@ -459,7 +459,7 @@ generateHash(
   size_t seed = 0;
   boost::hash_combine(seed, version);
   boost::hash_combine(seed, originatorId);
-  if (value.hasValue()) {
+  if (value.has_value()) {
     boost::hash_combine(seed, value.value());
   }
   return static_cast<int64_t>(seed);
@@ -506,7 +506,7 @@ getBestNextHopsMpls(std::vector<thrift::NextHopThrift> const& allNextHops) {
   int32_t minCost = std::numeric_limits<int32_t>::max();
   thrift::MplsActionCode mplsActionCode{thrift::MplsActionCode::SWAP};
   for (auto const& nextHop : allNextHops) {
-    CHECK(nextHop.mplsAction.hasValue());
+    CHECK(nextHop.mplsAction.has_value());
     // Action can't be push (we don't push labels in MPLS routes)
     // or POP with multiple nexthops
     CHECK(thrift::MplsActionCode::PUSH != nextHop.mplsAction->action);
@@ -641,9 +641,9 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
   switch (mplsAction.action) {
   case thrift::MplsActionCode::PUSH:
     // Swap label shouldn't be set
-    CHECK(not mplsAction.swapLabel.hasValue());
+    CHECK(not mplsAction.swapLabel.has_value());
     // Push labels should be set
-    CHECK(mplsAction.pushLabels.hasValue());
+    CHECK(mplsAction.pushLabels.has_value());
     // there should be atleast one push label
     CHECK(not mplsAction.pushLabels->empty());
     for (auto const& label : mplsAction.pushLabels.value()) {
@@ -652,16 +652,16 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
     break;
   case thrift::MplsActionCode::SWAP:
     // Swap label should be set
-    CHECK(mplsAction.swapLabel.hasValue());
+    CHECK(mplsAction.swapLabel.has_value());
     CHECK(isMplsLabelValid(mplsAction.swapLabel.value()));
     // Push labels shouldn't be set
-    CHECK(not mplsAction.pushLabels.hasValue());
+    CHECK(not mplsAction.pushLabels.has_value());
     break;
   case thrift::MplsActionCode::PHP:
   case thrift::MplsActionCode::POP_AND_LOOKUP:
     // Swap label should not be set
-    CHECK(not mplsAction.swapLabel.hasValue());
-    CHECK(not mplsAction.pushLabels.hasValue());
+    CHECK(not mplsAction.swapLabel.has_value());
+    CHECK(not mplsAction.pushLabels.has_value());
     break;
   default:
     CHECK(false) << "Unknown action code";
@@ -855,7 +855,7 @@ createThriftValue(
   value.value = data;
   value.ttl = ttl;
   value.ttlVersion = ttlVersion;
-  if (hash.hasValue()) {
+  if (hash.has_value()) {
     value.hash = hash;
   } else {
     value.hash = generateHash(version, originatorId, data);
@@ -926,7 +926,7 @@ createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
   // Sanity checks
   CHECK(isMplsLabelValid(topLabel));
   for (auto const& nextHop : nextHops) {
-    CHECK(nextHop.mplsAction.hasValue());
+    CHECK(nextHop.mplsAction.has_value());
   }
 
   thrift::MplsRoute mplsRoute;

@@ -27,13 +27,13 @@ HoldableValue<T>::HoldableValue(T val) : val_(val) {}
 template <class T>
 const T&
 HoldableValue<T>::value() const {
-  return heldVal_.hasValue() ? heldVal_.value() : val_;
+  return heldVal_.has_value() ? heldVal_.value() : val_;
 }
 
 template <class T>
 bool
 HoldableValue<T>::hasHold() const {
-  return heldVal_.hasValue();
+  return heldVal_.has_value();
 }
 
 template <class T>

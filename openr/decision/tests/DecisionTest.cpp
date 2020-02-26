@@ -143,15 +143,15 @@ getPrefixDbWithKspfAlgo(
   for (auto& p : newPrefixDb.prefixEntries) {
     p.forwardingType = thrift::PrefixForwardingType::SR_MPLS;
     p.forwardingAlgorithm = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    if (prefixType.hasValue() and
+    if (prefixType.has_value() and
         (prefixType.value() == thrift::PrefixType::BGP) and
-        (not prefix.hasValue())) {
+        (not prefix.has_value())) {
       p.type = thrift::PrefixType::BGP;
       p.mv = thrift::MetricVector();
     }
   }
 
-  if (prefix.hasValue()) {
+  if (prefix.has_value()) {
     thrift::PrefixEntry entry;
     entry.prefix = prefix.value();
     entry.forwardingType = thrift::PrefixForwardingType::SR_MPLS;
@@ -221,7 +221,7 @@ getRouteMap(SpfSolver& spfSolver, const vector<string>& nodes) {
 
   for (string const& node : nodes) {
     auto routeDb = spfSolver.buildPaths(node);
-    if (not routeDb.hasValue()) {
+    if (not routeDb.has_value()) {
       continue;
     }
 
@@ -250,7 +250,7 @@ getUnicastRoutes(SpfSolver& spfSolver, const vector<string>& nodes) {
 
   for (string const& node : nodes) {
     auto routeDb = spfSolver.buildPaths(node);
-    if (not routeDb.hasValue()) {
+    if (not routeDb.has_value()) {
       continue;
     }
 
@@ -294,7 +294,7 @@ printRouteDb(const folly::Optional<thrift::RouteDatabase>& routeDb) {
       LOG(INFO) << "ad_dis: "
                 << static_cast<int>(ucRoute.adminDistance.value());
     }
-    if (ucRoute.prefixType.hasValue()) {
+    if (ucRoute.prefixType.has_value()) {
       LOG(INFO) << "prefix_type: "
                 << static_cast<int>(ucRoute.prefixType.value());
     }
@@ -304,7 +304,7 @@ printRouteDb(const folly::Optional<thrift::RouteDatabase>& routeDb) {
     for (const auto nh : ucRoute.nextHops) {
       LOG(INFO) << "nexthops: " << toString(nh);
     }
-    if (ucRoute.bestNexthop.hasValue()) {
+    if (ucRoute.bestNexthop.has_value()) {
       const auto nh = ucRoute.bestNexthop.value();
       LOG(INFO) << "best next hop: " << toString(nh);
     }
@@ -432,7 +432,7 @@ TEST(ShortestPathTest, UnreachableNodes) {
 
   for (string const& node : allNodes) {
     auto routeDb = spfSolver.buildPaths(node);
-    ASSERT_TRUE(routeDb.hasValue());
+    ASSERT_TRUE(routeDb.has_value());
     EXPECT_EQ(node, routeDb->thisNodeName);
     EXPECT_EQ(0, routeDb->unicastRoutes.size());
     EXPECT_EQ(0, routeDb->mplsRoutes.size()); // No label routes
@@ -461,7 +461,7 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
 
   auto routeDb = spfSolver.buildPaths("1");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
   EXPECT_EQ(0, routeDb->mplsRoutes.size());
@@ -494,12 +494,12 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   // dump routes for both nodes, expect no routing entries
 
   auto routeDb = spfSolver.buildPaths("1");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
 
   routeDb = spfSolver.buildPaths("2");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
 }
@@ -513,10 +513,10 @@ TEST(ShortestPathTest, UnknownNode) {
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
   auto routeDb = spfSolver.buildPaths("1");
-  EXPECT_FALSE(routeDb.hasValue());
+  EXPECT_FALSE(routeDb.has_value());
 
   routeDb = spfSolver.buildPaths("2");
-  EXPECT_FALSE(routeDb.hasValue());
+  EXPECT_FALSE(routeDb.has_value());
 }
 
 /**
@@ -553,13 +553,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   auto routeDb = spfSolver.buildPaths("1");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   routeDb = spfSolver.buildPaths("2");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
@@ -581,13 +581,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   routeDb = spfSolver.buildPaths("1");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   routeDb = spfSolver.buildPaths("2");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
@@ -609,13 +609,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
   //
 
   routeDb = spfSolver.buildPaths("1");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
   routeDb = spfSolver.buildPaths("2");
-  ASSERT_TRUE(routeDb.hasValue());
+  ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
@@ -1054,7 +1054,7 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   auto routeDb = spfSolver.buildPaths("1");
   bool foundRouteV6 = false;
   bool foundRouteNodeLabel = false;
-  if (routeDb.hasValue()) {
+  if (routeDb.has_value()) {
     for (auto const& route : routeDb->unicastRoutes) {
       if (route.dest == addr3) {
         foundRouteV6 = true;

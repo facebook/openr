@@ -59,7 +59,7 @@ RangeAllocator<T>::RangeAllocator(
       area_(area) {
   timeout_ =
       fbzmq::ZmqTimeout::make(eventBase_->getEvb(), [this]() mutable noexcept {
-        CHECK(allocateValue_.hasValue());
+        CHECK(allocateValue_.has_value());
         auto allocateValue = allocateValue_.value();
         allocateValue_.clear();
         tryAllocate(allocateValue);
@@ -238,7 +238,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
       [this](
           const std::string& key,
           folly::Optional<thrift::Value> thriftVal) noexcept {
-        if (thriftVal.hasValue()) {
+        if (thriftVal.has_value()) {
           keyValUpdated(key, thriftVal.value());
         }
       },

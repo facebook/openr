@@ -757,7 +757,7 @@ main(int argc, char** argv) {
           FLAGS_enable_segment_routing,
           FLAGS_enable_ordered_fib_programming,
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
-          decisionGRWindow.hasValue(), /* waitOnDecision */
+          decisionGRWindow.has_value(), /* waitOnDecision */
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
           monitorSubmitUrl,

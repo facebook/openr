@@ -307,8 +307,8 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         std::string const& /* key */,
         folly::Optional<thrift::Value> value) mutable noexcept {
       // Parse PrefixDb
-      ASSERT_TRUE(value.hasValue());
-      ASSERT_TRUE(value.value().value.hasValue());
+      ASSERT_TRUE(value.has_value());
+      ASSERT_TRUE(value.value().value.has_value());
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
           value.value().value.value(), serializer);
       auto& prefixes = prefixDb.prefixEntries;
@@ -440,7 +440,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           prefixQueues.at(i),
           MonitorSubmitUrl{"inproc://monitor_submit"},
           kAllocPrefixMarker,
-          maybeAllocParams.hasValue()
+          maybeAllocParams.has_value()
               ? PrefixAllocatorMode(*maybeAllocParams)
               : PrefixAllocatorMode(PrefixAllocatorModeSeeded()),
           false /* set loopback addr */,
@@ -535,11 +535,11 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       if (round == 0) {
         // save it to be compared against in round 1
         auto index = allocators[i]->getMyPrefixIndex();
-        ASSERT_TRUE(index.hasValue());
+        ASSERT_TRUE(index.has_value());
         lastPrefixes.emplace_back(*index);
       } else {
         auto index = allocators[i]->getMyPrefixIndex();
-        ASSERT_TRUE(index.hasValue());
+        ASSERT_TRUE(index.has_value());
         EXPECT_EQ(lastPrefixes[i], *index);
       }
 
@@ -576,8 +576,8 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
       subscriptionKey,
       [&](const std::string& /* key */, folly::Optional<thrift::Value> value) {
         // Parse PrefixDb
-        ASSERT_TRUE(value.hasValue());
-        ASSERT_TRUE(value.value().value.hasValue());
+        ASSERT_TRUE(value.has_value());
+        ASSERT_TRUE(value.value().value.has_value());
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             value.value().value.value(), serializer);
         auto& prefixes = prefixDb.prefixEntries;
@@ -622,8 +622,8 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
     std::this_thread::yield();
   }
   SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.hasValue());
-    if (allocPrefix.hasValue()) {
+    EXPECT_TRUE(allocPrefix.has_value());
+    if (allocPrefix.has_value()) {
       EXPECT_EQ(allocPrefixLen, allocPrefix->second);
       EXPECT_TRUE(allocPrefix->first.inSubnet("10.1.0.0/16"));
     }
@@ -655,7 +655,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   while (hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
-  EXPECT_FALSE(allocPrefix->hasValue());
+  EXPECT_FALSE(allocPrefix->has_value());
   LOG(INFO) << "Step-2: Lost allocated prefix";
 
   //
@@ -668,7 +668,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
-  EXPECT_TRUE(allocPrefix->hasValue());
+  EXPECT_TRUE(allocPrefix->has_value());
   LOG(INFO) << "Step-3: Received allocated prefix from KvStore.";
 
   // Stop main eventloop
@@ -700,8 +700,8 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
       subscriptionKey,
       [&](const std::string& /* key */, folly::Optional<thrift::Value> value) {
         // Parse PrefixDb
-        ASSERT_TRUE(value.hasValue());
-        ASSERT_TRUE(value.value().value.hasValue());
+        ASSERT_TRUE(value.has_value());
+        ASSERT_TRUE(value.value().value.has_value());
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             value.value().value.value(), serializer);
         auto& prefixes = prefixDb.prefixEntries;
@@ -747,8 +747,8 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
     std::this_thread::yield();
   }
   SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.hasValue());
-    if (allocPrefix.hasValue()) {
+    EXPECT_TRUE(allocPrefix.has_value());
+    if (allocPrefix.has_value()) {
       EXPECT_EQ(allocPrefixLen, allocPrefix->second);
       EXPECT_TRUE(allocPrefix->first.inSubnet(ip6));
       prevAllocPrefix = allocPrefix.value();
@@ -774,8 +774,8 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
     std::this_thread::yield();
   }
   SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.hasValue());
-    if (allocPrefix.hasValue()) {
+    EXPECT_TRUE(allocPrefix.has_value());
+    if (allocPrefix.has_value()) {
       EXPECT_EQ(allocPrefixLen, allocPrefix->second);
       EXPECT_TRUE(allocPrefix->first.inSubnet(ip6));
       EXPECT_NE(prevAllocPrefix, allocPrefix.value());
@@ -814,8 +814,8 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
 
   // check the prefix allocated is the only available prefix
   SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.hasValue());
-    if (allocPrefix.hasValue()) {
+    EXPECT_TRUE(allocPrefix.has_value());
+    if (allocPrefix.has_value()) {
       EXPECT_EQ(allocPrefixLen, allocPrefix->second);
       EXPECT_TRUE(allocPrefix->first.inSubnet(ip6));
       EXPECT_EQ(allocPrefix->first.str(), "face:b00c:d00d:5::");
@@ -848,8 +848,8 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
       subscriptionKey,
       [&](const std::string& /* key */, folly::Optional<thrift::Value> value) {
         // Parse PrefixDb
-        ASSERT_TRUE(value.hasValue());
-        ASSERT_TRUE(value.value().value.hasValue());
+        ASSERT_TRUE(value.has_value());
+        ASSERT_TRUE(value.value().value.has_value());
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             value.value().value.value(), serializer);
         auto& prefixes = prefixDb.prefixEntries;
@@ -891,8 +891,8 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
     std::this_thread::yield();
   }
   SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.hasValue());
-    if (allocPrefix.hasValue()) {
+    EXPECT_TRUE(allocPrefix.has_value());
+    if (allocPrefix.has_value()) {
       EXPECT_EQ(allocPrefix, folly::IPAddress::createNetwork("1.2.3.0/24"));
     }
   }
@@ -923,7 +923,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   while (hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
-  EXPECT_FALSE(allocPrefix->hasValue());
+  EXPECT_FALSE(allocPrefix->has_value());
   LOG(INFO) << "Step-2: Lost allocated prefix";
 
   //
@@ -939,8 +939,8 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
     std::this_thread::yield();
   }
   SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.hasValue());
-    if (allocPrefix.hasValue()) {
+    EXPECT_TRUE(allocPrefix.has_value());
+    if (allocPrefix.has_value()) {
       EXPECT_EQ(allocPrefix, folly::IPAddress::createNetwork("3.2.1.0/24"));
     }
   }
@@ -959,8 +959,8 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
     std::this_thread::yield();
   }
   SYNCHRONIZED(allocPrefix) {
-    EXPECT_TRUE(allocPrefix.hasValue());
-    if (allocPrefix.hasValue()) {
+    EXPECT_TRUE(allocPrefix.has_value());
+    if (allocPrefix.has_value()) {
       EXPECT_EQ(allocPrefix, folly::IPAddress::createNetwork("5.6.7.0/24"));
     }
   }
@@ -978,7 +978,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   while (hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
-  EXPECT_FALSE(allocPrefix->hasValue());
+  EXPECT_FALSE(allocPrefix->has_value());
   LOG(INFO) << "Step-5: Received withdraw for allocated prefix from KvStore.";
 
   // Stop main eventloop

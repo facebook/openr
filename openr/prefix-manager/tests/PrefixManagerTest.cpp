@@ -342,7 +342,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
       maybeValue.value().value.value(), serializer);
   EXPECT_EQ(db.thisNodeName, "node-1");
   EXPECT_EQ(db.prefixEntries.size(), 1);
-  ASSERT_TRUE(db.perfEvents.hasValue());
+  ASSERT_TRUE(db.perfEvents.has_value());
   ASSERT_FALSE(db.perfEvents->events.empty());
   {
     const auto& perfEvent = db.perfEvents->events.back();
@@ -369,7 +369,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
       maybeValue1.value().value.value(), serializer);
   auto prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 1);
-  ASSERT_TRUE(db.perfEvents.hasValue());
+  ASSERT_TRUE(db.perfEvents.has_value());
   ASSERT_FALSE(db.perfEvents->events.empty());
   {
     const auto& perfEvent = db.perfEvents->events.back();
@@ -386,7 +386,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
       maybeValue2.value().value.value(), serializer);
   prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 8);
-  ASSERT_TRUE(db.perfEvents.hasValue());
+  ASSERT_TRUE(db.perfEvents.has_value());
   ASSERT_FALSE(db.perfEvents->events.empty());
   {
     const auto& perfEvent = db.perfEvents->events.back();
@@ -406,7 +406,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
       maybeValue3.value().value.value(), serializer);
   prefixDb = getPrefixDb("prefix:node-1");
   EXPECT_EQ(prefixDb.size(), 5);
-  ASSERT_TRUE(db.perfEvents.hasValue());
+  ASSERT_TRUE(db.perfEvents.has_value());
   ASSERT_FALSE(db.perfEvents->events.empty());
   {
     const auto& perfEvent = db.perfEvents->events.back();
@@ -448,11 +448,11 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   kvStoreClient->subscribeKey(
       keyStr,
       [&](std::string const& _, folly::Optional<thrift::Value> val) mutable {
-        ASSERT_TRUE(val.hasValue());
+        ASSERT_TRUE(val.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             val->value.value(), serializer);
         EXPECT_EQ(db.thisNodeName, "node-1");
-        if (expectedPrefix.hasValue() and db.prefixEntries.size() != 0) {
+        if (expectedPrefix.has_value() and db.prefixEntries.size() != 0) {
           // we should always be advertising one prefix until we withdraw all
           EXPECT_EQ(db.prefixEntries.size(), 1);
           EXPECT_EQ(expectedPrefix, db.prefixEntries.at(0));

@@ -638,7 +638,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
     addPerfEvent(perfEvents, nodeId_, "ADJ_DB_UPDATED");
     adjDb.perfEvents = perfEvents;
   } else {
-    DCHECK(!adjDb.perfEvents.hasValue());
+    DCHECK(!adjDb.perfEvents.has_value());
   }
 
   LOG(INFO) << "Updating adjacency database in KvStore with "

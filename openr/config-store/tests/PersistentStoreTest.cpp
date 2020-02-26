@@ -42,7 +42,7 @@ loadDatabaseFromDisk(const std::string& filePath) {
     }
 
     // Read finish
-    if (not optionalObject->hasValue()) {
+    if (not optionalObject->has_value()) {
       break;
     }
     auto pObject = std::move(optionalObject->value());
@@ -167,7 +167,7 @@ TEST(PersistentStoreTest, EncodeDecodePersistentObject) {
   folly::io::Cursor cursor(buf.get());
   auto optionalObject = PersistentStore::decodePersistentObject(cursor);
   EXPECT_FALSE(optionalObject.hasError());
-  EXPECT_TRUE(optionalObject->hasValue());
+  EXPECT_TRUE(optionalObject->has_value());
 
   auto pObjectGetAdd = optionalObject->value();
   EXPECT_EQ(keyVal.first, pObjectGetAdd.key);
@@ -175,7 +175,7 @@ TEST(PersistentStoreTest, EncodeDecodePersistentObject) {
 
   optionalObject = PersistentStore::decodePersistentObject(cursor);
   EXPECT_FALSE(optionalObject.hasError());
-  EXPECT_TRUE(optionalObject->hasValue());
+  EXPECT_TRUE(optionalObject->has_value());
 
   auto pObjectGetDel = optionalObject->value();
   EXPECT_EQ(keyVal.first, pObjectGetDel.key);

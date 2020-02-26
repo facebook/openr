@@ -108,7 +108,7 @@ PlatformPublisher::addrEventFunc(
   publishAddrEvent(thrift::AddrEntry(
       FRAGILE,
       ifName,
-      addrEntry.getPrefix().hasValue()
+      addrEntry.getPrefix().has_value()
           ? toIpPrefix(addrEntry.getPrefix().value())
           : prefix,
       addrEntry.isValid()));
@@ -123,7 +123,7 @@ PlatformPublisher::neighborEventFunc(
       FRAGILE,
       ifName,
       toBinaryAddress(neighborEntry.getDestination()),
-      neighborEntry.getLinkAddress().hasValue()
+      neighborEntry.getLinkAddress().has_value()
           ? neighborEntry.getLinkAddress().value().toString()
           : "",
       neighborEntry.isReachable()));

@@ -229,7 +229,7 @@ TEST_P(RangeAllocatorFixture, NoSeed) {
   for (size_t i = 0; i < allocators.size(); ++i) {
     EXPECT_FALSE(allocators[i]->isRangeConsumed());
     const auto maybeVal = allocators[i]->getValueFromKvStore();
-    ASSERT_TRUE(maybeVal.hasValue());
+    ASSERT_TRUE(maybeVal.has_value());
     ASSERT_NE(allocation.end(), allocation.find(i));
     EXPECT_EQ(allocation[i], *maybeVal);
   }
@@ -325,7 +325,7 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
   auto timer = folly::AsyncTimeout::make(*evb.getEvb(), [&]() noexcept {
     if (not overrideOwner) {
       for (uint32_t i = 0; i < kNumClients; i++) {
-        if (allocators[i]->getValue().hasValue()) {
+        if (allocators[i]->getValue().has_value()) {
           VLOG(1) << "Removing client " << i << " with value "
                   << allocators[i]->getValue().value();
           allocation.erase(i);

@@ -43,19 +43,19 @@ Watchdog::addEvb(OpenrEventBase* evb, const std::string& name) {
 
 bool
 Watchdog::memoryLimitExceeded() const {
-  return memExceedTime_.hasValue();
+  return memExceedTime_.has_value();
 }
 
 void
 Watchdog::monitorMemory() {
   auto memInUse_ = resourceMonitor_.getRSSMemBytes();
-  if (not memInUse_.hasValue()) {
+  if (not memInUse_.has_value()) {
     return;
   }
   if (memInUse_.value() / 1e6 > criticalMemoryMB_) {
     LOG(WARNING) << "Memory usage critical:" << memInUse_.value() << " bytes,"
                  << " Memory limit:" << criticalMemoryMB_ << " MB";
-    if (not memExceedTime_.hasValue()) {
+    if (not memExceedTime_.has_value()) {
       memExceedTime_ = std::chrono::steady_clock::now();
       return;
     }
@@ -72,7 +72,7 @@ Watchdog::monitorMemory() {
     }
     return;
   }
-  if (memExceedTime_.hasValue()) {
+  if (memExceedTime_.has_value()) {
     memExceedTime_ = folly::none;
   }
 }

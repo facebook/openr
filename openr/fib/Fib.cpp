@@ -374,7 +374,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     std::vector<thrift::NextHopThrift> validNextHops;
     for (auto const& nextHop : route.nextHops) {
       const auto& ifName = nextHop.address.ifName;
-      CHECK(ifName.hasValue());
+      CHECK(ifName.has_value());
       if (folly::get_default(interfaceStatusDb_, *ifName, false)) {
         validNextHops.emplace_back(nextHop);
       }
@@ -423,7 +423,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     for (auto const& nextHop : route.nextHops) {
       // We don't have ifName for `POP_AND_LOOKUP` mpls action
       auto const& ifName = nextHop.address.ifName;
-      if (not ifName.hasValue() or
+      if (not ifName.has_value() or
           folly::get_default(interfaceStatusDb_, *ifName, false)) {
         validNextHops.emplace_back(nextHop);
       }
@@ -717,7 +717,7 @@ Fib::submitCounters() {
   // Count the number of bgp routes
   int64_t bgpCounter = 0;
   for (const auto& route : routeState_.unicastRoutes) {
-    if (route.second.bestNexthop.hasValue()) {
+    if (route.second.bestNexthop.has_value()) {
       bgpCounter++;
     }
   }
@@ -728,7 +728,7 @@ Fib::submitCounters() {
 
 void
 Fib::logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents) {
-  if (not perfEvents.hasValue() or not perfEvents->events.size()) {
+  if (not perfEvents.has_value() or not perfEvents->events.size()) {
     return;
   }
 

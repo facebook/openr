@@ -115,7 +115,7 @@ SparkWrapper::recvNeighborEvent(
   while (not neighborUpdatesReader_.size()) {
     // Break if timeout occurs
     auto now = std::chrono::steady_clock::now();
-    if (timeout.hasValue() && now - startTime > timeout.value()) {
+    if (timeout.has_value() && now - startTime > timeout.value()) {
       return folly::makeUnexpected(Error(-1, std::string("timed out")));
     }
     // Yield the thread

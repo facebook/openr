@@ -136,7 +136,7 @@ KvStoreClient::initTimers() {
       eventBase_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
 
   // Create check persistKey timer
-  if (checkPersistKeyPeriod_.hasValue()) {
+  if (checkPersistKeyPeriod_.has_value()) {
     checkPersistKeyTimer_ = fbzmq::ZmqTimeout::make(
         eventBase_->getEvb(), [this]() noexcept { checkPersistKeyInStore(); });
 
@@ -447,7 +447,7 @@ KvStoreClient::scheduleTtlUpdates(
       ttlVersion /* ttl version */,
       0 /* hash */);
   ttlThriftValue.value = folly::none;
-  CHECK(not ttlThriftValue.value.hasValue());
+  CHECK(not ttlThriftValue.value.has_value());
 
   // renew before Ttl expires about every ttl/3, i.e., try twice
   // use ExponentialBackoff to track remaining time
@@ -897,7 +897,7 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
   // Go through received key-values and find out the ones which need update
   std::string area{thrift::KvStore_constants::kDefaultArea()};
 
-  if (publication.area.hasValue()) {
+  if (publication.area.has_value()) {
     area = publication.area.value();
   }
 
@@ -1182,9 +1182,9 @@ KvStoreClient::setKeysHelper(
             << ", version: " << kv.second.version
             << ", originatorId: " << kv.second.originatorId
             << ", ttlVersion: " << kv.second.ttlVersion
-            << ", val: " << (kv.second.value.hasValue() ? "valid" : "null")
+            << ", val: " << (kv.second.value.has_value() ? "valid" : "null")
             << ", area: " << area;
-    if (not kv.second.value.hasValue()) {
+    if (not kv.second.value.has_value()) {
       // avoid empty optinal exception
       continue;
     }

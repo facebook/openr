@@ -262,7 +262,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   // Step1: verify there is NOTHING inside kvStore instances
   auto preDb =
       KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
-  EXPECT_TRUE(preDb.first.hasValue());
+  EXPECT_TRUE(preDb.first.has_value());
   EXPECT_TRUE(preDb.first.value().empty());
   EXPECT_TRUE(preDb.second.empty());
 
@@ -300,7 +300,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   {
     auto postDb =
         KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
-    ASSERT_TRUE(postDb.first.hasValue());
+    ASSERT_TRUE(postDb.first.has_value());
     auto pub = postDb.first.value();
     EXPECT_TRUE(pub.size() == 2);
     EXPECT_TRUE(pub.count(key1));
@@ -312,7 +312,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     auto maybe =
         KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
             sockAddrs, "test_");
-    ASSERT_TRUE(maybe.first.hasValue());
+    ASSERT_TRUE(maybe.first.has_value());
     auto pub = maybe.first.value();
     EXPECT_EQ(2, pub.size());
     EXPECT_EQ("test_value1", pub[key1].value);
@@ -327,7 +327,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
 
     auto db =
         KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
-    ASSERT_TRUE(db.first.hasValue());
+    ASSERT_TRUE(db.first.has_value());
     ASSERT_TRUE(db.first.value().empty());
 
     // start thriftSever to make sure TearDown method won't stop non-existing

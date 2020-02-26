@@ -450,7 +450,7 @@ class DualBaseFixture : public ::testing::Test {
       const auto& nodeStatus = kv.second.first;
       // root level status
       const auto& rootsStatus = kv.second.second;
-      if (rootId.hasValue()) {
+      if (rootId.has_value()) {
         // print specific root status
         if (rootsStatus.count(*rootId) == 0) {
           LOG(ERROR) << "node: " << node << " has no root " << *rootId

@@ -307,7 +307,7 @@ PersistentStore::loadDatabaseTlvFormat(
     }
 
     // Read finish
-    if (not optionalObject->hasValue()) {
+    if (not optionalObject->has_value()) {
       break;
     }
     auto pObject = std::move(optionalObject->value());

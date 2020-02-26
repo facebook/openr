@@ -30,8 +30,8 @@ RouteBuilder::build() const {
 
 Route
 RouteBuilder::buildMulticastRoute() const {
-  if (!routeIfIndex_.hasValue() || routeIfIndex_.value() == 0 ||
-      !routeIfName_.hasValue()) {
+  if (!routeIfIndex_.has_value() || routeIfIndex_.value() == 0 ||
+      !routeIfName_.has_value()) {
     throw fbnl::NlException("Iface index and Iface name must be set");
   }
   NextHopBuilder nhBuilder;
@@ -49,8 +49,8 @@ RouteBuilder::buildMulticastRoute() const {
 
 Route
 RouteBuilder::buildLinkRoute() const {
-  if (!routeIfIndex_.hasValue() || routeIfIndex_.value() == 0 ||
-      !routeIfName_.hasValue()) {
+  if (!routeIfIndex_.has_value() || routeIfIndex_.value() == 0 ||
+      !routeIfName_.has_value()) {
     throw fbnl::NlException("Iface index and Iface name must be set");
   }
   NextHopBuilder nhBuilder;
@@ -437,7 +437,7 @@ std::string
 Route::str() const {
   std::string result;
   if (family_ == AF_MPLS) {
-    if (mplsLabel_.hasValue()) {
+    if (mplsLabel_.has_value()) {
       result += folly::sformat("label {} ", mplsLabel_.value());
     }
   } else {
@@ -445,7 +445,7 @@ Route::str() const {
         folly::sformat("route {} ", folly::IPAddress::networkToString(dst_));
   }
   uint32_t flags = 0;
-  if (flags_.hasValue()) {
+  if (flags_.has_value()) {
     flags = flags_.value();
   }
   result += folly::sformat(
@@ -566,7 +566,7 @@ NextHopBuilder::getPushLabels() const {
 
 uint8_t
 NextHopBuilder::getFamily() const {
-  if (gateway_.hasValue()) {
+  if (gateway_.has_value()) {
     return gateway_.value().family();
   }
   return AF_UNSPEC;
@@ -595,10 +595,10 @@ operator==(const NextHop& lhs, const NextHop& rhs) {
 size_t
 NextHopHash::operator()(const NextHop& nh) const {
   size_t res = 0;
-  if (nh.getIfIndex().hasValue()) {
+  if (nh.getIfIndex().has_value()) {
     res += std::hash<std::string>()(std::to_string(nh.getIfIndex().value()));
   }
-  if (nh.getGateway().hasValue()) {
+  if (nh.getGateway().has_value()) {
     res += std::hash<std::string>()(nh.getGateway().value().str());
   }
   res += std::hash<std::string>()(std::to_string(nh.getWeight()));
@@ -637,7 +637,7 @@ NextHop::getPushLabels() const {
 
 uint8_t
 NextHop::getFamily() const {
-  if (gateway_.hasValue()) {
+  if (gateway_.has_value()) {
     return gateway_.value().family();
   }
   return AF_UNSPEC;
@@ -651,15 +651,15 @@ NextHop::str() const {
       (gateway_ ? gateway_->str() : "n/a"),
       (ifIndex_ ? std::to_string(*ifIndex_) : "n/a"),
       std::to_string(weight_));
-  if (labelAction_.hasValue()) {
+  if (labelAction_.has_value()) {
     result += folly::sformat(
         " Label action {}",
         apache::thrift::util::enumNameSafe(labelAction_.value()));
   }
-  if (swapLabel_.hasValue()) {
+  if (swapLabel_.has_value()) {
     result += folly::sformat(" Swap label {}", swapLabel_.value());
   }
-  if (pushLabels_.hasValue()) {
+  if (pushLabels_.has_value()) {
     result += " Push Labels: ";
     for (const auto& label : pushLabels_.value()) {
       result += folly::sformat(" {} ", label);
@@ -803,7 +803,7 @@ IfAddress::operator=(const IfAddress& other) {
 
 uint8_t
 IfAddress::getFamily() const {
-  if (prefix_.hasValue()) {
+  if (prefix_.has_value()) {
     return prefix_->first.family();
   } else {
     return family_.value();
@@ -812,7 +812,7 @@ IfAddress::getFamily() const {
 
 uint8_t
 IfAddress::getPrefixLen() const {
-  if (prefix_.hasValue()) {
+  if (prefix_.has_value()) {
     return prefix_->second;
   }
   return 0;
@@ -848,7 +848,7 @@ IfAddress::str() const {
   return folly::sformat(
       "addr {} {} intf-index {}, valid {}",
       getFamily() == AF_INET ? "inet" : "inet6",
-      prefix_.hasValue() ? folly::IPAddress::networkToString(*prefix_) : "n/a",
+      prefix_.has_value() ? folly::IPAddress::networkToString(*prefix_) : "n/a",
       ifIndex_,
       isValid_ ? "Yes" : "No");
 }
@@ -997,7 +997,7 @@ Neighbor::isReachable() const {
 std::string
 Neighbor::str() const {
   std::string stateStr{"n/a"};
-  if (state_.hasValue()) {
+  if (state_.has_value()) {
     stateStr = std::to_string(state_.value());
   }
 
@@ -1006,7 +1006,7 @@ Neighbor::str() const {
       destination_.str(),
       isReachable_ ? "Yes" : "No",
       ifIndex_,
-      linkAddress_.hasValue() ? linkAddress_->toString() : "n/a",
+      linkAddress_.has_value() ? linkAddress_->toString() : "n/a",
       stateStr);
 }
 

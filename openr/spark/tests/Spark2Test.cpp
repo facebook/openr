@@ -174,7 +174,7 @@ class SimpleSpark2Fixture : public Spark2Fixture {
     {
       auto event =
           node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-      ASSERT_TRUE(event.hasValue());
+      ASSERT_TRUE(event.has_value());
       EXPECT_EQ(iface1, event->ifName);
       EXPECT_EQ("node-2", event->neighbor.nodeName);
       EXPECT_EQ(
@@ -186,7 +186,7 @@ class SimpleSpark2Fixture : public Spark2Fixture {
     {
       auto event =
           node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-      ASSERT_TRUE(event.hasValue());
+      ASSERT_TRUE(event.has_value());
       EXPECT_EQ(iface2, event->ifName);
       EXPECT_EQ("node-1", event->neighbor.nodeName);
       EXPECT_EQ(
@@ -220,7 +220,7 @@ TEST_F(SimpleSpark2Fixture, RttTest) {
   {
     auto event = node1->waitForEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     // 25% tolerance
     EXPECT_GE(event->rttUs, (40 - 10) * 1000);
     EXPECT_LE(event->rttUs, (40 + 10) * 1000);
@@ -231,7 +231,7 @@ TEST_F(SimpleSpark2Fixture, RttTest) {
   {
     auto event = node2->waitForEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     // 25% tolerance
     EXPECT_GE(event->rttUs, (40 - 10) * 1000);
     EXPECT_LE(event->rttUs, (40 + 10) * 1000);
@@ -262,14 +262,14 @@ TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
   {
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported down adjacency to node-2";
   }
 
   {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-2 reported down adjacency to node-1";
   }
 }
@@ -292,7 +292,7 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
   {
     auto event = node1->waitForEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported node-2 as RESTARTING";
   }
 
@@ -307,7 +307,7 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
   {
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported node-2 as 'RESTARTED'";
   }
 
@@ -315,7 +315,7 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
   {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
@@ -325,12 +325,12 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
         node1
             ->waitForEvent(
                 thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
-            .hasValue());
+            .has_value());
     EXPECT_FALSE(
         node2
             ->waitForEvent(
                 thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
-            .hasValue());
+            .has_value());
   }
 }
 
@@ -352,7 +352,7 @@ TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
   {
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reporte down adjacency to node-2";
 
     // Make sure 'down' event is triggered by GRTimer expire
@@ -382,7 +382,7 @@ TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
   {
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
 
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
@@ -397,7 +397,7 @@ TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
   {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
 
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
@@ -428,7 +428,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   {
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(
@@ -440,7 +440,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
@@ -463,7 +463,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   {
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
@@ -473,7 +473,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
@@ -524,7 +524,7 @@ TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
 
     // check for neighbor state on node2, should return folly::none
     // since node2 can't receive pkt from node1
-    EXPECT_FALSE(node2->getSparkNeighState(iface2, "node-1").hasValue());
+    EXPECT_FALSE(node2->getSparkNeighState(iface2, "node-1").has_value());
     LOG(INFO) << "node-2 doesn't have any neighbor";
   }
 }
@@ -562,7 +562,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
   {
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-2", event->neighbor.nodeName);
     EXPECT_EQ(
@@ -574,7 +574,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
   {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-1", event->neighbor.nodeName);
     EXPECT_EQ(
@@ -591,7 +591,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
     // node-1 will report node-2 as RESTARTING
     auto event = node1->waitForEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported node-2 restarting";
 
     // create a new Spark2 instead of old Spark
@@ -607,7 +607,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
     // node-1 will finally report node-2 as RESTARTED
     auto event =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported node-2 as 'RESTARTED'";
   }
 
@@ -615,7 +615,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
   {
     auto event =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
-    ASSERT_TRUE(event.hasValue());
+    ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
@@ -626,13 +626,13 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
                          thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
                          kGRHoldTime,
                          kGRHoldTime * 2)
-                     .hasValue());
+                     .has_value());
     EXPECT_FALSE(node2
                      ->waitForEvent(
                          thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
                          kGRHoldTime,
                          kGRHoldTime * 2)
-                     .hasValue());
+                     .has_value());
   }
 }
 
@@ -664,8 +664,8 @@ TEST_F(Spark2Fixture, LoopedHelloPktTest) {
                          thrift::SparkNeighborEventType::NEIGHBOR_UP,
                          kGRHoldTime,
                          kGRHoldTime * 2)
-                     .hasValue());
-    EXPECT_FALSE(node1->getSparkNeighState(iface1, "node-1").hasValue());
+                     .has_value());
+    EXPECT_FALSE(node1->getSparkNeighState(iface1, "node-1").has_value());
   }
 }
 

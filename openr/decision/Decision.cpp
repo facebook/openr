@@ -679,7 +679,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       bool isBGP = npKv.second.type == thrift::PrefixType::BGP;
       hasBGP |= isBGP;
       hasNonBGP |= !isBGP;
-      if (isBGP and not npKv.second.mv.hasValue()) {
+      if (isBGP and not npKv.second.mv.has_value()) {
         missingMv = true;
         LOG(ERROR) << "Prefix entry for prefix " << toString(npKv.second.prefix)
                    << " advertised by " << npKv.first
@@ -729,7 +729,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       auto route = hasBGP
           ? createBGPRoute(myNodeName, prefix, nodePrefixes, isV4Prefix)
           : createOpenRRoute(myNodeName, prefix, nodePrefixes, isV4Prefix);
-      if (route.hasValue()) {
+      if (route.has_value()) {
         routeDb.unicastRoutes.emplace_back(std::move(route.value()));
       }
     } else {
@@ -753,7 +753,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
         kv.second,
         routeToNodes,
         prefixState_.prefixes().at(kv.first));
-    if (unicastRoute.hasValue()) {
+    if (unicastRoute.has_value()) {
       routeDb.unicastRoutes.emplace_back(std::move(unicastRoute.value()));
     }
   }
@@ -906,7 +906,7 @@ SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
   for (const auto& node : nodes.nodes) {
     auto npKv = nodePrefixes.find(node);
     if (npKv != nodePrefixes.end()) {
-      maxMinNexthopForPrefix = npKv->second.minNexthop.hasValue() &&
+      maxMinNexthopForPrefix = npKv->second.minNexthop.has_value() &&
               (not maxMinNexthopForPrefix.has_value() ||
                npKv->second.minNexthop.value() > maxMinNexthopForPrefix.value())
           ? npKv->second.minNexthop.value()
@@ -1008,7 +1008,7 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
     // Associate IGP_COST to prefixEntry
     if (bgpUseIgpMetric_) {
       const auto igpMetric = static_cast<int64_t>(it->second.first);
-      if (not ret.bestIgpMetric.hasValue() or
+      if (not ret.bestIgpMetric.has_value() or
           *(ret.bestIgpMetric) > igpMetric) {
         ret.bestIgpMetric = igpMetric;
       }
@@ -1023,7 +1023,7 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
               << toString(prefix) << " for node " << nodeName;
     }
 
-    switch (ret.bestVector.hasValue()
+    switch (ret.bestVector.has_value()
                 ? MetricVectorUtils::compareMetricVectors(
                       metricVector, *(ret.bestVector))
                 : MetricVectorUtils::CompareResult::WINNER) {
@@ -1431,8 +1431,8 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
 
       // Create associated mpls action if swapLabel is provided
       folly::Optional<thrift::MplsAction> mplsAction;
-      if (swapLabel.hasValue()) {
-        CHECK(not mplsAction.hasValue());
+      if (swapLabel.has_value()) {
+        CHECK(not mplsAction.has_value());
         const bool isNextHopAlsoDst = dstNodeNames.count(neighborNode);
         mplsAction = createMplsAction(
             isNextHopAlsoDst ? thrift::MplsActionCode::PHP
@@ -1449,7 +1449,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
         if (not isMplsLabelValid(dstNodeLabel)) {
           continue;
         }
-        CHECK(not mplsAction.hasValue());
+        CHECK(not mplsAction.has_value());
         mplsAction = createMplsAction(
             thrift::MplsActionCode::PUSH,
             folly::none,
@@ -1632,7 +1632,7 @@ Decision::Decision(
 
   coldStartTimer_ = fbzmq::ZmqTimeout::make(
       getEvb(), [this]() noexcept { coldStartUpdate(); });
-  if (gracefulRestartDuration.hasValue()) {
+  if (gracefulRestartDuration.has_value()) {
     coldStartTimer_->scheduleTimeout(gracefulRestartDuration.value());
   }
 
@@ -1708,7 +1708,7 @@ Decision::getDecisionRouteDb(std::string nodeName) {
       nodeName = myNodeName_;
     }
     auto maybeRouteDb = spfSolver_->buildPaths(nodeName);
-    if (maybeRouteDb.hasValue()) {
+    if (maybeRouteDb.has_value()) {
       routeDb = std::move(maybeRouteDb.value());
     } else {
       routeDb.thisNodeName = nodeName;
@@ -1810,7 +1810,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     const auto& rawVal = kv.second;
     std::string nodeName = getNodeNameFromKey(key);
 
-    if (not rawVal.value.hasValue()) {
+    if (not rawVal.value.has_value()) {
       // skip TTL update
       DCHECK(rawVal.ttlVersion > 0);
       continue;
@@ -1959,7 +1959,7 @@ Decision::processPendingAdjUpdates() {
   // run SPF once for all updates received
   LOG(INFO) << "Decision: computing new paths.";
   auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
-  if (not maybeRouteDb.hasValue()) {
+  if (not maybeRouteDb.has_value()) {
     LOG(WARNING) << "AdjacencyDb updates incurred no route updates";
     return;
   }
@@ -1982,7 +1982,7 @@ Decision::processPendingPrefixUpdates() {
   // update routeDb once for all updates received
   LOG(INFO) << "Decision: updating new routeDb.";
   auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
-  if (not maybeRouteDb.hasValue()) {
+  if (not maybeRouteDb.has_value()) {
     LOG(WARNING) << "PrefixDb updates incurred no route updates";
     return;
   }
@@ -1998,7 +1998,7 @@ Decision::decrementOrderedFibHolds() {
       return;
     }
     auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
-    if (not maybeRouteDb.hasValue()) {
+    if (not maybeRouteDb.has_value()) {
       LOG(INFO) << "decrementOrderedFibHolds incurred no route updates";
       return;
     }
@@ -2013,7 +2013,7 @@ Decision::decrementOrderedFibHolds() {
 void
 Decision::coldStartUpdate() {
   auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
-  if (not maybeRouteDb.hasValue()) {
+  if (not maybeRouteDb.has_value()) {
     LOG(ERROR) << "SEVERE: No routes to program after cold start duration. "
                << "Sending empty route db to FIB";
     thrift::RouteDatabase db;
@@ -2029,7 +2029,7 @@ Decision::coldStartUpdate() {
 void
 Decision::sendRouteUpdate(
     thrift::RouteDatabase& db, std::string const& eventDescription) {
-  if (db.perfEvents.hasValue()) {
+  if (db.perfEvents.has_value()) {
     addPerfEvent(db.perfEvents.value(), myNodeName_, eventDescription);
   }
 

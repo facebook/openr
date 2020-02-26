@@ -320,7 +320,7 @@ NetlinkProtocolSocket::processMessage(
       auto addrMessage = std::make_unique<NetlinkAddrMessage>();
       fbnl::IfAddress addr = addrMessage->parseMessage(nlh);
 
-      if (!addr.getPrefix().hasValue()) {
+      if (!addr.getPrefix().has_value()) {
         break;
       }
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {

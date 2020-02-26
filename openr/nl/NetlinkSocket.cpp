@@ -76,7 +76,7 @@ NetlinkSocket::doHandleRouteEvent(
   }
 
   if (handler_ && runHandler && eventFlags_[ROUTE_EVENT]) {
-    std::string ifName = routeCopy.getRouteIfName().hasValue()
+    std::string ifName = routeCopy.getRouteIfName().has_value()
         ? routeCopy.getRouteIfName().value()
         : "";
     EventVariant event = std::move(routeCopy);
@@ -167,7 +167,7 @@ NetlinkSocket::doHandleNeighborEvent(
 void
 NetlinkSocket::doUpdateRouteCache(Route route, bool updateUnicastRoute) {
   // Skip cached route entries and any routes not in the main table
-  int flags = route.getFlags().hasValue() ? route.getFlags().value() : 0;
+  int flags = route.getFlags().has_value() ? route.getFlags().value() : 0;
   if (route.getRouteTable() != RT_TABLE_MAIN || flags & RTM_F_CLONED) {
     return;
   }
@@ -183,7 +183,7 @@ NetlinkSocket::doUpdateRouteCache(Route route, bool updateUnicastRoute) {
       return;
     }
     auto maybeIfIndex = route.getNextHops().begin()->getIfIndex();
-    if (!maybeIfIndex.hasValue()) {
+    if (!maybeIfIndex.has_value()) {
       LOG(ERROR) << "Invalid NextHop"
                  << folly::IPAddress::networkToString(prefix);
       return;
@@ -207,7 +207,7 @@ NetlinkSocket::doUpdateRouteCache(Route route, bool updateUnicastRoute) {
       return;
     }
     auto maybeIfIndex = route.getNextHops().begin()->getIfIndex();
-    if (!maybeIfIndex.hasValue()) {
+    if (!maybeIfIndex.has_value()) {
       LOG(ERROR) << "Invalid NextHop"
                  << folly::IPAddress::networkToString(prefix);
       return;
@@ -524,7 +524,7 @@ NetlinkSocket::checkUnicastRoute(const Route& route) {
 void
 NetlinkSocket::doDeleteMplsRoute(Route mplsRoute) {
   auto label = mplsRoute.getMplsLabel();
-  if (!label.hasValue()) {
+  if (!label.has_value()) {
     return;
   }
   auto& mplsRoutes = mplsRoutesCache_[mplsRoute.getProtocolId()];
@@ -546,7 +546,7 @@ NetlinkSocket::doDeleteMplsRoute(Route mplsRoute) {
 void
 NetlinkSocket::doAddUpdateMplsRoute(Route mplsRoute) {
   auto label = mplsRoute.getMplsLabel();
-  if (!label.hasValue()) {
+  if (!label.has_value()) {
     LOG(ERROR) << "MPLS route add - no label provided";
     return;
   }
@@ -638,7 +638,7 @@ NetlinkSocket::checkMulticastRoute(const Route& route) {
         "Invalid multicast address {}",
         folly::IPAddress::networkToString(prefix)));
   }
-  if (not route.getRouteIfName().hasValue()) {
+  if (not route.getRouteIfName().has_value()) {
     throw fbnl::NlException(folly::sformat(
         "Need set Iface name for multicast address {}",
         folly::IPAddress::networkToString(prefix)));
@@ -948,7 +948,7 @@ NetlinkSocket::delIfAddress(IfAddress ifAddress) {
 
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
-  if (!ifAddress.getPrefix().hasValue()) {
+  if (!ifAddress.getPrefix().has_value()) {
     fbnl::NlException ex("Prefix must be set");
     promise.setException(std::move(ex));
     return future;
@@ -1003,15 +1003,15 @@ NetlinkSocket::getIfAddrs(int ifIndex, int family, int scope) {
           if (family != AF_UNSPEC && family != addr.getFamily()) {
             continue;
           }
-          auto addrScope = addr.getScope().hasValue() ? addr.getScope().value()
-                                                      : 0; // RT_SCOPE_UNIVERSE
+          auto addrScope = addr.getScope().has_value() ? addr.getScope().value()
+                                                       : 0; // RT_SCOPE_UNIVERSE
           if (scope != RT_SCOPE_NOWHERE && scope != addrScope) {
             continue;
           }
           if (ifIndex != addr.getIfIndex()) {
             continue;
           }
-          if (!addr.getPrefix().hasValue()) {
+          if (!addr.getPrefix().has_value()) {
             continue;
           }
 
@@ -1035,7 +1035,7 @@ NetlinkSocket::doSyncIfAddress(
     if (addr.getIfIndex() != ifIndex) {
       throw fbnl::NlException("Inconsistent ifIndex in addrs");
     }
-    if (!addr.getPrefix().hasValue()) {
+    if (!addr.getPrefix().has_value()) {
       throw fbnl::NlException("Prefix must be set when sync addresses");
     }
     newPrefixes.emplace_back(addr.getPrefix().value());

@@ -94,15 +94,15 @@ NetlinkFibHandler::buildNextHops(const fbnl::NextHopSet& nextHops) {
   std::vector<thrift::NextHopThrift> thriftNextHops;
 
   for (auto const& nh : nextHops) {
-    CHECK(nh.getGateway().hasValue());
-    const auto& ifName = nh.getIfIndex().hasValue()
+    CHECK(nh.getGateway().has_value());
+    const auto& ifName = nh.getIfIndex().has_value()
         ? netlinkSocket_->getIfName(nh.getIfIndex().value()).get()
         : "";
     thrift::NextHopThrift nextHop;
     nextHop.address = toBinaryAddress(nh.getGateway().value());
     nextHop.address.ifName = ifName;
     auto labelAction = nh.getLabelAction();
-    if (labelAction.hasValue()) {
+    if (labelAction.has_value()) {
       if (labelAction.value() == thrift::MplsActionCode::POP_AND_LOOKUP ||
           labelAction.value() == thrift::MplsActionCode::PHP) {
         nextHop.mplsAction = createMplsAction(labelAction.value());
@@ -441,24 +441,24 @@ NetlinkFibHandler::future_getMplsRouteTableByClient(int16_t clientId) {
 void
 NetlinkFibHandler::buildMplsAction(
     fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) const {
-  if (!nhop.mplsAction.hasValue()) {
+  if (!nhop.mplsAction.has_value()) {
     return;
   }
   auto mplsAction = nhop.mplsAction.value();
   nhBuilder.setLabelAction(mplsAction.action);
   if (mplsAction.action == thrift::MplsActionCode::SWAP) {
-    if (!mplsAction.swapLabel.hasValue()) {
+    if (!mplsAction.swapLabel.has_value()) {
       throw fbnl::NlException("Swap label not provided");
     }
     nhBuilder.setSwapLabel(mplsAction.swapLabel.value());
   } else if (mplsAction.action == thrift::MplsActionCode::PUSH) {
-    if (!mplsAction.pushLabels.hasValue()) {
+    if (!mplsAction.pushLabels.has_value()) {
       throw fbnl::NlException("Push label(s) not provided");
     }
     nhBuilder.setPushLabels(mplsAction.pushLabels.value());
   } else if (mplsAction.action == thrift::MplsActionCode::POP_AND_LOOKUP) {
     auto lpbkIfIndex = netlinkSocket_->getLoopbackIfindex().get();
-    if (lpbkIfIndex.hasValue()) {
+    if (lpbkIfIndex.has_value()) {
       nhBuilder.setIfIndex(lpbkIfIndex.value());
     } else {
       throw fbnl::NlException("POP action, loopback interface not available");
@@ -474,7 +474,7 @@ NetlinkFibHandler::buildNextHop(
   // add nexthops
   fbnl::NextHopBuilder nhBuilder;
   for (const auto& nh : nhop) {
-    if (nh.address.ifName.hasValue()) {
+    if (nh.address.ifName.has_value()) {
       nhBuilder.setIfIndex(
           netlinkSocket_->getIfIndex(nh.address.ifName.value()).get());
     }

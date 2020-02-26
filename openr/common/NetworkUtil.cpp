@@ -25,7 +25,7 @@ size_t
 hash<openr::thrift::BinaryAddress>::operator()(
     openr::thrift::BinaryAddress const& addr) const {
   size_t res = hash<string>()(addr.addr);
-  if (addr.ifName.hasValue()) {
+  if (addr.ifName.has_value()) {
     res += hash<string>()(addr.ifName.value());
   }
   return res;
@@ -38,10 +38,10 @@ size_t
 hash<openr::thrift::MplsAction>::operator()(
     openr::thrift::MplsAction const& mplsAction) const {
   size_t res = hash<int8_t>()(static_cast<int8_t>(mplsAction.action));
-  if (mplsAction.swapLabel.hasValue()) {
+  if (mplsAction.swapLabel.has_value()) {
     res += hash<int32_t>()(mplsAction.swapLabel.value());
   }
-  if (mplsAction.pushLabels.hasValue()) {
+  if (mplsAction.pushLabels.has_value()) {
     for (auto const& pushLabel : mplsAction.pushLabels.value()) {
       res += hash<int32_t>()(pushLabel);
     }
@@ -58,7 +58,7 @@ hash<openr::thrift::NextHopThrift>::operator()(
   size_t res = hash<openr::thrift::BinaryAddress>()(nextHop.address);
   res += hash<int32_t>()(nextHop.weight);
   res += hash<int32_t>()(nextHop.metric);
-  if (nextHop.mplsAction.hasValue()) {
+  if (nextHop.mplsAction.has_value()) {
     res += hash<openr::thrift::MplsAction>()(nextHop.mplsAction.value());
   }
   return res;
@@ -74,7 +74,7 @@ hash<openr::thrift::UnicastRoute>::operator()(
   for (const auto& nh : route.nextHops) {
     res += hash<openr::thrift::BinaryAddress>()(nh.address);
     res += hash<int32_t>()(nh.weight);
-    if (nh.mplsAction.hasValue()) {
+    if (nh.mplsAction.has_value()) {
       res += hash<openr::thrift::MplsAction>()(nh.mplsAction.value());
     }
   }

@@ -96,11 +96,11 @@ PrefixManager::PrefixManager(
         removePrefixes(update.prefixes);
         break;
       case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE:
-        CHECK(update.type.hasValue());
+        CHECK(update.type.has_value());
         removePrefixesByType(update.type.value());
         break;
       case thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE:
-        CHECK(update.type.hasValue());
+        CHECK(update.type.has_value());
         syncPrefixes(update.type.value(), update.prefixes);
         break;
       default:
@@ -124,7 +124,7 @@ PrefixManager::PrefixManager(
           folly::Optional<thrift::Value> value) noexcept {
         // we're not currently persisting this key, it may be that we no longer
         // want it advertised
-        if (value.hasValue() and value.value().value.has_value()) {
+        if (value.has_value() and value.value().value.has_value()) {
           const auto prefixDb =
               fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
                   value.value().value.value(), serializer_);

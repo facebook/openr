@@ -98,7 +98,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
             auto& val = kv.second;
             // check if we have any value update.
             // Ttl refreshing won't update any value.
-            if (!val.value.hasValue()) {
+            if (!val.value.has_value()) {
               continue;
             }
 
@@ -227,7 +227,7 @@ OpenrCtrlHandler::semifuture_getEventLogs() {
   folly::Promise<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>> p;
 
   auto eventLogs = zmqMonitorClient_->getLastEventLogs();
-  if (eventLogs.hasValue()) {
+  if (eventLogs.has_value()) {
     p.setValue(std::make_unique<std::vector<fbzmq::thrift::EventLog>>(
         eventLogs.value()));
   } else {
@@ -288,7 +288,7 @@ OpenrCtrlHandler::getSelectedCounters(
 int64_t
 OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
   auto counter = zmqMonitorClient_->getCounter(*key);
-  if (counter.hasValue()) {
+  if (counter.has_value()) {
     return static_cast<int64_t>(counter->value);
   }
   return 0;
@@ -530,7 +530,7 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
     VLOG(3) << "AdjKey has been added/modified. Notify immediately";
     p.setValue(true);
   } else if (
-      thriftPub->tobeUpdatedKeys.hasValue() &&
+      thriftPub->tobeUpdatedKeys.has_value() &&
       thriftPub->tobeUpdatedKeys.value().size() > 0) {
     VLOG(3) << "AdjKey has been deleted/expired. Notify immediately";
     p.setValue(true);

@@ -150,8 +150,8 @@ toString(const thrift::NextHopThrift& nextHop) {
       nextHop.address.ifName.value_or("N/A"),
       nextHop.weight,
       nextHop.metric,
-      nextHop.mplsAction.hasValue() ? toString(nextHop.mplsAction.value())
-                                    : "");
+      nextHop.mplsAction.has_value() ? toString(nextHop.mplsAction.value())
+                                     : "");
 }
 
 inline std::string
