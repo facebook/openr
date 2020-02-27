@@ -8,7 +8,7 @@
 #include "KvStorePoller.h"
 
 #include <openr/common/Constants.h>
-#include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreUtil.h>
 
 namespace openr {
 
@@ -19,8 +19,7 @@ std::pair<
     folly::Optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
-  return openr::KvStoreClient::dumpAllWithPrefixMultipleAndParse<
-      thrift::AdjacencyDatabase>(
+  return openr::dumpAllWithPrefixMultipleAndParse<thrift::AdjacencyDatabase>(
       sockAddrs_,
       Constants::kAdjDbMarker.toString(),
       Constants::kServiceConnTimeout,
@@ -31,8 +30,7 @@ std::pair<
     folly::Optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStorePoller::getPrefixDatabases(std::chrono::milliseconds pollTimeout) {
-  return openr::KvStoreClient::dumpAllWithPrefixMultipleAndParse<
-      thrift::PrefixDatabase>(
+  return openr::dumpAllWithPrefixMultipleAndParse<thrift::PrefixDatabase>(
       sockAddrs_,
       Constants::kPrefixDbMarker.toString(),
       Constants::kServiceConnTimeout,

@@ -21,6 +21,7 @@
 
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
@@ -317,8 +318,8 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
 
   evb.run();
 
-  auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      sockAddrs_, "test_");
+  auto maybe =
+      dumpAllWithPrefixMultipleAndParse<thrift::Value>(sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.first.has_value());
 
@@ -363,8 +364,8 @@ TEST_F(
 
   evb.run();
 
-  auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      sockAddrs_, "test_");
+  auto maybe =
+      dumpAllWithPrefixMultipleAndParse<thrift::Value>(sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.first.has_value());
 
@@ -407,8 +408,8 @@ TEST_F(
 
   evb.run();
 
-  auto maybe = KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-      sockAddrs_, "test_");
+  auto maybe =
+      dumpAllWithPrefixMultipleAndParse<thrift::Value>(sockAddrs_, "test_");
 
   ASSERT_TRUE(maybe.first.has_value());
 
@@ -1520,7 +1521,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
   // verify dumpAllWithThriftClientFromMultiple
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
-        auto maybe = KvStoreClient::dumpAllWithThriftClientFromMultiple(
+        auto maybe = dumpAllWithThriftClientFromMultiple(
             sockAddrs_,
             "test_",
             Constants::kServiceConnTimeout,
@@ -1533,7 +1534,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
         EXPECT_EQ(maybe.first.value().size(), 1);
 
         // only one key in pod Area too, "test_ttl_pod_area"
-        maybe = KvStoreClient::dumpAllWithThriftClientFromMultiple(
+        maybe = dumpAllWithThriftClientFromMultiple(
             sockAddrs_,
             "test_",
             Constants::kServiceConnTimeout,

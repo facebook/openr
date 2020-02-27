@@ -15,12 +15,9 @@
 #include <gtest/gtest.h>
 
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 using namespace openr;
 
@@ -260,8 +257,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   sockAddrs.push_back(folly::SocketAddress{localhost_, port2});
 
   // Step1: verify there is NOTHING inside kvStore instances
-  auto preDb =
-      KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+  auto preDb = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
   EXPECT_TRUE(preDb.first.has_value());
   EXPECT_TRUE(preDb.first.value().empty());
   EXPECT_TRUE(preDb.second.empty());
@@ -298,8 +294,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   // Step4: verify we can fetch 2 keys from different servers as aggregation
   // result
   {
-    auto postDb =
-        KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+    auto postDb = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
     ASSERT_TRUE(postDb.first.has_value());
     auto pub = postDb.first.value();
     EXPECT_TRUE(pub.size() == 2);
@@ -310,8 +305,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   // Step5: verify dumpAllWithPrefixMultipleAndParse API
   {
     auto maybe =
-        KvStoreClient::dumpAllWithPrefixMultipleAndParse<thrift::Value>(
-            sockAddrs, "test_");
+        dumpAllWithPrefixMultipleAndParse<thrift::Value>(sockAddrs, "test_");
     ASSERT_TRUE(maybe.first.has_value());
     auto pub = maybe.first.value();
     EXPECT_EQ(2, pub.size());
@@ -325,8 +319,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     openrThriftServerWrapper1_->stop();
     openrThriftServerWrapper2_->stop();
 
-    auto db =
-        KvStoreClient::dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
+    auto db = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
     ASSERT_TRUE(db.first.has_value());
     ASSERT_TRUE(db.first.value().empty());
 
