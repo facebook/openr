@@ -7,12 +7,15 @@
 
 #include "PrefixManager.h"
 
+#include <fb303/ServiceData.h>
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/kvstore/KvStore.h>
+
+namespace fb303 = facebook::fb303;
 
 namespace openr {
 
@@ -155,15 +158,6 @@ PrefixManager::PrefixManager(
   initialOutputStateTimer_ =
       fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept { outputState(); });
   initialOutputStateTimer_->scheduleTimeout(prefixHoldTime);
-
-  zmqMonitorClient_ =
-      std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
-
-  // Schedule periodic timer for submission to monitor
-  const bool isPeriodic = true;
-  monitorTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { submitCounters(); });
-  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
 }
 
 void
@@ -316,6 +310,16 @@ PrefixManager::updateKvStore() {
 
   // anything we don't advertise next time, we need to clear
   keysToClear_ = std::move(nowAdvertisingKeys);
+
+  // Update flat counters
+  size_t num_prefixes = 0;
+  for (auto const& kv : prefixMap_) {
+    fb303::fbData->setCounter(
+        "prefix_manager.num_prefixes." + getPrefixTypeName(kv.first),
+        kv.second.size());
+    num_prefixes += kv.second.size();
+  }
+  fb303::fbData->setCounter("prefix_manager.num_prefixes", num_prefixes);
 }
 
 folly::SemiFuture<bool>
@@ -405,28 +409,6 @@ PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
         std::move(prefixes)));
   });
   return sf;
-}
-
-void
-PrefixManager::submitCounters() {
-  VLOG(2) << "Submitting counters ... ";
-
-  // Extract/build counters from thread-data
-  auto counters = tData_.getCounters();
-  counters["prefix_manager.zmq_event_queue_size"] =
-      getEvb()->getNotificationQueueSize();
-
-  // Count total route number
-  size_t num_prefixes = 0;
-  for (auto const& kv : prefixMap_) {
-    counters[folly::sformat(
-        "prefix_manager.num_prefixes.{}", getPrefixTypeName(kv.first))] =
-        kv.second.size();
-    num_prefixes += kv.second.size();
-  }
-  counters["prefix_manager.num_prefixes"] = num_prefixes;
-
-  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 // helpers for modifying our Prefix Db

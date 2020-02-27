@@ -100,9 +100,6 @@ class PrefixManager final : public OpenrEventBase {
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
 
-  // Submit internal state counters to monitor
-  void submitCounters();
-
   // add prefix entry in kvstore, return per prefix key name
   std::string advertisePrefix(thrift::PrefixEntry& prefixEntry);
 
@@ -151,15 +148,6 @@ class PrefixManager final : public OpenrEventBase {
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
-
-  // Timer for submitting to monitor periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
-
-  // DS to keep track of stats
-  fbzmq::ThreadData tData_;
-
-  // client to interact with monitor
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // track any prefix keys for this node that we see to make sure we withdraw
   // anything we no longer wish to advertise
