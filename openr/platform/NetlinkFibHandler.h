@@ -83,7 +83,7 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
 
   int64_t aliveSince() override;
 
-  facebook::fb303::cpp2::fb_status getStatus() override;
+  facebook::fb303::cpp2::fb303_status getStatus() override;
 
   openr::thrift::SwitchRunState getSwitchRunState() override;
 

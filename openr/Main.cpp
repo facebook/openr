@@ -92,12 +92,12 @@ void
 waitForFibService(const fbzmq::ZmqEventLoop& evl) {
   auto waitForFibStart = std::chrono::steady_clock::now();
 
-  auto fibStatus = facebook::fb303::cpp2::fb_status::DEAD;
+  auto fibStatus = facebook::fb303::cpp2::fb303_status::DEAD;
   folly::EventBase evb;
   std::shared_ptr<apache::thrift::async::TAsyncSocket> socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
   while (evl.isRunning() &&
-         facebook::fb303::cpp2::fb_status::ALIVE != fibStatus) {
+         facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG(INFO) << "Waiting for FibService to come up...";
     openr::Fib::createFibClient(evb, socket, client, FLAGS_fib_handler_port);

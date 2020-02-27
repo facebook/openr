@@ -39,7 +39,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
     fbzmq::ZmqEventLoop& evl,
     fbzmq::Context& context)
-    : facebook::fb303::FacebookBase2("openr"),
+    : facebook::fb303::BaseService("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
       decision_(decision),
@@ -217,9 +217,9 @@ OpenrCtrlHandler::authorizeConnection() {
   }
 }
 
-facebook::fb303::cpp2::fb_status
+facebook::fb303::cpp2::fb303_status
 OpenrCtrlHandler::getStatus() {
-  return facebook::fb303::cpp2::fb_status::ALIVE;
+  return facebook::fb303::cpp2::fb303_status::ALIVE;
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<fbzmq::thrift::EventLog>>>
@@ -240,7 +240,7 @@ OpenrCtrlHandler::semifuture_getEventLogs() {
 
 void
 OpenrCtrlHandler::getCounters(std::map<std::string, int64_t>& _return) {
-  FacebookBase2::getCounters(_return);
+  BaseService::getCounters(_return);
   for (auto const& kv : zmqMonitorClient_->dumpCounters()) {
     _return.emplace(kv.first, static_cast<int64_t>(kv.second.value));
   }

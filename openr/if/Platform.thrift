@@ -11,7 +11,7 @@ namespace py openr.Platform
 namespace py3 openr.thrift
 namespace lua openr.Platform
 
-include "common/fb303/if/fb303.thrift"
+include "fb303/thrift/fb303_core.thrift"
 include "Network.thrift"
 
 /**
@@ -167,7 +167,7 @@ const i16 kUnknowProtAdminDistance = 255
 /**
  * Interface to on-box Fib.
  */
-service FibService extends fb303.FacebookService {
+service FibService extends fb303_core.BaseService {
 
   /*
   * get run state

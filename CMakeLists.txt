@@ -41,6 +41,7 @@ find_library(CONCURRENCY concurrency PATHS)
 find_library(DOUBLE-CONVERSION double-conversion)
 find_package(fbzmq REQUIRED)
 find_package(folly REQUIRED)
+find_package(fb303 CONFIG REQUIRED)
 find_package(fizz REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Gflags REQUIRED)
@@ -69,6 +70,7 @@ endif()
 
 include_directories(
   ${Boost_INCLUDE_DIR}
+  ${FB303_INCLUDE_DIR}
   ${FBTHRIFT_INCLUDE_DIR}
   ${FOLLY_INCLUDE_DIR}
   ${RE2_INCLUDE_DIR}
@@ -87,7 +89,6 @@ add_fbthrift_cpp_library(
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} dual_cpp2)
 
-
 add_fbthrift_cpp_library(
   network_cpp2
   openr/if/Network.thrift
@@ -96,16 +97,6 @@ add_fbthrift_cpp_library(
     optionals
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} network_cpp2)
-
-add_fbthrift_cpp_library(
-  fb303_cpp2
-  common/fb303/if/fb303.thrift
-  SERVICES
-    FacebookService
-  OPTIONS
-    optionals
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} fb303_cpp2)
 
 add_fbthrift_cpp_library(
   persistent_store_cpp2
@@ -184,7 +175,7 @@ add_fbthrift_cpp_library(
     json
     optionals
   DEPENDS
-    fb303_cpp2
+    fb303::fb303_thrift_cpp
     network_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} platform_cpp2)
@@ -233,13 +224,13 @@ add_fbthrift_cpp_library(
     optionals
   DEPENDS
     decision_cpp2
-    fb303_cpp2
     dual_cpp2
     fib_cpp2
     kv_store_cpp2
     link_monitor_cpp2
     lsdb_cpp2
     network_cpp2
+    fb303::fb303_thrift_cpp
     fbzmq::monitor_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp2)
@@ -269,7 +260,6 @@ install(TARGETS
 )
 
 add_library(openrlib
-  common/fb303/cpp/FacebookBase2.cpp
   openr/allocators/PrefixAllocator.cpp
   openr/common/BuildInfo.cpp
   openr/common/Constants.cpp
@@ -322,6 +312,7 @@ target_link_libraries(openrlib
   glog::glog
   gflags
   FBThrift::thriftcpp2
+  fb303::fb303
   ${ASYNC}
   ${PROTOCOL}
   ${CONCURRENCY}

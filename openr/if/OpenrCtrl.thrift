@@ -12,7 +12,7 @@ namespace py3 openr.thrift
 namespace php Openr
 namespace lua openr.OpenrCtrl
 
-include "common/fb303/if/fb303.thrift"
+include "fb303/thrift/fb303_core.thrift"
 include "fbzmq/service/if/Monitor.thrift"
 include "Decision.thrift"
 include "Dual.thrift"
@@ -30,7 +30,7 @@ exception OpenrError {
  * Thrift service - exposes RPC APIs for interaction with all of Open/R's
  * modules.
  */
-service OpenrCtrl extends fb303.FacebookService {
+service OpenrCtrl extends fb303_core.BaseService {
 
   //
   // PrefixManager APIs

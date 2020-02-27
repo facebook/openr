@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <common/fb303/cpp/FacebookBase2.h>
+#include <fb303/BaseService.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Types.h>
@@ -21,7 +21,7 @@
 
 namespace openr {
 class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
-                               public facebook::fb303::FacebookBase2 {
+                               public facebook::fb303::BaseService {
  public:
   /**
    * NOTE: If acceptablePeerCommonNames is empty then check for peerName is
@@ -47,10 +47,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // fb303 service APIs
   //
 
-  facebook::fb303::cpp2::fb_status getStatus() override;
+  facebook::fb303::cpp2::fb303_status getStatus() override;
 
   void getCounters(std::map<std::string, int64_t>& _return) override;
-  using facebook::fb303::FacebookBase2::getRegexCounters;
   void getRegexCounters(
       std::map<std::string, int64_t>& _return,
       std::unique_ptr<std::string> regex) override;

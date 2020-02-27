@@ -377,10 +377,10 @@ NetlinkFibHandler::aliveSince() {
   return startTime_;
 }
 
-facebook::fb303::cpp2::fb_status
+facebook::fb303::cpp2::fb303_status
 NetlinkFibHandler::getStatus() {
   VLOG(3) << "Received getStatus";
-  return facebook::fb303::cpp2::fb_status::ALIVE;
+  return facebook::fb303::cpp2::fb303_status::ALIVE;
 }
 
 openr::thrift::SwitchRunState
