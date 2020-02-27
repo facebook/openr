@@ -626,7 +626,8 @@ Spark::validateHelloPacket(
 
     // in Spark2 Handshake messages will be used to find common area
     auto commonArea = findCommonArea(
-        helloPacket.payload.areas, helloPacket.payload.originator.nodeName);
+        apache::thrift::castToFolly(helloPacket.payload.areas),
+        helloPacket.payload.originator.nodeName);
     if (commonArea.hasError()) {
       return PacketValidationResult::INVALID_AREA_CONFIGURATION;
     }
