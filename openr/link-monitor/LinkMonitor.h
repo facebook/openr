@@ -16,7 +16,6 @@
 #include <fbzmq/async/ZmqThrottle.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/CppAttributes.h>
 #include <folly/IPAddress.h>
@@ -261,9 +260,6 @@ class LinkMonitor final : public OpenrEventBase {
 
   void processNeighborEvent(thrift::SparkNeighborEvent&& event);
 
-  // Sumbmits the counter/stats to monitor
-  void submitCounters();
-
   // submit events to monitor
   void logNeighborEvent(thrift::SparkNeighborEvent const& event);
 
@@ -374,15 +370,9 @@ class LinkMonitor final : public OpenrEventBase {
   // Timer for processing interfaces which are in backoff states
   std::unique_ptr<fbzmq::ZmqTimeout> advertiseIfaceAddrTimer_;
 
-  // Timer for submitting to monitor periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
-
   // Timer for resyncing InterfaceDb from netlink
   std::unique_ptr<fbzmq::ZmqTimeout> interfaceDbSyncTimer_;
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
-
-  // DS to hold local stats/counters
-  fbzmq::ThreadData tData_;
 
   // Thrift client connection to switch SystemService, which we actually use to
   // manipulate routes.

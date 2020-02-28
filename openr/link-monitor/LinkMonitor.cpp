@@ -9,6 +9,7 @@
 
 #include <functional>
 
+#include <fb303/ServiceData.h>
 #include <fbzmq/service/if/gen-cpp2/Monitor_types.h>
 #include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -29,6 +30,7 @@
 #include <openr/spark/Spark.h>
 
 using apache::thrift::FRAGILE;
+namespace fb303 = facebook::fb303;
 
 namespace {
 
@@ -242,10 +244,11 @@ LinkMonitor::LinkMonitor(
   prepare();
 
   // Initialize stats keys
-  tData_.addStatExportType("link_monitor.neighbor_up", fbzmq::SUM);
-  tData_.addStatExportType("link_monitor.neighbor_down", fbzmq::SUM);
-  tData_.addStatExportType("link_monitor.advertise_adjacencies", fbzmq::SUM);
-  tData_.addStatExportType("link_monitor.advertise_links", fbzmq::SUM);
+  fb303::fbData->addStatExportType("link_monitor.neighbor_up", fb303::SUM);
+  fb303::fbData->addStatExportType("link_monitor.neighbor_down", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "link_monitor.advertise_adjacencies", fb303::SUM);
+  fb303::fbData->addStatExportType("link_monitor.advertise_links", fb303::SUM);
 }
 
 void
@@ -351,12 +354,6 @@ LinkMonitor::prepare() noexcept {
         }
       });
 
-  // Schedule periodic timer for monitor submission
-  const bool isPeriodic = true;
-  monitorTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { submitCounters(); });
-  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
-
   // Schedule periodic timer for InterfaceDb re-sync from Netlink Platform
   interfaceDbSyncTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
     auto success = syncInterfaces();
@@ -364,10 +361,10 @@ LinkMonitor::prepare() noexcept {
       VLOG(2) << "InterfaceDb Sync is successful";
       expBackoff_.reportSuccess();
       interfaceDbSyncTimer_->scheduleTimeout(
-          Constants::kPlatformSyncInterval, isPeriodic);
+          Constants::kPlatformSyncInterval, true /* isPeriodic */);
     } else {
-      tData_.addStatValue(
-          "link_monitor.thrift.failure.getAllLinks", 1, fbzmq::SUM);
+      fb303::fbData->addStatValue(
+          "link_monitor.thrift.failure.getAllLinks", 1, fb303::SUM);
       // Apply exponential backoff and schedule next run
       expBackoff_.reportError();
       interfaceDbSyncTimer_->scheduleTimeout(
@@ -422,7 +419,7 @@ LinkMonitor::neighborUpEvent(
       << ". Remote Interface: " << remoteIfName << ", metric: " << newAdj.metric
       << ", rttUs: " << event.rttUs << ", addrV4: " << toString(neighborAddrV4)
       << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area;
-  tData_.addStatValue("link_monitor.neighbor_up", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
   std::string repUrl;
   if (!mockMode_) {
@@ -462,7 +459,7 @@ LinkMonitor::neighborDownEvent(
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is down on interface "
                << ifName;
-  tData_.addStatValue("link_monitor.neighbor_down", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue("link_monitor.neighbor_down", 1, fb303::SUM);
 
   auto adjValueIt = adjacencies_.find(adjId);
   if (adjValueIt != adjacencies_.end()) {
@@ -646,7 +643,8 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   const auto keyName = adjacencyDbMarker_ + nodeId_;
   std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
   kvStoreClient_->persistKey(keyName, adjDbStr, ttlKeyInKvStore_, area);
-  tData_.addStatValue("link_monitor.advertise_adjacencies", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "link_monitor.advertise_adjacencies", 1, fb303::SUM);
 
   // Config is most likely to have changed. Update it in `ConfigStore`
   configStore_->storeThriftObj(kConfigKey, config_); // not awaiting on result
@@ -654,6 +652,14 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   // Cancel throttle timeout if scheduled
   if (advertiseAdjacenciesThrottled_->isActive()) {
     advertiseAdjacenciesThrottled_->cancel();
+  }
+
+  // Update some flat counters
+  fb303::fbData->setCounter("link_monitor.adjacencies", adjacencies_.size());
+  for (const auto& kv : adjacencies_) {
+    auto& adj = kv.second.adjacency;
+    fb303::fbData->setCounter(
+        "link_monitor.metric." + adj.otherNodeName, adj.metric);
   }
 }
 void
@@ -689,7 +695,7 @@ LinkMonitor::advertiseIfaceAddr() {
 
 void
 LinkMonitor::advertiseInterfaces() {
-  tData_.addStatValue("link_monitor.advertise_links", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue("link_monitor.advertise_links", 1, fb303::SUM);
 
   // Create interface database
   thrift::InterfaceDatabase ifDb;
@@ -1237,25 +1243,6 @@ LinkMonitor::getLinkMonitorAdjacencies() {
     p.setValue(std::make_unique<thrift::AdjacencyDatabase>(std::move(adjDb)));
   });
   return sf;
-}
-
-void
-LinkMonitor::submitCounters() {
-  VLOG(3) << "Submitting counters ... ";
-
-  // Extract/build counters from thread-data
-  auto counters = tData_.getCounters();
-
-  // Add some more flat counters
-  counters["link_monitor.adjacencies"] = adjacencies_.size();
-  counters["link_monitor.zmq_event_queue_size"] =
-      getEvb()->getNotificationQueueSize();
-  for (const auto& kv : adjacencies_) {
-    auto& adj = kv.second.adjacency;
-    counters["link_monitor.metric." + adj.otherNodeName] = adj.metric;
-  }
-
-  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 void
