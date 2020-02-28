@@ -334,7 +334,7 @@ RangeAllocator<T>::keyValUpdated(
           << "Lost to higher originatorId";
       CHECK_EQ(*myValue_, val);
       callback_(folly::none);
-      myValue_.clear();
+      myValue_.reset();
     }
 
     // Unsubscribe to update of lost value
