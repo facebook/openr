@@ -161,9 +161,9 @@ TEST_F(SingleKvStoreTestFixture, SetGetKeyTest) {
   const uint16_t port = openrThriftServerWrapper_->getOpenrCtrlThriftPort();
 
   // Create and initilize kvStoreThriftClient
-  auto client1 = std::make_shared<KvStoreClient>(
+  auto client1 = std::make_shared<KvStoreClientInternal>(
       context_, &evl, nodeId_, folly::SocketAddress{localhost_, port});
-  auto client2 = std::make_shared<KvStoreClient>(
+  auto client2 = std::make_shared<KvStoreClientInternal>(
       context_, &evl, nodeId_, folly::SocketAddress{localhost_, port});
   EXPECT_TRUE(nullptr != client1);
   EXPECT_TRUE(nullptr != client2);
@@ -264,9 +264,9 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
 
   // Step2: initilize kvStoreClient connecting to different thriftServers
   OpenrEventBase evl;
-  auto client1 = std::make_shared<KvStoreClient>(
+  auto client1 = std::make_shared<KvStoreClientInternal>(
       context_, &evl, nodeId1_, folly::SocketAddress{localhost_, port1});
-  auto client2 = std::make_shared<KvStoreClient>(
+  auto client2 = std::make_shared<KvStoreClientInternal>(
       context_, &evl, nodeId2_, folly::SocketAddress{localhost_, port2});
   EXPECT_TRUE(nullptr != client1);
   EXPECT_TRUE(nullptr != client2);

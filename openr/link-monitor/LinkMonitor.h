@@ -38,7 +38,7 @@
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
-#include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/link-monitor/InterfaceEntry.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/platform/PlatformPublisher.h>
@@ -87,6 +87,7 @@ class LinkMonitor final : public OpenrEventBase {
       // for kvstore client
       KvStoreLocalCmdUrl kvStoreLocalCmdUrl,
       KvStoreLocalPubUrl kvStoreLocalPubUrl,
+      KvStore* kvstore,
       // interface names to monitor
       std::unique_ptr<re2::RE2::Set> includeRegexList,
       // interface names to exclude
@@ -287,6 +288,7 @@ class LinkMonitor final : public OpenrEventBase {
   // used for kvStoreClient
   const std::string kvStoreLocalCmdUrl_;
   const std::string kvStoreLocalPubUrl_;
+  KvStore* kvStore_;
   // the interface names that match we can run on
   std::unique_ptr<re2::RE2::Set> includeRegexList_;
   // the interface names that match we can't run on
@@ -381,7 +383,7 @@ class LinkMonitor final : public OpenrEventBase {
   std::unique_ptr<thrift::SystemServiceAsyncClient> client_;
 
   // client to interact with KvStore
-  std::unique_ptr<KvStoreClient> kvStoreClient_;
+  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
 
   // RangAlloctor to get unique nodeLabel for this node
   std::unordered_map<std::string /* area */, RangeAllocator<int32_t>>

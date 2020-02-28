@@ -36,16 +36,16 @@ const std::chrono::seconds kMonitorSubmitInterval(3600);
 
 // Count for testing purpose
 const uint32_t kNumStores = 3; // Total number of KvStore
-const uint32_t kNumClients = 99; // Total number of KvStoreClient
+const uint32_t kNumClients = 99; // Total number of KvStoreClientInternal
 } // namespace
 
 /**
  * Base class for all of our unit-tests. Internally it has linear topology of
- * kNumStores KvStores, total of kNumClients KvStoreClients evenly distributed
- * among these KvStores.
+ * kNumStores KvStores, total of kNumClients KvStoreClientInternals evenly
+ * distributed among these KvStores.
  *
  * All of our tests create kNumClients allocators (one attached with each
- * KvStoreClient).
+ * KvStoreClientInternal).
  */
 class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
  public:
@@ -75,12 +75,13 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     for (uint32_t i = 0; i < kNumClients; i++) {
       auto const& store = stores[i % kNumStores];
-      auto client = std::make_unique<KvStoreClient>(
+      auto client = std::make_unique<KvStoreClientInternal>(
           zmqContext,
           &evb,
           createClientName(i),
           store->localCmdUrl,
-          store->localPubUrl);
+          store->localPubUrl,
+          store->getKvStore());
       clients.emplace_back(std::move(client));
     }
   }
@@ -145,7 +146,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   // Client `i` connects to store `i % stores.size()`
   // All clients loop in same event-loop
-  std::vector<std::unique_ptr<KvStoreClient>> clients;
+  std::vector<std::unique_ptr<KvStoreClientInternal>> clients;
 
   // OpenrEventBase for all clients
   OpenrEventBase evb;

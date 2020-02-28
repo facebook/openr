@@ -90,12 +90,13 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStoreReqSock_.connect(fbzmq::SocketUrl{kvStore_->inprocCmdUrl}).value();
 
   // kvstore client
-  kvStoreClient_ = std::make_unique<KvStoreClient>(
+  kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
       context_,
       &eventBase_,
       nodeId_,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_});
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      kvStore_.get());
 
   // Subscribe our own prefixDb
   kvStoreClient_->subscribeKey(
@@ -175,6 +176,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nodeId_,
       prefixUpdatesQueue_.getReader(),
       configStore_.get(),
+      kvStore_.get(),
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
@@ -191,6 +193,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       static_cast<int32_t>(60099), // platfrom pub port
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      kvStore_.get(),
       std::move(includeRegexList),
       std::move(excludeRegexList),
       // redistribute interface names
@@ -251,6 +254,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       MonitorSubmitUrl{monitorSubmitUrl_},
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      kvStore_.get(),
       context_);
 
   // Watchdog thread to monitor thread aliveness
@@ -323,6 +327,7 @@ OpenrWrapper<Serializer>::run() {
       nodeId_,
       KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      kvStore_.get(),
       prefixUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       AllocPrefixMarker{"allocprefix:"}, // alloc_prefix_marker

@@ -110,17 +110,19 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
-    kvStoreClient = std::make_unique<KvStoreClient>(
+    kvStoreClient = std::make_unique<KvStoreClientInternal>(
         context,
         &evl,
         "node-1",
         kvStoreWrapper->localCmdUrl,
-        kvStoreWrapper->localPubUrl);
+        kvStoreWrapper->localPubUrl,
+        kvStoreWrapper->getKvStore());
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
         prefixUpdatesQueue.getReader(),
         configStore.get(),
+        kvStoreWrapper->getKvStore(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -203,7 +205,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
   std::unique_ptr<PrefixManager> prefixManager{nullptr};
   std::unique_ptr<std::thread> prefixManagerThread{nullptr};
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
-  std::unique_ptr<KvStoreClient> kvStoreClient{nullptr};
+  std::unique_ptr<KvStoreClientInternal> kvStoreClient{nullptr};
   const bool perPrefixKeys_ = GetParam();
 };
 
@@ -789,6 +791,7 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       "node-2",
       prefixUpdatesQueue.getReader(),
       configStore.get(),
+      kvStoreWrapper->getKvStore(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -894,6 +897,7 @@ TEST_P(PrefixManagerTestFixture, CheckReload) {
       "node-2",
       prefixUpdatesQueue.getReader(),
       configStore.get(),
+      kvStoreWrapper->getKvStore(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -1003,6 +1007,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
       "node-1",
       prefixUpdatesQueue.getReader(),
       configStore.get(),
+      kvStoreWrapper->getKvStore(),
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},

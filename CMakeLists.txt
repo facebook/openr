@@ -276,7 +276,7 @@ add_library(openrlib
   openr/decision/PrefixState.cpp
   openr/dual/Dual.cpp
   openr/fib/Fib.cpp
-  openr/kvstore/KvStoreClient.cpp
+  openr/kvstore/KvStoreClientInternal.cpp
   openr/kvstore/KvStore.cpp
   openr/kvstore/KvStoreWrapper.cpp
   openr/link-monitor/LinkMonitor.cpp

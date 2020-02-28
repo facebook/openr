@@ -10,7 +10,7 @@
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/OpenrEventBase.h>
-#include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 
 namespace openr {
 
@@ -19,13 +19,15 @@ class KvStoreAgent : public OpenrEventBase {
   KvStoreAgent(
       fbzmq::Context& zmqContext,
       std::string nodeId,
+      KvStore* kvStore,
       std::string kvStoreCmdUrl = "tcp://[::1]:60002",
       std::string kvStorePubUrl = "tcp://[::1]:60001");
 
   const std::string agentKeyPrefix{"prefixForDataThisAgentDisseminates:"};
 
  private:
-  std::unique_ptr<KvStoreClient> kvStoreClient_;
+  KvStore* kvStore_{nullptr};
+  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<fbzmq::ZmqTimeout> periodicValueChanger_;
 
 }; // class KvStoreAgent

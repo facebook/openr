@@ -21,7 +21,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 
 namespace openr {
 
@@ -50,7 +50,7 @@ class RangeAllocator {
   RangeAllocator(
       const std::string& nodeName,
       const std::string& keyPrefix,
-      KvStoreClient* const kvStoreClient,
+      KvStoreClientInternal* const kvStoreClient,
       std::function<void(folly::Optional<T>)> callback,
       const std::chrono::milliseconds minBackoffDur =
           std::chrono::milliseconds(50),
@@ -128,10 +128,10 @@ class RangeAllocator {
   const std::string nodeName_;
   const std::string keyPrefix_;
 
-  // KvStoreClient instance used for communicating with KvStore
-  KvStoreClient* const kvStoreClient_{nullptr};
+  // KvStoreClientInternal instance used for communicating with KvStore
+  KvStoreClientInternal* const kvStoreClient_{nullptr};
 
-  // EventLoop in which KvStoreClient is looping. Used for scheduling
+  // EventLoop in which KvStoreClientInternal is looping. Used for scheduling
   // asynchronous events.
   OpenrEventBase* const eventBase_{nullptr};
 

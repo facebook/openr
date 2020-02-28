@@ -38,6 +38,7 @@ PrefixAllocator::PrefixAllocator(
     const std::string& myNodeName,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
+    KvStore* kvStore_,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const AllocPrefixMarker& allocPrefixMarker,
@@ -63,10 +64,18 @@ PrefixAllocator::PrefixAllocator(
       prefixUpdatesQueue_(prefixUpdatesQueue),
       zmqMonitorClient_(zmqContext, monitorSubmitUrl),
       systemServicePort_(systemServicePort) {
+  // check non-empty module ptr
   CHECK(configStore_);
+  CHECK(kvStore_);
+
   // Create KvStore client
-  kvStoreClient_ = std::make_unique<KvStoreClient>(
-      zmqContext, this, myNodeName_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl);
+  kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
+      zmqContext,
+      this,
+      myNodeName_,
+      kvStoreLocalCmdUrl,
+      kvStoreLocalPubUrl,
+      kvStore_);
 
   // Let the magic begin. Start allocation as per allocMode
   std::visit(*this, allocMode);

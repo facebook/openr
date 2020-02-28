@@ -42,7 +42,7 @@ using namespace std::chrono_literals;
  * logic in asynchronous fashion.
  *
  */
-class KvStoreClient {
+class KvStoreClientInternal {
  public:
   using KeyCallback = folly::Function<void(
       std::string const&, folly::Optional<thrift::Value>) noexcept>;
@@ -51,27 +51,28 @@ class KvStoreClient {
    * Creates and initializes all necessary sockets for communicating with
    * KvStore.
    */
-  KvStoreClient(
+  KvStoreClientInternal(
       fbzmq::Context& context,
       OpenrEventBase* eventBase,
       std::string const& nodeId,
       std::string const& kvStoreLocalCmdUrl,
       std::string const& kvStoreLocalPubUrl,
+      KvStore* kvStore,
       folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod =
           60000ms,
       folly::Optional<std::chrono::milliseconds> recvTimeout = 3000ms);
 
   /*
-   * Second flavor of KvStoreClient to talk to KvStore through Open/R ctrl
-   * Thrift port.
+   * Second flavor of KvStoreClientInternal to talk to KvStore through Open/R
+   * ctrl Thrift port.
    */
-  KvStoreClient(
+  KvStoreClientInternal(
       fbzmq::Context& context,
       OpenrEventBase* eventBase,
       std::string const& nodeId,
       folly::SocketAddress const& socketAddr);
 
-  ~KvStoreClient();
+  ~KvStoreClientInternal();
 
   /**
    * Set specified key-value into KvStore. This is an authoratitive call. It
@@ -228,7 +229,7 @@ class KvStoreClient {
   void processExpiredKeys(thrift::Publication const& publication);
 
   /*
-   * Utility function to build thrift::Value in KvStoreClient
+   * Utility function to build thrift::Value in KvStoreClientInternal
    * This method will:
    *  1. create ThriftValue based on input param;
    *  2. check if version is specified:
@@ -342,6 +343,9 @@ class KvStoreClient {
   // Socket Urls (we assume local, unencrypted connection)
   const std::string kvStoreLocalCmdUrl_{""};
   const std::string kvStoreLocalPubUrl_{""};
+
+  // Pointers to KvStore module
+  KvStore* kvStore_{nullptr};
 
   // periodic timer to check existence of persist key in kv store
   folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod_{

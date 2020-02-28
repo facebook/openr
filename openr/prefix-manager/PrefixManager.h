@@ -23,7 +23,7 @@
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
-#include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/Queue.h>
 
 namespace openr {
@@ -34,6 +34,7 @@ class PrefixManager final : public OpenrEventBase {
       const std::string& nodeId,
       messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
       PersistentStore* configStore,
+      KvStore* kvStore,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
@@ -111,8 +112,11 @@ class PrefixManager final : public OpenrEventBase {
   // this node name
   const std::string nodeId_;
 
-  // client to interact with ConfigStore
+  // module ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
+
+  // module ptr to interact with KvStore
+  KvStore* kvStore_{nullptr};
 
   // keep track of prefixDB on disk
   thrift::PrefixDatabase diskState_;
@@ -135,7 +139,7 @@ class PrefixManager final : public OpenrEventBase {
   const std::chrono::milliseconds ttlKeyInKvStore_;
 
   // kvStoreClient for persisting our prefix db
-  KvStoreClient kvStoreClient_;
+  KvStoreClientInternal kvStoreClient_;
 
   // The current prefix db this node is advertising. In-case if multiple entries
   // exists for a given prefix, lowest prefix-type is preferred. This is to

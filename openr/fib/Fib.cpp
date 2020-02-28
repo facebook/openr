@@ -34,6 +34,7 @@ Fib::Fib(
     const MonitorSubmitUrl& monitorSubmitUrl,
     const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
+    KvStore* kvStore,
     fbzmq::Context& zmqContext)
     : myNodeName_(std::move(myNodeName)),
       thriftPort_(thriftPort),
@@ -41,6 +42,7 @@ Fib::Fib(
       enableSegmentRouting_(enableSegmentRouting),
       enableOrderedFib_(enableOrderedFib),
       coldStartDuration_(coldStartDuration),
+      kvStore_(kvStore),
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)) {
   syncRoutesTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
@@ -58,8 +60,10 @@ Fib::Fib(
   });
 
   if (enableOrderedFib_) {
-    kvStoreClient_ = std::make_unique<KvStoreClient>(
-        zmqContext, this, myNodeName_, storeCmdUrl, storePubUrl);
+    // check non-empty module ptr
+    CHECK(kvStore_);
+    kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
+        zmqContext, this, myNodeName_, storeCmdUrl, storePubUrl, kvStore_);
   }
 
   if (not waitOnDecision) {

@@ -23,7 +23,7 @@
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/Queue.h>
 
 namespace openr {
@@ -62,6 +62,7 @@ class Fib final : public OpenrEventBase {
       const MonitorSubmitUrl& monitorSubmitUrl,
       const KvStoreLocalCmdUrl& storeCmdUrl,
       const KvStoreLocalPubUrl& storePubUrl,
+      KvStore* kvStore,
       fbzmq::Context& zmqContext);
 
   /**
@@ -242,6 +243,9 @@ class Fib final : public OpenrEventBase {
   std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
 
+  // module ptr to refer to KvStore for KvStoreClientInternal usage
+  KvStore* kvStore_{nullptr};
+
   // Callback timer to sync routes to switch agent and scheduled on route-sync
   // failure. ExponentialBackoff timer to ease up things if they go wrong
   std::unique_ptr<fbzmq::ZmqTimeout> syncRoutesTimer_{nullptr};
@@ -259,7 +263,7 @@ class Fib final : public OpenrEventBase {
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
-  std::unique_ptr<KvStoreClient> kvStoreClient_;
+  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
 
   // Latest aliveSince heard from FibService. If the next one is different then
   // it means that FibAgent has restarted and we need to perform sync.

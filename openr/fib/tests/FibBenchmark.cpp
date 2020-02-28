@@ -92,6 +92,7 @@ class FibWrapper {
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
         KvStoreLocalPubUrl{"inproc://kvstore-sub"},
+        nullptr, /* KvStore module ptr */
         context);
 
     fibThread = std::make_unique<std::thread>([this]() {

@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "KvStoreClient.h"
+#include "KvStoreClientInternal.h"
 
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
@@ -16,12 +16,13 @@
 
 namespace openr {
 
-KvStoreClient::KvStoreClient(
+KvStoreClientInternal::KvStoreClientInternal(
     fbzmq::Context& context,
     OpenrEventBase* eventBase,
     std::string const& nodeId,
     std::string const& kvStoreLocalCmdUrl,
     std::string const& kvStoreLocalPubUrl,
+    KvStore* kvStore,
     folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod,
     folly::Optional<std::chrono::milliseconds> recvTimeout)
     : useThriftClient_(false),
@@ -30,6 +31,7 @@ KvStoreClient::KvStoreClient(
       context_(context),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
+      kvStore_(kvStore),
       checkPersistKeyPeriod_(checkPersistKeyPeriod),
       recvTimeout_(recvTimeout),
       kvStoreCmdSock_(nullptr),
@@ -42,6 +44,7 @@ KvStoreClient::KvStoreClient(
   CHECK(!nodeId.empty());
   CHECK(!kvStoreLocalCmdUrl.empty());
   CHECK(!kvStoreLocalPubUrl.empty());
+  CHECK(kvStore_);
 
   //
   // Prepare sockets
@@ -82,7 +85,7 @@ KvStoreClient::KvStoreClient(
   initTimers();
 }
 
-KvStoreClient::KvStoreClient(
+KvStoreClientInternal::KvStoreClientInternal(
     fbzmq::Context& context,
     OpenrEventBase* eventBase,
     std::string const& nodeId,
@@ -101,7 +104,7 @@ KvStoreClient::KvStoreClient(
   initTimers();
 }
 
-KvStoreClient::~KvStoreClient() {
+KvStoreClientInternal::~KvStoreClientInternal() {
   // kvStoreSubSock will ONLY be intialized when it is NOT using thriftClient
   if (useThriftClient_) {
     return;
@@ -112,7 +115,7 @@ KvStoreClient::~KvStoreClient() {
 }
 
 void
-KvStoreClient::initTimers() {
+KvStoreClientInternal::initTimers() {
   // Create timer to advertise pending key-vals
   advertiseKeyValsTimer_ =
       fbzmq::ZmqTimeout::make(eventBase_->getEvb(), [this]() noexcept {
@@ -145,7 +148,7 @@ KvStoreClient::initTimers() {
 }
 
 void
-KvStoreClient::initOpenrCtrlClient() {
+KvStoreClientInternal::initOpenrCtrlClient() {
   // Do not create new client if one exists already
   if (openrCtrlClient_) {
     return;
@@ -162,7 +165,7 @@ KvStoreClient::initOpenrCtrlClient() {
 }
 
 void
-KvStoreClient::prepareKvStoreCmdSock() noexcept {
+KvStoreClientInternal::prepareKvStoreCmdSock() noexcept {
   CHECK(!useThriftClient_)
       << "prepareKvStoreCmdSock() NOT supported over Thrift";
 
@@ -180,7 +183,7 @@ KvStoreClient::prepareKvStoreCmdSock() noexcept {
 }
 
 void
-KvStoreClient::checkPersistKeyInStore() {
+KvStoreClientInternal::checkPersistKeyInStore() {
   CHECK(!useThriftClient_)
       << "checkPersistKeyInStore() NOT supported over Thrift";
 
@@ -248,12 +251,12 @@ KvStoreClient::checkPersistKeyInStore() {
 }
 
 bool
-KvStoreClient::persistKey(
+KvStoreClientInternal::persistKey(
     std::string const& key,
     std::string const& value,
     std::chrono::milliseconds const ttl /* = Constants::kTtlInfInterval */,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
-  VLOG(3) << "KvStoreClient: persistKey called for key:" << key
+  VLOG(3) << "KvStoreClientInternal: persistKey called for key:" << key
           << " area:" << area;
 
   auto& persistedKeyVals = persistedKeyVals_[area];
@@ -346,7 +349,7 @@ KvStoreClient::persistKey(
 }
 
 thrift::Value
-KvStoreClient::buildThriftValue(
+KvStoreClientInternal::buildThriftValue(
     std::string const& key,
     std::string const& value,
     uint32_t version /* = 0 */,
@@ -370,13 +373,13 @@ KvStoreClient::buildThriftValue(
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::setKey(
+KvStoreClientInternal::setKey(
     std::string const& key,
     std::string const& value,
     uint32_t version /* = 0 */,
     std::chrono::milliseconds ttl /* = Constants::kTtlInfInterval */,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  VLOG(3) << "KvStoreClient: setKey called for key " << key;
+  VLOG(3) << "KvStoreClientInternal: setKey called for key " << key;
 
   // Build new key-value pair
   thrift::Value thriftValue = buildThriftValue(key, value, version, ttl, area);
@@ -399,7 +402,7 @@ KvStoreClient::setKey(
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::setKey(
+KvStoreClientInternal::setKey(
     std::string const& key,
     thrift::Value const& thriftValue,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
@@ -422,7 +425,7 @@ KvStoreClient::setKey(
 }
 
 void
-KvStoreClient::scheduleTtlUpdates(
+KvStoreClientInternal::scheduleTtlUpdates(
     std::string const& key,
     uint32_t version,
     uint32_t ttlVersion,
@@ -467,11 +470,11 @@ KvStoreClient::scheduleTtlUpdates(
 }
 
 void
-KvStoreClient::unsetKey(
+KvStoreClientInternal::unsetKey(
     std::string const& key,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  VLOG(3) << "KvStoreClient: unsetKey called for key " << key << " area "
-          << area;
+  VLOG(3) << "KvStoreClientInternal: unsetKey called for key " << key
+          << " area " << area;
 
   persistedKeyVals_[area].erase(key);
   backoffs_.erase(key);
@@ -480,12 +483,12 @@ KvStoreClient::unsetKey(
 }
 
 void
-KvStoreClient::clearKey(
+KvStoreClientInternal::clearKey(
     std::string const& key,
     std::string keyValue,
     std::chrono::milliseconds ttl,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  VLOG(1) << "KvStoreClient: clear key called for key " << key;
+  VLOG(1) << "KvStoreClientInternal: clear key called for key " << key;
 
   // erase keys
   unsetKey(key, area);
@@ -514,10 +517,10 @@ KvStoreClient::clearKey(
 }
 
 folly::Expected<thrift::Value, fbzmq::Error>
-KvStoreClient::getKey(
+KvStoreClientInternal::getKey(
     std::string const& key,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  VLOG(3) << "KvStoreClient: getKey called for key " << key << ", area "
+  VLOG(3) << "KvStoreClientInternal: getKey called for key " << key << ", area "
           << area;
 
   // use thrift-port talking to kvstore
@@ -579,7 +582,7 @@ KvStoreClient::getKey(
 }
 
 folly::Expected<thrift::Publication, fbzmq::Error>
-KvStoreClient::dumpImpl(
+KvStoreClientInternal::dumpImpl(
     fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>& sock,
     apache::thrift::CompactSerializer& serializer,
     std::string const& prefix,
@@ -602,7 +605,7 @@ KvStoreClient::dumpImpl(
 }
 
 folly::Expected<std::unordered_map<std::string, thrift::Value>, fbzmq::Error>
-KvStoreClient::dumpAllWithPrefix(
+KvStoreClientInternal::dumpAllWithPrefix(
     const std::string& prefix /* = "" */,
     const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
   // use thrift-port talking to kvstore
@@ -641,12 +644,12 @@ KvStoreClient::dumpAllWithPrefix(
 }
 
 folly::Optional<thrift::Value>
-KvStoreClient::subscribeKey(
+KvStoreClientInternal::subscribeKey(
     std::string const& key,
     KeyCallback callback,
     bool fetchKeyValue,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  VLOG(3) << "KvStoreClient: subscribeKey called for key " << key;
+  VLOG(3) << "KvStoreClientInternal: subscribeKey called for key " << key;
   CHECK(bool(callback)) << "Callback function for " << key << " is empty";
   keyCallbacks_[key] = std::move(callback);
 
@@ -660,7 +663,7 @@ KvStoreClient::subscribeKey(
 }
 
 void
-KvStoreClient::subscribeKeyFilter(
+KvStoreClientInternal::subscribeKeyFilter(
     KvStoreFilters kvFilters, KeyCallback callback) {
   keyPrefixFilter_ = std::move(kvFilters);
   keyPrefixFilterCallback_ = std::move(callback);
@@ -668,15 +671,15 @@ KvStoreClient::subscribeKeyFilter(
 }
 
 void
-KvStoreClient::unSubscribeKeyFilter() {
+KvStoreClientInternal::unSubscribeKeyFilter() {
   keyPrefixFilterCallback_ = nullptr;
   keyPrefixFilter_ = KvStoreFilters({}, {});
   return;
 }
 
 void
-KvStoreClient::unsubscribeKey(std::string const& key) {
-  VLOG(3) << "KvStoreClient: unsubscribeKey called for key " << key;
+KvStoreClientInternal::unsubscribeKey(std::string const& key) {
+  VLOG(3) << "KvStoreClientInternal: unsubscribeKey called for key " << key;
   // Store callback into KeyCallback map
   if (keyCallbacks_.erase(key) == 0) {
     LOG(WARNING) << "UnsubscribeKey called for non-existing key" << key;
@@ -684,15 +687,16 @@ KvStoreClient::unsubscribeKey(std::string const& key) {
 }
 
 void
-KvStoreClient::setKvCallback(KeyCallback callback) {
+KvStoreClientInternal::setKvCallback(KeyCallback callback) {
   kvCallback_ = std::move(callback);
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::addPeers(
+KvStoreClientInternal::addPeers(
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
-  VLOG(3) << "KvStoreClient: addPeers called for " << peers.size() << " peers.";
+  VLOG(3) << "KvStoreClientInternal: addPeers called for " << peers.size()
+          << " peers.";
 
   CHECK(!useThriftClient_) << "addPeers() NOT supported over Thrift";
 
@@ -728,10 +732,10 @@ KvStoreClient::addPeers(
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::delPeer(
+KvStoreClientInternal::delPeer(
     std::string const& peerName,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
-  VLOG(3) << "KvStoreClient: delPeer called for peer " << peerName;
+  VLOG(3) << "KvStoreClientInternal: delPeer called for peer " << peerName;
 
   std::vector<std::string> peerNames;
   peerNames.push_back(peerName);
@@ -739,19 +743,19 @@ KvStoreClient::delPeer(
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::delPeers(
+KvStoreClientInternal::delPeers(
     const std::vector<std::string>& peerNames,
     const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
-  VLOG(3) << "KvStoreClient: delPeers called for " << peerNames.size()
+  VLOG(3) << "KvStoreClientInternal: delPeers called for " << peerNames.size()
           << "peers";
 
   return delPeersHelper(peerNames, area);
 }
 
 folly::Expected<std::unordered_map<std::string, thrift::PeerSpec>, fbzmq::Error>
-KvStoreClient::getPeers(
+KvStoreClientInternal::getPeers(
     const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
-  VLOG(3) << "KvStoreClient: getPeers called";
+  VLOG(3) << "KvStoreClientInternal: getPeers called";
 
   CHECK(!useThriftClient_) << "getPeers() NOT supported over Thrift";
 
@@ -776,7 +780,8 @@ KvStoreClient::getPeers(
 }
 
 void
-KvStoreClient::processExpiredKeys(thrift::Publication const& publication) {
+KvStoreClientInternal::processExpiredKeys(
+    thrift::Publication const& publication) {
   auto const& expiredKeys = publication.expiredKeys;
 
   for (auto const& key : expiredKeys) {
@@ -793,7 +798,8 @@ KvStoreClient::processExpiredKeys(thrift::Publication const& publication) {
 }
 
 void
-KvStoreClient::processPublication(thrift::Publication const& publication) {
+KvStoreClientInternal::processPublication(
+    thrift::Publication const& publication) {
   // Go through received key-values and find out the ones which need update
   std::string area{thrift::KvStore_constants::kDefaultArea()};
 
@@ -935,7 +941,7 @@ KvStoreClient::processPublication(thrift::Publication const& publication) {
 }
 
 void
-KvStoreClient::advertisePendingKeys() {
+KvStoreClientInternal::advertisePendingKeys() {
   std::chrono::milliseconds timeout = Constants::kMaxBackoff;
 
   // advertise pending key for each area
@@ -1002,7 +1008,7 @@ KvStoreClient::advertisePendingKeys() {
 }
 
 void
-KvStoreClient::advertiseTtlUpdates() {
+KvStoreClientInternal::advertiseTtlUpdates() {
   // Build set of keys to advertise ttl updates
   auto timeout = Constants::kMaxTtlUpdateInterval;
 
@@ -1069,7 +1075,7 @@ KvStoreClient::advertiseTtlUpdates() {
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::setKeysHelper(
+KvStoreClientInternal::setKeysHelper(
     std::unordered_map<std::string, thrift::Value> keyVals,
     std::string const& area) {
   // Return if nothing to advertise.
@@ -1142,7 +1148,7 @@ KvStoreClient::setKeysHelper(
 }
 
 folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClient::delPeersHelper(
+KvStoreClientInternal::delPeersHelper(
     const std::vector<std::string>& peerNames,
     const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   CHECK(!useThriftClient_) << "delPeersHelper() NOT supported over Thrift";

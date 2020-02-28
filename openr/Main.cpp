@@ -41,7 +41,6 @@
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
-#include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/platform/NetlinkFibHandler.h>
@@ -497,6 +496,7 @@ main(int argc, char** argv) {
           FLAGS_node_name,
           prefixUpdatesQueue.getReader(),
           configStore,
+          kvStore,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
           monitorSubmitUrl,
@@ -533,6 +533,7 @@ main(int argc, char** argv) {
             FLAGS_node_name,
             kvStoreLocalCmdUrl,
             kvStoreLocalPubUrl,
+            kvStore,
             prefixUpdatesQueue,
             monitorSubmitUrl,
             AllocPrefixMarker{Constants::kPrefixAllocMarker.toString()},
@@ -682,6 +683,7 @@ main(int argc, char** argv) {
           FLAGS_system_agent_port,
           KvStoreLocalCmdUrl{kvStoreLocalCmdUrl},
           KvStoreLocalPubUrl{kvStoreLocalPubUrl},
+          kvStore,
           std::move(includeRegexList),
           std::move(excludeRegexList),
           std::move(redistRegexList),
@@ -763,6 +765,7 @@ main(int argc, char** argv) {
           monitorSubmitUrl,
           kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
+          kvStore,
           context));
 
   // Start OpenrCtrl thrift server

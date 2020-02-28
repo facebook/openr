@@ -29,7 +29,7 @@
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
 #include <openr/kvstore/KvStore.h>
-#include <openr/kvstore/KvStoreClient.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/ReplicateQueue.h>
 
 #include "RangeAllocator.h"
@@ -63,6 +63,7 @@ class PrefixAllocator : public OpenrEventBase {
       const std::string& myNodeName,
       const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
+      KvStore* kvStore,
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const AllocPrefixMarker& allocPrefixMarker,
@@ -218,10 +219,13 @@ class PrefixAllocator : public OpenrEventBase {
 
   // we'll use this to get the full dump from the KvStore
   // and get and set my assigned prefix
-  std::unique_ptr<KvStoreClient> kvStoreClient_{nullptr};
+  std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
 
-  // client to interact with ConfigStore
+  // module ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
+
+  // module ptr to interact with KvStore
+  KvStore* kvStore_{nullptr};
 
   // RangAlloctor to get unique prefix index for this node
   std::unique_ptr<RangeAllocator<uint32_t>> rangeAllocator_;

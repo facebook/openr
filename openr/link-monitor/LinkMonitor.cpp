@@ -78,6 +78,7 @@ LinkMonitor::LinkMonitor(
     int32_t platformThriftPort,
     KvStoreLocalCmdUrl kvStoreLocalCmdUrl,
     KvStoreLocalPubUrl kvStoreLocalPubUrl,
+    KvStore* kvStore,
     std::unique_ptr<re2::RE2::Set> includeRegexList,
     std::unique_ptr<re2::RE2::Set> excludeRegexList,
     std::unique_ptr<re2::RE2::Set> redistRegexList,
@@ -105,6 +106,7 @@ LinkMonitor::LinkMonitor(
       platformThriftPort_(platformThriftPort),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
+      kvStore_(kvStore),
       includeRegexList_(std::move(includeRegexList)),
       excludeRegexList_(std::move(excludeRegexList)),
       redistRegexList_(std::move(redistRegexList)),
@@ -129,7 +131,10 @@ LinkMonitor::LinkMonitor(
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
       configStore_(configStore),
       areas_(areas) {
+  // Check non-empty module ptr
   CHECK(configStore_);
+  CHECK(kvStore_);
+
   // Create throttled adjacency advertiser
   advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
@@ -168,12 +173,13 @@ LinkMonitor::LinkMonitor(
   }
 
   //  Create KvStore client
-  kvStoreClient_ = std::make_unique<KvStoreClient>(
+  kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
       zmqContext,
       this,
       nodeId_,
       kvStoreLocalCmdUrl_,
       kvStoreLocalPubUrl_,
+      kvStore_,
       folly::none, /* persist key timer */
       folly::none /* recv timeout */);
 
@@ -435,8 +441,8 @@ LinkMonitor::neighborUpEvent(
 
   // two cases upon this event:
   // 1) the min interface changes: the previous min interface's connection will
-  // be overridden by KvStoreClient, thus no need to explicitly remove it
-  // 2) does not change: the existing connection to a neighbor is retained
+  // be overridden by KvStoreClientInternal, thus no need to explicitly remove
+  // it 2) does not change: the existing connection to a neighbor is retained
   thrift::PeerSpec peerSpec;
   peerSpec.cmdUrl = repUrl;
   peerSpec.supportFloodOptimization = event.supportFloodOptimization;

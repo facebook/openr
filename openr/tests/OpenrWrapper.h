@@ -146,14 +146,14 @@ class OpenrWrapper {
   // IpPrefix
   folly::Synchronized<folly::Optional<thrift::IpPrefix>> ipPrefix_;
 
-  // event loop to use with KvStoreClient
+  // event loop to use with KvStoreClientInternal
   OpenrEventBase eventBase_;
 
   // sub modules owned by this wrapper
   std::unique_ptr<PersistentStore> configStore_;
   std::unique_ptr<fbzmq::ZmqMonitor> monitor_;
   std::unique_ptr<KvStore> kvStore_;
-  std::unique_ptr<KvStoreClient> kvStoreClient_;
+  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<Spark> spark_;
   std::unique_ptr<LinkMonitor> linkMonitor_;
   std::unique_ptr<Decision> decision_;

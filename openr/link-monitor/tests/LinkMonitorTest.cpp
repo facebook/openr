@@ -234,6 +234,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         "node-1",
         prefixUpdatesQueue.getReader(),
         configStore.get(),
+        kvStoreWrapper->getKvStore(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -271,6 +272,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         port, /* thrift service port */
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),
         std::move(excludeRegexList),
         std::move(redistRegexList), // redistribute interface name
@@ -863,6 +865,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       port, // platform pub port
       KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+      kvStoreWrapper->getKvStore(),
       std::move(includeRegexList),
       std::move(excludeRegexList),
       // redistribute interface names
@@ -1656,6 +1659,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         0, // platform pub port
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),
         std::move(excludeRegexList),
         std::move(redistRegexList),

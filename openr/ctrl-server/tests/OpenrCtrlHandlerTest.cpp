@@ -102,6 +102,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        kvStoreWrapper->getKvStore(),
         context_);
     fibThread_ = std::thread([&]() { fib->run(); });
 
@@ -110,6 +111,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         nodeName,
         prefixUpdatesQueue_.getReader(),
         persistentStore.get(),
+        kvStoreWrapper->getKvStore(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         monitorSubmitUrl_,
@@ -145,6 +147,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         systemThriftThread.getAddress()->getPort(),
         KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
+        kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),
         nullptr,
         nullptr, // redistribute interface name

@@ -62,12 +62,13 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         std::chrono::seconds(600) /* counter submit interval */,
         std::unordered_map<std::string, openr::thrift::PeerSpec>{});
     kvStoreWrapper_->run();
-    kvStoreClient_ = std::make_unique<KvStoreClient>(
+    kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
         zmqContext_,
         &evb_,
         myNodeName_,
         kvStoreWrapper_->localCmdUrl,
-        kvStoreWrapper_->localPubUrl);
+        kvStoreWrapper_->localPubUrl,
+        kvStoreWrapper_->getKvStore());
 
     LOG(INFO) << "The test store is running";
 
@@ -106,6 +107,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         myNodeName_,
         prefixUpdatesQueue_.getReader(),
         configStore_.get(),
+        kvStoreWrapper_->getKvStore(),
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -139,6 +141,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         myNodeName_,
         KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
+        kvStoreWrapper_->getKvStore(),
         prefixUpdatesQueue_,
         MonitorSubmitUrl{"inproc://monitor_submit"},
         kAllocPrefixMarker,
@@ -193,7 +196,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   std::string tempFileName_;
 
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
-  std::unique_ptr<KvStoreClient> kvStoreClient_;
+  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<PersistentStore> configStore_;
   std::unique_ptr<PrefixManager> prefixManager_;
   std::unique_ptr<PrefixAllocator> prefixAllocator_;
@@ -348,7 +351,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     };
 
     //
-    // 1) spin up a kvstore and create KvStoreClient
+    // 1) spin up a kvstore and create KvStoreClientInternal
     //
 
     const auto nodeId = folly::sformat("test_store{}", round);
@@ -362,8 +365,13 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     LOG(INFO) << "The test store is running";
 
     // Attach a kvstore client in main event loop
-    auto kvStoreClient = std::make_unique<KvStoreClient>(
-        zmqContext, &evl, nodeId, store->localCmdUrl, store->localPubUrl);
+    auto kvStoreClient = std::make_unique<KvStoreClientInternal>(
+        zmqContext,
+        &evl,
+        nodeId,
+        store->localCmdUrl,
+        store->localPubUrl,
+        store->getKvStore());
 
     // Set seed prefix in KvStore
     if (emptySeedPrefix) {
@@ -418,6 +426,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           myNodeName,
           prefixQueues.at(i).getReader(),
           tempConfigStore.get(),
+          store->getKvStore(),
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
           MonitorSubmitUrl{"inproc://monitor_submit"},
@@ -437,6 +446,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           myNodeName,
           KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
+          store->getKvStore(),
           prefixQueues.at(i),
           MonitorSubmitUrl{"inproc://monitor_submit"},
           kAllocPrefixMarker,

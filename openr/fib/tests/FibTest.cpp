@@ -218,6 +218,7 @@ class FibTestFixture : public ::testing::Test {
         MonitorSubmitUrl{"inproc://monitor-sub"},
         KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
         KvStoreLocalPubUrl{"inproc://kvstore-pub"},
+        nullptr, /* KvStore module ptr */
         context);
 
     fibThread = std::make_unique<std::thread>([this]() {

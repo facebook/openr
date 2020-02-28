@@ -39,6 +39,7 @@ PrefixManager::PrefixManager(
     const std::string& nodeId,
     messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
     PersistentStore* configStore,
+    KvStore* kvStore,
     const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
@@ -51,14 +52,21 @@ PrefixManager::PrefixManager(
     const std::unordered_set<std::string>& areas)
     : nodeId_(nodeId),
       configStore_{configStore},
+      kvStore_(kvStore),
       prefixDbMarker_{prefixDbMarker},
       perPrefixKeys_{perPrefixKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(ttlKeyInKvStore),
-      kvStoreClient_{
-          zmqContext, this, nodeId_, kvStoreLocalCmdUrl, kvStoreLocalPubUrl},
+      kvStoreClient_{zmqContext,
+                     this,
+                     nodeId_,
+                     kvStoreLocalCmdUrl,
+                     kvStoreLocalPubUrl,
+                     kvStore_},
       areas_{areas} {
   CHECK(configStore_);
+  CHECK(kvStore_);
+
   // pick up prefixes from disk
   auto maybePrefixDb =
       configStore_->loadThriftObj<thrift::PrefixDatabase>(kConfigKey).get();

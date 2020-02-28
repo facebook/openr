@@ -39,7 +39,7 @@ template <typename T>
 RangeAllocator<T>::RangeAllocator(
     const std::string& nodeName,
     const std::string& keyPrefix,
-    KvStoreClient* const kvStoreClient,
+    KvStoreClientInternal* const kvStoreClient,
     std::function<void(folly::Optional<T>)> callback,
     const std::chrono::milliseconds minBackoffDur /* = 50ms */,
     const std::chrono::milliseconds maxBackoffDur /* = 2s */,
@@ -75,7 +75,7 @@ RangeAllocator<T>::~RangeAllocator() {
     allocateValue_.clear();
   }
 
-  // Unsubscribe from KvStoreClient if we have been to
+  // Unsubscribe from KvStoreClientInternal if we have been to
   if (myValue_) {
     const auto myKey = createKey(*myValue_);
     kvStoreClient_->unsubscribeKey(myKey);
@@ -223,7 +223,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     CHECK_EQ(nodeName_, maybeThriftVal->originatorId);
     // We own it: this can occur if the node reboots w/ kvstore intact
     // Let the application know of newly allocated value
-    // We set back via KvStoreClient so that ttl is published regularly
+    // We set back via KvStoreClientInternal so that ttl is published regularly
     auto newValue = *maybeThriftVal;
     newValue.ttlVersion += 1; // bump ttl version
     newValue.ttl = rangeAllocTtl_.count(); // reset ttl

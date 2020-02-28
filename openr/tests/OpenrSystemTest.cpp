@@ -38,7 +38,6 @@
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
-#include <openr/kvstore/KvStoreClient.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/spark/tests/MockIoProvider.h>
 #include <openr/tests/OpenrWrapper.h>
