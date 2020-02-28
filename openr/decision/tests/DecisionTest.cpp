@@ -131,7 +131,8 @@ const thrift::NextHopThrift labelPopNextHop{
 
 // timeout to wait until decision debounce
 // (i.e. spf recalculation, route rebuild) finished
-const std::chrono::milliseconds debounceTimeout{500};
+const std::chrono::milliseconds debounceTimeoutMin{10};
+const std::chrono::milliseconds debounceTimeoutMax{500};
 
 thrift::PrefixDatabase
 getPrefixDbWithKspfAlgo(
@@ -3696,8 +3697,8 @@ class DecisionTestFixture : public ::testing::Test {
         false, /* bgpUseIgpMetric */
         AdjacencyDbMarker{"adj:"},
         PrefixDbMarker{"prefix:"},
-        std::chrono::milliseconds(10),
-        std::chrono::milliseconds(500),
+        debounceTimeoutMin,
+        debounceTimeoutMax,
         folly::none,
         kvStoreUpdatesQueue.getReader(),
         routeUpdatesQueue,
@@ -4121,11 +4122,10 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   auto counters = decision->getCounters();
   EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(0, counters["decision.route_build_runs.count.0"]);
-  sendKvPublication(publication);
 
-  /* sleep override */
-  // wait for SPF to finish
-  std::this_thread::sleep_for(debounceTimeout / 2);
+  sendKvPublication(publication);
+  recvMyRouteDb("1", serializer);
+
   // validate SPF after initial sync, no rebouncing here
   counters = decision->getCounters();
   EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
@@ -4146,7 +4146,6 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       {},
       std::string(""));
-
   sendKvPublication(publication);
 
   // we simulate adding a new router R4
@@ -4161,16 +4160,13 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       {},
       std::string(""));
-
   sendKvPublication(publication);
+  recvMyRouteDb("1", serializer);
 
-  /* sleep override */
-  // wait for debouncing to kick in
-  std::this_thread::sleep_for(debounceTimeout);
-  // validate SPF
   counters = decision->getCounters();
   EXPECT_EQ(2, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(2, counters["decision.route_build_runs.count.0"]);
+
   //
   // Only publish prefix updates
   //
@@ -4181,10 +4177,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       std::string(""));
   sendKvPublication(publication);
+  recvMyRouteDb("1", serializer);
 
-  /* sleep override */
-  // wait for route rebuilding to finish
-  std::this_thread::sleep_for(debounceTimeout / 2);
   counters = decision->getCounters();
   EXPECT_EQ(2, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(3, counters["decision.route_build_runs.count.0"]);
@@ -4210,10 +4204,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       std::string(""));
   sendKvPublication(publication);
+  recvMyRouteDb("1", serializer);
 
-  /* sleep override */
-  // wait for SPF to finish
-  std::this_thread::sleep_for(debounceTimeout);
   counters = decision->getCounters();
   EXPECT_EQ(3, counters["decision.path_build_runs.count.0"]);
   EXPECT_EQ(4, counters["decision.route_build_runs.count.0"]);
@@ -4247,10 +4239,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       std::string(""));
   sendKvPublication(publication);
+  recvMyRouteDb("1", serializer);
 
-  /* sleep override */
-  // wait for route rebuilding to finish
-  std::this_thread::sleep_for(debounceTimeout);
   counters = decision->getCounters();
   EXPECT_EQ(3, counters["decision.path_build_runs.count.0"]);
   // only 1 request shall be processed
@@ -4284,7 +4274,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeoutMax);
 
   // make sure the counter did not increment
   counters = decision->getCounters();
@@ -4318,7 +4308,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeoutMax);
 
   // make sure counter is incremented
   counters = decision->getCounters();
@@ -4329,7 +4319,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
 
   // wait for SPF to finish
   /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeout);
+  std::this_thread::sleep_for(2 * debounceTimeoutMax);
 
   // make sure counter is not incremented
   counters = decision->getCounters();
@@ -4377,10 +4367,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
       std::string(""));
 
   sendKvPublication(publication);
-
-  // wait for SPF to finish
-  /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeout);
+  recvMyRouteDb("1", serializer);
 
   // validate routers
   auto routeMapList = dumpRouteDb({"1", "2", "3"});
@@ -4442,10 +4429,7 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
-
-  // wait for SPF to finish
-  /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeout);
+  recvMyRouteDb("1", serializer);
 
   // Query new information
   // validate routers
@@ -4533,10 +4517,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
       std::string(""));
 
   sendKvPublication(publication);
-
-  // wait for SPF to finish
-  /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeout);
+  recvMyRouteDb("1", serializer);
 
   // Query new information
   // validate routers
@@ -4597,10 +4578,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
-
-  // wait for SPF to finish
-  /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeout);
+  recvMyRouteDb("1", serializer);
 
   routeMapList = dumpRouteDb({"1"});
   RouteMap routeMap2;
@@ -4642,10 +4620,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
-
-  // wait for SPF to finish
-  /* sleep override */
-  std::this_thread::sleep_for(2 * debounceTimeout);
+  recvMyRouteDb("1", serializer);
 
   // Query new information
   // validate routers
@@ -4744,7 +4719,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   while (true) {
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start);
-    if (diff > (3 * debounceTimeout)) {
+    if (diff > (3 * debounceTimeoutMax)) {
       LOG(INFO) << "Hammered decision with " << totalSent
                 << " updates. Stopping";
       break;
