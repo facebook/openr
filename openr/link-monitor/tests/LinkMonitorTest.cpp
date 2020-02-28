@@ -214,7 +214,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     configStore->waitUntilRunning();
 
     // spin up a kvstore
-    kvStoreWrapper = std::make_shared<KvStoreWrapper>(
+    kvStoreWrapper = std::make_unique<KvStoreWrapper>(
         context,
         "test_store1",
         std::chrono::seconds(1) /* db sync interval */,
@@ -265,7 +265,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     redistRegexList->Compile();
 
     // start a link monitor
-    linkMonitor = make_shared<LinkMonitor>(
+    linkMonitor = std::make_unique<LinkMonitor>(
         context,
         "node-1",
         port, /* thrift service port */
@@ -322,6 +322,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Stopping prefix manager thread";
     prefixManager->stop();
     prefixManagerThread->join();
+    prefixManager.reset();
 
     // Erase data from config store
     LOG(INFO) << "Erasing data from config store";
@@ -331,16 +332,19 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Stopping config store";
     configStore->stop();
     configStoreThread->join();
+    configStore.reset();
 
     // stop the kvStore
     LOG(INFO) << "Stopping KvStoreWrapper";
     kvStoreWrapper->stop();
+    kvStoreWrapper.reset();
     LOG(INFO) << "KvStoreWrapper got stopped";
 
     // stop mocked nl platform
     LOG(INFO) << "Stopping mocked thrift handlers";
     mockNlHandler->stop();
     systemThriftThread.stop();
+    mockNlHandler.reset();
     LOG(INFO) << "Mocked thrift handlers got stopped";
   }
 
@@ -532,13 +536,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
 
-  std::shared_ptr<LinkMonitor> linkMonitor;
+  std::unique_ptr<LinkMonitor> linkMonitor;
   std::unique_ptr<std::thread> linkMonitorThread;
 
   std::unique_ptr<PrefixManager> prefixManager;
   std::unique_ptr<std::thread> prefixManagerThread;
 
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper;
+  std::unique_ptr<KvStoreWrapper> kvStoreWrapper;
   std::shared_ptr<MockNetlinkSystemHandler> mockNlHandler;
 
   std::queue<thrift::AdjacencyDatabase> expectedAdjDbs;
@@ -853,7 +857,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   neighborUpdatesQueue =
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
 
-  linkMonitor = make_shared<LinkMonitor>(
+  linkMonitor = std::make_unique<LinkMonitor>(
       context,
       "node-1",
       port, // platform pub port
