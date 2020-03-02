@@ -62,16 +62,6 @@ class KvStoreClientInternal {
           60000ms,
       folly::Optional<std::chrono::milliseconds> recvTimeout = 3000ms);
 
-  /*
-   * Second flavor of KvStoreClientInternal to talk to KvStore through Open/R
-   * ctrl Thrift port.
-   */
-  KvStoreClientInternal(
-      fbzmq::Context& context,
-      OpenrEventBase* eventBase,
-      std::string const& nodeId,
-      folly::SocketAddress const& socketAddr);
-
   ~KvStoreClientInternal();
 
   /**
@@ -100,18 +90,14 @@ class KvStoreClientInternal {
    * running.
    *
    * Second flavour directly forwards the value to KvStore.
-   *
-   * Return error type:
-   *     1. zmq socket error
-   *     2. server error returned by KvStore
    */
-  folly::Expected<folly::Unit, fbzmq::Error> setKey(
+  folly::Optional<folly::Unit> setKey(
       std::string const& key,
       std::string const& value,
       uint32_t version = 0,
       std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  folly::Expected<folly::Unit, fbzmq::Error> setKey(
+  folly::Optional<folly::Unit> setKey(
       std::string const& key,
       thrift::Value const& value,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
@@ -136,11 +122,8 @@ class KvStoreClientInternal {
 
   /**
    * Get key from KvStore. It gets from local snapshot KeyVals of the kvstore.
-   * Return error type:
-   *    1. zmq socket error
-   *    2. "key not found" error upon non-existing key.
    */
-  folly::Expected<thrift::Value, fbzmq::Error> getKey(
+  folly::Optional<thrift::Value> getKey(
       std::string const& key,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
@@ -148,9 +131,7 @@ class KvStoreClientInternal {
    * Dump the entries of my KV store whose keys match the given prefix
    * If the prefix is empty string, the full KV store is dumped
    */
-  folly::Expected<
-      std::unordered_map<std::string /* key */, thrift::Value /* value */>,
-      fbzmq::Error>
+  folly::Optional<std::unordered_map<std::string, thrift::Value>>
   dumpAllWithPrefix(
       const std::string& prefix = "",
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
@@ -179,31 +160,19 @@ class KvStoreClientInternal {
   void unSubscribeKeyFilter();
 
   /**
-   * APIs to send Add/Del peer command to KvStore.
-   * Return error type:
-   *     1. zmq socket error
-   *     2. server error returned by KvStore
+   * APIs to add/del/get peer info from KvStore.
    */
-  folly::Expected<folly::Unit, fbzmq::Error> addPeers(
+  folly::Optional<folly::Unit> addPeers(
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  folly::Expected<folly::Unit, fbzmq::Error> delPeer(
+  folly::Optional<folly::Unit> delPeer(
       std::string const& peerName,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  folly::Expected<folly::Unit, fbzmq::Error> delPeers(
+  folly::Optional<folly::Unit> delPeers(
       const std::vector<std::string>& peerNames,
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
-
-  /**
-   * APIs to send PEER_DUMP command to KvStore.
-   * return error type:
-   *      1. zme socket error
-   *      2. server error returned by KvStore
-   */
-  folly::Expected<
-      std::unordered_map<std::string, thrift::PeerSpec>,
-      fbzmq::Error>
-  getPeers(const std::string& area = thrift::KvStore_constants::kDefaultArea());
+  folly::Optional<std::unordered_map<std::string, thrift::PeerSpec>> getPeers(
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   OpenrEventBase*
   getOpenrEventBase() const noexcept {
@@ -245,20 +214,16 @@ class KvStoreClientInternal {
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
-   * Utility function to SET keys in KvStore. Will throw an exception if things
-   * goes wrong.
+   * Utility function to SET keys in KvStore.
    */
-  folly::Expected<folly::Unit, fbzmq::Error> setKeysHelper(
+  folly::Optional<folly::Unit> setKeysHelper(
       std::unordered_map<std::string, thrift::Value> keyVals,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Utility function to del peers in KvStore
-   * return error type:
-   *    1. zmq socket error
-   *    2. server error returned by KvStore
    */
-  folly::Expected<folly::Unit, fbzmq::Error> delPeersHelper(
+  folly::Optional<folly::Unit> delPeersHelper(
       const std::vector<std::string>& peerNames,
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
@@ -285,29 +250,7 @@ class KvStoreClientInternal {
    */
   void advertiseTtlUpdates();
 
-  /**
-   * Helper to do full dumps
-   */
-  static folly::Expected<thrift::Publication, fbzmq::Error> dumpImpl(
-      fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>& sock,
-      apache::thrift::CompactSerializer& serializer,
-      std::string const& prefix,
-      folly::Optional<std::chrono::milliseconds> recvTimeout,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
-
-  /**
-   * Create KvStoreCmd socket on the fly. REQ-REP sockets needs reset if
-   * previously issued request fails and response hasn't been received as
-   * REQ socket will enter into exceptional state.
-   */
-  void prepareKvStoreCmdSock() noexcept;
-
   void checkPersistKeyInStore();
-
-  /*
-   * Util function to instantiate openrCtrlClient
-   */
-  void initOpenrCtrlClient();
 
   /*
    * Wrapper function to initialize timer
@@ -318,17 +261,8 @@ class KvStoreClientInternal {
   // Immutable state
   //
 
-  // boolean var indicating use thrift or NOT
-  const bool useThriftClient_{false};
-
-  // SocketAddress used to connect to openrCtrlClient
-  const folly::SocketAddress sockAddr_{};
-
   // EventBase to create openrCtrl client
   folly::EventBase evb_;
-
-  // cached OpenrCtrlClient to talk to Open/R instance
-  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> openrCtrlClient_{nullptr};
 
   // Our local node identifier
   const std::string nodeId_;

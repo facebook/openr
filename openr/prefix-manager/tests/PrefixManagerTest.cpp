@@ -339,7 +339,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   // Wait for throttled update to announce to kvstore
   std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
   auto maybeValue = kvStoreClient->getKey(keyStr);
-  EXPECT_FALSE(maybeValue.hasError());
+  EXPECT_TRUE(maybeValue.has_value());
   auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue.value().value.value(), serializer);
   EXPECT_EQ(db.thisNodeName, "node-1");
@@ -366,7 +366,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   /* Verify that before throttle expires, we don't see any update */
   std::this_thread::sleep_for(Constants::kPrefixMgrKvThrottleTimeout / 2);
   auto maybeValue1 = kvStoreClient->getKey(keyStr);
-  EXPECT_FALSE(maybeValue1.hasError());
+  EXPECT_TRUE(maybeValue1.has_value());
   auto db1 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue1.value().value.value(), serializer);
   auto prefixDb = getPrefixDb("prefix:node-1");
@@ -383,7 +383,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   // Wait for throttled update to announce to kvstore
   std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
   auto maybeValue2 = kvStoreClient->getKey(keyStr);
-  EXPECT_FALSE(maybeValue2.hasError());
+  EXPECT_TRUE(maybeValue2.has_value());
   auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue2.value().value.value(), serializer);
   prefixDb = getPrefixDb("prefix:node-1");
@@ -403,7 +403,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
   // Wait for throttled update to announce to kvstore
   std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
   auto maybeValue3 = kvStoreClient->getKey(keyStr);
-  EXPECT_FALSE(maybeValue3.hasError());
+  EXPECT_TRUE(maybeValue3.has_value());
   auto db3 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
       maybeValue3.value().value.value(), serializer);
   prefixDb = getPrefixDb("prefix:node-1");
@@ -654,7 +654,6 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.hasValue());
         keyVersion = maybeValue.value().version;
-        EXPECT_FALSE(maybeValue.hasError());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value.value(), serializer);
         EXPECT_EQ(db.thisNodeName, "node-1");
@@ -686,7 +685,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_FALSE(maybeValue.hasError());
+        EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value.value(), serializer);
         EXPECT_EQ(maybeValue.value().version, keyVersion + 2);
@@ -708,7 +707,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_FALSE(maybeValue.hasError());
+        EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value.value(), serializer);
         EXPECT_EQ(maybeValue.value().version, keyVersion + 3);
@@ -749,7 +748,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_FALSE(maybeValue.hasError());
+        EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value.value(), serializer);
         EXPECT_EQ(maybeValue.value().version, staleKeyVersion + 1);

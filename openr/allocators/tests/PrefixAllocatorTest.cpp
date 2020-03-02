@@ -382,7 +382,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           kAllocPrefixLen);
       auto res = kvStoreClient->setKey(
           Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
-      EXPECT_FALSE(res.hasError()) << res.error();
+      EXPECT_TRUE(res.has_value());
     }
 
     //
@@ -496,7 +496,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           kAllocPrefixLen);
       auto res = kvStoreClient->setKey(
           Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
-      EXPECT_FALSE(res.hasError()) << res.error();
+      EXPECT_TRUE(res.has_value());
 
       // wait for prefix allocation to finish
       LOG(INFO) << "waiting for full allocation to complete with new "
@@ -626,7 +626,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
       "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
   auto res = kvStoreClient_->setKey(
       Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
-  EXPECT_FALSE(res.hasError()) << res.error();
+  EXPECT_TRUE(res.has_value());
   // busy loop until we have prefix
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
@@ -674,7 +674,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   hasAllocPrefix.store(false, std::memory_order_relaxed);
   auto res2 = kvStoreClient_->setKey(
       Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
-  EXPECT_FALSE(res2.hasError()) << res2.error();
+  EXPECT_TRUE(res2.has_value());
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
@@ -751,7 +751,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
       "{},{}", folly::IPAddress::networkToString(seedPrefix), allocPrefixLen);
   auto res = kvStoreClient_->setKey(
       Constants::kSeedPrefixAllocParamKey.toString(), prefixAllocParam);
-  EXPECT_FALSE(res.hasError()) << res.error();
+  EXPECT_TRUE(res.has_value());
   // busy loop until we have prefix
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
@@ -778,7 +778,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
       Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer),
       1);
-  EXPECT_FALSE(res0.hasError()) << res0.error();
+  EXPECT_TRUE(res0.has_value());
 
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
@@ -809,7 +809,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
       Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer),
       2);
-  EXPECT_FALSE(res5.hasError()) << res5.error();
+  EXPECT_TRUE(res5.has_value());
 
   // counter is added to break loop. In case allocated prefix is already
   // the expected one, there will be no prefix update and hasAllocPrefix
@@ -895,7 +895,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   auto res = kvStoreClient_->setKey(
       Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
-  EXPECT_FALSE(res.hasError()) << res.error();
+  EXPECT_TRUE(res.has_value());
   // busy loop until we have prefix
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
@@ -944,7 +944,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   auto res2 = kvStoreClient_->setKey(
       Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
-  EXPECT_FALSE(res2.hasError()) << res2.error();
+  EXPECT_TRUE(res2.has_value());
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
@@ -964,7 +964,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   auto res3 = kvStoreClient_->setKey(
       Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
-  EXPECT_FALSE(res3.hasError()) << res3.error();
+  EXPECT_TRUE(res3.has_value());
   while (not hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }
@@ -984,7 +984,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   auto res4 = kvStoreClient_->setKey(
       Constants::kStaticPrefixAllocParamKey.toString(),
       fbzmq::util::writeThriftObjStr(staticAlloc, serializer));
-  EXPECT_FALSE(res4.hasError()) << res4.error();
+  EXPECT_TRUE(res4.has_value());
   while (hasAllocPrefix.load(std::memory_order_relaxed)) {
     std::this_thread::yield();
   }

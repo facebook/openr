@@ -25,8 +25,7 @@ KvStoreClientInternal::KvStoreClientInternal(
     KvStore* kvStore,
     folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod,
     folly::Optional<std::chrono::milliseconds> recvTimeout)
-    : useThriftClient_(false),
-      nodeId_(nodeId),
+    : nodeId_(nodeId),
       eventBase_(eventBase),
       context_(context),
       kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
@@ -79,37 +78,11 @@ KvStoreClientInternal::KvStoreClientInternal(
     }
   });
 
-  //
-  // initialize timers
-  //
-  initTimers();
-}
-
-KvStoreClientInternal::KvStoreClientInternal(
-    fbzmq::Context& context,
-    OpenrEventBase* eventBase,
-    std::string const& nodeId,
-    folly::SocketAddress const& sockAddr)
-    : useThriftClient_(true),
-      sockAddr_(sockAddr),
-      nodeId_(nodeId),
-      eventBase_(eventBase),
-      context_(context) {
-  // sanity check
-  CHECK_NE(eventBase_, static_cast<void*>(nullptr));
-  CHECK(!nodeId.empty());
-  CHECK(!sockAddr_.empty());
-
   // initialize timers
   initTimers();
 }
 
 KvStoreClientInternal::~KvStoreClientInternal() {
-  // kvStoreSubSock will ONLY be intialized when it is NOT using thriftClient
-  if (useThriftClient_) {
-    return;
-  }
-
   // Removes the KvStore socket from the eventBase
   eventBase_->removeSocket(fbzmq::RawZmqSocketPtr{*kvStoreSubSock_});
 }
@@ -148,50 +121,9 @@ KvStoreClientInternal::initTimers() {
 }
 
 void
-KvStoreClientInternal::initOpenrCtrlClient() {
-  // Do not create new client if one exists already
-  if (openrCtrlClient_) {
-    return;
-  }
-
-  try {
-    openrCtrlClient_ = openr::getOpenrCtrlPlainTextClient(
-        evb_, folly::IPAddress(sockAddr_.getAddressStr()), sockAddr_.getPort());
-  } catch (const std::exception& ex) {
-    LOG(ERROR) << "Failed to connect to Open/R. Exception: "
-               << folly::exceptionStr(ex);
-    openrCtrlClient_ = nullptr;
-  }
-}
-
-void
-KvStoreClientInternal::prepareKvStoreCmdSock() noexcept {
-  CHECK(!useThriftClient_)
-      << "prepareKvStoreCmdSock() NOT supported over Thrift";
-
-  if (kvStoreCmdSock_) {
-    return;
-  }
-  kvStoreCmdSock_ = std::make_unique<fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>>(
-      context_, folly::none, folly::none, fbzmq::NonblockingFlag{false});
-  const auto kvStoreCmd =
-      kvStoreCmdSock_->connect(fbzmq::SocketUrl{kvStoreLocalCmdUrl_});
-  if (kvStoreCmd.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << kvStoreLocalCmdUrl_ << "' "
-               << kvStoreCmd.error();
-  }
-}
-
-void
 KvStoreClientInternal::checkPersistKeyInStore() {
-  CHECK(!useThriftClient_)
-      << "checkPersistKeyInStore() NOT supported over Thrift";
-
-  // Prepare request
-  thrift::KvStoreRequest request;
-  thrift::KeyGetParams params;
-
   std::chrono::milliseconds timeout{checkPersistKeyPeriod_.value()};
+
   // go through persisted keys map for each area
   for (const auto& persistKeyValsEntry : persistedKeyVals_) {
     const auto& area = persistKeyValsEntry.first;
@@ -201,49 +133,42 @@ KvStoreClientInternal::checkPersistKeyInStore() {
       continue;
     }
 
+    // Prepare KEY_GET params
+    thrift::KeyGetParams params;
+    thrift::Publication pub;
     for (auto const& key : persistedKeyVals) {
-      params.keys.push_back(key.first);
+      params.keys.emplace_back(key.first);
     }
 
-    request.cmd = thrift::Command::KEY_GET;
-    request.keyGetParams = params;
-    request.area = area;
-
-    // Send request
-    prepareKvStoreCmdSock();
-    kvStoreCmdSock_->sendThriftObj(request, serializer_);
-
-    // Receive response
-    auto maybePublication = kvStoreCmdSock_->recvThriftObj<thrift::Publication>(
-        serializer_, recvTimeout_);
-
-    if (not maybePublication) {
-      kvStoreCmdSock_.reset();
-      LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
-                 << "Exception: " << maybePublication.error();
+    // Get KvStore response
+    try {
+      pub = *(kvStore_->getKvStoreKeyVals(params, area).get());
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << "Failed to get keyvals from kvstore. Exception: "
+                 << ex.what();
       // retry in 1 sec
       timeout = 1000ms;
       checkPersistKeyTimer_->scheduleTimeout(1000ms);
       continue;
     }
 
-    auto& publication = *maybePublication;
+    // Find expired keys from latest KvStore
     std::unordered_map<std::string, thrift::Value> keyVals;
     for (auto const& key : persistedKeyVals) {
-      auto rxkey = publication.keyVals.find(key.first);
-      if (rxkey == publication.keyVals.end()) {
+      auto rxkey = pub.keyVals.find(key.first);
+      if (rxkey == pub.keyVals.end()) {
         keyVals.emplace(key.first, persistedKeyVals.at(key.first));
       }
     }
+
     // Advertise to KvStore
     if (not keyVals.empty()) {
       const auto ret = setKeysHelper(std::move(keyVals), area);
-      if (ret.hasError()) {
-        LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
-                   << "Exception: " << ret.error();
+      if (!ret.has_value()) {
+        LOG(ERROR) << "Error sending SET_KEY request to KvStore.";
       }
     }
-    processPublication(publication);
+    processPublication(pub);
   }
 
   timeout = std::min(timeout, checkPersistKeyPeriod_.value());
@@ -372,7 +297,7 @@ KvStoreClientInternal::buildThriftValue(
   return thriftValue;
 }
 
-folly::Expected<folly::Unit, fbzmq::Error>
+folly::Optional<folly::Unit>
 KvStoreClientInternal::setKey(
     std::string const& key,
     std::string const& value,
@@ -401,7 +326,7 @@ KvStoreClientInternal::setKey(
   return ret;
 }
 
-folly::Expected<folly::Unit, fbzmq::Error>
+folly::Optional<folly::Unit>
 KvStoreClientInternal::setKey(
     std::string const& key,
     thrift::Value const& thriftValue,
@@ -511,136 +436,55 @@ KvStoreClientInternal::clearKey(
   keyVals.emplace(key, std::move(thriftValue));
   // Advertise to KvStore
   const auto ret = setKeysHelper(std::move(keyVals), area);
-  if (!ret) {
-    LOG(ERROR) << "Error sending SET_KEY request to KvStore: " << ret.error();
+  if (!ret.has_value()) {
+    LOG(ERROR) << "Error sending SET_KEY request to KvStore";
   }
 }
 
-folly::Expected<thrift::Value, fbzmq::Error>
+folly::Optional<thrift::Value>
 KvStoreClientInternal::getKey(
     std::string const& key,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
   VLOG(3) << "KvStoreClientInternal: getKey called for key " << key << ", area "
           << area;
+  CHECK(kvStore_);
 
-  // use thrift-port talking to kvstore
-  if (useThriftClient_) {
-    // init openrCtrlClient to talk to KvStore
-    initOpenrCtrlClient();
-
-    if (!openrCtrlClient_) {
-      return folly::makeUnexpected(
-          fbzmq::Error(0, "can't init OpenrCtrlClient"));
-    }
-
-    thrift::Publication pub;
-    try {
-      openrCtrlClient_->sync_getKvStoreKeyVals(
-          pub, std::vector<std::string>{key});
-    } catch (const std::exception& ex) {
-      LOG(ERROR) << "Failed to dump key-val from KvStore. Exception: "
-                 << folly::exceptionStr(ex);
-      openrCtrlClient_ = nullptr;
-      return folly::makeUnexpected(fbzmq::Error(0, ex.what()));
-    }
-
-    // check key existence
-    if (pub.keyVals.find(key) == pub.keyVals.end()) {
-      return folly::makeUnexpected(fbzmq::Error(0, "can't find key"));
-    }
-    return pub.keyVals.at(key);
+  thrift::Publication pub;
+  try {
+    thrift::KeyGetParams params;
+    params.keys.emplace_back(key);
+    pub = *(kvStore_->getKvStoreKeyVals(params, area).get());
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Failed to get keyvals from kvstore. Exception: "
+               << ex.what();
+    return folly::none;
   }
+  VLOG(3) << "Received " << pub.keyVals.size() << " key-vals.";
 
-  // Prepare request
-  thrift::KvStoreRequest request;
-  thrift::KeyGetParams params;
-  params.keys.push_back(key);
-
-  request.cmd = thrift::Command::KEY_GET;
-  request.keyGetParams = params;
-  request.area = area;
-
-  // Send request
-  prepareKvStoreCmdSock();
-  kvStoreCmdSock_->sendThriftObj(request, serializer_);
-
-  // Receive response
-  auto maybePublication = kvStoreCmdSock_->recvThriftObj<thrift::Publication>(
-      serializer_, recvTimeout_);
-  if (not maybePublication) {
-    kvStoreCmdSock_.reset();
-    return folly::makeUnexpected(maybePublication.error());
-  }
-  auto& publication = *maybePublication;
-  VLOG(3) << "Received " << publication.keyVals.size() << " key-vals.";
-
-  auto it = publication.keyVals.find(key);
-  if (it == publication.keyVals.end()) {
-    return folly::makeUnexpected(fbzmq::Error(0, "key not found"));
+  auto it = pub.keyVals.find(key);
+  if (it == pub.keyVals.end()) {
+    LOG(ERROR) << "Key: " << key << " NOT found in kvstore. Area: " << area;
+    return folly::none;
   }
   return it->second;
 }
 
-folly::Expected<thrift::Publication, fbzmq::Error>
-KvStoreClientInternal::dumpImpl(
-    fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>& sock,
-    apache::thrift::CompactSerializer& serializer,
-    std::string const& prefix,
-    folly::Optional<std::chrono::milliseconds> recvTimeout,
-    std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  // Prepare request
-  thrift::KvStoreRequest request;
-  thrift::KeyDumpParams params;
-
-  params.prefix = prefix;
-  request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams = params;
-  request.area = area;
-
-  // Send request
-  sock.sendThriftObj(request, serializer);
-
-  // Receive response
-  return sock.recvThriftObj<thrift::Publication>(serializer, recvTimeout);
-}
-
-folly::Expected<std::unordered_map<std::string, thrift::Value>, fbzmq::Error>
+folly::Optional<std::unordered_map<std::string, thrift::Value>>
 KvStoreClientInternal::dumpAllWithPrefix(
     const std::string& prefix /* = "" */,
     const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  // use thrift-port talking to kvstore
-  if (useThriftClient_) {
-    // Init openrCtrlClient to talk to kvStore
-    initOpenrCtrlClient();
+  CHECK(kvStore_);
 
-    if (!openrCtrlClient_) {
-      return folly::makeUnexpected(
-          fbzmq::Error(0, "can't init OpenrCtrlClient"));
-    }
-
-    thrift::Publication pub;
-    thrift::KeyDumpParams keyDumpParams;
-    keyDumpParams.prefix = prefix;
-    try {
-      openrCtrlClient_->sync_getKvStoreKeyValsFilteredArea(
-          pub, keyDumpParams, area);
-    } catch (const std::exception& ex) {
-      LOG(ERROR) << "Failed to dump keys from KvStore. Exception: "
-                 << folly::exceptionStr(ex);
-      openrCtrlClient_ = nullptr;
-      return folly::makeUnexpected(fbzmq::Error(0, ex.what()));
-    }
-    return pub.keyVals;
+  thrift::Publication pub;
+  try {
+    thrift::KeyDumpParams params;
+    params.prefix = prefix;
+    pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Failed to add peers to kvstore. Exception: " << ex.what();
+    return folly::none;
   }
-
-  prepareKvStoreCmdSock();
-  auto maybePub =
-      dumpImpl(*kvStoreCmdSock_, serializer_, prefix, recvTimeout_, area);
-  if (maybePub.hasError()) {
-    kvStoreCmdSock_.reset();
-    return folly::makeUnexpected(maybePub.error());
-  }
-  return maybePub.value().keyVals;
+  return pub.keyVals;
 }
 
 folly::Optional<thrift::Value>
@@ -691,47 +535,26 @@ KvStoreClientInternal::setKvCallback(KeyCallback callback) {
   kvCallback_ = std::move(callback);
 }
 
-folly::Expected<folly::Unit, fbzmq::Error>
+folly::Optional<folly::Unit>
 KvStoreClientInternal::addPeers(
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   VLOG(3) << "KvStoreClientInternal: addPeers called for " << peers.size()
           << " peers.";
+  CHECK(kvStore_);
 
-  CHECK(!useThriftClient_) << "addPeers() NOT supported over Thrift";
-
-  // Prepare request
-  thrift::KvStoreRequest request;
-  thrift::PeerAddParams params;
-
-  params.peers = std::move(peers);
-  request.cmd = thrift::Command::PEER_ADD;
-  request.peerAddParams = params;
-  request.area = area;
-
-  // Send request
-  prepareKvStoreCmdSock();
-  kvStoreCmdSock_->sendThriftObj(request, serializer_);
-
-  // Receive response
-  auto maybeReply = kvStoreCmdSock_->recvThriftObj<thrift::PeerCmdReply>(
-      serializer_, recvTimeout_);
-  if (not maybeReply) {
-    kvStoreCmdSock_.reset();
-    return folly::makeUnexpected(maybeReply.error());
-  }
-  auto& reply = *maybeReply;
-
-  if (reply.peers.size() < params.peers.size()) {
-    return folly::makeUnexpected(fbzmq::Error(
-        0,
-        "Failed to submit new peer requests to KvStore, server "
-        "error..."));
+  try {
+    thrift::PeerAddParams params;
+    params.peers = std::move(peers);
+    kvStore_->addUpdateKvStorePeers(std::move(params), area).get();
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Failed to add peers to kvstore. Exception: " << ex.what();
+    return folly::none;
   }
   return folly::Unit();
 }
 
-folly::Expected<folly::Unit, fbzmq::Error>
+folly::Optional<folly::Unit>
 KvStoreClientInternal::delPeer(
     std::string const& peerName,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
@@ -739,10 +562,10 @@ KvStoreClientInternal::delPeer(
 
   std::vector<std::string> peerNames;
   peerNames.push_back(peerName);
-  return delPeersHelper(peerNames, area);
+  return delPeersHelper(std::move(peerNames), area);
 }
 
-folly::Expected<folly::Unit, fbzmq::Error>
+folly::Optional<folly::Unit>
 KvStoreClientInternal::delPeers(
     const std::vector<std::string>& peerNames,
     const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
@@ -752,31 +575,38 @@ KvStoreClientInternal::delPeers(
   return delPeersHelper(peerNames, area);
 }
 
-folly::Expected<std::unordered_map<std::string, thrift::PeerSpec>, fbzmq::Error>
+// This is a PRIVATE method
+folly::Optional<folly::Unit>
+KvStoreClientInternal::delPeersHelper(
+    const std::vector<std::string>& peerNames,
+    const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
+  CHECK(kvStore_);
+
+  try {
+    thrift::PeerDelParams params;
+    params.peerNames = peerNames;
+    kvStore_->deleteKvStorePeers(std::move(params), area).get();
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Failed to del peers from kvstore. Exception: " << ex.what();
+    return folly::none;
+  }
+  return folly::Unit();
+}
+
+folly::Optional<std::unordered_map<std::string, thrift::PeerSpec>>
 KvStoreClientInternal::getPeers(
     const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   VLOG(3) << "KvStoreClientInternal: getPeers called";
+  CHECK(kvStore_);
 
-  CHECK(!useThriftClient_) << "getPeers() NOT supported over Thrift";
-
-  // Prepare request
-  thrift::KvStoreRequest request;
-  request.cmd = thrift::Command::PEER_DUMP;
-  request.area = area;
-
-  // Send request
-  prepareKvStoreCmdSock();
-  kvStoreCmdSock_->sendThriftObj(request, serializer_);
-
-  // Receive response
-  auto maybeReply = kvStoreCmdSock_->recvThriftObj<thrift::PeerCmdReply>(
-      serializer_, recvTimeout_);
-  if (not maybeReply) {
-    kvStoreCmdSock_.reset();
-    return folly::makeUnexpected(maybeReply.error());
+  thrift::PeersMap peers;
+  try {
+    peers = *(kvStore_->getKvStorePeers(area).get());
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Failed to dump peers from kvstore. Exception: " << ex.what();
+    return folly::none;
   }
-
-  return maybeReply->peers;
+  return peers;
 }
 
 void
@@ -992,13 +822,12 @@ KvStoreClientInternal::advertisePendingKeys() {
 
     // Advertise to KvStore
     const auto ret = setKeysHelper(std::move(keyVals), area);
-    if (ret) {
+    if (ret.has_value()) {
       for (auto const& key : keys) {
         keysToAdvertise.erase(key);
       }
     } else {
-      LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
-                 << "Will retry again. Error: " << ret.error();
+      LOG(ERROR) << "Error sending SET_KEY request to KvStore.";
     }
   }
 
@@ -1062,9 +891,8 @@ KvStoreClientInternal::advertiseTtlUpdates() {
     // Advertise to KvStore
     if (not keyVals.empty()) {
       const auto ret = setKeysHelper(std::move(keyVals), area);
-      if (not ret) {
-        LOG(ERROR) << "Error sending SET_KEY request to KvStore. "
-                   << "Will retry again. Exception: " << ret.error().errString;
+      if (!ret.has_value()) {
+        LOG(ERROR) << "Error sending SET_KEY request to KvStore.";
       }
     }
   }
@@ -1074,15 +902,18 @@ KvStoreClientInternal::advertiseTtlUpdates() {
   ttlTimer_->scheduleTimeout(timeout);
 }
 
-folly::Expected<folly::Unit, fbzmq::Error>
+folly::Optional<folly::Unit>
 KvStoreClientInternal::setKeysHelper(
     std::unordered_map<std::string, thrift::Value> keyVals,
     std::string const& area) {
+  CHECK(kvStore_);
+
   // Return if nothing to advertise.
   if (keyVals.empty()) {
     return folly::Unit();
   }
 
+  // Debugging purpose print-out
   for (auto const& kv : keyVals) {
     VLOG(3) << "Advertising key: " << kv.first
             << ", version: " << kv.second.version
@@ -1096,84 +927,16 @@ KvStoreClientInternal::setKeysHelper(
     }
   }
 
-  // use thrift-port talking to kvstore
-  if (useThriftClient_) {
-    // Init openrCtrlClient to talk to kvStore
-    initOpenrCtrlClient();
-
-    if (!openrCtrlClient_) {
-      return folly::makeUnexpected(
-          fbzmq::Error(0, "can't init OpenrCtrlClient"));
-    }
-
-    thrift::KeySetParams keySetParams;
-    keySetParams.keyVals = std::move(keyVals);
-    try {
-      openrCtrlClient_->sync_setKvStoreKeyVals(keySetParams, area);
-    } catch (const std::exception& ex) {
-      LOG(ERROR) << "Failed to set key-val from KvStore. Exception: "
-                 << folly::exceptionStr(ex);
-      openrCtrlClient_ = nullptr;
-      return folly::makeUnexpected(fbzmq::Error(0, ex.what()));
-    }
-    return folly::Unit();
-  }
-
-  // Build request
-  thrift::KvStoreRequest request;
   thrift::KeySetParams params;
-
   params.keyVals = std::move(keyVals);
-  request.cmd = thrift::Command::KEY_SET;
-  request.keySetParams = params;
-  request.area = area;
 
-  // Send request to KvStore
-  prepareKvStoreCmdSock();
-  kvStoreCmdSock_->sendThriftObj(request, serializer_);
-
-  // Receive response back
-  auto maybeReply = kvStoreCmdSock_->recvOne(recvTimeout_);
-  if (not maybeReply) {
-    kvStoreCmdSock_.reset();
-    return folly::makeUnexpected(maybeReply.error());
+  try {
+    kvStore_->setKvStoreKeyVals(params, area).get();
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Failed to set key-val from KvStore. Exception: "
+               << ex.what();
+    return folly::none;
   }
-
-  const auto response = maybeReply->read<std::string>().value();
-  if (response != Constants::kSuccessResponse.toString()) {
-    return folly::makeUnexpected(
-        fbzmq::Error(0, "KvStore error in SET_KEY. Received: " + response));
-  }
-  return folly::Unit();
-}
-
-folly::Expected<folly::Unit, fbzmq::Error>
-KvStoreClientInternal::delPeersHelper(
-    const std::vector<std::string>& peerNames,
-    const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
-  CHECK(!useThriftClient_) << "delPeersHelper() NOT supported over Thrift";
-
-  // Prepare request
-  thrift::KvStoreRequest request;
-  thrift::PeerDelParams params;
-
-  params.peerNames = peerNames;
-  request.cmd = thrift::Command::PEER_DEL;
-  request.peerDelParams = params;
-  request.area = area;
-
-  // Send request
-  prepareKvStoreCmdSock();
-  kvStoreCmdSock_->sendThriftObj(request, serializer_);
-
-  // Receive response
-  auto maybeReply = kvStoreCmdSock_->recvThriftObj<thrift::PeerCmdReply>(
-      serializer_, recvTimeout_);
-  if (not maybeReply) {
-    kvStoreCmdSock_.reset();
-    return folly::makeUnexpected(maybeReply.error());
-  }
-
   return folly::Unit();
 }
 

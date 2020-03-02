@@ -549,9 +549,7 @@ main(int argc, char** argv) {
             FLAGS_system_agent_port));
   }
 
-  //
-  // If enabled, start the spark service.
-  //
+  // Create Spark instance for neighbor discovery
   auto spark = startEventBase(
       allThreads,
       orderedEvbs,

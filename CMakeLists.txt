@@ -647,15 +647,15 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/kvstore
   )
 
-  add_openr_test(KvStoreClientTest kvstore_client_test
+  add_openr_test(KvStoreClientInternalTest kvstore_client_internal_test
     SOURCES
-      openr/kvstore/tests/KvStoreClientTest.cpp
+      openr/kvstore/tests/KvStoreClientInternalTest.cpp
     DESTINATION sbin/tests/openr/kvstore
   )
 
-  add_openr_test(KvStoreThriftClientTest kvstore_thrift_client_test
+  add_openr_test(KvStoreUtilTest kvstore_util_test
     SOURCES
-      openr/kvstore/tests/KvStoreThriftClientTest.cpp
+      openr/kvstore/tests/KvStoreUtilTest.cpp
     DESTINATION sbin/tests/openr/kvstore
   )
 

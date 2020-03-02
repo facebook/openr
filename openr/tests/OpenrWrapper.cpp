@@ -40,19 +40,20 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreGlobalCmdUrl_(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
-      kvStoreReqSock_(context),
       platformPubSock_(context),
       systemPort_(systemPort),
       per_prefix_keys_(per_prefix_keys) {
-  // LM ifName
-  std::string ifName = "vethLMTest_" + nodeId_;
+  // create zmq monitor
+  monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      MonitorPubUrl{monitorPubUrl_},
+      context_);
 
-  // create config-store
+  // create and start config-store thread
   configStore_ = std::make_unique<PersistentStore>(
       nodeId_,
       folly::sformat("/tmp/{}_aq_config_store.bin", nodeId_),
       context_);
-  // start config-store thread
   std::thread configStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " ConfigStore running.";
     configStore_->run();
@@ -61,16 +62,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   configStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(configStoreThread));
 
-  // create zmq monitor
-  monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      MonitorPubUrl{monitorPubUrl_},
-      context_);
-
-  //
-  // create kvstore
-  //
-
+  // create and start kvstore thread
   std::optional<KvStoreFilters> filters{std::nullopt};
   kvStore_ = std::make_unique<KvStore>(
       context_,
@@ -84,10 +76,16 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreMonitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec>{},
       std::move(filters));
+  std::thread kvStoreThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " KvStore running.";
+    kvStore_->run();
+    VLOG(1) << nodeId_ << " KvStore stopped.";
+  });
+  kvStore_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(kvStoreThread));
 
-  kvStoreLocalCmdUrl_ = kvStore_->inprocCmdUrl;
   // kvstore client socket
-  kvStoreReqSock_.connect(fbzmq::SocketUrl{kvStore_->inprocCmdUrl}).value();
+  kvStoreLocalCmdUrl_ = kvStore_->inprocCmdUrl;
 
   // kvstore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
@@ -159,6 +157,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   // create link monitor
   //
+  std::string ifName = "vethLMTest_" + nodeId_;
   std::vector<thrift::IpPrefix> networks;
   networks.emplace_back(toIpPrefix(folly::IPAddress::createNetwork("::/0")));
   re2::RE2::Options options;
@@ -170,22 +169,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   includeRegexList->Compile();
   std::unique_ptr<re2::RE2::Set> excludeRegexList;
   std::unique_ptr<re2::RE2::Set> redistRegexList;
-
-  // start prefix manager
-  prefixManager_ = std::make_unique<PrefixManager>(
-      nodeId_,
-      prefixUpdatesQueue_.getReader(),
-      configStore_.get(),
-      kvStore_.get(),
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      PrefixDbMarker{"prefix:"},
-      per_prefix_keys_ /* create IP prefix keys */,
-      false /* prefix-mananger perf measurement */,
-      std::chrono::seconds(0),
-      Constants::kKvStoreDbTtl,
-      context_);
 
   linkMonitor_ = std::make_unique<LinkMonitor>(
       context_,
@@ -217,6 +200,24 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       linkFlapInitialBackoff,
       linkFlapMaxBackoff,
       Constants::kKvStoreDbTtl);
+
+  //
+  // Create prefix manager
+  //
+  prefixManager_ = std::make_unique<PrefixManager>(
+      nodeId_,
+      prefixUpdatesQueue_.getReader(),
+      configStore_.get(),
+      kvStore_.get(),
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      PrefixDbMarker{"prefix:"},
+      per_prefix_keys_ /* create IP prefix keys */,
+      false /* prefix-mananger perf measurement */,
+      std::chrono::seconds(0),
+      Constants::kKvStoreDbTtl,
+      context_);
 
   //
   // create decision
@@ -257,6 +258,31 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStore_.get(),
       context_);
 
+  //
+  // create PrefixAllocator
+  //
+  const auto seedPrefix =
+      folly::IPAddress::createNetwork("fc00:cafe:babe::/62");
+  const uint8_t allocPrefixLen = 64;
+  prefixAllocator_ = std::make_unique<PrefixAllocator>(
+      nodeId_,
+      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
+      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
+      kvStore_.get(),
+      prefixUpdatesQueue_,
+      MonitorSubmitUrl{monitorSubmitUrl_},
+      AllocPrefixMarker{"allocprefix:"}, // alloc_prefix_marker
+      std::make_pair(seedPrefix, allocPrefixLen),
+      false /* set loopback addr */,
+      false /* override global address */,
+      "" /* loopback interface name */,
+      false /* prefix fwd type MPLS */,
+      false /* prefix fwd algo KSP2_ED_ECMP */,
+      Constants::kPrefixAllocatorSyncInterval,
+      configStore_.get(),
+      context_,
+      systemPort_ /* system agent port*/);
+
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(
       nodeId_, std::chrono::seconds(1), std::chrono::seconds(60), memLimit);
@@ -270,24 +296,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 template <class Serializer>
 void
 OpenrWrapper<Serializer>::run() {
-  // start monitor thread
-  std::thread monitorThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " Monitor running.";
-    monitor_->run();
-    VLOG(1) << nodeId_ << " Monitor stopped.";
-  });
-  monitor_->waitUntilRunning();
-  allThreads_.emplace_back(std::move(monitorThread));
-
-  // start kvstore thread
-  std::thread kvStoreThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " KvStore running.";
-    kvStore_->run();
-    VLOG(1) << nodeId_ << " KvStore stopped.";
-  });
-  kvStore_->waitUntilRunning();
-  allThreads_.emplace_back(std::move(kvStoreThread));
-
   try {
     // bind out publisher socket
     VLOG(2) << "Platform Publisher: Binding pub url '" << platformPubUrl_
@@ -320,27 +328,14 @@ OpenrWrapper<Serializer>::run() {
     }
   });
 
-  const auto seedPrefix =
-      folly::IPAddress::createNetwork("fc00:cafe:babe::/62");
-  const uint8_t allocPrefixLen = 64;
-  prefixAllocator_ = std::make_unique<PrefixAllocator>(
-      nodeId_,
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      kvStore_.get(),
-      prefixUpdatesQueue_,
-      MonitorSubmitUrl{monitorSubmitUrl_},
-      AllocPrefixMarker{"allocprefix:"}, // alloc_prefix_marker
-      std::make_pair(seedPrefix, allocPrefixLen),
-      false /* set loopback addr */,
-      false /* override global address */,
-      "" /* loopback interface name */,
-      false /* prefix fwd type MPLS */,
-      false /* prefix fwd algo KSP2_ED_ECMP */,
-      Constants::kPrefixAllocatorSyncInterval,
-      configStore_.get(),
-      context_,
-      systemPort_ /* system agent port*/);
+  // start monitor thread
+  std::thread monitorThread([this]() noexcept {
+    VLOG(1) << nodeId_ << " Monitor running.";
+    monitor_->run();
+    VLOG(1) << nodeId_ << " Monitor stopped.";
+  });
+  monitor_->waitUntilRunning();
+  allThreads_.emplace_back(std::move(monitorThread));
 
   // Spawn a PrefixManager thread
   std::thread prefixManagerThread([this]() noexcept {
@@ -441,10 +436,10 @@ OpenrWrapper<Serializer>::stop() {
   prefixAllocator_->waitUntilStopped();
   prefixManager_->stop();
   prefixManager_->waitUntilStopped();
-  kvStore_->stop();
-  kvStore_->waitUntilStopped();
   monitor_->stop();
   monitor_->waitUntilStopped();
+  kvStore_->stop();
+  kvStore_->waitUntilStopped();
   configStore_->stop();
   configStore_->waitUntilStopped();
 
@@ -453,7 +448,7 @@ OpenrWrapper<Serializer>::stop() {
     t.join();
   }
 
-  LOG(INFO) << nodeId_ << " OpenR stopped";
+  LOG(INFO) << "OpenR with nodeId: " << nodeId_ << " stopped";
 }
 
 template <class Serializer>
@@ -495,29 +490,9 @@ OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
 }
 
 template <class Serializer>
-folly::Expected<std::unordered_map<std::string, thrift::PeerSpec>, fbzmq::Error>
+folly::Optional<std::unordered_map<std::string, thrift::PeerSpec>>
 OpenrWrapper<Serializer>::getKvStorePeers() {
   return kvStoreClient_->getPeers();
-}
-
-template <class Serializer>
-std::unordered_map<std::string /* key */, thrift::Value>
-OpenrWrapper<Serializer>::kvStoreDumpAll(std::string const& prefix) {
-  // Prepare request
-  thrift::KvStoreRequest request;
-  thrift::KeyDumpParams params;
-
-  params.prefix = prefix;
-  request.cmd = thrift::Command::KEY_DUMP;
-  request.keyDumpParams = params;
-
-  // Make ZMQ call and wait for response
-  kvStoreReqSock_.sendThriftObj(request, serializer_).value();
-  auto reply =
-      kvStoreReqSock_.recvThriftObj<thrift::Publication>(serializer_).value();
-
-  // Return the result
-  return reply.keyVals;
 }
 
 template <class Serializer>

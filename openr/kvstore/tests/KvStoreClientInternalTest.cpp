@@ -135,13 +135,29 @@ class MultipleStoreFixture : public ::testing::Test {
     auto port2 = thriftWrapper2_->getOpenrCtrlThriftPort();
     auto port3 = thriftWrapper3_->getOpenrCtrlThriftPort();
     client1 = std::make_shared<KvStoreClientInternal>(
-        context, &evb, node1, folly::SocketAddress{localhost_, port1});
+        context,
+        &evb,
+        node1,
+        store1->localCmdUrl,
+        store1->localPubUrl,
+        store1->getKvStore());
 
     client2 = std::make_shared<KvStoreClientInternal>(
-        context, &evb, node2, folly::SocketAddress{localhost_, port2});
+        context,
+        &evb,
+        node2,
+        store2->localCmdUrl,
+        store2->localPubUrl,
+        store2->getKvStore(),
+        persistKeyTimer /* checkPersistKeyPeriod */);
 
     client3 = std::make_shared<KvStoreClientInternal>(
-        context, &evb, node3, folly::SocketAddress{localhost_, port3});
+        context,
+        &evb,
+        node3,
+        store3->localCmdUrl,
+        store3->localPubUrl,
+        store3->getKvStore());
 
     sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port1});
     sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port2});
@@ -157,6 +173,7 @@ class MultipleStoreFixture : public ::testing::Test {
       thriftWrapper3_;
   std::shared_ptr<KvStoreClientInternal> client1, client2, client3;
 
+  const std::chrono::milliseconds persistKeyTimer{100};
   const std::string localhost_{"::1"};
   const std::string node1{"node1"}, node2{"node2"}, node3{"node3"};
 
@@ -192,42 +209,6 @@ class MultipleAreaFixture : public MultipleStoreFixture {
     store1->stop();
     store2->stop();
     store3->stop();
-  }
-
-  void
-  initKvStoreClientInternal() {
-    // Create and initialize kvstore-clients
-    auto port1 = thriftWrapper1_->getOpenrCtrlThriftPort();
-    auto port2 = thriftWrapper2_->getOpenrCtrlThriftPort();
-    auto port3 = thriftWrapper3_->getOpenrCtrlThriftPort();
-    client1 = std::make_shared<KvStoreClientInternal>(
-        context,
-        &evb,
-        node1,
-        store1->localCmdUrl,
-        store1->localPubUrl,
-        store1->getKvStore());
-
-    client2 = std::make_shared<KvStoreClientInternal>(
-        context,
-        &evb,
-        node2,
-        store2->localCmdUrl,
-        store2->localPubUrl,
-        store2->getKvStore(),
-        persistKeyTimer /* checkPersistKeyPeriod */);
-
-    client3 = std::make_shared<KvStoreClientInternal>(
-        context,
-        &evb,
-        node3,
-        store3->localCmdUrl,
-        store3->localPubUrl,
-        store3->getKvStore());
-
-    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port1});
-    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port2});
-    sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port3});
   }
 
   void
@@ -292,7 +273,6 @@ class MultipleAreaFixture : public MultipleStoreFixture {
 
   const std::string podArea{"pod-area"};
   const std::string planeArea{"plane-area"};
-  const std::chrono::milliseconds persistKeyTimer{100};
   std::unordered_map<std::string, thrift::PeerSpec> peers1;
   std::unordered_map<std::string, thrift::PeerSpec> peers2PlaneArea;
   std::unordered_map<std::string, thrift::PeerSpec> peers2PodArea;
@@ -1000,25 +980,19 @@ TEST(KvStoreClientInternal, ApiTest) {
   // dump keys
   evb.scheduleTimeout(std::chrono::milliseconds(4), [&]() noexcept {
     // dump keys using thrift flavor of KvStoreClientInternal
-    const std::string localhost{"::1"};
-    auto port = thriftWrapper->getOpenrCtrlThriftPort();
-    auto client3 = std::make_shared<KvStoreClientInternal>(
-        context, &evb, nodeId, folly::SocketAddress{localhost, port});
-    auto client4 = std::make_shared<KvStoreClientInternal>(
-        context, &evb, nodeId, folly::SocketAddress{localhost, port});
-    const auto maybeKeyVals = client3->dumpAllWithPrefix();
+    const auto maybeKeyVals = client1->dumpAllWithPrefix();
     ASSERT_TRUE(maybeKeyVals.hasValue());
     ASSERT_EQ(3, maybeKeyVals->size());
     EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value);
     EXPECT_EQ("test_value2-client2", maybeKeyVals->at("test_key2").value);
     EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value);
 
-    const auto maybeKeyVals2 = client4->dumpAllWithPrefix();
+    const auto maybeKeyVals2 = client2->dumpAllWithPrefix();
     ASSERT_TRUE(maybeKeyVals2.hasValue());
     EXPECT_EQ(*maybeKeyVals, *maybeKeyVals2);
 
     // dump keys with a given prefix
-    const auto maybePrefixedKeyVals = client3->dumpAllWithPrefix("test");
+    const auto maybePrefixedKeyVals = client1->dumpAllWithPrefix("test");
     ASSERT_TRUE(maybePrefixedKeyVals.hasValue());
     ASSERT_EQ(2, maybePrefixedKeyVals->size());
     EXPECT_EQ("test_value1", maybePrefixedKeyVals->at("test_key1").value);

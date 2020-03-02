@@ -80,9 +80,8 @@ class OpenrWrapper {
   /**
    * APIs to get existing peers of a KvStore.
    */
-  folly::
-      Expected<std::unordered_map<std::string, thrift::PeerSpec>, fbzmq::Error>
-      getKvStorePeers();
+  folly::Optional<std::unordered_map<std::string, thrift::PeerSpec>>
+  getKvStorePeers();
 
   /**
    * add interfaceDb for spark to tracking
@@ -163,12 +162,10 @@ class OpenrWrapper {
 
   // sub module communication zmq urls and ports
   int kvStoreGlobalCmdPort_{0};
-  int kvStoreGlobalPubPort_{0};
   const std::string monitorSubmitUrl_;
   const std::string monitorPubUrl_;
   const std::string kvStoreLocalPubUrl_;
   const std::string kvStoreGlobalCmdUrl_;
-  const std::string kvStoreGlobalPubUrl_;
   const std::string platformPubUrl_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
@@ -176,9 +173,6 @@ class OpenrWrapper {
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
   std::string kvStoreLocalCmdUrl_;
-
-  // client sockets mainly for tests
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> kvStoreReqSock_;
 
   // socket to publish platform events
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> platformPubSock_;

@@ -130,7 +130,9 @@ template <typename T>
 bool
 RangeAllocator<T>::isRangeConsumed() const {
   const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
-  CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
+  CHECK(maybeKeyMap.has_value())
+      << "Failed to dump keys with prefix: " << keyPrefix_
+      << " from kvstore in area: " << area_;
   T count = 0;
   for (const auto& kv : *maybeKeyMap) {
     const auto val = details::binaryToPrimitive<T>(kv.second.value.value());
@@ -146,7 +148,9 @@ template <typename T>
 folly::Optional<T>
 RangeAllocator<T>::getValueFromKvStore() const {
   const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
-  CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
+  CHECK(maybeKeyMap.has_value())
+      << "Failed to dump keys with prefix: " << keyPrefix_
+      << " from kvstore in area: " << area_;
   for (const auto& kv : *maybeKeyMap) {
     if (kv.second.originatorId == nodeName_) {
       const auto val = details::binaryToPrimitive<T>(kv.second.value.value());
@@ -217,7 +221,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
             ttlVersion /* ttl version */,
             0 /* hash */),
         area_);
-    CHECK(ret) << ret.error();
+    CHECK(ret.has_value());
   } else {
     CHECK(shouldOwnMine);
     CHECK_EQ(nodeName_, maybeThriftVal->originatorId);
@@ -258,7 +262,9 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
   auto newVal = dist(gen);
 
   const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
-  CHECK(maybeKeyMap) << maybeKeyMap.error().errString;
+  CHECK(maybeKeyMap.has_value())
+      << "Failed to dump keys with prefix: " << keyPrefix_
+      << " from kvstore in area: " << area_;
   const auto valOwners =
       folly::gen::from(*maybeKeyMap) |
       folly::gen::map([](std::pair<std::string, thrift::Value> const& kv) {

@@ -196,7 +196,11 @@ class OpenrFixture : public ::testing::Test {
     LOG(INFO) << "Stopping mockIoProvider thread.";
     mockIoProvider->stop();
     mockIoProviderThread->join();
+    // ScopedServerThread will take care of join
     systemThriftThread_.stop();
+
+    // DO NOT explicitly call stop() method for Open/R instances
+    // as DESCTRUCTOR in OpenrWrapper will take care of them.
   }
 
   /**
@@ -225,8 +229,8 @@ class OpenrFixture : public ::testing::Test {
         port_,
         memLimit,
         per_prefix_keys);
-    aquamen_.emplace_back(std::move(ptr));
-    return aquamen_.back().get();
+    openrWrappers_.emplace_back(std::move(ptr));
+    return openrWrappers_.back().get();
   }
 
   // public member variables
@@ -241,7 +245,8 @@ class OpenrFixture : public ::testing::Test {
   apache::thrift::util::ScopedServerThread systemThriftThread_;
 
  private:
-  std::vector<std::unique_ptr<OpenrWrapper<CompactSerializer>>> aquamen_{};
+  std::vector<std::unique_ptr<OpenrWrapper<CompactSerializer>>>
+      openrWrappers_{};
 };
 
 //

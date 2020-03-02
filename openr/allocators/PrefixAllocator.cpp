@@ -106,9 +106,10 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
     // 1) Get initial value from KvStore!
     auto maybeValue = kvStoreClient_->getKey(
         Constants::kStaticPrefixAllocParamKey.toString(), area_);
-    if (maybeValue.hasError()) {
-      LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
-                 << maybeValue.error();
+    if (!maybeValue.has_value()) {
+      LOG(ERROR) << "Failed to retrieve prefix alloc key: "
+                 << Constants::kStaticPrefixAllocParamKey.toString()
+                 << " from KvStore, area: " << area_;
     } else {
       processStaticPrefixAllocUpdate(maybeValue.value());
       return;
@@ -178,9 +179,10 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
     // 1) Get initial value from KvStore!
     auto maybeValue = kvStoreClient_->getKey(
         Constants::kSeedPrefixAllocParamKey.toString(), area_);
-    if (maybeValue.hasError()) {
-      LOG(ERROR) << "Failed to retrieve prefix alloc params from KvStore "
-                 << maybeValue.error();
+    if (!maybeValue.has_value()) {
+      LOG(ERROR) << "Failed to retrieve prefix alloc key: "
+                 << Constants::kStaticPrefixAllocParamKey.toString()
+                 << " from KvStore, area: " << area_;
     } else {
       processAllocParamUpdate(maybeValue.value());
       return;

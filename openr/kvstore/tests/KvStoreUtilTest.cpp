@@ -26,54 +26,6 @@ namespace {
 const std::chrono::milliseconds kTtl{1000};
 } // namespace
 
-class SingleKvStoreTestFixture : public ::testing::Test {
- public:
-  void
-  SetUp() override {
-    // spin up a kvStore through kvStoreWrapper
-    kvStoreWrapper_ = std::make_shared<KvStoreWrapper>(
-        context_,
-        nodeId_,
-        std::chrono::seconds(60) /* db sync interval */,
-        std::chrono::seconds(600) /* counter submit interval */,
-        std::unordered_map<std::string, thrift::PeerSpec>{});
-    kvStoreWrapper_->run();
-
-    // spin up an OpenrThriftServerWrapper
-    openrThriftServerWrapper_ = std::make_shared<OpenrThriftServerWrapper>(
-        nodeId_,
-        nullptr /* decision */,
-        nullptr /* fib */,
-        kvStoreWrapper_->getKvStore() /* kvStore */,
-        nullptr /* linkMonitor */,
-        nullptr /* configStore */,
-        nullptr /* prefixManager */,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
-        KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
-        context_);
-    openrThriftServerWrapper_->run();
-  }
-
-  void
-  TearDown() override {
-    LOG(INFO) << "Stopping openrCtrl thrift server thread";
-    openrThriftServerWrapper_->stop();
-    LOG(INFO) << "OpenrCtrl thrift server thread got stopped";
-
-    LOG(INFO) << "Stopping KvStoreWrapper thread";
-    kvStoreWrapper_->stop();
-    LOG(INFO) << "KvStoreWrapper thread got stopped";
-  }
-
-  // var used to conmmunicate to kvStore through openrCtrl thrift server
-  const std::string nodeId_{"test_kvstore_thrift"};
-  const std::string localhost_{"::1"};
-
-  fbzmq::Context context_{};
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper_{nullptr};
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
-};
-
 class MultipleKvStoreTestFixture : public ::testing::Test {
  public:
   void
@@ -150,101 +102,6 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper2_;
 };
 
-TEST_F(SingleKvStoreTestFixture, SetGetKeyTest) {
-  // Create another OpenrEventBase instance for looping clients
-  OpenrEventBase evl;
-
-  const std::string key1{"test_key1"};
-  const std::string val1{"test_value1"};
-  const std::string key2{"test_key2"};
-  const std::string val2{"test_value2"};
-  const uint16_t port = openrThriftServerWrapper_->getOpenrCtrlThriftPort();
-
-  // Create and initilize kvStoreThriftClient
-  auto client1 = std::make_shared<KvStoreClientInternal>(
-      context_, &evl, nodeId_, folly::SocketAddress{localhost_, port});
-  auto client2 = std::make_shared<KvStoreClientInternal>(
-      context_, &evl, nodeId_, folly::SocketAddress{localhost_, port});
-  EXPECT_TRUE(nullptr != client1);
-  EXPECT_TRUE(nullptr != client2);
-
-  // Test1: test getKey()/setKey() with one client when there is no such key
-  evl.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
-    // client1 get key, should be no key inside kvStore
-    auto maybeValue1 = client1->getKey(key1);
-    ASSERT_FALSE(maybeValue1.hasValue());
-
-    // client1 set key-value
-    EXPECT_TRUE(client1->setKey(key1, val1));
-
-    auto maybeValue2 = client1->getKey(key1);
-    ASSERT_TRUE(maybeValue2.hasValue());
-    EXPECT_EQ(1, maybeValue2->version);
-    EXPECT_EQ(val1, maybeValue2->value.value());
-  });
-
-  // Test2: test getKey()/setKey() with the other client. Verift version bump
-  evl.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    // use client2 to get key, should see excatly the same as client1
-    auto maybeValue3 = client2->getKey(key1);
-    ASSERT_TRUE(maybeValue3.hasValue());
-    EXPECT_EQ(1, maybeValue3->version);
-    EXPECT_EQ(val1, maybeValue3->value.value());
-
-    // use client2 to set key, should see version bumped up
-    const std::string newValue{"test_value1_new"};
-    EXPECT_TRUE(client2->setKey(key1, newValue));
-
-    auto maybeValue4 = client2->getKey(key1);
-    ASSERT_TRUE(maybeValue4.hasValue());
-    EXPECT_EQ(2, maybeValue4->version);
-    EXPECT_EQ(newValue, maybeValue4->value.value());
-  });
-
-  // Test3: inject keys with non-infinite TTL
-  evl.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
-    EXPECT_TRUE(client1->setKey(key2, val2, 3, kTtl));
-  });
-
-  // Test4: key shall NOT expire even after TTL time due to continuous
-  // refreshing
-  evl.scheduleTimeout(std::chrono::milliseconds(3) + kTtl * 3, [&]() noexcept {
-    // check key is NOT expiring
-    auto maybeValue5 = client2->getKey(key2);
-    ASSERT_TRUE(maybeValue5.hasValue());
-    EXPECT_EQ(3, maybeValue5->version);
-    EXPECT_EQ(val2, maybeValue5->value.value());
-    EXPECT_LT(0, maybeValue5->ttlVersion);
-
-    // nuke client to mimick scenario user process dies and no ttl update
-    client1 = nullptr;
-    client2 = nullptr;
-  });
-
-  evl.scheduleTimeout(std::chrono::milliseconds(4) + kTtl * 6, [&]() noexcept {
-    // Verify key-value info
-    const auto keyValResponse = kvStoreWrapper_->dumpAll();
-    ASSERT_EQ(1, keyValResponse.size()); // (key2, val2) expired!!!
-
-    auto const& value1 = keyValResponse.at(key1);
-    EXPECT_EQ("test_value1_new", value1.value);
-    EXPECT_EQ(2, value1.version);
-
-    // stop the event loop
-    evl.stop();
-  });
-
-  // Start event loop and wait until it finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "Starting main eventloop.";
-    evl.run();
-    LOG(INFO) << "Main eventloop terminated.";
-  });
-  evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
-}
-
 TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const std::string key1{"test_key1"};
   const std::string key2{"test_key2"};
@@ -263,16 +120,26 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   EXPECT_TRUE(preDb.second.empty());
 
   // Step2: initilize kvStoreClient connecting to different thriftServers
-  OpenrEventBase evl;
+  OpenrEventBase evb;
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      context_, &evl, nodeId1_, folly::SocketAddress{localhost_, port1});
+      context_,
+      &evb,
+      nodeId1_,
+      kvStoreWrapper1_->localCmdUrl,
+      kvStoreWrapper1_->localPubUrl,
+      kvStoreWrapper1_->getKvStore());
   auto client2 = std::make_shared<KvStoreClientInternal>(
-      context_, &evl, nodeId2_, folly::SocketAddress{localhost_, port2});
+      context_,
+      &evb,
+      nodeId2_,
+      kvStoreWrapper2_->localCmdUrl,
+      kvStoreWrapper2_->localPubUrl,
+      kvStoreWrapper2_->getKvStore());
   EXPECT_TRUE(nullptr != client1);
   EXPECT_TRUE(nullptr != client2);
 
   // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
-  evl.runInEventBaseThread([&]() noexcept {
+  evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     value.version = 1;
     {
@@ -286,10 +153,10 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
           key2, fbzmq::util::writeThriftObjStr(value, serializer), 200);
     }
 
-    evl.stop();
+    evb.stop();
   });
 
-  evl.run();
+  evb.run();
 
   // Step4: verify we can fetch 2 keys from different servers as aggregation
   // result

@@ -546,7 +546,7 @@ LinkMonitor::advertiseKvStorePeers(
   // Delete old peers
   if (toDelPeers.size() > 0) {
     const auto ret = kvStoreClient_->delPeers(toDelPeers, area);
-    CHECK(ret) << ret.error();
+    CHECK(ret);
   }
 
   // Get list of peers to add
@@ -583,7 +583,7 @@ LinkMonitor::advertiseKvStorePeers(
   // Add new peers
   if (toAddPeers.size() > 0) {
     const auto ret = kvStoreClient_->addPeers(std::move(toAddPeers), area);
-    CHECK(ret) << ret.error();
+    CHECK(ret);
   }
 }
 

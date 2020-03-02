@@ -150,9 +150,9 @@ PrefixManager::PrefixManager(
   // get initial dump of keys related to us
   for (const auto& area : areas_) {
     auto result = kvStoreClient_.dumpAllWithPrefix(keyPrefixList.front(), area);
-    if (result.hasError()) {
-      LOG(ERROR) << "Failed dumping keys from area " << area << " :"
-                 << result.error();
+    if (!result.has_value()) {
+      LOG(ERROR) << "Failed dumping keys with prefix: " << keyPrefixList.front()
+                 << " from area: " << area;
       continue;
     }
     for (auto const& kv : result.value()) {
