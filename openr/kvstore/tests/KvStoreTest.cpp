@@ -2353,55 +2353,19 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
   auto myStore = createKvStore(myNodeId, emptyPeers);
   myStore->run();
 
+  // Set key via KvStoreWrapper::setKey
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
-
-  // Set key1 via KvStoreWrapper::setKey with solicitResponse
-  const auto key1 = folly::sformat("test-key-1");
-  const thrift::Value thriftVal1(
+  const auto key = folly::sformat("test-key");
+  const thrift::Value thriftVal(
       apache::thrift::FRAGILE,
       1 /* version */,
       "gotham_city" /* originatorId */,
-      folly::sformat("test-value-1"),
+      folly::sformat("test-value"),
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
-      generateHash(1, "gotham_city", std::string("test-value-1")));
-  expectedKeyVals[key1] = thriftVal1;
-  myStore->setKey(key1, thriftVal1);
-
-  // Set key2 by new request socket. Ensure no response comes.
-  const auto key2 = folly::sformat("test-key-2");
-  const thrift::Value thriftVal2(
-      apache::thrift::FRAGILE,
-      1 /* version */,
-      "gotham_city" /* originatorId */,
-      folly::sformat("test-value-2"),
-      Constants::kTtlInfinity /* ttl */,
-      0 /* ttl version */,
-      generateHash(1, "gotham_city", std::string("test-value-2")));
-  expectedKeyVals[key2] = thriftVal2;
-  {
-    fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock{
-        context, folly::none, folly::none, fbzmq::NonblockingFlag{false}};
-    reqSock.connect(fbzmq::SocketUrl{myStore->localCmdUrl});
-
-    // Prepare request
-    thrift::KvStoreRequest request;
-    thrift::KeySetParams params;
-
-    params.keyVals.emplace(key2, thriftVal2);
-    params.solicitResponse = false;
-    request.cmd = thrift::Command::KEY_SET;
-    request.keySetParams = params;
-
-    // Make ZMQ call and wait for response
-    apache::thrift::CompactSerializer serializer;
-    auto sendStatus = reqSock.sendThriftObj(request, serializer);
-    EXPECT_FALSE(sendStatus.hasError());
-
-    // Try to receive message
-    auto recvStatus = reqSock.recvOne(std::chrono::milliseconds(100));
-    EXPECT_TRUE(recvStatus.hasError());
-  }
+      generateHash(1, "gotham_city", std::string("test-value")));
+  expectedKeyVals[key] = thriftVal;
+  myStore->setKey(key, thriftVal);
 
   // Expect both keys in KvStore
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll());

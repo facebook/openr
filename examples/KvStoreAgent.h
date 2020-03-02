@@ -20,7 +20,6 @@ class KvStoreAgent : public OpenrEventBase {
       fbzmq::Context& zmqContext,
       std::string nodeId,
       KvStore* kvStore,
-      std::string kvStoreCmdUrl = "tcp://[::1]:60002",
       std::string kvStorePubUrl = "tcp://[::1]:60001");
 
   const std::string agentKeyPrefix{"prefixForDataThisAgentDisseminates:"};

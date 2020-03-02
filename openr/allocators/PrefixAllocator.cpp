@@ -36,7 +36,6 @@ namespace openr {
 
 PrefixAllocator::PrefixAllocator(
     const std::string& myNodeName,
-    const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
     KvStore* kvStore_,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
@@ -70,12 +69,7 @@ PrefixAllocator::PrefixAllocator(
 
   // Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      zmqContext,
-      this,
-      myNodeName_,
-      kvStoreLocalCmdUrl,
-      kvStoreLocalPubUrl,
-      kvStore_);
+      zmqContext, this, myNodeName_, kvStoreLocalPubUrl, kvStore_);
 
   // Let the magic begin. Start allocation as per allocMode
   std::visit(*this, allocMode);

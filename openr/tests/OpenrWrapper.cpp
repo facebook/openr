@@ -84,15 +84,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(kvStoreThread));
 
-  // kvstore client socket
-  kvStoreLocalCmdUrl_ = kvStore_->inprocCmdUrl;
-
   // kvstore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
       context_,
       &eventBase_,
       nodeId_,
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       kvStore_.get());
 
@@ -174,7 +170,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       context_,
       nodeId_,
       static_cast<int32_t>(60099), // platfrom pub port
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       kvStore_.get(),
       std::move(includeRegexList),
@@ -209,7 +204,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       prefixUpdatesQueue_.getReader(),
       configStore_.get(),
       kvStore_.get(),
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       PrefixDbMarker{"prefix:"},
@@ -253,7 +247,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       routeUpdatesQueue_.getReader(),
       interfaceUpdatesQueue_.getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       kvStore_.get(),
       context_);
@@ -266,7 +259,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   const uint8_t allocPrefixLen = 64;
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
       nodeId_,
-      KvStoreLocalCmdUrl{kvStoreLocalCmdUrl_},
       KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       kvStore_.get(),
       prefixUpdatesQueue_,

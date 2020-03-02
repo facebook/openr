@@ -19,13 +19,12 @@ KvStoreAgent::KvStoreAgent(
     fbzmq::Context& zmqContext,
     std::string nodeId,
     KvStore* kvStore,
-    std::string kvStoreCmdUrl,
     std::string kvStorePubUrl)
     : kvStore_(kvStore) {
   CHECK(kvStore_);
 
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      zmqContext, this, nodeId, kvStoreCmdUrl, kvStorePubUrl, kvStore_);
+      zmqContext, this, nodeId, kvStorePubUrl, kvStore_);
 
   // set a call back so we can keep track of other keys with the prefix we
   // care about

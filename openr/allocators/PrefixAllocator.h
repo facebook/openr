@@ -61,7 +61,6 @@ class PrefixAllocator : public OpenrEventBase {
  public:
   PrefixAllocator(
       const std::string& myNodeName,
-      const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
       KvStore* kvStore,
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,

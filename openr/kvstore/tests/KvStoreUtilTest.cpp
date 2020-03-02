@@ -125,14 +125,12 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
       context_,
       &evb,
       nodeId1_,
-      kvStoreWrapper1_->localCmdUrl,
       kvStoreWrapper1_->localPubUrl,
       kvStoreWrapper1_->getKvStore());
   auto client2 = std::make_shared<KvStoreClientInternal>(
       context_,
       &evb,
       nodeId2_,
-      kvStoreWrapper2_->localCmdUrl,
       kvStoreWrapper2_->localPubUrl,
       kvStoreWrapper2_->getKvStore());
   EXPECT_TRUE(nullptr != client1);

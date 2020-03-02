@@ -40,7 +40,6 @@ PrefixManager::PrefixManager(
     messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
     PersistentStore* configStore,
     KvStore* kvStore,
-    const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
     const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const PrefixDbMarker& prefixDbMarker,
@@ -57,12 +56,7 @@ PrefixManager::PrefixManager(
       perPrefixKeys_{perPrefixKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(ttlKeyInKvStore),
-      kvStoreClient_{zmqContext,
-                     this,
-                     nodeId_,
-                     kvStoreLocalCmdUrl,
-                     kvStoreLocalPubUrl,
-                     kvStore_},
+      kvStoreClient_{zmqContext, this, nodeId_, kvStoreLocalPubUrl, kvStore_},
       areas_{areas} {
   CHECK(configStore_);
   CHECK(kvStore_);

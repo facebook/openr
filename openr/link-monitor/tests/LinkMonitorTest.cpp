@@ -235,7 +235,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         prefixUpdatesQueue.getReader(),
         configStore.get(),
         kvStoreWrapper->getKvStore(),
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
@@ -270,7 +269,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         context,
         "node-1",
         port, /* thrift service port */
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),
@@ -863,7 +861,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       context,
       "node-1",
       port, // platform pub port
-      KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
       KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       kvStoreWrapper->getKvStore(),
       std::move(includeRegexList),
@@ -1657,7 +1654,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         context,
         folly::sformat("lm{}", i + 1),
         0, // platform pub port
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),

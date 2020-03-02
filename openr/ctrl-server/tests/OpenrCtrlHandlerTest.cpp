@@ -100,7 +100,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_.getReader(),
         interfaceUpdatesQueue_.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         kvStoreWrapper->getKvStore(),
         context_);
@@ -112,7 +111,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         prefixUpdatesQueue_.getReader(),
         persistentStore.get(),
         kvStoreWrapper->getKvStore(),
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         monitorSubmitUrl_,
         PrefixDbMarker{Constants::kPrefixDbMarker.str()},
@@ -145,7 +143,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         context_,
         nodeName,
         systemThriftThread.getAddress()->getPort(),
-        KvStoreLocalCmdUrl{kvStoreWrapper->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),

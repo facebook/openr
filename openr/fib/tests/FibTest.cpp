@@ -216,7 +216,6 @@ class FibTestFixture : public ::testing::Test {
         routeUpdatesQueue.getReader(),
         interfaceUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
-        KvStoreLocalCmdUrl{"inproc://kvstore-cmd"},
         KvStoreLocalPubUrl{"inproc://kvstore-pub"},
         nullptr, /* KvStore module ptr */
         context);

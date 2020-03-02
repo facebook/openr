@@ -135,29 +135,18 @@ class MultipleStoreFixture : public ::testing::Test {
     auto port2 = thriftWrapper2_->getOpenrCtrlThriftPort();
     auto port3 = thriftWrapper3_->getOpenrCtrlThriftPort();
     client1 = std::make_shared<KvStoreClientInternal>(
-        context,
-        &evb,
-        node1,
-        store1->localCmdUrl,
-        store1->localPubUrl,
-        store1->getKvStore());
+        context, &evb, node1, store1->localPubUrl, store1->getKvStore());
 
     client2 = std::make_shared<KvStoreClientInternal>(
         context,
         &evb,
         node2,
-        store2->localCmdUrl,
         store2->localPubUrl,
         store2->getKvStore(),
         persistKeyTimer /* checkPersistKeyPeriod */);
 
     client3 = std::make_shared<KvStoreClientInternal>(
-        context,
-        &evb,
-        node3,
-        store3->localCmdUrl,
-        store3->localPubUrl,
-        store3->getKvStore());
+        context, &evb, node3, store3->localPubUrl, store3->getKvStore());
 
     sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port1});
     sockAddrs_.emplace_back(folly::SocketAddress{localhost_, port2});
@@ -455,12 +444,7 @@ TEST(KvStoreClientInternal, PeerApiTest) {
 
   // Create and initialize kvstore-clients
   auto client = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore());
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore());
 
   // Schedule callback to set keys from client
   evb.runInEventBaseThread([&]() noexcept {
@@ -557,7 +541,6 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
       context,
       &evb,
       store1->nodeId,
-      store1->localCmdUrl,
       store1->localPubUrl,
       store1->getKvStore(),
       1000ms);
@@ -698,13 +681,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
 
   // Create and initialize kvstore-client, with persist key timer
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore(),
-      1000ms);
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore(), 1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
@@ -795,13 +772,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
 
   // Create and initialize kvstore-client, with persist key timer
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore(),
-      1000ms);
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore(), 1000ms);
 
   // Schedule callback to set keys from client1 (this will be executed first)
   const std::string testKey{"test-key"};
@@ -903,19 +874,9 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Create and initialize kvstore-clients
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore());
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore());
   auto client2 = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore());
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore());
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
@@ -1108,19 +1069,9 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
 
   // Create and initialize kvstore-clients
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore());
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore());
   auto client2 = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore());
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore());
 
   int key1CbCnt = 0;
   int key2CbCnt = 0;
@@ -1276,19 +1227,9 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
 
   // Create and initialize kvstore-clients
   auto client1 = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore());
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore());
   auto client2 = std::make_shared<KvStoreClientInternal>(
-      context,
-      &evb,
-      nodeId,
-      store->localCmdUrl,
-      store->localPubUrl,
-      store->getKvStore());
+      context, &evb, nodeId, store->localPubUrl, store->getKvStore());
 
   std::vector<std::string> keyPrefixList;
   keyPrefixList.emplace_back("test_");

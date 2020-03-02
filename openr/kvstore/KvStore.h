@@ -100,10 +100,8 @@ struct KvStoreParams {
 
   // the socket to publish changes to kv-store
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock;
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> globalPubSock;
   // socket for remote & local commands
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock;
-  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> inprocCmdSock;
 
   // ZMQ high water
   int zmqHwm;
@@ -127,7 +125,6 @@ struct KvStoreParams {
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
       fbzmq::Context& zmqContext,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> inprocCmdSock,
       // ZMQ high water mark
       int zmqhwm,
       // IP QoS
@@ -146,7 +143,6 @@ struct KvStoreParams {
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         localPubSock(zmqContext),
         globalCmdSock(std::move(globalCmdSock)),
-        inprocCmdSock(std::move(inprocCmdSock)),
         zmqHwm(zmqhwm),
         maybeIpTos(std::move(maybeipTos)),
         dbSyncInterval(dbsyncInterval),
@@ -521,9 +517,6 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<folly::Unit> processKvStoreDualMessage(
       thrift::DualMessages dualMessages,
       std::string area = openr::thrift::KvStore_constants::kDefaultArea());
-
-  // Inproc URL for REQ/REP to KvStore
-  const std::string inprocCmdUrl;
 
  private:
   // disable copying

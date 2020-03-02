@@ -485,7 +485,6 @@ main(int argc, char** argv) {
           FLAGS_is_flood_root,
           FLAGS_use_flood_optimization,
           areas));
-  const KvStoreLocalCmdUrl kvStoreLocalCmdUrl{kvStore->inprocCmdUrl};
 
   auto prefixManager = startEventBase(
       allThreads,
@@ -497,7 +496,6 @@ main(int argc, char** argv) {
           prefixUpdatesQueue.getReader(),
           configStore,
           kvStore,
-          kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
           monitorSubmitUrl,
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
@@ -531,7 +529,6 @@ main(int argc, char** argv) {
         "PrefixAllocator",
         std::make_unique<PrefixAllocator>(
             FLAGS_node_name,
-            kvStoreLocalCmdUrl,
             kvStoreLocalPubUrl,
             kvStore,
             prefixUpdatesQueue,
@@ -679,7 +676,6 @@ main(int argc, char** argv) {
           context,
           FLAGS_node_name,
           FLAGS_system_agent_port,
-          KvStoreLocalCmdUrl{kvStoreLocalCmdUrl},
           KvStoreLocalPubUrl{kvStoreLocalPubUrl},
           kvStore,
           std::move(includeRegexList),
@@ -761,7 +757,6 @@ main(int argc, char** argv) {
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
           monitorSubmitUrl,
-          kvStoreLocalCmdUrl,
           kvStoreLocalPubUrl,
           kvStore,
           context));

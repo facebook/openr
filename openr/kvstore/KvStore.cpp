@@ -89,8 +89,7 @@ KvStore::KvStore(
     bool isFloodRoot,
     bool useFloodOptimization,
     const std::unordered_set<std::string>& areas)
-    : inprocCmdUrl(folly::sformat("inproc://{}_KVSTORE_local_cmd", nodeId)),
-      localPubUrl_(std::move(localPubUrl)),
+    : localPubUrl_(std::move(localPubUrl)),
       monitorSubmitInterval_(monitorSubmitInterval),
       kvParams_(
           nodeId,
@@ -99,11 +98,6 @@ KvStore::KvStore(
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
               fbzmq::IdentityString{folly::sformat("{}::TCP::CMD", nodeId)},
-              folly::none,
-              fbzmq::NonblockingFlag{true}),
-          fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
-              zmqContext,
-              folly::none,
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
@@ -165,13 +159,6 @@ KvStore::KvStore(
       ZMQ_POLLIN,
       [this](int) noexcept {
         processCmdSocketRequest(kvParams_.globalCmdSock);
-      });
-  prepareSocket(kvParams_.inprocCmdSock, std::string(inprocCmdUrl));
-  addSocket(
-      fbzmq::RawZmqSocketPtr{*kvParams_.inprocCmdSock},
-      ZMQ_POLLIN,
-      [this](int) noexcept {
-        processCmdSocketRequest(kvParams_.inprocCmdSock);
       });
 
   // create KvStoreDb instances

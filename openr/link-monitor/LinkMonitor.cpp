@@ -76,7 +76,6 @@ LinkMonitor::LinkMonitor(
     fbzmq::Context& zmqContext,
     std::string nodeId,
     int32_t platformThriftPort,
-    KvStoreLocalCmdUrl kvStoreLocalCmdUrl,
     KvStoreLocalPubUrl kvStoreLocalPubUrl,
     KvStore* kvStore,
     std::unique_ptr<re2::RE2::Set> includeRegexList,
@@ -104,9 +103,6 @@ LinkMonitor::LinkMonitor(
     const std::unordered_set<std::string>& areas)
     : nodeId_(nodeId),
       platformThriftPort_(platformThriftPort),
-      kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
-      kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
-      kvStore_(kvStore),
       includeRegexList_(std::move(includeRegexList)),
       excludeRegexList_(std::move(excludeRegexList)),
       redistRegexList_(std::move(redistRegexList)),
@@ -133,7 +129,6 @@ LinkMonitor::LinkMonitor(
       areas_(areas) {
   // Check non-empty module ptr
   CHECK(configStore_);
-  CHECK(kvStore_);
 
   // Create throttled adjacency advertiser
   advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
@@ -177,9 +172,8 @@ LinkMonitor::LinkMonitor(
       zmqContext,
       this,
       nodeId_,
-      kvStoreLocalCmdUrl_,
-      kvStoreLocalPubUrl_,
-      kvStore_,
+      kvStoreLocalPubUrl,
+      kvStore,
       folly::none, /* persist key timer */
       folly::none /* recv timeout */);
 

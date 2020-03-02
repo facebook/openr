@@ -79,7 +79,6 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
           zmqContext,
           &evb,
           createClientName(i),
-          store->localCmdUrl,
           store->localPubUrl,
           store->getKvStore());
       clients.emplace_back(std::move(client));

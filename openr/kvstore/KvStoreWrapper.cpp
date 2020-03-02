@@ -62,8 +62,6 @@ KvStoreWrapper::KvStoreWrapper(
       isFloodRoot,
       useFloodOptimization,
       areas);
-
-  localCmdUrl = kvStore_->inprocCmdUrl;
 }
 
 void
@@ -86,13 +84,6 @@ KvStoreWrapper::run() noexcept {
   if (subConnect.hasError()) {
     LOG(FATAL) << "Error connecting to URL '" << localPubUrl << "' "
                << subConnect.error();
-  }
-
-  // connect request socket for communicating with KvStore
-  const auto reqConnect = reqSock_.connect(fbzmq::SocketUrl{localCmdUrl});
-  if (reqConnect.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << localCmdUrl << "' "
-               << reqConnect.error();
   }
 
   // Start kvstore

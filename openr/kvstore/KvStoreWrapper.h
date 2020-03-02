@@ -174,7 +174,6 @@ class KvStoreWrapper {
    * sockets.
    */
   const std::string nodeId;
-  std::string localCmdUrl;
   const std::string localPubUrl;
 
   /**

@@ -66,7 +66,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         zmqContext_,
         &evb_,
         myNodeName_,
-        kvStoreWrapper_->localCmdUrl,
         kvStoreWrapper_->localPubUrl,
         kvStoreWrapper_->getKvStore());
 
@@ -108,7 +107,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
         prefixUpdatesQueue_.getReader(),
         configStore_.get(),
         kvStoreWrapper_->getKvStore(),
-        KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{"prefix:"},
@@ -139,7 +137,6 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
 
     prefixAllocator_ = make_unique<PrefixAllocator>(
         myNodeName_,
-        KvStoreLocalCmdUrl{kvStoreWrapper_->localCmdUrl},
         KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         kvStoreWrapper_->getKvStore(),
         prefixUpdatesQueue_,
@@ -366,12 +363,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
     // Attach a kvstore client in main event loop
     auto kvStoreClient = std::make_unique<KvStoreClientInternal>(
-        zmqContext,
-        &evl,
-        nodeId,
-        store->localCmdUrl,
-        store->localPubUrl,
-        store->getKvStore());
+        zmqContext, &evl, nodeId, store->localPubUrl, store->getKvStore());
 
     // Set seed prefix in KvStore
     if (emptySeedPrefix) {
@@ -427,7 +419,6 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           prefixQueues.at(i).getReader(),
           tempConfigStore.get(),
           store->getKvStore(),
-          KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
           MonitorSubmitUrl{"inproc://monitor_submit"},
           PrefixDbMarker{"prefix:"},
@@ -444,7 +435,6 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       auto allocator = make_unique<PrefixAllocator>(
           myNodeName,
-          KvStoreLocalCmdUrl{store->localCmdUrl},
           KvStoreLocalPubUrl{store->localPubUrl},
           store->getKvStore(),
           prefixQueues.at(i),

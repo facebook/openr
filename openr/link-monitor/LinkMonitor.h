@@ -85,7 +85,6 @@ class LinkMonitor final : public OpenrEventBase {
       std::string nodeId,
       int32_t platformThriftPort,
       // for kvstore client
-      KvStoreLocalCmdUrl kvStoreLocalCmdUrl,
       KvStoreLocalPubUrl kvStoreLocalPubUrl,
       KvStore* kvstore,
       // interface names to monitor
@@ -285,10 +284,6 @@ class LinkMonitor final : public OpenrEventBase {
   const std::string nodeId_;
   // Switch agent thrift server port
   const int32_t platformThriftPort_{0};
-  // used for kvStoreClient
-  const std::string kvStoreLocalCmdUrl_;
-  const std::string kvStoreLocalPubUrl_;
-  KvStore* kvStore_;
   // the interface names that match we can run on
   std::unique_ptr<re2::RE2::Set> includeRegexList_;
   // the interface names that match we can't run on

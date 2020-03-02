@@ -55,7 +55,6 @@ class KvStoreClientInternal {
       fbzmq::Context& context,
       OpenrEventBase* eventBase,
       std::string const& nodeId,
-      std::string const& kvStoreLocalCmdUrl,
       std::string const& kvStoreLocalPubUrl,
       KvStore* kvStore,
       folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod =
@@ -294,9 +293,6 @@ class KvStoreClientInternal {
   //
   // Mutable state
   //
-
-  // REQ socket for KvStore API calls
-  std::unique_ptr<fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT>> kvStoreCmdSock_;
 
   // SUB socket for listing to kvstore client.
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> kvStoreSubSock_;

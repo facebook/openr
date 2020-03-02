@@ -32,7 +32,6 @@ Fib::Fib(
     messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
-    const KvStoreLocalCmdUrl& storeCmdUrl,
     const KvStoreLocalPubUrl& storePubUrl,
     KvStore* kvStore,
     fbzmq::Context& zmqContext)
@@ -63,7 +62,7 @@ Fib::Fib(
     // check non-empty module ptr
     CHECK(kvStore_);
     kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-        zmqContext, this, myNodeName_, storeCmdUrl, storePubUrl, kvStore_);
+        zmqContext, this, myNodeName_, storePubUrl, kvStore_);
   }
 
   if (not waitOnDecision) {

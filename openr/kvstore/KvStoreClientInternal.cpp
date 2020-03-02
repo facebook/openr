@@ -20,7 +20,6 @@ KvStoreClientInternal::KvStoreClientInternal(
     fbzmq::Context& context,
     OpenrEventBase* eventBase,
     std::string const& nodeId,
-    std::string const& kvStoreLocalCmdUrl,
     std::string const& kvStoreLocalPubUrl,
     KvStore* kvStore,
     folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod,
@@ -28,12 +27,10 @@ KvStoreClientInternal::KvStoreClientInternal(
     : nodeId_(nodeId),
       eventBase_(eventBase),
       context_(context),
-      kvStoreLocalCmdUrl_(kvStoreLocalCmdUrl),
       kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
       kvStore_(kvStore),
       checkPersistKeyPeriod_(checkPersistKeyPeriod),
       recvTimeout_(recvTimeout),
-      kvStoreCmdSock_(nullptr),
       kvStoreSubSock_(
           context, folly::none, folly::none, fbzmq::NonblockingFlag{false}) {
   //
@@ -41,7 +38,6 @@ KvStoreClientInternal::KvStoreClientInternal(
   //
   CHECK_NE(eventBase_, static_cast<void*>(nullptr));
   CHECK(!nodeId.empty());
-  CHECK(!kvStoreLocalCmdUrl.empty());
   CHECK(!kvStoreLocalPubUrl.empty());
   CHECK(kvStore_);
 

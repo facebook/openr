@@ -35,7 +35,6 @@ class PrefixManager final : public OpenrEventBase {
       messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
       PersistentStore* configStore,
       KvStore* kvStore,
-      const KvStoreLocalCmdUrl& kvStoreLocalCmdUrl,
       const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const PrefixDbMarker& prefixDbMarker,
