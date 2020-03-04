@@ -737,7 +737,7 @@ createSparkPayload(
   payload.solicitResponse = solicitResponse;
   payload.supportFloodOptimization = supportFloodOptimization;
   payload.restarting = restarting;
-  payload.areas = areas;
+  apache::thrift::fromFollyOptional(payload.areas, areas);
   return payload;
 }
 
@@ -805,7 +805,7 @@ createAdjDb(
   adjDb.isOverloaded = overLoadBit;
   adjDb.adjacencies = adjs;
   adjDb.nodeLabel = nodeLabel;
-  adjDb.area = area;
+  apache::thrift::fromFollyOptional(adjDb.area, area);
   return adjDb;
 }
 
@@ -835,9 +835,9 @@ createPrefixEntry(
   prefixEntry.data = data;
   prefixEntry.forwardingType = forwardingType;
   prefixEntry.forwardingAlgorithm = forwardingAlgorithm;
-  prefixEntry.ephemeral = ephemeral;
-  prefixEntry.mv = mv;
-  prefixEntry.minNexthop = minNexthop;
+  apache::thrift::fromFollyOptional(prefixEntry.ephemeral, ephemeral);
+  apache::thrift::fromFollyOptional(prefixEntry.mv, mv);
+  apache::thrift::fromFollyOptional(prefixEntry.minNexthop, minNexthop);
   return prefixEntry;
 }
 
@@ -852,11 +852,11 @@ createThriftValue(
   thrift::Value value;
   value.version = version;
   value.originatorId = originatorId;
-  value.value = data;
+  apache::thrift::fromFollyOptional(value.value, data);
   value.ttl = ttl;
   value.ttlVersion = ttlVersion;
   if (hash.has_value()) {
-    value.hash = hash;
+    apache::thrift::fromFollyOptional(value.hash, hash);
   } else {
     value.hash = generateHash(version, originatorId, data);
   }
@@ -875,10 +875,10 @@ createThriftPublication(
   thrift::Publication pub;
   pub.keyVals = kv;
   pub.expiredKeys = expiredKeys;
-  pub.nodeIds = nodeIds;
-  pub.tobeUpdatedKeys = keysToUpdate;
-  pub.floodRootId = floodRootId;
-  pub.area = area;
+  apache::thrift::fromFollyOptional(pub.nodeIds, nodeIds);
+  apache::thrift::fromFollyOptional(pub.tobeUpdatedKeys, keysToUpdate);
+  apache::thrift::fromFollyOptional(pub.floodRootId, floodRootId);
+  apache::thrift::fromFollyOptional(pub.area, area);
   return pub;
 }
 
@@ -891,9 +891,9 @@ createNextHop(
     bool useNonShortestRoute) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
-  nextHop.address.ifName = std::move(ifName);
+  apache::thrift::fromFollyOptional(nextHop.address.ifName, std::move(ifName));
   nextHop.metric = metric;
-  nextHop.mplsAction = maybeMplsAction;
+  apache::thrift::fromFollyOptional(nextHop.mplsAction, maybeMplsAction);
   nextHop.useNonShortestRoute = useNonShortestRoute;
   return nextHop;
 }
@@ -905,8 +905,8 @@ createMplsAction(
     folly::Optional<std::vector<int32_t>> maybePushLabels) {
   thrift::MplsAction mplsAction;
   mplsAction.action = mplsActionCode;
-  mplsAction.swapLabel = maybeSwapLabel;
-  mplsAction.pushLabels = maybePushLabels;
+  apache::thrift::fromFollyOptional(mplsAction.swapLabel, maybeSwapLabel);
+  apache::thrift::fromFollyOptional(mplsAction.pushLabels, maybePushLabels);
   checkMplsAction(mplsAction); // sanity checks
   return mplsAction;
 }

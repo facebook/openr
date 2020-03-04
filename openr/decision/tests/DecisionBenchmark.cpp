@@ -122,7 +122,7 @@ class DecisionWrapper {
       bool overloadBit = false) {
     auto adjDb = createAdjDb(nodeId, adjs, 0, overloadBit);
     if (perfEvents.has_value()) {
-      adjDb.perfEvents = perfEvents;
+      apache::thrift::fromFollyOptional(adjDb.perfEvents, perfEvents);
     }
     return thrift::Value(
         FRAGILE,

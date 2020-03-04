@@ -1964,7 +1964,8 @@ Decision::processPendingAdjUpdates() {
     return;
   }
 
-  maybeRouteDb.value().perfEvents = maybePerfEvents;
+  apache::thrift::fromFollyOptional(
+      maybeRouteDb.value().perfEvents, maybePerfEvents);
   sendRouteUpdate(maybeRouteDb.value(), "DECISION_SPF");
 }
 
@@ -1987,7 +1988,8 @@ Decision::processPendingPrefixUpdates() {
     return;
   }
 
-  maybeRouteDb.value().perfEvents = maybePerfEvents;
+  apache::thrift::fromFollyOptional(
+      maybeRouteDb.value().perfEvents, maybePerfEvents);
   sendRouteUpdate(maybeRouteDb.value(), "ROUTE_UPDATE");
 }
 
