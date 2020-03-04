@@ -123,7 +123,7 @@ KvStoreWrapper::setKey(
   // Prepare KeySetParams
   thrift::KeySetParams params;
   params.keyVals.emplace(std::move(key), std::move(value));
-  params.nodeIds = std::move(nodeIds);
+  apache::thrift::fromFollyOptional(params.nodeIds, std::move(nodeIds));
 
   try {
     kvStore_->setKvStoreKeyVals(std::move(params), area).get();
@@ -141,7 +141,7 @@ KvStoreWrapper::setKeys(
     std::string area) {
   // Prepare KeySetParams
   thrift::KeySetParams params;
-  params.nodeIds = std::move(nodeIds);
+  apache::thrift::fromFollyOptional(params.nodeIds, std::move(nodeIds));
   for (const auto& keyVal : keyVals) {
     params.keyVals.emplace(keyVal.first, keyVal.second);
   }
