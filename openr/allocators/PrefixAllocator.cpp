@@ -645,7 +645,7 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
       ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
       : thrift::PrefixForwardingAlgorithm::SP_ECMP;
-  prefixEntry.ephemeral = folly::none;
+  prefixEntry.ephemeral.reset();
 
   thrift::PrefixUpdateRequest request;
   request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;

@@ -449,7 +449,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
           },
       },
       thrift::PerfEvents());
-  intfDb.perfEvents = folly::none;
+  intfDb.perfEvents.reset();
   LOG(INFO) << "Pushing interface update";
   interfaceUpdatesQueue.push(intfDb);
 
@@ -492,7 +492,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
           },
       },
       thrift::PerfEvents());
-  intfChange_1.perfEvents = folly::none;
+  intfChange_1.perfEvents.reset();
   LOG(INFO) << "Pushing interface update";
   interfaceUpdatesQueue.push(intfChange_1);
 
@@ -547,7 +547,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
           },
       },
       thrift::PerfEvents());
-  intfChange_2.perfEvents = folly::none;
+  intfChange_2.perfEvents.reset();
   LOG(INFO) << "Pushing interface update";
   interfaceUpdatesQueue.push(intfChange_2);
 

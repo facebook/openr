@@ -137,7 +137,7 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
     prefixEntry.type = thrift::PrefixType::LOOPBACK;
     prefixEntry.data = "";
     prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
-    prefixEntry.ephemeral = folly::none;
+    prefixEntry.ephemeral.reset();
     prefixes.push_back(prefixEntry);
   }
 

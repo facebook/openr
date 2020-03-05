@@ -723,11 +723,11 @@ TEST(UtilTest, MplsActionValidate) {
 
     mplsAction.swapLabel = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel = folly::none;
+    mplsAction.swapLabel.reset();
 
     mplsAction.pushLabels = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels = folly::none;
+    mplsAction.pushLabels.reset();
   }
 
   //
@@ -740,11 +740,11 @@ TEST(UtilTest, MplsActionValidate) {
 
     mplsAction.swapLabel = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel = folly::none;
+    mplsAction.swapLabel.reset();
 
     mplsAction.pushLabels = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels = folly::none;
+    mplsAction.pushLabels.reset();
   }
 
   //
@@ -760,7 +760,7 @@ TEST(UtilTest, MplsActionValidate) {
 
     mplsAction.pushLabels = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels = folly::none;
+    mplsAction.pushLabels.reset();
   }
 
   //
@@ -773,7 +773,7 @@ TEST(UtilTest, MplsActionValidate) {
 
     mplsAction.swapLabel = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel = folly::none;
+    mplsAction.swapLabel.reset();
 
     mplsAction.pushLabels = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");

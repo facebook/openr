@@ -3159,8 +3159,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // validate router 3
   EXPECT_EQ(routeMap.find(make_pair("3", toString(addr1))), routeMap.end());
   // reset min nexthop to rest of checks
-  prefixDBTwo.prefixEntries.back().minNexthop = folly::none;
-  prefixDBOne.prefixEntries.back().minNexthop = folly::none;
+  prefixDBTwo.prefixEntries.back().minNexthop.reset();
+  prefixDBOne.prefixEntries.back().minNexthop.reset();
   spfSolver->updatePrefixDatabase(prefixDBTwo);
   spfSolver->updatePrefixDatabase(prefixDBOne);
 

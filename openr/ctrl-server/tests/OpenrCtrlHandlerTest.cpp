@@ -516,11 +516,11 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     openrCtrlThriftClient_->sync_getKvStoreHashFiltered(pub, params);
     EXPECT_EQ(3, pub.keyVals.size());
     auto value3 = keyVals.at("key3");
-    value3.value = folly::none;
+    value3.value.reset();
     auto value33 = keyVals.at("key33");
-    value33.value = folly::none;
+    value33.value.reset();
     auto value333 = keyVals.at("key333");
-    value333.value = folly::none;
+    value333.value.reset();
     EXPECT_EQ(value3, pub.keyVals["key3"]);
     EXPECT_EQ(value33, pub.keyVals["key33"]);
     EXPECT_EQ(value333, pub.keyVals["key333"]);

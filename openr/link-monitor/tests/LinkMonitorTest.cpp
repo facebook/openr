@@ -589,7 +589,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
               },
           },
           thrift::PerfEvents());
-      intfDb.perfEvents = folly::none;
+      intfDb.perfEvents.reset();
     }
 
     {

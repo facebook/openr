@@ -740,7 +740,7 @@ LinkMonitor::advertiseRedistAddrs() {
     prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
         ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
         : thrift::PrefixForwardingAlgorithm::SP_ECMP;
-    prefixEntry.ephemeral = folly::none;
+    prefixEntry.ephemeral.reset();
     prefixes.push_back(prefixEntry);
   }
 
@@ -1195,7 +1195,7 @@ LinkMonitor::getInterfaces() {
       if (backoffMs.count() != 0) {
         ifDetails.linkFlapBackOffMs = backoffMs.count();
       } else {
-        ifDetails.linkFlapBackOffMs = folly::none;
+        ifDetails.linkFlapBackOffMs.reset();
       }
 
       reply.interfaceDetails.emplace(ifName, std::move(ifDetails));

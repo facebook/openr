@@ -493,7 +493,7 @@ OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
     const std::vector<SparkInterfaceEntry>& interfaceEntries) {
   thrift::InterfaceDatabase ifDb(
       apache::thrift::FRAGILE, nodeId_, {}, thrift::PerfEvents());
-  ifDb.perfEvents = folly::none;
+  ifDb.perfEvents.reset();
 
   for (const auto& interface : interfaceEntries) {
     ifDb.interfaces.emplace(

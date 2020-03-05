@@ -418,7 +418,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value = folly::none;
+    newKvIt->second.value.reset();
     newKvIt->second.ttl = 123;
     newKvIt->second.ttlVersion++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
@@ -532,7 +532,7 @@ TEST(KvStore, compareValuesTest) {
   v1 = refValue;
   v2 = refValue;
   v1.value = "dummyValue1";
-  v2.hash = folly::none;
+  v2.hash.reset();
   {
     int rc = KvStore::compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
@@ -541,8 +541,8 @@ TEST(KvStore, compareValuesTest) {
   // v1.hash and v1.value are missing
   v1 = refValue;
   v2 = refValue;
-  v1.value = folly::none;
-  v1.hash = folly::none;
+  v1.value.reset();
+  v1.hash.reset();
   {
     int rc = KvStore::compareValues(v1, v2);
     EXPECT_EQ(rc, -2); // unknown
@@ -761,7 +761,7 @@ TEST(KvStore, TtlVerification) {
   //
   {
     auto thriftValue = value;
-    thriftValue.value = folly::none;
+    thriftValue.value.reset();
     thriftValue.ttl = 30000;
     thriftValue.ttlVersion += 1;
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
@@ -794,7 +794,7 @@ TEST(KvStore, TtlVerification) {
   //
   {
     auto thriftValue = value;
-    thriftValue.value = folly::none;
+    thriftValue.value.reset();
     thriftValue.ttl = Constants::kTtlInfinity;
     thriftValue.ttlVersion += 2;
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
@@ -827,7 +827,7 @@ TEST(KvStore, TtlVerification) {
   //
   {
     auto thriftValue = value;
-    thriftValue.value = folly::none;
+    thriftValue.value.reset();
     thriftValue.ttl = 20000;
     thriftValue.ttlVersion += 3;
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
@@ -860,7 +860,7 @@ TEST(KvStore, TtlVerification) {
   //
   {
     auto thriftValue = value;
-    thriftValue.value = folly::none;
+    thriftValue.value.reset();
     thriftValue.ttl = 10000;
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
 

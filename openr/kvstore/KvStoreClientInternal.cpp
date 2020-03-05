@@ -370,7 +370,7 @@ KvStoreClientInternal::scheduleTtlUpdates(
       ttl,
       ttlVersion /* ttl version */,
       0 /* hash */);
-  ttlThriftValue.value = folly::none;
+  ttlThriftValue.value.reset();
   CHECK(not ttlThriftValue.value.has_value());
 
   // renew before Ttl expires about every ttl/3, i.e., try twice
