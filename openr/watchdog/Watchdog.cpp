@@ -48,7 +48,7 @@ Watchdog::memoryLimitExceeded() const {
 
 void
 Watchdog::monitorMemory() {
-  auto memInUse_ = resourceMonitor_.getRSSMemBytes();
+  auto memInUse_ = systemMetrics_.getRSSMemBytes();
   if (not memInUse_.has_value()) {
     return;
   }

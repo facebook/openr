@@ -11,7 +11,7 @@
 #include <string>
 #include <unordered_map>
 
-#include <fbzmq/service/resource-monitor/ResourceMonitor.h>
+#include <fbzmq/service/monitor/SystemMetrics.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -67,9 +67,8 @@ class Watchdog final : public OpenrEventBase {
   // amount of time memory usage sustained above memory limit
   folly::Optional<std::chrono::steady_clock::time_point> memExceedTime_;
 
-  // resource monitor
-  // TODO T62261328: Remove ResourceMonitor (& sigar) dependency
-  fbzmq::ResourceMonitor resourceMonitor_{};
+  // Get the system metrics for resource usage counters
+  fbzmq::SystemMetrics systemMetrics_{};
 };
 
 } // namespace openr

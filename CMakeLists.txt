@@ -49,7 +49,6 @@ find_package(Glog REQUIRED)
 find_library(PROTOCOL protocol PATHS)
 find_library(RE2 re2)
 find_library(SODIUM sodium)
-find_library(SIGAR sigar)
 find_package(FBThrift REQUIRED)
 find_package(wangle REQUIRED)
 find_package(yarpl REQUIRED)
@@ -60,7 +59,6 @@ find_library(ZSTD zstd)
 find_library(BENCHMARK follybenchmark PATHS)
 
 find_path(RE2_INCLUDE_DIR re2/re2.h)
-find_path(SIGAR_INCLUDE_DIR sigar.h)
 find_path(ZMQ_INCLUDE_DIR zmq.h)
 
 set(FOLLY_EXCEPTION_TRACER)
@@ -74,7 +72,6 @@ include_directories(
   ${FBTHRIFT_INCLUDE_DIR}
   ${FOLLY_INCLUDE_DIR}
   ${RE2_INCLUDE_DIR}
-  ${SIGAR_INCLUDE_DIR}
   ${ZMQ_INCLUDE_DIR}
 )
 
@@ -320,7 +317,6 @@ target_link_libraries(openrlib
   Folly::folly
   ${FOLLY_EXCEPTION_TRACER}
   ${SODIUM}
-  ${SIGAR}
   ${RE2}
   ${Boost_LIBRARIES}
   -lpthread
@@ -353,7 +349,6 @@ target_link_libraries(openr_bin
   Folly::folly
   ${FOLLY_EXCEPTION_TRACER}
   ${SODIUM}
-  ${SIGAR}
   ${Boost_LIBRARIES}
   -lpthread
   -lcrypto
@@ -387,7 +382,6 @@ if(BUILD_TOOLS)
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
     ${SODIUM}
-    ${SIGAR}
     ${Boost_LIBRARIES}
     -lpthread
     -lcrypto
@@ -419,9 +413,7 @@ target_link_libraries(platform_linux
   ${PROTOCOL}
   ${CONCURRENCY}
   ${SODIUM}
-  ${SIGAR}
   ${ZMQ}
-  ${SIGAR}
   ${Boost_LIBRARIES}
   -lpthread
 )
@@ -558,7 +550,6 @@ if(BUILD_TESTS)
       Folly::folly
       ${FOLLY_EXCEPTION_TRACER}
       ${SODIUM}
-      ${SIGAR}
       ${Boost_LIBRARIES}
       -lpthread
       -lcrypto

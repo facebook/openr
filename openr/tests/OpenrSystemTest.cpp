@@ -548,9 +548,9 @@ TEST_P(SimpleRingTopologyFixture, RingTopologyMultiPathTest) {
 }
 
 //
-// Verify resource monitor
+// Verify system metrics
 //
-TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
+TEST_P(SimpleRingTopologyFixture, SimpleRingTopologyFixture) {
   // define interface names for the test
   mockIoProvider->addIfNameIfIndex(
       {{iface12, ifIndex12}, {iface21, ifIndex21}});
@@ -599,8 +599,11 @@ TEST_P(SimpleRingTopologyFixture, ResourceMonitor) {
   }
 
   // check if counters contain the cpu and memory resource usage
-  EXPECT_EQ(counters1.count(memKey), 1);
+  // sleep for 6s to ensure querying twice for calculating the cpu% counter
+  std::this_thread::sleep_for(std::chrono::seconds(6));
+  counters1 = openr1->zmqMonitorClient->dumpCounters();
   EXPECT_EQ(counters1.count(cpuKey), 1);
+  EXPECT_EQ(counters1.count(memKey), 1);
 
   // allocate memory to go beyond memory limit and check if watchdog
   // catches the over the limit condition
