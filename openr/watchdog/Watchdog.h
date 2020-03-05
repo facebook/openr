@@ -34,7 +34,7 @@ class Watchdog final : public OpenrEventBase {
 
   void addEvb(OpenrEventBase* evb, const std::string& name);
 
-  bool memoryLimitExceeded() const;
+  bool memoryLimitExceeded();
 
  private:
   void updateCounters();

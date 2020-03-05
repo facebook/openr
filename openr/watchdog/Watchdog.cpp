@@ -42,8 +42,11 @@ Watchdog::addEvb(OpenrEventBase* evb, const std::string& name) {
 }
 
 bool
-Watchdog::memoryLimitExceeded() const {
-  return memExceedTime_.has_value();
+Watchdog::memoryLimitExceeded() {
+  bool result;
+  getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [&result, this]() { result = memExceedTime_.has_value(); });
+  return result;
 }
 
 void
