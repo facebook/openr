@@ -286,10 +286,10 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
           for (auto& store : stores) {
             auto keyVals = store->dumpAll();
             if (not keyVals.empty()) {
-              LOG(INFO) << store->nodeId << " still has " << keyVals.size()
-                        << " keys remaining";
+              VLOG(2) << store->nodeId << " still has " << keyVals.size()
+                      << " keys remaining";
               for (auto& kv : keyVals) {
-                LOG(INFO) << "  " << kv.first << ", ttl: " << kv.second.ttl;
+                VLOG(2) << "  " << kv.first << ", ttl: " << kv.second.ttl;
               }
               allStoreEmpty = false;
               break;
