@@ -830,7 +830,7 @@ TEST(BGPRedistribution, BasicOperation) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, bgpPrefix1),
-          Field(&thrift::UnicastRoute::data, data2),
+          Truly([&data2](auto i) { return i.data == data2; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -934,7 +934,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Field(&thrift::UnicastRoute::data, data1),
+          Truly([&data1](auto i) { return i.data == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -952,7 +952,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Field(&thrift::UnicastRoute::data, data1),
+          Truly([&data1](auto i) { return i.data == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -970,7 +970,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Field(&thrift::UnicastRoute::data, data1),
+          Truly([&data1](auto i) { return i.data == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -988,7 +988,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Field(&thrift::UnicastRoute::data, data1),
+          Truly([&data1](auto i) { return i.data == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -1005,7 +1005,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Field(&thrift::UnicastRoute::data, data1),
+          Truly([&data1](auto i) { return i.data == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
