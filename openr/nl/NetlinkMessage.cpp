@@ -191,6 +191,7 @@ NetlinkProtocolSocket::setNeighborEventCB(
 
 void
 NetlinkProtocolSocket::processAck(uint32_t ack) {
+  VLOG(0) << "Ack received: " << ack;
   if (ack == lastSeqNo_) {
     VLOG(2) << "Last ack received " << ack;
     // cancel active message timer
@@ -199,6 +200,8 @@ NetlinkProtocolSocket::processAck(uint32_t ack) {
     }
     // continue sending next set of messages
     sendNetlinkMessage();
+  } else {
+    LOG(ERROR) << "Ack received for older message: " << ack;
   }
 }
 
@@ -265,6 +268,7 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
 void
 NetlinkProtocolSocket::setReturnStatusValue(uint32_t seq, int status) {
   try {
+    VLOG(1) << "trying to set return for " << seq;
     auto request = nlSeqNoMap_.at(seq);
     request->setReturnStatus(status);
     // Remove mapping
@@ -305,12 +309,16 @@ NetlinkProtocolSocket::processMessage(
       fbnl::Link link = linkMessage->parseMessage(nlh);
 
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
+        VLOG(0) << "Link info for Req: " << nlh->nlmsg_seq;
         // Synchronous event - do not generate link events
         linkCache_.emplace_back(link);
       } else if (linkEventCB_) {
         // Asynchronous event - generate link event for handler
         VLOG(0) << "Asynchronous Link Event: " << link.str();
         linkEventCB_(link, true);
+      } else {
+        LOG(ERROR) << "Received link event but not sure about client: "
+                   << nlh->nlmsg_seq;
       }
     } break;
 
@@ -371,6 +379,8 @@ NetlinkProtocolSocket::processMessage(
       const struct nlmsgerr* const ack =
           reinterpret_cast<struct nlmsgerr*>(NLMSG_DATA(nlh));
       if (ack->msg.nlmsg_pid != pid_) {
+        LOG(ERROR) << "received netlink message with wrong PID, received: "
+                   << ack->msg.nlmsg_pid << " expected: " << pid_;
         break;
       }
       setReturnStatusValue(ack->msg.nlmsg_seq, ack->error);

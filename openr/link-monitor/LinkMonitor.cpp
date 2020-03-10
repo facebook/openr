@@ -766,7 +766,9 @@ LinkMonitor::advertiseRedistAddrs() {
       prefixes.emplace_back(std::move(prefix));
     }
   }
-
+  if (!prefixes.size()) {
+    LOG(INFO) << "Overwrite loopback address with empty address";
+  }
   // Advertise via prefix manager client
   thrift::PrefixUpdateRequest request;
   request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
