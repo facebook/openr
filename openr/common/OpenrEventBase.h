@@ -51,6 +51,16 @@ class OpenrEventBase {
   }
 
   /**
+   * Another flavor of adding a task to fiber manager. But user will be
+   * responsible to wait for the fiber completion in termination sequence.
+   */
+  template <typename F>
+  folly::Future<folly::Unit>
+  addFiberTaskFuture(F&& func) {
+    return fiberManager_.addTaskFuture(std::move(func));
+  }
+
+  /**
    * EventBase API aliases
    */
   void

@@ -48,16 +48,30 @@ TEST(OpenrEventBaseTest, CreateDestroy) {
 }
 
 TEST(OpenrEventBaseTest, FiberTest) {
-  folly::Promise<folly::Unit> p;
-  auto sf = p.getSemiFuture();
+  // test addFiberTask()
+  folly::Promise<folly::Unit> p1;
+  auto sf = p1.getSemiFuture();
   OpenrEventBase evb;
-  evb.addFiberTask([p = std::move(p)]() mutable noexcept {
+  evb.addFiberTask([p = std::move(p1)]() mutable noexcept {
     p.setValue(folly::Unit());
   });
   evb.getEvb()->loopOnce();
   EXPECT_TRUE(sf.valid());
   EXPECT_TRUE(sf.isReady());
   EXPECT_TRUE(sf.hasValue());
+
+  // test addFiberTaskAndGetFuture()
+  folly::Promise<folly::Unit> p2;
+  folly::Future<folly::Unit> f;
+  f = evb.addFiberTaskFuture([p = std::move(p2)]() mutable noexcept {
+    p.setValue(folly::Unit());
+  });
+  EXPECT_TRUE(f.valid());
+  EXPECT_FALSE(f.isReady());
+
+  evb.getEvb()->loopOnce();
+  EXPECT_TRUE(f.isReady());
+  EXPECT_TRUE(f.hasValue());
 }
 
 TEST(OpenrEventBaseTest, RunnableApi) {
