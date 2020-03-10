@@ -477,7 +477,7 @@ NetlinkProtocolSocket::getReturnStatus(
   }
 
   // Collect request status(es) from the request message futures
-  auto all = collectAll(futures.begin(), futures.end());
+  auto all = collectAllUnsafe(futures.begin(), futures.end());
   // Wait for Netlink Ack (which sets the promise value)
   if (all.wait(timeout).isReady()) {
     // Collect statuses from individual futures
