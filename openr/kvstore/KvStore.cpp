@@ -798,22 +798,26 @@ KvStore::processKvStoreDualMessage(
 
 fbzmq::thrift::CounterMap
 KvStore::getCounters() {
-  // Extract/build counters from thread-data
-  auto allCounters = tData_.getCounters();
+  std::unordered_map<std::string, int64_t> allCounters;
 
-  for (auto& kvDb : kvStoreDb_) {
-    auto kvDbCounters = kvDb.second.getCounters();
-    // add up counters for same key from all kvStoreDb instances
-    allCounters = std::accumulate(
-        kvDbCounters.begin(),
-        kvDbCounters.end(),
-        allCounters,
-        [](std::unordered_map<std::string, int64_t>& allCounters,
-           const std::pair<const std::string, int64_t>& kvDbcounter) {
-          allCounters[kvDbcounter.first] += kvDbcounter.second;
-          return allCounters;
-        });
-  }
+  // Extract/build counters from thread-data
+  getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this, &allCounters]() {
+    allCounters = tData_.getCounters();
+    for (auto& kvDb : kvStoreDb_) {
+      auto kvDbCounters = kvDb.second.getCounters();
+      // add up counters for same key from all kvStoreDb instances
+      allCounters = std::accumulate(
+          kvDbCounters.begin(),
+          kvDbCounters.end(),
+          allCounters,
+          [](std::unordered_map<std::string, int64_t>& allCounters,
+             const std::pair<const std::string, int64_t>& kvDbcounter) {
+            allCounters[kvDbcounter.first] += kvDbcounter.second;
+            return allCounters;
+          });
+    }
+  });
+
   return prepareSubmitCounters(allCounters);
 }
 
