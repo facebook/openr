@@ -66,3 +66,22 @@ TEST(ReplicateQueueTest, Test) {
 
   EXPECT_EQ(kTotalWrites * kNumReaders, totalReads);
 }
+
+TEST(ReplicateQueueTest, OpenQueueTest) {
+  ReplicateQueue<int> q;
+  auto r1 = q.getReader();
+  EXPECT_EQ(1, q.getNumReaders());
+
+  q.close();
+  EXPECT_EQ(0, q.getNumReaders());
+
+  // make sure can't add reader when ReplicateQueue is closed
+  EXPECT_THROW(q.getReader(), std::runtime_error);
+
+  // reopen queue and make sure reader can be added
+  q.open();
+  auto r2 = q.getReader();
+  EXPECT_EQ(1, q.getNumReaders());
+
+  q.close();
+}

@@ -15,12 +15,7 @@ ReplicateQueue<ValueType>::ReplicateQueue() {}
 
 template <typename ValueType>
 ReplicateQueue<ValueType>::~ReplicateQueue() {
-  auto lockedReaders = readers_.wlock();
-  // Close all queues
-  for (auto& reader : *lockedReaders) {
-    reader->close();
-  }
-  lockedReaders->clear();
+  close();
 }
 
 template <typename ValueType>

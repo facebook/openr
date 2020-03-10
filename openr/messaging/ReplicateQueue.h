@@ -57,6 +57,14 @@ class ReplicateQueue {
   size_t getNumReaders();
 
   /**
+   * Open the underlying queue. ONLY used for UT purpose.
+   */
+  void
+  open() {
+    closed_ = false;
+  }
+
+  /**
    * Close the underlying queue. All subsequent writes and reads will fails.
    */
   void close();
