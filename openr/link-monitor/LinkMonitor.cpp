@@ -1190,7 +1190,7 @@ LinkMonitor::getInterfaces() {
       if (config_.linkMetricOverrides.count(ifName) > 0) {
         maybeMetric.assign(config_.linkMetricOverrides.at(ifName));
       }
-      ifDetails.metricOverride = maybeMetric;
+      apache::thrift::fromFollyOptional(ifDetails.metricOverride, maybeMetric);
 
       // Add link-backoff
       auto backoffMs = interface.getBackoffDuration();
