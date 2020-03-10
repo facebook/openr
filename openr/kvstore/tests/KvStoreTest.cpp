@@ -225,7 +225,9 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
 
         // Update hash
         thriftVal.hash = generateHash(
-            thriftVal.version, thriftVal.originatorId, thriftVal.value);
+            thriftVal.version,
+            thriftVal.originatorId,
+            apache::thrift::castToFolly(thriftVal.value));
         // Add this to expected key/vals
         expectedKeyVals.emplace(key, thriftVal);
         expectedGlobalKeyVals.emplace(key, thriftVal);
@@ -905,8 +907,10 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
 
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash = generateHash(
+      thriftVal.version,
+      thriftVal.originatorId,
+      apache::thrift::castToFolly(thriftVal.value));
   EXPECT_TRUE(store0->setKey("test1", thriftVal));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("test1", thriftVal));
@@ -928,7 +932,9 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal2.hash = generateHash(
-      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+      thriftVal2.version,
+      thriftVal2.originatorId,
+      apache::thrift::castToFolly(thriftVal2.value));
   EXPECT_TRUE(store0->setKey("test2", thriftVal2));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("test2", thriftVal2));
@@ -950,7 +956,9 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal3.hash = generateHash(
-      thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
+      thriftVal3.version,
+      thriftVal3.originatorId,
+      apache::thrift::castToFolly(thriftVal3.value));
   EXPECT_TRUE(store0->setKey("e2exyz", thriftVal3));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2exyz", thriftVal3));
@@ -972,7 +980,9 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal4.hash = generateHash(
-      thriftVal4.version, thriftVal4.originatorId, thriftVal4.value);
+      thriftVal4.version,
+      thriftVal4.originatorId,
+      apache::thrift::castToFolly(thriftVal4.value));
   EXPECT_TRUE(store0->setKey("e2e", thriftVal4));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2e", thriftVal4));
@@ -994,7 +1004,9 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal5.hash = generateHash(
-      thriftVal5.version, thriftVal5.originatorId, thriftVal5.value);
+      thriftVal5.version,
+      thriftVal5.originatorId,
+      apache::thrift::castToFolly(thriftVal5.value));
   EXPECT_TRUE(store0->setKey("e2", thriftVal5));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2", thriftVal5));
@@ -1014,7 +1026,9 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
   thriftVal6.hash = generateHash(
-      thriftVal6.version, thriftVal6.originatorId, thriftVal6.value);
+      thriftVal6.version,
+      thriftVal6.originatorId,
+      apache::thrift::castToFolly(thriftVal6.value));
   EXPECT_TRUE(store1->setKey("test3", thriftVal6));
   expectedKeyVals["test3"] = thriftVal6;
   expectedOrignatorVals["test3"] = thriftVal6;
@@ -1077,7 +1091,9 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
       0 /* hash */);
 
   thriftVal1.hash = generateHash(
-      thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+      thriftVal1.version,
+      thriftVal1.originatorId,
+      apache::thrift::castToFolly(thriftVal1.value));
 
   thrift::Value thriftVal2(
       apache::thrift::FRAGILE,
@@ -1089,7 +1105,9 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
       0 /* hash */);
 
   thriftVal2.hash = generateHash(
-      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+      thriftVal2.version,
+      thriftVal2.originatorId,
+      apache::thrift::castToFolly(thriftVal2.value));
 
   EXPECT_TRUE(store0->setKey("test1", thriftVal1));
   auto maybeThriftVal = store0->getKey("test1");
@@ -1174,8 +1192,10 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
       0 /* hash */);
   EXPECT_TRUE(store1->setKey("test", thriftVal));
   // Update hash
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash = generateHash(
+      thriftVal.version,
+      thriftVal.originatorId,
+      apache::thrift::castToFolly(thriftVal.value));
 
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0 on pub socket ...";
@@ -1195,8 +1215,10 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
       0 /* hash */);
   EXPECT_TRUE(store2->setKey("test", thriftVal));
   // Update hash
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash = generateHash(
+      thriftVal.version,
+      thriftVal.originatorId,
+      apache::thrift::castToFolly(thriftVal.value));
 
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0...";
@@ -1221,8 +1243,10 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
       0 /* hash */);
   EXPECT_TRUE(store1->setKey("test", thriftVal));
   // Update hash
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash = generateHash(
+      thriftVal.version,
+      thriftVal.originatorId,
+      apache::thrift::castToFolly(thriftVal.value));
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0 on pub socket ...";
   pub = store0->recvPublication(kTimeout);
@@ -1859,7 +1883,9 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     store->setKey(key, thriftVal);
     // Update hash
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
 
     // Store this in expectedKeyVals
     expectedKeyVals[key] = thriftVal;
@@ -1918,7 +1944,9 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     store->setKey(key, thriftVal);
     // Update hash
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
 
     // Store this in expectedKeyVals
     expectedKeyVals[key] = thriftVal;
@@ -2095,7 +2123,7 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   thriftValFirst.hash = generateHash(
       thriftValFirst.version,
       thriftValFirst.originatorId,
-      thriftValFirst.value);
+      apache::thrift::castToFolly(thriftValFirst.value));
 
   // set a key from the store on the other end of the chain
   thrift::Value thriftValLast(
@@ -2109,7 +2137,9 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   EXPECT_TRUE(stores[kNumStores - 1]->setKey(kKeyName, thriftValLast));
   // Update hash
   thriftValLast.hash = generateHash(
-      thriftValLast.version, thriftValLast.originatorId, thriftValLast.value);
+      thriftValLast.version,
+      thriftValLast.originatorId,
+      apache::thrift::castToFolly(thriftValLast.value));
 
   //
   // We expect test-value-2 because "2" > "1" in tie-breaking
@@ -2162,7 +2192,9 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     EXPECT_TRUE(stores[0]->setKey(kKeyName, thriftVal));
     // Update hash
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
 
     // Make sure the old value still exists
     EXPECT_EQ(thriftValLast, stores[0]->getKey(kKeyName));
@@ -2202,7 +2234,9 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
     store->setKey(key, thriftVal);
     // Update hash
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
 
     // Store this in expectedKeyVals
     if (i % 2 == 0) {
@@ -2280,7 +2314,9 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
 
     // Update hash
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
 
     // Store keyVals
     expectedKeyVals[key] = thriftVal;
@@ -2318,7 +2354,9 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
     auto newThriftVal = thriftVal;
     newThriftVal.value = "why-so-serious";
     newThriftVal.hash = generateHash(
-        newThriftVal.version, newThriftVal.originatorId, newThriftVal.value);
+        newThriftVal.version,
+        newThriftVal.originatorId,
+        apache::thrift::castToFolly(newThriftVal.value));
     peerKeyVals[key] = newThriftVal; // extra key in local
     EXPECT_EQ(emptyKeyVals, myStore->syncKeyVals(peerKeyVals));
   }
@@ -2403,7 +2441,9 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
       1 /* ttl version */,
       0 /* hash */);
   thriftVal1.hash = generateHash(
-      thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+      thriftVal1.version,
+      thriftVal1.originatorId,
+      apache::thrift::castToFolly(thriftVal1.value));
   EXPECT_TRUE(store1->setKey("key1", thriftVal1));
   {
     /* check key is in store1 */
@@ -2427,7 +2467,9 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
       1 /* ttl version */,
       0 /* hash */);
   thriftVal2.hash = generateHash(
-      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+      thriftVal2.version,
+      thriftVal2.originatorId,
+      apache::thrift::castToFolly(thriftVal2.value));
   EXPECT_TRUE(store1->setKey("key2", thriftVal2));
 
   {
@@ -2511,7 +2553,9 @@ TEST_F(KvStoreTestFixture, RateLimiterSync) {
         0 /* hash */);
     std::string key = folly::sformat("key{}", ++expectNumKeys);
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
     if (expectNumKeys == 10) {
       // we should be able to set thousands of keys wihtin 5 seconds,
       // pick one of them and let it be set by store0, all others set by store2
@@ -2573,7 +2617,9 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         ++i1 /* ttl version */,
         0 /* hash */);
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
     EXPECT_TRUE(store0->setKey("key1", thriftVal));
     elapsedTime1 =
         duration_cast<seconds>(steady_clock::now() - startTime1).count();
@@ -2625,7 +2671,9 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         ++i2 /* ttl version */,
         0 /* hash */);
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
     EXPECT_TRUE(store1->setKey("key2", thriftVal));
     elapsedTime2 =
         duration_cast<seconds>(steady_clock::now() - startTime2).count();
@@ -2671,7 +2719,9 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         0 /* ttl version */,
         0 /* hash */);
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
     EXPECT_TRUE(store1->setKey(key, thriftVal));
     elapsedTime3 =
         duration_cast<seconds>(steady_clock::now() - startTime3).count();
@@ -2718,7 +2768,9 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         0 /* ttl version */,
         0 /* hash */);
     thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.version,
+        thriftVal.originatorId,
+        apache::thrift::castToFolly(thriftVal.value));
     EXPECT_TRUE(store1->setKey(key, thriftVal));
     elapsedTime4 =
         duration_cast<seconds>(steady_clock::now() - startTime4).count();
@@ -2775,7 +2827,8 @@ TEST_F(KvStoreTestFixture, FullSync) {
         30000 /* ttl */,
         99 /* ttl version */,
         0 /* hash*/);
-    val.hash = generateHash(val.version, val.originatorId, val.value);
+    val.hash = generateHash(
+        val.version, val.originatorId, apache::thrift::castToFolly(val.value));
     EXPECT_TRUE(storeA->setKey(keyVer.first, val));
   }
 
@@ -2792,7 +2845,8 @@ TEST_F(KvStoreTestFixture, FullSync) {
     if (keyVer.first == k1) {
       val.value = "a"; // set same value for k1
     }
-    val.hash = generateHash(val.version, val.originatorId, val.value);
+    val.hash = generateHash(
+        val.version, val.originatorId, apache::thrift::castToFolly(val.value));
     EXPECT_TRUE(storeB->setKey(keyVer.first, val));
   }
 
@@ -2916,7 +2970,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             0 /* ttl version */,
             0 /* hash */);
         thriftVal0.hash = generateHash(
-            thriftVal0.version, thriftVal0.originatorId, thriftVal0.value);
+            thriftVal0.version,
+            thriftVal0.originatorId,
+            apache::thrift::castToFolly(thriftVal0.value));
 
         thrift::Value thriftVal1 = createThriftValue(
             1 /* version */,
@@ -2926,7 +2982,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             0 /* ttl version */,
             0 /* hash */);
         thriftVal1.hash = generateHash(
-            thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+            thriftVal1.version,
+            thriftVal1.originatorId,
+            apache::thrift::castToFolly(thriftVal1.value));
 
         thrift::Value thriftVal2 = createThriftValue(
             1 /* version */,
@@ -2936,7 +2994,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             0 /* ttl version */,
             0 /* hash */);
         thriftVal2.hash = generateHash(
-            thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+            thriftVal2.version,
+            thriftVal2.originatorId,
+            apache::thrift::castToFolly(thriftVal2.value));
 
         thrift::Value thriftVal3 = createThriftValue(
             1 /* version */,
@@ -2946,7 +3006,9 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             0 /* ttl version */,
             0 /* hash */);
         thriftVal3.hash = generateHash(
-            thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
+            thriftVal3.version,
+            thriftVal3.originatorId,
+            apache::thrift::castToFolly(thriftVal3.value));
 
         // set key in default area, but storeA does not have default area, this
         // should fail
