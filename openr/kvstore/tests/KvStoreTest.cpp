@@ -303,11 +303,13 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
           std::this_thread::yield();
         }
         // must expire after ttl
+        const int64_t errorMargin = 5; // 5ms for error margin
         const auto elapsedTime =
             duration_cast<milliseconds>(steady_clock::now() - startTime)
                 .count();
         LOG(INFO) << "ttl " << ttl << " vs elapsedTime " << elapsedTime;
-        EXPECT_LE(ttl - Constants::kTtlDecrement.count(), elapsedTime);
+        EXPECT_LE(
+            ttl - Constants::kTtlDecrement.count() - errorMargin, elapsedTime);
       }
     } // for `i < kNumIter`
   }
