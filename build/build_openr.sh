@@ -154,19 +154,6 @@ install_fbthrift() {
   popd
 }
 
-install_sigar() {
-  pushd .
-  if [[ ! -e "sigar" ]]; then
-    git clone https://github.com/hyperic/sigar/
-  fi
-  cd sigar
-  ./autogen.sh
-  ./configure --disable-shared CFLAGS='-fgnu89-inline'
-  sudo make install
-  sudo ldconfig
-  popd
-}
-
 install_fbzmq() {
   pushd .
   if [[ ! -e "fbzmq" ]]; then
@@ -375,7 +362,6 @@ install_libzmq
 install_libnl
 install_krb5
 install_fbthrift
-install_sigar
 install_fbzmq
 install_re2
 install_openr

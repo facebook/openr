@@ -47,8 +47,6 @@ jobs:
       run: python build/fbcode_builder/getdeps.py fetch --no-tests rsocket-cpp
     - name: Fetch autoconf
       run: python build/fbcode_builder/getdeps.py fetch --no-tests autoconf
-    - name: Fetch sigar
-      run: python build/fbcode_builder/getdeps.py fetch --no-tests sigar
     - name: Fetch automake
       run: python build/fbcode_builder/getdeps.py fetch --no-tests automake
     - name: Fetch libtool
@@ -101,8 +99,6 @@ jobs:
       run: python build/fbcode_builder/getdeps.py build --no-tests rsocket-cpp
     - name: Build autoconf
       run: python build/fbcode_builder/getdeps.py build --no-tests autoconf
-    - name: Build sigar
-      run: python build/fbcode_builder/getdeps.py build --no-tests sigar
     - name: Build automake
       run: python build/fbcode_builder/getdeps.py build --no-tests automake
     - name: Build libtool
