@@ -390,6 +390,16 @@ main(int argc, char** argv) {
     waitForFibService(mainEventLoop);
   }
 
+  // Starting openrCtrlEvb for thrift handler
+  OpenrEventBase ctrlEvb;
+  std::thread ctrlEvbThread([&]() noexcept {
+    LOG(INFO) << "Starting openrCtrl eventbase...";
+    folly::setThreadName("openrCtrl");
+    ctrlEvb.run();
+    LOG(INFO) << "OpenrCtrl eventbase stopped...";
+  });
+  ctrlEvb.waitUntilRunning();
+
   // Start config-store URL
   auto configStore = startEventBase(
       allThreads,
@@ -800,20 +810,23 @@ main(int argc, char** argv) {
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
   }
 
-  auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
-      FLAGS_node_name,
-      acceptableNamesSet,
-      decision,
-      fib,
-      kvStore,
-      linkMonitor,
-      configStore,
-      prefixManager,
-      monitorSubmitUrl,
-      kvStoreLocalPubUrl,
-      mainEventLoop,
-      context);
+  std::shared_ptr<openr::OpenrCtrlHandler> ctrlHandler{nullptr};
+  ctrlEvb.getEvb()->runInEventBaseThreadAndWait([&]() {
+    ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
+        FLAGS_node_name,
+        acceptableNamesSet,
+        &ctrlEvb,
+        decision,
+        fib,
+        kvStore,
+        linkMonitor,
+        configStore,
+        prefixManager,
+        monitorSubmitUrl,
+        context);
+  });
 
+  CHECK(ctrlHandler);
   thriftCtrlServer.setInterface(ctrlHandler);
   thriftCtrlServer.setNumIOWorkerThreads(1);
   // Intentionally kept this as (1). If you're changing to higher number please
@@ -848,7 +861,13 @@ main(int argc, char** argv) {
   neighborUpdatesQueue.close();
   prefixUpdatesQueue.close();
   kvStoreUpdatesQueue.close();
+
   thriftCtrlServer.stop();
+  ctrlHandler.reset();
+  ctrlEvb.stop();
+  ctrlEvb.waitUntilStopped();
+  ctrlEvbThread.join();
+
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {
     (*riter)->stop();

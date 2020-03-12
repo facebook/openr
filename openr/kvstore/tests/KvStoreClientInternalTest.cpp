@@ -130,31 +130,27 @@ class MultipleStoreFixture : public ::testing::Test {
   initThriftWrappers() {
     // wrapper to spin up an OpenrThriftServerWrapper for thrift connection
     auto makeThriftServerWrapper =
-        [this](std::string nodeId, std::string localPubUrl, KvStore* kvStore) {
+        [this](std::string nodeId, std::shared_ptr<KvStoreWrapper> store) {
           return std::make_shared<OpenrThriftServerWrapper>(
               nodeId,
               nullptr /* decision */,
               nullptr /* fib */,
-              kvStore /* kvStore */,
+              store->getKvStore() /* kvStore */,
               nullptr /* linkMonitor */,
               nullptr /* configStore */,
               nullptr /* prefixManager */,
               MonitorSubmitUrl{"inproc://monitor_submit"},
-              KvStoreLocalPubUrl{localPubUrl},
               context);
         };
 
     // spin up OpenrThriftServerWrapper for thrift connectivity
-    thriftWrapper1_ = makeThriftServerWrapper(
-        node1, store1->localPubUrl, store1->getKvStore());
+    thriftWrapper1_ = makeThriftServerWrapper(node1, store1);
     thriftWrapper1_->run();
 
-    thriftWrapper2_ = makeThriftServerWrapper(
-        node2, store2->localPubUrl, store2->getKvStore());
+    thriftWrapper2_ = makeThriftServerWrapper(node2, store2);
     thriftWrapper2_->run();
 
-    thriftWrapper3_ = makeThriftServerWrapper(
-        node3, store3->localPubUrl, store3->getKvStore());
+    thriftWrapper3_ = makeThriftServerWrapper(node3, store3);
     thriftWrapper3_->run();
   }
 
@@ -788,8 +784,10 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
 
   // Stop store
   LOG(INFO) << "Stopping store";
-  store->stop();
+  store->closeQueue();
   client1.reset();
+  store->stop();
+  store.reset();
 
   evb.stop();
   evb.waitUntilStopped();
@@ -891,8 +889,10 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
 
   // Stop store
   LOG(INFO) << "Stopping store";
-  store->stop();
+  store->closeQueue();
   client1.reset();
+  store->stop();
+  store.reset();
 
   evb.stop();
   evb.waitUntilStopped();

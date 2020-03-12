@@ -18,11 +18,9 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
     PersistentStore* configStore,
     PrefixManager* prefixManager,
     MonitorSubmitUrl const& monitorSubmitUrl,
-    KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
     fbzmq::Context& context)
     : nodeName_(nodeName),
       monitorSubmitUrl_(monitorSubmitUrl),
-      kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
       context_(context),
       decision_(decision),
       fib_(fib),
@@ -36,30 +34,24 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
 void
 OpenrThriftServerWrapper::run() {
   // Create main-event-loop
-  mainEvlThread_ = std::thread([&]() { mainEvl_.run(); });
-  mainEvl_.waitUntilRunning();
-
-  tm_ = apache::thrift::concurrency::ThreadManager::newSimpleThreadManager(
-      1, false);
-  tm_->threadFactory(
-      std::make_shared<apache::thrift::concurrency::PosixThreadFactory>());
-  tm_->start();
+  evbThread_ = std::thread([&]() { evb_.run(); });
+  evb_.waitUntilRunning();
 
   // create openrCtrlHandler
-  openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
-      nodeName_,
-      std::unordered_set<std::string>{},
-      decision_,
-      fib_,
-      kvStore_,
-      linkMonitor_,
-      configStore_,
-      prefixManager_,
-      monitorSubmitUrl_,
-      kvStoreLocalPubUrl_,
-      mainEvl_,
-      context_);
-  openrCtrlHandler_->setThreadManager(tm_.get());
+  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
+    openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
+        nodeName_,
+        std::unordered_set<std::string>{},
+        &evb_,
+        decision_,
+        fib_,
+        kvStore_,
+        linkMonitor_,
+        configStore_,
+        prefixManager_,
+        monitorSubmitUrl_,
+        context_);
+  });
 
   // setup openrCtrlThrift server for client to connect to
   std::shared_ptr<apache::thrift::ThriftServer> server =
@@ -75,10 +67,11 @@ OpenrThriftServerWrapper::run() {
 
 void
 OpenrThriftServerWrapper::stop() {
-  mainEvl_.stop();
-  mainEvlThread_.join();
+  // ATTN: it is user's responsibility to close the queue passed
+  //       to OpenrThrifyServerWrapper before calling stop()
   openrCtrlHandler_.reset();
-  tm_->join();
+  evb_.stop();
+  evbThread_.join();
   openrCtrlThriftServerThread_.stop();
 
   LOG(INFO) << "Successfully stopped openr-ctrl thrift server";

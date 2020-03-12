@@ -30,6 +30,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   OpenrCtrlHandler(
       const std::string& nodeName,
       const std::unordered_set<std::string>& acceptablePeerCommonNames,
+      OpenrEventBase* ctrlEvb,
       Decision* decision,
       Fib* fib,
       KvStore* kvStore,
@@ -37,8 +38,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       PersistentStore* configStore,
       PrefixManager* prefixManager,
       MonitorSubmitUrl const& monitorSubmitUrl,
-      KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
-      fbzmq::ZmqEventLoop& evl,
       fbzmq::Context& context);
 
   ~OpenrCtrlHandler() override;
@@ -292,14 +291,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   PersistentStore* configStore_{nullptr};
   PrefixManager* prefixManager_{nullptr};
 
-  // Reference to event-loop
-  fbzmq::ZmqEventLoop& evl_;
-
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
-
-  // KvStore sub socket
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> kvStoreSubSock_;
 
   // Active kvstore snoop publishers
   std::atomic<int64_t> publisherToken_{0};
@@ -314,6 +307,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::Synchronized<
       std::unordered_map<int64_t, std::pair<folly::Promise<bool>, int64_t>>>
       longPollReqs_;
+
+  // fiber task future hold
+  folly::Future<folly::Unit> taskFuture_;
 
 }; // class OpenrCtrlHandler
 } // namespace openr

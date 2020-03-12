@@ -41,7 +41,6 @@ class LongPollFixture : public ::testing::Test {
         nullptr /* configStore */,
         nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor-submit-url"},
-        KvStoreLocalPubUrl{kvStoreWrapper_->localPubUrl},
         context_);
     openrThriftServerWrapper_->run();
 
@@ -64,10 +63,13 @@ class LongPollFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    kvStoreWrapper_->closeQueue();
     client1_.reset();
     client2_.reset();
     openrThriftServerWrapper_->stop();
+    openrThriftServerWrapper_.reset();
     kvStoreWrapper_->stop();
+    kvStoreWrapper_.reset();
   }
 
  private:

@@ -176,7 +176,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         persistentStore.get() /* configStore */,
         prefixManager.get() /* prefixManager */,
         monitorSubmitUrl_,
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         context_);
     openrThriftServerWrapper_->run();
 

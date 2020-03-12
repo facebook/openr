@@ -199,9 +199,6 @@ class KvStoreWrapper {
   // Queue for streaming KvStore updates
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
 
-  // ZMQ request socket for interacting with KvStore's command socket
-  fbzmq::Socket<ZMQ_REQ, fbzmq::ZMQ_CLIENT> reqSock_;
-
   // ZMQ sub socket for listening realtime updates from KvStore
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> subSock_;
 

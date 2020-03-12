@@ -29,6 +29,7 @@ namespace openr {
 OpenrCtrlHandler::OpenrCtrlHandler(
     const std::string& nodeName,
     const std::unordered_set<std::string>& acceptablePeerCommonNames,
+    OpenrEventBase* ctrlEvb,
     Decision* decision,
     Fib* fib,
     KvStore* kvStore,
@@ -36,8 +37,6 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     PersistentStore* configStore,
     PrefixManager* prefixManager,
     MonitorSubmitUrl const& monitorSubmitUrl,
-    KvStoreLocalPubUrl const& kvStoreLocalPubUrl,
-    fbzmq::ZmqEventLoop& evl,
     fbzmq::Context& context)
     : facebook::fb303::BaseService("openr"),
       nodeName_(nodeName),
@@ -47,113 +46,92 @@ OpenrCtrlHandler::OpenrCtrlHandler(
       kvStore_(kvStore),
       linkMonitor_(linkMonitor),
       configStore_(configStore),
-      prefixManager_(prefixManager),
-      evl_(evl),
-      kvStoreSubSock_(context) {
+      prefixManager_(prefixManager) {
   // Create monitor client
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(context, monitorSubmitUrl);
 
-  // Connect to KvStore
-  const auto kvStoreSub =
-      kvStoreSubSock_.connect(fbzmq::SocketUrl{kvStoreLocalPubUrl});
-  if (kvStoreSub.hasError()) {
-    LOG(FATAL) << "Error binding to URL " << std::string(kvStoreLocalPubUrl)
-               << " " << kvStoreSub.error();
+  // Add fiber task to receive publication from KvStore
+  if (kvStore_) {
+    taskFuture_ = ctrlEvb->addFiberTaskFuture([
+      q = std::move(kvStore_->getKvStoreUpdatesReader()),
+      this
+    ]() mutable noexcept {
+      LOG(INFO) << "Starting KvStore updates processing fiber";
+      while (true) {
+        auto maybePublication = q.get(); // perform read
+        VLOG(2) << "Received publication from KvStore";
+        if (maybePublication.hasError()) {
+          LOG(INFO) << "Terminating KvStore publications processing fiber";
+          break;
+        }
+
+        SYNCHRONIZED(kvStorePublishers_) {
+          for (auto& kv : kvStorePublishers_) {
+            kv.second.next(maybePublication.value());
+          }
+        }
+
+        bool isAdjChanged = false;
+        // check if any of KeyVal has 'adj' update
+        for (auto& kv : maybePublication.value().keyVals) {
+          auto& key = kv.first;
+          auto& val = kv.second;
+          // check if we have any value update.
+          // Ttl refreshing won't update any value.
+          if (!val.value.has_value()) {
+            continue;
+          }
+
+          // "adj:*" key has changed. Update local collection
+          if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+            VLOG(3) << "Adj key: " << key << " change received";
+            isAdjChanged = true;
+            break;
+          }
+        }
+
+        if (isAdjChanged) {
+          // thrift::Publication contains "adj:*" key change.
+          // Clean ALL pending promises
+          longPollReqs_.withWLock([&](auto& longPollReqs) {
+            for (auto& kv : longPollReqs) {
+              auto& p = kv.second.first;
+              p.setValue(true);
+            }
+            longPollReqs.clear();
+          });
+        } else {
+          longPollReqs_.withWLock([&](auto& longPollReqs) {
+            auto now = getUnixTimeStampMs();
+            std::vector<int64_t> reqsToClean;
+            for (auto& kv : longPollReqs) {
+              auto& clientId = kv.first;
+              auto& req = kv.second;
+
+              auto& p = req.first;
+              auto& timeStamp = req.second;
+              if (now - timeStamp >= Constants::kLongPollReqHoldTime.count()) {
+                LOG(INFO) << "Elapsed time: " << now - timeStamp
+                          << " is over hold limit: "
+                          << Constants::kLongPollReqHoldTime.count();
+                reqsToClean.emplace_back(clientId);
+                p.setValue(false);
+              }
+            }
+
+            // cleanup expired requests since no ADJ change observed
+            for (auto& clientId : reqsToClean) {
+              longPollReqs.erase(clientId);
+            }
+          });
+        }
+      }
+    });
   }
-
-  // Subscribe to everything
-  const auto kvStoreSubOpt = kvStoreSubSock_.setSockOpt(ZMQ_SUBSCRIBE, "", 0);
-  if (kvStoreSubOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
-               << std::string(kvStoreLocalPubUrl) << " "
-               << kvStoreSubOpt.error();
-  }
-
-  evl_.runInEventLoop([this]() noexcept {
-    evl_.addSocket(
-        fbzmq::RawZmqSocketPtr{*kvStoreSubSock_},
-        ZMQ_POLLIN,
-        [&](int) noexcept {
-          apache::thrift::CompactSerializer serializer;
-          // Read publication from socket and process it
-          auto maybePublication =
-              kvStoreSubSock_.recvThriftObj<thrift::Publication>(serializer);
-          if (maybePublication.hasError()) {
-            LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
-                       << "Exception: " << maybePublication.error();
-            return;
-          }
-
-          SYNCHRONIZED(kvStorePublishers_) {
-            for (auto& kv : kvStorePublishers_) {
-              kv.second.next(maybePublication.value());
-            }
-          }
-
-          bool isAdjChanged = false;
-          // check if any of KeyVal has 'adj' update
-          for (auto& kv : maybePublication.value().keyVals) {
-            auto& key = kv.first;
-            auto& val = kv.second;
-            // check if we have any value update.
-            // Ttl refreshing won't update any value.
-            if (!val.value.has_value()) {
-              continue;
-            }
-
-            // "adj:*" key has changed. Update local collection
-            if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-              VLOG(3) << "Adj key: " << key << " change received";
-              isAdjChanged = true;
-              break;
-            }
-          }
-
-          if (isAdjChanged) {
-            // thrift::Publication contains "adj:*" key change.
-            // Clean ALL pending promises
-            longPollReqs_.withWLock([&](auto& longPollReqs) {
-              for (auto& kv : longPollReqs) {
-                auto& p = kv.second.first;
-                p.setValue(true);
-              }
-              longPollReqs.clear();
-            });
-          } else {
-            longPollReqs_.withWLock([&](auto& longPollReqs) {
-              auto now = getUnixTimeStampMs();
-              std::vector<int64_t> reqsToClean;
-              for (auto& kv : longPollReqs) {
-                auto& clientId = kv.first;
-                auto& req = kv.second;
-
-                auto& p = req.first;
-                auto& timeStamp = req.second;
-                if (now - timeStamp >=
-                    Constants::kLongPollReqHoldTime.count()) {
-                  LOG(INFO) << "Elapsed time: " << now - timeStamp
-                            << " is over hold limit: "
-                            << Constants::kLongPollReqHoldTime.count();
-                  reqsToClean.emplace_back(clientId);
-                  p.setValue(false);
-                }
-              }
-
-              // cleanup expired requests since no ADJ change observed
-              for (auto& clientId : reqsToClean) {
-                longPollReqs.erase(clientId);
-              }
-            });
-          }
-        });
-  });
 }
 
 OpenrCtrlHandler::~OpenrCtrlHandler() {
-  evl_.removeSocket(fbzmq::RawZmqSocketPtr{*kvStoreSubSock_});
-  kvStoreSubSock_.close();
-
   std::vector<apache::thrift::ServerStreamPublisher<thrift::Publication>>
       publishers;
   // NOTE: We're intentionally creating list of publishers to and then invoke
@@ -175,6 +153,9 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
 
   LOG(INFO) << "Cleanup all pending request(s).";
   longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
+
+  LOG(INFO) << "Waiting for termination of kvStoreUpdatesQueue.";
+  taskFuture_.wait();
 }
 
 void

@@ -37,7 +37,6 @@ KvStoreWrapper::KvStoreWrapper(
       localPubUrl(folly::sformat("inproc://{}-kvstore-pub", nodeId)),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
       monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
-      reqSock_(zmqContext),
       subSock_(zmqContext),
       enableFloodOptimization_(enableFloodOptimization) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
@@ -106,7 +105,6 @@ KvStoreWrapper::stop() {
   kvStoreUpdatesQueue_.close();
 
   // Destroy socket for communicating with kvstore
-  reqSock_.close();
   subSock_.close();
 
   // Stop kvstore

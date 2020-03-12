@@ -110,7 +110,6 @@ class FibWrapper {
         nullptr /* configStore */,
         nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor-sub"},
-        KvStoreLocalPubUrl{"inproc://kvstore-sub"},
         context);
     openrThriftServerWrapper_->run();
   }

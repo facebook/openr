@@ -31,68 +31,63 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   void
   SetUp() override {
     // define/start eventbase thread
-    evbThread = std::thread([&]() {
-      LOG(INFO) << "Eventbase starting";
-      evb.run();
-      LOG(INFO) << "Eventbase stopped";
-    });
+    evbThread = std::thread([&]() { evb.run(); });
 
-    // spin up a kvStore through kvStoreWrapper
-    kvStoreWrapper1_ = std::make_shared<KvStoreWrapper>(
-        context_,
-        nodeId1_,
-        std::chrono::seconds(60), // db sync interval
-        std::chrono::seconds(600), // counter submit interval,
-        std::unordered_map<std::string, thrift::PeerSpec>{});
+    auto makeStoreWrapper = [this](std::string nodeId) {
+      return std::make_shared<KvStoreWrapper>(
+          context_,
+          nodeId,
+          std::chrono::seconds(60), // db sync interval
+          std::chrono::seconds(600), // counter submit interval,
+          std::unordered_map<std::string, thrift::PeerSpec>{});
+    };
+
+    auto makeThriftServerWrapper =
+        [this](std::string nodeId, std::shared_ptr<KvStoreWrapper> store) {
+          return std::make_shared<OpenrThriftServerWrapper>(
+              nodeId,
+              nullptr /* decision */,
+              nullptr /* fib */,
+              store->getKvStore() /* kvStore */,
+              nullptr /* linkMonitor */,
+              nullptr /* configStore */,
+              nullptr /* prefixManager */,
+              MonitorSubmitUrl{"inproc://monitor_submit"},
+              context_);
+        };
+
+    // spin up kvStore through kvStoreWrapper
+    kvStoreWrapper1_ = makeStoreWrapper(nodeId1_);
+    kvStoreWrapper2_ = makeStoreWrapper(nodeId2_);
+
     kvStoreWrapper1_->run();
-
-    // spin up an OpenrThriftServerWrapper
-    openrThriftServerWrapper1_ = std::make_shared<OpenrThriftServerWrapper>(
-        nodeId1_,
-        nullptr /* decision */,
-        nullptr /* fib */,
-        kvStoreWrapper1_->getKvStore() /* kvStore */,
-        nullptr /* linkMonitor */,
-        nullptr /* configStore */,
-        nullptr /* prefixManager */,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
-        KvStoreLocalPubUrl{kvStoreWrapper1_->localPubUrl},
-        context_);
-    openrThriftServerWrapper1_->run();
-
-    // spin up another kvStore through kvStoreWrapper
-    kvStoreWrapper2_ = std::make_shared<KvStoreWrapper>(
-        context_,
-        nodeId2_,
-        std::chrono::seconds(60), // db sync interval
-        std::chrono::seconds(600), // counter submit interval,
-        std::unordered_map<std::string, thrift::PeerSpec>{});
     kvStoreWrapper2_->run();
 
-    // spin up another OpenrThriftServerWrapper
-    openrThriftServerWrapper2_ = std::make_shared<OpenrThriftServerWrapper>(
-        nodeId2_,
-        nullptr /* decision */,
-        nullptr /* fib */,
-        kvStoreWrapper2_->getKvStore() /* kvStore */,
-        nullptr /* linkMonitor */,
-        nullptr /* configStore */,
-        nullptr /* prefixManager */,
-        MonitorSubmitUrl{"inproc://monitor_submit"},
-        KvStoreLocalPubUrl{kvStoreWrapper2_->localPubUrl},
-        context_);
-    openrThriftServerWrapper2_->run();
+    // spin up OpenrThriftServerWrapper
+    thriftServer1_ = makeThriftServerWrapper(nodeId1_, kvStoreWrapper1_);
+    thriftServer2_ = makeThriftServerWrapper(nodeId2_, kvStoreWrapper2_);
+
+    thriftServer1_->run();
+    thriftServer2_->run();
   }
 
   void
   TearDown() override {
-    openrThriftServerWrapper1_->stop();
-    openrThriftServerWrapper2_->stop();
+    if (thriftServer1_) {
+      thriftServer1_->stop();
+      thriftServer1_.reset();
+    }
+    if (thriftServer2_) {
+      thriftServer2_->stop();
+      thriftServer2_.reset();
+    }
 
     // ATTN: kvStoreUpdatesQueue must be closed before destructing
     //       KvStoreClientInternal as fiber future is depending on RQueue
     kvStoreWrapper1_->stop();
+    kvStoreWrapper1_.reset();
     kvStoreWrapper2_->stop();
+    kvStoreWrapper2_.reset();
 
     // ATTN: Destroy client before destroy evb. Otherwise, destructor will
     //       FOREVER waiting fiber future to be fulfilled.
@@ -117,8 +112,8 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_{nullptr},
       kvStoreWrapper2_{nullptr};
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper1_{nullptr},
-      openrThriftServerWrapper2_{nullptr};
+  std::shared_ptr<OpenrThriftServerWrapper> thriftServer1_{nullptr},
+      thriftServer2_{nullptr};
   std::shared_ptr<KvStoreClientInternal> client1{nullptr}, client2{nullptr};
 };
 
@@ -126,8 +121,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const std::string key1{"test_key1"};
   const std::string key2{"test_key2"};
   const std::string prefix = "";
-  const uint16_t port1 = openrThriftServerWrapper1_->getOpenrCtrlThriftPort();
-  const uint16_t port2 = openrThriftServerWrapper2_->getOpenrCtrlThriftPort();
+  const uint16_t port1 = thriftServer1_->getOpenrCtrlThriftPort();
+  const uint16_t port2 = thriftServer2_->getOpenrCtrlThriftPort();
 
   std::vector<folly::SocketAddress> sockAddrs;
   sockAddrs.push_back(folly::SocketAddress{localhost_, port1});
@@ -188,17 +183,19 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   // Step6: shutdown both thriftSevers and verify
   // dumpAllWithThriftClientFromMultiple() will get nothing.
   {
-    openrThriftServerWrapper1_->stop();
-    openrThriftServerWrapper2_->stop();
+    // ATTN: kvStoreUpdatesQueue must be closed before destructing
+    //       KvStoreClientInternal as fiber future is depending on RQueue
+    kvStoreWrapper1_->closeQueue();
+    kvStoreWrapper2_->closeQueue();
+
+    thriftServer1_->stop();
+    thriftServer1_.reset();
+    thriftServer2_->stop();
+    thriftServer2_.reset();
 
     auto db = dumpAllWithThriftClientFromMultiple(sockAddrs, prefix);
     ASSERT_TRUE(db.first.has_value());
     ASSERT_TRUE(db.first.value().empty());
-
-    // start thriftSever to make sure TearDown method won't stop non-existing
-    // server
-    openrThriftServerWrapper1_->run();
-    openrThriftServerWrapper2_->run();
   }
 }
 

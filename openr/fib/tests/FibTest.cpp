@@ -236,7 +236,6 @@ class FibTestFixture : public ::testing::Test {
         nullptr /* configStore */,
         nullptr /* prefixManager */,
         MonitorSubmitUrl{"inproc://monitor-rep"},
-        KvStoreLocalPubUrl{"inproc://kvStore-pub"},
         context);
     openrThriftServerWrapper_->run();
   }

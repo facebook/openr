@@ -17,16 +17,13 @@ namespace openr {
 
 class OpenrThriftServerWrapper {
  private:
-  fbzmq::ZmqEventLoop mainEvl_;
-  std::thread mainEvlThread_;
-  std::shared_ptr<apache::thrift::concurrency::ThreadManager> tm_{nullptr};
+  OpenrEventBase evb_;
+  std::thread evbThread_;
+  std::shared_ptr<OpenrCtrlHandler> openrCtrlHandler_{nullptr};
   apache::thrift::util::ScopedServerThread openrCtrlThriftServerThread_;
   std::string const nodeName_;
   MonitorSubmitUrl const monitorSubmitUrl_;
-  KvStoreLocalPubUrl const kvStoreLocalPubUrl_;
   fbzmq::Context& context_;
-
-  std::shared_ptr<OpenrCtrlHandler> openrCtrlHandler_{nullptr};
 
  public:
   OpenrThriftServerWrapper(
@@ -38,7 +35,6 @@ class OpenrThriftServerWrapper {
       PersistentStore* configStore,
       PrefixManager* prefixManager,
       MonitorSubmitUrl const& monitorSubmitUrl,
-      KvStoreLocalPubUrl const& kvstoreLocalPubUrl,
       fbzmq::Context& context);
 
   // start Open/R thrift server
