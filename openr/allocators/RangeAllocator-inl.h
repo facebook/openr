@@ -61,7 +61,7 @@ RangeAllocator<T>::RangeAllocator(
       fbzmq::ZmqTimeout::make(eventBase_->getEvb(), [this]() mutable noexcept {
         CHECK(allocateValue_.has_value());
         auto allocateValue = allocateValue_.value();
-        allocateValue_.clear();
+        allocateValue_.reset();
         tryAllocate(allocateValue);
       });
 }
@@ -72,7 +72,7 @@ RangeAllocator<T>::~RangeAllocator() {
   // We need to cancel any pending timeout
   if (timeout_) {
     timeout_.reset();
-    allocateValue_.clear();
+    allocateValue_.reset();
   }
 
   // Unsubscribe from KvStoreClientInternal if we have been to
