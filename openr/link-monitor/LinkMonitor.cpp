@@ -76,7 +76,6 @@ LinkMonitor::LinkMonitor(
     fbzmq::Context& zmqContext,
     std::string nodeId,
     int32_t platformThriftPort,
-    KvStoreLocalPubUrl kvStoreLocalPubUrl,
     KvStore* kvStore,
     std::unique_ptr<re2::RE2::Set> includeRegexList,
     std::unique_ptr<re2::RE2::Set> excludeRegexList,
@@ -169,13 +168,7 @@ LinkMonitor::LinkMonitor(
 
   //  Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      zmqContext,
-      this,
-      nodeId_,
-      kvStoreLocalPubUrl,
-      kvStore,
-      folly::none, /* persist key timer */
-      folly::none /* recv timeout */);
+      this, nodeId_, kvStore, folly::none /* persist key timer */);
 
   if (enableSegmentRouting) {
     // create range allocator to get unique node labels

@@ -35,7 +35,6 @@ class PrefixManager final : public OpenrEventBase {
       messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
       PersistentStore* configStore,
       KvStore* kvStore,
-      const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
       const MonitorSubmitUrl& monitorSubmitUrl,
       const PrefixDbMarker& prefixDbMarker,
       bool createIpPrefix,
@@ -43,15 +42,14 @@ class PrefixManager final : public OpenrEventBase {
       bool enablePerfMeasurement,
       const std::chrono::seconds prefixHoldTime,
       const std::chrono::milliseconds ttlKeyInKvStore,
-      fbzmq::Context& zmqContext,
       const std::unordered_set<std::string>& area = {
           openr::thrift::KvStore_constants::kDefaultArea()});
+
+  ~PrefixManager();
 
   // disable copying
   PrefixManager(PrefixManager const&) = delete;
   PrefixManager& operator=(PrefixManager const&) = delete;
-
-  void stop() override;
 
   /*
    * Public API for PrefixManager operations, including:
@@ -138,7 +136,7 @@ class PrefixManager final : public OpenrEventBase {
   const std::chrono::milliseconds ttlKeyInKvStore_;
 
   // kvStoreClient for persisting our prefix db
-  KvStoreClientInternal kvStoreClient_;
+  std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
 
   // The current prefix db this node is advertising. In-case if multiple entries
   // exists for a given prefix, lowest prefix-type is preferred. This is to
@@ -164,9 +162,6 @@ class PrefixManager final : public OpenrEventBase {
 
   // area Id
   const std::unordered_set<std::string> areas_{};
-
-  // Future for fiber
-  folly::Future<folly::Unit> prefixUpdatesTaskFuture_;
 }; // PrefixManager
 
 } // namespace openr

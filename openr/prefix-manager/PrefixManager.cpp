@@ -40,14 +40,12 @@ PrefixManager::PrefixManager(
     messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
     PersistentStore* configStore,
     KvStore* kvStore,
-    const KvStoreLocalPubUrl& kvStoreLocalPubUrl,
     const MonitorSubmitUrl& monitorSubmitUrl,
     const PrefixDbMarker& prefixDbMarker,
     bool perPrefixKeys,
     bool enablePerfMeasurement,
     const std::chrono::seconds prefixHoldTime,
     const std::chrono::milliseconds ttlKeyInKvStore,
-    fbzmq::Context& zmqContext,
     const std::unordered_set<std::string>& areas)
     : nodeId_(nodeId),
       configStore_{configStore},
@@ -56,10 +54,13 @@ PrefixManager::PrefixManager(
       perPrefixKeys_{perPrefixKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
       ttlKeyInKvStore_(ttlKeyInKvStore),
-      kvStoreClient_{zmqContext, this, nodeId_, kvStoreLocalPubUrl, kvStore_},
       areas_{areas} {
   CHECK(configStore_);
   CHECK(kvStore_);
+
+  // Create KvStore client
+  kvStoreClient_ =
+      std::make_unique<KvStoreClientInternal>(this, nodeId_, kvStore_);
 
   // pick up prefixes from disk
   auto maybePrefixDb =
@@ -122,7 +123,7 @@ PrefixManager::PrefixManager(
       "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_));
   std::set<std::string> originatorIds{};
   KvStoreFilters kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
-  kvStoreClient_.subscribeKeyFilter(
+  kvStoreClient_->subscribeKeyFilter(
       std::move(kvFilters),
       [this](
           const std::string& key,
@@ -143,7 +144,8 @@ PrefixManager::PrefixManager(
 
   // get initial dump of keys related to us
   for (const auto& area : areas_) {
-    auto result = kvStoreClient_.dumpAllWithPrefix(keyPrefixList.front(), area);
+    auto result =
+        kvStoreClient_->dumpAllWithPrefix(keyPrefixList.front(), area);
     if (!result.has_value()) {
       LOG(ERROR) << "Failed dumping keys with prefix: " << keyPrefixList.front()
                  << " from area: " << area;
@@ -162,10 +164,16 @@ PrefixManager::PrefixManager(
   initialOutputStateTimer_->scheduleTimeout(prefixHoldTime);
 }
 
-void
-PrefixManager::stop() {
-  prefixUpdatesTaskFuture_.wait();
-  OpenrEventBase::stop();
+PrefixManager::~PrefixManager() {
+  // - If EventBase is stopped or it is within the evb thread, run immediately;
+  // - Otherwise, will wait the EventBase to run;
+  getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
+    // destory timers
+    LOG(INFO) << "Destroyed timers inside PrefixManager";
+    initialOutputStateTimer_.reset();
+    outputStateThrottled_.reset();
+  });
+  kvStoreClient_.reset();
 }
 
 void
@@ -210,7 +218,7 @@ PrefixManager::advertisePrefix(thrift::PrefixEntry& prefixEntry) {
           thrift::KvStore_constants::kDefaultArea())
           .getPrefixKey();
   for (const auto& area : areas_) {
-    bool const changed = kvStoreClient_.persistKey(
+    bool const changed = kvStoreClient_->persistKey(
         prefixKey,
         fbzmq::util::writeThriftObjStr(std::move(prefixDb), serializer_),
         ttlKeyInKvStore_,
@@ -270,7 +278,7 @@ PrefixManager::updateKvStore() {
     const auto prefixDbKey = folly::sformat(
         "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_);
     for (const auto& area : areas_) {
-      bool const changed = kvStoreClient_.persistKey(
+      bool const changed = kvStoreClient_->persistKey(
           prefixDbKey,
           fbzmq::util::writeThriftObjStr(std::move(prefixDb), serializer_),
           ttlKeyInKvStore_,
@@ -301,7 +309,7 @@ PrefixManager::updateKvStore() {
       LOG(INFO) << "Withdrawing key: " << key << " from KvStore area: " << area;
       // one last key set with empty DB and deletePrefix set signifies withdraw
       // then the key should ttl out
-      kvStoreClient_.clearKey(
+      kvStoreClient_->clearKey(
           key,
           fbzmq::util::writeThriftObjStr(
               std::move(deletedPrefixDb), serializer_),

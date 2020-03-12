@@ -84,8 +84,6 @@ class LinkMonitor final : public OpenrEventBase {
       // the id of the node running link monitor
       std::string nodeId,
       int32_t platformThriftPort,
-      // for kvstore client
-      KvStoreLocalPubUrl kvStoreLocalPubUrl,
       KvStore* kvstore,
       // interface names to monitor
       std::unique_ptr<re2::RE2::Set> includeRegexList,

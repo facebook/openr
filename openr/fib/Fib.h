@@ -60,7 +60,6 @@ class Fib final : public OpenrEventBase {
       messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
-      const KvStoreLocalPubUrl& storePubUrl,
       KvStore* kvStore,
       fbzmq::Context& zmqContext);
 

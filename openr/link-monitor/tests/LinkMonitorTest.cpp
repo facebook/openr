@@ -235,14 +235,12 @@ class LinkMonitorTestFixture : public ::testing::Test {
         prefixUpdatesQueue.getReader(),
         configStore.get(),
         kvStoreWrapper->getKvStore(),
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         false /* create IP prefix keys */,
         false,
         std::chrono::seconds(0),
-        Constants::kKvStoreDbTtl,
-        context);
+        Constants::kKvStoreDbTtl);
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";
       prefixManager->run();
@@ -269,7 +267,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         context,
         "node-1",
         port, /* thrift service port */
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),
         std::move(excludeRegexList),
@@ -312,6 +309,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     interfaceUpdatesQueue.close();
     neighborUpdatesQueue.close();
     prefixUpdatesQueue.close();
+    kvStoreWrapper->closeQueue();
 
     LOG(INFO) << "Stopping the LinkMonitor thread";
     linkMonitor->stop();
@@ -847,8 +845,9 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // stop linkMonitor
   LOG(INFO) << "Mock restarting link monitor!";
-
   neighborUpdatesQueue.close();
+  kvStoreWrapper->stop();
+  kvStoreWrapper.reset();
   linkMonitor->stop();
   linkMonitorThread->join();
   linkMonitor.reset();
@@ -856,12 +855,25 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue =
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
+  // Recreate KvStore as previous kvStoreUpdatesQueue is closed
+  kvStoreWrapper = std::make_unique<KvStoreWrapper>(
+      context,
+      "test_store1",
+      std::chrono::seconds(1) /* db sync interval */,
+      std::chrono::seconds(600) /* counter submit interval */,
+      std::unordered_map<std::string, thrift::PeerSpec>{},
+      std::nullopt,
+      std::nullopt,
+      Constants::kTtlDecrement,
+      false,
+      false);
+  kvStoreWrapper->run();
+  LOG(INFO) << "A new test KV store is running";
 
   linkMonitor = std::make_unique<LinkMonitor>(
       context,
       "node-1",
       port, // platform pub port
-      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       kvStoreWrapper->getKvStore(),
       std::move(includeRegexList),
       std::move(excludeRegexList),
@@ -1654,7 +1666,6 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         context,
         folly::sformat("lm{}", i + 1),
         0, // platform pub port
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),
         std::move(excludeRegexList),
@@ -1716,6 +1727,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   EXPECT_EQ(kNumNodesToTest, labelSet.size());
   // cleanup
   neighborUpdatesQueue.close();
+  kvStoreWrapper->closeQueue();
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
     linkMonitors[i]->stop();
     linkMonitorThreads[i]->join();

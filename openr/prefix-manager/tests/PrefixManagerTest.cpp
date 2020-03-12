@@ -110,26 +110,18 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
-    kvStoreClient = std::make_unique<KvStoreClientInternal>(
-        context,
-        &evl,
-        "node-1",
-        kvStoreWrapper->localPubUrl,
-        kvStoreWrapper->getKvStore());
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
         "node-1",
         prefixUpdatesQueue.getReader(),
         configStore.get(),
         kvStoreWrapper->getKvStore(),
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         perPrefixKeys_ /* per prefix keys */,
         true /* prefix-mananger perf measurement */,
         std::chrono::seconds{0},
-        Constants::kKvStoreDbTtl,
-        context);
+        Constants::kKvStoreDbTtl);
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "PrefixManager thread starting";
@@ -143,9 +135,15 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
   TearDown() override {
     // Close queues
     prefixUpdatesQueue.close();
+    kvStoreWrapper->closeQueue();
+
+    // cleanup kvStoreClient
+    if (kvStoreClient) {
+      kvStoreClient.reset();
+    }
 
     // this will be invoked before linkMonitorThread's d-tor
-    LOG(INFO) << "Stopping the linkMonitor thread";
+    LOG(INFO) << "Stopping prefixMgr thread";
     prefixManager->stop();
     prefixManagerThread->join();
     prefixManager.reset();
@@ -160,9 +158,14 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
 
     // stop the kvStore
     kvStoreWrapper->stop();
-    kvStoreClient.reset();
     kvStoreWrapper.reset();
-    LOG(INFO) << "The test KV store is stopped";
+
+    // stop evlThread
+    if (evl.isRunning()) {
+      evl.stop();
+      evl.waitUntilStopped();
+      evlThread.join();
+    }
   }
 
   // In case of separate IP prefix keys, collect all the prefix Entries
@@ -190,6 +193,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
 
   fbzmq::Context context;
   OpenrEventBase evl;
+  std::thread evlThread;
 
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
@@ -321,99 +325,132 @@ TEST_P(PrefixManagerTestFixture, RemoveInvalidType) {
 }
 
 TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
-  prefixManager->advertisePrefixes({prefixEntry1}).get();
+  folly::Baton waitBaton;
+  auto scheduleAt = std::chrono::milliseconds{0}.count();
+  thrift::PrefixDatabase db;
 
   std::string keyStr{"prefix:node-1"};
-
   if (perPrefixKeys_) {
     auto prefixKey = PrefixKey(
         "node-1",
         folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
         thrift::KvStore_constants::kDefaultArea());
-
     keyStr = prefixKey.getPrefixKey();
   }
 
-  // Wait for throttled update to announce to kvstore
-  std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
-  auto maybeValue = kvStoreClient->getKey(keyStr);
-  EXPECT_TRUE(maybeValue.has_value());
-  auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-      maybeValue.value().value.value(), serializer);
-  EXPECT_EQ(db.thisNodeName, "node-1");
-  EXPECT_EQ(db.prefixEntries.size(), 1);
-  ASSERT_TRUE(db.perfEvents.has_value());
-  ASSERT_FALSE(db.perfEvents->events.empty());
-  {
-    const auto& perfEvent = db.perfEvents->events.back();
-    EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-    EXPECT_EQ("node-1", perfEvent.nodeName);
-    EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
-  }
+  // start kvStoreClientInternal separately with different thread
+  kvStoreClient = std::make_unique<KvStoreClientInternal>(
+      &evl, "node-1", kvStoreWrapper->getKvStore());
 
-  prefixManager->withdrawPrefixes({prefixEntry1}).get();
-  prefixManager->advertisePrefixes({prefixEntry2}).get();
-  prefixManager->advertisePrefixes({prefixEntry3}).get();
-  prefixManager->advertisePrefixes({prefixEntry4}).get();
-  prefixManager->advertisePrefixes({prefixEntry5}).get();
-  prefixManager->advertisePrefixes({prefixEntry6}).get();
-  prefixManager->advertisePrefixes({prefixEntry7}).get();
-  prefixManager->advertisePrefixes({prefixEntry8}).get();
-  prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
+  prefixManager->advertisePrefixes({prefixEntry1}).get();
 
-  /* Verify that before throttle expires, we don't see any update */
-  std::this_thread::sleep_for(Constants::kPrefixMgrKvThrottleTimeout / 2);
-  auto maybeValue1 = kvStoreClient->getKey(keyStr);
-  EXPECT_TRUE(maybeValue1.has_value());
-  auto db1 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-      maybeValue1.value().value.value(), serializer);
-  auto prefixDb = getPrefixDb("prefix:node-1");
-  EXPECT_EQ(prefixDb.size(), 1);
-  ASSERT_TRUE(db.perfEvents.has_value());
-  ASSERT_FALSE(db.perfEvents->events.empty());
-  {
-    const auto& perfEvent = db.perfEvents->events.back();
-    EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-    EXPECT_EQ("node-1", perfEvent.nodeName);
-    EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
-  }
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() {
+        // Wait for throttled update to announce to kvstore
+        auto maybeValue = kvStoreClient->getKey(keyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value.value(), serializer);
+        EXPECT_EQ(db.thisNodeName, "node-1");
+        EXPECT_EQ(db.prefixEntries.size(), 1);
+        ASSERT_TRUE(db.perfEvents.has_value());
+        ASSERT_FALSE(db.perfEvents->events.empty());
 
-  // Wait for throttled update to announce to kvstore
-  std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
-  auto maybeValue2 = kvStoreClient->getKey(keyStr);
-  EXPECT_TRUE(maybeValue2.has_value());
-  auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-      maybeValue2.value().value.value(), serializer);
-  prefixDb = getPrefixDb("prefix:node-1");
-  EXPECT_EQ(prefixDb.size(), 8);
-  ASSERT_TRUE(db.perfEvents.has_value());
-  ASSERT_FALSE(db.perfEvents->events.empty());
-  {
-    const auto& perfEvent = db.perfEvents->events.back();
-    EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-    EXPECT_EQ("node-1", perfEvent.nodeName);
-    EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
-  }
+        {
+          const auto& perfEvent = db.perfEvents->events.back();
+          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
+          EXPECT_EQ("node-1", perfEvent.nodeName);
+          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+        }
 
-  // now make a change and check again
-  prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT).get();
+        prefixManager->withdrawPrefixes({prefixEntry1}).get();
+        prefixManager->advertisePrefixes({prefixEntry2}).get();
+        prefixManager->advertisePrefixes({prefixEntry3}).get();
+        prefixManager->advertisePrefixes({prefixEntry4}).get();
+        prefixManager->advertisePrefixes({prefixEntry5}).get();
+        prefixManager->advertisePrefixes({prefixEntry6}).get();
+        prefixManager->advertisePrefixes({prefixEntry7}).get();
+        prefixManager->advertisePrefixes({prefixEntry8}).get();
+        prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
+      });
 
-  // Wait for throttled update to announce to kvstore
-  std::this_thread::sleep_for(2 * Constants::kPrefixMgrKvThrottleTimeout);
-  auto maybeValue3 = kvStoreClient->getKey(keyStr);
-  EXPECT_TRUE(maybeValue3.has_value());
-  auto db3 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-      maybeValue3.value().value.value(), serializer);
-  prefixDb = getPrefixDb("prefix:node-1");
-  EXPECT_EQ(prefixDb.size(), 5);
-  ASSERT_TRUE(db.perfEvents.has_value());
-  ASSERT_FALSE(db.perfEvents->events.empty());
-  {
-    const auto& perfEvent = db.perfEvents->events.back();
-    EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-    EXPECT_EQ("node-1", perfEvent.nodeName);
-    EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
-  }
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += Constants::kPrefixMgrKvThrottleTimeout.count() / 2),
+      [&]() {
+        // Verify that before throttle expires, we don't see any update
+        auto maybeValue1 = kvStoreClient->getKey(keyStr);
+        EXPECT_TRUE(maybeValue1.has_value());
+        auto db1 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue1.value().value.value(), serializer);
+        auto prefixDb = getPrefixDb("prefix:node-1");
+        EXPECT_EQ(prefixDb.size(), 1);
+        ASSERT_TRUE(db.perfEvents.has_value());
+        ASSERT_FALSE(db.perfEvents->events.empty());
+        {
+          const auto& perfEvent = db.perfEvents->events.back();
+          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
+          EXPECT_EQ("node-1", perfEvent.nodeName);
+          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+        }
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() {
+        // Wait for throttled update to announce to kvstore
+        auto maybeValue2 = kvStoreClient->getKey(keyStr);
+        EXPECT_TRUE(maybeValue2.has_value());
+        auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue2.value().value.value(), serializer);
+        auto prefixDb = getPrefixDb("prefix:node-1");
+        EXPECT_EQ(prefixDb.size(), 8);
+        ASSERT_TRUE(db.perfEvents.has_value());
+        ASSERT_FALSE(db.perfEvents->events.empty());
+        {
+          const auto& perfEvent = db.perfEvents->events.back();
+          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
+          EXPECT_EQ("node-1", perfEvent.nodeName);
+          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+        }
+        // now make a change and check again
+        prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT)
+            .get();
+      });
+
+  evl.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+      [&]() {
+        // Wait for throttled update to announce to kvstore
+        auto maybeValue3 = kvStoreClient->getKey(keyStr);
+        EXPECT_TRUE(maybeValue3.has_value());
+        auto db3 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue3.value().value.value(), serializer);
+        auto prefixDb = getPrefixDb("prefix:node-1");
+        EXPECT_EQ(prefixDb.size(), 5);
+        ASSERT_TRUE(db.perfEvents.has_value());
+        ASSERT_FALSE(db.perfEvents->events.empty());
+        {
+          const auto& perfEvent = db.perfEvents->events.back();
+          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
+          EXPECT_EQ("node-1", perfEvent.nodeName);
+          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
+        }
+
+        // Synchronization primitive
+        waitBaton.post();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  evlThread = std::thread([&]() { evl.run(); });
+  evl.waitUntilRunning();
+
+  // Synchronization primitive
+  waitBaton.wait();
 }
 
 /**
@@ -445,6 +482,10 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   folly::Optional<thrift::PrefixEntry> expectedPrefix;
   bool gotExpected = true;
 
+  // start kvStoreClientInternal separately with different thread
+  kvStoreClient = std::make_unique<KvStoreClientInternal>(
+      &evl, "node-1", kvStoreWrapper->getKvStore());
+
   kvStoreClient->subscribeKey(
       keyStr,
       [&](std::string const& _, folly::Optional<thrift::Value> val) mutable {
@@ -469,7 +510,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
       });
 
   // Start event loop in it's own thread
-  std::thread evlThread([&]() { evl.run(); });
+  evlThread = std::thread([&]() { evl.run(); });
   evl.waitUntilRunning();
 
   //
@@ -507,10 +548,6 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   prefixManager->withdrawPrefixes({bgp_prefix, default_prefix}).get();
   baton.wait();
   baton.reset();
-
-  // Nuke test environment
-  evl.stop();
-  evlThread.join();
 }
 
 /**
@@ -519,11 +556,13 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
  * the old key format
  */
 TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
-  int waitDuration{0};
   // test only if 'create ip prefixes' is enabled
   if (!perPrefixKeys_) {
     return;
   }
+
+  folly::Baton waitBaton;
+  int waitDuration{0};
 
   auto prefixKey1 = PrefixKey(
       "node-1",
@@ -533,6 +572,9 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
       "node-1",
       folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
       thrift::KvStore_constants::kDefaultArea());
+
+  kvStoreClient = std::make_unique<KvStoreClientInternal>(
+      &evl, "node-1", kvStoreWrapper->getKvStore());
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evl.scheduleTimeout(
@@ -600,22 +642,17 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
             maybeValue2.value().value.value(), serializer);
         EXPECT_NE(db.prefixEntries.size(), 0);
         EXPECT_TRUE(db.deletePrefix);
+
+        // Synchronization primitive
+        waitBaton.post();
       });
 
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
-      [&]() noexcept { evl.stop(); });
-
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "main loop starting.";
-    evl.run();
-    LOG(INFO) << "main loop terminating.";
-  });
+  evlThread = std::thread([&]() { evl.run(); });
   evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+
+  // Synchronization primitive
+  waitBaton.wait();
 }
 
 /**
@@ -627,6 +664,8 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
 TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   int waitDuration{0};
   int keyVersion{0};
+  folly::Baton waitBaton;
+
   std::string prefixKeyStr{"prefix:node-1"};
   const auto prefixEntry =
       createPrefixEntry(toIpPrefix("5001::/64"), thrift::PrefixType::DEFAULT);
@@ -637,6 +676,9 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   if (perPrefixKeys_) {
     prefixKeyStr = prefixKey.getPrefixKey();
   }
+
+  kvStoreClient = std::make_unique<KvStoreClientInternal>(
+      &evl, "node-1", kvStoreWrapper->getKvStore());
 
   // Schedule callback to set keys from client1 (this will be executed first)
   evl.scheduleTimeout(
@@ -757,46 +799,43 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
           EXPECT_NE(db.prefixEntries.size(), 0);
           EXPECT_TRUE(db.deletePrefix);
         }
+
+        // Synchronization primitive
+        waitBaton.post();
       });
 
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
-      [&]() noexcept { evl.stop(); });
-
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "main loop starting.";
-    evl.run();
-    LOG(INFO) << "main loop terminating.";
-  });
+  evlThread = std::thread([&]() { evl.run(); });
   evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+
+  // Synchronization primitive
+  waitBaton.wait();
 }
 
 TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
+  folly::Baton waitBaton;
   int waitDuration{0};
+  std::chrono::milliseconds ttl{100};
 
   if (!perPrefixKeys_) {
     return;
   }
 
-  std::chrono::milliseconds ttl{100};
+  kvStoreClient = std::make_unique<KvStoreClientInternal>(
+      &evl, "node-1", kvStoreWrapper->getKvStore());
+
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
       "node-2",
       prefixUpdatesQueue.getReader(),
       configStore.get(),
       kvStoreWrapper->getKvStore(),
-      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
       PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
       perPrefixKeys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0),
-      ttl,
-      context);
+      ttl);
 
   auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
     LOG(INFO) << "PrefixManager thread starting";
@@ -860,25 +899,21 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue2.hasValue());
         EXPECT_EQ(maybeValue2.value().version, 1);
+
+        // Synchronization primitive
+        waitBaton.post();
       });
 
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
-      [&]() noexcept { evl.stop(); });
-
   // Start the event loop and wait until it is finished execution.
-  std::thread evlThread([&]() {
-    LOG(INFO) << "main loop starting.";
-    evl.run();
-    LOG(INFO) << "main loop terminating.";
-  });
+  evlThread = std::thread([&]() { evl.run(); });
   evl.waitUntilRunning();
-  evl.waitUntilStopped();
-  evlThread.join();
+
+  // Synchronization primitive
+  waitBaton.wait();
 
   // cleanup
   prefixUpdatesQueue.close();
+  kvStoreWrapper->closeQueue();
   prefixManager2->stop();
   prefixManagerThread2->join();
 }
@@ -894,14 +929,12 @@ TEST_P(PrefixManagerTestFixture, CheckReload) {
       prefixUpdatesQueue.getReader(),
       configStore.get(),
       kvStoreWrapper->getKvStore(),
-      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
       PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
       perPrefixKeys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0),
-      Constants::kKvStoreDbTtl,
-      context);
+      Constants::kKvStoreDbTtl);
 
   auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
     LOG(INFO) << "PrefixManager thread starting";
@@ -918,6 +951,7 @@ TEST_P(PrefixManagerTestFixture, CheckReload) {
 
   // cleanup
   prefixUpdatesQueue.close();
+  kvStoreWrapper->closeQueue();
   prefixManager2->stop();
   prefixManagerThread2->join();
 }
@@ -1003,14 +1037,12 @@ TEST(PrefixManagerTest, HoldTimeout) {
       prefixUpdatesQueue.getReader(),
       configStore.get(),
       kvStoreWrapper->getKvStore(),
-      KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
       MonitorSubmitUrl{"inproc://monitor_submit"},
       PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
       false /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       holdTime,
-      Constants::kKvStoreDbTtl,
-      context);
+      Constants::kKvStoreDbTtl);
   std::thread prefixManagerThread([&]() {
     LOG(INFO) << "PrefixManager thread starting";
     prefixManager->run();
@@ -1031,6 +1063,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
 
   // Stop the test
   prefixUpdatesQueue.close();
+  kvStoreWrapper->closeQueue();
   prefixManager->stop();
   prefixManagerThread.join();
   kvStoreWrapper->stop();

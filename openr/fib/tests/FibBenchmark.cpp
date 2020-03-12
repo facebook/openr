@@ -90,7 +90,6 @@ class FibWrapper {
         routeUpdatesQueue.getReader(),
         interfaceUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
-        KvStoreLocalPubUrl{"inproc://kvstore-sub"},
         nullptr, /* KvStore module ptr */
         context);
 

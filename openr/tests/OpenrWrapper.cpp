@@ -86,11 +86,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
 
   // kvstore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      context_,
-      &eventBase_,
-      nodeId_,
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
-      kvStore_.get());
+      &eventBase_, nodeId_, kvStore_.get());
 
   // Subscribe our own prefixDb
   kvStoreClient_->subscribeKey(
@@ -170,7 +166,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       context_,
       nodeId_,
       static_cast<int32_t>(60099), // platfrom pub port
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       kvStore_.get(),
       std::move(includeRegexList),
       std::move(excludeRegexList),
@@ -204,14 +199,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       prefixUpdatesQueue_.getReader(),
       configStore_.get(),
       kvStore_.get(),
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       PrefixDbMarker{"prefix:"},
       per_prefix_keys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       std::chrono::seconds(0),
-      Constants::kKvStoreDbTtl,
-      context_);
+      Constants::kKvStoreDbTtl);
 
   //
   // create decision
@@ -247,7 +240,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       routeUpdatesQueue_.getReader(),
       interfaceUpdatesQueue_.getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       kvStore_.get(),
       context_);
 
@@ -259,7 +251,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   const uint8_t allocPrefixLen = 64;
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
       nodeId_,
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       kvStore_.get(),
       prefixUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},

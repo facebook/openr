@@ -496,14 +496,12 @@ main(int argc, char** argv) {
           prefixUpdatesQueue.getReader(),
           configStore,
           kvStore,
-          kvStoreLocalPubUrl,
           monitorSubmitUrl,
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
           FLAGS_per_prefix_keys,
           FLAGS_enable_perf_measurement,
           kvHoldTime,
           std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms),
-          context,
           areas));
 
   // Prefix Allocator to automatically allocate prefixes for nodes
@@ -529,7 +527,6 @@ main(int argc, char** argv) {
         "PrefixAllocator",
         std::make_unique<PrefixAllocator>(
             FLAGS_node_name,
-            kvStoreLocalPubUrl,
             kvStore,
             prefixUpdatesQueue,
             monitorSubmitUrl,
@@ -676,7 +673,6 @@ main(int argc, char** argv) {
           context,
           FLAGS_node_name,
           FLAGS_system_agent_port,
-          KvStoreLocalPubUrl{kvStoreLocalPubUrl},
           kvStore,
           std::move(includeRegexList),
           std::move(excludeRegexList),
@@ -757,7 +753,6 @@ main(int argc, char** argv) {
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
           monitorSubmitUrl,
-          kvStoreLocalPubUrl,
           kvStore,
           context));
 

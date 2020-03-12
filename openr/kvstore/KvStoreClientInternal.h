@@ -15,10 +15,6 @@
 #include <folly/Optional.h>
 #include <folly/SocketAddress.h>
 
-#include <fbzmq/async/ZmqTimeout.h>
-#include <fbzmq/zmq/Zmq.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
-
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrClient.h>
@@ -52,14 +48,11 @@ class KvStoreClientInternal {
    * KvStore.
    */
   KvStoreClientInternal(
-      fbzmq::Context& context,
       OpenrEventBase* eventBase,
       std::string const& nodeId,
-      std::string const& kvStoreLocalPubUrl,
       KvStore* kvStore,
       folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod =
-          60000ms,
-      folly::Optional<std::chrono::milliseconds> recvTimeout = 3000ms);
+          60000ms);
 
   ~KvStoreClientInternal();
 
@@ -260,22 +253,12 @@ class KvStoreClientInternal {
   // Immutable state
   //
 
-  // EventBase to create openrCtrl client
-  folly::EventBase evb_;
-
   // Our local node identifier
   const std::string nodeId_;
 
   // OpenrEventBase pointer for scheduling async events and socket callback
   // registration
   OpenrEventBase* const eventBase_{nullptr};
-
-  // ZMQ context for IO processing
-  fbzmq::Context& context_;
-
-  // Socket Urls (we assume local, unencrypted connection)
-  const std::string kvStoreLocalCmdUrl_{""};
-  const std::string kvStoreLocalPubUrl_{""};
 
   // Pointers to KvStore module
   KvStore* kvStore_{nullptr};
@@ -285,17 +268,11 @@ class KvStoreClientInternal {
       folly::none};
 
   // check persiste key timer event
-  std::unique_ptr<fbzmq::ZmqTimeout> checkPersistKeyTimer_;
-
-  // Recv Timeout to be used from from KvStore
-  folly::Optional<std::chrono::milliseconds> recvTimeout_;
+  std::unique_ptr<folly::AsyncTimeout> checkPersistKeyTimer_;
 
   //
   // Mutable state
   //
-
-  // SUB socket for listing to kvstore client.
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> kvStoreSubSock_;
 
   // Locally advertised authorative key-vals using `persistKey`
   std::unordered_map<
@@ -334,17 +311,17 @@ class KvStoreClientInternal {
       std::unordered_set<std::string /* key */>>
       keysToAdvertise_;
 
-  // Serializer object for thrift-obj <-> string conversion
-  apache::thrift::CompactSerializer serializer_;
-
   // Timer to advertised pending key-vals
-  std::unique_ptr<fbzmq::ZmqTimeout> advertiseKeyValsTimer_;
+  std::unique_ptr<folly::AsyncTimeout> advertiseKeyValsTimer_;
 
   // Timer to advertise ttl updates for key-vals
-  std::unique_ptr<fbzmq::ZmqTimeout> ttlTimer_;
+  std::unique_ptr<folly::AsyncTimeout> ttlTimer_;
 
   // prefix key filter to apply for key updates
   KvStoreFilters keyPrefixFilter_{{}, {}};
+
+  // fiber task future hold
+  folly::Future<folly::Unit> taskFuture_;
 };
 
 } // namespace openr

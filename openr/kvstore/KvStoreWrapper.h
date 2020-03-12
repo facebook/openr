@@ -66,6 +66,11 @@ class KvStoreWrapper {
   }
 
   void
+  openQueue() {
+    kvStoreUpdatesQueue_.open();
+  }
+
+  void
   closeQueue() {
     kvStoreUpdatesQueue_.close();
   }

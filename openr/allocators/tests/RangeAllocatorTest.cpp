@@ -76,22 +76,25 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     for (uint32_t i = 0; i < kNumClients; i++) {
       auto const& store = stores[i % kNumStores];
       auto client = std::make_unique<KvStoreClientInternal>(
-          zmqContext,
-          &evb,
-          createClientName(i),
-          store->localPubUrl,
-          store->getKvStore());
+          &evb, createClientName(i), store->getKvStore());
       clients.emplace_back(std::move(client));
     }
   }
 
   void
   TearDown() override {
-    clients.clear();
     for (auto& store : stores) {
       store->stop();
     }
+    for (auto& client : clients) {
+      client.reset();
+    }
+    clients.clear();
     stores.clear();
+
+    evb.stop();
+    evb.waitUntilStopped();
+    evbThread.join();
   }
 
   static std::string
@@ -149,6 +152,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   // OpenrEventBase for all clients
   OpenrEventBase evb;
+  std::thread evbThread;
 
   // owner override allowed
   const bool overrideOwner = GetParam();
@@ -168,6 +172,7 @@ TEST_P(RangeAllocatorFixture, DistinctSeed) {
   const auto initVals =
       range(start, start + kNumClients) | as<std::vector<uint32_t>>();
 
+  folly::Baton waitBaton;
   uint32_t rcvd{0};
   auto allocators = createAllocators<uint32_t>(
       {start, start + kNumClients - 1},
@@ -178,11 +183,22 @@ TEST_P(RangeAllocatorFixture, DistinctSeed) {
         rcvd++;
         if (rcvd == kNumClients) {
           LOG(INFO) << "We got everything, stopping OpenrEventBase.";
-          evb.stop();
+
+          // Synchronization primitive
+          waitBaton.post();
         }
       });
 
-  evb.run();
+  // Start the event loop and wait until it is finished execution.
+  evbThread = std::thread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  // Synchronization primitive
+  waitBaton.wait();
+
+  for (auto& allocator : allocators) {
+    allocator.reset();
+  }
 }
 
 /**
@@ -193,6 +209,7 @@ TEST_P(RangeAllocatorFixture, NoSeed) {
   const uint64_t start = 61;
   const uint64_t end = start + kNumClients * 10;
 
+  folly::Baton waitBaton;
   std::map<int /* client id */, uint64_t /* allocated value */> allocation;
   auto allocators = createAllocators<uint64_t>(
       {start, end},
@@ -220,11 +237,18 @@ TEST_P(RangeAllocatorFixture, NoSeed) {
             as<std::set<uint64_t>>();
         if (allocatedVals.size() == kNumClients) {
           LOG(INFO) << "We got everything, stopping OpenrEventBase.";
-          evb.stop();
+
+          // Synchronization primitive
+          waitBaton.post();
         }
       });
 
-  evb.run();
+  // Start the event loop and wait until it is finished execution.
+  evbThread = std::thread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  // Synchronization primitive
+  waitBaton.wait();
 
   for (size_t i = 0; i < allocators.size(); ++i) {
     EXPECT_FALSE(allocators[i]->isRangeConsumed());
@@ -237,6 +261,10 @@ TEST_P(RangeAllocatorFixture, NoSeed) {
   VLOG(2) << "=============== Allocation Table ===============";
   for (auto const& kv : allocation) {
     VLOG(2) << kv.first << "\t-->\t" << kv.second;
+  }
+
+  for (auto& allocator : allocators) {
+    allocator.reset();
   }
 }
 
@@ -255,6 +283,7 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
   const uint64_t start = 61;
   const uint64_t end = start + rangeSize - 1; // Range is inclusive
 
+  folly::Baton waitBaton;
   std::map<int /* client id */, uint64_t /* allocated value */> allocation;
   auto allocators = createAllocators<uint64_t>(
       {start, end},
@@ -291,7 +320,8 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
         if (not overrideOwner) {
           // no override
           LOG(INFO) << "We got everything, stopping OpenrEventBase.";
-          evb.stop();
+          // Synchronization primitive
+          waitBaton.post();
           return;
         }
         // Overide mode: client [expectedClientIdStart, expectedClientIdEnd]
@@ -306,12 +336,18 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
 
         if (clientIds == expectedClientIds) {
           LOG(INFO) << "We got everything, stopping OpenrEventBase.";
-          evb.stop();
+          // Synchronization primitive
+          waitBaton.post();
         }
       },
       4s);
 
-  evb.run();
+  // Start the event loop and wait until it is finished execution.
+  evbThread = std::thread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  // Synchronization primitive
+  waitBaton.wait();
 
   EXPECT_TRUE(allocators.front()->isRangeConsumed());
 
@@ -322,28 +358,23 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
 
   // Schedule timeout to remove an allocator (client). This should then free a
   // prefix for the last, unallocated, allocator.
-  auto timer = folly::AsyncTimeout::make(*evb.getEvb(), [&]() noexcept {
-    if (not overrideOwner) {
-      for (uint32_t i = 0; i < kNumClients; i++) {
-        if (allocators[i]->getValue().has_value()) {
-          VLOG(1) << "Removing client " << i << " with value "
-                  << allocators[i]->getValue().value();
-          allocation.erase(i);
-          allocators.erase(allocators.begin() + i);
-          break;
-        }
+  if (not overrideOwner) {
+    for (uint32_t i = 0; i < kNumClients; i++) {
+      if (allocators[i]->getValue().has_value()) {
+        VLOG(1) << "Removing client " << i << " with value "
+                << allocators[i]->getValue().value();
+        allocation.erase(i);
+        allocators[i].reset();
+        allocators.erase(allocators.begin() + i);
+        break;
       }
-    } else {
-      expectedClientIdStart--;
-      expectedClientIdEnd--;
-      allocation.erase(kNumClients - 1);
-      allocators.pop_back();
     }
-  });
-  timer->scheduleTimeout(std::chrono::milliseconds(0));
-
-  VLOG(2) << "Continuing OpenrEventBase...";
-  evb.run();
+  } else {
+    expectedClientIdStart--;
+    expectedClientIdEnd--;
+    allocation.erase(kNumClients - 1);
+    allocators.pop_back();
+  }
 
   EXPECT_TRUE(allocators.front()->isRangeConsumed());
 

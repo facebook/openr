@@ -10,66 +10,38 @@
 #include <openr/common/OpenrClient.h>
 #include <openr/common/Util.h>
 
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/SharedMutex.h>
 #include <folly/String.h>
 
 namespace openr {
 
 KvStoreClientInternal::KvStoreClientInternal(
-    fbzmq::Context& context,
     OpenrEventBase* eventBase,
     std::string const& nodeId,
-    std::string const& kvStoreLocalPubUrl,
     KvStore* kvStore,
-    folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod,
-    folly::Optional<std::chrono::milliseconds> recvTimeout)
+    folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod)
     : nodeId_(nodeId),
       eventBase_(eventBase),
-      context_(context),
-      kvStoreLocalPubUrl_(kvStoreLocalPubUrl),
       kvStore_(kvStore),
-      checkPersistKeyPeriod_(checkPersistKeyPeriod),
-      recvTimeout_(recvTimeout),
-      kvStoreSubSock_(
-          context, folly::none, folly::none, fbzmq::NonblockingFlag{false}) {
-  //
+      checkPersistKeyPeriod_(checkPersistKeyPeriod) {
   // sanity check
-  //
   CHECK_NE(eventBase_, static_cast<void*>(nullptr));
   CHECK(!nodeId.empty());
-  CHECK(!kvStoreLocalPubUrl.empty());
   CHECK(kvStore_);
 
-  //
-  // Prepare sockets
-  //
-
-  // Connect to subscriber endpoint
-  const auto kvStoreSub =
-      kvStoreSubSock_.connect(fbzmq::SocketUrl{kvStoreLocalPubUrl_});
-  if (kvStoreSub.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << kvStoreLocalPubUrl_ << "' "
-               << kvStoreSub.error();
-  }
-
-  // Subscribe to everything
-  const auto kvStoreSubOpt = kvStoreSubSock_.setSockOpt(ZMQ_SUBSCRIBE, "", 0);
-  if (kvStoreSubOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
-               << ""
-               << " " << kvStoreSubOpt.error();
-  }
-
-  // Attach socket callback
-  eventBase_->addSocket(*kvStoreSubSock_, ZMQ_POLLIN, [&](int) noexcept {
-    // Read publication from socket and process it
-    auto maybePublication = kvStoreSubSock_.recvThriftObj<thrift::Publication>(
-        serializer_, recvTimeout_);
-    if (maybePublication.hasError()) {
-      LOG(ERROR) << "Failed to read publication from KvStore SUB socket. "
-                 << "Exception: " << maybePublication.error();
-    } else {
+  // Fiber to process thrift::Publication from KvStore
+  taskFuture_ = eventBase_->addFiberTaskFuture([
+    q = std::move(kvStore_->getKvStoreUpdatesReader()),
+    this
+  ]() mutable noexcept {
+    LOG(INFO) << "Starting KvStore updates processing fiber";
+    while (true) {
+      auto maybePublication = q.get(); // perform read
+      VLOG(2) << "Received KvStore update";
+      if (maybePublication.hasError()) {
+        LOG(INFO) << "Terminating KvStore updates processing fiber";
+        break;
+      }
       processPublication(maybePublication.value());
     }
   });
@@ -79,15 +51,26 @@ KvStoreClientInternal::KvStoreClientInternal(
 }
 
 KvStoreClientInternal::~KvStoreClientInternal() {
-  // Removes the KvStore socket from the eventBase
-  eventBase_->removeSocket(fbzmq::RawZmqSocketPtr{*kvStoreSubSock_});
+  // - If EventBase is stopped or it is within the evb thread, run immediately;
+  // - Otherwise, will wait the EventBase to run;
+  eventBase_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
+    // destory your timers
+    LOG(INFO) << "Destroy timers inside KvStoreClientInternal...";
+    advertiseKeyValsTimer_.reset();
+    ttlTimer_.reset();
+    checkPersistKeyTimer_.reset();
+  });
+
+  // wait for fiber to be closed before destroy KvStoreClientInternal
+  taskFuture_.wait();
+  LOG(INFO) << "Fiber task closed...";
 }
 
 void
 KvStoreClientInternal::initTimers() {
   // Create timer to advertise pending key-vals
   advertiseKeyValsTimer_ =
-      fbzmq::ZmqTimeout::make(eventBase_->getEvb(), [this]() noexcept {
+      folly::AsyncTimeout::make(*eventBase_->getEvb(), [this]() noexcept {
         VLOG(3) << "Received timeout event.";
 
         // Advertise all pending keys
@@ -104,14 +87,13 @@ KvStoreClientInternal::initTimers() {
       });
 
   // Create ttl timer
-  ttlTimer_ = fbzmq::ZmqTimeout::make(
-      eventBase_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
+  ttlTimer_ = folly::AsyncTimeout::make(
+      *eventBase_->getEvb(), [this]() noexcept { advertiseTtlUpdates(); });
 
   // Create check persistKey timer
   if (checkPersistKeyPeriod_.has_value()) {
-    checkPersistKeyTimer_ = fbzmq::ZmqTimeout::make(
-        eventBase_->getEvb(), [this]() noexcept { checkPersistKeyInStore(); });
-
+    checkPersistKeyTimer_ = folly::AsyncTimeout::make(
+        *eventBase_->getEvb(), [this]() noexcept { checkPersistKeyInStore(); });
     checkPersistKeyTimer_->scheduleTimeout(checkPersistKeyPeriod_.value());
   }
 }

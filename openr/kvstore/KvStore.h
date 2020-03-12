@@ -518,6 +518,9 @@ class KvStore final : public OpenrEventBase {
       thrift::DualMessages dualMessages,
       std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
+  // API to get reader for kvStoreUpdatesQueue
+  messaging::RQueue<thrift::Publication> getKvStoreUpdatesReader();
+
  private:
   // disable copying
   KvStore(KvStore const&) = delete;

@@ -100,7 +100,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         routeUpdatesQueue_.getReader(),
         interfaceUpdatesQueue_.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         kvStoreWrapper->getKvStore(),
         context_);
     fibThread_ = std::thread([&]() { fib->run(); });
@@ -111,14 +110,12 @@ class OpenrCtrlFixture : public ::testing::Test {
         prefixUpdatesQueue_.getReader(),
         persistentStore.get(),
         kvStoreWrapper->getKvStore(),
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         monitorSubmitUrl_,
         PrefixDbMarker{Constants::kPrefixDbMarker.str()},
         false /* create per prefix keys */,
         false,
         std::chrono::seconds(0),
-        Constants::kKvStoreDbTtl,
-        context_);
+        Constants::kKvStoreDbTtl);
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
 
     // Create MockNetlinkSystemHandler
@@ -143,7 +140,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         context_,
         nodeName,
         systemThriftThread.getAddress()->getPort(),
-        KvStoreLocalPubUrl{kvStoreWrapper->localPubUrl},
         kvStoreWrapper->getKvStore(),
         std::move(includeRegexList),
         nullptr,

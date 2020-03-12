@@ -16,11 +16,7 @@ namespace openr {
 
 class KvStoreAgent : public OpenrEventBase {
  public:
-  KvStoreAgent(
-      fbzmq::Context& zmqContext,
-      std::string nodeId,
-      KvStore* kvStore,
-      std::string kvStorePubUrl = "tcp://[::1]:60001");
+  KvStoreAgent(std::string nodeId, KvStore* kvStore);
 
   const std::string agentKeyPrefix{"prefixForDataThisAgentDisseminates:"};
 

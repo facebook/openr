@@ -484,6 +484,11 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
   return {folly::makeUnexpected(fbzmq::Error())};
 }
 
+messaging::RQueue<thrift::Publication>
+KvStore::getKvStoreUpdatesReader() {
+  return kvParams_.kvStoreUpdatesQueue.getReader();
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 KvStore::getKvStoreKeyVals(
     thrift::KeyGetParams keyGetParams, std::string area) {

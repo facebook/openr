@@ -15,16 +15,12 @@
 
 namespace openr {
 
-KvStoreAgent::KvStoreAgent(
-    fbzmq::Context& zmqContext,
-    std::string nodeId,
-    KvStore* kvStore,
-    std::string kvStorePubUrl)
+KvStoreAgent::KvStoreAgent(std::string nodeId, KvStore* kvStore)
     : kvStore_(kvStore) {
   CHECK(kvStore_);
 
-  kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      zmqContext, this, nodeId, kvStorePubUrl, kvStore_);
+  kvStoreClient_ =
+      std::make_unique<KvStoreClientInternal>(this, nodeId, kvStore_);
 
   // set a call back so we can keep track of other keys with the prefix we
   // care about

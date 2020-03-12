@@ -30,6 +30,13 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
+    // define/start eventbase thread
+    evbThread = std::thread([&]() {
+      LOG(INFO) << "Eventbase starting";
+      evb.run();
+      LOG(INFO) << "Eventbase stopped";
+    });
+
     // spin up a kvStore through kvStoreWrapper
     kvStoreWrapper1_ = std::make_shared<KvStoreWrapper>(
         context_,
@@ -79,16 +86,24 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 
   void
   TearDown() override {
-    LOG(INFO) << "Stopping openrCtrl thrift server thread";
     openrThriftServerWrapper1_->stop();
     openrThriftServerWrapper2_->stop();
-    LOG(INFO) << "OpenrCtrl thrift server thread got stopped";
 
-    LOG(INFO) << "Stopping KvStoreWrapper thread";
+    // ATTN: kvStoreUpdatesQueue must be closed before destructing
+    //       KvStoreClientInternal as fiber future is depending on RQueue
     kvStoreWrapper1_->stop();
     kvStoreWrapper2_->stop();
-    LOG(INFO) << "KvStoreWrapper thread got stopped";
+
+    // ATTN: Destroy client before destroy evb. Otherwise, destructor will
+    //       FOREVER waiting fiber future to be fulfilled.
+    client1.reset();
+    client2.reset();
+
+    evb.stop();
+    evb.waitUntilStopped();
+    evbThread.join();
   }
+
   // var used to conmmunicate to kvStore through openrCtrl thrift server
   const std::string nodeId1_{"test_1"};
   const std::string nodeId2_{"test_2"};
@@ -96,20 +111,25 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 
   fbzmq::Context context_{};
   apache::thrift::CompactSerializer serializer;
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_;
-  std::shared_ptr<KvStoreWrapper> kvStoreWrapper2_;
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper1_;
-  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper2_;
+
+  OpenrEventBase evb;
+  std::thread evbThread;
+
+  std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_{nullptr},
+      kvStoreWrapper2_{nullptr};
+  std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper1_{nullptr},
+      openrThriftServerWrapper2_{nullptr};
+  std::shared_ptr<KvStoreClientInternal> client1{nullptr}, client2{nullptr};
 };
 
 TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const std::string key1{"test_key1"};
   const std::string key2{"test_key2"};
-
-  std::vector<folly::SocketAddress> sockAddrs;
   const std::string prefix = "";
   const uint16_t port1 = openrThriftServerWrapper1_->getOpenrCtrlThriftPort();
   const uint16_t port2 = openrThriftServerWrapper2_->getOpenrCtrlThriftPort();
+
+  std::vector<folly::SocketAddress> sockAddrs;
   sockAddrs.push_back(folly::SocketAddress{localhost_, port1});
   sockAddrs.push_back(folly::SocketAddress{localhost_, port2});
 
@@ -119,25 +139,16 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   EXPECT_TRUE(preDb.first.value().empty());
   EXPECT_TRUE(preDb.second.empty());
 
-  // Step2: initilize kvStoreClient connecting to different thriftServers
-  OpenrEventBase evb;
-  auto client1 = std::make_shared<KvStoreClientInternal>(
-      context_,
-      &evb,
-      nodeId1_,
-      kvStoreWrapper1_->localPubUrl,
-      kvStoreWrapper1_->getKvStore());
-  auto client2 = std::make_shared<KvStoreClientInternal>(
-      context_,
-      &evb,
-      nodeId2_,
-      kvStoreWrapper2_->localPubUrl,
-      kvStoreWrapper2_->getKvStore());
-  EXPECT_TRUE(nullptr != client1);
-  EXPECT_TRUE(nullptr != client2);
+  evb.getEvb()->runInEventBaseThreadAndWait([&]() noexcept {
+    // Step2: initilize kvStoreClient connecting to different thriftServers
+    client1 = std::make_shared<KvStoreClientInternal>(
+        &evb, nodeId1_, kvStoreWrapper1_->getKvStore());
+    client2 = std::make_shared<KvStoreClientInternal>(
+        &evb, nodeId2_, kvStoreWrapper2_->getKvStore());
+    EXPECT_TRUE(nullptr != client1);
+    EXPECT_TRUE(nullptr != client2);
 
-  // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
-  evb.runInEventBaseThread([&]() noexcept {
+    // Step3: insert (k1, v1) and (k2, v2) to different openrCtrlWrapper server
     thrift::Value value;
     value.version = 1;
     {
@@ -147,14 +158,10 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     }
     {
       value.value = "test_value2";
-      client2->setKey(
-          key2, fbzmq::util::writeThriftObjStr(value, serializer), 200);
+      EXPECT_TRUE(client2->setKey(
+          key2, fbzmq::util::writeThriftObjStr(value, serializer), 200));
     }
-
-    evb.stop();
   });
-
-  evb.run();
 
   // Step4: verify we can fetch 2 keys from different servers as aggregation
   // result
