@@ -451,11 +451,10 @@ getDurationBetweenPerfEvents(
   return std::chrono::milliseconds(second - first);
 }
 
+template <class T>
 int64_t
 generateHash(
-    const int64_t version,
-    const std::string& originatorId,
-    const folly::Optional<std::string>& value) {
+    const int64_t version, const std::string& originatorId, const T& value) {
   size_t seed = 0;
   boost::hash_combine(seed, version);
   boost::hash_combine(seed, originatorId);
@@ -463,6 +462,15 @@ generateHash(
     boost::hash_combine(seed, value.value());
   }
   return static_cast<int64_t>(seed);
+}
+
+int64_t
+generateHash(
+    const int64_t version,
+    const std::string& originatorId,
+    const apache::thrift::DeprecatedOptionalField<std::string>& value) {
+  return generateHash<apache::thrift::DeprecatedOptionalField<std::string>>(
+      version, originatorId, value);
 }
 
 std::string

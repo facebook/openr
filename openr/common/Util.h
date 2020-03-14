@@ -213,7 +213,7 @@ getDurationBetweenPerfEvents(
 int64_t generateHash(
     const int64_t version,
     const std::string& originatorId,
-    const folly::Optional<std::string>& value);
+    const apache::thrift::DeprecatedOptionalField<std::string>& value);
 
 /**
  * TO BE DEPRECATED SOON: Backward compatible with empty remoteIfName

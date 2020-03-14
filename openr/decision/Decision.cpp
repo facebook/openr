@@ -1877,7 +1877,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     if (key.find(adjacencyDbMarker_) == 0) {
       if (spfSolver_->deleteAdjacencyDatabase(nodeName)) {
         res.adjChanged = true;
-        pendingAdjUpdates_.addUpdate(myNodeName_, folly::none);
+        pendingAdjUpdates_.addUpdate(
+            myNodeName_, thrift::PrefixDatabase().perfEvents);
       }
       continue;
     }

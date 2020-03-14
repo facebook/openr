@@ -987,9 +987,7 @@ TEST(KvStoreClientInternal, ApiTest) {
         Constants::kTtlInfinity, // ttl
         0, // ttl version
         generateHash(
-            3,
-            "originator-id",
-            folly::Optional<std::string>("set_test_value")));
+            3, "originator-id", thrift::Value().value = "set_test_value"));
 
     // Sync call to insert key-value into the KvStore
     client1->setKey(testKey, testValue);

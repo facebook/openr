@@ -68,7 +68,8 @@ struct DecisionPendingUpdates {
   void
   addUpdate(
       const std::string& nodeName,
-      const folly::Optional<thrift::PerfEvents>& perfEvents) {
+      const apache::thrift::DeprecatedOptionalField<thrift::PerfEvents>&
+          perfEvents) {
     ++count_;
 
     // Skip if perf information is missing

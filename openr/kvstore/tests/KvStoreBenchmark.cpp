@@ -180,9 +180,7 @@ floodingUpdate(
 
     // Update hash
     thriftVal.hash = generateHash(
-        thriftVal.version,
-        thriftVal.originatorId,
-        apache::thrift::castToFolly(thriftVal.value));
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
     auto keyVal = std::make_pair(key, thriftVal);
     keyVals.emplace_back(keyVal);
   }
@@ -262,9 +260,7 @@ BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
         0 /* ttl version */,
         0 /* hash */);
     thriftVal.hash = generateHash(
-        thriftVal.version,
-        thriftVal.originatorId,
-        apache::thrift::castToFolly(thriftVal.value));
+        thriftVal.version, thriftVal.originatorId, thriftVal.value);
 
     // Adding key to kvStore
     kvStore->setKey(key, thriftVal);
