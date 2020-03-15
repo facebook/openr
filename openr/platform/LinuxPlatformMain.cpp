@@ -73,7 +73,7 @@ main(int argc, char** argv) {
 
   auto nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
   auto nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
-      nlEventLoop.get(), nullptr, std::move(nlProtocolSocket));
+      nlEventLoop.get(), eventPublisher.get(), std::move(nlProtocolSocket));
 
   // Subscribe selected network events
   nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
