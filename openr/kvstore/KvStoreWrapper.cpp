@@ -187,7 +187,7 @@ KvStoreWrapper::syncKeyVals(
 }
 
 thrift::Publication
-KvStoreWrapper::recvPublication(std::chrono::milliseconds timeout) {
+KvStoreWrapper::recvPublication() {
   auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
   if (maybePublication.hasError()) {
     throw std::runtime_error(std::string("recvPublication failed"));

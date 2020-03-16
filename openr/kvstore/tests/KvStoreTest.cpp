@@ -40,10 +40,6 @@ const std::chrono::seconds kMonitorSubmitInterval(3600);
 // TTL in ms
 const int64_t kTtlMs = 1000;
 
-// Timeout for recieving publication from KvStore. This spans the maximum
-// duration it can take to propogate an update through KvStores
-const std::chrono::seconds kTimeout(12);
-
 /**
  * produce a random string of given length - for value generation
  */
@@ -246,7 +242,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
           // Receive all expected number of updates.
           std::map<std::string, thrift::Value> receivedKeyVals;
           while (receivedKeyVals.size() < kNumKeys) {
-            auto publication = store->recvPublication(kTimeout);
+            auto publication = store->recvPublication();
             for (auto const& kv : publication.keyVals) {
               receivedKeyVals.emplace(kv);
             }
@@ -617,7 +613,6 @@ TEST(KvStore, MonitorReport) {
  */
 TEST(KvStore, TtlVerification) {
   fbzmq::Context context;
-  const std::chrono::milliseconds testPollTimeout{1000};
   const std::string key{"dummyKey"};
   const thrift::Value value(
       apache::thrift::FRAGILE,
@@ -655,7 +650,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(0, kvStore.dumpAll().size());
 
     // We will receive key-expiry publication but no key-advertisement
-    auto publication = kvStore.recvPublication(testPollTimeout);
+    auto publication = kvStore.recvPublication();
     EXPECT_EQ(0, publication.keyVals.size());
     ASSERT_EQ(1, publication.expiredKeys.size());
     EXPECT_EQ(key, publication.expiredKeys.at(0));
@@ -700,7 +695,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue, hashResValue);
 
     // We will receive key-expiry publication but no key-advertisement
-    auto publication = kvStore.recvPublication(testPollTimeout);
+    auto publication = kvStore.recvPublication();
     EXPECT_EQ(0, publication.keyVals.size());
     ASSERT_EQ(1, publication.expiredKeys.size());
     EXPECT_EQ(key, publication.expiredKeys.at(0));
@@ -746,7 +741,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue, hashResValue);
 
     // We will receive key-advertisement
-    auto publication = kvStore.recvPublication(testPollTimeout);
+    auto publication = kvStore.recvPublication();
     EXPECT_EQ(1, publication.keyVals.size());
     ASSERT_EQ(0, publication.expiredKeys.size());
     ASSERT_EQ(1, publication.keyVals.count(key));
@@ -778,7 +773,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.value, getRes->value);
 
     // We will receive update over PUB socket
-    auto publication = kvStore.recvPublication(testPollTimeout);
+    auto publication = kvStore.recvPublication();
     EXPECT_EQ(1, publication.keyVals.size());
     ASSERT_EQ(0, publication.expiredKeys.size());
     ASSERT_EQ(1, publication.keyVals.count(key));
@@ -811,7 +806,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.value, getRes->value);
 
     // We will receive update over PUB socket
-    auto publication = kvStore.recvPublication(testPollTimeout);
+    auto publication = kvStore.recvPublication();
     EXPECT_EQ(1, publication.keyVals.size());
     ASSERT_EQ(0, publication.expiredKeys.size());
     ASSERT_EQ(1, publication.keyVals.count(key));
@@ -844,7 +839,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.value, getRes->value);
 
     // We will receive update over PUB socket
-    auto publication = kvStore.recvPublication(testPollTimeout);
+    auto publication = kvStore.recvPublication();
     EXPECT_EQ(1, publication.keyVals.size());
     ASSERT_EQ(0, publication.expiredKeys.size());
     ASSERT_EQ(1, publication.keyVals.count(key));
@@ -1178,7 +1173,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
 
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0 on pub socket ...";
-  auto pub = store0->recvPublication(kTimeout);
+  auto pub = store0->recvPublication();
   EXPECT_EQ(1, pub.keyVals.size());
   EXPECT_EQ(thriftVal, pub.keyVals["test"]);
 
@@ -1199,7 +1194,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
 
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0...";
-  pub = store0->recvPublication(kTimeout);
+  pub = store0->recvPublication();
   EXPECT_EQ(1, pub.keyVals.size());
   EXPECT_EQ(thriftVal, pub.keyVals["test"]);
 
@@ -1224,7 +1219,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
       generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0 on pub socket ...";
-  pub = store0->recvPublication(kTimeout);
+  pub = store0->recvPublication();
   EXPECT_EQ(1, pub.keyVals.size());
   EXPECT_EQ(thriftVal, pub.keyVals["test"]);
 
@@ -1886,7 +1881,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     std::unordered_set<std::string> keys;
     VLOG(3) << "Store " << store->nodeId << " received keys.";
     while (keys.size() < kNumStores) {
-      auto publication = store->recvPublication(kTimeout);
+      auto publication = store->recvPublication();
       for (auto const& kv : publication.keyVals) {
         VLOG(3) << "\tkey: " << kv.first
                 << ", value: " << kv.second.value.value();
@@ -1932,7 +1927,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     std::unordered_set<std::string> keys;
     VLOG(3) << "Store " << store->nodeId << " received keys.";
     while (keys.size() < kNumStores) {
-      auto publication = store->recvPublication(kTimeout);
+      auto publication = store->recvPublication();
       for (auto const& kv : publication.keyVals) {
         VLOG(3) << "\tkey: " << kv.first
                 << ", value: " << kv.second.value.value();
@@ -1992,7 +1987,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   {
     for (auto& store : stores_) {
       VLOG(2) << "Receiving publication from " << store->nodeId;
-      store->recvPublication(kTimeout);
+      store->recvPublication();
     }
   }
 
@@ -2117,8 +2112,8 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
 
   // We have to wait until we see two updates on the first node and verify them.
   {
-    auto pub1 = stores[0]->recvPublication(kTimeout);
-    auto pub2 = stores[0]->recvPublication(kTimeout);
+    auto pub1 = stores[0]->recvPublication();
+    auto pub2 = stores[0]->recvPublication();
     ASSERT_EQ(1, pub1.keyVals.count(kKeyName));
     ASSERT_EQ(1, pub2.keyVals.count(kKeyName));
     EXPECT_EQ(thriftValFirst, pub1.keyVals.at(kKeyName));
@@ -2231,7 +2226,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
     std::unordered_set<std::string> keys;
     VLOG(3) << "Store " << myStore->nodeId << " received keys.";
     while (keys.size() < kNumStores) {
-      auto publication = myStore->recvPublication(kTimeout);
+      auto publication = myStore->recvPublication();
       for (auto const& kv : publication.keyVals) {
         VLOG(3) << "\tkey: " << kv.first
                 << ", value: " << kv.second.value.value();
@@ -2411,7 +2406,7 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
     ASSERT_TRUE(getRes1.has_value());
 
     /* check key synced from store1 has ttl that is reduced by ttlDecr. */
-    auto getPub0 = store0->recvPublication(std::chrono::seconds(1));
+    auto getPub0 = store0->recvPublication();
     ASSERT_EQ(1, getPub0.keyVals.count("key1"));
     EXPECT_LE(getPub0.keyVals.at("key1").ttl, ttl1 - ttlDecr.count());
   }

@@ -249,9 +249,6 @@ class Constants {
   // The port KvStore replier listens on
   static constexpr int32_t kKvStoreRepPort{60002};
 
-  // Decision publisher port for emitting realtime route-db updates
-  static constexpr int32_t kDecisionPubPort{60003};
-
   // The port monitor publishes on
   static constexpr int32_t kMonitorPubPort{60007};
 

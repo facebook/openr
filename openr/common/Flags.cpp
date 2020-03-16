@@ -16,10 +16,6 @@ DEFINE_int32(
     kvstore_rep_port,
     openr::Constants::kKvStoreRepPort,
     "The port KvStore replier listens on");
-DEFINE_int32(
-    decision_pub_port,
-    openr::Constants::kDecisionPubPort,
-    "Decision publisher port for emitting realtime route-db updates");
 // Flag to enable or disable plugin module.
 DEFINE_bool(enable_plugin, false, "Enable plugin module");
 DEFINE_string(

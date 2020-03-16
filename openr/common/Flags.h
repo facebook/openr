@@ -13,7 +13,6 @@
 
 DECLARE_int32(openr_ctrl_port);
 DECLARE_int32(kvstore_rep_port);
-DECLARE_int32(decision_pub_port);
 
 DECLARE_bool(enable_plugin);
 

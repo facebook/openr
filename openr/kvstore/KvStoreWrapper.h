@@ -126,10 +126,9 @@ class KvStoreWrapper {
       std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
-   * API to listen for a publication on PUB socket. This blocks until a
-   * publication is received on the socket from KvStore.
+   * API to listen for a publication on PUB queue.
    */
-  thrift::Publication recvPublication(std::chrono::milliseconds timeout);
+  thrift::Publication recvPublication();
 
   /**
    * API to get counters from KvStore directly

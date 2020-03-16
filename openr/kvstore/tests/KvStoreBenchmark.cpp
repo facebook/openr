@@ -25,9 +25,6 @@ namespace {
 const std::chrono::seconds kDbSyncInterval(10000);
 const std::chrono::seconds kMonitorSubmitInterval(3600);
 
-// Timeout for recieving publication from KvStore. This spans the maximum
-// duration it can take to propogate an update through KvStores
-const std::chrono::seconds kTimeout(100);
 // The byte size of a key
 const int kSizeOfKey = 32;
 // The byte size of a value
@@ -189,7 +186,7 @@ floodingUpdate(
   version++;
 
   // Receive publication from kvStore for new key-update
-  auto pub = kvStore->recvPublication(kTimeout);
+  auto pub = kvStore->recvPublication();
   CHECK_EQ(numOfUpdateKeys, pub.keyVals.size());
 }
 

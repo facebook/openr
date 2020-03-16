@@ -411,11 +411,10 @@ class LinkMonitorTestFixture : public ::testing::Test {
   getPublicationValueForKey(
       std::string const& key,
       std::string const& area =
-          openr::thrift::KvStore_constants::kDefaultArea(),
-      std::chrono::seconds timeout = std::chrono::seconds(10)) {
+          openr::thrift::KvStore_constants::kDefaultArea()) {
     LOG(INFO) << "Waiting to receive publication for key " << key << " area "
               << area;
-    auto pub = kvStoreWrapper->recvPublication(timeout);
+    auto pub = kvStoreWrapper->recvPublication();
     EXPECT_TRUE(pub.area.has_value());
     if (pub.area.value() != area) {
       return folly::none;
@@ -499,8 +498,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
       std::string const& area =
           openr::thrift::KvStore_constants::kDefaultArea()) {
     while (true) {
-      auto value =
-          getPublicationValueForKey(key, area, std::chrono::seconds(3));
+      auto value = getPublicationValueForKey(key, area);
       if (not value.has_value()) {
         continue;
       }
@@ -1704,7 +1702,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
 
   // recv kv store publications until we have valid labels from each node
   while (nodeLabels.size() < kNumNodesToTest) {
-    auto pub = kvStoreWrapper->recvPublication(std::chrono::seconds(10));
+    auto pub = kvStoreWrapper->recvPublication();
     for (auto const& kv : pub.keyVals) {
       if (kv.first.find("adj:") == 0 and kv.second.value) {
         auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(

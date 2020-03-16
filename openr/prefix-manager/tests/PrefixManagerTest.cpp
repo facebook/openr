@@ -1047,7 +1047,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
   prefixManager->waitUntilRunning();
 
   // We must receive publication after holdTime
-  auto publication = kvStoreWrapper->recvPublication(holdTime * 2);
+  auto publication = kvStoreWrapper->recvPublication();
   const auto elapsedTime =
       std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::steady_clock::now() - startTime);
@@ -1162,7 +1162,7 @@ TEST_P(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // Helper function to receive expected number of updates from KvStore
   auto recvPublication = [this](int num) {
     for (int i = 0; i < num; ++i) {
-      EXPECT_NO_THROW(kvStoreWrapper->recvPublication(std::chrono::seconds(1)));
+      EXPECT_NO_THROW(kvStoreWrapper->recvPublication());
     }
   };
 

@@ -34,7 +34,6 @@ constexpr int Constants::kIpTos;
 constexpr int Constants::kKeepAliveCnt;
 constexpr int Constants::kKeepAliveEnable;
 constexpr int32_t Constants::kOpenrCtrlPort;
-constexpr int32_t Constants::kDecisionPubPort;
 constexpr int32_t Constants::kFibAgentPort;
 constexpr int32_t Constants::kKvStoreRepPort;
 constexpr int32_t Constants::kMaxSrLabel;
