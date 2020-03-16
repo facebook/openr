@@ -40,7 +40,6 @@ PrefixManager::PrefixManager(
     messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
     PersistentStore* configStore,
     KvStore* kvStore,
-    const MonitorSubmitUrl& monitorSubmitUrl,
     const PrefixDbMarker& prefixDbMarker,
     bool perPrefixKeys,
     bool enablePerfMeasurement,

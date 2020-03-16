@@ -235,7 +235,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
         prefixUpdatesQueue.getReader(),
         configStore.get(),
         kvStoreWrapper->getKvStore(),
-        MonitorSubmitUrl{"inproc://monitor_submit"},
         PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
         false /* create IP prefix keys */,
         false,

@@ -179,7 +179,6 @@ class KvStoreWrapper {
    * sockets.
    */
   const std::string nodeId;
-  const std::string localPubUrl;
 
   /**
    * Global URLs could be created outside of kvstore, mainly for testing
@@ -198,9 +197,8 @@ class KvStoreWrapper {
 
   // Queue for streaming KvStore updates
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
-
-  // ZMQ sub socket for listening realtime updates from KvStore
-  fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> subSock_;
+  messaging::RQueue<thrift::Publication> kvStoreUpdatesQueueReader_{
+      kvStoreUpdatesQueue_.getReader()};
 
   // KvStore owned by this wrapper.
   std::unique_ptr<KvStore> kvStore_;

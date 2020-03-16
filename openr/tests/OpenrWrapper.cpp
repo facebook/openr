@@ -36,7 +36,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       ioProvider_(std::move(ioProvider)),
       monitorSubmitUrl_(folly::sformat("inproc://{}-monitor-submit", nodeId_)),
       monitorPubUrl_(folly::sformat("inproc://{}-monitor-pub", nodeId_)),
-      kvStoreLocalPubUrl_(folly::sformat("inproc://{}-kvstore-pub", nodeId_)),
       kvStoreGlobalCmdUrl_(
           folly::sformat("inproc://{}-kvstore-cmd-global", nodeId_)),
       platformPubUrl_(folly::sformat("inproc://{}-platform-pub", nodeId_)),
@@ -68,7 +67,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       context_,
       nodeId_,
       kvStoreUpdatesQueue_,
-      KvStoreLocalPubUrl{kvStoreLocalPubUrl_},
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       folly::none /* ip-tos */,
@@ -199,7 +197,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       prefixUpdatesQueue_.getReader(),
       configStore_.get(),
       kvStore_.get(),
-      MonitorSubmitUrl{monitorSubmitUrl_},
       PrefixDbMarker{"prefix:"},
       per_prefix_keys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,

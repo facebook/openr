@@ -98,8 +98,6 @@ struct KvStoreParams {
   // Queue for publishing KvStore updates to other modules within a process
   messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue;
 
-  // the socket to publish changes to kv-store
-  fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> localPubSock;
   // socket for remote & local commands
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock;
 
@@ -123,7 +121,6 @@ struct KvStoreParams {
   KvStoreParams(
       std::string nodeid,
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
-      fbzmq::Context& zmqContext,
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       // ZMQ high water mark
       int zmqhwm,
@@ -141,7 +138,6 @@ struct KvStoreParams {
       bool usefloodOptimization)
       : nodeId(nodeid),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
-        localPubSock(zmqContext),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
         maybeIpTos(std::move(maybeipTos)),
@@ -427,9 +423,6 @@ class KvStore final : public OpenrEventBase {
       std::string nodeId,
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
-      // the url we use to publish our updates to
-      // local subscribers
-      KvStoreLocalPubUrl localPubUrl,
       // the url to receive command from local and
       // non local clients (often encrypted channel)
       KvStoreGlobalCmdUrl globalCmdUrl,
@@ -552,9 +545,6 @@ class KvStore final : public OpenrEventBase {
   //
   // Non mutable state
   //
-
-  // The ZMQ URL used for local publications
-  const std::string localPubUrl_;
 
   // Interval to submit to monitor. Default value is high
   // to avoid submission of counters in testing.

@@ -875,9 +875,6 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.originatorId, getRes->originatorId);
     EXPECT_EQ(value.ttlVersion + 3, getRes->ttlVersion);
     EXPECT_EQ(value.value, getRes->value);
-
-    // We will receive update over PUB socket
-    EXPECT_THROW(kvStore.recvPublication(testPollTimeout), std::runtime_error);
   }
 
   kvStore.stop();
@@ -2439,10 +2436,6 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
     ASSERT_FALSE(getRes1.has_value());
     auto nodeCounters = store1->getCounters();
     EXPECT_EQ(nodeCounters["kvstore.num_keys"].value, 2);
-
-    /* check key is not synced from store1 */
-    EXPECT_THROW(
-        store0->recvPublication(std::chrono::seconds(1)), std::runtime_error);
   }
 }
 

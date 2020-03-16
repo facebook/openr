@@ -73,7 +73,6 @@ KvStore::KvStore(
     fbzmq::Context& zmqContext,
     std::string nodeId,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
-    KvStoreLocalPubUrl localPubUrl,
     KvStoreGlobalCmdUrl globalCmdUrl,
     MonitorSubmitUrl monitorSubmitUrl,
     folly::Optional<int> maybeIpTos,
@@ -89,12 +88,10 @@ KvStore::KvStore(
     bool isFloodRoot,
     bool useFloodOptimization,
     const std::unordered_set<std::string>& areas)
-    : localPubUrl_(std::move(localPubUrl)),
-      monitorSubmitInterval_(monitorSubmitInterval),
+    : monitorSubmitInterval_(monitorSubmitInterval),
       kvParams_(
           nodeId,
           kvStoreUpdatesQueue,
-          zmqContext,
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
               fbzmq::IdentityString{folly::sformat("{}::TCP::CMD", nodeId)},
@@ -111,7 +108,6 @@ KvStore::KvStore(
           useFloodOptimization),
       areas_(areas) {
   CHECK(not nodeId.empty());
-  CHECK(not localPubUrl_.empty());
   CHECK(not areas_.empty());
 
   zmqMonitorClient_ =
@@ -125,33 +121,7 @@ KvStore::KvStore(
   monitorTimer_->scheduleTimeout(monitorSubmitInterval_, isPeriodic);
 
   //
-  // Set various socket options
-  //
-  auto& localPubSock = kvParams_.localPubSock;
-
-  // HWM for pub and peer sub sockets
-  const auto localPubHwm =
-      localPubSock.setSockOpt(ZMQ_SNDHWM, &zmqHwm, sizeof(zmqHwm));
-  if (localPubHwm.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SNDHWM to " << zmqHwm << " "
-               << localPubHwm.error();
-  }
-
-  //
-  // Bind the sockets
-  //
-  VLOG(2) << "KvStore: Binding publisher and replier sockets.";
-
-  // the following will throw exception if something is wrong
-  VLOG(2) << "KvStore: Binding localPubUrl '" << localPubUrl_ << "'";
-  const auto localPubBind = localPubSock.bind(fbzmq::SocketUrl{localPubUrl_});
-  if (localPubBind.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << localPubUrl_ << "' "
-               << localPubBind.error();
-  }
-
-  //
-  // Prepare global & local command socket
+  // Prepare global command socket
   //
   prepareSocket(kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
   addSocket(
@@ -2120,14 +2090,7 @@ KvStoreDb::floodPublication(
   }
   publication.nodeIds->emplace_back(kvParams_.nodeId);
 
-  // Flood publication on local PUB socket
-  //
-  // Usually only local subscribers need to know, but we are also sending
-  // on global socket so that it can help debugging things via breeze as
-  // well as preserve backward compatibility
-  auto const msg =
-      fbzmq::Message::fromThriftObj(publication, serializer_).value();
-  kvParams_.localPubSock.sendOne(msg);
+  // Flood publication on local PUB queue
   kvParams_.kvStoreUpdatesQueue.push(publication);
 
   //

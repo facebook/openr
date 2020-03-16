@@ -110,7 +110,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         prefixUpdatesQueue_.getReader(),
         persistentStore.get(),
         kvStoreWrapper->getKvStore(),
-        monitorSubmitUrl_,
         PrefixDbMarker{Constants::kPrefixDbMarker.str()},
         false /* create per prefix keys */,
         false,

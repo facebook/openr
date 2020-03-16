@@ -468,7 +468,7 @@ main(int argc, char** argv) {
   if (nodeAreas.size()) {
     areas = nodeAreas;
   }
-  const KvStoreLocalPubUrl kvStoreLocalPubUrl{"inproc://kvstore_pub_local"};
+
   // Start KVStore
   auto kvStore = startEventBase(
       allThreads,
@@ -479,7 +479,6 @@ main(int argc, char** argv) {
           context,
           FLAGS_node_name,
           kvStoreUpdatesQueue,
-          kvStoreLocalPubUrl,
           KvStoreGlobalCmdUrl{folly::sformat(
               "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
           monitorSubmitUrl,
@@ -506,7 +505,6 @@ main(int argc, char** argv) {
           prefixUpdatesQueue.getReader(),
           configStore,
           kvStore,
-          monitorSubmitUrl,
           PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
           FLAGS_per_prefix_keys,
           FLAGS_enable_perf_measurement,

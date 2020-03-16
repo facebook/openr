@@ -34,10 +34,8 @@ KvStoreWrapper::KvStoreWrapper(
     bool isFloodRoot,
     const std::unordered_set<std::string>& areas)
     : nodeId(nodeId),
-      localPubUrl(folly::sformat("inproc://{}-kvstore-pub", nodeId)),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
       monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
-      subSock_(zmqContext),
       enableFloodOptimization_(enableFloodOptimization) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   // assume useFloodOptimization when enableFloodOptimization is True
@@ -46,7 +44,6 @@ KvStoreWrapper::KvStoreWrapper(
       zmqContext,
       nodeId,
       kvStoreUpdatesQueue_,
-      KvStoreLocalPubUrl{localPubUrl},
       KvStoreGlobalCmdUrl{globalCmdUrl},
       MonitorSubmitUrl{monitorSubmitUrl},
       folly::none /* ip-tos */,
@@ -65,26 +62,6 @@ KvStoreWrapper::KvStoreWrapper(
 
 void
 KvStoreWrapper::run() noexcept {
-  // connect sub socket for listening realtime updates from KvStore
-  const auto subHwmOpt =
-      subSock_.setSockOpt(ZMQ_RCVHWM, &kSocketHwm, sizeof(kSocketHwm));
-  if (subHwmOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_RCVHWM to " << kSocketHwm << " "
-               << subHwmOpt.error();
-  }
-  const auto subOpt =
-      subSock_.setSockOpt(ZMQ_SUBSCRIBE, "", 0); // Subscribe to everything.
-  if (subOpt.hasError()) {
-    LOG(FATAL) << "Error setting ZMQ_SUBSCRIBE to "
-               << ""
-               << " " << subOpt.error();
-  }
-  const auto subConnect = subSock_.connect(fbzmq::SocketUrl{localPubUrl});
-  if (subConnect.hasError()) {
-    LOG(FATAL) << "Error connecting to URL '" << localPubUrl << "' "
-               << subConnect.error();
-  }
-
   // Start kvstore
   kvStoreThread_ = std::thread([this]() {
     VLOG(1) << "KvStore " << nodeId << " running.";
@@ -103,9 +80,6 @@ KvStoreWrapper::stop() {
 
   // Close queue
   kvStoreUpdatesQueue_.close();
-
-  // Destroy socket for communicating with kvstore
-  subSock_.close();
 
   // Stop kvstore
   kvStore_->stop();
@@ -214,13 +188,12 @@ KvStoreWrapper::syncKeyVals(
 
 thrift::Publication
 KvStoreWrapper::recvPublication(std::chrono::milliseconds timeout) {
-  auto maybeMsg =
-      subSock_.recvThriftObj<thrift::Publication>(serializer_, timeout);
-  if (maybeMsg.hasError()) {
-    throw std::runtime_error(folly::sformat(
-        "recvPublication failed: {}", maybeMsg.error().errString));
+  auto maybePublication = kvStoreUpdatesQueueReader_.get(); // perform read
+  if (maybePublication.hasError()) {
+    throw std::runtime_error(std::string("recvPublication failed"));
   }
-  return maybeMsg.value();
+  auto pub = maybePublication.value();
+  return pub;
 }
 
 fbzmq::thrift::CounterMap
