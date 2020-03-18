@@ -88,7 +88,7 @@ struct DecisionPendingUpdates {
     // oldest.
     if (!minTs_ or minTs_.value() > perfEvents->events.front().unixTs) {
       minTs_ = perfEvents->events.front().unixTs;
-      perfEvents_ = perfEvents;
+      perfEvents_ = apache::thrift::castToFolly(perfEvents);
       addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
     }
   }
