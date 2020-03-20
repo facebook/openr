@@ -7,6 +7,7 @@
 
 #include "Fib.h"
 
+#include <fb303/ServiceData.h>
 #include <fbzmq/service/if/gen-cpp2/Monitor_types.h>
 #include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -18,6 +19,8 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+
+namespace fb303 = facebook::fb303;
 
 namespace openr {
 
@@ -55,6 +58,8 @@ Fib::Fib(
             expBackoff_.getTimeRemainingUntilRetry());
       }
     }
+    fb303::fbData->setCounter(
+        "fib.require_routedb_sync", syncRoutesTimer_->isScheduled());
   });
 
   if (enableOrderedFib_) {
@@ -74,7 +79,8 @@ Fib::Fib(
     try {
       keepAliveCheck();
     } catch (const std::exception& e) {
-      tData_.addStatValue("fib.thrift.failure.keepalive", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue(
+          "fib.thrift.failure.keepalive", 1, fb303::COUNT);
       client_.reset();
       LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
                  << folly::exceptionStr(e);
@@ -117,24 +123,22 @@ Fib::Fib(
     }
   });
 
-  // Schedule periodic timer for submission to monitor
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
-  const bool isPeriodic = true;
-  monitorTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { submitCounters(); });
-  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
 
   // Initialize stats keys
-  tData_.addStatExportType("fib.convergence_time_ms", fbzmq::AVG);
-  tData_.addStatExportType("fib.local_route_program_time_ms", fbzmq::AVG);
-  tData_.addStatExportType("fib.num_of_route_updates", fbzmq::SUM);
-  tData_.addStatExportType("fib.process_interface_db", fbzmq::COUNT);
-  tData_.addStatExportType("fib.process_route_db", fbzmq::COUNT);
-  tData_.addStatExportType("fib.sync_fib_calls", fbzmq::COUNT);
-  tData_.addStatExportType("fib.thrift.failure.add_del_route", fbzmq::COUNT);
-  tData_.addStatExportType("fib.thrift.failure.keepalive", fbzmq::COUNT);
-  tData_.addStatExportType("fib.thrift.failure.sync_fib", fbzmq::COUNT);
+  fb303::fbData->addStatExportType("fib.convergence_time_ms", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "fib.local_route_program_time_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("fib.num_of_route_updates", fb303::SUM);
+  fb303::fbData->addStatExportType("fib.process_interface_db", fb303::COUNT);
+  fb303::fbData->addStatExportType("fib.process_route_db", fb303::COUNT);
+  fb303::fbData->addStatExportType("fib.sync_fib_calls", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "fib.thrift.failure.add_del_route", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "fib.thrift.failure.keepalive", fb303::COUNT);
+  fb303::fbData->addStatExportType("fib.thrift.failure.sync_fib", fb303::COUNT);
 }
 
 std::optional<thrift::IpPrefix>
@@ -329,14 +333,14 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   }
 
   // Add some counters
-  tData_.addStatValue("fib.process_route_db", 1, fbzmq::COUNT);
+  fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
   // Send request to agent
   updateRoutes(routeDelta);
 }
 
 void
 Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
-  tData_.addStatValue("fib.process_interface_db", 1, fbzmq::COUNT);
+  fb303::fbData->addStatValue("fib.process_interface_db", 1, fb303::COUNT);
 
   if (interfaceDb.perfEvents) {
     addPerfEvent(*interfaceDb.perfEvents, myNodeName_, "FIB_INTF_DB_RECEIVED");
@@ -485,6 +489,9 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
             << routeDbDelta.unicastRoutesToDelete.size() << "-unicast, "
             << routeDbDelta.mplsRoutesToDelete.size() << "-mpls, ";
 
+  // update flat counters here as they depend on routeState_ and its change
+  updateGlobalCounters();
+
   // Only for backward compatibility
   auto const& patchedUnicastRoutesToUpdate =
       createUnicastRoutesWithBestNexthops(routeDbDelta.unicastRoutesToUpdate);
@@ -566,13 +573,14 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
       numOfRouteUpdates += mplsRoutesToUpdate.size();
       client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
     }
-    tData_.addStatValue(
-        "fib.num_of_route_updates", numOfRouteUpdates, fbzmq::SUM);
+    fb303::fbData->addStatValue(
+        "fib.num_of_route_updates", numOfRouteUpdates, fb303::SUM);
     routeState_.dirtyRouteDb = false;
     logPerfEvents(apache::thrift::castToFolly(routeDbDelta.perfEvents));
     LOG(INFO) << "Done processing route add/update";
   } catch (const std::exception& e) {
-    tData_.addStatValue("fib.thrift.failure.add_del_route", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue(
+        "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
     client_.reset();
     routeState_.dirtyRouteDb = true;
     syncRouteDbDebounced(); // Schedule future full sync of route DB
@@ -617,7 +625,7 @@ Fib::syncRouteDb() {
 
   try {
     createFibClient(evb_, socket_, client_, thriftPort_);
-    tData_.addStatValue("fib.sync_fib_calls", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
 
     // Sync unicast routes
     client_->sync_syncFib(kFibId_, unicastRoutes);
@@ -633,7 +641,7 @@ Fib::syncRouteDb() {
     LOG(INFO) << "Done syncing latest routeDb with fib-agent";
     return true;
   } catch (std::exception const& e) {
-    tData_.addStatValue("fib.thrift.failure.sync_fib", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("fib.thrift.failure.sync_fib", 1, fb303::COUNT);
     LOG(ERROR) << "Failed to sync routeDb with switch FIB agent. Error: "
                << folly::exceptionStr(e);
     routeState_.dirtyRouteDb = true;
@@ -703,18 +711,13 @@ Fib::createFibClient(
 }
 
 void
-Fib::submitCounters() {
-  VLOG(3) << "Submitting counters ... ";
-
-  // Extract/build counters from thread-data
-  auto counters = tData_.getCounters();
-
-  // Add some more flat counters
-  counters["fib.num_routes"] = routeState_.unicastRoutes.size();
-  counters["fib.num_dirty_prefixes"] = routeState_.dirtyPrefixes.size();
-  counters["fib.num_dirty_labels"] = routeState_.dirtyLabels.size();
-  counters["fib.require_routedb_sync"] = syncRoutesTimer_->isScheduled();
-  counters["fib.zmq_event_queue_size"] = getEvb()->getNotificationQueueSize();
+Fib::updateGlobalCounters() {
+  // Set some flat counters
+  fb303::fbData->setCounter("fib.num_routes", routeState_.unicastRoutes.size());
+  fb303::fbData->setCounter(
+      "fib.num_dirty_prefixes", routeState_.dirtyPrefixes.size());
+  fb303::fbData->setCounter(
+      "fib.num_dirty_labels", routeState_.dirtyLabels.size());
 
   // Count the number of bgp routes
   int64_t bgpCounter = 0;
@@ -723,9 +726,7 @@ Fib::submitCounters() {
       bgpCounter++;
     }
   }
-  counters["fib.num_routes.BGP"] = bgpCounter;
-
-  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
+  fb303::fbData->setCounter("fib.num_routes.BGP", bgpCounter);
 }
 
 void
@@ -759,13 +760,13 @@ Fib::logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents) {
       LOG(WARNING) << "Ignoring perf event with bad local duration "
                    << localDuration.error();
     } else if (*localDuration <= Constants::kConvergenceMaxDuration) {
-      tData_.addStatValue(
+      fb303::fbData->addStatValue(
           "fib.local_route_program_time_ms",
           localDuration->count(),
-          fbzmq::AVG);
+          fb303::AVG);
       kvStoreClient_->persistKey(
           Constants::kFibTimeMarker.toString() + myNodeName_,
-          std::to_string(tData_.getCounters().at(
+          std::to_string(fb303::fbData->getCounters().at(
               "fib.local_route_program_time_ms.avg.60")),
           Constants::kTtlInfInterval,
           openr::thrift::KvStore_constants::kDefaultArea());
@@ -796,8 +797,8 @@ Fib::logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents) {
   }
 
   // Export convergence duration counter
-  tData_.addStatValue(
-      "fib.convergence_time_ms", totalDuration.count(), fbzmq::AVG);
+  fb303::fbData->addStatValue(
+      "fib.convergence_time_ms", totalDuration.count(), fb303::AVG);
 
   // Log via zmq monitor
   fbzmq::LogSample sample{};

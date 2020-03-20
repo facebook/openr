@@ -10,7 +10,6 @@
 #include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/io/async/EventBase.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
@@ -169,8 +168,8 @@ class Fib final : public OpenrEventBase {
    */
   void keepAliveCheck();
 
-  // Submit internal state counters to monitor
-  void submitCounters();
+  // set flat counter/stats
+  void updateGlobalCounters();
 
   // log perf events
   void logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents);
@@ -251,12 +250,6 @@ class Fib final : public OpenrEventBase {
 
   // periodically send alive msg to switch agent
   std::unique_ptr<fbzmq::ZmqTimeout> keepAliveTimer_{nullptr};
-
-  // Timer for submitting to monitor periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
-
-  // DS to keep track of stats
-  fbzmq::ThreadData tData_;
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
