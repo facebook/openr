@@ -291,7 +291,8 @@ main(int argc, char** argv) {
         context, PlatformPublisherUrl{FLAGS_platform_pub_url});
 
     // Create Netlink Protocol object in a new thread
-    nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+    // ATTN: intentionally set evl capacity to be 1e5 instead of default 1e2
+    nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>(1e5);
     nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
         nlProtocolSocketEventLoop.get());
     auto nlProtocolSocketThread = std::thread([&]() {
@@ -304,7 +305,8 @@ main(int argc, char** argv) {
     nlProtocolSocketEventLoop->waitUntilRunning();
     allThreads.emplace_back(std::move(nlProtocolSocketThread));
 
-    nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>();
+    // ATTN: intentionally set evl capacity to be 1e5 instead of default 1e2
+    nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>(1e5);
     nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
         nlEventLoop.get(), eventPublisher.get(), std::move(nlProtocolSocket));
     // Subscribe selected network events

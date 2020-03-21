@@ -126,6 +126,13 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
     : evl_(evl) {
   nlMessageTimer_ = fbzmq::ZmqTimeout::make(evl_, [this]() noexcept {
     LOG(INFO) << "Did not receive last ack " << lastSeqNo_;
+
+    LOG(INFO) << "Closing netlink socket and recreate it";
+    evl_->removeSocketFd(nlSock_);
+    close(nlSock_);
+    init();
+
+    LOG(INFO) << "Resend netlink msg";
     sendNetlinkMessage();
   });
 }
