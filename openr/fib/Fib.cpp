@@ -46,7 +46,7 @@ Fib::Fib(
       kvStore_(kvStore),
       expBackoff_(
           std::chrono::milliseconds(8), std::chrono::milliseconds(4096)) {
-  syncRoutesTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
+  syncRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     if (routeState_.hasRoutesFromDecision) {
       if (syncRouteDb()) {
         hasSyncedFib_ = true;
@@ -74,7 +74,7 @@ Fib::Fib(
     syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
   }
 
-  keepAliveTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
+  keepAliveTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     // Make thrift calls to do real programming
     try {
       keepAliveCheck();
@@ -85,12 +85,13 @@ Fib::Fib(
       LOG(ERROR) << "Failed to make thrift call to Switch Agent. Error: "
                  << folly::exceptionStr(e);
     }
+    // schedule periodically
+    keepAliveTimer_->scheduleTimeout(Constants::kKeepAliveCheckInterval);
   });
 
   // Only schedule health checker in non dry run mode
   if (not dryrun_) {
-    keepAliveTimer_->scheduleTimeout(
-        Constants::kKeepAliveCheckInterval, true /* schedule periodically */);
+    keepAliveTimer_->scheduleTimeout(Constants::kKeepAliveCheckInterval);
   }
 
   // Fiber to process route updates from Decision

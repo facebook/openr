@@ -8,9 +8,9 @@
 #pragma once
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -245,11 +245,11 @@ class Fib final : public OpenrEventBase {
 
   // Callback timer to sync routes to switch agent and scheduled on route-sync
   // failure. ExponentialBackoff timer to ease up things if they go wrong
-  std::unique_ptr<fbzmq::ZmqTimeout> syncRoutesTimer_{nullptr};
+  std::unique_ptr<folly::AsyncTimeout> syncRoutesTimer_{nullptr};
   ExponentialBackoff<std::chrono::milliseconds> expBackoff_;
 
   // periodically send alive msg to switch agent
-  std::unique_ptr<fbzmq::ZmqTimeout> keepAliveTimer_{nullptr};
+  std::unique_ptr<folly::AsyncTimeout> keepAliveTimer_{nullptr};
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
