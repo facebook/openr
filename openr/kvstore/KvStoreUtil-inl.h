@@ -17,7 +17,7 @@ ThriftType
 parseThriftValue(thrift::Value const& value) {
   apache::thrift::CompactSerializer serializer;
 
-  DCHECK(value.value.hasValue());
+  DCHECK(value.value.has_value());
 
   auto buf =
       folly::IOBuf::wrapBufferAsValue(value.value->data(), value.value->size());
