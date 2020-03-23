@@ -85,6 +85,7 @@ const auto nb3 = createSparkNeighbor(
 
 const uint64_t kTimestamp{1000000};
 const uint64_t kNodeLabel{0};
+const std::string kConfigKey = "link-monitor-config";
 
 const auto adj_2_1 = createThriftAdjacency(
     "node-2",
@@ -214,20 +215,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     configStore->waitUntilRunning();
 
     // spin up a kvstore
-    kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        context,
-        "test_store1",
-        std::chrono::seconds(1) /* db sync interval */,
-        std::chrono::seconds(600) /* counter submit interval */,
-        std::unordered_map<std::string, thrift::PeerSpec>{},
-        std::nullopt,
-        std::nullopt,
-        Constants::kTtlDecrement,
-        false,
-        false,
-        areas);
-    kvStoreWrapper->run();
-    LOG(INFO) << "The test KV store is running";
+    createKvStore(areas);
 
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
@@ -262,43 +250,14 @@ class LinkMonitorTestFixture : public ::testing::Test {
     redistRegexList->Compile();
 
     // start a link monitor
-    linkMonitor = std::make_unique<LinkMonitor>(
-        context,
-        "node-1",
-        port, /* thrift service port */
-        kvStoreWrapper->getKvStore(),
+    createLinkMonitor(
         std::move(includeRegexList),
         std::move(excludeRegexList),
-        std::move(redistRegexList), // redistribute interface name
-        std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
-        false /* useRttMetric */,
-        false /* enable perf measurement */,
-        true /* enable v4 */,
-        true /* enable segment routing */,
-        false /* prefix type mpls */,
-        false /* prefix fwd algo KSP2_ED_ECMP */,
-        AdjacencyDbMarker{"adj:"},
-        interfaceUpdatesQueue,
-        neighborUpdatesQueue.getReader(),
-        MonitorSubmitUrl{"inproc://monitor-rep"},
-        configStore.get(),
-        false,
-        prefixUpdatesQueue,
-        PlatformPublisherUrl{"inproc://platform-pub-url"},
-        std::chrono::seconds(1),
-        // link flap backoffs, set low to keep UT runtime low
+        std::move(redistRegexList),
         flapInitalBackoff,
         flapMaxBackoff,
-        Constants::kKvStoreDbTtl,
+        true,
         areas);
-
-    linkMonitorThread = std::make_unique<std::thread>([this]() {
-      folly::setThreadName("LinkMonitor");
-      LOG(INFO) << "LinkMonitor thread starting";
-      linkMonitor->run();
-      LOG(INFO) << "LinkMonitor thread finishing";
-    });
-    linkMonitor->waitUntilRunning();
   }
 
   void
@@ -314,7 +273,6 @@ class LinkMonitorTestFixture : public ::testing::Test {
     linkMonitor->stop();
     linkMonitorThread->join();
     linkMonitor.reset();
-    LOG(INFO) << "LinkMonitor thread got stopped";
 
     LOG(INFO) << "Stopping prefix manager thread";
     prefixManager->stop();
@@ -343,6 +301,74 @@ class LinkMonitorTestFixture : public ::testing::Test {
     systemThriftThread.stop();
     mockNlHandler.reset();
     LOG(INFO) << "Mocked thrift handlers got stopped";
+  }
+
+  void
+  createKvStore(
+      std::unordered_set<std::string> areas = {
+          openr::thrift::KvStore_constants::kDefaultArea()}) {
+    kvStoreWrapper = std::make_unique<KvStoreWrapper>(
+        context,
+        "test_store1",
+        std::chrono::seconds(1) /* db sync interval */,
+        std::chrono::seconds(600) /* counter submit interval */,
+        std::unordered_map<std::string, thrift::PeerSpec>{},
+        std::nullopt,
+        std::nullopt,
+        Constants::kTtlDecrement,
+        false,
+        false,
+        areas);
+    kvStoreWrapper->run();
+  }
+
+  void
+  createLinkMonitor(
+      std::unique_ptr<re2::RE2::Set> includeRegexList,
+      std::unique_ptr<re2::RE2::Set> excludeRegexList,
+      std::unique_ptr<re2::RE2::Set> redistRegexList,
+      std::chrono::milliseconds flapInitalBackoff,
+      std::chrono::milliseconds flapMaxBackoff,
+      bool enableSegmentRouting = true,
+      std::unordered_set<std::string> areas = {
+          openr::thrift::KvStore_constants::kDefaultArea()}) {
+    linkMonitor = std::make_unique<LinkMonitor>(
+        context,
+        "node-1",
+        port, /* thrift service port */
+        kvStoreWrapper->getKvStore(),
+        std::move(includeRegexList),
+        std::move(excludeRegexList),
+        std::move(redistRegexList), // redistribute interface name
+        std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
+        false /* useRttMetric */,
+        false /* enable perf measurement */,
+        true /* enable v4 */,
+        enableSegmentRouting,
+        false /* prefix type mpls */,
+        false /* prefix fwd algo KSP2_ED_ECMP */,
+        AdjacencyDbMarker{"adj:"},
+        interfaceUpdatesQueue,
+        neighborUpdatesQueue.getReader(),
+        MonitorSubmitUrl{"inproc://monitor-rep"},
+        configStore.get(),
+        false,
+        prefixUpdatesQueue,
+        PlatformPublisherUrl{"inproc://platform-pub-url"},
+        std::chrono::seconds(1),
+        // link flap backoffs, set low to keep UT runtime low
+        flapInitalBackoff,
+        flapMaxBackoff,
+        Constants::kKvStoreDbTtl,
+        areas);
+
+    linkMonitorThread = std::make_unique<std::thread>([this]() {
+      folly::setThreadName("LinkMonitor");
+      LOG(INFO) << "LinkMonitor thread starting";
+      linkMonitor->run();
+      LOG(INFO) << "LinkMonitor thread finishing";
+    });
+    linkMonitor->waitUntilRunning();
   }
 
   // Receive and process interface updates from the update queue
@@ -442,6 +468,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
           openr::thrift::KvStore_constants::kDefaultArea()) {
     CHECK(!expectedAdjDbs.empty());
 
+    LOG(INFO) << "[EXPECTED ADJ]";
     printAdjDb(expectedAdjDbs.front());
 
     while (true) {
@@ -459,14 +486,15 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
       auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
           value->value.value(), serializer);
-      printAdjDb(adjDb);
-
       // we can not know what the nodeLabel will be
       adjDb.nodeLabel = kNodeLabel;
       // nor the timestamp, so we override with our predefinded const values
       for (auto& adj : adjDb.adjacencies) {
         adj.timestamp = kTimestamp;
       }
+
+      LOG(INFO) << "[RECEIVED ADJ]";
+      printAdjDb(adjDb);
       auto adjDbstr = fbzmq::util::writeThriftObjStr(adjDb, serializer);
       auto expectedAdjDbstr =
           fbzmq::util::writeThriftObjStr(expectedAdjDbs.front(), serializer);
@@ -567,24 +595,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       // create an interface
       mockNlHandler->sendLinkEvent("iface_2_1", 100, true);
       recvAndReplyIfUpdate();
-      thrift::InterfaceDatabase intfDb(
-          FRAGILE,
-          "node-1",
-          {
-              {
-                  "iface_2_1",
-                  thrift::InterfaceInfo(
-                      FRAGILE,
-                      true, // isUp
-                      100, // ifIndex
-                      {}, // v4Addrs: TO BE DEPRECATED SOON
-                      {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
-                      {} // networks
-                      ),
-              },
-          },
-          thrift::PerfEvents());
-      intfDb.perfEvents.reset();
     }
 
     {
@@ -830,16 +840,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
   }
 
-  // mock "restarting" link monitor with existing config store
-
-  std::string regexErr;
-  auto includeRegexList =
-      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-  includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
-  includeRegexList->Compile();
-  std::unique_ptr<re2::RE2::Set> excludeRegexList;
-  std::unique_ptr<re2::RE2::Set> redistRegexList;
-
   // stop linkMonitor
   LOG(INFO) << "Mock restarting link monitor!";
   neighborUpdatesQueue.close();
@@ -852,57 +852,25 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue =
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
-  // Recreate KvStore as previous kvStoreUpdatesQueue is closed
-  kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-      context,
-      "test_store1",
-      std::chrono::seconds(1) /* db sync interval */,
-      std::chrono::seconds(600) /* counter submit interval */,
-      std::unordered_map<std::string, thrift::PeerSpec>{},
-      std::nullopt,
-      std::nullopt,
-      Constants::kTtlDecrement,
-      false,
-      false);
-  kvStoreWrapper->run();
-  LOG(INFO) << "A new test KV store is running";
 
-  linkMonitor = std::make_unique<LinkMonitor>(
-      context,
-      "node-1",
-      port, // platform pub port
-      kvStoreWrapper->getKvStore(),
+  // Recreate KvStore as previous kvStoreUpdatesQueue is closed
+  createKvStore();
+
+  // mock "restarting" link monitor with existing config store
+  std::string regexErr;
+  auto includeRegexList =
+      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+  includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
+  includeRegexList->Compile();
+  std::unique_ptr<re2::RE2::Set> excludeRegexList;
+  std::unique_ptr<re2::RE2::Set> redistRegexList;
+
+  createLinkMonitor(
       std::move(includeRegexList),
       std::move(excludeRegexList),
-      // redistribute interface names
       std::move(redistRegexList),
-      std::vector<thrift::IpPrefix>{}, // static prefixes
-      false /* useRttMetric */,
-      false /* enable perf measurement */,
-      false /* enable v4 */,
-      true /* enable segment routing */,
-      false /* prefix type MPLS */,
-      false /* prefix fwd algo KSP2_ED_ECMP */,
-      AdjacencyDbMarker{"adj:"},
-      interfaceUpdatesQueue,
-      neighborUpdatesQueue.getReader(),
-      MonitorSubmitUrl{"inproc://monitor-rep2"},
-      configStore.get(),
-      false,
-      prefixUpdatesQueue,
-      PlatformPublisherUrl{"inproc://platform-pub-url2"},
-      std::chrono::seconds(1),
-      // link flap backoffs, set low to keep UT runtime low
       std::chrono::milliseconds(1),
-      std::chrono::milliseconds(8),
-      Constants::kKvStoreDbTtl);
-
-  linkMonitorThread = std::make_unique<std::thread>([this]() {
-    LOG(INFO) << "LinkMonitor thread starting";
-    linkMonitor->run();
-    LOG(INFO) << "LinkMonitor thread finishing";
-  });
-  linkMonitor->waitUntilRunning();
+      std::chrono::milliseconds(8));
 
   // 12. neighbor up
   {
@@ -928,6 +896,57 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     neighborUpdatesQueue.push(std::move(neighborEvent));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1");
+  }
+}
+
+// Test linkMonitor restarts to honor `enableSegmentRouting` flag
+TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
+  SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
+  {
+    // Intertionally save nodeLabel to be non-zero value
+    thrift::LinkMonitorConfig config;
+    config.nodeLabel = 1 + rand(); // non-zero random number
+    auto resp = configStore->storeThriftObj(kConfigKey, config).get();
+    EXPECT_EQ(folly::Unit(), resp);
+  }
+
+  {
+    // stop linkMonitor
+    LOG(INFO) << "Mock restarting link monitor!";
+    neighborUpdatesQueue.close();
+    kvStoreWrapper->closeQueue();
+    linkMonitor->stop();
+    linkMonitorThread->join();
+    linkMonitor.reset();
+
+    // Create new neighbor update queue. Previous one is closed
+    neighborUpdatesQueue.open();
+    kvStoreWrapper->openQueue();
+
+    // mock "restarting" link monitor with existing config store
+    std::string regexErr;
+    auto includeRegexList =
+        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+    includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
+    includeRegexList->Compile();
+    std::unique_ptr<re2::RE2::Set> excludeRegexList;
+    std::unique_ptr<re2::RE2::Set> redistRegexList;
+
+    // ATTN: intentionally set `enableSegmentRouting = false` to test the
+    //       config_ load scenario.
+    createLinkMonitor(
+        std::move(includeRegexList),
+        std::move(excludeRegexList),
+        std::move(redistRegexList),
+        std::chrono::milliseconds(1),
+        std::chrono::milliseconds(8),
+        false);
+
+    // nodeLabel is non-zero value read from config_, override to 0 to
+    // honor flag.
+    auto thriftAdjDb = linkMonitor->getLinkMonitorAdjacencies().get();
+    EXPECT_TRUE(thriftAdjDb);
+    ASSERT_EQ(0, thriftAdjDb->nodeLabel);
   }
 }
 

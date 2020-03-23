@@ -594,7 +594,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   auto adjDb = thrift::AdjacencyDatabase();
   adjDb.thisNodeName = nodeId_;
   adjDb.isOverloaded = config_.isOverloaded;
-  adjDb.nodeLabel = config_.nodeLabel;
+  adjDb.nodeLabel = enableSegmentRouting_ ? config_.nodeLabel : 0;
   adjDb.area = area;
   for (const auto& adjKv : adjacencies_) {
     // 'second.second' is the adj object for this peer
@@ -1212,7 +1212,7 @@ LinkMonitor::getLinkMonitorAdjacencies() {
     thrift::AdjacencyDatabase adjDb;
     adjDb.thisNodeName = nodeId_;
     adjDb.isOverloaded = config_.isOverloaded;
-    adjDb.nodeLabel = config_.nodeLabel;
+    adjDb.nodeLabel = enableSegmentRouting_ ? config_.nodeLabel : 0;
 
     // fill adjacency details
     for (const auto& adjKv : adjacencies_) {

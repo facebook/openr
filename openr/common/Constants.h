@@ -199,8 +199,6 @@ class Constants {
 
   static constexpr folly::StringPiece kGlobalCmdLocalIdTemplate{
       "{}::{}::TCP::CMD::LOCAL"};
-  // ID template for the global SUB socket
-  static constexpr folly::StringPiece kGlobalSubIdTemplate{"{}::TCP::SUB"};
 
   // ID for Spark report server
   static constexpr folly::StringPiece kSparkReportServerId{
