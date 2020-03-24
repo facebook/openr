@@ -714,7 +714,13 @@ Fib::createFibClient(
 void
 Fib::updateGlobalCounters() {
   // Set some flat counters
-  fb303::fbData->setCounter("fib.num_routes", routeState_.unicastRoutes.size());
+  fb303::fbData->setCounter(
+      "fib.num_routes",
+      routeState_.unicastRoutes.size() + routeState_.mplsRoutes.size());
+  fb303::fbData->setCounter(
+      "fib.num_unicast_routes", routeState_.unicastRoutes.size());
+  fb303::fbData->setCounter(
+      "fib.num_mpls_routes", routeState_.mplsRoutes.size());
   fb303::fbData->setCounter(
       "fib.num_dirty_prefixes", routeState_.dirtyPrefixes.size());
   fb303::fbData->setCounter(
