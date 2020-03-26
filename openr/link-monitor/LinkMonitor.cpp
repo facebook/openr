@@ -29,7 +29,6 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/spark/Spark.h>
 
-using apache::thrift::FRAGILE;
 namespace fb303 = facebook::fb303;
 
 namespace {

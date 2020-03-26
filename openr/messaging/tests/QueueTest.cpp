@@ -15,7 +15,6 @@
 
 #include <openr/messaging/Queue.h>
 
-using namespace ::testing;
 using namespace openr::messaging;
 
 TEST(RWQueueTest, SizeAndReaders) {

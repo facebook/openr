@@ -26,7 +26,6 @@
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
 using namespace std;
-using namespace std::chrono_literals;
 using namespace openr;
 
 namespace {

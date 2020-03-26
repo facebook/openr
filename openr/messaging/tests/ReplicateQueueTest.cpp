@@ -14,7 +14,6 @@
 
 #include <openr/messaging/ReplicateQueue.h>
 
-using namespace ::testing;
 using namespace openr::messaging;
 
 TEST(ReplicateQueueTest, Test) {

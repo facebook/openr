@@ -43,7 +43,6 @@
     name(counters, iters, ##__VA_ARGS__);                              \
   }
 
-using namespace folly;
 namespace {
 // Virtual interface
 const std::string kVethNameY("vethTestY");

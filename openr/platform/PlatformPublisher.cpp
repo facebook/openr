@@ -20,7 +20,6 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 
-using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
 
 namespace openr {

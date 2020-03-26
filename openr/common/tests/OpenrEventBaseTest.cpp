@@ -16,7 +16,6 @@
 
 #include <openr/common/OpenrEventBase.h>
 
-using namespace ::testing;
 using namespace openr;
 
 class OpenrEventBaseTestFixture : public ::testing::Test {

@@ -44,7 +44,6 @@
     name(counters, iters, ##__VA_ARGS__);                              \
   }
 
-using namespace folly;
 namespace {
 // We have 24 SSWs per plane as of now and moving towards 36 per plane.
 const int kNumOfSswsPerPlane = 36;
