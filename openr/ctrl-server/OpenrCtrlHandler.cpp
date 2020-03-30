@@ -552,28 +552,6 @@ OpenrCtrlHandler::semifuture_getSpanningTreeInfos(
   return kvStore_->getSpanningTreeInfos(std::move(*area));
 }
 
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::semifuture_addUpdateKvStorePeers(
-    std::unique_ptr<thrift::PeersMap> peers,
-    std::unique_ptr<std::string> area) {
-  thrift::PeerAddParams params;
-  params.peers = std::move(*peers);
-
-  CHECK(kvStore_);
-  return kvStore_->addUpdateKvStorePeers(std::move(params), std::move(*area));
-}
-
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::semifuture_deleteKvStorePeers(
-    std::unique_ptr<std::vector<std::string>> peerNames,
-    std::unique_ptr<std::string> area) {
-  thrift::PeerDelParams params;
-  params.peerNames = std::move(*peerNames);
-
-  CHECK(kvStore_);
-  return kvStore_->deleteKvStorePeers(std::move(params), std::move(*area));
-}
-
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::semifuture_getKvStorePeers() {
   CHECK(kvStore_);

@@ -55,13 +55,7 @@ enum Command {
   DUAL = 10, // DUAL message
   FLOOD_TOPO_SET = 11, // set or unset flooding-topo child
   FLOOD_TOPO_GET = 12; // get flood-topology information
-
   AREAS_CONFIG_GET = 13; // get AreasConfig from kvstore
-
-  // operations on the store peers
-  PEER_ADD  = 4,
-  PEER_DEL  = 5,
-  PEER_DUMP = 6,
 }
 
 //
@@ -231,11 +225,4 @@ struct Publication {
 
   // area to which this publication belogs
   7: optional string area;
-}
-
-// Dump of the current peers: sent in
-// response to any PEER_ command, so the
-// caller can see the result of the request
-struct PeerCmdReply {
-  1: PeersMap peers
 }

@@ -179,14 +179,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::SptInfos>>
   semifuture_getSpanningTreeInfos(std::unique_ptr<std::string> area) override;
 
-  folly::SemiFuture<folly::Unit> semifuture_addUpdateKvStorePeers(
-      std::unique_ptr<thrift::PeersMap> peers,
-      std::unique_ptr<std::string> area) override;
-
-  folly::SemiFuture<folly::Unit> semifuture_deleteKvStorePeers(
-      std::unique_ptr<std::vector<std::string>> peerNames,
-      std::unique_ptr<std::string> area) override;
-
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeers() override;
 

@@ -24,11 +24,7 @@ listed below
 - `KEY_SET` => Set/Update key-value in a KvStore
 - `KEY_GET` => Get existing key-value in a KvStore
 - `KEY_DUMP` => Get content of local KvStore. Optionally takes a filter argument
-- `PEER_ADD` => Add a new peer to a KvStore
-- `PEER_DEL` => Del existing peer
-- `PEER_DUMP` => Get list of all current peers KvStore is connected to
 
-#### PUB/SUB Channel
 All incremental changes in local KvStore are published as `thrift::Publication`
 messages containing changes. All received incremental changes are processed and
 applied locally and conditionally forwarded.
@@ -37,7 +33,7 @@ applied locally and conditionally forwarded.
 ---
 
 #### Incremental Updates - Flooding
-Whenever an update is received (either via Cmd socket) or (pub socket) it is
+Whenever an update is received via glocalCmdSocket or thrift port, it is
 applied locally. If the update causes any change in local KvStore then it is
 forwarded to all neighbors. An update is ignored when it is echoed back which
 limits the flooding.
@@ -111,13 +107,13 @@ handle an expired key (for e.g. Decision removes adj/prefix DB of nodes). These
 notifications are ignored by other KvStores as they will be generating the very
 same notifications by themselves.
 
-### KvStoreClient
+### KvStoreClientInternal
 ---
 
 KvStore is core and a heavily used module in OpenR. Interacting with KvStore
 involves sending and receiving proper thrift objects on sockets. This
-was leading to a lot of complexity in the code. `KvStoreClient` is added to
-address this concern. It provides APIs to interact with KvStore and supports all
+was leading to a lot of complexity in the code. `KvStoreClientInternal` is added
+to address this concern. It provides APIs to interact with KvStore and supports all
 the above APIs in really nice semantics so that writing code becomes easy and
 fun.
 

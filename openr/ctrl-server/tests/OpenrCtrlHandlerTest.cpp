@@ -570,10 +570,12 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   };
 
   {
-    openrCtrlThriftClient_->sync_addUpdateKvStorePeers(
-        peers, thrift::KvStore_constants::kDefaultArea());
-
-    openrCtrlThriftClient_->sync_addUpdateKvStorePeers(peersPod, "pod");
+    for (auto& peer : peers) {
+      kvStoreWrapper->addPeer(peer.first, peer.second);
+    }
+    for (auto& peerPod : peersPod) {
+      kvStoreWrapper->addPeer(peerPod.first, peerPod.second, "pod");
+    }
 
     thrift::PeersMap ret;
     openrCtrlThriftClient_->sync_getKvStorePeersArea(
@@ -586,9 +588,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 
   {
-    std::vector<std::string> peersToDel{"peer2"};
-    openrCtrlThriftClient_->sync_deleteKvStorePeers(
-        peersToDel, thrift::KvStore_constants::kDefaultArea());
+    kvStoreWrapper->delPeer("peer2");
 
     thrift::PeersMap ret;
     openrCtrlThriftClient_->sync_getKvStorePeersArea(
@@ -608,8 +608,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 
   {
-    std::vector<std::string> peersToDel{"peer21"};
-    openrCtrlThriftClient_->sync_deleteKvStorePeers(peersToDel, "pod");
+    kvStoreWrapper->delPeer("peer21", "pod");
 
     thrift::PeersMap ret;
     openrCtrlThriftClient_->sync_getKvStorePeersArea(ret, "pod");

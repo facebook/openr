@@ -640,8 +640,8 @@ KvStore::getKvStorePeers(std::string area) {
     } else {
       tData_.addStatValue("kvstore.cmd_peer_dump", 1, fbzmq::COUNT);
       auto& kvStoreDb = kvStoreDb_.at(area);
-      auto reply = kvStoreDb.dumpPeers();
-      p.setValue(std::make_unique<thrift::PeersMap>(std::move(reply.peers)));
+      auto peers = kvStoreDb.dumpPeers();
+      p.setValue(std::make_unique<thrift::PeersMap>(std::move(peers)));
     }
   });
   return sf;
@@ -1272,13 +1272,13 @@ KvStoreDb::requestFullSyncFromPeers() {
 }
 
 // dump all peers we are subscribed to
-thrift::PeerCmdReply
+thrift::PeersMap
 KvStoreDb::dumpPeers() {
-  thrift::PeerCmdReply reply;
+  thrift::PeersMap peers;
   for (auto const& kv : peers_) {
-    reply.peers.emplace(kv.first, kv.second.first);
+    peers.emplace(kv.first, kv.second.first);
   }
-  return reply;
+  return peers;
 }
 
 // update TTL with remainng time to expire, TTL version remains
@@ -1438,41 +1438,6 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
     auto hashDump = dumpHashWithFilters(kvFilters);
     updatePublicationTtl(hashDump);
     return fbzmq::Message::fromThriftObj(hashDump, serializer_);
-  }
-  case thrift::Command::PEER_ADD: {
-    VLOG(2) << "Peer addition requested";
-    tData_.addStatValue("kvstore.cmd_peer_add", 1, fbzmq::COUNT);
-
-    if (not thriftReq.peerAddParams.has_value()) {
-      LOG(ERROR) << "received none peerAddParams";
-      return folly::makeUnexpected(fbzmq::Error());
-    }
-    if (thriftReq.peerAddParams.value().peers.empty()) {
-      LOG(ERROR) << "Malformed peer-add request, ignoring";
-      return folly::makeUnexpected(fbzmq::Error());
-    }
-    addPeers(thriftReq.peerAddParams.value().peers);
-    return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
-  }
-  case thrift::Command::PEER_DEL: {
-    VLOG(2) << "Peer deletion requested";
-    tData_.addStatValue("kvstore.cmd_per_del", 1, fbzmq::COUNT);
-
-    if (not thriftReq.peerDelParams.has_value()) {
-      LOG(ERROR) << "received none peerDelParams";
-      return folly::makeUnexpected(fbzmq::Error());
-    }
-    if (thriftReq.peerDelParams.value().peerNames.empty()) {
-      LOG(ERROR) << "Malformed peer-del request, ignoring";
-      return folly::makeUnexpected(fbzmq::Error());
-    }
-    delPeers(thriftReq.peerDelParams.value().peerNames);
-    return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
-  }
-  case thrift::Command::PEER_DUMP: {
-    VLOG(2) << "Peer dump requested";
-    tData_.addStatValue("kvstore.cmd_peer_dump", 1, fbzmq::COUNT);
-    return fbzmq::Message::fromThriftObj(dumpPeers(), serializer_);
   }
   case thrift::Command::DUAL: {
     VLOG(2) << "DUAL messages received";

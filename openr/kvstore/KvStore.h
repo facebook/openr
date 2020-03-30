@@ -210,7 +210,7 @@ class KvStoreDb : public DualNode {
   void delPeers(std::vector<std::string> const& peers);
 
   // dump all peers we are subscribed to
-  thrift::PeerCmdReply dumpPeers();
+  thrift::PeersMap dumpPeers();
 
   // process spanning-tree-set command to set/unset a child for a given root
   void processFloodTopoSet(

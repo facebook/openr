@@ -246,23 +246,6 @@ service OpenrCtrl extends fb303_core.BaseService {
   ) throws (1: OpenrError error);
 
   /**
-   * Add/Update KvStore peer - usually not to be used by external peers unless
-   * you know what you're doing.
-   */
-  void addUpdateKvStorePeers(
-    1: KvStore.PeersMap peers,
-    2: string area = KvStore.kDefaultArea
-  ) throws (1: OpenrError error)
-
-  /**
-   * Delete KvStore peers
-   */
-  void deleteKvStorePeers(
-    1: list<string> peerNames,
-    2: string area = KvStore.kDefaultArea
-  ) throws (1: OpenrError error)
-
-  /**
    * Get KvStore peers
    */
   KvStore.PeersMap getKvStorePeers() throws (1: OpenrError error)
