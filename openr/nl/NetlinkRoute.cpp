@@ -5,8 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/nl/NetlinkRoute.h"
-#include "openr/nl/NetlinkMessage.h"
+#include <openr/nl/NetlinkRoute.h>
 
 namespace openr::fbnl {
 

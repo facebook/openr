@@ -279,6 +279,7 @@ add_library(openrlib
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
   openr/nl/NetlinkMessage.cpp
+  openr/nl/NetlinkProtocolSocket.cpp
   openr/nl/NetlinkRoute.cpp
   openr/nl/NetlinkSocket.cpp
   openr/nl/NetlinkTypes.cpp
@@ -675,9 +676,9 @@ if(BUILD_TESTS)
 
   if(ADD_ROOT_TESTS)
     # these tests must be run by root user
-    add_openr_test(NetlinkMessageTest netlink_message_test
+    add_openr_test(NetlinkProtocolSocketTest netlink_message_test
       SOURCES
-        openr/nl/tests/NetlinkMessageTest.cpp
+        openr/nl/tests/NetlinkProtocolSocketTest.cpp
       DESTINATION sbin/tests/openr/nl
     )
 

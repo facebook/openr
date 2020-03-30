@@ -11,8 +11,7 @@
 
 #include <openr/nl/NetlinkTypes.h>
 
-namespace openr {
-namespace fbnl {
+namespace openr::fbnl {
 
 const std::set<int> kNeighborReachableStates{
     NUD_REACHABLE, NUD_STALE, NUD_DELAY, NUD_PERMANENT, NUD_PROBE, NUD_NOARP};
@@ -1140,5 +1139,4 @@ operator==(const Link& lhs, const Link& rhs) {
       lhs.getIfIndex() == rhs.getIfIndex() && lhs.getFlags() == rhs.getFlags());
 }
 
-} // namespace fbnl
-} // namespace openr
+} // namespace openr::fbnl

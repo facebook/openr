@@ -25,9 +25,7 @@
 #include <gtest/gtest.h>
 
 #include <openr/if/gen-cpp2/Network_types.h>
-#include <openr/nl/NetlinkMessage.h>
-#include <openr/nl/NetlinkRoute.h>
-#include <openr/nl/NetlinkTypes.h>
+#include <openr/nl/NetlinkProtocolSocket.h>
 
 extern "C" {
 #include <linux/rtnetlink.h>

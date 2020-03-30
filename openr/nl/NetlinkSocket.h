@@ -12,8 +12,7 @@
 #include <folly/IPAddress.h>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
-#include <openr/nl/NetlinkMessage.h>
-#include <openr/nl/NetlinkTypes.h>
+#include <openr/nl/NetlinkProtocolSocket.h>
 
 namespace openr::fbnl {
 
