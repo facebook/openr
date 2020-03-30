@@ -245,7 +245,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
 
     auto neighborKey = std::make_pair(ifName, neighborEntry.getDestination());
     if (neighborEntry.isReachable()) {
-      neighbors.emplace(neighborKey, neighborEntry);
+      auto it = neighbors.insert({neighborKey, neighborEntry});
+      it.first->second = neighborEntry; // Override existing if any
       neighborAddEventCount++;
     } else {
       neighbors.erase(neighborKey);
@@ -448,30 +449,12 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
   auto neighborKey1 = std::make_pair(kVethNameX, kNextHopIp1);
   auto neighborKey2 = std::make_pair(kVethNameY, kNextHopIp2);
 
-  // A timeout to stop the UT in case we never received expected events
-  // UT will mostly likely fail as our checks at the end will fail
-  zmqLoop.scheduleTimeout(kEventLoopTimeout, [&]() noexcept {
-    VLOG(3) << "Timeout waiting for events... ";
-    zmqLoop.stop();
-  });
-
   // We expect link and neighbor events to be delivered
   // 4 neighbor event (create and delete)
   // This func helps stop zmq loop when expected events are processed
   std::shared_ptr<MyNetlinkHandler> myHandler =
       std::make_shared<MyNetlinkHandler>(
-          [&]() noexcept {
-            VLOG(3) << "Received event from netlink";
-            if (zmqLoop.isRunning() &&
-                myHandler->neighbors.count(neighborKey1) == 0 &&
-                myHandler->neighbors.count(neighborKey2) == 0 &&
-                myHandler->neighborAddEventCount >= 2 &&
-                myHandler->neighborDelEventCount >= 2) {
-              VLOG(3) << "Expected events received. Stopping zmq event loop";
-              zmqLoop.stop();
-            }
-          },
-          "vethTest" /* Filter on test links only */);
+          [&]() noexcept {}, "vethTest" /* Filter on test links only */);
 
   NetlinkSocket netlinkSocket(
       &zmqLoop, myHandler.get(), std::move(nlProtocolSocket));
@@ -548,8 +531,23 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
       myHandler->neighbors.at(neighborKey2).getLinkAddress().value());
 
   // Now delete both the neighbor entries from the system
+  folly::Baton neighborBaton;
+  int expectedNeighbors{0};
+  myHandler->replaceEventFunc([&]() {
+    if (expectedNeighbors == myHandler->neighbors.size()) {
+      neighborBaton.post();
+    }
+  });
+
+  expectedNeighbors = 1;
   deleteTestNeighborEntry(kVethNameX, kNextHopIp1, kLinkAddr1);
+  neighborBaton.wait();
+  neighborBaton.reset();
+
+  expectedNeighbors = 0;
   deleteTestNeighborEntry(kVethNameY, kNextHopIp2, kLinkAddr2);
+  neighborBaton.wait();
+  neighborBaton.reset();
 
   // Now verify our events
   // 4 neighbor events
@@ -588,6 +586,7 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighborMultipleEventTest) {
   EXPECT_EQ(0, neighbors.count(neighborKey1));
   EXPECT_EQ(0, neighbors.count(neighborKey2));
 
+  zmqLoop.stop();
   eventThread.join();
 }
 
