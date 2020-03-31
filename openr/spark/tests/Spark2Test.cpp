@@ -125,8 +125,6 @@ class Spark2Fixture : public testing::Test {
         fastInitKeepAliveTime,
         true,
         true,
-        MonitorSubmitUrl{
-            folly::sformat("{}-{}", kSparkCounterCmdUrl, spark2Id)},
         version,
         context,
         mockIoProvider,

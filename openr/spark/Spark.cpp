@@ -17,6 +17,7 @@
 #include <functional>
 #include <vector>
 
+#include <fb303/ServiceData.h>
 #include <fbzmq/service/if/gen-cpp2/Monitor_types.h>
 #include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -36,6 +37,8 @@
 #include <openr/common/Util.h>
 
 #include "IoProvider.h"
+
+namespace fb303 = facebook::fb303;
 
 namespace {
 //
@@ -284,7 +287,6 @@ Spark::Spark(
     bool enableSubnetValidation,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue,
-    MonitorSubmitUrl const& monitorSubmitUrl,
     KvStoreCmdPort kvStoreCmdPort,
     OpenrCtrlThriftPort openrCtrlThriftPort,
     std::pair<uint32_t, uint32_t> version,
@@ -353,19 +355,17 @@ Spark::Spark(
   // Initialize UDP socket for neighbor discovery
   prepare(maybeIpTos);
 
-  zmqMonitorClient_ =
-      std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
-
   // Initialize some stat keys
-  tData_.addStatExportType(
-      "spark.invalid_keepalive.different_domain", fbzmq::SUM);
-  tData_.addStatExportType(
-      "spark.invalid_keepalive.invalid_version", fbzmq::SUM);
-  tData_.addStatExportType(
-      "spark.invalid_keepalive.missing_v4_addr", fbzmq::SUM);
-  tData_.addStatExportType(
-      "spark.invalid_keepalive.different_subnet", fbzmq::SUM);
-  tData_.addStatExportType("spark.invalid_keepalive.looped_packet", fbzmq::SUM);
+  fb303::fbData->addStatExportType(
+      "spark.invalid_keepalive.different_domain", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "spark.invalid_keepalive.invalid_version", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "spark.invalid_keepalive.missing_v4_addr", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "spark.invalid_keepalive.different_subnet", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "spark.invalid_keepalive.looped_packet", fb303::SUM);
 }
 
 // static util function to transform state into str
@@ -526,12 +526,6 @@ Spark::prepare(std::optional<int> maybeIpTos) noexcept {
 
   LOG(INFO) << "Spark thread attaching socket/events callbacks...";
 
-  // Schedule periodic timer for monitor submission
-  const bool isPeriodic = true;
-  monitorTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { submitCounters(); });
-  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
-
   // Listen for incoming messages on multicast FD
   addSocketFd(mcastFd_, ZMQ_POLLIN, [this](int) noexcept {
     try {
@@ -541,6 +535,14 @@ Spark::prepare(std::optional<int> maybeIpTos) noexcept {
                  << folly::exceptionStr(err);
     }
   });
+
+  // update counters every few seconds
+  counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    updateGlobalCounters();
+    // Schedule next counters update
+    counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+  });
+  counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
 }
 
 PacketValidationResult
@@ -552,7 +554,8 @@ Spark::sanityCheckHelloPkt(
   // check if own packet has looped
   if (neighborName == myNodeName_) {
     VLOG(2) << "Ignore packet from self (" << myNodeName_ << ")";
-    tData_.addStatValue("spark.invalid_keepalive.looped_packet", 1, fbzmq::SUM);
+    fb303::fbData->addStatValue(
+        "spark.invalid_keepalive.looped_packet", 1, fb303::SUM);
     return PacketValidationResult::SKIP_LOOPED_SELF;
   }
   // domain check
@@ -561,8 +564,8 @@ Spark::sanityCheckHelloPkt(
                << " on interface " << remoteIfName
                << " because it's from different domain " << domainName
                << ". My domain is " << myDomainName_;
-    tData_.addStatValue(
-        "spark.invalid_keepalive.different_domain", 1, fbzmq::SUM);
+    fb303::fbData->addStatValue(
+        "spark.invalid_keepalive.different_domain", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
   }
   // version check
@@ -570,8 +573,8 @@ Spark::sanityCheckHelloPkt(
     LOG(ERROR) << "Unsupported version: " << neighborName << " "
                << remoteVersion
                << ", must be >= " << kVersion_.lowestSupportedVersion;
-    tData_.addStatValue(
-        "spark.invalid_keepalive.invalid_version", 1, fbzmq::SUM);
+    fb303::fbData->addStatValue(
+        "spark.invalid_keepalive.invalid_version", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
   }
   return PacketValidationResult::SUCCESS;
@@ -804,19 +807,20 @@ Spark::parsePacket(
           << " from " << clientAddr.getAddressStr();
 
   // update counters for packets received, dropped and processed
-  tData_.addStatValue("spark.hello_packet_recv", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue("spark.hello_packet_recv", 1, fb303::SUM);
 
   // update counters for total size of packets received
-  tData_.addStatValue("spark.hello_packet_recv_size", bytesRead, fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "spark.hello_packet_recv_size", bytesRead, fb303::SUM);
 
   if (!shouldProcessHelloPacket(ifName, clientAddr.getIPAddress())) {
     LOG(ERROR) << "Spark: dropping hello packet due to rate limiting on iface: "
                << ifName << " from addr: " << clientAddr.getAddressStr();
-    tData_.addStatValue("spark.hello_packet_dropped", 1, fbzmq::SUM);
+    fb303::fbData->addStatValue("spark.hello_packet_dropped", 1, fb303::SUM);
     return false;
   }
 
-  tData_.addStatValue("spark.hello_packet_processed", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue("spark.hello_packet_processed", 1, fb303::SUM);
 
   if (bytesRead >= 0) {
     VLOG(4) << "Read a total of " << bytesRead << " bytes from fd " << mcastFd_;
@@ -857,8 +861,8 @@ Spark::validateV4AddressSubnet(
     toIPAddress(neighV4Addr);
   } catch (const folly::IPAddressFormatException& ex) {
     LOG(ERROR) << "Neighbor V4 address is not known";
-    tData_.addStatValue(
-        "spark.invalid_keepalive.missing_v4_addr", 1, fbzmq::SUM);
+    fb303::fbData->addStatValue(
+        "spark.invalid_keepalive.missing_v4_addr", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
   }
 
@@ -870,8 +874,8 @@ Spark::validateV4AddressSubnet(
     LOG(ERROR) << "Neighbor V4 address " << toString(neighV4Addr)
                << " is not in the same subnet with local V4 address "
                << myV4Addr.str() << "/" << +myV4PrefixLen;
-    tData_.addStatValue(
-        "spark.invalid_keepalive.different_subnet", 1, fbzmq::SUM);
+    fb303::fbData->addStatValue(
+        "spark.invalid_keepalive.different_subnet", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
   }
   return PacketValidationResult::SUCCESS;
@@ -1060,8 +1064,9 @@ Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
   }
 
   // update counters for number of pkts and total size of pkts sent
-  tData_.addStatValue("spark.handshake.bytes_sent", packet.size(), fbzmq::SUM);
-  tData_.addStatValue("spark.handshake.packets_sent", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "spark.handshake.bytes_sent", packet.size(), fb303::SUM);
+  fb303::fbData->addStatValue("spark.handshake.packets_sent", 1, fb303::SUM);
 }
 
 void
@@ -1118,8 +1123,9 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   }
 
   // update counters for number of pkts and total size of pkts sent
-  tData_.addStatValue("spark.heartbeat.bytes_sent", packet.size(), fbzmq::SUM);
-  tData_.addStatValue("spark.heartbeat.packets_sent", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "spark.heartbeat.bytes_sent", packet.size(), fb303::SUM);
+  fb303::fbData->addStatValue("spark.heartbeat.packets_sent", 1, fb303::SUM);
 }
 
 void
@@ -1168,16 +1174,6 @@ Spark::getSparkNeighState(
           }
         }
       });
-  return std::move(future).get();
-}
-
-std::unordered_map<std::string, int64_t>
-Spark::getCounters() {
-  folly::Promise<std::unordered_map<std::string, int64_t>> promise;
-  auto future = promise.getFuture();
-  runInEventBaseThread([this, promise = std::move(promise)]() mutable {
-    promise.setValue(tData_.getCounters());
-  });
   return std::move(future).get();
 }
 
@@ -2108,8 +2104,9 @@ Spark::sendHelloPacket(
   }
 
   // update counters for number of pkts and total size of pkts sent
-  tData_.addStatValue("spark.hello.bytes_sent", packet.size(), fbzmq::SUM);
-  tData_.addStatValue("spark.hello.packets_sent", 1, fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "spark.hello.bytes_sent", packet.size(), fb303::SUM);
+  fb303::fbData->addStatValue("spark.hello.packets_sent", 1, fb303::SUM);
 
   VLOG(4) << "Sent " << bytesSent << " bytes in hello packet";
 }
@@ -2471,25 +2468,22 @@ Spark::getNewLabelForIface(const std::string& ifName) {
 }
 
 void
-Spark::submitCounters() {
-  VLOG(3) << "Submitting counters...";
-
-  // Extract/build counters from thread-data
-  auto counters = tData_.getCounters();
-
-  // Add some more flat counters
+Spark::updateGlobalCounters() {
+  // set some flat counters
   int64_t adjacentNeighborCount{0}, trackedNeighborCount{0};
   for (auto const& ifaceNeighbors : neighbors_) {
     trackedNeighborCount += ifaceNeighbors.second.size();
     for (auto const& kv : ifaceNeighbors.second) {
       auto const& neighbor = kv.second;
       adjacentNeighborCount += neighbor.isAdjacent;
-      counters
-          ["spark.rtt_us." + neighbor.info.nodeName + "." +
-           ifaceNeighbors.first] = neighbor.rtt.count();
-      counters["spark.rtt_latest_us." + neighbor.info.nodeName] =
-          neighbor.rttLatest.count();
-      counters["spark.seq_num." + neighbor.info.nodeName] = neighbor.seqNum;
+      fb303::fbData->setCounter(
+          "spark.rtt_us." + neighbor.info.nodeName + "." + ifaceNeighbors.first,
+          neighbor.rtt.count());
+      fb303::fbData->setCounter(
+          "spark.rtt_latest_us." + neighbor.info.nodeName,
+          neighbor.rttLatest.count());
+      fb303::fbData->setCounter(
+          "spark.seq_num." + neighbor.info.nodeName, neighbor.seqNum);
     }
   }
   for (auto const& ifaceNeighbors : spark2Neighbors_) {
@@ -2497,23 +2491,25 @@ Spark::submitCounters() {
     for (auto const& kv : ifaceNeighbors.second) {
       auto const& neighbor = kv.second;
       adjacentNeighborCount += neighbor.state == SparkNeighState::ESTABLISHED;
-      counters
-          ["spark.rtt_us." + neighbor.nodeName + "." + ifaceNeighbors.first] =
-              neighbor.rtt.count();
-      counters["spark.rtt_latest_us." + neighbor.nodeName] =
-          neighbor.rttLatest.count();
-      counters["spark.seq_num." + neighbor.nodeName] = neighbor.seqNum;
+      fb303::fbData->setCounter(
+          "spark.rtt_us." + neighbor.nodeName + "." + ifaceNeighbors.first,
+          neighbor.rtt.count());
+      fb303::fbData->setCounter(
+          "spark.rtt_latest_us." + neighbor.nodeName,
+          neighbor.rttLatest.count());
+      fb303::fbData->setCounter(
+          "spark.seq_num." + neighbor.nodeName, neighbor.seqNum);
     }
   }
-  counters["spark.num_tracked_interfaces"] =
-      neighbors_.size() ? neighbors_.size() : spark2Neighbors_.size();
-  counters["spark.num_tracked_neighbors"] = trackedNeighborCount;
-  counters["spark.num_adjacent_neighbors"] = adjacentNeighborCount;
-  counters["spark.my_seq_num"] = mySeqNum_;
-  counters["spark.pending_timers"] = getEvb()->timer().count();
-  counters["spark.zmq_event_queue_size"] = getEvb()->getNotificationQueueSize();
-
-  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
+  fb303::fbData->setCounter(
+      "spark.num_tracked_interfaces",
+      neighbors_.size() ? neighbors_.size() : spark2Neighbors_.size());
+  fb303::fbData->setCounter(
+      "spark.num_tracked_neighbors", trackedNeighborCount);
+  fb303::fbData->setCounter(
+      "spark.num_adjacent_neighbors", adjacentNeighborCount);
+  fb303::fbData->setCounter("spark.my_seq_num", mySeqNum_);
+  fb303::fbData->setCounter("spark.pending_timers", getEvb()->timer().count());
 }
 
 folly::Expected<std::string, folly::Unit>
@@ -2533,13 +2529,14 @@ Spark::findCommonArea(
     if (commonArea.size() == 0) {
       LOG(WARNING) << myNodeName_
                    << ": No common area found with: " << nodeName;
-      tData_.addStatValue("spark.no_common_area", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue("spark.no_common_area", 1, fb303::COUNT);
       return folly::makeUnexpected(folly::unit);
     } else if (commonArea.size() > 1) {
       LOG(ERROR)
           << "Invalid configuration, cannot have multiple common areas, node: "
           << nodeName;
-      tData_.addStatValue("spark.multiple_common_area", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue(
+          "spark.multiple_common_area", 1, fb303::COUNT);
       return folly::makeUnexpected(folly::unit);
     }
     VLOG(2) << ": Spark hello packet from " << nodeName << " in area "

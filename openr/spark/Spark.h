@@ -13,11 +13,11 @@
 #include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/SocketAddress.h>
 #include <folly/container/EvictingCacheMap.h>
 #include <folly/fibers/FiberManager.h>
+#include <folly/io/async/AsyncTimeout.h>
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -96,7 +96,6 @@ class Spark final : public OpenrEventBase {
       bool enableSubnetValidation,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>& nbrUpdatesQueue,
-      MonitorSubmitUrl const& monitorSubmitUrl,
       KvStoreCmdPort kvStoreCmdPort,
       OpenrCtrlThriftPort openrCtrlThriftPort,
       std::pair<uint32_t, uint32_t> version,
@@ -112,9 +111,6 @@ class Spark final : public OpenrEventBase {
   // get the current state of neighborNode, used for unit-testing
   std::optional<SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
-
-  // get counters
-  std::unordered_map<std::string, int64_t> getCounters();
 
   // override eventloop stop()
   void stop() override;
@@ -219,8 +215,8 @@ class Spark final : public OpenrEventBase {
   // same across process-restarts
   int32_t getNewLabelForIface(std::string const& ifName);
 
-  // Sumbmits the counter/stats to monitor
-  void submitCounters();
+  // set flat counter/stats
+  void updateGlobalCounters();
 
   // find common area, must be only one or none
   folly::Expected<std::string, folly::Unit> findCommonArea(
@@ -598,21 +594,15 @@ class Spark final : public OpenrEventBase {
   // instances, hence the shared_ptr
   std::shared_ptr<IoProvider> ioProvider_{nullptr};
 
-  // Timer for submitting to monitor periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
-
   // vector of BucketedTimeSeries to make sure we don't take too many
   // hello packets from any one iface, address pair
   std::vector<folly::BucketedTimeSeries<int64_t, std::chrono::steady_clock>>
       timeSeriesVector_{};
 
-  // DS to hold local stats/counters
-  fbzmq::ThreadData tData_;
-
-  // client to interact with monitor
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
-
   // areas that this node belongs to.
   std::optional<std::unordered_set<std::string>> areas_ = std::nullopt;
+
+  // Timer for updating and submitting counters periodically
+  std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
 };
 } // namespace openr

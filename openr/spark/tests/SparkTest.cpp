@@ -12,6 +12,7 @@
 #include <mutex>
 #include <thread>
 
+#include <fb303/ServiceData.h>
 #include <folly/MapUtil.h>
 #include <folly/Memory.h>
 #include <folly/Optional.h>
@@ -100,6 +101,20 @@ class SparkFixture : public testing::Test {
     mockIoProviderThread->join();
   }
 
+  // get the hello packet counters for testing
+  std::map<std::string, int64_t>
+  getNumHelloPacket() {
+    auto allCounter = facebook::fb303::fbData->getCounters();
+    std::map<std::string, int64_t> helloPacketMap;
+    helloPacketMap["spark.hello_packet_dropped.sum"] =
+        allCounter["spark.hello_packet_dropped.sum"];
+    helloPacketMap["spark.hello_packet_processed.sum"] =
+        allCounter["spark.hello_packet_processed.sum"];
+    helloPacketMap["spark.hello_packet_recv.sum"] =
+        allCounter["spark.hello_packet_recv.sum"];
+    return helloPacketMap;
+  }
+
   // helper function to create a spark instance
   shared_ptr<SparkWrapper>
   createSpark(
@@ -120,8 +135,6 @@ class SparkFixture : public testing::Test {
         fastInitKeepAliveTime,
         true /* enable v4 */,
         true /* enable subnet validation */,
-        MonitorSubmitUrl{
-            folly::sformat("{}-{}", kSparkCounterCmdUrl, sparkNum)},
         version,
         context,
         mockIoProvider,
@@ -1395,32 +1408,6 @@ TEST_F(SparkFixture, dropPacketsTest) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  // set up a ZMq monitor to get counters
-  auto zmqMonitor1 = make_shared<fbzmq::ZmqMonitor>(
-      MonitorSubmitUrl{folly::sformat("{}-{}", kSparkCounterCmdUrl, 1)},
-      MonitorPubUrl{"inproc://monitor-pub1"},
-      context);
-
-  auto zmqMonitor2 = make_shared<fbzmq::ZmqMonitor>(
-      MonitorSubmitUrl{folly::sformat("{}-{}", kSparkCounterCmdUrl, 2)},
-      MonitorPubUrl{"inproc://monitor-pub2"},
-      context);
-
-  auto monitorThread1 = std::make_unique<std::thread>([zmqMonitor1]() {
-    LOG(INFO) << "ZmqMonitor thread starting";
-    zmqMonitor1->run();
-    LOG(INFO) << "ZmqMonitor thread finished";
-  });
-
-  auto monitorThread2 = std::make_unique<std::thread>([zmqMonitor2]() {
-    LOG(INFO) << "ZmqMonitor thread starting";
-    zmqMonitor2->run();
-    LOG(INFO) << "ZmqMonitor thread finished";
-  });
-
-  zmqMonitor1->waitUntilRunning();
-  zmqMonitor2->waitUntilRunning();
-
   // start spark1, spark2
   auto spark1 = createSpark(
       kDomainName,
@@ -1445,6 +1432,12 @@ TEST_F(SparkFixture, dropPacketsTest) {
   // start tracking iface2
   EXPECT_TRUE(spark2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
+  // no drop at first
+  auto counters = getNumHelloPacket();
+  auto totalDrops =
+      folly::get_default(counters, "spark.hello_packet_dropped.sum", 0);
+  EXPECT_EQ(totalDrops, 0);
+
   LOG(INFO) << "Preparing to receive the messages from sparks";
 
   //
@@ -1464,47 +1457,42 @@ TEST_F(SparkFixture, dropPacketsTest) {
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
-  // Wait for atleast (2 * Constants::kMaxAllowedPps) packets to be received
-  // before we verify that packets are dropped
+  // Wait for at least (4 * Constants::kMaxAllowedPps) packets to be received
+  // in two nodes before we verify that packets are dropped
   while (true) {
-    auto counters = spark1->getCounters();
-    auto rcvdMsgs = counters["spark.hello_packet_recv.sum.0"];
-    if (rcvdMsgs > 2 * Constants::kMaxAllowedPps) {
+    auto counters = getNumHelloPacket();
+    auto rcvdMsgs =
+        folly::get_default(counters, "spark.hello_packet_recv.sum", 0);
+    auto dropMsgs =
+        folly::get_default(counters, "spark.hello_packet_dropped.sum", 0);
+    if (dropMsgs > 0 || rcvdMsgs > 4 * Constants::kMaxAllowedPps) {
       break;
     }
     std::this_thread::yield();
   }
 
-  auto spark1Values = spark1->getCounters();
-  auto spark2Values = spark2->getCounters();
-
-  auto spark1Recv =
-      folly::get_default(spark1Values, "spark.hello_packet_recv.sum.0", 0);
-  auto spark1Drops =
-      folly::get_default(spark1Values, "spark.hello_packet_dropped.sum.0", 0);
-  auto spark1Processed =
-      folly::get_default(spark1Values, "spark.hello_packet_processed.sum.0", 0);
-  auto spark2Recv =
-      folly::get_default(spark2Values, "spark.hello_packet_recv.sum.0", 0);
-  auto spark2Drops =
-      folly::get_default(spark2Values, "spark.hello_packet_dropped.sum.0", 0);
-  auto spark2Processed =
-      folly::get_default(spark2Values, "spark.hello_packet_processed.sum.0", 0);
-
-  // check that spark1 dropped some packets
-  EXPECT_GE(spark1Drops, 1);
-  // spark1 was sending packets slowly so spark2 dosen't need to drop any
-  EXPECT_EQ(spark2Drops, 0);
-
-  // we should either drop or process every packet we receive
-  EXPECT_EQ(spark1Processed + spark1Drops, spark1Recv);
-  EXPECT_EQ(spark2Processed + spark2Drops, spark2Recv);
-
-  LOG(INFO) << "Stopping the monitor threads";
-  zmqMonitor1->stop();
-  monitorThread1->join();
-  zmqMonitor2->stop();
-  monitorThread2->join();
+  // wait and ensure the drop counter incremented if drop happened
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  // verify drop happened and verify total number of packets
+  counters = getNumHelloPacket();
+  totalDrops =
+      folly::get_default(counters, "spark.hello_packet_dropped.sum", 0);
+  auto totalProcessed =
+      folly::get_default(counters, "spark.hello_packet_processed.sum", 0);
+  auto totalRecv =
+      folly::get_default(counters, "spark.hello_packet_recv.sum", 0);
+  LOG(INFO) << "totalDrops: " << totalDrops;
+  LOG(INFO) << "totalProcessed: " << totalProcessed;
+  LOG(INFO) << "totalRecv: " << totalRecv;
+  // detect some drops
+  EXPECT_GE(totalDrops, 1);
+  // We should either drop or process every packet we receive.
+  // Enable 1 more packet for margin: it may call getNumHelloPacket() right
+  // after `hello_packet_recv` incremented
+  // but `hello_packet_dropped` or `hello_packet_processed` didn't increment.
+  EXPECT_TRUE(
+      (totalProcessed + totalDrops == totalRecv) ||
+      (totalProcessed + totalDrops + 1 == totalRecv));
 }
 
 //

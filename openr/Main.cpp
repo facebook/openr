@@ -577,7 +577,6 @@ main(int argc, char** argv) {
           FLAGS_enable_subnet_validation,
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
-          monitorSubmitUrl,
           KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
           OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
           std::make_pair(

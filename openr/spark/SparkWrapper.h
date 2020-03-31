@@ -64,7 +64,6 @@ class SparkWrapper {
       std::chrono::milliseconds myFastInitKeepAliveTime,
       bool enableV4,
       bool enableSubnetValidation,
-      MonitorSubmitUrl const& monitorCmdUrl,
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
       std::shared_ptr<IoProvider> ioProvider,
@@ -100,16 +99,11 @@ class SparkWrapper {
   std::optional<SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
-  std::unordered_map<std::string, int64_t>
-  getCounters() {
-    return spark_->getCounters();
-  }
-
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
       const thrift::SparkNeighborEvent& event);
 
   //
-  // Private state
+  // Private statex
   //
 
  private:
@@ -118,9 +112,6 @@ class SparkWrapper {
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
   messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesReader_{
       neighborUpdatesQueue_.getReader()};
-
-  // DEALER socket for submitting our monitor
-  const std::string monitorCmdUrl_{""};
 
   // Queue to send interface updates to spark
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;

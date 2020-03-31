@@ -136,7 +136,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       true, // enable subnet validation
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
-      MonitorSubmitUrl{monitorSubmitUrl_},
       KvStoreCmdPort{0},
       OpenrCtrlThriftPort{0},
       std::make_pair(
