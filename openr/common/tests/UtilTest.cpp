@@ -114,6 +114,17 @@ struct PrefixKeyEntry {
   int plen{0};
 };
 
+TEST(UtilTest, NetworkUtilTest) {
+  folly::IPAddress v4{"192.168.0.2"};
+  folly::IPAddress v6{"fe80::2"};
+
+  EXPECT_EQ(v4.str(), toString(toBinaryAddress(v4)));
+  EXPECT_EQ(v6.str(), toString(toBinaryAddress(v6)));
+
+  thrift::BinaryAddress empty;
+  EXPECT_EQ("", toString(empty));
+}
+
 TEST(UtilTest, PrefixKeyTest) {
   std::vector<PrefixKeyEntry> strToItems;
 

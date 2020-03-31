@@ -885,16 +885,20 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
   }
 
-  // 13. neighbor down
+  // 13. neighbor down with empty address
   {
+    thrift::BinaryAddress empty;
+    auto cp = nb2;
+    cp.transportAddressV4 = empty;
+    cp.transportAddressV6 = empty;
     auto neighborEvent = createNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
         "iface_2_1",
-        nb2,
+        cp,
         100 /* rtt-us */,
         1 /* label */);
     neighborUpdatesQueue.push(std::move(neighborEvent));
-    LOG(INFO) << "Testing neighbor down event!";
+    LOG(INFO) << "Testing neighbor down event witgh empty address!";
     checkNextAdjPub("adj:node-1");
   }
 }

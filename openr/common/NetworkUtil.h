@@ -124,7 +124,7 @@ toIpPrefix(const std::string& prefix) {
 
 inline std::string
 toString(const thrift::BinaryAddress& addr) {
-  return toIPAddress(addr).str();
+  return addr.addr.empty() ? "" : toIPAddress(addr).str();
 }
 
 inline std::string
