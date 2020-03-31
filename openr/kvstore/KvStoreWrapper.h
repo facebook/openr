@@ -82,14 +82,14 @@ class KvStoreWrapper {
   bool setKey(
       std::string key,
       thrift::Value value,
-      folly::Optional<std::vector<std::string>> nodeIds = folly::none,
+      std::optional<std::vector<std::string>> nodeIds = std::nullopt,
       std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**
    * API to retrieve an existing key-value from KvStore. Returns empty if none
    * exists.
    */
-  folly::Optional<thrift::Value> getKey(
+  std::optional<thrift::Value> getKey(
       std::string key,
       std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
@@ -99,7 +99,7 @@ class KvStoreWrapper {
    */
   bool setKeys(
       const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
-      folly::Optional<std::vector<std::string>> nodeIds = folly::none,
+      std::optional<std::vector<std::string>> nodeIds = std::nullopt,
       std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
   /**

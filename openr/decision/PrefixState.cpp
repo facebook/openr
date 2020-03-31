@@ -120,7 +120,7 @@ std::vector<thrift::NextHopThrift>
 PrefixState::getLoopbackVias(
     std::unordered_set<std::string> const& nodes,
     bool const isV4,
-    folly::Optional<int64_t> const& igpMetric) const {
+    std::optional<int64_t> const& igpMetric) const {
   std::vector<thrift::NextHopThrift> result;
   result.reserve(nodes.size());
   auto const& hostLoopBacks =
@@ -130,7 +130,7 @@ PrefixState::getLoopbackVias(
       LOG(ERROR) << "No loopback for node " << node;
     } else {
       result.emplace_back(createNextHop(
-          hostLoopBacks.at(node), folly::none, igpMetric.value_or(0)));
+          hostLoopBacks.at(node), std::nullopt, igpMetric.value_or(0)));
     }
   }
   return result;

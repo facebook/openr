@@ -23,13 +23,12 @@ class KvStorePoller {
   ~KvStorePoller() {}
 
   std::pair<
-      folly::Optional<
-          std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
+      std::optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
       std::vector<fbzmq::SocketUrl> /* unreached url */>
   getAdjacencyDatabases(std::chrono::milliseconds pollTimeout);
 
   std::pair<
-      folly::Optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
+      std::optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
       std::vector<fbzmq::SocketUrl> /* unreached url */>
   getPrefixDatabases(std::chrono::milliseconds pollTimeout);
 

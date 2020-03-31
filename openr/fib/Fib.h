@@ -172,7 +172,7 @@ class Fib final : public OpenrEventBase {
   void updateGlobalCounters();
 
   // log perf events
-  void logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents);
+  void logPerfEvents(std::optional<thrift::PerfEvents> perfEvents);
 
   // Prefix to available nexthop information. Also store perf information of
   // received route-db if provided.

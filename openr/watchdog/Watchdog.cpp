@@ -76,7 +76,7 @@ Watchdog::monitorMemory() {
     return;
   }
   if (memExceedTime_.has_value()) {
-    memExceedTime_ = folly::none;
+    memExceedTime_ = std::nullopt;
   }
 }
 

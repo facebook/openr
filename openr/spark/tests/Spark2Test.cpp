@@ -130,7 +130,7 @@ class Spark2Fixture : public testing::Test {
         version,
         context,
         mockIoProvider,
-        folly::none, // no area support yet
+        std::nullopt, // no area support yet
         enableSpark2,
         increaseHelloInterval,
         timeConfig);
@@ -522,7 +522,7 @@ TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
         node1->getSparkNeighState(iface1, "node-2") == SparkNeighState::WARM);
     LOG(INFO) << "node-1 have neighbor: node-2 in WARM state";
 
-    // check for neighbor state on node2, should return folly::none
+    // check for neighbor state on node2, should return std::nullopt
     // since node2 can't receive pkt from node1
     EXPECT_FALSE(node2->getSparkNeighState(iface2, "node-1").has_value());
     LOG(INFO) << "node-2 doesn't have any neighbor";

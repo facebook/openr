@@ -15,7 +15,6 @@
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/Optional.h>
 #include <folly/SocketAddress.h>
 #include <folly/container/EvictingCacheMap.h>
 #include <folly/fibers/FiberManager.h>
@@ -92,7 +91,7 @@ class Spark final : public OpenrEventBase {
       std::chrono::milliseconds myHeartbeatTime,
       std::chrono::milliseconds myNegotiateHoldTime,
       std::chrono::milliseconds myHeartbeatHoldTime,
-      folly::Optional<int> ipTos,
+      std::optional<int> ipTos,
       bool enableV4,
       bool enableSubnetValidation,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
@@ -106,12 +105,12 @@ class Spark final : public OpenrEventBase {
       bool enableFloodOptimization = false,
       bool enableSpark2 = false,
       bool increaseHelloInterval = false,
-      folly::Optional<std::unordered_set<std::string>> areas = folly::none);
+      std::optional<std::unordered_set<std::string>> areas = std::nullopt);
 
   ~Spark() override = default;
 
   // get the current state of neighborNode, used for unit-testing
-  folly::Optional<SparkNeighState> getSparkNeighState(
+  std::optional<SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
   // get counters
@@ -152,7 +151,7 @@ class Spark final : public OpenrEventBase {
   Spark& operator=(Spark const&) = delete;
 
   // Initializes ZMQ sockets
-  void prepare(folly::Optional<int> maybeIpTos) noexcept;
+  void prepare(std::optional<int> maybeIpTos) noexcept;
 
   // check neighbor's hello packet; return true if packet is valid and
   // passed the following checks:
@@ -213,7 +212,7 @@ class Spark final : public OpenrEventBase {
       const std::unordered_map<std::string, Interface>& newInterfaceDb);
 
   // find an interface name in the interfaceDb given an ifIndex
-  folly::Optional<std::string> findInterfaceFromIfindex(int ifIndex);
+  std::optional<std::string> findInterfaceFromIfindex(int ifIndex);
 
   // Utility function to generate a new label for neighbor on given interface.
   // If there is only one neighbor per interface then labels are expected to be
@@ -225,7 +224,7 @@ class Spark final : public OpenrEventBase {
 
   // find common area, must be only one or none
   folly::Expected<std::string, folly::Unit> findCommonArea(
-      folly::Optional<std::unordered_set<std::string>> areas,
+      std::optional<std::unordered_set<std::string>> areas,
       const std::string& nodeName);
 
   // function to receive and parse received pkt
@@ -425,7 +424,7 @@ class Spark final : public OpenrEventBase {
 
   // Util function for state transition
   static SparkNeighState getNextState(
-      folly::Optional<SparkNeighState> const& currState,
+      std::optional<SparkNeighState> const& currState,
       SparkNeighEvent const& event);
 
   //
@@ -487,7 +486,7 @@ class Spark final : public OpenrEventBase {
   int mcastFd_{-1};
 
   // state transition matrix for Finite-State-Machine
-  static const std::vector<std::vector<folly::Optional<SparkNeighState>>>
+  static const std::vector<std::vector<std::optional<SparkNeighState>>>
       stateMap_;
 
   // Queue to publish neighbor events
@@ -614,6 +613,6 @@ class Spark final : public OpenrEventBase {
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
   // areas that this node belongs to.
-  folly::Optional<std::unordered_set<std::string>> areas_ = folly::none;
+  std::optional<std::unordered_set<std::string>> areas_ = std::nullopt;
 };
 } // namespace openr

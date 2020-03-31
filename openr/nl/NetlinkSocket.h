@@ -318,7 +318,7 @@ class NetlinkSocket {
   /**
    * get loopback interface index
    */
-  virtual folly::Future<folly::Optional<int>> getLoopbackIfindex();
+  virtual folly::Future<std::optional<int>> getLoopbackIfindex();
 
   /**
    * Get interface name form index
@@ -438,7 +438,7 @@ class NetlinkSocket {
 
   EventsHandler* handler_{nullptr};
 
-  folly::Optional<int> loopbackIfIndex_;
+  std::optional<int> loopbackIfIndex_;
 
   /**
    * We keep an internal cache of Neighbor and Link entries

@@ -96,7 +96,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
       fbnl::NextHopBuilder& nhBuilder) const;
 
   // parse MPLS labels
-  folly::Optional<std::vector<int32_t>> parseMplsLabels(
+  std::optional<std::vector<int32_t>> parseMplsLabels(
       const struct rtattr* routeAttr) const;
 
   // set mpls action based on nexthop fields

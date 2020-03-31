@@ -355,7 +355,7 @@ class DualNode {
 
   // pick smallest root-id who has a valid-route
   // return none if no ready SPT found
-  folly::Optional<std::string> getSptRootId() const noexcept;
+  std::optional<std::string> getSptRootId() const noexcept;
 
   // get SPT-peers for a given root-id
   // return empty-set if dual for root-id is not ready
@@ -364,7 +364,7 @@ class DualNode {
 
   // get route-info for a given root-id
   // return none if root-id is not discoveried yet
-  folly::Optional<Dual::RouteInfo> getInfo(const std::string& rootId) const
+  std::optional<Dual::RouteInfo> getInfo(const std::string& rootId) const
       noexcept;
 
   // get all route-infos for all discovered roots

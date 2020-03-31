@@ -433,7 +433,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     return res;
   }
 
-  folly::Optional<thrift::Value>
+  std::optional<thrift::Value>
   getPublicationValueForKey(
       std::string const& key,
       std::string const& area =
@@ -443,7 +443,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     auto pub = kvStoreWrapper->recvPublication();
     EXPECT_TRUE(pub.area.has_value());
     if (pub.area.value() != area) {
-      return folly::none;
+      return std::nullopt;
     }
 
     VLOG(1) << "Received publication with keys in area " << pub.area.value();
@@ -453,7 +453,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     auto kv = pub.keyVals.find(key);
     if (kv == pub.keyVals.end() or !kv->second.value) {
-      return folly::none;
+      return std::nullopt;
     }
 
     return kv->second;
@@ -472,7 +472,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     printAdjDb(expectedAdjDbs.front());
 
     while (true) {
-      folly::Optional<thrift::Value> value;
+      std::optional<thrift::Value> value;
       try {
         value = getPublicationValueForKey(key, area);
         if (not value.has_value()) {

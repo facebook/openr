@@ -46,7 +46,7 @@ KvStoreWrapper::KvStoreWrapper(
       kvStoreUpdatesQueue_,
       KvStoreGlobalCmdUrl{globalCmdUrl},
       MonitorSubmitUrl{monitorSubmitUrl},
-      folly::none /* ip-tos */,
+      std::nullopt /* ip-tos */,
       dbSyncInterval,
       monitorSubmitInterval,
       peers,
@@ -90,12 +90,12 @@ bool
 KvStoreWrapper::setKey(
     std::string key,
     thrift::Value value,
-    folly::Optional<std::vector<std::string>> nodeIds,
+    std::optional<std::vector<std::string>> nodeIds,
     std::string area) {
   // Prepare KeySetParams
   thrift::KeySetParams params;
   params.keyVals.emplace(std::move(key), std::move(value));
-  apache::thrift::fromFollyOptional(params.nodeIds, std::move(nodeIds));
+  fromStdOptional(params.nodeIds, std::move(nodeIds));
 
   try {
     kvStore_->setKvStoreKeyVals(std::move(params), area).get();
@@ -109,11 +109,11 @@ KvStoreWrapper::setKey(
 bool
 KvStoreWrapper::setKeys(
     const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
-    folly::Optional<std::vector<std::string>> nodeIds,
+    std::optional<std::vector<std::string>> nodeIds,
     std::string area) {
   // Prepare KeySetParams
   thrift::KeySetParams params;
-  apache::thrift::fromFollyOptional(params.nodeIds, std::move(nodeIds));
+  fromStdOptional(params.nodeIds, std::move(nodeIds));
   for (const auto& keyVal : keyVals) {
     params.keyVals.emplace(keyVal.first, keyVal.second);
   }
@@ -127,7 +127,7 @@ KvStoreWrapper::setKeys(
   return true;
 }
 
-folly::Optional<thrift::Value>
+std::optional<thrift::Value>
 KvStoreWrapper::getKey(std::string key, std::string area) {
   // Prepare KeyGetParams
   thrift::KeyGetParams params;
@@ -139,13 +139,13 @@ KvStoreWrapper::getKey(std::string key, std::string area) {
   } catch (std::exception const& e) {
     LOG(WARNING) << "Exception to get key from kvstore: "
                  << folly::exceptionStr(e);
-    return folly::none; // No value found
+    return std::nullopt; // No value found
   }
 
   // Return the result
   auto it = pub.keyVals.find(key);
   if (it == pub.keyVals.end()) {
-    return folly::none; // No value found
+    return std::nullopt; // No value found
   }
   return it->second;
 }

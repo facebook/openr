@@ -78,7 +78,7 @@ class DecisionWrapper {
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
-        folly::none,
+        std::nullopt,
         kvStoreUpdatesQueue.getReader(),
         routeUpdatesQueue,
         MonitorSubmitUrl{"inproc://monitor-rep"},
@@ -117,11 +117,11 @@ class DecisionWrapper {
       const std::string& nodeId,
       int64_t version,
       const std::vector<thrift::Adjacency>& adjs,
-      const folly::Optional<thrift::PerfEvents>& perfEvents,
+      const std::optional<thrift::PerfEvents>& perfEvents,
       bool overloadBit = false) {
     auto adjDb = createAdjDb(nodeId, adjs, 0, overloadBit);
     if (perfEvents.has_value()) {
-      apache::thrift::fromFollyOptional(adjDb.perfEvents, perfEvents);
+      fromStdOptional(adjDb.perfEvents, perfEvents);
     }
     return thrift::Value(
         FRAGILE,
@@ -410,7 +410,7 @@ createGrid(
       auto adjs = createGridAdjacencys(row, col, n);
       initialPub.keyVals.emplace(
           folly::sformat("adj:{}", nodeName),
-          decisionWrapper->createAdjValue(nodeName, 1, adjs, folly::none));
+          decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
 
       // prefix
       auto addrV6 = toIpPrefix(nodeToPrefixV6(nodeId));
@@ -449,7 +449,7 @@ createSswsAdjacencies(
         // Add to publication
         initialPub.keyVals.emplace(
             folly::sformat("adj:{}", nodeName),
-            decisionWrapper->createAdjValue(nodeName, 1, adjs, folly::none));
+            decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
       }
     }
   }
@@ -492,7 +492,7 @@ createFswsAdjacencies(
       // Add to publication
       initialPub.keyVals.emplace(
           folly::sformat("adj:{}", nodeName),
-          decisionWrapper->createAdjValue(nodeName, 1, adjs, folly::none));
+          decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
     }
   }
 }
@@ -523,7 +523,7 @@ createRswsAdjacencies(
       // Add to publication
       initialPub.keyVals.emplace(
           folly::sformat("adj:{}", nodeName),
-          decisionWrapper->createAdjValue(nodeName, 1, adjs, folly::none));
+          decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
     }
   }
 }
@@ -585,7 +585,7 @@ createFabric(
 void
 updateRandomFabricAdjs(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
-    folly::Optional<std::pair<int, int>>& selectedNode,
+    std::optional<std::pair<int, int>>& selectedNode,
     const int numOfPods,
     const int numOfFswsPerPod,
     const int numOfRswsPerPod,
@@ -617,8 +617,8 @@ updateRandomFabricAdjs(
 
   // Record the updated rsw
   selectedNode = (selectedNode.has_value())
-      ? folly::none
-      : folly::Optional<std::pair<int, int>>(std::make_pair(podId, rswIdInPod));
+      ? std::nullopt
+      : std::optional<std::pair<int, int>>(std::make_pair(podId, rswIdInPod));
 
   // Send the update to decision and receive the routes
   sendRecvUpdate(
@@ -632,7 +632,7 @@ updateRandomFabricAdjs(
 void
 updateRandomGridAdjs(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
-    folly::Optional<std::pair<int, int>>& selectedNode,
+    std::optional<std::pair<int, int>>& selectedNode,
     const int n,
     std::vector<uint64_t>& processTimes) {
   thrift::Publication newPub;
@@ -649,8 +649,8 @@ updateRandomGridAdjs(
   auto overloadBit = selectedNode.has_value() ? false : true;
   // Record the updated nodeId
   selectedNode = selectedNode.has_value()
-      ? folly::none
-      : folly::Optional<std::pair<int, int>>(std::make_pair(row, col));
+      ? std::nullopt
+      : std::optional<std::pair<int, int>>(std::make_pair(row, col));
 
   // Send the update to decision and receive the routes
   sendRecvUpdate(
@@ -697,7 +697,7 @@ BM_DecisionGrid(
   decisionWrapper->recvMyRouteDb();
 
   // Record the updated nodeId
-  folly::Optional<std::pair<int, int>> selectedNode = folly::none;
+  std::optional<std::pair<int, int>> selectedNode = std::nullopt;
   //
   // Customized time counter
   // processTimes[0] is the time of sending adjDB from Kvstore (simulated) to
@@ -758,7 +758,7 @@ BM_DecisionFabric(
   decisionWrapper->recvMyRouteDb();
 
   // Record the updated node
-  folly::Optional<std::pair<int, int>> selectedNode = folly::none;
+  std::optional<std::pair<int, int>> selectedNode = std::nullopt;
 
   //
   // Customized time counters

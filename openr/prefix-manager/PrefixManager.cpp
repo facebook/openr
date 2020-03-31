@@ -125,8 +125,7 @@ PrefixManager::PrefixManager(
   kvStoreClient_->subscribeKeyFilter(
       std::move(kvFilters),
       [this](
-          const std::string& key,
-          folly::Optional<thrift::Value> value) noexcept {
+          const std::string& key, std::optional<thrift::Value> value) noexcept {
         // we're not currently persisting this key, it may be that we no longer
         // want it advertised
         if (value.has_value() and value.value().value.has_value()) {

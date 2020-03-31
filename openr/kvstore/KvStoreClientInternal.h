@@ -41,7 +41,7 @@ using namespace std::chrono_literals;
 class KvStoreClientInternal {
  public:
   using KeyCallback = folly::Function<void(
-      std::string const&, folly::Optional<thrift::Value>) noexcept>;
+      std::string const&, std::optional<thrift::Value>) noexcept>;
 
   /**
    * Creates and initializes all necessary sockets for communicating with
@@ -51,8 +51,7 @@ class KvStoreClientInternal {
       OpenrEventBase* eventBase,
       std::string const& nodeId,
       KvStore* kvStore,
-      folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod =
-          60000ms);
+      std::optional<std::chrono::milliseconds> checkPersistKeyPeriod = 60000ms);
 
   ~KvStoreClientInternal();
 
@@ -83,13 +82,13 @@ class KvStoreClientInternal {
    *
    * Second flavour directly forwards the value to KvStore.
    */
-  folly::Optional<folly::Unit> setKey(
+  std::optional<folly::Unit> setKey(
       std::string const& key,
       std::string const& value,
       uint32_t version = 0,
       std::chrono::milliseconds ttl = Constants::kTtlInfInterval,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  folly::Optional<folly::Unit> setKey(
+  std::optional<folly::Unit> setKey(
       std::string const& key,
       thrift::Value const& value,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
@@ -115,7 +114,7 @@ class KvStoreClientInternal {
   /**
    * Get key from KvStore. It gets from local snapshot KeyVals of the kvstore.
    */
-  folly::Optional<thrift::Value> getKey(
+  std::optional<thrift::Value> getKey(
       std::string const& key,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
@@ -123,7 +122,7 @@ class KvStoreClientInternal {
    * Dump the entries of my KV store whose keys match the given prefix
    * If the prefix is empty string, the full KV store is dumped
    */
-  folly::Optional<std::unordered_map<std::string, thrift::Value>>
+  std::optional<std::unordered_map<std::string, thrift::Value>>
   dumpAllWithPrefix(
       const std::string& prefix = "",
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
@@ -134,7 +133,7 @@ class KvStoreClientInternal {
    * @param callback - callback API to invoke when key update is received
    * @param fetchInitValue - returns key value from KvStore if set to 'true'
    */
-  folly::Optional<thrift::Value> subscribeKey(
+  std::optional<thrift::Value> subscribeKey(
       std::string const& key,
       KeyCallback callback,
       bool fetchInitValue = false,
@@ -154,16 +153,16 @@ class KvStoreClientInternal {
   /**
    * APIs to add/del/get peer info from KvStore.
    */
-  folly::Optional<folly::Unit> addPeers(
+  std::optional<folly::Unit> addPeers(
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  folly::Optional<folly::Unit> delPeer(
+  std::optional<folly::Unit> delPeer(
       std::string const& peerName,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  folly::Optional<folly::Unit> delPeers(
+  std::optional<folly::Unit> delPeers(
       const std::vector<std::string>& peerNames,
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
-  folly::Optional<std::unordered_map<std::string, thrift::PeerSpec>> getPeers(
+  std::optional<std::unordered_map<std::string, thrift::PeerSpec>> getPeers(
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   OpenrEventBase*
@@ -208,14 +207,14 @@ class KvStoreClientInternal {
   /**
    * Utility function to SET keys in KvStore.
    */
-  folly::Optional<folly::Unit> setKeysHelper(
+  std::optional<folly::Unit> setKeysHelper(
       std::unordered_map<std::string, thrift::Value> keyVals,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Utility function to del peers in KvStore
    */
-  folly::Optional<folly::Unit> delPeersHelper(
+  std::optional<folly::Unit> delPeersHelper(
       const std::vector<std::string>& peerNames,
       const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
@@ -264,8 +263,7 @@ class KvStoreClientInternal {
   KvStore* kvStore_{nullptr};
 
   // periodic timer to check existence of persist key in kv store
-  folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod_{
-      folly::none};
+  std::optional<std::chrono::milliseconds> checkPersistKeyPeriod_{std::nullopt};
 
   // check persiste key timer event
   std::unique_ptr<folly::AsyncTimeout> checkPersistKeyTimer_;

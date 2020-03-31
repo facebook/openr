@@ -65,7 +65,7 @@ class Watchdog final : public OpenrEventBase {
   uint32_t criticalMemoryMB_{0};
 
   // amount of time memory usage sustained above memory limit
-  folly::Optional<std::chrono::steady_clock::time_point> memExceedTime_;
+  std::optional<std::chrono::steady_clock::time_point> memExceedTime_;
 
   // Get the system metrics for resource usage counters
   fbzmq::SystemMetrics systemMetrics_{};

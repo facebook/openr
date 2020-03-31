@@ -50,14 +50,14 @@ static std::unordered_map<std::string, ThriftType> parseThriftValues(
  */
 template <typename ThriftType>
 static std::pair<
-    folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
+    std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 dumpAllWithPrefixMultipleAndParse(
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& prefix,
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
-    folly::Optional<int> maybeIpTos = folly::none,
+    std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
     const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
@@ -79,14 +79,14 @@ dumpAllWithPrefixMultipleAndParse(
  *
  */
 static std::pair<
-    folly::Optional<std::unordered_map<std::string /* key */, thrift::Value>>,
+    std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 dumpAllWithThriftClientFromMultiple(
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& prefix,
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
-    folly::Optional<int> maybeIpTos = folly::none,
+    std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
     const std::string& area = thrift::KvStore_constants::kDefaultArea());
 

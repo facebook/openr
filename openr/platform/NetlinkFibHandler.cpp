@@ -111,7 +111,7 @@ NetlinkFibHandler::buildNextHops(const fbnl::NextHopSet& nextHops) {
             createMplsAction(labelAction.value(), nh.getSwapLabel().value());
       } else if (labelAction.value() == thrift::MplsActionCode::PUSH) {
         nextHop.mplsAction = createMplsAction(
-            labelAction.value(), folly::none, nh.getPushLabels().value());
+            labelAction.value(), std::nullopt, nh.getPushLabels().value());
       }
     }
     thriftNextHops.emplace_back(std::move(nextHop));

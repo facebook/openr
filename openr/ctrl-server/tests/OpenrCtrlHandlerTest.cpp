@@ -81,7 +81,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
-        folly::none,
+        std::nullopt,
         kvStoreWrapper->getReader(),
         routeUpdatesQueue_,
         monitorSubmitUrl_,
@@ -712,12 +712,12 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     kvStoreWrapper->setKey(
         key,
         createThriftValue(7, "node1", std::string("value1")),
-        folly::none,
+        std::nullopt,
         "pod");
     kvStoreWrapper->setKey(
         key,
         createThriftValue(8, "node1", std::string("value1")),
-        folly::none,
+        std::nullopt,
         "plane");
 
     // Check we should receive-3 updates

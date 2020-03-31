@@ -2943,7 +2943,7 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         // should fail
         EXPECT_FALSE(storeA->setKey(k0, thriftVal0));
         // set key in the correct area
-        EXPECT_TRUE(storeA->setKey(k0, thriftVal0, folly::none, podArea));
+        EXPECT_TRUE(storeA->setKey(k0, thriftVal0, std::nullopt, podArea));
         // store A should not have the key in default area
         EXPECT_FALSE(storeA->getKey(k0).has_value());
         // store A should have the key in pod-area
@@ -2956,7 +2956,7 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         // set key in store C and verify it's present in plane area in store B
         // and not present in POD area in storeB and storeA set key in the
         // correct area
-        EXPECT_TRUE(storeC->setKey(k2, thriftVal2, folly::none, planeArea));
+        EXPECT_TRUE(storeC->setKey(k2, thriftVal2, std::nullopt, planeArea));
         // store B should have the key in planeArea
         EXPECT_TRUE(storeB->getKey(k2, planeArea).has_value());
         // store B should NOT have the key in podArea
@@ -2973,8 +2973,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         expectedKeyValsPlane[k3] = thriftVal3;
 
         // add another key in both plane and pod area
-        EXPECT_TRUE(storeB->setKey(k1, thriftVal1, folly::none, podArea));
-        EXPECT_TRUE(storeC->setKey(k3, thriftVal3, folly::none, planeArea));
+        EXPECT_TRUE(storeB->setKey(k1, thriftVal1, std::nullopt, podArea));
+        EXPECT_TRUE(storeC->setKey(k3, thriftVal3, std::nullopt, planeArea));
       },
       scheduleTimePoint);
 

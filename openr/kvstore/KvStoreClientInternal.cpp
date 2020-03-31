@@ -19,7 +19,7 @@ KvStoreClientInternal::KvStoreClientInternal(
     OpenrEventBase* eventBase,
     std::string const& nodeId,
     KvStore* kvStore,
-    folly::Optional<std::chrono::milliseconds> checkPersistKeyPeriod)
+    std::optional<std::chrono::milliseconds> checkPersistKeyPeriod)
     : nodeId_(nodeId),
       eventBase_(eventBase),
       kvStore_(kvStore),
@@ -175,7 +175,7 @@ KvStoreClientInternal::persistKey(
       value,
       ttl.count(),
       0 /* ttl version */,
-      folly::none /* hash */);
+      std::nullopt /* hash */);
   CHECK(thriftValue.value);
 
   // Retrieve the existing value for the key. If key is persisted before then
@@ -183,7 +183,7 @@ KvStoreClientInternal::persistKey(
   if (keyIt == persistedKeyVals.end()) {
     // Get latest value from KvStore
     auto maybeValue = getKey(key, area);
-    if (maybeValue.hasValue()) {
+    if (maybeValue.has_value()) {
       thriftValue = maybeValue.value();
       // TTL update pub is never saved in kvstore
       DCHECK(thriftValue.value);
@@ -266,7 +266,7 @@ KvStoreClientInternal::buildThriftValue(
   // Use one version number higher than currently in KvStore if not specified
   if (!version) {
     auto maybeValue = getKey(key, area);
-    if (maybeValue.hasValue()) {
+    if (maybeValue.has_value()) {
       thriftValue.version = maybeValue->version + 1;
     } else {
       thriftValue.version = 1;
@@ -275,7 +275,7 @@ KvStoreClientInternal::buildThriftValue(
   return thriftValue;
 }
 
-folly::Optional<folly::Unit>
+std::optional<folly::Unit>
 KvStoreClientInternal::setKey(
     std::string const& key,
     std::string const& value,
@@ -304,7 +304,7 @@ KvStoreClientInternal::setKey(
   return ret;
 }
 
-folly::Optional<folly::Unit>
+std::optional<folly::Unit>
 KvStoreClientInternal::setKey(
     std::string const& key,
     thrift::Value const& thriftValue,
@@ -399,7 +399,7 @@ KvStoreClientInternal::clearKey(
   // if key doesn't exist in KvStore no need to add it as "empty". This
   // condition should not exist.
   auto maybeValue = getKey(key, area);
-  if (!maybeValue.hasValue()) {
+  if (!maybeValue.has_value()) {
     return;
   }
   // overwrite all values, increment version, reset value to empty
@@ -419,7 +419,7 @@ KvStoreClientInternal::clearKey(
   }
 }
 
-folly::Optional<thrift::Value>
+std::optional<thrift::Value>
 KvStoreClientInternal::getKey(
     std::string const& key,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
@@ -435,19 +435,19 @@ KvStoreClientInternal::getKey(
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to get keyvals from kvstore. Exception: "
                << ex.what();
-    return folly::none;
+    return std::nullopt;
   }
   VLOG(3) << "Received " << pub.keyVals.size() << " key-vals.";
 
   auto it = pub.keyVals.find(key);
   if (it == pub.keyVals.end()) {
     LOG(ERROR) << "Key: " << key << " NOT found in kvstore. Area: " << area;
-    return folly::none;
+    return std::nullopt;
   }
   return it->second;
 }
 
-folly::Optional<std::unordered_map<std::string, thrift::Value>>
+std::optional<std::unordered_map<std::string, thrift::Value>>
 KvStoreClientInternal::dumpAllWithPrefix(
     const std::string& prefix /* = "" */,
     const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
@@ -460,12 +460,12 @@ KvStoreClientInternal::dumpAllWithPrefix(
     pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to add peers to kvstore. Exception: " << ex.what();
-    return folly::none;
+    return std::nullopt;
   }
   return pub.keyVals;
 }
 
-folly::Optional<thrift::Value>
+std::optional<thrift::Value>
 KvStoreClientInternal::subscribeKey(
     std::string const& key,
     KeyCallback callback,
@@ -477,11 +477,11 @@ KvStoreClientInternal::subscribeKey(
 
   if (fetchKeyValue) {
     auto maybeValue = getKey(key, area);
-    if (maybeValue.hasValue()) {
+    if (maybeValue.has_value()) {
       return maybeValue.value();
     }
   }
-  return folly::none;
+  return std::nullopt;
 }
 
 void
@@ -513,7 +513,7 @@ KvStoreClientInternal::setKvCallback(KeyCallback callback) {
   kvCallback_ = std::move(callback);
 }
 
-folly::Optional<folly::Unit>
+std::optional<folly::Unit>
 KvStoreClientInternal::addPeers(
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
@@ -527,12 +527,12 @@ KvStoreClientInternal::addPeers(
     kvStore_->addUpdateKvStorePeers(std::move(params), area).get();
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to add peers to kvstore. Exception: " << ex.what();
-    return folly::none;
+    return std::nullopt;
   }
   return folly::Unit();
 }
 
-folly::Optional<folly::Unit>
+std::optional<folly::Unit>
 KvStoreClientInternal::delPeer(
     std::string const& peerName,
     std::string const& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
@@ -543,7 +543,7 @@ KvStoreClientInternal::delPeer(
   return delPeersHelper(std::move(peerNames), area);
 }
 
-folly::Optional<folly::Unit>
+std::optional<folly::Unit>
 KvStoreClientInternal::delPeers(
     const std::vector<std::string>& peerNames,
     const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
@@ -554,7 +554,7 @@ KvStoreClientInternal::delPeers(
 }
 
 // This is a PRIVATE method
-folly::Optional<folly::Unit>
+std::optional<folly::Unit>
 KvStoreClientInternal::delPeersHelper(
     const std::vector<std::string>& peerNames,
     const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
@@ -566,12 +566,12 @@ KvStoreClientInternal::delPeersHelper(
     kvStore_->deleteKvStorePeers(std::move(params), area).get();
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to del peers from kvstore. Exception: " << ex.what();
-    return folly::none;
+    return std::nullopt;
   }
   return folly::Unit();
 }
 
-folly::Optional<std::unordered_map<std::string, thrift::PeerSpec>>
+std::optional<std::unordered_map<std::string, thrift::PeerSpec>>
 KvStoreClientInternal::getPeers(
     const std::string& area /* = thrift::KvStore_constants::kDefaultArea()*/) {
   VLOG(3) << "KvStoreClientInternal: getPeers called";
@@ -582,7 +582,7 @@ KvStoreClientInternal::getPeers(
     peers = *(kvStore_->getKvStorePeers(area).get());
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to dump peers from kvstore. Exception: " << ex.what();
-    return folly::none;
+    return std::nullopt;
   }
   return peers;
 }
@@ -595,12 +595,12 @@ KvStoreClientInternal::processExpiredKeys(
   for (auto const& key : expiredKeys) {
     /* callback registered by the thread */
     if (kvCallback_) {
-      kvCallback_(key, folly::none);
+      kvCallback_(key, std::nullopt);
     }
     /* key specific registered callback */
     auto cb = keyCallbacks_.find(key);
     if (cb != keyCallbacks_.end()) {
-      (cb->second)(key, folly::none);
+      (cb->second)(key, std::nullopt);
     }
   }
 }
@@ -880,7 +880,7 @@ KvStoreClientInternal::advertiseTtlUpdates() {
   ttlTimer_->scheduleTimeout(timeout);
 }
 
-folly::Optional<folly::Unit>
+std::optional<folly::Unit>
 KvStoreClientInternal::setKeysHelper(
     std::unordered_map<std::string, thrift::Value> keyVals,
     std::string const& area) {
@@ -913,7 +913,7 @@ KvStoreClientInternal::setKeysHelper(
   } catch (const std::exception& ex) {
     LOG(ERROR) << "Failed to set key-val from KvStore. Exception: "
                << ex.what();
-    return folly::none;
+    return std::nullopt;
   }
   return folly::Unit();
 }

@@ -478,7 +478,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
 
   // Synchronization primitive
   folly::Baton baton;
-  folly::Optional<thrift::PrefixEntry> expectedPrefix;
+  std::optional<thrift::PrefixEntry> expectedPrefix;
   bool gotExpected = true;
 
   // start kvStoreClientInternal separately with different thread
@@ -487,7 +487,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
 
   kvStoreClient->subscribeKey(
       keyStr,
-      [&](std::string const& _, folly::Optional<thrift::Value> val) mutable {
+      [&](std::string const& _, std::optional<thrift::Value> val) mutable {
         ASSERT_TRUE(val.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             val->value.value(), serializer);
@@ -542,7 +542,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   //
   // 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
   //
-  expectedPrefix = folly::none;
+  expectedPrefix = std::nullopt;
   gotExpected = true;
   prefixManager->withdrawPrefixes({bgp_prefix, default_prefix}).get();
   baton.wait();
@@ -587,7 +587,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_TRUE(maybeValue.has_value());
         EXPECT_EQ(maybeValue.value().version, 1);
       });
 
@@ -606,12 +606,12 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_TRUE(maybeValue.has_value());
         EXPECT_EQ(maybeValue.value().version, 1);
 
         prefixKeyStr = prefixKey2.getPrefixKey();
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue2.hasValue());
+        EXPECT_TRUE(maybeValue2.has_value());
         EXPECT_EQ(maybeValue2.value().version, 1);
       });
 
@@ -630,13 +630,13 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_TRUE(maybeValue.has_value());
         EXPECT_EQ(maybeValue.value().version, 1);
 
         // verify key is withdrawn
         prefixKeyStr = prefixKey2.getPrefixKey();
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue2.hasValue());
+        EXPECT_TRUE(maybeValue2.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue2.value().value.value(), serializer);
         EXPECT_NE(db.prefixEntries.size(), 0);
@@ -691,7 +691,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
           waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
       [&]() noexcept {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_TRUE(maybeValue.has_value());
         keyVersion = maybeValue.value().version;
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value.value(), serializer);
@@ -865,12 +865,12 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue.hasValue());
+        EXPECT_TRUE(maybeValue.has_value());
         EXPECT_EQ(maybeValue.value().version, 1);
 
         prefixKeyStr = prefixKey2.getPrefixKey();
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue2.hasValue());
+        EXPECT_TRUE(maybeValue2.has_value());
         EXPECT_EQ(maybeValue2.value().version, 1);
       });
 
@@ -891,11 +891,11 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
       [&]() noexcept {
         auto prefixKeyStr = prefixKey1.getPrefixKey();
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_FALSE(maybeValue.hasValue());
+        EXPECT_FALSE(maybeValue.has_value());
 
         prefixKeyStr = prefixKey2.getPrefixKey();
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue2.hasValue());
+        EXPECT_TRUE(maybeValue2.has_value());
         EXPECT_EQ(maybeValue2.value().version, 1);
 
         // Synchronization primitive

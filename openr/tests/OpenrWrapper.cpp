@@ -69,7 +69,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreUpdatesQueue_,
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
-      folly::none /* ip-tos */,
+      std::nullopt /* ip-tos */,
       kvStoreDbSyncInterval,
       kvStoreMonitorSubmitInterval,
       std::unordered_map<std::string, thrift::PeerSpec>{},
@@ -90,7 +90,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStoreClient_->subscribeKey(
       folly::sformat("prefix:{}", nodeId_),
       [&](const std::string& /* key */,
-          folly::Optional<thrift::Value> value) noexcept {
+          std::optional<thrift::Value> value) noexcept {
         if (!value.has_value()) {
           return;
         }
@@ -109,7 +109,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
             }
           }
           if (!received) {
-            ipPrefix_ = folly::none;
+            ipPrefix_ = std::nullopt;
           }
         }
       },
@@ -131,7 +131,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::chrono::milliseconds{0}, /* spark2_heartbeat_time */
       std::chrono::milliseconds{0}, /* spark2_negotiate_hold_time */
       std::chrono::milliseconds{0}, /* spark2_heartbeat_hold_time */
-      folly::none, // ip-tos
+      std::nullopt, // ip-tos
       v4Enabled, // enable v4
       true, // enable subnet validation
       interfaceUpdatesQueue_.getReader(),
@@ -217,7 +217,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       PrefixDbMarker{"prefix:"},
       std::chrono::milliseconds(10),
       std::chrono::milliseconds(250),
-      folly::none,
+      std::nullopt,
       kvStoreUpdatesQueue_.getReader(),
       routeUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
@@ -432,7 +432,7 @@ OpenrWrapper<Serializer>::stop() {
 }
 
 template <class Serializer>
-folly::Optional<thrift::IpPrefix>
+std::optional<thrift::IpPrefix>
 OpenrWrapper<Serializer>::getIpPrefix() {
   SYNCHRONIZED(ipPrefix_) {
     if (ipPrefix_.has_value()) {
@@ -466,11 +466,11 @@ template <class Serializer>
 bool
 OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
   auto keys = kvStoreClient_->dumpAllWithPrefix(key);
-  return keys.hasValue();
+  return keys.has_value();
 }
 
 template <class Serializer>
-folly::Optional<std::unordered_map<std::string, thrift::PeerSpec>>
+std::optional<std::unordered_map<std::string, thrift::PeerSpec>>
 OpenrWrapper<Serializer>::getKvStorePeers() {
   return kvStoreClient_->getPeers();
 }

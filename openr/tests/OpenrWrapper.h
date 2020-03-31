@@ -59,7 +59,7 @@ class OpenrWrapper {
   }
 
   // getter for allocated prefix
-  folly::Optional<thrift::IpPrefix> getIpPrefix();
+  std::optional<thrift::IpPrefix> getIpPrefix();
 
   // checks if the given key exists in the kvstore
   bool checkKeyExists(std::string key);
@@ -80,7 +80,7 @@ class OpenrWrapper {
   /**
    * APIs to get existing peers of a KvStore.
    */
-  folly::Optional<std::unordered_map<std::string, thrift::PeerSpec>>
+  std::optional<std::unordered_map<std::string, thrift::PeerSpec>>
   getKvStorePeers();
 
   /**
@@ -143,7 +143,7 @@ class OpenrWrapper {
   std::shared_ptr<IoProvider> ioProvider_;
 
   // IpPrefix
-  folly::Synchronized<folly::Optional<thrift::IpPrefix>> ipPrefix_;
+  folly::Synchronized<std::optional<thrift::IpPrefix>> ipPrefix_;
 
   // event loop to use with KvStoreClientInternal
   OpenrEventBase eventBase_;

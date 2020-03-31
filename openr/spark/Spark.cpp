@@ -135,7 +135,7 @@ using namespace fbzmq;
 
 namespace openr {
 
-const std::vector<std::vector<folly::Optional<SparkNeighState>>>
+const std::vector<std::vector<std::optional<SparkNeighState>>>
     Spark::stateMap_ = {
         /*
          * index 0 - IDLE
@@ -143,69 +143,69 @@ const std::vector<std::vector<folly::Optional<SparkNeighState>>>
          */
         {SparkNeighState::WARM,
          SparkNeighState::WARM,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none},
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt},
         /*
          * index 1 - WARM
          * HELLO_RCVD_INFO => NEGOTIATE;
          */
         {SparkNeighState::NEGOTIATE,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none},
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt},
         /*
          * index 2 - NEGOTIATE
          * HANDSHAKE_RCVD => ESTABLISHED; NEGOTIATE_TIMER_EXPIRE => WARM
          */
-        {folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
+        {std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
          SparkNeighState::ESTABLISHED,
-         folly::none,
+         std::nullopt,
          SparkNeighState::WARM,
-         folly::none},
+         std::nullopt},
         /*
          * index 3 - ESTABLISHED
          * HELLO_RCVD_NO_INFO => IDLE; HELLO_RCVD_RESTART => RESTART;
          * HEARTBEAT_RCVD => ESTABLISHED; HEARTBEAT_TIMER_EXPIRE => IDLE;
          */
-        {folly::none,
+        {std::nullopt,
          SparkNeighState::IDLE,
          SparkNeighState::RESTART,
          SparkNeighState::ESTABLISHED,
-         folly::none,
+         std::nullopt,
          SparkNeighState::IDLE,
-         folly::none,
-         folly::none},
+         std::nullopt,
+         std::nullopt},
         /*
          * index 4 - RESTART
          * HELLO_RCVD_INFO => ESTABLISHED; GR_TIMER_EXPIRE => IDLE
          */
         {SparkNeighState::ESTABLISHED,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
-         folly::none,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
          SparkNeighState::IDLE}};
 
 SparkNeighState
 Spark::getNextState(
-    folly::Optional<SparkNeighState> const& currState,
+    std::optional<SparkNeighState> const& currState,
     SparkNeighEvent const& event) {
   CHECK(currState.has_value()) << "Current state is 'UNEXPECTED'";
 
-  folly::Optional<SparkNeighState> nextState =
+  std::optional<SparkNeighState> nextState =
       stateMap_[static_cast<uint32_t>(currState.value())]
                [static_cast<uint32_t>(event)];
 
@@ -279,7 +279,7 @@ Spark::Spark(
     std::chrono::milliseconds myHeartbeatTime,
     std::chrono::milliseconds myNegotiateHoldTime,
     std::chrono::milliseconds myHeartbeatHoldTime,
-    folly::Optional<int> maybeIpTos,
+    std::optional<int> maybeIpTos,
     bool enableV4,
     bool enableSubnetValidation,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
@@ -293,7 +293,7 @@ Spark::Spark(
     bool enableFloodOptimization,
     bool enableSpark2,
     bool increaseHelloInterval,
-    folly::Optional<std::unordered_set<std::string>> areas)
+    std::optional<std::unordered_set<std::string>> areas)
     : myDomainName_(myDomainName),
       myNodeName_(myNodeName),
       udpMcastPort_(udpMcastPort),
@@ -413,7 +413,7 @@ Spark::stop() {
 }
 
 void
-Spark::prepare(folly::Optional<int> maybeIpTos) noexcept {
+Spark::prepare(std::optional<int> maybeIpTos) noexcept {
   int fd = ioProvider_->socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   mcastFd_ = fd;
   LOG(INFO) << "Creatd UDP socket for neighbor discovery. fd: " << mcastFd_;
@@ -626,7 +626,7 @@ Spark::validateHelloPacket(
 
     // in Spark2 Handshake messages will be used to find common area
     auto commonArea = findCommonArea(
-        apache::thrift::castToFolly(helloPacket.payload.areas),
+        castToStd(helloPacket.payload.areas),
         helloPacket.payload.originator.nodeName);
     if (commonArea.hasError()) {
       return PacketValidationResult::INVALID_AREA_CONFIGURATION;
@@ -1143,10 +1143,10 @@ Spark::checkNeighborState(
       << "Actual state: [" << sparkNeighborStateToStr(neighbor.state) << "].";
 }
 
-folly::Optional<SparkNeighState>
+std::optional<SparkNeighState>
 Spark::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
-  folly::Promise<folly::Optional<SparkNeighState>> promise;
+  folly::Promise<std::optional<SparkNeighState>> promise;
   auto future = promise.getFuture();
 
   runInEventBaseThread(
@@ -1154,14 +1154,14 @@ Spark::getSparkNeighState(
         if (spark2Neighbors_.find(ifName) == spark2Neighbors_.end()) {
           LOG(ERROR) << "No interface: " << ifName
                      << " in spark2Neighbor collection";
-          promise.setValue(folly::none);
+          promise.setValue(std::nullopt);
         } else {
           auto& ifNeighbors = spark2Neighbors_.at(ifName);
           auto neighborIt = ifNeighbors.find(neighborName);
           if (neighborIt == ifNeighbors.end()) {
             LOG(ERROR) << "No neighborName: " << neighborName
                        << " in spark2Neighbor colelction";
-            promise.setValue(folly::none);
+            promise.setValue(std::nullopt);
           } else {
             auto& neighbor = neighborIt->second;
             promise.setValue(neighbor.state);
@@ -2437,14 +2437,14 @@ Spark::updateInterfaceInDb(
   }
 }
 
-folly::Optional<std::string>
+std::optional<std::string>
 Spark::findInterfaceFromIfindex(int ifIndex) {
   for (const auto& kv : interfaceDb_) {
     if (kv.second.ifIndex == ifIndex) {
       return kv.first;
     }
   }
-  return folly::none;
+  return std::nullopt;
 }
 
 int32_t
@@ -2518,7 +2518,7 @@ Spark::submitCounters() {
 
 folly::Expected<std::string, folly::Unit>
 Spark::findCommonArea(
-    folly::Optional<std::unordered_set<std::string>> adjAreas,
+    std::optional<std::unordered_set<std::string>> adjAreas,
     const std::string& nodeName) {
   // check area membership
   std::vector<std::string> commonArea{};

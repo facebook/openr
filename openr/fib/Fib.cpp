@@ -533,7 +533,7 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   if (dryrun_) {
     // Do not program routes in case of dryrun
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
-    logPerfEvents(apache::thrift::castToFolly(routeDbDelta.perfEvents));
+    logPerfEvents(castToStd(routeDbDelta.perfEvents));
     return;
   }
 
@@ -577,7 +577,7 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
     fb303::fbData->addStatValue(
         "fib.num_of_route_updates", numOfRouteUpdates, fb303::SUM);
     routeState_.dirtyRouteDb = false;
-    logPerfEvents(apache::thrift::castToFolly(routeDbDelta.perfEvents));
+    logPerfEvents(castToStd(routeDbDelta.perfEvents));
     LOG(INFO) << "Done processing route add/update";
   } catch (const std::exception& e) {
     fb303::fbData->addStatValue(
@@ -737,7 +737,7 @@ Fib::updateGlobalCounters() {
 }
 
 void
-Fib::logPerfEvents(folly::Optional<thrift::PerfEvents> perfEvents) {
+Fib::logPerfEvents(std::optional<thrift::PerfEvents> perfEvents) {
   if (not perfEvents.has_value() or not perfEvents->events.size()) {
     return;
   }

@@ -167,7 +167,7 @@ LinkMonitor::LinkMonitor(
 
   //  Create KvStore client
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      this, nodeId_, kvStore, folly::none /* persist key timer */);
+      this, nodeId_, kvStore, std::nullopt /* persist key timer */);
 
   if (enableSegmentRouting) {
     // create range allocator to get unique node labels
@@ -179,7 +179,7 @@ LinkMonitor::LinkMonitor(
               nodeId_,
               Constants::kNodeLabelRangePrefix.toString(),
               kvStoreClient_.get(),
-              [&](folly::Optional<int32_t> newVal) noexcept {
+              [&](std::optional<int32_t> newVal) noexcept {
                 config_.nodeLabel = newVal ? newVal.value() : 0;
                 advertiseAdjacencies();
               },
@@ -193,7 +193,7 @@ LinkMonitor::LinkMonitor(
       // Delay range allocation until we have formed all of our adjcencies
       auto startAllocTimer =
           folly::AsyncTimeout::make(*getEvb(), [this, area]() noexcept {
-            folly::Optional<int32_t> initValue;
+            std::optional<int32_t> initValue;
             if (config_.nodeLabel != 0) {
               initValue = config_.nodeLabel;
             }

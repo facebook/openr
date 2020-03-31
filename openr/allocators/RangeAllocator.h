@@ -51,7 +51,7 @@ class RangeAllocator {
       const std::string& nodeName,
       const std::string& keyPrefix,
       KvStoreClientInternal* const kvStoreClient,
-      std::function<void(folly::Optional<T>)> callback,
+      std::function<void(std::optional<T>)> callback,
       const std::chrono::milliseconds minBackoffDur =
           std::chrono::milliseconds(50),
       const std::chrono::milliseconds maxBackoffDur = std::chrono::seconds(2),
@@ -68,7 +68,7 @@ class RangeAllocator {
    */
   void startAllocator(
       const std::pair<T /* min */, T /* max */> allocRange,
-      const folly::Optional<T> maybeInitValue);
+      const std::optional<T> maybeInitValue);
 
   /**
    * Default destructor.
@@ -78,13 +78,13 @@ class RangeAllocator {
   /**
    * Allocated value stored locally if any.
    */
-  folly::Optional<T>
+  std::optional<T>
   getValue() const {
     return myValue_;
   }
 
   // Allocated value stored in kvstore if any
-  folly::Optional<T> getValueFromKvStore() const;
+  std::optional<T> getValueFromKvStore() const;
 
   // check if the whole range has been allocated
   bool isRangeConsumed() const;
@@ -97,7 +97,7 @@ class RangeAllocator {
   RangeAllocator& operator=(RangeAllocator const&) = delete;
 
   // start allocation
-  void start(const folly::Optional<T> maybeInitValue);
+  void start(const std::optional<T> maybeInitValue);
 
   /**
    * Invoked asynchronously to allocate a new value. On success callback
@@ -136,7 +136,7 @@ class RangeAllocator {
   OpenrEventBase* const eventBase_{nullptr};
 
   // Callback function to let user know of newly allocated value
-  const std::function<void(folly::Optional<T>)> callback_{nullptr};
+  const std::function<void(std::optional<T>)> callback_{nullptr};
 
   // allow a higher originator ID to grab a key from an existing owner with a
   // lower ID knowingly
@@ -156,16 +156,16 @@ class RangeAllocator {
   T allocRangeSize_;
 
   // Currently allocated value
-  folly::Optional<T> myValue_;
+  std::optional<T> myValue_;
 
   // Currently requested value
-  folly::Optional<T> myRequestedValue_;
+  std::optional<T> myRequestedValue_;
 
   // Exponential backoff to avoid frequent allocation retries
   ExponentialBackoff<std::chrono::milliseconds> backoff_;
 
   // Scheduled timeout token
-  folly::Optional<int64_t> allocateValue_{folly::none};
+  std::optional<int64_t> allocateValue_{std::nullopt};
   std::unique_ptr<fbzmq::ZmqTimeout> timeout_;
 
   // if allocator has started

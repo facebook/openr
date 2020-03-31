@@ -16,7 +16,7 @@ KvStorePoller::KvStorePoller(std::vector<folly::SocketAddress>& sockAddrs)
     : sockAddrs_(sockAddrs) {}
 
 std::pair<
-    folly::Optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
+    std::optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::dumpAllWithPrefixMultipleAndParse<thrift::AdjacencyDatabase>(
@@ -27,7 +27,7 @@ KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
 }
 
 std::pair<
-    folly::Optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
+    std::optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 KvStorePoller::getPrefixDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::dumpAllWithPrefixMultipleAndParse<thrift::PrefixDatabase>(

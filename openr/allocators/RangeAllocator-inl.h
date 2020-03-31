@@ -40,7 +40,7 @@ RangeAllocator<T>::RangeAllocator(
     const std::string& nodeName,
     const std::string& keyPrefix,
     KvStoreClientInternal* const kvStoreClient,
-    std::function<void(folly::Optional<T>)> callback,
+    std::function<void(std::optional<T>)> callback,
     const std::chrono::milliseconds minBackoffDur /* = 50ms */,
     const std::chrono::milliseconds maxBackoffDur /* = 2s */,
     const bool overrideOwner /* = true */,
@@ -92,14 +92,14 @@ RangeAllocator<T>::createKey(const T val) const noexcept {
 template <typename T>
 void
 RangeAllocator<T>::startAllocator(
-    const std::pair<T, T> allocRange, const folly::Optional<T> maybeInitValue) {
+    const std::pair<T, T> allocRange, const std::optional<T> maybeInitValue) {
   CHECK(not hasStarted_) << "Already started";
   hasStarted_ = true;
 
   allocRange_ = allocRange;
   CHECK_LE(allocRange_.first, allocRange_.second) << "Invalid range.";
   T initValue;
-  if (maybeInitValue.hasValue()) {
+  if (maybeInitValue.has_value()) {
     initValue = maybeInitValue.value();
     // maybeInitValue may be outside of allocation range, e.g., initial dump
     // from kvstore gets invalid prefix index from previous incarnation
@@ -145,7 +145,7 @@ RangeAllocator<T>::isRangeConsumed() const {
 }
 
 template <typename T>
-folly::Optional<T>
+std::optional<T>
 RangeAllocator<T>::getValueFromKvStore() const {
   const auto maybeKeyMap = kvStoreClient_->dumpAllWithPrefix(keyPrefix_, area_);
   CHECK(maybeKeyMap.has_value())
@@ -158,14 +158,14 @@ RangeAllocator<T>::getValueFromKvStore() const {
       return val;
     }
   }
-  return folly::none;
+  return std::nullopt;
 }
 
 template <typename T>
 void
 RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   // Sanity check. We should not have any previously allocated value.
-  CHECK(!myValue_.hasValue())
+  CHECK(!myValue_.has_value())
       << "We have previously allocated value " << myValue_.value();
 
   VLOG(1) << "RangeAllocator " << nodeName_ << ": trying to allocate "
@@ -241,7 +241,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
       newKey,
       [this](
           const std::string& key,
-          folly::Optional<thrift::Value> thriftVal) noexcept {
+          std::optional<thrift::Value> thriftVal) noexcept {
         if (thriftVal.has_value()) {
           keyValUpdated(key, thriftVal.value());
         }
@@ -339,7 +339,7 @@ RangeAllocator<T>::keyValUpdated(
       CHECK_LT(nodeName_, thriftVal.originatorId)
           << "Lost to higher originatorId";
       CHECK_EQ(*myValue_, val);
-      callback_(folly::none);
+      callback_(std::nullopt);
       myValue_.reset();
     }
 

@@ -225,7 +225,7 @@ main(int argc, char** argv) {
       << "Overlapping global/local segment routing label space.";
 
   // Prepare IP-TOS value from flag and do sanity checks
-  folly::Optional<int> maybeIpTos{0};
+  std::optional<int> maybeIpTos{0};
   if (FLAGS_ip_tos != 0) {
     CHECK_LE(0, FLAGS_ip_tos) << "ip_tos must be greater than 0";
     CHECK_GE(256, FLAGS_ip_tos) << "ip_tos must be less than 256";
@@ -712,7 +712,7 @@ main(int argc, char** argv) {
   // SPF in Decision module.  This is to make sure the Decision module
   // receives itself as one of the nodes before running the spf.
 
-  folly::Optional<std::chrono::seconds> decisionGRWindow{folly::none};
+  std::optional<std::chrono::seconds> decisionGRWindow{std::nullopt};
   if (FLAGS_decision_graceful_restart_window_s >= 0) {
     decisionGRWindow =
         std::chrono::seconds(FLAGS_decision_graceful_restart_window_s);

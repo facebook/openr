@@ -95,7 +95,7 @@ class PrefixAllocator : public OpenrEventBase {
   void operator()(PrefixAllocatorParams const&);
 
   // Thread safe API for testing only
-  folly::Optional<uint32_t> getMyPrefixIndex();
+  std::optional<uint32_t> getMyPrefixIndex();
 
   // Static function to parse string representation of allocation params to
   // strong types.
@@ -124,26 +124,26 @@ class PrefixAllocator : public OpenrEventBase {
   bool checkE2eAllocIndex(uint32_t index);
 
   // get my existing prefix index from kvstore if it's present
-  folly::Optional<uint32_t> loadPrefixIndexFromKvStore();
+  std::optional<uint32_t> loadPrefixIndexFromKvStore();
 
   // load prefix index from disk
-  folly::Optional<uint32_t> loadPrefixIndexFromDisk();
+  std::optional<uint32_t> loadPrefixIndexFromDisk();
 
   // save newly elected prefix index to disk
-  void savePrefixIndexToDisk(folly::Optional<uint32_t> prefixIndex);
+  void savePrefixIndexToDisk(std::optional<uint32_t> prefixIndex);
 
   // initialize my prefix
   uint32_t getInitPrefixIndex();
 
   // start allocating prefixes, can be called again with new prefix
-  // or `folly::none` if seed prefix is no longer valid to withdraw
+  // or `std::nullopt` if seed prefix is no longer valid to withdraw
   // what we had before!
   void startAllocation(
-      folly::Optional<PrefixAllocatorParams> const& allocParams,
+      std::optional<PrefixAllocatorParams> const& allocParams,
       bool checkParams = true);
 
   // use my newly allocated prefix
-  void applyMyPrefixIndex(folly::Optional<uint32_t> prefixIndex);
+  void applyMyPrefixIndex(std::optional<uint32_t> prefixIndex);
   void applyMyPrefix();
 
   // update prefix
@@ -154,10 +154,10 @@ class PrefixAllocator : public OpenrEventBase {
 
   void logPrefixEvent(
       std::string event,
-      folly::Optional<uint32_t> oldPrefix,
-      folly::Optional<uint32_t> newPrefix,
-      folly::Optional<PrefixAllocatorParams> const& oldParams = folly::none,
-      folly::Optional<PrefixAllocatorParams> const& newParams = folly::none);
+      std::optional<uint32_t> oldPrefix,
+      std::optional<uint32_t> newPrefix,
+      std::optional<PrefixAllocatorParams> const& oldParams = std::nullopt,
+      std::optional<PrefixAllocatorParams> const& newParams = std::nullopt);
 
   void syncIfaceAddrs(
       const std::string& ifName,
@@ -208,10 +208,10 @@ class PrefixAllocator : public OpenrEventBase {
   //
 
   // Allocation parameters e.g., fc00:cafe::/56, 64
-  folly::Optional<PrefixAllocatorParams> allocParams_;
+  std::optional<PrefixAllocatorParams> allocParams_;
 
   // index of my currently claimed prefix within seed prefix
-  folly::Optional<uint32_t> myPrefixIndex_;
+  std::optional<uint32_t> myPrefixIndex_;
 
   apache::thrift::CompactSerializer serializer_;
 
@@ -249,7 +249,7 @@ class PrefixAllocator : public OpenrEventBase {
    * When Optional value is empty, it means cleanup addresses on the iface
    * otherwise applys the Optional value to the iface
    */
-  std::pair<bool, folly::Optional<folly::CIDRNetwork>> applyState_;
+  std::pair<bool, std::optional<folly::CIDRNetwork>> applyState_;
 
   // save alloc index from e2e-network-alllocation <value version, indices set>
   std::pair<int64_t, std::unordered_set<uint32_t>> e2eAllocIndex_{-1, {}};

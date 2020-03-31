@@ -66,28 +66,28 @@ class NextHopBuilder final {
 
   NextHopBuilder& setPushLabels(const std::vector<int32_t>& pushLabels);
 
-  folly::Optional<int> getIfIndex() const;
+  std::optional<int> getIfIndex() const;
 
-  folly::Optional<folly::IPAddress> getGateway() const;
+  std::optional<folly::IPAddress> getGateway() const;
 
   uint8_t getWeight() const;
 
-  folly::Optional<thrift::MplsActionCode> getLabelAction() const;
+  std::optional<thrift::MplsActionCode> getLabelAction() const;
 
-  folly::Optional<uint32_t> getSwapLabel() const;
+  std::optional<uint32_t> getSwapLabel() const;
 
-  folly::Optional<std::vector<int32_t>> getPushLabels() const;
+  std::optional<std::vector<int32_t>> getPushLabels() const;
 
   uint8_t getFamily() const;
 
  private:
-  folly::Optional<int> ifIndex_;
-  folly::Optional<folly::IPAddress> gateway_;
+  std::optional<int> ifIndex_;
+  std::optional<folly::IPAddress> gateway_;
   uint8_t weight_{0}; // default weight is 0
-  folly::Optional<thrift::MplsActionCode> labelAction_;
-  folly::Optional<uint32_t> swapLabel_;
-  folly::Optional<std::vector<int32_t>> pushLabels_;
-  folly::Optional<uint8_t> family_;
+  std::optional<thrift::MplsActionCode> labelAction_;
+  std::optional<uint32_t> swapLabel_;
+  std::optional<std::vector<int32_t>> pushLabels_;
+  std::optional<uint8_t> family_;
 };
 
 // NOTE: No special copy+move constructor and assignment operators for this one
@@ -95,30 +95,30 @@ class NextHop final {
  public:
   explicit NextHop(const NextHopBuilder& builder);
 
-  folly::Optional<int> getIfIndex() const;
+  std::optional<int> getIfIndex() const;
 
-  folly::Optional<folly::IPAddress> getGateway() const;
+  std::optional<folly::IPAddress> getGateway() const;
 
   uint8_t getWeight() const;
 
   std::string str() const;
 
-  folly::Optional<thrift::MplsActionCode> getLabelAction() const;
+  std::optional<thrift::MplsActionCode> getLabelAction() const;
 
-  folly::Optional<uint32_t> getSwapLabel() const;
+  std::optional<uint32_t> getSwapLabel() const;
 
-  folly::Optional<std::vector<int32_t>> getPushLabels() const;
+  std::optional<std::vector<int32_t>> getPushLabels() const;
 
   uint8_t getFamily() const;
 
  private:
-  folly::Optional<int> ifIndex_;
-  folly::Optional<folly::IPAddress> gateway_;
+  std::optional<int> ifIndex_;
+  std::optional<folly::IPAddress> gateway_;
   uint8_t weight_{0}; // default weight is 0
-  folly::Optional<thrift::MplsActionCode> labelAction_;
-  folly::Optional<uint32_t> swapLabel_;
-  folly::Optional<std::vector<int32_t>> pushLabels_;
-  folly::Optional<uint8_t> family_;
+  std::optional<thrift::MplsActionCode> labelAction_;
+  std::optional<uint32_t> swapLabel_;
+  std::optional<std::vector<int32_t>> pushLabels_;
+  std::optional<uint8_t> family_;
 };
 
 bool operator==(const NextHop& lhs, const NextHop& rhs);
@@ -194,7 +194,7 @@ class RouteBuilder {
 
   RouteBuilder& setMplsLabel(uint32_t mplsLabel);
 
-  folly::Optional<uint32_t> getMplsLabel() const;
+  std::optional<uint32_t> getMplsLabel() const;
   // Required, default RTN_UNICAST
   RouteBuilder& setType(uint8_t type = RTN_UNICAST);
 
@@ -221,34 +221,34 @@ class RouteBuilder {
 
   RouteBuilder& setFlags(uint32_t flags);
 
-  folly::Optional<uint32_t> getFlags() const;
+  std::optional<uint32_t> getFlags() const;
 
   RouteBuilder& setPriority(uint32_t priority);
 
-  folly::Optional<uint32_t> getPriority() const;
+  std::optional<uint32_t> getPriority() const;
 
   RouteBuilder& setTos(uint8_t tos);
 
-  folly::Optional<uint8_t> getTos() const;
+  std::optional<uint8_t> getTos() const;
 
   RouteBuilder& setMtu(uint32_t mtu);
 
-  folly::Optional<uint32_t> getMtu() const;
+  std::optional<uint32_t> getMtu() const;
 
   RouteBuilder& setAdvMss(uint32_t tos);
 
-  folly::Optional<uint32_t> getAdvMss() const;
+  std::optional<uint32_t> getAdvMss() const;
 
   RouteBuilder& addNextHop(const NextHop& nextHop);
 
   RouteBuilder& setRouteIfName(const std::string& ifName);
 
-  folly::Optional<std::string> getRouteIfName() const;
+  std::optional<std::string> getRouteIfName() const;
 
   // Multicast/Link route only need ifIndex in nexthop
   RouteBuilder& setRouteIfIndex(int ifIndex);
 
-  folly::Optional<int> getRouteIfIndex() const;
+  std::optional<int> getRouteIfIndex() const;
 
   const NextHopSet& getNextHops() const;
 
@@ -263,16 +263,16 @@ class RouteBuilder {
   uint8_t scope_{RT_SCOPE_UNIVERSE};
   uint8_t family_{AF_UNSPEC};
   bool isValid_{false};
-  folly::Optional<uint32_t> flags_;
-  folly::Optional<uint32_t> priority_;
-  folly::Optional<uint8_t> tos_;
-  folly::Optional<uint32_t> mtu_;
-  folly::Optional<uint32_t> advMss_;
+  std::optional<uint32_t> flags_;
+  std::optional<uint32_t> priority_;
+  std::optional<uint8_t> tos_;
+  std::optional<uint32_t> mtu_;
+  std::optional<uint32_t> advMss_;
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
-  folly::Optional<int> routeIfIndex_; // for multicast or link route
-  folly::Optional<std::string> routeIfName_; // for multicast or linkroute
-  folly::Optional<uint32_t> mplsLabel_;
+  std::optional<int> routeIfIndex_; // for multicast or link route
+  std::optional<std::string> routeIfName_; // for multicast or linkroute
+  std::optional<uint32_t> mplsLabel_;
 };
 
 class Route final {
@@ -290,7 +290,7 @@ class Route final {
 
   const folly::CIDRNetwork& getDestination() const;
 
-  folly::Optional<uint32_t> getMplsLabel() const;
+  std::optional<uint32_t> getMplsLabel() const;
 
   uint8_t getType() const;
 
@@ -300,21 +300,21 @@ class Route final {
 
   uint8_t getScope() const;
 
-  folly::Optional<uint32_t> getFlags() const;
+  std::optional<uint32_t> getFlags() const;
 
-  folly::Optional<uint32_t> getPriority() const;
+  std::optional<uint32_t> getPriority() const;
 
-  folly::Optional<uint8_t> getTos() const;
+  std::optional<uint8_t> getTos() const;
 
-  folly::Optional<uint32_t> getMtu() const;
+  std::optional<uint32_t> getMtu() const;
 
-  folly::Optional<uint32_t> getAdvMss() const;
+  std::optional<uint32_t> getAdvMss() const;
 
   const NextHopSet& getNextHops() const;
 
   bool isValid() const;
 
-  folly::Optional<std::string> getRouteIfName() const;
+  std::optional<std::string> getRouteIfName() const;
 
   void setPriority(uint32_t priority);
 
@@ -327,15 +327,15 @@ class Route final {
   uint8_t scope_{RT_SCOPE_UNIVERSE};
   uint8_t family_{AF_UNSPEC};
   bool isValid_{false};
-  folly::Optional<uint32_t> flags_;
-  folly::Optional<uint32_t> priority_;
-  folly::Optional<uint8_t> tos_;
-  folly::Optional<uint32_t> mtu_;
-  folly::Optional<uint32_t> advMss_;
+  std::optional<uint32_t> flags_;
+  std::optional<uint32_t> priority_;
+  std::optional<uint8_t> tos_;
+  std::optional<uint32_t> mtu_;
+  std::optional<uint32_t> advMss_;
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
-  folly::Optional<std::string> routeIfName_;
-  folly::Optional<uint32_t> mplsLabel_;
+  std::optional<std::string> routeIfName_;
+  std::optional<uint32_t> mplsLabel_;
 };
 
 bool operator==(const Route& lhs, const Route& rhs);
@@ -355,20 +355,20 @@ class IfAddressBuilder final {
 
   IfAddressBuilder& setPrefix(const folly::CIDRNetwork& prefix);
 
-  folly::Optional<folly::CIDRNetwork> getPrefix() const;
+  std::optional<folly::CIDRNetwork> getPrefix() const;
 
   IfAddressBuilder& setFamily(uint8_t family);
 
   // Family will be shadowed if prefix is set
-  folly::Optional<uint8_t> getFamily() const;
+  std::optional<uint8_t> getFamily() const;
 
   IfAddressBuilder& setScope(uint8_t scope);
 
-  folly::Optional<uint8_t> getScope() const;
+  std::optional<uint8_t> getScope() const;
 
   IfAddressBuilder& setFlags(uint8_t flags);
 
-  folly::Optional<uint8_t> getFlags() const;
+  std::optional<uint8_t> getFlags() const;
 
   IfAddressBuilder& setValid(bool isValid);
 
@@ -378,12 +378,12 @@ class IfAddressBuilder final {
   void reset();
 
  private:
-  folly::Optional<folly::CIDRNetwork> prefix_;
+  std::optional<folly::CIDRNetwork> prefix_;
   int ifIndex_{0};
   bool isValid_{false};
-  folly::Optional<uint8_t> scope_;
-  folly::Optional<uint8_t> flags_;
-  folly::Optional<uint8_t> family_;
+  std::optional<uint8_t> scope_;
+  std::optional<uint8_t> flags_;
+  std::optional<uint8_t> family_;
 };
 
 class IfAddress final {
@@ -404,23 +404,23 @@ class IfAddress final {
 
   int getIfIndex() const;
 
-  folly::Optional<folly::CIDRNetwork> getPrefix() const;
+  std::optional<folly::CIDRNetwork> getPrefix() const;
 
-  folly::Optional<uint8_t> getScope() const;
+  std::optional<uint8_t> getScope() const;
 
-  folly::Optional<uint8_t> getFlags() const;
+  std::optional<uint8_t> getFlags() const;
 
   bool isValid() const;
 
   std::string str() const;
 
  private:
-  folly::Optional<folly::CIDRNetwork> prefix_;
+  std::optional<folly::CIDRNetwork> prefix_;
   int ifIndex_{0};
   bool isValid_{false};
-  folly::Optional<uint8_t> scope_;
-  folly::Optional<uint8_t> flags_;
-  folly::Optional<uint8_t> family_;
+  std::optional<uint8_t> scope_;
+  std::optional<uint8_t> flags_;
+  std::optional<uint8_t> family_;
 };
 
 bool operator==(const IfAddress& lhs, const IfAddress& rhs);
@@ -452,7 +452,7 @@ class NeighborBuilder final {
 
   NeighborBuilder& setLinkAddress(const folly::MacAddress& linkAddress);
 
-  folly::Optional<folly::MacAddress> getLinkAddress() const;
+  std::optional<folly::MacAddress> getLinkAddress() const;
 
   bool getIsReachable() const;
 
@@ -468,14 +468,14 @@ class NeighborBuilder final {
    */
   NeighborBuilder& setState(int state, bool deleted = false);
 
-  folly::Optional<int> getState() const;
+  std::optional<int> getState() const;
 
  private:
   int ifIndex_{0};
   bool isReachable_{false};
   folly::IPAddress destination_;
-  folly::Optional<folly::MacAddress> linkAddress_;
-  folly::Optional<int> state_;
+  std::optional<folly::MacAddress> linkAddress_;
+  std::optional<int> state_;
 };
 
 class Neighbor final {
@@ -497,9 +497,9 @@ class Neighbor final {
 
   folly::IPAddress getDestination() const;
 
-  folly::Optional<folly::MacAddress> getLinkAddress() const;
+  std::optional<folly::MacAddress> getLinkAddress() const;
 
-  folly::Optional<int> getState() const;
+  std::optional<int> getState() const;
 
   std::string str() const;
 
@@ -507,8 +507,8 @@ class Neighbor final {
   int ifIndex_{0};
   bool isReachable_{false};
   folly::IPAddress destination_;
-  folly::Optional<folly::MacAddress> linkAddress_;
-  folly::Optional<int> state_;
+  std::optional<folly::MacAddress> linkAddress_;
+  std::optional<int> state_;
 };
 
 bool operator==(const Neighbor& lhs, const Neighbor& rhs);

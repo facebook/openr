@@ -59,7 +59,7 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
   if (pendingReads_.size()) {
     // Unblock a pending read
     auto& pendingRead = pendingReads_.front().get();
-    pendingRead.data.assign(std::forward<ValueTypeT>(val));
+    pendingRead.data = std::forward<ValueTypeT>(val);
     pendingRead.baton.post();
     pendingReads_.pop_front();
   } else {
@@ -83,13 +83,13 @@ RWQueue<ValueType>::get() {
   // Post our own baton if read is immediate (for)
   // XXX: This will evenly distribute elements between readers when queue
   // and also ensures fiber-fairness
-  if (pendingRead.data.hasValue()) {
+  if (pendingRead.data) {
     pendingRead.baton.post();
   }
 
   // Wait for baton and read the data
   pendingRead.baton.wait();
-  if (pendingRead.data.hasValue()) {
+  if (pendingRead.data) {
     return std::move(pendingRead.data).value();
   }
   return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
@@ -107,13 +107,13 @@ RWQueue<ValueType>::getCoro() {
   }
 
   // Wait if there is no data
-  if (pendingRead.data.hasValue()) {
+  if (pendingRead.data) {
     pendingRead.baton.post();
   }
 
   // Wait for baton and read the data
   co_await pendingRead.baton;
-  if (pendingRead.data.hasValue()) {
+  if (pendingRead.data) {
     co_return std::move(pendingRead.data).value();
   }
   co_return folly::makeUnexpected(QueueError::QUEUE_CLOSED);

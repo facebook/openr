@@ -107,8 +107,8 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
   std::vector<std::unique_ptr<RangeAllocator<T>>>
   createAllocators(
       const std::pair<T, T>& allocRange,
-      const folly::Optional<std::vector<T>> maybeInitVals,
-      std::function<void(int /* client id */, folly::Optional<T>)> callback,
+      const std::optional<std::vector<T>> maybeInitVals,
+      std::function<void(int /* client id */, std::optional<T>)> callback,
       const std::chrono::milliseconds rangeAllocTtl =
           Constants::kRangeAllocTtl) {
     // sanity check
@@ -124,7 +124,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
           "value:",
           clients[i].get(),
           [callback,
-           i](folly::Optional<T> newVal) noexcept { callback(i, newVal); },
+           i](std::optional<T> newVal) noexcept { callback(i, newVal); },
           10ms /* min backoff */,
           100ms /* max backoff */,
           overrideOwner /* override allowed */,
@@ -133,7 +133,8 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
       // start allocator
       allocator->startAllocator(
           allocRange,
-          maybeInitVals ? make_optional(maybeInitVals->at(i)) : folly::none);
+          maybeInitVals ? std::make_optional(maybeInitVals->at(i))
+                        : std::nullopt);
       allocators.emplace_back(std::move(allocator));
     }
 
@@ -177,7 +178,7 @@ TEST_P(RangeAllocatorFixture, DistinctSeed) {
   auto allocators = createAllocators<uint32_t>(
       {start, start + kNumClients - 1},
       initVals,
-      [&](int clientId, folly::Optional<uint32_t> newVal) {
+      [&](int clientId, std::optional<uint32_t> newVal) {
         DCHECK(newVal);
         CHECK_EQ(clientId + start, newVal.value());
         rcvd++;
@@ -213,8 +214,8 @@ TEST_P(RangeAllocatorFixture, NoSeed) {
   std::map<int /* client id */, uint64_t /* allocated value */> allocation;
   auto allocators = createAllocators<uint64_t>(
       {start, end},
-      folly::none,
-      [&](int clientId, folly::Optional<uint64_t> newVal) {
+      std::nullopt,
+      [&](int clientId, std::optional<uint64_t> newVal) {
         if (newVal) {
           VLOG(1) << "client " << clientId << " got " << newVal.value();
           ASSERT_GE(newVal.value(), start);
@@ -287,8 +288,8 @@ TEST_P(RangeAllocatorFixture, InsufficentRange) {
   std::map<int /* client id */, uint64_t /* allocated value */> allocation;
   auto allocators = createAllocators<uint64_t>(
       {start, end},
-      folly::none,
-      [&](int clientId, folly::Optional<uint64_t> newVal) {
+      std::nullopt,
+      [&](int clientId, std::optional<uint64_t> newVal) {
         if (newVal) {
           const auto val = newVal.value();
           VLOG(1) << "client " << clientId << " got " << val;

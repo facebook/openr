@@ -259,7 +259,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
   const auto newSeedPrefix = folly::IPAddress::createNetwork(
       folly::sformat("fc00:cafe:b00c::/{}", FLAGS_seed_prefix_len));
 
-  folly::Optional<PrefixAllocatorParams> maybeAllocParams;
+  std::optional<PrefixAllocatorParams> maybeAllocParams;
   if (!emptySeedPrefix) {
     maybeAllocParams = std::make_pair(seedPrefix, kAllocPrefixLen);
   }
@@ -304,7 +304,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         nodeToPrefix;
     auto prefixDbCb = [&](
         std::string const& /* key */,
-        folly::Optional<thrift::Value> value) mutable noexcept {
+        std::optional<thrift::Value> value) mutable noexcept {
       // Parse PrefixDb
       ASSERT_TRUE(value.has_value());
       ASSERT_TRUE(value.value().value.has_value());
@@ -561,14 +561,14 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
     return;
   }
 
-  folly::Synchronized<folly::Optional<folly::CIDRNetwork>> allocPrefix;
+  folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   std::atomic<bool> hasAllocPrefix{false};
   const uint8_t allocPrefixLen = 24;
   const std::string subscriptionKey = folly::sformat(
       "{}{}", openr::Constants::kPrefixDbMarker.toString(), myNodeName_);
 
   // Set callback
-  auto cb = [&](const std::string&, folly::Optional<thrift::Value> value) {
+  auto cb = [&](const std::string&, std::optional<thrift::Value> value) {
     // Parse PrefixDb
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(value.value().value.has_value());
@@ -580,7 +580,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
     EXPECT_GE(1, prefixes.size());
     if (prefixes.empty()) {
       SYNCHRONIZED(allocPrefix) {
-        allocPrefix = folly::none;
+        allocPrefix = std::nullopt;
       }
       LOG(INFO) << "Lost allocated prefix!";
       hasAllocPrefix.store(false, std::memory_order_relaxed);
@@ -695,7 +695,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
     return;
   }
 
-  folly::Synchronized<folly::Optional<folly::CIDRNetwork>> allocPrefix;
+  folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   folly::CIDRNetwork prevAllocPrefix;
   std::atomic<bool> hasAllocPrefix{false};
   const uint8_t allocPrefixLen = 64;
@@ -705,7 +705,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
   // Set callback
   kvStoreClient_->subscribeKey(
       subscriptionKey,
-      [&](const std::string& /* key */, folly::Optional<thrift::Value> value) {
+      [&](const std::string& /* key */, std::optional<thrift::Value> value) {
         // Parse PrefixDb
         ASSERT_TRUE(value.has_value());
         ASSERT_TRUE(value.value().value.has_value());
@@ -717,7 +717,7 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
         EXPECT_GE(1, prefixes.size());
         if (prefixes.empty()) {
           SYNCHRONIZED(allocPrefix) {
-            allocPrefix = folly::none;
+            allocPrefix = std::nullopt;
           }
           LOG(INFO) << "Lost allocated prefix!";
           hasAllocPrefix.store(false, std::memory_order_relaxed);
@@ -839,13 +839,13 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   }
 
   thrift::StaticAllocation staticAlloc;
-  folly::Synchronized<folly::Optional<folly::CIDRNetwork>> allocPrefix;
+  folly::Synchronized<std::optional<folly::CIDRNetwork>> allocPrefix;
   std::atomic<bool> hasAllocPrefix{false};
   const std::string subscriptionKey =
       folly::sformat("{}{}", openr::Constants::kPrefixDbMarker, myNodeName_);
 
   // Set callback
-  auto cb = [&](const std::string&, folly::Optional<thrift::Value> value) {
+  auto cb = [&](const std::string&, std::optional<thrift::Value> value) {
     // Parse PrefixDb
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(value.value().value.has_value());
@@ -857,7 +857,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
     EXPECT_GE(1, prefixes.size());
     if (prefixes.empty()) {
       SYNCHRONIZED(allocPrefix) {
-        allocPrefix = folly::none;
+        allocPrefix = std::nullopt;
       }
       LOG(INFO) << "Lost allocated prefix!";
       hasAllocPrefix.store(false, std::memory_order_relaxed);

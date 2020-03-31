@@ -111,7 +111,7 @@ class SparkFixture : public testing::Test {
       std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-      folly::Optional<std::unordered_set<std::string>> areas = folly::none) {
+      std::optional<std::unordered_set<std::string>> areas = std::nullopt) {
     return std::make_unique<SparkWrapper>(
         domainName,
         myNodeName,
@@ -1658,7 +1658,7 @@ TEST_F(SparkFixture, AreaTest) {
       milliseconds(2000) /* keep alive time */,
       std::make_pair(
           Constants::kOpenrSupportedVersion, Constants::kOpenrSupportedVersion),
-      folly::none);
+      std::nullopt);
   auto spark2 = createSpark(
       kDomainName,
       "node-2",

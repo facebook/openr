@@ -68,7 +68,7 @@ class SparkWrapper {
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
       std::shared_ptr<IoProvider> ioProvider,
-      folly::Optional<std::unordered_set<std::string>> areas,
+      std::optional<std::unordered_set<std::string>> areas,
       bool enableSpark2,
       bool increaseHelloInterval,
       SparkTimeConfig timeConfig);
@@ -88,16 +88,16 @@ class SparkWrapper {
 
   // receive spark neighbor event
   folly::Expected<thrift::SparkNeighborEvent, fbzmq::Error> recvNeighborEvent(
-      folly::Optional<std::chrono::milliseconds> timeout = folly::none);
+      std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
-  folly::Optional<thrift::SparkNeighborEvent> waitForEvent(
+  std::optional<thrift::SparkNeighborEvent> waitForEvent(
       const thrift::SparkNeighborEventType eventType,
-      folly::Optional<std::chrono::milliseconds> rcvdTimeout = folly::none,
-      folly::Optional<std::chrono::milliseconds> procTimeout =
+      std::optional<std::chrono::milliseconds> rcvdTimeout = std::nullopt,
+      std::optional<std::chrono::milliseconds> procTimeout =
           Constants::kPlatformProcTimeout) noexcept;
 
   // utility call to check neighbor state
-  folly::Optional<SparkNeighState> getSparkNeighState(
+  std::optional<SparkNeighState> getSparkNeighState(
       std::string const& ifName, std::string const& neighborName);
 
   std::unordered_map<std::string, int64_t>

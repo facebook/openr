@@ -57,7 +57,7 @@ getOpenrCtrlPlainTextClient(
     std::chrono::milliseconds processingTimeout =
         std::chrono::milliseconds(10000),
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
-    folly::Optional<int> maybeIpTos = folly::none) {
+    std::optional<int> maybeIpTos = std::nullopt) {
   std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client;
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
     // NOTE: It is possible to have caching for socket. We're not doing it as
@@ -72,9 +72,8 @@ getOpenrCtrlPlainTextClient(
         folly::DelayedDestruction::Destructor());
 
     // Build OptionMap for client socket connection
-    folly::SocketOptionMap optionMap =
-        folly::emptySocketOptionMap;
-    if (maybeIpTos.hasValue()) {
+    folly::SocketOptionMap optionMap = folly::emptySocketOptionMap;
+    if (maybeIpTos.has_value()) {
       folly::SocketOptionKey v6Opts = {IPPROTO_IPV6, IPV6_TCLASS};
       optionMap.emplace(v6Opts, maybeIpTos.value());
     }

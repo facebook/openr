@@ -215,9 +215,9 @@ class SpfSolver::SpfSolverImpl {
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
-  folly::Optional<thrift::RouteDatabase> buildPaths(
+  std::optional<thrift::RouteDatabase> buildPaths(
       const std::string& myNodeName);
-  folly::Optional<thrift::RouteDatabase> buildRouteDb(
+  std::optional<thrift::RouteDatabase> buildRouteDb(
       const std::string& myNodeName);
 
   bool decrementHolds();
@@ -255,12 +255,12 @@ class SpfSolver::SpfSolverImpl {
       const SpfResult& srcNodeDistances,
       const LinkState::LinkSet& linksToIgnore = {});
 
-  folly::Optional<thrift::UnicastRoute> createOpenRRoute(
+  std::optional<thrift::UnicastRoute> createOpenRRoute(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
       bool const isV4);
-  folly::Optional<thrift::UnicastRoute> createBGPRoute(
+  std::optional<thrift::UnicastRoute> createBGPRoute(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
@@ -281,7 +281,7 @@ class SpfSolver::SpfSolverImpl {
       bool const hasBgp,
       bool const useKsp2EdAlgo);
 
-  folly::Optional<int64_t> getMinNextHopThreshold(
+  std::optional<int64_t> getMinNextHopThreshold(
       BestPathCalResult nodes,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
 
@@ -296,7 +296,7 @@ class SpfSolver::SpfSolverImpl {
       std::unordered_set<std::string> const& nodes);
 
   // Given prefixes and the nodes who announce it, get the kspf routes.
-  folly::Optional<thrift::UnicastRoute> selectKsp2Routes(
+  std::optional<thrift::UnicastRoute> selectKsp2Routes(
       const thrift::IpPrefix& prefix,
       const string& myNodeName,
       BestPathCalResult const& bestPathCalResult,
@@ -330,7 +330,7 @@ class SpfSolver::SpfSolverImpl {
       const Metric minMetric,
       std::unordered_map<std::pair<std::string, std::string>, Metric>
           nextHopNodes,
-      folly::Optional<int32_t> swapLabel) const;
+      std::optional<int32_t> swapLabel) const;
 
   Metric findMinDistToNeighbor(
       const std::string& myNodeName, const std::string& neighborName) const;
@@ -616,10 +616,10 @@ SpfSolver::SpfSolverImpl::traceEdgeDisjointPaths(
   return paths;
 }
 
-folly::Optional<thrift::RouteDatabase>
+std::optional<thrift::RouteDatabase>
 SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
   if (!linkState_.hasNode(myNodeName)) {
-    return folly::none;
+    return std::nullopt;
   }
 
   auto const& startTime = std::chrono::steady_clock::now();
@@ -649,11 +649,11 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
   return buildRouteDb(myNodeName);
 } // buildPaths
 
-folly::Optional<thrift::RouteDatabase>
+std::optional<thrift::RouteDatabase>
 SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   if (not linkState_.hasNode(myNodeName) or
       spfResults_.count(myNodeName) == 0) {
-    return folly::none;
+    return std::nullopt;
   }
 
   const auto startTime = std::chrono::steady_clock::now();
@@ -898,11 +898,11 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
   return dstNodes;
 }
 
-folly::Optional<int64_t>
+std::optional<int64_t>
 SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
     BestPathCalResult nodes,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
-  folly::Optional<int64_t> maxMinNexthopForPrefix = folly::none;
+  std::optional<int64_t> maxMinNexthopForPrefix = std::nullopt;
   for (const auto& node : nodes.nodes) {
     auto npKv = nodePrefixes.find(node);
     if (npKv != nodePrefixes.end()) {
@@ -930,7 +930,7 @@ SpfSolver::SpfSolverImpl::maybeFilterDrainedNodes(
   return filtered.nodes.empty() ? result : filtered;
 }
 
-folly::Optional<thrift::UnicastRoute>
+std::optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::createOpenRRoute(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
@@ -940,7 +940,7 @@ SpfSolver::SpfSolverImpl::createOpenRRoute(
   const auto dstNodes = getBestAnnouncingNodes(
       myNodeName, prefix, nodePrefixes, isV4, false, false);
   if (not dstNodes.success) {
-    return folly::none;
+    return std::nullopt;
   }
 
   std::set<std::string> prefixNodes = dstNodes.nodes;
@@ -954,7 +954,7 @@ SpfSolver::SpfSolverImpl::createOpenRRoute(
     LOG(WARNING) << "No route to prefix " << toString(prefix)
                  << ", advertised by: " << folly::join(", ", prefixNodes);
     tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
-    return folly::none;
+    return std::nullopt;
   }
 
   // Convert list of neighbor nodes to nexthops (considering adjacencies)
@@ -967,7 +967,7 @@ SpfSolver::SpfSolverImpl::createOpenRRoute(
           perDestination,
           metricNhs.first,
           metricNhs.second,
-          folly::none));
+          std::nullopt));
 }
 
 BestPathCalResult
@@ -1054,7 +1054,7 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
   return ret;
 }
 
-folly::Optional<thrift::UnicastRoute>
+std::optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::createBGPRoute(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
@@ -1063,12 +1063,12 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
   std::string bestNode;
   // order is intended to comply with API used later.
   std::set<std::string> nodes;
-  folly::Optional<thrift::MetricVector> bestVector{folly::none};
+  std::optional<thrift::MetricVector> bestVector{std::nullopt};
 
   const auto dstInfo = getBestAnnouncingNodes(
       myNodeName, prefix, nodePrefixes, isV4, true, false);
   if (not dstInfo.success) {
-    return folly::none;
+    return std::nullopt;
   }
 
   if (dstInfo.nodes.empty() or dstInfo.nodes.count(myNodeName)) {
@@ -1078,7 +1078,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
       LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
       tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
     }
-    return folly::none;
+    return std::nullopt;
   }
   CHECK_NOTNULL(dstInfo.bestData);
 
@@ -1088,7 +1088,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     tData_.addStatValue("decision.missing_loopback_addr", 1, fbzmq::SUM);
     LOG(ERROR) << "Cannot find the best paths loopback address. "
                << "Skipping route for prefix: " << toString(prefix);
-    return folly::none;
+    return std::nullopt;
   }
 
   const auto nextHopsWithMetric =
@@ -1101,7 +1101,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
       false,
       nextHopsWithMetric.first,
       nextHopsWithMetric.second,
-      folly::none);
+      std::nullopt);
 
   return thrift::UnicastRoute{FRAGILE,
                               prefix,
@@ -1113,7 +1113,7 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               bestNextHop.at(0)};
 }
 
-folly::Optional<thrift::UnicastRoute>
+std::optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::selectKsp2Routes(
     const thrift::IpPrefix& prefix,
     const string& myNodeName,
@@ -1176,7 +1176,7 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
   }
 
   if (paths.size() == 0) {
-    return folly::none;
+    return std::nullopt;
   }
 
   for (const auto& pathAndCost : paths) {
@@ -1193,10 +1193,10 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
     CHECK(pathAndCost.first.size());
     auto firstLink = pathAndCost.first.back().second;
     auto& pathCost = pathAndCost.second;
-    folly::Optional<thrift::MplsAction> mplsAction;
+    std::optional<thrift::MplsAction> mplsAction;
     if (labels.size()) {
       mplsAction = createMplsAction(
-          thrift::MplsActionCode::PUSH, folly::none, std::move(labels));
+          thrift::MplsActionCode::PUSH, std::nullopt, std::move(labels));
     }
 
     auto const& prefixStr = prefix.prefixAddress.addr;
@@ -1219,7 +1219,7 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
     LOG(WARNING) << "Dropping routes to " << toString(prefix) << " because of "
                  << route.nextHops.size() << " of nexthops is smaller than "
                  << minNextHop.value() << " /n route: /n" << toString(route);
-    return folly::none;
+    return std::nullopt;
   }
 
   if (bestPathCalResult.bestData != nullptr) {
@@ -1397,7 +1397,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
     const Metric minMetric,
     std::unordered_map<std::pair<std::string, std::string>, Metric>
         nextHopNodes,
-    folly::Optional<int32_t> swapLabel) const {
+    std::optional<int32_t> swapLabel) const {
   CHECK(not nextHopNodes.empty());
 
   std::vector<thrift::NextHopThrift> nextHops;
@@ -1430,14 +1430,14 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
       }
 
       // Create associated mpls action if swapLabel is provided
-      folly::Optional<thrift::MplsAction> mplsAction;
+      std::optional<thrift::MplsAction> mplsAction;
       if (swapLabel.has_value()) {
         CHECK(not mplsAction.has_value());
         const bool isNextHopAlsoDst = dstNodeNames.count(neighborNode);
         mplsAction = createMplsAction(
             isNextHopAlsoDst ? thrift::MplsActionCode::PHP
                              : thrift::MplsActionCode::SWAP,
-            isNextHopAlsoDst ? folly::none : swapLabel);
+            isNextHopAlsoDst ? std::nullopt : swapLabel);
       }
 
       // Create associated mpls action if dest node is not empty and destination
@@ -1452,7 +1452,7 @@ SpfSolver::SpfSolverImpl::getNextHopsThrift(
         CHECK(not mplsAction.has_value());
         mplsAction = createMplsAction(
             thrift::MplsActionCode::PUSH,
-            folly::none,
+            std::nullopt,
             std::vector<int32_t>{dstNodeLabel});
       }
 
@@ -1571,12 +1571,12 @@ SpfSolver::getPrefixDatabases() {
   return impl_->getPrefixDatabases();
 }
 
-folly::Optional<thrift::RouteDatabase>
+std::optional<thrift::RouteDatabase>
 SpfSolver::buildPaths(const std::string& myNodeName) {
   return impl_->buildPaths(myNodeName);
 }
 
-folly::Optional<thrift::RouteDatabase>
+std::optional<thrift::RouteDatabase>
 SpfSolver::buildRouteDb(const std::string& myNodeName) {
   return impl_->buildRouteDb(myNodeName);
 }
@@ -1606,7 +1606,7 @@ Decision::Decision(
     const PrefixDbMarker& prefixDbMarker,
     std::chrono::milliseconds debounceMinDur,
     std::chrono::milliseconds debounceMaxDur,
-    folly::Optional<std::chrono::seconds> gracefulRestartDuration,
+    std::optional<std::chrono::seconds> gracefulRestartDuration,
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
@@ -1826,12 +1826,14 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         auto rc = spfSolver_->updateAdjacencyDatabase(adjacencyDb);
         if (rc.first) {
           res.adjChanged = true;
-          pendingAdjUpdates_.addUpdate(myNodeName_, adjacencyDb.perfEvents);
+          pendingAdjUpdates_.addUpdate(
+              myNodeName_, castToStd(adjacencyDb.perfEvents));
         }
         if (rc.second && nodeName == myNodeName_) {
           // route attribute chanegs only matter for the local node
           res.prefixesChanged = true;
-          pendingPrefixUpdates_.addUpdate(myNodeName_, adjacencyDb.perfEvents);
+          pendingPrefixUpdates_.addUpdate(
+              myNodeName_, castToStd(adjacencyDb.perfEvents));
         }
         if (spfSolver_->hasHolds() && orderedFibTimer_ != nullptr &&
             !orderedFibTimer_->isScheduled()) {
@@ -1848,7 +1850,8 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         auto nodePrefixDb = updateNodePrefixDatabase(key, prefixDb);
         if (spfSolver_->updatePrefixDatabase(nodePrefixDb)) {
           res.prefixesChanged = true;
-          pendingPrefixUpdates_.addUpdate(myNodeName_, nodePrefixDb.perfEvents);
+          pendingPrefixUpdates_.addUpdate(
+              myNodeName_, castToStd(nodePrefixDb.perfEvents));
         }
         continue;
       }
@@ -1878,7 +1881,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       if (spfSolver_->deleteAdjacencyDatabase(nodeName)) {
         res.adjChanged = true;
         pendingAdjUpdates_.addUpdate(
-            myNodeName_, thrift::PrefixDatabase().perfEvents);
+            myNodeName_, castToStd(thrift::PrefixDatabase().perfEvents));
       }
       continue;
     }
@@ -1965,8 +1968,7 @@ Decision::processPendingAdjUpdates() {
     return;
   }
 
-  apache::thrift::fromFollyOptional(
-      maybeRouteDb.value().perfEvents, maybePerfEvents);
+  fromStdOptional(maybeRouteDb.value().perfEvents, maybePerfEvents);
   sendRouteUpdate(maybeRouteDb.value(), "DECISION_SPF");
 }
 
@@ -1989,8 +1991,7 @@ Decision::processPendingPrefixUpdates() {
     return;
   }
 
-  apache::thrift::fromFollyOptional(
-      maybeRouteDb.value().perfEvents, maybePerfEvents);
+  fromStdOptional(maybeRouteDb.value().perfEvents, maybePerfEvents);
   sendRouteUpdate(maybeRouteDb.value(), "ROUTE_UPDATE");
 }
 

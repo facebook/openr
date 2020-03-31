@@ -443,7 +443,7 @@ class DualBaseFixture : public ::testing::Test {
   static void
   printStatus(
       const std::unordered_map<std::string, StatusStrings>& status,
-      folly::Optional<std::string> rootId = folly::none) {
+      std::optional<std::string> rootId = std::nullopt) {
     for (const auto& kv : status) {
       const auto& node = kv.first;
       // node level status

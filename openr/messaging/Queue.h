@@ -115,7 +115,7 @@ class RWQueue {
  private:
   struct PendingRead {
     folly::fibers::Baton baton;
-    folly::Optional<ValueType> data;
+    std::optional<ValueType> data;
   };
 
   /**

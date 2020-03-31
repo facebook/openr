@@ -379,7 +379,7 @@ NetlinkRouteMessage::parseIp(
   }
 }
 
-folly::Optional<std::vector<int32_t>>
+std::optional<std::vector<int32_t>>
 NetlinkRouteMessage::parseMplsLabels(const struct rtattr* routeAttr) const {
   const struct rtattr* mplsAttr =
       reinterpret_cast<struct rtattr*> RTA_DATA(routeAttr);
@@ -402,7 +402,7 @@ NetlinkRouteMessage::parseMplsLabels(const struct rtattr* routeAttr) const {
     }
     mplsAttr = RTA_NEXT(mplsAttr, mplsAttrLen);
   } while (RTA_OK(mplsAttr, mplsAttrLen));
-  return folly::none;
+  return std::nullopt;
 }
 
 void
@@ -467,15 +467,15 @@ void
 NetlinkRouteMessage::setMplsAction(
     fbnl::NextHopBuilder& nhBuilder, unsigned char family) const {
   // Inferring MPLS action from nexthop fields
-  if (nhBuilder.getPushLabels() != folly::none) {
+  if (nhBuilder.getPushLabels() != std::nullopt) {
     nhBuilder.setLabelAction(thrift::MplsActionCode::PUSH);
   } else if (family == AF_MPLS) {
-    if (nhBuilder.getGateway() != folly::none &&
-        nhBuilder.getSwapLabel() != folly::none) {
+    if (nhBuilder.getGateway() != std::nullopt &&
+        nhBuilder.getSwapLabel() != std::nullopt) {
       nhBuilder.setLabelAction(thrift::MplsActionCode::SWAP);
     } else if (
-        nhBuilder.getGateway() != folly::none &&
-        nhBuilder.getSwapLabel() == folly::none) {
+        nhBuilder.getGateway() != std::nullopt &&
+        nhBuilder.getSwapLabel() == std::nullopt) {
       nhBuilder.setLabelAction(thrift::MplsActionCode::PHP);
     } else {
       nhBuilder.setLabelAction(thrift::MplsActionCode::POP_AND_LOOKUP);

@@ -42,14 +42,14 @@ parseThriftValues(
 // static
 template <typename ThriftType>
 std::pair<
-    folly::Optional<std::unordered_map<std::string /* key */, ThriftType>>,
+    std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 dumpAllWithPrefixMultipleAndParse(
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
-    folly::Optional<int> maybeIpTos /* folly::none */,
+    std::optional<int> maybeIpTos /* std::nullopt */,
     const folly::SocketAddress& bindAddr /* folly::AsyncSocket::anyAddress()*/,
     const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
   auto val = dumpAllWithThriftClientFromMultiple(
@@ -61,21 +61,21 @@ dumpAllWithPrefixMultipleAndParse(
       bindAddr,
       area);
   if (not val.first) {
-    return std::make_pair(folly::none, val.second);
+    return std::make_pair(std::nullopt, val.second);
   }
   return std::make_pair(parseThriftValues<ThriftType>(*val.first), val.second);
 }
 
 // static method to dump KvStore key-val over multiple instances
 std::pair<
-    folly::Optional<std::unordered_map<std::string /* key */, thrift::Value>>,
+    std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
     std::vector<fbzmq::SocketUrl> /* unreached url */>
 dumpAllWithThriftClientFromMultiple(
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
-    folly::Optional<int> maybeIpTos /* folly::none */,
+    std::optional<int> maybeIpTos /* std::nullopt */,
     const folly::SocketAddress& bindAddr /* folly::AsyncSocket::anyAddress()*/,
     const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
   folly::EventBase evb;
@@ -124,7 +124,7 @@ dumpAllWithThriftClientFromMultiple(
 
   // can't connect to ANY single Open/R instance
   if (calls.empty()) {
-    return std::make_pair(folly::none, unreachedUrls);
+    return std::make_pair(std::nullopt, unreachedUrls);
   }
 
   folly::collectAllSemiFuture(calls).via(&evb).thenValue(

@@ -52,7 +52,7 @@ class KeyPrefix {
  * PrefixKey class to form and parse a PrefixKey. PrefixKey can be instantiated
  * by passing parameters to form a key, or by passing the key string to parse
  * and populate the parameters. In case the parsing fails all the parameters
- * are set to folly::none
+ * are set to std::nullopt
  */
 
 class PrefixKey {
@@ -213,6 +213,11 @@ getDurationBetweenPerfEvents(
 int64_t generateHash(
     const int64_t version,
     const std::string& originatorId,
+    const std::optional<std::string>& value);
+
+int64_t generateHash(
+    const int64_t version,
+    const std::string& originatorId,
     const apache::thrift::DeprecatedOptionalField<std::string>& value);
 
 /**
@@ -271,6 +276,70 @@ isMplsLabelValid(int32_t const mplsLabel) {
  */
 void checkMplsAction(thrift::MplsAction const& mplsAction);
 
+/**
+ * Thrift is consuming DeprecatedOptionalField for optional fields.
+ * Openr is using std::optional internally.
+ * The utilities covert between these types.
+ * Can be removed when thrift adopts std::optional.
+ */
+template <class T>
+auto&&
+fromStdOptional(
+    apache::thrift::DeprecatedOptionalField<T>& lhs,
+    const std::optional<T>& rhs) {
+  if (rhs) {
+    lhs = *rhs;
+  } else {
+    lhs.reset();
+  }
+  return lhs;
+}
+
+template <class T>
+std::optional<T>
+castToStd(const apache::thrift::DeprecatedOptionalField<T>& t) {
+  if (t) {
+    return *t;
+  }
+  return {};
+}
+
+template <class T>
+std::optional<T>
+castToStd(apache::thrift::DeprecatedOptionalField<T>& t) {
+  if (t) {
+    return *t;
+  }
+  return {};
+}
+
+template <class T>
+std::optional<T>
+castToStd(apache::thrift::DeprecatedOptionalField<T>&& t) {
+  if (t) {
+    return std::move(*t);
+  }
+  return {};
+}
+
+template <class T>
+std::optional<T>
+castToStd(const folly::Optional<T>& t) {
+  if (t) {
+    return *t;
+  }
+  return {};
+}
+
+template <class T>
+std::optional<T>
+castToStd(folly::Optional<T>&& t) {
+  if (t) {
+    return std::move(*t);
+  }
+  return {};
+}
+
 thrift::PeerSpec createPeerSpec(
     const std::string& cmdUrl, bool supportFloodOptimization);
 
@@ -292,7 +361,7 @@ thrift::SparkPayload createSparkPayload(
     bool solicitResponse,
     bool supportFloodOptimization,
     bool restarting,
-    const folly::Optional<std::unordered_set<std::string>>& areas);
+    const std::optional<std::unordered_set<std::string>>& areas);
 
 thrift::SparkNeighborEvent createSparkNeighborEvent(
     thrift::SparkNeighborEventType event,
@@ -332,7 +401,7 @@ thrift::AdjacencyDatabase createAdjDb(
     const std::vector<thrift::Adjacency>& adjs,
     int32_t nodeLabel,
     bool overLoadBit = false,
-    folly::Optional<std::string> area = std::string{
+    std::optional<std::string> area = std::string{
         openr::thrift::KvStore_constants::kDefaultArea()});
 
 thrift::PrefixDatabase createPrefixDb(
@@ -347,38 +416,38 @@ thrift::PrefixEntry createPrefixEntry(
         thrift::PrefixForwardingType::IP,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm =
         thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    folly::Optional<bool> ephemeral = folly::none,
-    folly::Optional<thrift::MetricVector> mv = folly::none,
-    folly::Optional<int64_t> minNexthop = folly::none);
+    std::optional<bool> ephemeral = std::nullopt,
+    std::optional<thrift::MetricVector> mv = std::nullopt,
+    std::optional<int64_t> minNexthop = std::nullopt);
 
 thrift::Value createThriftValue(
     int64_t version,
     std::string originatorId,
-    folly::Optional<std::string> data,
+    std::optional<std::string> data,
     int64_t ttl = Constants::kTtlInfinity,
     int64_t ttlVersion = 0,
-    folly::Optional<int64_t> hash = folly::none);
+    std::optional<int64_t> hash = std::nullopt);
 
 thrift::Publication createThriftPublication(
     const std::unordered_map<std::string, thrift::Value>& kv,
     const std::vector<std::string>& expiredKeys,
-    const folly::Optional<std::vector<std::string>>& nodeIds = folly::none,
-    const folly::Optional<std::vector<std::string>>& keysToUpdate = folly::none,
-    const folly::Optional<std::string>& floodRootId = folly::none,
-    const folly::Optional<std::string>& area = std::string{
+    const std::optional<std::vector<std::string>>& nodeIds = std::nullopt,
+    const std::optional<std::vector<std::string>>& keysToUpdate = std::nullopt,
+    const std::optional<std::string>& floodRootId = std::nullopt,
+    const std::optional<std::string>& area = std::string{
         openr::thrift::KvStore_constants::kDefaultArea()});
 
 thrift::NextHopThrift createNextHop(
     thrift::BinaryAddress addr,
-    folly::Optional<std::string> ifName = folly::none,
+    std::optional<std::string> ifName = std::nullopt,
     int32_t metric = 0,
-    folly::Optional<thrift::MplsAction> maybeMplsAction = folly::none,
+    std::optional<thrift::MplsAction> maybeMplsAction = std::nullopt,
     bool useNonShortestRoute = false);
 
 thrift::MplsAction createMplsAction(
     thrift::MplsActionCode const mplsActionCode,
-    folly::Optional<int32_t> maybeSwapLabel = folly::none,
-    folly::Optional<std::vector<int32_t>> maybePushLabels = folly::none);
+    std::optional<int32_t> maybeSwapLabel = std::nullopt,
+    std::optional<std::vector<int32_t>> maybePushLabels = std::nullopt);
 
 thrift::UnicastRoute createUnicastRoute(
     thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops);
@@ -407,7 +476,7 @@ namespace MetricVectorUtils {
 
 enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };
 
-folly::Optional<const openr::thrift::MetricEntity> getMetricEntityByType(
+std::optional<const openr::thrift::MetricEntity> getMetricEntityByType(
     const openr::thrift::MetricVector& mv, int64_t type);
 
 thrift::MetricEntity createMetricEntity(

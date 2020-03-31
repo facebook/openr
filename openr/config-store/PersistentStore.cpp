@@ -385,11 +385,11 @@ PersistentStore::encodePersistentObject(
 }
 
 // A made up decoding of a PersistentObject.
-folly::Expected<folly::Optional<PersistentObject>, std::string>
+folly::Expected<std::optional<PersistentObject>, std::string>
 PersistentStore::decodePersistentObject(folly::io::Cursor& cursor) noexcept {
   // If nothing can be read, return
   if (not cursor.canAdvance(1)) {
-    return folly::none;
+    return std::nullopt;
   }
 
   PersistentObject pObject;

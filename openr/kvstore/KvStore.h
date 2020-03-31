@@ -104,7 +104,7 @@ struct KvStoreParams {
   // ZMQ high water
   int zmqHwm;
   // IP ToS
-  folly::Optional<int> maybeIpTos;
+  std::optional<int> maybeIpTos;
   // how often to request full db sync from peers
   std::chrono::seconds dbSyncInterval;
   // KvStore key filters
@@ -125,7 +125,7 @@ struct KvStoreParams {
       // ZMQ high water mark
       int zmqhwm,
       // IP QoS
-      folly::Optional<int> maybeipTos,
+      std::optional<int> maybeipTos,
       // how often to request full db sync from peers
       std::chrono::seconds dbsyncInterval,
       std::optional<KvStoreFilters> filter,
@@ -429,7 +429,7 @@ class KvStore final : public OpenrEventBase {
       // the url to submit to monitor
       MonitorSubmitUrl monitorSubmitUrl,
       // IP TOS value to set on sockets using TCP
-      folly::Optional<int> ipTos,
+      std::optional<int> ipTos,
       // how often to request full db sync from peers
       std::chrono::seconds dbSyncInterval,
       // how often to submit to monitor
@@ -526,7 +526,7 @@ class KvStore final : public OpenrEventBase {
   void prepareSocket(
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
       std::string const& url,
-      folly::Optional<int> maybeIpTos = folly::none);
+      std::optional<int> maybeIpTos = std::nullopt);
 
   void processCmdSocketRequest(
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;

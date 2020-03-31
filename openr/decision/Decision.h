@@ -45,9 +45,9 @@ struct BestPathCalResult {
   bool success{false};
   std::string bestNode{""};
   std::set<std::string> nodes;
-  folly::Optional<int64_t> bestIgpMetric{folly::none};
+  std::optional<int64_t> bestIgpMetric{std::nullopt};
   std::string const* bestData{nullptr};
-  folly::Optional<thrift::MetricVector> bestVector{folly::none};
+  std::optional<thrift::MetricVector> bestVector{std::nullopt};
 };
 
 namespace detail {
@@ -61,15 +61,14 @@ struct DecisionPendingUpdates {
   void
   clear() {
     count_ = 0;
-    minTs_ = folly::none;
-    perfEvents_ = folly::none;
+    minTs_ = std::nullopt;
+    perfEvents_ = std::nullopt;
   }
 
   void
   addUpdate(
       const std::string& nodeName,
-      const apache::thrift::DeprecatedOptionalField<thrift::PerfEvents>&
-          perfEvents) {
+      const std::optional<thrift::PerfEvents>& perfEvents) {
     ++count_;
 
     // Skip if perf information is missing
@@ -88,7 +87,7 @@ struct DecisionPendingUpdates {
     // oldest.
     if (!minTs_ or minTs_.value() > perfEvents->events.front().unixTs) {
       minTs_ = perfEvents->events.front().unixTs;
-      perfEvents_ = apache::thrift::castToFolly(perfEvents);
+      perfEvents_ = perfEvents;
       addPerfEvent(*perfEvents_, nodeName, "DECISION_RECEIVED");
     }
   }
@@ -98,15 +97,15 @@ struct DecisionPendingUpdates {
     return count_;
   }
 
-  folly::Optional<thrift::PerfEvents>
+  std::optional<thrift::PerfEvents>
   getPerfEvents() const {
     return perfEvents_;
   }
 
  private:
   uint32_t count_{0};
-  folly::Optional<int64_t> minTs_;
-  folly::Optional<thrift::PerfEvents> perfEvents_;
+  std::optional<int64_t> minTs_;
+  std::optional<thrift::PerfEvents> perfEvents_;
 };
 } // namespace detail
 
@@ -156,14 +155,14 @@ class SpfSolver {
   getPrefixDatabases();
 
   // Compute all routes from perspective of a given router.
-  // Returns folly::none if myNodeName doesn't have any prefix database
-  folly::Optional<thrift::RouteDatabase> buildPaths(
+  // Returns std::nullopt if myNodeName doesn't have any prefix database
+  std::optional<thrift::RouteDatabase> buildPaths(
       const std::string& myNodeName);
 
   // Build route database using global prefix database and cached SPF
   // computation from perspective of a given router.
-  // Returns folly::none if myNodeName doesn't have any prefix database
-  folly::Optional<thrift::RouteDatabase> buildRouteDb(
+  // Returns std::nullopt if myNodeName doesn't have any prefix database
+  std::optional<thrift::RouteDatabase> buildRouteDb(
       const std::string& myNodeName);
 
   bool decrementHolds();
@@ -210,7 +209,7 @@ class Decision : public OpenrEventBase {
       const PrefixDbMarker& prefixDbMarker,
       std::chrono::milliseconds debounceMinDur,
       std::chrono::milliseconds debounceMaxDur,
-      folly::Optional<std::chrono::seconds> gracefulRestartDuration,
+      std::optional<std::chrono::seconds> gracefulRestartDuration,
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,

@@ -23,7 +23,7 @@ SparkWrapper::SparkWrapper(
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
     std::shared_ptr<IoProvider> ioProvider,
-    folly::Optional<std::unordered_set<std::string>> areas,
+    std::optional<std::unordered_set<std::string>> areas,
     bool enableSpark2,
     bool increaseHelloInterval,
     SparkTimeConfig timeConfig)
@@ -41,7 +41,7 @@ SparkWrapper::SparkWrapper(
       timeConfig.myHeartbeatTime, // spark2_heartbeat_time
       timeConfig.myNegotiateHoldTime, // spark2_negotiate_hold_time
       timeConfig.myHeartbeatHoldTime, // spark2_heartbeat_hold_time
-      folly::none /* ip-tos */,
+      std::nullopt /* ip-tos */,
       enableV4,
       enableSubnetValidation,
       interfaceUpdatesQueue_.getReader(),
@@ -110,7 +110,7 @@ SparkWrapper::updateInterfaceDb(
 
 folly::Expected<thrift::SparkNeighborEvent, Error>
 SparkWrapper::recvNeighborEvent(
-    folly::Optional<std::chrono::milliseconds> timeout) {
+    std::optional<std::chrono::milliseconds> timeout) {
   auto startTime = std::chrono::steady_clock::now();
   while (not neighborUpdatesReader_.size()) {
     // Break if timeout occurs
@@ -125,11 +125,11 @@ SparkWrapper::recvNeighborEvent(
   return neighborUpdatesReader_.get().value();
 }
 
-folly::Optional<thrift::SparkNeighborEvent>
+std::optional<thrift::SparkNeighborEvent>
 SparkWrapper::waitForEvent(
     const thrift::SparkNeighborEventType eventType,
-    folly::Optional<std::chrono::milliseconds> rcvdTimeout,
-    folly::Optional<std::chrono::milliseconds> procTimeout) noexcept {
+    std::optional<std::chrono::milliseconds> rcvdTimeout,
+    std::optional<std::chrono::milliseconds> procTimeout) noexcept {
   auto startTime = std::chrono::steady_clock::now();
 
   while (true) {
@@ -150,7 +150,7 @@ SparkWrapper::waitForEvent(
       return event;
     }
   }
-  return folly::none;
+  return std::nullopt;
 }
 
 std::pair<folly::IPAddress, folly::IPAddress>
@@ -159,7 +159,7 @@ SparkWrapper::getTransportAddrs(const thrift::SparkNeighborEvent& event) {
           toIPAddress(event.neighbor.transportAddressV6)};
 }
 
-folly::Optional<SparkNeighState>
+std::optional<SparkNeighState>
 SparkWrapper::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
   return spark_->getSparkNeighState(ifName, neighborName);

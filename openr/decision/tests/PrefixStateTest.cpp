@@ -88,7 +88,7 @@ TEST_P(GetLoopbackViasTest, basicOperation) {
   for (auto const& [name, db] : prefixDbs_) {
     nodes.emplace(name);
   }
-  const auto loopbacks = state_.getLoopbackVias(nodes, isV4, folly::none);
+  const auto loopbacks = state_.getLoopbackVias(nodes, isV4, std::nullopt);
 
   EXPECT_EQ(loopbacks.size(), prefixDbs_.size());
 
@@ -121,7 +121,7 @@ TEST_P(GetLoopbackViasTest, basicOperation) {
     }
   }
 
-  const auto loopbacks2 = state_.getLoopbackVias(nodes, isV4, folly::none);
+  const auto loopbacks2 = state_.getLoopbackVias(nodes, isV4, std::nullopt);
   EXPECT_EQ(loopbacks2.size(), 0);
 }
 

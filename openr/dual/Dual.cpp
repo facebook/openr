@@ -782,11 +782,11 @@ DualNode::getDuals() {
   return duals_;
 }
 
-folly::Optional<std::string>
+std::optional<std::string>
 DualNode::getSptRootId() const noexcept {
   if (duals_.empty()) {
     // haven't discovered any root yet
-    return folly::none;
+    return std::nullopt;
   }
 
   // pick smallest root-id who has valid route
@@ -796,7 +796,7 @@ DualNode::getSptRootId() const noexcept {
     }
   }
 
-  return folly::none;
+  return std::nullopt;
 }
 
 std::unordered_set<std::string>
@@ -850,10 +850,10 @@ DualNode::processDualMessages(const thrift::DualMessages& messages) {
   sendAllDualMessages(msgsToSend);
 }
 
-folly::Optional<Dual::RouteInfo>
+std::optional<Dual::RouteInfo>
 DualNode::getInfo(const std::string& rootId) const noexcept {
   if (duals_.count(rootId) == 0) {
-    return folly::none;
+    return std::nullopt;
   }
   return duals_.at(rootId).getInfo();
 }

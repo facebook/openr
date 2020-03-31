@@ -894,9 +894,9 @@ NetlinkSocket::getIfIndex(const std::string& ifName) {
   return future;
 }
 
-folly::Future<folly::Optional<int>>
+folly::Future<std::optional<int>>
 NetlinkSocket::getLoopbackIfindex() {
-  folly::Promise<folly::Optional<int>> promise;
+  folly::Promise<std::optional<int>> promise;
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
     p.setValue(loopbackIfIndex_);

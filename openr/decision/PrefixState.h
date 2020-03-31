@@ -38,7 +38,7 @@ class PrefixState {
   std::vector<thrift::NextHopThrift> getLoopbackVias(
       std::unordered_set<std::string> const& nodes,
       bool const isV4,
-      folly::Optional<int64_t> const& igpMetric) const;
+      std::optional<int64_t> const& igpMetric) const;
 
   std::unordered_map<std::string, thrift::BinaryAddress> const&
   getNodeHostLoopbacksV4() const {

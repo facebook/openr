@@ -122,22 +122,22 @@ TEST(UtilTest, PrefixKeyTest) {
   // prefix key
   PrefixKeyEntry k1;
 
-  // this should fail, all paremeters expected to by folly::none
+  // this should fail, all parameters expected to be std::nullopt
   k1.pkey = "prefix:[ff00::1]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
 
-  // this should fail, all paremeters expected to by folly::none
+  // this should fail, all parameters expected to be std::nullopt
   k1.pkey = "prefix:node-name:e.1:[ff00::1/100]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
 
-  // this should fail, all paremeters expected to by folly::none
+  // this should fail, all parameters expected to be std::nullopt
   k1.pkey = "prefix:node_name:a:[ff00::1/a]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
 
-  // this should fail, all paremeters expected to by folly::none
+  // this should fail, all parameters expected to be std::nullopt
   k1.pkey = "prefix:nodename:0:0:[ff00::1/129]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
@@ -165,12 +165,12 @@ TEST(UtilTest, PrefixKeyTest) {
   k1.shouldPass = false;
   strToItems.push_back(k1);
 
-  // this should fail, all paremeters expected to by folly::none
+  // this should fail, all paremeters expected to by std::nullopt
   k1.pkey = "prefix:nodename.0.0:3:[ff00::1/2334]";
   k1.shouldPass = false;
   strToItems.push_back(k1);
 
-  // this should fail, all paremeters expected to by folly::none
+  // this should fail, all paremeters expected to by std::nullopt
   k1.pkey = "prefix:nodename.0.0:33:[192.168.0.1/343]";
   k1.shouldPass = false;
   strToItems.push_back(k1);

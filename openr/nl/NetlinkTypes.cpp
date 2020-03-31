@@ -84,7 +84,7 @@ RouteBuilder::setMplsLabel(uint32_t mplsLabel) {
   return *this;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 RouteBuilder::getMplsLabel() const {
   return mplsLabel_;
 }
@@ -140,7 +140,7 @@ RouteBuilder::setFlags(uint32_t flags) {
   return *this;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 RouteBuilder::getFlags() const {
   return flags_;
 }
@@ -151,7 +151,7 @@ RouteBuilder::setPriority(uint32_t priority) {
   return *this;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 RouteBuilder::getPriority() const {
   return priority_;
 }
@@ -162,7 +162,7 @@ RouteBuilder::setTos(uint8_t tos) {
   return *this;
 }
 
-folly::Optional<uint8_t>
+std::optional<uint8_t>
 RouteBuilder::getTos() const {
   return tos_;
 }
@@ -173,7 +173,7 @@ RouteBuilder::setMtu(uint32_t mtu) {
   return *this;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 RouteBuilder::getMtu() const {
   return mtu_;
 }
@@ -184,7 +184,7 @@ RouteBuilder::setAdvMss(uint32_t advMss) {
   return *this;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 RouteBuilder::getAdvMss() const {
   return advMss_;
 }
@@ -195,7 +195,7 @@ RouteBuilder::setRouteIfName(const std::string& ifName) {
   return *this;
 }
 
-folly::Optional<std::string>
+std::optional<std::string>
 RouteBuilder::getRouteIfName() const {
   return routeIfName_;
 }
@@ -206,7 +206,7 @@ RouteBuilder::setRouteIfIndex(int ifIndex) {
   return *this;
 }
 
-folly::Optional<int>
+std::optional<int>
 RouteBuilder::getRouteIfIndex() const {
   return routeIfIndex_;
 }
@@ -372,22 +372,22 @@ Route::getDestination() const {
   return dst_;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 Route::getMplsLabel() const {
   return mplsLabel_;
 }
 
-folly::Optional<uint8_t>
+std::optional<uint8_t>
 Route::getTos() const {
   return tos_;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 Route::getMtu() const {
   return mtu_;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 Route::getAdvMss() const {
   return advMss_;
 }
@@ -407,12 +407,12 @@ Route::getScope() const {
   return scope_;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 Route::getFlags() const {
   return flags_;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 Route::getPriority() const {
   return priority_;
 }
@@ -422,7 +422,7 @@ Route::getNextHops() const {
   return nextHops_;
 }
 
-folly::Optional<std::string>
+std::optional<std::string>
 Route::getRouteIfName() const {
   return routeIfName_;
 }
@@ -533,12 +533,12 @@ NextHopBuilder::setPushLabels(const std::vector<int32_t>& pushLabels) {
   return *this;
 }
 
-folly::Optional<int>
+std::optional<int>
 NextHopBuilder::getIfIndex() const {
   return ifIndex_;
 }
 
-folly::Optional<folly::IPAddress>
+std::optional<folly::IPAddress>
 NextHopBuilder::getGateway() const {
   return gateway_;
 }
@@ -548,17 +548,17 @@ NextHopBuilder::getWeight() const {
   return weight_;
 }
 
-folly::Optional<thrift::MplsActionCode>
+std::optional<thrift::MplsActionCode>
 NextHopBuilder::getLabelAction() const {
   return labelAction_;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 NextHopBuilder::getSwapLabel() const {
   return swapLabel_;
 }
 
-folly::Optional<std::vector<int32_t>>
+std::optional<std::vector<int32_t>>
 NextHopBuilder::getPushLabels() const {
   return pushLabels_;
 }
@@ -604,12 +604,12 @@ NextHopHash::operator()(const NextHop& nh) const {
   return res;
 }
 
-folly::Optional<int>
+std::optional<int>
 NextHop::getIfIndex() const {
   return ifIndex_;
 }
 
-folly::Optional<folly::IPAddress>
+std::optional<folly::IPAddress>
 NextHop::getGateway() const {
   return gateway_;
 }
@@ -619,17 +619,17 @@ NextHop::getWeight() const {
   return weight_;
 }
 
-folly::Optional<thrift::MplsActionCode>
+std::optional<thrift::MplsActionCode>
 NextHop::getLabelAction() const {
   return labelAction_;
 }
 
-folly::Optional<uint32_t>
+std::optional<uint32_t>
 NextHop::getSwapLabel() const {
   return swapLabel_;
 }
 
-folly::Optional<std::vector<int32_t>>
+std::optional<std::vector<int32_t>>
 NextHop::getPushLabels() const {
   return pushLabels_;
 }
@@ -691,7 +691,7 @@ IfAddressBuilder::setPrefix(const folly::CIDRNetwork& prefix) {
   return *this;
 }
 
-folly::Optional<folly::CIDRNetwork>
+std::optional<folly::CIDRNetwork>
 IfAddressBuilder::getPrefix() const {
   return prefix_;
 }
@@ -703,7 +703,7 @@ IfAddressBuilder::setFamily(uint8_t family) {
 }
 
 // Family will be shadowed if prefix is set
-folly::Optional<uint8_t>
+std::optional<uint8_t>
 IfAddressBuilder::getFamily() const {
   return family_;
 }
@@ -714,7 +714,7 @@ IfAddressBuilder::setScope(uint8_t scope) {
   return *this;
 }
 
-folly::Optional<uint8_t>
+std::optional<uint8_t>
 IfAddressBuilder::getScope() const {
   return scope_;
 }
@@ -725,7 +725,7 @@ IfAddressBuilder::setFlags(uint8_t flags) {
   return *this;
 }
 
-folly::Optional<uint8_t>
+std::optional<uint8_t>
 IfAddressBuilder::getFlags() const {
   return flags_;
 }
@@ -827,17 +827,17 @@ IfAddress::isValid() const {
   return isValid_;
 }
 
-folly::Optional<folly::CIDRNetwork>
+std::optional<folly::CIDRNetwork>
 IfAddress::getPrefix() const {
   return prefix_;
 }
 
-folly::Optional<uint8_t>
+std::optional<uint8_t>
 IfAddress::getScope() const {
   return scope_;
 }
 
-folly::Optional<uint8_t>
+std::optional<uint8_t>
 IfAddress::getFlags() const {
   return flags_;
 }
@@ -896,7 +896,7 @@ NeighborBuilder::setLinkAddress(const folly::MacAddress& linkAddress) {
   return *this;
 }
 
-folly::Optional<folly::MacAddress>
+std::optional<folly::MacAddress>
 NeighborBuilder::getLinkAddress() const {
   return linkAddress_;
 }
@@ -908,7 +908,7 @@ NeighborBuilder::setState(int state, bool deleted) {
   return *this;
 }
 
-folly::Optional<int>
+std::optional<int>
 NeighborBuilder::getState() const {
   return state_;
 }
@@ -978,12 +978,12 @@ Neighbor::getDestination() const {
   return destination_;
 }
 
-folly::Optional<folly::MacAddress>
+std::optional<folly::MacAddress>
 Neighbor::getLinkAddress() const {
   return linkAddress_;
 }
 
-folly::Optional<int>
+std::optional<int>
 Neighbor::getState() const {
   return state_;
 }

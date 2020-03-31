@@ -13,7 +13,6 @@
 
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
-#include <folly/Optional.h>
 #include <folly/init/Init.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -223,10 +222,10 @@ class MultipleAreaFixture : public MultipleStoreFixture {
   void
   setUpPeers() {
     // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
-    EXPECT_TRUE(client1->addPeers(peers1, planeArea).hasValue());
-    EXPECT_TRUE(client2->addPeers(peers2PlaneArea, planeArea).hasValue());
-    EXPECT_TRUE(client2->addPeers(peers2PodArea, podArea).hasValue());
-    EXPECT_TRUE(client3->addPeers(peers3, podArea).hasValue());
+    EXPECT_TRUE(client1->addPeers(peers1, planeArea).has_value());
+    EXPECT_TRUE(client2->addPeers(peers2PlaneArea, planeArea).has_value());
+    EXPECT_TRUE(client2->addPeers(peers2PodArea, podArea).has_value());
+    EXPECT_TRUE(client3->addPeers(peers3, podArea).has_value());
   }
 
   void
@@ -494,7 +493,7 @@ TEST(KvStoreClientInternal, PeerApiTest) {
     client->addPeers(peers);
     {
       auto maybePeers = client->getPeers();
-      EXPECT_TRUE(maybePeers.hasValue());
+      EXPECT_TRUE(maybePeers.has_value());
       EXPECT_EQ(*maybePeers, peers);
     }
 
@@ -505,7 +504,7 @@ TEST(KvStoreClientInternal, PeerApiTest) {
     client->delPeers(toDelPeers);
     {
       auto maybePeers = client->getPeers();
-      EXPECT_TRUE(maybePeers.hasValue());
+      EXPECT_TRUE(maybePeers.has_value());
       EXPECT_EQ(*maybePeers, peers);
     }
 
@@ -514,7 +513,7 @@ TEST(KvStoreClientInternal, PeerApiTest) {
     client->delPeer(peerName3);
     {
       auto maybePeers = client->getPeers();
-      EXPECT_TRUE(maybePeers.hasValue());
+      EXPECT_TRUE(maybePeers.has_value());
       EXPECT_EQ(*maybePeers, peers);
     }
 
@@ -737,7 +736,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
     // 1st get key
     auto maybeVal1 = client1->getKey("test_key3");
 
-    ASSERT_TRUE(maybeVal1.hasValue());
+    ASSERT_TRUE(maybeVal1.has_value());
     EXPECT_EQ(1, maybeVal1->version);
     EXPECT_EQ("test_value3", maybeVal1->value);
   });
@@ -759,14 +758,14 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
   // check after few ms if key is deleted,
   evb.scheduleTimeout(std::chrono::milliseconds(60), [&]() noexcept {
     auto maybeVal3 = client1->getKey("test_key3");
-    ASSERT_FALSE(maybeVal3.hasValue());
+    ASSERT_FALSE(maybeVal3.has_value());
   });
 
   // Schedule after a second, key will be erased and set back in kvstore
   // with persist key check callback
   evb.scheduleTimeout(std::chrono::milliseconds(3000), [&]() noexcept {
     auto maybeVal3 = client1->getKey("test_key3");
-    ASSERT_TRUE(maybeVal3.hasValue());
+    ASSERT_TRUE(maybeVal3.has_value());
     EXPECT_EQ(1, maybeVal3->version);
     EXPECT_EQ("test_value3", maybeVal3->value);
 
@@ -838,7 +837,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
   evb.scheduleTimeout(std::chrono::seconds(2), [&]() noexcept {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
-    ASSERT_TRUE(maybeVal.hasValue());
+    ASSERT_TRUE(maybeVal.has_value());
     EXPECT_EQ(1, maybeVal->version);
     EXPECT_EQ(testValue, maybeVal->value);
     EXPECT_LT(0, maybeVal->ttl);
@@ -853,7 +852,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
   evb.scheduleTimeout(std::chrono::seconds(6), [&]() noexcept {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
-    ASSERT_TRUE(maybeVal.hasValue());
+    ASSERT_TRUE(maybeVal.has_value());
     EXPECT_EQ(1, maybeVal->version);
     EXPECT_EQ(testValue, maybeVal->value);
     EXPECT_LT(1000, maybeVal->ttl);
@@ -868,7 +867,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
   evb.scheduleTimeout(std::chrono::seconds(8), [&]() noexcept {
     // Ensure key exists
     auto maybeVal = client1->getKey(testKey);
-    ASSERT_TRUE(maybeVal.hasValue());
+    ASSERT_TRUE(maybeVal.has_value());
     EXPECT_EQ(1, maybeVal->version);
     EXPECT_EQ(testValue, maybeVal->value);
     EXPECT_LT(0, maybeVal->ttl);
@@ -948,15 +947,15 @@ TEST(KvStoreClientInternal, ApiTest) {
   evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
     std::unordered_map<std::string, thrift::PeerSpec> peerMap;
     peerMap.emplace("peer2", createPeerSpec("inproc://fake_cmd_url_2", false));
-    EXPECT_TRUE(client1->addPeers(peerMap).hasValue());
-    EXPECT_TRUE(client1->delPeer("peer1").hasValue());
+    EXPECT_TRUE(client1->addPeers(peerMap).has_value());
+    EXPECT_TRUE(client1->delPeer("peer1").has_value());
   });
 
   // Schedule callback to persist key2 from client2 (this will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(2), [&]() noexcept {
     // 1st get key
     auto maybeVal1 = client2->getKey("test_key2");
-    ASSERT_TRUE(maybeVal1.hasValue());
+    ASSERT_TRUE(maybeVal1.has_value());
     EXPECT_EQ(1, maybeVal1->version);
     EXPECT_EQ("test_value2", maybeVal1->value);
 
@@ -967,7 +966,7 @@ TEST(KvStoreClientInternal, ApiTest) {
 
     // 2nd getkey
     auto maybeVal2 = client2->getKey("test_key2");
-    ASSERT_TRUE(maybeVal2.hasValue());
+    ASSERT_TRUE(maybeVal2.has_value());
     EXPECT_EQ(2, maybeVal2->version);
     EXPECT_EQ("test_value2-client2", maybeVal2->value);
 
@@ -1000,19 +999,19 @@ TEST(KvStoreClientInternal, ApiTest) {
   // dump keys
   evb.scheduleTimeout(std::chrono::milliseconds(4), [&]() noexcept {
     const auto maybeKeyVals = client1->dumpAllWithPrefix();
-    ASSERT_TRUE(maybeKeyVals.hasValue());
+    ASSERT_TRUE(maybeKeyVals.has_value());
     ASSERT_EQ(3, maybeKeyVals->size());
     EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value);
     EXPECT_EQ("test_value2-client2", maybeKeyVals->at("test_key2").value);
     EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value);
 
     const auto maybeKeyVals2 = client2->dumpAllWithPrefix();
-    ASSERT_TRUE(maybeKeyVals2.hasValue());
+    ASSERT_TRUE(maybeKeyVals2.has_value());
     EXPECT_EQ(*maybeKeyVals, *maybeKeyVals2);
 
     // dump keys with a given prefix
     const auto maybePrefixedKeyVals = client1->dumpAllWithPrefix("test");
-    ASSERT_TRUE(maybePrefixedKeyVals.hasValue());
+    ASSERT_TRUE(maybePrefixedKeyVals.has_value());
     ASSERT_EQ(2, maybePrefixedKeyVals->size());
     EXPECT_EQ("test_value1", maybePrefixedKeyVals->at("test_key1").value);
     EXPECT_EQ(
@@ -1049,12 +1048,12 @@ TEST(KvStoreClientInternal, ApiTest) {
   evb.scheduleTimeout(std::chrono::milliseconds(6) + kTtl * 3, [&]() noexcept {
     LOG(INFO) << "received response.";
     auto maybeVal1 = client2->getKey("test_ttl_key1");
-    ASSERT_TRUE(maybeVal1.hasValue());
+    ASSERT_TRUE(maybeVal1.has_value());
     EXPECT_EQ("test_ttl_value1", maybeVal1->value);
     EXPECT_LT(500, maybeVal1->ttlVersion);
 
     auto maybeVal2 = client1->getKey("test_ttl_key2");
-    ASSERT_TRUE(maybeVal2.hasValue());
+    ASSERT_TRUE(maybeVal2.has_value());
     EXPECT_LT(1500, maybeVal2->ttlVersion);
     EXPECT_EQ(1, maybeVal2->version);
     EXPECT_EQ("test_ttl_value2", maybeVal2->value);
@@ -1137,7 +1136,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     client1->subscribeKey(
         "test_key1",
-        [&](std::string const& k, folly::Optional<thrift::Value> v) {
+        [&](std::string const& k, std::optional<thrift::Value> v) {
           // should be called when client1 call persistKey for test_key1
           EXPECT_EQ("test_key1", k);
           EXPECT_EQ(1, v.value().version);
@@ -1147,7 +1146,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         false);
     client1->subscribeKey(
         "test_key2",
-        [&](std::string const& k, folly::Optional<thrift::Value> v) {
+        [&](std::string const& k, std::optional<thrift::Value> v) {
           // hould be called when client2 call persistKey for test_key2
           EXPECT_EQ("test_key2", k);
           EXPECT_LT(0, v.value().version);
@@ -1174,7 +1173,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
     client2->persistKey("test_key2", "test_value2-client2");
     client2->subscribeKey(
         "test_key2",
-        [&](std::string const&, folly::Optional<thrift::Value>) {
+        [&](std::string const&, std::optional<thrift::Value>) {
           // this should never be called when client2 call persistKey
           // for test_key2 with same value
           key2CbCntClient2++;
@@ -1189,10 +1188,10 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
   evb.scheduleTimeout(std::chrono::milliseconds(11), [&]() noexcept {
     client2->setKey("test_key_subs_cb", "test_key_subs_cb_val", 11);
 
-    folly::Optional<thrift::Value> keyValue;
+    std::optional<thrift::Value> keyValue;
     keyValue = client2->subscribeKey(
         "test_key_subs_cb",
-        [&](std::string const&, folly::Optional<thrift::Value>) {},
+        [&](std::string const&, std::optional<thrift::Value>) {},
         true);
 
     if (keyValue.has_value()) {
@@ -1210,7 +1209,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
 
     client2->setKvCallback([&](
         const std::string& key,
-        folly::Optional<thrift::Value> thriftVal) noexcept {
+        std::optional<thrift::Value> thriftVal) noexcept {
       if (!thriftVal.has_value()) {
         EXPECT_EQ("test_key_exp", key);
         keyExpCbCnt++;
@@ -1219,7 +1218,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
 
     client2->subscribeKey(
         "test_key_exp",
-        [&](std::string const& k, folly::Optional<thrift::Value> v) {
+        [&](std::string const& k, std::optional<thrift::Value> v) {
           if (!v.has_value()) {
             EXPECT_EQ("test_key_exp", k);
             keyExpKeyCbCnt++;
@@ -1295,7 +1294,7 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
     // using store->setKey should trigger the callback, key1CbCnt++
     client1->subscribeKeyFilter(
         std::move(kvFilters),
-        [&](std::string const& k, folly::Optional<thrift::Value> v) {
+        [&](std::string const& k, std::optional<thrift::Value> v) {
           // this should be called when client call persistKey for
           // test_key1
           EXPECT_THAT(k, testing::StartsWith("test_"));
@@ -1391,9 +1390,9 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
 
   evb.scheduleTimeout(std::chrono::milliseconds(scheduleAt), [&]() noexcept {
     // test addPeers in invalid area, following result must be false
-    EXPECT_FALSE(client1->addPeers(peers1).hasValue());
-    EXPECT_FALSE(client2->addPeers(peers2PlaneArea).hasValue());
-    EXPECT_FALSE(client3->addPeers(peers3).hasValue());
+    EXPECT_FALSE(client1->addPeers(peers1).has_value());
+    EXPECT_FALSE(client2->addPeers(peers2PlaneArea).has_value());
+    EXPECT_FALSE(client3->addPeers(peers3).has_value());
     // add peers in valid area,
     // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
     setUpPeers();
@@ -1403,19 +1402,19 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // test addPeers
         auto maybePeers = client1->getPeers(planeArea);
-        EXPECT_TRUE(maybePeers.hasValue());
+        EXPECT_TRUE(maybePeers.has_value());
         EXPECT_EQ(maybePeers.value(), peers1);
 
         auto maybePeers2 = client2->getPeers(planeArea);
-        EXPECT_TRUE(maybePeers2.hasValue());
+        EXPECT_TRUE(maybePeers2.has_value());
         EXPECT_EQ(maybePeers2.value(), peers2PlaneArea);
 
         auto maybePeers3 = client2->getPeers(podArea);
-        EXPECT_TRUE(maybePeers3.hasValue());
+        EXPECT_TRUE(maybePeers3.has_value());
         EXPECT_EQ(maybePeers3.value(), peers2PodArea);
 
         auto maybePeers4 = client3->getPeers(podArea);
-        EXPECT_TRUE(maybePeers4.hasValue());
+        EXPECT_TRUE(maybePeers4.has_value());
         EXPECT_EQ(maybePeers4.value(), peers3);
       });
 
@@ -1433,7 +1432,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
                     fbzmq::util::writeThriftObjStr(valuePlane1, serializer),
                     100,
                     Constants::kTtlInfInterval)
-                .hasValue());
+                .has_value());
 
         EXPECT_TRUE(
             client1
@@ -1443,7 +1442,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
                     100,
                     Constants::kTtlInfInterval,
                     planeArea)
-                .hasValue());
+                .has_value());
 
         // set key in pod are on node3
         thrift::Value valuePod1;
@@ -1457,7 +1456,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
                     100,
                     Constants::kTtlInfInterval,
                     podArea)
-                .hasValue());
+                .has_value());
       });
 
   // get keys from pod and play area and ensure keys are not leaked across
@@ -1514,7 +1513,7 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
                             1,
                             ttl,
                             planeArea)
-                        .hasValue());
+                        .has_value());
         client3->persistKey(
             "test_ttl_key_pod", "test_ttl_value_pod", ttl, podArea);
       });
@@ -1524,12 +1523,14 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // plane key must be present in node2 (plane area) and not in node3
         EXPECT_TRUE(
-            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
-        EXPECT_FALSE(client3->getKey("test_ttl_key_plane", podArea).hasValue());
+            client2->getKey("test_ttl_key_plane", planeArea).has_value());
+        EXPECT_FALSE(
+            client3->getKey("test_ttl_key_plane", podArea).has_value());
 
         // pod key - should present in node2 (Pod area) and absent in node1
-        EXPECT_TRUE(client2->getKey("test_ttl_key_pod", podArea).hasValue());
-        EXPECT_FALSE(client1->getKey("test_ttl_key_pod", planeArea).hasValue());
+        EXPECT_TRUE(client2->getKey("test_ttl_key_pod", podArea).has_value());
+        EXPECT_FALSE(
+            client1->getKey("test_ttl_key_pod", planeArea).has_value());
       });
 
   // schecdule after 2 * TTL, check key refresh is working fine
@@ -1537,11 +1538,11 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
       std::chrono::milliseconds(scheduleAt += ttl.count() * 2), [&]() noexcept {
         // plane key must be present
         EXPECT_TRUE(
-            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+            client2->getKey("test_ttl_key_plane", planeArea).has_value());
 
         // pod key must be present
-        EXPECT_TRUE(client2->getKey("test_ttl_key_pod", podArea).hasValue());
-        EXPECT_TRUE(client3->getKey("test_ttl_key_pod", podArea).hasValue());
+        EXPECT_TRUE(client2->getKey("test_ttl_key_pod", podArea).has_value());
+        EXPECT_TRUE(client3->getKey("test_ttl_key_pod", podArea).has_value());
       });
 
   // verify dumpAllWithThriftClientFromMultiple
@@ -1586,11 +1587,11 @@ TEST_F(MultipleAreaFixture, MultipleAreaKeyExpiry) {
       std::chrono::milliseconds(scheduleAt += ttl.count() * 2), [&]() noexcept {
         // keys should be expired now
         EXPECT_FALSE(
-            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+            client2->getKey("test_ttl_key_plane", planeArea).has_value());
 
         // pod key must be present
-        EXPECT_FALSE(client2->getKey("test_ttl_key_pod", podArea).hasValue());
-        EXPECT_FALSE(client3->getKey("test_ttl_key_pod", podArea).hasValue());
+        EXPECT_FALSE(client2->getKey("test_ttl_key_pod", podArea).has_value());
+        EXPECT_FALSE(client3->getKey("test_ttl_key_pod", podArea).has_value());
 
         // Synchronization primitive
         waitBaton.post();
@@ -1634,7 +1635,7 @@ TEST_F(MultipleAreaFixture, PersistKeyArea) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         EXPECT_TRUE(
-            client1->getKey("test_ttl_key_plane", planeArea).hasValue());
+            client1->getKey("test_ttl_key_plane", planeArea).has_value());
       });
 
   // expire the key in node2 kvstore by setting a low ttl value
@@ -1648,14 +1649,15 @@ TEST_F(MultipleAreaFixture, PersistKeyArea) {
             500 /* ttl version */,
             0 /* hash */);
 
-        store2->setKey("test_ttl_key_plane", keyExpVal, folly::none, planeArea);
+        store2->setKey(
+            "test_ttl_key_plane", keyExpVal, std::nullopt, planeArea);
       });
 
   // key is expired in node2
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 1), [&]() noexcept {
         EXPECT_FALSE(
-            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+            client2->getKey("test_ttl_key_plane", planeArea).has_value());
       });
 
   // checkPersistKey should kick in and repopulate the key node1 kvstore,
@@ -1663,7 +1665,7 @@ TEST_F(MultipleAreaFixture, PersistKeyArea) {
       std::chrono::milliseconds(scheduleAt += persistKeyTimer.count() + 100),
       [&]() noexcept {
         EXPECT_TRUE(
-            client2->getKey("test_ttl_key_plane", planeArea).hasValue());
+            client2->getKey("test_ttl_key_plane", planeArea).has_value());
         // Synchronization primitive
         waitBaton.post();
       });

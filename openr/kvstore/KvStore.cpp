@@ -75,7 +75,7 @@ KvStore::KvStore(
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
     MonitorSubmitUrl monitorSubmitUrl,
-    folly::Optional<int> maybeIpTos,
+    std::optional<int> maybeIpTos,
     std::chrono::seconds dbSyncInterval,
     std::chrono::seconds monitorSubmitInterval,
     // initializer for mutable state
@@ -350,7 +350,7 @@ void
 KvStore::prepareSocket(
     fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& socket,
     std::string const& url,
-    folly::Optional<int> maybeIpTos) {
+    std::optional<int> maybeIpTos) {
   std::vector<std::pair<int, int>> socketOptions{
       {ZMQ_SNDHWM, Constants::kHighWaterMark},
       {ZMQ_RCVHWM, Constants::kHighWaterMark},
@@ -515,8 +515,7 @@ KvStore::dumpKvStoreKeys(
       }
       kvStoreDb.updatePublicationTtl(thriftPub);
       // I'm the initiator, set flood-root-id
-      apache::thrift::fromFollyOptional(
-          thriftPub.floodRootId, kvStoreDb.getSptRootId());
+      fromStdOptional(thriftPub.floodRootId, kvStoreDb.getSptRootId());
 
       if (keyDumpParams.keyValHashes.has_value() and
           keyDumpParams.prefix.empty()) {
@@ -1404,8 +1403,7 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
     }
     updatePublicationTtl(thriftPub);
     // I'm the initiator, set flood-root-id
-    apache::thrift::fromFollyOptional(
-        thriftPub.floodRootId, DualNode::getSptRootId());
+    fromStdOptional(thriftPub.floodRootId, DualNode::getSptRootId());
 
     if (keyDumpParamsVal.keyValHashes.has_value() and
         keyDumpParamsVal.prefix.empty()) {
@@ -1485,12 +1483,12 @@ KvStoreDb::processFloodTopoGet() noexcept {
     thrift::SptInfo sptInfo;
     sptInfo.passive = info.sm.state == DualState::PASSIVE;
     sptInfo.cost = info.distance;
-    // convert from std::optional to folly::optional
-    folly::Optional<std::string> nexthop = folly::none;
+    // convert from std::optional to std::optional
+    std::optional<std::string> nexthop = std::nullopt;
     if (info.nexthop.has_value()) {
       nexthop = info.nexthop.value();
     }
-    apache::thrift::fromFollyOptional(sptInfo.parent, nexthop);
+    fromStdOptional(sptInfo.parent, nexthop);
     sptInfo.children = kv.second.children();
     sptInfos.infos.emplace(rootId, sptInfo);
   }
@@ -1499,8 +1497,7 @@ KvStoreDb::processFloodTopoGet() noexcept {
   sptInfos.counters = DualNode::getCounters();
 
   // set flood root-id and peers
-  apache::thrift::fromFollyOptional(
-      sptInfos.floodRootId, DualNode::getSptRootId());
+  fromStdOptional(sptInfos.floodRootId, DualNode::getSptRootId());
   std::optional<std::string> floodRootId{std::nullopt};
   if (sptInfos.floodRootId.has_value()) {
     floodRootId = sptInfos.floodRootId.value();
@@ -1915,12 +1912,12 @@ KvStoreDb::floodBufferedUpdates() {
   // merge publication per root-id
   for (const auto& kv : publicationBuffer_) {
     thrift::Publication publication{};
-    // convert from std::optional to folly::Optional
-    folly::Optional<std::string> floodRootId{folly::none};
+    // convert from std::optional to std::optional
+    std::optional<std::string> floodRootId{std::nullopt};
     if (kv.first.has_value()) {
       floodRootId = kv.first.value();
     }
-    apache::thrift::fromFollyOptional(publication.floodRootId, floodRootId);
+    fromStdOptional(publication.floodRootId, floodRootId);
     for (const auto& key : kv.second) {
       auto kvStoreIt = kvStore_.find(key);
       if (kvStoreIt != kvStore_.end()) {
@@ -1969,8 +1966,7 @@ KvStoreDb::finalizeFullSync(
   params.keyVals = std::move(updates.keyVals);
   params.solicitResponse = false;
   // I'm the initiator, set flood-root-id
-  apache::thrift::fromFollyOptional(
-      params.floodRootId, DualNode::getSptRootId());
+  fromStdOptional(params.floodRootId, DualNode::getSptRootId());
   params.timestamp_ms = getUnixTimeStampMs();
 
   updateRequest.cmd = thrift::Command::KEY_SET;
@@ -2067,8 +2063,7 @@ KvStoreDb::floodPublication(
 
   if (setFloodRoot and not senderId.has_value()) {
     // I'm the initiator, set flood-root-id
-    apache::thrift::fromFollyOptional(
-        publication.floodRootId, DualNode::getSptRootId());
+    fromStdOptional(publication.floodRootId, DualNode::getSptRootId());
   }
 
   thrift::KvStoreRequest floodRequest;

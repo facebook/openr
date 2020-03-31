@@ -468,6 +468,14 @@ int64_t
 generateHash(
     const int64_t version,
     const std::string& originatorId,
+    const std::optional<std::string>& value) {
+  return generateHash<std::optional<std::string>>(version, originatorId, value);
+}
+
+int64_t
+generateHash(
+    const int64_t version,
+    const std::string& originatorId,
     const apache::thrift::DeprecatedOptionalField<std::string>& value) {
   return generateHash<apache::thrift::DeprecatedOptionalField<std::string>>(
       version, originatorId, value);
@@ -735,7 +743,7 @@ createSparkPayload(
     bool solicitResponse,
     bool supportFloodOptimization,
     bool restarting,
-    const folly::Optional<std::unordered_set<std::string>>& areas) {
+    const std::optional<std::unordered_set<std::string>>& areas) {
   thrift::SparkPayload payload;
   payload.version = version;
   payload.originator = originator;
@@ -745,7 +753,7 @@ createSparkPayload(
   payload.solicitResponse = solicitResponse;
   payload.supportFloodOptimization = supportFloodOptimization;
   payload.restarting = restarting;
-  apache::thrift::fromFollyOptional(payload.areas, areas);
+  fromStdOptional(payload.areas, areas);
   return payload;
 }
 
@@ -807,13 +815,13 @@ createAdjDb(
     const std::vector<thrift::Adjacency>& adjs,
     int32_t nodeLabel,
     bool overLoadBit,
-    folly::Optional<std::string> area) {
+    std::optional<std::string> area) {
   thrift::AdjacencyDatabase adjDb;
   adjDb.thisNodeName = nodeName;
   adjDb.isOverloaded = overLoadBit;
   adjDb.adjacencies = adjs;
   adjDb.nodeLabel = nodeLabel;
-  apache::thrift::fromFollyOptional(adjDb.area, area);
+  fromStdOptional(adjDb.area, area);
   return adjDb;
 }
 
@@ -834,18 +842,18 @@ createPrefixEntry(
     const std::string& data,
     thrift::PrefixForwardingType forwardingType,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
-    folly::Optional<bool> ephemeral,
-    folly::Optional<thrift::MetricVector> mv,
-    folly::Optional<int64_t> minNexthop) {
+    std::optional<bool> ephemeral,
+    std::optional<thrift::MetricVector> mv,
+    std::optional<int64_t> minNexthop) {
   thrift::PrefixEntry prefixEntry;
   prefixEntry.prefix = prefix;
   prefixEntry.type = type;
   prefixEntry.data = data;
   prefixEntry.forwardingType = forwardingType;
   prefixEntry.forwardingAlgorithm = forwardingAlgorithm;
-  apache::thrift::fromFollyOptional(prefixEntry.ephemeral, ephemeral);
-  apache::thrift::fromFollyOptional(prefixEntry.mv, mv);
-  apache::thrift::fromFollyOptional(prefixEntry.minNexthop, minNexthop);
+  fromStdOptional(prefixEntry.ephemeral, ephemeral);
+  fromStdOptional(prefixEntry.mv, mv);
+  fromStdOptional(prefixEntry.minNexthop, minNexthop);
   return prefixEntry;
 }
 
@@ -853,18 +861,18 @@ thrift::Value
 createThriftValue(
     int64_t version,
     std::string originatorId,
-    folly::Optional<std::string> data,
+    std::optional<std::string> data,
     int64_t ttl,
     int64_t ttlVersion,
-    folly::Optional<int64_t> hash) {
+    std::optional<int64_t> hash) {
   thrift::Value value;
   value.version = version;
   value.originatorId = originatorId;
-  apache::thrift::fromFollyOptional(value.value, data);
+  fromStdOptional(value.value, data);
   value.ttl = ttl;
   value.ttlVersion = ttlVersion;
   if (hash.has_value()) {
-    apache::thrift::fromFollyOptional(value.hash, hash);
+    fromStdOptional(value.hash, hash);
   } else {
     value.hash = generateHash(version, originatorId, data);
   }
@@ -876,32 +884,32 @@ thrift::Publication
 createThriftPublication(
     const std::unordered_map<std::string, thrift::Value>& kv,
     const std::vector<std::string>& expiredKeys,
-    const folly::Optional<std::vector<std::string>>& nodeIds,
-    const folly::Optional<std::vector<std::string>>& keysToUpdate,
-    const folly::Optional<std::string>& floodRootId,
-    const folly::Optional<std::string>& area) {
+    const std::optional<std::vector<std::string>>& nodeIds,
+    const std::optional<std::vector<std::string>>& keysToUpdate,
+    const std::optional<std::string>& floodRootId,
+    const std::optional<std::string>& area) {
   thrift::Publication pub;
   pub.keyVals = kv;
   pub.expiredKeys = expiredKeys;
-  apache::thrift::fromFollyOptional(pub.nodeIds, nodeIds);
-  apache::thrift::fromFollyOptional(pub.tobeUpdatedKeys, keysToUpdate);
-  apache::thrift::fromFollyOptional(pub.floodRootId, floodRootId);
-  apache::thrift::fromFollyOptional(pub.area, area);
+  fromStdOptional(pub.nodeIds, nodeIds);
+  fromStdOptional(pub.tobeUpdatedKeys, keysToUpdate);
+  fromStdOptional(pub.floodRootId, floodRootId);
+  fromStdOptional(pub.area, area);
   return pub;
 }
 
 thrift::NextHopThrift
 createNextHop(
     thrift::BinaryAddress addr,
-    folly::Optional<std::string> ifName,
+    std::optional<std::string> ifName,
     int32_t metric,
-    folly::Optional<thrift::MplsAction> maybeMplsAction,
+    std::optional<thrift::MplsAction> maybeMplsAction,
     bool useNonShortestRoute) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
-  apache::thrift::fromFollyOptional(nextHop.address.ifName, std::move(ifName));
+  fromStdOptional(nextHop.address.ifName, std::move(ifName));
   nextHop.metric = metric;
-  apache::thrift::fromFollyOptional(nextHop.mplsAction, maybeMplsAction);
+  fromStdOptional(nextHop.mplsAction, maybeMplsAction);
   nextHop.useNonShortestRoute = useNonShortestRoute;
   return nextHop;
 }
@@ -909,12 +917,12 @@ createNextHop(
 thrift::MplsAction
 createMplsAction(
     thrift::MplsActionCode const mplsActionCode,
-    folly::Optional<int32_t> maybeSwapLabel,
-    folly::Optional<std::vector<int32_t>> maybePushLabels) {
+    std::optional<int32_t> maybeSwapLabel,
+    std::optional<std::vector<int32_t>> maybePushLabels) {
   thrift::MplsAction mplsAction;
   mplsAction.action = mplsActionCode;
-  apache::thrift::fromFollyOptional(mplsAction.swapLabel, maybeSwapLabel);
-  apache::thrift::fromFollyOptional(mplsAction.pushLabels, maybePushLabels);
+  fromStdOptional(mplsAction.swapLabel, maybeSwapLabel);
+  fromStdOptional(mplsAction.pushLabels, maybePushLabels);
   checkMplsAction(mplsAction); // sanity checks
   return mplsAction;
 }
@@ -1019,14 +1027,14 @@ createPeerSyncId(const std::string& node, const std::string& area) {
 
 namespace MetricVectorUtils {
 
-folly::Optional<const openr::thrift::MetricEntity>
+std::optional<const openr::thrift::MetricEntity>
 getMetricEntityByType(const openr::thrift::MetricVector& mv, int64_t type) {
   for (auto& me : mv.metrics) {
     if (me.type == type) {
       return me;
     }
   }
-  return folly::none;
+  return std::nullopt;
 }
 
 // Utility method to create metric entity.

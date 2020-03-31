@@ -37,7 +37,7 @@ enum ActionType {
 struct PersistentObject {
   ActionType type;
   std::string key;
-  folly::Optional<std::string> data;
+  std::optional<std::string> data;
 };
 /**
  * PersistentStore provides functionality of storing `Key-Values` with arbitrary
@@ -77,7 +77,7 @@ class PersistentStore : public OpenrEventBase {
    */
   static folly::Expected<std::unique_ptr<folly::IOBuf>, std::string>
   encodePersistentObject(const PersistentObject& pObject) noexcept;
-  static folly::Expected<folly::Optional<PersistentObject>, std::string>
+  static folly::Expected<std::optional<PersistentObject>, std::string>
   decodePersistentObject(folly::io::Cursor& cursor) noexcept;
 
   //

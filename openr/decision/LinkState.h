@@ -50,7 +50,7 @@ class HoldableValue {
   bool isChangeBringingUp(T val);
 
   T val_;
-  folly::Optional<T> heldVal_;
+  std::optional<T> heldVal_;
   LinkStateMetric holdTtl_{0};
 };
 
