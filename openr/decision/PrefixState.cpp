@@ -17,13 +17,15 @@ PrefixState::deleteLoopbackPrefix(
   auto addrSize = prefix.prefixAddress.addr.size();
   if (addrSize == folly::IPAddressV4::byteCount() &&
       folly::IPAddressV4::bitCount() == prefix.prefixLength) {
-    if (prefix.prefixAddress == nodeHostLoopbacksV4_[nodeName]) {
+    if (nodeHostLoopbacksV4_.find(nodeName) != nodeHostLoopbacksV4_.end() &&
+        prefix.prefixAddress == nodeHostLoopbacksV4_.at(nodeName)) {
       nodeHostLoopbacksV4_.erase(nodeName);
     }
   }
   if (addrSize == folly::IPAddressV6::byteCount() &&
       folly::IPAddressV6::bitCount() == prefix.prefixLength) {
-    if (nodeHostLoopbacksV6_[nodeName] == prefix.prefixAddress) {
+    if (nodeHostLoopbacksV6_.find(nodeName) != nodeHostLoopbacksV6_.end() &&
+        nodeHostLoopbacksV6_.at(nodeName) == prefix.prefixAddress) {
       nodeHostLoopbacksV6_.erase(nodeName);
     }
   }
