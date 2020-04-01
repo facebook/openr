@@ -678,7 +678,7 @@ Fib::keepAliveCheck() {
 void
 Fib::createFibClient(
     folly::EventBase& evb,
-    std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+    std::shared_ptr<folly::AsyncSocket>& socket,
     std::unique_ptr<thrift::FibServiceAsyncClient>& client,
     int32_t port) {
   // Reset client if channel is not good
@@ -693,7 +693,7 @@ Fib::createFibClient(
   }
 
   // Create socket to thrift server and set some connection parameters
-  socket = apache::thrift::async::TAsyncSocket::newSocket(
+  socket = folly::AsyncSocket::newSocket(
       &evb,
       Constants::kPlatformHost.toString(),
       port,

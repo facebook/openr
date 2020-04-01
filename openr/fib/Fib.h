@@ -10,9 +10,9 @@
 #include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
-#include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/ExponentialBackoff.h>
@@ -69,7 +69,7 @@ class Fib final : public OpenrEventBase {
    */
   static void createFibClient(
       folly::EventBase& evb,
-      std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+      std::shared_ptr<folly::AsyncSocket>& socket,
       std::unique_ptr<thrift::FibServiceAsyncClient>& client,
       int32_t port);
 
@@ -237,7 +237,7 @@ class Fib final : public OpenrEventBase {
   // Thrift client connection to switch FIB Agent using which we actually
   // manipulate routes.
   folly::EventBase evb_;
-  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_{nullptr};
+  std::shared_ptr<folly::AsyncSocket> socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
 
   // module ptr to refer to KvStore for KvStoreClientInternal usage

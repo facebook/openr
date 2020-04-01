@@ -837,7 +837,7 @@ PrefixAllocator::logPrefixEvent(
 void
 PrefixAllocator::createThriftClient(
     folly::EventBase& evb,
-    std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+    std::shared_ptr<folly::AsyncSocket>& socket,
     std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
     int32_t port) {
   // Reset client if channel is not good
@@ -852,7 +852,7 @@ PrefixAllocator::createThriftClient(
   }
 
   // Create socket to thrift server and set some connection parameters
-  socket = apache::thrift::async::TAsyncSocket::newSocket(
+  socket = folly::AsyncSocket::newSocket(
       &evb,
       Constants::kPlatformHost.toString(),
       port,

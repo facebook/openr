@@ -93,7 +93,7 @@ waitForFibService(const fbzmq::ZmqEventLoop& evl) {
 
   auto fibStatus = facebook::fb303::cpp2::fb303_status::DEAD;
   folly::EventBase evb;
-  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket;
+  std::shared_ptr<folly::AsyncSocket> socket;
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
   while (evl.isRunning() &&
          facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus) {

@@ -15,8 +15,8 @@
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
+#include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/EventBase.h>
-#include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
@@ -176,7 +176,7 @@ class PrefixAllocator : public OpenrEventBase {
   // Create client when necessary
   void createThriftClient(
       folly::EventBase& evb,
-      std::shared_ptr<apache::thrift::async::TAsyncSocket>& socket,
+      std::shared_ptr<folly::AsyncSocket>& socket,
       std::unique_ptr<thrift::SystemServiceAsyncClient>& client,
       int32_t port);
 
@@ -237,7 +237,7 @@ class PrefixAllocator : public OpenrEventBase {
   // Thriftclient for system service
   int32_t systemServicePort_{0};
   folly::EventBase evb_;
-  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_{nullptr};
+  std::shared_ptr<folly::AsyncSocket> socket_{nullptr};
   std::unique_ptr<thrift::SystemServiceAsyncClient> client_{nullptr};
 
   // AsyncTimeout for initialization

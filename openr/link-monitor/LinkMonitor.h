@@ -21,12 +21,12 @@
 #include <folly/IPAddress.h>
 #include <folly/Optional.h>
 #include <folly/futures/Future.h>
+#include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
 #include <glog/logging.h>
 #include <re2/re2.h>
 #include <re2/set.h>
-#include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/allocators/RangeAllocator.h>
@@ -372,7 +372,7 @@ class LinkMonitor final : public OpenrEventBase {
   // Thrift client connection to switch SystemService, which we actually use to
   // manipulate routes.
   folly::EventBase evb_;
-  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_;
+  std::shared_ptr<folly::AsyncSocket> socket_;
   std::unique_ptr<thrift::SystemServiceAsyncClient> client_;
 
   // client to interact with KvStore

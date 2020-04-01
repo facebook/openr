@@ -18,7 +18,7 @@
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
-#include <thrift/lib/cpp/async/TAsyncSocket.h>
+#include <folly/io/async/AsyncSocket.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/if/gen-cpp2/Platform_types.h>

@@ -8,10 +8,10 @@
 #pragma once
 
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
-#include <thrift/lib/cpp/async/TAsyncSocket.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 namespace openr {

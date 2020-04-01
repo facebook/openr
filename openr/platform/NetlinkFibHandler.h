@@ -16,7 +16,7 @@
 #include <fbzmq/async/ZmqTimeout.h>
 #include <folly/Expected.h>
 #include <folly/futures/Future.h>
-#include <thrift/lib/cpp/async/TAsyncSocket.h>
+#include <folly/io/async/AsyncSocket.h>
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>

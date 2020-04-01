@@ -833,7 +833,7 @@ LinkMonitor::createNetlinkSystemHandlerClient() {
   }
 
   // Create socket to thrift server and set some connection parameters
-  socket_ = apache::thrift::async::TAsyncSocket::newSocket(
+  socket_ = folly::AsyncSocket::newSocket(
       &evb_,
       Constants::kPlatformHost.toString(),
       platformThriftPort_,

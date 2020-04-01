@@ -8,7 +8,7 @@
 #pragma once
 
 #include <folly/io/SocketOptionMap.h>
-#include <thrift/lib/cpp/async/TAsyncSocket.h>
+#include <folly/io/async/AsyncSocket.h>
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
@@ -66,10 +66,9 @@ getOpenrCtrlPlainTextClient(
     // Create a new UNCONNECTED AsyncSocket
     // ATTN: don't change contructor flavor to connect automatically.
     const folly::SocketAddress sa(addr, port);
-    apache::thrift::async::TAsyncSocket::UniquePtr transport = nullptr;
-    transport = apache::thrift::async::TAsyncSocket::UniquePtr(
-        new apache::thrift::async::TAsyncSocket(&evb),
-        folly::DelayedDestruction::Destructor());
+    folly::AsyncSocket::UniquePtr transport = nullptr;
+    transport = folly::AsyncSocket::UniquePtr(
+        new folly::AsyncSocket(&evb), folly::DelayedDestruction::Destructor());
 
     // Build OptionMap for client socket connection
     folly::SocketOptionMap optionMap = folly::emptySocketOptionMap;
