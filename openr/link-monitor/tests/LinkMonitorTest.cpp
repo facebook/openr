@@ -908,9 +908,9 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
   SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   {
     // Intertionally save nodeLabel to be non-zero value
-    thrift::LinkMonitorConfig config;
-    config.nodeLabel = 1 + rand(); // non-zero random number
-    auto resp = configStore->storeThriftObj(kConfigKey, config).get();
+    thrift::LinkMonitorState state;
+    state.nodeLabel = 1 + rand(); // non-zero random number
+    auto resp = configStore->storeThriftObj(kConfigKey, state).get();
     EXPECT_EQ(folly::Unit(), resp);
   }
 

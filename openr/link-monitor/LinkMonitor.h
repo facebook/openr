@@ -327,7 +327,7 @@ class LinkMonitor final : public OpenrEventBase {
   bool mockMode_{false};
 
   // LinkMonitor config attributes (defined in LinkMonitor.thrift)
-  thrift::LinkMonitorConfig config_;
+  thrift::LinkMonitorState state_;
 
   // Queue to publish interface updates to other modules
   messaging::ReplicateQueue<thrift::InterfaceDatabase>& interfaceUpdatesQueue_;

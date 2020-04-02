@@ -45,17 +45,16 @@ getRttMetric(int64_t rttUs) {
 }
 
 void
-printLinkMonitorConfig(openr::thrift::LinkMonitorConfig const& config) {
-  VLOG(1) << "LinkMonitor config .... ";
-  VLOG(1) << "\tnodeLabel: " << config.nodeLabel;
-  VLOG(1) << "\tisOverloaded: " << (config.isOverloaded ? "true" : "false");
-  if (not config.overloadedLinks.empty()) {
-    VLOG(1) << "\toverloadedLinks: "
-            << folly::join(",", config.overloadedLinks);
+printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
+  VLOG(1) << "LinkMonitor state .... ";
+  VLOG(1) << "\tnodeLabel: " << state.nodeLabel;
+  VLOG(1) << "\tisOverloaded: " << (state.isOverloaded ? "true" : "false");
+  if (not state.overloadedLinks.empty()) {
+    VLOG(1) << "\toverloadedLinks: " << folly::join(",", state.overloadedLinks);
   }
-  if (not config.linkMetricOverrides.empty()) {
+  if (not state.linkMetricOverrides.empty()) {
     VLOG(1) << "\tlinkMetricOverrides: ";
-    for (auto const& kv : config.linkMetricOverrides) {
+    for (auto const& kv : state.linkMetricOverrides) {
       VLOG(1) << "\t\t" << kv.first << ": " << kv.second;
     }
   }
@@ -146,21 +145,21 @@ LinkMonitor::LinkMonitor(
   advertiseIfaceAddrTimer_ = fbzmq::ZmqTimeout::make(
       getEvb(), [this]() noexcept { advertiseIfaceAddr(); });
 
-  LOG(INFO) << "Loading link-monitor config";
+  LOG(INFO) << "Loading link-monitor state";
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
   // Create config-store client
-  auto config =
-      configStore_->loadThriftObj<thrift::LinkMonitorConfig>(kConfigKey).get();
-  if (config.hasValue()) {
-    LOG(INFO) << "Loaded link-monitor config from disk.";
-    config_ = config.value();
-    printLinkMonitorConfig(config_);
+  auto state =
+      configStore_->loadThriftObj<thrift::LinkMonitorState>(kConfigKey).get();
+  if (state.hasValue()) {
+    LOG(INFO) << "Loaded link-monitor state from disk.";
+    state_ = state.value();
+    printLinkMonitorState(state_);
   } else {
-    config_.isOverloaded = assumeDrained;
+    state_.isOverloaded = assumeDrained;
     LOG(WARNING) << folly::sformat(
-        "Failed to load link-monitor config. "
+        "Failed to load link-monitor state. "
         "Setting node as {}",
         assumeDrained ? "DRAINED" : "UNDRAINED");
   }
@@ -180,7 +179,7 @@ LinkMonitor::LinkMonitor(
               Constants::kNodeLabelRangePrefix.toString(),
               kvStoreClient_.get(),
               [&](std::optional<int32_t> newVal) noexcept {
-                config_.nodeLabel = newVal ? newVal.value() : 0;
+                state_.nodeLabel = newVal ? newVal.value() : 0;
                 advertiseAdjacencies();
               },
               std::chrono::milliseconds(100),
@@ -194,8 +193,8 @@ LinkMonitor::LinkMonitor(
       auto startAllocTimer =
           folly::AsyncTimeout::make(*getEvb(), [this, area]() noexcept {
             std::optional<int32_t> initValue;
-            if (config_.nodeLabel != 0) {
-              initValue = config_.nodeLabel;
+            if (state_.nodeLabel != 0) {
+              initValue = state_.nodeLabel;
             }
             rangeAllocator_.at(area).startAllocator(
                 Constants::kSrGlobalRange, initValue);
@@ -592,8 +591,8 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
 
   auto adjDb = thrift::AdjacencyDatabase();
   adjDb.thisNodeName = nodeId_;
-  adjDb.isOverloaded = config_.isOverloaded;
-  adjDb.nodeLabel = enableSegmentRouting_ ? config_.nodeLabel : 0;
+  adjDb.isOverloaded = state_.isOverloaded;
+  adjDb.nodeLabel = enableSegmentRouting_ ? state_.nodeLabel : 0;
   adjDb.area = area;
   for (const auto& adjKv : adjacencies_) {
     // 'second.second' is the adj object for this peer
@@ -605,18 +604,18 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
     auto adj = folly::copy(adjKv.second.adjacency);
 
     // Set link overload bit
-    adj.isOverloaded = config_.overloadedLinks.count(adj.ifName) > 0;
+    adj.isOverloaded = state_.overloadedLinks.count(adj.ifName) > 0;
 
     // Override metric with link metric if it exists
     adj.metric =
-        folly::get_default(config_.linkMetricOverrides, adj.ifName, adj.metric);
+        folly::get_default(state_.linkMetricOverrides, adj.ifName, adj.metric);
 
     // Override metric with adj metric if it exists
     thrift::AdjKey adjKey;
     adjKey.nodeName = adj.otherNodeName;
     adjKey.ifName = adj.ifName;
     adj.metric =
-        folly::get_default(config_.adjMetricOverrides, adjKey, adj.metric);
+        folly::get_default(state_.adjMetricOverrides, adjKey, adj.metric);
 
     adjDb.adjacencies.emplace_back(std::move(adj));
   }
@@ -639,7 +638,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
       "link_monitor.advertise_adjacencies", 1, fb303::SUM);
 
   // Config is most likely to have changed. Update it in `ConfigStore`
-  configStore_->storeThriftObj(kConfigKey, config_); // not awaiting on result
+  configStore_->storeThriftObj(kConfigKey, state_); // not awaiting on result
 
   // Cancel throttle timeout if scheduled
   if (advertiseAdjacenciesThrottled_->isActive()) {
@@ -983,11 +982,11 @@ LinkMonitor::setNodeOverload(bool isOverloaded) {
   runInEventBaseThread([this, p = std::move(p), isOverloaded]() mutable {
     std::string cmd =
         isOverloaded ? "SET_NODE_OVERLOAD" : "UNSET_NODE_OVERLOAD";
-    if (config_.isOverloaded == isOverloaded) {
+    if (state_.isOverloaded == isOverloaded) {
       LOG(INFO) << "Skip cmd: [" << cmd << "]. Node already in target state: ["
                 << (isOverloaded ? "OVERLOADED" : "NOT OVERLOADED") << "]";
     } else {
-      config_.isOverloaded = isOverloaded;
+      state_.isOverloaded = isOverloaded;
       SYSLOG(INFO) << (isOverloaded ? "Setting" : "Unsetting")
                    << " overload bit for node";
       advertiseAdjacencies();
@@ -1013,14 +1012,14 @@ LinkMonitor::setInterfaceOverload(
           return;
         }
 
-        if (isOverloaded && config_.overloadedLinks.count(interfaceName)) {
+        if (isOverloaded && state_.overloadedLinks.count(interfaceName)) {
           LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
                     << " is already overloaded";
           p.setValue();
           return;
         }
 
-        if (!isOverloaded && !config_.overloadedLinks.count(interfaceName)) {
+        if (!isOverloaded && !state_.overloadedLinks.count(interfaceName)) {
           LOG(INFO) << "Skip cmd: [" << cmd << "]. Interface: " << interfaceName
                     << " is currently NOT overloaded";
           p.setValue();
@@ -1028,11 +1027,11 @@ LinkMonitor::setInterfaceOverload(
         }
 
         if (isOverloaded) {
-          config_.overloadedLinks.insert(interfaceName);
+          state_.overloadedLinks.insert(interfaceName);
           SYSLOG(INFO) << "Setting overload bit for interface "
                        << interfaceName;
         } else {
-          config_.overloadedLinks.erase(interfaceName);
+          state_.overloadedLinks.erase(interfaceName);
           SYSLOG(INFO) << "Unsetting overload bit for interface "
                        << interfaceName;
         }
@@ -1059,8 +1058,8 @@ LinkMonitor::setLinkMetric(
         }
 
         if (overrideMetric.has_value() &&
-            config_.linkMetricOverrides.count(interfaceName) &&
-            config_.linkMetricOverrides[interfaceName] ==
+            state_.linkMetricOverrides.count(interfaceName) &&
+            state_.linkMetricOverrides[interfaceName] ==
                 overrideMetric.value()) {
           LOG(INFO) << "Skip cmd: " << cmd
                     << ". Overridden metric: " << overrideMetric.value()
@@ -1070,7 +1069,7 @@ LinkMonitor::setLinkMetric(
         }
 
         if (!overrideMetric.has_value() &&
-            !config_.linkMetricOverrides.count(interfaceName)) {
+            !state_.linkMetricOverrides.count(interfaceName)) {
           LOG(INFO) << "Skip cmd: " << cmd
                     << ". No overridden metric found for interface: "
                     << interfaceName;
@@ -1079,11 +1078,11 @@ LinkMonitor::setLinkMetric(
         }
 
         if (overrideMetric.has_value()) {
-          config_.linkMetricOverrides[interfaceName] = overrideMetric.value();
+          state_.linkMetricOverrides[interfaceName] = overrideMetric.value();
           SYSLOG(INFO) << "Overriding metric for interface " << interfaceName
                        << " to " << overrideMetric.value();
         } else {
-          config_.linkMetricOverrides.erase(interfaceName);
+          state_.linkMetricOverrides.erase(interfaceName);
           SYSLOG(INFO) << "Removing metric override for interface "
                        << interfaceName;
         }
@@ -1119,9 +1118,8 @@ LinkMonitor::setAdjacencyMetric(
       return;
     }
 
-    if (overrideMetric.has_value() &&
-        config_.adjMetricOverrides.count(adjKey) &&
-        config_.adjMetricOverrides[adjKey] == overrideMetric.value()) {
+    if (overrideMetric.has_value() && state_.adjMetricOverrides.count(adjKey) &&
+        state_.adjMetricOverrides[adjKey] == overrideMetric.value()) {
       LOG(INFO) << "Skip cmd: " << cmd
                 << ". Overridden metric: " << overrideMetric.value()
                 << " already set for: [" << adjNodeName << ":" << interfaceName
@@ -1131,7 +1129,7 @@ LinkMonitor::setAdjacencyMetric(
     }
 
     if (!overrideMetric.has_value() &&
-        !config_.adjMetricOverrides.count(adjKey)) {
+        !state_.adjMetricOverrides.count(adjKey)) {
       LOG(INFO) << "Skip cmd: " << cmd << ". No overridden metric found for: ["
                 << adjNodeName << ":" << interfaceName << "]";
       p.setValue();
@@ -1139,11 +1137,11 @@ LinkMonitor::setAdjacencyMetric(
     }
 
     if (overrideMetric.has_value()) {
-      config_.adjMetricOverrides[adjKey] = overrideMetric.value();
+      state_.adjMetricOverrides[adjKey] = overrideMetric.value();
       SYSLOG(INFO) << "Overriding metric for adjacency: [" << adjNodeName << ":"
                    << interfaceName << "] to " << overrideMetric.value();
     } else {
-      config_.adjMetricOverrides.erase(adjKey);
+      state_.adjMetricOverrides.erase(adjKey);
       SYSLOG(INFO) << "Removing metric override for adjacency: [" << adjNodeName
                    << ":" << interfaceName << "]";
     }
@@ -1164,7 +1162,7 @@ LinkMonitor::getInterfaces() {
     // reply with the dump of known interfaces and their states
     thrift::DumpLinksReply reply;
     reply.thisNodeName = nodeId_;
-    reply.isOverloaded = config_.isOverloaded;
+    reply.isOverloaded = state_.isOverloaded;
 
     // Fill interface details
     for (auto& kv : interfaces_) {
@@ -1173,14 +1171,14 @@ LinkMonitor::getInterfaces() {
       auto ifDetails = thrift::InterfaceDetails(
           apache::thrift::FRAGILE,
           interface.getInterfaceInfo(),
-          config_.overloadedLinks.count(ifName) > 0,
+          state_.overloadedLinks.count(ifName) > 0,
           0 /* custom metric value */,
           0 /* link flap back off time */);
 
       // Add metric override if any
       folly::Optional<int32_t> maybeMetric;
-      if (config_.linkMetricOverrides.count(ifName) > 0) {
-        maybeMetric.assign(config_.linkMetricOverrides.at(ifName));
+      if (state_.linkMetricOverrides.count(ifName) > 0) {
+        maybeMetric.assign(state_.linkMetricOverrides.at(ifName));
       }
       apache::thrift::fromFollyOptional(ifDetails.metricOverride, maybeMetric);
 
@@ -1210,8 +1208,8 @@ LinkMonitor::getLinkMonitorAdjacencies() {
     // build adjacency database
     thrift::AdjacencyDatabase adjDb;
     adjDb.thisNodeName = nodeId_;
-    adjDb.isOverloaded = config_.isOverloaded;
-    adjDb.nodeLabel = enableSegmentRouting_ ? config_.nodeLabel : 0;
+    adjDb.isOverloaded = state_.isOverloaded;
+    adjDb.nodeLabel = enableSegmentRouting_ ? state_.nodeLabel : 0;
 
     // fill adjacency details
     for (const auto& adjKv : adjacencies_) {
@@ -1219,18 +1217,18 @@ LinkMonitor::getLinkMonitorAdjacencies() {
       auto adj = folly::copy(adjKv.second.adjacency);
 
       // Set link overload bit
-      adj.isOverloaded = config_.overloadedLinks.count(adj.ifName) > 0;
+      adj.isOverloaded = state_.overloadedLinks.count(adj.ifName) > 0;
 
       // Override metric with link metric if it exists
       adj.metric = folly::get_default(
-          config_.linkMetricOverrides, adj.ifName, adj.metric);
+          state_.linkMetricOverrides, adj.ifName, adj.metric);
 
       // Override metric with adj metric if it exists
       thrift::AdjKey adjKey;
       adjKey.nodeName = adj.otherNodeName;
       adjKey.ifName = adj.ifName;
       adj.metric =
-          folly::get_default(config_.adjMetricOverrides, adjKey, adj.metric);
+          folly::get_default(state_.adjMetricOverrides, adjKey, adj.metric);
 
       adjDb.adjacencies.emplace_back(std::move(adj));
     }

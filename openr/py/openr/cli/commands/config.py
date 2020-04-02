@@ -82,12 +82,10 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        lm_config = deserialize_thrift_object(
-            lm_config_blob, lm_types.LinkMonitorConfig
-        )
+        lm_config = deserialize_thrift_object(lm_config_blob, lm_types.LinkMonitorState)
         self.print_config(lm_config)
 
-    def print_config(self, lm_config: lm_types.LinkMonitorConfig):
+    def print_config(self, lm_config: lm_types.LinkMonitorState):
         caption = "Link Monitor parameters stored"
         rows = []
         rows.append(

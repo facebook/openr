@@ -113,7 +113,7 @@ struct AdjKey {
 // state) etc.
 // NOTE: This is not currently exposed via any API
 //
-struct LinkMonitorConfig {
+struct LinkMonitorState {
   // Overload bit for Open-R. If set then this node is not available for
   // transit traffic at all.
   1: bool isOverloaded = 0;
