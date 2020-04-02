@@ -222,10 +222,18 @@ class MultipleAreaFixture : public MultipleStoreFixture {
   void
   setUpPeers() {
     // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
-    EXPECT_TRUE(client1->addPeers(peers1, planeArea).has_value());
-    EXPECT_TRUE(client2->addPeers(peers2PlaneArea, planeArea).has_value());
-    EXPECT_TRUE(client2->addPeers(peers2PodArea, podArea).has_value());
-    EXPECT_TRUE(client3->addPeers(peers3, podArea).has_value());
+    for (auto& peer : peers1) {
+      EXPECT_TRUE(store1->addPeer(peer.first, peer.second, planeArea));
+    }
+    for (auto& peer : peers2PlaneArea) {
+      EXPECT_TRUE(store2->addPeer(peer.first, peer.second, planeArea));
+    }
+    for (auto& peer : peers2PodArea) {
+      EXPECT_TRUE(store2->addPeer(peer.first, peer.second, podArea));
+    }
+    for (auto& peer : peers3) {
+      EXPECT_TRUE(store3->addPeer(peer.first, peer.second, podArea));
+    }
   }
 
   void
@@ -438,110 +446,6 @@ TEST_F(
     EXPECT_EQ(1, dump.size());
     EXPECT_EQ("test_value3", dump["test_key"].value);
   }
-}
-
-/**
- * Verify add/del/getPeers APIs
- */
-TEST(KvStoreClientInternal, PeerApiTest) {
-  fbzmq::Context context;
-  folly::Baton waitBaton;
-  const std::string nodeId{"test_store"};
-  const std::string peerName1{"peer1"};
-  const std::string peerName2{"peer2"};
-  const std::string peerName3{"peer3"};
-  const thrift::PeerSpec peerSpec1 =
-      createPeerSpec("inproc://fake_cmd_url_1", false);
-  const thrift::PeerSpec peerSpec2 =
-      createPeerSpec("inproc://fake_cmd_url_2", false);
-  const thrift::PeerSpec peerSpec3 =
-      createPeerSpec("inproc://fake_cmd_url_3", false);
-
-  // Initialize and start KvStore with one fake peer
-  std::unordered_map<std::string, thrift::PeerSpec> peers;
-  peers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName1),
-      std::forward_as_tuple(peerSpec1));
-  peers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName2),
-      std::forward_as_tuple(peerSpec2));
-  peers.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(peerName3),
-      std::forward_as_tuple(peerSpec3));
-
-  auto store = std::make_shared<KvStoreWrapper>(
-      context,
-      nodeId,
-      std::chrono::seconds(60) /* db sync interval */,
-      std::chrono::seconds(600) /* counter submit interval */,
-      peers);
-  store->run();
-
-  // Create another OpenrEventBase instance for looping clients
-  OpenrEventBase evb;
-
-  // Create and initialize kvstore-clients
-  auto client = std::make_shared<KvStoreClientInternal>(
-      &evb, nodeId, store->getKvStore());
-
-  // Schedule callback to set keys from client
-  evb.runInEventBaseThread([&]() noexcept {
-    // test addPeers
-    client->addPeers(peers);
-    {
-      auto maybePeers = client->getPeers();
-      EXPECT_TRUE(maybePeers.has_value());
-      EXPECT_EQ(*maybePeers, peers);
-    }
-
-    // test delPeers
-    auto toDelPeers = std::vector<std::string>{peerName1, peerName2};
-    peers.erase(peerName1);
-    peers.erase(peerName2);
-    client->delPeers(toDelPeers);
-    {
-      auto maybePeers = client->getPeers();
-      EXPECT_TRUE(maybePeers.has_value());
-      EXPECT_EQ(*maybePeers, peers);
-    }
-
-    // test delPeer
-    peers.erase(peerName3);
-    client->delPeer(peerName3);
-    {
-      auto maybePeers = client->getPeers();
-      EXPECT_TRUE(maybePeers.has_value());
-      EXPECT_EQ(*maybePeers, peers);
-    }
-
-    // Synchronization primitive
-    waitBaton.post();
-  });
-
-  // Start the event loop and wait until it is finished execution.
-  std::thread evbThread([&]() { evb.run(); });
-  evb.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
-
-  store->closeQueue();
-  client.reset();
-
-  evb.stop();
-  evb.waitUntilStopped();
-  evbThread.join();
-
-  // Verify peers INFO from KvStore
-  const auto peersResponse = store->getPeers();
-  EXPECT_EQ(0, peersResponse.size());
-
-  // Stop store
-  LOG(INFO) << "Stopping store";
-  store->stop();
 }
 
 TEST(KvStoreClientInternal, EmptyValueKey) {
@@ -945,10 +849,9 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Schedule callback to add/del peer via client-1 (will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    std::unordered_map<std::string, thrift::PeerSpec> peerMap;
-    peerMap.emplace("peer2", createPeerSpec("inproc://fake_cmd_url_2", false));
-    EXPECT_TRUE(client1->addPeers(peerMap).has_value());
-    EXPECT_TRUE(client1->delPeer("peer1").has_value());
+    EXPECT_TRUE(store->addPeer(
+        "peer2", createPeerSpec("inproc://fake_cmd_url_2", false)));
+    EXPECT_TRUE(store->delPeer("peer1"));
   });
 
   // Schedule callback to persist key2 from client2 (this will be executed next)
@@ -1390,9 +1293,15 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
 
   evb.scheduleTimeout(std::chrono::milliseconds(scheduleAt), [&]() noexcept {
     // test addPeers in invalid area, following result must be false
-    EXPECT_FALSE(client1->addPeers(peers1).has_value());
-    EXPECT_FALSE(client2->addPeers(peers2PlaneArea).has_value());
-    EXPECT_FALSE(client3->addPeers(peers3).has_value());
+    for (auto& peer : peers1) {
+      EXPECT_FALSE(store1->addPeer(peer.first, peer.second));
+    }
+    for (auto& peer : peers2PlaneArea) {
+      EXPECT_FALSE(store2->addPeer(peer.first, peer.second));
+    }
+    for (auto& peer : peers3) {
+      EXPECT_FALSE(store3->addPeer(peer.first, peer.second));
+    }
     // add peers in valid area,
     // node1(pod-area)  --- (pod area) node2 (plane area) -- (plane area) node3
     setUpPeers();
@@ -1401,21 +1310,17 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // test addPeers
-        auto maybePeers = client1->getPeers(planeArea);
-        EXPECT_TRUE(maybePeers.has_value());
-        EXPECT_EQ(maybePeers.value(), peers1);
+        auto maybePeers = store1->getPeers(planeArea);
+        EXPECT_EQ(maybePeers, peers1);
 
-        auto maybePeers2 = client2->getPeers(planeArea);
-        EXPECT_TRUE(maybePeers2.has_value());
-        EXPECT_EQ(maybePeers2.value(), peers2PlaneArea);
+        auto maybePeers2 = store2->getPeers(planeArea);
+        EXPECT_EQ(maybePeers2, peers2PlaneArea);
 
-        auto maybePeers3 = client2->getPeers(podArea);
-        EXPECT_TRUE(maybePeers3.has_value());
-        EXPECT_EQ(maybePeers3.value(), peers2PodArea);
+        auto maybePeers3 = store2->getPeers(podArea);
+        EXPECT_EQ(maybePeers3, peers2PodArea);
 
-        auto maybePeers4 = client3->getPeers(podArea);
-        EXPECT_TRUE(maybePeers4.has_value());
-        EXPECT_EQ(maybePeers4.value(), peers3);
+        auto maybePeers4 = store3->getPeers(podArea);
+        EXPECT_EQ(maybePeers4, peers3);
       });
 
   // test for key set, get and key flood within area

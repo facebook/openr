@@ -265,6 +265,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "LinkMonitor test/basic operations is done";
 
     interfaceUpdatesQueue.close();
+    peerUpdatesQueue.close();
     neighborUpdatesQueue.close();
     prefixUpdatesQueue.close();
     kvStoreWrapper->closeQueue();
@@ -318,7 +319,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
         Constants::kTtlDecrement,
         false,
         false,
-        areas);
+        areas,
+        peerUpdatesQueue.getReader());
     kvStoreWrapper->run();
   }
 
@@ -349,6 +351,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{"adj:"},
         interfaceUpdatesQueue,
+        peerUpdatesQueue,
         neighborUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
@@ -548,6 +551,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
   fbzmq::Context context{};
 
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue;
+  messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
   messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesReader{
@@ -842,6 +846,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
   // stop linkMonitor
   LOG(INFO) << "Mock restarting link monitor!";
+  peerUpdatesQueue.close();
   neighborUpdatesQueue.close();
   kvStoreWrapper->stop();
   kvStoreWrapper.reset();
@@ -849,9 +854,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   linkMonitorThread->join();
   linkMonitor.reset();
 
-  // Create new neighbor update queue. Previous one is closed
+  // Create new neighborUpdatesQueue/peerUpdatesQueue.
+  // Previous one is closed
   neighborUpdatesQueue =
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>();
+  peerUpdatesQueue = messaging::ReplicateQueue<thrift::PeerUpdateRequest>();
 
   // Recreate KvStore as previous kvStoreUpdatesQueue is closed
   createKvStore();
@@ -1699,6 +1706,7 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{"adj:"},
         interfaceUpdatesQueue,
+        peerUpdatesQueue,
         neighborUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),

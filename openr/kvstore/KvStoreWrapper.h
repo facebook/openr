@@ -40,8 +40,10 @@ class KvStoreWrapper {
       std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
       bool enableFloodOptimization = false,
       bool isFloodRoot = false,
-      const std::unordered_set<std::string>& areas = {
-          openr::thrift::KvStore_constants::kDefaultArea()});
+      const std::unordered_set<std::string>& areas =
+          {openr::thrift::KvStore_constants::kDefaultArea()},
+      std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
+          peerUpdatesQueue = std::nullopt);
 
   ~KvStoreWrapper() {
     stop();
@@ -198,6 +200,9 @@ class KvStoreWrapper {
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;
   messaging::RQueue<thrift::Publication> kvStoreUpdatesQueueReader_{
       kvStoreUpdatesQueue_.getReader()};
+
+  // Queue for streaming peer updates from LM
+  messaging::ReplicateQueue<thrift::PeerUpdateRequest> dummyPeerUpdatesQueue_;
 
   // KvStore owned by this wrapper.
   std::unique_ptr<KvStore> kvStore_;

@@ -247,6 +247,7 @@ main(int argc, char** argv) {
   ReplicateQueue<openr::thrift::SparkNeighborEvent> neighborUpdatesQueue;
   ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdatesQueue;
   ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
+  ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -481,6 +482,7 @@ main(int argc, char** argv) {
           context,
           FLAGS_node_name,
           kvStoreUpdatesQueue,
+          peerUpdatesQueue.getReader(),
           KvStoreGlobalCmdUrl{folly::sformat(
               "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
           monitorSubmitUrl,
@@ -695,6 +697,7 @@ main(int argc, char** argv) {
           FLAGS_prefix_algo_type_ksp2_ed_ecmp,
           AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
           interfaceUpdatesQueue,
+          peerUpdatesQueue,
           neighborUpdatesQueue.getReader(),
           monitorSubmitUrl,
           configStore,
@@ -857,6 +860,7 @@ main(int argc, char** argv) {
   // Stop all threads (in reverse order of their creation)
   routeUpdatesQueue.close();
   interfaceUpdatesQueue.close();
+  peerUpdatesQueue.close();
   neighborUpdatesQueue.close();
   prefixUpdatesQueue.close();
   kvStoreUpdatesQueue.close();

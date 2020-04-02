@@ -87,6 +87,7 @@ LinkMonitor::LinkMonitor(
     bool forwardingAlgoKsp2Ed,
     AdjacencyDbMarker adjacencyDbMarker,
     messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
+    messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
     messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
     MonitorSubmitUrl const& monitorSubmitUrl,
     PersistentStore* configStore,
@@ -119,6 +120,7 @@ LinkMonitor::LinkMonitor(
       // mutable states
       interfaceUpdatesQueue_(intfUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
+      peerUpdatesQueue_(peerUpdatesQueue),
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
@@ -513,6 +515,10 @@ void
 LinkMonitor::advertiseKvStorePeers(
     const std::string& area,
     const std::unordered_map<std::string, thrift::PeerSpec>& upPeers) {
+  // Prepare peer update request
+  thrift::PeerUpdateRequest req;
+  req.area = area;
+
   // Get old and new peer list. Also update local state
   const auto oldPeers = std::move(peers_[area]);
   peers_[area] = getPeersFromAdjacencies(adjacencies_, area);
@@ -530,8 +536,9 @@ LinkMonitor::advertiseKvStorePeers(
 
   // Delete old peers
   if (toDelPeers.size() > 0) {
-    const auto ret = kvStoreClient_->delPeers(toDelPeers, area);
-    CHECK(ret);
+    thrift::PeerDelParams params;
+    params.peerNames = std::move(toDelPeers);
+    req.peerDelParams = std::move(params);
   }
 
   // Get list of peers to add
@@ -567,8 +574,13 @@ LinkMonitor::advertiseKvStorePeers(
 
   // Add new peers
   if (toAddPeers.size() > 0) {
-    const auto ret = kvStoreClient_->addPeers(std::move(toAddPeers), area);
-    CHECK(ret);
+    thrift::PeerAddParams params;
+    params.peers = std::move(toAddPeers);
+    req.peerAddParams = std::move(params);
+  }
+
+  if (req.peerDelParams.has_value() || req.peerAddParams.has_value()) {
+    peerUpdatesQueue_.push(std::move(req));
   }
 }
 

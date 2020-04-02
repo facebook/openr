@@ -125,9 +125,16 @@ struct PeerAddParams {
   1: PeersMap peers
 }
 
-// peers to delete
+// parameters for peers deletion
 struct PeerDelParams {
   1: list<string> peerNames
+}
+
+// peer updateRequest
+struct PeerUpdateRequest {
+  1: string area = kDefaultArea
+  2: optional PeerAddParams peerAddParams
+  3: optional PeerDelParams peerDelParams
 }
 
 // set/unset flood-topo child
@@ -192,8 +199,6 @@ struct KvStoreRequest {
   2: optional KeySetParams keySetParams
   3: optional KeyGetParams keyGetParams
   6: optional KeyDumpParams keyDumpParams
-  4: optional PeerAddParams peerAddParams
-  5: optional PeerDelParams peerDelParams
   9: optional Dual.DualMessages dualMessages
   10: optional FloodTopoSetParams floodTopoSetParams
   // area identifier to identify the KvStoreDb instance

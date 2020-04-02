@@ -67,6 +67,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       context_,
       nodeId_,
       kvStoreUpdatesQueue_,
+      peerUpdatesQueue_.getReader(),
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
       std::nullopt /* ip-tos */,
@@ -177,6 +178,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /* prefix fwd algo KSP2_ED_ECMP */,
       AdjacencyDbMarker{"adj:"},
       interfaceUpdatesQueue_,
+      peerUpdatesQueue_,
       neighborUpdatesQueue_.getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},
       configStore_.get(),
@@ -393,6 +395,7 @@ void
 OpenrWrapper<Serializer>::stop() {
   // Close all queues
   routeUpdatesQueue_.close();
+  peerUpdatesQueue_.close();
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();
   prefixUpdatesQueue_.close();
@@ -466,12 +469,6 @@ bool
 OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
   auto keys = kvStoreClient_->dumpAllWithPrefix(key);
   return keys.has_value();
-}
-
-template <class Serializer>
-std::optional<std::unordered_map<std::string, thrift::PeerSpec>>
-OpenrWrapper<Serializer>::getKvStorePeers() {
-  return kvStoreClient_->getPeers();
 }
 
 template <class Serializer>

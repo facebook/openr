@@ -108,9 +108,11 @@ class LinkMonitor final : public OpenrEventBase {
       bool forwardingAlgoKsp2Ed,
       // KvStore's adjacency object's key prefix
       AdjacencyDbMarker adjacencyDbMarker,
-      // URLs for spark, kv-store and monitor
+      // Queue for spark and kv-store
       messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
+      messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
       messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
+      // URL for monitoring
       MonitorSubmitUrl const& monitorSubmitUrl,
       PersistentStore* configStore,
       // if set, we will assume drained if no drain state is found in the
@@ -334,6 +336,9 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Queue to publish prefix updates to PrefixManager
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue_;
+
+  // Queue to publish peer updates to KvStore
+  messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue_;
 
   // Used to subscribe to netlink events from PlatformPublisher
   fbzmq::Socket<ZMQ_SUB, fbzmq::ZMQ_CLIENT> nlEventSub_;

@@ -150,21 +150,6 @@ class KvStoreClientInternal {
   void subscribeKeyFilter(KvStoreFilters kvFilters, KeyCallback callback);
   void unSubscribeKeyFilter();
 
-  /**
-   * APIs to add/del/get peer info from KvStore.
-   */
-  std::optional<folly::Unit> addPeers(
-      std::unordered_map<std::string, thrift::PeerSpec> peers,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  std::optional<folly::Unit> delPeer(
-      std::string const& peerName,
-      std::string const& area = thrift::KvStore_constants::kDefaultArea());
-  std::optional<folly::Unit> delPeers(
-      const std::vector<std::string>& peerNames,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
-  std::optional<std::unordered_map<std::string, thrift::PeerSpec>> getPeers(
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
-
   OpenrEventBase*
   getOpenrEventBase() const noexcept {
     return eventBase_;
@@ -210,13 +195,6 @@ class KvStoreClientInternal {
   std::optional<folly::Unit> setKeysHelper(
       std::unordered_map<std::string, thrift::Value> keyVals,
       std::string const& area = thrift::KvStore_constants::kDefaultArea());
-
-  /**
-   * Utility function to del peers in KvStore
-   */
-  std::optional<folly::Unit> delPeersHelper(
-      const std::vector<std::string>& peerNames,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
   /**
    * Helper function to advertise the pending keys considering the exponential

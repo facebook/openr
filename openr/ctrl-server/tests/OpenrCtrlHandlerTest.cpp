@@ -152,6 +152,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         false /* prefix fwd algo KSP2_ED_ECMP */,
         AdjacencyDbMarker{Constants::kAdjDbMarker.str()},
         interfaceUpdatesQueue_,
+        peerUpdatesQueue_,
         neighborUpdatesQueue_.getReader(),
         monitorSubmitUrl_,
         persistentStore.get(),
@@ -190,6 +191,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   TearDown() override {
     routeUpdatesQueue_.close();
     interfaceUpdatesQueue_.close();
+    peerUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
     kvStoreWrapper->closeQueue();
@@ -241,6 +243,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
 

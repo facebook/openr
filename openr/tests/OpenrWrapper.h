@@ -71,19 +71,6 @@ class OpenrWrapper {
   void stop();
 
   /**
-   * API to get dump from KvStore.
-   * if we pass a prefix, only return keys that match it
-   */
-  std::unordered_map<std::string /* key */, thrift::Value> kvStoreDumpAll(
-      std::string const& prefix = "");
-
-  /**
-   * APIs to get existing peers of a KvStore.
-   */
-  std::optional<std::unordered_map<std::string, thrift::PeerSpec>>
-  getKvStorePeers();
-
-  /**
    * add interfaceDb for spark to tracking
    * return true upon success and fasle otherwise
    */
@@ -169,6 +156,7 @@ class OpenrWrapper {
   const std::string platformPubUrl_;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue_;

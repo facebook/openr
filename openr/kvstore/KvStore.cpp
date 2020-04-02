@@ -73,6 +73,7 @@ KvStore::KvStore(
     fbzmq::Context& zmqContext,
     std::string nodeId,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
+    messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
     MonitorSubmitUrl monitorSubmitUrl,
     std::optional<int> maybeIpTos,
@@ -120,9 +121,7 @@ KvStore::KvStore(
       getEvb(), [this]() noexcept { submitCounters(); });
   monitorTimer_->scheduleTimeout(monitorSubmitInterval_, isPeriodic);
 
-  //
   // Prepare global command socket
-  //
   prepareSocket(kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
   addSocket(
       fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
@@ -130,6 +129,25 @@ KvStore::KvStore(
       [this](int) noexcept {
         processCmdSocketRequest(kvParams_.globalCmdSock);
       });
+
+  // Add reader to process peer updates from LinkMonitor
+  addFiberTask([q = std::move(peerUpdateQueue), this]() mutable noexcept {
+    LOG(INFO) << "Starting peer updates processing fiber";
+    while (true) {
+      auto maybePeerUpdate = q.get(); // perform read
+      VLOG(2) << "Received peer update...";
+      if (maybePeerUpdate.hasError()) {
+        LOG(INFO) << "Terminating peer updates processing fiber";
+        break;
+      }
+      try {
+        processPeerUpdates(std::move(maybePeerUpdate).value());
+      } catch (const std::exception& ex) {
+        LOG(ERROR) << "Failed to process peer request. Exception: "
+                   << ex.what();
+      }
+    }
+  });
 
   // create KvStoreDb instances
   for (auto const& area : areas_) {
@@ -457,6 +475,17 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
 messaging::RQueue<thrift::Publication>
 KvStore::getKvStoreUpdatesReader() {
   return kvParams_.kvStoreUpdatesQueue.getReader();
+}
+
+void
+KvStore::processPeerUpdates(thrift::PeerUpdateRequest&& req) {
+  // Req can contain peerAdd/peerDel simultaneously
+  if (req.peerAddParams.has_value()) {
+    addUpdateKvStorePeers(req.peerAddParams.value(), req.area).get();
+  }
+  if (req.peerDelParams.has_value()) {
+    deleteKvStorePeers(req.peerDelParams.value(), req.area).get();
+  }
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>

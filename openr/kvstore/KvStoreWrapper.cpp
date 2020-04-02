@@ -32,7 +32,9 @@ KvStoreWrapper::KvStoreWrapper(
     std::chrono::milliseconds ttlDecr,
     bool enableFloodOptimization,
     bool isFloodRoot,
-    const std::unordered_set<std::string>& areas)
+    const std::unordered_set<std::string>& areas,
+    std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
+        peerUpdatesQueue)
     : nodeId(nodeId),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
       monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
@@ -44,6 +46,8 @@ KvStoreWrapper::KvStoreWrapper(
       zmqContext,
       nodeId,
       kvStoreUpdatesQueue_,
+      peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
+                                   : dummyPeerUpdatesQueue_.getReader(),
       KvStoreGlobalCmdUrl{globalCmdUrl},
       MonitorSubmitUrl{monitorSubmitUrl},
       std::nullopt /* ip-tos */,
@@ -80,6 +84,7 @@ KvStoreWrapper::stop() {
 
   // Close queue
   kvStoreUpdatesQueue_.close();
+  dummyPeerUpdatesQueue_.close();
 
   // Stop kvstore
   kvStore_->stop();

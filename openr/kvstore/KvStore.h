@@ -423,8 +423,9 @@ class KvStore final : public OpenrEventBase {
       std::string nodeId,
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
-      // the url to receive command from local and
-      // non local clients (often encrypted channel)
+      // Queue for receiving peer updates
+      messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
+      // the url to receive command from peer instances
       KvStoreGlobalCmdUrl globalCmdUrl,
       // the url to submit to monitor
       MonitorSubmitUrl monitorSubmitUrl,
@@ -535,6 +536,8 @@ class KvStore final : public OpenrEventBase {
   // bytes counters.
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
       fbzmq::Message&& msg);
+
+  void processPeerUpdates(thrift::PeerUpdateRequest&& req);
 
   void submitCounters();
 
