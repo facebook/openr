@@ -1617,8 +1617,8 @@ Decision::Decision(
       prefixDbMarker_(prefixDbMarker),
       routeUpdatesQueue_(routeUpdatesQueue) {
   routeDb_.thisNodeName = myNodeName_;
-  processUpdatesTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { processPendingUpdates(); });
+  processUpdatesTimer_ = folly::AsyncTimeout::make(
+      *getEvb(), [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(
       myNodeName,
       enableV4,
@@ -1630,21 +1630,22 @@ Decision::Decision(
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
 
-  coldStartTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { coldStartUpdate(); });
+  coldStartTimer_ = folly::AsyncTimeout::make(
+      *getEvb(), [this]() noexcept { coldStartUpdate(); });
   if (gracefulRestartDuration.has_value()) {
     coldStartTimer_->scheduleTimeout(gracefulRestartDuration.value());
   }
 
   // Schedule periodic timer for submission to monitor
-  const bool isPeriodic = true;
-  monitorTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { submitCounters(); });
-  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval, isPeriodic);
+  monitorTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    submitCounters();
+    monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+  });
+  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
 
   // Schedule periodic timer to decremtOrderedFibHolds
   if (enableOrderedFib) {
-    orderedFibTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
+    orderedFibTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
       LOG(INFO) << "Decrementing Holds";
       decrementOrderedFibHolds();
       if (spfSolver_->hasHolds()) {

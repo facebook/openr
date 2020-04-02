@@ -13,7 +13,6 @@
 
 #include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/async/ZmqThrottle.h>
-#include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
@@ -258,7 +257,7 @@ class Decision : public OpenrEventBase {
 
   // callback timer used on startup to publish routes after
   // gracefulRestartDuration
-  std::unique_ptr<fbzmq::ZmqTimeout> coldStartTimer_{nullptr};
+  std::unique_ptr<folly::AsyncTimeout> coldStartTimer_{nullptr};
 
   /**
    * Timer to schedule pending update processing
@@ -266,7 +265,7 @@ class Decision : public OpenrEventBase {
    * just route rebuilding is needed.
    * Apply exponential backoff timeout to avoid churn
    */
-  std::unique_ptr<fbzmq::ZmqTimeout> processUpdatesTimer_;
+  std::unique_ptr<folly::AsyncTimeout> processUpdatesTimer_;
   ExponentialBackoff<std::chrono::milliseconds> processUpdatesBackoff_;
 
   // store update to-do status
@@ -331,10 +330,10 @@ class Decision : public OpenrEventBase {
   std::chrono::seconds monitorSyncInterval_{0};
 
   // Timer for submitting to monitor periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_{nullptr};
+  std::unique_ptr<folly::AsyncTimeout> monitorTimer_{nullptr};
 
   // Timer for decrementing link holds for ordered fib programming
-  std::unique_ptr<fbzmq::ZmqTimeout> orderedFibTimer_{nullptr};
+  std::unique_ptr<folly::AsyncTimeout> orderedFibTimer_{nullptr};
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
