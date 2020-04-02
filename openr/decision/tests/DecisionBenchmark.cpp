@@ -80,6 +80,7 @@ class DecisionWrapper {
         std::chrono::milliseconds(500),
         std::nullopt,
         kvStoreUpdatesQueue.getReader(),
+        staticRoutesUpdateQueue.getReader(),
         routeUpdatesQueue,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
@@ -94,6 +95,7 @@ class DecisionWrapper {
 
   ~DecisionWrapper() {
     kvStoreUpdatesQueue.close();
+    staticRoutesUpdateQueue.close();
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
     decisionThread->join();
@@ -189,6 +191,7 @@ class DecisionWrapper {
 
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
   messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
 

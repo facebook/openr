@@ -83,6 +83,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::chrono::milliseconds(500),
         std::nullopt,
         kvStoreWrapper->getReader(),
+        staticRoutesUpdatesQueue_.getReader(),
         routeUpdatesQueue_,
         monitorSubmitUrl_,
         context_);
@@ -190,6 +191,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   void
   TearDown() override {
     routeUpdatesQueue_.close();
+    staticRoutesUpdatesQueue_.close();
     interfaceUpdatesQueue_.close();
     peerUpdatesQueue_.close();
     neighborUpdatesQueue_.close();
@@ -246,6 +248,8 @@ class OpenrCtrlFixture : public ::testing::Test {
   messaging::ReplicateQueue<thrift::PeerUpdateRequest> peerUpdatesQueue_;
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue_;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta>
+      staticRoutesUpdatesQueue_;
 
   fbzmq::Context context_;
   folly::EventBase evb_;

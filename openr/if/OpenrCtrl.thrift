@@ -26,6 +26,11 @@ exception OpenrError {
   1: string message
 } ( message = "message" )
 
+struct StaticRoutes {
+  1: map<i32,list<Network.NextHopThrift>> mplsRoutes;
+}
+
+
 /**
  * Thrift service - exposes RPC APIs for interaction with all of Open/R's
  * modules.

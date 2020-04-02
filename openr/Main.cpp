@@ -248,6 +248,7 @@ main(int argc, char** argv) {
   ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdatesQueue;
   ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;
+  ReplicateQueue<openr::thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
 
   // structures to organize our modules
   std::vector<std::thread> allThreads;
@@ -738,6 +739,7 @@ main(int argc, char** argv) {
           std::chrono::milliseconds(FLAGS_decision_debounce_max_ms),
           decisionGRWindow,
           kvStoreUpdatesQueue.getReader(),
+          staticRoutesUpdateQueue.getReader(),
           routeUpdatesQueue,
           monitorSubmitUrl,
           context));
@@ -864,6 +866,7 @@ main(int argc, char** argv) {
   neighborUpdatesQueue.close();
   prefixUpdatesQueue.close();
   kvStoreUpdatesQueue.close();
+  staticRoutesUpdateQueue.close();
 
   thriftCtrlServer.stop();
   ctrlHandler.reset();

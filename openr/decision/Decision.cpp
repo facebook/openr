@@ -209,6 +209,9 @@ class SpfSolver::SpfSolverImpl {
       std::string /* nodeName */,
       thrift::AdjacencyDatabase> const&
   getAdjacencyDatabases();
+
+  thrift::StaticRoutes const& getStaticRoutes();
+
   // returns true if the prefixDb changed
   bool updatePrefixDatabase(const thrift::PrefixDatabase& prefixDb);
 
@@ -228,6 +231,12 @@ class SpfSolver::SpfSolverImpl {
   getThreadData() noexcept {
     return tData_;
   }
+
+  std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
+
+  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
+
+  bool staticRoutesUpdated();
 
   static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
       const SpfResult& spfResult, const std::set<std::string>& dstNodes);
@@ -344,6 +353,10 @@ class SpfSolver::SpfSolverImpl {
 
   PrefixState prefixState_;
 
+  thrift::StaticRoutes staticRoutes_;
+
+  std::vector<thrift::RouteDatabaseDelta> staticRoutesUpdates_;
+
   // Save all direct next-hop distance from a given source node to a destination
   // node. We update it as we compute all LFA routes from perspective of source
   std::unordered_map<
@@ -391,6 +404,17 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
 }
 
 bool
+SpfSolver::SpfSolverImpl::staticRoutesUpdated() {
+  return staticRoutesUpdates_.size() > 0;
+}
+
+void
+SpfSolver::SpfSolverImpl::pushRoutesDeltaUpdates(
+    thrift::RouteDatabaseDelta& staticRoutesDelta) {
+  staticRoutesUpdates_.emplace_back(std::move(staticRoutesDelta));
+}
+
+bool
 SpfSolver::SpfSolverImpl::hasHolds() const {
   return linkState_.hasHolds();
 }
@@ -429,6 +453,11 @@ SpfSolver::SpfSolverImpl::deleteAdjacencyDatabase(const std::string& nodeName) {
 std::unordered_map<std::string /* nodeName */, thrift::AdjacencyDatabase> const&
 SpfSolver::SpfSolverImpl::getAdjacencyDatabases() {
   return linkState_.getAdjacencyDatabases();
+}
+
+thrift::StaticRoutes const&
+SpfSolver::SpfSolverImpl::getStaticRoutes() {
+  return staticRoutes_;
 }
 
 bool
@@ -1113,6 +1142,48 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
                               bestNextHop.at(0)};
 }
 
+std::optional<thrift::RouteDatabaseDelta>
+SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
+  std::unordered_map<int32_t, thrift::MplsRoute> routesToUpdate;
+  std::unordered_set<int32_t> routesToDel;
+
+  // squash the updates together.
+  for (const auto& staticRoutesUpdate : staticRoutesUpdates_) {
+    for (const auto& mplsRoutesToUpdate :
+         staticRoutesUpdate.mplsRoutesToUpdate) {
+      LOG(INFO) << "adding: " << mplsRoutesToUpdate.topLabel;
+      routesToUpdate[mplsRoutesToUpdate.topLabel] = mplsRoutesToUpdate;
+      routesToDel.erase(mplsRoutesToUpdate.topLabel);
+    }
+
+    for (const auto& mplsRoutesToDelete :
+         staticRoutesUpdate.mplsRoutesToDelete) {
+      LOG(INFO) << "erasing: " << mplsRoutesToDelete;
+      routesToDel.insert(mplsRoutesToDelete);
+      routesToUpdate.erase(mplsRoutesToDelete);
+    }
+  }
+  staticRoutesUpdates_.clear();
+
+  if (routesToUpdate.size() == 0 && routesToDel.size() == 0) {
+    return {};
+  }
+
+  thrift::RouteDatabaseDelta ret;
+  for (const auto& routeToUpdate : routesToUpdate) {
+    staticRoutes_.mplsRoutes[routeToUpdate.first] =
+        routeToUpdate.second.nextHops;
+    ret.mplsRoutesToUpdate.emplace_back(std::move(routeToUpdate.second));
+  }
+
+  for (const auto& routeToDel : routesToDel) {
+    staticRoutes_.mplsRoutes.erase(routeToDel);
+    ret.mplsRoutesToDelete.push_back(routeToDel);
+  }
+
+  return ret;
+}
+
 std::optional<thrift::UnicastRoute>
 SpfSolver::SpfSolverImpl::selectKsp2Routes(
     const thrift::IpPrefix& prefix,
@@ -1546,6 +1617,17 @@ SpfSolver::updateAdjacencyDatabase(
 }
 
 bool
+SpfSolver::staticRoutesUpdated() {
+  return impl_->staticRoutesUpdated();
+}
+
+void
+SpfSolver::pushRoutesDeltaUpdates(
+    thrift::RouteDatabaseDelta& staticRoutesDelta) {
+  return impl_->pushRoutesDeltaUpdates(staticRoutesDelta);
+}
+
+bool
 SpfSolver::hasHolds() const {
   return impl_->hasHolds();
 }
@@ -1558,6 +1640,11 @@ SpfSolver::deleteAdjacencyDatabase(const std::string& nodeName) {
 std::unordered_map<std::string /* nodeName */, thrift::AdjacencyDatabase> const&
 SpfSolver::getAdjacencyDatabases() {
   return impl_->getAdjacencyDatabases();
+}
+
+thrift::StaticRoutes const&
+SpfSolver::getStaticRoutes() {
+  return impl_->getStaticRoutes();
 }
 
 // update prefixes for a given router
@@ -1579,6 +1666,11 @@ SpfSolver::buildPaths(const std::string& myNodeName) {
 std::optional<thrift::RouteDatabase>
 SpfSolver::buildRouteDb(const std::string& myNodeName) {
   return impl_->buildRouteDb(myNodeName);
+}
+
+std::optional<thrift::RouteDatabaseDelta>
+SpfSolver::processStaticRouteUpdates() {
+  return impl_->processStaticRouteUpdates();
 }
 
 bool
@@ -1608,6 +1700,7 @@ Decision::Decision(
     std::chrono::milliseconds debounceMaxDur,
     std::optional<std::chrono::seconds> gracefulRestartDuration,
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
+    messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
@@ -1697,6 +1790,29 @@ Decision::Decision(
       }
     }
   });
+
+  // Add reader to process publication from KvStore
+  addFiberTask(
+      [q = std::move(staticRoutesUpdateQueue), this]() mutable noexcept {
+        LOG(INFO) << "Starting static routes update processing fiber";
+        while (true) {
+          auto maybeThriftPub = q.get(); // perform read
+          VLOG(2) << "Received static routes update";
+          if (maybeThriftPub.hasError()) {
+            LOG(INFO) << "Terminating prefix manager update processing fiber";
+            break;
+          }
+          // Apply publication and update stored update status
+          pushRoutesDeltaUpdates(maybeThriftPub.value());
+          if (!processUpdatesBackoff_.atMaxBackoff()) {
+            processUpdatesBackoff_.reportError();
+            processUpdatesTimer_->scheduleTimeout(
+                processUpdatesBackoff_.getTimeRemainingUntilRetry());
+          } else {
+            CHECK(processUpdatesTimer_->isScheduled());
+          }
+        }
+      });
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
@@ -1715,6 +1831,17 @@ Decision::getDecisionRouteDb(std::string nodeName) {
       routeDb.thisNodeName = nodeName;
     }
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
+  });
+  return sf;
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::StaticRoutes>>
+Decision::getDecisionStaticRoutes() {
+  folly::Promise<std::unique_ptr<thrift::StaticRoutes>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([p = std::move(p), this]() mutable {
+    auto staticRoutes = spfSolver_->getStaticRoutes();
+    p.setValue(std::make_unique<thrift::StaticRoutes>(std::move(staticRoutes)));
   });
   return sf;
 }
@@ -1903,6 +2030,36 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   return res;
 }
 
+void
+Decision::processStaticRouteUpdates() {
+  auto maybePerfEvents = pendingPrefixUpdates_.getPerfEvents();
+  pendingPrefixUpdates_.clear();
+  if (coldStartTimer_->isScheduled()) {
+    return;
+  }
+
+  if (maybePerfEvents) {
+    addPerfEvent(*maybePerfEvents, myNodeName_, "DECISION_DEBOUNCE");
+  }
+  // update routeDb once for all updates received
+  LOG(INFO) << "Decision: updating new routeDb.";
+  auto maybeRouteDb = spfSolver_->processStaticRouteUpdates();
+
+  if (not maybeRouteDb.has_value()) {
+    LOG(WARNING) << "prefix manager updates incurred no route updates";
+    return;
+  }
+
+  fromStdOptional(maybeRouteDb.value().perfEvents, maybePerfEvents);
+  routeUpdatesQueue_.push(std::move(maybeRouteDb.value()));
+}
+
+void
+Decision::pushRoutesDeltaUpdates(
+    thrift::RouteDatabaseDelta& staticRoutesDelta) {
+  spfSolver_->pushRoutesDeltaUpdates(staticRoutesDelta);
+}
+
 // periodically submit counters to Counters thread
 void
 Decision::submitCounters() {
@@ -1918,9 +2075,22 @@ Decision::submitCounters() {
 
 void
 Decision::processPendingUpdates() {
+  // we need to update  static route first, because there maybe routes
+  // depending on static routes.
+  bool staticRoutesUpdated{false};
+  if (spfSolver_->staticRoutesUpdated()) {
+    staticRoutesUpdated = true;
+    processStaticRouteUpdates();
+  }
+
   if (processUpdatesStatus_.adjChanged) {
     processPendingAdjUpdates();
-  } else if (processUpdatesStatus_.prefixesChanged) {
+  } else if (
+      processUpdatesStatus_.prefixesChanged ||
+      staticRoutesUpdated) // if only static routes gets updated, we still need
+                           // to update routes because there maybe routes
+                           // depended on static routes.
+  {
     processPendingPrefixUpdates();
   }
 

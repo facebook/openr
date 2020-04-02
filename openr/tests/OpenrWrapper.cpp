@@ -220,6 +220,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::chrono::milliseconds(250),
       std::nullopt,
       kvStoreUpdatesQueue_.getReader(),
+      staticRoutesQueue_.getReader(),
       routeUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
       context_);
@@ -400,6 +401,7 @@ OpenrWrapper<Serializer>::stop() {
   neighborUpdatesQueue_.close();
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();
+  staticRoutesQueue_.close();
 
   // stop all modules in reverse order
   eventBase_.stop();

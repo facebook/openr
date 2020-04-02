@@ -3720,6 +3720,7 @@ class DecisionTestFixture : public ::testing::Test {
         debounceTimeoutMax,
         std::nullopt,
         kvStoreUpdatesQueue.getReader(),
+        staticRoutesUpdateQueue.getReader(),
         routeUpdatesQueue,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
@@ -3735,6 +3736,7 @@ class DecisionTestFixture : public ::testing::Test {
   void
   TearDown() override {
     kvStoreUpdatesQueue.close();
+    staticRoutesUpdateQueue.close();
 
     LOG(INFO) << "Stopping the decision thread";
     decision->stop();
@@ -3774,6 +3776,11 @@ class DecisionTestFixture : public ::testing::Test {
   void
   sendKvPublication(const thrift::Publication& publication) {
     kvStoreUpdatesQueue.push(publication);
+  }
+
+  void
+  sendStaticRoutesUpdate(const thrift::RouteDatabaseDelta& publication) {
+    staticRoutesUpdateQueue.push(publication);
   }
 
   // helper function
@@ -3869,6 +3876,7 @@ class DecisionTestFixture : public ::testing::Test {
   fbzmq::Context zeromqContext{};
 
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
   messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
@@ -4000,6 +4008,88 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops({createNextHopFromAdj(adj12, false, 10)}));
+
+  // construct new static mpls route add
+  thrift::RouteDatabaseDelta input;
+  thrift::NextHopThrift nh, nh1, nh2;
+  nh.address = toBinaryAddress(folly::IPAddressV6("::1"));
+  nh1.address = toBinaryAddress(folly::IPAddressV6("::2"));
+  nh.mplsAction,
+      nh1.mplsAction = createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+  thrift::MplsRoute route;
+  route.topLabel = 32011;
+  route.nextHops = {nh};
+  input.mplsRoutesToUpdate.push_back(route);
+
+  // update 32011 and make sure only that is updated
+  sendStaticRoutesUpdate(input);
+  auto routesDelta = routeUpdatesQueueReader.get().value();
+  // consume an empty routes update because of reachability change.
+  routeUpdatesQueueReader.get().value();
+  routesDelta.perfEvents_ref().reset();
+  EXPECT_EQ(routesDelta, input);
+
+  // update another routes and make sure only that is updated
+  route.topLabel = 32012;
+  input.mplsRoutesToUpdate = {route};
+  sendStaticRoutesUpdate(input);
+  routesDelta = routeUpdatesQueueReader.get().value();
+  // consume an empty routes update because of reachability change.
+  routeUpdatesQueueReader.get().value();
+  routesDelta.perfEvents_ref().reset();
+  EXPECT_EQ(routesDelta, input);
+
+  auto staticRoutes =
+      decision->getDecisionStaticRoutes().wait().value()->mplsRoutes;
+  EXPECT_EQ(staticRoutes.size(), 2);
+  EXPECT_THAT(staticRoutes[32012], testing::UnorderedElementsAreArray({nh}));
+  EXPECT_THAT(staticRoutes[32011], testing::UnorderedElementsAreArray({nh}));
+
+  // test our consolidating logic, we first update 32011 then delete 32011
+  // making sure only delete for 32011 is emitted.
+  route.topLabel = 32011;
+  route.nextHops = {nh, nh1};
+  input.mplsRoutesToUpdate = {route};
+  input.mplsRoutesToDelete.clear();
+  sendStaticRoutesUpdate(input);
+
+  input.mplsRoutesToUpdate.clear();
+  input.mplsRoutesToDelete = {32011};
+  sendStaticRoutesUpdate(input);
+
+  routesDelta = routeUpdatesQueueReader.get().value();
+  // consume an empty routes update because of reachability change.
+  routeUpdatesQueueReader.get().value();
+  routesDelta.perfEvents_ref().reset();
+  EXPECT_EQ(routesDelta.mplsRoutesToDelete[0], 32011);
+  EXPECT_EQ(routesDelta.mplsRoutesToUpdate.size(), 0);
+
+  staticRoutes = decision->getDecisionStaticRoutes().wait().value()->mplsRoutes;
+  EXPECT_EQ(staticRoutes.size(), 1);
+  EXPECT_THAT(staticRoutes[32012], testing::UnorderedElementsAreArray({nh}));
+
+  // test our consolidating logic, we first delete 32012 then update 32012
+  // making sure only update for 32012 is emitted.
+  input.mplsRoutesToUpdate.clear();
+  input.mplsRoutesToDelete = {32012};
+  sendStaticRoutesUpdate(input);
+
+  route.topLabel = 32012;
+  route.nextHops = {nh, nh1};
+  input.mplsRoutesToUpdate = {route};
+  input.mplsRoutesToDelete.clear();
+  sendStaticRoutesUpdate(input);
+
+  routesDelta = routeUpdatesQueueReader.get().value();
+  // consume an empty routes update because of reachability change.
+  routeUpdatesQueueReader.get().value();
+  routesDelta.perfEvents_ref().reset();
+  EXPECT_EQ(routesDelta, input);
+
+  staticRoutes = decision->getDecisionStaticRoutes().wait().value()->mplsRoutes;
+  EXPECT_EQ(staticRoutes.size(), 1);
+  EXPECT_THAT(
+      staticRoutes[32012], testing::UnorderedElementsAreArray({nh, nh1}));
 }
 
 // The following topology is used:

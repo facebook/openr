@@ -31,6 +31,8 @@
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/OpenrCtrl_types.h>
+#include <openr/if/gen-cpp2/PrefixManager_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/messaging/ReplicateQueue.h>
 
@@ -133,6 +135,14 @@ class SpfSolver {
       bool /* route attributes has changed (nexthop addr, node/adj label */>
   updateAdjacencyDatabase(thrift::AdjacencyDatabase const& adjacencyDb);
 
+  bool staticRoutesUpdated();
+
+  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
+
+  std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
+
+  thrift::StaticRoutes const& getStaticRoutes();
+
   bool hasHolds() const;
 
   // delete a node's adjacency database
@@ -210,6 +220,7 @@ class Decision : public OpenrEventBase {
       std::chrono::milliseconds debounceMaxDur,
       std::optional<std::chrono::seconds> gracefulRestartDuration,
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
+      messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
@@ -224,6 +235,9 @@ class Decision : public OpenrEventBase {
    */
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getDecisionRouteDb(
       std::string nodeName);
+
+  folly::SemiFuture<std::unique_ptr<thrift::StaticRoutes>>
+  getDecisionStaticRoutes();
 
   /*
    * Retrieve AdjacencyDatabase as map.
@@ -242,6 +256,11 @@ class Decision : public OpenrEventBase {
   // process publication from KvStore
   ProcessPublicationResult processPublication(
       thrift::Publication const& thriftPub);
+
+  // process static routes publication from prefix manager.
+  void processStaticRouteUpdates();
+
+  void pushRoutesDeltaUpdates(thrift::RouteDatabaseDelta& staticRoutesDelta);
 
   /**
    * Process received publication and populate the pendingAdjUpdates_
@@ -270,6 +289,8 @@ class Decision : public OpenrEventBase {
 
   // store update to-do status
   ProcessPublicationResult processUpdatesStatus_;
+
+  bool staticRoutesChanged_{false};
 
   /**
    * Caller function of processPendingAdjUpdates and processPendingPrefixUpdates
