@@ -116,10 +116,11 @@ KvStore::KvStore(
   kvParams_.zmqMonitorClient = zmqMonitorClient_;
 
   // Schedule periodic timer for counters submission
-  const bool isPeriodic = true;
-  monitorTimer_ = fbzmq::ZmqTimeout::make(
-      getEvb(), [this]() noexcept { submitCounters(); });
-  monitorTimer_->scheduleTimeout(monitorSubmitInterval_, isPeriodic);
+  monitorTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    submitCounters();
+    monitorTimer_->scheduleTimeout(monitorSubmitInterval_);
+  });
+  monitorTimer_->scheduleTimeout(monitorSubmitInterval_);
 
   // Prepare global command socket
   prepareSocket(kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
@@ -848,10 +849,10 @@ KvStoreDb::KvStoreDb(
         kvParams_.floodRate.value().first, // messages per sec
         kvParams_.floodRate.value().second); // burst size
     pendingPublicationTimer_ =
-        fbzmq::ZmqTimeout::make(evb_->getEvb(), [this]() noexcept {
+        folly::AsyncTimeout::make(*evb_->getEvb(), [this]() noexcept {
           if (!floodLimiter_->consume(1)) {
             pendingPublicationTimer_->scheduleTimeout(
-                Constants::kFloodPendingPublication, false);
+                Constants::kFloodPendingPublication);
             return;
           }
           floodBufferedUpdates();
@@ -872,8 +873,8 @@ KvStoreDb::KvStoreDb(
 
   // Hook up timer with cleanupTtlCountdownQueue(). The actual scheduling
   // happens within updateTtlCountdownQueue()
-  ttlCountdownTimer_ = fbzmq::ZmqTimeout::make(
-      evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
+  ttlCountdownTimer_ = folly::AsyncTimeout::make(
+      *evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
 
   // Initialize stats keys
   tData_.addStatExportType("kvstore.cmd_hash_dump", fbzmq::COUNT);
@@ -1846,8 +1847,8 @@ KvStoreDb::attachCallbacks() {
       });
 
   // Perform full-sync if there are peers to sync with.
-  fullSyncTimer_ = fbzmq::ZmqTimeout::make(
-      evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
+  fullSyncTimer_ = folly::AsyncTimeout::make(
+      *evb_->getEvb(), [this]() noexcept { requestFullSyncFromPeers(); });
 
   // Define request sync timer
   requestSyncTimer_ = folly::AsyncTimeout::make(
@@ -2052,7 +2053,7 @@ KvStoreDb::floodPublication(
   if (floodLimiter_ && rateLimit && !floodLimiter_->consume(1)) {
     bufferPublication(std::move(publication));
     pendingPublicationTimer_->scheduleTimeout(
-        Constants::kFloodPendingPublication, false);
+        Constants::kFloodPendingPublication);
     return;
   }
   // merge with buffered publication and flood

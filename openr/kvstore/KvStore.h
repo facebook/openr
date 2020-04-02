@@ -14,7 +14,6 @@
 
 #include <boost/heap/priority_queue.hpp>
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -358,7 +357,7 @@ class KvStoreDb : public DualNode {
       peersToSyncWith_{};
 
   // Callback timer to get full KEY_DUMP from peersToSyncWith_
-  std::unique_ptr<fbzmq::ZmqTimeout> fullSyncTimer_;
+  std::unique_ptr<folly::AsyncTimeout> fullSyncTimer_;
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
@@ -370,7 +369,7 @@ class KvStoreDb : public DualNode {
   TtlCountdownQueue ttlCountdownQueue_;
 
   // TTL count down timer
-  std::unique_ptr<fbzmq::ZmqTimeout> ttlCountdownTimer_;
+  std::unique_ptr<folly::AsyncTimeout> ttlCountdownTimer_;
 
   // Data-struct for maintaining stats/counters
   fbzmq::ThreadData tData_;
@@ -387,7 +386,7 @@ class KvStoreDb : public DualNode {
   std::unique_ptr<folly::BasicTokenBucket<>> floodLimiter_{nullptr};
 
   // timer to send pending kvstore publication
-  std::unique_ptr<fbzmq::ZmqTimeout> pendingPublicationTimer_{nullptr};
+  std::unique_ptr<folly::AsyncTimeout> pendingPublicationTimer_{nullptr};
 
   // timer for requesting full-sync
   std::unique_ptr<folly::AsyncTimeout> requestSyncTimer_{nullptr};
@@ -560,7 +559,7 @@ class KvStore final : public OpenrEventBase {
   //
 
   // Timer for submitting to monitor periodically
-  std::unique_ptr<fbzmq::ZmqTimeout> monitorTimer_;
+  std::unique_ptr<folly::AsyncTimeout> monitorTimer_;
 
   // client to interact with monitor
   std::shared_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
