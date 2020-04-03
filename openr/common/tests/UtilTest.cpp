@@ -966,6 +966,10 @@ TEST(MetricVectorUtilsTest, compareMetricVectors) {
   EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetricVectors(r, l));
 }
 
+TEST(UtilTest, FunctionExecutionTime) {
+  LOG_FN_EXECUTION_TIME;
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

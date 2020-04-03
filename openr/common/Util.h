@@ -17,7 +17,9 @@
 #include <folly/IPAddress.h>
 #include <folly/Memory.h>
 #include <folly/Optional.h>
+#include <folly/ScopeGuard.h>
 #include <folly/String.h>
+#include <glog/logging.h>
 #include <re2/re2.h>
 #include <re2/set.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -33,6 +35,30 @@
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+
+/**
+ * Helper macro function to log execution time of function.
+ * Usage:
+ *  void someFunction() {
+ *    LOG_FN_EXECUTION_TIME;
+ *    ...
+ *    <function-body>
+ *    ...
+ *  }
+ *
+ * Output:
+ *  V0402 16:35:54 ... UtilTest.cpp:970] Execution time for TestBody took 0ms.
+ */
+
+#define LOG_FN_EXECUTION_TIME                                                \
+  auto FB_ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE) =                           \
+  ::folly::detail::ScopeGuardOnExit() +                                    \
+  [&, fn=__FUNCTION__, ts=std::chrono::steady_clock::now()] () noexcept { \
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(   \
+        std::chrono::steady_clock::now() - ts);                              \
+    VLOG(1) << "Execution time for " << fn << " took " << duration.count()   \
+            << "ms";                                                         \
+  }
 
 namespace openr {
 
