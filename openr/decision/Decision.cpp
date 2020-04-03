@@ -1908,7 +1908,7 @@ Decision::updateNodePrefixDatabase(
 
   thrift::PrefixDatabase nodePrefixDb;
   nodePrefixDb.thisNodeName = nodeName;
-  nodePrefixDb.perfEvents = prefixDb.perfEvents;
+  nodePrefixDb.perfEvents.copy_from(prefixDb.perfEvents);
   nodePrefixDb.prefixEntries.reserve(perPrefixPrefixEntries_[nodeName].size());
   for (auto& kv : perPrefixPrefixEntries_[nodeName]) {
     nodePrefixDb.prefixEntries.emplace_back(kv.second);
@@ -2210,7 +2210,7 @@ Decision::sendRouteUpdate(
 
   // Find out delta to be sent to Fib
   auto routeDelta = findDeltaRoutes(db, routeDb_);
-  routeDelta.perfEvents = db.perfEvents;
+  routeDelta.perfEvents.copy_from(db.perfEvents);
   routeDb_ = std::move(db);
 
   // publish the new route state

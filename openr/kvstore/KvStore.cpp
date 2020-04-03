@@ -633,8 +633,9 @@ KvStore::setKvStoreKeyVals(
       // Create publication and merge it with local KvStore
       thrift::Publication rcvdPublication;
       rcvdPublication.keyVals = std::move(keySetParams.keyVals);
-      rcvdPublication.nodeIds = std::move(keySetParams.nodeIds);
-      rcvdPublication.floodRootId = std::move(keySetParams.floodRootId);
+      rcvdPublication.nodeIds.move_from(std::move(keySetParams.nodeIds));
+      rcvdPublication.floodRootId.move_from(
+          std::move(keySetParams.floodRootId));
       kvStoreDb.mergePublication(rcvdPublication);
 
       // ready to return
@@ -980,7 +981,7 @@ KvStoreDb::dumpHashWithFilters(KvStoreFilters const& kvFilters) const {
     auto& value = thriftPub.keyVals[kv.first];
     value.version = kv.second.version;
     value.originatorId = kv.second.originatorId;
-    value.hash = kv.second.hash;
+    value.hash.copy_from(kv.second.hash);
     value.ttl = kv.second.ttl;
     value.ttlVersion = kv.second.ttlVersion;
   }
@@ -1389,8 +1390,9 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
     // Create publication and merge it with local KvStore
     thrift::Publication rcvdPublication;
     rcvdPublication.keyVals = std::move(ketSetParamsVal.keyVals);
-    rcvdPublication.nodeIds = std::move(ketSetParamsVal.nodeIds);
-    rcvdPublication.floodRootId = std::move(ketSetParamsVal.floodRootId);
+    rcvdPublication.nodeIds.move_from(std::move(ketSetParamsVal.nodeIds));
+    rcvdPublication.floodRootId.move_from(
+        std::move(ketSetParamsVal.floodRootId));
     mergePublication(rcvdPublication);
 
     // respond to the client
@@ -2101,8 +2103,8 @@ KvStoreDb::floodPublication(
 
   params.keyVals = publication.keyVals;
   params.solicitResponse = false;
-  params.nodeIds = publication.nodeIds;
-  params.floodRootId = publication.floodRootId;
+  params.nodeIds.copy_from(publication.nodeIds);
+  params.floodRootId.copy_from(publication.floodRootId);
   params.timestamp_ms = getUnixTimeStampMs();
 
   floodRequest.cmd = thrift::Command::KEY_SET;
@@ -2171,7 +2173,7 @@ KvStoreDb::mergePublication(
   thrift::Publication deltaPublication;
   deltaPublication.keyVals = KvStore::mergeKeyValues(
       kvStore_, rcvdPublication.keyVals, kvParams_.filters);
-  deltaPublication.floodRootId = rcvdPublication.floodRootId;
+  deltaPublication.floodRootId.copy_from(rcvdPublication.floodRootId);
   deltaPublication.area = area_;
 
   const size_t kvUpdateCnt = deltaPublication.keyVals.size();
@@ -2179,7 +2181,7 @@ KvStoreDb::mergePublication(
 
   // Populate nodeIds and our nodeId_ to the end
   if (rcvdPublication.nodeIds.has_value()) {
-    deltaPublication.nodeIds = rcvdPublication.nodeIds;
+    deltaPublication.nodeIds.copy_from(rcvdPublication.nodeIds);
   }
 
   // Update ttl values of keys

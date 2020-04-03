@@ -691,7 +691,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_GE(thriftValue.ttl, hashResValue.ttl + 1);
     hashResValue.ttl = thriftValue.ttl;
     hashResValue.hash = 0;
-    hashResValue.value = thriftValue.value;
+    hashResValue.value.copy_from(thriftValue.value);
     EXPECT_EQ(thriftValue, hashResValue);
 
     // We will receive key-expiry publication but no key-advertisement
@@ -737,7 +737,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_GE(thriftValue.ttl, hashResValue.ttl + 1);
     hashResValue.ttl = thriftValue.ttl;
     hashResValue.hash = 0;
-    hashResValue.value = thriftValue.value;
+    hashResValue.value.copy_from(thriftValue.value);
     EXPECT_EQ(thriftValue, hashResValue);
 
     // We will receive key-advertisement
