@@ -7,7 +7,12 @@
 
 #include <thread>
 
+#include <fb303/ServiceData.h>
+
+#include <openr/common/Util.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
+
+namespace fb303 = facebook::fb303;
 
 namespace openr::fbnl {
 
@@ -19,12 +24,13 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
   nlMessageTimer_ = fbzmq::ZmqTimeout::make(evl_, [this]() noexcept {
     LOG(INFO) << "Did not receive last ack " << lastSeqNo_;
 
+    fb303::fbData->addStatValue("netlink.socket_recreate", 1, fb303::COUNT);
     LOG(INFO) << "Closing netlink socket and recreate it";
     evl_->removeSocketFd(nlSock_);
     close(nlSock_);
     init();
 
-    LOG(INFO) << "Resend netlink msg";
+    LOG(INFO) << "Resume sending bufferred netlink messages";
     sendNetlinkMessage();
   });
 }
@@ -38,7 +44,7 @@ NetlinkProtocolSocket::init() {
   if (nlSock_ < 0) {
     LOG(FATAL) << "Netlink socket create failed.";
   }
-  VLOG(1) << "Netlink socket created." << nlSock_;
+  VLOG(1) << "Created netlink socket. fd=" << nlSock_;
   int size = kNetlinkSockRecvBuf;
   // increase socket recv buffer size
   if (setsockopt(nlSock_, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size)) < 0) {
@@ -90,7 +96,6 @@ NetlinkProtocolSocket::setNeighborEventCB(
 
 void
 NetlinkProtocolSocket::processAck(uint32_t ack) {
-  VLOG(2) << "Ack received: " << ack;
   if (ack == lastSeqNo_) {
     VLOG(2) << "Last ack received " << ack;
     // cancel active message timer
@@ -100,7 +105,7 @@ NetlinkProtocolSocket::processAck(uint32_t ack) {
     // continue sending next set of messages
     sendNetlinkMessage();
   } else {
-    LOG(ERROR) << "Ack received for older message: " << ack;
+    LOG_EVERY_N(ERROR, 100) << "Ack received for older message: " << ack;
   }
 }
 
@@ -159,21 +164,20 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
     }
 
     // Schedule timer to wait for acks and send next set of messages
-    nlMessageTimer_->scheduleTimeout(
-        std::chrono::milliseconds(kNlMessageAckTimer));
+    nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
   });
 }
 
 void
 NetlinkProtocolSocket::setReturnStatusValue(uint32_t seq, int status) {
   try {
-    VLOG(1) << "trying to set return for " << seq;
+    VLOG(2) << "Setting return value for seq=" << seq << " with ret=" << status;
     auto request = nlSeqNoMap_.at(seq);
     request->setReturnStatus(status);
     // Remove mapping
     nlSeqNoMap_.erase(seq);
   } catch (const std::out_of_range& e) {
-    VLOG(2) << "No future associated with Seq#" << seq;
+    LOG(ERROR) << "No future associated with seq=" << seq;
   }
 }
 
@@ -196,6 +200,8 @@ NetlinkProtocolSocket::processMessage(
       auto rtmMessage = std::make_unique<NetlinkRouteMessage>();
       auto route = rtmMessage->parseMessage(nlh);
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
+        // Update message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
         // Synchronous event - do not generate route events
         routeCache_.emplace_back(route);
       }
@@ -208,16 +214,16 @@ NetlinkProtocolSocket::processMessage(
       fbnl::Link link = linkMessage->parseMessage(nlh);
 
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
-        VLOG(0) << "Link info for Req: " << nlh->nlmsg_seq;
+        // Update message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
         // Synchronous event - do not generate link events
         linkCache_.emplace_back(link);
-      } else if (linkEventCB_) {
-        // Asynchronous event - generate link event for handler
-        VLOG(0) << "Asynchronous Link Event: " << link.str();
-        linkEventCB_(link, true);
       } else {
-        LOG(ERROR) << "Received link event but not sure about client: "
-                   << nlh->nlmsg_seq;
+        // Asynchronous event - generate link event for handler
+        VLOG(1) << "Asynchronous Link Event: " << link.str();
+        if (linkEventCB_) {
+          linkEventCB_(link, true);
+        }
       }
     } break;
 
@@ -231,8 +237,10 @@ NetlinkProtocolSocket::processMessage(
         break;
       }
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
+        // Update message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
         // Response to a corresponding request
-        auto request = nlSeqNoMap_.at(nlh->nlmsg_seq);
+        auto& request = nlSeqNoMap_.at(nlh->nlmsg_seq);
         if (request->getMessageType() ==
             NetlinkMessage::MessageType::GET_ALL_ADDRS) {
           // Message in response to get addresses, store in address cache
@@ -242,19 +250,21 @@ NetlinkProtocolSocket::processMessage(
                 NetlinkMessage::MessageType::ADD_ADDR ||
             request->getMessageType() ==
                 NetlinkMessage::MessageType::DEL_ADDR) {
-          /* Response to a add/del request - generate addr event for handler.
-          This occurs when we add/del IPv4 addresses generates address event
-          with the same sequence as the original request */
+          // Response to a add/del request - generate addr event for handler.
+          // This occurs when we add/del IPv4 addresses generates address event
+          // with the same sequence as the original request.
+          // Asynchronous event - generate addr event for handler
+          VLOG(1) << "Asynchronous Addr Event: " << addr.str();
           if (addrEventCB_) {
-            // Asynchronous event - generate addr event for handler
-            VLOG(0) << "Asynchronous Addr Event: " << addr.str();
             addrEventCB_(addr, true);
           }
         }
-      } else if (addrEventCB_) {
+      } else {
         // Asynchronous event - generate addr event for handler
-        VLOG(0) << "Asynchronous Addr Event: " << addr.str();
-        addrEventCB_(addr, true);
+        VLOG(1) << "Asynchronous Addr Event: " << addr.str();
+        if (addrEventCB_) {
+          addrEventCB_(addr, true);
+        }
       }
     } break;
 
@@ -265,12 +275,16 @@ NetlinkProtocolSocket::processMessage(
       fbnl::Neighbor neighbor = neighMessage->parseMessage(nlh);
 
       if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
+        // Update message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
         // Synchronous event - do not generate neighbor events
         neighborCache_.emplace_back(neighbor);
-      } else if (neighborEventCB_) {
+      } else {
         // Asynchronous event - generate neighbor event for handler
-        VLOG(0) << "Asynchronous Neighbor Event: " << neighbor.str();
-        neighborEventCB_(neighbor, true);
+        VLOG(1) << "Asynchronous Neighbor Event: " << neighbor.str();
+        if (neighborEventCB_) {
+          neighborEventCB_(neighbor, true);
+        }
       }
     } break;
 
@@ -282,7 +296,6 @@ NetlinkProtocolSocket::processMessage(
                    << ack->msg.nlmsg_pid << " expected: " << pid_;
         break;
       }
-      setReturnStatusValue(ack->msg.nlmsg_seq, ack->error);
       if (std::abs(ack->error) != EEXIST && std::abs(ack->error) != 0) {
         ++errors_;
       }
@@ -290,6 +303,7 @@ NetlinkProtocolSocket::processMessage(
         ++acks_;
       }
       processAck(ack->msg.nlmsg_seq);
+      setReturnStatusValue(ack->msg.nlmsg_seq, ack->error);
     } break;
 
     case NLMSG_NOOP:
@@ -567,6 +581,7 @@ NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
 
 std::vector<fbnl::Link>
 NetlinkProtocolSocket::getAllLinks() {
+  LOG_FN_EXECUTION_TIME;
   // Refresh internal cache
   linkCache_.clear();
   // Send Netlink message to get links
@@ -583,6 +598,7 @@ NetlinkProtocolSocket::getAllLinks() {
 
 std::vector<fbnl::IfAddress>
 NetlinkProtocolSocket::getAllIfAddresses() {
+  LOG_FN_EXECUTION_TIME;
   // Refresh internal cache
   addressCache_.clear();
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
@@ -602,6 +618,7 @@ NetlinkProtocolSocket::getAllIfAddresses() {
 
 std::vector<fbnl::Neighbor>
 NetlinkProtocolSocket::getAllNeighbors() {
+  LOG_FN_EXECUTION_TIME;
   // Refresh internal cache
   neighborCache_.clear();
   // Send Netlink message to get neighbors
@@ -618,6 +635,7 @@ NetlinkProtocolSocket::getAllNeighbors() {
 
 std::vector<fbnl::Route>
 NetlinkProtocolSocket::getAllRoutes() {
+  LOG_FN_EXECUTION_TIME;
   routeCache_.clear();
   auto routeMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
   std::vector<folly::Future<int>> futures;

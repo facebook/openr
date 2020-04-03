@@ -93,7 +93,7 @@ class NetlinkProtocolSocket {
       std::chrono::milliseconds timeout = kNlMessageAckTimer);
 
   // error count
-  // TODO: protect these variables with atomic of thread safety
+  // TODO: protect these variables with atomic to ensure thread safety
   uint32_t getErrorCount() const;
 
   // ack count

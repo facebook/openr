@@ -36,3 +36,28 @@ and Routes.
 
 Further wraps NetlinkProtocolSocket for backward compatibility with previous C++
 interface.
+
+## Unit Testing
+Netlink code is exhaustively unit-tested. However to run unit-tests, you'll need
+to run with `sudo`. Temporary route, link, address and neighbor entries will be
+created in the network. Hence it is best to run inside the container
+
+For MPLS route unit-tests you'll need to have MPLS enabled kernel with following
+sysctl configuration parameters.
+
+Some unit-tests tries to add upto 100k routes and can consume significant amount
+of memory and time to run. So please be patient or disable those tests if you 
+don't want your system to scale to that number.
+
+```
+// Install kernel modules
+sudo modprobe mpls_router
+sudo modprobe mpls_iptunnel
+sudo modprobe mpls_gso
+
+// Configure sysctl
+sysctl -w net.mpls.conf.lo.input=1
+sysctl -w net.mpls.conf.lo1.input=1
+sysctl -w net.mpls.ip_ttl_propagate=1
+sysctl -w net.mpls.platform_labels=65536
+```

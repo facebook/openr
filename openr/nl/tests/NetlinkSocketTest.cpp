@@ -34,7 +34,6 @@ using namespace openr;
 using namespace openr::fbnl;
 using namespace folly::literals::shell_literals;
 
-
 namespace {
 const std::string kVethNameX("vethTestX");
 const std::string kVethNameY("vethTestY");

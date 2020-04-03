@@ -463,7 +463,6 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
   ackCount = nlSock->getAckCount();
-  // create label next hop
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
   EXPECT_EQ(0, nlSock->getErrorCount());
