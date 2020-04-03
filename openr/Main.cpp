@@ -741,7 +741,6 @@ main(int argc, char** argv) {
           kvStoreUpdatesQueue.getReader(),
           staticRoutesUpdateQueue.getReader(),
           routeUpdatesQueue,
-          monitorSubmitUrl,
           context));
 
   // FIB ordering works only in single area configuration

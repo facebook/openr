@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
@@ -31,6 +32,8 @@ DEFINE_bool(stress_test, false, "pass this to run the stress test");
 using namespace std;
 using namespace openr;
 using namespace testing;
+
+namespace fb303 = facebook::fb303;
 
 using apache::thrift::CompactSerializer;
 using apache::thrift::FRAGILE;
@@ -328,7 +331,8 @@ TEST(SpfSolver, Counters) {
 
   // Verifiy some initial/default counters
   {
-    const auto counters = spfSolver.getCounters();
+    spfSolver.updateGlobalCounters();
+    const auto counters = fb303::fbData->getCounters();
     EXPECT_EQ(counters.at("decision.num_nodes"), 1);
   }
 
@@ -386,7 +390,8 @@ TEST(SpfSolver, Counters) {
   }
 
   // Verify counters
-  const auto counters = spfSolver.getCounters();
+  spfSolver.updateGlobalCounters();
+  const auto counters = fb303::fbData->getCounters();
   EXPECT_EQ(counters.at("decision.num_partial_adjacencies"), 1);
   EXPECT_EQ(counters.at("decision.num_complete_adjacencies"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes"), 3);
@@ -402,7 +407,9 @@ TEST(SpfSolver, Counters) {
 
   // fully disconnect node 2
   spfSolver.updateAdjacencyDatabase(createAdjDb("1", {adj13}, 1));
-  EXPECT_EQ(spfSolver.getCounters().at("decision.num_partial_adjacencies"), 0);
+  spfSolver.updateGlobalCounters();
+  EXPECT_EQ(
+      fb303::fbData->getCounters().at("decision.num_partial_adjacencies"), 0);
 }
 
 //
@@ -1569,6 +1576,7 @@ INSTANTIATE_TEST_CASE_P(
 //
 TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
   CustomSetUp(false /* disable LFA */, false /* useKsp2Ed */);
+  fb303::fbData->resetAllData();
   auto routeMap = getRouteMap(*spfSolver, {"1", "2", "3", "4"});
 
   // Unicast routes => 4 * (4 - 1) = 12
@@ -1577,8 +1585,8 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
   EXPECT_EQ(36, routeMap.size());
 
   // validate router 1
-  const auto counters = spfSolver->getCounters();
-  EXPECT_EQ(counters.at("decision.spf_runs.count.0"), 4);
+  const auto counters = fb303::fbData->getCounters();
+  EXPECT_EQ(counters.at("decision.spf_runs.count"), 4);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
       NextHops({createNextHopFromAdj(adj12, v4Enabled, 20),
@@ -1823,6 +1831,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
       true /* multipath - ignored */,
       true /* useKsp2Ed */,
       std::get<1>(GetParam()));
+  fb303::fbData->resetAllData();
   auto routeMap = getRouteMap(*spfSolver, {"1", "2", "3", "4"});
 
   // Unicast routes => 4 * (4 - 1) = 12
@@ -1830,9 +1839,9 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
   // Adj label routes => 4 * 2 = 8
   EXPECT_EQ(36, routeMap.size());
 
-  const auto counters = spfSolver->getCounters();
+  const auto counters = fb303::fbData->getCounters();
   // 4 nodes * 3 peer per node * 2 (run spf because we run 2 shortest path)
-  EXPECT_EQ(counters.at("decision.spf_runs.count.0"), 24);
+  EXPECT_EQ(counters.at("decision.spf_runs.count"), 24);
   auto pushCode = thrift::MplsActionCode::PUSH;
   auto push1 =
       createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1});
@@ -2007,6 +2016,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       true /* useKsp2Ed */,
       thrift::PrefixType::BGP,
       true);
+
+  fb303::fbData->resetAllData();
   thrift::MetricVector mv1, mv2;
   int64_t numMetrics = 5;
   mv1.metrics.resize(numMetrics);
@@ -2033,9 +2044,9 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   auto routeMap = getRouteMap(*spfSolver, {"3"});
 
-  const auto counters = spfSolver->getCounters();
+  const auto counters = fb303::fbData->getCounters();
   // run 2 spfs for all peers
-  EXPECT_EQ(counters.at("decision.spf_runs.count.0"), 6);
+  EXPECT_EQ(counters.at("decision.spf_runs.count"), 6);
   auto pushCode = thrift::MplsActionCode::PUSH;
   auto push2 =
       createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2});
@@ -3722,7 +3733,6 @@ class DecisionTestFixture : public ::testing::Test {
         kvStoreUpdatesQueue.getReader(),
         staticRoutesUpdateQueue.getReader(),
         routeUpdatesQueue,
-        MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
 
     decisionThread = std::make_unique<std::thread>([this]() {
@@ -4218,6 +4228,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // publish the link state info to KvStore
   //
 
+  fb303::fbData->resetAllData();
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
@@ -4228,17 +4239,17 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       {},
       std::string(""));
 
-  auto counters = decision->getCounters();
-  EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
-  EXPECT_EQ(0, counters["decision.route_build_runs.count.0"]);
+  auto counters = fb303::fbData->getCounters();
+  EXPECT_EQ(0, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(0, counters["decision.route_build_runs.count"]);
 
   sendKvPublication(publication);
   recvMyRouteDb("1", serializer);
 
   // validate SPF after initial sync, no rebouncing here
-  counters = decision->getCounters();
-  EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
-  EXPECT_EQ(1, counters["decision.route_build_runs.count.0"]);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(1, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(1, counters["decision.route_build_runs.count"]);
 
   //
   // publish the link state info to KvStore via the KvStore pub socket
@@ -4272,9 +4283,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   sendKvPublication(publication);
   recvMyRouteDb("1", serializer);
 
-  counters = decision->getCounters();
-  EXPECT_EQ(2, counters["decision.path_build_runs.count.0"]);
-  EXPECT_EQ(2, counters["decision.route_build_runs.count.0"]);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(2, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(2, counters["decision.route_build_runs.count"]);
 
   //
   // Only publish prefix updates
@@ -4288,9 +4299,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   sendKvPublication(publication);
   recvMyRouteDb("1", serializer);
 
-  counters = decision->getCounters();
-  EXPECT_EQ(2, counters["decision.path_build_runs.count.0"]);
-  EXPECT_EQ(3, counters["decision.route_build_runs.count.0"]);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(2, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(3, counters["decision.route_build_runs.count"]);
 
   //
   // publish adj updates right after prefix updates
@@ -4315,9 +4326,9 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   sendKvPublication(publication);
   recvMyRouteDb("1", serializer);
 
-  counters = decision->getCounters();
-  EXPECT_EQ(3, counters["decision.path_build_runs.count.0"]);
-  EXPECT_EQ(4, counters["decision.route_build_runs.count.0"]);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(3, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(4, counters["decision.route_build_runs.count"]);
 
   //
   // publish multiple prefix updates in a row
@@ -4350,10 +4361,10 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   sendKvPublication(publication);
   recvMyRouteDb("1", serializer);
 
-  counters = decision->getCounters();
-  EXPECT_EQ(3, counters["decision.path_build_runs.count.0"]);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(3, counters["decision.path_build_runs.count"]);
   // only 1 request shall be processed
-  EXPECT_EQ(5, counters["decision.route_build_runs.count.0"]);
+  EXPECT_EQ(5, counters["decision.route_build_runs.count"]);
 }
 
 //
@@ -4365,7 +4376,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   // publish the link state info to KvStore, but use different markers
   // those must be ignored by the decision module
   //
-
+  fb303::fbData->resetAllData();
   auto publication = createThriftPublication(
       {{"adj2:1", createAdjValue("1", 1, {adj12})},
        {"adji2:2", createAdjValue("2", 1, {adj21})},
@@ -4376,8 +4387,8 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
       {},
       std::string(""));
 
-  auto counters = decision->getCounters();
-  EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
+  auto counters = fb303::fbData->getCounters();
+  EXPECT_EQ(0, counters["decision.path_build_runs.count"]);
 
   sendKvPublication(publication);
 
@@ -4386,8 +4397,8 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   std::this_thread::sleep_for(2 * debounceTimeoutMax);
 
   // make sure the counter did not increment
-  counters = decision->getCounters();
-  EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(0, counters["decision.path_build_runs.count"]);
 }
 
 //
@@ -4399,7 +4410,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   // publish initial link state info to KvStore, This should trigger the
   // SPF run.
   //
-
+  fb303::fbData->resetAllData();
   auto const publication = createThriftPublication(
       {{"adj:1", createAdjValue("1", 1, {adj12})},
        {"adj:2", createAdjValue("2", 1, {adj21})},
@@ -4410,8 +4421,8 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
       {},
       std::string(""));
 
-  auto counters = decision->getCounters();
-  EXPECT_EQ(0, counters["decision.path_build_runs.count.0"]);
+  auto counters = fb303::fbData->getCounters();
+  EXPECT_EQ(0, counters["decision.path_build_runs.count"]);
 
   sendKvPublication(publication);
 
@@ -4420,8 +4431,8 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   std::this_thread::sleep_for(2 * debounceTimeoutMax);
 
   // make sure counter is incremented
-  counters = decision->getCounters();
-  EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(1, counters["decision.path_build_runs.count"]);
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
@@ -4431,8 +4442,8 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   std::this_thread::sleep_for(2 * debounceTimeoutMax);
 
   // make sure counter is not incremented
-  counters = decision->getCounters();
-  EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(1, counters["decision.path_build_runs.count"]);
 }
 
 /**
@@ -4779,6 +4790,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
  */
 TEST_F(DecisionTestFixture, DecisionSubReliability) {
   thrift::Publication initialPub;
+  fb303::fbData->resetAllData();
 
   // Create full topology
   for (int i = 1; i <= 1000; i++) {
@@ -4868,10 +4880,10 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
 
   const int64_t adjUpdateCnt = 1000 /* initial */;
   const int64_t prefixUpdateCnt = totalSent + 1000 /* initial */ + 1 /* end */;
-  auto counters = decision->getCounters();
-  EXPECT_EQ(1, counters["decision.path_build_runs.count.0"]);
-  EXPECT_EQ(adjUpdateCnt, counters["decision.adj_db_update.count.0"]);
-  EXPECT_EQ(prefixUpdateCnt, counters["decision.prefix_db_update.count.0"]);
+  auto counters = fb303::fbData->getCounters();
+  EXPECT_EQ(1, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(adjUpdateCnt, counters["decision.adj_db_update.count"]);
+  EXPECT_EQ(prefixUpdateCnt, counters["decision.prefix_db_update.count"]);
 }
 
 /*

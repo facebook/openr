@@ -176,7 +176,7 @@ class SpfSolver {
 
   bool decrementHolds();
 
-  std::unordered_map<std::string, int64_t> getCounters();
+  void updateGlobalCounters();
 
  private:
   // no-copy
@@ -222,12 +222,9 @@ class Decision : public OpenrEventBase {
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
       messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
-      const MonitorSubmitUrl& monitorSubmitUrl,
       fbzmq::Context& zmqContext);
 
   virtual ~Decision() = default;
-
-  std::unordered_map<std::string, int64_t> getCounters();
 
   /*
    * Retrieve routeDb from specified node.
@@ -319,9 +316,6 @@ class Decision : public OpenrEventBase {
 
   std::chrono::milliseconds getMaxFib();
 
-  // periodically submit counters to monitor thread
-  void submitCounters();
-
   // node to prefix entries database for nodes advertising per prefix keys
   thrift::PrefixDatabase updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
@@ -356,8 +350,8 @@ class Decision : public OpenrEventBase {
   // Timer for decrementing link holds for ordered fib programming
   std::unique_ptr<folly::AsyncTimeout> orderedFibTimer_{nullptr};
 
-  // client to interact with monitor
-  std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
+  // Timer for updating and submitting counters periodically
+  std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
 
   // need to store all this for backward compatibility, otherwise a key update
   // can lead to mistakenly withdrawing some prefixes

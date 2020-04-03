@@ -12,8 +12,8 @@
 #include <string>
 #include <unordered_set>
 
+#include <fb303/ServiceData.h>
 #include <fbzmq/service/logging/LogSample.h>
-#include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/MapUtil.h>
@@ -33,6 +33,8 @@
 #include <openr/decision/PrefixState.h>
 
 using namespace std;
+
+namespace fb303 = facebook::fb303;
 
 using apache::thrift::FRAGILE;
 using apache::thrift::TEnumTraits;
@@ -176,21 +178,26 @@ class SpfSolver::SpfSolverImpl {
         bgpDryRun_(bgpDryRun),
         bgpUseIgpMetric_(bgpUseIgpMetric) {
     // Initialize stat keys
-    tData_.addStatExportType("decision.adj_db_update", fbzmq::COUNT);
-    tData_.addStatExportType(
-        "decision.incompatible_forwarding_type", fbzmq::COUNT);
-    tData_.addStatExportType("decision.missing_loopback_addr", fbzmq::SUM);
-    tData_.addStatExportType("decision.no_route_to_label", fbzmq::COUNT);
-    tData_.addStatExportType("decision.no_route_to_prefix", fbzmq::COUNT);
-    tData_.addStatExportType("decision.path_build_ms", fbzmq::AVG);
-    tData_.addStatExportType("decision.path_build_runs", fbzmq::COUNT);
-    tData_.addStatExportType("decision.prefix_db_update", fbzmq::COUNT);
-    tData_.addStatExportType("decision.route_build_ms", fbzmq::AVG);
-    tData_.addStatExportType("decision.route_build_runs", fbzmq::COUNT);
-    tData_.addStatExportType("decision.skipped_mpls_route", fbzmq::COUNT);
-    tData_.addStatExportType("decision.skipped_unicast_route", fbzmq::COUNT);
-    tData_.addStatExportType("decision.spf_ms", fbzmq::AVG);
-    tData_.addStatExportType("decision.spf_runs", fbzmq::COUNT);
+    fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
+    fb303::fbData->addStatExportType(
+        "decision.incompatible_forwarding_type", fb303::COUNT);
+    fb303::fbData->addStatExportType(
+        "decision.missing_loopback_addr", fb303::SUM);
+    fb303::fbData->addStatExportType(
+        "decision.no_route_to_label", fb303::COUNT);
+    fb303::fbData->addStatExportType(
+        "decision.no_route_to_prefix", fb303::COUNT);
+    fb303::fbData->addStatExportType("decision.path_build_ms", fb303::AVG);
+    fb303::fbData->addStatExportType("decision.path_build_runs", fb303::COUNT);
+    fb303::fbData->addStatExportType("decision.prefix_db_update", fb303::COUNT);
+    fb303::fbData->addStatExportType("decision.route_build_ms", fb303::AVG);
+    fb303::fbData->addStatExportType("decision.route_build_runs", fb303::COUNT);
+    fb303::fbData->addStatExportType(
+        "decision.skipped_mpls_route", fb303::COUNT);
+    fb303::fbData->addStatExportType(
+        "decision.skipped_unicast_route", fb303::COUNT);
+    fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
+    fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
   }
 
   ~SpfSolverImpl() = default;
@@ -225,12 +232,7 @@ class SpfSolver::SpfSolverImpl {
 
   bool decrementHolds();
 
-  std::unordered_map<std::string, int64_t> getCounters();
-
-  fbzmq::ThreadData&
-  getThreadData() noexcept {
-    return tData_;
-  }
+  void updateGlobalCounters();
 
   std::optional<thrift::RouteDatabaseDelta> processStaticRouteUpdates();
 
@@ -366,9 +368,6 @@ class SpfSolver::SpfSolverImpl {
           pair<Metric, unordered_set<string /* nextHopNodeName */>>>>
       spfResults_;
 
-  // track some stats
-  fbzmq::ThreadData tData_;
-
   const std::string myNodeName_;
 
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
@@ -395,7 +394,7 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     holdUpTtl = getMyHopsToNode(newAdjacencyDb.thisNodeName);
     holdDownTtl = getMaxHopsToNode(newAdjacencyDb.thisNodeName) - holdUpTtl;
   }
-  tData_.addStatValue("decision.adj_db_update", 1, fbzmq::COUNT);
+  fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
   auto rc = linkState_.updateAdjacencyDatabase(
       newAdjacencyDb, holdUpTtl, holdDownTtl);
   // temporary hack needed to keep UTs happy
@@ -465,7 +464,7 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
     thrift::PrefixDatabase const& prefixDb) {
   auto const& nodeName = prefixDb.thisNodeName;
   VLOG(1) << "Updating prefix database for node " << nodeName;
-  tData_.addStatValue("decision.prefix_db_update", 1, fbzmq::COUNT);
+  fb303::fbData->addStatValue("decision.prefix_db_update", 1, fb303::COUNT);
   return prefixState_.updatePrefixDatabase(prefixDb);
 }
 
@@ -486,7 +485,7 @@ SpfSolver::SpfSolverImpl::runSpf(
     const LinkState::LinkSet& linksToIgnore) {
   unordered_map<string, pair<Metric, unordered_set<string>>> result;
 
-  tData_.addStatValue("decision.spf_runs", 1, fbzmq::COUNT);
+  fb303::fbData->addStatValue("decision.spf_runs", 1, fb303::COUNT);
   const auto startTime = std::chrono::steady_clock::now();
 
   DijkstraQ q;
@@ -554,7 +553,7 @@ SpfSolver::SpfSolverImpl::runSpf(
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "SPF elapsed time: " << deltaTime.count() << "ms.";
-  tData_.addStatValue("decision.spf_ms", deltaTime.count(), fbzmq::AVG);
+  fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
   return result;
 }
 
@@ -652,7 +651,7 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
   }
 
   auto const& startTime = std::chrono::steady_clock::now();
-  tData_.addStatValue("decision.path_build_runs", 1, fbzmq::COUNT);
+  fb303::fbData->addStatValue("decision.path_build_runs", 1, fb303::COUNT);
 
   spfResults_.clear();
   spfResults_[myNodeName] = runSpf(myNodeName, true);
@@ -673,7 +672,8 @@ SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "Decision::buildPaths took " << deltaTime.count() << "ms.";
-  tData_.addStatValue("decision.path_build_ms", deltaTime.count(), fbzmq::AVG);
+  fb303::fbData->addStatValue(
+      "decision.path_build_ms", deltaTime.count(), fb303::AVG);
 
   return buildRouteDb(myNodeName);
 } // buildPaths
@@ -686,7 +686,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   }
 
   const auto startTime = std::chrono::steady_clock::now();
-  tData_.addStatValue("decision.route_build_runs", 1, fbzmq::COUNT);
+  fb303::fbData->addStatValue("decision.route_build_runs", 1, fb303::COUNT);
 
   thrift::RouteDatabase routeDb;
   routeDb.thisNodeName = myNodeName;
@@ -725,13 +725,15 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       if (hasNonBGP) {
         LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
                    << " which is advertised with BGP and non-BGP type.";
-        tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
+        fb303::fbData->addStatValue(
+            "decision.skipped_unicast_route", 1, fb303::COUNT);
         continue;
       }
       if (missingMv) {
         LOG(ERROR) << "Skipping route for prefix " << toString(prefix)
                    << " at least one advertiser is missing its metric vector.";
-        tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
+        fb303::fbData->addStatValue(
+            "decision.skipped_unicast_route", 1, fb303::COUNT);
         continue;
       }
     }
@@ -746,7 +748,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     bool isV4Prefix = prefixStr.size() == folly::IPAddressV4::byteCount();
     if (isV4Prefix && !enableV4_) {
       LOG(WARNING) << "Received v4 prefix while v4 is not enabled.";
-      tData_.addStatValue("decision.skipped_unicast_route", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue(
+          "decision.skipped_unicast_route", 1, fb303::COUNT);
       continue;
     }
 
@@ -801,7 +804,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     if (not isMplsLabelValid(topLabel)) {
       LOG(ERROR) << "Ignoring invalid node label " << topLabel << " of node "
                  << adjDb.thisNodeName;
-      tData_.addStatValue("decision.skipped_mpls_route", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue(
+          "decision.skipped_mpls_route", 1, fb303::COUNT);
       continue;
     }
 
@@ -821,7 +825,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     if (metricNhs.second.empty()) {
       LOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
                    << " of node " << adjDb.thisNodeName;
-      tData_.addStatValue("decision.no_route_to_label", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue(
+          "decision.no_route_to_label", 1, fb303::COUNT);
       continue;
     }
 
@@ -854,7 +859,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     if (not isMplsLabelValid(topLabel)) {
       LOG(ERROR) << "Ignoring invalid adjacency label " << topLabel
                  << " of link " << link->directionalToString(myNodeName);
-      tData_.addStatValue("decision.skipped_mpls_route", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue(
+          "decision.skipped_mpls_route", 1, fb303::COUNT);
       continue;
     }
 
@@ -869,7 +875,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
   LOG(INFO) << "Decision::buildRouteDb took " << deltaTime.count() << "ms.";
-  tData_.addStatValue("decision.route_build_ms", deltaTime.count(), fbzmq::AVG);
+  fb303::fbData->addStatValue(
+      "decision.route_build_ms", deltaTime.count(), fb303::AVG);
   return routeDb;
 } // buildRouteDb
 
@@ -890,8 +897,8 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
                    << TEnumTraits<thrift::PrefixForwardingType>::findName(
                           nodePrefix.second.forwardingType)
                    << " for algorithm KSP2_ED_ECMP;";
-        tData_.addStatValue(
-            "decision.incompatible_forwarding_type", 1, fbzmq::COUNT);
+        fb303::fbData->addStatValue(
+            "decision.incompatible_forwarding_type", 1, fb303::COUNT);
         return dstNodes;
       }
     }
@@ -918,7 +925,7 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
     return maybeFilterDrainedNodes(std::move(bestPathCalRes));
   } else if (not bestPathCalRes.success) {
     LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
-    tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
   } else {
     VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
             << ". Best path originated by self.";
@@ -982,7 +989,7 @@ SpfSolver::SpfSolverImpl::createOpenRRoute(
   if (metricNhs.second.empty()) {
     LOG(WARNING) << "No route to prefix " << toString(prefix)
                  << ", advertised by: " << folly::join(", ", prefixNodes);
-    tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
 
@@ -1105,7 +1112,8 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
     // is no path to it
     if (not dstInfo.nodes.count(myNodeName)) {
       LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
-      tData_.addStatValue("decision.no_route_to_prefix", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue(
+          "decision.no_route_to_prefix", 1, fb303::COUNT);
     }
     return std::nullopt;
   }
@@ -1114,7 +1122,8 @@ SpfSolver::SpfSolverImpl::createBGPRoute(
   auto bestNextHop = prefixState_.getLoopbackVias(
       {dstInfo.bestNode}, isV4, dstInfo.bestIgpMetric);
   if (bestNextHop.size() != 1) {
-    tData_.addStatValue("decision.missing_loopback_addr", 1, fbzmq::SUM);
+    fb303::fbData->addStatValue(
+        "decision.missing_loopback_addr", 1, fb303::SUM);
     LOG(ERROR) << "Cannot find the best paths loopback address. "
                << "Skipping route for prefix: " << toString(prefix);
     return std::nullopt;
@@ -1553,8 +1562,8 @@ SpfSolver::SpfSolverImpl::findMinDistToNeighbor(
   return min;
 }
 
-std::unordered_map<std::string, int64_t>
-SpfSolver::SpfSolverImpl::getCounters() {
+void
+SpfSolver::SpfSolverImpl::updateGlobalCounters() {
   size_t numPartialAdjacencies{0};
   for (auto const& kv : linkState_.getAdjacencyDatabases()) {
     const auto& adjDb = kv.second;
@@ -1568,22 +1577,23 @@ SpfSolver::SpfSolverImpl::getCounters() {
     }
   }
 
-  // Get stats from tData_
-  auto counters = tData_.getCounters();
-
   // Add custom counters
-  counters["decision.num_partial_adjacencies"] = numPartialAdjacencies;
-  counters["decision.num_complete_adjacencies"] = linkState_.numLinks();
+  fb303::fbData->setCounter(
+      "decision.num_partial_adjacencies", numPartialAdjacencies);
+  fb303::fbData->setCounter(
+      "decision.num_complete_adjacencies", linkState_.numLinks());
   // When node has no adjacencies then linkState reports 0
-  counters["decision.num_nodes"] =
-      std::max(linkState_.numNodes(), static_cast<size_t>(1ul));
-  counters["decision.num_prefixes"] = prefixState_.prefixes().size();
-  counters["decision.num_nodes_v4_loopbacks"] =
-      prefixState_.getNodeHostLoopbacksV4().size();
-  counters["decision.num_nodes_v6_loopbacks"] =
-      prefixState_.getNodeHostLoopbacksV6().size();
-
-  return counters;
+  fb303::fbData->setCounter(
+      "decision.num_nodes",
+      std::max(linkState_.numNodes(), static_cast<size_t>(1ul)));
+  fb303::fbData->setCounter(
+      "decision.num_prefixes", prefixState_.prefixes().size());
+  fb303::fbData->setCounter(
+      "decision.num_nodes_v4_loopbacks",
+      prefixState_.getNodeHostLoopbacksV4().size());
+  fb303::fbData->setCounter(
+      "decision.num_nodes_v6_loopbacks",
+      prefixState_.getNodeHostLoopbacksV6().size());
 }
 
 //
@@ -1678,9 +1688,9 @@ SpfSolver::decrementHolds() {
   return impl_->decrementHolds();
 }
 
-std::unordered_map<std::string, int64_t>
-SpfSolver::getCounters() {
-  return impl_->getCounters();
+void
+SpfSolver::updateGlobalCounters() {
+  return impl_->updateGlobalCounters();
 }
 
 //
@@ -1702,7 +1712,6 @@ Decision::Decision(
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
-    const MonitorSubmitUrl& monitorSubmitUrl,
     fbzmq::Context& zmqContext)
     : processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       myNodeName_(myNodeName),
@@ -1720,21 +1729,19 @@ Decision::Decision(
       bgpDryRun,
       bgpUseIgpMetric);
 
-  zmqMonitorClient_ =
-      std::make_unique<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
-
   coldStartTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { coldStartUpdate(); });
   if (gracefulRestartDuration.has_value()) {
     coldStartTimer_->scheduleTimeout(gracefulRestartDuration.value());
   }
 
-  // Schedule periodic timer for submission to monitor
-  monitorTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    submitCounters();
-    monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+  // Schedule periodic timer for counter submission
+  counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    spfSolver_->updateGlobalCounters();
+    // Schedule next counters update
+    counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
   });
-  monitorTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+  counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
 
   // Schedule periodic timer to decremtOrderedFibHolds
   if (enableOrderedFib) {
@@ -1866,17 +1873,6 @@ Decision::getDecisionPrefixDbs() {
     p.setValue(std::make_unique<thrift::PrefixDbs>(std::move(prefixDbs)));
   });
   return sf;
-}
-
-std::unordered_map<std::string, int64_t>
-Decision::getCounters() {
-  folly::Promise<std::unordered_map<std::string, int64_t>> promise;
-  auto future = promise.getFuture();
-  getEvb()->runInEventBaseThread(
-      [this, p = std::move(promise)]() mutable noexcept {
-        p.setValue(spfSolver_->getCounters());
-      });
-  return std::move(future).get();
 }
 
 thrift::PrefixDatabase
@@ -2058,19 +2054,6 @@ void
 Decision::pushRoutesDeltaUpdates(
     thrift::RouteDatabaseDelta& staticRoutesDelta) {
   spfSolver_->pushRoutesDeltaUpdates(staticRoutesDelta);
-}
-
-// periodically submit counters to Counters thread
-void
-Decision::submitCounters() {
-  VLOG(3) << "Submitting counters...";
-
-  // Prepare for submitting counters
-  auto counters = spfSolver_->getCounters();
-  counters["decision.zmq_event_queue_size"] =
-      getEvb()->getNotificationQueueSize();
-
-  zmqMonitorClient_->setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 void

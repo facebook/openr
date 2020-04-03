@@ -85,7 +85,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         kvStoreWrapper->getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         routeUpdatesQueue_,
-        monitorSubmitUrl_,
         context_);
     decisionThread_ = std::thread([&]() { decision->run(); });
 

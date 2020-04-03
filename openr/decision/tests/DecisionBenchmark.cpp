@@ -82,7 +82,6 @@ class DecisionWrapper {
         kvStoreUpdatesQueue.getReader(),
         staticRoutesUpdateQueue.getReader(),
         routeUpdatesQueue,
-        MonitorSubmitUrl{"inproc://monitor-rep"},
         zeromqContext);
 
     decisionThread = std::make_unique<std::thread>([this]() {

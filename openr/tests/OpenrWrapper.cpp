@@ -222,7 +222,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       kvStoreUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       routeUpdatesQueue_,
-      MonitorSubmitUrl{monitorSubmitUrl_},
       context_);
 
   //
