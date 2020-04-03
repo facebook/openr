@@ -21,6 +21,7 @@
 #include <fbzmq/service/if/gen-cpp2/Monitor_types.h>
 #include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/zmq/Zmq.h>
+#include <folly/GLog.h>
 #include <folly/IPAddress.h>
 #include <folly/MapUtil.h>
 #include <folly/ScopeGuard.h>
@@ -871,9 +872,10 @@ Spark::validateV4AddressSubnet(
       folly::sformat("{}/{}", toString(neighV4Addr), myV4PrefixLen);
 
   if (!myV4Addr.inSubnet(neighCidrNetwork)) {
-    LOG(ERROR) << "Neighbor V4 address " << toString(neighV4Addr)
-               << " is not in the same subnet with local V4 address "
-               << myV4Addr.str() << "/" << +myV4PrefixLen;
+    FB_LOG_EVERY_MS(ERROR, 500)
+        << "Neighbor V4 address " << toString(neighV4Addr)
+        << " is not in the same subnet with local V4 address " << myV4Addr.str()
+        << "/" << myV4PrefixLen;
     fb303::fbData->addStatValue(
         "spark.invalid_keepalive.different_subnet", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
@@ -1683,14 +1685,11 @@ Spark::processHandshakeMsg(
     return;
   }
 
-  if (enableV4_ and enableSubnetValidation_) {
-    if (PacketValidationResult::FAILURE ==
-        validateV4AddressSubnet(ifName, handshakeMsg.transportAddressV4)) {
-      LOG(ERROR) << "V4 subnet validation failed for handshakeMsg from: "
-                 << ifName;
-      return;
-    }
-  }
+  // update Spark2 neighborState
+  neighbor.kvStoreCmdPort = handshakeMsg.kvStoreCmdPort;
+  neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort;
+  neighbor.transportAddressV4 = handshakeMsg.transportAddressV4;
+  neighbor.transportAddressV6 = handshakeMsg.transportAddressV6;
 
   // recevied spark neighbors' area will be matched with configured interface's
   // area once interface based area identifier is implemented
@@ -1706,12 +1705,6 @@ Spark::processHandshakeMsg(
   if (commonArea.hasError()) {
     return;
   }
-
-  // update Spark2 neighborState
-  neighbor.kvStoreCmdPort = handshakeMsg.kvStoreCmdPort;
-  neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort;
-  neighbor.transportAddressV4 = handshakeMsg.transportAddressV4;
-  neighbor.transportAddressV6 = handshakeMsg.transportAddressV6;
   neighbor.area = commonArea.value();
 
   // update neighbor holdTime as "NEGOTIATING" process
@@ -1719,6 +1712,14 @@ Spark::processHandshakeMsg(
       std::chrono::milliseconds(handshakeMsg.holdTime), myHeartbeatHoldTime_);
   neighbor.gracefulRestartHoldTime = std::max(
       std::chrono::milliseconds(handshakeMsg.gracefulRestartTime), myHoldTime_);
+
+  // v4 subnet validation if enabled
+  if (enableV4_ and enableSubnetValidation_) {
+    if (PacketValidationResult::FAILURE ==
+        validateV4AddressSubnet(ifName, handshakeMsg.transportAddressV4)) {
+      return;
+    }
+  }
 
   // state transition
   SparkNeighState oldState = neighbor.state;
@@ -2226,6 +2227,16 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
         LOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
                   << ifName << " down";
 
+        CHECK(not neighbor.nodeName.empty());
+        CHECK(not neighbor.remoteIfName.empty());
+
+        // Spark will NOT notify neighbor DOWN event in following cases:
+        //    1). v6Addr is empty for this neighbor;
+        //    2). v4 enabled and v4Addr is empty for this neighbor;
+        if (neighbor.transportAddressV6.addr.empty() ||
+            (enableV4_ && neighbor.transportAddressV4.addr.empty())) {
+          continue;
+        }
         neighborDownWrapper(neighbor, ifName, neighborName);
       }
       spark2Neighbors_.erase(ifName);

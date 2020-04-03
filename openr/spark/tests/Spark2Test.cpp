@@ -667,6 +667,84 @@ TEST_F(Spark2Fixture, LoopedHelloPktTest) {
   }
 }
 
+TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture LinkDownWithoutAdjFormed finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start spark2 instances
+  auto node1 = createSpark(kDomainName, "node-1", 1);
+  auto node2 = createSpark(kDomainName, "node-2", 2);
+
+  // enable v4 subnet validation to put adddres in different /31 subnet
+  // on purpose.
+  const folly::CIDRNetwork ip1V4WithSubnet =
+      folly::IPAddress::createNetwork("192.168.0.2", 31);
+  const folly::CIDRNetwork ip2V4WithSameSubnet =
+      folly::IPAddress::createNetwork("192.168.0.3", 31);
+  const folly::CIDRNetwork ip2V4WithDiffSubnet =
+      folly::IPAddress::createNetwork("192.168.0.4", 31);
+
+  // start tracking iface1
+  EXPECT_TRUE(
+      node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4WithSubnet, ip1V6}}));
+
+  // start tracking iface2
+  EXPECT_TRUE(node2->updateInterfaceDb(
+      {{iface2, ifIndex2, ip2V4WithDiffSubnet, ip2V6}}));
+
+  // won't form adj as v4 validation should fail
+  {
+    EXPECT_FALSE(node1
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+
+    EXPECT_FALSE(node2
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+  }
+
+  {
+    // bring down interface of node1 to make sure no crash happened
+    EXPECT_TRUE(node1->updateInterfaceDb({}));
+
+    // bring up interface of node1 to make sure no crash happened
+    EXPECT_TRUE(
+        node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4WithSubnet, ip1V6}}));
+  }
+
+  {
+    // bring up interface with SAME subnet and verify ADJ UP event
+    EXPECT_TRUE(node2->updateInterfaceDb(
+        {{iface2, ifIndex2, ip2V4WithSameSubnet, ip2V6}}));
+
+    auto event1 =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event1.has_value());
+
+    auto event2 =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event2.has_value());
+    LOG(INFO) << "node-1 and node-2 successfully form adjacency";
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
