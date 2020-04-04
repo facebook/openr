@@ -127,7 +127,7 @@ dumpAllWithThriftClientFromMultiple(
     return std::make_pair(std::nullopt, unreachedUrls);
   }
 
-  folly::collectAllSemiFuture(calls).via(&evb).thenValue(
+  folly::collectAll(calls).via(&evb).thenValue(
       [&](std::vector<folly::Try<openr::thrift::Publication>>&& results) {
         LOG(INFO) << "Merge values received from Open/R instances"
                   << ", results size: " << results.size();
