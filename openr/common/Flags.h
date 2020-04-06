@@ -109,9 +109,6 @@ DECLARE_string(tls_ticket_seed_path);
 DECLARE_string(tls_ecc_curve_name);
 DECLARE_string(tls_acceptable_peers);
 
-DECLARE_int32(persistent_store_initial_backoff_ms);
-DECLARE_int32(persistent_store_max_backoff_ms);
-
 DECLARE_bool(enable_flood_optimization);
 DECLARE_bool(is_flood_root);
 DECLARE_bool(use_flood_optimization);

@@ -89,9 +89,8 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
         "1",
         storageFilePath,
         context,
-        std::chrono::milliseconds(0),
-        std::chrono::milliseconds(0),
-        true);
+        true /*dryrun*/,
+        false /*periodicallySaveToDisk*/);
 
     configStoreThread = std::make_unique<std::thread>([this]() noexcept {
       LOG(INFO) << "ConfigStore thread starting";
@@ -1006,8 +1005,6 @@ TEST(PrefixManagerTest, HoldTimeout) {
           "/tmp/pm_ut_config_store.bin.{}",
           std::hash<std::thread::id>{}(std::this_thread::get_id())),
       context,
-      Constants::kPersistentStoreInitialBackoff,
-      Constants::kPersistentStoreMaxBackoff,
       true);
   std::thread configStoreThread([&]() noexcept {
     LOG(INFO) << "ConfigStore thread starting";

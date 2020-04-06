@@ -28,15 +28,15 @@ PersistentStore::PersistentStore(
     const std::string& nodeName,
     const std::string& storageFilePath,
     fbzmq::Context& context,
-    std::chrono::milliseconds saveInitialBackoff,
-    std::chrono::milliseconds saveMaxBackoff,
-    bool dryrun)
+    bool dryrun,
+    bool periodicallySaveToDisk)
     : storageFilePath_(storageFilePath), dryrun_(dryrun) {
-  if (saveInitialBackoff != 0ms or saveMaxBackoff != 0ms) {
+  if (periodicallySaveToDisk) {
     // Create timer and backoff mechanism only if backoff is requested
     saveDbTimerBackoff_ =
         std::make_unique<ExponentialBackoff<std::chrono::milliseconds>>(
-            saveInitialBackoff, saveMaxBackoff);
+            Constants::kPersistentStoreInitialBackoff,
+            Constants::kPersistentStoreMaxBackoff);
 
     saveDbTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
       if (savePersistentObjectToDisk()) {

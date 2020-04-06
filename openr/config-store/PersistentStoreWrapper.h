@@ -13,14 +13,7 @@ namespace openr {
 
 class PersistentStoreWrapper {
  public:
-  PersistentStoreWrapper(
-      fbzmq::Context& context,
-      const unsigned long tid,
-      // persistent store DB saving backoffs
-      std::chrono::milliseconds saveInitialBackoff =
-          Constants::kPersistentStoreInitialBackoff,
-      std::chrono::milliseconds saveMaxBackoff =
-          Constants::kPersistentStoreMaxBackoff);
+  PersistentStoreWrapper(fbzmq::Context& context, const unsigned long tid);
 
   // Destructor will try to save DB to disk before destroying the object
   ~PersistentStoreWrapper() {

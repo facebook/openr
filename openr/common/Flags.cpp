@@ -315,14 +315,6 @@ DEFINE_string(
     "A comma separated list of strings. Strings are x509 common names to "
     "accept SSL connections from. If an empty string is provided, the server "
     "will accept connections from any authenticated peer.");
-DEFINE_int32(
-    persistent_store_initial_backoff_ms,
-    openr::Constants::kPersistentStoreInitialBackoff.count(),
-    "Initial backoff to save DB to file (in milliseconds)");
-DEFINE_int32(
-    persistent_store_max_backoff_ms,
-    openr::Constants::kPersistentStoreMaxBackoff.count(),
-    "Max backoff to save DB to file (in millseconds)");
 DEFINE_bool(enable_flood_optimization, false, "Enable flooding optimization");
 DEFINE_bool(is_flood_root, false, "set myself as flooding root or not");
 // TODO this option will be deprecated in near future, this is just for safely

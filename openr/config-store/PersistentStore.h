@@ -56,12 +56,8 @@ class PersistentStore : public OpenrEventBase {
       const std::string& nodeName,
       const std::string& storageFilePath,
       fbzmq::Context& context,
-      // persistent store DB saving backoffs
-      std::chrono::milliseconds saveInitialBackoff =
-          Constants::kPersistentStoreInitialBackoff,
-      std::chrono::milliseconds saveMaxBackoff =
-          Constants::kPersistentStoreMaxBackoff,
-      bool dryrun = false);
+      bool dryrun = false,
+      bool periodicallySaveToDisk = true);
 
   // Destructor will try to save DB to disk before destroying the object
   ~PersistentStore() override;

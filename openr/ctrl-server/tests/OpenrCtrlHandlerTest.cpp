@@ -45,12 +45,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     // start fresh
     std::remove(configStoreFile.data());
     persistentStore = std::make_unique<PersistentStore>(
-        nodeName,
-        configStoreFile,
-        context_,
-        Constants::kPersistentStoreInitialBackoff,
-        Constants::kPersistentStoreMaxBackoff,
-        true /* dryrun */);
+        nodeName, configStoreFile, context_, true /* dryrun */);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
     // Create KvStore module

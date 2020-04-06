@@ -411,11 +411,7 @@ main(int argc, char** argv) {
       watchdog,
       "ConfigStore",
       std::make_unique<PersistentStore>(
-          FLAGS_node_name,
-          FLAGS_config_store_filepath,
-          context,
-          std::chrono::milliseconds(FLAGS_persistent_store_initial_backoff_ms),
-          std::chrono::milliseconds(FLAGS_persistent_store_max_backoff_ms)));
+          FLAGS_node_name, FLAGS_config_store_filepath, context));
 
   // Start monitor Module
   // for each log message it receives, we want to add the openr domain
