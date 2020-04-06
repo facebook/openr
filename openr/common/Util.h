@@ -244,7 +244,7 @@ int64_t generateHash(
 int64_t generateHash(
     const int64_t version,
     const std::string& originatorId,
-    const apache::thrift::DeprecatedOptionalField<std::string>& value);
+    const apache::thrift::optional_field_ref<const std::string&> value);
 
 /**
  * TO BE DEPRECATED SOON: Backward compatible with empty remoteIfName

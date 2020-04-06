@@ -453,7 +453,7 @@ getDurationBetweenPerfEvents(
 
 template <class T>
 int64_t
-generateHash(
+generateHashImpl(
     const int64_t version, const std::string& originatorId, const T& value) {
   size_t seed = 0;
   boost::hash_combine(seed, version);
@@ -469,16 +469,15 @@ generateHash(
     const int64_t version,
     const std::string& originatorId,
     const std::optional<std::string>& value) {
-  return generateHash<std::optional<std::string>>(version, originatorId, value);
+  return generateHashImpl(version, originatorId, value);
 }
 
 int64_t
 generateHash(
     const int64_t version,
     const std::string& originatorId,
-    const apache::thrift::DeprecatedOptionalField<std::string>& value) {
-  return generateHash<apache::thrift::DeprecatedOptionalField<std::string>>(
-      version, originatorId, value);
+    const apache::thrift::optional_field_ref<const std::string&> value) {
+  return generateHashImpl(version, originatorId, value);
 }
 
 std::string
