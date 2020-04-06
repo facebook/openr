@@ -53,7 +53,6 @@ DECLARE_bool(enable_encryption);
 DECLARE_bool(enable_fib_service_waiting);
 DECLARE_bool(enable_rtt_metric);
 DECLARE_bool(enable_v4);
-DECLARE_bool(enable_subnet_validation);
 DECLARE_bool(enable_lfa);
 DECLARE_bool(enable_ordered_fib_programming);
 DECLARE_bool(enable_bgp_route_programming);

@@ -285,7 +285,6 @@ Spark::Spark(
     std::chrono::milliseconds myHeartbeatHoldTime,
     std::optional<int> maybeIpTos,
     bool enableV4,
-    bool enableSubnetValidation,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue,
     KvStoreCmdPort kvStoreCmdPort,
@@ -310,7 +309,6 @@ Spark::Spark(
       myNegotiateHoldTime_(myNegotiateHoldTime),
       myHeartbeatHoldTime_(myHeartbeatHoldTime),
       enableV4_(enableV4),
-      enableSubnetValidation_(enableSubnetValidation),
       neighborUpdatesQueue_(neighborUpdatesQueue),
       kKvStoreCmdPort_(kvStoreCmdPort),
       kOpenrCtrlThriftPort_(openrCtrlThriftPort),
@@ -602,7 +600,7 @@ Spark::validateHelloPacket(
   }
 
   // validate v4 address subnet
-  if (enableV4_ and enableSubnetValidation_) {
+  if (enableV4_) {
     if (PacketValidationResult::FAILURE ==
         validateV4AddressSubnet(ifName, originator.transportAddressV4)) {
       return PacketValidationResult::FAILURE;
@@ -1714,7 +1712,7 @@ Spark::processHandshakeMsg(
       std::chrono::milliseconds(handshakeMsg.gracefulRestartTime), myHoldTime_);
 
   // v4 subnet validation if enabled
-  if (enableV4_ and enableSubnetValidation_) {
+  if (enableV4_) {
     if (PacketValidationResult::FAILURE ==
         validateV4AddressSubnet(ifName, handshakeMsg.transportAddressV4)) {
       return;

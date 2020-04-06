@@ -93,7 +93,6 @@ class Spark final : public OpenrEventBase {
       std::chrono::milliseconds myHeartbeatHoldTime,
       std::optional<int> ipTos,
       bool enableV4,
-      bool enableSubnetValidation,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       messaging::ReplicateQueue<thrift::SparkNeighborEvent>& nbrUpdatesQueue,
       KvStoreCmdPort kvStoreCmdPort,
@@ -468,11 +467,6 @@ class Spark final : public OpenrEventBase {
   // This flag indicates that we will also exchange v4 transportAddress in
   // Spark HelloMessage
   const bool enableV4_{false};
-
-  // If enabled, then all newly formed adjacency will be validated on v4 subnet
-  // If subnets are different on each end of adjacency, neighboring session will
-  // not be formed
-  const bool enableSubnetValidation_{true};
 
   // the next sequence number to be used on any interface for outgoing hellos
   // NOTE: we increment this on hello sent out of any interfaces

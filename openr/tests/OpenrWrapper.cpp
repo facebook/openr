@@ -134,7 +134,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       std::chrono::milliseconds{0}, /* spark2_heartbeat_hold_time */
       std::nullopt, // ip-tos
       v4Enabled, // enable v4
-      true, // enable subnet validation
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       KvStoreCmdPort{0},

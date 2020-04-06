@@ -123,8 +123,7 @@ class Spark2Fixture : public testing::Test {
         grHoldTime,
         keepAliveTime,
         fastInitKeepAliveTime,
-        true,
-        true,
+        true, /* enableV4 */
         version,
         context,
         mockIoProvider,

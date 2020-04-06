@@ -191,11 +191,10 @@ transport and v4/v6 topologies are congruent.
 ENABLE_V4=false
 ```
 
-#### ENABLE_SUBNET_VALIDATION
+#### DEPRECATED_ENABLE_SUBNET_VALIDATION
 
 OpenR supports subnet validation to avoid mis-cabling of v4 addresses on
-different subnets on each end of the link. Need to enable v4 and this flag at
-the same time to turn on validation.
+different subnets on each end of the link. This is now by default enabled if v4 is enabled.
 
 ```
 ENABLE_SUBNET_VALIDATION=true

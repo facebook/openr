@@ -127,11 +127,6 @@ DEFINE_bool(
     "Enable v4 in OpenR for exchanging and programming v4 routes. Works only "
     "when Switch FIB Agent is used for FIB programming. No NSS/Linux.");
 DEFINE_bool(
-    enable_subnet_validation,
-    true,
-    "Enable subnet validation on adjacencies to avoid mis-cabling of v4 "
-    "address on different subnets on each end.");
-DEFINE_bool(
     enable_lfa, false, "Enable LFA computation for quick reroute per RFC 5286");
 DEFINE_bool(
     enable_ordered_fib_programming,

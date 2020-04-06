@@ -573,7 +573,6 @@ main(int argc, char** argv) {
           std::chrono::seconds(FLAGS_spark2_heartbeat_hold_time_s),
           maybeIpTos,
           FLAGS_enable_v4,
-          FLAGS_enable_subnet_validation,
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
           KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},

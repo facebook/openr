@@ -18,7 +18,6 @@ SparkWrapper::SparkWrapper(
     std::chrono::milliseconds myKeepAliveTime,
     std::chrono::milliseconds myFastInitKeepAliveTime,
     bool enableV4,
-    bool enableSubnetValidation,
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
     std::shared_ptr<IoProvider> ioProvider,
@@ -42,7 +41,6 @@ SparkWrapper::SparkWrapper(
       timeConfig.myHeartbeatHoldTime, // spark2_heartbeat_hold_time
       std::nullopt /* ip-tos */,
       enableV4,
-      enableSubnetValidation,
       interfaceUpdatesQueue_.getReader(),
       neighborUpdatesQueue_,
       KvStoreCmdPort{10002},

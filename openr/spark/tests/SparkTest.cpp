@@ -134,7 +134,6 @@ class SparkFixture : public testing::Test {
         keepAliveTime /* myKeepAliveTime */,
         fastInitKeepAliveTime,
         true /* enable v4 */,
-        true /* enable subnet validation */,
         version,
         context,
         mockIoProvider,
