@@ -26,11 +26,6 @@ NetlinkMessage::getMessagePtr() {
   return msghdr;
 }
 
-void
-NetlinkMessage::updateBytesReceived(uint16_t bytes) {
-  size_ = bytes;
-}
-
 uint32_t
 NetlinkMessage::getDataLength() const {
   return msghdr->nlmsg_len;
@@ -41,7 +36,7 @@ NetlinkMessage::addSubAttributes(
     struct rtattr* rta, int type, const void* data, uint32_t len) const {
   uint32_t subRtaLen = RTA_LENGTH(len);
 
-  if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > size_) {
+  if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > kMaxNlPayloadSize) {
     VLOG(1) << "Space not available to add sub attribute type " << type;
     return nullptr;
   }
@@ -71,7 +66,7 @@ NetlinkMessage::addAttributes(
   uint32_t rtaLen = (RTA_LENGTH(len));
   uint32_t nlmsgAlen = NLMSG_ALIGN((msghdr)->nlmsg_len);
 
-  if (nlmsgAlen + RTA_ALIGN(rtaLen) > size_) {
+  if (nlmsgAlen + RTA_ALIGN(rtaLen) > kMaxNlPayloadSize) {
     VLOG(1) << "Space not available to add attribute type " << type;
     return ResultCode::NO_MESSAGE_BUFFER;
   }

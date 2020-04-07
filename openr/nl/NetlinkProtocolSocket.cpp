@@ -16,16 +16,25 @@ namespace fb303 = facebook::fb303;
 
 namespace openr::fbnl {
 
-// TODO: Move this into class! `Sequence numbers are unique per PID`
-uint32_t gSequenceNumber{0};
-
 NetlinkProtocolSocket::NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
     : evl_(evl) {
   nlMessageTimer_ = fbzmq::ZmqTimeout::make(evl_, [this]() noexcept {
-    LOG(INFO) << "Did not receive last ack " << lastSeqNo_;
+    DCHECK(false) << "This shouldn't occur usually. Adding DCHECK to get "
+                  << "attention in UTs";
 
-    fb303::fbData->addStatValue("netlink.socket_recreate", 1, fb303::COUNT);
+    fb303::fbData->addStatValue(
+        "netlink.message_timeouts", nlSeqNumMap_.size(), fb303::COUNT);
+
+    LOG(ERROR) << "Timed-out receiving ack for " << nlSeqNumMap_.size()
+               << " message(s).";
+    for (auto const& kv : nlSeqNumMap_) {
+      LOG(ERROR) << "  Pending seq=" << kv.first << ", message-type="
+                 << static_cast<int>(kv.second->getMessageType())
+                 << ", bytes-sent=" << kv.second->getDataLength();
+    }
+
     LOG(INFO) << "Closing netlink socket and recreate it";
+    nlSeqNumMap_.clear(); // Clear all timed out requests
     evl_->removeSocketFd(nlSock_);
     close(nlSock_);
     init();
@@ -95,90 +104,95 @@ NetlinkProtocolSocket::setNeighborEventCB(
 }
 
 void
-NetlinkProtocolSocket::processAck(uint32_t ack) {
-  if (ack == lastSeqNo_) {
-    VLOG(2) << "Last ack received " << ack;
-    // cancel active message timer
-    if (nlMessageTimer_->isScheduled()) {
-      nlMessageTimer_->cancelTimeout();
-    }
-    // continue sending next set of messages
-    sendNetlinkMessage();
+NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
+  auto it = nlSeqNumMap_.find(ack);
+  if (it != nlSeqNumMap_.end()) {
+    VLOG(2) << "Setting return value for seq=" << ack << " with ret=" << status;
+    // Set return status on promise
+    it->second->setReturnStatus(status);
+    nlSeqNumMap_.erase(it);
   } else {
-    LOG_EVERY_N(ERROR, 100) << "Ack received for older message: " << ack;
+    LOG(ERROR) << "No future associated with seq=" << ack;
+  }
+
+  // Cancel timer if there are no more expected responses
+  if (nlSeqNumMap_.empty()) {
+    nlMessageTimer_->cancelTimeout();
+  } else {
+    // Extend timer and wait for next ack
+    nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
+  }
+
+  // We've successfully completed at-least one message. Send more messages
+  // if any pending. Here we add optimization to wait for some more acks and
+  // send pending message in batch of atleast `kMinIovMsg`
+  if (nlSeqNumMap_.empty() or (kMaxIovMsg - nlSeqNumMap_.size() > kMinIovMsg)) {
+    sendNetlinkMessage();
   }
 }
 
 void
 NetlinkProtocolSocket::sendNetlinkMessage() {
-  evl_->runImmediatelyOrInEventLoop([this]() {
-    struct sockaddr_nl nladdr = {
-        .nl_family = AF_NETLINK, .nl_pad = 0, .nl_pid = 0, .nl_groups = 0};
-    uint32_t count{0};
-    uint32_t iovSize = std::min(msgQueue_.size(), kMaxIovMsg);
+  CHECK(evl_->isInEventLoop());
+  struct sockaddr_nl nladdr = {
+      .nl_family = AF_NETLINK, .nl_pad = 0, .nl_pid = 0, .nl_groups = 0};
+  CHECK_LE(nlSeqNumMap_.size(), kMaxIovMsg)
+      << "We must have capacity to send at-least one message!";
+  uint32_t count{0};
+  const uint32_t iovSize =
+      std::min(msgQueue_.size(), kMaxIovMsg - nlSeqNumMap_.size());
 
-    if (!iovSize) {
-      return;
-    }
-
-    auto iov = std::make_unique<struct iovec[]>(iovSize);
-
-    while (count < iovSize && !msgQueue_.empty()) {
-      auto m = std::move(msgQueue_.front());
-      msgQueue_.pop();
-
-      struct nlmsghdr* nlmsg_hdr = m->getMessagePtr();
-      iov[count].iov_base = reinterpret_cast<void*>(m->getMessagePtr());
-      iov[count].iov_len = m->getDataLength();
-
-      // fill sequence number and PID
-      nlmsg_hdr->nlmsg_seq = ++gSequenceNumber;
-      nlmsg_hdr->nlmsg_pid = pid_;
-
-      // check if one request per message
-      if ((nlmsg_hdr->nlmsg_flags & NLM_F_MULTI) != 0) {
-        LOG(ERROR) << "Error: multipart netlink message not supported";
-      }
-
-      // Add seq number -> netlink request mapping
-      nlSeqNoMap_.insert({gSequenceNumber, std::move(m)});
-      count++;
-    }
-    lastSeqNo_ = gSequenceNumber;
-    VLOG(2) << "Last seq sent:" << lastSeqNo_;
-
-    auto outMsg = std::make_unique<struct msghdr>();
-    outMsg->msg_name = &nladdr;
-    outMsg->msg_namelen = sizeof(nladdr);
-    outMsg->msg_iov = &iov[0];
-    outMsg->msg_iovlen = count;
-
-    VLOG(2) << "Sending " << outMsg->msg_iovlen << " netlink messages";
-    auto status = sendmsg(nlSock_, outMsg.get(), 0);
-
-    if (status < 0) {
-      LOG(ERROR) << "Error sending on NL socket "
-                 << folly::errnoStr(std::abs(status))
-                 << " Number of messages:" << outMsg->msg_iovlen;
-      ++errors_;
-    }
-
-    // Schedule timer to wait for acks and send next set of messages
-    nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
-  });
-}
-
-void
-NetlinkProtocolSocket::setReturnStatusValue(uint32_t seq, int status) {
-  try {
-    VLOG(2) << "Setting return value for seq=" << seq << " with ret=" << status;
-    auto request = nlSeqNoMap_.at(seq);
-    request->setReturnStatus(status);
-    // Remove mapping
-    nlSeqNoMap_.erase(seq);
-  } catch (const std::out_of_range& e) {
-    LOG(ERROR) << "No future associated with seq=" << seq;
+  if (!iovSize) {
+    return;
   }
+
+  auto iov = std::make_unique<struct iovec[]>(iovSize);
+
+  while (count < iovSize && !msgQueue_.empty()) {
+    auto m = std::move(msgQueue_.front());
+    msgQueue_.pop();
+
+    struct nlmsghdr* nlmsg_hdr = m->getMessagePtr();
+    iov[count].iov_base = reinterpret_cast<void*>(m->getMessagePtr());
+    iov[count].iov_len = m->getDataLength();
+
+    // fill sequence number and PID
+    nlmsg_hdr->nlmsg_pid = pid_;
+    nlmsg_hdr->nlmsg_seq = nextNlSeqNum_++;
+    if (nextNlSeqNum_ == 0) {
+      // wrap around - we start from 1
+      nextNlSeqNum_ = 1;
+    }
+
+    // check if one request per message
+    if ((nlmsg_hdr->nlmsg_flags & NLM_F_MULTI) != 0) {
+      LOG(ERROR) << "Error: multipart netlink message not supported";
+    }
+
+    // Add seq number -> netlink request mapping
+    auto res = nlSeqNumMap_.insert({nlmsg_hdr->nlmsg_seq, std::move(m)});
+    CHECK(res.second) << "Entry exists for " << nlmsg_hdr->nlmsg_seq;
+    count++;
+  }
+
+  auto outMsg = std::make_unique<struct msghdr>();
+  outMsg->msg_name = &nladdr;
+  outMsg->msg_namelen = sizeof(nladdr);
+  outMsg->msg_iov = &iov[0];
+  outMsg->msg_iovlen = count;
+
+  VLOG(2) << "Sending " << outMsg->msg_iovlen << " netlink messages";
+  auto status = sendmsg(nlSock_, outMsg.get(), 0);
+
+  if (status < 0) {
+    LOG(ERROR) << "Error sending on NL socket "
+               << folly::errnoStr(std::abs(status))
+               << " Number of messages:" << outMsg->msg_iovlen;
+    ++errors_;
+  }
+
+  // Schedule timer to wait for acks and send next set of messages
+  nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
 }
 
 void
@@ -199,9 +213,9 @@ NetlinkProtocolSocket::processMessage(
       // next RTM message to be processed
       auto rtmMessage = std::make_unique<NetlinkRouteMessage>();
       auto route = rtmMessage->parseMessage(nlh);
-      if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
-        // Update message timer as we received a valid ack
-        nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
+      if (nlSeqNumMap_.count(nlh->nlmsg_seq) > 0) {
+        // Extend message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
         // Synchronous event - do not generate route events
         routeCache_.emplace_back(route);
       }
@@ -213,9 +227,9 @@ NetlinkProtocolSocket::processMessage(
       auto linkMessage = std::make_unique<NetlinkLinkMessage>();
       fbnl::Link link = linkMessage->parseMessage(nlh);
 
-      if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
-        // Update message timer as we received a valid ack
-        nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
+      if (nlSeqNumMap_.count(nlh->nlmsg_seq) > 0) {
+        // Extend message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
         // Synchronous event - do not generate link events
         linkCache_.emplace_back(link);
       } else {
@@ -236,11 +250,11 @@ NetlinkProtocolSocket::processMessage(
       if (!addr.getPrefix().has_value()) {
         break;
       }
-      if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
-        // Update message timer as we received a valid ack
-        nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
+      if (nlSeqNumMap_.count(nlh->nlmsg_seq) > 0) {
+        // Extend message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
         // Response to a corresponding request
-        auto& request = nlSeqNoMap_.at(nlh->nlmsg_seq);
+        auto& request = nlSeqNumMap_.at(nlh->nlmsg_seq);
         if (request->getMessageType() ==
             NetlinkMessage::MessageType::GET_ALL_ADDRS) {
           // Message in response to get addresses, store in address cache
@@ -274,9 +288,9 @@ NetlinkProtocolSocket::processMessage(
       auto neighMessage = std::make_unique<NetlinkNeighborMessage>();
       fbnl::Neighbor neighbor = neighMessage->parseMessage(nlh);
 
-      if (nlSeqNoMap_.count(nlh->nlmsg_seq) > 0) {
-        // Update message timer as we received a valid ack
-        nlMessageTimer_->scheduleTimeout(kNlMessageAckTimer);
+      if (nlSeqNumMap_.count(nlh->nlmsg_seq) > 0) {
+        // Extend message timer as we received a valid ack
+        nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
         // Synchronous event - do not generate neighbor events
         neighborCache_.emplace_back(neighbor);
       } else {
@@ -302,8 +316,7 @@ NetlinkProtocolSocket::processMessage(
       if (ack->error == 0) {
         ++acks_;
       }
-      processAck(ack->msg.nlmsg_seq);
-      setReturnStatusValue(ack->msg.nlmsg_seq, ack->error);
+      processAck(ack->msg.nlmsg_seq, ack->error);
     } break;
 
     case NLMSG_NOOP:
@@ -311,8 +324,7 @@ NetlinkProtocolSocket::processMessage(
 
     case NLMSG_DONE: {
       // End of multipart message
-      processAck(nlh->nlmsg_seq);
-      setReturnStatusValue(nlh->nlmsg_seq, 0);
+      processAck(nlh->nlmsg_seq, 0);
     } break;
 
     default:
@@ -361,15 +373,8 @@ NetlinkProtocolSocket::addNetlinkMessage(
     std::vector<std::unique_ptr<NetlinkMessage>> nlmsgs) {
   evl_->runImmediatelyOrInEventLoop(
       [this, nlmsgs = std::move(nlmsgs)]() mutable {
-        auto queueSize = msgQueue_.size();
         for (auto& nlmsg : nlmsgs) {
-          if (++queueSize < kMaxNlMessageQueue) {
-            msgQueue_.push(std::move(nlmsg));
-          } else {
-            LOG(ERROR) << "Limit of" << queueSize
-                       << " for pending netlink messages reached, discarding";
-            break;
-          }
+          msgQueue_.push(std::move(nlmsg));
         }
         // call send messages API if no timers are scheduled
         if (!nlMessageTimer_->isScheduled()) {

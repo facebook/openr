@@ -59,9 +59,6 @@ class NetlinkMessage {
   // Buffer to create message
   std::array<char, kMaxNlPayloadSize> msg = {};
 
-  // update size of message received
-  void updateBytesReceived(uint16_t bytes);
-
   // set status value (in promise)
   void setReturnStatus(int status);
 
@@ -117,10 +114,6 @@ class NetlinkMessage {
 
   // pointer to the netlink message header
   struct nlmsghdr* const msghdr{nullptr};
-
-  // size available for adding messages,
-  // in case of rx message, it contains bytes received
-  uint32_t size_{kMaxNlPayloadSize};
 
   // Promise to relay the status code received from kernel
   std::unique_ptr<folly::Promise<int>> promise_{nullptr};
