@@ -61,17 +61,18 @@ NetlinkProtocolSocket::init() {
   };
 
   // set the source address
-  ::memset(&saddr_, 0, sizeof(saddr_));
-  saddr_.nl_family = AF_NETLINK;
-  saddr_.nl_pid = pid_;
+  struct sockaddr_nl saddr;
+  ::memset(&saddr, 0, sizeof(saddr));
+  saddr.nl_family = AF_NETLINK;
+  saddr.nl_pid = pid_;
   /* We can subscribe to different Netlink mutlicast groups for specific types
    * of events: link, IPv4/IPv6 address and neighbor. */
-  saddr_.nl_groups = RTMGRP_LINK // listen for link events
+  saddr.nl_groups = RTMGRP_LINK // listen for link events
       | RTMGRP_IPV4_IFADDR // listen for IPv4 address events
       | RTMGRP_IPV6_IFADDR // listen for IPv6 address events
       | RTMGRP_NEIGH; // listen for Neighbor (ARP) events
 
-  if (bind(nlSock_, (struct sockaddr*)&saddr_, sizeof(saddr_)) != 0) {
+  if (bind(nlSock_, (struct sockaddr*)&saddr, sizeof(saddr)) != 0) {
     LOG(FATAL) << "Failed to bind netlink socket: " << folly::errnoStr(errno);
   };
 

@@ -45,14 +45,9 @@ class NetlinkProtocolSocket {
  public:
   explicit NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl);
 
+  // TODO: This should be private and auto initialized (either lazy or static)
   // create socket and add to eventloop
   void init();
-
-  // receive messages from netlink socket
-  void recvNetlinkMessage();
-
-  // send message to netlink socket
-  void sendNetlinkMessage();
 
   ~NetlinkProtocolSocket();
 
@@ -65,10 +60,6 @@ class NetlinkProtocolSocket {
   // Set netlinkSocket Addr event callback
   void setNeighborEventCB(
       std::function<void(fbnl::Neighbor, bool)> neighborEventCB);
-
-  // process message
-  void processMessage(
-      const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead);
 
   // synchronous add route and nexthop paths
   ResultCode addRoute(const openr::fbnl::Route& route);
@@ -116,29 +107,44 @@ class NetlinkProtocolSocket {
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
   NetlinkProtocolSocket& operator=(NetlinkProtocolSocket const&) = delete;
 
-  // add netlink message to the queue
+  // Buffer netlink message to the queue_. Invoke sendNetlinkMessage if there
+  // are no messages in flight
   void addNetlinkMessage(std::vector<std::unique_ptr<NetlinkMessage>> nlmsg);
 
-  // process ack message
+  // Send a message batch to netlink socket from queue_
+  void sendNetlinkMessage();
+
+  // Receive messages from netlink socket. Invoke `processMessage` for every
+  // message received.
+  void recvNetlinkMessage();
+
+  // Process received netlink message. Set return values for pending requests
+  // or send notifications.
+  void processMessage(
+      const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead);
+
+  // Process ack message. Set return status on pending requests in nlSeqNumMap_
+  // Resume sending messages from queue_ if any pending
   void processAck(uint32_t ack, int status);
 
+  // Event base for serializing read/write requests to netlink socket. Also
+  // ensure thread safety of private member variables.
   fbzmq::ZmqEventLoop* evl_{nullptr};
 
+  // TODO: Avoid callback and use queue for notifications
   // Event callbacks
   std::function<void(fbnl::Link, bool)> linkEventCB_;
-
   std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
-
   std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
 
-  // netlink socket
-  int nlSock_{-1};
-
-  // PID Of the endpoint
+  // PID Of the process. Each nl socket is associated with PID and every message
+  // sent or received contains this PID. This must be unique for each socket
+  // an application create across all the processes on the system.
   uint32_t pid_{UINT_MAX};
 
-  // source addr
-  struct sockaddr_nl saddr_;
+  // Netlink socket fd. Created when class is constructed. Re-created on timeout
+  // when no response is received for any of our pending requests.
+  int nlSock_{-1};
 
   // Next available sequence number to use. It is possible to wrap this around,
   // and should be fine. We put hard check to avoid conflict between pending
@@ -178,6 +184,18 @@ class NetlinkProtocolSocket {
   std::unique_ptr<fbzmq::ZmqTimeout> nlMessageTimer_{nullptr};
 
   /**
+   * TODO: Remove this temporary cache. Instead associate cache with each
+   * get request we receive. As of this implementation a subsequent getLinks
+   * requests might will end up messing up with result of first request. e.g.
+   *  R1 - getAllLinks(); clear-cache; enqueue GET_ALL_LINKS response, seq=0
+   *  Kernel sends L1, L2, L3 in message R1-part-1. Add L1, L2, L3 to cache;
+   *  R2 - getAllLinks(); clear-cache; enqueue GET_ALL_LINKS response, seq=1
+   *  Kernel sends L4, L5 in message R1-part-2. Add L4, L5 to cache.
+   *  Return only [L4, L5] to R1.
+   *  Kernel sends L1, L2, L3 in message R1-part-1. Add L1, L2, L3 to cache;
+   *  Kernel sends L4, L5 in message R1-part-2. Add L4, L5 to cache.
+   *  Return [L4, L5, L1, L2, L3, L4, L5] to R2 (NOTE: duplicated entries)
+   *
    * We maintain a temporary cache of Link, Address, Neighbor and Routes from
    * the kernel, which are solely used for the getAll... methods. These caches
    * are cleared when we invoke a new getAllLinks/Addresses/Neighbors/Routes
