@@ -213,6 +213,7 @@ class NlMessageFixture : public ::testing::Test {
   bool
   checkRouteInKernelRoutes(
       const std::vector<fbnl::Route>& kernelRoutes, const fbnl::Route& route) {
+    LOG_FN_EXECUTION_TIME;
     for (auto& kernelRoute : kernelRoutes) {
       if (route == kernelRoute) {
         return true;
@@ -226,9 +227,56 @@ class NlMessageFixture : public ::testing::Test {
   findRoutesInKernelRoutes(
       const std::vector<fbnl::Route>& kernelRoutes,
       const std::vector<fbnl::Route>& routes) {
+    LOG_FN_EXECUTION_TIME;
+    std::unordered_map<std::tuple<uint8_t, uint8_t, uint32_t>, fbnl::Route>
+        mplsRoutes;
+    std::unordered_map<
+        std::tuple<uint8_t, uint8_t, folly::CIDRNetwork>,
+        fbnl::Route>
+        unicastRoutes;
+
+    // Build map for efficient search
+    for (auto const& route : kernelRoutes) {
+      if (route.getFamily() == AF_MPLS) {
+        mplsRoutes.emplace(
+            std::make_tuple(
+                route.getRouteTable(),
+                route.getProtocolId(),
+                route.getMplsLabel().value()),
+            route);
+      } else {
+        unicastRoutes.emplace(
+            std::make_tuple(
+                route.getRouteTable(),
+                route.getProtocolId(),
+                route.getDestination()),
+            route);
+      }
+    }
+
     int routeCount{0};
-    for (auto& route : routes) {
-      routeCount += checkRouteInKernelRoutes(kernelRoutes, route) ? 1 : 0;
+    for (auto const& route : routes) {
+      std::optional<fbnl::Route> maybeRoute;
+      if (route.getFamily() == AF_MPLS) {
+        auto it = mplsRoutes.find(std::make_tuple(
+            route.getRouteTable(),
+            route.getProtocolId(),
+            route.getMplsLabel().value()));
+        if (it != mplsRoutes.end()) {
+          maybeRoute = it->second;
+        }
+      } else {
+        auto it = unicastRoutes.find(std::make_tuple(
+            route.getRouteTable(),
+            route.getProtocolId(),
+            route.getDestination()));
+        if (it != unicastRoutes.end()) {
+          maybeRoute = it->second;
+        }
+      }
+      if (maybeRoute.has_value() and route == maybeRoute.value()) {
+        routeCount++;
+      }
     }
     return routeCount;
   }
