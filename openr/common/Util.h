@@ -349,6 +349,20 @@ castToStd(apache::thrift::DeprecatedOptionalField<T>&& t) {
 }
 
 template <class T>
+auto&&
+fromStdOptional(
+    apache::thrift::optional_field_ref<T&> lhs, const std::optional<T>& rhs) {
+  lhs.from_optional(rhs);
+  return lhs;
+}
+
+template <class T>
+auto
+castToStd(apache::thrift::optional_field_ref<T> t) {
+  return t.to_optional();
+}
+
+template <class T>
 std::optional<T>
 castToStd(const folly::Optional<T>& t) {
   if (t) {
