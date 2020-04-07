@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 
+#include <fb303/ServiceData.h>
 #include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Exception.h>
@@ -80,6 +81,16 @@ uint32_t inLabel3{130};
 uint32_t inLabel4{140};
 uint32_t inLabel5{141};
 
+int64_t
+getErrorCount() {
+  return facebook::fb303::fbData->getCounters()["netlink.errors.sum"];
+}
+
+int64_t
+getAckCount() {
+  return facebook::fb303::fbData->getCounters()["netlink.acks.sum"];
+}
+
 class NlMessageFixture : public ::testing::Test {
  public:
   NlMessageFixture() = default;
@@ -87,6 +98,9 @@ class NlMessageFixture : public ::testing::Test {
 
   void
   SetUp() override {
+    // Clear fb303 counters
+    facebook::fb303::fbData->resetAllData();
+
     if (getuid()) {
       SKIP() << "Must run this test as root";
       return;
@@ -510,22 +524,22 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
       folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -551,23 +565,23 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
 
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -587,23 +601,23 @@ TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -625,23 +639,23 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
       folly::none, folly::none, folly::none, ipAddrY2V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -663,23 +677,23 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -703,23 +717,23 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
   }
 
   auto route = buildRoute(kRouteProtoId, ipPrefix5, folly::none, paths);
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes for multiple label PUSH nexthops
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -765,23 +779,23 @@ TEST_F(NlMessageFixture, PopLabel) {
       folly::none,
       ifIndexLo));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for single POP nexthop
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -807,23 +821,23 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
       folly::none,
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for single POP nexthop
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -844,23 +858,23 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
       ipAddrY1V6,
       ifIndexZ));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for single SWAP label nexthop
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -889,23 +903,23 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
       ifIndexZ));
 
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create label next hop
   status = nlSock->addLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for muliple SWAP label nexthop
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -926,11 +940,11 @@ TEST_F(NlMessageFixture, NlErrorMessage) {
       ipAddrY1V6,
       invalidIfindex));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // create label next hop
   ResultCode status = nlSock->addLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SYSERR);
-  EXPECT_NE(0, nlSock->getErrorCount());
+  EXPECT_NE(0, getErrorCount());
 }
 
 TEST_F(NlMessageFixture, InvalidRoute) {
@@ -961,25 +975,25 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix2, folly::none, paths2));
 
-  ackCount = nlSock->getAckCount();
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  ackCount = getAckCount();
+  EXPECT_EQ(0, getErrorCount());
   // create label next hop
   nlSock->addRoutes(routes);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // programmed 2 routes but should have received only 1 ack
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // delete needs only the destination prefix or label, doesn't
   // matter if the nexthop is valid or not. In this case delete will
   // be called for both routes but only one route is installed. Kernel
   // will return an error
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(routes[0]);
   EXPECT_EQ(status, ResultCode::SUCCESS);
   status = nlSock->deleteRoute(routes[1]);
-  EXPECT_EQ(1, nlSock->getErrorCount());
+  EXPECT_EQ(1, getErrorCount());
   // deleting 2 routes but should have received only 1 ack
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_GE(getAckCount(), ackCount + 1);
 }
 
 TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
@@ -991,14 +1005,14 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   uint32_t count{100000};
   const auto routes = buildV6RouteDb(count);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   LOG(INFO) << "Adding " << count << " routes";
   status = nlSock->addRoutes(routes);
   LOG(INFO) << "Done adding " << count << " routes";
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // should have received acks with status = 0
-  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+  EXPECT_GE(getAckCount(), ackCount + count);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes at scale
@@ -1007,12 +1021,12 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, routes), count);
 
   // delete routes
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoutes(routes);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // should have received acks status = 0
-  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+  EXPECT_GE(getAckCount(), ackCount + count);
 
   // verify route deletions
   kernelRoutes = nlSock->getAllRoutes();
@@ -1033,22 +1047,22 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
       ifIndexY));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel5, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->addLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -1069,11 +1083,11 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
       ifIndexZ));
   auto route1 = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->addLabelRoute(route1);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for single hop MPLS PHP
@@ -1089,22 +1103,22 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
 
   auto route2 = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->addLabelRoute(route2);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for multiple next hop MPLS PHP
   kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route2));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route2);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -1130,24 +1144,24 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
       folly::none, folly::none, folly::none, ipAddrY2V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create ipv4 route with label nexthop
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // should have received one ack with status = 0
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for IPv4 nexthops
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -1171,24 +1185,24 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
       folly::none, folly::none, folly::none, ipAddrY1V4, ifIndexY));
   auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   // create ipv4 route with label nexthop
   status = nlSock->addRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // should have received one ack with status = 0
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for max 16 labels
   auto kernelRoutes = nlSock->getAllRoutes();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + 1);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes();
@@ -1204,14 +1218,14 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   const uint32_t count{100000};
   const auto routes = buildV4RouteDb(count);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   LOG(INFO) << "Adding in bulk " << count << " routes";
   status = nlSock->addRoutes(routes);
   LOG(INFO) << "Done adding " << count << " routes";
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // should have received acks with status = 0
-  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+  EXPECT_GE(getAckCount(), ackCount + count);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes at scale
@@ -1221,13 +1235,13 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
 
   // delete routes
   LOG(INFO) << "Deleting in bulk " << count << " routes";
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoutes(routes);
   LOG(INFO) << "Done deleting";
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // should have received acks status = 0
-  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+  EXPECT_GE(getAckCount(), ackCount + count);
 
   // verify route deletions
   kernelRoutes = nlSock->getAllRoutes();
@@ -1235,15 +1249,15 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
 
   // add routes one by one instead of a vector of routes
   LOG(INFO) << "Adding one by one " << count << " routes";
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   for (const auto& route : routes) {
     status = nlSock->addRoute(route);
     EXPECT_EQ(status, ResultCode::SUCCESS);
   }
   LOG(INFO) << "Done adding " << count << " routes";
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // should have received acks with status = 0
-  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+  EXPECT_GE(getAckCount(), ackCount + count);
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes at scale
@@ -1253,15 +1267,15 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
 
   // delete routes one by one instead of a vector of routes
   LOG(INFO) << "Deleting " << count << " routes one at a time";
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   for (const auto& route : routes) {
     status = nlSock->deleteRoute(route);
     EXPECT_EQ(status, ResultCode::SUCCESS);
   }
   LOG(INFO) << "Done deleting";
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
   // should have received acks status = 0
-  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+  EXPECT_GE(getAckCount(), ackCount + count);
   // verify route deletions
   kernelRoutes = nlSock->getAllRoutes();
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, routes), 0);
@@ -1288,13 +1302,13 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
         buildRoute(kRouteProtoId, folly::none, 600 + i, paths));
   }
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   LOG(INFO) << "Adding " << count << " label routes";
   status = nlSock->addRoutes(labelRoutes);
   EXPECT_EQ(status, ResultCode::SUCCESS);
   LOG(INFO) << "Done adding " << count << " label routes";
-  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + count);
+  EXPECT_EQ(0, getErrorCount());
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes at scale
@@ -1302,11 +1316,11 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   LOG(INFO) << "Checking if all routes are added to kernel";
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, labelRoutes), count);
 
-  ackCount = nlSock->getAckCount();
+  ackCount = getAckCount();
   status = nlSock->deleteRoutes(labelRoutes);
   EXPECT_EQ(status, ResultCode::SUCCESS);
-  EXPECT_EQ(0, nlSock->getErrorCount());
-  EXPECT_GE(nlSock->getAckCount(), ackCount + count);
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + count);
 
   // verify route deletions
   kernelRoutes = nlSock->getAllRoutes();
@@ -1424,7 +1438,7 @@ TEST_F(NlMessageFixture, GetAllNeighbors) {
   }
   // Check if Netlink returned all the test neighbors
   EXPECT_EQ(testNeighbors, countNeighbors);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
 
   // Delete neighbors
   LOG(INFO) << "Deleting " << countNeighbors << " test neighbors";
@@ -1493,7 +1507,7 @@ TEST_F(NlMessageFixture, GetAllNeighborsV4) {
   }
   // Check if Netlink returned all the test neighbors
   EXPECT_EQ(testNeighbors, countNeighbors);
-  EXPECT_EQ(0, nlSock->getErrorCount());
+  EXPECT_EQ(0, getErrorCount());
 
   // Delete neighbors
   LOG(INFO) << "Deleting " << countNeighbors << " test neighbors";

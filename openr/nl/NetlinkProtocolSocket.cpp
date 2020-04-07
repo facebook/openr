@@ -23,7 +23,7 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
                   << "attention in UTs";
 
     fb303::fbData->addStatValue(
-        "netlink.message_timeouts", nlSeqNumMap_.size(), fb303::COUNT);
+        "netlink.message_timeouts", nlSeqNumMap_.size(), fb303::SUM);
 
     LOG(ERROR) << "Timed-out receiving ack for " << nlSeqNumMap_.size()
                << " message(s).";
@@ -80,7 +80,7 @@ NetlinkProtocolSocket::init() {
       recvNetlinkMessage();
     } catch (std::exception const& err) {
       LOG(ERROR) << "error processing NL message" << folly::exceptionStr(err);
-      ++errors_;
+      fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
     }
   });
 }
@@ -188,7 +188,7 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
     LOG(ERROR) << "Error sending on NL socket "
                << folly::errnoStr(std::abs(status))
                << " Number of messages:" << outMsg->msg_iovlen;
-    ++errors_;
+    fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
   }
 
   // Schedule timer to wait for acks and send next set of messages
@@ -311,10 +311,10 @@ NetlinkProtocolSocket::processMessage(
         break;
       }
       if (std::abs(ack->error) != EEXIST && std::abs(ack->error) != 0) {
-        ++errors_;
+        fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
       }
       if (ack->error == 0) {
-        ++acks_;
+        fb303::fbData->addStatValue("netlink.acks", 1, fb303::SUM);
       }
       processAck(ack->msg.nlmsg_seq, ack->error);
     } break;
@@ -329,7 +329,7 @@ NetlinkProtocolSocket::processMessage(
 
     default:
       LOG(ERROR) << "Unknown message type: " << nlh->nlmsg_type;
-      ++errors_;
+      fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
     }
   } while ((nlh = NLMSG_NEXT(nlh, bytesRead)));
 }
@@ -351,16 +351,6 @@ NetlinkProtocolSocket::recvNetlinkMessage() {
     return;
   }
   processMessage(recvMsg, static_cast<uint32_t>(bytesRead));
-}
-
-uint32_t
-NetlinkProtocolSocket::getErrorCount() const {
-  return errors_;
-}
-
-uint32_t
-NetlinkProtocolSocket::getAckCount() const {
-  return acks_;
 }
 
 NetlinkProtocolSocket::~NetlinkProtocolSocket() {

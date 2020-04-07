@@ -100,13 +100,6 @@ class NetlinkProtocolSocket {
       std::unordered_set<int> ignoredErrors,
       std::chrono::milliseconds timeout = kNlRequestAckTimeout);
 
-  // error count
-  // TODO: protect these variables with atomic to ensure thread safety
-  uint32_t getErrorCount() const;
-
-  // ack count
-  uint32_t getAckCount() const;
-
   // get all link interfaces from kernel using Netlink
   std::vector<fbnl::Link> getAllLinks();
 
@@ -146,12 +139,6 @@ class NetlinkProtocolSocket {
 
   // source addr
   struct sockaddr_nl saddr_;
-
-  // capture error counts
-  uint32_t errors_{0};
-
-  // NLMSG acks
-  uint32_t acks_{0};
 
   // Next available sequence number to use. It is possible to wrap this around,
   // and should be fine. We put hard check to avoid conflict between pending
