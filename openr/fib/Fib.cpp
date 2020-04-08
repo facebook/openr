@@ -380,7 +380,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     // Find valid nexthops for route
     std::vector<thrift::NextHopThrift> validNextHops;
     for (auto const& nextHop : route.nextHops) {
-      const auto& ifName = nextHop.address.ifName;
+      const auto ifName = nextHop.address.ifName_ref();
       CHECK(ifName.has_value());
       if (folly::get_default(interfaceStatusDb_, *ifName, false)) {
         validNextHops.emplace_back(nextHop);
@@ -429,7 +429,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     std::vector<thrift::NextHopThrift> validNextHops;
     for (auto const& nextHop : route.nextHops) {
       // We don't have ifName for `POP_AND_LOOKUP` mpls action
-      auto const& ifName = nextHop.address.ifName;
+      auto const ifName = nextHop.address.ifName_ref();
       if (not ifName.has_value() or
           folly::get_default(interfaceStatusDb_, *ifName, false)) {
         validNextHops.emplace_back(nextHop);

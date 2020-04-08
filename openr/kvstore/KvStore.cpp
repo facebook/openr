@@ -2161,7 +2161,7 @@ KvStoreDb::mergePublication(
   }
 
   // Check for loop
-  const auto& nodeIds = rcvdPublication.nodeIds;
+  const auto nodeIds = rcvdPublication.nodeIds_ref();
   if (nodeIds.has_value() and
       std::find(nodeIds->begin(), nodeIds->end(), kvParams_.nodeId) !=
           nodeIds->end()) {
