@@ -168,7 +168,7 @@ class NetlinkSocket {
   virtual ~NetlinkSocket();
 
   /**
-   * Add unicast/multicast/link routes to route table
+   * Add unicast routes to route table
    *
    * Add unicast route to kernel, see RouteBuilder::buildUnicastRoute()
    * If adding multipath nextHops for the same prefix at different times,
@@ -177,7 +177,6 @@ class NetlinkSocket {
    * but kernel will reject the request
    * @throws fbnl::NlException
    *
-   * Add multicast route, see RouteBuilder::buildMulticastRoute()
    * @throws fbnl::NlException if the route already existed
    */
   virtual folly::Future<folly::Unit> addRoute(Route route);
@@ -188,7 +187,7 @@ class NetlinkSocket {
   virtual folly::Future<folly::Unit> addMplsRoute(Route route);
 
   /**
-   * Delete unicast/multicast routes from route table
+   * Delete unicast routes from route table
    * This will delete route according to destination, nexthops. You must set
    * exactly the same destination and nexthops as in route table.
    * For convience, one can just set destination, this will delete all nextHops
@@ -221,14 +220,6 @@ class NetlinkSocket {
       uint8_t protocolId, NlMplsRoutes newMplsRouteDb);
 
   /**
-   * Delete routes that not in the 'newRouteDb' but in kernel
-   * Add/Update routes in 'newRouteDb'
-   * @throws fbnl::NlException
-   */
-  virtual folly::Future<folly::Unit> syncLinkRoutes(
-      uint8_t protocolId, NlLinkRoutes newRouteDb);
-
-  /**
    * Get cached unicast routing by protocol ID
    * @throws fbnl::NlException
    */
@@ -240,20 +231,6 @@ class NetlinkSocket {
    * @throws fbnl::NlException
    */
   virtual folly::Future<NlMplsRoutes> getCachedMplsRoutes(
-      uint8_t protocolId) const;
-
-  /**
-   * Get cached multicast routing by protocol ID
-   * @throws fbnl::NlException
-   */
-  virtual folly::Future<NlMulticastRoutes> getCachedMulticastRoutes(
-      uint8_t protocolId) const;
-
-  /**
-   * Get cached link route by protocol ID
-   * @throws fbnl::NlException
-   */
-  virtual folly::Future<NlLinkRoutes> getCachedLinkRoutes(
       uint8_t protocolId) const;
 
   /**
@@ -318,7 +295,7 @@ class NetlinkSocket {
   /**
    * get loopback interface index
    */
-  virtual folly::Future<std::optional<int>> getLoopbackIfindex();
+  virtual folly::Future<std::optional<int>> getLoopbackIfIndex();
 
   /**
    * Get interface name form index
@@ -389,15 +366,7 @@ class NetlinkSocket {
 
   void doDeleteMplsRoute(Route route);
 
-  void doAddMulticastRoute(Route route);
-
-  void doDeleteMulticastRoute(Route route);
-
   void doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb);
-
-  void doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb);
-
-  void checkMulticastRoute(const Route& route);
 
   void checkUnicastRoute(const Route& route);
 
@@ -430,11 +399,6 @@ class NetlinkSocket {
    * MPLS label route cache
    */
   NlMplsRoutesDb mplsRoutesCache_;
-
-  // Check against redundant multicast routes
-  NlMulticastRoutesDb mcastRoutesCache_;
-
-  NlLinkRoutesDb linkRoutesCache_;
 
   EventsHandler* handler_{nullptr};
 

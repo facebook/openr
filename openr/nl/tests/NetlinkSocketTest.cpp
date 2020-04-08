@@ -857,59 +857,6 @@ TEST_F(NetlinkSocketFixture, SyncRouteTestV4) {
   doSyncRouteTest(true);
 }
 
-// - Add a mulitcast route
-// - verify it is added
-// - try adding it again
-// - verify that duplicate route is not added
-// - try deleting it
-TEST_F(NetlinkSocketFixture, ModifyMulticastRouteTest) {
-  folly::CIDRNetwork prefix{folly::IPAddress("ff00::"), 8};
-  int ifIndex = netlinkSocket->getIfIndex(kVethNameY).get();
-  // Add a route which is added to system
-  netlinkSocket
-      ->addRoute(buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix))
-      .get();
-  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-
-  auto mcastRoutes =
-      netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(1, mcastRoutes.size());
-
-  SCOPE_EXIT {
-    EXPECT_EQ(0, routes.size());
-  };
-
-  EXPECT_EQ(0, routes.size());
-
-  // Check kernel
-  auto kernelRoutes = netlinkSocket->getAllRoutes();
-  int count = 0;
-  for (const auto& r : kernelRoutes) {
-    if (r.getDestination() == prefix and r.getType() == RTN_MULTICAST) {
-      count++;
-    }
-  }
-  EXPECT_EQ(1, count);
-
-  // Try adding it back now, (it will not be added to system)
-  netlinkSocket
-      ->addRoute(buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix))
-      .get();
-  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-
-  EXPECT_EQ(0, routes.size());
-
-  // Try deleting it
-  netlinkSocket
-      ->delRoute(buildMCastRoute(ifIndex, kAqRouteProtoId, kVethNameY, prefix))
-      .get();
-  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(0, routes.size());
-
-  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(0, mcastRoutes.size());
-}
-
 // - Add a unicast route with 2 paths (nextHops)
 // - verify it is added
 // - Add another unicast route with 2 paths (nextHops)
@@ -1478,90 +1425,6 @@ TEST_F(NetlinkSocketFixture, MultiProtocolUnicastTestDecisionTest) {
   EXPECT_EQ(0, count);
 }
 
-// - Add different routes for different protocols
-// - Verify it is added,
-// - Update nh and then verify it is updated
-// - Delete it and then verify it is deleted
-TEST_F(NetlinkSocketFixture, MutiProtocolMulticastRouteTest) {
-  folly::CIDRNetwork prefix{folly::IPAddress("ff00::"), 8};
-  int ifIndexX = netlinkSocket->getIfIndex(kVethNameX).get();
-  int ifIndexY = netlinkSocket->getIfIndex(kVethNameY).get();
-
-  // Add routes for different protocols
-  netlinkSocket
-      ->addRoute(buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix))
-      .get();
-  netlinkSocket
-      ->addRoute(
-          buildMCastRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix))
-      .get();
-
-  auto routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(0, routes.size());
-  routes = netlinkSocket->getCachedUnicastRoutes(kAqRouteProtoId1).get();
-  EXPECT_EQ(0, routes.size());
-
-  auto mcastRoutes =
-      netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(1, mcastRoutes.size());
-  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
-  EXPECT_EQ(1, mcastRoutes.size());
-
-  // Try adding it back now, (it will not be added to system)
-  netlinkSocket
-      ->addRoute(buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix))
-      .get();
-  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(1, mcastRoutes.size());
-
-  netlinkSocket
-      ->addRoute(
-          buildMCastRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix))
-      .get();
-  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
-  EXPECT_EQ(1, mcastRoutes.size());
-
-  // Check kernel
-  auto kernelRoutes = netlinkSocket->getAllRoutes();
-  int count = 0;
-  for (const auto& r : kernelRoutes) {
-    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId) {
-      count++;
-    }
-    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId1) {
-      count++;
-    }
-  }
-  EXPECT_EQ(2, count);
-
-  // Try deleting it
-  netlinkSocket
-      ->delRoute(buildMCastRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix))
-      .get();
-  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(0, mcastRoutes.size());
-
-  netlinkSocket
-      ->delRoute(
-          buildMCastRoute(ifIndexY, kAqRouteProtoId1, kVethNameX, prefix))
-      .get();
-  mcastRoutes = netlinkSocket->getCachedMulticastRoutes(kAqRouteProtoId1).get();
-  EXPECT_EQ(0, mcastRoutes.size());
-
-  // Check kernel
-  kernelRoutes = netlinkSocket->getAllRoutes();
-  count = 0;
-  for (const auto& r : kernelRoutes) {
-    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId) {
-      count++;
-    }
-    if (r.getDestination() == prefix && r.getProtocolId() == kAqRouteProtoId1) {
-      count++;
-    }
-  }
-  EXPECT_EQ(0, count);
-}
-
 TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
   int ifIndexX = netlinkSocket->getIfIndex(kVethNameX).get();
   int ifIndexY = netlinkSocket->getIfIndex(kVethNameY).get();
@@ -1780,86 +1643,6 @@ TEST_F(NetlinkSocketFixture, MultiProtocolSyncUnicastRouteTest) {
     }
     if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) &&
         r.getProtocolId() == kAqRouteProtoId1) {
-      count++;
-    }
-  }
-  EXPECT_EQ(0, count);
-}
-
-TEST_F(NetlinkSocketFixture, MultiProtocolSyncLinkRouteTest) {
-  // V6
-  NlLinkRoutes routeDbV6;
-  folly::CIDRNetwork prefix1V6{folly::IPAddress("fc00:cafe:3::"), 64};
-  folly::CIDRNetwork prefix2V6{folly::IPAddress("fc00:cafe:4::"), 64};
-  int ifIndexX = netlinkSocket->getIfIndex(kVethNameX).get();
-  int ifIndexY = netlinkSocket->getIfIndex(kVethNameY).get();
-  routeDbV6.emplace(
-      std::make_pair(prefix1V6, kVethNameX),
-      buildLinkRoute(ifIndexX, kAqRouteProtoId, kVethNameX, prefix1V6));
-  routeDbV6.emplace(
-      std::make_pair(prefix2V6, kVethNameY),
-      buildLinkRoute(ifIndexY, kAqRouteProtoId, kVethNameY, prefix2V6));
-
-  // V4
-  NlLinkRoutes routeDbV4;
-  folly::CIDRNetwork prefix1V4{folly::IPAddress("192.168.0.11"), 32};
-  folly::CIDRNetwork prefix2V4{folly::IPAddress("192.168.0.12"), 32};
-  routeDbV4.emplace(
-      std::make_pair(prefix1V4, kVethNameX),
-      buildLinkRoute(ifIndexX, kAqRouteProtoId1, kVethNameX, prefix1V4));
-  routeDbV4.emplace(
-      std::make_pair(prefix2V4, kVethNameY),
-      buildLinkRoute(ifIndexY, kAqRouteProtoId1, kVethNameY, prefix2V4));
-
-  // Sync routeDb
-  netlinkSocket->syncLinkRoutes(kAqRouteProtoId, std::move(routeDbV6)).get();
-  auto routes = netlinkSocket->getCachedLinkRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(2, routes.size());
-  EXPECT_EQ(1, routes.count(std::make_pair(prefix1V6, kVethNameX)));
-  EXPECT_EQ(1, routes.count(std::make_pair(prefix2V6, kVethNameY)));
-
-  netlinkSocket->syncLinkRoutes(kAqRouteProtoId1, std::move(routeDbV4)).get();
-  routes = netlinkSocket->getCachedLinkRoutes(kAqRouteProtoId1).get();
-  EXPECT_EQ(2, routes.size());
-  EXPECT_EQ(1, routes.count(std::make_pair(prefix1V4, kVethNameX)));
-  EXPECT_EQ(1, routes.count(std::make_pair(prefix2V4, kVethNameY)));
-
-  // Check kernel
-  auto kernelRoutes = netlinkSocket->getAllRoutes();
-  int count = 0;
-  for (const auto& r : kernelRoutes) {
-    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6) &&
-        r.getProtocolId() == kAqRouteProtoId) {
-      count++;
-    }
-    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) &&
-        r.getProtocolId() == kAqRouteProtoId1) {
-      count++;
-    }
-  }
-  EXPECT_EQ(4, count);
-
-  // Cleanup
-  routeDbV6.clear();
-  netlinkSocket->syncLinkRoutes(kAqRouteProtoId, std::move(routeDbV6)).get();
-  routes = netlinkSocket->getCachedLinkRoutes(kAqRouteProtoId).get();
-  EXPECT_EQ(0, routes.size());
-
-  routeDbV4.clear();
-  netlinkSocket->syncLinkRoutes(kAqRouteProtoId1, std::move(routeDbV4)).get();
-  routes = netlinkSocket->getCachedLinkRoutes(kAqRouteProtoId1).get();
-  EXPECT_EQ(0, routes.size());
-
-  kernelRoutes = netlinkSocket->getAllRoutes();
-  count = 0;
-  for (const auto& r : kernelRoutes) {
-    if ((r.getDestination() == prefix1V6 || r.getDestination() == prefix2V6) &&
-        r.getProtocolId() == kAqRouteProtoId && r.getScope() == RT_SCOPE_LINK) {
-      count++;
-    }
-    if ((r.getDestination() == prefix1V4 || r.getDestination() == prefix2V4) &&
-        r.getProtocolId() == kAqRouteProtoId1 &&
-        r.getScope() == RT_SCOPE_LINK) {
       count++;
     }
   }
@@ -2308,7 +2091,7 @@ TEST_F(NetlinkSocketFixture, GetAddrsTest) {
 TEST_F(NetlinkSocketFixture, LoopbackTest) {
   LOG(INFO) << "Get all links and check if loopback index is set";
   netlinkSocket->getAllLinks();
-  EXPECT_TRUE(netlinkSocket->getLoopbackIfindex().get().has_value());
+  EXPECT_TRUE(netlinkSocket->getLoopbackIfIndex().get().has_value());
 }
 
 int

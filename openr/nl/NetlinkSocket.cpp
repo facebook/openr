@@ -172,59 +172,14 @@ NetlinkSocket::doUpdateRouteCache(Route route, bool updateUnicastRoute) {
     return;
   }
 
-  uint8_t protocol = route.getProtocolId();
-  // Multicast routes do not belong to our proto
-  // Save it in our local copy and move on
   const folly::CIDRNetwork& prefix = route.getDestination();
-  if (prefix.first.isMulticast()) {
-    if (route.getNextHops().size() != 1) {
-      LOG(ERROR) << "Unexpected nextHops for multicast address: "
-                 << folly::IPAddress::networkToString(prefix);
-      return;
-    }
-    auto maybeIfIndex = route.getNextHops().begin()->getIfIndex();
-    if (!maybeIfIndex.has_value()) {
-      LOG(ERROR) << "Invalid NextHop"
-                 << folly::IPAddress::networkToString(prefix);
-      return;
-    }
-    const std::string& ifName = getIfName(maybeIfIndex.value()).get();
-    auto key = std::make_pair(prefix, ifName);
-    auto& mcastRoutes = mcastRoutesCache_[protocol];
 
-    mcastRoutes.erase(key);
-    if (route.isValid()) {
-      mcastRoutes.emplace(std::make_pair(key, std::move(route)));
-    }
-    return;
-  }
-
-  // Handle link scope routes
-  if (route.getScope() == RT_SCOPE_LINK) {
-    if (route.getNextHops().size() != 1) {
-      LOG(ERROR) << "Unexpected nextHops for link scope route: "
-                 << folly::IPAddress::networkToString(prefix);
-      return;
-    }
-    auto maybeIfIndex = route.getNextHops().begin()->getIfIndex();
-    if (!maybeIfIndex.has_value()) {
-      LOG(ERROR) << "Invalid NextHop"
-                 << folly::IPAddress::networkToString(prefix);
-      return;
-    }
-    const std::string& ifName = getIfName(maybeIfIndex.value()).get();
-    auto key = std::make_pair(prefix, ifName);
-    auto& linkRoutes = linkRoutesCache_[protocol];
-
-    linkRoutes.erase(key);
-    if (route.isValid()) {
-      linkRoutes.emplace(std::make_pair(key, std::move(route)));
-    }
+  if (prefix.first.isMulticast() or route.getScope() == RT_SCOPE_LINK) {
     return;
   }
 
   if (updateUnicastRoute) {
-    auto& unicastRoutes = unicastRoutesCache_[protocol];
+    auto& unicastRoutes = unicastRoutesCache_[route.getProtocolId()];
     if (route.isValid()) {
       unicastRoutes.erase(prefix);
       unicastRoutes.emplace(prefix, std::move(route));
@@ -252,9 +207,6 @@ NetlinkSocket::addRoute(Route route) {
       case RTN_UNICAST:
       case RTN_BLACKHOLE:
         doAddUpdateUnicastRoute(std::move(r));
-        break;
-      case RTN_MULTICAST:
-        doAddMulticastRoute(std::move(r));
         break;
       default:
         throw fbnl::NlException(
@@ -493,9 +445,6 @@ NetlinkSocket::delRoute(Route route) {
       case RTN_BLACKHOLE:
         doDeleteUnicastRoute(std::move(r));
         break;
-      case RTN_MULTICAST:
-        doDeleteMulticastRoute(std::move(r));
-        break;
       default:
         throw fbnl::NlException(
             folly::sformat("Unsupported route type {}", (int)type));
@@ -597,88 +546,6 @@ NetlinkSocket::doDeleteUnicastRoute(Route route) {
   unicastRoutes.erase(route.getDestination());
 }
 
-void
-NetlinkSocket::doAddMulticastRoute(Route route) {
-  checkMulticastRoute(route);
-
-  auto& mcastRoutes = mcastRoutesCache_[route.getProtocolId()];
-  auto prefix = route.getDestination();
-  auto ifName = route.getRouteIfName().value();
-  auto key = std::make_pair(prefix, ifName);
-  if (mcastRoutes.count(key)) {
-    // This could be kernel proto or our proto. we dont care
-    LOG(WARNING)
-        << "Multicast route: " << folly::IPAddress::networkToString(prefix)
-        << " exists for interface: " << ifName;
-    return;
-  }
-
-  VLOG(3)
-      << "Adding multicast route: " << folly::IPAddress::networkToString(prefix)
-      << " for interface: " << ifName;
-
-  int err{0};
-
-  err = static_cast<int>(nlSock_->addRoute(route));
-
-  if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
-        "Failed to add multicast route {} Error: {}",
-        folly::IPAddress::networkToString(prefix),
-        err));
-  }
-  mcastRoutes.emplace(key, std::move(route));
-}
-
-void
-NetlinkSocket::checkMulticastRoute(const Route& route) {
-  auto prefix = route.getDestination();
-  if (not prefix.first.isMulticast()) {
-    throw fbnl::NlException(folly::sformat(
-        "Invalid multicast address {}",
-        folly::IPAddress::networkToString(prefix)));
-  }
-  if (not route.getRouteIfName().has_value()) {
-    throw fbnl::NlException(folly::sformat(
-        "Need set Iface name for multicast address {}",
-        folly::IPAddress::networkToString(prefix)));
-  }
-}
-
-void
-NetlinkSocket::doDeleteMulticastRoute(Route route) {
-  checkMulticastRoute(route);
-
-  auto& mcastRoutes = mcastRoutesCache_[route.getProtocolId()];
-  auto prefix = route.getDestination();
-  auto ifName = route.getRouteIfName().value();
-  auto key = std::make_pair(prefix, ifName);
-  auto iter = mcastRoutes.find(key);
-  if (iter == mcastRoutes.end()) {
-    // This could be kernel proto or our proto. we dont care
-    LOG(WARNING)
-        << "Multicast route: " << folly::IPAddress::networkToString(prefix)
-        << " doesn't exists for interface: " << ifName;
-    return;
-  }
-
-  VLOG(3) << "Deleting multicast route: "
-          << folly::IPAddress::networkToString(prefix)
-          << " for interface: " << ifName;
-
-  int err{0};
-
-  err = static_cast<int>(nlSock_->deleteRoute(iter->second));
-  if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
-        "Failed to delete multicast route {} Error: {}",
-        folly::IPAddress::networkToString(prefix),
-        err));
-  }
-
-  mcastRoutes.erase(iter);
-}
-
 folly::Future<folly::Unit>
 NetlinkSocket::syncUnicastRoutes(
     uint8_t protocolId, NlUnicastRoutes newRouteDb) {
@@ -733,75 +600,6 @@ NetlinkSocket::doSyncUnicastRoutes(uint8_t protocolId, NlUnicastRoutes syncDb) {
   }
 }
 
-folly::Future<folly::Unit>
-NetlinkSocket::syncLinkRoutes(uint8_t protocolId, NlLinkRoutes newRouteDb) {
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-
-  evl_->runImmediatelyOrInEventLoop([this,
-                                     p = std::move(promise),
-                                     syncDb = std::move(newRouteDb),
-                                     protocolId]() mutable {
-    try {
-      doSyncLinkRoutes(protocolId, std::move(syncDb));
-      p.setValue();
-    } catch (std::exception const& ex) {
-      LOG(ERROR) << "Error syncing unicast routeDb with Fib: "
-                 << folly::exceptionStr(ex);
-      p.setException(ex);
-    }
-  });
-  return future;
-}
-
-void
-NetlinkSocket::doSyncLinkRoutes(uint8_t protocolId, NlLinkRoutes syncDb) {
-  auto& linkRoutes = linkRoutesCache_[protocolId];
-  std::vector<std::pair<folly::CIDRNetwork, std::string>> toDel;
-  for (const auto& route : linkRoutes) {
-    if (!syncDb.count(route.first)) {
-      toDel.emplace_back(route.first);
-    }
-  }
-  for (const auto& routeToDel : toDel) {
-    auto iter = linkRoutes.find(routeToDel);
-    if (iter == linkRoutes.end()) {
-      continue;
-    }
-
-    int err{0};
-
-    err = static_cast<int>(nlSock_->deleteRoute(iter->second));
-
-    if (err != 0) {
-      throw fbnl::NlException(folly::sformat(
-          "Could not del link Route to: {} dev {} Error: {}",
-          folly::IPAddress::networkToString(routeToDel.first),
-          routeToDel.second,
-          err));
-    }
-  }
-
-  for (auto& routeToAdd : syncDb) {
-    if (linkRoutes.count(routeToAdd.first)) {
-      continue;
-    }
-
-    int err{0};
-
-    err = static_cast<int>(nlSock_->addRoute(routeToAdd.second));
-
-    if (err != 0) {
-      throw fbnl::NlException(folly::sformat(
-          "Could not add link Route to: {} dev {} Error: {}",
-          folly::IPAddress::networkToString(routeToAdd.first.first),
-          routeToAdd.first.second,
-          err));
-    }
-  }
-  linkRoutes.swap(syncDb);
-}
-
 folly::Future<NlUnicastRoutes>
 NetlinkSocket::getCachedUnicastRoutes(uint8_t protocolId) const {
   VLOG(3) << "NetlinkSocket getCachedUnicastRoutes by protocol "
@@ -816,45 +614,6 @@ NetlinkSocket::getCachedUnicastRoutes(uint8_t protocolId) const {
           p.setValue(iter->second);
         } else {
           p.setValue(NlUnicastRoutes{});
-        }
-      });
-  return future;
-}
-
-folly::Future<NlMulticastRoutes>
-NetlinkSocket::getCachedMulticastRoutes(uint8_t protocolId) const {
-  VLOG(3) << "NetlinkSocket getCachedMulticastRoutes by protocol "
-          << (int)protocolId;
-  folly::Promise<NlMulticastRoutes> promise;
-  auto future = promise.getFuture();
-
-  evl_->runImmediatelyOrInEventLoop(
-      [this, p = std::move(promise), protocolId]() mutable {
-        auto iter = mcastRoutesCache_.find(protocolId);
-        if (iter != mcastRoutesCache_.end()) {
-          p.setValue(iter->second);
-        } else {
-          p.setValue(NlMulticastRoutes());
-        }
-      });
-  return future;
-}
-
-folly::Future<NlLinkRoutes>
-NetlinkSocket::getCachedLinkRoutes(uint8_t protocolId) const {
-  VLOG(3) << "NetlinkSocket getCachedLinkRoutes by protocol "
-          << (int)protocolId;
-
-  folly::Promise<NlLinkRoutes> promise;
-  auto future = promise.getFuture();
-
-  evl_->runImmediatelyOrInEventLoop(
-      [this, p = std::move(promise), protocolId]() mutable {
-        auto iter = linkRoutesCache_.find(protocolId);
-        if (iter != linkRoutesCache_.end()) {
-          p.setValue(iter->second);
-        } else {
-          p.setValue(NlLinkRoutes{});
         }
       });
   return future;
@@ -895,7 +654,7 @@ NetlinkSocket::getIfIndex(const std::string& ifName) {
 }
 
 folly::Future<std::optional<int>>
-NetlinkSocket::getLoopbackIfindex() {
+NetlinkSocket::getLoopbackIfIndex() {
   folly::Promise<std::optional<int>> promise;
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {

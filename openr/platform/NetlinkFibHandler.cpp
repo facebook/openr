@@ -457,7 +457,7 @@ NetlinkFibHandler::buildMplsAction(
     }
     nhBuilder.setPushLabels(mplsAction.pushLabels.value());
   } else if (mplsAction.action == thrift::MplsActionCode::POP_AND_LOOKUP) {
-    auto lpbkIfIndex = netlinkSocket_->getLoopbackIfindex().get();
+    auto lpbkIfIndex = netlinkSocket_->getLoopbackIfIndex().get();
     if (lpbkIfIndex.has_value()) {
       nhBuilder.setIfIndex(lpbkIfIndex.value());
     } else {
