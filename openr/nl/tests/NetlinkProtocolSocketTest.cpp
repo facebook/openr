@@ -39,7 +39,6 @@ using namespace folly::literals::shell_literals;
 
 using openr::fbnl::NetlinkProtocolSocket;
 using openr::fbnl::NetlinkRouteMessage;
-using openr::fbnl::ResultCode;
 
 namespace {
 const std::string kVethNameX("vethTestX");
@@ -518,7 +517,7 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
@@ -526,7 +525,7 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
 
   ackCount = getAckCount();
   status = nlSock->addRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -537,7 +536,7 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -551,7 +550,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
 
   paths.push_back(buildNextHop(
@@ -568,7 +567,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -579,7 +578,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -593,7 +592,7 @@ TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
@@ -604,7 +603,7 @@ TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -615,7 +614,7 @@ TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -629,7 +628,7 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
@@ -642,7 +641,7 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -653,7 +652,7 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -667,7 +666,7 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel1,
@@ -680,7 +679,7 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -691,7 +690,7 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -704,7 +703,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
   // Add IPv6 route with 48 path ECMP
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   for (uint32_t i = 0; i < 48; i++) {
     outLabel6[0] = outLabel6[0] + 10 + i;
@@ -720,7 +719,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -731,7 +730,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -744,7 +743,7 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
   // check for max payload handling. Add nexthops that exceeds payload size
   // Should error out
 
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   struct v6Addr addr6 {
     0
@@ -763,14 +762,14 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
 
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
   status = nlSock->addLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::NO_MESSAGE_BUFFER);
+  EXPECT_EQ(ENOBUFS, status);
 }
 
 TEST_F(NlMessageFixture, PopLabel) {
   // pop label to loopback i/f
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -782,7 +781,7 @@ TEST_F(NlMessageFixture, PopLabel) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -793,7 +792,7 @@ TEST_F(NlMessageFixture, PopLabel) {
 
   ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -806,7 +805,7 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
   // pop labels to different interfaces
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -824,7 +823,7 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -835,7 +834,7 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
 
   ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -849,7 +848,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -861,7 +860,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -872,7 +871,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
 
   ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -886,7 +885,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -906,7 +905,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
   ackCount = getAckCount();
   // create label next hop
   status = nlSock->addLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -917,7 +916,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
 
   ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -942,8 +941,7 @@ TEST_F(NlMessageFixture, NlErrorMessage) {
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
   EXPECT_EQ(0, getErrorCount());
   // create label next hop
-  ResultCode status = nlSock->addLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SYSERR);
+  EXPECT_EQ(ENODEV, nlSock->addLabelRoute(route));
   EXPECT_NE(0, getErrorCount());
 }
 
@@ -954,7 +952,7 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   std::vector<openr::fbnl::NextHop> paths1;
   std::vector<openr::fbnl::Route> routes;
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   paths1.push_back(buildNextHop(
       folly::none,
       swapLabel,
@@ -978,7 +976,8 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   ackCount = getAckCount();
   EXPECT_EQ(0, getErrorCount());
   // create label next hop
-  nlSock->addRoutes(routes);
+  nlSock->addRoute(routes.at(0));
+  nlSock->addRoute(routes.at(1));
   EXPECT_EQ(0, getErrorCount());
   // programmed 2 routes but should have received only 1 ack
   EXPECT_GE(getAckCount(), ackCount + 1);
@@ -989,7 +988,7 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   // will return an error
   ackCount = getAckCount();
   status = nlSock->deleteRoute(routes[0]);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   status = nlSock->deleteRoute(routes[1]);
   EXPECT_EQ(1, getErrorCount());
   // deleting 2 routes but should have received only 1 ack
@@ -1001,7 +1000,7 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   uint32_t count{100000};
   const auto routes = buildV6RouteDb(count);
 
@@ -1009,7 +1008,7 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   LOG(INFO) << "Adding " << count << " routes";
   status = nlSock->addRoutes(routes);
   LOG(INFO) << "Done adding " << count << " routes";
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   // should have received acks with status = 0
   EXPECT_GE(getAckCount(), ackCount + count);
@@ -1023,7 +1022,7 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   // delete routes
   ackCount = getAckCount();
   status = nlSock->deleteRoutes(routes);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   // should have received acks status = 0
   EXPECT_GE(getAckCount(), ackCount + count);
@@ -1037,7 +1036,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
   // Add label route with single path label with PHP nexthop
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -1049,7 +1048,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
 
   ackCount = getAckCount();
   status = nlSock->addLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -1060,7 +1059,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
 
   ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -1073,7 +1072,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   // Add label route with single path label with PHP nexthop
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
@@ -1085,7 +1084,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
 
   ackCount = getAckCount();
   status = nlSock->addLabelRoute(route1);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -1105,7 +1104,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
 
   ackCount = getAckCount();
   status = nlSock->addLabelRoute(route2);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -1116,7 +1115,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
 
   ackCount = getAckCount();
   status = nlSock->deleteLabelRoute(route2);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -1130,7 +1129,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("10.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
@@ -1147,7 +1146,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   ackCount = getAckCount();
   // create ipv4 route with label nexthop
   status = nlSock->addRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   // should have received one ack with status = 0
   EXPECT_GE(getAckCount(), ackCount + 1);
@@ -1159,7 +1158,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -1173,7 +1172,7 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   folly::CIDRNetwork ipPrefix1V4 =
       folly::IPAddress::createNetwork("11.10.0.0/24");
   std::vector<openr::fbnl::NextHop> paths;
@@ -1188,7 +1187,7 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
   ackCount = getAckCount();
   // create ipv4 route with label nexthop
   status = nlSock->addRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   // should have received one ack with status = 0
   EXPECT_GE(getAckCount(), ackCount + 1);
@@ -1200,7 +1199,7 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoute(route);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + 1);
 
@@ -1214,7 +1213,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   const uint32_t count{100000};
   const auto routes = buildV4RouteDb(count);
 
@@ -1222,7 +1221,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   LOG(INFO) << "Adding in bulk " << count << " routes";
   status = nlSock->addRoutes(routes);
   LOG(INFO) << "Done adding " << count << " routes";
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   // should have received acks with status = 0
   EXPECT_GE(getAckCount(), ackCount + count);
@@ -1238,7 +1237,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   ackCount = getAckCount();
   status = nlSock->deleteRoutes(routes);
   LOG(INFO) << "Done deleting";
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   // should have received acks status = 0
   EXPECT_GE(getAckCount(), ackCount + count);
@@ -1252,7 +1251,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   ackCount = getAckCount();
   for (const auto& route : routes) {
     status = nlSock->addRoute(route);
-    EXPECT_EQ(status, ResultCode::SUCCESS);
+    EXPECT_EQ(0, status);
   }
   LOG(INFO) << "Done adding " << count << " routes";
   EXPECT_EQ(0, getErrorCount());
@@ -1270,7 +1269,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   ackCount = getAckCount();
   for (const auto& route : routes) {
     status = nlSock->deleteRoute(route);
-    EXPECT_EQ(status, ResultCode::SUCCESS);
+    EXPECT_EQ(0, status);
   }
   LOG(INFO) << "Done deleting";
   EXPECT_EQ(0, getErrorCount());
@@ -1286,7 +1285,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  ResultCode status{ResultCode::FAIL};
+  int status{-1};
   uint32_t count{20000};
   std::vector<openr::fbnl::NextHop> paths;
   // create label next hop
@@ -1305,7 +1304,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   ackCount = getAckCount();
   LOG(INFO) << "Adding " << count << " label routes";
   status = nlSock->addRoutes(labelRoutes);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   LOG(INFO) << "Done adding " << count << " label routes";
   EXPECT_GE(getAckCount(), ackCount + count);
   EXPECT_EQ(0, getErrorCount());
@@ -1318,7 +1317,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
 
   ackCount = getAckCount();
   status = nlSock->deleteRoutes(labelRoutes);
-  EXPECT_EQ(status, ResultCode::SUCCESS);
+  EXPECT_EQ(0, status);
   EXPECT_EQ(0, getErrorCount());
   EXPECT_GE(getAckCount(), ackCount + count);
 
@@ -1341,7 +1340,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
   }
   EXPECT_NE(ifIndexX, -1);
 
-  ResultCode status;
+  int status;
   std::vector<fbnl::IfAddress> ifAddresses;
   for (int i = 0; i < addrCount; i++) {
     openr::fbnl::IfAddressBuilder builder;
@@ -1353,7 +1352,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
                       .setValid(true)
                       .build();
     status = nlSock->addIfAddress(ifAddr);
-    EXPECT_EQ(status, ResultCode::SUCCESS);
+    EXPECT_EQ(0, status);
     ifAddresses.emplace_back(ifAddr);
 
     openr::fbnl::IfAddressBuilder ipv4builder;
@@ -1365,7 +1364,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
                         .setValid(true)
                         .build();
     status = nlSock->addIfAddress(ifAddrV4);
-    EXPECT_EQ(status, ResultCode::SUCCESS);
+    EXPECT_EQ(0, status);
     ifAddresses.emplace_back(ifAddrV4);
   }
 
@@ -1381,7 +1380,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
         folly::IPAddress("face:d00d::" + std::to_string(i)), 128};
     builder.setPrefix(prefix1).setIfIndex(ifIndexX).setScope(RT_SCOPE_UNIVERSE);
     status = nlSock->deleteIfAddress(builder.build());
-    EXPECT_EQ(status, ResultCode::SUCCESS);
+    EXPECT_EQ(0, status);
 
     openr::fbnl::IfAddressBuilder ipv4builder;
     folly::CIDRNetwork prefix2{
@@ -1389,7 +1388,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
     ipv4builder.setPrefix(prefix2).setIfIndex(ifIndexX).setScope(
         RT_SCOPE_UNIVERSE);
     status = nlSock->deleteIfAddress(ipv4builder.build());
-    EXPECT_EQ(status, ResultCode::SUCCESS);
+    EXPECT_EQ(0, status);
   }
 
   // Verify if addresses have been deleted

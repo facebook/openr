@@ -23,21 +23,6 @@ namespace openr::fbnl {
 
 constexpr uint16_t kMaxNlPayloadSize{4096};
 
-enum class ResultCode {
-  SUCCESS = 0,
-  FAIL,
-  TIMEOUT,
-  SYSERR,
-  NO_MESSAGE_BUFFER,
-  SENDMSG_FAILED,
-  INVALID_ADDRESS_FAMILY,
-  NO_LABEL,
-  NO_NEXTHOP_IP,
-  NO_LOOPBACK_INDEX,
-  UNKNOWN_LABEL_ACTION,
-  NO_IP
-};
-
 /**
  * TODO: Document this class
  */
@@ -93,10 +78,11 @@ class NetlinkMessage {
   void setMessageType(NetlinkMessage::MessageType type);
 
  protected:
-  // add TLV attributes, specify the length and size of data
-  // returns false if enough buffer is not available. Also updates the
-  // length field in NLMSG header
-  ResultCode addAttributes(
+  // Add TLV attributes, specify the length and size of data returns ENOBUFS
+  // if enough buffer is not available. Also updates the length field in
+  // NLMSG header.
+  // @returns 0 on success else relevant system error code
+  int addAttributes(
       int type,
       const char* const data,
       uint32_t len,

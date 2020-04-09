@@ -40,6 +40,10 @@ constexpr std::chrono::milliseconds kNlRequestTimeout{30000};
 /**
  * TODO: Document this class
  * TODO: Move to another file
+ *
+ * Add/Del APIs returns int value. 0 indicates success and in case of failure,
+ * corresponding netlink error code. You can use `nl_geterror(errno)` to get
+ * corresponding error string.
  */
 class NetlinkProtocolSocket {
  public:
@@ -62,31 +66,31 @@ class NetlinkProtocolSocket {
       std::function<void(fbnl::Neighbor, bool)> neighborEventCB);
 
   // synchronous add route and nexthop paths
-  ResultCode addRoute(const openr::fbnl::Route& route);
+  int addRoute(const openr::fbnl::Route& route);
 
   // synchronous delete route
-  ResultCode deleteRoute(const openr::fbnl::Route& route);
+  int deleteRoute(const openr::fbnl::Route& route);
 
   // synchronous add label route
-  ResultCode addLabelRoute(const openr::fbnl::Route& route);
+  int addLabelRoute(const openr::fbnl::Route& route);
 
   // synchronous delete label route
-  ResultCode deleteLabelRoute(const openr::fbnl::Route& route);
+  int deleteLabelRoute(const openr::fbnl::Route& route);
 
   // synchronous add given list of IP or label routes and their nexthop paths
-  ResultCode addRoutes(const std::vector<openr::fbnl::Route> routes);
+  int addRoutes(const std::vector<openr::fbnl::Route>& routes);
 
   // synchronous delete a list of given IP or label routes
-  ResultCode deleteRoutes(const std::vector<openr::fbnl::Route> routes);
+  int deleteRoutes(const std::vector<openr::fbnl::Route>& routes);
 
   // synchronous add interface address
-  ResultCode addIfAddress(const openr::fbnl::IfAddress& ifAddr);
+  int addIfAddress(const openr::fbnl::IfAddress& ifAddr);
 
   // synchronous delete interface address
-  ResultCode deleteIfAddress(const openr::fbnl::IfAddress& ifAddr);
+  int deleteIfAddress(const openr::fbnl::IfAddress& ifAddr);
 
   // get netlink request statuses
-  ResultCode getReturnStatus(
+  int getReturnStatus(
       std::vector<folly::Future<int>>& futures,
       std::unordered_set<int> ignoredErrors,
       std::chrono::milliseconds timeout = kNlRequestAckTimeout);

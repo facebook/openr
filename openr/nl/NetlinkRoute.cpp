@@ -91,7 +91,7 @@ NetlinkRouteMessage::encodeLabel(uint32_t label, bool bos) const {
   return encodeLabel;
 }
 
-ResultCode
+int
 NetlinkRouteMessage::addIpNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
@@ -108,23 +108,23 @@ NetlinkRouteMessage::addIpNexthop(
   auto const via = path.getGateway();
   if (!via.has_value()) {
     if (route.getType() == RTN_MULTICAST || route.getScope() == RT_SCOPE_LINK) {
-      return ResultCode::SUCCESS;
+      return 0;
     }
     LOG(ERROR) << "Nexthop IP not provided";
-    return ResultCode::NO_NEXTHOP_IP;
+    return EINVAL;
   }
   if (addSubAttributes(
           rta, RTA_GATEWAY, via.value().bytes(), via.value().byteCount()) ==
       nullptr) {
-    return ResultCode::NO_MESSAGE_BUFFER;
+    return ENOBUFS;
   };
 
   // update length in rtnexthop
   rtnh->rtnh_len += via.value().byteCount() + sizeof(struct rtattr);
-  return ResultCode::SUCCESS;
+  return 0;
 }
 
-ResultCode
+int
 NetlinkRouteMessage::addSwapOrPHPNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
@@ -148,7 +148,7 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
             RTA_NEWDST,
             reinterpret_cast<const char*>(&swapLabel),
             sizeof(swapLabel)) == nullptr) {
-      return ResultCode::NO_MESSAGE_BUFFER;
+      return ENOBUFS;
     }
   }
   // update rtnh len
@@ -166,15 +166,15 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
   if (addSubAttributes(
           rta, RTA_VIA, reinterpret_cast<const char*>(&via), viaLen) ==
       nullptr) {
-    return ResultCode::NO_MESSAGE_BUFFER;
+    return ENOBUFS;
   }
 
   // update length in rtnexthop
   rtnh->rtnh_len += viaLen + sizeof(struct rtattr);
-  return ResultCode::SUCCESS;
+  return 0;
 }
 
-ResultCode
+int
 NetlinkRouteMessage::addPopNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
@@ -183,7 +183,7 @@ NetlinkRouteMessage::addPopNexthop(
   rtnh->rtnh_len = sizeof(*rtnh);
   if (!path.getIfIndex().has_value()) {
     LOG(ERROR) << "Loopback interface index not provided for POP";
-    return ResultCode::NO_LOOPBACK_INDEX;
+    return EINVAL;
   }
   rtnh->rtnh_ifindex = path.getIfIndex().value();
   rtnh->rtnh_flags = 0;
@@ -193,15 +193,15 @@ NetlinkRouteMessage::addPopNexthop(
   if (addSubAttributes(
           rta, RTA_OIF, reinterpret_cast<const char*>(&oif), sizeof(oif)) ==
       nullptr) {
-    return ResultCode::NO_MESSAGE_BUFFER;
+    return ENOBUFS;
   }
 
   // update length in rtnexthop
   rtnh->rtnh_len += sizeof(oif) + sizeof(struct rtattr);
-  return ResultCode::SUCCESS;
+  return 0;
 }
 
-ResultCode
+int
 NetlinkRouteMessage::addLabelNexthop(
     struct rtattr* rta,
     struct rtnexthop* rtnh,
@@ -217,9 +217,8 @@ NetlinkRouteMessage::addLabelNexthop(
 
   // RTA_ENCAP sub attribute
   struct rtattr* rtaEncap = addSubAttributes(rta, RTA_ENCAP, nullptr, 0);
-
   if (rtaEncap == nullptr) {
-    return ResultCode::NO_MESSAGE_BUFFER;
+    return ENOBUFS;
   }
 
   // MPLS_IP_TUNNEL_DST sub attribute
@@ -228,7 +227,7 @@ NetlinkRouteMessage::addLabelNexthop(
   auto labels = path.getPushLabels();
   if (!labels.has_value()) {
     LOG(ERROR) << "Labels not provided for PUSH action";
-    return ResultCode::NO_LABEL;
+    return EINVAL;
   }
   // abort immediately to bring attention
   CHECK(labels.value().size() <= kMaxLabels);
@@ -240,7 +239,7 @@ NetlinkRouteMessage::addLabelNexthop(
   size_t totalSize = labels.value().size() * sizeof(struct mpls_label);
   if (addSubAttributes(rta, MPLS_IPTUNNEL_DST, &mplsLabel, totalSize) ==
       nullptr) {
-    return ResultCode::NO_MESSAGE_BUFFER;
+    return ENOBUFS;
   };
 
   // update RTA ENCAP sub attribute length
@@ -250,7 +249,7 @@ NetlinkRouteMessage::addLabelNexthop(
   uint16_t encapType = LWTUNNEL_ENCAP_MPLS;
   if (addSubAttributes(rta, RTA_ENCAP_TYPE, &encapType, sizeof(encapType)) ==
       nullptr) {
-    return ResultCode::NO_MESSAGE_BUFFER;
+    return ENOBUFS;
   };
 
   // update rtnh len
@@ -260,41 +259,40 @@ NetlinkRouteMessage::addLabelNexthop(
   auto const via = path.getGateway();
   if (!via.has_value()) {
     LOG(ERROR) << "Nexthop IP not provided";
-    return ResultCode::NO_NEXTHOP_IP;
+    return EINVAL;
   }
   if (addSubAttributes(
           rta, RTA_GATEWAY, via.value().bytes(), via.value().byteCount()) ==
       nullptr) {
-    return ResultCode::NO_MESSAGE_BUFFER;
+    return ENOBUFS;
   };
 
   // update length in rtnexthop
   rtnh->rtnh_len += via.value().byteCount() + sizeof(struct rtattr);
-  return ResultCode::SUCCESS;
+  return 0;
 }
 
-ResultCode
+int
 NetlinkRouteMessage::addNextHops(const openr::fbnl::Route& route) {
-  ResultCode status{ResultCode::SUCCESS};
   std::array<char, kMaxNlPayloadSize> nhop = {};
+  int status{0};
   if (route.getNextHops().size()) {
-    if ((status = addMultiPathNexthop(nhop, route)) != ResultCode::SUCCESS) {
+    if ((status = addMultiPathNexthop(nhop, route))) {
       return status;
-    };
+    }
 
     // copy the encap info into NLMSG payload
     const char* const data = reinterpret_cast<const char*>(
         RTA_DATA(reinterpret_cast<struct rtattr*>(nhop.data())));
     int payloadLen = RTA_PAYLOAD(reinterpret_cast<struct rtattr*>(nhop.data()));
-    if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_)) !=
-        ResultCode::SUCCESS) {
+    if ((status = addAttributes(RTA_MULTIPATH, data, payloadLen, msghdr_))) {
       return status;
     };
   }
-  return status;
+  return 0;
 }
 
-ResultCode
+int
 NetlinkRouteMessage::addMultiPathNexthop(
     std::array<char, kMaxNlPayloadSize>& nhop,
     const openr::fbnl::Route& route) const {
@@ -305,8 +303,8 @@ NetlinkRouteMessage::addMultiPathNexthop(
   rta->rta_type = RTA_MULTIPATH;
   rta->rta_len = RTA_LENGTH(0);
   struct rtnexthop* rtnh = reinterpret_cast<struct rtnexthop*>(RTA_DATA(rta));
-  ResultCode result{ResultCode::SUCCESS};
 
+  int result{0};
   const auto& paths = route.getNextHops();
   for (const auto& path : paths) {
     VLOG(3) << path.str();
@@ -330,14 +328,14 @@ NetlinkRouteMessage::addMultiPathNexthop(
         break;
 
       default:
-        LOG(ERROR) << "Unknown action ";
-        return ResultCode::UNKNOWN_LABEL_ACTION;
+        LOG(ERROR) << "Unknown action";
+        return EINVAL;
       }
     } else {
       result = addIpNexthop(rta, rtnh, path, route);
     }
 
-    if (result != ResultCode::SUCCESS) {
+    if (result) {
       return result;
     }
     rtnh = RTNH_NEXT(rtnh);
@@ -606,7 +604,7 @@ NetlinkRouteMessage::parseNextHops(
   return nextHops;
 }
 
-ResultCode
+int
 NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
   auto const& pfix = route.getDestination();
   auto ip = std::get<0>(pfix);
@@ -617,7 +615,7 @@ NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
 
   if (addressFamily != AF_INET && addressFamily != AF_INET6) {
     LOG(ERROR) << "Address family is not AF_INET or AF_INET6";
-    return ResultCode::INVALID_ADDRESS_FAMILY;
+    return EINVAL;
   }
 
   init(RTM_NEWROUTE, 0, route);
@@ -625,34 +623,31 @@ NetlinkRouteMessage::addRoute(const openr::fbnl::Route& route) {
   rtmsg_->rtm_family = addressFamily;
   rtmsg_->rtm_dst_len = plen; /* netmask */
   const char* const ipptr = reinterpret_cast<const char*>(ip.bytes());
-  ResultCode status{ResultCode::SUCCESS};
-  if ((status = addAttributes(RTA_DST, ipptr, ip.byteCount(), msghdr_)) !=
-      ResultCode::SUCCESS) {
+  int status{0};
+  if ((status = addAttributes(RTA_DST, ipptr, ip.byteCount(), msghdr_))) {
     return status;
-  };
+  }
 
   // set up admin distance if priority.
   if (route.getPriority()) {
     const uint32_t adminDistance = route.getPriority().value();
     const char* const adPtr = reinterpret_cast<const char*>(&adminDistance);
     if ((status =
-             addAttributes(RTA_PRIORITY, adPtr, sizeof(uint32_t), msghdr_)) !=
-        ResultCode::SUCCESS) {
+             addAttributes(RTA_PRIORITY, adPtr, sizeof(uint32_t), msghdr_))) {
       return status;
-    };
+    }
   }
 
   return addNextHops(route);
 }
 
-ResultCode
+int
 NetlinkRouteMessage::deleteRoute(const openr::fbnl::Route& route) {
   auto const& pfix = route.getDestination();
   auto addressFamily = route.getFamily();
-  VLOG(1) << "Deleting route: " << route.str();
-
   if (addressFamily != AF_INET && addressFamily != AF_INET6) {
-    return ResultCode::INVALID_ADDRESS_FAMILY;
+    LOG(ERROR) << "Invalid address family. Expected AF_INET or AF_INET6";
+    return EINVAL;
   }
   init(RTM_DELROUTE, 0, route);
 
@@ -661,15 +656,10 @@ NetlinkRouteMessage::deleteRoute(const openr::fbnl::Route& route) {
   rtmsg_->rtm_family = addressFamily;
   rtmsg_->rtm_dst_len = plen; /* netmask */
   const char* const ipptr = reinterpret_cast<const char*>(ip.bytes());
-  ResultCode status{ResultCode::SUCCESS};
-  if ((status = addAttributes(RTA_DST, ipptr, ip.byteCount(), msghdr_)) !=
-      ResultCode::SUCCESS) {
-    return status;
-  };
-  return status;
+  return addAttributes(RTA_DST, ipptr, ip.byteCount(), msghdr_);
 }
 
-ResultCode
+int
 NetlinkRouteMessage::addLabelRoute(const openr::fbnl::Route& route) {
   init(RTM_NEWROUTE, 0, route);
   rtmsg_->rtm_family = AF_MPLS;
@@ -677,30 +667,31 @@ NetlinkRouteMessage::addLabelRoute(const openr::fbnl::Route& route) {
   rtmsg_->rtm_flags = 0;
   struct mpls_label mlabel;
 
-  VLOG(1) << "Adding MPLS route " << route.str();
   if (route.getFamily() != AF_MPLS) {
-    return ResultCode::INVALID_ADDRESS_FAMILY;
+    LOG(ERROR) << "Invalid address family. Expected AF_MPLS";
+    return EINVAL;
   }
 
   auto label = route.getMplsLabel();
   if (!label.has_value()) {
-    return ResultCode::NO_LABEL;
+    LOG(ERROR) << "Missing label";
+    return EINVAL;
   }
 
   mlabel.entry = encodeLabel(label.value(), true);
-  ResultCode status{ResultCode::SUCCESS};
+  int status{0};
   if ((status = addAttributes(
            RTA_DST,
            reinterpret_cast<const char*>(&mlabel),
            sizeof(mpls_label),
-           msghdr_)) != ResultCode::SUCCESS) {
+           msghdr_))) {
     return status;
-  };
+  }
 
   return addNextHops(route);
 }
 
-ResultCode
+int
 NetlinkRouteMessage::deleteLabelRoute(const openr::fbnl::Route& route) {
   init(RTM_DELROUTE, 0, route);
   rtmsg_->rtm_family = AF_MPLS;
@@ -710,20 +701,15 @@ NetlinkRouteMessage::deleteLabelRoute(const openr::fbnl::Route& route) {
   auto label = route.getMplsLabel();
   if (!label.has_value()) {
     LOG(ERROR) << "Label not provided";
-    return ResultCode::NO_LABEL;
+    return EINVAL;
   }
   VLOG(1) << "Deleting label: " << route.str();
   mlabel.entry = encodeLabel(label.value(), true);
-  ResultCode status{ResultCode::SUCCESS};
-  if ((status = addAttributes(
-           RTA_DST,
-           reinterpret_cast<const char*>(&mlabel),
-           sizeof(mpls_label),
-           msghdr_)) != ResultCode::SUCCESS) {
-    return status;
-  };
-
-  return status;
+  return addAttributes(
+      RTA_DST,
+      reinterpret_cast<const char*>(&mlabel),
+      sizeof(mpls_label),
+      msghdr_);
 }
 
 NetlinkLinkMessage::NetlinkLinkMessage() {
@@ -811,19 +797,19 @@ NetlinkAddrMessage::init(int type) {
   ifaddrmsg_ = reinterpret_cast<struct ifaddrmsg*>((char*)msghdr_ + nlmsgAlen);
 }
 
-ResultCode
+int
 NetlinkAddrMessage::addOrDeleteIfAddress(
     const openr::fbnl::IfAddress& ifAddr, const int type) {
   if (type != RTM_NEWADDR && type != RTM_DELADDR) {
     LOG(ERROR) << "Incorrect Netlink message type";
-    return ResultCode::FAIL;
+    return EINVAL;
   } else if (ifAddr.getFamily() != AF_INET && ifAddr.getFamily() != AF_INET6) {
     LOG(ERROR) << "Invalid address family" << ifAddr.str();
-    return ResultCode::INVALID_ADDRESS_FAMILY;
+    return EINVAL;
   } else if (!ifAddr.getPrefix().has_value()) {
     // No IP address given
     LOG(ERROR) << "No IP address given to add " << ifAddr.str();
-    return ResultCode::NO_IP;
+    return EDESTADDRREQ;
   }
 
   LOG(INFO) << (type == RTM_NEWADDR ? "Adding" : "Deleting") << " IP address "
@@ -842,16 +828,14 @@ NetlinkAddrMessage::addOrDeleteIfAddress(
   ifaddrmsg_->ifa_index = ifAddr.getIfIndex();
 
   const char* const ipptr = reinterpret_cast<const char*>(ip.bytes());
-  ResultCode status{ResultCode::SUCCESS};
-  status = addAttributes(IFA_ADDRESS, ipptr, ip.byteCount(), msghdr_);
-  if (status != ResultCode::SUCCESS) {
+  int status = addAttributes(IFA_ADDRESS, ipptr, ip.byteCount(), msghdr_);
+  if (status) {
     return status;
   }
   // For IPv4, need to specify the ip address in IFA_LOCAL attribute as well
   // for point-to-point interfaces
   // For IPv6, the extra attribute has no effect
-  status = addAttributes(IFA_LOCAL, ipptr, ip.byteCount(), msghdr_);
-  return status;
+  return addAttributes(IFA_LOCAL, ipptr, ip.byteCount(), msghdr_);
 }
 
 fbnl::IfAddress

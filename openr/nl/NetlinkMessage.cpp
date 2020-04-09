@@ -37,7 +37,7 @@ NetlinkMessage::addSubAttributes(
   uint32_t subRtaLen = RTA_LENGTH(len);
 
   if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > kMaxNlPayloadSize) {
-    VLOG(1) << "Space not available to add sub attribute type " << type;
+    LOG(ERROR) << "No buffer for adding attr: " << type << " length: " << len;
     return nullptr;
   }
 
@@ -57,7 +57,7 @@ NetlinkMessage::addSubAttributes(
   return subrta;
 }
 
-ResultCode
+int
 NetlinkMessage::addAttributes(
     int type,
     const char* const data,
@@ -67,8 +67,8 @@ NetlinkMessage::addAttributes(
   uint32_t nlmsgAlen = NLMSG_ALIGN((msghdr)->nlmsg_len);
 
   if (nlmsgAlen + RTA_ALIGN(rtaLen) > kMaxNlPayloadSize) {
-    VLOG(1) << "Space not available to add attribute type " << type;
-    return ResultCode::NO_MESSAGE_BUFFER;
+    LOG(ERROR) << "Space not available to add attribute type " << type;
+    return ENOBUFS;
   }
 
   // set the pointer to the aligned location
@@ -83,7 +83,7 @@ NetlinkMessage::addAttributes(
 
   // update the length in NL MSG header
   msghdr->nlmsg_len = nlmsgAlen + RTA_ALIGN(rtaLen);
-  return ResultCode::SUCCESS;
+  return 0;
 }
 
 folly::Future<int>

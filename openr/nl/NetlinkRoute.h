@@ -54,16 +54,16 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   }
 
   // add a unicast route
-  ResultCode addRoute(const openr::fbnl::Route& route);
+  int addRoute(const openr::fbnl::Route& route);
 
   // delete a route
-  ResultCode deleteRoute(const openr::fbnl::Route& route);
+  int deleteRoute(const openr::fbnl::Route& route);
 
   // add label route
-  ResultCode addLabelRoute(const openr::fbnl::Route& route);
+  int addLabelRoute(const openr::fbnl::Route& route);
 
   // delete label route
-  ResultCode deleteLabelRoute(const openr::fbnl::Route& route);
+  int deleteLabelRoute(const openr::fbnl::Route& route);
 
   // encode MPLS label, returns in network order
   uint32_t encodeLabel(uint32_t label, bool bos) const;
@@ -107,33 +107,33 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   struct rtmsg* rtmsg_{nullptr};
 
   // add set of nexthops
-  ResultCode addNextHops(const openr::fbnl::Route& route);
+  int addNextHops(const openr::fbnl::Route& route);
 
   // Add ECMP paths
-  ResultCode addMultiPathNexthop(
+  int addMultiPathNexthop(
       std::array<char, kMaxNlPayloadSize>& nhop,
       const openr::fbnl::Route& route) const;
 
   // Add label encap
-  ResultCode addLabelNexthop(
+  int addLabelNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
       const openr::fbnl::NextHop& path) const;
 
   // swap or PHP
-  ResultCode addSwapOrPHPNexthop(
+  int addSwapOrPHPNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
       const openr::fbnl::NextHop& path) const;
 
   // POP - sends to lo I/F
-  ResultCode addPopNexthop(
+  int addPopNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
       const openr::fbnl::NextHop& path) const;
 
   // POP - sends to lo I/F
-  ResultCode addIpNexthop(
+  int addIpNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
       const openr::fbnl::NextHop& path,
@@ -184,7 +184,7 @@ class NetlinkAddrMessage final : public NetlinkMessage {
 
   // create netlink message to add/delete interface address
   // type - RTM_NEWADDR or RTM_DELADDR
-  ResultCode addOrDeleteIfAddress(
+  int addOrDeleteIfAddress(
       const openr::fbnl::IfAddress& ifAddr, const int type);
 
  private:
