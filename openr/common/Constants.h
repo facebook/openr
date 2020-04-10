@@ -148,7 +148,8 @@ class Constants {
   // Default const parameters for thrift connections with Switch agent
   static constexpr folly::StringPiece kPlatformHost{"::1"};
   static constexpr std::chrono::milliseconds kPlatformConnTimeout{100};
-  static constexpr std::chrono::milliseconds kPlatformProcTimeout{20000};
+  static constexpr std::chrono::milliseconds kPlatformRoutesProcTimeout{20000};
+  static constexpr std::chrono::milliseconds kPlatformIntfProcTimeout{1000};
   static constexpr std::chrono::milliseconds kServiceConnTimeout{500};
   static constexpr std::chrono::milliseconds kServiceProcTimeout{20000};
 

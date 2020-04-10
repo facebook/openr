@@ -595,7 +595,7 @@ NetlinkProtocolSocket::getAllLinks() {
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   msg.emplace_back(std::move(linkMsg));
   addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{}, kNlRequestTimeout);
+  getReturnStatus(futures, std::unordered_set<int>{});
   return std::move(linkCache_);
 }
 
@@ -615,7 +615,7 @@ NetlinkProtocolSocket::getAllIfAddresses() {
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   msg.emplace_back(std::move(addrMsg));
   addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{}, kNlRequestTimeout);
+  getReturnStatus(futures, std::unordered_set<int>{});
   return std::move(addressCache_);
 }
 
@@ -632,7 +632,7 @@ NetlinkProtocolSocket::getAllNeighbors() {
   std::vector<std::unique_ptr<NetlinkMessage>> msg;
   msg.emplace_back(std::move(neighMsg));
   addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{}, kNlRequestTimeout);
+  getReturnStatus(futures, std::unordered_set<int>{});
   return std::move(neighborCache_);
 }
 

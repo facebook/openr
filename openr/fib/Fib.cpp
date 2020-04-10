@@ -701,7 +701,7 @@ Fib::createFibClient(
 
   // Create channel and set timeout
   auto channel = apache::thrift::HeaderClientChannel::newChannel(socket);
-  channel->setTimeout(Constants::kPlatformProcTimeout.count());
+  channel->setTimeout(Constants::kPlatformRoutesProcTimeout.count());
 
   // Set BinaryProtocol and Framed client type for talkiing with thrift1 server
   channel->setProtocolId(apache::thrift::protocol::T_BINARY_PROTOCOL);

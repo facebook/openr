@@ -92,7 +92,7 @@ class SparkWrapper {
       const thrift::SparkNeighborEventType eventType,
       std::optional<std::chrono::milliseconds> rcvdTimeout = std::nullopt,
       std::optional<std::chrono::milliseconds> procTimeout =
-          Constants::kPlatformProcTimeout) noexcept;
+          Constants::kPlatformRoutesProcTimeout) noexcept;
 
   // utility call to check neighbor state
   std::optional<SparkNeighState> getSparkNeighState(
