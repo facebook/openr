@@ -15,7 +15,6 @@
 #include <boost/heap/priority_queue.hpp>
 #include <boost/serialization/strong_typedef.hpp>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
-#include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Optional.h>
 #include <folly/TokenBucket.h>
@@ -168,7 +167,7 @@ class KvStoreDb : public DualNode {
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
       thrift::KvStoreRequest& thriftReq);
 
-  // Extracts the counters and submit them to monitor
+  // Extracts the counters
   std::unordered_map<std::string, int64_t> getCounters();
 
   // get multiple keys at once
@@ -371,9 +370,6 @@ class KvStoreDb : public DualNode {
   // TTL count down timer
   std::unique_ptr<folly::AsyncTimeout> ttlCountdownTimer_;
 
-  // Data-struct for maintaining stats/counters
-  fbzmq::ThreadData tData_;
-
   // Map of latest peer sync up request send to each peer
   // this is used to measure full-dump sync time between this node and each of
   // its peers
@@ -469,8 +465,6 @@ class KvStore final : public OpenrEventBase {
   static int compareValues(const thrift::Value& v1, const thrift::Value& v2);
 
   // Public APIs
-  fbzmq::thrift::CounterMap getCounters();
-
   folly::SemiFuture<std::unique_ptr<thrift::AreasConfig>> getAreasConfig();
 
   folly::SemiFuture<std::unique_ptr<thrift::Publication>> getKvStoreKeyVals(
@@ -538,7 +532,7 @@ class KvStore final : public OpenrEventBase {
 
   void processPeerUpdates(thrift::PeerUpdateRequest&& req);
 
-  void submitCounters();
+  void updateGlobalCounters();
 
   //
   // Private variables
@@ -550,7 +544,7 @@ class KvStore final : public OpenrEventBase {
 
   // Interval to submit to monitor. Default value is high
   // to avoid submission of counters in testing.
-  const std::chrono::seconds monitorSubmitInterval_;
+  const std::chrono::seconds counterSubmitInterval_;
 
   std::optional<KvStoreFilters> filters_ = std::nullopt;
 
@@ -558,8 +552,8 @@ class KvStore final : public OpenrEventBase {
   // Mutable state
   //
 
-  // Timer for submitting to monitor periodically
-  std::unique_ptr<folly::AsyncTimeout> monitorTimer_;
+  // Timer for updating and submitting counters periodically
+  std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
 
   // client to interact with monitor
   std::shared_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
@@ -569,9 +563,6 @@ class KvStore final : public OpenrEventBase {
 
   // map of area IDs and instance of KvStoreDb
   std::unordered_map<std::string /* area ID */, KvStoreDb> kvStoreDb_{};
-
-  // Data-struct for maintaining stats/counters
-  fbzmq::ThreadData tData_;
 
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;

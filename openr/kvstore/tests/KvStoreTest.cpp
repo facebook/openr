@@ -11,6 +11,7 @@
 #include <tuple>
 #include <unordered_set>
 
+#include <fb303/ServiceData.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
 #include <folly/Memory.h>
@@ -28,6 +29,8 @@ using namespace openr;
 using apache::thrift::CompactSerializer;
 using namespace std::chrono;
 
+namespace fb303 = facebook::fb303;
+
 namespace {
 
 // the size of the value string
@@ -35,7 +38,8 @@ const uint32_t kValueStrSize = 64;
 
 // interval for periodic syncs
 const std::chrono::seconds kDbSyncInterval(1);
-const std::chrono::seconds kMonitorSubmitInterval(3600);
+const std::chrono::seconds kCounterSubmitInterval(1);
+const std::chrono::milliseconds counterUpdateWaitTime(1500);
 
 // TTL in ms
 const int64_t kTtlMs = 1000;
@@ -99,7 +103,7 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
         context,
         nodeId,
         dbSyncInterval,
-        kMonitorSubmitInterval,
+        kCounterSubmitInterval,
         std::move(peers),
         std::move(filters),
         kvStoreRate,
@@ -570,35 +574,68 @@ TEST(KvStore, MonitorReport) {
   const std::vector<std::string> nodeIds2{"node5"};
   kvStore.setKey("test-key", thrift::Value(), nodeIds2);
 
-  // create and bind socket to receive counters
-  fbzmq::Socket<ZMQ_DEALER, fbzmq::ZMQ_SERVER> server(context);
-  server.bind(fbzmq::SocketUrl{kvStore.monitorSubmitUrl}).value();
+  // ait till counters updated
+  std::this_thread::sleep_for(std::chrono::milliseconds(counterUpdateWaitTime));
+  auto counters = fb303::fbData->getCounters();
 
-  std::vector<fbzmq::PollItem> pollItems = {
-      {reinterpret_cast<void*>(*server), 0, ZMQ_POLLIN, 0}};
-  fbzmq::poll(pollItems);
+  // Verify the keys exist
+  ASSERT_EQ(1, counters.count("kvstore.num_keys"));
+  ASSERT_EQ(1, counters.count("kvstore.num_peers"));
+  ASSERT_EQ(1, counters.count("kvstore.pending_full_sync"));
+  ASSERT_EQ(1, counters.count("kvstore.cmd_peer_dump.count"));
+  ASSERT_EQ(1, counters.count("kvstore.cmd_peer_add.count"));
+  ASSERT_EQ(1, counters.count("kvstore.cmd_per_del.count"));
+  ASSERT_EQ(1, counters.count("kvstore.expired_key_vals.sum"));
+  ASSERT_EQ(1, counters.count("kvstore.flood_duration_ms.avg"));
+  ASSERT_EQ(1, counters.count("kvstore.full_sync_duration_ms.avg"));
+  ASSERT_EQ(1, counters.count("kvstore.peers.bytes_received.sum"));
+  ASSERT_EQ(1, counters.count("kvstore.peers.bytes_sent.sum"));
+  ASSERT_EQ(1, counters.count("kvstore.rate_limit_keys.avg"));
+  ASSERT_EQ(1, counters.count("kvstore.rate_limit_suppress.count"));
+  ASSERT_EQ(1, counters.count("kvstore.received_dual_messages.count"));
+  ASSERT_EQ(1, counters.count("kvstore.cmd_hash_dump.count"));
+  ASSERT_EQ(1, counters.count("kvstore.cmd_key_dump.count"));
+  ASSERT_EQ(1, counters.count("kvstore.cmd_key_get.count"));
+  ASSERT_EQ(1, counters.count("kvstore.sent_key_vals.sum"));
+  ASSERT_EQ(1, counters.count("kvstore.sent_publications.count"));
+  ASSERT_EQ(1, counters.count("kvstore.updated_key_vals.sum"));
+  // Verify the value of keys
+  EXPECT_EQ(0, counters.at("kvstore.num_keys"));
+  EXPECT_EQ(0, counters.at("kvstore.num_peers"));
+  EXPECT_EQ(0, counters.at("kvstore.pending_full_sync"));
+  EXPECT_EQ(0, counters.at("kvstore.cmd_peer_dump.count"));
+  EXPECT_EQ(0, counters.at("kvstore.cmd_peer_add.count"));
+  EXPECT_EQ(0, counters.at("kvstore.cmd_per_del.count"));
+  EXPECT_EQ(0, counters.at("kvstore.expired_key_vals.sum"));
+  EXPECT_EQ(0, counters.at("kvstore.flood_duration_ms.avg"));
+  EXPECT_EQ(0, counters.at("kvstore.full_sync_duration_ms.avg"));
+  EXPECT_EQ(0, counters.at("kvstore.peers.bytes_received.sum"));
+  EXPECT_EQ(0, counters.at("kvstore.peers.bytes_sent.sum"));
+  EXPECT_EQ(0, counters.at("kvstore.rate_limit_keys.avg"));
+  EXPECT_EQ(0, counters.at("kvstore.rate_limit_suppress.count"));
+  EXPECT_EQ(0, counters.at("kvstore.received_dual_messages.count"));
+  EXPECT_EQ(0, counters.at("kvstore.cmd_hash_dump.count"));
+  EXPECT_EQ(0, counters.at("kvstore.cmd_key_dump.count"));
+  EXPECT_EQ(0, counters.at("kvstore.cmd_key_get.count"));
+  EXPECT_EQ(0, counters.at("kvstore.sent_key_vals.sum"));
+  EXPECT_EQ(0, counters.at("kvstore.sent_publications.count"));
+  EXPECT_EQ(0, counters.at("kvstore.updated_key_vals.sum"));
 
-  // wait till we receive counters
-  server.recvOne()
-      .value()
-      .readThriftObj<fbzmq::thrift::MonitorRequest>(serializer)
-      .value();
+  // Verify two keys were set
+  EXPECT_EQ(1, counters.count("kvstore.cmd_key_set.count"));
+  EXPECT_EQ(2, counters.at("kvstore.cmd_key_set.count"));
+  EXPECT_EQ(1, counters.count("kvstore.received_key_vals.sum"));
+  EXPECT_EQ(2, counters.at("kvstore.received_key_vals.sum"));
 
-  // receive counters from KvStore
-  auto counters = kvStore.getCounters();
-  EXPECT_EQ(1, counters.count("kvstore.num_keys"));
-  EXPECT_EQ(1, counters.count("kvstore.num_peers"));
-  EXPECT_EQ(1, counters.count("kvstore.pending_full_sync"));
-
-  // Verify looped publication counter
-  ASSERT_EQ(1, counters.count("kvstore.looped_publications.count.0"));
-  EXPECT_EQ(1, counters.at("kvstore.looped_publications.count.0").value);
+  // Verify publication counter
+  ASSERT_EQ(1, counters.count("kvstore.looped_publications.count"));
+  EXPECT_EQ(1, counters.at("kvstore.looped_publications.count"));
+  ASSERT_EQ(1, counters.count("kvstore.received_publications.count"));
+  EXPECT_EQ(2, counters.at("kvstore.received_publications.count"));
 
   // Verify redundant publication counter
-  ASSERT_EQ(
-      1, counters.count("kvstore.received_redundant_publications.count.0"));
-  EXPECT_EQ(
-      1, counters.at("kvstore.received_redundant_publications.count.0").value);
+  ASSERT_EQ(1, counters.count("kvstore.received_redundant_publications.count"));
+  EXPECT_EQ(1, counters.at("kvstore.received_redundant_publications.count"));
 
   LOG(INFO) << "Counters received, yo";
   kvStore.stop();
@@ -1949,18 +1986,10 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   //   (15 peers except originator)
   // - No publication or key_vals is sent out of peerStores except peerStore[0]
   //
-  auto getNodeCounters = [&]() {
-    std::map<std::string, fbzmq::thrift::CounterMap> nodeCounters;
-    for (auto& store : stores_) {
-      nodeCounters.emplace(store->nodeId, store->getCounters());
-    }
-    return nodeCounters;
-  };
   LOG(INFO) << "Testing flooding behavior";
 
   // Get current counters
-  LOG(INFO) << "Getting counters snapshot";
-  auto oldNodeCounters = getNodeCounters();
+  auto oldCounters = fb303::fbData->getCounters();
 
   // Set new key
   {
@@ -1993,35 +2022,27 @@ TEST_F(KvStoreTestFixture, BasicSync) {
 
   // Get new counters
   LOG(INFO) << "Getting counters snapshot";
-  auto newNodeCounters = getNodeCounters();
+  auto newCounters = fb303::fbData->getCounters();
 
   // Verify counters
   for (auto& store : stores_) {
-    LOG(INFO) << "Verifying counters from " << store->nodeId;
-    auto& oldCounters = oldNodeCounters[store->nodeId];
-    auto& newCounters = newNodeCounters[store->nodeId];
+    LOG(INFO) << "Verifying global counters for 16 stores";
     EXPECT_LE(
-        oldCounters["kvstore.received_publications.count.0"].value + 1,
-        newCounters["kvstore.received_publications.count.0"].value);
+        oldCounters["kvstore.received_publications.count"] + 17,
+        newCounters["kvstore.received_publications.count"]);
     EXPECT_LE(
-        oldCounters["kvstore.received_key_vals.sum.0"].value + 1,
-        newCounters["kvstore.received_key_vals.sum.0"].value);
+        oldCounters["kvstore.received_key_vals.sum"] + 17,
+        newCounters["kvstore.received_key_vals.sum"]);
     EXPECT_EQ(
-        oldCounters["kvstore.updated_key_vals.sum.0"].value + 1,
-        newCounters["kvstore.updated_key_vals.sum.0"].value);
-    int sentOffset = 0;
-    if (store->nodeId == peerStores[0]->nodeId) {
-      sentOffset = 1;
-    }
-    if (store->nodeId == myStore->nodeId) {
-      sentOffset = 15;
-    }
+        oldCounters["kvstore.updated_key_vals.sum"] + 17,
+        newCounters["kvstore.updated_key_vals.sum"]);
+    int sentOffset = 16;
     EXPECT_EQ(
-        oldCounters["kvstore.sent_publications.count.0"].value + sentOffset,
-        newCounters["kvstore.sent_publications.count.0"].value);
+        oldCounters["kvstore.sent_publications.count"] + sentOffset,
+        newCounters["kvstore.sent_publications.count"]);
     EXPECT_EQ(
-        oldCounters["kvstore.sent_key_vals.sum.0"].value + sentOffset,
-        newCounters["kvstore.sent_key_vals.sum.0"].value);
+        oldCounters["kvstore.sent_key_vals.sum"] + sentOffset,
+        newCounters["kvstore.sent_key_vals.sum"]);
   }
 }
 
@@ -2426,11 +2447,11 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   EXPECT_TRUE(store1->setKey("key2", thriftVal2));
 
   {
-    /* check key get returns false from store1, but keys exist (key1 and key2)*/
+    /* check key get returns false from both store0 and store1 */
+    auto getRes0 = store0->getKey("key2");
+    ASSERT_FALSE(getRes0.has_value());
     auto getRes1 = store1->getKey("key2");
     ASSERT_FALSE(getRes1.has_value());
-    auto nodeCounters = store1->getCounters();
-    EXPECT_EQ(nodeCounters["kvstore.num_keys"].value, 2);
   }
 }
 
@@ -2531,6 +2552,7 @@ TEST_F(KvStoreTestFixture, RateLimiterSync) {
 
 TEST_F(KvStoreTestFixture, RateLimiter) {
   fbzmq::Context context;
+  fb303::fbData->resetAllData();
 
   const uint32_t messageRate = 10; // number of messages per second
   const uint32_t burstSize = 50; // number of messages
@@ -2572,24 +2594,12 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   } while (elapsedTime1 < duration1);
 
-  auto getNodeCounters = [&]() {
-    std::map<std::string, fbzmq::thrift::CounterMap> nodeCounters;
-    for (auto& store : stores_) {
-      nodeCounters.emplace(store->nodeId, store->getCounters());
-    }
-    return nodeCounters;
-  };
-
   // sleep to get tokens replenished since store1 also floods keys it receives
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  auto counters1 = getNodeCounters();
-  auto s0Counters1 = counters1["store0"];
-  auto s1Counters1 = counters1["store1"];
-
-  auto s0PubSent1 = s0Counters1["kvstore.sent_publications.count.0"].value;
-  auto s1PubSent1 = s1Counters1["kvstore.sent_publications.count.0"].value;
+  auto s0PubSent1 =
+      fb303::fbData->getCounters()["kvstore.sent_publications.count"];
 
   // check number of sent publications should be at least number of keys set
   EXPECT_GE(s0PubSent1 - i1, 0);
@@ -2606,6 +2616,7 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   const int wait = 2; // in seconds
   int i2{0};
   uint64_t elapsedTime2{0};
+  fb303::fbData->resetAllData();
   do {
     thrift::Value thriftVal(
         apache::thrift::FRAGILE,
@@ -2632,15 +2643,13 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   ASSERT_TRUE(getRes.has_value());
   EXPECT_EQ(i2, getRes->ttlVersion);
 
-  auto counters2 = getNodeCounters();
-  auto s1Counters2 = counters2["store1"];
-  auto s0Counters2 = counters2["store0"];
-  auto s1PubSent2 = s1Counters2["kvstore.sent_publications.count.0"].value;
-  auto s0KeyNum2 = s0Counters2["kvstore.num_keys"].value;
+  auto allCounters = fb303::fbData->getCounters();
+  auto s1PubSent2 = allCounters["kvstore.sent_publications.count"];
+  auto s0KeyNum2 = store0->dumpAll().size();
 
   // number of messages sent must be around duration * messageRate
-  // + 1 as some messages could have been sent after the counter
-  EXPECT_LT(s1PubSent2 - s1PubSent1, (duration2 + wait + 1) * messageRate);
+  // +3 as some messages could have been sent after the counter
+  EXPECT_LT(s1PubSent2, (duration2 + wait + 3) * messageRate);
 
   /**
    * TEST3: similar to TEST2, except instead of key ttl version, new keys
@@ -2674,19 +2683,18 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   // wait pending updates
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(wait));
-  auto counters3 = getNodeCounters();
-  auto s0Counters3 = counters3["store0"];
-  auto s1Counters3 = counters3["store1"];
-  auto s1PubSent3 = s1Counters3["kvstore.sent_publications.count.0"].value;
-  auto s1Supressed3 = s1Counters3["kvstore.rate_limit_suppress.count.0"].value;
+
+  allCounters = fb303::fbData->getCounters();
+  auto s1PubSent3 = allCounters["kvstore.sent_publications.count"];
+  auto s1Supressed3 = allCounters["kvstore.rate_limit_suppress.count"];
 
   // number of messages sent must be around duration * messageRate
-  // + 1 as some messages could have been sent after the counter
-  EXPECT_LE(s1PubSent3 - s1PubSent2, (duration3 + wait + 1) * messageRate);
+  // +3 as some messages could have been sent after the counter
+  EXPECT_LE(s1PubSent3 - s1PubSent2, (duration3 + wait + 3) * messageRate);
 
   // check for number of keys in store0 should be equal to number of keys
   // added in store1.
-  auto s0KeyNum3 = s0Counters3["kvstore.num_keys"].value;
+  auto s0KeyNum3 = store0->dumpAll().size();
   EXPECT_EQ(s0KeyNum3 - s0KeyNum2, i3);
 
   /*
@@ -2721,9 +2729,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::milliseconds(2 * ttlLow));
 
-  auto counters4 = getNodeCounters();
-  auto s1Counters4 = counters4["store1"];
-  auto s1Supressed4 = s1Counters4["kvstore.rate_limit_suppress.count.0"].value;
+  allCounters = fb303::fbData->getCounters();
+  auto s1Supressed4 = allCounters["kvstore.rate_limit_suppress.count"];
   // expired keys are not sent (or received). Just check expired keys
   // were also supressed
   EXPECT_GE(s1Supressed4 - s1Supressed3, 1);
@@ -2990,14 +2997,12 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         EXPECT_EQ(
             expectedKeyValsPlane, storeC->dumpAll(std::nullopt, planeArea));
 
-        // counters will have total count from all instances of kvstore
         // check for counters on StoreB that has 2 instances. Number of keys
         // must be the total of both areas number of keys must be 4, 2 from
         // podArea and 2 from planArea number of peers at storeB must be 2 - one
         // from each area
-        auto counters = storeB->getCounters();
-        EXPECT_EQ(4, counters.at("kvstore.num_keys").value);
-        EXPECT_EQ(2, counters.at("kvstore.num_peers").value);
+        EXPECT_EQ(2, storeB->dumpAll(std::nullopt, podArea).size());
+        EXPECT_EQ(2, storeB->dumpAll(std::nullopt, planeArea).size());
       },
       scheduleTimePoint + std::chrono::milliseconds(200));
 

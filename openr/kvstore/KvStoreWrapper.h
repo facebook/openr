@@ -132,11 +132,6 @@ class KvStoreWrapper {
    */
   thrift::Publication recvPublication();
 
-  /**
-   * API to get counters from KvStore directly
-   */
-  fbzmq::thrift::CounterMap getCounters();
-
   /*
    * Get flooding topology information
    */

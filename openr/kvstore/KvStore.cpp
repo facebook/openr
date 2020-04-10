@@ -7,6 +7,7 @@
 
 #include "KvStore.h"
 
+#include <fb303/ServiceData.h>
 #include <fbzmq/service/logging/LogSample.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Format.h>
@@ -19,6 +20,8 @@
 #include <openr/if/gen-cpp2/OpenrCtrl_types.h>
 
 using namespace std::chrono;
+
+namespace fb303 = facebook::fb303;
 
 namespace openr {
 
@@ -78,7 +81,7 @@ KvStore::KvStore(
     MonitorSubmitUrl monitorSubmitUrl,
     std::optional<int> maybeIpTos,
     std::chrono::seconds dbSyncInterval,
-    std::chrono::seconds monitorSubmitInterval,
+    std::chrono::seconds counterSubmitInterval,
     // initializer for mutable state
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     std::optional<KvStoreFilters> filters,
@@ -89,7 +92,7 @@ KvStore::KvStore(
     bool isFloodRoot,
     bool useFloodOptimization,
     const std::unordered_set<std::string>& areas)
-    : monitorSubmitInterval_(monitorSubmitInterval),
+    : counterSubmitInterval_(counterSubmitInterval),
       kvParams_(
           nodeId,
           kvStoreUpdatesQueue,
@@ -116,11 +119,9 @@ KvStore::KvStore(
   kvParams_.zmqMonitorClient = zmqMonitorClient_;
 
   // Schedule periodic timer for counters submission
-  monitorTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    submitCounters();
-    monitorTimer_->scheduleTimeout(monitorSubmitInterval_);
-  });
-  monitorTimer_->scheduleTimeout(monitorSubmitInterval_);
+  counterUpdateTimer_ = folly::AsyncTimeout::make(
+      *getEvb(), [this]() noexcept { updateGlobalCounters(); });
+  counterUpdateTimer_->scheduleTimeout(counterSubmitInterval_);
 
   // Prepare global command socket
   prepareSocket(kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
@@ -439,8 +440,8 @@ KvStore::processCmdSocketRequest(
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
 KvStore::processRequestMsg(fbzmq::Message&& request) {
-  tData_.addStatValue(
-      "kvstore.peers.bytes_received", request.size(), fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.peers.bytes_received", request.size(), fb303::SUM);
   auto maybeThriftReq =
       request.readThriftObj<thrift::KvStoreRequest>(serializer_);
 
@@ -461,8 +462,8 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
     auto& kvStoreDb = kvStoreDb_.at(area);
     auto response = kvStoreDb.processRequestMsgHelper(thriftRequest);
     if (response.hasValue()) {
-      tData_.addStatValue(
-          "kvstore.peers.bytes_sent", response->size(), fbzmq::SUM);
+      fb303::fbData->addStatValue(
+          "kvstore.peers.bytes_sent", response->size(), fb303::SUM);
     }
     return response;
   } catch (std::out_of_range const& e) {
@@ -504,7 +505,7 @@ KvStore::getKvStoreKeyVals(
       p.setException(
           thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
     } else {
-      tData_.addStatValue("kvstore.cmd_key_get", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue("kvstore.cmd_key_get", 1, fb303::COUNT);
 
       auto& kvStoreDb = kvStoreDb_.at(area);
       auto thriftPub = kvStoreDb.getKeyVals(keyGetParams.keys);
@@ -531,7 +532,7 @@ KvStore::dumpKvStoreKeys(
       p.setException(
           thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
     } else {
-      tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
       auto& kvStoreDb = kvStoreDb_.at(area);
       std::vector<std::string> keyPrefixList;
@@ -581,7 +582,7 @@ KvStore::dumpKvStoreHashes(
       p.setException(
           thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
     } else {
-      tData_.addStatValue("kvstore.cmd_hash_dump", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
 
       auto& kvStoreDb = kvStoreDb_.at(area);
       std::set<std::string> originator{};
@@ -612,11 +613,12 @@ KvStore::setKvStoreKeyVals(
           thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
     } else {
       // Update statistics
-      tData_.addStatValue("kvstore.cmd_key_set", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
       if (keySetParams.timestamp_ms.has_value()) {
         auto floodMs = getUnixTimeStampMs() - keySetParams.timestamp_ms.value();
         if (floodMs > 0) {
-          tData_.addStatValue("kvstore.flood_duration_ms", floodMs, fbzmq::AVG);
+          fb303::fbData->addStatValue(
+              "kvstore.flood_duration_ms", floodMs, fb303::AVG);
         }
       }
 
@@ -668,7 +670,7 @@ KvStore::getKvStorePeers(std::string area) {
       p.setException(
           thrift::OpenrError(folly::sformat("Invalid area: {}", area)));
     } else {
-      tData_.addStatValue("kvstore.cmd_peer_dump", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
       auto& kvStoreDb = kvStoreDb_.at(area);
       auto peers = kvStoreDb.dumpPeers();
       p.setValue(std::make_unique<thrift::PeersMap>(std::move(peers)));
@@ -695,7 +697,7 @@ KvStore::addUpdateKvStorePeers(
       p.setException(thrift::OpenrError(
           "Empty peerNames from peer-add request, ignoring"));
     } else {
-      tData_.addStatValue("kvstore.cmd_peer_add", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue("kvstore.cmd_peer_add", 1, fb303::COUNT);
       auto& kvStoreDb = kvStoreDb_.at(area);
       kvStoreDb.addPeers(peerAddParams.peers);
       p.setValue();
@@ -722,7 +724,7 @@ KvStore::deleteKvStorePeers(
       p.setException(thrift::OpenrError(
           "Empty peerNames from peer-del request, ignoring"));
     } else {
-      tData_.addStatValue("kvstore.cmd_per_del", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue("kvstore.cmd_per_del", 1, fb303::COUNT);
       auto& kvStoreDb = kvStoreDb_.at(area);
       kvStoreDb.delPeers(peerDelParams.peerNames);
       p.setValue();
@@ -791,7 +793,8 @@ KvStore::processKvStoreDualMessage(
       LOG(ERROR) << "Empty DUAL msg receved";
       p.setValue();
     } else {
-      tData_.addStatValue("kvstore.received_dual_messages", 1, fbzmq::COUNT);
+      fb303::fbData->addStatValue(
+          "kvstore.received_dual_messages", 1, fb303::COUNT);
 
       auto& kvStoreDb = kvStoreDb_.at(area);
       kvStoreDb.processDualMessages(std::move(dualMessages));
@@ -801,35 +804,26 @@ KvStore::processKvStoreDualMessage(
   return sf;
 }
 
-fbzmq::thrift::CounterMap
-KvStore::getCounters() {
-  std::unordered_map<std::string, int64_t> allCounters;
-
-  // Extract/build counters from thread-data
-  getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this, &allCounters]() {
-    allCounters = tData_.getCounters();
-    for (auto& kvDb : kvStoreDb_) {
-      auto kvDbCounters = kvDb.second.getCounters();
-      // add up counters for same key from all kvStoreDb instances
-      allCounters = std::accumulate(
-          kvDbCounters.begin(),
-          kvDbCounters.end(),
-          allCounters,
-          [](std::unordered_map<std::string, int64_t>& allCounters,
-             const std::pair<const std::string, int64_t>& kvDbcounter) {
-            allCounters[kvDbcounter.first] += kvDbcounter.second;
-            return allCounters;
-          });
-    }
-  });
-
-  return prepareSubmitCounters(allCounters);
-}
-
 void
-KvStore::submitCounters() {
-  VLOG(3) << "Submitting counters ... ";
-  zmqMonitorClient_->setCounters(getCounters());
+KvStore::updateGlobalCounters() {
+  auto allCounters = fb303::fbData->getCounters();
+  for (auto& kvDb : kvStoreDb_) {
+    auto kvDbCounters = kvDb.second.getCounters();
+    // add up counters for same key from all kvStoreDb instances
+    allCounters = std::accumulate(
+        kvDbCounters.begin(),
+        kvDbCounters.end(),
+        allCounters,
+        [](std::map<std::string, int64_t>& allCounters,
+           const std::pair<const std::string, int64_t>& kvDbcounter) {
+          allCounters[kvDbcounter.first] += kvDbcounter.second;
+          return allCounters;
+        });
+  }
+  for (auto counter : allCounters) {
+    fb303::fbData->setCounter(counter.first, counter.second);
+  }
+  counterUpdateTimer_->scheduleTimeout(counterSubmitInterval_);
 }
 
 KvStoreDb::KvStoreDb(
@@ -878,31 +872,33 @@ KvStoreDb::KvStoreDb(
       *evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
 
   // Initialize stats keys
-  tData_.addStatExportType("kvstore.cmd_hash_dump", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.cmd_key_dump", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.cmd_key_get", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.cmd_key_set", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.cmd_peer_add", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.cmd_peer_dump", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.cmd_per_del", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.expired_key_vals", fbzmq::SUM);
-  tData_.addStatExportType("kvstore.flood_duration_ms", fbzmq::AVG);
-  tData_.addStatExportType("kvstore.full_sync_duration_ms", fbzmq::AVG);
-  tData_.addStatExportType("kvstore.looped_publications", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.peers.bytes_received", fbzmq::SUM);
-  tData_.addStatExportType("kvstore.peers.bytes_received", fbzmq::SUM);
-  tData_.addStatExportType("kvstore.peers.bytes_sent", fbzmq::SUM);
-  tData_.addStatExportType("kvstore.peers.bytes_sent", fbzmq::SUM);
-  tData_.addStatExportType("kvstore.rate_limit_keys", fbzmq::AVG);
-  tData_.addStatExportType("kvstore.rate_limit_suppress", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.received_dual_messages", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.received_key_vals", fbzmq::SUM);
-  tData_.addStatExportType("kvstore.received_publications", fbzmq::COUNT);
-  tData_.addStatExportType(
-      "kvstore.received_redundant_publications", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.sent_key_vals", fbzmq::SUM);
-  tData_.addStatExportType("kvstore.sent_publications", fbzmq::COUNT);
-  tData_.addStatExportType("kvstore.updated_key_vals", fbzmq::SUM);
+  fb303::fbData->addStatExportType("kvstore.cmd_hash_dump", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_key_dump", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_key_get", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_key_set", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_peer_add", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_peer_dump", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.cmd_per_del", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.expired_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.flood_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("kvstore.full_sync_duration_ms", fb303::AVG);
+  fb303::fbData->addStatExportType("kvstore.looped_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.peers.bytes_received", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.peers.bytes_received", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.peers.bytes_sent", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.peers.bytes_sent", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.rate_limit_keys", fb303::AVG);
+  fb303::fbData->addStatExportType("kvstore.rate_limit_suppress", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.received_dual_messages", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.received_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.received_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.received_redundant_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.sent_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.sent_publications", fb303::COUNT);
+  fb303::fbData->addStatExportType("kvstore.updated_key_vals", fb303::SUM);
 }
 
 void
@@ -1157,15 +1153,15 @@ folly::Expected<size_t, fbzmq::Error>
 KvStoreDb::sendMessageToPeer(
     const std::string& peerSocketId, const thrift::KvStoreRequest& request) {
   auto msg = fbzmq::Message::fromThriftObj(request, serializer_).value();
-  tData_.addStatValue("kvstore.peers.bytes_sent", msg.size(), fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.peers.bytes_sent", msg.size(), fb303::SUM);
   return peerSyncSock_.sendMultiple(
       fbzmq::Message::from(peerSocketId).value(), fbzmq::Message(), msg);
 }
 
 std::unordered_map<std::string, int64_t>
 KvStoreDb::getCounters() {
-  // Extract/build counters from thread-data
-  auto counters = tData_.getCounters();
+  std::unordered_map<std::string, int64_t> counters;
 
   // Add some more flat counters
   counters["kvstore.num_keys"] = kvStore_.size();
@@ -1363,12 +1359,13 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
       return folly::makeUnexpected(fbzmq::Error());
     }
 
-    tData_.addStatValue("kvstore.cmd_key_set", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
     if (thriftReq.keySetParams->timestamp_ms.has_value()) {
       auto floodMs =
           getUnixTimeStampMs() - thriftReq.keySetParams->timestamp_ms.value();
       if (floodMs > 0) {
-        tData_.addStatValue("kvstore.flood_duration_ms", floodMs, fbzmq::AVG);
+        fb303::fbData->addStatValue(
+            "kvstore.flood_duration_ms", floodMs, fb303::AVG);
       }
     }
 
@@ -1408,7 +1405,7 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
       return folly::makeUnexpected(fbzmq::Error());
     }
 
-    tData_.addStatValue("kvstore.cmd_key_get", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("kvstore.cmd_key_get", 1, fb303::COUNT);
 
     auto thriftPub = getKeyVals(thriftReq.keyGetParams.value().keys);
     updatePublicationTtl(thriftPub);
@@ -1422,7 +1419,7 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
     }
 
     auto& keyDumpParamsVal = thriftReq.keyDumpParams.value();
-    tData_.addStatValue("kvstore.cmd_key_dump", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
     std::vector<std::string> keyPrefixList;
     folly::split(",", keyDumpParamsVal.prefix, keyPrefixList, true);
@@ -1458,7 +1455,7 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
       return folly::makeUnexpected(fbzmq::Error());
     }
 
-    tData_.addStatValue("kvstore.cmd_hash_dump", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
 
     std::set<std::string> originator{};
     std::vector<std::string> keyPrefixList{};
@@ -1479,7 +1476,8 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
       LOG(ERROR) << "received empty dualMessages";
       return fbzmq::Message(); // ignore it
     }
-    tData_.addStatValue("kvstore.received_dual_messages", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue(
+        "kvstore.received_dual_messages", 1, fb303::COUNT);
     DualNode::processDualMessages(std::move(*thriftReq.dualMessages));
     return fbzmq::Message();
   }
@@ -1682,8 +1680,8 @@ KvStoreDb::processSyncResponse() noexcept {
     return;
   }
 
-  tData_.addStatValue(
-      "kvstore.peers.bytes_received", syncPubMsg.size(), fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.peers.bytes_received", syncPubMsg.size(), fb303::SUM);
 
   // at this point we received all three parts
   if (not delimMsg.empty()) {
@@ -1732,8 +1730,8 @@ KvStoreDb::processSyncResponse() noexcept {
   if (latestSentPeerSync_.count(requestId)) {
     auto syncDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - latestSentPeerSync_.at(requestId));
-    tData_.addStatValue(
-        "kvstore.full_sync_duration_ms", syncDuration.count(), fbzmq::AVG);
+    fb303::fbData->addStatValue(
+        "kvstore.full_sync_duration_ms", syncDuration.count(), fb303::AVG);
     logSyncEvent(requestId, syncDuration);
     VLOG(1) << "It took " << syncDuration.count() << " ms to sync with "
             << requestId;
@@ -1907,8 +1905,8 @@ KvStoreDb::cleanupTtlCountdownQueue() {
     // no key expires
     return;
   }
-  tData_.addStatValue(
-      "kvstore.expired_key_vals", expiredKeys.size(), fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.expired_key_vals", expiredKeys.size(), fb303::SUM);
   thrift::Publication expiredKeysPub{};
   expiredKeysPub.expiredKeys = std::move(expiredKeys);
   floodPublication(std::move(expiredKeysPub));
@@ -1916,9 +1914,9 @@ KvStoreDb::cleanupTtlCountdownQueue() {
 
 void
 KvStoreDb::bufferPublication(thrift::Publication&& publication) {
-  tData_.addStatValue("kvstore.rate_limit_suppress", 1, fbzmq::COUNT);
-  tData_.addStatValue(
-      "kvstore.rate_limit_keys", publication.keyVals.size(), fbzmq::AVG);
+  fb303::fbData->addStatValue("kvstore.rate_limit_suppress", 1, fb303::COUNT);
+  fb303::fbData->addStatValue(
+      "kvstore.rate_limit_keys", publication.keyVals.size(), fb303::AVG);
   std::optional<std::string> floodRootId{std::nullopt};
   if (publication.floodRootId.has_value()) {
     floodRootId = publication.floodRootId.value();
@@ -2042,10 +2040,10 @@ KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
 void
 KvStoreDb::collectSendFailureStats(
     const fbzmq::Error& error, const std::string& dstSockId) {
-  tData_.addStatValue(
+  fb303::fbData->addStatValue(
       folly::sformat("kvstore.send_failure.{}.{}", dstSockId, error.errNum),
       1,
-      fbzmq::COUNT);
+      fb303::COUNT);
 }
 
 void
@@ -2125,9 +2123,9 @@ KvStoreDb::floodPublication(
             << (senderId.has_value() ? senderId.value() : "N/A")
             << ", to: " << peer << ", via: " << kvParams_.nodeId;
 
-    tData_.addStatValue("kvstore.sent_publications", 1, fbzmq::COUNT);
-    tData_.addStatValue(
-        "kvstore.sent_key_vals", publication.keyVals.size(), fbzmq::SUM);
+    fb303::fbData->addStatValue("kvstore.sent_publications", 1, fb303::COUNT);
+    fb303::fbData->addStatValue(
+        "kvstore.sent_key_vals", publication.keyVals.size(), fb303::SUM);
 
     // Send flood request
     auto const& peerCmdSocketId = peers_.at(peer).second;
@@ -2147,9 +2145,9 @@ KvStoreDb::mergePublication(
     const thrift::Publication& rcvdPublication,
     std::optional<std::string> senderId) {
   // Add counters
-  tData_.addStatValue("kvstore.received_publications", 1, fbzmq::COUNT);
-  tData_.addStatValue(
-      "kvstore.received_key_vals", rcvdPublication.keyVals.size(), fbzmq::SUM);
+  fb303::fbData->addStatValue("kvstore.received_publications", 1, fb303::COUNT);
+  fb303::fbData->addStatValue(
+      "kvstore.received_key_vals", rcvdPublication.keyVals.size(), fb303::SUM);
 
   const bool needFinalizeFullSync = senderId.has_value() and
       rcvdPublication.tobeUpdatedKeys.has_value() and
@@ -2165,7 +2163,7 @@ KvStoreDb::mergePublication(
   if (nodeIds.has_value() and
       std::find(nodeIds->begin(), nodeIds->end(), kvParams_.nodeId) !=
           nodeIds->end()) {
-    tData_.addStatValue("kvstore.looped_publications", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue("kvstore.looped_publications", 1, fb303::COUNT);
     return 0;
   }
 
@@ -2177,7 +2175,8 @@ KvStoreDb::mergePublication(
   deltaPublication.area = area_;
 
   const size_t kvUpdateCnt = deltaPublication.keyVals.size();
-  tData_.addStatValue("kvstore.updated_key_vals", kvUpdateCnt, fbzmq::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.updated_key_vals", kvUpdateCnt, fb303::SUM);
 
   // Populate nodeIds and our nodeId_ to the end
   if (rcvdPublication.nodeIds.has_value()) {
@@ -2192,8 +2191,8 @@ KvStoreDb::mergePublication(
     floodPublication(std::move(deltaPublication));
   } else {
     // Keep track of received publications which din't update any field
-    tData_.addStatValue(
-        "kvstore.received_redundant_publications", 1, fbzmq::COUNT);
+    fb303::fbData->addStatValue(
+        "kvstore.received_redundant_publications", 1, fb303::COUNT);
   }
 
   // response to senderId with tobeUpdatedKeys + Vals

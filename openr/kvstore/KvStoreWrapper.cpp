@@ -201,11 +201,6 @@ KvStoreWrapper::recvPublication() {
   return pub;
 }
 
-fbzmq::thrift::CounterMap
-KvStoreWrapper::getCounters() {
-  return kvStore_->getCounters();
-}
-
 thrift::SptInfos
 KvStoreWrapper::getFloodTopo(std::string area) {
   auto sptInfos = *(kvStore_->getSpanningTreeInfos(area).get());
