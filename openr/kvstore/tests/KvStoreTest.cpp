@@ -554,7 +554,7 @@ TEST(KvStore, compareValuesTest) {
 //
 // Test counter reporting
 //
-TEST(KvStore, MonitorReport) {
+TEST(KvStore, CounterReport) {
   fbzmq::Context context;
   CompactSerializer serializer;
 
@@ -566,20 +566,40 @@ TEST(KvStore, MonitorReport) {
       std::unordered_map<std::string, thrift::PeerSpec>{});
   kvStore.run();
 
+  /** Verify redundant publications **/
   // Set key in KvStore with loop
   const std::vector<std::string> nodeIds{"node2", "node3", "node1", "node4"};
   kvStore.setKey("test-key", thrift::Value(), nodeIds);
-
   // Set same key with different path
   const std::vector<std::string> nodeIds2{"node5"};
   kvStore.setKey("test-key", thrift::Value(), nodeIds2);
 
-  // ait till counters updated
+  /** Verify key update **/
+  // Set a key in KvStore
+  thrift::Value thriftVal1 = createThriftValue(
+      1 /* version */,
+      "node1" /* originatorId */,
+      std::string("value1") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  kvStore.setKey("test-key2", thriftVal1);
+
+  // Set same key with different value
+  thrift::Value thriftVal2 = createThriftValue(
+      1 /* version */,
+      "node1" /* originatorId */,
+      std::string("value2") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+  kvStore.setKey("test-key2", thriftVal2);
+
+  // Wait till counters updated
   std::this_thread::sleep_for(std::chrono::milliseconds(counterUpdateWaitTime));
   auto counters = fb303::fbData->getCounters();
 
-  // Verify the keys exist
-  ASSERT_EQ(1, counters.count("kvstore.num_keys"));
+  // Verify the counter keys exist
   ASSERT_EQ(1, counters.count("kvstore.num_peers"));
   ASSERT_EQ(1, counters.count("kvstore.pending_full_sync"));
   ASSERT_EQ(1, counters.count("kvstore.cmd_peer_dump.count"));
@@ -598,9 +618,7 @@ TEST(KvStore, MonitorReport) {
   ASSERT_EQ(1, counters.count("kvstore.cmd_key_get.count"));
   ASSERT_EQ(1, counters.count("kvstore.sent_key_vals.sum"));
   ASSERT_EQ(1, counters.count("kvstore.sent_publications.count"));
-  ASSERT_EQ(1, counters.count("kvstore.updated_key_vals.sum"));
-  // Verify the value of keys
-  EXPECT_EQ(0, counters.at("kvstore.num_keys"));
+  // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("kvstore.num_peers"));
   EXPECT_EQ(0, counters.at("kvstore.pending_full_sync"));
   EXPECT_EQ(0, counters.at("kvstore.cmd_peer_dump.count"));
@@ -619,23 +637,38 @@ TEST(KvStore, MonitorReport) {
   EXPECT_EQ(0, counters.at("kvstore.cmd_key_get.count"));
   EXPECT_EQ(0, counters.at("kvstore.sent_key_vals.sum"));
   EXPECT_EQ(0, counters.at("kvstore.sent_publications.count"));
-  EXPECT_EQ(0, counters.at("kvstore.updated_key_vals.sum"));
 
-  // Verify two keys were set
-  EXPECT_EQ(1, counters.count("kvstore.cmd_key_set.count"));
-  EXPECT_EQ(2, counters.at("kvstore.cmd_key_set.count"));
-  EXPECT_EQ(1, counters.count("kvstore.received_key_vals.sum"));
-  EXPECT_EQ(2, counters.at("kvstore.received_key_vals.sum"));
+  // Verify four keys were set
+  ASSERT_EQ(1, counters.count("kvstore.cmd_key_set.count"));
+  EXPECT_EQ(4, counters.at("kvstore.cmd_key_set.count"));
+  ASSERT_EQ(1, counters.count("kvstore.received_key_vals.sum"));
+  EXPECT_EQ(4, counters.at("kvstore.received_key_vals.sum"));
+
+  // Verify the key and the number of key
+  ASSERT_TRUE(kvStore.getKey("test-key2").has_value());
+  ASSERT_EQ(1, counters.count("kvstore.num_keys"));
+  int expect_num_key = 1;
+  EXPECT_EQ(expect_num_key, counters.at("kvstore.num_keys"));
+
+  // Verify the number key update
+  ASSERT_EQ(1, counters.count("kvstore.updated_key_vals.sum"));
+  EXPECT_EQ(2, counters.at("kvstore.updated_key_vals.sum"));
 
   // Verify publication counter
   ASSERT_EQ(1, counters.count("kvstore.looped_publications.count"));
   EXPECT_EQ(1, counters.at("kvstore.looped_publications.count"));
   ASSERT_EQ(1, counters.count("kvstore.received_publications.count"));
-  EXPECT_EQ(2, counters.at("kvstore.received_publications.count"));
+  EXPECT_EQ(4, counters.at("kvstore.received_publications.count"));
 
   // Verify redundant publication counter
   ASSERT_EQ(1, counters.count("kvstore.received_redundant_publications.count"));
   EXPECT_EQ(1, counters.at("kvstore.received_redundant_publications.count"));
+
+  // Wait for counter update again
+  std::this_thread::sleep_for(std::chrono::milliseconds(counterUpdateWaitTime));
+  // Verify the num_keys counter is the same
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(expect_num_key, counters.at("kvstore.num_keys"));
 
   LOG(INFO) << "Counters received, yo";
   kvStore.stop();

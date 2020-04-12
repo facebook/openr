@@ -806,21 +806,21 @@ KvStore::processKvStoreDualMessage(
 
 void
 KvStore::updateGlobalCounters() {
-  auto allCounters = fb303::fbData->getCounters();
+  std::unordered_map<std::string, int64_t> flatCounters;
   for (auto& kvDb : kvStoreDb_) {
     auto kvDbCounters = kvDb.second.getCounters();
     // add up counters for same key from all kvStoreDb instances
-    allCounters = std::accumulate(
+    flatCounters = std::accumulate(
         kvDbCounters.begin(),
         kvDbCounters.end(),
-        allCounters,
-        [](std::map<std::string, int64_t>& allCounters,
+        flatCounters,
+        [](std::unordered_map<std::string, int64_t>& flatCounters,
            const std::pair<const std::string, int64_t>& kvDbcounter) {
-          allCounters[kvDbcounter.first] += kvDbcounter.second;
-          return allCounters;
+          flatCounters[kvDbcounter.first] += kvDbcounter.second;
+          return flatCounters;
         });
   }
-  for (auto counter : allCounters) {
+  for (auto counter : flatCounters) {
     fb303::fbData->setCounter(counter.first, counter.second);
   }
   counterUpdateTimer_->scheduleTimeout(counterSubmitInterval_);
