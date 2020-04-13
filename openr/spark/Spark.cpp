@@ -152,6 +152,7 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
          std::nullopt,
          std::nullopt,
          std::nullopt,
+         std::nullopt,
          std::nullopt},
         /*
          * index 1 - WARM
@@ -164,10 +165,12 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
          std::nullopt,
          std::nullopt,
          std::nullopt,
+         std::nullopt,
          std::nullopt},
         /*
          * index 2 - NEGOTIATE
-         * HANDSHAKE_RCVD => ESTABLISHED; NEGOTIATE_TIMER_EXPIRE => WARM
+         * HANDSHAKE_RCVD => ESTABLISHED; NEGOTIATE_TIMER_EXPIRE => WARM;
+         * V4_SUBNET_VALIDATION_FAILURE => WARM;
          */
         {std::nullopt,
          std::nullopt,
@@ -176,7 +179,8 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
          SparkNeighState::ESTABLISHED,
          std::nullopt,
          SparkNeighState::WARM,
-         std::nullopt},
+         std::nullopt,
+         SparkNeighState::WARM},
         /*
          * index 3 - ESTABLISHED
          * HELLO_RCVD_NO_INFO => IDLE; HELLO_RCVD_RESTART => RESTART;
@@ -188,6 +192,7 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
          SparkNeighState::ESTABLISHED,
          std::nullopt,
          SparkNeighState::IDLE,
+         std::nullopt,
          std::nullopt,
          std::nullopt},
         /*
@@ -201,7 +206,8 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
          std::nullopt,
          std::nullopt,
          std::nullopt,
-         SparkNeighState::IDLE}};
+         SparkNeighState::IDLE,
+         std::nullopt}};
 
 SparkNeighState
 Spark::getNextState(
@@ -870,10 +876,9 @@ Spark::validateV4AddressSubnet(
       folly::sformat("{}/{}", toString(neighV4Addr), myV4PrefixLen);
 
   if (!myV4Addr.inSubnet(neighCidrNetwork)) {
-    FB_LOG_EVERY_MS(ERROR, 500)
-        << "Neighbor V4 address " << toString(neighV4Addr)
-        << " is not in the same subnet with local V4 address " << myV4Addr.str()
-        << "/" << myV4PrefixLen;
+    LOG(ERROR) << "Neighbor V4 address " << toString(neighV4Addr)
+               << " is not in the same subnet with local V4 address "
+               << myV4Addr.str() << "/" << +myV4PrefixLen;
     fb303::fbData->addStatValue(
         "spark.invalid_keepalive.different_subnet", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
@@ -1657,25 +1662,36 @@ Spark::processHandshakeMsg(
 
   auto& neighbor = neighborIt->second;
 
-  // for quick convergence purpose, reply immediately if neighbor
-  // hasn't form adjacency with us yet
+  // for quick convergence, reply immediately if neighbor
+  // hasn't form adjacency with us yet.
+  //
+  // ATTN: in case of v4 subnet validation fails, neighbor
+  //       state will fall back from NEGOTIATE => WARM.
+  //       Node should NOT ask for handshakeMsg reply to
+  //       avoid infinite loop of pkt between nodes.
   if (!handshakeMsg.isAdjEstablished) {
-    sendHandshakeMsg(ifName, neighbor.state == SparkNeighState::ESTABLISHED);
+    sendHandshakeMsg(ifName, neighbor.state != SparkNeighState::NEGOTIATE);
     LOG(INFO) << "Neighbor: (" << neighborName
               << ") has NOT forming adj with us yet. "
               << "Reply to handshakeMsg immediately.";
   }
 
-  // Will extend heartbeat hold-timer In case:
-  //  1. Already declare neighbor in ESTABLISHED state;
-  //  2. Receive handshakeMsg before heartbeatMsg from neighbor;
+  // After GR from peerNode, peerNode will go through:
+  //
+  // IDLE => WARM => NEGOTIATE => ESTABLISHED
+  //
+  // Node can receive handshakeMsg from peerNode although it has already
+  // marked peer in ESTABLISHED state. Avoid unnecessary adj drop when
+  // handshake is happening by extending heartbeat hold timer.
   if (neighbor.heartbeatHoldTimer) {
     // Reset the hold-timer for neighbor as we have received a keep-alive msg
     LOG(INFO) << "Extend heartbeat timer for neighbor: " << neighborName;
     neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
   }
 
-  // In case when we process handshakeMsg, negotiate timer already expired
+  // skip NEGOTIATE step if neighbor is NOT in state. This can happen:
+  //  1). negotiate hold timer already expired;
+  //  2). v4 validation failed and fall back to WARM;
   if (neighbor.state != SparkNeighState::NEGOTIATE) {
     VLOG(3) << "For neighborNode (" << neighborName << "): current state: ["
             << sparkNeighborStateToStr(neighbor.state) << "]"
@@ -1715,6 +1731,17 @@ Spark::processHandshakeMsg(
   if (enableV4_) {
     if (PacketValidationResult::FAILURE ==
         validateV4AddressSubnet(ifName, handshakeMsg.transportAddressV4)) {
+      // state transition
+      SparkNeighState oldState = neighbor.state;
+      neighbor.state =
+          getNextState(oldState, SparkNeighEvent::V4_SUBNET_VALIDATION_FAILURE);
+      logStateTransition(neighborName, ifName, oldState, neighbor.state);
+
+      // stop sending out handshake msg, no longer in NEGOTIATE stage
+      neighbor.negotiateTimer.reset();
+      // remove negotiate hold timer, no longer in NEGOTIATE stage
+      neighbor.negotiateHoldTimer.reset();
+
       return;
     }
   }

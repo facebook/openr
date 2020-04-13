@@ -66,7 +66,7 @@ const std::chrono::milliseconds kHelloTime(200);
 // the time interval for spark2 handhshake msg
 const std::chrono::milliseconds kHandshakeTime(50);
 
-// the time interval for spark2 handhshake msg
+// the time interval for spark2 heartbeat msg
 const std::chrono::milliseconds kHeartbeatTime(50);
 
 // the hold time for spark2 negotiate stage
@@ -318,16 +318,18 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    EXPECT_FALSE(
-        node1
-            ->waitForEvent(
-                thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
-            .has_value());
-    EXPECT_FALSE(
-        node2
-            ->waitForEvent(
-                thrift::SparkNeighborEventType::NEIGHBOR_DOWN, kGRHoldTime * 2)
-            .has_value());
+    EXPECT_FALSE(node1
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+    EXPECT_FALSE(node2
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
   }
 }
 
@@ -741,6 +743,71 @@ TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
     ASSERT_TRUE(event2.has_value());
     LOG(INFO) << "node-1 and node-2 successfully form adjacency";
+  }
+}
+
+TEST_F(Spark2Fixture, InvalidV4Subnet) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture InvalidV4Subnet finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start spark2 instances
+  std::string nodeName1 = "node-1";
+  std::string nodeName2 = "node-2";
+  auto node1 = createSpark(kDomainName, nodeName1, 1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2);
+
+  // enable v4 subnet validation to put adddres in different /31 subnet
+  // on purpose.
+  const folly::CIDRNetwork ip1V4WithSubnet =
+      folly::IPAddress::createNetwork("192.168.0.2", 31);
+  const folly::CIDRNetwork ip2V4WithDiffSubnet =
+      folly::IPAddress::createNetwork("192.168.0.4", 31);
+
+  // start tracking iface1 and iface2
+  EXPECT_TRUE(
+      node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4WithSubnet, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb(
+      {{iface2, ifIndex2, ip2V4WithDiffSubnet, ip2V6}}));
+
+  // won't form adj as v4 validation should fail
+  {
+    EXPECT_FALSE(node1
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+
+    EXPECT_FALSE(node2
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+  }
+
+  // check neighbor state: should be in WARM/NEGOTIATE stage
+  {
+    auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
+    EXPECT_TRUE(
+        neighState1 == SparkNeighState::WARM ||
+        neighState1 == SparkNeighState::NEGOTIATE);
+
+    auto neighState2 = node2->getSparkNeighState(iface2, nodeName1);
+    EXPECT_TRUE(
+        neighState2 == SparkNeighState::WARM ||
+        neighState2 == SparkNeighState::NEGOTIATE);
   }
 }
 
