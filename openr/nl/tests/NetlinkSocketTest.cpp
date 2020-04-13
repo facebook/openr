@@ -97,7 +97,6 @@ class NetlinkSocketFixture : public testing::Test {
     nlProtocolSocket =
         std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&evl2);
     nlProtocolSocketThread = std::thread([&]() {
-      nlProtocolSocket->init();
       evl2.run();
       evl2.waitUntilStopped();
     });

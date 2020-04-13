@@ -46,10 +46,6 @@ class NetlinkProtocolSocket {
  public:
   explicit NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl);
 
-  // TODO: This should be private and auto initialized (either lazy or static)
-  // create socket and add to eventloop
-  void init();
-
   ~NetlinkProtocolSocket();
 
   // Set netlinkSocket Link event callback
@@ -151,6 +147,9 @@ class NetlinkProtocolSocket {
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
   NetlinkProtocolSocket& operator=(NetlinkProtocolSocket const&) = delete;
+
+  // Initialize netlink socket and add to eventloop for polling
+  void init();
 
   // Buffer netlink message to the queue_. Invoke sendNetlinkMessage if there
   // are no messages in flight

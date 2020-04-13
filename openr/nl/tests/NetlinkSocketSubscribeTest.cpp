@@ -128,7 +128,6 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
     nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
         &nlProtocolSocketEventLoop);
     nlProtocolSocketThread = std::thread([&]() {
-      nlProtocolSocket->init();
       nlProtocolSocketEventLoop.run();
       nlProtocolSocketEventLoop.waitUntilStopped();
     });

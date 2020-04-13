@@ -42,6 +42,9 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
     LOG(INFO) << "Resume sending bufferred netlink messages";
     sendNetlinkMessage();
   });
+
+  // Initialize the socket
+  init();
 }
 
 void

@@ -300,7 +300,6 @@ main(int argc, char** argv) {
     auto nlProtocolSocketThread = std::thread([&]() {
       LOG(INFO) << "Starting NetlinkProtolSocketEvl thread ...";
       folly::setThreadName("NetlinkProtolSocketEvl");
-      nlProtocolSocket->init();
       nlProtocolSocketEventLoop->run();
       LOG(INFO) << "NetlinkProtolSocketEvl thread got stopped.";
     });

@@ -61,7 +61,6 @@ main(int argc, char** argv) {
       std::thread([&nlProtocolSocket, &nlProtocolSocketEventLoop]() {
         LOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
         folly::setThreadName("NetlinkProtolSocketEvl");
-        nlProtocolSocket->init();
         nlProtocolSocketEventLoop->run();
         LOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
       }));

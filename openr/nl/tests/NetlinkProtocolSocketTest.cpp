@@ -136,7 +136,6 @@ class NlMessageFixture : public ::testing::Test {
 
     // start event thread
     eventThread = std::thread([&]() {
-      nlSock->init();
       evl.run();
       evl.waitUntilStopped();
     });
