@@ -749,7 +749,7 @@ NetlinkSocket::getIfAddrs(int ifIndex, int family, int scope) {
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), ifIndex, family, scope]() mutable {
         std::vector<IfAddress> addrs;
-        std::vector<fbnl::IfAddress> allAddrs = nlSock_->getAllIfAddresses();
+        auto allAddrs = nlSock_->getAllIfAddresses().get();
         for (auto& addr : allAddrs) {
           // Check if addr fits the filtering parameters
           if (family != AF_UNSPEC && family != addr.getFamily()) {
@@ -834,11 +834,11 @@ NetlinkSocket::getAllLinks() {
   auto future = promise.getFuture();
   evl_->runImmediatelyOrInEventLoop([this, p = std::move(promise)]() mutable {
     try {
-      auto links = nlSock_->getAllLinks();
+      auto links = nlSock_->getAllLinks().get();
       for (auto& link : links) {
         doHandleLinkEvent(link, false);
       }
-      auto addresses = nlSock_->getAllIfAddresses();
+      auto addresses = nlSock_->getAllIfAddresses().get();
       for (auto& address : addresses) {
         doHandleAddrEvent(address, false);
       }
@@ -859,7 +859,7 @@ NetlinkSocket::getAllReachableNeighbors() {
     try {
       getAllLinks().get();
 
-      auto neighbors = nlSock_->getAllNeighbors();
+      auto neighbors = nlSock_->getAllNeighbors().get();
       for (auto& neighbor : neighbors) {
         doHandleNeighborEvent(neighbor, false);
       }
@@ -874,7 +874,7 @@ NetlinkSocket::getAllReachableNeighbors() {
 
 void
 NetlinkSocket::updateRouteCache() {
-  auto routes = nlSock_->getAllRoutes();
+  auto routes = nlSock_->getAllRoutes().get();
   for (auto& route : routes) {
     doHandleRouteEvent(route, false, true);
   }
@@ -882,7 +882,7 @@ NetlinkSocket::updateRouteCache() {
 
 std::vector<fbnl::Route>
 NetlinkSocket::getAllRoutes() const {
-  return nlSock_->getAllRoutes();
+  return nlSock_->getAllRoutes().get();
 }
 
 void

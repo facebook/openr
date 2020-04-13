@@ -497,6 +497,9 @@ NetlinkFibHandler::buildRoute(
     return rtBuilder.build();
   }
   buildNextHop(rtBuilder, route.nextHops);
+
+  // TODO: Add protocol to priority mapping
+
   return rtBuilder.setFlags(0).setValid(true).build();
 }
 

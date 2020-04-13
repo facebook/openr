@@ -210,36 +210,38 @@ NetlinkProtocolSocket::processMessage(
 
     VLOG(2) << "Received Netlink message of type " << nlh->nlmsg_type
             << " seq no " << nlh->nlmsg_seq;
+    auto nlSeqIt = nlSeqNumMap_.find(nlh->nlmsg_seq);
+
     switch (nlh->nlmsg_type) {
     case RTM_NEWROUTE:
     case RTM_DELROUTE: {
       // next RTM message to be processed
-      auto rtmMessage = std::make_unique<NetlinkRouteMessage>();
-      auto route = rtmMessage->parseMessage(nlh);
-      if (nlSeqNumMap_.count(nlh->nlmsg_seq) > 0) {
+      auto route = NetlinkRouteMessage::parseMessage(nlh);
+      if (nlSeqIt != nlSeqNumMap_.end()) {
         // Extend message timer as we received a valid ack
         nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
-        // Synchronous event - do not generate route events
-        routeCache_.emplace_back(route);
+        // Received route in response to request
+        nlSeqIt->second->rcvdRoute(std::move(route));
+      } else {
+        // Route notification
+        DCHECK(false) << "Route notifications are not subscribed";
       }
     } break;
 
     case RTM_DELLINK:
     case RTM_NEWLINK: {
       // process link information received from netlink
-      auto linkMessage = std::make_unique<NetlinkLinkMessage>();
-      fbnl::Link link = linkMessage->parseMessage(nlh);
+      auto link = NetlinkLinkMessage::parseMessage(nlh);
 
-      if (nlSeqNumMap_.count(nlh->nlmsg_seq) > 0) {
+      if (nlSeqIt != nlSeqNumMap_.end()) {
         // Extend message timer as we received a valid ack
         nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
-        // Synchronous event - do not generate link events
-        linkCache_.emplace_back(link);
+        // Received link in response to request
+        nlSeqIt->second->rcvdLink(std::move(link));
       } else {
-        // Asynchronous event - generate link event for handler
-        VLOG(1) << "Asynchronous Link Event: " << link.str();
+        // Link notification
         if (linkEventCB_) {
-          linkEventCB_(link, true);
+          linkEventCB_(std::move(link), true);
         }
       }
     } break;
@@ -247,40 +249,37 @@ NetlinkProtocolSocket::processMessage(
     case RTM_DELADDR:
     case RTM_NEWADDR: {
       // process interface address information received from netlink
-      auto addrMessage = std::make_unique<NetlinkAddrMessage>();
-      fbnl::IfAddress addr = addrMessage->parseMessage(nlh);
-
+      auto addr = NetlinkAddrMessage::parseMessage(nlh);
       if (!addr.getPrefix().has_value()) {
         break;
       }
-      if (nlSeqNumMap_.count(nlh->nlmsg_seq) > 0) {
+
+      if (nlSeqIt != nlSeqNumMap_.end()) {
         // Extend message timer as we received a valid ack
         nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
         // Response to a corresponding request
-        auto& request = nlSeqNumMap_.at(nlh->nlmsg_seq);
+        auto& request = nlSeqIt->second;
         if (request->getMessageType() ==
             NetlinkMessage::MessageType::GET_ALL_ADDRS) {
-          // Message in response to get addresses, store in address cache
-          addressCache_.emplace_back(addr);
-        } else if (
-            request->getMessageType() ==
-                NetlinkMessage::MessageType::ADD_ADDR ||
-            request->getMessageType() ==
-                NetlinkMessage::MessageType::DEL_ADDR) {
+          // Received link in response to request
+          request->rcvdIfAddress(std::move(addr));
+        } else {
+          // TODO: Make the notifications consistent across all the APIs. We
+          // can also invoke notifcation on success of addition or removal.
+          //
           // Response to a add/del request - generate addr event for handler.
           // This occurs when we add/del IPv4 addresses generates address event
           // with the same sequence as the original request.
-          // Asynchronous event - generate addr event for handler
-          VLOG(1) << "Asynchronous Addr Event: " << addr.str();
+          //
+          // IfAddress notification
           if (addrEventCB_) {
-            addrEventCB_(addr, true);
+            addrEventCB_(std::move(addr), true);
           }
         }
       } else {
-        // Asynchronous event - generate addr event for handler
-        VLOG(1) << "Asynchronous Addr Event: " << addr.str();
+        // IfAddress notification
         if (addrEventCB_) {
-          addrEventCB_(addr, true);
+          addrEventCB_(std::move(addr), true);
         }
       }
     } break;
@@ -288,19 +287,17 @@ NetlinkProtocolSocket::processMessage(
     case RTM_DELNEIGH:
     case RTM_NEWNEIGH: {
       // process neighbor information received from netlink
-      auto neighMessage = std::make_unique<NetlinkNeighborMessage>();
-      fbnl::Neighbor neighbor = neighMessage->parseMessage(nlh);
+      auto neighbor = NetlinkNeighborMessage::parseMessage(nlh);
 
-      if (nlSeqNumMap_.count(nlh->nlmsg_seq) > 0) {
+      if (nlSeqIt != nlSeqNumMap_.end()) {
         // Extend message timer as we received a valid ack
         nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
-        // Synchronous event - do not generate neighbor events
-        neighborCache_.emplace_back(neighbor);
+        // Received neighbor in response to request
+        nlSeqIt->second->rcvdNeighbor(std::move(neighbor));
       } else {
-        // Asynchronous event - generate neighbor event for handler
-        VLOG(1) << "Asynchronous Neighbor Event: " << neighbor.str();
+        // Neighbor notification
         if (neighborEventCB_) {
-          neighborEventCB_(neighbor, true);
+          neighborEventCB_(std::move(neighbor), true);
         }
       }
     } break;
@@ -489,70 +486,59 @@ NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   return future;
 }
 
-std::vector<fbnl::Link>
+folly::SemiFuture<std::vector<fbnl::Link>>
 NetlinkProtocolSocket::getAllLinks() {
-  LOG_FN_EXECUTION_TIME;
-  // Refresh internal cache
-  linkCache_.clear();
-
-  // Send Netlink message to get links
   auto linkMsg = std::make_unique<openr::fbnl::NetlinkLinkMessage>();
-  auto future = linkMsg->getSemiFuture();
+  auto future = linkMsg->getLinksSemiFuture();
+
+  // Initialize message fields to get all links
   linkMsg->init(RTM_GETLINK, 0);
   addNetlinkMessage(std::move(linkMsg));
-  std::move(future).get(); // Wait for future to complete
 
-  return std::move(linkCache_);
+  return future;
 }
 
-std::vector<fbnl::IfAddress>
+folly::SemiFuture<std::vector<fbnl::IfAddress>>
 NetlinkProtocolSocket::getAllIfAddresses() {
-  LOG_FN_EXECUTION_TIME;
-  // Refresh internal cache
-  addressCache_.clear();
-
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
-  auto future = addrMsg->getSemiFuture();
+  auto future = addrMsg->getAddrsSemiFuture();
 
-  // Initialize Netlink message fields to get all addresses
+  // Initialize message fields to get all addresses
   addrMsg->init(RTM_GETADDR);
   addrMsg->setMessageType(NetlinkMessage::MessageType::GET_ALL_ADDRS);
   addNetlinkMessage(std::move(addrMsg));
-  std::move(future).get(); // Wait for future to complete
 
-  return std::move(addressCache_);
+  return future;
 }
 
-std::vector<fbnl::Neighbor>
+folly::SemiFuture<std::vector<fbnl::Neighbor>>
 NetlinkProtocolSocket::getAllNeighbors() {
-  LOG_FN_EXECUTION_TIME;
-  // Refresh internal cache
-  neighborCache_.clear();
-
-  // Send Netlink message to get neighbors
   auto neighMsg = std::make_unique<openr::fbnl::NetlinkNeighborMessage>();
-  auto future = neighMsg->getSemiFuture();
+  auto future = neighMsg->getNeighborsSemiFuture();
 
+  // Initialize message fields to get all neighbors
   neighMsg->init(RTM_GETNEIGH, 0);
   addNetlinkMessage(std::move(neighMsg));
-  std::move(future).get(); // Wait for future to complete
 
-  return std::move(neighborCache_);
+  return future;
 }
 
-std::vector<fbnl::Route>
-NetlinkProtocolSocket::getAllRoutes() {
-  LOG_FN_EXECUTION_TIME;
-  routeCache_.clear();
-
+folly::SemiFuture<std::vector<fbnl::Route>>
+NetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
   auto routeMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-  auto future = routeMsg->getSemiFuture();
+  auto future = routeMsg->getRoutesSemiFuture();
 
-  fbnl::RouteBuilder builder; // to create empty route
-  routeMsg->init(RTM_GETROUTE, 0, builder.build());
+  // Initialize message fields to get all addresses
+  routeMsg->init(RTM_GETROUTE, 0, filter);
   addNetlinkMessage(std::move(routeMsg));
-  std::move(future).get(); // Wait for future to complete
-  return std::move(routeCache_);
+
+  return future;
+}
+
+folly::SemiFuture<std::vector<fbnl::Route>>
+NetlinkProtocolSocket::getAllRoutes() {
+  fbnl::RouteBuilder builder;
+  return getRoutes(builder.build());
 }
 
 } // namespace openr::fbnl

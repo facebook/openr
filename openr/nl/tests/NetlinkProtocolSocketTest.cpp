@@ -144,7 +144,7 @@ class NlMessageFixture : public ::testing::Test {
     evl.waitUntilRunning();
 
     // find ifIndexX and ifIndexY
-    auto links = nlSock->getAllLinks();
+    auto links = nlSock->getAllLinks().get();
     for (const auto& link : links) {
       if (link.getLinkName() == kVethNameX) {
         ifIndexX = link.getIfIndex();
@@ -494,7 +494,6 @@ class NlMessageFixture : public ::testing::Test {
 };
 
 TEST_F(NlMessageFixture, EncodeLabel) {
-  NetlinkRouteMessage rt{};
   std::vector<std::pair<uint32_t, uint32_t>> labels;
   labels.push_back(std::make_pair(0x0, 0 | 0x100));
   labels.push_back(std::make_pair(0x1, 0x1000 | 0x100));
@@ -508,7 +507,7 @@ TEST_F(NlMessageFixture, EncodeLabel) {
   labels.push_back(std::make_pair(0x1F0000, 0x100));
 
   for (const auto& x : labels) {
-    EXPECT_EQ(x.second, ntohl(rt.encodeLabel(x.first, true)));
+    EXPECT_EQ(x.second, ntohl(NetlinkRouteMessage::encodeLabel(x.first, true)));
   }
 }
 
@@ -529,7 +528,7 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -538,7 +537,7 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -568,7 +567,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -577,7 +576,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -601,7 +600,7 @@ TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -610,7 +609,7 @@ TEST_F(NlMessageFixture, IPv4RouteSingleNextHop) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -636,7 +635,7 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -645,7 +644,7 @@ TEST_F(NlMessageFixture, IPv4RouteMultipleNextHops) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -672,7 +671,7 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -681,7 +680,7 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -710,7 +709,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes for multiple label PUSH nexthops
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -719,7 +718,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -767,7 +766,7 @@ TEST_F(NlMessageFixture, PopLabel) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for single POP nexthop
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -776,7 +775,7 @@ TEST_F(NlMessageFixture, PopLabel) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -806,7 +805,7 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for single POP nexthop
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -815,7 +814,7 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -840,7 +839,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for single SWAP label nexthop
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -849,7 +848,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -882,7 +881,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for muliple SWAP label nexthop
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -891,7 +890,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -989,7 +988,7 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes at scale
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   LOG(INFO) << "Checking if all routes are added to kernel";
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, routes), count);
 
@@ -1009,7 +1008,7 @@ TEST_F(NlMessageFixture, MultipleIpRoutesLabelNexthop) {
   EXPECT_GE(getAckCount(), ackCount + count);
 
   // verify route deletions
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, routes), 0);
 }
 
@@ -1033,7 +1032,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify getAllRoutes
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -1042,7 +1041,7 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -1067,7 +1066,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for single hop MPLS PHP
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route1));
 
   paths.push_back(buildNextHop(
@@ -1086,7 +1085,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for multiple next hop MPLS PHP
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route2));
 
   ackCount = getAckCount();
@@ -1095,7 +1094,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route2));
 }
 
@@ -1126,7 +1125,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for IPv4 nexthops
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -1135,7 +1134,7 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -1164,7 +1163,7 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes for max 16 labels
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, route));
 
   ackCount = getAckCount();
@@ -1173,7 +1172,7 @@ TEST_F(NlMessageFixture, MaxLabelStackTest) {
   EXPECT_GE(getAckCount(), ackCount + 1);
 
   // verify if route is deleted
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
@@ -1203,7 +1202,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes at scale
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   LOG(INFO) << "Checking if all routes are added to kernel";
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, routes), count);
 
@@ -1225,7 +1224,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   EXPECT_GE(getAckCount(), ackCount + count);
 
   // verify route deletions
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, routes), 0);
 
   // add routes one by one instead of a vector of routes
@@ -1241,7 +1240,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes at scale
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   LOG(INFO) << "Checking if all routes are added to kernel";
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, routes), count);
 
@@ -1256,7 +1255,7 @@ TEST_F(NlMessageFixture, MultipleIpV4RouteLabelNexthop) {
   // should have received acks status = 0
   EXPECT_GE(getAckCount(), ackCount + count);
   // verify route deletions
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, routes), 0);
 }
 
@@ -1297,7 +1296,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
 
   LOG(INFO) << "Getting all routes...";
   // verify Netlink getAllRoutes at scale
-  auto kernelRoutes = nlSock->getAllRoutes();
+  auto kernelRoutes = nlSock->getAllRoutes().get();
   LOG(INFO) << "Checking if all routes are added to kernel";
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, labelRoutes), count);
 
@@ -1315,7 +1314,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
   EXPECT_GE(getAckCount(), ackCount + count);
 
   // verify route deletions
-  kernelRoutes = nlSock->getAllRoutes();
+  kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_EQ(findRoutesInKernelRoutes(kernelRoutes, labelRoutes), 0);
 }
 
@@ -1323,7 +1322,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
 TEST_F(NlMessageFixture, AddrScaleTest) {
   const int addrCount{250};
 
-  auto links = nlSock->getAllLinks();
+  auto links = nlSock->getAllLinks().get();
   // Find kVethNameX
   int ifIndexX{-1};
   for (const auto& link : links) {
@@ -1359,7 +1358,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
   }
 
   // Verify if addresses have been added
-  auto kernelAddresses = nlSock->getAllIfAddresses();
+  auto kernelAddresses = nlSock->getAllIfAddresses().get();
   EXPECT_EQ(
       2 * addrCount,
       findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
@@ -1380,7 +1379,7 @@ TEST_F(NlMessageFixture, AddrScaleTest) {
   }
 
   // Verify if addresses have been deleted
-  kernelAddresses = nlSock->getAllIfAddresses();
+  kernelAddresses = nlSock->getAllIfAddresses().get();
   EXPECT_EQ(0, findAddressesInKernelAddresses(kernelAddresses, ifAddresses));
 }
 
@@ -1399,8 +1398,8 @@ TEST_F(NlMessageFixture, GetAllNeighbors) {
 
   // Get links and neighbors
   LOG(INFO) << "Getting links and neighbors";
-  auto links = nlSock->getAllLinks();
-  auto neighbors = nlSock->getAllNeighbors();
+  auto links = nlSock->getAllLinks().get();
+  auto neighbors = nlSock->getAllNeighbors().get();
 
   // Find kVethNameX
   int ifIndexX{-1};
@@ -1438,7 +1437,7 @@ TEST_F(NlMessageFixture, GetAllNeighbors) {
 
   // Check if getAllNeighbors do not return any reachable neighbors on
   // kVethNameX
-  neighbors = nlSock->getAllNeighbors();
+  neighbors = nlSock->getAllNeighbors().get();
   testNeighbors = 0;
   for (const auto& neighbor : neighbors) {
     if (neighbor.getIfIndex() == ifIndexX &&
@@ -1469,8 +1468,8 @@ TEST_F(NlMessageFixture, GetAllNeighborsV4) {
 
   // Get links and neighbors
   LOG(INFO) << "Getting links and neighbors";
-  auto links = nlSock->getAllLinks();
-  auto neighbors = nlSock->getAllNeighbors();
+  auto links = nlSock->getAllLinks().get();
+  auto neighbors = nlSock->getAllNeighbors().get();
 
   // Find kVethNameX
   int ifIndexX{-1};
@@ -1507,7 +1506,7 @@ TEST_F(NlMessageFixture, GetAllNeighborsV4) {
 
   // Check if getAllNeighbors do not return any reachable neighbors on
   // kVethNameX
-  neighbors = nlSock->getAllNeighbors();
+  neighbors = nlSock->getAllNeighbors().get();
   testNeighbors = 0;
   for (const auto& neighbor : neighbors) {
     if (neighbor.getIfIndex() == ifIndexX &&

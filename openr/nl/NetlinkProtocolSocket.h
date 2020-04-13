@@ -35,14 +35,8 @@ constexpr size_t kMinIovMsg{200};
 // assume kernel is not responsive.
 constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
 
-// Timeout for an overall netlink request e.g. addRoute, delRoute
-// TODO: Remove this timeout. Implement timeout at a higher level. It will
-// be possible to do so when we make all APIs asynchronous
-constexpr std::chrono::milliseconds kNlRequestTimeout{30000};
-
 /**
  * TODO: Document this class
- * TODO: Move to another file
  *
  * Add/Del APIs returns int value. 0 indicates success and in case of failure,
  * corresponding netlink error code. You can use `nl_geterror(errno)` to get
@@ -114,22 +108,33 @@ class NetlinkProtocolSocket {
    */
   folly::SemiFuture<int> deleteIfAddress(const openr::fbnl::IfAddress& ifAddr);
 
-  // TODO: Make asynchronous
-  // get all link interfaces from kernel using Netlink
-  std::vector<fbnl::Link> getAllLinks();
+  /**
+   * API to get interfaces from kernel
+   */
+  folly::SemiFuture<std::vector<fbnl::Link>> getAllLinks();
 
-  // TODO: Make asynchronous
-  // get all interface addresses from kernel using Netlink
-  std::vector<fbnl::IfAddress> getAllIfAddresses();
+  /**
+   * API to get interface addresses from kernel
+   */
+  folly::SemiFuture<std::vector<fbnl::IfAddress>> getAllIfAddresses();
 
-  // TODO: Make asynchronous
-  // get all neighbors from kernel using Netlink
-  std::vector<fbnl::Neighbor> getAllNeighbors();
+  /**
+   * API to get neighbors from kernel
+   */
+  folly::SemiFuture<std::vector<fbnl::Neighbor>> getAllNeighbors();
 
-  // TODO: Make asynchronous
-  // TODO: Provide APIs to get specific routes. `getRoutes(fbnl::Route filter)`
-  // get all routes from kernel using Netlink
-  std::vector<fbnl::Route> getAllRoutes();
+  /**
+   * API to retrieve routes from kernel. Attributes specified in filter will be
+   * used to selectively retrieve routes.
+   */
+  folly::SemiFuture<std::vector<fbnl::Route>> getRoutes(
+      const fbnl::Route& filter);
+
+  /**
+   * APIs to retrieve routes from default routing table.
+   * std::vector<fbnl::Route> getAllRoutes();
+   */
+  folly::SemiFuture<std::vector<fbnl::Route>> getAllRoutes();
 
   // TODO: Provide thread safe API for interface name <-> index mapping
   // TODO: Provide API to sync route
@@ -222,28 +227,6 @@ class NetlinkProtocolSocket {
   // time. Netlink socket is re-initiaited on timeout for any of our pending
   // message, and `nlSeqNumMap_` is cleared.
   std::unique_ptr<fbzmq::ZmqTimeout> nlMessageTimer_{nullptr};
-
-  /**
-   * TODO: Remove this temporary cache. Instead associate cache with each
-   * get request we receive. As of this implementation a subsequent getLinks
-   * requests might will end up messing up with result of first request. e.g.
-   *  R1 - getAllLinks(); clear-cache; enqueue GET_ALL_LINKS response, seq=0
-   *  Kernel sends L1, L2, L3 in message R1-part-1. Add L1, L2, L3 to cache;
-   *  R2 - getAllLinks(); clear-cache; enqueue GET_ALL_LINKS response, seq=1
-   *  Kernel sends L4, L5 in message R1-part-2. Add L4, L5 to cache.
-   *  Return only [L4, L5] to R1.
-   *  Kernel sends L1, L2, L3 in message R1-part-1. Add L1, L2, L3 to cache;
-   *  Kernel sends L4, L5 in message R1-part-2. Add L4, L5 to cache.
-   *  Return [L4, L5, L1, L2, L3, L4, L5] to R2 (NOTE: duplicated entries)
-   *
-   * We maintain a temporary cache of Link, Address, Neighbor and Routes from
-   * the kernel, which are solely used for the getAll... methods. These caches
-   * are cleared when we invoke a new getAllLinks/Addresses/Neighbors/Routes
-   */
-  std::vector<fbnl::Link> linkCache_{};
-  std::vector<fbnl::IfAddress> addressCache_{};
-  std::vector<fbnl::Neighbor> neighborCache_{};
-  std::vector<fbnl::Route> routeCache_{};
 };
 
 } // namespace openr::fbnl

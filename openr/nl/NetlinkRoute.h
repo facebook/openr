@@ -40,8 +40,19 @@ class NetlinkRouteMessage final : public NetlinkMessage {
  public:
   NetlinkRouteMessage();
 
+  ~NetlinkRouteMessage() override;
+
+  // Override setReturnStatus. Set routePromise_ with rcvdRoutes_
+  void setReturnStatus(int status) override;
+
+  // Get future for received links in response to GET request
+  folly::SemiFuture<std::vector<Route>>
+  getRoutesSemiFuture() {
+    return routePromise_.getSemiFuture();
+  }
+
   // initiallize route message with default params
-  void init(int type, uint32_t flags, const openr::fbnl::Route& route);
+  void init(int type, uint32_t flags, const Route& route);
 
   friend std::ostream&
   operator<<(std::ostream& out, NetlinkRouteMessage const& msg) {
@@ -54,22 +65,22 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   }
 
   // add a unicast route
-  int addRoute(const openr::fbnl::Route& route);
+  int addRoute(const Route& route);
 
   // delete a route
-  int deleteRoute(const openr::fbnl::Route& route);
+  int deleteRoute(const Route& route);
 
   // add label route
-  int addLabelRoute(const openr::fbnl::Route& route);
+  int addLabelRoute(const Route& route);
 
   // delete label route
-  int deleteLabelRoute(const openr::fbnl::Route& route);
+  int deleteLabelRoute(const Route& route);
 
   // encode MPLS label, returns in network order
-  uint32_t encodeLabel(uint32_t label, bool bos) const;
+  static uint32_t encodeLabel(uint32_t label, bool bos);
 
   // process netlink route message
-  fbnl::Route parseMessage(const struct nlmsghdr* nlmsg) const;
+  static Route parseMessage(const struct nlmsghdr* nlmsg);
 
  private:
   // print ancillary data
@@ -82,87 +93,96 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   void showMultiPathAttribues(const struct rtattr* const rta) const;
 
   // parse IP address
-  folly::Expected<folly::IPAddress, folly::IPAddressFormatError> parseIp(
-      const struct rtattr* ipAttr, unsigned char family) const;
+  static folly::Expected<folly::IPAddress, folly::IPAddressFormatError> parseIp(
+      const struct rtattr* ipAttr, unsigned char family);
 
   // process netlink next hops
-  std::vector<fbnl::NextHop> parseNextHops(
-      const struct rtattr* routeAttrMultipath, unsigned char family) const;
+  static std::vector<NextHop> parseNextHops(
+      const struct rtattr* routeAttrMultipath, unsigned char family);
 
   // parse NextHop Attributes
-  void parseNextHopAttribute(
+  static void parseNextHopAttribute(
       const struct rtattr* routeAttr,
       unsigned char family,
-      fbnl::NextHopBuilder& nhBuilder) const;
+      NextHopBuilder& nhBuilder);
 
   // parse MPLS labels
-  std::optional<std::vector<int32_t>> parseMplsLabels(
-      const struct rtattr* routeAttr) const;
+  static std::optional<std::vector<int32_t>> parseMplsLabels(
+      const struct rtattr* routeAttr);
 
   // set mpls action based on nexthop fields
-  void setMplsAction(
-      fbnl::NextHopBuilder& nhBuilder, unsigned char family) const;
+  static void setMplsAction(NextHopBuilder& nhBuilder, unsigned char family);
 
   // pointer to route message header
   struct rtmsg* rtmsg_{nullptr};
 
   // add set of nexthops
-  int addNextHops(const openr::fbnl::Route& route);
+  int addNextHops(const Route& route);
 
   // Add ECMP paths
   int addMultiPathNexthop(
-      std::array<char, kMaxNlPayloadSize>& nhop,
-      const openr::fbnl::Route& route) const;
+      std::array<char, kMaxNlPayloadSize>& nhop, const Route& route) const;
 
   // Add label encap
   int addLabelNexthop(
-      struct rtattr* rta,
-      struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path) const;
+      struct rtattr* rta, struct rtnexthop* rtnh, const NextHop& path) const;
 
   // swap or PHP
   int addSwapOrPHPNexthop(
-      struct rtattr* rta,
-      struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path) const;
+      struct rtattr* rta, struct rtnexthop* rtnh, const NextHop& path) const;
 
   // POP - sends to lo I/F
   int addPopNexthop(
-      struct rtattr* rta,
-      struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path) const;
+      struct rtattr* rta, struct rtnexthop* rtnh, const NextHop& path) const;
 
   // POP - sends to lo I/F
   int addIpNexthop(
       struct rtattr* rta,
       struct rtnexthop* rtnh,
-      const openr::fbnl::NextHop& path,
-      const openr::fbnl::Route& route) const;
+      const NextHop& path,
+      const Route& route) const;
 
   // pointer to the netlink message header
   struct nlmsghdr* msghdr_{nullptr};
 
   // for via nexthop
-  struct NextHop {
+  struct _NextHop {
     uint16_t addrFamily;
     char ip[16];
   } __attribute__((__packed__));
 
-  struct NextHopV4 {
+  struct _NextHopV4 {
     uint16_t addrFamily;
     char ip[4];
   } __attribute__((__packed__));
+
+ private:
+  void rcvdRoute(Route&& route) override;
+
+  folly::Promise<std::vector<Route>> routePromise_;
+  std::vector<Route> rcvdRoutes_;
 };
 
 class NetlinkLinkMessage final : public NetlinkMessage {
  public:
   NetlinkLinkMessage();
 
+  ~NetlinkLinkMessage() override;
+
+  // Override setReturnStatus. Set linkPromise_ with rcvdLinks_
+  void setReturnStatus(int status) override;
+
+  // Get future for received links in response to GET request
+  folly::SemiFuture<std::vector<Link>>
+  getLinksSemiFuture() {
+    return linkPromise_.getSemiFuture();
+  }
+
   // initiallize link message with default params
   void init(int type, uint32_t flags);
 
   // parse Netlink Link message
-  fbnl::Link parseMessage(const struct nlmsghdr* nlh) const;
+  static Link parseMessage(const struct nlmsghdr* nlh);
 
  private:
   // pointer to link message header
@@ -170,22 +190,37 @@ class NetlinkLinkMessage final : public NetlinkMessage {
 
   // pointer to the netlink message header
   struct nlmsghdr* msghdr_{nullptr};
+
+  void rcvdLink(Link&& link) override;
+
+  folly::Promise<std::vector<Link>> linkPromise_;
+  std::vector<Link> rcvdLinks_;
 };
 
 class NetlinkAddrMessage final : public NetlinkMessage {
  public:
   NetlinkAddrMessage();
 
+  ~NetlinkAddrMessage() override;
+
+  // Override setReturnStatus. Set addrPromise_ with rcvdAddrs_
+  void setReturnStatus(int status) override;
+
+  // Get future for received addresses in response to GET request
+  folly::SemiFuture<std::vector<IfAddress>>
+  getAddrsSemiFuture() {
+    return addrPromise_.getSemiFuture();
+  }
+
   // initiallize address message with default params
   void init(int type);
 
   // parse Netlink Address message
-  fbnl::IfAddress parseMessage(const struct nlmsghdr* nlh) const;
+  static IfAddress parseMessage(const struct nlmsghdr* nlh);
 
   // create netlink message to add/delete interface address
   // type - RTM_NEWADDR or RTM_DELADDR
-  int addOrDeleteIfAddress(
-      const openr::fbnl::IfAddress& ifAddr, const int type);
+  int addOrDeleteIfAddress(const IfAddress& ifAddr, const int type);
 
  private:
   // pointer to interface message header
@@ -193,17 +228,33 @@ class NetlinkAddrMessage final : public NetlinkMessage {
 
   // pointer to the netlink message header
   struct nlmsghdr* msghdr_{nullptr};
+
+  void rcvdIfAddress(IfAddress&& ifAddr) override;
+
+  folly::Promise<std::vector<IfAddress>> addrPromise_;
+  std::vector<IfAddress> rcvdAddrs_;
 };
 
 class NetlinkNeighborMessage final : public NetlinkMessage {
  public:
   NetlinkNeighborMessage();
 
+  ~NetlinkNeighborMessage() override;
+
+  // Override setReturnStatus. Set neighborPromise_ with rcvdNeighbors_
+  void setReturnStatus(int status) override;
+
+  // Get future for received neighbors in response to GET request
+  folly::SemiFuture<std::vector<Neighbor>>
+  getNeighborsSemiFuture() {
+    return neighborPromise_.getSemiFuture();
+  }
+
   // initiallize neighbor message with default params
   void init(int type, uint32_t flags);
 
   // parse Netlink Neighbor message
-  fbnl::Neighbor parseMessage(const struct nlmsghdr* nlh) const;
+  static Neighbor parseMessage(const struct nlmsghdr* nlh);
 
  private:
   // pointer to neighbor message header
@@ -211,6 +262,11 @@ class NetlinkNeighborMessage final : public NetlinkMessage {
 
   // pointer to the netlink message header
   struct nlmsghdr* msghdr_{nullptr};
+
+  void rcvdNeighbor(Neighbor&& ifAddr) override;
+
+  folly::Promise<std::vector<Neighbor>> neighborPromise_;
+  std::vector<Neighbor> rcvdNeighbors_;
 };
 
 } // namespace openr::fbnl

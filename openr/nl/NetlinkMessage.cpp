@@ -10,15 +10,17 @@
 namespace openr::fbnl {
 
 NetlinkMessage::NetlinkMessage()
-    : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())),
-      promise_(std::make_unique<folly::Promise<int>>()) {}
+    : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())) {}
 
 NetlinkMessage::NetlinkMessage(int type)
-    : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())),
-      promise_(std::make_unique<folly::Promise<int>>()) {
+    : msghdr(reinterpret_cast<struct nlmsghdr*>(msg.data())) {
   // initialize netlink header
   msghdr->nlmsg_len = NLMSG_LENGTH(0);
   msghdr->nlmsg_type = type;
+}
+
+NetlinkMessage::~NetlinkMessage() {
+  CHECK(promise_.isFulfilled());
 }
 
 struct nlmsghdr*
@@ -88,12 +90,12 @@ NetlinkMessage::addAttributes(
 
 folly::SemiFuture<int>
 NetlinkMessage::getSemiFuture() {
-  return promise_->getSemiFuture();
+  return promise_.getSemiFuture();
 }
 
 void
 NetlinkMessage::setReturnStatus(int status) {
-  promise_->setValue(status);
+  promise_.setValue(status);
 }
 
 // get Message Type

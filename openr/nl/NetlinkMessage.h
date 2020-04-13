@@ -19,6 +19,8 @@
 
 #include <folly/futures/Future.h>
 
+#include <openr/nl/NetlinkTypes.h>
+
 namespace openr::fbnl {
 
 constexpr uint16_t kMaxNlPayloadSize{4096};
@@ -30,7 +32,7 @@ class NetlinkMessage {
  public:
   NetlinkMessage();
 
-  virtual ~NetlinkMessage() = default;
+  virtual ~NetlinkMessage();
 
   // construct message with type
   NetlinkMessage(int type);
@@ -44,10 +46,51 @@ class NetlinkMessage {
   // Buffer to create message
   std::array<char, kMaxNlPayloadSize> msg = {};
 
-  // set status value (in promise)
-  void setReturnStatus(int status);
+  /**
+   * APIs for accumulating objects of `GET_<>` request. These APIs are invoked
+   * when an object is received from kernel in-response to this netlink-message.
+   * Sub-classes must override them and define behavior for them depending on
+   * the request type they make.
+   *
+   * e.g. GET_ROUTE request will invoke `rcvdRoute(..)` for each route received
+   *      from kernel. At the end `setReturnStatus(..)` will be invoked.
+   */
 
+  virtual void
+  rcvdRoute(Route&& /* route */) {
+    CHECK(false) << "Must be implemented by subclass";
+  }
+
+  virtual void
+  rcvdLink(Link&& /* link */) {
+    CHECK(false) << "Must be implemented by subclass";
+  }
+
+  virtual void
+  rcvdNeighbor(Neighbor&& /* neighbor */) {
+    CHECK(false) << "Must be implemented by subclass";
+  }
+
+  virtual void
+  rcvdIfAddress(IfAddress&& /* ifAddr */) {
+    CHECK(false) << "Must be implemented by subclass";
+  }
+
+  /**
+   * Get SemiFuture associated with the the associated netlink request. Upon
+   * receipt of the ack from kernel, the value will be set.
+   */
   folly::SemiFuture<int> getSemiFuture();
+
+  /**
+   * Set the return value of the netlink request. Invoke this on receipt of the
+   * ack. This must be invoked before class is destroyed.
+   *
+   * Sub-classes can override this method to define more specific behavior
+   * on completion of the request. For e.g. `GET_<OBJ>` requests on completion
+   * can fulfil the `Promise<vector<OBJ>>`
+   */
+  virtual void setReturnStatus(int status);
 
   /**
    * Netlink MessageType denotes the type of request sent to the kernel, so that
@@ -102,7 +145,7 @@ class NetlinkMessage {
   struct nlmsghdr* const msghdr{nullptr};
 
   // Promise to relay the status code received from kernel
-  std::unique_ptr<folly::Promise<int>> promise_{nullptr};
+  folly::Promise<int> promise_;
 };
 
 } // namespace openr::fbnl
