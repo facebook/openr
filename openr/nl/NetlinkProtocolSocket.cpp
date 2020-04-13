@@ -46,9 +46,7 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
 
 void
 NetlinkProtocolSocket::init() {
-  pid_ = static_cast<int>(
-      std::hash<std::thread::id>{}(std::this_thread::get_id()));
-
+  // Create netlink socket
   nlSock_ = ::socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
   if (nlSock_ < 0) {
     LOG(FATAL) << "Netlink socket create failed.";
@@ -60,11 +58,11 @@ NetlinkProtocolSocket::init() {
     LOG(FATAL) << "Netlink socket set recv buffer failed.";
   };
 
-  // set the source address
+  // Bind on the source address. We let kernel chose the available port-ID
   struct sockaddr_nl saddr;
   ::memset(&saddr, 0, sizeof(saddr));
   saddr.nl_family = AF_NETLINK;
-  saddr.nl_pid = pid_;
+  saddr.nl_pid = 0; // We let kernel assign the port-ID
   /* We can subscribe to different Netlink mutlicast groups for specific types
    * of events: link, IPv4/IPv6 address and neighbor. */
   saddr.nl_groups = RTMGRP_LINK // listen for link events
@@ -74,7 +72,10 @@ NetlinkProtocolSocket::init() {
 
   if (bind(nlSock_, (struct sockaddr*)&saddr, sizeof(saddr)) != 0) {
     LOG(FATAL) << "Failed to bind netlink socket: " << folly::errnoStr(errno);
-  };
+  }
+
+  // Retrieve and set pid that we will use for all subsequent messages
+  portId_ = saddr.nl_pid;
 
   evl_->addSocketFd(nlSock_, ZMQ_POLLIN, [this](int) noexcept {
     try {
@@ -158,7 +159,7 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
     iov[count].iov_len = m->getDataLength();
 
     // fill sequence number and PID
-    nlmsg_hdr->nlmsg_pid = pid_;
+    nlmsg_hdr->nlmsg_pid = portId_;
     nlmsg_hdr->nlmsg_seq = nextNlSeqNum_++;
     if (nextNlSeqNum_ == 0) {
       // wrap around - we start from 1
@@ -305,9 +306,9 @@ NetlinkProtocolSocket::processMessage(
     case NLMSG_ERROR: {
       const struct nlmsgerr* const ack =
           reinterpret_cast<struct nlmsgerr*>(NLMSG_DATA(nlh));
-      if (ack->msg.nlmsg_pid != pid_) {
+      if (ack->msg.nlmsg_pid != portId_) {
         LOG(ERROR) << "received netlink message with wrong PID, received: "
-                   << ack->msg.nlmsg_pid << " expected: " << pid_;
+                   << ack->msg.nlmsg_pid << " expected: " << portId_;
         break;
       }
       if (std::abs(ack->error) != EEXIST && std::abs(ack->error) != 0) {

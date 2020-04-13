@@ -182,14 +182,16 @@ class NetlinkProtocolSocket {
   std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
   std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
 
-  // PID Of the process. Each nl socket is associated with PID and every message
-  // sent or received contains this PID. This must be unique for each socket
-  // an application create across all the processes on the system.
-  uint32_t pid_{UINT_MAX};
-
   // Netlink socket fd. Created when class is constructed. Re-created on timeout
   // when no response is received for any of our pending requests.
   int nlSock_{-1};
+
+  // nl_pid stands for port-ID and not process-ID. Netlink sockets are bound on
+  // this specified port. This must be unique for every netlink socket that
+  // is created on the system. Ironically kernel assigns the process-ID as the
+  // port-ID for the first socket that is created by process. All subsequent
+  // netlink sockets created by process gets assigned some unique-ID.
+  uint32_t portId_{UINT_MAX};
 
   // Next available sequence number to use. It is possible to wrap this around,
   // and should be fine. We put hard check to avoid conflict between pending
