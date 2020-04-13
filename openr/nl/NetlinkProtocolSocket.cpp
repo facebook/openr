@@ -363,223 +363,130 @@ NetlinkProtocolSocket::~NetlinkProtocolSocket() {
 
 void
 NetlinkProtocolSocket::addNetlinkMessage(
-    std::vector<std::unique_ptr<NetlinkMessage>> nlmsgs) {
-  evl_->runImmediatelyOrInEventLoop(
-      [this, nlmsgs = std::move(nlmsgs)]() mutable {
-        for (auto& nlmsg : nlmsgs) {
-          msgQueue_.push(std::move(nlmsg));
+    std::unique_ptr<NetlinkMessage> nlmsg) {
+  evl_->runImmediatelyOrInEventLoop([this, nlmsg = std::move(nlmsg)]() mutable {
+    msgQueue_.push(std::move(nlmsg));
+    // call send messages API if no timers are scheduled
+    if (!nlMessageTimer_->isScheduled()) {
+      sendNetlinkMessage();
+    }
+  });
+}
+
+folly::SemiFuture<int>
+NetlinkProtocolSocket::collectReturnStatus(
+    std::vector<folly::SemiFuture<int>>&& futures,
+    std::unordered_set<int> ignoredErrors) {
+  return folly::collectAll(std::move(futures))
+      .defer([ignoredErrors](
+                 folly::Try<std::vector<folly::Try<int>>>&& results) {
+        for (auto& result : results.value()) {
+          auto retval = std::abs(result.value()); // Throws exeption if any
+          if (retval == 0 or ignoredErrors.count(retval)) {
+            continue;
+          }
+
+          // We encountered first non zero value. Report error and return
+          LOG(ERROR) << "One or more Netlink requests failed with error code: "
+                     << retval << " -- " << folly::errnoStr(retval);
+          return retval;
         }
-        // call send messages API if no timers are scheduled
-        if (!nlMessageTimer_->isScheduled()) {
-          sendNetlinkMessage();
-        }
+        return 0;
       });
-  return;
 }
 
-int
-NetlinkProtocolSocket::getReturnStatus(
-    std::vector<folly::Future<int>>& futures,
-    std::unordered_set<int> ignoredErrors,
-    std::chrono::milliseconds timeout) {
-  if (!futures.size()) {
-    // No request messages
-    return 0;
-  }
-
-  // Collect request status(es) from the request message futures
-  auto all = collectAllUnsafe(futures.begin(), futures.end());
-  // Wait for Netlink Ack (which sets the promise value)
-  if (all.wait(timeout).isReady()) {
-    // Collect statuses from individual futures
-    for (const auto& future : futures) {
-      if (std::abs(future.value()) != 0 &&
-          ignoredErrors.count(std::abs(future.value())) == 0) {
-        // Not one of the ignored errors, log
-        LOG(ERROR) << "One or more Netlink requests failed with error code: "
-                   << std::abs(future.value()) << " -- "
-                   << folly::errnoStr(std::abs(future.value()));
-        return std::abs(future.value());
-      }
-    }
-    return 0;
-  } else {
-    // Atleast one request was timed out.
-    LOG(ERROR) << "One or more Netlink requests timed out";
-    return ETIME;
-  }
-}
-
-int
+folly::SemiFuture<int>
 NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
-  auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(rtmMsg->getFuture());
-  int status{0};
-  if ((status = rtmMsg->addRoute(route)) != 0) {
-    LOG(ERROR) << "Error adding route " << route.str();
-    return status;
+  auto rtmMsg = std::make_unique<NetlinkRouteMessage>();
+  auto future = rtmMsg->getSemiFuture();
+
+  int status = rtmMsg->addRoute(route);
+  if (status != 0) {
+    rtmMsg->setReturnStatus(status);
+  } else {
+    addNetlinkMessage(std::move(rtmMsg));
   }
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(rtmMsg));
-  addNetlinkMessage(std::move(msg));
-  return getReturnStatus(futures, std::unordered_set<int>{EEXIST});
+
+  return future;
 }
 
-int
-NetlinkProtocolSocket::addRoutes(
-    const std::vector<openr::fbnl::Route>& routes) {
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  std::vector<folly::Future<int>> futures;
-
-  for (const auto& route : routes) {
-    auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-    int status{0};
-    if (route.getFamily() == AF_MPLS) {
-      status = rtmMsg->addLabelRoute(route);
-    } else {
-      status = rtmMsg->addRoute(route);
-    }
-    if (status == 0) {
-      futures.emplace_back(rtmMsg->getFuture());
-      msg.emplace_back(std::move(rtmMsg));
-    } else {
-      LOG(ERROR) << "Error adding route " << route.str();
-      return status;
-    }
-  }
-  if (msg.size()) {
-    addNetlinkMessage(std::move(msg));
-  }
-  return getReturnStatus(
-      futures, std::unordered_set<int>{EEXIST}, kNlRequestTimeout);
-}
-
-int
+folly::SemiFuture<int>
 NetlinkProtocolSocket::deleteRoute(const openr::fbnl::Route& route) {
   auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(rtmMsg->getFuture());
-  int status{0};
-  if ((status = rtmMsg->deleteRoute(route)) != 0) {
-    LOG(ERROR) << "Error deleting route " << route.str();
-    return status;
+  auto future = rtmMsg->getSemiFuture();
+
+  int status = rtmMsg->deleteRoute(route);
+  if (status != 0) {
+    rtmMsg->setReturnStatus(status);
+  } else {
+    addNetlinkMessage(std::move(rtmMsg));
   }
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(rtmMsg));
-  addNetlinkMessage(std::move(msg));
-  // Ignore EEXIST, ESRCH, EINVAL errors in delete operation
-  return getReturnStatus(
-      futures, std::unordered_set<int>{EEXIST, ESRCH, EINVAL});
+
+  return future;
 }
 
-int
+folly::SemiFuture<int>
 NetlinkProtocolSocket::addLabelRoute(const openr::fbnl::Route& route) {
   auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(rtmMsg->getFuture());
-  int status{0};
-  if ((status = rtmMsg->addLabelRoute(route)) != 0) {
-    LOG(ERROR) << "Error adding label route " << route.str();
-    return status;
-  };
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(rtmMsg));
-  addNetlinkMessage(std::move(msg));
-  return getReturnStatus(futures, std::unordered_set<int>{EEXIST});
+  auto future = rtmMsg->getSemiFuture();
+
+  int status = rtmMsg->addLabelRoute(route);
+  if (status != 0) {
+    rtmMsg->setReturnStatus(status);
+  } else {
+    addNetlinkMessage(std::move(rtmMsg));
+  }
+
+  return future;
 }
 
-int
+folly::SemiFuture<int>
 NetlinkProtocolSocket::deleteLabelRoute(const openr::fbnl::Route& route) {
   auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(rtmMsg->getFuture());
-  int status{0};
-  if ((status = rtmMsg->deleteLabelRoute(route)) != 0) {
-    LOG(ERROR) << "Error deleting label route " << route.str();
-    return status;
-  };
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(rtmMsg));
-  addNetlinkMessage(std::move(msg));
-  // Ignore EEXIST, ESRCH, EINVAL errors in delete operation
-  // TODO: Remove EINVAL from the ignored error list or point out the reason
-  return getReturnStatus(
-      futures, std::unordered_set<int>{EEXIST, ESRCH, EINVAL});
+  auto future = rtmMsg->getSemiFuture();
+
+  int status = rtmMsg->deleteLabelRoute(route);
+  if (status != 0) {
+    rtmMsg->setReturnStatus(status);
+  } else {
+    addNetlinkMessage(std::move(rtmMsg));
+  }
+
+  return future;
 }
 
-int
-NetlinkProtocolSocket::deleteRoutes(
-    const std::vector<openr::fbnl::Route>& routes) {
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  std::vector<folly::Future<int>> futures;
-
-  for (const auto& route : routes) {
-    auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-    int status{0};
-    if (route.getFamily() == AF_MPLS) {
-      status = rtmMsg->deleteLabelRoute(route);
-    } else {
-      status = rtmMsg->deleteRoute(route);
-    }
-    if (status == 0) {
-      futures.emplace_back(rtmMsg->getFuture());
-      msg.emplace_back(std::move(rtmMsg));
-    } else {
-      LOG(ERROR) << "Error deleting route " << route.str();
-      return status;
-    }
-  }
-  if (msg.size()) {
-    addNetlinkMessage(std::move(msg));
-  }
-  // Ignore EEXIST, ESRCH, EINVAL errors in delete operation
-  // TODO: Remove EINVAL from the ignored error list or point out the reason
-  return getReturnStatus(
-      futures,
-      std::unordered_set<int>{EEXIST, ESRCH, EINVAL},
-      kNlRequestTimeout);
-}
-
-int
+folly::SemiFuture<int>
 NetlinkProtocolSocket::addIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(addrMsg->getFuture());
+  auto future = addrMsg->getSemiFuture();
 
   // Initialize Netlink message fields to add interface address
   addrMsg->setMessageType(NetlinkMessage::MessageType::ADD_ADDR);
   int status = addrMsg->addOrDeleteIfAddress(ifAddr, RTM_NEWADDR);
   if (status != 0) {
-    return status;
+    addrMsg->setReturnStatus(status);
+  } else {
+    addNetlinkMessage(std::move(addrMsg));
   }
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(addrMsg));
-  addNetlinkMessage(std::move(msg));
 
-  // Ignore EEXIST error in add address operation (address already present)
-  return getReturnStatus(futures, std::unordered_set<int>{EEXIST});
+  return future;
 }
 
-int
+folly::SemiFuture<int>
 NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(addrMsg->getFuture());
+  auto future = addrMsg->getSemiFuture();
 
   // Initialize Netlink message fields to delete interface address
   addrMsg->setMessageType(NetlinkMessage::MessageType::DEL_ADDR);
   int status = addrMsg->addOrDeleteIfAddress(ifAddr, RTM_DELADDR);
   if (status != 0) {
-    return status;
+    addrMsg->setReturnStatus(status);
+  } else {
+    addNetlinkMessage(std::move(addrMsg));
   }
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(addrMsg));
-  addNetlinkMessage(std::move(msg));
 
-  // Ignore EADDRNOTAVAIL error in delete
-  // (occurs when trying to delete address not assigned to interface)
-  return getReturnStatus(futures, std::unordered_set<int>{EADDRNOTAVAIL});
+  return future;
 }
 
 std::vector<fbnl::Link>
@@ -587,15 +494,14 @@ NetlinkProtocolSocket::getAllLinks() {
   LOG_FN_EXECUTION_TIME;
   // Refresh internal cache
   linkCache_.clear();
+
   // Send Netlink message to get links
   auto linkMsg = std::make_unique<openr::fbnl::NetlinkLinkMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(linkMsg->getFuture());
+  auto future = linkMsg->getSemiFuture();
   linkMsg->init(RTM_GETLINK, 0);
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(linkMsg));
-  addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{});
+  addNetlinkMessage(std::move(linkMsg));
+  std::move(future).get(); // Wait for future to complete
+
   return std::move(linkCache_);
 }
 
@@ -604,18 +510,16 @@ NetlinkProtocolSocket::getAllIfAddresses() {
   LOG_FN_EXECUTION_TIME;
   // Refresh internal cache
   addressCache_.clear();
+
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(addrMsg->getFuture());
+  auto future = addrMsg->getSemiFuture();
 
   // Initialize Netlink message fields to get all addresses
   addrMsg->init(RTM_GETADDR);
   addrMsg->setMessageType(NetlinkMessage::MessageType::GET_ALL_ADDRS);
+  addNetlinkMessage(std::move(addrMsg));
+  std::move(future).get(); // Wait for future to complete
 
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(addrMsg));
-  addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{});
   return std::move(addressCache_);
 }
 
@@ -624,15 +528,15 @@ NetlinkProtocolSocket::getAllNeighbors() {
   LOG_FN_EXECUTION_TIME;
   // Refresh internal cache
   neighborCache_.clear();
+
   // Send Netlink message to get neighbors
   auto neighMsg = std::make_unique<openr::fbnl::NetlinkNeighborMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(neighMsg->getFuture());
+  auto future = neighMsg->getSemiFuture();
+
   neighMsg->init(RTM_GETNEIGH, 0);
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(neighMsg));
-  addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{});
+  addNetlinkMessage(std::move(neighMsg));
+  std::move(future).get(); // Wait for future to complete
+
   return std::move(neighborCache_);
 }
 
@@ -640,15 +544,14 @@ std::vector<fbnl::Route>
 NetlinkProtocolSocket::getAllRoutes() {
   LOG_FN_EXECUTION_TIME;
   routeCache_.clear();
+
   auto routeMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-  std::vector<folly::Future<int>> futures;
-  futures.emplace_back(routeMsg->getFuture());
+  auto future = routeMsg->getSemiFuture();
+
   fbnl::RouteBuilder builder; // to create empty route
   routeMsg->init(RTM_GETROUTE, 0, builder.build());
-  std::vector<std::unique_ptr<NetlinkMessage>> msg;
-  msg.emplace_back(std::move(routeMsg));
-  addNetlinkMessage(std::move(msg));
-  getReturnStatus(futures, std::unordered_set<int>{}, kNlRequestTimeout);
+  addNetlinkMessage(std::move(routeMsg));
+  std::move(future).get(); // Wait for future to complete
   return std::move(routeCache_);
 }
 

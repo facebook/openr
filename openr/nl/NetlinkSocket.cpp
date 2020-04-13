@@ -17,6 +17,7 @@ NetlinkSocket::NetlinkSocket(
     : evl_(evl), handler_(handler), nlSock_(std::move(nlSock)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 
+  // TODO: Create nlSock_ inline here and share an event-loop
   CHECK(nlSock_ != nullptr) << "Missing NetlinkProtocolSocket";
 
   // Instantiate local link and neighbor caches
@@ -369,11 +370,6 @@ void
 NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   checkUnicastRoute(route);
 
-  const auto& dest = route.getDestination();
-
-  // Create new set of nexthops to be programmed. Existing + New ones
-  auto& unicastRoutes = unicastRoutesCache_[route.getProtocolId()];
-  auto iter = unicastRoutes.find(dest);
   // if user did not speicify priority
   if (!route.getPriority()) {
     const auto routePair =
@@ -387,6 +383,12 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
       route.setPriority(routePair->second);
     }
   }
+
+  // Create new set of nexthops to be programmed. Existing + New ones
+  const auto& dest = route.getDestination();
+  auto& unicastRoutes = unicastRoutesCache_[route.getProtocolId()];
+  auto iter = unicastRoutes.find(dest);
+
   // Same route
   if (iter != unicastRoutes.end() && iter->second == route) {
     return;
@@ -399,13 +401,11 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     // instead a new route will be created, which may cause underlying kernel
     // crash when releasing netdevices
     if (iter != unicastRoutes.end()) {
-      int err{0};
-
-      err = static_cast<int>(nlSock_->deleteRoute(iter->second));
-
-      if (0 != err) {
-        throw fbnl::NlException(folly::sformat(
-            "Failed to delete route\n{}\nError: {}", iter->second.str(), err));
+      int err = static_cast<int>(nlSock_->deleteRoute(iter->second).get());
+      if (err != 0 && std::abs(err) != ESRCH) {
+        throw fbnl::NlException(
+            folly::sformat("Failed to delete route: {}", iter->second.str()),
+            err);
       }
     }
   }
@@ -414,13 +414,10 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   unicastRoutes.erase(dest);
 
   // Add new route
-  int err{0};
-
-  err = static_cast<int>(nlSock_->addRoute(route));
-
-  if (0 != err) {
+  int err = static_cast<int>(nlSock_->addRoute(route).get());
+  if (err != 0 && std::abs(err) != EEXIST) {
     throw fbnl::NlException(
-        folly::sformat("Could not add route\n{}\nError: {}", route.str(), err));
+        folly::sformat("Could not add route: {}", route.str()), err);
   }
 
   // Add route entry in cache on successful addition
@@ -482,11 +479,10 @@ NetlinkSocket::doDeleteMplsRoute(Route mplsRoute) {
     return;
   }
 
-  int err{0};
-  err = static_cast<int>(nlSock_->deleteLabelRoute(mplsRoute));
-  if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
-        "Failed to delete MPLS {} Error: {}", label.value(), err));
+  int err = static_cast<int>(nlSock_->deleteLabelRoute(mplsRoute).get());
+  if (err != 0 && std::abs(err) != ESRCH) {
+    throw fbnl::NlException(
+        folly::sformat("Failed to delete MPLS route: {}", label.value()), err);
   }
   // Update local cache with removed prefix
   mplsRoutes.erase(label.value());
@@ -509,11 +505,10 @@ NetlinkSocket::doAddUpdateMplsRoute(Route mplsRoute) {
   }
 
   mplsRoutes.erase(label.value());
-  int err{0};
-  err = static_cast<int>(nlSock_->addLabelRoute(mplsRoute));
-  if (0 != err) {
-    throw fbnl::NlException(folly::sformat(
-        "Could not add mpls route\n{}\nError: {}", mplsRoute.str(), err));
+  int err = static_cast<int>(nlSock_->addLabelRoute(mplsRoute).get());
+  if (err != 0 && std::abs(err) != EEXIST) {
+    throw fbnl::NlException(
+        folly::sformat("Failed to add MPLS route: {}", mplsRoute.str()), err);
   }
   // Add MPLS route entry in cache on successful addition
   mplsRoutes.emplace(std::make_pair(
@@ -532,14 +527,13 @@ NetlinkSocket::doDeleteUnicastRoute(Route route) {
     return;
   }
 
-  int err{0};
-
-  err = static_cast<int>(nlSock_->deleteRoute(route));
-  if (err != 0) {
-    throw fbnl::NlException(folly::sformat(
-        "Failed to delete route {} Error: {}",
-        folly::IPAddress::networkToString(route.getDestination()),
-        err));
+  int err = static_cast<int>(nlSock_->deleteRoute(route).get());
+  if (err != 0 && std::abs(err) != ESRCH) {
+    throw fbnl::NlException(
+        folly::sformat(
+            "Failed to delete route {}",
+            folly::IPAddress::networkToString(route.getDestination())),
+        err);
   }
 
   // Update local cache with removed prefix
@@ -691,11 +685,11 @@ NetlinkSocket::addIfAddress(IfAddress ifAddress) {
 
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), addr = std::move(ifAddress)]() mutable {
-        int err = static_cast<int>(nlSock_->addIfAddress(addr));
-        if (err == 0) {
+        int err = static_cast<int>(nlSock_->addIfAddress(addr).get());
+        if (err == 0 || std::abs(err) == EEXIST) {
           p.setValue();
         } else {
-          p.setException(fbnl::NlException("Failed to add If Address"));
+          p.setException(fbnl::NlException("Failed to add If Address", err));
         }
       });
   return future;
@@ -708,17 +702,16 @@ NetlinkSocket::delIfAddress(IfAddress ifAddress) {
   folly::Promise<folly::Unit> promise;
   auto future = promise.getFuture();
   if (!ifAddress.getPrefix().has_value()) {
-    fbnl::NlException ex("Prefix must be set");
-    promise.setException(std::move(ex));
+    promise.setException(fbnl::NlException("Prefix must be set"));
     return future;
   }
   evl_->runImmediatelyOrInEventLoop(
       [this, p = std::move(promise), ifAddr = std::move(ifAddress)]() mutable {
-        int err = static_cast<int>(nlSock_->deleteIfAddress(ifAddr));
-        if (err == 0) {
+        int err = static_cast<int>(nlSock_->deleteIfAddress(ifAddr).get());
+        if (err == 0 || std::abs(err) == EADDRNOTAVAIL) {
           p.setValue();
         } else {
-          p.setException(fbnl::NlException("Failed to delete If Address"));
+          p.setException(fbnl::NlException("Failed to delete If Address", err));
         }
       });
   return future;

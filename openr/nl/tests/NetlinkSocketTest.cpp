@@ -1730,7 +1730,7 @@ TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
 
   // Add new address
   netlinkSocket->addIfAddress(std::move(ifAddr)).get();
-  // Add duplicated address
+  // Add duplicated address. EXISTS error is suppressed.
   netlinkSocket->addIfAddress(std::move(ifAddr1)).get();
 
   kernelAddresses =
@@ -1751,7 +1751,7 @@ TEST_F(NetlinkSocketFixture, AddDelDuplicatedIfAddressTest) {
   builder.reset();
   ifAddr1 = builder.setPrefix(prefix).setIfIndex(ifIndex).build();
   netlinkSocket->delIfAddress(std::move(ifAddr)).get();
-  // double delete
+  // Double delete. EADDRNOTAVAIL error is suppressed.
   netlinkSocket->delIfAddress(std::move(ifAddr1)).get();
 
   kernelAddresses =

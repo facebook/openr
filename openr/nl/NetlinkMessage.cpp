@@ -86,9 +86,9 @@ NetlinkMessage::addAttributes(
   return 0;
 }
 
-folly::Future<int>
-NetlinkMessage::getFuture() {
-  return promise_->getFuture();
+folly::SemiFuture<int>
+NetlinkMessage::getSemiFuture() {
+  return promise_->getSemiFuture();
 }
 
 void

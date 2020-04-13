@@ -13,6 +13,7 @@
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
+#include <folly/futures/Future.h>
 
 #include <openr/nl/NetlinkMessage.h>
 #include <openr/nl/NetlinkRoute.h>
@@ -35,6 +36,8 @@ constexpr size_t kMinIovMsg{200};
 constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
 
 // Timeout for an overall netlink request e.g. addRoute, delRoute
+// TODO: Remove this timeout. Implement timeout at a higher level. It will
+// be possible to do so when we make all APIs asynchronous
 constexpr std::chrono::milliseconds kNlRequestTimeout{30000};
 
 /**
@@ -65,47 +68,80 @@ class NetlinkProtocolSocket {
   void setNeighborEventCB(
       std::function<void(fbnl::Neighbor, bool)> neighborEventCB);
 
-  // synchronous add route and nexthop paths
-  int addRoute(const openr::fbnl::Route& route);
+  /**
+   * Add IPv4/IPv6 route. If route entry exists then paths will be appended else
+   * new route entry will be created and paths will be added. Returns EXISTS
+   * error code if one of the path already exists.
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  folly::SemiFuture<int> addRoute(const openr::fbnl::Route& route);
 
-  // synchronous delete route
-  int deleteRoute(const openr::fbnl::Route& route);
+  /**
+   * Delete IPv4/IPv6 route. APIs allows to specifically delete paths of route
+   * or whole route itself. If route contains no nexthops, then all the
+   * associated paths are removed.
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  folly::SemiFuture<int> deleteRoute(const openr::fbnl::Route& route);
 
-  // synchronous add label route
-  int addLabelRoute(const openr::fbnl::Route& route);
+  /**
+   * Add MPLS, aka label, route. Nexthops can be PUSH, SWAP, PHP or POP
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  folly::SemiFuture<int> addLabelRoute(const openr::fbnl::Route& route);
 
-  // synchronous delete label route
-  int deleteLabelRoute(const openr::fbnl::Route& route);
+  /**
+   * Delete MPLS, aka label, route
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  folly::SemiFuture<int> deleteLabelRoute(const openr::fbnl::Route& route);
 
-  // synchronous add given list of IP or label routes and their nexthop paths
-  int addRoutes(const std::vector<openr::fbnl::Route>& routes);
+  /**
+   * Add an address to the interface
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  folly::SemiFuture<int> addIfAddress(const openr::fbnl::IfAddress& ifAddr);
 
-  // synchronous delete a list of given IP or label routes
-  int deleteRoutes(const std::vector<openr::fbnl::Route>& routes);
+  /**
+   * Delete an address from the interface
+   *
+   * @returns 0 on success else appropriate system error code
+   */
+  folly::SemiFuture<int> deleteIfAddress(const openr::fbnl::IfAddress& ifAddr);
 
-  // synchronous add interface address
-  int addIfAddress(const openr::fbnl::IfAddress& ifAddr);
-
-  // synchronous delete interface address
-  int deleteIfAddress(const openr::fbnl::IfAddress& ifAddr);
-
-  // get netlink request statuses
-  int getReturnStatus(
-      std::vector<folly::Future<int>>& futures,
-      std::unordered_set<int> ignoredErrors,
-      std::chrono::milliseconds timeout = kNlRequestAckTimeout);
-
+  // TODO: Make asynchronous
   // get all link interfaces from kernel using Netlink
   std::vector<fbnl::Link> getAllLinks();
 
+  // TODO: Make asynchronous
   // get all interface addresses from kernel using Netlink
   std::vector<fbnl::IfAddress> getAllIfAddresses();
 
+  // TODO: Make asynchronous
   // get all neighbors from kernel using Netlink
   std::vector<fbnl::Neighbor> getAllNeighbors();
 
+  // TODO: Make asynchronous
+  // TODO: Provide APIs to get specific routes. `getRoutes(fbnl::Route filter)`
   // get all routes from kernel using Netlink
   std::vector<fbnl::Route> getAllRoutes();
+
+  // TODO: Provide thread safe API for interface name <-> index mapping
+  // TODO: Provide API to sync route
+
+  /**
+   * Utility function to accumulate result of multiple requests into one. The
+   * result will be 0 if all the futures are successful else it will contains
+   * the first non-zero value (aka error code), in given sequence.
+   */
+  static folly::SemiFuture<int> collectReturnStatus(
+      std::vector<folly::SemiFuture<int>>&& futures,
+      std::unordered_set<int> ignoredErrors = {});
 
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
@@ -113,7 +149,7 @@ class NetlinkProtocolSocket {
 
   // Buffer netlink message to the queue_. Invoke sendNetlinkMessage if there
   // are no messages in flight
-  void addNetlinkMessage(std::vector<std::unique_ptr<NetlinkMessage>> nlmsg);
+  void addNetlinkMessage(std::unique_ptr<NetlinkMessage> nlmsg);
 
   // Send a message batch to netlink socket from queue_
   void sendNetlinkMessage();

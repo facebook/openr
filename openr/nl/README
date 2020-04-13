@@ -9,7 +9,7 @@ information.
 ## NetlinkTypes
 
 Defines C++ classes to represent various routing information e.g. Address, Link,
-Route etc. This serves as data representation between application code and 
+Route etc. This serves as data representation between application code and
 netlink C++ library.
 
 ## NetlinkMessage
@@ -21,7 +21,7 @@ Reference: http://man7.org/linux/man-pages/man7/netlink.7.html
 
 ## NetlinkRoute
 
-Specialization of netlink message for `NETLINK_ROUTE` (aka rtnetlink) family. It 
+Specialization of netlink message for `NETLINK_ROUTE` (aka rtnetlink) family. It
 implements Addresses, Link, Neighbor and Route (IP, IPv6 & MPLS).
 
 Reference: http://man7.org/linux/man-pages/man7/rtnetlink.7.html
@@ -46,7 +46,7 @@ For MPLS route unit-tests you'll need to have MPLS enabled kernel with following
 sysctl configuration parameters.
 
 Some unit-tests tries to add upto 100k routes and can consume significant amount
-of memory and time to run. So please be patient or disable those tests if you 
+of memory and time to run. So please be patient or disable those tests if you
 don't want your system to scale to that number.
 
 ```
@@ -56,8 +56,5 @@ sudo modprobe mpls_iptunnel
 sudo modprobe mpls_gso
 
 // Configure sysctl
-sysctl -w net.mpls.conf.lo.input=1
-sysctl -w net.mpls.conf.lo1.input=1
-sysctl -w net.mpls.ip_ttl_propagate=1
 sysctl -w net.mpls.platform_labels=65536
 ```

@@ -30,8 +30,9 @@ namespace openr::fbnl {
 
 class NlException : public std::runtime_error {
  public:
-  explicit NlException(const std::string& msg)
-      : std::runtime_error(folly::sformat("NlException: {} ", msg)) {}
+  explicit NlException(const std::string& msg, int err = 0)
+      : std::runtime_error(folly::sformat(
+            "Error({}) - {}. {} ", err, folly::errnoStr(err), msg)) {}
 };
 
 const uint8_t DEFAULT_PROTOCOL_ID = 99;

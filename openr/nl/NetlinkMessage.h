@@ -47,7 +47,7 @@ class NetlinkMessage {
   // set status value (in promise)
   void setReturnStatus(int status);
 
-  folly::Future<int> getFuture();
+  folly::SemiFuture<int> getSemiFuture();
 
   /**
    * Netlink MessageType denotes the type of request sent to the kernel, so that
