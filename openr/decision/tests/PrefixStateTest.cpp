@@ -160,6 +160,60 @@ TEST_F(PrefixStateTestFixture, getNodeHostLoopbacksV6) {
       state_.getNodeHostLoopbacksV6(), testing::UnorderedElementsAre(pair2));
 }
 
+// prevent withdrawing v4 prefixes create default loopback which will cause
+// crash in BgpRib
+class LoopbackTestWithParam : public PrefixStateTestFixture,
+                              public ::testing::WithParamInterface<bool> {};
+
+TEST_P(LoopbackTestWithParam, AddRemoveLoopbackV4orV6) {
+  auto isV4 = GetParam();
+  std::pair<std::string, thrift::BinaryAddress> pair1(
+      "0", getAddrFromSeed(0, isV4).prefixAddress);
+  std::pair<std::string, thrift::BinaryAddress> pair2(
+      "1", getAddrFromSeed(1, isV4).prefixAddress);
+  if (isV4) {
+    EXPECT_THAT(
+        state_.getNodeHostLoopbacksV4(),
+        testing::UnorderedElementsAre(pair1, pair2));
+  } else {
+    LOG(INFO) << "haha";
+    EXPECT_THAT(
+        state_.getNodeHostLoopbacksV6(),
+        testing::UnorderedElementsAre(pair1, pair2));
+  }
+
+  auto node0LB = createPrefixEntry(getAddrFromSeed(0, isV4));
+  thrift::PrefixEntry p1 = isV4
+      ? createPrefixEntry(
+            toIpPrefix("11.121.121.0/32"), thrift::PrefixType::BGP)
+      : createPrefixEntry(toIpPrefix("ffff::1/128"), thrift::PrefixType::BGP);
+  thrift::PrefixEntry p2 = isV4
+      ? createPrefixEntry(
+            toIpPrefix("12.122.122.0/32"), thrift::PrefixType::BGP)
+      : createPrefixEntry(toIpPrefix("ffff::2/128"), thrift::PrefixType::BGP);
+
+  // announcing loopback and p1
+  thrift::PrefixDatabase emptyPrefixDb;
+  emptyPrefixDb.thisNodeName = "0";
+  emptyPrefixDb.prefixEntries = {node0LB, p1};
+  EXPECT_TRUE(state_.updatePrefixDatabase(emptyPrefixDb));
+
+  // withdraw loopback and p1, announcing p2, expect no loopback is there
+  // anymore
+  emptyPrefixDb.prefixEntries = {p2};
+  EXPECT_TRUE(state_.updatePrefixDatabase(emptyPrefixDb));
+  if (isV4) {
+    EXPECT_THAT(
+        state_.getNodeHostLoopbacksV4(), testing::UnorderedElementsAre(pair2));
+  } else {
+    LOG(INFO) << "heihei";
+    EXPECT_THAT(
+        state_.getNodeHostLoopbacksV6(), testing::UnorderedElementsAre(pair2));
+  }
+}
+
+INSTANTIATE_TEST_CASE_P(LoopbackTest, LoopbackTestWithParam, ::testing::Bool());
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
