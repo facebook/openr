@@ -187,6 +187,10 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
     if (ifName.find(ifNamePrefix) == std::string::npos) {
       return;
     }
+    // Ignore link event for down links
+    if (links.count(ifName) == 0 && not linkEntry.isUp()) {
+      return;
+    }
     links[ifName].isUp = linkEntry.isUp();
     if (!linkEntry.isUp()) {
       linkDelEventCount++;
