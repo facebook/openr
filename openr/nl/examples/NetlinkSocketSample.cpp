@@ -22,7 +22,6 @@
 #include <glog/logging.h>
 #include <openr/nl/NetlinkSocket.h>
 
-
 using namespace openr;
 using namespace openr::fbnl;
 using namespace folly::literals::shell_literals;
@@ -94,25 +93,6 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
         << "** Neighbor entry: " << neighborEntry.getDestination().str()
         << " -> " << neighborEntry.getLinkAddress().value().toString()
         << (neighborEntry.isReachable() ? " : Reachable" : " : Unreachable");
-    LOG(INFO) << "============================================================";
-  }
-
-  void
-  routeEventFunc(
-      const std::string&,
-      const openr::fbnl::Route& routeEntry) noexcept override {
-    LOG(INFO) << "** Route entry: "
-              << "Dest : "
-              << folly::IPAddress::networkToString(routeEntry.getDestination());
-
-    for (const auto& nh : routeEntry.getNextHops()) {
-      if (!nh.getGateway().has_value() || !nh.getIfIndex().has_value()) {
-        continue;
-      }
-      LOG(INFO) << "NextHop: " << nh.getGateway().value().str()
-                << " IfaceIndex: " << nh.getIfIndex().value()
-                << " Weight: " << nh.getWeight();
-    }
     LOG(INFO) << "============================================================";
   }
 

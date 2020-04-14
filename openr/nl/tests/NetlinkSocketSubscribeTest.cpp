@@ -257,28 +257,6 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
     }
   }
 
-  void
-  routeEventFunc(
-      const std::string&,
-      const openr::fbnl::Route& routeEntry) noexcept override {
-    VLOG(3) << "** Route entry: "
-            << "Dest : "
-            << folly::IPAddress::networkToString(routeEntry.getDestination())
-            << " action " << (routeEntry.isValid() ? "Add" : "Del");
-
-    if (not routeEntry.isValid()) {
-      routeDelEventCount++;
-      routes.erase(routeEntry.getDestination());
-    } else {
-      routeAddEventCount++;
-      routes.erase(routeEntry.getDestination());
-      routes.emplace(routeEntry.getDestination(), routeEntry);
-    }
-    if (eventFunc) {
-      eventFunc();
-    }
-  }
-
   // Making vars public so UT can easily check these
   int linkAddEventCount{0};
   int linkDelEventCount{0};
@@ -286,11 +264,8 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
   int neighborDelEventCount{0};
   int addrAddEventCount{0};
   int addrDelEventCount{0};
-  int routeDelEventCount{0};
-  int routeAddEventCount{0};
   NlLinks links;
   NlNeighbors neighbors;
-  NlUnicastRoutes routes;
   std::function<void()> eventFunc{nullptr};
   std::string ifNamePrefix{"vethTest"};
   NetlinkSocket* netlinkSocket{nullptr};
@@ -1067,8 +1042,6 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
   EXPECT_EQ(0, myHandler->addrDelEventCount);
   EXPECT_EQ(0, myHandler->neighborAddEventCount);
   EXPECT_EQ(0, myHandler->neighborDelEventCount);
-  EXPECT_EQ(0, myHandler->routeAddEventCount);
-  EXPECT_EQ(0, myHandler->routeDelEventCount);
 
   // Now bring the links down and disable link event handler
   myHandler->linkAddEventCount = 0;
@@ -1099,8 +1072,6 @@ TEST_F(NetlinkSocketSubscribeFixture, LinkEventFlagTest) {
   EXPECT_EQ(0, myHandler->addrDelEventCount);
   EXPECT_EQ(0, myHandler->neighborAddEventCount);
   EXPECT_EQ(0, myHandler->neighborDelEventCount);
-  EXPECT_EQ(0, myHandler->routeAddEventCount);
-  EXPECT_EQ(0, myHandler->routeDelEventCount);
 }
 
 // Subscribe/Unsubscribe neighbor event
@@ -1175,8 +1146,6 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
   EXPECT_EQ(0, myHandler->linkDelEventCount);
   EXPECT_EQ(0, myHandler->addrAddEventCount);
   EXPECT_EQ(0, myHandler->addrDelEventCount);
-  EXPECT_EQ(0, myHandler->routeAddEventCount);
-  EXPECT_EQ(0, myHandler->routeDelEventCount);
 
   // Unsubscribe neighbor event
   netlinkSocket.unsubscribeEvent(fbnl::NEIGH_EVENT);
@@ -1199,8 +1168,6 @@ TEST_F(NetlinkSocketSubscribeFixture, NeighEventFlagTest) {
   EXPECT_EQ(0, myHandler->linkDelEventCount);
   EXPECT_EQ(0, myHandler->addrAddEventCount);
   EXPECT_EQ(0, myHandler->addrDelEventCount);
-  EXPECT_EQ(0, myHandler->routeAddEventCount);
-  EXPECT_EQ(0, myHandler->routeDelEventCount);
 }
 
 // Subscribe/Unsubscribe addr event
@@ -1281,8 +1248,6 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
   EXPECT_EQ(0, myHandler->neighborDelEventCount);
   EXPECT_EQ(0, myHandler->linkAddEventCount);
   EXPECT_EQ(0, myHandler->linkDelEventCount);
-  EXPECT_EQ(0, myHandler->routeAddEventCount);
-  EXPECT_EQ(0, myHandler->routeDelEventCount);
 
   // Now remove the addresses
   myHandler->addrAddEventCount = 0;
@@ -1316,275 +1281,6 @@ TEST_F(NetlinkSocketSubscribeFixture, AddrEventFlagTest) {
   EXPECT_EQ(0, myHandler->neighborDelEventCount);
   EXPECT_EQ(0, myHandler->linkAddEventCount);
   EXPECT_EQ(0, myHandler->linkDelEventCount);
-  EXPECT_EQ(0, myHandler->routeAddEventCount);
-  EXPECT_EQ(0, myHandler->routeDelEventCount);
-}
-
-// Add/Del route, test route events
-TEST_F(NetlinkSocketSubscribeFixture, RouteTest) {
-  // TODO T48109670:  Implement support for handling route events from kernel
-  SKIP() << "NetlinkProtocolSocket does not listen to kernel route events";
-
-  ZmqEventLoop zmqLoop;
-
-  // A timeout to stop the UT in case we never received expected events
-  // UT will mostly likely fail as our checks at the end will fail
-  auto setTimeout = [&] {
-    return zmqLoop.scheduleTimeout(kEventLoopTimeout, [&]() noexcept {
-      VLOG(3) << "Timeout waiting for events... ";
-      zmqLoop.stop();
-    });
-  };
-  int timeout = setTimeout();
-
-  // We expect both links to be up after which we stop the zmq loop
-  // This func helps stop zmq loop when expected events are processed
-  std::shared_ptr<MyNetlinkHandler> myHandler =
-      std::make_shared<MyNetlinkHandler>(
-          [&]() noexcept {
-            VLOG(3) << "Received event from netlink";
-            if (zmqLoop.isRunning() && myHandler->routes.count(kPrefix1) &&
-                myHandler->routes.count(kPrefix2) &&
-                myHandler->routes.count(kPrefix3)) {
-              LOG(INFO) << "Expected events received. Stopping zmq event loop";
-              zmqLoop.stop();
-            }
-          },
-          "vethTest" /* Filter on test links only */);
-
-  NetlinkSocket netlinkSocket(
-      &zmqLoop, myHandler.get(), std::move(nlProtocolSocket));
-  myHandler->setNetlinkSocket(&netlinkSocket);
-  netlinkSocket.subscribeAllEvents();
-
-  // Run the zmq event loop in its own thread
-  // We will either timeout if expected events are not received
-  // or stop after we receive expected events
-  std::thread eventThread([&]() {
-    zmqLoop.run();
-    zmqLoop.waitUntilStopped();
-  });
-
-  zmqLoop.waitUntilRunning();
-
-  // Now emulate the links going up
-  // We deliberately choose system calls here to completely
-  // decouple from netlink socket behavior being tested
-  auto cmd = "ip link set dev {} up"_shellify(kVethNameX.c_str());
-  folly::Subprocess proc(std::move(cmd));
-  EXPECT_EQ(0, proc.wait().exitStatus());
-
-  cmd = "ip link set dev {} up"_shellify(kVethNameY.c_str());
-  folly::Subprocess proc1(std::move(cmd));
-  EXPECT_EQ(0, proc1.wait().exitStatus());
-
-  cmd = "ip addr add {} dev {}"_shellify(
-      folly::IPAddress::networkToString(kIpAddr1).c_str(), kVethNameX.c_str());
-  folly::Subprocess proc2(std::move(cmd));
-  EXPECT_EQ(0, proc2.wait().exitStatus());
-
-  cmd = "ip addr add {} dev {}"_shellify(
-      folly::IPAddress::networkToString(kIpAddr2).c_str(), kVethNameY.c_str());
-  folly::Subprocess proc3(std::move(cmd));
-  EXPECT_EQ(0, proc3.wait().exitStatus());
-
-  // Adding route with interface and system calls
-  std::vector<folly::IPAddress> nexthops1{kNextHopIp1};
-  std::vector<folly::IPAddress> nexthops2{kNextHopIp1, kNextHopIp2};
-  int ifIndexX = netlinkSocket.getIfIndex(kVethNameX).get();
-  netlinkSocket.addRoute(buildRoute(ifIndexX, 99, nexthops1, kPrefix1)).get();
-  netlinkSocket.addRoute(buildRoute(ifIndexX, 99, nexthops2, kPrefix2)).get();
-  cmd = "ip route add {} via {} dev {}"_shellify(
-      folly::IPAddress::networkToString(kPrefix3).c_str(),
-      kNextHopIp3.str().c_str(),
-      kVethNameX.c_str());
-  folly::Subprocess proc4(std::move(cmd));
-  EXPECT_EQ(0, proc4.wait().exitStatus());
-
-  zmqLoop.waitUntilStopped();
-  zmqLoop.cancelTimeout(timeout);
-  eventThread.join();
-
-  EXPECT_LE(3, myHandler->routeAddEventCount);
-  EXPECT_EQ(0, myHandler->routeDelEventCount);
-
-  // Verify routes
-  EXPECT_EQ(1, myHandler->routes.count(kPrefix1));
-  EXPECT_EQ(1, myHandler->routes.count(kPrefix2));
-  EXPECT_EQ(1, myHandler->routes.count(kPrefix3));
-
-  EXPECT_TRUE(CompareNextHops(nexthops1, myHandler->routes.at(kPrefix1)));
-  EXPECT_TRUE(CompareNextHops(nexthops2, myHandler->routes.at(kPrefix2)));
-
-  myHandler->routeAddEventCount = 0;
-  myHandler->replaceEventFunc([&] {
-    VLOG(3) << "Received event from netlink";
-    if (zmqLoop.isRunning() && !myHandler->routes.count(kPrefix1) &&
-        !myHandler->routes.count(kPrefix2) &&
-        !myHandler->routes.count(kPrefix3)) {
-      VLOG(3) << "Expected events received. Stopping zmq event loop";
-      zmqLoop.stop();
-    }
-  });
-  timeout = setTimeout();
-  std::thread eventThread2([&]() { zmqLoop.run(); });
-  zmqLoop.waitUntilRunning();
-
-  // Delete routes
-  netlinkSocket.delRoute(buildRoute(ifIndexX, 99, nexthops1, kPrefix1)).get();
-  nexthops2.clear();
-  netlinkSocket.delRoute(buildRoute(ifIndexX, 99, nexthops2, kPrefix2)).get();
-  cmd = "ip route delete {} via {}"_shellify(
-      folly::IPAddress::networkToString(kPrefix3).c_str(),
-      kNextHopIp3.str().c_str());
-  folly::Subprocess proc5(std::move(cmd));
-  EXPECT_EQ(0, proc5.wait().exitStatus());
-
-  zmqLoop.waitUntilStopped();
-  zmqLoop.cancelTimeout(timeout);
-
-  EXPECT_EQ(3, myHandler->routeDelEventCount);
-
-  // Verify routes deleted
-  EXPECT_EQ(0, myHandler->routes.count(kPrefix1));
-  EXPECT_EQ(0, myHandler->routes.count(kPrefix2));
-  EXPECT_EQ(0, myHandler->routes.count(kPrefix3));
-
-  eventThread2.join();
-}
-
-// Add/Del route, test route events
-TEST_F(NetlinkSocketSubscribeFixture, RouteFlagTest) {
-  // TODO T48109670:  Implement support for handling route events from kernel
-  SKIP() << "NetlinkProtocolSocket does not listen to route events";
-
-  ZmqEventLoop zmqLoop;
-
-  // A timeout to stop the UT in case we never received expected events
-  // UT will mostly likely fail as our checks at the end will fail
-  auto setTimeout = [&] {
-    return zmqLoop.scheduleTimeout(kEventLoopTimeout, [&]() noexcept {
-      VLOG(3) << "Timeout waiting for events... ";
-      zmqLoop.stop();
-    });
-  };
-  int timeout = setTimeout();
-
-  // We expect both links to be up after which we stop the zmq loop
-  // This func helps stop zmq loop when expected events are processed
-  std::shared_ptr<MyNetlinkHandler> myHandler =
-      std::make_shared<MyNetlinkHandler>(
-          [&]() noexcept {
-            VLOG(3) << "Received event from netlink";
-            if (zmqLoop.isRunning() && myHandler->routes.count(kPrefix1) &&
-                myHandler->routes.count(kPrefix2) &&
-                myHandler->routes.count(kPrefix3)) {
-              LOG(INFO) << "Expected events received. Stopping zmq event loop";
-              zmqLoop.stop();
-            }
-          },
-          "vethTest" /* Filter on test links only */);
-
-  NetlinkSocket netlinkSocket(
-      &zmqLoop, myHandler.get(), std::move(nlProtocolSocket));
-  myHandler->setNetlinkSocket(&netlinkSocket);
-  // Only subscribe route event
-  netlinkSocket.unsubscribeAllEvents();
-  netlinkSocket.subscribeEvent(fbnl::ROUTE_EVENT);
-
-  // Run the zmq event loop in its own thread
-  // We will either timeout if expected events are not received
-  // or stop after we receive expected events
-  std::thread eventThread([&]() {
-    zmqLoop.run();
-    zmqLoop.waitUntilStopped();
-  });
-
-  zmqLoop.waitUntilRunning();
-
-  // Now emulate the links going up
-  // We deliberately choose system calls here to completely
-  // decouple from netlink socket behavior being tested
-  auto cmd = "ip link set dev {} up"_shellify(kVethNameX.c_str());
-  folly::Subprocess proc(std::move(cmd));
-  EXPECT_EQ(0, proc.wait().exitStatus());
-
-  cmd = "ip link set dev {} up"_shellify(kVethNameY.c_str());
-  folly::Subprocess proc1(std::move(cmd));
-  EXPECT_EQ(0, proc1.wait().exitStatus());
-
-  cmd = "ip addr add {} dev {}"_shellify(
-      folly::IPAddress::networkToString(kIpAddr1).c_str(), kVethNameX.c_str());
-  folly::Subprocess proc2(std::move(cmd));
-  EXPECT_EQ(0, proc2.wait().exitStatus());
-
-  cmd = "ip addr add {} dev {}"_shellify(
-      folly::IPAddress::networkToString(kIpAddr2).c_str(), kVethNameY.c_str());
-  folly::Subprocess proc3(std::move(cmd));
-  EXPECT_EQ(0, proc3.wait().exitStatus());
-
-  // Add route
-  std::vector<folly::IPAddress> nexthops1{kNextHopIp1};
-  std::vector<folly::IPAddress> nexthops2{kNextHopIp1, kNextHopIp2};
-  int ifIndexX = netlinkSocket.getIfIndex(kVethNameX).get();
-  netlinkSocket.addRoute(buildRoute(ifIndexX, 99, nexthops1, kPrefix1)).get();
-  netlinkSocket.addRoute(buildRoute(ifIndexX, 99, nexthops2, kPrefix2)).get();
-  cmd = "ip route add {} via {} dev {}"_shellify(
-      folly::IPAddress::networkToString(kPrefix3).c_str(),
-      kNextHopIp3.str().c_str(),
-      kVethNameX.c_str());
-  folly::Subprocess proc4(std::move(cmd));
-  EXPECT_EQ(0, proc4.wait().exitStatus());
-
-  zmqLoop.waitUntilStopped();
-  zmqLoop.cancelTimeout(timeout);
-  eventThread.join();
-
-  EXPECT_LE(3, myHandler->routeAddEventCount);
-  EXPECT_EQ(0, myHandler->routeDelEventCount);
-  EXPECT_EQ(0, myHandler->addrAddEventCount);
-  EXPECT_EQ(0, myHandler->addrDelEventCount);
-  EXPECT_EQ(0, myHandler->neighborAddEventCount);
-  EXPECT_EQ(0, myHandler->neighborDelEventCount);
-  EXPECT_EQ(0, myHandler->linkAddEventCount);
-  EXPECT_EQ(0, myHandler->linkDelEventCount);
-
-  // Verify routes
-  EXPECT_EQ(1, myHandler->routes.count(kPrefix1));
-  EXPECT_EQ(1, myHandler->routes.count(kPrefix2));
-  EXPECT_EQ(1, myHandler->routes.count(kPrefix3));
-
-  EXPECT_TRUE(CompareNextHops(nexthops1, myHandler->routes.at(kPrefix1)));
-  EXPECT_TRUE(CompareNextHops(nexthops2, myHandler->routes.at(kPrefix2)));
-
-  myHandler->routeAddEventCount = 0;
-  netlinkSocket.unsubscribeEvent(fbnl::ROUTE_EVENT);
-  timeout = setTimeout();
-  std::thread eventThread2([&]() { zmqLoop.run(); });
-  zmqLoop.waitUntilRunning();
-
-  // Delete routes
-  netlinkSocket.delRoute(buildRoute(ifIndexX, 99, nexthops1, kPrefix1)).get();
-  nexthops2.clear();
-  netlinkSocket.delRoute(buildRoute(ifIndexX, 99, nexthops2, kPrefix2)).get();
-  cmd = "ip route delete {} via {}"_shellify(
-      folly::IPAddress::networkToString(kPrefix3).c_str(),
-      kNextHopIp3.str().c_str());
-  folly::Subprocess proc5(std::move(cmd));
-  EXPECT_EQ(0, proc5.wait().exitStatus());
-
-  zmqLoop.waitUntilStopped();
-  zmqLoop.cancelTimeout(timeout);
-
-  EXPECT_LE(0, myHandler->routeDelEventCount);
-  EXPECT_EQ(0, myHandler->addrAddEventCount);
-  EXPECT_EQ(0, myHandler->addrDelEventCount);
-  EXPECT_EQ(0, myHandler->neighborAddEventCount);
-  EXPECT_EQ(0, myHandler->neighborDelEventCount);
-  EXPECT_EQ(0, myHandler->linkAddEventCount);
-  EXPECT_EQ(0, myHandler->linkDelEventCount);
-
-  eventThread2.join();
 }
 
 // Flap multiple links up and down and stress test link events

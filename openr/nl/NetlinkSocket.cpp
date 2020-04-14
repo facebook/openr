@@ -75,14 +75,6 @@ NetlinkSocket::doHandleRouteEvent(
   } catch (const std::exception& ex) {
     LOG(ERROR) << "UpdateCacheFailed";
   }
-
-  if (handler_ && runHandler && eventFlags_[ROUTE_EVENT]) {
-    std::string ifName = routeCopy.getRouteIfName().has_value()
-        ? routeCopy.getRouteIfName().value()
-        : "";
-    EventVariant event = std::move(routeCopy);
-    handler_->handleEvent(ifName, event);
-  }
 }
 
 void

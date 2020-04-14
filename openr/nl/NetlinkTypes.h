@@ -41,7 +41,6 @@ enum NetlinkEventType {
   LINK_EVENT = 0,
   NEIGH_EVENT,
   ADDR_EVENT,
-  ROUTE_EVENT,
   MAX_EVENT_TYPE // sentinel
 };
 

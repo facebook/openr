@@ -16,7 +16,7 @@
 
 namespace openr::fbnl {
 
-using EventVariant = std::variant<Route, Neighbor, IfAddress, Link>;
+using EventVariant = std::variant<Neighbor, IfAddress, Link>;
 
 struct PrefixCmp {
   bool
@@ -92,13 +92,6 @@ class NetlinkSocket {
       LOG(FATAL) << "addrEventFunc is not implemented";
     }
 
-    virtual void
-    routeEventFunc(
-        const std::string& /* ifName */,
-        const openr::fbnl::Route& /* routeEntry */) noexcept {
-      LOG(FATAL) << "routeEventFunc is not implemented";
-    }
-
    private:
     EventsHandler(const EventsHandler&) = delete;
     EventsHandler& operator=(const EventsHandler&) = delete;
@@ -138,11 +131,6 @@ class NetlinkSocket {
     EventsHandler* eventHandler;
     EventVisitor(const std::string& ifName, EventsHandler* handler)
         : linkName(ifName), eventHandler(handler) {}
-
-    void
-    operator()(openr::fbnl::Route const& route) const {
-      eventHandler->routeEventFunc(linkName, route);
-    }
 
     void
     operator()(openr::fbnl::IfAddress const& addr) const {
