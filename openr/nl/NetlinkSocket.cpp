@@ -394,22 +394,6 @@ NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
     return;
   }
 
-  if (dest.first.isV6()) {
-    // We need to explicitly add new V6 routes & remove old routes
-    // With IPv6, if new route being requested has different properties
-    // (like gateway or metric or..) the existing one will not be replaced,
-    // instead a new route will be created, which may cause underlying kernel
-    // crash when releasing netdevices
-    if (iter != unicastRoutes.end()) {
-      int err = static_cast<int>(nlSock_->deleteRoute(iter->second).get());
-      if (err != 0 && std::abs(err) != ESRCH) {
-        throw fbnl::NlException(
-            folly::sformat("Failed to delete route: {}", iter->second.str()),
-            err);
-      }
-    }
-  }
-
   // Remove route from cache
   unicastRoutes.erase(dest);
 
@@ -479,7 +463,7 @@ NetlinkSocket::doDeleteMplsRoute(Route mplsRoute) {
     return;
   }
 
-  int err = static_cast<int>(nlSock_->deleteLabelRoute(mplsRoute).get());
+  int err = static_cast<int>(nlSock_->deleteRoute(mplsRoute).get());
   if (err != 0 && std::abs(err) != ESRCH) {
     throw fbnl::NlException(
         folly::sformat("Failed to delete MPLS route: {}", label.value()), err);
@@ -505,7 +489,7 @@ NetlinkSocket::doAddUpdateMplsRoute(Route mplsRoute) {
   }
 
   mplsRoutes.erase(label.value());
-  int err = static_cast<int>(nlSock_->addLabelRoute(mplsRoute).get());
+  int err = static_cast<int>(nlSock_->addRoute(mplsRoute).get());
   if (err != 0 && std::abs(err) != EEXIST) {
     throw fbnl::NlException(
         folly::sformat("Failed to add MPLS route: {}", mplsRoute.str()), err);

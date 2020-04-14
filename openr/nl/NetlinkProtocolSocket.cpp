@@ -16,8 +16,10 @@ namespace fb303 = facebook::fb303;
 
 namespace openr::fbnl {
 
-NetlinkProtocolSocket::NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
-    : evl_(evl) {
+NetlinkProtocolSocket::NetlinkProtocolSocket(
+    fbzmq::ZmqEventLoop* evl, bool enableIPv6RouteReplaceSemantics)
+    : evl_(evl),
+      enableIPv6RouteReplaceSemantics_(enableIPv6RouteReplaceSemantics) {
   nlMessageTimer_ = fbzmq::ZmqTimeout::make(evl_, [this]() noexcept {
     DCHECK(false) << "This shouldn't occur usually. Adding DCHECK to get "
                   << "attention in UTs";
@@ -314,10 +316,10 @@ NetlinkProtocolSocket::processMessage(
                    << ack->msg.nlmsg_pid << " expected: " << portId_;
         break;
       }
-      if (std::abs(ack->error) != EEXIST && std::abs(ack->error) != 0) {
+      if (std::abs(ack->error) != EEXIST && std::abs(ack->error) != ESRCH &&
+          ack->error != 0) {
         fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
-      }
-      if (ack->error == 0) {
+      } else {
         fb303::fbData->addStatValue("netlink.acks", 1, fb303::SUM);
       }
       processAck(ack->msg.nlmsg_seq, ack->error);
@@ -401,7 +403,26 @@ NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
   auto rtmMsg = std::make_unique<NetlinkRouteMessage>();
   auto future = rtmMsg->getSemiFuture();
 
-  int status = rtmMsg->addRoute(route);
+  int status{0};
+  switch (route.getFamily()) {
+  case AF_INET6:
+    if (not enableIPv6RouteReplaceSemantics_) {
+      // Special case for IPv6 route add. We first delete the route and then
+      // add it.
+      // NOTE: We ignore the error for the deleteRoute
+      deleteRoute(route);
+    }
+    FOLLY_FALLTHROUGH;
+  case AF_INET:
+    status = rtmMsg->addRoute(route);
+    break;
+  case AF_MPLS:
+    status = rtmMsg->addLabelRoute(route);
+    break;
+  default:
+    status = -EPROTONOSUPPORT;
+  }
+
   if (status != 0) {
     rtmMsg->setReturnStatus(status);
   } else {
@@ -416,37 +437,19 @@ NetlinkProtocolSocket::deleteRoute(const openr::fbnl::Route& route) {
   auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
   auto future = rtmMsg->getSemiFuture();
 
-  int status = rtmMsg->deleteRoute(route);
-  if (status != 0) {
-    rtmMsg->setReturnStatus(status);
-  } else {
-    addNetlinkMessage(std::move(rtmMsg));
+  int status{0};
+  switch (route.getFamily()) {
+  case AF_INET:
+  case AF_INET6:
+    status = rtmMsg->deleteRoute(route);
+    break;
+  case AF_MPLS:
+    status = rtmMsg->deleteLabelRoute(route);
+    break;
+  default:
+    status = -EPROTONOSUPPORT;
   }
 
-  return future;
-}
-
-folly::SemiFuture<int>
-NetlinkProtocolSocket::addLabelRoute(const openr::fbnl::Route& route) {
-  auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-  auto future = rtmMsg->getSemiFuture();
-
-  int status = rtmMsg->addLabelRoute(route);
-  if (status != 0) {
-    rtmMsg->setReturnStatus(status);
-  } else {
-    addNetlinkMessage(std::move(rtmMsg));
-  }
-
-  return future;
-}
-
-folly::SemiFuture<int>
-NetlinkProtocolSocket::deleteLabelRoute(const openr::fbnl::Route& route) {
-  auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
-  auto future = rtmMsg->getSemiFuture();
-
-  int status = rtmMsg->deleteLabelRoute(route);
   if (status != 0) {
     rtmMsg->setReturnStatus(status);
   } else {

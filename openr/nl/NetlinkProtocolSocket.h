@@ -44,7 +44,8 @@ constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
  */
 class NetlinkProtocolSocket {
  public:
-  explicit NetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl);
+  explicit NetlinkProtocolSocket(
+      fbzmq::ZmqEventLoop* evl, bool enableIPv6RouteReplaceSemantics = false);
 
   ~NetlinkProtocolSocket();
 
@@ -59,36 +60,34 @@ class NetlinkProtocolSocket {
       std::function<void(fbnl::Neighbor, bool)> neighborEventCB);
 
   /**
-   * Add IPv4/IPv6 route. If route entry exists then paths will be appended else
-   * new route entry will be created and paths will be added. Returns EXISTS
-   * error code if one of the path already exists.
+   * Add or replace route. An existing paths of route will be replaced with
+   * new paths. Supports AF_INET, AF_INET6 and AF_MPLS address families.
+   *
+   * Either route.getDestination() or route.getMplsLabel() must be set when
+   * route is built.
+   *
+   * NOTE: For AF_INET6 kernel has different behavior for NLM_F_REPLACE. Hence,
+   * to provide consistent API interface across all address family, this API
+   * first removes the route if destination is IPv6 and add all new paths. There
+   * can be a breif period of packet drops when route is deleted and added
+   * again. On kernel 4.18+ new IPv6 route replace semantics allows seamless
+   * route replace for IPv6. It can be enabeld by constructor parameter.
    *
    * @returns 0 on success else appropriate system error code
    */
   folly::SemiFuture<int> addRoute(const openr::fbnl::Route& route);
 
   /**
-   * Delete IPv4/IPv6 route. APIs allows to specifically delete paths of route
-   * or whole route itself. If route contains no nexthops, then all the
-   * associated paths are removed.
+   * Delete route. This API deletes all the paths associated with the route
+   * based on key (destination-address or mpls top-label). Supports AF_INET,
+   * AF_INET6 and AF_MPLS address families
+   *
+   * Either route.getDestination() or route.getMplsLabel() must be set when
+   * route is built. `nexthops()` attributes are completely ignored.
    *
    * @returns 0 on success else appropriate system error code
    */
   folly::SemiFuture<int> deleteRoute(const openr::fbnl::Route& route);
-
-  /**
-   * Add MPLS, aka label, route. Nexthops can be PUSH, SWAP, PHP or POP
-   *
-   * @returns 0 on success else appropriate system error code
-   */
-  folly::SemiFuture<int> addLabelRoute(const openr::fbnl::Route& route);
-
-  /**
-   * Delete MPLS, aka label, route
-   *
-   * @returns 0 on success else appropriate system error code
-   */
-  folly::SemiFuture<int> deleteLabelRoute(const openr::fbnl::Route& route);
 
   /**
    * Add an address to the interface
@@ -180,6 +179,9 @@ class NetlinkProtocolSocket {
   std::function<void(fbnl::Link, bool)> linkEventCB_;
   std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
   std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
+
+  // Use new IPv6 route replace semantics. See documentation for addRoute(...)
+  const bool enableIPv6RouteReplaceSemantics_{false};
 
   // Netlink socket fd. Created when class is constructed. Re-created on timeout
   // when no response is received for any of our pending requests.
