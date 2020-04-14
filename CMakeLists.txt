@@ -78,6 +78,26 @@ include_directories(
 SET(OPENR_THRIFT_LIBS)
 
 add_fbthrift_cpp_library(
+  bgp_config_cpp2
+  openr/if/BgpConfig.thrift
+  OPTIONS
+    json
+    optionals
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} bgp_config_cpp2)
+
+add_fbthrift_cpp_library(
+  openr_config_cpp2
+  openr/if/OpenrConfig.thrift
+  OPTIONS
+    json
+    optionals
+  DEPENDS
+    bgp_config_cpp2
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_config_cpp2)
+
+add_fbthrift_cpp_library(
   dual_cpp2
   openr/if/Dual.thrift
   OPTIONS
@@ -122,6 +142,7 @@ add_fbthrift_cpp_library(
     json
     optionals
   DEPENDS
+    openr_config_cpp2
     network_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} lsdb_cpp2)
@@ -133,6 +154,7 @@ add_fbthrift_cpp_library(
     json
     optionals
   DEPENDS
+    openr_config_cpp2
     network_cpp2
     lsdb_cpp2
 )
@@ -156,6 +178,7 @@ add_fbthrift_cpp_library(
     json
     optionals
   DEPENDS
+    openr_config_cpp2
     lsdb_cpp2
     spark_cpp2
 )
@@ -195,6 +218,7 @@ add_fbthrift_cpp_library(
     json
     optionals
   DEPENDS
+    openr_config_cpp2
     lsdb_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} prefix_manager_cpp2)
@@ -220,6 +244,7 @@ add_fbthrift_cpp_library(
     json
     optionals
   DEPENDS
+    openr_config_cpp2
     decision_cpp2
     dual_cpp2
     fib_cpp2
@@ -265,6 +290,7 @@ add_library(openrlib
   openr/common/OpenrEventBase.cpp
   openr/common/ThriftUtil.cpp
   openr/common/Util.cpp
+  openr/config/Config.cpp
   openr/config-store/PersistentStore.cpp
   openr/config-store/PersistentStoreWrapper.cpp
   openr/ctrl-server/OpenrCtrlHandler.cpp

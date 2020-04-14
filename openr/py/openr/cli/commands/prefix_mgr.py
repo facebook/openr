@@ -12,6 +12,7 @@ from typing import List
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
+from openr.OpenrConfig.ttypes import PrefixForwardingType
 from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import ipnetwork, printing
 
@@ -21,7 +22,7 @@ class PrefixMgrCmd(OpenrCtrlCmd):
         self,
         prefixes: List[str],
         prefix_type: network_types.PrefixType,
-        forwarding_type: lsdb_types.PrefixForwardingType = lsdb_types.PrefixForwardingType.IP,
+        forwarding_type: PrefixForwardingType = PrefixForwardingType.IP,
     ) -> List[lsdb_types.PrefixEntry]:
         return [
             lsdb_types.PrefixEntry(
@@ -43,10 +44,8 @@ class PrefixMgrCmd(OpenrCtrlCmd):
 
         return PREFIX_TYPE_TO_VALUES[prefix_type]
 
-    def to_thrift_forwarding_type(
-        self, forwarding_type: str
-    ) -> lsdb_types.PrefixForwardingType:
-        FORWARDING_TYPE_TO_VALUES = lsdb_types.PrefixForwardingType._NAMES_TO_VALUES
+    def to_thrift_forwarding_type(self, forwarding_type: str) -> PrefixForwardingType:
+        FORWARDING_TYPE_TO_VALUES = PrefixForwardingType._NAMES_TO_VALUES
         if forwarding_type not in FORWARDING_TYPE_TO_VALUES:
             raise Exception(
                 "Unknown forwarding type {}. Use any of {}".format(

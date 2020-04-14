@@ -15,6 +15,7 @@ from typing import List, Optional
 from openr.Fib import ttypes as fib_types
 from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
+from openr.OpenrConfig import ttypes as openr_config_types
 
 
 def sprint_addr(addr):
@@ -176,20 +177,22 @@ def sprint_prefix_type(prefix_type):
 
 def sprint_prefix_forwarding_type(forwarding_type):
     """
-    :param forwarding_type: lsdb_types.PrefixForwardingType
+    :param forwarding_type: openr_config_types.PrefixForwardingType
     """
 
-    return lsdb_types.PrefixForwardingType._VALUES_TO_NAMES.get(forwarding_type)
+    return openr_config_types.PrefixForwardingType._VALUES_TO_NAMES.get(forwarding_type)
 
 
 def sprint_prefix_forwarding_algorithm(
-    forwarding_algo: lsdb_types.PrefixForwardingAlgorithm
+    forwarding_algo: openr_config_types.PrefixForwardingAlgorithm
 ) -> str:
     """
-    :param forwarding_algorithm: lsdb_types.PrefixForwardingAlgorithm
+    :param forwarding_algorithm: openr_config_types.PrefixForwardingAlgorithm
     """
 
-    return lsdb_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(forwarding_algo)
+    return openr_config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
+        forwarding_algo
+    )
 
 
 def sprint_prefix_is_ephemeral(prefix_entry: lsdb_types.PrefixEntry) -> str:

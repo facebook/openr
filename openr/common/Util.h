@@ -35,6 +35,7 @@
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 /**
  * Helper macro function to log execution time of function.
