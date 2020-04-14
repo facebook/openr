@@ -9,7 +9,6 @@
 
 #include <vector>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
@@ -36,11 +35,32 @@ constexpr size_t kMinIovMsg{200};
 constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
 
 /**
- * TODO: Document this class
+ * C++ async interface for netlink APIs. It supports minimal functionality that
+ * Open/R needs but can be easily extended to support any netlink message
+ * exchange.
  *
- * Add/Del APIs returns int value. 0 indicates success and in case of failure,
- * corresponding netlink error code. You can use `nl_geterror(errno)` to get
- * corresponding error string.
+ * NOTE APIs
+ * All public APIs are asynchronous. An API call, transaltes to exactly one
+ * message that needs to be sent to kernel. It is enqueued and future associated
+ * with request is returned. In response to API call, kernel may send one or
+ * more messages followed by an ack. The future is fulfilled when ack is
+ * received. Appropriate error code or return value is set. In case of failure
+ * the request may timeout and ETIMEOUT will be set.
+ *
+ * NOTE Threading:
+ * EventBase used to initiate this class is used in serializing the messages
+ * that needs to be sent to kernel. Further it also polls netlink socket fd
+ * for any messages that needs to be read. Received messages may fulfil the
+ * future of outstanding requests.
+ *
+ * NOTE Performance:
+ * Above threading model allows multiple requests to be sent in parallel and
+ * process their response asynchronously. Outstanding requests to kernel is
+ * rate-limited to not overwhelm the socket buffers. Rate-limiting of requests
+ * is governed by params kMaxIovMsg and kMinIovMsg. This allows adding 100k
+ * routes in under 2 seconds. These performance benchmarks can be observed
+ * by running associated UTs and it might vary on different systems.
+ *
  */
 class NetlinkProtocolSocket {
  public:
@@ -138,9 +158,6 @@ class NetlinkProtocolSocket {
   folly::SemiFuture<std::vector<fbnl::Route>> getIPv4Routes(uint8_t protocolId);
   folly::SemiFuture<std::vector<fbnl::Route>> getIPv6Routes(uint8_t protocolId);
   folly::SemiFuture<std::vector<fbnl::Route>> getMplsRoutes(uint8_t protocolId);
-
-  // TODO: Provide thread safe API for interface name <-> index mapping
-  // TODO: Provide API to sync route
 
   /**
    * Utility function to accumulate result of multiple requests into one. The

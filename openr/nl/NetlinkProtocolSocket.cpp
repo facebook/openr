@@ -190,9 +190,6 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
 
   VLOG(2) << "Sending " << outMsg->msg_iovlen << " netlink messages";
   auto status = sendmsg(nlSock_, outMsg.get(), 0);
-  // TODO: If message send fails, then process ack for the failed
-  // messages
-
   if (status < 0) {
     LOG(ERROR) << "Error sending on NL socket "
                << folly::errnoStr(std::abs(status))

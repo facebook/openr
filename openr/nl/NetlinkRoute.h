@@ -36,6 +36,9 @@ constexpr uint32_t kLabelShift{12};
 constexpr uint32_t kLabelMask{0xFFFFF000};
 constexpr uint32_t kLabelSizeBits{20};
 
+/**
+ * Message specialization for ROUTE object
+ */
 class NetlinkRouteMessage final : public NetlinkMessage {
  public:
   NetlinkRouteMessage();
@@ -169,6 +172,9 @@ class NetlinkRouteMessage final : public NetlinkMessage {
   std::vector<Route> rcvdRoutes_;
 };
 
+/**
+ * Message specialization for LINK object
+ */
 class NetlinkLinkMessage final : public NetlinkMessage {
  public:
   NetlinkLinkMessage();
@@ -203,6 +209,9 @@ class NetlinkLinkMessage final : public NetlinkMessage {
   std::vector<Link> rcvdLinks_;
 };
 
+/**
+ * Message specialization for ADDR object
+ */
 class NetlinkAddrMessage final : public NetlinkMessage {
  public:
   NetlinkAddrMessage();
@@ -241,6 +250,9 @@ class NetlinkAddrMessage final : public NetlinkMessage {
   std::vector<IfAddress> rcvdAddrs_;
 };
 
+/**
+ * Message specialization for NEIGHBOR object
+ */
 class NetlinkNeighborMessage final : public NetlinkMessage {
  public:
   NetlinkNeighborMessage();

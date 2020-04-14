@@ -26,7 +26,15 @@ namespace openr::fbnl {
 constexpr uint16_t kMaxNlPayloadSize{4096};
 
 /**
- * TODO: Document this class
+ * Data structure representing a netlink message, either to be sent or received.
+ * It wraps `struct nlmsghdr` and provides buffer for appending message payload.
+ * Further message payload in turn can contains multiple attributes and
+ * sub-attributes depending on the message type.
+ *
+ * Aim of the message is to faciliate serialization and deserialization of
+ * C++ object (application) to/from bytes (kernel).
+ *
+ * Maximum size of message is limited by `kMaxNlPayloadSize` parameter.
  */
 class NetlinkMessage {
  public:
