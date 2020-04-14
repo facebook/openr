@@ -356,24 +356,6 @@ getNthPrefix(
   return {allocPrefixIp.mask(allocPrefixLen), allocPrefixLen};
 }
 
-std::unordered_map<std::string, fbzmq::thrift::Counter>
-prepareSubmitCounters(
-    const std::unordered_map<std::string, int64_t>& counters) {
-  std::unordered_map<std::string, fbzmq::thrift::Counter> thriftCounters;
-  for (const auto& kv : counters) {
-    fbzmq::thrift::Counter counter;
-    counter.value = kv.second;
-    counter.valueType = fbzmq::thrift::CounterValueType::GAUGE;
-    auto now = std::chrono::system_clock::now();
-    // current unixtime in ms
-    counter.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            now.time_since_epoch())
-                            .count();
-    thriftCounters.emplace(kv.first, counter);
-  }
-  return thriftCounters;
-}
-
 void
 addPerfEvent(
     thrift::PerfEvents& perfEvents,

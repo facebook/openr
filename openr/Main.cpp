@@ -10,7 +10,6 @@
 #include <stdexcept>
 
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/FileUtil.h>
 #include <folly/Format.h>
@@ -110,14 +109,6 @@ waitForFibService(const fbzmq::ZmqEventLoop& evl) {
                     std::chrono::steady_clock::now() - waitForFibStart)
                     .count();
   LOG(INFO) << "FibService up. Waited for " << waitMs << " ms.";
-}
-
-void
-submitCounters(const ZmqEventLoop& eventLoop, ZmqMonitorClient& monitorClient) {
-  VLOG(3) << "Submitting counters...";
-  std::unordered_map<std::string, int64_t> counters{};
-  counters["main.zmq_event_queue_size"] = eventLoop.getEventQueueSize();
-  monitorClient.setCounters(prepareSubmitCounters(std::move(counters)));
 }
 
 /**
@@ -373,12 +364,6 @@ main(int argc, char** argv) {
 
   const MonitorSubmitUrl monitorSubmitUrl{
       folly::sformat("tcp://[::1]:{}", FLAGS_monitor_rep_port)};
-
-  ZmqMonitorClient monitorClient(context, monitorSubmitUrl);
-  auto monitorTimer = fbzmq::ZmqTimeout::make(&mainEventLoop, [&]() noexcept {
-    submitCounters(mainEventLoop, monitorClient);
-  });
-  monitorTimer->scheduleTimeout(Constants::kMonitorSubmitInterval, true);
 
   // Starting main event-loop
   std::thread mainEventLoopThread([&]() noexcept {

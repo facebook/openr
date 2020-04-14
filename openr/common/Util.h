@@ -181,9 +181,6 @@ folly::IPAddress createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept;
 folly::CIDRNetwork createLoopbackPrefix(
     const folly::CIDRNetwork& prefix) noexcept;
 
-std::unordered_map<std::string, fbzmq::thrift::Counter> prepareSubmitCounters(
-    const std::unordered_map<std::string, int64_t>& counters);
-
 template <typename SetT, typename T = typename SetT::value_type>
 SetT
 buildSetDifference(SetT const& lhs, SetT const& rhs) {
