@@ -20,6 +20,22 @@ NetlinkRouteMessage::~NetlinkRouteMessage() {
 
 void
 NetlinkRouteMessage::rcvdRoute(Route&& route) {
+  //
+  // Implement application side filters for table and protocol if specified
+  //
+
+  if (filters_.table && filters_.table != route.getRouteTable()) {
+    return; // ignore the route
+  }
+
+  if (filters_.protocol && filters_.protocol != route.getProtocolId()) {
+    return; // ignore the route
+  }
+
+  if (filters_.type && filters_.type != route.getType()) {
+    return; // ignore the route
+  }
+
   rcvdRoutes_.emplace_back(std::move(route));
 }
 
@@ -41,15 +57,25 @@ NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
   msghdr_->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
 
   if (type == RTM_GETROUTE) {
-    // Get all routes
+    // Get routes matching subsequent criteria specified below
     msghdr_->nlmsg_flags |= NLM_F_DUMP;
+    // NOTE - Only `rtmsg_->rtm_family` will be used by kernel as filter
+    // parameter. Other parameters such as table, protocol, scope, type will
+    // need to be filtered on user side.
+    filters_.table = route.getRouteTable();
+    filters_.type = route.getType();
+    filters_.protocol = route.getProtocolId();
+
+    VLOG(2) << "RTM_GETROUTE "
+            << " table=" << static_cast<int>(filters_.table)
+            << " type=" << static_cast<int>(filters_.type)
+            << " protocol=" << static_cast<int>(filters_.protocol)
+            << " family=" << static_cast<int>(route.getFamily());
   }
 
-  if (type != RTM_DELROUTE) {
+  if (type == RTM_NEWROUTE) {
+    // We create new route or replace existing
     msghdr_->nlmsg_flags |= NLM_F_CREATE;
-  }
-
-  if (route.getType() != RTN_MULTICAST) {
     msghdr_->nlmsg_flags |= NLM_F_REPLACE;
   }
 
@@ -57,6 +83,7 @@ NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
   auto nlmsgAlen = NLMSG_ALIGN(sizeof(struct nlmsghdr));
   rtmsg_ = reinterpret_cast<struct rtmsg*>((char*)msghdr_ + nlmsgAlen);
 
+  // Initialize values from route object or function params
   rtmsg_->rtm_table = route.getRouteTable();
   rtmsg_->rtm_protocol = route.getProtocolId();
   rtmsg_->rtm_scope = route.getScope();
@@ -850,8 +877,6 @@ NetlinkAddrMessage::addOrDeleteIfAddress(
     return EDESTADDRREQ;
   }
 
-  LOG(INFO) << (type == RTM_NEWADDR ? "Adding" : "Deleting") << " IP address "
-            << ifAddr.str();
   init(type);
   // initialize netlink address fields
   auto ip = std::get<0>(ifAddr.getPrefix().value());

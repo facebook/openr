@@ -120,7 +120,12 @@ class NetlinkProtocolSocket {
 
   /**
    * API to retrieve routes from kernel. Attributes specified in filter will be
-   * used to selectively retrieve routes.
+   * used to selectively retrieve routes. Filter is supported on following
+   * attributes. 0 will act as wildcard for querying routes.
+   * - table
+   * - protocol
+   * - address family
+   * - type
    */
   folly::SemiFuture<std::vector<fbnl::Route>> getRoutes(
       const fbnl::Route& filter);
@@ -130,6 +135,9 @@ class NetlinkProtocolSocket {
    * std::vector<fbnl::Route> getAllRoutes();
    */
   folly::SemiFuture<std::vector<fbnl::Route>> getAllRoutes();
+  folly::SemiFuture<std::vector<fbnl::Route>> getIPv4Routes(uint8_t protocolId);
+  folly::SemiFuture<std::vector<fbnl::Route>> getIPv6Routes(uint8_t protocolId);
+  folly::SemiFuture<std::vector<fbnl::Route>> getMplsRoutes(uint8_t protocolId);
 
   // TODO: Provide thread safe API for interface name <-> index mapping
   // TODO: Provide API to sync route

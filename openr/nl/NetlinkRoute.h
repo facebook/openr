@@ -159,6 +159,12 @@ class NetlinkRouteMessage final : public NetlinkMessage {
  private:
   void rcvdRoute(Route&& route) override;
 
+  struct {
+    uint8_t table{0};
+    uint8_t protocol{0};
+    uint8_t type{0};
+  } filters_;
+
   folly::Promise<std::vector<Route>> routePromise_;
   std::vector<Route> rcvdRoutes_;
 };

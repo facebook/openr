@@ -545,6 +545,38 @@ NetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
 folly::SemiFuture<std::vector<fbnl::Route>>
 NetlinkProtocolSocket::getAllRoutes() {
   fbnl::RouteBuilder builder;
+  builder.setProtocolId(RTPROT_UNSPEC); // Explicitly set protocol to 0
+  builder.setType(RTN_UNSPEC); // Explicitly set type to 0
+  return getRoutes(builder.build());
+}
+
+folly::SemiFuture<std::vector<fbnl::Route>>
+NetlinkProtocolSocket::getIPv4Routes(uint8_t protocolId) {
+  fbnl::RouteBuilder builder;
+  // Set address family to MPLS with default v4 route
+  builder.setDestination({folly::IPAddressV4("0.0.0.0"), 0});
+  // Set protocol ID
+  builder.setProtocolId(protocolId);
+  return getRoutes(builder.build());
+}
+
+folly::SemiFuture<std::vector<fbnl::Route>>
+NetlinkProtocolSocket::getIPv6Routes(uint8_t protocolId) {
+  fbnl::RouteBuilder builder;
+  // Set address family to MPLS with default v6 route
+  builder.setDestination({folly::IPAddressV6("::"), 0});
+  // Set protocol ID
+  builder.setProtocolId(protocolId);
+  return getRoutes(builder.build());
+}
+
+folly::SemiFuture<std::vector<fbnl::Route>>
+NetlinkProtocolSocket::getMplsRoutes(uint8_t protocolId) {
+  fbnl::RouteBuilder builder;
+  // Set address family to MPLS with default label
+  builder.setMplsLabel(0);
+  // Set protocol ID
+  builder.setProtocolId(protocolId);
   return getRoutes(builder.build());
 }
 
