@@ -362,20 +362,6 @@ void
 NetlinkSocket::doAddUpdateUnicastRoute(Route route) {
   checkUnicastRoute(route);
 
-  // if user did not speicify priority
-  if (!route.getPriority()) {
-    const auto routePair =
-        openr::thrift::Platform_constants::protocolIdtoPriority().find(
-            route.getProtocolId());
-    if (routePair ==
-        openr::thrift::Platform_constants::protocolIdtoPriority().end()) {
-      route.setPriority(
-          openr::thrift::Platform_constants::kUnknowProtAdminDistance());
-    } else {
-      route.setPriority(routePair->second);
-    }
-  }
-
   // Create new set of nexthops to be programmed. Existing + New ones
   const auto& dest = route.getDestination();
   auto& unicastRoutes = unicastRoutesCache_[route.getProtocolId()];

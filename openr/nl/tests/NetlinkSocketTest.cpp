@@ -165,6 +165,11 @@ class NetlinkSocketFixture : public testing::Test {
       rtBuilder.addNextHop(nhBuilder.build());
       nhBuilder.reset();
     }
+    if (protocolId == kAqRouteProtoId) {
+      rtBuilder.setPriority(kAqRouteProtoIdPriority);
+    } else if (protocolId == kAqRouteProtoId1) {
+      rtBuilder.setPriority(kAqRouteProtoId1Priority);
+    }
     return rtBuilder.build();
   }
 

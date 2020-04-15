@@ -43,6 +43,20 @@ getClientName(const int16_t clientId) {
   }
   return it->second;
 }
+
+uint8_t
+protocolToPriority(const uint8_t protocol) {
+  // Lookup in protocol to priority mapping
+  auto& priorityMap = openr::thrift::Platform_constants::protocolIdtoPriority();
+  auto priorityIt = priorityMap.find(protocol);
+  if (priorityIt != priorityMap.end()) {
+    return priorityIt->second;
+  }
+
+  // Default priority is unknown
+  return openr::thrift::Platform_constants::kUnknowProtAdminDistance();
+}
+
 } // namespace
 
 NetlinkFibHandler::NetlinkFibHandler(
@@ -54,6 +68,7 @@ NetlinkFibHandler::NetlinkFibHandler(
                      .count()),
       evl_{zmqEventLoop} {
   CHECK_NOTNULL(zmqEventLoop);
+  // TODO: Implement this neighbor in this class
   netlinkSocket_->registerNeighborListener(
       [this](const fbnl::NetlinkSocket::NeighborUpdate& neighborUpdate) {
         std::lock_guard<std::mutex> g(listenersMutex_);
@@ -95,6 +110,7 @@ NetlinkFibHandler::buildNextHops(const fbnl::NextHopSet& nextHops) {
 
   for (auto const& nh : nextHops) {
     CHECK(nh.getGateway().has_value());
+    // TODO: Create the index cache locally
     const auto& ifName = nh.getIfIndex().has_value()
         ? netlinkSocket_->getIfName(nh.getIfIndex().value()).get()
         : "";
@@ -248,6 +264,7 @@ NetlinkFibHandler::future_addMplsRoute(
   if (protocol.hasError()) {
     return future;
   }
+  // TODO: Replace this with addRoute()
   return netlinkSocket_->addMplsRoute(buildMplsRoute(*route, protocol.value()));
 }
 
@@ -263,6 +280,7 @@ NetlinkFibHandler::future_deleteMplsRoute(int16_t clientId, int32_t topLabel) {
   }
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setMplsLabel(topLabel).setProtocolId(protocol.value());
+  // TODO: Replace this with deleteRoute()
   return netlinkSocket_->delMplsRoute(rtBuilder.build());
 }
 
@@ -344,6 +362,7 @@ NetlinkFibHandler::future_syncFib(
         toIPNetwork(route.dest), buildRoute(route, protocol.value()));
   }
 
+  // TODO: Implement sync routes in here. `NetlinkSocket` is deprecated
   return netlinkSocket_->syncUnicastRoutes(
       protocol.value(), std::move(newRoutes));
 }
@@ -368,6 +387,7 @@ NetlinkFibHandler::future_syncMplsFib(
         mplsRoute.topLabel, buildMplsRoute(mplsRoute, protocol.value()));
   }
 
+  // TODO: Implement sync mpls routes in here. `NetlinkSocket` is deprecated
   return netlinkSocket_->syncMplsRoutes(
       protocol.value(), std::move(newMplsRoutes));
 }
@@ -402,6 +422,8 @@ NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
     return future;
   }
 
+  // TODO: Replace this with `getIPv4Routes(protocol)` and
+  // `getIPv6Routes(protocol)`
   return netlinkSocket_->getCachedUnicastRoutes(protocol.value())
       .thenValue([this](fbnl::NlUnicastRoutes res) mutable {
         return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
@@ -427,6 +449,7 @@ NetlinkFibHandler::future_getMplsRouteTableByClient(int16_t clientId) {
     return future;
   }
 
+  // TODO: Replace this with `getMplsRoutes(protocol)`
   return netlinkSocket_->getCachedMplsRoutes(protocol.value())
       .thenValue([this](fbnl::NlMplsRoutes res) mutable {
         return std::make_unique<std::vector<openr::thrift::MplsRoute>>(
@@ -457,6 +480,7 @@ NetlinkFibHandler::buildMplsAction(
     }
     nhBuilder.setPushLabels(mplsAction.pushLabels.value());
   } else if (mplsAction.action == thrift::MplsActionCode::POP_AND_LOOKUP) {
+    // TODO: Cache interface indexes locally
     auto lpbkIfIndex = netlinkSocket_->getLoopbackIfIndex().get();
     if (lpbkIfIndex.has_value()) {
       nhBuilder.setIfIndex(lpbkIfIndex.value());
@@ -475,6 +499,7 @@ NetlinkFibHandler::buildNextHop(
   fbnl::NextHopBuilder nhBuilder;
   for (const auto& nh : nhop) {
     if (nh.address.ifName.has_value()) {
+      // TODO: Create the index cache locally
       nhBuilder.setIfIndex(
           netlinkSocket_->getIfIndex(nh.address.ifName.value()).get());
     }
@@ -488,38 +513,51 @@ NetlinkFibHandler::buildNextHop(
 fbnl::Route
 NetlinkFibHandler::buildRoute(
     const thrift::UnicastRoute& route, int protocol) const noexcept {
+  // Create route object
   fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setDestination(toIPNetwork(route.dest)).setProtocolId(protocol);
+  rtBuilder.setDestination(toIPNetwork(route.dest))
+      .setProtocolId(protocol)
+      .setPriority(protocolToPriority(protocol))
+      .setFlags(0)
+      .setValid(true);
 
-  // treat empty nexthop as null route
   if (route.nextHops.empty()) {
+    // Empty nexthops is same as DROP (aka RTN_BLACKHOLE)
     rtBuilder.setType(RTN_BLACKHOLE);
-    return rtBuilder.build();
+  } else {
+    // Add nexthops
+    buildNextHop(rtBuilder, route.nextHops);
   }
-  buildNextHop(rtBuilder, route.nextHops);
 
-  // TODO: Add protocol to priority mapping
-
-  return rtBuilder.setFlags(0).setValid(true).build();
+  return rtBuilder.build();
 }
 
 fbnl::Route
 NetlinkFibHandler::buildMplsRoute(
     const thrift::MplsRoute& mplsRoute, int protocol) const noexcept {
+  // Craete route object
   fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setMplsLabel(static_cast<uint32_t>(mplsRoute.topLabel));
-  rtBuilder.setProtocolId(protocol);
+  rtBuilder.setMplsLabel(static_cast<uint32_t>(mplsRoute.topLabel))
+      .setProtocolId(protocol)
+      .setPriority(protocolToPriority(protocol))
+      .setFlags(0)
+      .setValid(true);
 
-  // treat empty nexthop as null route
   if (mplsRoute.nextHops.empty()) {
+    // Empty nexthops is same as DROP (aka RTN_BLACKHOLE)
     rtBuilder.setType(RTN_BLACKHOLE);
+  } else {
+    // Add nexthops
+    buildNextHop(rtBuilder, mplsRoute.nextHops);
   }
-  buildNextHop(rtBuilder, mplsRoute.nextHops);
-  return rtBuilder.setFlags(0).setValid(true).build();
+
+  return rtBuilder.setValid(true).build();
 }
 
 void
 NetlinkFibHandler::getCounters(std::map<std::string, int64_t>& counters) {
+  // TODO: Since this is stateless, we won't be able to report this counter
+  // anymore. Anyway FBOSS doesn't report this similar counter.
   counters["fibagent.num_of_routes"] = netlinkSocket_->getRouteCount().get();
 }
 
