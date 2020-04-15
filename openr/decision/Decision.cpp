@@ -1565,10 +1565,12 @@ SpfSolver::SpfSolverImpl::findMinDistToNeighbor(
 void
 SpfSolver::SpfSolverImpl::updateGlobalCounters() {
   size_t numPartialAdjacencies{0};
+  const auto& mySpfResult = spfResults_[myNodeName_];
   for (auto const& kv : linkState_.getAdjacencyDatabases()) {
     const auto& adjDb = kv.second;
     size_t numLinks = linkState_.linksFromNode(kv.first).size();
-    if (0 != numLinks) {
+    // Consider partial adjacency only iff node is reachable from current node
+    if (mySpfResult.count(adjDb.thisNodeName) && 0 != numLinks) {
       // only add to the count if this node is not completely disconnected
       size_t diff = adjDb.adjacencies.size() - numLinks;
       // Number of links (bi-directional) must be <= number of adjacencies

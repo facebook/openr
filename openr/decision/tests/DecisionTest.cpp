@@ -79,6 +79,9 @@ const auto adj42 =
     createAdjacency("2", "4/2", "2/4", "fe80::2", "192.168.0.2", 10, 100002);
 const auto adj43 =
     createAdjacency("3", "4/3", "3/4", "fe80::3", "192.168.0.3", 10, 100003);
+// R5 -> R4
+const auto adj54 =
+    createAdjacency("4", "5/4", "4/5", "fe80::4", "192.168.0.4", 10, 100001);
 
 const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto addr2 = toIpPrefix("::ffff:10.2.2.2/128");
@@ -342,6 +345,7 @@ TEST(SpfSolver, Counters) {
   auto adjacencyDb2 = createAdjDb("2", {adj21, adj23}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj31}, 3 << 20); // invalid mpls label
   auto adjacencyDb4 = createAdjDb("4", {}, 4);
+  auto adjacencyDb5 = createAdjDb("5", {adj54}, 5); // Disconnected node
   spfSolver.updateAdjacencyDatabase(adjacencyDb1);
   spfSolver.updateAdjacencyDatabase(adjacencyDb2);
   spfSolver.updateAdjacencyDatabase(adjacencyDb3);
