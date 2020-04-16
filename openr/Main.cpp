@@ -27,7 +27,6 @@
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/transport/rsocket/server/RSRoutingHandler.h>
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/BuildInfo.h>
@@ -780,10 +779,6 @@ main(int argc, char** argv) {
   }
   // set the port and interface
   thriftCtrlServer.setPort(FLAGS_openr_ctrl_port);
-
-  // Needed to support streaming APIs
-  thriftCtrlServer.addRoutingHandler(
-      std::make_unique<apache::thrift::RSRoutingHandler>());
 
   std::unordered_set<std::string> acceptableNamesSet; // empty set by default
   if (FLAGS_enable_secure_thrift_server) {
