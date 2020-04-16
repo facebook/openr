@@ -104,7 +104,7 @@ struct OpenrConfig {
   16: LinkMonitorConfig link_monitor_config
   17: SparkConfig spark_config
   # Watchdog
-  18: bool enable_watchdog = true
+  18: optional bool enable_watchdog
   19: optional WatchdogConfig watchdog_config
   # prefix allocation
   20: optional bool enable_prefix_allocation

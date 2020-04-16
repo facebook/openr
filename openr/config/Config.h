@@ -16,6 +16,14 @@ class Config {
   explicit Config(const std::string& configFile);
   explicit Config(thrift::OpenrConfig config) : config_(std::move(config)) {}
 
+  //
+  // Migration function to create config from gflag values.
+  //
+  // This populate thrift::OpenrConfig structure from flag for 2 purposes:
+  //   1. internal module could be migrated to use thrift::OpenrConfig
+  //   2. Config loaded with '--config' could be compared to config here
+  static std::shared_ptr<Config> createConfigFromGflag();
+
   // getter
   const thrift::OpenrConfig&
   getConfig() const {

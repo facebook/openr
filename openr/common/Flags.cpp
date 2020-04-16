@@ -331,3 +331,63 @@ DEFINE_bool(
     prefix_algo_type_ksp2_ed_ecmp,
     false,
     "Advertise prefix algorithm type as 2-Shortest paths Edge Disjoint ECMP");
+
+// Local AS number
+// TODO: Exact config values needs to be decided
+DEFINE_int32(bgp_local_as, 61234, "Bgp local AS number");
+
+// Router id
+DEFINE_string(bgp_router_id, "169.0.0.1", "Bgp router id");
+
+// Hold time
+DEFINE_int32(bgp_hold_time_s, 30, "Bgp hold time in seconds");
+
+// GR time
+DEFINE_int32(bgp_gr_time_s, 120, "Bgp graceful restart time in seconds");
+
+// Peer address
+DEFINE_string(bgp_peer_addr, "::1", "Bgp peer IPv4 address");
+
+// Confed AS
+DEFINE_int32(bgp_confed_as, 6001, "Bgp confed AS number");
+
+// Peer As
+DEFINE_int32(bgp_remote_as, 2028, "Bgp peer AS number");
+
+// is confed peer
+DEFINE_bool(bgp_is_confed, false, "Is Bgp peer confed");
+
+// is rr client
+DEFINE_bool(bgp_is_rr_client, false, "Is Bgp peer rr client");
+
+// Thrift service port
+DEFINE_int32(bgp_thrift_port, 2029, "port for thrift service");
+
+// nexthop ipv4
+DEFINE_string(bgp_nexthop4, "0.0.0.0", "Bgp nexthop ipv4");
+
+// nexthop ipv4
+DEFINE_string(bgp_nexthop6, "::", "Bgp nexthop ipv6");
+
+// set nexthop self
+DEFINE_bool(bgp_nexthop_self, false, "Bgp nexthop self");
+
+// Override bgp auto config with arguments passed
+DEFINE_bool(bgp_override_auto_config, false, "Override BGP auto config");
+
+DEFINE_string(
+    spr_ha_state_file,
+    "/dev/shm/spr_ha_state.txt",
+    "File in which HA stateful information is stored across bgp restarts");
+
+// bgp stateful ha
+DEFINE_bool(bgp_enable_stateful_ha, true, "Is Bgp peer stateful HA required");
+
+DEFINE_uint32(
+    bgp_min_nexthop,
+    0,
+    "Min nexthops for a route to be considered to program/announce."
+    " This would only work for prefix announcing with ksp2 "
+    "algorithm. Right now, only used in turbo-fabric setup");
+
+DEFINE_string(config, "", "OpenR config file path");

@@ -123,3 +123,23 @@ DECLARE_int32(spark2_heartbeat_hold_time_s);
 
 DECLARE_bool(prefix_fwd_type_mpls);
 DECLARE_bool(prefix_algo_type_ksp2_ed_ecmp);
+
+DECLARE_int32(bgp_local_as);
+DECLARE_string(bgp_router_id);
+DECLARE_int32(bgp_hold_time_s);
+DECLARE_int32(bgp_gr_time_s);
+DECLARE_string(bgp_peer_addr);
+DECLARE_int32(bgp_confed_as);
+DECLARE_int32(bgp_remote_as);
+DECLARE_bool(bgp_is_confed);
+DECLARE_bool(bgp_is_rr_client);
+DECLARE_int32(bgp_thrift_port);
+DECLARE_string(bgp_nexthop4);
+DECLARE_string(bgp_nexthop6);
+DECLARE_bool(bgp_nexthop_self);
+DECLARE_bool(bgp_override_auto_config);
+DECLARE_string(spr_ha_state_file);
+DECLARE_bool(bgp_enable_stateful_ha);
+DECLARE_uint32(bgp_min_nexthop);
+
+DECLARE_string(config);
