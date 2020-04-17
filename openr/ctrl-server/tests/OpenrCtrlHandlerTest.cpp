@@ -170,6 +170,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         linkMonitor.get() /* linkMonitor */,
         persistentStore.get() /* configStore */,
         prefixManager.get() /* prefixManager */,
+        nullptr /* config */,
         monitorSubmitUrl_,
         context_);
     openrThriftServerWrapper_->run();

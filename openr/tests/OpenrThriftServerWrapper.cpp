@@ -17,6 +17,7 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
     LinkMonitor* linkMonitor,
     PersistentStore* configStore,
     PrefixManager* prefixManager,
+    std::shared_ptr<const Config> config,
     MonitorSubmitUrl const& monitorSubmitUrl,
     fbzmq::Context& context)
     : nodeName_(nodeName),
@@ -27,7 +28,8 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
       kvStore_(kvStore),
       linkMonitor_(linkMonitor),
       configStore_(configStore),
-      prefixManager_(prefixManager) {
+      prefixManager_(prefixManager),
+      config_(config) {
   CHECK(!nodeName_.empty());
 }
 
@@ -49,6 +51,7 @@ OpenrThriftServerWrapper::run() {
         linkMonitor_,
         configStore_,
         prefixManager_,
+        config_,
         monitorSubmitUrl_,
         context_);
   });

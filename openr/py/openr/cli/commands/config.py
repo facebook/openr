@@ -7,6 +7,7 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import json
 
 from typing import Tuple
 
@@ -20,6 +21,13 @@ from openr.OpenrCtrl.ttypes import OpenrError
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
+
+
+class ConfigShowCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client):
+        resp = client.getRunningConfig()
+        config = json.loads(resp)
+        print(json.dumps(config, indent=4, sort_keys=True, separators=(",", ": ")))
 
 
 class ConfigStoreCmdBase(OpenrCtrlCmd):

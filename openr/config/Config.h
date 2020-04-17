@@ -30,6 +30,8 @@ class Config {
     return config_;
   }
 
+  std::string getRunningConfig() const;
+
  private:
   thrift::OpenrConfig config_;
 };

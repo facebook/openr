@@ -235,6 +235,7 @@ class FibTestFixture : public ::testing::Test {
         nullptr /* linkMonitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
+        nullptr /* config */,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         context);
     openrThriftServerWrapper_->run();

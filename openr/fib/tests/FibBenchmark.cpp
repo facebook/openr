@@ -108,6 +108,7 @@ class FibWrapper {
         nullptr /* linkMonitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
+        nullptr /* config */,
         MonitorSubmitUrl{"inproc://monitor-sub"},
         context);
     openrThriftServerWrapper_->run();

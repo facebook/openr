@@ -40,6 +40,7 @@ class LongPollFixture : public ::testing::Test {
         nullptr /* linkMonitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
+        nullptr /* config */,
         MonitorSubmitUrl{"inproc://monitor-submit-url"},
         context_);
     openrThriftServerWrapper_->run();

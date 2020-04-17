@@ -21,6 +21,7 @@ include "KvStore.thrift"
 include "LinkMonitor.thrift"
 include "Lsdb.thrift"
 include "Network.thrift"
+include "OpenrConfig.thrift"
 
 exception OpenrError {
   1: string message
@@ -36,6 +37,19 @@ struct StaticRoutes {
  * modules.
  */
 service OpenrCtrl extends fb303_core.BaseService {
+
+  //
+  // Config APIs
+  //
+  /**
+   * get string config
+   */
+  string getRunningConfig()
+
+  /**
+   * get config in thrift
+   */
+  OpenrConfig.OpenrConfig getRunningConfigThrift()
 
   //
   // PrefixManager APIs

@@ -34,6 +34,7 @@ class OpenrThriftServerWrapper {
       LinkMonitor* linkMonitor,
       PersistentStore* configStore,
       PrefixManager* prefixManager,
+      std::shared_ptr<const Config> config,
       MonitorSubmitUrl const& monitorSubmitUrl,
       fbzmq::Context& context);
 
@@ -60,6 +61,7 @@ class OpenrThriftServerWrapper {
   LinkMonitor* linkMonitor_{nullptr};
   PersistentStore* configStore_{nullptr};
   PrefixManager* prefixManager_{nullptr};
+  std::shared_ptr<const Config> config_;
 };
 
 } // namespace openr

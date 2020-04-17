@@ -35,6 +35,8 @@
 #include <openr/common/ThriftUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
+#include <openr/config/Config.h>
+#include <openr/config/GflagConfig.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
@@ -192,6 +194,9 @@ main(int argc, char** argv) {
 
   // Sanity check for IPv6 global environment
   checkIsIpv6Enabled();
+
+  // start config module
+  auto config = GflagConfig::createConfigFromGflag();
 
   // Sanity check for prefix forwarding type and algorithm
   if (FLAGS_prefix_algo_type_ksp2_ed_ecmp) {
@@ -799,6 +804,7 @@ main(int argc, char** argv) {
         linkMonitor,
         configStore,
         prefixManager,
+        config,
         monitorSubmitUrl,
         context);
   });

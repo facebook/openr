@@ -52,6 +52,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
               nullptr /* linkMonitor */,
               nullptr /* configStore */,
               nullptr /* prefixManager */,
+              nullptr /* config */,
               MonitorSubmitUrl{"inproc://monitor_submit"},
               context_);
         };

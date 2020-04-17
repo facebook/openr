@@ -17,6 +17,7 @@ from openr.cli.utils.options import breeze_option
 
 class ConfigCli(object):
     def __init__(self):
+        self.config.add_command(ConfigShowCli().show, name="show")
         self.config.add_command(
             ConfigPrefixAllocatorCli().config_prefix_allocator,
             name="prefix-allocator-config",
@@ -35,6 +36,15 @@ class ConfigCli(object):
     def config(ctx):  # noqa: B902
         """ CLI tool to peek into Config Store module. """
         pass
+
+
+class ConfigShowCli(object):
+    @click.command()
+    @click.pass_obj
+    def show(cli_opts):  # noqa: B902
+        """ Show openr running config """
+
+        config.ConfigShowCmd(cli_opts).run()
 
 
 class ConfigPrefixAllocatorCli(object):

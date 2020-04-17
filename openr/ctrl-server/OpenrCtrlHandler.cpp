@@ -36,6 +36,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     LinkMonitor* linkMonitor,
     PersistentStore* configStore,
     PrefixManager* prefixManager,
+    std::shared_ptr<const Config> config,
     MonitorSubmitUrl const& monitorSubmitUrl,
     fbzmq::Context& context)
     : facebook::fb303::BaseService("openr"),
@@ -46,7 +47,8 @@ OpenrCtrlHandler::OpenrCtrlHandler(
       kvStore_(kvStore),
       linkMonitor_(linkMonitor),
       configStore_(configStore),
-      prefixManager_(prefixManager) {
+      prefixManager_(prefixManager),
+      config_(config) {
   // Create monitor client
   zmqMonitorClient_ =
       std::make_unique<fbzmq::ZmqMonitorClient>(context, monitorSubmitUrl);
@@ -289,6 +291,16 @@ OpenrCtrlHandler::getOpenrVersion(thrift::OpenrVersions& _openrVersion) {
 void
 OpenrCtrlHandler::getBuildInfo(thrift::BuildInfo& _buildInfo) {
   _buildInfo = getBuildInfoThrift();
+}
+
+void
+OpenrCtrlHandler::getRunningConfig(std::string& _return) {
+  _return = config_->getRunningConfig();
+}
+
+void
+OpenrCtrlHandler::getRunningConfigThrift(thrift::OpenrConfig& _config) {
+  _config = config_->getConfig();
 }
 
 //

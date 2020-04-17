@@ -12,6 +12,7 @@
 #include <fbzmq/zmq/Zmq.h>
 #include <openr/common/Types.h>
 #include <openr/config-store/PersistentStore.h>
+#include <openr/config/Config.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCpp.h>
@@ -37,6 +38,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       LinkMonitor* linkMonitor,
       PersistentStore* configStore,
       PrefixManager* prefixManager,
+      std::shared_ptr<const Config> config,
       MonitorSubmitUrl const& monitorSubmitUrl,
       fbzmq::Context& context);
 
@@ -59,6 +61,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   // Openr Node Name
   void getMyNodeName(std::string& _return) override;
+
+  // Get running config
+  void getRunningConfig(std::string& _return) override;
+  void getRunningConfigThrift(thrift::OpenrConfig& _config) override;
 
   //
   // ZMQ Monitor APIs
@@ -282,6 +288,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   LinkMonitor* linkMonitor_{nullptr};
   PersistentStore* configStore_{nullptr};
   PrefixManager* prefixManager_{nullptr};
+  std::shared_ptr<const Config> config_;
 
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
