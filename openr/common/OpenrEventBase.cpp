@@ -54,6 +54,7 @@ OpenrEventBase::ZmqEventHandler::ZmqEventHandler(
     fbzmq::SocketCallback callback)
     : folly::EventHandler(evb, folly::NetworkSocket::fromFd(fd)),
       callback_(std::move(callback)),
+      zmqEvents_(zmqEvents),
       ptr_(reinterpret_cast<void*>(socketPtr)) {
   CHECK(evb);
   // Register handler
@@ -73,36 +74,41 @@ OpenrEventBase::ZmqEventHandler::ZmqEventHandler(
   if (ptr_) {
     timeout_ = folly::AsyncTimeout::schedule(
         std::chrono::seconds(0), *evb, [&]() noexcept {
-          int zmqEvents{0};
-          size_t zmqEventsLen = sizeof(zmqEvents);
-          auto err =
-              zmq_getsockopt(ptr_, ZMQ_EVENTS, &zmqEvents, &zmqEventsLen);
-          CHECK_EQ(0, err) << "Got error while reading events from zmq socket";
-          if (zmqEvents & ZMQ_POLLIN) {
-            handlerReady(folly::EventHandler::READ);
-          }
+          // Invoke handler to process already pending events if any
+          handlerReady(0); // events will be read by zmq_getsockopt
         });
   }
 }
 
 void
 OpenrEventBase::ZmqEventHandler::handlerReady(uint16_t events) noexcept {
-  if (not events) {
+  int zmqEvents{0};
+  size_t zmqEventsLen = sizeof(zmqEvents);
+
+  if (ptr_) {
+    // ZMQ Socket - Read events via zmq_getsockopt
+    auto err = zmq_getsockopt(ptr_, ZMQ_EVENTS, &zmqEvents, &zmqEventsLen);
+    CHECK_EQ(0, err) << "Got error while reading events from zmq socket";
+  } else {
+    // Usual socket/event fd - Use signalled events
+    if (events & folly::EventHandler::READ) {
+      zmqEvents |= ZMQ_POLLIN;
+    }
+    if (events & folly::EventHandler::WRITE) {
+      zmqEvents |= ZMQ_POLLOUT;
+    }
+  }
+
+  // Return if no events
+  if (not zmqEvents) {
     return;
   }
 
-  int zmqEvents{0};
-  size_t zmqEventsLen = sizeof(zmqEvents);
-  if (events & folly::EventHandler::READ) {
-    zmqEvents |= ZMQ_POLLIN;
-  }
-  if (events & folly::EventHandler::WRITE) {
-    zmqEvents |= ZMQ_POLLOUT;
-  }
-
   do {
-    // Invoke callback
-    callback_(zmqEvents);
+    // Invoke callback if there is an overlap
+    if (zmqEvents_ & zmqEvents) {
+      callback_(zmqEvents);
+    }
 
     if (ptr_ and (zmqEvents & ZMQ_POLLIN)) {
       // Get socket events after the read

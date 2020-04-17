@@ -134,6 +134,9 @@ class OpenrEventBase {
     // Callback for handling event
     fbzmq::SocketCallback callback_;
 
+    // Subscribed events
+    const int zmqEvents_{0};
+
     // fbzmq socket pointer if fd is socket
     void* ptr_{nullptr};
 
