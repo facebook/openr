@@ -1166,7 +1166,9 @@ KvStoreDb::getCounters() {
   // Add some more flat counters
   counters["kvstore.num_keys"] = kvStore_.size();
   counters["kvstore.num_peers"] = peers_.size();
-  counters["kvstore.pending_full_sync"] = peersToSyncWith_.size();
+  // Add up pending and in-flight full sync
+  counters["kvstore.pending_full_sync"] =
+      peersToSyncWith_.size() + latestSentPeerSync_.size();
   return counters;
 }
 
@@ -1255,7 +1257,6 @@ KvStoreDb::requestFullSyncFromPeers() {
 
     VLOG(1) << "Sending full-sync request to peer " << peerName << " using id "
             << peerCmdSocketId;
-    latestSentPeerSync_[peerCmdSocketId] = std::chrono::steady_clock::now();
     auto const ret = sendMessageToPeer(peerCmdSocketId, dumpRequest);
 
     if (ret.hasError()) {
@@ -1268,8 +1269,7 @@ KvStoreDb::requestFullSyncFromPeers() {
       timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       ++it;
     } else {
-      latestSentPeerSync_.emplace(
-          peerCmdSocketId, std::chrono::steady_clock::now());
+      latestSentPeerSync_[peerCmdSocketId] = std::chrono::steady_clock::now();
 
       // Remove the iterator
       it = peersToSyncWith_.erase(it);
@@ -1277,8 +1277,9 @@ KvStoreDb::requestFullSyncFromPeers() {
 
     // if pending response is above the limit wait until
     // kStoreFullSyncResponseTimeout before sending next sync request
-    if (latestSentPeerSync_.size() >= fullSycnReqInProgress_) {
-      LOG(INFO) << fullSycnReqInProgress_ << " full-sync in progress";
+    if (latestSentPeerSync_.size() >= parallelSyncLimit_) {
+      LOG(INFO) << latestSentPeerSync_.size() << " full-sync in progress. "
+                << " Limit: " << parallelSyncLimit_;
       timeout = Constants::kStoreFullSyncResponseTimeout;
       break;
     }
@@ -1288,7 +1289,7 @@ KvStoreDb::requestFullSyncFromPeers() {
   // if maximum allowed pending sync count is reached. Adding a new peer
   // will not initiate full sync request if it's already scheduled
   if (not peersToSyncWith_.empty() ||
-      latestSentPeerSync_.size() >= fullSycnReqInProgress_) {
+      latestSentPeerSync_.size() >= parallelSyncLimit_) {
     LOG_IF(INFO, peersToSyncWith_.size())
         << peersToSyncWith_.size() << " peers still require full-sync.";
     LOG(INFO) << "Scheduling full-sync after " << timeout.count() << "ms.";
@@ -1740,9 +1741,8 @@ KvStoreDb::processSyncResponse() noexcept {
     // double the max full sync pending once a response is received, to a max
     // of kMaxFullSyncPendingCountThreshold
     if (not peersToSyncWith_.empty()) {
-      fullSycnReqInProgress_ = std::min(
-          2 * fullSycnReqInProgress_,
-          Constants::kMaxFullSyncPendingCountThreshold);
+      parallelSyncLimit_ = std::min(
+          2 * parallelSyncLimit_, Constants::kMaxFullSyncPendingCountThreshold);
       fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
     }
   }

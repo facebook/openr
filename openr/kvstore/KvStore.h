@@ -396,7 +396,7 @@ class KvStoreDb : public DualNode {
   // max parallel syncs allowed. It's initialized with '2' and doubles
   // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
   // response received
-  int32_t fullSycnReqInProgress_{2};
+  int32_t parallelSyncLimit_{2};
 
   // event loop
   OpenrEventBase* evb_{nullptr};
