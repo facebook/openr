@@ -5,11 +5,13 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <sodium.h>
+#include <algorithm>
 #include <cstdlib>
 #include <thread>
 #include <tuple>
 #include <unordered_set>
+
+#include <sodium.h>
 
 #include <fb303/ServiceData.h>
 #include <fbzmq/zmq/Zmq.h>
@@ -2489,14 +2491,14 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
 }
 
 /**
- * Test kvstore-consistency with rate-limiter enabled
+ * Test kvstore-consistency with flooding rate-limiter enabled
  * linear topology, intentionlly increate db-sync interval from 1s -> 60s so
  * we can check kvstore is synced without replying on periodic peer-sync.
  * s0 -- s1 (rate-limited) -- s2
  * let s0 set ONLY one key, while s2 sets thousands of keys within 5 seconds.
  * Make sure all stores have same amount of keys at the end
  */
-TEST_F(KvStoreTestFixture, RateLimiterSync) {
+TEST_F(KvStoreTestFixture, RateLimiterFlood) {
   fbzmq::Context context;
 
   const uint32_t messageRate = 10; // number of messages per second
@@ -3045,6 +3047,180 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
 
   evb.loop();
 }
+
+/**
+ * Verify correctness of initial full sync rate limiting.
+ *
+ * - Create KvStore store0.
+ * - Create kNumPeers sockets. Add peers to store0
+ * - Verify exponential increase in full-sync requests from store0 with every
+ *   reply. Starting with 2 requests.
+ */
+class KvStoreRateLimitTestFixture : public testing::TestWithParam<size_t> {
+ public:
+  fbzmq::Context context;
+  CompactSerializer serializer;
+
+  // Number of peers
+  const size_t kNumPeers = GetParam();
+};
+
+TEST_P(KvStoreRateLimitTestFixture, InitialSync) {
+  const thrift::Publication emptyResponse;
+
+  //
+  // Create and start store0.
+  // NOTE: Set db-sync-interval to 60s (high value) to avoid periodic full sync
+  // in this test
+  //
+  auto store0 = std::make_unique<KvStoreWrapper>(
+      context,
+      "store0",
+      60s /* dbSyncInterval */,
+      kCounterSubmitInterval,
+      std::unordered_map<std::string, thrift::PeerSpec>{},
+      std::nullopt /* filters */,
+      std::nullopt /* kvStoreRate */,
+      Constants::kTtlDecrement,
+      false /* enableFloodOptimization */,
+      false /* isFloodRoot */,
+      std::unordered_set<std::string>{
+          openr::thrift::KvStore_constants::kDefaultArea()});
+  store0->run();
+
+  //
+  // Create peer sockets & add each peer to KvStore
+  //
+  std::vector<fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>> peerSockets;
+  std::vector<fbzmq::PollItem> pollItems;
+  for (size_t i = 0; i < kNumPeers; ++i) {
+    const std::string nodeName = folly::sformat("test-peer-{}", i);
+
+    // Create peer spec based on peer-index
+    // NOTE: We explicitly disable flood optimization to avoid conflict of
+    // dual messages with full sync requests.
+    thrift::PeerSpec peerSpec;
+    peerSpec.supportFloodOptimization = false;
+    peerSpec.cmdUrl = folly::sformat("inproc://{}", nodeName);
+    peerSpec.thriftPortUrl = ""; // Intentionally empty
+
+    // Create peer socket.
+    // NOTE: make it non-blocking and we're not setting identity string
+    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> peerSock(
+        context,
+        folly::none /* identity string */,
+        folly::none,
+        fbzmq::NonblockingFlag{true});
+    peerSock.bind(fbzmq::SocketUrl(peerSpec.cmdUrl)).value();
+
+    // Add socket to poll item and peer-sockets list
+    pollItems.push_back({reinterpret_cast<void*>(*peerSock), 0, ZMQ_POLLIN, 0});
+    peerSockets.emplace_back(std::move(peerSock));
+
+    // Add peer to KvStore
+    store0->addPeer(nodeName, peerSpec);
+  }
+
+  //
+  // Verify sync request rate-limiting
+  // 1) Every peer-add will initiate the full sync request. All request will
+  //   be bufferred but not sent
+  // 2) parallelSyncLimit=2 will be sent out initially
+  // 3) We read all the requests but only respond to one request at a time
+  //    until we reach max limit. Subsequently we send response to all requests.
+  // 4) On receipt of a successful sync response `parallelSyncLimit` will double
+  //   and more requests will be sent by store0
+  // 5) repeat from (3) until all (kNumPeers) requests/responses are done
+  //
+
+  size_t parallelSyncLimit{2}; // Doubles on every response we send
+  size_t numReceivedRequests{0}; // Number of requests received
+  std::map<int, std::string /* peer-id */> outstandingResponses;
+
+  while (numReceivedRequests < kNumPeers) {
+    // Poll ZMQ sockets until timeout is encountered - no more request is sent
+    // from store0
+    while (true) {
+      auto ret = fbzmq::poll(pollItems, std::chrono::milliseconds(1000));
+      ASSERT_TRUE(ret.hasValue());
+      if (ret.value() == 0) { // Unsuccessful poll
+        break;
+      }
+
+      // We've received event on at-least one socket. Read the request
+      for (size_t i = 0; i < kNumPeers; ++i) {
+        if (pollItems.at(i).revents != ZMQ_POLLIN) {
+          continue; // No read event
+        }
+
+        // Read and validate request
+        auto msgs = peerSockets.at(i).recvMultiple();
+        ASSERT_TRUE(msgs.hasValue());
+        EXPECT_EQ(3, msgs->size());
+        EXPECT_TRUE(msgs->at(1).empty()); // Empty identifier
+        auto request = msgs->at(2)
+                           .readThriftObj<thrift::KvStoreRequest>(serializer)
+                           .value();
+        EXPECT_EQ(thrift::Command::KEY_DUMP, request.cmd);
+        ASSERT_TRUE(request.keyDumpParams_ref());
+        EXPECT_TRUE(request.keyDumpParams_ref()->keyValHashes_ref());
+        // We must not have received the request before
+        EXPECT_EQ(0, outstandingResponses.count(i));
+
+        // Update test state variables
+        ++numReceivedRequests;
+        outstandingResponses.emplace(
+            i, msgs->at(0).read<std::string>().value());
+      } // end for
+    } // end while(true)
+
+    // Verify that expected requests are received
+    if (numReceivedRequests < kNumPeers) {
+      EXPECT_EQ(parallelSyncLimit, outstandingResponses.size());
+    }
+
+    // Respond to only one request if we haven't reached the full limit yet
+    const bool limitReached =
+        parallelSyncLimit == Constants::kMaxFullSyncPendingCountThreshold;
+    ASSERT_LT(0, outstandingResponses.size()); // Ensure at-least one request
+    for (auto it = outstandingResponses.begin();
+         it != outstandingResponses.end();) {
+      auto ret = peerSockets.at(it->first).sendMultiple(
+          fbzmq::Message::from(it->second).value(),
+          fbzmq::Message(),
+          fbzmq::Message::fromThriftObj(emptyResponse, serializer).value());
+      EXPECT_TRUE(ret.hasValue());
+      // Remove, we have responded to the request
+      it = outstandingResponses.erase(it);
+
+      if (not limitReached) {
+        break; // We only respond to one message until limit is reached.
+      }
+    }
+
+    // Bump up the limit
+    parallelSyncLimit = std::min(
+        2 * parallelSyncLimit, Constants::kMaxFullSyncPendingCountThreshold);
+  }
+
+  //
+  // Ensure we received and responded to all the request only ONCE
+  //
+  EXPECT_EQ(kNumPeers, numReceivedRequests);
+  if (kNumPeers > Constants::kMaxFullSyncPendingCountThreshold) {
+    EXPECT_EQ(0, outstandingResponses.size());
+  }
+
+  //
+  // Done
+  //
+  store0->stop();
+}
+
+INSTANTIATE_TEST_CASE_P(
+    KvStoreTestInstance,
+    KvStoreRateLimitTestFixture,
+    ::testing::Values(2, 4, 8, 16, 32, 64, 128));
 
 int
 main(int argc, char* argv[]) {

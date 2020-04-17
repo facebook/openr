@@ -86,12 +86,9 @@ class Constants {
   // default interval for kvstore to sync with peers
   static constexpr std::chrono::seconds kStoreSyncInterval{60};
 
-  // KvStore full sync response timeout
-  static constexpr std::chrono::seconds kStoreFullSyncResponseTimeout{10};
-
   // Count of maximum pending kvstore sync response before waiting for
-  // kStoreFullSyncResponseTimeout to send the next sync request
-  static constexpr int32_t kMaxFullSyncPendingCountThreshold{32};
+  // kMaxBackoff to send the next sync request
+  static constexpr size_t kMaxFullSyncPendingCountThreshold{32};
 
   //
   // PrefixAllocator specific

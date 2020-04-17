@@ -1275,12 +1275,14 @@ KvStoreDb::requestFullSyncFromPeers() {
       it = peersToSyncWith_.erase(it);
     }
 
-    // if pending response is above the limit wait until
-    // kStoreFullSyncResponseTimeout before sending next sync request
+    // if pending response is above the limit wait until kMaxBackoff before
+    // sending next sync request
     if (latestSentPeerSync_.size() >= parallelSyncLimit_) {
-      LOG(INFO) << latestSentPeerSync_.size() << " full-sync in progress. "
-                << " Limit: " << parallelSyncLimit_;
-      timeout = Constants::kStoreFullSyncResponseTimeout;
+      LOG(INFO) << latestSentPeerSync_.size() << " full-sync in progress which "
+                << " is above limit: " << parallelSyncLimit_ << ". Will send "
+                << "sync request after max timeout or on receipt of sync "
+                << "response";
+      timeout = Constants::kMaxBackoff;
       break;
     }
   } // for
@@ -1737,14 +1739,21 @@ KvStoreDb::processSyncResponse() noexcept {
     VLOG(1) << "It took " << syncDuration.count() << " ms to sync with "
             << requestId;
     latestSentPeerSync_.erase(requestId);
-    // if peers to sync with is not empty then schedule one immediately
-    // double the max full sync pending once a response is received, to a max
-    // of kMaxFullSyncPendingCountThreshold
-    if (not peersToSyncWith_.empty()) {
-      parallelSyncLimit_ = std::min(
-          2 * parallelSyncLimit_, Constants::kMaxFullSyncPendingCountThreshold);
-      fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
-    }
+  }
+
+  // We've received a full sync response. Double the parallel sync-request
+  // limit. This is under assumption that, subsequent sync request will not
+  // incur huge changes.
+  parallelSyncLimit_ = std::min(
+      2 * parallelSyncLimit_, Constants::kMaxFullSyncPendingCountThreshold);
+
+  // Schedule timeout immediately to resume sending full sync requests. If no
+  // outstanding sync is required, then cancel the timeout. Cancelling timeout
+  // will let the subsequent sync requests to proceed immediately.
+  if (not peersToSyncWith_.empty()) {
+    fullSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+  } else {
+    fullSyncTimer_->cancelTimeout();
   }
 }
 
