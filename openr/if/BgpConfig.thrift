@@ -219,7 +219,6 @@ struct BgpConfig {
   /**
    * the list of BGP peers for the switch
    */
-
   5: list<BgpPeer> peers
   /**
    * the hold time for all BGP sessions

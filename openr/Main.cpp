@@ -828,11 +828,8 @@ main(int argc, char** argv) {
 
   // Call external module for platform specific implementations
   if (FLAGS_enable_plugin) {
-    pluginStart(PluginArgs{FLAGS_node_name,
-                           prefixUpdatesQueue,
-                           routeUpdatesQueue.getReader(),
-                           FLAGS_prefix_algo_type_ksp2_ed_ecmp,
-                           sslContext});
+    pluginStart(PluginArgs{
+        prefixUpdatesQueue, routeUpdatesQueue.getReader(), config, sslContext});
   }
 
   // Wait for main-event loop to return

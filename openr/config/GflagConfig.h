@@ -16,6 +16,18 @@
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
+// RSW Confed AS base
+constexpr int32_t kRswConfedBase = 2000;
+
+// FSW Confed AS base
+constexpr int32_t kFswConfedBase = 6000;
+
+// RSW Local Confed AS number offset relative to device number
+constexpr int32_t kRswLocalConfedOffset = 100;
+
+// FSW Local Confed AS number offset relative to device number
+constexpr int32_t kFswLocalConfedOffset = 200;
+
 namespace openr {
 
 //
@@ -161,12 +173,113 @@ class GflagConfig final {
     // SPR
     if (FLAGS_enable_plugin) {
       config.enable_spr_ref() = FLAGS_enable_plugin;
-      // TODO - add bgp config
+      config.bgp_config_ref() = getBgpConfig();
       if (auto v = FLAGS_bgp_use_igp_metric) {
         config.bgp_use_igp_metric_ref() = v;
       }
     }
     return std::make_shared<Config>(config);
+  }
+
+  // Generate Bgp configuration based on input arguments
+  static thrift::BgpConfig
+  getBgpArgConfig() {
+    thrift::BgpConfig config;
+    thrift::BgpPeer staticPeer;
+
+    // create new config
+    config.router_id = FLAGS_bgp_router_id;
+    config.local_as = FLAGS_bgp_local_as;
+    if (FLAGS_bgp_is_confed) {
+      config.local_confed_as_ref() = FLAGS_bgp_confed_as;
+    }
+    config.hold_time = FLAGS_bgp_hold_time_s;
+    config.graceful_restart_convergence_seconds_ref() = FLAGS_bgp_gr_time_s;
+    // Bind to ephemeral port. Should not bind to default 179 port to avoid
+    // clashing with other bgp instance running.
+    // TODO: In long run bgp should support not listening on any port
+    config.listen_port = 0;
+
+    // static peer (no peer groups)
+    staticPeer.remote_as = FLAGS_bgp_remote_as;
+    staticPeer.peer_addr = FLAGS_bgp_peer_addr;
+    staticPeer.local_addr = FLAGS_bgp_peer_addr;
+    staticPeer.next_hop4 = FLAGS_bgp_nexthop4;
+    staticPeer.next_hop6 = FLAGS_bgp_nexthop6;
+    staticPeer.is_rr_client_ref() = FLAGS_bgp_is_rr_client;
+    staticPeer.is_confed_peer_ref() = FLAGS_bgp_is_confed;
+    staticPeer.next_hop_self_ref() = FLAGS_bgp_nexthop_self;
+    staticPeer.enable_stateful_ha_ref() = FLAGS_bgp_enable_stateful_ha;
+
+    config.peers = {staticPeer};
+    return config;
+  }
+
+  // Generate Bgp configuration automatically
+  static thrift::BgpConfig
+  getBgpAutoConfig() {
+    thrift::BgpConfig config;
+    thrift::BgpPeer staticPeer;
+    auto deviceName = FLAGS_node_name;
+
+    config.router_id = FLAGS_bgp_router_id;
+    // Local confed as is sufficient, local as is unused anyways
+    config.local_as = FLAGS_bgp_local_as;
+
+    if (deviceName.substr(0, 3) == "rsw") {
+      // rsw001
+      auto rswNum = folly::to<uint32_t>(deviceName.substr(3, 3));
+      config.local_confed_as_ref() =
+          kRswConfedBase + kRswLocalConfedOffset + rswNum;
+      staticPeer.remote_as = kRswConfedBase + rswNum;
+    } else if (deviceName.substr(0, 3) == "fsw") {
+      // fsw001
+      auto fswNum = folly::to<uint32_t>(deviceName.substr(3, 3));
+      config.local_confed_as_ref() =
+          kRswConfedBase + kFswLocalConfedOffset + fswNum;
+      staticPeer.remote_as = kFswConfedBase + fswNum;
+    } else {
+      LOG(FATAL) << "Unsupported device to enable spr " << deviceName;
+    }
+    config.hold_time = FLAGS_bgp_hold_time_s;
+    config.graceful_restart_convergence_seconds_ref() = FLAGS_bgp_gr_time_s;
+    // Bind to ephemeral port. Should not bind to default 179 port to avoid
+    // clashing with other bgp instance running.
+    config.listen_port = 0;
+
+    // static peer (no peer groups)
+    staticPeer.peer_addr = FLAGS_bgp_peer_addr;
+    staticPeer.local_addr = FLAGS_bgp_peer_addr;
+    staticPeer.next_hop4 = FLAGS_bgp_nexthop4;
+    staticPeer.next_hop6 = FLAGS_bgp_nexthop6;
+    staticPeer.next_hop_self_ref() = false;
+    staticPeer.is_rr_client_ref() = false;
+    staticPeer.is_confed_peer_ref() = true;
+    staticPeer.enable_stateful_ha_ref() = true;
+
+    config.peers = {staticPeer};
+    return config;
+  }
+
+  // Generate Bgp configuration
+  static thrift::BgpConfig
+  getBgpConfig() {
+    // Validate input arguments
+    if (!folly::IPAddress::validate(FLAGS_bgp_router_id)) {
+      LOG(FATAL) << "Invalid bgp_router_id " << FLAGS_bgp_router_id;
+    }
+    if (!folly::IPAddress::validate(FLAGS_bgp_peer_addr)) {
+      LOG(FATAL) << "Invalid bgp_peer_addr " << FLAGS_bgp_peer_addr;
+    }
+    if (!folly::IPAddress::validate(FLAGS_bgp_nexthop4)) {
+      LOG(FATAL) << "Invalid bgp_nexthop4 " << FLAGS_bgp_nexthop4;
+    }
+    if (!folly::IPAddress::validate(FLAGS_bgp_nexthop6)) {
+      LOG(FATAL) << "Invalid bgp_nexthop6 " << FLAGS_bgp_nexthop6;
+    }
+
+    return FLAGS_bgp_override_auto_config ? getBgpArgConfig()
+                                          : getBgpAutoConfig();
   }
 };
 
