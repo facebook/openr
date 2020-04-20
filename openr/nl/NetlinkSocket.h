@@ -20,7 +20,8 @@ using EventVariant = std::variant<Neighbor, IfAddress, Link>;
 
 struct PrefixCmp {
   bool
-  operator()(const folly::CIDRNetwork& lhs, const folly::CIDRNetwork& rhs) {
+  operator()(
+      const folly::CIDRNetwork& lhs, const folly::CIDRNetwork& rhs) const {
     if (lhs.first != rhs.first) {
       return lhs.first < rhs.first;
     } else {
