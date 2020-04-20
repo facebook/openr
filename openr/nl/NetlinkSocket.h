@@ -334,6 +334,12 @@ class NetlinkSocket {
   void registerNeighborListener(
       std::function<void(const NeighborUpdate& neighborUpdate)> callback);
 
+  // Expose pointer to underlying protocol socket
+  NetlinkProtocolSocket*
+  getProtocolSocket() {
+    return nlSock_.get();
+  }
+
  private:
   void doHandleRouteEvent(
       Route route, bool runHandler, bool updateUnicastRoute) noexcept;

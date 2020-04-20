@@ -34,39 +34,16 @@ const std::chrono::seconds kSyncStaticRouteTimeout{30};
 const uint8_t kMinRouteProtocolId = 17;
 const uint8_t kMaxRouteProtocolId = 253;
 
-std::string
-getClientName(const int16_t clientId) {
-  auto it = thrift::_FibClient_VALUES_TO_NAMES.find(
-      static_cast<thrift::FibClient>(clientId));
-  if (it == thrift::_FibClient_VALUES_TO_NAMES.end()) {
-    return folly::sformat("UNKNOWN(id={})", clientId);
-  }
-  return it->second;
-}
-
-uint8_t
-protocolToPriority(const uint8_t protocol) {
-  // Lookup in protocol to priority mapping
-  auto& priorityMap = openr::thrift::Platform_constants::protocolIdtoPriority();
-  auto priorityIt = priorityMap.find(protocol);
-  if (priorityIt != priorityMap.end()) {
-    return priorityIt->second;
-  }
-
-  // Default priority is unknown
-  return openr::thrift::Platform_constants::kUnknowProtAdminDistance();
-}
-
 } // namespace
 
 NetlinkFibHandler::NetlinkFibHandler(
     fbzmq::ZmqEventLoop* zmqEventLoop,
     std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket)
     : netlinkSocket_(netlinkSocket),
+      evl_{zmqEventLoop},
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
-                     .count()),
-      evl_{zmqEventLoop} {
+                     .count()) {
   CHECK_NOTNULL(zmqEventLoop);
   // TODO: Implement this neighbor in this class
   netlinkSocket_->registerNeighborListener(
@@ -104,15 +81,33 @@ NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
   return ret->second;
 }
 
+std::string
+NetlinkFibHandler::getClientName(const int16_t clientId) {
+  return apache::thrift::util::enumNameSafe(
+      static_cast<thrift::FibClient>(clientId));
+}
+
+uint8_t
+NetlinkFibHandler::protocolToPriority(const uint8_t protocol) {
+  // Lookup in protocol to priority mapping
+  auto& priorityMap = openr::thrift::Platform_constants::protocolIdtoPriority();
+  auto priorityIt = priorityMap.find(protocol);
+  if (priorityIt != priorityMap.end()) {
+    return priorityIt->second;
+  }
+
+  // Default priority is unknown
+  return openr::thrift::Platform_constants::kUnknowProtAdminDistance();
+}
+
 std::vector<thrift::NextHopThrift>
 NetlinkFibHandler::buildNextHops(const fbnl::NextHopSet& nextHops) {
   std::vector<thrift::NextHopThrift> thriftNextHops;
 
   for (auto const& nh : nextHops) {
     CHECK(nh.getGateway().has_value());
-    // TODO: Create the index cache locally
     const auto& ifName = nh.getIfIndex().has_value()
-        ? netlinkSocket_->getIfName(nh.getIfIndex().value()).get()
+        ? getIfName(nh.getIfIndex().value()).value()
         : "";
     thrift::NextHopThrift nextHop;
     nextHop.address = toBinaryAddress(nh.getGateway().value());
@@ -289,29 +284,19 @@ NetlinkFibHandler::future_addMplsRoutes(
     int16_t clientId, std::unique_ptr<std::vector<thrift::MplsRoute>> routes) {
   LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
 
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
+  std::vector<folly::Future<folly::Unit>> futures;
+  for (auto& route : *routes) {
+    auto ptr = std::make_unique<thrift::MplsRoute>(std::move(route));
+    futures.emplace_back(future_addMplsRoute(clientId, std::move(ptr)));
+  }
 
-  // Run all route updates in a single eventloop
-  evl_->runImmediatelyOrInEventLoop([this,
-                                     clientId,
-                                     promise = std::move(promise),
-                                     routes = std::move(routes)]() mutable {
-    for (auto& route : *routes) {
-      auto ptr = std::make_unique<thrift::MplsRoute>(std::move(route));
-      try {
-        // This is going to be synchronous call as we are invoking from
-        // within event loop
-        future_addMplsRoute(clientId, std::move(ptr)).get();
-      } catch (std::exception const& e) {
-        promise.setException(e);
-        return;
-      }
-    }
-    promise.setValue();
-  });
-
-  return future;
+  return collectAllUnsafe(std::move(futures))
+      .then([](folly::Try<std::vector<folly::Try<folly::Unit>>>&& retvals) {
+        for (auto& retval : retvals.value()) {
+          retval.value(); // Throw exception if any
+        }
+        return folly::Unit(); // Return unit on success
+      });
 }
 
 folly::Future<folly::Unit>
@@ -319,26 +304,18 @@ NetlinkFibHandler::future_deleteMplsRoutes(
     int16_t clientId, std::unique_ptr<std::vector<int32_t>> topLabels) {
   LOG(INFO) << "Deleting mpls routes of client: " << getClientName(clientId);
 
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
+  std::vector<folly::Future<folly::Unit>> futures;
+  for (auto& label : *topLabels) {
+    futures.emplace_back(future_deleteMplsRoute(clientId, label));
+  }
 
-  evl_->runImmediatelyOrInEventLoop(
-      [this,
-       clientId,
-       promise = std::move(promise),
-       topLabels = std::move(topLabels)]() mutable {
-        for (auto& label : *topLabels) {
-          try {
-            future_deleteMplsRoute(clientId, label).get();
-          } catch (std::exception const& e) {
-            promise.setException(e);
-            return;
-          }
+  return collectAllUnsafe(std::move(futures))
+      .then([](folly::Try<std::vector<folly::Try<folly::Unit>>>&& retvals) {
+        for (auto& retval : retvals.value()) {
+          retval.value(); // Throw exception if any
         }
-        promise.setValue();
+        return folly::Unit(); // Return unit on success
       });
-
-  return future;
 }
 
 folly::Future<folly::Unit>
@@ -463,7 +440,7 @@ NetlinkFibHandler::future_getMplsRouteTableByClient(int16_t clientId) {
 }
 void
 NetlinkFibHandler::buildMplsAction(
-    fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) const {
+    fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) {
   if (!nhop.mplsAction.has_value()) {
     return;
   }
@@ -480,8 +457,7 @@ NetlinkFibHandler::buildMplsAction(
     }
     nhBuilder.setPushLabels(mplsAction.pushLabels.value());
   } else if (mplsAction.action == thrift::MplsActionCode::POP_AND_LOOKUP) {
-    // TODO: Cache interface indexes locally
-    auto lpbkIfIndex = netlinkSocket_->getLoopbackIfIndex().get();
+    auto lpbkIfIndex = getLoopbackIfIndex();
     if (lpbkIfIndex.has_value()) {
       nhBuilder.setIfIndex(lpbkIfIndex.value());
     } else {
@@ -494,14 +470,12 @@ NetlinkFibHandler::buildMplsAction(
 void
 NetlinkFibHandler::buildNextHop(
     fbnl::RouteBuilder& rtBuilder,
-    const std::vector<thrift::NextHopThrift>& nhop) const {
+    const std::vector<thrift::NextHopThrift>& nhop) {
   // add nexthops
   fbnl::NextHopBuilder nhBuilder;
   for (const auto& nh : nhop) {
-    if (nh.address.ifName.has_value()) {
-      // TODO: Create the index cache locally
-      nhBuilder.setIfIndex(
-          netlinkSocket_->getIfIndex(nh.address.ifName.value()).get());
+    if (nh.address.ifName_ref()) {
+      nhBuilder.setIfIndex(getIfIndex(*nh.address.ifName_ref()).value());
     }
     nhBuilder.setGateway(toIPAddress(nh.address));
     buildMplsAction(nhBuilder, nh);
@@ -511,8 +485,7 @@ NetlinkFibHandler::buildNextHop(
 }
 
 fbnl::Route
-NetlinkFibHandler::buildRoute(
-    const thrift::UnicastRoute& route, int protocol) const noexcept {
+NetlinkFibHandler::buildRoute(const thrift::UnicastRoute& route, int protocol) {
   // Create route object
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setDestination(toIPNetwork(route.dest))
@@ -534,7 +507,7 @@ NetlinkFibHandler::buildRoute(
 
 fbnl::Route
 NetlinkFibHandler::buildMplsRoute(
-    const thrift::MplsRoute& mplsRoute, int protocol) const noexcept {
+    const thrift::MplsRoute& mplsRoute, int protocol) {
   // Craete route object
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setMplsLabel(static_cast<uint32_t>(mplsRoute.topLabel))
@@ -552,6 +525,87 @@ NetlinkFibHandler::buildMplsRoute(
   }
 
   return rtBuilder.setValid(true).build();
+}
+
+std::optional<int>
+NetlinkFibHandler::getIfIndex(const std::string& ifName) {
+  // Lambda function to lookup ifName in cache
+  auto getCachedIndex = [this, &ifName]() -> std::optional<int> {
+    auto cache = ifNameToIndex_.rlock();
+    auto it = cache->find(ifName);
+    if (it != cache->end()) {
+      return it->second;
+    }
+    return std::nullopt;
+  };
+
+  // Lookup in cache. Return if exists
+  auto maybeIndex = getCachedIndex();
+  if (maybeIndex.has_value()) {
+    return maybeIndex;
+  }
+
+  // Update cache and return cached index
+  initializeInterfaceCache();
+  return getCachedIndex();
+}
+
+std::optional<std::string>
+NetlinkFibHandler::getIfName(const int ifIndex) {
+  // Lambda function to lookup ifIndex in cache
+  auto getCachedName = [this, ifIndex]() -> std::optional<std::string> {
+    auto cache = ifIndexToName_.rlock();
+    auto it = cache->find(ifIndex);
+    if (it != cache->end()) {
+      return it->second;
+    }
+    return std::nullopt;
+  };
+
+  // Lookup in cache. Return if exists
+  auto maybeName = getCachedName();
+  if (maybeName.has_value()) {
+    return maybeName;
+  }
+
+  // Update cache and return cached index
+  initializeInterfaceCache();
+  return getCachedName();
+}
+
+std::optional<int>
+NetlinkFibHandler::getLoopbackIfIndex() {
+  auto index = loopbackIfIndex_.load();
+  if (index < 0) {
+    initializeInterfaceCache();
+    index = loopbackIfIndex_.load();
+  }
+
+  if (index < 0) {
+    return std::nullopt;
+  }
+  return index;
+}
+
+void
+NetlinkFibHandler::initializeInterfaceCache() noexcept {
+  auto links = netlinkSocket_->getProtocolSocket()->getAllLinks().get();
+
+  // Acquire locks on the cache
+  auto lockedIfNameToIndex = ifNameToIndex_.wlock();
+  auto lockedIfIndexToName = ifIndexToName_.wlock();
+
+  // NOTE: We don't clear cache instead override entries
+  for (auto const& link : links) {
+    // Update name <-> index mappings
+    (*lockedIfNameToIndex)[link.getLinkName()] = link.getIfIndex();
+    (*lockedIfIndexToName)[link.getIfIndex()] = link.getLinkName();
+
+    // Update loopbackIfIndex_
+    if (link.isLoopback()) {
+      loopbackIfIndex_.store(link.getIfIndex());
+    }
+  }
 }
 
 void

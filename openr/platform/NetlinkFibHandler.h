@@ -31,6 +31,12 @@ namespace openr {
 /**
  * This class implements OpenR's Platform.FibService thrit interface for
  * programming routes on Linux platform for packet routing in kernel
+ *
+ * TODO: Add UT for NetlinkFibHandler - for correctness of following APIs
+ * - buildRoute / buildMplsRoute / buildNextHop / buildMplsAction
+ * - Add/Del/Sync unicast routes (IPv4 & IPv6)
+ * - Add/Del/Sync mpls routes
+ * - NOTE: Use MockProtocolSocket to faciliate the UTs
  */
 class NetlinkFibHandler : public thrift::FibServiceSvIf {
  public:
@@ -100,7 +106,33 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
     return netlinkSocket_;
   }
 
+  /**
+   * Static API to convert protocol to clientId. Set exception in promise if
+   * return value is not false;
+   * TODO: Add UT for this API
+   * TODO: Fix this by not taking promise as a parameter
+   */
+  template <class A>
+  static folly::Expected<int16_t, bool> getProtocol(
+      folly::Promise<A>& promise, int16_t clientId);
+
+  /**
+   * Convert clientId to client name
+   * TODO: Add UT for this API
+   */
+  static std::string getClientName(const int16_t clientId);
+
+  /**
+   * Translate protocol identifier to priority
+   * TODO: Add UT for this API
+   */
+  static uint8_t protocolToPriority(const uint8_t protocol);
+
  protected:
+  /**
+   * TODO: Migrate BGP++ to stream API for neighbor notifications. Also need to
+   * sync with WedgeAgent progress on it.
+   */
   struct ThreadLocalListener {
     folly::EventBase* eventBase;
     std::unordered_map<
@@ -113,50 +145,83 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
 
   std::mutex listenersMutex_;
   folly::ThreadLocalPtr<ThreadLocalListener, int> listeners_;
-
   std::vector<const apache::thrift::TConnectionContext*> brokenClients_;
 
   void invokeNeighborListeners(
       ThreadLocalListener* listener,
       fbnl::NetlinkSocket::NeighborUpdate neighborUpdate);
 
-  NetlinkFibHandler(const NetlinkFibHandler&) = delete;
-  NetlinkFibHandler& operator=(const NetlinkFibHandler&) = delete;
-
-  template <class A>
-  folly::Expected<int16_t, bool> getProtocol(
-      folly::Promise<A>& promise, int16_t clientId);
-
+  /**
+   * APIs to convert netlink route representation to thrift. Used for sending
+   * routes read from kernel to client.
+   */
   std::vector<thrift::UnicastRoute> toThriftUnicastRoutes(
       const fbnl::NlUnicastRoutes& routeDb);
-
   std::vector<thrift::MplsRoute> toThriftMplsRoutes(
       const fbnl::NlMplsRoutes& routeDb);
-
   std::vector<thrift::NextHopThrift> buildNextHops(
       const fbnl::NextHopSet& nextHopSet);
 
-  fbnl::Route buildRoute(const thrift::UnicastRoute& route, int protocol) const
-      noexcept;
-
-  fbnl::Route buildMplsRoute(
-      const thrift::MplsRoute& mplsRoute, int protocol) const noexcept;
-
+  /**
+   * API to convert thrift route representation to netlink. Used for programming
+   * routes in kernel.
+   */
+  fbnl::Route buildRoute(const thrift::UnicastRoute& route, int protocol);
+  fbnl::Route buildMplsRoute(const thrift::MplsRoute& mplsRoute, int protocol);
   void buildMplsAction(
-      fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) const;
-
+      fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop);
   void buildNextHop(
       fbnl::RouteBuilder& rtBuilder,
-      const std::vector<thrift::NextHopThrift>& nhop) const;
+      const std::vector<thrift::NextHopThrift>& nhop);
+
+  /**
+   * APIs to convert ifName <-> ifIndex for thrift <-> netlink route conversions
+   * Returns `folly::none` if can't find the mapping.
+   *
+   * Cache is used for optimized response to subsequent query for same interface
+   * name or index. Entries in cache are lazily initialized on first instance by
+   * querying `getAllLinks`.
+   *
+   * Returns `std::nullopt` if mapping is not found
+   */
+  std::optional<int> getIfIndex(const std::string& ifName);
+  std::optional<std::string> getIfName(const int ifIndex);
+
+  /**
+   * Get interface index of loopback interface. Lazily query it from netlink
+   * by querying `getAllLinks`
+   */
+  std::optional<int> getLoopbackIfIndex();
 
   // Used to interact with Linux kernel routing table
   std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket_;
 
+  // ZMQ Eventloop pointer
+  // TODO: Migrate to folly::EventBase
+  fbzmq::ZmqEventLoop* evl_{nullptr};
+
+ private:
+  /**
+   * Disable copy & assignment operators
+   */
+  NetlinkFibHandler(const NetlinkFibHandler&) = delete;
+  NetlinkFibHandler& operator=(const NetlinkFibHandler&) = delete;
+
+  /**
+   * Initialize cache related to interfaces. Especially loopbackIfIndex_
+   * and interface name <-> index mappings
+   */
+  void initializeInterfaceCache() noexcept;
+
+  // Cache for interface index <-> name mapping
+  folly::Synchronized<std::unordered_map<std::string, int>> ifNameToIndex_;
+  folly::Synchronized<std::unordered_map<int, std::string>> ifIndexToName_;
+
+  // Loopback interface index cache. Initialized to negative number
+  std::atomic<int> loopbackIfIndex_{-1};
+
   // Time when service started, in number of seconds, since epoch
   const int64_t startTime_{0};
-
-  // ZMQ Eventloop pointer
-  fbzmq::ZmqEventLoop* evl_{nullptr};
 };
 
 } // namespace openr
