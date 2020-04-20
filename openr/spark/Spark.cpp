@@ -358,7 +358,7 @@ Spark::Spark(
   });
 
   // Initialize UDP socket for neighbor discovery
-  prepare(maybeIpTos);
+  prepareSocket(maybeIpTos);
 
   // Initialize some stat keys
   fb303::fbData->addStatExportType(
@@ -418,7 +418,7 @@ Spark::stop() {
 }
 
 void
-Spark::prepare(std::optional<int> maybeIpTos) noexcept {
+Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   int fd = ioProvider_->socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   mcastFd_ = fd;
   LOG(INFO) << "Creatd UDP socket for neighbor discovery. fd: " << mcastFd_;
@@ -534,7 +534,7 @@ Spark::prepare(std::optional<int> maybeIpTos) noexcept {
   // Listen for incoming messages on multicast FD
   addSocketFd(mcastFd_, ZMQ_POLLIN, [this](int) noexcept {
     try {
-      processHelloPacket();
+      processPacket();
     } catch (std::exception const& err) {
       LOG(ERROR) << "Spark: error processing hello packet "
                  << folly::exceptionStr(err);
@@ -1040,13 +1040,11 @@ Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
   handshakeMsg.gracefulRestartTime = myHoldTime_.count();
   handshakeMsg.transportAddressV6 = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
-  // should be obtained from interface DB
-  handshakeMsg.area = openr::thrift::KvStore_constants::kDefaultArea();
   handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
   handshakeMsg.kvStoreCmdPort = kKvStoreCmdPort_;
 
   thrift::SparkHelloPacket pkt;
-  pkt.handshakeMsg = handshakeMsg;
+  pkt.handshakeMsg_ref() = std::move(handshakeMsg);
 
   auto packet = util::writeThriftObjStr(pkt, serializer_);
 
@@ -1105,7 +1103,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   heartbeatMsg.seqNum = mySeqNum_;
 
   thrift::SparkHelloPacket pkt;
-  pkt.heartbeatMsg = heartbeatMsg;
+  pkt.heartbeatMsg_ref() = std::move(heartbeatMsg);
 
   auto packet = util::writeThriftObjStr(pkt, serializer_);
 
@@ -1412,6 +1410,13 @@ Spark::processHelloMsg(
   auto const& remoteSeqNum = static_cast<uint64_t>(helloMsg.seqNum);
   auto const& nbrSentTimeInUs = std::chrono::microseconds(helloMsg.sentTsInUs);
 
+  // interface name check
+  if (spark2Neighbors_.find(ifName) == spark2Neighbors_.end()) {
+    LOG(ERROR) << "Ignoring packet received from: " << neighborName
+               << " on unknown interface: " << ifName;
+    return;
+  }
+
   auto sanityCheckResult = sanityCheckHelloPkt(
       domainName, neighborName, remoteIfName, remoteVersion);
   if (PacketValidationResult::SKIP_LOOPED_SELF == sanityCheckResult) {
@@ -1420,14 +1425,6 @@ Spark::processHelloMsg(
   }
 
   if (PacketValidationResult::FAILURE == sanityCheckResult) {
-    LOG(ERROR) << "Sanity check of Hello pkt failed";
-    return;
-  }
-
-  // interface name check
-  if (spark2Neighbors_.find(ifName) == spark2Neighbors_.end()) {
-    LOG(ERROR) << "Ignoring packet received from: " << neighborName
-               << " on unknown interface: " << ifName;
     return;
   }
 
@@ -1448,14 +1445,14 @@ Spark::processHelloMsg(
         std::piecewise_construct,
         std::forward_as_tuple(neighborName),
         std::forward_as_tuple(
-            domainName, /* neighborNode domain */
-            neighborName, /* neighborNode name */
-            remoteIfName, /* remote interface on neighborNode */
-            getNewLabelForIface(ifName), /* label for Segment Routing */
-            remoteSeqNum, /* seqNum reported by neighborNode */
+            domainName, // neighborNode domain
+            neighborName, // neighborNode name
+            remoteIfName, // remote interface on neighborNode
+            getNewLabelForIface(ifName), // label for Segment Routing
+            remoteSeqNum, // seqNum reported by neighborNode
             myKeepAliveTime_,
             std::move(rttChangeCb),
-            std::string{} /* empty area, handshake msg will fill it */));
+            std::string{}));
 
     auto& neighbor = ifNeighbors.at(neighborName);
     checkNeighborState(neighbor, SparkNeighState::IDLE);
@@ -1704,22 +1701,8 @@ Spark::processHandshakeMsg(
   neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort;
   neighbor.transportAddressV4 = handshakeMsg.transportAddressV4;
   neighbor.transportAddressV6 = handshakeMsg.transportAddressV6;
-
-  // recevied spark neighbors' area will be matched with configured interface's
-  // area once interface based area identifier is implemented
-  // older spark2 handshake message has default area set to "". Temporary fix
-  // TODO: remove after spark handshake defaults to default area
-  std::unordered_set<std::string> rxArea{};
-  if (handshakeMsg.area == "") {
-    rxArea.insert(openr::thrift::KvStore_constants::kDefaultArea());
-  } else {
-    rxArea.insert(handshakeMsg.area);
-  }
-  auto commonArea = findCommonArea(rxArea, handshakeMsg.nodeName);
-  if (commonArea.hasError()) {
-    return;
-  }
-  neighbor.area = commonArea.value();
+  // TODO: area should be populated through areaId negotiation
+  neighbor.area = thrift::KvStore_constants::kDefaultArea();
 
   // update neighbor holdTime as "NEGOTIATING" process
   neighbor.heartbeatHoldTime = std::max(
@@ -1787,7 +1770,7 @@ Spark::processHeartbeatMsg(
 }
 
 void
-Spark::processHelloPacket() {
+Spark::processPacket() {
   // Step 1: receive and parse pkt
   thrift::SparkHelloPacket helloPacket;
   std::string ifName;
@@ -2066,7 +2049,7 @@ Spark::sendHelloPacket(
     }
 
     // fill in helloMsg field
-    helloPacket.helloMsg = helloMsg;
+    helloPacket.helloMsg_ref() = std::move(helloMsg);
   }
 
   // TODO: deprecate the payload setup once old spark msg

@@ -146,22 +146,20 @@ class Spark final : public OpenrEventBase {
   Spark(Spark const&) = delete;
   Spark& operator=(Spark const&) = delete;
 
-  // Initializes ZMQ sockets
-  void prepare(std::optional<int> maybeIpTos) noexcept;
+  // Initializes UDP socket for multicast neighbor discovery
+  void prepareSocket(std::optional<int> maybeIpTos) noexcept;
 
   // check neighbor's hello packet; return true if packet is valid and
   // passed the following checks:
-  //
   // (1) neighbor is not self (packet not looped back)
-  // (2) validate hello packet sequence number. detects neighbor restart if
-  //     sequence number gets wrapped up again.
-  // (3) performs various other validation e.g. domain, subnet validation etc.
+  // (2) performs various other validation e.g. domain, version etc.
   PacketValidationResult sanityCheckHelloPkt(
       std::string const& domainName,
       std::string const& neighborName,
       std::string const& remoteIfName,
       uint32_t const& remoteVersion);
 
+  // [Plan to deprecate]
   PacketValidationResult validateHelloPacket(
       std::string const& ifName, thrift::SparkHelloPacket const& helloPacket);
 
@@ -182,7 +180,7 @@ class Spark final : public OpenrEventBase {
 
   // process hello packet from a neighbor. we want to see if
   // the neighbor could be added as adjacent peer.
-  void processHelloPacket();
+  void processPacket();
 
   // originate my hello packet on given interface
   void sendHelloPacket(
@@ -202,7 +200,7 @@ class Spark final : public OpenrEventBase {
       const std::set<std::string>& toAdd,
       const std::unordered_map<std::string, Interface>& newInterfaceDb);
 
-  // util function yo update interface in spark
+  // util function to update interface in spark
   void updateInterfaceInDb(
       const std::set<std::string>& toUpdate,
       const std::unordered_map<std::string, Interface>& newInterfaceDb);
@@ -218,6 +216,7 @@ class Spark final : public OpenrEventBase {
   // set flat counter/stats
   void updateGlobalCounters();
 
+  // [Plan to deprecate]
   // find common area, must be only one or none
   folly::Expected<std::string, folly::Unit> findCommonArea(
       std::optional<std::unordered_set<std::string>> areas,

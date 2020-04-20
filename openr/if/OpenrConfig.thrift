@@ -73,8 +73,34 @@ struct PrefixAllocationConfig {
   6: bool override_loopback_addr = false
 }
 
+/**
+ * NOTE: interfaces and nodes can be explicit or unix regex
+ * 1) Config specifying interfaces:
+ *  config = {
+ *    area_id : "1",
+ *    interface_regexes : ["ethernet1, port-channel.*"],
+ *    neighbor_regexes : []
+ *  }
+ *
+ * 2) Config specifying nodes:
+ *  config = {
+ *    area_id : "2",
+ *    interface_regexes : [],
+ *    neighbor_regexes : ["node123", "fsw.*"]
+ *  }
+ *
+ * 3) Config specifying both. Tie breaker will be implementated
+ *    from config reader side:
+ *  config = {
+ *    area_id : "3",
+ *    interface_regexes : [loopback0],
+ *    neighbor_regexes : ["node1.*"],
+ *  }
+ */
 struct AreaConfig {
   1: string area_id
+  2: list<string> interface_regexes
+  3: list<string> neighbor_regexes
 }
 
 struct OpenrConfig {

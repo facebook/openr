@@ -55,15 +55,15 @@ struct SparkNeighbor {
 //
 struct ReflectedNeighborInfo {
   // Last sequence number we heard from neighbor
-  1: i64 seqNum = 0;
+  1: i64 seqNum = 0
 
   // Timestamp of last hello packet sent by sender to neighbor from which hello
   // packet is received
-  2: i64 lastNbrMsgSentTsInUs = 0;
+  2: i64 lastNbrMsgSentTsInUs = 0
 
   // Timestamp when the last packet was received by neighbor from which hello
   // packet is received
-  3: i64 lastMyMsgRcvdTsInUs = 0;
+  3: i64 lastMyMsgRcvdTsInUs = 0
 }
 
 //
@@ -73,6 +73,7 @@ typedef i32 OpenrVersion
 
 //
 // This is the data embedded in the payload of hello packet
+// [Plan to deprecate]: remove after Spark2 fully in use
 //
 struct SparkPayload {
   7: OpenrVersion version = 20180307

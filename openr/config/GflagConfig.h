@@ -55,7 +55,11 @@ class GflagConfig final {
       areas.emplace_back(openr::thrift::KvStore_constants::kDefaultArea());
     }
     for (const auto& area : areas) {
-      config.areas.emplace_back(apache::thrift::FRAGILE, area);
+      config.areas.emplace_back(
+          apache::thrift::FRAGILE,
+          area,
+          std::vector<std::string>{},
+          std::vector<std::string>{});
     }
 
     config.listen_addr = FLAGS_listen_addr;
