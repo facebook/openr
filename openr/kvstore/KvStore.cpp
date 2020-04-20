@@ -129,7 +129,21 @@ KvStore::KvStore(
       fbzmq::RawZmqSocketPtr{*kvParams_.globalCmdSock},
       ZMQ_POLLIN,
       [this](int) noexcept {
-        processCmdSocketRequest(kvParams_.globalCmdSock);
+        // Drain all available messages in loop
+        while (true) {
+          auto maybeReq = kvParams_.globalCmdSock.recvMultiple();
+          if (maybeReq.hasError() and maybeReq.error().errNum == EAGAIN) {
+            break;
+          }
+
+          if (maybeReq.hasError()) {
+            LOG(ERROR) << "failed reading messages from globalCmdSock: "
+                       << maybeReq.error();
+            continue;
+          }
+
+          processCmdSocketRequest(std::move(maybeReq).value());
+        } // while
       });
 
   // Add reader to process peer updates from LinkMonitor
@@ -402,17 +416,7 @@ KvStore::prepareSocket(
 }
 
 void
-KvStore::processCmdSocketRequest(
-    fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept {
-  auto maybeReq = cmdSock.recvMultiple();
-
-  if (maybeReq.hasError()) {
-    LOG(ERROR) << "KvStore::processCmdSocketRequest: Error receiving "
-               << "command: " << maybeReq.error();
-    return;
-  }
-
-  auto req = maybeReq.value();
+KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
   if (req.empty()) {
     LOG(ERROR) << "Empty request received";
     return;
@@ -430,7 +434,7 @@ KvStore::processCmdSocketRequest(
   }
 
   if (not req.back().empty()) {
-    auto sndRet = cmdSock.sendMultiple(req);
+    auto sndRet = kvParams_.globalCmdSock.sendMultiple(req);
     if (sndRet.hasError()) {
       LOG(ERROR) << "Error sending response. " << sndRet.error();
     }
@@ -1671,29 +1675,10 @@ KvStoreDb::processNexthopChange(
 }
 
 void
-KvStoreDb::processSyncResponse() noexcept {
-  VLOG(4) << "awaiting for sync response message";
-
-  fbzmq::Message requestIdMsg, delimMsg, syncPubMsg;
-
-  auto ret = peerSyncSock_.recvMultiple(requestIdMsg, delimMsg, syncPubMsg);
-  if (ret.hasError()) {
-    LOG(ERROR) << "processSyncResponse: failed processing syncRespone: "
-               << ret.error();
-    return;
-  }
-
+KvStoreDb::processSyncResponse(
+    const std::string& requestId, fbzmq::Message&& syncPubMsg) noexcept {
   fb303::fbData->addStatValue(
       "kvstore.peers.bytes_received", syncPubMsg.size(), fb303::SUM);
-
-  // at this point we received all three parts
-  if (not delimMsg.empty()) {
-    LOG(ERROR) << "processSyncResponse: unexpected delimiter: "
-               << delimMsg.read<std::string>().value();
-    return;
-  }
-
-  auto const requestId = requestIdMsg.read<std::string>().value();
 
   // syncPubMsg can be of two types
   // 1. ack to SET_KEY ("OK" or "ERR")
@@ -1850,9 +1835,34 @@ KvStoreDb::attachCallbacks() {
 
   evb_->addSocket(
       fbzmq::RawZmqSocketPtr{*peerSyncSock_}, ZMQ_POLLIN, [this](int) noexcept {
-        // we received a sync response
         VLOG(3) << "KvStore: sync response received";
-        processSyncResponse();
+        // Drain all available messages in loop
+        while (true) {
+          fbzmq::Message requestIdMsg, delimMsg, syncPubMsg;
+          auto ret =
+              peerSyncSock_.recvMultiple(requestIdMsg, delimMsg, syncPubMsg);
+          if (ret.hasError() and ret.error().errNum == EAGAIN) {
+            break;
+          }
+
+          // Check for error in receiving messages
+          if (ret.hasError()) {
+            LOG(ERROR) << "failed reading messages from peerSyncSock_: "
+                       << ret.error();
+            continue;
+          }
+
+          // at this point we received all three parts
+          if (not delimMsg.empty()) {
+            LOG(ERROR) << "unexpected delimiter from peerSyncSock_: "
+                       << delimMsg.read<std::string>().value();
+            continue;
+          }
+
+          // process the request
+          processSyncResponse(
+              requestIdMsg.read<std::string>().value(), std::move(syncPubMsg));
+        } // while
       });
 
   // Perform full-sync if there are peers to sync with.

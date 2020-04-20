@@ -302,7 +302,8 @@ class KvStoreDb : public DualNode {
       const std::vector<std::string>& keys, const std::string& senderId);
 
   // process received KV_DUMP from one of our neighbor
-  void processSyncResponse() noexcept;
+  void processSyncResponse(
+      const std::string& requestId, fbzmq::Message&& syncPubMsg) noexcept;
 
   // randomly request sync from one connected neighbor
   void requestSync();
@@ -522,8 +523,7 @@ class KvStore final : public OpenrEventBase {
       std::string const& url,
       std::optional<int> maybeIpTos = std::nullopt);
 
-  void processCmdSocketRequest(
-      fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>& cmdSock) noexcept;
+  void processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept;
 
   // This function wraps `processRequestMsgHelper` and updates send/received
   // bytes counters.
