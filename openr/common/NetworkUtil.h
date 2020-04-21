@@ -138,8 +138,11 @@ toString(const thrift::MplsAction& mplsAction) {
   return folly::sformat(
       "mpls {} {}{}",
       apache::thrift::util::enumNameSafe(mplsAction.action),
-      mplsAction.swapLabel ? std::to_string(*mplsAction.swapLabel) : "",
-      mplsAction.pushLabels ? folly::join("/", *mplsAction.pushLabels) : "");
+      mplsAction.swapLabel_ref() ? std::to_string(*mplsAction.swapLabel_ref())
+                                 : "",
+      mplsAction.pushLabels_ref()
+          ? folly::join("/", *mplsAction.pushLabels_ref())
+          : "");
 }
 
 inline std::string
@@ -147,11 +150,12 @@ toString(const thrift::NextHopThrift& nextHop) {
   return folly::sformat(
       "via {} dev {} weight {} metric {} {}",
       toIPAddress(nextHop.address).str(),
-      nextHop.address.ifName.value_or("N/A"),
+      nextHop.address.ifName_ref().value_or("N/A"),
       nextHop.weight,
       nextHop.metric,
-      nextHop.mplsAction.has_value() ? toString(nextHop.mplsAction.value())
-                                     : "");
+      nextHop.mplsAction_ref().has_value()
+          ? toString(nextHop.mplsAction_ref().value())
+          : "");
 }
 
 inline std::string

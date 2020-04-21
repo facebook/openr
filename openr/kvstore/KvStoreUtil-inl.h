@@ -17,10 +17,10 @@ ThriftType
 parseThriftValue(thrift::Value const& value) {
   apache::thrift::CompactSerializer serializer;
 
-  DCHECK(value.value.has_value());
+  DCHECK(value.value_ref().has_value());
 
-  auto buf =
-      folly::IOBuf::wrapBufferAsValue(value.value->data(), value.value->size());
+  auto buf = folly::IOBuf::wrapBufferAsValue(
+      value.value_ref()->data(), value.value_ref()->size());
   return fbzmq::util::readThriftObj<ThriftType>(buf, serializer);
 }
 
