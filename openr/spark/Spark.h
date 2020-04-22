@@ -27,6 +27,7 @@
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Spark_types.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/spark/IoProvider.h>
@@ -104,7 +105,8 @@ class Spark final : public OpenrEventBase {
       bool enableFloodOptimization = false,
       bool enableSpark2 = false,
       bool increaseHelloInterval = false,
-      std::optional<std::unordered_set<std::string>> areas = std::nullopt);
+      std::optional<std::unordered_set<std::string>> areas = std::nullopt,
+      std::shared_ptr<thrift::OpenrConfig> config = nullptr);
 
   ~Spark() override = default;
 
@@ -215,6 +217,38 @@ class Spark final : public OpenrEventBase {
 
   // set flat counter/stats
   void updateGlobalCounters();
+
+  // utility method to initialize/reload openr config
+  void loadConfig();
+
+  // utility method to add regex for:
+  //
+  //  tuple(areaId, neighbor_regex, interface_regex)
+  //
+  // NOTE: by default, use ".*" to match everything.
+  void addAreaRegex(
+      const std::string& areaId,
+      const std::vector<std::string>& neighbor_regexes,
+      const std::vector<std::string>& interface_regexes);
+
+  // util function to deduce `areaId` from neighbor.
+  // This is util function to deduce `areaId` from neighbor during helloMsg
+  // processing by leveraging:
+  //
+  //  1). interface from which helloMsg received;
+  //  2). neighbor's nodeName;
+  //
+  // against `thrift::AreaConfig` parsed by Spark. It support both
+  // interface and peer node name regexes. Treat multiple/conflict
+  // deduced area as error. Tie-breaking mechanism can be implemented
+  // if needed.
+  static std::optional<std::string> getNeighborArea(
+      const std::string& peerNodeName,
+      const std::string& ifName,
+      const std::vector<std::tuple<
+          std::string,
+          std::unique_ptr<re2::RE2::Set>,
+          std::unique_ptr<re2::RE2::Set>>>& areaIdRegexList);
 
   // [Plan to deprecate]
   // find common area, must be only one or none
@@ -377,7 +411,10 @@ class Spark final : public OpenrEventBase {
       int64_t const newRtt);
 
   // utility call to send handshake msg
-  void sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished);
+  void sendHandshakeMsg(
+      std::string const& ifName,
+      std::string const& peerArea,
+      bool isAdjEstablished);
 
   // utility call to send heartbeat msg
   void sendHeartbeatMsg(std::string const& ifName);
@@ -505,22 +542,22 @@ class Spark final : public OpenrEventBase {
   std::unordered_map<
       std::string /* ifName */,
       std::unique_ptr<fbzmq::ZmqTimeout>>
-      ifNameToHelloTimers_;
+      ifNameToHelloTimers_{};
 
   // heartbeat packet send timers for each interface
   std::unordered_map<
       std::string /* ifName */,
       std::unique_ptr<fbzmq::ZmqTimeout>>
-      ifNameToHeartbeatTimers_;
+      ifNameToHeartbeatTimers_{};
 
   // number of active neighbors for each interface
   std::unordered_map<
       std::string /* ifName */,
       std::unordered_set<std::string> /* neighbors */>
-      ifNameToActiveNeighbors_;
+      ifNameToActiveNeighbors_{};
 
   // Ordered set to keep track of allocated labels
-  std::set<int32_t> allocatedLabels_;
+  std::set<int32_t> allocatedLabels_{};
 
   //
   // Neighbor state tracking
@@ -595,6 +632,16 @@ class Spark final : public OpenrEventBase {
 
   // areas that this node belongs to.
   std::optional<std::unordered_set<std::string>> areas_ = std::nullopt;
+
+  // global openr config
+  std::shared_ptr<const thrift::OpenrConfig> config_{nullptr};
+
+  // areaId -> node name regex parsed from areaConfig
+  std::vector<std::tuple<
+      std::string /* areaId */,
+      std::unique_ptr<re2::RE2::Set> /* neighbor regex */,
+      std::unique_ptr<re2::RE2::Set> /* interface regex */>>
+      areaIdRegexList_{};
 
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};

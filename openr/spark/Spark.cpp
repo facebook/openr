@@ -301,7 +301,8 @@ Spark::Spark(
     bool enableFloodOptimization,
     bool enableSpark2,
     bool increaseHelloInterval,
-    std::optional<std::unordered_set<std::string>> areas)
+    std::optional<std::unordered_set<std::string>> areas,
+    std::shared_ptr<thrift::OpenrConfig> config)
     : myDomainName_(myDomainName),
       myNodeName_(myNodeName),
       udpMcastPort_(udpMcastPort),
@@ -323,7 +324,8 @@ Spark::Spark(
       enableSpark2_(enableSpark2),
       increaseHelloInterval_(increaseHelloInterval),
       ioProvider_(std::move(ioProvider)),
-      areas_(std::move(areas)) {
+      areas_(std::move(areas)),
+      config_(std::move(config)) {
   CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
       << "Keep-alive-time must be less than hold-time.";
   CHECK(myKeepAliveTime > std::chrono::milliseconds(0))
@@ -333,6 +335,9 @@ Spark::Spark(
   CHECK(fastInitKeepAliveTime <= myKeepAliveTime)
       << "fast-init-keep-alive-time must not be bigger than keep-alive-time";
   CHECK(ioProvider_) << "Got null IoProvider";
+
+  // Initialize global openr config
+  loadConfig();
 
   // Initialize list of BucketedTimeSeries
   const std::chrono::seconds sec{1};
@@ -550,6 +555,79 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
 }
 
+void
+Spark::addAreaRegex(
+    const std::string& areaId,
+    const std::vector<std::string>& neighborRegexes,
+    const std::vector<std::string>& interfaceRegexes) {
+  CHECK(not(neighborRegexes.empty() and interfaceRegexes.empty()))
+      << "Invalid config. At least one non-empty regexes for neighbor or interface";
+
+  re2::RE2::Options regexOpts;
+  regexOpts.set_case_sensitive(false);
+  std::string regexErr;
+  std::unique_ptr<re2::RE2::Set> neighborRegexList{nullptr};
+  std::unique_ptr<re2::RE2::Set> interfaceRegexList{nullptr};
+
+  // neighbor regex
+  if (not neighborRegexes.empty()) {
+    neighborRegexList =
+        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+
+    for (const auto& regexStr : neighborRegexes) {
+      if (-1 == neighborRegexList->Add(regexStr, &regexErr)) {
+        LOG(FATAL) << folly::sformat(
+            "Failed to add neighbor regex: {} for area: {}. Error: {}",
+            regexStr,
+            areaId,
+            regexErr);
+      }
+    }
+    CHECK(neighborRegexList->Compile()) << "Neighbor regex compilation failed";
+  }
+
+  // interface regex
+  if (not interfaceRegexes.empty()) {
+    interfaceRegexList =
+        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+
+    for (const auto& regexStr : interfaceRegexes) {
+      if (-1 == interfaceRegexList->Add(regexStr, &regexErr)) {
+        LOG(FATAL) << folly::sformat(
+            "Failed to add interface regex: {} for area: {}. Error: {}",
+            regexStr,
+            areaId,
+            regexErr);
+      }
+    }
+    CHECK(interfaceRegexList->Compile())
+        << "Interface regex compilation failed";
+  }
+  areaIdRegexList_.emplace_back(std::make_tuple(
+      areaId, std::move(neighborRegexList), std::move(interfaceRegexList)));
+}
+
+// parse openrConfig to initialize:
+//  1) areaId => [node_name|interface_name] regex matching;
+//  2) etc.
+//
+void
+Spark::loadConfig() {
+  if (not config_) {
+    // global openrConfig_ NOT supported yet. To make regex backward compatible:
+    // defaultArea => anything(".*") for backward compatible
+    addAreaRegex(thrift::KvStore_constants::kDefaultArea(), {".*"}, {".*"});
+    return;
+  }
+
+  for (const auto& areaConfig : config_->areas) {
+    addAreaRegex(
+        areaConfig.area_id,
+        areaConfig.neighbor_regexes,
+        areaConfig.interface_regexes);
+  }
+}
+
 PacketValidationResult
 Spark::sanityCheckHelloPkt(
     std::string const& domainName,
@@ -585,6 +663,7 @@ Spark::sanityCheckHelloPkt(
   return PacketValidationResult::SUCCESS;
 }
 
+// [Plan to deprecate]
 PacketValidationResult
 Spark::validateHelloPacket(
     std::string const& ifName, thrift::SparkHelloPacket const& helloPacket) {
@@ -1019,7 +1098,10 @@ Spark::updateNeighborRtt(
 }
 
 void
-Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
+Spark::sendHandshakeMsg(
+    std::string const& ifName,
+    std::string const& peerArea,
+    bool isAdjEstablished) {
   SCOPE_FAIL {
     LOG(ERROR) << "Failed sending Handshake packet on " << ifName;
   };
@@ -1042,6 +1124,7 @@ Spark::sendHandshakeMsg(std::string const& ifName, bool isAdjEstablished) {
   handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
   handshakeMsg.kvStoreCmdPort = kKvStoreCmdPort_;
+  handshakeMsg.area = peerArea; // handshakeMsg send peer's area deduced locally
 
   thrift::SparkHelloPacket pkt;
   pkt.handshakeMsg_ref() = std::move(handshakeMsg);
@@ -1428,6 +1511,14 @@ Spark::processHelloMsg(
     return;
   }
 
+  // deduce area for peer
+  // TODO: in case area is different from previously calculated one,
+  //       trigger area change event
+  auto area = getNeighborArea(neighborName, ifName, areaIdRegexList_);
+  if (not area.has_value()) {
+    return;
+  }
+
   // get (neighborName -> Spark2Neighbor) mapping per ifName
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
 
@@ -1452,7 +1543,7 @@ Spark::processHelloMsg(
             remoteSeqNum, // seqNum reported by neighborNode
             myKeepAliveTime_,
             std::move(rttChangeCb),
-            std::string{}));
+            area.value()));
 
     auto& neighbor = ifNeighbors.at(neighborName);
     checkNeighborState(neighbor, SparkNeighState::IDLE);
@@ -1539,10 +1630,11 @@ Spark::processHelloMsg(
                 << myRemoteSeqNum << "), my Seq#: (" << mySeqNum_ << ").";
       } else {
         // Starts timer to periodically send hankshake msg
-        neighbor.negotiateTimer =
-            fbzmq::ZmqTimeout::make(getEvb(), [this, ifName]() noexcept {
+        const std::string peerAreaId = neighbor.area;
+        neighbor.negotiateTimer = fbzmq::ZmqTimeout::make(
+            getEvb(), [this, ifName, peerAreaId]() noexcept {
               // periodically send out handshake msg
-              sendHandshakeMsg(ifName, false);
+              sendHandshakeMsg(ifName, peerAreaId, false);
             });
         const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
         neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_, isPeriodic);
@@ -1666,8 +1758,9 @@ Spark::processHandshakeMsg(
   //       state will fall back from NEGOTIATE => WARM.
   //       Node should NOT ask for handshakeMsg reply to
   //       avoid infinite loop of pkt between nodes.
-  if (!handshakeMsg.isAdjEstablished) {
-    sendHandshakeMsg(ifName, neighbor.state != SparkNeighState::NEGOTIATE);
+  if (not handshakeMsg.isAdjEstablished) {
+    sendHandshakeMsg(
+        ifName, neighbor.area, neighbor.state != SparkNeighState::NEGOTIATE);
     LOG(INFO) << "Neighbor: (" << neighborName
               << ") has NOT forming adj with us yet. "
               << "Reply to handshakeMsg immediately.";
@@ -1701,8 +1794,6 @@ Spark::processHandshakeMsg(
   neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort;
   neighbor.transportAddressV4 = handshakeMsg.transportAddressV4;
   neighbor.transportAddressV6 = handshakeMsg.transportAddressV6;
-  // TODO: area should be populated through areaId negotiation
-  neighbor.area = thrift::KvStore_constants::kDefaultArea();
 
   // update neighbor holdTime as "NEGOTIATING" process
   neighbor.heartbeatHoldTime = std::max(
@@ -1725,6 +1816,22 @@ Spark::processHandshakeMsg(
       // remove negotiate hold timer, no longer in NEGOTIATE stage
       neighbor.negotiateHoldTimer.reset();
 
+      return;
+    }
+  }
+
+  // area validation. Compare the following:
+  //  1) handshakeMsg.area: areaId that neighbor node thinks I should be in;
+  //  2) neighbor.area: areaId that I think neighbor node should be in;
+  //
+  //  ONLY promote to NEGOTIATE state if areaId matches
+  if (handshakeMsg.area != thrift::KvStore_constants::kDefaultArea()) {
+    // for backward compatibility consideration, defaultArea
+    // indicates it doesn't support AREA negotiation
+    if (neighbor.area != handshakeMsg.area) {
+      VLOG(1) << "Inconsistent areaId deduced between local and remote review. "
+              << "Neighbor's areaId: [" << neighbor.area << "], "
+              << "My areaId from remote: [" << handshakeMsg.area << "].";
       return;
     }
   }
@@ -2529,6 +2636,56 @@ Spark::updateGlobalCounters() {
       "spark.num_adjacent_neighbors", adjacentNeighborCount);
   fb303::fbData->setCounter("spark.my_seq_num", mySeqNum_);
   fb303::fbData->setCounter("spark.pending_timers", getEvb()->timer().count());
+}
+
+// This is a static function
+std::optional<std::string>
+Spark::getNeighborArea(
+    const std::string& peerNodeName,
+    const std::string& localIfName,
+    const std::vector<std::tuple<
+        std::string,
+        std::unique_ptr<re2::RE2::Set>,
+        std::unique_ptr<re2::RE2::Set>>>& areaIdRegexList) {
+  std::vector<std::string> candidateAreas{};
+
+  // looping through areaIdRegexList
+  for (const auto& t : areaIdRegexList) {
+    const auto& areaId = std::get<0>(t);
+    const auto& neighborRegex = std::get<1>(t);
+    const auto& interfaceRegex = std::get<2>(t);
+    if (neighborRegex and interfaceRegex) {
+      if (matchRegexSet(peerNodeName, neighborRegex) and
+          matchRegexSet(localIfName, interfaceRegex)) {
+        VLOG(4) << folly::sformat(
+            "Area: {} found for neighbor: {}, interface: {}",
+            areaId,
+            peerNodeName,
+            localIfName);
+        candidateAreas.emplace_back(areaId);
+      }
+    } else if (neighborRegex and matchRegexSet(peerNodeName, neighborRegex)) {
+      VLOG(4) << folly::sformat(
+          "Area: {} found for neighbor: {}", areaId, peerNodeName);
+      candidateAreas.emplace_back(areaId);
+    } else if (interfaceRegex and matchRegexSet(localIfName, interfaceRegex)) {
+      VLOG(4) << folly::sformat(
+          "Area: {} found for interface: {}", areaId, localIfName);
+      candidateAreas.emplace_back(areaId);
+    }
+  }
+
+  if (candidateAreas.empty()) {
+    LOG(ERROR) << "No matching area found for neighbor: " << peerNodeName;
+    fb303::fbData->addStatValue("spark.neighbor_no_area", 1, fb303::COUNT);
+    return std::nullopt;
+  } else if (candidateAreas.size() > 1) {
+    LOG(ERROR) << "Multiple area found for neighbor: " << peerNodeName;
+    fb303::fbData->addStatValue(
+        "spark.neighbor_multiple_area", 1, fb303::COUNT);
+    return std::nullopt;
+  }
+  return candidateAreas.back();
 }
 
 folly::Expected<std::string, folly::Unit>

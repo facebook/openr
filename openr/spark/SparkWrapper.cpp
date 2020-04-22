@@ -21,6 +21,7 @@ SparkWrapper::SparkWrapper(
     std::pair<uint32_t, uint32_t> version,
     fbzmq::Context& zmqContext,
     std::shared_ptr<IoProvider> ioProvider,
+    std::shared_ptr<thrift::OpenrConfig> config,
     std::optional<std::unordered_set<std::string>> areas,
     bool enableSpark2,
     bool increaseHelloInterval,
@@ -51,7 +52,8 @@ SparkWrapper::SparkWrapper(
       true,
       enableSpark2,
       increaseHelloInterval,
-      areas);
+      areas,
+      std::move(config));
 
   // start spark
   run();
@@ -159,6 +161,18 @@ std::optional<SparkNeighState>
 SparkWrapper::getSparkNeighState(
     std::string const& ifName, std::string const& neighborName) {
   return spark_->getSparkNeighState(ifName, neighborName);
+}
+
+thrift::AreaConfig
+SparkWrapper::createAreaConfig(
+    const std::string& areaId,
+    const std::vector<std::string>& neighborRegexes,
+    const std::vector<std::string>& interfaceRegexes) {
+  thrift::AreaConfig areaConfig;
+  areaConfig.area_id = areaId;
+  areaConfig.neighbor_regexes = neighborRegexes;
+  areaConfig.interface_regexes = interfaceRegexes;
+  return areaConfig;
 }
 
 } // namespace openr

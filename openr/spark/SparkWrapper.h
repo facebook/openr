@@ -66,6 +66,7 @@ class SparkWrapper {
       std::pair<uint32_t, uint32_t> version,
       fbzmq::Context& zmqContext,
       std::shared_ptr<IoProvider> ioProvider,
+      std::shared_ptr<thrift::OpenrConfig> config,
       std::optional<std::unordered_set<std::string>> areas,
       bool enableSpark2,
       bool increaseHelloInterval,
@@ -100,6 +101,12 @@ class SparkWrapper {
 
   static std::pair<folly::IPAddress, folly::IPAddress> getTransportAddrs(
       const thrift::SparkNeighborEvent& event);
+
+  // utility function to construct thrift::AreaConfig
+  static thrift::AreaConfig createAreaConfig(
+      const std::string& areaId,
+      const std::vector<std::string>& nodeRegexes,
+      const std::vector<std::string>& interfaceRegexes);
 
   //
   // Private statex

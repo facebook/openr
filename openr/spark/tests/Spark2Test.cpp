@@ -105,6 +105,7 @@ class Spark2Fixture : public testing::Test {
       uint32_t spark2Id,
       bool enableSpark2 = true,
       bool increaseHelloInterval = true,
+      std::shared_ptr<thrift::OpenrConfig> config = nullptr,
       std::chrono::milliseconds grHoldTime = kGRHoldTime,
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
@@ -127,7 +128,8 @@ class Spark2Fixture : public testing::Test {
         version,
         context,
         mockIoProvider,
-        std::nullopt, // no area support yet
+        config,
+        std::nullopt,
         enableSpark2,
         increaseHelloInterval,
         timeConfig);
@@ -808,6 +810,64 @@ TEST_F(Spark2Fixture, InvalidV4Subnet) {
     EXPECT_TRUE(
         neighState2 == SparkNeighState::WARM ||
         neighState2 == SparkNeighState::NEGOTIATE);
+  }
+}
+
+TEST_F(Spark2Fixture, AreaTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture AreaTest finished";
+  };
+
+  // Explicitly set regex to be capital letters to make sure
+  // regex is NOT case-sensative
+  auto areaConfig11 = SparkWrapper::createAreaConfig("1", {"RSW.*"}, {".*"});
+  auto areaConfig12 = SparkWrapper::createAreaConfig("2", {"FSW.*"}, {".*"});
+  auto areaConfig21 = SparkWrapper::createAreaConfig("1", {"FSW.*"}, {".*"});
+  auto areaConfig22 = SparkWrapper::createAreaConfig("2", {"RSW.*"}, {".*"});
+
+  // RSW: { 1 -> "RSW.*", 2 -> "FSW.*"}
+  // FSW: { 1 -> "FSW.*", 2 -> "RSW.*"}
+  auto config1 = std::make_shared<thrift::OpenrConfig>();
+  auto config2 = std::make_shared<thrift::OpenrConfig>();
+  config1->areas.emplace_back(areaConfig11);
+  config1->areas.emplace_back(areaConfig12);
+  config2->areas.emplace_back(areaConfig21);
+  config2->areas.emplace_back(areaConfig22);
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  LOG(INFO) << "Starting node-1 and node-2...";
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+
+  // start tracking iface1 and iface2
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  // RSW001 and FSW002 node should form adj in area 2 due to regex matching
+  // Area 1 will be ignored although it is part of common areas.
+  {
+    auto event1 =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event1.has_value());
+    EXPECT_EQ(event1.value().neighbor.nodeName, nodeName2);
+    EXPECT_EQ(event1.value().area, "2");
+
+    auto event2 =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event2.has_value());
+    EXPECT_EQ(event2.value().neighbor.nodeName, nodeName1);
+    EXPECT_EQ(event2.value().area, "2");
   }
 }
 

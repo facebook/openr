@@ -137,6 +137,7 @@ class SparkFixture : public testing::Test {
         version,
         context,
         mockIoProvider,
+        nullptr, // no openr config support yet
         areas,
         false, // disable Spark2 functionality
         false, // do NOT increase hello interval
