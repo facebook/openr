@@ -268,7 +268,7 @@ std::vector<thrift::NextHopThrift> getBestNextHopsMpls(
     std::vector<thrift::NextHopThrift> const& nextHops);
 
 /**
- * Find delta between two route databases
+ * Find delta between two route databases, it requires input to be sorted.
  */
 thrift::RouteDatabaseDelta findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,

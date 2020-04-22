@@ -534,6 +534,16 @@ findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,
     const thrift::RouteDatabase& oldRouteDb) {
   DCHECK(newRouteDb.thisNodeName == oldRouteDb.thisNodeName);
+  // verify the input is sorted.
+  CHECK(
+      std::is_sorted(
+          newRouteDb.unicastRoutes.begin(), newRouteDb.unicastRoutes.end()) &&
+      std::is_sorted(
+          oldRouteDb.unicastRoutes.begin(), oldRouteDb.unicastRoutes.end()) &&
+      std::is_sorted(
+          newRouteDb.mplsRoutes.begin(), newRouteDb.mplsRoutes.end()) &&
+      std::is_sorted(
+          oldRouteDb.mplsRoutes.begin(), oldRouteDb.mplsRoutes.end()));
 
   // Find unicast routes to be added/updated or removed
   std::vector<thrift::UnicastRoute> unicastRoutesToUpdate;

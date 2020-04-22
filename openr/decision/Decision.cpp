@@ -2193,6 +2193,9 @@ Decision::sendRouteUpdate(
     addPerfEvent(db.perfEvents.value(), myNodeName_, eventDescription);
   }
 
+  // sorting the input to meet findDeltaRoutes()'s assumption
+  std::sort(db.mplsRoutes.begin(), db.mplsRoutes.end());
+  std::sort(db.unicastRoutes.begin(), db.unicastRoutes.end());
   // Find out delta to be sent to Fib
   auto routeDelta = findDeltaRoutes(db, routeDb_);
   routeDelta.perfEvents.copy_from(db.perfEvents);

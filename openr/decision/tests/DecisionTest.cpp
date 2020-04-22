@@ -3803,8 +3803,9 @@ class DecisionTestFixture : public ::testing::Test {
       const string& node,
       int64_t version,
       const vector<thrift::Adjacency>& adjs,
-      bool overloaded = false) {
-    auto adjDB = createAdjDb(node, adjs, 0);
+      bool overloaded = false,
+      int32_t nodeId = 0) {
+    auto adjDB = createAdjDb(node, adjs, nodeId);
     adjDB.isOverloaded = overloaded;
     return thrift::Value(
         FRAGILE,
@@ -3917,8 +3918,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   //
 
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12})},
-       {"adj:2", createAdjValue("2", 1, {adj21})},
+      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {},
@@ -3929,7 +3930,15 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   sendKvPublication(publication);
   auto routeDbDelta = recvMyRouteDb("1", serializer);
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  // self mpls route, node 2 mpls route and adj12 label route
+  EXPECT_EQ(3, routeDbDelta.mplsRoutesToUpdate.size());
+  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
+
   auto routeDb = dumpRouteDb({"1"})["1"];
+  std::sort(routeDb.unicastRoutes.begin(), routeDb.unicastRoutes.end());
+  std::sort(routeDb.mplsRoutes.begin(), routeDb.mplsRoutes.end());
+
   auto routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
 
@@ -3946,25 +3955,35 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   // Some tricks here; we need to bump the time-stamp on router 2's data, so
   // it can override existing; for router 3 we publish new key-value
+  LOG(INFO) << "haha1";
 
   publication = createThriftPublication(
-      {{"adj:3", createAdjValue("3", 1, {adj32})},
-       {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
-       {"adj:4", createAdjValue("4", 1, {})}, // No adjacencies
+      {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
+       {"adj:2", createAdjValue("2", 3, {adj21, adj23}, false, 2)},
+       {"adj:4", createAdjValue("4", 1, {}, false, 4)}, // No adjacencies
        {"prefix:3", createPrefixValue("3", 1, {addr3})}},
       {},
       {},
       {},
       std::string(""));
   routeDbBefore = dumpRouteDb({"1"})["1"];
+  std::sort(
+      routeDbBefore.unicastRoutes.begin(), routeDbBefore.unicastRoutes.end());
   sendKvPublication(publication);
-
   // validate routers
 
   // receive my local Decision routeDbDelta publication
   routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
-  EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
+  // only expect to add a route to addr3
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].dest, addr3);
+  EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
+  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
+
   routeDb = dumpRouteDb({"1"})["1"];
+  std::sort(routeDb.unicastRoutes.begin(), routeDb.unicastRoutes.end());
+  std::sort(routeDb.mplsRoutes.begin(), routeDb.mplsRoutes.end());
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   fillRouteMap("1", routeMap, routeDb);
@@ -4003,6 +4022,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       routeMap[make_pair("3", toString(addr2))],
       NextHops({createNextHopFromAdj(adj32, false, 10)}));
 
+  LOG(INFO) << "haha2";
   // remove 3
   publication = createThriftPublication(
       thrift::KeyVals{},
@@ -4012,16 +4032,54 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       std::string(""));
 
   routeDbBefore = dumpRouteDb({"1"})["1"];
+  std::sort(
+      routeDbBefore.unicastRoutes.begin(), routeDbBefore.unicastRoutes.end());
+  std::sort(routeDbBefore.mplsRoutes.begin(), routeDbBefore.mplsRoutes.end());
+
   sendKvPublication(publication);
   routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
+  EXPECT_EQ(1, routeDbDelta.mplsRoutesToDelete.size());
   routeDb = dumpRouteDb({"1"})["1"];
+  std::sort(routeDb.unicastRoutes.begin(), routeDb.unicastRoutes.end());
+  std::sort(routeDb.mplsRoutes.begin(), routeDb.mplsRoutes.end());
+
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops({createNextHopFromAdj(adj12, false, 10)}));
+
+  LOG(INFO) << "haha3";
+  publication = createThriftPublication(
+      {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
+       {"adj:2", createAdjValue("2", 4, {adj21, adj23}, false, 2)},
+       {"prefix:3", createPrefixValue("3", 1, {addr3})}},
+      {},
+      {},
+      {},
+      std::string(""));
+  routeDbBefore = dumpRouteDb({"1"})["1"];
+  std::sort(
+      routeDbBefore.unicastRoutes.begin(), routeDbBefore.unicastRoutes.end());
+  std::sort(routeDbBefore.mplsRoutes.begin(), routeDbBefore.mplsRoutes.end());
+  sendKvPublication(publication);
+  // validate routers
+
+  // receive my local Decision routeDbDelta publication
+  routeDbDelta = recvMyRouteDb("1" /* node name */, serializer);
+  // only expect to add a route to addr3
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(routeDbDelta.unicastRoutesToUpdate[0].dest, addr3);
+  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
+  EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
+
+  routeDb = dumpRouteDb({"1"})["1"];
+  std::sort(routeDb.unicastRoutes.begin(), routeDb.unicastRoutes.end());
+  std::sort(routeDb.mplsRoutes.begin(), routeDb.mplsRoutes.end());
+  routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
+  EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
 
   // construct new static mpls route add
   thrift::RouteDatabaseDelta input;
@@ -4927,10 +4985,13 @@ TEST_F(DecisionTestFixture, PerPrefixKeyExpiry) {
       {},
       std::string(""));
   auto routeDbBefore = dumpRouteDb({"1"})["1"];
+  std::sort(
+      routeDbBefore.unicastRoutes.begin(), routeDbBefore.unicastRoutes.end());
   sendKvPublication(publication0);
   auto routeDbDelta = recvMyRouteDb("1", serializer);
   EXPECT_EQ(5, routeDbDelta.unicastRoutesToUpdate.size());
   auto routeDb = dumpRouteDb({"1"})["1"];
+  std::sort(routeDb.unicastRoutes.begin(), routeDb.unicastRoutes.end());
   auto routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
 
