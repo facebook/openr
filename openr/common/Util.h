@@ -307,7 +307,7 @@ void checkMplsAction(thrift::MplsAction const& mplsAction);
  * Can be removed when thrift adopts std::optional.
  */
 template <class T>
-auto&&
+void
 fromStdOptional(
     apache::thrift::DeprecatedOptionalField<T>& lhs,
     const std::optional<T>& rhs) {
@@ -316,7 +316,6 @@ fromStdOptional(
   } else {
     lhs.reset();
   }
-  return lhs;
 }
 
 template <class T>
@@ -347,11 +346,10 @@ castToStd(apache::thrift::DeprecatedOptionalField<T>&& t) {
 }
 
 template <class T>
-auto&&
+void
 fromStdOptional(
     apache::thrift::optional_field_ref<T&> lhs, const std::optional<T>& rhs) {
   lhs.from_optional(rhs);
-  return lhs;
 }
 
 template <class T>
