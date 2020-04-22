@@ -813,9 +813,9 @@ TEST_F(Spark2Fixture, InvalidV4Subnet) {
   }
 }
 
-TEST_F(Spark2Fixture, AreaTest) {
+TEST_F(Spark2Fixture, AreaMatch) {
   SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture AreaTest finished";
+    LOG(INFO) << "Spark2Fixture AreaMatch finished";
   };
 
   // Explicitly set regex to be capital letters to make sure
@@ -868,6 +868,134 @@ TEST_F(Spark2Fixture, AreaTest) {
     ASSERT_TRUE(event2.has_value());
     EXPECT_EQ(event2.value().neighbor.nodeName, nodeName1);
     EXPECT_EQ(event2.value().area, "2");
+  }
+}
+
+TEST_F(Spark2Fixture, NoAreaMatch) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture NoAreaMatch finished";
+  };
+
+  // AreaConfig:
+  //  rsw001: { 1 -> "RSW.*"}
+  //  fsw002: { 1 -> "FSW.*"}
+  //
+  //  rsw001 and fsw002 will receive each other's helloMsg, but won't proceed.
+  //  rsw001 can ONLY pair with "RSW.*", whereas fsw002 can ONLY pair with
+  //  "FSW.*".
+  auto areaConfig1 = SparkWrapper::createAreaConfig("1", {"RSW.*"}, {".*"});
+  auto areaConfig2 = SparkWrapper::createAreaConfig("1", {"FSW.*"}, {".*"});
+
+  auto config1 = std::make_shared<thrift::OpenrConfig>();
+  auto config2 = std::make_shared<thrift::OpenrConfig>();
+  config1->areas.emplace_back(areaConfig1);
+  config2->areas.emplace_back(areaConfig2);
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  LOG(INFO) << "Starting node-1 and node-2...";
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+
+  // start tracking iface1 and iface2
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  {
+    EXPECT_FALSE(node1
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+    EXPECT_FALSE(node2
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+    EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeName2).has_value());
+    EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeName1).has_value());
+  }
+}
+
+TEST_F(Spark2Fixture, InconsistentArea) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture InconsistentArea finished";
+  };
+
+  // AreaConfig:
+  //  rsw001: { 1 -> "FSW.*"}
+  //  fsw002: { 2 -> "RSW.*"}
+  //
+  //  rsw001 and fsw002 will receive each other's helloMsg and proceed to
+  //  NEGOTIATE stage. However, rsw001 thinks fsw002 should reside in
+  //  area "1", whereas fsw002 thinks rsw001 should be in area "2".
+  //
+  //  AREA negotiation won't go through. Will fall back to WARM
+  auto areaConfig1 = SparkWrapper::createAreaConfig("1", {"FSW.*"}, {".*"});
+  auto areaConfig2 = SparkWrapper::createAreaConfig("2", {"RSW.*"}, {".*"});
+
+  auto config1 = std::make_shared<thrift::OpenrConfig>();
+  auto config2 = std::make_shared<thrift::OpenrConfig>();
+  config1->areas.emplace_back(areaConfig1);
+  config2->areas.emplace_back(areaConfig2);
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  LOG(INFO) << "Starting node-1 and node-2...";
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+
+  {
+    // start tracking iface1 and iface2
+    EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  }
+
+  {
+    EXPECT_FALSE(node1
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+    EXPECT_FALSE(node2
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+
+    auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
+    EXPECT_TRUE(
+        neighState1 == SparkNeighState::WARM ||
+        neighState1 == SparkNeighState::NEGOTIATE);
+
+    auto neighState2 = node2->getSparkNeighState(iface2, nodeName1);
+    EXPECT_TRUE(
+        neighState2 == SparkNeighState::WARM ||
+        neighState2 == SparkNeighState::NEGOTIATE);
   }
 }
 

@@ -170,7 +170,7 @@ const std::vector<std::vector<std::optional<SparkNeighState>>>
         /*
          * index 2 - NEGOTIATE
          * HANDSHAKE_RCVD => ESTABLISHED; NEGOTIATE_TIMER_EXPIRE => WARM;
-         * V4_SUBNET_VALIDATION_FAILURE => WARM;
+         * NEGOTIATION_FAILURE => WARM;
          */
         {std::nullopt,
          std::nullopt,
@@ -1808,7 +1808,7 @@ Spark::processHandshakeMsg(
       // state transition
       SparkNeighState oldState = neighbor.state;
       neighbor.state =
-          getNextState(oldState, SparkNeighEvent::V4_SUBNET_VALIDATION_FAILURE);
+          getNextState(oldState, SparkNeighEvent::NEGOTIATION_FAILURE);
       logStateTransition(neighborName, ifName, oldState, neighbor.state);
 
       // stop sending out handshake msg, no longer in NEGOTIATE stage
@@ -1829,9 +1829,21 @@ Spark::processHandshakeMsg(
     // for backward compatibility consideration, defaultArea
     // indicates it doesn't support AREA negotiation
     if (neighbor.area != handshakeMsg.area) {
-      VLOG(1) << "Inconsistent areaId deduced between local and remote review. "
-              << "Neighbor's areaId: [" << neighbor.area << "], "
-              << "My areaId from remote: [" << handshakeMsg.area << "].";
+      LOG(ERROR)
+          << "Inconsistent areaId deduced between local and remote review. "
+          << "Neighbor's areaId: [" << neighbor.area << "], "
+          << "My areaId from remote: [" << handshakeMsg.area << "].";
+
+      // state transition
+      SparkNeighState oldState = neighbor.state;
+      neighbor.state =
+          getNextState(oldState, SparkNeighEvent::NEGOTIATION_FAILURE);
+      logStateTransition(neighborName, ifName, oldState, neighbor.state);
+
+      // stop sending out handshake msg, no longer in NEGOTIATE stage
+      neighbor.negotiateTimer.reset();
+      // remove negotiate hold timer, no longer in NEGOTIATE stage
+      neighbor.negotiateHoldTimer.reset();
       return;
     }
   }
