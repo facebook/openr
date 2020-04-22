@@ -1613,47 +1613,48 @@ Spark::processHelloMsg(
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
-    if (tsIt != neighborInfos.end()) {
-      //
-      // My node's Seq# seen from neighbor should NOT be higher than ours
-      // since it always received helloMsg sent previously. If it is the
-      // case, it normally means we have recently restarted ourself.
-      //
-      // Ignore this helloMsg from my previous incarnation.
-      // Wait for neighbor to catch up with the latest Seq#.
-      //
-      uint64_t myRemoteSeqNum =
-          static_cast<uint64_t>(neighborInfos.at(myNodeName_).seqNum);
-      if (myRemoteSeqNum >= mySeqNum_) {
-        VLOG(2) << "Seeing my previous incarnation from neighbor: ("
-                << neighborName << "). Seen Seq# from neighbor: ("
-                << myRemoteSeqNum << "), my Seq#: (" << mySeqNum_ << ").";
-      } else {
-        // Starts timer to periodically send hankshake msg
-        const std::string peerAreaId = neighbor.area;
-        neighbor.negotiateTimer = fbzmq::ZmqTimeout::make(
-            getEvb(), [this, ifName, peerAreaId]() noexcept {
-              // periodically send out handshake msg
-              sendHandshakeMsg(ifName, peerAreaId, false);
-            });
-        const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
-        neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_, isPeriodic);
-
-        // Starts negotiate hold-timer
-        neighbor.negotiateHoldTimer = fbzmq::ZmqTimeout::make(
-            getEvb(), [this, ifName, neighborName]() noexcept {
-              // prevent to stucking in NEGOTIATE forever
-              processNegotiateTimeout(ifName, neighborName);
-            });
-        neighbor.negotiateHoldTimer->scheduleTimeout(myNegotiateHoldTime_);
-
-        // Neighbor is aware of us. Promote to NEGOTIATE state
-        SparkNeighState oldState = neighbor.state;
-        neighbor.state =
-            getNextState(oldState, SparkNeighEvent::HELLO_RCVD_INFO);
-        logStateTransition(neighborName, ifName, oldState, neighbor.state);
-      }
+    if (tsIt == neighborInfos.end()) {
+      // Neighbor is NOT aware of us, ignore helloMsg
+      return;
     }
+
+    // My node's Seq# seen from neighbor should NOT be higher than ours
+    // since it always received helloMsg sent previously. If it is the
+    // case, it normally means we have recently restarted ourself.
+    //
+    // Ignore this helloMsg from my previous incarnation.
+    // Wait for neighbor to catch up with the latest Seq#.
+    const uint64_t myRemoteSeqNum =
+        static_cast<uint64_t>(neighborInfos.at(myNodeName_).seqNum);
+    if (myRemoteSeqNum >= mySeqNum_) {
+      VLOG(2) << "Seeing my previous incarnation from neighbor: ("
+              << neighborName << "). Seen Seq# from neighbor: ("
+              << myRemoteSeqNum << "), my Seq#: (" << mySeqNum_ << ").";
+      return;
+    }
+
+    // Starts timer to periodically send hankshake msg
+    const std::string peerAreaId = neighbor.area;
+    neighbor.negotiateTimer = fbzmq::ZmqTimeout::make(
+        getEvb(), [this, ifName, peerAreaId]() noexcept {
+          // periodically send out handshake msg
+          sendHandshakeMsg(ifName, peerAreaId, false);
+        });
+    const bool isPeriodic = true;
+    neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_, isPeriodic);
+
+    // Starts negotiate hold-timer
+    neighbor.negotiateHoldTimer = fbzmq::ZmqTimeout::make(
+        getEvb(), [this, ifName, neighborName]() noexcept {
+          // prevent to stucking in NEGOTIATE forever
+          processNegotiateTimeout(ifName, neighborName);
+        });
+    neighbor.negotiateHoldTimer->scheduleTimeout(myNegotiateHoldTime_);
+
+    // Neighbor is aware of us. Promote to NEGOTIATE state
+    SparkNeighState oldState = neighbor.state;
+    neighbor.state = getNextState(oldState, SparkNeighEvent::HELLO_RCVD_INFO);
+    logStateTransition(neighborName, ifName, oldState, neighbor.state);
   } else if (neighbor.state == SparkNeighState::ESTABLISHED) {
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
@@ -1687,48 +1688,50 @@ Spark::processHelloMsg(
   } else if (neighbor.state == SparkNeighState::RESTART) {
     // Neighbor is undergoing restart. Will reply immediately for hello msg for
     // quick adjacency establishment.
-    if (tsIt != neighborInfos.end()) {
-      if (neighbor.seqNum < remoteSeqNum) {
-        // By going here, it means this node missed ALL of the helloMsg sent-out
-        // after neighbor 'restarting' itself. Will let GR timer to handle it.
-        LOG(WARNING) << "Unexpected Seq#:" << remoteSeqNum
-                     << " received from neighbor: (" << neighborName
-                     << "), local Seq#: (" << neighbor.seqNum << ").";
-      } else {
-        // Neighbor is back from 'restarting' state. Go back to 'ESTABLISHED'
-        LOG(INFO) << "Node: (" << neighborName << ") is back from restart. "
-                  << "Received Seq#: (" << remoteSeqNum << "), local Seq#: ("
-                  << neighbor.seqNum << ").";
-
-        // Update local seqNum maintained for this neighbor
-        neighbor.seqNum = remoteSeqNum;
-
-        notifySparkNeighborEvent(
-            thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
-            ifName,
-            neighbor.toThrift(),
-            neighbor.rtt.count(),
-            neighbor.label,
-            true /* support flood-optimization */,
-            neighbor.area);
-
-        // start heartbeat timer again to make sure neighbor is alive
-        neighbor.heartbeatHoldTimer = fbzmq::ZmqTimeout::make(
-            getEvb(), [this, ifName, neighborName]() noexcept {
-              processHeartbeatTimeout(ifName, neighborName);
-            });
-        neighbor.heartbeatHoldTimer->scheduleTimeout(
-            neighbor.heartbeatHoldTime);
-
-        // stop the graceful-restart hold-timer
-        neighbor.gracefulRestartHoldTimer.reset();
-
-        SparkNeighState oldState = neighbor.state;
-        neighbor.state =
-            getNextState(oldState, SparkNeighEvent::HELLO_RCVD_INFO);
-        logStateTransition(neighborName, ifName, oldState, neighbor.state);
-      }
+    if (tsIt == neighborInfos.end()) {
+      // Neighbor is NOT aware of us, ignore helloMsg
+      return;
     }
+
+    if (neighbor.seqNum < remoteSeqNum) {
+      // By going here, it means this node missed ALL of the helloMsg sent-out
+      // after neighbor 'restarting' itself. Will let GR timer to handle it.
+      LOG(WARNING) << "Unexpected Seq#:" << remoteSeqNum
+                   << " received from neighbor: (" << neighborName
+                   << "), local Seq#: (" << neighbor.seqNum << ").";
+      return;
+    }
+
+    // Neighbor is back from 'restarting' state. Go back to 'ESTABLISHED'
+    LOG(INFO) << "Node: (" << neighborName << ") is back from restart. "
+              << "Received Seq#: (" << remoteSeqNum << "), local Seq#: ("
+              << neighbor.seqNum << ").";
+
+    // Update local seqNum maintained for this neighbor
+    neighbor.seqNum = remoteSeqNum;
+
+    notifySparkNeighborEvent(
+        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED,
+        ifName,
+        neighbor.toThrift(),
+        neighbor.rtt.count(),
+        neighbor.label,
+        true /* support flood-optimization */,
+        neighbor.area);
+
+    // start heartbeat timer again to make sure neighbor is alive
+    neighbor.heartbeatHoldTimer = fbzmq::ZmqTimeout::make(
+        getEvb(), [this, ifName, neighborName]() noexcept {
+          processHeartbeatTimeout(ifName, neighborName);
+        });
+    neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
+
+    // stop the graceful-restart hold-timer
+    neighbor.gracefulRestartHoldTimer.reset();
+
+    SparkNeighState oldState = neighbor.state;
+    neighbor.state = getNextState(oldState, SparkNeighEvent::HELLO_RCVD_INFO);
+    logStateTransition(neighborName, ifName, oldState, neighbor.state);
   }
 }
 
@@ -1821,13 +1824,16 @@ Spark::processHandshakeMsg(
   }
 
   // area validation. Compare the following:
+  //
   //  1) handshakeMsg.area: areaId that neighbor node thinks I should be in;
   //  2) neighbor.area: areaId that I think neighbor node should be in;
   //
   //  ONLY promote to NEGOTIATE state if areaId matches
-  if (handshakeMsg.area != thrift::KvStore_constants::kDefaultArea()) {
-    // for backward compatibility consideration, defaultArea
-    // indicates it doesn't support AREA negotiation
+  if (neighbor.area != thrift::KvStore_constants::kDefaultArea() &&
+      handshakeMsg.area != thrift::KvStore_constants::kDefaultArea()) {
+    // For backward compatible consideration, If:
+    //  1) neighbor.area == defaulArea: this node doesn't support areaConfig;
+    //  2) handshakeMsg.area == defaultArea: peer doesn't support areaConfig;
     if (neighbor.area != handshakeMsg.area) {
       LOG(ERROR)
           << "Inconsistent areaId deduced between local and remote review. "
@@ -1846,6 +1852,11 @@ Spark::processHandshakeMsg(
       neighbor.negotiateHoldTimer.reset();
       return;
     }
+  } else {
+    // Backward compatibility:
+    // In case it doesn't support AREA negotiation.
+    // Override neighbor area deduced previously from helloMsg to defaultArea.
+    neighbor.area = thrift::KvStore_constants::kDefaultArea();
   }
 
   // state transition

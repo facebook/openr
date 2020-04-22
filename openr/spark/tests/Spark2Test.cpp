@@ -929,7 +929,7 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
   }
 }
 
-TEST_F(Spark2Fixture, InconsistentArea) {
+TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture InconsistentArea finished";
   };
@@ -996,6 +996,59 @@ TEST_F(Spark2Fixture, InconsistentArea) {
     EXPECT_TRUE(
         neighState2 == SparkNeighState::WARM ||
         neighState2 == SparkNeighState::NEGOTIATE);
+  }
+}
+
+TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture InconsistentArea finished";
+  };
+
+  // AreaConfig:
+  //  rsw001: {}
+  //  fsw002: { 2 -> "RSW.*"}
+  //
+  //  rsw001 doesn't know anything about AREA, whereas fsw002 is configured
+  //  with areaConfig. Make sure AREA negotiation will go through and they can
+  //  form adj inside `defaultArea`.
+  auto areaConfig2 = SparkWrapper::createAreaConfig("2", {"RSW.*"}, {".*"});
+  auto config2 = std::make_shared<thrift::OpenrConfig>();
+  config2->areas.emplace_back(areaConfig2);
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  LOG(INFO) << "Starting node-1 and node-2...";
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, nullptr);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+
+  {
+    // start tracking iface1 and iface2
+    EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  }
+
+  {
+    auto event1 =
+        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event1.has_value());
+    EXPECT_EQ(event1.value().neighbor.nodeName, nodeName2);
+    EXPECT_EQ(event1.value().area, thrift::KvStore_constants::kDefaultArea());
+
+    auto event2 =
+        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    ASSERT_TRUE(event2.has_value());
+    EXPECT_EQ(event2.value().neighbor.nodeName, nodeName1);
+    EXPECT_EQ(event2.value().area, thrift::KvStore_constants::kDefaultArea());
   }
 }
 
