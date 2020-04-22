@@ -22,7 +22,6 @@ SparkWrapper::SparkWrapper(
     fbzmq::Context& zmqContext,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<thrift::OpenrConfig> config,
-    std::optional<std::unordered_set<std::string>> areas,
     bool enableSpark2,
     bool increaseHelloInterval,
     SparkTimeConfig timeConfig)
@@ -52,7 +51,6 @@ SparkWrapper::SparkWrapper(
       true,
       enableSpark2,
       increaseHelloInterval,
-      areas,
       std::move(config));
 
   // start spark

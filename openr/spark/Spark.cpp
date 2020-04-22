@@ -301,7 +301,6 @@ Spark::Spark(
     bool enableFloodOptimization,
     bool enableSpark2,
     bool increaseHelloInterval,
-    std::optional<std::unordered_set<std::string>> areas,
     std::shared_ptr<thrift::OpenrConfig> config)
     : myDomainName_(myDomainName),
       myNodeName_(myNodeName),
@@ -324,7 +323,6 @@ Spark::Spark(
       enableSpark2_(enableSpark2),
       increaseHelloInterval_(increaseHelloInterval),
       ioProvider_(std::move(ioProvider)),
-      areas_(std::move(areas)),
       config_(std::move(config)) {
   CHECK(myHoldTime_ >= 3 * myKeepAliveTime)
       << "Keep-alive-time must be less than hold-time.";
@@ -711,14 +709,6 @@ Spark::validateHelloPacket(
       processNeighborRttChange(ifName, originator, newRtt);
     };
 
-    // in Spark2 Handshake messages will be used to find common area
-    auto commonArea = findCommonArea(
-        castToStd(helloPacket.payload.areas),
-        helloPacket.payload.originator.nodeName);
-    if (commonArea.hasError()) {
-      return PacketValidationResult::INVALID_AREA_CONFIGURATION;
-    }
-
     ifNeighbors.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(neighborName),
@@ -728,8 +718,7 @@ Spark::validateHelloPacket(
             helloPacket.payload.seqNum,
             std::move(holdTimer),
             myKeepAliveTime_,
-            std::move(rttChangeCb),
-            commonArea.value()));
+            std::move(rttChangeCb)));
 
     return PacketValidationResult::SUCCESS;
   }
@@ -2203,7 +2192,7 @@ Spark::sendHelloPacket(
       inFastInitState,
       enableFloodOptimization_,
       restarting,
-      areas_);
+      std::nullopt);
 
   // add all neighbors we have heard from on this interface
   for (const auto& kv : neighbors_.at(ifName)) {
@@ -2709,42 +2698,6 @@ Spark::getNeighborArea(
     return std::nullopt;
   }
   return candidateAreas.back();
-}
-
-folly::Expected<std::string, folly::Unit>
-Spark::findCommonArea(
-    std::optional<std::unordered_set<std::string>> adjAreas,
-    const std::string& nodeName) {
-  // check area membership
-  std::vector<std::string> commonArea{};
-
-  if (areas_.has_value() && adjAreas.has_value()) {
-    for (auto area = areas_.value().begin(); area != areas_.value().end();
-         area++) {
-      if (adjAreas.value().find(*area) != adjAreas.value().end()) {
-        commonArea.push_back(*area);
-      }
-    }
-    if (commonArea.size() == 0) {
-      LOG(WARNING) << myNodeName_
-                   << ": No common area found with: " << nodeName;
-      fb303::fbData->addStatValue("spark.no_common_area", 1, fb303::COUNT);
-      return folly::makeUnexpected(folly::unit);
-    } else if (commonArea.size() > 1) {
-      LOG(ERROR)
-          << "Invalid configuration, cannot have multiple common areas, node: "
-          << nodeName;
-      fb303::fbData->addStatValue(
-          "spark.multiple_common_area", 1, fb303::COUNT);
-      return folly::makeUnexpected(folly::unit);
-    }
-    VLOG(2) << ": Spark hello packet from " << nodeName << " in area "
-            << commonArea[0];
-    return commonArea[0];
-  }
-  // return default area if the remote node does not support areas
-  std::string area{openr::thrift::KvStore_constants::kDefaultArea()};
-  return area;
 }
 
 } // namespace openr

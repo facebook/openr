@@ -105,7 +105,6 @@ class Spark final : public OpenrEventBase {
       bool enableFloodOptimization = false,
       bool enableSpark2 = false,
       bool increaseHelloInterval = false,
-      std::optional<std::unordered_set<std::string>> areas = std::nullopt,
       std::shared_ptr<thrift::OpenrConfig> config = nullptr);
 
   ~Spark() override = default;
@@ -249,12 +248,6 @@ class Spark final : public OpenrEventBase {
           std::string,
           std::unique_ptr<re2::RE2::Set>,
           std::unique_ptr<re2::RE2::Set>>>& areaIdRegexList);
-
-  // [Plan to deprecate]
-  // find common area, must be only one or none
-  folly::Expected<std::string, folly::Unit> findCommonArea(
-      std::optional<std::unordered_set<std::string>> areas,
-      const std::string& nodeName);
 
   // function to receive and parse received pkt
   bool parsePacket(
@@ -629,9 +622,6 @@ class Spark final : public OpenrEventBase {
   // hello packets from any one iface, address pair
   std::vector<folly::BucketedTimeSeries<int64_t, std::chrono::steady_clock>>
       timeSeriesVector_{};
-
-  // areas that this node belongs to.
-  std::optional<std::unordered_set<std::string>> areas_ = std::nullopt;
 
   // global openr config
   std::shared_ptr<const thrift::OpenrConfig> config_{nullptr};

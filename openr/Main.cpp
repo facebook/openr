@@ -571,8 +571,7 @@ main(int argc, char** argv) {
           std::make_shared<IoProvider>(),
           FLAGS_enable_flood_optimization,
           FLAGS_enable_spark2,
-          FLAGS_spark2_increase_hello_interval,
-          areas));
+          FLAGS_spark2_increase_hello_interval));
 
   // Static list of prefixes to announce into the network as long as OpenR is
   // running.

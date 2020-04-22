@@ -129,7 +129,6 @@ class Spark2Fixture : public testing::Test {
         context,
         mockIoProvider,
         config,
-        std::nullopt,
         enableSpark2,
         increaseHelloInterval,
         timeConfig);
