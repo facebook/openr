@@ -1568,7 +1568,7 @@ TEST_F(MultipleAreaFixture, PersistKeyArea) {
 
   // checkPersistKey should kick in and repopulate the key node1 kvstore,
   evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += persistKeyTimer.count() + 100),
+      std::chrono::milliseconds(scheduleAt += persistKeyTimer.count() + 500),
       [&]() noexcept {
         EXPECT_TRUE(
             client2->getKey("test_ttl_key_plane", planeArea).has_value());
