@@ -89,7 +89,7 @@ main(int argc, char** argv) {
   if (FLAGS_enable_netlink_system_handler) {
     // start NetlinkSystem thread
     auto nlHandler =
-        std::make_shared<NetlinkSystemHandler>(&mainEventLoop, nlSocket);
+        std::make_shared<NetlinkSystemHandler>(nlSocket->getProtocolSocket());
 
     auto systemThriftThread =
         std::thread([nlHandler, &systemServiceServer]() noexcept {

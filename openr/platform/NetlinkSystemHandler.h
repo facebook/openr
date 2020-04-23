@@ -36,63 +36,51 @@ namespace openr {
 
 class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
  public:
-  NetlinkSystemHandler(
-      fbzmq::ZmqEventLoop* zmqEventLoop,
-      std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket);
-
-  ~NetlinkSystemHandler() override;
+  explicit NetlinkSystemHandler(fbnl::NetlinkProtocolSocket* nlSock);
 
   NetlinkSystemHandler(const NetlinkSystemHandler&) = delete;
   NetlinkSystemHandler& operator=(const NetlinkSystemHandler&) = delete;
 
-  folly::Future<std::unique_ptr<std::vector<thrift::Link>>> future_getAllLinks()
-      override;
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>>
+  semifuture_getAllLinks() override;
 
-  folly::Future<folly::Unit> future_addIfaceAddresses(
+  folly::SemiFuture<folly::Unit> semifuture_addIfaceAddresses(
       std::unique_ptr<std::string> iface,
       std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
 
-  folly::Future<folly::Unit> future_removeIfaceAddresses(
+  folly::SemiFuture<folly::Unit> semifuture_removeIfaceAddresses(
       std::unique_ptr<std::string> iface,
       std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;
 
-  folly::Future<folly::Unit> future_syncIfaceAddresses(
+  folly::SemiFuture<folly::Unit> semifuture_syncIfaceAddresses(
       std::unique_ptr<std::string> iface,
       int16_t family,
       int16_t scope,
       std::unique_ptr<std::vector<thrift::IpPrefix>> addrs) override;
 
-  folly::Future<std::unique_ptr<std::vector<thrift::IpPrefix>>>
-  future_getIfaceAddresses(
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::IpPrefix>>>
+  semifuture_getIfaceAddresses(
       std::unique_ptr<std::string> iface,
       int16_t family,
       int16_t scope) override;
 
  private:
-  void initNetlinkSystemHandler();
-
-  void doAddIfaceAddr(
-      const std::string& ifName, const folly::CIDRNetwork& prefix);
-
-  void doRemoveIfaceAddr(
-      const std::string& ifName, const folly::CIDRNetwork& prefix);
-
-  void doSyncIfaceAddrs(
+  /**
+   * Helper function to add/remove addresses
+   */
+  folly::SemiFuture<folly::Unit> addRemoveIfAddresses(
+      const bool isAdd,
       const std::string& ifName,
-      int16_t family,
-      int16_t scope,
-      const std::vector<::openr::thrift::IpPrefix>& addrs);
+      const std::vector<thrift::IpPrefix>& addrs);
 
-  std::unique_ptr<std::vector<openr::thrift::IpPrefix>> doGetIfaceAddrs(
-      const std::string& iface, int16_t family, int16_t scope);
+  /**
+   * Synchronous API to query interface index from kernel.
+   * NOTE: We intentionally don't use cache to optimize this call as APIs of
+   * this handlers for add/remove/sync addresses are rarely invoked.
+   */
+  std::optional<int> getIfIndex(const std::string& ifName);
 
-  std::unique_ptr<std::vector<openr::thrift::Link>> doGetAllLinks();
-
-  std::unique_ptr<std::vector<openr::thrift::NeighborEntry>>
-  doGetAllNeighbors();
-
-  fbzmq::ZmqEventLoop* mainEventLoop_;
-  std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket_;
+  fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
 };
 
 } // namespace openr

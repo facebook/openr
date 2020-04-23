@@ -356,7 +356,7 @@ main(int argc, char** argv) {
           [&netlinkSystemServer, &mainEventLoop, nlSocket]() {
             folly::setThreadName("SystemService");
             auto systemHandler = std::make_unique<NetlinkSystemHandler>(
-                &mainEventLoop, nlSocket);
+                nlSocket->getProtocolSocket());
             netlinkSystemServer->setInterface(std::move(systemHandler));
 
             LOG(INFO) << "Starting NetlinkSystem server...";

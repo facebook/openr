@@ -45,8 +45,8 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
     sendNetlinkMessage();
   });
 
-  // Initialize the socket
-  init();
+  // Initialize the socket in an event loop
+  evl_->runInEventLoop([this]() { init(); });
 }
 
 void

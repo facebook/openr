@@ -845,11 +845,12 @@ IfAddress::getFlags() const {
 std::string
 IfAddress::str() const {
   return folly::sformat(
-      "addr {} {} intf-index {}, valid {}",
+      "addr {} {} intf-index {}, valid {}, scope {}",
       getFamily() == AF_INET ? "inet" : "inet6",
       prefix_.has_value() ? folly::IPAddress::networkToString(*prefix_) : "n/a",
       ifIndex_,
-      isValid_ ? "Yes" : "No");
+      isValid_ ? "Yes" : "No",
+      scope_.has_value() ? scope_.value() : -1);
 }
 
 bool

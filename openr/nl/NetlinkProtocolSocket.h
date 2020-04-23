@@ -67,7 +67,7 @@ class NetlinkProtocolSocket {
   explicit NetlinkProtocolSocket(
       fbzmq::ZmqEventLoop* evl, bool enableIPv6RouteReplaceSemantics = false);
 
-  ~NetlinkProtocolSocket();
+  virtual ~NetlinkProtocolSocket();
 
   // Set netlinkSocket Link event callback
   void setLinkEventCB(std::function<void(fbnl::Link, bool)> linkEventCB);
@@ -95,7 +95,7 @@ class NetlinkProtocolSocket {
    *
    * @returns 0 on success else appropriate system error code
    */
-  folly::SemiFuture<int> addRoute(const openr::fbnl::Route& route);
+  virtual folly::SemiFuture<int> addRoute(const openr::fbnl::Route& route);
 
   /**
    * Delete route. This API deletes all the paths associated with the route
@@ -107,36 +107,38 @@ class NetlinkProtocolSocket {
    *
    * @returns 0 on success else appropriate system error code
    */
-  folly::SemiFuture<int> deleteRoute(const openr::fbnl::Route& route);
+  virtual folly::SemiFuture<int> deleteRoute(const openr::fbnl::Route& route);
 
   /**
    * Add an address to the interface
    *
    * @returns 0 on success else appropriate system error code
    */
-  folly::SemiFuture<int> addIfAddress(const openr::fbnl::IfAddress& ifAddr);
+  virtual folly::SemiFuture<int> addIfAddress(
+      const openr::fbnl::IfAddress& ifAddr);
 
   /**
    * Delete an address from the interface
    *
    * @returns 0 on success else appropriate system error code
    */
-  folly::SemiFuture<int> deleteIfAddress(const openr::fbnl::IfAddress& ifAddr);
+  virtual folly::SemiFuture<int> deleteIfAddress(
+      const openr::fbnl::IfAddress& ifAddr);
 
   /**
    * API to get interfaces from kernel
    */
-  folly::SemiFuture<std::vector<fbnl::Link>> getAllLinks();
+  virtual folly::SemiFuture<std::vector<fbnl::Link>> getAllLinks();
 
   /**
    * API to get interface addresses from kernel
    */
-  folly::SemiFuture<std::vector<fbnl::IfAddress>> getAllIfAddresses();
+  virtual folly::SemiFuture<std::vector<fbnl::IfAddress>> getAllIfAddresses();
 
   /**
    * API to get neighbors from kernel
    */
-  folly::SemiFuture<std::vector<fbnl::Neighbor>> getAllNeighbors();
+  virtual folly::SemiFuture<std::vector<fbnl::Neighbor>> getAllNeighbors();
 
   /**
    * API to retrieve routes from kernel. Attributes specified in filter will be
@@ -147,17 +149,20 @@ class NetlinkProtocolSocket {
    * - address family
    * - type
    */
-  folly::SemiFuture<std::vector<fbnl::Route>> getRoutes(
+  virtual folly::SemiFuture<std::vector<fbnl::Route>> getRoutes(
       const fbnl::Route& filter);
 
   /**
    * APIs to retrieve routes from default routing table.
    * std::vector<fbnl::Route> getAllRoutes();
    */
-  folly::SemiFuture<std::vector<fbnl::Route>> getAllRoutes();
-  folly::SemiFuture<std::vector<fbnl::Route>> getIPv4Routes(uint8_t protocolId);
-  folly::SemiFuture<std::vector<fbnl::Route>> getIPv6Routes(uint8_t protocolId);
-  folly::SemiFuture<std::vector<fbnl::Route>> getMplsRoutes(uint8_t protocolId);
+  virtual folly::SemiFuture<std::vector<fbnl::Route>> getAllRoutes();
+  virtual folly::SemiFuture<std::vector<fbnl::Route>> getIPv4Routes(
+      uint8_t protocolId);
+  virtual folly::SemiFuture<std::vector<fbnl::Route>> getIPv6Routes(
+      uint8_t protocolId);
+  virtual folly::SemiFuture<std::vector<fbnl::Route>> getMplsRoutes(
+      uint8_t protocolId);
 
   /**
    * Utility function to accumulate result of multiple requests into one. The
@@ -168,12 +173,13 @@ class NetlinkProtocolSocket {
       std::vector<folly::SemiFuture<int>>&& futures,
       std::unordered_set<int> ignoredErrors = {});
 
+ protected:
+  // Initialize netlink socket and add to eventloop for polling
+  virtual void init();
+
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
   NetlinkProtocolSocket& operator=(NetlinkProtocolSocket const&) = delete;
-
-  // Initialize netlink socket and add to eventloop for polling
-  void init();
 
   // Buffer netlink message to the queue_. Invoke sendNetlinkMessage if there
   // are no messages in flight
