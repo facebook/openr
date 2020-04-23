@@ -222,12 +222,14 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
           if (!hashDump.count(kv.first)) {
             continue;
           }
-          EXPECT_EQ(kv.second.hash.value(), hashDump.at(kv.first).hash.value());
+          EXPECT_EQ(
+              kv.second.hash_ref().value(),
+              hashDump.at(kv.first).hash_ref().value());
         }
 
         // Update hash
-        thriftVal.hash = generateHash(
-            thriftVal.version, thriftVal.originatorId, thriftVal.value);
+        thriftVal.hash_ref() = generateHash(
+            thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
         // Add this to expected key/vals
         expectedKeyVals.emplace(key, thriftVal);
         expectedGlobalKeyVals.emplace(key, thriftVal);
@@ -262,7 +264,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
           VLOG(4) << "Store " << store->nodeId << " received keys.";
           for (auto const& kv : receivedKeyVals) {
             VLOG(4) << "\tkey: " << kv.first
-                    << ", value: " << kv.second.value.value()
+                    << ", value: " << kv.second.value_ref().value()
                     << ", version: " << kv.second.version;
           }
         } // for `j < kNumStores`
@@ -276,7 +278,8 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
             EXPECT_TRUE(kv.second.hash.value() != 0);
             EXPECT_TRUE(hashDump.count(kv.first) != 0);
             EXPECT_EQ(
-                kv.second.hash.value(), hashDump.at(kv.first).hash.value());
+                kv.second.hash_ref().value(),
+                hashDump.at(kv.first).hash_ref().value());
           }
         }
       } else {
@@ -402,7 +405,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value = "dummyValueTest";
+    newKvIt->second.value_ref() = "dummyValueTest";
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -412,7 +415,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value = "dummy";
+    newKvIt->second.value_ref() = "dummy";
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -422,7 +425,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value.reset();
+    newKvIt->second.value_ref().reset();
     newKvIt->second.ttl = 123;
     newKvIt->second.ttlVersion++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
@@ -431,11 +434,11 @@ TEST(KvStore, mergeKeyValuesTest) {
     EXPECT_EQ(myKvIt->second.ttlVersion, newKvIt->second.ttlVersion);
     EXPECT_EQ(myKvIt->second.ttl, newKvIt->second.ttl);
     // old value tho
-    EXPECT_EQ(myKvIt->second.value, oldKvIt->second.value);
+    EXPECT_EQ(myKvIt->second.value_ref(), oldKvIt->second.value_ref());
 
     EXPECT_EQ(deltaKvIt->second.ttlVersion, newKvIt->second.ttlVersion);
     EXPECT_EQ(deltaKvIt->second.ttl, newKvIt->second.ttl);
-    EXPECT_EQ(deltaKvIt->second.value.has_value(), false);
+    EXPECT_EQ(deltaKvIt->second.value_ref().has_value(), false);
   }
 
   // update ttl only (same version, originatorId and value,
@@ -454,7 +457,7 @@ TEST(KvStore, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value = "dummy";
+    newKvIt->second.value_ref() = "dummy";
     newKvIt->second.ttlVersion++;
     auto keyVals = KvStore::mergeKeyValues(myStore, newStore);
     EXPECT_EQ(myStore, oldStore);
@@ -525,8 +528,8 @@ TEST(KvStore, compareValuesTest) {
   // hash and value are different
   v1 = refValue;
   v2 = refValue;
-  v1.value = "dummyValue1";
-  v1.hash = 445566;
+  v1.value_ref() = "dummyValue1";
+  v1.hash_ref() = 445566;
   {
     int rc = KvStore::compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
@@ -535,8 +538,8 @@ TEST(KvStore, compareValuesTest) {
   // v2.hash is missing, values are different
   v1 = refValue;
   v2 = refValue;
-  v1.value = "dummyValue1";
-  v2.hash.reset();
+  v1.value_ref() = "dummyValue1";
+  v2.hash_ref().reset();
   {
     int rc = KvStore::compareValues(v1, v2);
     EXPECT_EQ(rc, 1); // v1 is better
@@ -545,8 +548,8 @@ TEST(KvStore, compareValuesTest) {
   // v1.hash and v1.value are missing
   v1 = refValue;
   v2 = refValue;
-  v1.value.reset();
-  v1.hash.reset();
+  v1.value_ref().reset();
+  v1.hash_ref().reset();
   {
     int rc = KvStore::compareValues(v1, v2);
     EXPECT_EQ(rc, -2); // unknown
@@ -742,7 +745,7 @@ TEST(KvStore, TtlVerification) {
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     getRes->ttl = thriftValue.ttl;
-    getRes->hash = 0;
+    getRes->hash_ref() = 0;
     EXPECT_EQ(thriftValue, getRes.value());
 
     // KEY_DUMP
@@ -752,7 +755,7 @@ TEST(KvStore, TtlVerification) {
     auto& dumpResValue = dumpRes.at(key);
     EXPECT_GE(thriftValue.ttl, dumpResValue.ttl + 1);
     dumpResValue.ttl = thriftValue.ttl;
-    dumpResValue.hash = 0;
+    dumpResValue.hash_ref() = 0;
     EXPECT_EQ(thriftValue, dumpResValue);
 
     // HASH_DUMP
@@ -762,8 +765,8 @@ TEST(KvStore, TtlVerification) {
     auto& hashResValue = hashRes.at(key);
     EXPECT_GE(thriftValue.ttl, hashResValue.ttl + 1);
     hashResValue.ttl = thriftValue.ttl;
-    hashResValue.hash = 0;
-    hashResValue.value.copy_from(thriftValue.value);
+    hashResValue.hash_ref() = 0;
+    hashResValue.value_ref().copy_from(thriftValue.value_ref());
     EXPECT_EQ(thriftValue, hashResValue);
 
     // We will receive key-expiry publication but no key-advertisement
@@ -788,7 +791,7 @@ TEST(KvStore, TtlVerification) {
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     getRes->ttl = thriftValue.ttl;
-    getRes->hash = 0;
+    getRes->hash_ref() = 0;
     EXPECT_EQ(thriftValue, getRes.value());
 
     // KEY_DUMP
@@ -798,7 +801,7 @@ TEST(KvStore, TtlVerification) {
     auto& dumpResValue = dumpRes.at(key);
     EXPECT_GE(thriftValue.ttl, dumpResValue.ttl + 1);
     dumpResValue.ttl = thriftValue.ttl;
-    dumpResValue.hash = 0;
+    dumpResValue.hash_ref() = 0;
     EXPECT_EQ(thriftValue, dumpResValue);
 
     // HASH_DUMP
@@ -808,8 +811,8 @@ TEST(KvStore, TtlVerification) {
     auto& hashResValue = hashRes.at(key);
     EXPECT_GE(thriftValue.ttl, hashResValue.ttl + 1);
     hashResValue.ttl = thriftValue.ttl;
-    hashResValue.hash = 0;
-    hashResValue.value.copy_from(thriftValue.value);
+    hashResValue.hash_ref() = 0;
+    hashResValue.value_ref().copy_from(thriftValue.value_ref());
     EXPECT_EQ(thriftValue, hashResValue);
 
     // We will receive key-advertisement
@@ -821,7 +824,7 @@ TEST(KvStore, TtlVerification) {
     // TTL decremented by 1 before it gets forwarded out
     EXPECT_GE(thriftValue.ttl, pubValue.ttl + 1);
     pubValue.ttl = thriftValue.ttl;
-    pubValue.hash = 0;
+    pubValue.hash_ref() = 0;
     EXPECT_EQ(thriftValue, pubValue);
   }
 
@@ -830,7 +833,7 @@ TEST(KvStore, TtlVerification) {
   //
   {
     auto thriftValue = value;
-    thriftValue.value.reset();
+    thriftValue.value_ref().reset();
     thriftValue.ttl = 30000;
     thriftValue.ttlVersion += 1;
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
@@ -842,7 +845,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue.version, getRes->version);
     EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
     EXPECT_EQ(thriftValue.ttlVersion, getRes->ttlVersion);
-    EXPECT_EQ(value.value, getRes->value);
+    EXPECT_EQ(value.value_ref(), getRes->value_ref());
 
     // We will receive update over PUB socket
     auto publication = kvStore.recvPublication();
@@ -863,7 +866,7 @@ TEST(KvStore, TtlVerification) {
   //
   {
     auto thriftValue = value;
-    thriftValue.value.reset();
+    thriftValue.value_ref().reset();
     thriftValue.ttl = Constants::kTtlInfinity;
     thriftValue.ttlVersion += 2;
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
@@ -875,7 +878,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue.version, getRes->version);
     EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
     EXPECT_EQ(thriftValue.ttlVersion, getRes->ttlVersion);
-    EXPECT_EQ(value.value, getRes->value);
+    EXPECT_EQ(value.value_ref(), getRes->value_ref());
 
     // We will receive update over PUB socket
     auto publication = kvStore.recvPublication();
@@ -896,7 +899,7 @@ TEST(KvStore, TtlVerification) {
   //
   {
     auto thriftValue = value;
-    thriftValue.value.reset();
+    thriftValue.value_ref().reset();
     thriftValue.ttl = 20000;
     thriftValue.ttlVersion += 3;
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
@@ -908,7 +911,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue.version, getRes->version);
     EXPECT_EQ(thriftValue.originatorId, getRes->originatorId);
     EXPECT_EQ(thriftValue.ttlVersion, getRes->ttlVersion);
-    EXPECT_EQ(value.value, getRes->value);
+    EXPECT_EQ(value.value_ref(), getRes->value_ref());
 
     // We will receive update over PUB socket
     auto publication = kvStore.recvPublication();
@@ -929,7 +932,7 @@ TEST(KvStore, TtlVerification) {
   //
   {
     auto thriftValue = value;
-    thriftValue.value.reset();
+    thriftValue.value_ref().reset();
     thriftValue.ttl = 10000;
     EXPECT_TRUE(kvStore.setKey(key, thriftValue));
 
@@ -941,7 +944,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.version, getRes->version);
     EXPECT_EQ(value.originatorId, getRes->originatorId);
     EXPECT_EQ(value.ttlVersion + 3, getRes->ttlVersion);
-    EXPECT_EQ(value.value, getRes->value);
+    EXPECT_EQ(value.value_ref(), getRes->value_ref());
   }
 
   kvStore.stop();
@@ -971,8 +974,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       0 /* ttl version */,
       0 /* hash */);
 
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash_ref() = generateHash(
+      thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
   EXPECT_TRUE(store0->setKey("test1", thriftVal));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("test1", thriftVal));
@@ -993,8 +996,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
-  thriftVal2.hash = generateHash(
-      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+  thriftVal2.hash_ref() = generateHash(
+      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value_ref());
   EXPECT_TRUE(store0->setKey("test2", thriftVal2));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("test2", thriftVal2));
@@ -1015,8 +1018,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
-  thriftVal3.hash = generateHash(
-      thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
+  thriftVal3.hash_ref() = generateHash(
+      thriftVal3.version, thriftVal3.originatorId, thriftVal3.value_ref());
   EXPECT_TRUE(store0->setKey("e2exyz", thriftVal3));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2exyz", thriftVal3));
@@ -1037,8 +1040,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
-  thriftVal4.hash = generateHash(
-      thriftVal4.version, thriftVal4.originatorId, thriftVal4.value);
+  thriftVal4.hash_ref() = generateHash(
+      thriftVal4.version, thriftVal4.originatorId, thriftVal4.value_ref());
   EXPECT_TRUE(store0->setKey("e2e", thriftVal4));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2e", thriftVal4));
@@ -1059,8 +1062,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
-  thriftVal5.hash = generateHash(
-      thriftVal5.version, thriftVal5.originatorId, thriftVal5.value);
+  thriftVal5.hash_ref() = generateHash(
+      thriftVal5.version, thriftVal5.originatorId, thriftVal5.value_ref());
   EXPECT_TRUE(store0->setKey("e2", thriftVal5));
   // Adding key in store1 too
   EXPECT_TRUE(store1->setKey("e2", thriftVal5));
@@ -1079,8 +1082,8 @@ TEST_F(KvStoreTestFixture, LeafNode) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
-  thriftVal6.hash = generateHash(
-      thriftVal6.version, thriftVal6.originatorId, thriftVal6.value);
+  thriftVal6.hash_ref() = generateHash(
+      thriftVal6.version, thriftVal6.originatorId, thriftVal6.value_ref());
   EXPECT_TRUE(store1->setKey("test3", thriftVal6));
   expectedKeyVals["test3"] = thriftVal6;
   expectedOrignatorVals["test3"] = thriftVal6;
@@ -1142,8 +1145,8 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
       0 /* ttl version */,
       0 /* hash */);
 
-  thriftVal1.hash = generateHash(
-      thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+  thriftVal1.hash_ref() = generateHash(
+      thriftVal1.version, thriftVal1.originatorId, thriftVal1.value_ref());
 
   thrift::Value thriftVal2(
       apache::thrift::FRAGILE,
@@ -1154,8 +1157,8 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
       0 /* ttl version */,
       0 /* hash */);
 
-  thriftVal2.hash = generateHash(
-      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+  thriftVal2.hash_ref() = generateHash(
+      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value_ref());
 
   EXPECT_TRUE(store0->setKey("test1", thriftVal1));
   auto maybeThriftVal = store0->getKey("test1");
@@ -1240,8 +1243,8 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
       0 /* hash */);
   EXPECT_TRUE(store1->setKey("test", thriftVal));
   // Update hash
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash_ref() = generateHash(
+      thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
 
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0 on pub socket ...";
@@ -1261,8 +1264,8 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
       0 /* hash */);
   EXPECT_TRUE(store2->setKey("test", thriftVal));
   // Update hash
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash_ref() = generateHash(
+      thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
 
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0...";
@@ -1287,8 +1290,8 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
       0 /* hash */);
   EXPECT_TRUE(store1->setKey("test", thriftVal));
   // Update hash
-  thriftVal.hash =
-      generateHash(thriftVal.version, thriftVal.originatorId, thriftVal.value);
+  thriftVal.hash_ref() = generateHash(
+      thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
   // Receive publication from store0 for new key-update
   LOG(INFO) << "Waiting for message from store0 on pub socket ...";
   pub = store0->recvPublication();
@@ -1395,7 +1398,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo0 = sptInfos.infos.at("r0");
       EXPECT_TRUE(sptInfo0.passive);
       EXPECT_EQ(sptInfo0.cost, 0);
-      EXPECT_EQ(sptInfo0.parent, "r0");
+      EXPECT_EQ(sptInfo0.parent_ref(), "r0");
       EXPECT_EQ(sptInfo0.children.size(), 2);
       EXPECT_EQ(sptInfo0.children.count("n0"), 1);
       EXPECT_EQ(sptInfo0.children.count("n1"), 1);
@@ -1405,13 +1408,13 @@ TEST_F(KvStoreTestFixture, DualTest) {
       EXPECT_TRUE(sptInfo1.passive);
       EXPECT_EQ(sptInfo1.cost, 2);
       EXPECT_TRUE(sptInfo1.parent.has_value());
-      r0Parent = *sptInfo1.parent;
+      r0Parent = *sptInfo1.parent_ref();
       EXPECT_TRUE(r0Parent == "n0" or r0Parent == "n1");
       EXPECT_EQ(sptInfo1.children.size(), 0);
 
       // validate flooding-peer-info
       EXPECT_TRUE(sptInfos.floodRootId.has_value());
-      EXPECT_EQ(*sptInfos.floodRootId, "r0");
+      EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
       EXPECT_EQ(sptInfos.floodPeers.size(), 2);
       EXPECT_EQ(sptInfos.floodPeers.count("n0"), 1);
       EXPECT_EQ(sptInfos.floodPeers.count("n1"), 1);
@@ -1428,7 +1431,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo1 = sptInfos.infos.at("r1");
       EXPECT_TRUE(sptInfo1.passive);
       EXPECT_EQ(sptInfo1.cost, 0);
-      EXPECT_EQ(sptInfo1.parent, "r1");
+      EXPECT_EQ(sptInfo1.parent_ref(), "r1");
       EXPECT_EQ(sptInfo1.children.size(), 2);
       EXPECT_EQ(sptInfo1.children.count("n0"), 1);
       EXPECT_EQ(sptInfo1.children.count("n1"), 1);
@@ -1438,13 +1441,13 @@ TEST_F(KvStoreTestFixture, DualTest) {
       EXPECT_TRUE(sptInfo0.passive);
       EXPECT_EQ(sptInfo0.cost, 2);
       EXPECT_TRUE(sptInfo0.parent.has_value());
-      r1Parent = *sptInfo0.parent;
+      r1Parent = *sptInfo0.parent_ref();
       EXPECT_TRUE(r1Parent == "n0" or r1Parent == "n1");
       EXPECT_EQ(sptInfo0.children.size(), 0);
 
       // validate flooding-peer-info
       EXPECT_TRUE(sptInfos.floodRootId.has_value());
-      EXPECT_EQ(*sptInfos.floodRootId, "r0");
+      EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
       EXPECT_EQ(sptInfos.floodPeers.size(), 1);
       EXPECT_EQ(sptInfos.floodPeers.count(r1Parent), 1);
     }
@@ -1460,7 +1463,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo0 = sptInfos.infos.at("r0");
       EXPECT_TRUE(sptInfo0.passive);
       EXPECT_EQ(sptInfo0.cost, 1);
-      EXPECT_EQ(sptInfo0.parent, "r0");
+      EXPECT_EQ(sptInfo0.parent_ref(), "r0");
       if (r1Parent == "n0") {
         EXPECT_EQ(sptInfo0.children.size(), 1);
         EXPECT_EQ(sptInfo0.children.count("r1"), 1);
@@ -1472,7 +1475,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo1 = sptInfos.infos.at("r1");
       EXPECT_TRUE(sptInfo1.passive);
       EXPECT_EQ(sptInfo1.cost, 1);
-      EXPECT_EQ(sptInfo1.parent, "r1");
+      EXPECT_EQ(sptInfo1.parent_ref(), "r1");
       if (r0Parent == "n0") {
         EXPECT_EQ(sptInfo1.children.size(), 1);
         EXPECT_EQ(sptInfo1.children.count("r0"), 1);
@@ -1481,7 +1484,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       }
 
       // validate flooding-peer-info
-      EXPECT_EQ(*sptInfos.floodRootId, "r0");
+      EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
       if (r1Parent == "n0") {
         EXPECT_EQ(sptInfos.floodPeers.size(), 2);
         EXPECT_EQ(sptInfos.floodPeers.count("r0"), 1);
@@ -1503,7 +1506,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo0 = sptInfos.infos.at("r0");
       EXPECT_TRUE(sptInfo0.passive);
       EXPECT_EQ(sptInfo0.cost, 1);
-      EXPECT_EQ(sptInfo0.parent, "r0");
+      EXPECT_EQ(sptInfo0.parent_ref(), "r0");
       if (r1Parent == "n1") {
         EXPECT_EQ(sptInfo0.children.size(), 1);
         EXPECT_EQ(sptInfo0.children.count("r1"), 1);
@@ -1515,7 +1518,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo1 = sptInfos.infos.at("r1");
       EXPECT_TRUE(sptInfo1.passive);
       EXPECT_EQ(sptInfo1.cost, 1);
-      EXPECT_EQ(sptInfo1.parent, "r1");
+      EXPECT_EQ(sptInfo1.parent_ref(), "r1");
       if (r0Parent == "n1") {
         EXPECT_EQ(sptInfo1.children.size(), 1);
         EXPECT_EQ(sptInfo1.children.count("r0"), 1);
@@ -1524,7 +1527,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
       }
 
       // validate flooding-peer-info
-      EXPECT_EQ(*sptInfos.floodRootId, "r0");
+      EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
       if (r1Parent == "n1") {
         EXPECT_EQ(sptInfos.floodPeers.size(), 2);
         EXPECT_EQ(sptInfos.floodPeers.count("r0"), 1);
@@ -1561,7 +1564,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo1 = sptInfos.infos.at("r1");
     EXPECT_TRUE(sptInfo1.passive);
     EXPECT_EQ(sptInfo1.cost, 0);
-    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.parent_ref(), "r1");
     EXPECT_EQ(sptInfo1.children.size(), 2);
     EXPECT_EQ(sptInfo1.children.count("n0"), 1);
     EXPECT_EQ(sptInfo1.children.count("n1"), 1);
@@ -1573,7 +1576,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     EXPECT_EQ(sptInfo0.children.size(), 0);
 
     // validate flooding-peer-info
-    EXPECT_EQ(*sptInfos.floodRootId, "r1");
+    EXPECT_EQ(*sptInfos.floodRootId_ref(), "r1");
     EXPECT_EQ(sptInfos.floodPeers.size(), 2);
     EXPECT_EQ(sptInfos.floodPeers.count("n0"), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("n1"), 1);
@@ -1595,11 +1598,11 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo1 = sptInfos.infos.at("r1");
     EXPECT_TRUE(sptInfo1.passive);
     EXPECT_EQ(sptInfo1.cost, 1);
-    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.parent_ref(), "r1");
     EXPECT_EQ(sptInfo1.children.size(), 0);
 
     // validate flooding-peer-info
-    EXPECT_EQ(*sptInfos.floodRootId, "r1");
+    EXPECT_EQ(*sptInfos.floodRootId_ref(), "r1");
     EXPECT_EQ(sptInfos.floodPeers.size(), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("r1"), 1);
   }
@@ -1620,11 +1623,11 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo1 = sptInfos.infos.at("r1");
     EXPECT_TRUE(sptInfo1.passive);
     EXPECT_EQ(sptInfo1.cost, 1);
-    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.parent_ref(), "r1");
     EXPECT_EQ(sptInfo1.children.size(), 0);
 
     // validate flooding-peer-info
-    EXPECT_EQ(*sptInfos.floodRootId, "r1");
+    EXPECT_EQ(*sptInfos.floodRootId_ref(), "r1");
     EXPECT_EQ(sptInfos.floodPeers.size(), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("r1"), 1);
   }
@@ -1666,7 +1669,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo0 = sptInfos.infos.at("r0");
     EXPECT_TRUE(sptInfo0.passive);
     EXPECT_EQ(sptInfo0.cost, 0);
-    EXPECT_EQ(sptInfo0.parent, "r0");
+    EXPECT_EQ(sptInfo0.parent_ref(), "r0");
     EXPECT_EQ(sptInfo0.children.size(), 1);
     EXPECT_EQ(sptInfo0.children.count("n1"), 1);
 
@@ -1674,12 +1677,12 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo1 = sptInfos.infos.at("r1");
     EXPECT_TRUE(sptInfo1.passive);
     EXPECT_EQ(sptInfo1.cost, 2);
-    EXPECT_EQ(sptInfo1.parent, "n1");
+    EXPECT_EQ(sptInfo1.parent_ref(), "n1");
     EXPECT_EQ(sptInfo1.children.size(), 0);
 
     // validate flooding-peer-info
     EXPECT_TRUE(sptInfos.floodRootId.has_value());
-    EXPECT_EQ(*sptInfos.floodRootId, "r0");
+    EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
     EXPECT_EQ(sptInfos.floodPeers.size(), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("n1"), 1);
   }
@@ -1695,7 +1698,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo0 = sptInfos.infos.at("r0");
     EXPECT_TRUE(sptInfo0.passive);
     EXPECT_EQ(sptInfo0.cost, 2);
-    EXPECT_EQ(sptInfo0.parent, "n1");
+    EXPECT_EQ(sptInfo0.parent_ref(), "n1");
     EXPECT_EQ(sptInfo0.children.size(), 1);
     EXPECT_EQ(sptInfo0.children.count("n0"), 1);
 
@@ -1703,14 +1706,14 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo1 = sptInfos.infos.at("r1");
     EXPECT_TRUE(sptInfo1.passive);
     EXPECT_EQ(sptInfo1.cost, 0);
-    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.parent_ref(), "r1");
     EXPECT_EQ(sptInfo1.children.size(), 2);
     EXPECT_EQ(sptInfo1.children.count("n0"), 1);
     EXPECT_EQ(sptInfo1.children.count("n1"), 1);
 
     // validate flooding-peer-info
     EXPECT_TRUE(sptInfos.floodRootId.has_value());
-    EXPECT_EQ(*sptInfos.floodRootId, "r0");
+    EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
     EXPECT_EQ(sptInfos.floodPeers.size(), 2);
     EXPECT_EQ(sptInfos.floodPeers.count("n0"), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("n1"), 1);
@@ -1727,18 +1730,18 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo0 = sptInfos.infos.at("r0");
     EXPECT_TRUE(sptInfo0.passive);
     EXPECT_EQ(sptInfo0.cost, 3);
-    EXPECT_EQ(sptInfo0.parent, "r1");
+    EXPECT_EQ(sptInfo0.parent_ref(), "r1");
     EXPECT_EQ(sptInfo0.children.size(), 0);
 
     // validate root r1
     const auto& sptInfo1 = sptInfos.infos.at("r1");
     EXPECT_TRUE(sptInfo1.passive);
     EXPECT_EQ(sptInfo1.cost, 1);
-    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.parent_ref(), "r1");
     EXPECT_EQ(sptInfo1.children.size(), 0);
 
     // validate flooding-peer-info
-    EXPECT_EQ(*sptInfos.floodRootId, "r0");
+    EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
     EXPECT_EQ(sptInfos.floodPeers.size(), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("r1"), 1);
   }
@@ -1754,7 +1757,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo0 = sptInfos.infos.at("r0");
     EXPECT_TRUE(sptInfo0.passive);
     EXPECT_EQ(sptInfo0.cost, 1);
-    EXPECT_EQ(sptInfo0.parent, "r0");
+    EXPECT_EQ(sptInfo0.parent_ref(), "r0");
     EXPECT_EQ(sptInfo0.children.size(), 1);
     EXPECT_EQ(sptInfo0.children.count("r1"), 1);
 
@@ -1762,12 +1765,12 @@ TEST_F(KvStoreTestFixture, DualTest) {
     const auto& sptInfo1 = sptInfos.infos.at("r1");
     EXPECT_TRUE(sptInfo1.passive);
     EXPECT_EQ(sptInfo1.cost, 1);
-    EXPECT_EQ(sptInfo1.parent, "r1");
+    EXPECT_EQ(sptInfo1.parent_ref(), "r1");
     EXPECT_EQ(sptInfo1.children.size(), 1);
     EXPECT_EQ(sptInfo1.children.count("r0"), 1);
 
     // validate flooding-peer-info
-    EXPECT_EQ(*sptInfos.floodRootId, "r0");
+    EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
     EXPECT_EQ(sptInfos.floodPeers.size(), 2);
     EXPECT_EQ(sptInfos.floodPeers.count("r0"), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("r1"), 1);
@@ -1924,8 +1927,8 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     // Submit the key-value to store
     store->setKey(key, thriftVal);
     // Update hash
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
 
     // Store this in expectedKeyVals
     expectedKeyVals[key] = thriftVal;
@@ -1956,7 +1959,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
       auto publication = store->recvPublication();
       for (auto const& kv : publication.keyVals) {
         VLOG(3) << "\tkey: " << kv.first
-                << ", value: " << kv.second.value.value();
+                << ", value: " << kv.second.value_ref().value();
         keys.insert(kv.first);
       }
     }
@@ -1983,8 +1986,8 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     // Submit the key-value to store
     store->setKey(key, thriftVal);
     // Update hash
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
 
     // Store this in expectedKeyVals
     expectedKeyVals[key] = thriftVal;
@@ -2002,7 +2005,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
       auto publication = store->recvPublication();
       for (auto const& kv : publication.keyVals) {
         VLOG(3) << "\tkey: " << kv.first
-                << ", value: " << kv.second.value.value();
+                << ", value: " << kv.second.value_ref().value();
         keys.insert(kv.first);
       }
     }
@@ -2142,10 +2145,10 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
       0 /* hash */);
   EXPECT_TRUE(stores[0]->setKey(kKeyName, thriftValFirst));
   // Update hash
-  thriftValFirst.hash = generateHash(
+  thriftValFirst.hash_ref() = generateHash(
       thriftValFirst.version,
       thriftValFirst.originatorId,
-      thriftValFirst.value);
+      thriftValFirst.value_ref());
 
   // set a key from the store on the other end of the chain
   thrift::Value thriftValLast(
@@ -2158,8 +2161,10 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
       0 /* hash */);
   EXPECT_TRUE(stores[kNumStores - 1]->setKey(kKeyName, thriftValLast));
   // Update hash
-  thriftValLast.hash = generateHash(
-      thriftValLast.version, thriftValLast.originatorId, thriftValLast.value);
+  thriftValLast.hash_ref() = generateHash(
+      thriftValLast.version,
+      thriftValLast.originatorId,
+      thriftValLast.value_ref());
 
   //
   // We expect test-value-2 because "2" > "1" in tie-breaking
@@ -2179,10 +2184,11 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     ASSERT_TRUE(pub1.nodeIds.has_value());
     ASSERT_TRUE(pub2.nodeIds.has_value());
     EXPECT_EQ(
-        std::vector<std::string>{stores[0]->nodeId}, pub1.nodeIds.value());
+        std::vector<std::string>{stores[0]->nodeId},
+        pub1.nodeIds_ref().value());
     auto expectedNodeIds = nodeIdsSeq;
     std::reverse(std::begin(expectedNodeIds), std::end(expectedNodeIds));
-    EXPECT_EQ(expectedNodeIds, pub2.nodeIds.value());
+    EXPECT_EQ(expectedNodeIds, pub2.nodeIds_ref().value());
   }
 
   for (auto& store : stores) {
@@ -2211,8 +2217,8 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
         0 /* hash */);
     EXPECT_TRUE(stores[0]->setKey(kKeyName, thriftVal));
     // Update hash
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
 
     // Make sure the old value still exists
     EXPECT_EQ(thriftValLast, stores[0]->getKey(kKeyName));
@@ -2251,8 +2257,8 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
     // Submit the key-value to store
     store->setKey(key, thriftVal);
     // Update hash
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
 
     // Store this in expectedKeyVals
     if (i % 2 == 0) {
@@ -2285,7 +2291,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
       auto publication = myStore->recvPublication();
       for (auto const& kv : publication.keyVals) {
         VLOG(3) << "\tkey: " << kv.first
-                << ", value: " << kv.second.value.value();
+                << ", value: " << kv.second.value_ref().value();
         keys.insert(kv.first);
       }
     }
@@ -2329,8 +2335,8 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
     myStore->setKey(key, thriftVal);
 
     // Update hash
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
 
     // Store keyVals
     expectedKeyVals[key] = thriftVal;
@@ -2366,9 +2372,11 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   // 3. Query with different value (change value/hash of test-key-0)
   {
     auto newThriftVal = thriftVal;
-    newThriftVal.value = "why-so-serious";
-    newThriftVal.hash = generateHash(
-        newThriftVal.version, newThriftVal.originatorId, newThriftVal.value);
+    newThriftVal.value_ref() = "why-so-serious";
+    newThriftVal.hash_ref() = generateHash(
+        newThriftVal.version,
+        newThriftVal.originatorId,
+        newThriftVal.value_ref());
     peerKeyVals[key] = newThriftVal; // extra key in local
     EXPECT_EQ(emptyKeyVals, myStore->syncKeyVals(peerKeyVals));
   }
@@ -2453,8 +2461,8 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
       ttl1 /* ttl */,
       1 /* ttl version */,
       0 /* hash */);
-  thriftVal1.hash = generateHash(
-      thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+  thriftVal1.hash_ref() = generateHash(
+      thriftVal1.version, thriftVal1.originatorId, thriftVal1.value_ref());
   EXPECT_TRUE(store1->setKey("key1", thriftVal1));
   {
     /* check key is in store1 */
@@ -2477,8 +2485,8 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
       ttl2 /* ttl */,
       1 /* ttl version */,
       0 /* hash */);
-  thriftVal2.hash = generateHash(
-      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+  thriftVal2.hash_ref() = generateHash(
+      thriftVal2.version, thriftVal2.originatorId, thriftVal2.value_ref());
   EXPECT_TRUE(store1->setKey("key2", thriftVal2));
 
   {
@@ -2557,8 +2565,8 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
         1 /* ttl version */,
         0 /* hash */);
     std::string key = folly::sformat("key{}", ++expectNumKeys);
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
     if (expectNumKeys == 10) {
       // we should be able to set thousands of keys wihtin 5 seconds,
       // pick one of them and let it be set by store0, all others set by store2
@@ -2620,8 +2628,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         300000 /* ttl */,
         ++i1 /* ttl version */,
         0 /* hash */);
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
     EXPECT_TRUE(store0->setKey("key1", thriftVal));
     elapsedTime1 =
         duration_cast<seconds>(steady_clock::now() - startTime1).count();
@@ -2661,8 +2669,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         300000 /* ttl */,
         ++i2 /* ttl version */,
         0 /* hash */);
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
     EXPECT_TRUE(store1->setKey("key2", thriftVal));
     elapsedTime2 =
         duration_cast<seconds>(steady_clock::now() - startTime2).count();
@@ -2705,8 +2713,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         300000 /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
     EXPECT_TRUE(store1->setKey(key, thriftVal));
     elapsedTime3 =
         duration_cast<seconds>(steady_clock::now() - startTime3).count();
@@ -2751,8 +2759,8 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
         ttlLow /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
     EXPECT_TRUE(store1->setKey(key, thriftVal));
     elapsedTime4 =
         duration_cast<seconds>(steady_clock::now() - startTime4).count();
@@ -2808,7 +2816,8 @@ TEST_F(KvStoreTestFixture, FullSync) {
         30000 /* ttl */,
         99 /* ttl version */,
         0 /* hash*/);
-    val.hash = generateHash(val.version, val.originatorId, val.value);
+    val.hash_ref() =
+        generateHash(val.version, val.originatorId, val.value_ref());
     EXPECT_TRUE(storeA->setKey(keyVer.first, val));
   }
 
@@ -2823,9 +2832,10 @@ TEST_F(KvStoreTestFixture, FullSync) {
         99 /* ttl version */,
         0 /* hash*/);
     if (keyVer.first == k1) {
-      val.value = "a"; // set same value for k1
+      val.value_ref() = "a"; // set same value for k1
     }
-    val.hash = generateHash(val.version, val.originatorId, val.value);
+    val.hash_ref() =
+        generateHash(val.version, val.originatorId, val.value_ref());
     EXPECT_TRUE(storeB->setKey(keyVer.first, val));
   }
 
@@ -2843,24 +2853,24 @@ TEST_F(KvStoreTestFixture, FullSync) {
     auto valB = storeB->getKey(key);
     EXPECT_TRUE(valA.has_value());
     EXPECT_TRUE(valB.has_value());
-    EXPECT_EQ(valA->value.value(), valB->value.value());
+    EXPECT_EQ(valA->value_ref().value(), valB->value_ref().value());
     EXPECT_EQ(valA->version, valB->version);
   }
   auto v0 = storeA->getKey(k0);
   EXPECT_EQ(v0->version, 5);
-  EXPECT_EQ(v0->value.value(), "a");
+  EXPECT_EQ(v0->value_ref().value(), "a");
   auto v1 = storeA->getKey(k1);
   EXPECT_EQ(v1->version, 1);
-  EXPECT_EQ(v1->value.value(), "a");
+  EXPECT_EQ(v1->value_ref().value(), "a");
   auto v2 = storeA->getKey(k2);
   EXPECT_EQ(v2->version, 9);
-  EXPECT_EQ(v2->value.value(), "a");
+  EXPECT_EQ(v2->value_ref().value(), "a");
   auto v3 = storeA->getKey(k3);
   EXPECT_EQ(v3->version, 9);
-  EXPECT_EQ(v3->value.value(), "b");
+  EXPECT_EQ(v3->value_ref().value(), "b");
   auto v4 = storeA->getKey(k4);
   EXPECT_EQ(v4->version, 6);
-  EXPECT_EQ(v4->value.value(), "b");
+  EXPECT_EQ(v4->value_ref().value(), "b");
 }
 
 /* Kvstore tests related to area */

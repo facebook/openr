@@ -135,7 +135,8 @@ RangeAllocator<T>::isRangeConsumed() const {
       << " from kvstore in area: " << area_;
   T count = 0;
   for (const auto& kv : *maybeKeyMap) {
-    const auto val = details::binaryToPrimitive<T>(kv.second.value.value());
+    const auto val =
+        details::binaryToPrimitive<T>(kv.second.value_ref().value());
     if (val >= allocRange_.first && val <= allocRange_.second) {
       ++count;
     }
@@ -153,7 +154,8 @@ RangeAllocator<T>::getValueFromKvStore() const {
       << " from kvstore in area: " << area_;
   for (const auto& kv : *maybeKeyMap) {
     if (kv.second.originatorId == nodeName_) {
-      const auto val = details::binaryToPrimitive<T>(kv.second.value.value());
+      const auto val =
+          details::binaryToPrimitive<T>(kv.second.value_ref().value());
       CHECK_EQ(kv.first, createKey(val));
       return val;
     }
@@ -269,7 +271,7 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
       folly::gen::from(*maybeKeyMap) |
       folly::gen::map([](std::pair<std::string, thrift::Value> const& kv) {
         return std::make_pair(
-            details::binaryToPrimitive<T>(kv.second.value.value()),
+            details::binaryToPrimitive<T>(kv.second.value_ref().value()),
             kv.second.originatorId);
       }) |
       folly::gen::as<
@@ -302,7 +304,7 @@ template <typename T>
 void
 RangeAllocator<T>::keyValUpdated(
     const std::string& key, const thrift::Value& thriftVal) noexcept {
-  const T val = details::binaryToPrimitive<T>(thriftVal.value.value());
+  const T val = details::binaryToPrimitive<T>(thriftVal.value_ref().value());
 
   // Some sanity checks
   CHECK_EQ(1, thriftVal.version);

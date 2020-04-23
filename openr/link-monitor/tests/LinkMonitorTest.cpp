@@ -157,7 +157,7 @@ printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
   LOG(INFO) << "Node: " << adjDb.thisNodeName
             << ", Overloaded: " << adjDb.isOverloaded
             << ", Label: " << adjDb.nodeLabel
-            << ", area: " << adjDb.area.value();
+            << ", area: " << adjDb.area_ref().value();
   for (auto const& adj : adjDb.adjacencies) {
     LOG(INFO) << "  " << adj.otherNodeName << "@" << adj.ifName
               << ", metric: " << adj.metric << ", label: " << adj.adjLabel
@@ -440,17 +440,18 @@ class LinkMonitorTestFixture : public ::testing::Test {
               << area;
     auto pub = kvStoreWrapper->recvPublication();
     EXPECT_TRUE(pub.area.has_value());
-    if (pub.area.value() != area) {
+    if (pub.area_ref().value() != area) {
       return std::nullopt;
     }
 
-    VLOG(1) << "Received publication with keys in area " << pub.area.value();
+    VLOG(1) << "Received publication with keys in area "
+            << pub.area_ref().value();
     for (auto const& kv : pub.keyVals) {
       VLOG(1) << "  " << kv.first;
     }
 
     auto kv = pub.keyVals.find(key);
-    if (kv == pub.keyVals.end() or !kv->second.value) {
+    if (kv == pub.keyVals.end() or !kv->second.value_ref()) {
       return std::nullopt;
     }
 
@@ -483,7 +484,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
       }
 
       auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
-          value->value.value(), serializer);
+          value->value_ref().value(), serializer);
       // we can not know what the nodeLabel will be
       adjDb.nodeLabel = kNodeLabel;
       // nor the timestamp, so we override with our predefinded const values
@@ -530,7 +531,7 @@ class LinkMonitorTestFixture : public ::testing::Test {
       }
 
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-          value->value.value(), serializer);
+          value->value_ref().value(), serializer);
       std::unordered_set<thrift::IpPrefix> prefixes;
       for (auto const& prefixEntry : prefixDb.prefixEntries) {
         prefixes.insert(prefixEntry.prefix);
@@ -774,7 +775,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_TRUE(res->interfaceDetails.at(interfaceName).isOverloaded);
     EXPECT_EQ(
         linkMetric,
-        res->interfaceDetails.at(interfaceName).metricOverride.value());
+        res->interfaceDetails.at(interfaceName).metricOverride_ref().value());
 
     LOG(INFO) << "Testing unset node overload command!";
     ret = linkMonitor->setNodeOverload(false).get();
@@ -785,7 +786,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_TRUE(res->interfaceDetails.at(interfaceName).isOverloaded);
     EXPECT_EQ(
         linkMetric,
-        res->interfaceDetails.at(interfaceName).metricOverride.value());
+        res->interfaceDetails.at(interfaceName).metricOverride_ref().value());
 
     LOG(INFO) << "Testing unset link overload command!";
     ret = linkMonitor->setInterfaceOverload(interfaceName, false).get();
@@ -1313,9 +1314,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
       EXPECT_GE(
-          links1->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 0);
+          links1->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().value(),
+          0);
       EXPECT_LE(
-          links1->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 2000);
+          links1->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().value(),
+          2000);
     }
   }
 
@@ -1388,9 +1391,11 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
       EXPECT_GE(
-          links2->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 2000);
+          links2->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().value(),
+          2000);
       EXPECT_LE(
-          links2->interfaceDetails.at(ifName).linkFlapBackOffMs.value(), 4000);
+          links2->interfaceDetails.at(ifName).linkFlapBackOffMs_ref().value(),
+          4000);
     }
   }
 
@@ -1730,9 +1735,9 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   while (nodeLabels.size() < kNumNodesToTest) {
     auto pub = kvStoreWrapper->recvPublication();
     for (auto const& kv : pub.keyVals) {
-      if (kv.first.find("adj:") == 0 and kv.second.value) {
+      if (kv.first.find("adj:") == 0 and kv.second.value_ref()) {
         auto adjDb = fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
-            kv.second.value.value(), serializer);
+            kv.second.value_ref().value(), serializer);
         nodeLabels[adjDb.thisNodeName] = adjDb.nodeLabel;
         if (adjDb.nodeLabel == 0) {
           nodeLabels.erase(adjDb.thisNodeName);

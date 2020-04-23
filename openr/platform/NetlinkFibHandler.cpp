@@ -111,17 +111,17 @@ NetlinkFibHandler::buildNextHops(const fbnl::NextHopSet& nextHops) {
         : "";
     thrift::NextHopThrift nextHop;
     nextHop.address = toBinaryAddress(nh.getGateway().value());
-    nextHop.address.ifName = ifName;
+    nextHop.address.ifName_ref() = ifName;
     auto labelAction = nh.getLabelAction();
     if (labelAction.has_value()) {
       if (labelAction.value() == thrift::MplsActionCode::POP_AND_LOOKUP ||
           labelAction.value() == thrift::MplsActionCode::PHP) {
-        nextHop.mplsAction = createMplsAction(labelAction.value());
+        nextHop.mplsAction_ref() = createMplsAction(labelAction.value());
       } else if (labelAction.value() == thrift::MplsActionCode::SWAP) {
-        nextHop.mplsAction =
+        nextHop.mplsAction_ref() =
             createMplsAction(labelAction.value(), nh.getSwapLabel().value());
       } else if (labelAction.value() == thrift::MplsActionCode::PUSH) {
-        nextHop.mplsAction = createMplsAction(
+        nextHop.mplsAction_ref() = createMplsAction(
             labelAction.value(), std::nullopt, nh.getPushLabels().value());
       }
     }
@@ -441,21 +441,21 @@ NetlinkFibHandler::future_getMplsRouteTableByClient(int16_t clientId) {
 void
 NetlinkFibHandler::buildMplsAction(
     fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) {
-  if (!nhop.mplsAction.has_value()) {
+  if (!nhop.mplsAction_ref().has_value()) {
     return;
   }
   auto mplsAction = nhop.mplsAction.value();
   nhBuilder.setLabelAction(mplsAction.action);
   if (mplsAction.action == thrift::MplsActionCode::SWAP) {
-    if (!mplsAction.swapLabel.has_value()) {
+    if (!mplsAction.swapLabel_ref().has_value()) {
       throw fbnl::NlException("Swap label not provided");
     }
-    nhBuilder.setSwapLabel(mplsAction.swapLabel.value());
+    nhBuilder.setSwapLabel(mplsAction.swapLabel_ref().value());
   } else if (mplsAction.action == thrift::MplsActionCode::PUSH) {
-    if (!mplsAction.pushLabels.has_value()) {
+    if (!mplsAction.pushLabels_ref().has_value()) {
       throw fbnl::NlException("Push label(s) not provided");
     }
-    nhBuilder.setPushLabels(mplsAction.pushLabels.value());
+    nhBuilder.setPushLabels(mplsAction.pushLabels_ref().value());
   } else if (mplsAction.action == thrift::MplsActionCode::POP_AND_LOOKUP) {
     auto lpbkIfIndex = getLoopbackIfIndex();
     if (lpbkIfIndex.has_value()) {

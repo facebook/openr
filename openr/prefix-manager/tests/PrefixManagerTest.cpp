@@ -176,7 +176,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
     for (const auto& pkey : keyPrefixDbs.value()) {
       if (pkey.first.find(marker) == 0) {
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            pkey.second.value.value(), serializer);
+            pkey.second.value_ref().value(), serializer);
         // skip prefixes marked for delete
         if (!prefixDb.deletePrefix) {
           prefixEntries.insert(
@@ -1189,7 +1189,7 @@ TEST_P(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     // Send update request in queue
     thrift::PrefixUpdateRequest request;
     request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
-    request.type = thrift::PrefixType::BGP;
+    request.type_ref() = thrift::PrefixType::BGP;
     prefixUpdatesQueue.push(std::move(request));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
@@ -1206,7 +1206,7 @@ TEST_P(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     // Send update request in queue
     thrift::PrefixUpdateRequest request;
     request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
-    request.type = thrift::PrefixType::DEFAULT;
+    request.type_ref() = thrift::PrefixType::DEFAULT;
     request.prefixes = {prefixEntry3};
     prefixUpdatesQueue.push(std::move(request));
 

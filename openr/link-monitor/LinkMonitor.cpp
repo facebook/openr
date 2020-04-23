@@ -538,7 +538,7 @@ LinkMonitor::advertiseKvStorePeers(
   if (toDelPeers.size() > 0) {
     thrift::PeerDelParams params;
     params.peerNames = std::move(toDelPeers);
-    req.peerDelParams = std::move(params);
+    req.peerDelParams_ref() = std::move(params);
   }
 
   // Get list of peers to add
@@ -576,10 +576,11 @@ LinkMonitor::advertiseKvStorePeers(
   if (toAddPeers.size() > 0) {
     thrift::PeerAddParams params;
     params.peers = std::move(toAddPeers);
-    req.peerAddParams = std::move(params);
+    req.peerAddParams_ref() = std::move(params);
   }
 
-  if (req.peerDelParams.has_value() || req.peerAddParams.has_value()) {
+  if (req.peerDelParams_ref().has_value() ||
+      req.peerAddParams_ref().has_value()) {
     peerUpdatesQueue_.push(std::move(req));
   }
 }
@@ -605,7 +606,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   adjDb.thisNodeName = nodeId_;
   adjDb.isOverloaded = state_.isOverloaded;
   adjDb.nodeLabel = enableSegmentRouting_ ? state_.nodeLabel : 0;
-  adjDb.area = area;
+  adjDb.area_ref() = area;
   for (const auto& adjKv : adjacencies_) {
     // 'second.second' is the adj object for this peer
     // must match the area
@@ -636,9 +637,9 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   if (enablePerfMeasurement_) {
     thrift::PerfEvents perfEvents;
     addPerfEvent(perfEvents, nodeId_, "ADJ_DB_UPDATED");
-    adjDb.perfEvents = perfEvents;
+    adjDb.perfEvents_ref() = perfEvents;
   } else {
-    DCHECK(!adjDb.perfEvents.has_value());
+    DCHECK(!adjDb.perfEvents_ref().has_value());
   }
 
   LOG(INFO) << "Updating adjacency database in KvStore with "
@@ -743,7 +744,7 @@ LinkMonitor::advertiseRedistAddrs() {
     prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
         ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
         : thrift::PrefixForwardingAlgorithm::SP_ECMP;
-    prefixEntry.ephemeral.reset();
+    prefixEntry.ephemeral_ref().reset();
     prefixes.push_back(prefixEntry);
   }
 
@@ -775,7 +776,7 @@ LinkMonitor::advertiseRedistAddrs() {
   // Advertise via prefix manager client
   thrift::PrefixUpdateRequest request;
   request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
-  request.type = openr::thrift::PrefixType::LOOPBACK;
+  request.type_ref() = openr::thrift::PrefixType::LOOPBACK;
   request.prefixes = std::move(prefixes);
   prefixUpdatesQueue_.push(std::move(request));
 }

@@ -100,7 +100,7 @@ KvStoreWrapper::setKey(
   // Prepare KeySetParams
   thrift::KeySetParams params;
   params.keyVals.emplace(std::move(key), std::move(value));
-  fromStdOptional(params.nodeIds, std::move(nodeIds));
+  fromStdOptional(params.nodeIds_ref(), std::move(nodeIds));
 
   try {
     kvStore_->setKvStoreKeyVals(std::move(params), area).get();
@@ -118,7 +118,7 @@ KvStoreWrapper::setKeys(
     std::string area) {
   // Prepare KeySetParams
   thrift::KeySetParams params;
-  fromStdOptional(params.nodeIds, std::move(nodeIds));
+  fromStdOptional(params.nodeIds_ref(), std::move(nodeIds));
   for (const auto& keyVal : keyVals) {
     params.keyVals.emplace(keyVal.first, keyVal.second);
   }
@@ -185,7 +185,7 @@ KvStoreWrapper::syncKeyVals(
     thrift::KeyVals const& keyValHashes, std::string area) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
-  params.keyValHashes = keyValHashes;
+  params.keyValHashes_ref() = keyValHashes;
 
   auto pub = *(kvStore_->dumpKvStoreKeys(std::move(params), area).get());
   return pub.keyVals;

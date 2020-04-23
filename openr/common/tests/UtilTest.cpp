@@ -593,7 +593,7 @@ TEST(UtilTest, getDurationBetweenPerfEventsTest) {
 TEST(UtilTest, getBestNextHopsUnicast) {
   auto bestNextHops = getBestNextHopsUnicast({path1_2_1, path1_2_2});
   EXPECT_EQ(bestNextHops.size(), 1);
-  EXPECT_EQ(bestNextHops.at(0).address.ifName, "iface_1_2_1");
+  EXPECT_EQ(bestNextHops.at(0).address.ifName_ref(), "iface_1_2_1");
   EXPECT_EQ(
       bestNextHops.at(0).address.addr,
       toBinaryAddress(folly::IPAddress("fe80::2")).addr);
@@ -732,13 +732,13 @@ TEST(UtilTest, MplsActionValidate) {
     mplsAction.action = thrift::MplsActionCode::PHP;
     EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
 
-    mplsAction.swapLabel = 1;
+    mplsAction.swapLabel_ref() = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel.reset();
+    mplsAction.swapLabel_ref().reset();
 
-    mplsAction.pushLabels = std::vector<int32_t>();
+    mplsAction.pushLabels_ref() = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels.reset();
+    mplsAction.pushLabels_ref().reset();
   }
 
   //
@@ -749,13 +749,13 @@ TEST(UtilTest, MplsActionValidate) {
     mplsAction.action = thrift::MplsActionCode::POP_AND_LOOKUP;
     EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
 
-    mplsAction.swapLabel = 1;
+    mplsAction.swapLabel_ref() = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel.reset();
+    mplsAction.swapLabel_ref().reset();
 
-    mplsAction.pushLabels = std::vector<int32_t>();
+    mplsAction.pushLabels_ref() = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels.reset();
+    mplsAction.pushLabels_ref().reset();
   }
 
   //
@@ -766,12 +766,12 @@ TEST(UtilTest, MplsActionValidate) {
     mplsAction.action = thrift::MplsActionCode::SWAP;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
 
-    mplsAction.swapLabel = 1;
+    mplsAction.swapLabel_ref() = 1;
     EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
 
-    mplsAction.pushLabels = std::vector<int32_t>();
+    mplsAction.pushLabels_ref() = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels.reset();
+    mplsAction.pushLabels_ref().reset();
   }
 
   //
@@ -782,14 +782,14 @@ TEST(UtilTest, MplsActionValidate) {
     mplsAction.action = thrift::MplsActionCode::PUSH;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
 
-    mplsAction.swapLabel = 1;
+    mplsAction.swapLabel_ref() = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel.reset();
+    mplsAction.swapLabel_ref().reset();
 
-    mplsAction.pushLabels = std::vector<int32_t>();
+    mplsAction.pushLabels_ref() = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
 
-    mplsAction.pushLabels->push_back(1);
+    mplsAction.pushLabels_ref()->push_back(1);
     EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
   }
 }

@@ -236,7 +236,7 @@ BM_Fib(folly::UserCounters& counters, uint32_t iters, unsigned numOfPrefixes) {
     // Add perfevents
     thrift::PerfEvents perfEvents;
     addPerfEvent(perfEvents, routeDbDelta.thisNodeName, "FIB_INIT_UPDATE");
-    routeDbDelta.perfEvents = perfEvents;
+    routeDbDelta.perfEvents_ref() = perfEvents;
 
     // Send routeDB to Fib for updates
     fibWrapper->routeUpdatesQueue.push(routeDbDelta);

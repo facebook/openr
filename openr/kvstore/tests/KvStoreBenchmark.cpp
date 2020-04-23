@@ -176,8 +176,8 @@ floodingUpdate(
         0 /* hash */);
 
     // Update hash
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
     auto keyVal = std::make_pair(key, thriftVal);
     keyVals.emplace_back(keyVal);
   }
@@ -256,8 +256,8 @@ BM_KvStoreDumpAll(uint32_t iters, size_t numOfKeysInStore) {
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
         0 /* hash */);
-    thriftVal.hash = generateHash(
-        thriftVal.version, thriftVal.originatorId, thriftVal.value);
+    thriftVal.hash_ref() = generateHash(
+        thriftVal.version, thriftVal.originatorId, thriftVal.value_ref());
 
     // Adding key to kvStore
     kvStore->setKey(key, thriftVal);

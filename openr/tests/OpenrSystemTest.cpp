@@ -151,8 +151,8 @@ fillRouteMap(
     for (const auto& nextHop : route.nextHops) {
       const auto nextHopAddr = toIPAddress(nextHop.address);
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << nextHop.address.ifName.value() << " : " << nextHopAddr << " ("
-              << nextHop.metric << ")";
+              << nextHop.address.ifName_ref().value() << " : " << nextHopAddr
+              << " (" << nextHop.metric << ")";
 
       routeMap[make_pair(node, prefix)].insert(
           {{nextHop.address.ifName.value(), nextHopAddr}, nextHop.metric});

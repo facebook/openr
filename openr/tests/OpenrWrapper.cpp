@@ -97,7 +97,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
         }
         // Parse PrefixDb
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            value.value().value.value(), serializer_);
+            value.value().value_ref().value(), serializer_);
 
         SYNCHRONIZED(ipPrefix_) {
           bool received = false;
@@ -447,7 +447,7 @@ OpenrWrapper<Serializer>::getIpPrefix() {
   SYNCHRONIZED(ipPrefix_) {
     for (const auto& key : keys.value()) {
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-          key.second.value.value(), serializer_);
+          key.second.value_ref().value(), serializer_);
       if (prefixDb.deletePrefix) {
         // Skip prefixes which are about to be deleted
         continue;
@@ -477,7 +477,7 @@ OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
     const std::vector<SparkInterfaceEntry>& interfaceEntries) {
   thrift::InterfaceDatabase ifDb(
       apache::thrift::FRAGILE, nodeId_, {}, thrift::PerfEvents());
-  ifDb.perfEvents.reset();
+  ifDb.perfEvents_ref().reset();
 
   for (const auto& interface : interfaceEntries) {
     ifDb.interfaces.emplace(

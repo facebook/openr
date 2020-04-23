@@ -708,7 +708,7 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       bool isBGP = npKv.second.type == thrift::PrefixType::BGP;
       hasBGP |= isBGP;
       hasNonBGP |= !isBGP;
-      if (isBGP and not npKv.second.mv.has_value()) {
+      if (isBGP and not npKv.second.mv_ref().has_value()) {
         missingMv = true;
         LOG(ERROR) << "Prefix entry for prefix " << toString(npKv.second.prefix)
                    << " advertised by " << npKv.first
@@ -813,7 +813,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
     if (adjDb.thisNodeName == myNodeName) {
       thrift::NextHopThrift nh;
       nh.address = toBinaryAddress(folly::IPAddressV6("::"));
-      nh.mplsAction = createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+      nh.mplsAction_ref() =
+          createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
       routeDb.mplsRoutes.emplace_back(
           createMplsRoute(topLabel, {std::move(nh)}));
       continue;
@@ -942,9 +943,10 @@ SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
   for (const auto& node : nodes.nodes) {
     auto npKv = nodePrefixes.find(node);
     if (npKv != nodePrefixes.end()) {
-      maxMinNexthopForPrefix = npKv->second.minNexthop.has_value() &&
+      maxMinNexthopForPrefix = npKv->second.minNexthop_ref().has_value() &&
               (not maxMinNexthopForPrefix.has_value() ||
-               npKv->second.minNexthop.value() > maxMinNexthopForPrefix.value())
+               npKv->second.minNexthop_ref().value() >
+                   maxMinNexthopForPrefix.value())
           ? npKv->second.minNexthop.value()
           : maxMinNexthopForPrefix;
     }
@@ -1029,7 +1031,7 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
 
     // Sanity check that OPENR_IGP_COST shouldn't exist
     if (MetricVectorUtils::getMetricEntityByType(
-            prefixEntry.mv.value(),
+            prefixEntry.mv_ref().value(),
             static_cast<int64_t>(thrift::MetricEntityType::OPENR_IGP_COST))) {
       LOG(ERROR) << "Received unexpected metric entity OPENR_IGP_COST in metric"
                  << " vector for prefix " << toString(prefix) << " from node "
@@ -1310,10 +1312,10 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
     if (bestNextHop.size() != 1) {
       return route;
     }
-    route.data = *(bestPathCalResult.bestData);
+    route.data_ref() = *(bestPathCalResult.bestData);
     // in order to announce it back to BGP, we have to have the data
-    route.prefixType = thrift::PrefixType::BGP;
-    route.bestNexthop = bestNextHop[0];
+    route.prefixType_ref() = thrift::PrefixType::BGP;
+    route.bestNexthop_ref() = bestNextHop[0];
   }
 
   return std::move(route);
@@ -1906,7 +1908,7 @@ Decision::updateNodePrefixDatabase(
 
   thrift::PrefixDatabase nodePrefixDb;
   nodePrefixDb.thisNodeName = nodeName;
-  nodePrefixDb.perfEvents.copy_from(prefixDb.perfEvents);
+  nodePrefixDb.perfEvents_ref().copy_from(prefixDb.perfEvents_ref());
   nodePrefixDb.prefixEntries.reserve(perPrefixPrefixEntries_[nodeName].size());
   for (auto& kv : perPrefixPrefixEntries_[nodeName]) {
     nodePrefixDb.prefixEntries.emplace_back(kv.second);
@@ -1936,7 +1938,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     const auto& rawVal = kv.second;
     std::string nodeName = getNodeNameFromKey(key);
 
-    if (not rawVal.value.has_value()) {
+    if (not rawVal.value_ref().has_value()) {
       // skip TTL update
       DCHECK(rawVal.ttlVersion > 0);
       continue;
@@ -1947,19 +1949,19 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         // update adjacencyDb
         auto adjacencyDb =
             fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
-                rawVal.value.value(), serializer_);
+                rawVal.value_ref().value(), serializer_);
         CHECK_EQ(nodeName, adjacencyDb.thisNodeName);
         auto rc = spfSolver_->updateAdjacencyDatabase(adjacencyDb);
         if (rc.first) {
           res.adjChanged = true;
           pendingAdjUpdates_.addUpdate(
-              myNodeName_, castToStd(adjacencyDb.perfEvents));
+              myNodeName_, castToStd(adjacencyDb.perfEvents_ref()));
         }
         if (rc.second && nodeName == myNodeName_) {
           // route attribute chanegs only matter for the local node
           res.prefixesChanged = true;
           pendingPrefixUpdates_.addUpdate(
-              myNodeName_, castToStd(adjacencyDb.perfEvents));
+              myNodeName_, castToStd(adjacencyDb.perfEvents_ref()));
         }
         if (spfSolver_->hasHolds() && orderedFibTimer_ != nullptr &&
             !orderedFibTimer_->isScheduled()) {
@@ -1971,13 +1973,13 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       if (key.find(prefixDbMarker_) == 0) {
         // update prefixDb
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            rawVal.value.value(), serializer_);
+            rawVal.value_ref().value(), serializer_);
         CHECK_EQ(nodeName, prefixDb.thisNodeName);
         auto nodePrefixDb = updateNodePrefixDatabase(key, prefixDb);
         if (spfSolver_->updatePrefixDatabase(nodePrefixDb)) {
           res.prefixesChanged = true;
           pendingPrefixUpdates_.addUpdate(
-              myNodeName_, castToStd(nodePrefixDb.perfEvents));
+              myNodeName_, castToStd(nodePrefixDb.perfEvents_ref()));
         }
         continue;
       }
@@ -2007,7 +2009,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       if (spfSolver_->deleteAdjacencyDatabase(nodeName)) {
         res.adjChanged = true;
         pendingAdjUpdates_.addUpdate(
-            myNodeName_, castToStd(thrift::PrefixDatabase().perfEvents));
+            myNodeName_, castToStd(thrift::PrefixDatabase().perfEvents_ref()));
       }
       continue;
     }
@@ -2048,7 +2050,7 @@ Decision::processStaticRouteUpdates() {
     return;
   }
 
-  fromStdOptional(maybeRouteDb.value().perfEvents, maybePerfEvents);
+  fromStdOptional(maybeRouteDb.value().perfEvents_ref(), maybePerfEvents);
   routeUpdatesQueue_.push(std::move(maybeRouteDb.value()));
 }
 
@@ -2124,7 +2126,7 @@ Decision::processPendingAdjUpdates() {
     return;
   }
 
-  fromStdOptional(maybeRouteDb.value().perfEvents, maybePerfEvents);
+  fromStdOptional(maybeRouteDb.value().perfEvents_ref(), maybePerfEvents);
   sendRouteUpdate(maybeRouteDb.value(), "DECISION_SPF");
 }
 
@@ -2147,7 +2149,7 @@ Decision::processPendingPrefixUpdates() {
     return;
   }
 
-  fromStdOptional(maybeRouteDb.value().perfEvents, maybePerfEvents);
+  fromStdOptional(maybeRouteDb.value().perfEvents_ref(), maybePerfEvents);
   sendRouteUpdate(maybeRouteDb.value(), "ROUTE_UPDATE");
 }
 
@@ -2165,7 +2167,7 @@ Decision::decrementOrderedFibHolds() {
 
     // Create empty perfEvents list. In this case we don't this route update to
     // be inculded in the Fib time
-    maybeRouteDb.value().perfEvents = thrift::PerfEvents{};
+    maybeRouteDb.value().perfEvents_ref() = thrift::PerfEvents{};
     sendRouteUpdate(maybeRouteDb.value(), "ORDERED_FIB_HOLDS_EXPIRED");
   }
 }
@@ -2182,15 +2184,15 @@ Decision::coldStartUpdate() {
   }
   // Create empty perfEvents list. In this case we don't this route update to
   // be inculded in the Fib time
-  maybeRouteDb.value().perfEvents = thrift::PerfEvents{};
+  maybeRouteDb.value().perfEvents_ref() = thrift::PerfEvents{};
   sendRouteUpdate(maybeRouteDb.value(), "COLD_START_UPDATE");
 }
 
 void
 Decision::sendRouteUpdate(
     thrift::RouteDatabase& db, std::string const& eventDescription) {
-  if (db.perfEvents.has_value()) {
-    addPerfEvent(db.perfEvents.value(), myNodeName_, eventDescription);
+  if (db.perfEvents_ref().has_value()) {
+    addPerfEvent(db.perfEvents_ref().value(), myNodeName_, eventDescription);
   }
 
   // sorting the input to meet findDeltaRoutes()'s assumption
@@ -2198,7 +2200,7 @@ Decision::sendRouteUpdate(
   std::sort(db.unicastRoutes.begin(), db.unicastRoutes.end());
   // Find out delta to be sent to Fib
   auto routeDelta = findDeltaRoutes(db, routeDb_);
-  routeDelta.perfEvents.copy_from(db.perfEvents);
+  routeDelta.perfEvents_ref().copy_from(db.perfEvents_ref());
   routeDb_ = std::move(db);
 
   // publish the new route state

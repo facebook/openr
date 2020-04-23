@@ -503,15 +503,17 @@ getBestNextHopsMpls(std::vector<thrift::NextHopThrift> const& allNextHops) {
   int32_t minCost = std::numeric_limits<int32_t>::max();
   thrift::MplsActionCode mplsActionCode{thrift::MplsActionCode::SWAP};
   for (auto const& nextHop : allNextHops) {
-    CHECK(nextHop.mplsAction.has_value());
+    CHECK(nextHop.mplsAction_ref().has_value());
     // Action can't be push (we don't push labels in MPLS routes)
     // or POP with multiple nexthops
-    CHECK(thrift::MplsActionCode::PUSH != nextHop.mplsAction->action);
-    CHECK(thrift::MplsActionCode::POP_AND_LOOKUP != nextHop.mplsAction->action);
+    CHECK(thrift::MplsActionCode::PUSH != nextHop.mplsAction_ref()->action);
+    CHECK(
+        thrift::MplsActionCode::POP_AND_LOOKUP !=
+        nextHop.mplsAction_ref()->action);
 
     if (nextHop.metric <= minCost) {
       minCost = nextHop.metric;
-      if (nextHop.mplsAction->action == thrift::MplsActionCode::PHP) {
+      if (nextHop.mplsAction_ref()->action == thrift::MplsActionCode::PHP) {
         mplsActionCode = thrift::MplsActionCode::PHP;
       }
     }
@@ -521,7 +523,7 @@ getBestNextHopsMpls(std::vector<thrift::NextHopThrift> const& allNextHops) {
   std::vector<thrift::NextHopThrift> bestNextHops;
   for (auto const& nextHop : allNextHops) {
     if (nextHop.metric == minCost and
-        nextHop.mplsAction->action == mplsActionCode) {
+        nextHop.mplsAction_ref()->action == mplsActionCode) {
       bestNextHops.emplace_back(nextHop);
     }
   }
@@ -648,27 +650,27 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
   switch (mplsAction.action) {
   case thrift::MplsActionCode::PUSH:
     // Swap label shouldn't be set
-    CHECK(not mplsAction.swapLabel.has_value());
+    CHECK(not mplsAction.swapLabel_ref().has_value());
     // Push labels should be set
-    CHECK(mplsAction.pushLabels.has_value());
+    CHECK(mplsAction.pushLabels_ref().has_value());
     // there should be atleast one push label
-    CHECK(not mplsAction.pushLabels->empty());
-    for (auto const& label : mplsAction.pushLabels.value()) {
+    CHECK(not mplsAction.pushLabels_ref()->empty());
+    for (auto const& label : mplsAction.pushLabels_ref().value()) {
       CHECK(isMplsLabelValid(label));
     }
     break;
   case thrift::MplsActionCode::SWAP:
     // Swap label should be set
-    CHECK(mplsAction.swapLabel.has_value());
-    CHECK(isMplsLabelValid(mplsAction.swapLabel.value()));
+    CHECK(mplsAction.swapLabel_ref().has_value());
+    CHECK(isMplsLabelValid(mplsAction.swapLabel_ref().value()));
     // Push labels shouldn't be set
-    CHECK(not mplsAction.pushLabels.has_value());
+    CHECK(not mplsAction.pushLabels_ref().has_value());
     break;
   case thrift::MplsActionCode::PHP:
   case thrift::MplsActionCode::POP_AND_LOOKUP:
     // Swap label should not be set
-    CHECK(not mplsAction.swapLabel.has_value());
-    CHECK(not mplsAction.pushLabels.has_value());
+    CHECK(not mplsAction.swapLabel_ref().has_value());
+    CHECK(not mplsAction.pushLabels_ref().has_value());
     break;
   default:
     CHECK(false) << "Unknown action code";
@@ -743,8 +745,8 @@ createSparkPayload(
   payload.timestamp = timestamp;
   payload.solicitResponse = solicitResponse;
   payload.supportFloodOptimization = supportFloodOptimization;
-  payload.restarting = restarting;
-  fromStdOptional(payload.areas, areas);
+  payload.restarting_ref() = restarting;
+  fromStdOptional(payload.areas_ref(), areas);
   return payload;
 }
 
@@ -812,7 +814,7 @@ createAdjDb(
   adjDb.isOverloaded = overLoadBit;
   adjDb.adjacencies = adjs;
   adjDb.nodeLabel = nodeLabel;
-  fromStdOptional(adjDb.area, area);
+  fromStdOptional(adjDb.area_ref(), area);
   return adjDb;
 }
 
@@ -842,9 +844,9 @@ createPrefixEntry(
   prefixEntry.data = data;
   prefixEntry.forwardingType = forwardingType;
   prefixEntry.forwardingAlgorithm = forwardingAlgorithm;
-  fromStdOptional(prefixEntry.ephemeral, ephemeral);
-  fromStdOptional(prefixEntry.mv, mv);
-  fromStdOptional(prefixEntry.minNexthop, minNexthop);
+  fromStdOptional(prefixEntry.ephemeral_ref(), ephemeral);
+  fromStdOptional(prefixEntry.mv_ref(), mv);
+  fromStdOptional(prefixEntry.minNexthop_ref(), minNexthop);
   return prefixEntry;
 }
 
@@ -859,13 +861,13 @@ createThriftValue(
   thrift::Value value;
   value.version = version;
   value.originatorId = originatorId;
-  fromStdOptional(value.value, data);
+  fromStdOptional(value.value_ref(), data);
   value.ttl = ttl;
   value.ttlVersion = ttlVersion;
   if (hash.has_value()) {
-    fromStdOptional(value.hash, hash);
+    fromStdOptional(value.hash_ref(), hash);
   } else {
-    value.hash = generateHash(version, originatorId, data);
+    value.hash_ref() = generateHash(version, originatorId, data);
   }
 
   return value;
@@ -882,10 +884,10 @@ createThriftPublication(
   thrift::Publication pub;
   pub.keyVals = kv;
   pub.expiredKeys = expiredKeys;
-  fromStdOptional(pub.nodeIds, nodeIds);
-  fromStdOptional(pub.tobeUpdatedKeys, keysToUpdate);
-  fromStdOptional(pub.floodRootId, floodRootId);
-  fromStdOptional(pub.area, area);
+  fromStdOptional(pub.nodeIds_ref(), nodeIds);
+  fromStdOptional(pub.tobeUpdatedKeys_ref(), keysToUpdate);
+  fromStdOptional(pub.floodRootId_ref(), floodRootId);
+  fromStdOptional(pub.area_ref(), area);
   return pub;
 }
 
@@ -898,9 +900,9 @@ createNextHop(
     bool useNonShortestRoute) {
   thrift::NextHopThrift nextHop;
   nextHop.address = addr;
-  fromStdOptional(nextHop.address.ifName, std::move(ifName));
+  fromStdOptional(nextHop.address.ifName_ref(), std::move(ifName));
   nextHop.metric = metric;
-  fromStdOptional(nextHop.mplsAction, maybeMplsAction);
+  fromStdOptional(nextHop.mplsAction_ref(), maybeMplsAction);
   nextHop.useNonShortestRoute = useNonShortestRoute;
   return nextHop;
 }
@@ -912,8 +914,8 @@ createMplsAction(
     std::optional<std::vector<int32_t>> maybePushLabels) {
   thrift::MplsAction mplsAction;
   mplsAction.action = mplsActionCode;
-  fromStdOptional(mplsAction.swapLabel, maybeSwapLabel);
-  fromStdOptional(mplsAction.pushLabels, maybePushLabels);
+  fromStdOptional(mplsAction.swapLabel_ref(), maybeSwapLabel);
+  fromStdOptional(mplsAction.pushLabels_ref(), maybePushLabels);
   checkMplsAction(mplsAction); // sanity checks
   return mplsAction;
 }
@@ -933,7 +935,7 @@ createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
   // Sanity checks
   CHECK(isMplsLabelValid(topLabel));
   for (auto const& nextHop : nextHops) {
-    CHECK(nextHop.mplsAction.has_value());
+    CHECK(nextHop.mplsAction_ref().has_value());
   }
 
   thrift::MplsRoute mplsRoute;

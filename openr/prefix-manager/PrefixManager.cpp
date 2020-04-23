@@ -101,12 +101,12 @@ PrefixManager::PrefixManager(
         removePrefixes(update.prefixes);
         break;
       case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE:
-        CHECK(update.type.has_value());
-        removePrefixesByType(update.type.value());
+        CHECK(update.type_ref().has_value());
+        removePrefixesByType(update.type_ref().value());
         break;
       case thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE:
-        CHECK(update.type.has_value());
-        syncPrefixes(update.type.value(), update.prefixes);
+        CHECK(update.type_ref().has_value());
+        syncPrefixes(update.type_ref().value(), update.prefixes);
         break;
       default:
         LOG(FATAL) << "Unknown command received. "
@@ -190,7 +190,7 @@ PrefixManager::persistPrefixDb() {
   persistentPrefixDb.thisNodeName = nodeId_;
   for (const auto& kv : prefixMap_) {
     for (const auto& kv2 : kv.second) {
-      if (not kv2.second.ephemeral.value_or(false)) {
+      if (not kv2.second.ephemeral_ref().value_or(false)) {
         persistentPrefixDb.prefixEntries.emplace_back(kv2.second);
       }
     }
@@ -207,7 +207,8 @@ PrefixManager::advertisePrefix(thrift::PrefixEntry& prefixEntry) {
   prefixDb.thisNodeName = nodeId_;
   prefixDb.prefixEntries.emplace_back(prefixEntry);
   if (enablePerfMeasurement_) {
-    prefixDb.perfEvents = addingEvents_[prefixEntry.type][prefixEntry.prefix];
+    prefixDb.perfEvents_ref() =
+        addingEvents_[prefixEntry.type][prefixEntry.prefix];
   }
   const auto prefixKey =
       PrefixKey(
@@ -271,7 +272,7 @@ PrefixManager::updateKvStore() {
       }
     }
     if (enablePerfMeasurement_ and nullptr != mostRecentEvents) {
-      prefixDb.perfEvents = *mostRecentEvents;
+      prefixDb.perfEvents_ref() = *mostRecentEvents;
     }
     const auto prefixDbKey = folly::sformat(
         "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_);
@@ -292,8 +293,9 @@ PrefixManager::updateKvStore() {
   deletedPrefixDb.thisNodeName = nodeId_;
   deletedPrefixDb.deletePrefix = true;
   if (enablePerfMeasurement_) {
-    deletedPrefixDb.perfEvents = thrift::PerfEvents{};
-    maybeAddEvent(deletedPrefixDb.perfEvents.value(), "WITHDRAW_THROTTLED");
+    deletedPrefixDb.perfEvents_ref() = thrift::PerfEvents{};
+    maybeAddEvent(
+        deletedPrefixDb.perfEvents_ref().value(), "WITHDRAW_THROTTLED");
   }
   for (auto const& key : keysToClear_) {
     auto maybePerPrefixKey = PrefixKey::fromStr(key);

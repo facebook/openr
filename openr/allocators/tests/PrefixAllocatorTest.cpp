@@ -304,7 +304,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       ASSERT_TRUE(value.has_value());
       ASSERT_TRUE(value.value().value.has_value());
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-          value.value().value.value(), serializer);
+          value.value().value_ref().value(), serializer);
       auto& prefixes = prefixDb.prefixEntries;
 
       // Verify some expectations
@@ -568,7 +568,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(value.value().value.has_value());
     auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-        value.value().value.value(), serializer);
+        value.value().value_ref().value(), serializer);
     auto& prefixes = prefixDb.prefixEntries;
 
     // Verify some expectations
@@ -845,7 +845,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(value.value().value.has_value());
     auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-        value.value().value.value(), serializer);
+        value.value().value_ref().value(), serializer);
     auto& prefixes = prefixDb.prefixEntries;
 
     // Verify some expectations

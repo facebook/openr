@@ -341,9 +341,9 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   {
     auto dump = maybe.first.value();
     EXPECT_EQ(3, dump.size());
-    EXPECT_EQ("test_value1", dump["test_key1"].value);
-    EXPECT_EQ("test_value2", dump["test_key2"].value);
-    EXPECT_EQ("test_value3", dump["test_key3"].value);
+    EXPECT_EQ("test_value1", dump["test_key1"].value_ref());
+    EXPECT_EQ("test_value2", dump["test_key2"].value_ref());
+    EXPECT_EQ("test_value3", dump["test_key3"].value_ref());
   }
 }
 
@@ -394,7 +394,7 @@ TEST_F(
   {
     auto dump = maybe.first.value();
     EXPECT_EQ(1, dump.size());
-    EXPECT_EQ("test_value1", dump["test_key"].value);
+    EXPECT_EQ("test_value1", dump["test_key"].value_ref());
   }
 }
 
@@ -445,7 +445,7 @@ TEST_F(
   {
     auto dump = maybe.first.value();
     EXPECT_EQ(1, dump.size());
-    EXPECT_EQ("test_value3", dump["test_key"].value);
+    EXPECT_EQ("test_value3", dump["test_key"].value_ref());
   }
 }
 

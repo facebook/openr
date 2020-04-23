@@ -154,7 +154,7 @@ getPrefixDbWithKspfAlgo(
         (prefixType.value() == thrift::PrefixType::BGP) and
         (not prefix.has_value())) {
       p.type = thrift::PrefixType::BGP;
-      p.mv = thrift::MetricVector();
+      p.mv_ref() = thrift::MetricVector();
     }
   }
 
@@ -163,7 +163,7 @@ getPrefixDbWithKspfAlgo(
     entry.prefix = prefix.value();
     entry.forwardingType = thrift::PrefixForwardingType::SR_MPLS;
     entry.forwardingAlgorithm = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    entry.mv = thrift::MetricVector();
+    entry.mv_ref() = thrift::MetricVector();
     entry.type = thrift::PrefixType::BGP;
     newPrefixDb.prefixEntries.push_back(entry);
     return newPrefixDb;
@@ -297,13 +297,13 @@ void
 printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
   for (const auto ucRoute : routeDb.value().unicastRoutes) {
     LOG(INFO) << "dest: " << toString(ucRoute.dest);
-    if (ucRoute.adminDistance.has_value()) {
+    if (ucRoute.adminDistance_ref().has_value()) {
       LOG(INFO) << "ad_dis: "
-                << static_cast<int>(ucRoute.adminDistance.value());
+                << static_cast<int>(ucRoute.adminDistance_ref().value());
     }
-    if (ucRoute.prefixType.has_value()) {
+    if (ucRoute.prefixType_ref().has_value()) {
       LOG(INFO) << "prefix_type: "
-                << static_cast<int>(ucRoute.prefixType.value());
+                << static_cast<int>(ucRoute.prefixType_ref().value());
     }
 
     LOG(INFO) << "doNotInstall: " << ucRoute.doNotInstall;
@@ -311,7 +311,7 @@ printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
     for (const auto nh : ucRoute.nextHops) {
       LOG(INFO) << "nexthops: " << toString(nh);
     }
-    if (ucRoute.bestNexthop.has_value()) {
+    if (ucRoute.bestNexthop_ref().has_value()) {
       const auto nh = ucRoute.bestNexthop.value();
       LOG(INFO) << "best next hop: " << toString(nh);
     }
@@ -789,7 +789,8 @@ TEST(BGPRedistribution, BasicOperation) {
   // decrease the one of second node's metrics and expect to see the route
   // toward just the first
   prefixDb2WithBGP.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .metric.front()--;
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
@@ -799,7 +800,8 @@ TEST(BGPRedistribution, BasicOperation) {
 
   // now make 2 better
   prefixDb2WithBGP.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .metric.front() += 2;
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
@@ -820,11 +822,13 @@ TEST(BGPRedistribution, BasicOperation) {
 
   // now make that a tie break for a multipath route
   prefixDb1WithBGP.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .isBestPathTieBreaker = true;
   prefixDb2WithBGP.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .isBestPathTieBreaker = true;
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1WithBGP));
@@ -841,7 +845,7 @@ TEST(BGPRedistribution, BasicOperation) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, bgpPrefix1),
-          Truly([&data2](auto i) { return i.data == data2; }),
+          Truly([&data2](auto i) { return i.data_ref() == data2; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -945,7 +949,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data == data1; }),
+          Truly([&data1](auto i) { return i.data_ref() == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -963,7 +967,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data == data1; }),
+          Truly([&data1](auto i) { return i.data_ref() == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -981,7 +985,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data == data1; }),
+          Truly([&data1](auto i) { return i.data_ref() == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -999,7 +1003,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data == data1; }),
+          Truly([&data1](auto i) { return i.data_ref() == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -1016,7 +1020,7 @@ TEST(BGPRedistribution, IgpMetric) {
       routeDb.value().unicastRoutes,
       testing::Contains(AllOf(
           Field(&thrift::UnicastRoute::dest, addr1),
-          Truly([&data1](auto i) { return i.data == data1; }),
+          Truly([&data1](auto i) { return i.data_ref() == data1; }),
           Field(
               &thrift::UnicastRoute::nextHops,
               testing::UnorderedElementsAre(
@@ -2040,7 +2044,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   auto prefixDBTwo = prefixDBs["2"];
 
   // set metric vector for two prefixes in two nodes to be same
-  prefixDBOne.prefixEntries[1].mv = mv1;
+  prefixDBOne.prefixEntries[1].mv_ref() = mv1;
   prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[1]);
 
   spfSolver->updatePrefixDatabase(prefixDBOne);
@@ -2069,7 +2073,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   // decrease mv for the second node, now router 3 should point to 1
   prefixDBTwo.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .metric.front()--;
 
@@ -2088,7 +2093,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       {"3"})[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
 
   EXPECT_EQ(
-      route.bestNexthop.value(),
+      route.bestNexthop_ref().value(),
       createNextHop(
           v4Enabled ? addr1V4.prefixAddress : addr1.prefixAddress,
           std::nullopt,
@@ -2098,7 +2103,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   // increase mv for the second node by 2, now router 3 should point to 2
   prefixDBTwo.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .metric.front() += 2;
   spfSolver->updatePrefixDatabase(prefixDBTwo);
@@ -2113,7 +2119,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       {"3"})[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))];
 
   EXPECT_EQ(
-      route.bestNexthop,
+      route.bestNexthop_ref(),
       createNextHop(
           v4Enabled ? addr2V4.prefixAddress : addr2.prefixAddress,
           std::nullopt,
@@ -2123,12 +2129,14 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   // set the tie breaker to be true. in this case, both nodes will be selected
   prefixDBTwo.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .isBestPathTieBreaker = true;
 
   prefixDBOne.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .isBestPathTieBreaker = true;
   spfSolver->updatePrefixDatabase(prefixDBTwo);
@@ -2161,14 +2169,15 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       0,
       std::nullopt,
       false);
-  EXPECT_THAT(route.bestNexthop.value(), AnyOf(bestNextHop1, bestNextHop2));
+  EXPECT_THAT(
+      route.bestNexthop_ref().value(), AnyOf(bestNextHop1, bestNextHop2));
 
-  if (route.bestNexthop == bestNextHop1) {
-    EXPECT_EQ(route.data, "123");
+  if (route.bestNexthop_ref() == bestNextHop1) {
+    EXPECT_EQ(route.data_ref(), "123");
   } else {
-    EXPECT_EQ(route.data, "");
+    EXPECT_EQ(route.data_ref(), "");
   }
-  EXPECT_EQ(route.prefixType, thrift::PrefixType::BGP);
+  EXPECT_EQ(route.prefixType_ref(), thrift::PrefixType::BGP);
 }
 
 //
@@ -2973,7 +2982,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   // adj13_1 as nexthop
   prefixDBFour.prefixEntries.pop_back();
   apache::thrift::fromFollyOptional(
-      newPrefix.minNexthop, folly::make_optional<int64_t>(2));
+      newPrefix.minNexthop_ref(), folly::make_optional<int64_t>(2));
   prefixDBFour.prefixEntries.push_back(newPrefix);
   spfSolver->updatePrefixDatabase(prefixDBFour);
   routeMap = getRouteMap(*spfSolver, {"1"});
@@ -2993,7 +3002,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   // becasue of purging logic we have for any cast ip.
   auto prefixDBThr = prefixDBs["3"];
   apache::thrift::fromFollyOptional(
-      newPrefix.minNexthop, folly::make_optional<int64_t>(4));
+      newPrefix.minNexthop_ref(), folly::make_optional<int64_t>(4));
   prefixDBThr.prefixEntries.push_back(newPrefix);
   spfSolver->updatePrefixDatabase(prefixDBThr);
   routeMap = getRouteMap(*spfSolver, {"1"});
@@ -3148,7 +3157,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   auto prefixDBTwo = prefixDBs["2"];
 
   // set metric vector for addr1 prefixes in two nodes to be same
-  prefixDBOne.prefixEntries[0].mv = mv1;
+  prefixDBOne.prefixEntries[0].mv_ref() = mv1;
   prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[0]);
 
   spfSolver->updatePrefixDatabase(prefixDBOne);
@@ -3164,11 +3173,12 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // on best node is 2. In such case, we should allow the route to be
   // programmed and announced.
   prefixDBTwo.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .metric.front()--;
-  prefixDBTwo.prefixEntries.back().minNexthop = 4;
-  prefixDBOne.prefixEntries.back().minNexthop = 2;
+  prefixDBTwo.prefixEntries.back().minNexthop_ref() = 4;
+  prefixDBOne.prefixEntries.back().minNexthop_ref() = 2;
   spfSolver->updatePrefixDatabase(prefixDBTwo);
   spfSolver->updatePrefixDatabase(prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"});
@@ -3182,8 +3192,8 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // node 1 is the preferred node. Set threshold on Node 1 to be 4.
   // threshold on  node 2 is 2. In such case, threshold should be respected
   // and we should not program/annouce any routes
-  prefixDBTwo.prefixEntries.back().minNexthop = 2;
-  prefixDBOne.prefixEntries.back().minNexthop = 4;
+  prefixDBTwo.prefixEntries.back().minNexthop_ref() = 2;
+  prefixDBOne.prefixEntries.back().minNexthop_ref() = 4;
   spfSolver->updatePrefixDatabase(prefixDBTwo);
   spfSolver->updatePrefixDatabase(prefixDBOne);
   routeMap = getRouteMap(*spfSolver, {"3"});
@@ -3191,14 +3201,15 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // validate router 3
   EXPECT_EQ(routeMap.find(make_pair("3", toString(addr1))), routeMap.end());
   // reset min nexthop to rest of checks
-  prefixDBTwo.prefixEntries.back().minNexthop.reset();
-  prefixDBOne.prefixEntries.back().minNexthop.reset();
+  prefixDBTwo.prefixEntries.back().minNexthop_ref().reset();
+  prefixDBOne.prefixEntries.back().minNexthop_ref().reset();
   spfSolver->updatePrefixDatabase(prefixDBTwo);
   spfSolver->updatePrefixDatabase(prefixDBOne);
 
   // decrease mv for the second node, now router 3 should point to 2
   prefixDBTwo.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .metric.front() += 2;
   spfSolver->updatePrefixDatabase(prefixDBTwo);
@@ -3212,12 +3223,14 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   // set the tie breaker to be true. in this case, both nodes will be selected
   prefixDBTwo.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .isBestPathTieBreaker = true;
 
   prefixDBOne.prefixEntries.back()
-      .mv.value()
+      .mv_ref()
+      .value()
       .metrics[numMetrics - 1]
       .isBestPathTieBreaker = true;
   spfSolver->updatePrefixDatabase(prefixDBTwo);
@@ -4086,8 +4099,9 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   thrift::NextHopThrift nh, nh1, nh2;
   nh.address = toBinaryAddress(folly::IPAddressV6("::1"));
   nh1.address = toBinaryAddress(folly::IPAddressV6("::2"));
-  nh.mplsAction,
-      nh1.mplsAction = createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+  nh.mplsAction_ref(),
+      nh1.mplsAction_ref() =
+          createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
   thrift::MplsRoute route;
   route.topLabel = 32011;
   route.nextHops = {nh};

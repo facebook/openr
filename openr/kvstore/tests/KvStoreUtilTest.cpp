@@ -177,8 +177,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     ASSERT_TRUE(maybe.first.has_value());
     auto pub = maybe.first.value();
     EXPECT_EQ(2, pub.size());
-    EXPECT_EQ("test_value1", pub[key1].value);
-    EXPECT_EQ("test_value2", pub[key2].value);
+    EXPECT_EQ("test_value1", pub[key1].value_ref());
+    EXPECT_EQ("test_value2", pub[key2].value_ref());
   }
 
   // Step6: shutdown both thriftSevers and verify

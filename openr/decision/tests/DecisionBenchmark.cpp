@@ -122,7 +122,7 @@ class DecisionWrapper {
       bool overloadBit = false) {
     auto adjDb = createAdjDb(nodeId, adjs, 0, overloadBit);
     if (perfEvents.has_value()) {
-      fromStdOptional(adjDb.perfEvents, perfEvents);
+      fromStdOptional(adjDb.perfEvents_ref(), perfEvents);
     }
     return thrift::Value(
         FRAGILE,
@@ -267,8 +267,8 @@ sendRecvUpdate(
   auto routes2 = decisionWrapper->recvMyRouteDb();
 
   // Extract time from perfevent and accumulate processing time
-  if (routes2.perfEvents.has_value()) {
-    accumulatePerfTimes(routes2.perfEvents.value(), processTimes);
+  if (routes2.perfEvents_ref().has_value()) {
+    accumulatePerfTimes(routes2.perfEvents_ref().value(), processTimes);
   }
 }
 

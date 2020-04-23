@@ -81,7 +81,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
           auto& val = kv.second;
           // check if we have any value update.
           // Ttl refreshing won't update any value.
-          if (!val.value.has_value()) {
+          if (!val.value_ref().has_value()) {
             continue;
           }
 
@@ -506,7 +506,7 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
   // Only care about "adj:" key
   params.prefix = Constants::kAdjDbMarker;
   // Only dump difference between KvStore and client snapshot
-  params.keyValHashes = std::move(adjKeyVals);
+  params.keyValHashes_ref() = std::move(adjKeyVals);
 
   // Explicitly do SYNC call to get HASH_DUMP from KvStore
   std::unique_ptr<thrift::Publication> thriftPub{nullptr};
@@ -523,8 +523,8 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
     VLOG(3) << "AdjKey has been added/modified. Notify immediately";
     p.setValue(true);
   } else if (
-      thriftPub->tobeUpdatedKeys.has_value() &&
-      thriftPub->tobeUpdatedKeys.value().size() > 0) {
+      thriftPub->tobeUpdatedKeys_ref().has_value() &&
+      thriftPub->tobeUpdatedKeys_ref().value().size() > 0) {
     VLOG(3) << "AdjKey has been deleted/expired. Notify immediately";
     p.setValue(true);
   } else {

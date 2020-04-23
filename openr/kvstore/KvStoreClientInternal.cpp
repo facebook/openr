@@ -176,7 +176,7 @@ KvStoreClientInternal::persistKey(
       ttl.count(),
       0 /* ttl version */,
       std::nullopt /* hash */);
-  CHECK(thriftValue.value);
+  CHECK(thriftValue.value_ref());
 
   // Retrieve the existing value for the key. If key is persisted before then
   // it is the one we have cached locally else we need to fetch it from KvStore
@@ -186,11 +186,12 @@ KvStoreClientInternal::persistKey(
     if (maybeValue.has_value()) {
       thriftValue = maybeValue.value();
       // TTL update pub is never saved in kvstore
-      DCHECK(thriftValue.value);
+      DCHECK(thriftValue.value_ref());
     }
   } else {
     thriftValue = keyIt->second;
-    if (thriftValue.value.value() == value and thriftValue.ttl == ttl.count()) {
+    if (thriftValue.value_ref().value() == value and
+        thriftValue.ttl == ttl.count()) {
       // this is a no op, return early and change no state
       return false;
     }
@@ -206,10 +207,11 @@ KvStoreClientInternal::persistKey(
     thriftValue.version = 1;
     valueChange = true;
   } else if (
-      thriftValue.originatorId != nodeId_ || *thriftValue.value != value) {
+      thriftValue.originatorId != nodeId_ ||
+      *thriftValue.value_ref() != value) {
     thriftValue.version++;
     thriftValue.ttlVersion = 0;
-    thriftValue.value = value;
+    thriftValue.value_ref() = value;
     thriftValue.originatorId = nodeId_;
     valueChange = true;
   }
@@ -261,7 +263,7 @@ KvStoreClientInternal::buildThriftValue(
   // Create 'thrift::Value' object which will be sent to KvStore
   thrift::Value thriftValue = createThriftValue(
       version, nodeId_, value, ttl.count(), 0 /* ttl version */, 0 /* hash */);
-  CHECK(thriftValue.value);
+  CHECK(thriftValue.value_ref());
 
   // Use one version number higher than currently in KvStore if not specified
   if (!version) {
@@ -309,7 +311,7 @@ KvStoreClientInternal::setKey(
     std::string const& key,
     thrift::Value const& thriftValue,
     std::string const& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  CHECK(thriftValue.value);
+  CHECK(thriftValue.value_ref());
 
   std::unordered_map<std::string, thrift::Value> keyVals;
   keyVals.emplace(key, thriftValue);
@@ -352,8 +354,8 @@ KvStoreClientInternal::scheduleTtlUpdates(
       ttl,
       ttlVersion /* ttl version */,
       0 /* hash */);
-  ttlThriftValue.value.reset();
-  CHECK(not ttlThriftValue.value.has_value());
+  ttlThriftValue.value_ref().reset();
+  CHECK(not ttlThriftValue.value_ref().has_value());
 
   // renew before Ttl expires about every ttl/3, i.e., try twice
   // use ExponentialBackoff to track remaining time
@@ -408,7 +410,7 @@ KvStoreClientInternal::clearKey(
   thriftValue.version++;
   thriftValue.ttl = ttl.count();
   thriftValue.ttlVersion = 0;
-  thriftValue.value = std::move(keyValue);
+  thriftValue.value_ref() = std::move(keyValue);
 
   std::unordered_map<std::string, thrift::Value> keyVals;
   keyVals.emplace(key, std::move(thriftValue));
@@ -537,8 +539,8 @@ KvStoreClientInternal::processPublication(
   // Go through received key-values and find out the ones which need update
   std::string area{thrift::KvStore_constants::kDefaultArea()};
 
-  if (publication.area.has_value()) {
-    area = publication.area.value();
+  if (publication.area_ref().has_value()) {
+    area = publication.area_ref().value();
   }
 
   auto& persistedKeyVals = persistedKeyVals_[area];
@@ -549,7 +551,7 @@ KvStoreClientInternal::processPublication(
     auto const& key = kv.first;
     auto const& rcvdValue = kv.second;
 
-    if (not rcvdValue.value) {
+    if (not rcvdValue.value_ref()) {
       // ignore TTL update
       continue;
     }
@@ -636,7 +638,7 @@ KvStoreClientInternal::processPublication(
 
     // Need to re-advertise if value doesn't matches. This can happen when our
     // update is reflected back
-    if (!valueChange and currentValue.value != rcvdValue.value) {
+    if (!valueChange and currentValue.value_ref() != rcvdValue.value_ref()) {
       currentValue.originatorId = nodeId_;
       currentValue.version++;
       currentValue.ttlVersion = 0;
@@ -707,7 +709,8 @@ KvStoreClientInternal::advertisePendingKeys() {
                      thriftValue.ttlVersion,
                      thriftValue.ttl,
                      area);
-      VLOG(2) << "With value: " << folly::humanify(thriftValue.value.value());
+      VLOG(2) << "With value: "
+              << folly::humanify(thriftValue.value_ref().value());
 
       if (not backoff.canTryNow()) {
         timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
@@ -719,7 +722,7 @@ KvStoreClientInternal::advertisePendingKeys() {
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
       // Set in keyVals which is going to be advertise to the kvStore.
-      DCHECK(thriftValue.value);
+      DCHECK(thriftValue.value_ref());
       keyVals.emplace(key, thriftValue);
       keys.push_back(key);
     }
@@ -778,7 +781,7 @@ KvStoreClientInternal::advertiseTtlUpdates() {
       // bump ttl version
       thriftValue.ttlVersion++;
       // Set in keyVals which is going to be advertised to the kvStore.
-      DCHECK(not thriftValue.value);
+      DCHECK(not thriftValue.value_ref());
 
       VLOG(1)
           << "Advertising ttl update (key, version, originatorId, ttlVersion, area)"
@@ -819,13 +822,13 @@ KvStoreClientInternal::setKeysHelper(
 
   // Debugging purpose print-out
   for (auto const& kv : keyVals) {
-    VLOG(3) << "Advertising key: " << kv.first
-            << ", version: " << kv.second.version
-            << ", originatorId: " << kv.second.originatorId
-            << ", ttlVersion: " << kv.second.ttlVersion
-            << ", val: " << (kv.second.value.has_value() ? "valid" : "null")
-            << ", area: " << area;
-    if (not kv.second.value.has_value()) {
+    VLOG(3)
+        << "Advertising key: " << kv.first << ", version: " << kv.second.version
+        << ", originatorId: " << kv.second.originatorId
+        << ", ttlVersion: " << kv.second.ttlVersion
+        << ", val: " << (kv.second.value_ref().has_value() ? "valid" : "null")
+        << ", area: " << area;
+    if (not kv.second.value_ref().has_value()) {
       // avoid empty optinal exception
       continue;
     }

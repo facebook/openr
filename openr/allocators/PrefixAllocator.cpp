@@ -277,13 +277,13 @@ PrefixAllocator::parseParamsStr(const std::string& paramStr) noexcept {
 
 void
 PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
-  CHECK(value.value.has_value());
+  CHECK(value.value_ref().has_value());
 
   // Parse thrift::Value into thrift::StaticAllocation
   thrift::StaticAllocation staticAlloc;
   try {
     staticAlloc = fbzmq::util::readThriftObjStr<thrift::StaticAllocation>(
-        *value.value, serializer_);
+        *value.value_ref(), serializer_);
   } catch (std::exception const& e) {
     LOG(ERROR) << "Error parsing static prefix allocation value. Error: "
                << folly::exceptionStr(e);
@@ -326,8 +326,8 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
 
 void
 PrefixAllocator::processAllocParamUpdate(thrift::Value const& value) {
-  CHECK(value.value.has_value());
-  auto maybeParams = parseParamsStr(value.value.value());
+  CHECK(value.value_ref().has_value());
+  auto maybeParams = parseParamsStr(value.value_ref().value());
   if (maybeParams.hasError()) {
     LOG(ERROR) << "Malformed prefix-allocator params. " << maybeParams.error();
     startAllocation(std::nullopt);
@@ -344,7 +344,7 @@ PrefixAllocator::checkE2eAllocIndex(uint32_t index) {
 void
 PrefixAllocator::processNetworkAllocationsUpdate(
     thrift::Value const& e2eValue) {
-  CHECK(e2eValue.value.has_value());
+  CHECK(e2eValue.value_ref().has_value());
   if (!allocParams_.has_value()) {
     return;
   }
@@ -354,7 +354,7 @@ PrefixAllocator::processNetworkAllocationsUpdate(
   thrift::StaticAllocation staticAlloc;
   try {
     staticAlloc = fbzmq::util::readThriftObjStr<thrift::StaticAllocation>(
-        *e2eValue.value, serializer_);
+        *e2eValue.value_ref(), serializer_);
     /* skip if same version */
     if (e2eAllocIndex_.first == e2eValue.version) {
       return;
@@ -643,11 +643,11 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
       ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
       : thrift::PrefixForwardingAlgorithm::SP_ECMP;
-  prefixEntry.ephemeral.reset();
+  prefixEntry.ephemeral_ref().reset();
 
   thrift::PrefixUpdateRequest request;
   request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
-  request.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  request.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
   request.prefixes = {prefixEntry};
   prefixUpdatesQueue_.push(std::move(request));
 
@@ -729,7 +729,7 @@ PrefixAllocator::withdrawMyPrefix() {
   // withdraw prefix via prefixMgrClient
   thrift::PrefixUpdateRequest request;
   request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
-  request.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  request.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
   prefixUpdatesQueue_.push(std::move(request));
 }
 

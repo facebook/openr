@@ -512,11 +512,11 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     openrCtrlThriftClient_->sync_getKvStoreHashFiltered(pub, params);
     EXPECT_EQ(3, pub.keyVals.size());
     auto value3 = keyVals.at("key3");
-    value3.value.reset();
+    value3.value_ref().reset();
     auto value33 = keyVals.at("key33");
-    value33.value.reset();
+    value33.value_ref().reset();
     auto value333 = keyVals.at("key333");
-    value333.value.reset();
+    value333.value_ref().reset();
     EXPECT_EQ(value3, pub.keyVals["key3"]);
     EXPECT_EQ(value33, pub.keyVals["key33"]);
     EXPECT_EQ(value333, pub.keyVals["key333"]);
@@ -547,13 +547,13 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     ASSERT_NE(ret.infos.end(), ret.infos.find(nodeName));
     EXPECT_EQ(0, ret.counters.neighborCounters.size());
     EXPECT_EQ(1, ret.counters.rootCounters.size());
-    EXPECT_EQ(nodeName, ret.floodRootId);
+    EXPECT_EQ(nodeName, ret.floodRootId_ref());
     EXPECT_EQ(0, ret.floodPeers.size());
 
     thrift::SptInfo sptInfo = ret.infos.at(nodeName);
     EXPECT_EQ(0, sptInfo.cost);
     ASSERT_TRUE(sptInfo.parent.has_value());
-    EXPECT_EQ(nodeName, sptInfo.parent.value());
+    EXPECT_EQ(nodeName, sptInfo.parent_ref().value());
     EXPECT_EQ(0, sptInfo.children.size());
   }
 
@@ -638,7 +638,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
               auto& pub = *t;
               EXPECT_EQ(1, pub.keyVals.size());
               ASSERT_EQ(1, pub.keyVals.count(key));
-              EXPECT_EQ("value1", pub.keyVals.at(key).value.value());
+              EXPECT_EQ("value1", pub.keyVals.at(key).value_ref().value());
               EXPECT_EQ(received + 1, pub.keyVals.at(key).version);
               received++;
             });
@@ -698,7 +698,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
               auto& pub = *t;
               EXPECT_EQ(1, pub.keyVals.size());
               ASSERT_EQ(1, pub.keyVals.count(key));
-              EXPECT_EQ("value1", pub.keyVals.at(key).value.value());
+              EXPECT_EQ("value1", pub.keyVals.at(key).value_ref().value());
               EXPECT_EQ(received + 4, pub.keyVals.at(key).version);
               received++;
             });
