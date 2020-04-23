@@ -198,6 +198,10 @@ class SimpleSpark2Fixture : public Spark2Fixture {
   std::shared_ptr<SparkWrapper> node2;
 };
 
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// increase/decrease RTT, expect NEIGHBOR_RTT_CHANGE event
+//
 TEST_F(SimpleSpark2Fixture, RttTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture RttTest finished";
@@ -238,6 +242,11 @@ TEST_F(SimpleSpark2Fixture, RttTest) {
   }
 }
 
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// make it uni-directional, expect both side to lose adj
+// due to missing node info in `ReflectedNeighborInfo`
+//
 TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fxiture UnidirectionTest finished";
@@ -272,6 +281,11 @@ TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
   }
 }
 
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// restart one of them within GR window, make sure we get neighbor
+// "RESTARTED" event due to graceful restart window.
+//
 TEST_F(SimpleSpark2Fixture, GRTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture GracefulRestartTest finished";
@@ -285,8 +299,7 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
 
   node2.reset();
 
-  // node-1 should report node-2 as 'RESTARTING' when it received GRMsg from
-  // node-2
+  // node-1 should report node-2 as 'RESTARTING'
   {
     auto event = node1->waitForEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING);
@@ -300,7 +313,7 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
 
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
-  // node-1 should report node-2 as 'RESTARTED' when it receive helloMsg
+  // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
   // with wrapped seqNum
   {
     auto event =
@@ -334,6 +347,11 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
   }
 }
 
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// gracefully shut down one of them but NOT bring it back,
+// make sure we get neighbor "DOWN" event due to GR timer expiring.
+//
 TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture GRTimerExpiredTest finished";
@@ -363,6 +381,11 @@ TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
   }
 }
 
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// stop the bi-direction communication from each other.
+// Observe neighbor going DOWN due to hold timer expiration.
+//
 TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture HeartbeatTimerExpireTest finished";
@@ -380,34 +403,27 @@ TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
 
   // wait for sparks to lose each other
   {
-    auto event =
+    LOG(INFO) << "Waiting for both nodes to time out with each other";
+
+    auto event1 =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.has_value());
+    ASSERT_TRUE(event1.has_value());
 
-    // record time for expiration time test
-    auto endTime = std::chrono::steady_clock::now();
-    ASSERT_TRUE(endTime - startTime >= kHeartbeatHoldTime);
-    ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
-
-    LOG(INFO) << "node-1 reported down adjacency to node-2";
-  }
-
-  LOG(INFO) << "Waiting for node-2 to time-out node-1";
-
-  {
-    auto event =
+    auto event2 =
         node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
-    ASSERT_TRUE(event.has_value());
+    ASSERT_TRUE(event2.has_value());
 
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime >= kHeartbeatHoldTime);
     ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
-
-    LOG(INFO) << "node-2 reported down adjacency to node-1";
   }
 }
 
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// remove/add interface from one instance's perspective
+//
 TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture InterfaceRemovalTest finished";
@@ -481,6 +497,60 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   }
 }
 
+//
+// Start 2 Spark instances within different domains. Then
+// make sure they can't form adj as helloMsg being ignored.
+//
+TEST_F(Spark2Fixture, DomainTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture DomainTest finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start 2 spark instances within different domain
+  std::string domainLannister = "A_Lannister_Always_Pays_His_Debts";
+  std::string domainStark = "Winter_Is_Coming";
+  std::string nodeLannister = "Lannister";
+  std::string nodeStark = "Stark";
+  auto node1 = createSpark(domainLannister, nodeLannister, 1);
+  auto node2 = createSpark(domainStark, nodeStark, 2);
+
+  // start tracking iface1 and iface2
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  {
+    EXPECT_FALSE(node1
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+    EXPECT_FALSE(node2
+                     ->waitForEvent(
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
+                         kGRHoldTime,
+                         kGRHoldTime * 2)
+                     .has_value());
+    EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeStark).has_value());
+    EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeLannister).has_value());
+  }
+}
+
+//
+// Start 2 Spark instances, but block one from hearing another. Then
+// shutdown the peer that cannot hear, and make sure there is no DOWN
+// event generated for this one.
+//
 TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture IgnoreUnidirectionalPeerTest finished";
@@ -529,6 +599,10 @@ TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
   }
 }
 
+//
+// Start an old Spark instance and another Spark2 instance and
+// make sure they can form adj due to backward compatibiility.
+//
 TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture BackwardCompatibilityTest finished";
@@ -636,6 +710,10 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
   }
 }
 
+//
+// Start 1 Spark instace and make its interfaces connected to its own
+// Make sure pkt loop can be handled gracefully and no ADJ will be formed.
+//
 TEST_F(Spark2Fixture, LoopedHelloPktTest) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture LoopedHelloPktTest finished";
@@ -669,6 +747,13 @@ TEST_F(Spark2Fixture, LoopedHelloPktTest) {
   }
 }
 
+//
+// Start 2 Spark instances within different v4 subnet. Then
+// make sure they can't form adj as NEGOTIATION failed. Bring
+// down the interface and make sure no crash happened for tracked
+// neighbors. Then put them in same subnet, make sure instances
+// will form adj with each other.
+//
 TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture LinkDownWithoutAdjFormed finished";
@@ -716,7 +801,7 @@ TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
 
     EXPECT_FALSE(node2
                      ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
+                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
                          kGRHoldTime,
                          kGRHoldTime * 2)
                      .has_value());
@@ -747,6 +832,12 @@ TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
   }
 }
 
+//
+// Start 2 Spark instances within different v4 subnet. Then
+// make sure they can't form adj as NEGOTIATION failed. Check
+// neighbor state within NEGOTIATE/WARM depending on whether
+// new helloMsg is received.
+//
 TEST_F(Spark2Fixture, InvalidV4Subnet) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture InvalidV4Subnet finished";
@@ -812,6 +903,12 @@ TEST_F(Spark2Fixture, InvalidV4Subnet) {
   }
 }
 
+//
+// Positive case for AREA:
+//
+// Start 2 Spark instances with areaConfig and make sure they
+// can form adj with each other in specified AREA.
+//
 TEST_F(Spark2Fixture, AreaMatch) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture AreaMatch finished";
@@ -854,7 +951,6 @@ TEST_F(Spark2Fixture, AreaMatch) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   // RSW001 and FSW002 node should form adj in area 2 due to regex matching
-  // Area 1 will be ignored although it is part of common areas.
   {
     auto event1 =
         node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
@@ -870,6 +966,12 @@ TEST_F(Spark2Fixture, AreaMatch) {
   }
 }
 
+//
+// Negative case for AREA:
+//
+// Start 2 Spark instances with areaConfig and make sure they
+// can NOT form adj due to wrong AREA regex matching.
+//
 TEST_F(Spark2Fixture, NoAreaMatch) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture NoAreaMatch finished";
@@ -928,6 +1030,12 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
   }
 }
 
+//
+// Negative case for AREA:
+//
+// Start 2 Spark instances with areaConfig and make sure they
+// can NOT form adj due to inconsistent AREA negotiation result.
+//
 TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture InconsistentArea finished";
@@ -998,6 +1106,13 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
   }
 }
 
+//
+// Positive case for AREA:
+//
+// Start 1 Spark without AREA config supported, whereas starting
+// another Spark with areaConfig passed in. Make sure they can
+// form adj in `defaultArea` for backward compatibility.
+//
 TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
   SCOPE_EXIT {
     LOG(INFO) << "Spark2Fixture InconsistentArea finished";
