@@ -75,42 +75,6 @@ NetlinkSystemHandler::doGetAllLinks() {
   return linkDb;
 }
 
-folly::Future<std::unique_ptr<std::vector<thrift::NeighborEntry>>>
-NetlinkSystemHandler::future_getAllNeighbors() {
-  VLOG(3) << "Query all reachable neighbors from Netlink";
-
-  folly::Promise<std::unique_ptr<std::vector<thrift::NeighborEntry>>> promise;
-  auto future = promise.getFuture();
-  mainEventLoop_->runInEventLoop([this, p = std::move(promise)]() mutable {
-    try {
-      auto links = doGetAllNeighbors();
-      p.setValue(std::move(links));
-    } catch (const std::exception& ex) {
-      p.setException(ex);
-    }
-  });
-  return future;
-}
-
-std::unique_ptr<std::vector<openr::thrift::NeighborEntry>>
-NetlinkSystemHandler::doGetAllNeighbors() {
-  auto neighborDb = std::make_unique<std::vector<thrift::NeighborEntry>>();
-  const auto& neighbors = netlinkSocket_->getAllReachableNeighbors().get();
-
-  neighborDb->clear();
-
-  for (const auto& kv : neighbors) {
-    thrift::NeighborEntry neighborEntry = thrift::NeighborEntry(
-        FRAGILE,
-        kv.first.first,
-        toBinaryAddress(kv.first.second),
-        kv.second.getLinkAddress().value().toString(),
-        true);
-    neighborDb->push_back(neighborEntry);
-  }
-  return neighborDb;
-}
-
 folly::Future<folly::Unit>
 NetlinkSystemHandler::future_addIfaceAddresses(
     std::unique_ptr<std::string> iface,

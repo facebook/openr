@@ -43,8 +43,6 @@ class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
 
   void getAllLinks(std::vector<thrift::Link>& linkDb) override;
 
-  void getAllNeighbors(std::vector<thrift::NeighborEntry>& neighDb) override;
-
   void sendLinkEvent(
       const std::string& ifName, const uint64_t ifIndex, const bool isUp);
 
@@ -56,9 +54,6 @@ class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
  private:
   // Used to publish Netlink event
   std::unique_ptr<PlatformPublisher> platformPublisher_;
-
-  // Interface/nextHop-IP => MacAddress mapping
-  folly::Synchronized<fbnl::NlNeighbors> neighborDb_{};
 
   // Interface/link name => link attributes mapping
   folly::Synchronized<fbnl::NlLinks> linkDb_{};

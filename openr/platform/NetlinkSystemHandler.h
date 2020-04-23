@@ -48,9 +48,6 @@ class NetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   folly::Future<std::unique_ptr<std::vector<thrift::Link>>> future_getAllLinks()
       override;
 
-  folly::Future<std::unique_ptr<std::vector<thrift::NeighborEntry>>>
-  future_getAllNeighbors() override;
-
   folly::Future<folly::Unit> future_addIfaceAddresses(
       std::unique_ptr<std::string> iface,
       std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) override;

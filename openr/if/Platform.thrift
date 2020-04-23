@@ -115,9 +115,6 @@ service SystemService {
   list<Link> getAllLinks()
     throws (1: PlatformError error)
 
-  list<NeighborEntry> getAllNeighbors()
-    throws (1: PlatformError error)
-
   /**
    * Backward compatibility has been considered
    * As of now all the production platforms use our own SystemHandler
