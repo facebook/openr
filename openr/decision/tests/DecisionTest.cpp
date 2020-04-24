@@ -24,6 +24,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/decision/Decision.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
@@ -3735,18 +3736,17 @@ class DecisionTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {
+    auto tConfig = getBasicOpenrConfig();
+    tConfig.node_name = "1";
+    tConfig.enable_v4_ref() = true;
+    config = std::make_shared<Config>(tConfig);
+
     decision = make_shared<Decision>(
-        "1", /* node name */
-        true, /* enable v4 */
+        config,
         true, /* computeLfaPaths */
-        false, /* enableOrderedFib */
         false, /* bgpDryRun */
-        false, /* bgpUseIgpMetric */
-        AdjacencyDbMarker{"adj:"},
-        PrefixDbMarker{"prefix:"},
         debounceTimeoutMin,
         debounceTimeoutMax,
-        std::nullopt,
         kvStoreUpdatesQueue.getReader(),
         staticRoutesUpdateQueue.getReader(),
         routeUpdatesQueue,
@@ -3903,6 +3903,7 @@ class DecisionTestFixture : public ::testing::Test {
   // ZMQ context for IO processing
   fbzmq::Context zeromqContext{};
 
+  std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;

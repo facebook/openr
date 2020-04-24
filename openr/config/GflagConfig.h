@@ -77,8 +77,9 @@ class GflagConfig final {
     if (auto v = FLAGS_enable_netlink_system_handler) {
       config.enable_netlink_system_handler_ref() = v;
     }
-
-    config.eor_time_s = FLAGS_decision_graceful_restart_window_s;
+    if (auto v = FLAGS_decision_graceful_restart_window_s; v >= 0) {
+      config.eor_time_s_ref() = v;
+    }
 
     config.prefix_forwarding_type = FLAGS_prefix_fwd_type_mpls
         ? thrift::PrefixForwardingType::SR_MPLS
@@ -172,6 +173,10 @@ class GflagConfig final {
       pfxAllocConf.override_loopback_addr = FLAGS_override_loopback_addr;
 
       config.prefix_allocation_config_ref() = std::move(pfxAllocConf);
+    }
+
+    if (auto v = FLAGS_enable_ordered_fib_programming) {
+      config.enable_ordered_fib_programming_ref() = v;
     }
 
     // SPR

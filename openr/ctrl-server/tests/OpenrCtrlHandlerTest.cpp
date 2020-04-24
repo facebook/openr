@@ -20,6 +20,8 @@
 #include <openr/common/Constants.h>
 #include <openr/common/OpenrClient.h>
 #include <openr/config-store/PersistentStore.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -35,6 +37,12 @@ class OpenrCtrlFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
+    // create config
+    auto tConfig = getBasicOpenrConfig();
+    tConfig.node_name = nodeName;
+    tConfig.enable_v4_ref() = true;
+    config = std::make_shared<Config>(tConfig);
+
     // Create zmq-monitor
     zmqMonitor = std::make_unique<fbzmq::ZmqMonitor>(
         monitorSubmitUrl_, "inproc://monitor_pub_url", context_);
@@ -66,17 +74,11 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create Decision module
     decision = std::make_shared<Decision>(
-        nodeName, /* node name */
-        true, /* enable v4 */
+        config,
         true, /* computeLfaPaths */
-        false, /* enableOrderedFib */
         false, /* bgpDryRun */
-        false, /* bgpUseIgpMetric */
-        AdjacencyDbMarker{"adj:"},
-        PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
-        std::nullopt,
         kvStoreWrapper->getReader(),
         staticRoutesUpdatesQueue_.getReader(),
         routeUpdatesQueue_,
@@ -256,6 +258,7 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::thread persistentStoreThread_;
   std::thread linkMonitorThread_;
 
+  std::shared_ptr<Config> config;
   std::unique_ptr<fbzmq::ZmqMonitor> zmqMonitor;
   std::shared_ptr<Decision> decision;
   std::shared_ptr<Fib> fib;

@@ -11,6 +11,8 @@
 #include <re2/re2.h>
 #include <re2/set.h>
 
+#include <openr/config/tests/Utils.h>
+
 namespace openr {
 
 template <class Serializer>
@@ -42,6 +44,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       platformPubSock_(context),
       systemPort_(systemPort),
       per_prefix_keys_(per_prefix_keys) {
+  // create config
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.node_name = nodeId;
+  tConfig.enable_v4_ref() = v4Enabled;
+  config_ = std::make_shared<Config>(tConfig);
+
   // create zmq monitor
   monitor_ = std::make_unique<fbzmq::ZmqMonitor>(
       MonitorSubmitUrl{monitorSubmitUrl_},
@@ -207,17 +215,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create decision
   //
   decision_ = std::make_unique<Decision>(
-      nodeId_,
-      v4Enabled, // enable v4
+      config_,
       true, // computeLfaPaths
-      false, // enableOrderedFib
       false, // bgpDryRun
-      false, // bgpUseIgpMetric
-      AdjacencyDbMarker{"adj:"},
-      PrefixDbMarker{"prefix:"},
       std::chrono::milliseconds(10),
       std::chrono::milliseconds(250),
-      std::nullopt,
       kvStoreUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
       routeUpdatesQueue_,

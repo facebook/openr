@@ -16,6 +16,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/decision/Decision.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 #include <thrift/lib/cpp2/Thrift.h>
@@ -67,18 +68,17 @@ using apache::thrift::FRAGILE;
 class DecisionWrapper {
  public:
   explicit DecisionWrapper(const std::string& nodeName) {
+    auto tConfig = getBasicOpenrConfig();
+    tConfig.node_name = "1";
+    tConfig.enable_v4_ref() = true;
+    config = std::make_shared<Config>(tConfig);
+
     decision = std::make_shared<Decision>(
-        nodeName, /* node name */
-        true, /* enable v4 */
+        config,
         true, /* computeLfaPaths */
-        false, /* enableOrderedFib */
         false, /* bgpDryRun */
-        false, /* bgpUseIgpMetric */
-        AdjacencyDbMarker{"adj:"},
-        PrefixDbMarker{"prefix:"},
         std::chrono::milliseconds(10),
         std::chrono::milliseconds(500),
-        std::nullopt,
         kvStoreUpdatesQueue.getReader(),
         staticRoutesUpdateQueue.getReader(),
         routeUpdatesQueue,
@@ -188,6 +188,7 @@ class DecisionWrapper {
   // ZMQ context for IO processing
   fbzmq::Context zeromqContext{};
 
+  std::shared_ptr<Config> config;
   messaging::ReplicateQueue<thrift::Publication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
   messaging::ReplicateQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;

@@ -13,6 +13,7 @@
 #include <fbzmq/zmq/Zmq.h>
 
 #include <openr/allocators/PrefixAllocator.h>
+#include <openr/config/Config.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
@@ -136,6 +137,7 @@ class OpenrWrapper {
   OpenrEventBase eventBase_;
 
   // sub modules owned by this wrapper
+  std::shared_ptr<Config> config_;
   std::unique_ptr<PersistentStore> configStore_;
   std::unique_ptr<fbzmq::ZmqMonitor> monitor_;
   std::unique_ptr<KvStore> kvStore_;

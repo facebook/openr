@@ -118,7 +118,7 @@ struct OpenrConfig {
   9: optional bool enable_netlink_system_handler # netlink system server
 
   # time before decision start compute routes
-  10: i32 eor_time_s = -1
+  10: optional i32 eor_time_s
 
   11: PrefixForwardingType prefix_forwarding_type = PrefixForwardingType.IP
   12: PrefixForwardingAlgorithm prefix_forwarding_algorithm = PrefixForwardingAlgorithm.SP_ECMP
@@ -135,6 +135,8 @@ struct OpenrConfig {
   # prefix allocation
   20: optional bool enable_prefix_allocation
   21: optional PrefixAllocationConfig prefix_allocation_config
+
+  22: optional bool enable_ordered_fib_programming
 
   # bgp
   100: optional bool enable_spr

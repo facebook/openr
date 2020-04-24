@@ -1702,41 +1702,35 @@ SpfSolver::updateGlobalCounters() {
 //
 
 Decision::Decision(
-    std::string myNodeName,
-    bool enableV4,
+    std::shared_ptr<const Config> config,
     bool computeLfaPaths,
-    bool enableOrderedFib,
     bool bgpDryRun,
-    bool bgpUseIgpMetric,
-    const AdjacencyDbMarker& adjacencyDbMarker,
-    const PrefixDbMarker& prefixDbMarker,
     std::chrono::milliseconds debounceMinDur,
     std::chrono::milliseconds debounceMaxDur,
-    std::optional<std::chrono::seconds> gracefulRestartDuration,
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
     fbzmq::Context& zmqContext)
-    : processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
-      myNodeName_(myNodeName),
-      adjacencyDbMarker_(adjacencyDbMarker),
-      prefixDbMarker_(prefixDbMarker),
-      routeUpdatesQueue_(routeUpdatesQueue) {
+    : config_(config),
+      processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
+      routeUpdatesQueue_(routeUpdatesQueue),
+      myNodeName_(config->getConfig().node_name) {
+  auto tConfig = config->getConfig();
   routeDb_.thisNodeName = myNodeName_;
   processUpdatesTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { processPendingUpdates(); });
   spfSolver_ = std::make_unique<SpfSolver>(
-      myNodeName,
-      enableV4,
+      tConfig.node_name,
+      tConfig.enable_v4_ref().value_or(false),
       computeLfaPaths,
-      enableOrderedFib,
+      tConfig.enable_ordered_fib_programming_ref().value_or(false),
       bgpDryRun,
-      bgpUseIgpMetric);
+      tConfig.bgp_use_igp_metric_ref().value_or(false));
 
   coldStartTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { coldStartUpdate(); });
-  if (gracefulRestartDuration.has_value()) {
-    coldStartTimer_->scheduleTimeout(gracefulRestartDuration.value());
+  if (auto eor = config->getConfig().eor_time_s_ref()) {
+    coldStartTimer_->scheduleTimeout(std::chrono::seconds(*eor));
   }
 
   // Schedule periodic timer for counter submission
@@ -1748,7 +1742,7 @@ Decision::Decision(
   counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
 
   // Schedule periodic timer to decremtOrderedFibHolds
-  if (enableOrderedFib) {
+  if (tConfig.enable_ordered_fib_programming_ref().value_or(false)) {
     orderedFibTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
       LOG(INFO) << "Decrementing Holds";
       decrementOrderedFibHolds();
@@ -1945,7 +1939,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
     }
 
     try {
-      if (key.find(adjacencyDbMarker_) == 0) {
+      if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
         // update adjacencyDb
         auto adjacencyDb =
             fbzmq::util::readThriftObjStr<thrift::AdjacencyDatabase>(
@@ -1970,7 +1964,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
         continue;
       }
 
-      if (key.find(prefixDbMarker_) == 0) {
+      if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
         // update prefixDb
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             rawVal.value_ref().value(), serializer_);
@@ -2005,7 +1999,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
   for (const auto& key : thriftPub.expiredKeys) {
     std::string nodeName = getNodeNameFromKey(key);
 
-    if (key.find(adjacencyDbMarker_) == 0) {
+    if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
       if (spfSolver_->deleteAdjacencyDatabase(nodeName)) {
         res.adjChanged = true;
         pendingAdjUpdates_.addUpdate(
@@ -2014,7 +2008,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
       continue;
     }
 
-    if (key.find(prefixDbMarker_) == 0) {
+    if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
       // manually build delete prefix db to signal delete just as a client would
       thrift::PrefixDatabase deletePrefixDb;
       deletePrefixDb.thisNodeName = nodeName;

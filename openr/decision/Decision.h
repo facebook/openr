@@ -27,6 +27,7 @@
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/Decision_types.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -209,17 +210,11 @@ class SpfSolver {
 class Decision : public OpenrEventBase {
  public:
   Decision(
-      std::string myNodeName,
-      bool enableV4,
+      std::shared_ptr<const Config> config,
       bool computeLfaPaths,
-      bool enableOrderedFib,
       bool bgpDryRun,
-      bool bgpUseIgpMetric,
-      const AdjacencyDbMarker& adjacencyDbMarker,
-      const PrefixDbMarker& prefixDbMarker,
       std::chrono::milliseconds debounceMinDur,
       std::chrono::milliseconds debounceMaxDur,
-      std::optional<std::chrono::seconds> gracefulRestartDuration,
       messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
       messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
       messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
@@ -272,6 +267,9 @@ class Decision : public OpenrEventBase {
    */
   detail::DecisionPendingUpdates pendingPrefixUpdates_;
 
+  // openr config
+  std::shared_ptr<const Config> config_;
+
   // callback timer used on startup to publish routes after
   // gracefulRestartDuration
   std::unique_ptr<folly::AsyncTimeout> coldStartTimer_{nullptr};
@@ -321,13 +319,6 @@ class Decision : public OpenrEventBase {
   thrift::PrefixDatabase updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
 
-  // this node's name and the key markers
-  const std::string myNodeName_;
-  // the prefix we use to find the adjacency database announcements
-  const std::string adjacencyDbMarker_;
-  // the prefix we use to find the prefix db key announcements
-  const std::string prefixDbMarker_;
-
   thrift::RouteDatabase routeDb_;
 
   // Queue to publish route changes
@@ -360,6 +351,9 @@ class Decision : public OpenrEventBase {
       std::string,
       std::unordered_map<thrift::IpPrefix, thrift::PrefixEntry>>
       perPrefixPrefixEntries_, fullDbPrefixEntries_;
+
+  // this node's name and the key markers
+  const std::string myNodeName_;
 };
 
 } // namespace openr
