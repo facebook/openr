@@ -732,13 +732,9 @@ main(int argc, char** argv) {
       watchdog,
       "Fib",
       std::make_unique<Fib>(
-          FLAGS_node_name,
+          config,
           FLAGS_fib_handler_port,
-          FLAGS_dryrun,
-          FLAGS_enable_segment_routing,
-          FLAGS_enable_ordered_fib_programming,
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
-          decisionGRWindow.has_value(), /* waitOnDecision */
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
           monitorSubmitUrl,

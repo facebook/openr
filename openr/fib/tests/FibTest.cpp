@@ -30,6 +30,8 @@
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
 #include <openr/common/NetworkUtil.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
@@ -205,14 +207,22 @@ class FibTestFixture : public ::testing::Test {
     fibThriftThread.start(server);
     port = fibThriftThread.getAddress()->getPort();
 
-    fib = std::make_shared<Fib>(
+    auto tConfig = getBasicOpenrConfig(
         "node-1",
+        true, /* enableV4 */
+        true /*enableSegmentRouting*/,
+        false /*orderedFibProgramming*/,
+        false /*dryrun*/);
+    if (waitOnDecision_) {
+      tConfig.eor_time_s_ref() = 1;
+    }
+
+    config = make_shared<Config>(tConfig);
+
+    fib = std::make_shared<Fib>(
+        config,
         port, /* thrift port */
-        false, /* dryrun */
-        true, /* segment route */
-        false, /* orderedFib */
-        std::chrono::seconds(2),
-        waitOnDecision_,
+        std::chrono::seconds(2), /* coldStartDuration */
         routeUpdatesQueue.getReader(),
         interfaceUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
@@ -235,7 +245,7 @@ class FibTestFixture : public ::testing::Test {
         nullptr /* linkMonitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
-        nullptr /* config */,
+        config /* config */,
         MonitorSubmitUrl{"inproc://monitor-rep"},
         context);
     openrThriftServerWrapper_->run();
@@ -319,6 +329,7 @@ class FibTestFixture : public ::testing::Test {
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
 
+  std::shared_ptr<Config> config;
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;
 

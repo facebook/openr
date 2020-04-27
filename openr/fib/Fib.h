@@ -18,6 +18,7 @@
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/FibService.h>
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
@@ -49,13 +50,9 @@ namespace openr {
  */
 class Fib final : public OpenrEventBase {
  public:
-  Fib(std::string myNodeName,
+  Fib(std::shared_ptr<const Config> config,
       int32_t thriftPort,
-      bool dryrun,
-      bool enableSegmentRouting,
-      bool enableOrderedFib,
       std::chrono::seconds coldStartDuration,
-      bool waitOnDecision,
       messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
       messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
       const MonitorSubmitUrl& monitorSubmitUrl,
@@ -217,20 +214,16 @@ class Fib final : public OpenrEventBase {
   const std::string myNodeName_;
 
   // Switch agent thrift server port
-  const int32_t thriftPort_{0};
+  const int32_t thriftPort_;
 
   // In dry run we do not make actual thrift call to manipulate routes
   bool dryrun_{true};
 
   // Enable segment routing
-  const bool enableSegmentRouting_{false};
+  bool enableSegmentRouting_{false};
 
   // indicates that we should publish fib programming time to kvstore
   bool enableOrderedFib_{false};
-
-  // amount of time to wait before send routes to agent either when this module
-  // starts or the agent we are talking with restarts
-  const std::chrono::seconds coldStartDuration_;
 
   apache::thrift::CompactSerializer serializer_;
 
@@ -239,9 +232,6 @@ class Fib final : public OpenrEventBase {
   folly::EventBase evb_;
   std::shared_ptr<folly::AsyncSocket> socket_{nullptr};
   std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
-
-  // module ptr to refer to KvStore for KvStoreClientInternal usage
-  KvStore* kvStore_{nullptr};
 
   // Callback timer to sync routes to switch agent and scheduled on route-sync
   // failure. ExponentialBackoff timer to ease up things if they go wrong
@@ -254,6 +244,8 @@ class Fib final : public OpenrEventBase {
   // client to interact with monitor
   std::unique_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient_;
 
+  // module ptr to refer to KvStore for KvStoreClientInternal usage
+  KvStore* kvStore_{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
 
   // Latest aliveSince heard from FibService. If the next one is different then

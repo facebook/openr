@@ -45,9 +45,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       systemPort_(systemPort),
       per_prefix_keys_(per_prefix_keys) {
   // create config
-  auto tConfig = getBasicOpenrConfig();
-  tConfig.node_name = nodeId;
-  tConfig.enable_v4_ref() = v4Enabled;
+  auto tConfig = getBasicOpenrConfig(
+      nodeId_,
+      v4Enabled,
+      false /*enableSegmentRouting*/,
+      false /*orderedFibProgramming*/,
+      true /*dryrun*/);
   config_ = std::make_shared<Config>(tConfig);
 
   // create zmq monitor
@@ -229,13 +232,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create FIB
   //
   fib_ = std::make_unique<Fib>(
-      nodeId_,
-      static_cast<int32_t>(60100), // fib agent port
-      true, // dry run mode
-      false, // segment routing
-      false, // ordered Fib
+      config_,
+      Constants::kFibAgentPort,
       fibColdStartDuration,
-      false, // waitOnDecision
       routeUpdatesQueue_.getReader(),
       interfaceUpdatesQueue_.getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},

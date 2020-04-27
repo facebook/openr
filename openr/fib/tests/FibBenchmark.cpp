@@ -14,6 +14,8 @@
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
 
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/fib/Fib.h>
 #include <openr/fib/tests/MockNetlinkFibHandler.h>
 #include <openr/fib/tests/PrefixGenerator.h>
@@ -76,16 +78,20 @@ class FibWrapper {
     server->setInterface(mockFibHandler);
     fibThriftThread.start(server);
 
+    auto tConfig = getBasicOpenrConfig(
+        "node-1",
+        true, /* enableV4 */
+        false /*enableSegmentRouting*/,
+        false /*orderedFibProgramming*/,
+        false /*dryrun*/);
+    config = std::make_shared<Config>(tConfig);
+
     // Creat Fib module and start fib thread
     port = fibThriftThread.getAddress()->getPort();
     fib = std::make_shared<Fib>(
-        "node-1",
+        config,
         port, // thrift port
-        false, // dryrun
-        false, // segment route
-        false, // orderedFib
-        std::chrono::seconds(2),
-        false, // waitOnDecision
+        std::chrono::seconds(2), // coldStartDuration
         routeUpdatesQueue.getReader(),
         interfaceUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
@@ -108,7 +114,7 @@ class FibWrapper {
         nullptr /* linkMonitor */,
         nullptr /* configStore */,
         nullptr /* prefixManager */,
-        nullptr /* config */,
+        config /* config */,
         MonitorSubmitUrl{"inproc://monitor-sub"},
         context);
     openrThriftServerWrapper_->run();
@@ -174,6 +180,7 @@ class FibWrapper {
 
   fbzmq::Context context{};
 
+  std::shared_ptr<Config> config;
   std::shared_ptr<Fib> fib;
   std::unique_ptr<std::thread> fibThread;
 

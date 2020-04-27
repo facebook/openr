@@ -68,9 +68,7 @@ using apache::thrift::FRAGILE;
 class DecisionWrapper {
  public:
   explicit DecisionWrapper(const std::string& nodeName) {
-    auto tConfig = getBasicOpenrConfig();
-    tConfig.node_name = "1";
-    tConfig.enable_v4_ref() = true;
+    auto tConfig = getBasicOpenrConfig(nodeName);
     config = std::make_shared<Config>(tConfig);
 
     decision = std::make_shared<Decision>(

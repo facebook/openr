@@ -4,7 +4,12 @@
 
 namespace {
 openr::thrift::OpenrConfig
-getBasicOpenrConfig() {
+getBasicOpenrConfig(
+    const std::string nodeName = "",
+    bool enableV4 = true,
+    bool enableSegmentRouting = false,
+    bool orderedFibProgramming = false,
+    bool dryrun = true) {
   openr::thrift::LinkMonitorConfig linkMonitorConfig;
   linkMonitorConfig.include_interface_regexes =
       std::vector<std::string>{"et[0-9].*"};
@@ -25,13 +30,18 @@ getBasicOpenrConfig() {
 
   openr::thrift::OpenrConfig config;
 
-  config.node_name = "";
+  config.node_name = nodeName;
   config.domain = "domain";
-  config.enable_v4_ref() = true;
+  config.enable_v4_ref() = enableV4;
+  config.enable_segment_routing_ref() = enableSegmentRouting;
+  config.enable_ordered_fib_programming_ref() = orderedFibProgramming;
+  config.dryrun_ref() = dryrun;
   config.enable_netlink_system_handler_ref() = true;
+
   config.kvstore_config = kvstoreConfig;
   config.link_monitor_config = linkMonitorConfig;
   config.spark_config = sparkConfig;
+  config.enable_watchdog_ref() = true;
   config.watchdog_config_ref() = watchdogConfig;
 
   return config;

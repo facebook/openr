@@ -3736,9 +3736,7 @@ class DecisionTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {
-    auto tConfig = getBasicOpenrConfig();
-    tConfig.node_name = "1";
-    tConfig.enable_v4_ref() = true;
+    auto tConfig = getBasicOpenrConfig("1");
     config = std::make_shared<Config>(tConfig);
 
     decision = make_shared<Decision>(

@@ -25,27 +25,27 @@ namespace fb303 = facebook::fb303;
 namespace openr {
 
 Fib::Fib(
-    std::string myNodeName,
+    std::shared_ptr<const Config> config,
     int32_t thriftPort,
-    bool dryrun,
-    bool enableSegmentRouting,
-    bool enableOrderedFib,
     std::chrono::seconds coldStartDuration,
-    bool waitOnDecision,
     messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue,
     messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
     KvStore* kvStore,
     fbzmq::Context& zmqContext)
-    : myNodeName_(std::move(myNodeName)),
+    : myNodeName_(config->getConfig().node_name),
       thriftPort_(thriftPort),
-      dryrun_(dryrun),
-      enableSegmentRouting_(enableSegmentRouting),
-      enableOrderedFib_(enableOrderedFib),
-      coldStartDuration_(coldStartDuration),
-      kvStore_(kvStore),
       expBackoff_(
-          std::chrono::milliseconds(8), std::chrono::milliseconds(4096)) {
+          std::chrono::milliseconds(8), std::chrono::milliseconds(4096)),
+      kvStore_(kvStore) {
+  auto tConfig = config->getConfig();
+
+  dryrun_ = config->getConfig().dryrun_ref().value_or(false);
+  enableSegmentRouting_ =
+      config->getConfig().enable_segment_routing_ref().value_or(false);
+  enableOrderedFib_ =
+      config->getConfig().enable_ordered_fib_programming_ref().value_or(false);
+
   syncRoutesTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     if (routeState_.hasRoutesFromDecision) {
       if (syncRouteDb()) {
@@ -69,9 +69,9 @@ Fib::Fib(
         std::make_unique<KvStoreClientInternal>(this, myNodeName_, kvStore_);
   }
 
-  if (not waitOnDecision) {
+  if (not tConfig.eor_time_s_ref()) {
     routeState_.hasRoutesFromDecision = true;
-    syncRoutesTimer_->scheduleTimeout(coldStartDuration_);
+    syncRoutesTimer_->scheduleTimeout(coldStartDuration);
   }
 
   keepAliveTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {

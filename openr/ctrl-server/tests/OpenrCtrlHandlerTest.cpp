@@ -38,9 +38,8 @@ class OpenrCtrlFixture : public ::testing::Test {
   void
   SetUp() override {
     // create config
-    auto tConfig = getBasicOpenrConfig();
-    tConfig.node_name = nodeName;
-    tConfig.enable_v4_ref() = true;
+    auto tConfig = getBasicOpenrConfig(
+        nodeName, true /* enableV4 */, true /* enableSegmentRouting */);
     config = std::make_shared<Config>(tConfig);
 
     // Create zmq-monitor
@@ -87,13 +86,9 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create Fib module
     fib = std::make_shared<Fib>(
-        nodeName,
-        -1, /* thrift port */
-        true, /* dryrun */
-        true, /* enableSegmentRouting */
-        false, /* enableOrderedFib */
+        config,
+        -1,
         std::chrono::seconds(2),
-        false, /* waitOnDecision */
         routeUpdatesQueue_.getReader(),
         interfaceUpdatesQueue_.getReader(),
         MonitorSubmitUrl{"inproc://monitor-sub"},
