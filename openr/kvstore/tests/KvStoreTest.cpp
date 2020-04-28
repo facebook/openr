@@ -3232,6 +3232,119 @@ INSTANTIATE_TEST_CASE_P(
     KvStoreRateLimitTestFixture,
     ::testing::Values(2, 4, 8, 16, 32, 64, 128));
 
+/**
+ * Verifies expectation of full-sync across peer-add update and remove
+ * 1. Add peer (validate receipt of full-sync request)
+ * 2. Add peer with same spec (validate receipt of new full-sync request)
+ * 3. Add peer with updated spec (validate expiry of old sync-request & receipt
+ *    of new full-sync request on new socket)
+ * 4. Del peer (verify that full-sync request is erased)
+ */
+TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
+  // Lambda function to validate full-sync request
+  auto validateFullSyncRequest = [](std::vector<fbzmq::Message> const& msgs) {
+    CompactSerializer serializer;
+    EXPECT_EQ(3, msgs.size());
+    EXPECT_TRUE(msgs.at(1).empty()); // Empty identifier
+    auto request =
+        msgs.at(2).readThriftObj<thrift::KvStoreRequest>(serializer).value();
+    EXPECT_EQ(thrift::Command::KEY_DUMP, request.cmd);
+    ASSERT_TRUE(request.keyDumpParams_ref());
+    EXPECT_TRUE(request.keyDumpParams_ref()->keyValHashes_ref());
+  };
+
+  //
+  // Create test store
+  // NOTE: Set db-sync-interval to 60s (high value) to avoid periodic full sync
+  // in this test
+  //
+  auto store0 = createKvStore(
+      "store0",
+      std::unordered_map<std::string, thrift::PeerSpec>{},
+      std::nullopt /* filters */,
+      std::nullopt /* kvStoreRate */,
+      Constants::kTtlDecrement,
+      false /* enableFloodOptimization */,
+      false /* isFloodRoot */,
+      std::chrono::seconds(60) /* db-sync interval */);
+  store0->run();
+
+  // Verify initial expectations
+  EXPECT_EQ(0, store0->getPeers().size());
+  EXPECT_EQ(0, store0->getCounters().at("kvstore.pending_full_sync"));
+
+  //
+  // Create peer socket
+  //
+  thrift::PeerSpec peerSpec;
+  peerSpec.supportFloodOptimization = false;
+  peerSpec.cmdUrl = "inproc://test-peer-iface0";
+  peerSpec.thriftPortUrl = ""; // Intentionally empty
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> peerSock(
+      context,
+      folly::none /* identity string */,
+      folly::none,
+      fbzmq::NonblockingFlag{false});
+  peerSock.bind(fbzmq::SocketUrl(peerSpec.cmdUrl)).value();
+
+  //
+  // Add peer to KvStore
+  // Expect full-sync request
+  //
+  store0->addPeer("test-peer", peerSpec);
+  EXPECT_EQ(1, store0->getPeers().size());
+  {
+    auto msgs = peerSock.recvMultiple(std::chrono::milliseconds(1000));
+    ASSERT_TRUE(msgs.hasValue()) << msgs.error(); // No timeout
+    validateFullSyncRequest(msgs.value());
+    EXPECT_EQ(1, store0->getCounters().at("kvstore.pending_full_sync"));
+  }
+
+  //
+  // Update peer to KvStore
+  // Expect full-sync request
+  //
+  store0->addPeer("test-peer", peerSpec);
+  EXPECT_EQ(1, store0->getPeers().size());
+  {
+    auto msgs = peerSock.recvMultiple(std::chrono::milliseconds(1000));
+    ASSERT_TRUE(msgs.hasValue()) << msgs.error(); // No timeout
+    validateFullSyncRequest(msgs.value());
+    EXPECT_EQ(1, store0->getCounters().at("kvstore.pending_full_sync"));
+  }
+
+  //
+  // Update peer with new cmd url
+  // Expect full-sync request on new peer socket
+  //
+  peerSpec.cmdUrl = "inproc://test-peer-iface1";
+  fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> peerSockNew(
+      context,
+      folly::none /* identity string */,
+      folly::none,
+      fbzmq::NonblockingFlag{true});
+  peerSockNew.bind(fbzmq::SocketUrl(peerSpec.cmdUrl)).value();
+  store0->addPeer("test-peer", peerSpec);
+  EXPECT_EQ(1, store0->getPeers().size());
+  {
+    auto msgs = peerSock.recvMultiple(std::chrono::milliseconds(1000));
+    EXPECT_TRUE(msgs.hasError()) << msgs.error();
+
+    auto msgsNew = peerSockNew.recvMultiple(std::chrono::milliseconds(1000));
+    ASSERT_TRUE(msgsNew.hasValue()) << msgsNew.error();
+    validateFullSyncRequest(msgsNew.value());
+
+    EXPECT_EQ(1, store0->getCounters().at("kvstore.pending_full_sync"));
+  }
+
+  //
+  // Delete peer
+  //
+  store0->delPeer("test-peer");
+  EXPECT_EQ(0, store0->getPeers().size());
+  EXPECT_EQ(0, store0->getCounters().at("kvstore.pending_full_sync"));
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

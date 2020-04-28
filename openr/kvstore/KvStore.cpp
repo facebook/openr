@@ -119,8 +119,12 @@ KvStore::KvStore(
   kvParams_.zmqMonitorClient = zmqMonitorClient_;
 
   // Schedule periodic timer for counters submission
-  counterUpdateTimer_ = folly::AsyncTimeout::make(
-      *getEvb(), [this]() noexcept { updateGlobalCounters(); });
+  counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    for (auto& counter : getGlobalCounters()) {
+      fb303::fbData->setCounter(counter.first, counter.second);
+    }
+    counterUpdateTimer_->scheduleTimeout(counterSubmitInterval_);
+  });
   counterUpdateTimer_->scheduleTimeout(counterSubmitInterval_);
 
   // Prepare global command socket
@@ -808,9 +812,18 @@ KvStore::processKvStoreDualMessage(
   return sf;
 }
 
-void
-KvStore::updateGlobalCounters() {
-  std::unordered_map<std::string, int64_t> flatCounters;
+folly::SemiFuture<std::map<std::string, int64_t>>
+KvStore::getCounters() {
+  auto pf = folly::makePromiseContract<std::map<std::string, int64_t>>();
+  runInEventBaseThread([this, p = std::move(pf.first)]() mutable {
+    p.setValue(getGlobalCounters());
+  });
+  return std::move(pf.second);
+}
+
+std::map<std::string, int64_t>
+KvStore::getGlobalCounters() const {
+  std::map<std::string, int64_t> flatCounters;
   for (auto& kvDb : kvStoreDb_) {
     auto kvDbCounters = kvDb.second.getCounters();
     // add up counters for same key from all kvStoreDb instances
@@ -818,16 +831,13 @@ KvStore::updateGlobalCounters() {
         kvDbCounters.begin(),
         kvDbCounters.end(),
         flatCounters,
-        [](std::unordered_map<std::string, int64_t>& flatCounters,
+        [](std::map<std::string, int64_t>& flatCounters,
            const std::pair<const std::string, int64_t>& kvDbcounter) {
           flatCounters[kvDbcounter.first] += kvDbcounter.second;
           return flatCounters;
         });
   }
-  for (auto counter : flatCounters) {
-    fb303::fbData->setCounter(counter.first, counter.second);
-  }
-  counterUpdateTimer_->scheduleTimeout(counterSubmitInterval_);
+  return flatCounters;
 }
 
 KvStoreDb::KvStoreDb(
@@ -1082,6 +1092,8 @@ KvStoreDb::addPeers(
             LOG(FATAL) << "Error Disconnecting to URL '" << peerSpec.cmdUrl
                        << "' " << ret.error();
           }
+          // Remove any pending expected response for old socket-id
+          latestSentPeerSync_.erase(it->second.second);
           it->second.second = newPeerCmdId;
         } else {
           // case2. new peer came up (previsously shut down ungracefully)
@@ -1163,9 +1175,9 @@ KvStoreDb::sendMessageToPeer(
       fbzmq::Message::from(peerSocketId).value(), fbzmq::Message(), msg);
 }
 
-std::unordered_map<std::string, int64_t>
-KvStoreDb::getCounters() {
-  std::unordered_map<std::string, int64_t> counters;
+std::map<std::string, int64_t>
+KvStoreDb::getCounters() const {
+  std::map<std::string, int64_t> counters;
 
   // Add some more flat counters
   counters["kvstore.num_keys"] = kvStore_.size();
@@ -1653,7 +1665,7 @@ KvStoreDb::processNexthopChange(
     // we can be sure that I won't be in a disconnected state after we got
     // full synced. (ps: full-sync is 3-way-sync, one direction sync should be
     // good enough)
-    LOG(INFO) << "dual full-sync with " << *newNh;
+    LOG(INFO) << "Enqueuing full-sync request for peer " << *newNh;
     peersToSyncWith_.emplace(
         *newNh,
         ExponentialBackoff<std::chrono::milliseconds>(
@@ -1774,7 +1786,7 @@ KvStoreDb::requestSync() {
   }
 
   // Enqueue neighbor for full-sync (insert only if entry doesn't exists)
-  LOG(INFO) << "Requesting full-sync from " << randomNeighbor;
+  LOG(INFO) << "Enqueuing full-sync request for peer " << randomNeighbor;
   peersToSyncWith_.emplace(
       randomNeighbor,
       ExponentialBackoff<std::chrono::milliseconds>(

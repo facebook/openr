@@ -164,6 +164,14 @@ class KvStoreWrapper {
     return createPeerSpec(globalCmdUrl, enableFloodOptimization_);
   }
 
+  /**
+   * Get counters from KvStore
+   */
+  std::map<std::string, int64_t>
+  getCounters() {
+    return kvStore_->getCounters().get();
+  }
+
   KvStore*
   getKvStore() {
     return kvStore_.get();

@@ -168,7 +168,7 @@ class KvStoreDb : public DualNode {
       thrift::KvStoreRequest& thriftReq);
 
   // Extracts the counters
-  std::unordered_map<std::string, int64_t> getCounters();
+  std::map<std::string, int64_t> getCounters() const;
 
   // get multiple keys at once
   thrift::Publication getKeyVals(std::vector<std::string> const& keys);
@@ -506,6 +506,8 @@ class KvStore final : public OpenrEventBase {
       thrift::DualMessages dualMessages,
       std::string area = openr::thrift::KvStore_constants::kDefaultArea());
 
+  folly::SemiFuture<std::map<std::string, int64_t>> getCounters();
+
   // API to get reader for kvStoreUpdatesQueue
   messaging::RQueue<thrift::Publication> getKvStoreUpdatesReader();
 
@@ -532,7 +534,7 @@ class KvStore final : public OpenrEventBase {
 
   void processPeerUpdates(thrift::PeerUpdateRequest&& req);
 
-  void updateGlobalCounters();
+  std::map<std::string, int64_t> getGlobalCounters() const;
 
   //
   // Private variables
