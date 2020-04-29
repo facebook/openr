@@ -1567,6 +1567,27 @@ class SimpleRingTopologyFixture
   bool v4Enabled{false};
 
   std::unique_ptr<SpfSolver> spfSolver;
+
+  void
+  verifyRouteInUpdateNoDelete(
+      std::string nodeName, int32_t mplsLabel, thrift::RouteDatabase& compDb) {
+    // verify route DB change in node 1.
+    auto routeDb1 = spfSolver->buildPaths(nodeName).value();
+    std::sort(compDb.mplsRoutes.begin(), compDb.mplsRoutes.end());
+    std::sort(compDb.unicastRoutes.begin(), compDb.unicastRoutes.end());
+    std::sort(routeDb1.mplsRoutes.begin(), routeDb1.mplsRoutes.end());
+    std::sort(routeDb1.unicastRoutes.begin(), routeDb1.unicastRoutes.end());
+    auto deltaRoutes = findDeltaRoutes(routeDb1, compDb);
+
+    int find = 0;
+    for (const auto& mplsRoute : deltaRoutes.mplsRoutesToUpdate) {
+      if (mplsRoute.topLabel == mplsLabel) {
+        find++;
+      }
+    }
+    EXPECT_EQ(find, 1);
+    EXPECT_EQ(deltaRoutes.mplsRoutesToDelete.size(), 0);
+  }
 };
 
 INSTANTIATE_TEST_CASE_P(
@@ -1703,6 +1724,62 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
 
   validatePopLabelRoute(routeMap, "4", adjacencyDb4.nodeLabel);
   validateAdjLabelRoutes(routeMap, "4", adjacencyDb4.adjacencies);
+}
+
+//
+// Verify duplicate mpls routes case
+// let two nodes announcing same mpls label. Verify that the one with higher
+// name value would win.
+// change one node to use a different mpls label. verify routes gets programmed
+// and no withdraw happened.
+//
+TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
+  CustomSetUp(false /* disable LFA */, false /* useKsp2Ed */);
+  fb303::fbData->resetAllData();
+  // make node1's mpls label same as node2.
+  adjacencyDb1.nodeLabel = 2;
+  spfSolver->updateAdjacencyDatabase(adjacencyDb1);
+
+  // verify route DB change in node 1, 2 ,3.
+  // verify that only one route to mpls lable 1 is installed in all nodes
+  thrift::RouteDatabase emptyRouteDb;
+  emptyRouteDb.thisNodeName = "1";
+  verifyRouteInUpdateNoDelete("1", 2, emptyRouteDb);
+
+  emptyRouteDb.thisNodeName = "2";
+  verifyRouteInUpdateNoDelete("2", 2, emptyRouteDb);
+
+  emptyRouteDb.thisNodeName = "3";
+  verifyRouteInUpdateNoDelete("3", 2, emptyRouteDb);
+
+  auto counters = fb303::fbData->getCounters();
+  // verify the counters to be 3 because each node will noticed a duplicate
+  // for mpls label 1.
+  EXPECT_EQ(counters.at("decision.duplicate_node_label.count.60"), 3);
+
+  auto compDb1 = spfSolver->buildPaths("1").value();
+  auto compDb2 = spfSolver->buildPaths("2").value();
+  auto compDb3 = spfSolver->buildPaths("3").value();
+
+  counters = fb303::fbData->getCounters();
+  // now the counter should be 6, becasue we called buildPaths 3 times.
+  EXPECT_EQ(counters.at("decision.duplicate_node_label.count.60"), 6);
+
+  // change nodelabel of node 1 to be 1. Now each node has it's own
+  // mpls label, there should be no duplicate.
+  // verify that there is an update entry for mpls route to label 1.
+  // verify that no withdrawals of mpls routes to label 1.
+  adjacencyDb1.nodeLabel = 1;
+  spfSolver->updateAdjacencyDatabase(adjacencyDb1);
+  verifyRouteInUpdateNoDelete("1", 2, compDb1);
+
+  verifyRouteInUpdateNoDelete("2", 2, compDb2);
+
+  verifyRouteInUpdateNoDelete("3", 2, compDb3);
+
+  // because there is no duplicate anymore, so that counter should keep as 6.
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(counters.at("decision.duplicate_node_label.count.60"), 6);
 }
 
 //
@@ -3965,7 +4042,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   // Some tricks here; we need to bump the time-stamp on router 2's data, so
   // it can override existing; for router 3 we publish new key-value
-  LOG(INFO) << "haha1";
 
   publication = createThriftPublication(
       {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
@@ -3979,6 +4055,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   routeDbBefore = dumpRouteDb({"1"})["1"];
   std::sort(
       routeDbBefore.unicastRoutes.begin(), routeDbBefore.unicastRoutes.end());
+  std::sort(routeDbBefore.mplsRoutes.begin(), routeDbBefore.mplsRoutes.end());
   sendKvPublication(publication);
   // validate routers
 
@@ -4032,7 +4109,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       routeMap[make_pair("3", toString(addr2))],
       NextHops({createNextHopFromAdj(adj32, false, 10)}));
 
-  LOG(INFO) << "haha2";
   // remove 3
   publication = createThriftPublication(
       thrift::KeyVals{},
@@ -4061,7 +4137,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       routeMap[make_pair("1", toString(addr2))],
       NextHops({createNextHopFromAdj(adj12, false, 10)}));
 
-  LOG(INFO) << "haha3";
   publication = createThriftPublication(
       {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
        {"adj:2", createAdjValue("2", 4, {adj21, adj23}, false, 2)},

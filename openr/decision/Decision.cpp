@@ -195,6 +195,8 @@ class SpfSolver::SpfSolverImpl {
     fb303::fbData->addStatExportType(
         "decision.skipped_mpls_route", fb303::COUNT);
     fb303::fbData->addStatExportType(
+        "decision.duplicate_node_label", fb303::COUNT);
+    fb303::fbData->addStatExportType(
         "decision.skipped_unicast_route", fb303::COUNT);
     fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
     fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
@@ -791,6 +793,8 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   //
   // Create MPLS routes for all nodeLabel
   //
+  std::unordered_map<int32_t, std::pair<std::string, thrift::MplsRoute>>
+      labelToNode;
   for (const auto& kv : linkState_.getAdjacencyDatabases()) {
     const auto& adjDb = kv.second;
     const auto topLabel = adjDb.nodeLabel;
@@ -807,14 +811,29 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
       continue;
     }
 
+    // There can be a temporary collision in node label allocation. Usually
+    // happens when two segmented networks allocating labels from the same range
+    // join together. In case of such conflict we respect the node label of
+    // bigger node-ID
+    auto iter = labelToNode.find(topLabel);
+    if (iter != labelToNode.end()) {
+      LOG(INFO) << "Find duplicate label " << topLabel << "from "
+                << iter->second.first << " " << adjDb.thisNodeName;
+      fb303::fbData->addStatValue(
+          "decision.duplicate_node_label", 1, fb303::COUNT);
+      if (iter->second.first < adjDb.thisNodeName) {
+        continue;
+      }
+    }
+
     // Install POP_AND_LOOKUP for next layer
     if (adjDb.thisNodeName == myNodeName) {
       thrift::NextHopThrift nh;
       nh.address = toBinaryAddress(folly::IPAddressV6("::"));
       nh.mplsAction_ref() =
           createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
-      routeDb.mplsRoutes.emplace_back(
-          createMplsRoute(topLabel, {std::move(nh)}));
+      labelToNode[topLabel] = std::make_pair(
+          adjDb.thisNodeName, createMplsRoute(topLabel, {std::move(nh)}));
       continue;
     }
 
@@ -841,9 +860,16 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
         metricNhs.first,
         metricNhs.second,
         topLabel);
-    routeDb.mplsRoutes.emplace_back(
+    labelToNode[topLabel] = std::make_pair(
+        adjDb.thisNodeName,
         createMplsRoute(topLabel, std::move(nextHopsThrift)));
   }
+  std::transform(
+      labelToNode.begin(),
+      labelToNode.end(),
+      std::back_inserter(routeDb.mplsRoutes),
+      [](const std::pair<int32_t, std::pair<std::string, thrift::MplsRoute>>&
+             kv) -> thrift::MplsRoute { return kv.second.second; });
 
   //
   // Create MPLS routes for all of our adjacencies
