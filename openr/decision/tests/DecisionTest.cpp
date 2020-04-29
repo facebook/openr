@@ -555,7 +555,7 @@ TEST(SpfSolver, AdjacencyUpdate) {
   {
     auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb2);
     EXPECT_TRUE(res.first);
-    EXPECT_FALSE(res.second);
+    EXPECT_TRUE(res.second);
   }
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
@@ -613,7 +613,7 @@ TEST(SpfSolver, AdjacencyUpdate) {
   {
     auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb2);
     EXPECT_FALSE(res.first);
-    EXPECT_FALSE(res.second);
+    EXPECT_TRUE(res.second);
   }
 
   //
@@ -649,12 +649,10 @@ TEST(SpfSolver, AdjacencyUpdate) {
   {
     auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb2);
     EXPECT_FALSE(res.first);
-    EXPECT_FALSE(res.second);
+    EXPECT_TRUE(res.second);
   }
 
-  //
-  // Change nodeLabel. This should report route-attribute change only for node1
-  // and not for node2's nodeLabel change
+  // Change nodeLabel.
   adjacencyDb1.nodeLabel = 11;
   {
     auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb1);
@@ -666,7 +664,7 @@ TEST(SpfSolver, AdjacencyUpdate) {
   {
     auto res = spfSolver.updateAdjacencyDatabase(adjacencyDb2);
     EXPECT_FALSE(res.first);
-    EXPECT_FALSE(res.second);
+    EXPECT_TRUE(res.second);
   }
 }
 
@@ -696,7 +694,7 @@ TEST(MplsRoutes, BasicTest) {
       spfSolver.updateAdjacencyDatabase(adjacencyDb2));
 
   EXPECT_EQ(
-      std::make_pair(true, false),
+      std::make_pair(true, true),
       spfSolver.updateAdjacencyDatabase(adjacencyDb3));
 
   auto routeMap = getRouteMap(spfSolver, {"1", "2", "3"});
@@ -1057,10 +1055,10 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
       std::make_pair(false, true),
       spfSolver.updateAdjacencyDatabase(adjacencyDb1));
   EXPECT_EQ(
-      std::make_pair(!partitioned, false),
+      std::make_pair(!partitioned, true),
       spfSolver.updateAdjacencyDatabase(adjacencyDb2));
   EXPECT_EQ(
-      std::make_pair(!partitioned, false),
+      std::make_pair(!partitioned, true),
       spfSolver.updateAdjacencyDatabase(adjacencyDb3));
 
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
@@ -1331,13 +1329,13 @@ class SimpleRingMeshTopologyFixture
         std::make_pair(false, true),
         spfSolver->updateAdjacencyDatabase(adjacencyDb1));
     EXPECT_EQ(
-        std::make_pair(true, false),
+        std::make_pair(true, true),
         spfSolver->updateAdjacencyDatabase(adjacencyDb2));
     EXPECT_EQ(
-        std::make_pair(true, false),
+        std::make_pair(true, true),
         spfSolver->updateAdjacencyDatabase(adjacencyDb3));
     EXPECT_EQ(
-        std::make_pair(true, false),
+        std::make_pair(true, true),
         spfSolver->updateAdjacencyDatabase(adjacencyDb4));
 
     auto pdb1 = v4Enabled ? prefixDb1V4 : prefixDb1;
@@ -1510,13 +1508,13 @@ class SimpleRingTopologyFixture
         std::make_pair(false, true),
         spfSolver->updateAdjacencyDatabase(adjacencyDb1));
     EXPECT_EQ(
-        std::make_pair(true, false),
+        std::make_pair(true, true),
         spfSolver->updateAdjacencyDatabase(adjacencyDb2));
     EXPECT_EQ(
-        std::make_pair(true, false),
+        std::make_pair(true, true),
         spfSolver->updateAdjacencyDatabase(adjacencyDb3));
     EXPECT_EQ(
-        std::make_pair(true, false),
+        std::make_pair(true, true),
         spfSolver->updateAdjacencyDatabase(adjacencyDb4));
 
     auto pdb1 = v4Enabled ? prefixDb1V4 : prefixDb1;

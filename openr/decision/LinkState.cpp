@@ -520,7 +520,6 @@ LinkState::updateAdjacencyDatabase(
 
   bool routeAttrChanged = false;
 
-  // If changed locally we will need to update POP route for local node
   routeAttrChanged |= priorAdjacencyDb.nodeLabel != newAdjacencyDb.nodeLabel;
 
   auto newIter = newLinks.begin();

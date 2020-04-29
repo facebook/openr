@@ -397,8 +397,6 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
   fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
   auto rc = linkState_.updateAdjacencyDatabase(
       newAdjacencyDb, holdUpTtl, holdDownTtl);
-  // temporary hack needed to keep UTs happy
-  rc.second = rc.second && myNodeName_ == newAdjacencyDb.thisNodeName;
   return rc;
 }
 
@@ -1951,8 +1949,10 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
           pendingAdjUpdates_.addUpdate(
               myNodeName_, castToStd(adjacencyDb.perfEvents_ref()));
         }
-        if (rc.second && nodeName == myNodeName_) {
-          // route attribute chanegs only matter for the local node
+        if (rc.second) {
+          // rebuild the routes, if related route attributes has been
+          // changed. e.g. node mpls label change, adjacency label change,
+          // local nexthops change etc.
           res.prefixesChanged = true;
           pendingPrefixUpdates_.addUpdate(
               myNodeName_, castToStd(adjacencyDb.perfEvents_ref()));
