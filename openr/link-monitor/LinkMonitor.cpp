@@ -892,11 +892,12 @@ LinkMonitor::syncInterfaces() {
       continue;
     }
 
+    const std::unordered_set<folly::CIDRNetwork> oldNetworks =
+        interfaceEntry->getNetworks(); // NOTE: Copy intended
     std::unordered_set<folly::CIDRNetwork> newNetworks;
     for (const auto& network : link.networks) {
       newNetworks.emplace(toIPNetwork(network, false /* no masking */));
     }
-    const auto& oldNetworks = interfaceEntry->getNetworks();
 
     // Update link attributes
     const bool wasUp = interfaceEntry->isUp();
