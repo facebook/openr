@@ -23,45 +23,28 @@ namespace openr {
 
 KvStoreWrapper::KvStoreWrapper(
     fbzmq::Context& zmqContext,
-    std::string nodeId,
-    std::chrono::seconds dbSyncInterval,
-    std::chrono::seconds monitorSubmitInterval,
+    std::shared_ptr<const Config> config,
     std::unordered_map<std::string, thrift::PeerSpec> peers,
-    std::optional<KvStoreFilters> filters,
-    KvStoreFloodRate kvStoreRate,
-    std::chrono::milliseconds ttlDecr,
-    bool enableFloodOptimization,
-    bool isFloodRoot,
-    const std::unordered_set<std::string>& areas,
     std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
         peerUpdatesQueue)
-    : nodeId(nodeId),
+    : nodeId(config->getNodeName()),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
       monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
-      enableFloodOptimization_(enableFloodOptimization) {
+      enableFloodOptimization_(
+          config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
+              false)) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
-  // assume useFloodOptimization when enableFloodOptimization is True
-  bool useFloodOptimization = enableFloodOptimization;
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
-      nodeId,
       kvStoreUpdatesQueue_,
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
                                    : dummyPeerUpdatesQueue_.getReader(),
       KvStoreGlobalCmdUrl{globalCmdUrl},
       MonitorSubmitUrl{monitorSubmitUrl},
+      config,
       std::nullopt /* ip-tos */,
-      dbSyncInterval,
-      monitorSubmitInterval,
       peers,
-      std::move(filters),
-      Constants::kHighWaterMark,
-      kvStoreRate,
-      ttlDecr,
-      enableFloodOptimization,
-      isFloodRoot,
-      useFloodOptimization,
-      areas);
+      Constants::kHighWaterMark);
 }
 
 void

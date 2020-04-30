@@ -23,6 +23,8 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -41,7 +43,7 @@ const uint32_t kValueStrSize = 64;
 // interval for periodic syncs
 const std::chrono::seconds kDbSyncInterval(1);
 const std::chrono::seconds kCounterSubmitInterval(1);
-const std::chrono::milliseconds counterUpdateWaitTime(1500);
+const std::chrono::milliseconds counterUpdateWaitTime(5500);
 
 // TTL in ms
 const int64_t kTtlMs = 1000;
@@ -64,6 +66,13 @@ genRandomStr(const int len) {
   }
 
   return s;
+}
+
+thrift::KvstoreConfig
+getTestKvConf() {
+  thrift::KvstoreConfig kvConf;
+  kvConf.sync_interval_s = kDbSyncInterval.count();
+  return kvConf;
 }
 
 /**
@@ -93,27 +102,15 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
   createKvStore(
       std::string nodeId,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      std::optional<KvStoreFilters> filters = std::nullopt,
-      KvStoreFloodRate kvStoreRate = std::nullopt,
-      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
-      bool enableFloodOptimization = false,
-      bool isFloodRoot = false,
-      std::chrono::seconds dbSyncInterval = kDbSyncInterval,
-      std::unordered_set<std::string> areas = {
-          openr::thrift::KvStore_constants::kDefaultArea()}) {
-    auto ptr = std::make_unique<KvStoreWrapper>(
-        context,
-        nodeId,
-        dbSyncInterval,
-        kCounterSubmitInterval,
-        std::move(peers),
-        std::move(filters),
-        kvStoreRate,
-        ttlDecr,
-        enableFloodOptimization,
-        isFloodRoot,
-        areas);
-    stores_.emplace_back(std::move(ptr));
+      thrift::KvstoreConfig kvStoreConf = getTestKvConf(),
+      const std::vector<thrift::AreaConfig>& areas = {}) {
+    auto tConfig = getBasicOpenrConfig(nodeId);
+    tConfig.kvstore_config = kvStoreConf;
+    tConfig.areas = areas;
+    config_ = std::make_shared<Config>(tConfig);
+
+    stores_.emplace_back(
+        std::make_unique<KvStoreWrapper>(context, config_, peers));
     return stores_.back().get();
   }
 
@@ -131,6 +128,9 @@ class KvStoreTestFixture : public ::testing::TestWithParam<bool> {
 
   // Internal stores
   std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};
+
+  // config
+  std::shared_ptr<Config> config_;
 };
 
 class KvStoreTestTtlFixture : public KvStoreTestFixture {
@@ -559,25 +559,20 @@ TEST(KvStore, compareValuesTest) {
 //
 // Test counter reporting
 //
-TEST(KvStore, CounterReport) {
-  fbzmq::Context context;
+TEST_F(KvStoreTestFixture, CounterReport) {
   CompactSerializer serializer;
 
-  KvStoreWrapper kvStore(
-      context,
-      "node1",
-      std::chrono::seconds(1) /* Db Sync Interval */,
-      std::chrono::seconds(1) /* Monitor Submit Interval */,
-      std::unordered_map<std::string, thrift::PeerSpec>{});
-  kvStore.run();
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto kvStore = createKvStore("node1", emptyPeers);
+  kvStore->run();
 
   /** Verify redundant publications **/
   // Set key in KvStore with loop
   const std::vector<std::string> nodeIds{"node2", "node3", "node1", "node4"};
-  kvStore.setKey("test-key", thrift::Value(), nodeIds);
+  kvStore->setKey("test-key", thrift::Value(), nodeIds);
   // Set same key with different path
   const std::vector<std::string> nodeIds2{"node5"};
-  kvStore.setKey("test-key", thrift::Value(), nodeIds2);
+  kvStore->setKey("test-key", thrift::Value(), nodeIds2);
 
   /** Verify key update **/
   // Set a key in KvStore
@@ -588,7 +583,7 @@ TEST(KvStore, CounterReport) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
-  kvStore.setKey("test-key2", thriftVal1);
+  kvStore->setKey("test-key2", thriftVal1);
 
   // Set same key with different value
   thrift::Value thriftVal2 = createThriftValue(
@@ -598,7 +593,7 @@ TEST(KvStore, CounterReport) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
-  kvStore.setKey("test-key2", thriftVal2);
+  kvStore->setKey("test-key2", thriftVal2);
 
   // Wait till counters updated
   std::this_thread::sleep_for(std::chrono::milliseconds(counterUpdateWaitTime));
@@ -650,7 +645,7 @@ TEST(KvStore, CounterReport) {
   EXPECT_EQ(4, counters.at("kvstore.received_key_vals.sum"));
 
   // Verify the key and the number of key
-  ASSERT_TRUE(kvStore.getKey("test-key2").has_value());
+  ASSERT_TRUE(kvStore->getKey("test-key2").has_value());
   ASSERT_EQ(1, counters.count("kvstore.num_keys"));
   int expect_num_key = 1;
   EXPECT_EQ(expect_num_key, counters.at("kvstore.num_keys"));
@@ -676,7 +671,7 @@ TEST(KvStore, CounterReport) {
   EXPECT_EQ(expect_num_key, counters.at("kvstore.num_keys"));
 
   LOG(INFO) << "Counters received, yo";
-  kvStore.stop();
+  kvStore->stop();
   LOG(INFO) << "KvStore thread finished";
 }
 
@@ -686,8 +681,7 @@ TEST(KvStore, CounterReport) {
  * - Correct TTL reflects back in GET/KEY_DUMP/KEY_HASH
  * - Applying ttl updates reflects properly
  */
-TEST(KvStore, TtlVerification) {
-  fbzmq::Context context;
+TEST_F(KvStoreTestFixture, TtlVerification) {
   const std::string key{"dummyKey"};
   const thrift::Value value(
       apache::thrift::FRAGILE,
@@ -698,13 +692,11 @@ TEST(KvStore, TtlVerification) {
       5 /* ttl version */,
       0 /* hash */);
 
-  KvStoreWrapper kvStore(
-      context,
-      "test",
-      std::chrono::seconds(1) /* Db Sync Interval */,
-      std::chrono::seconds(100) /* Monitor Submit Interval */,
-      std::unordered_map<std::string, thrift::PeerSpec>{});
-  kvStore.run();
+  const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
+  auto kvStore =
+      createKvStore("test", emptyPeers); // std::chrono::seconds(100) /* Monitor
+                                         // Submit Interval */,
+  kvStore->run();
 
   //
   // 1. Advertise key-value with 1ms rtt
@@ -713,19 +705,19 @@ TEST(KvStore, TtlVerification) {
   {
     auto thriftValue = value;
     thriftValue.ttl = 1;
-    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+    EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
     // KEY_GET
-    EXPECT_FALSE(kvStore.getKey(key).has_value());
+    EXPECT_FALSE(kvStore->getKey(key).has_value());
 
     // KEY_DUMP
-    EXPECT_EQ(0, kvStore.dumpAll().size());
+    EXPECT_EQ(0, kvStore->dumpAll().size());
 
     // HASH_DUMP
-    EXPECT_EQ(0, kvStore.dumpAll().size());
+    EXPECT_EQ(0, kvStore->dumpAll().size());
 
     // We will receive key-expiry publication but no key-advertisement
-    auto publication = kvStore.recvPublication();
+    auto publication = kvStore->recvPublication();
     EXPECT_EQ(0, publication.keyVals.size());
     ASSERT_EQ(1, publication.expiredKeys.size());
     EXPECT_EQ(key, publication.expiredKeys.at(0));
@@ -738,10 +730,10 @@ TEST(KvStore, TtlVerification) {
   {
     auto thriftValue = value;
     thriftValue.ttl = Constants::kTtlThreshold.count() - 1;
-    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+    EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
     // KEY_GET
-    auto getRes = kvStore.getKey(key);
+    auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     getRes->ttl = thriftValue.ttl;
@@ -749,7 +741,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue, getRes.value());
 
     // KEY_DUMP
-    auto dumpRes = kvStore.dumpAll();
+    auto dumpRes = kvStore->dumpAll();
     EXPECT_EQ(1, dumpRes.size());
     ASSERT_EQ(1, dumpRes.count(key));
     auto& dumpResValue = dumpRes.at(key);
@@ -759,7 +751,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue, dumpResValue);
 
     // HASH_DUMP
-    auto hashRes = kvStore.dumpHashes();
+    auto hashRes = kvStore->dumpHashes();
     EXPECT_EQ(1, hashRes.size());
     ASSERT_EQ(1, hashRes.count(key));
     auto& hashResValue = hashRes.at(key);
@@ -770,7 +762,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue, hashResValue);
 
     // We will receive key-expiry publication but no key-advertisement
-    auto publication = kvStore.recvPublication();
+    auto publication = kvStore->recvPublication();
     EXPECT_EQ(0, publication.keyVals.size());
     ASSERT_EQ(1, publication.expiredKeys.size());
     EXPECT_EQ(key, publication.expiredKeys.at(0));
@@ -784,10 +776,10 @@ TEST(KvStore, TtlVerification) {
   {
     auto thriftValue = value;
     thriftValue.ttl = 50000;
-    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+    EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
     // KEY_GET
-    auto getRes = kvStore.getKey(key);
+    auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     getRes->ttl = thriftValue.ttl;
@@ -795,7 +787,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue, getRes.value());
 
     // KEY_DUMP
-    auto dumpRes = kvStore.dumpAll();
+    auto dumpRes = kvStore->dumpAll();
     EXPECT_EQ(1, dumpRes.size());
     ASSERT_EQ(1, dumpRes.count(key));
     auto& dumpResValue = dumpRes.at(key);
@@ -805,7 +797,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue, dumpResValue);
 
     // HASH_DUMP
-    auto hashRes = kvStore.dumpHashes();
+    auto hashRes = kvStore->dumpHashes();
     EXPECT_EQ(1, hashRes.size());
     ASSERT_EQ(1, hashRes.count(key));
     auto& hashResValue = hashRes.at(key);
@@ -816,7 +808,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(thriftValue, hashResValue);
 
     // We will receive key-advertisement
-    auto publication = kvStore.recvPublication();
+    auto publication = kvStore->recvPublication();
     EXPECT_EQ(1, publication.keyVals.size());
     ASSERT_EQ(0, publication.expiredKeys.size());
     ASSERT_EQ(1, publication.keyVals.count(key));
@@ -836,10 +828,10 @@ TEST(KvStore, TtlVerification) {
     thriftValue.value_ref().reset();
     thriftValue.ttl = 30000;
     thriftValue.ttlVersion += 1;
-    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+    EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
     // KEY_GET
-    auto getRes = kvStore.getKey(key);
+    auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     EXPECT_EQ(thriftValue.version, getRes->version);
@@ -848,7 +840,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.value_ref(), getRes->value_ref());
 
     // We will receive update over PUB socket
-    auto publication = kvStore.recvPublication();
+    auto publication = kvStore->recvPublication();
     EXPECT_EQ(1, publication.keyVals.size());
     ASSERT_EQ(0, publication.expiredKeys.size());
     ASSERT_EQ(1, publication.keyVals.count(key));
@@ -869,10 +861,10 @@ TEST(KvStore, TtlVerification) {
     thriftValue.value_ref().reset();
     thriftValue.ttl = Constants::kTtlInfinity;
     thriftValue.ttlVersion += 2;
-    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+    EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
     // KEY_GET - ttl should remain infinite
-    auto getRes = kvStore.getKey(key);
+    auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_EQ(Constants::kTtlInfinity, getRes->ttl);
     EXPECT_EQ(thriftValue.version, getRes->version);
@@ -881,7 +873,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.value_ref(), getRes->value_ref());
 
     // We will receive update over PUB socket
-    auto publication = kvStore.recvPublication();
+    auto publication = kvStore->recvPublication();
     EXPECT_EQ(1, publication.keyVals.size());
     ASSERT_EQ(0, publication.expiredKeys.size());
     ASSERT_EQ(1, publication.keyVals.count(key));
@@ -902,10 +894,10 @@ TEST(KvStore, TtlVerification) {
     thriftValue.value_ref().reset();
     thriftValue.ttl = 20000;
     thriftValue.ttlVersion += 3;
-    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+    EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
     // KEY_GET
-    auto getRes = kvStore.getKey(key);
+    auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
     EXPECT_EQ(thriftValue.version, getRes->version);
@@ -914,7 +906,7 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.value_ref(), getRes->value_ref());
 
     // We will receive update over PUB socket
-    auto publication = kvStore.recvPublication();
+    auto publication = kvStore->recvPublication();
     EXPECT_EQ(1, publication.keyVals.size());
     ASSERT_EQ(0, publication.expiredKeys.size());
     ASSERT_EQ(1, publication.keyVals.count(key));
@@ -934,10 +926,10 @@ TEST(KvStore, TtlVerification) {
     auto thriftValue = value;
     thriftValue.value_ref().reset();
     thriftValue.ttl = 10000;
-    EXPECT_TRUE(kvStore.setKey(key, thriftValue));
+    EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
     // KEY_GET
-    auto getRes = kvStore.getKey(key);
+    auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(20000, getRes->ttl); // Previous ttl was set to 20s
     EXPECT_LE(10000, getRes->ttl);
@@ -947,14 +939,18 @@ TEST(KvStore, TtlVerification) {
     EXPECT_EQ(value.value_ref(), getRes->value_ref());
   }
 
-  kvStore.stop();
+  kvStore->stop();
 }
 
 TEST_F(KvStoreTestFixture, LeafNode) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
-  std::optional<KvStoreFilters> kvFilters0{KvStoreFilters({"e2e"}, {"store0"})};
-  auto store0 = createKvStore("store0", emptyPeers, std::move(kvFilters0));
+  auto store0Conf = getTestKvConf();
+  store0Conf.set_leaf_node_ref() = true;
+  store0Conf.key_prefix_filters_ref() = {"e2e"};
+  store0Conf.key_originator_id_filters_ref() = {"store0"};
+
+  auto store0 = createKvStore("store0", emptyPeers, store0Conf);
   auto store1 = createKvStore("store1", emptyPeers);
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
   std::unordered_map<std::string, thrift::Value> expectedOrignatorVals;
@@ -1324,38 +1320,18 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
 TEST_F(KvStoreTestFixture, DualTest) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
-  auto r0 = createKvStore(
-      "r0",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt,
-      Constants::kTtlDecrement,
-      true,
-      true /* isRoot */);
-  auto r1 = createKvStore(
-      "r1",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt,
-      Constants::kTtlDecrement,
-      true,
-      true /* isRoot */);
-  auto n0 = createKvStore(
-      "n0",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt,
-      Constants::kTtlDecrement,
-      true,
-      false /* isRoot */);
-  auto n1 = createKvStore(
-      "n1",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt,
-      Constants::kTtlDecrement,
-      true,
-      false /* isRoot */);
+  auto floodRootConf = getTestKvConf();
+  floodRootConf.enable_flood_optimization_ref() = true;
+  floodRootConf.is_flood_root_ref() = true;
+
+  auto nonFloodRootConf = getTestKvConf();
+  nonFloodRootConf.enable_flood_optimization_ref() = true;
+  nonFloodRootConf.is_flood_root_ref() = false;
+
+  auto r0 = createKvStore("r0", emptyPeers, floodRootConf);
+  auto r1 = createKvStore("r1", emptyPeers, floodRootConf);
+  auto n0 = createKvStore("n0", emptyPeers, nonFloodRootConf);
+  auto n1 = createKvStore("n1", emptyPeers, nonFloodRootConf);
 
   // Start stores in their respective threads.
   r0->run();
@@ -2437,11 +2413,11 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
 TEST_F(KvStoreTestFixture, TtlDecrementValue) {
   fbzmq::Context context;
 
-  std::chrono::milliseconds ttlDecr{300};
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto store0 = createKvStore("store0", emptyPeers);
-  auto store1 =
-      createKvStore("store1", emptyPeers, std::nullopt, std::nullopt, ttlDecr);
+  auto store1Conf = getTestKvConf();
+  store1Conf.ttl_decrement_ms = 300;
+  auto store1 = createKvStore("store1", emptyPeers, store1Conf);
   store0->run();
   store1->run();
 
@@ -2472,11 +2448,12 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
     /* check key synced from store1 has ttl that is reduced by ttlDecr. */
     auto getPub0 = store0->recvPublication();
     ASSERT_EQ(1, getPub0.keyVals.count("key1"));
-    EXPECT_LE(getPub0.keyVals.at("key1").ttl, ttl1 - ttlDecr.count());
+    EXPECT_LE(
+        getPub0.keyVals.at("key1").ttl, ttl1 - store1Conf.ttl_decrement_ms);
   }
 
   /* Add another key with TTL < ttlDecr, and check it's not synced */
-  int64_t ttl2 = ttlDecr.count() - 1;
+  int64_t ttl2 = store1Conf.ttl_decrement_ms - 1;
   thrift::Value thriftVal2(
       apache::thrift::FRAGILE,
       1 /* version */,
@@ -2509,38 +2486,20 @@ TEST_F(KvStoreTestFixture, TtlDecrementValue) {
 TEST_F(KvStoreTestFixture, RateLimiterFlood) {
   fbzmq::Context context;
 
-  const uint32_t messageRate = 10; // number of messages per second
-  const uint32_t burstSize = 50; // number of messages
-  KvStoreFloodRate kvStoreRate(std::make_pair(messageRate, burstSize));
-
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-  auto store0 = createKvStore(
-      "store0",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt, /* rate-limited */
-      Constants::kTtlDecrement,
-      false, /* flood-optimization */
-      false, /* is-root */
-      60s /* db-sync-interval */);
-  auto store1 = createKvStore(
-      "store1",
-      emptyPeers,
-      std::nullopt,
-      kvStoreRate, /* rate-limited */
-      Constants::kTtlDecrement,
-      false, /* flood-optimization */
-      false, /* is-root */
-      60s /* db-sync-interval */);
-  auto store2 = createKvStore(
-      "store2",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt, /* rate-limited */
-      Constants::kTtlDecrement,
-      false, /* flood-optimization */
-      false, /* is-root */
-      60s /* db-sync-interval */);
+  // use prod syncInterval 60s
+  thrift::KvstoreConfig prodConf, rateLimitConf;
+  const size_t messageRate{10}, burstSize{50};
+  thrift::KvstoreFloodRate floodRate(
+      apache::thrift::FRAGILE,
+      messageRate /*flood_msg_per_sec*/,
+      burstSize /*flood_msg_burst_size*/);
+  rateLimitConf.flood_rate_ref() = floodRate;
+
+  auto store0 = createKvStore("store0", emptyPeers, prodConf);
+  auto store1 = createKvStore("store1", emptyPeers, rateLimitConf);
+  auto store2 = createKvStore("store2", emptyPeers, prodConf);
+
   store0->run();
   store1->run();
   store2->run();
@@ -2597,13 +2556,17 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   fbzmq::Context context;
   fb303::fbData->resetAllData();
 
-  const uint32_t messageRate = 10; // number of messages per second
-  const uint32_t burstSize = 50; // number of messages
-  KvStoreFloodRate kvStoreRate(std::make_pair(messageRate, burstSize));
+  const size_t messageRate{10}, burstSize{50};
+  auto rateLimitConf = getTestKvConf();
+  thrift::KvstoreFloodRate floodRate(
+      apache::thrift::FRAGILE,
+      messageRate /*flood_msg_per_sec*/,
+      burstSize /*flood_msg_burst_size*/);
+  rateLimitConf.flood_rate_ref() = floodRate;
 
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto store0 = createKvStore("store0", emptyPeers);
-  auto store1 = createKvStore("store1", emptyPeers, std::nullopt, kvStoreRate);
+  auto store1 = createKvStore("store1", emptyPeers, rateLimitConf);
   store0->run();
   store1->run();
 
@@ -2884,44 +2847,20 @@ TEST_F(KvStoreTestFixture, FullSync) {
 */
 TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
-  std::string podArea{"pod-area"};
-  std::string planeArea{"plane-area"};
 
   folly::EventBase evb;
   auto scheduleTimePoint = std::chrono::steady_clock::now();
 
-  auto storeA = createKvStore(
-      "storeA",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt,
-      Constants::kTtlDecrement,
-      false,
-      false,
-      kDbSyncInterval,
-      {podArea});
+  thrift::AreaConfig pod, plane;
+  pod.area_id = "pod-area";
+  pod.neighbor_regexes.emplace_back(".*");
+  plane.area_id = "plane-area";
+  plane.neighbor_regexes.emplace_back(".*");
 
-  auto storeB = createKvStore(
-      "storeB",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt,
-      Constants::kTtlDecrement,
-      false,
-      false,
-      kDbSyncInterval,
-      {podArea, planeArea});
-
-  auto storeC = createKvStore(
-      "storeC",
-      emptyPeers,
-      std::nullopt,
-      std::nullopt,
-      Constants::kTtlDecrement,
-      false,
-      false,
-      kDbSyncInterval,
-      {planeArea});
+  auto storeA = createKvStore("storeA", emptyPeers, getTestKvConf(), {pod});
+  auto storeB =
+      createKvStore("storeB", emptyPeers, getTestKvConf(), {pod, plane});
+  auto storeC = createKvStore("storeC", emptyPeers, getTestKvConf(), {plane});
 
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPod{};
   std::unordered_map<std::string, thrift::Value> expectedKeyValsPlane{};
@@ -2932,10 +2871,10 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         storeB->run();
         storeC->run();
 
-        storeA->addPeer("storeB", storeB->getPeerSpec(), podArea);
-        storeB->addPeer("storeA", storeA->getPeerSpec(), podArea);
-        storeB->addPeer("storeC", storeC->getPeerSpec(), planeArea);
-        storeC->addPeer("storeB", storeB->getPeerSpec(), planeArea);
+        storeA->addPeer("storeB", storeB->getPeerSpec(), pod.area_id);
+        storeB->addPeer("storeA", storeA->getPeerSpec(), pod.area_id);
+        storeB->addPeer("storeC", storeC->getPeerSpec(), plane.area_id);
+        storeC->addPeer("storeB", storeB->getPeerSpec(), plane.area_id);
         // verify get peers command
         std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
             {storeA->nodeId, storeA->getPeerSpec()},
@@ -2943,8 +2882,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
             {storeC->nodeId, storeC->getPeerSpec()},
         };
-        EXPECT_EQ(expectedPeersPod, storeB->getPeers(podArea));
-        EXPECT_EQ(expectedPeersPlane, storeB->getPeers(planeArea));
+        EXPECT_EQ(expectedPeersPod, storeB->getPeers(pod.area_id));
+        EXPECT_EQ(expectedPeersPlane, storeB->getPeers(plane.area_id));
 
         const std::string k0{"pod-area-0"};
         const std::string k1{"pod-area-1"};
@@ -2995,26 +2934,27 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         // should fail
         EXPECT_FALSE(storeA->setKey(k0, thriftVal0));
         // set key in the correct area
-        EXPECT_TRUE(storeA->setKey(k0, thriftVal0, std::nullopt, podArea));
+        EXPECT_TRUE(storeA->setKey(k0, thriftVal0, std::nullopt, pod.area_id));
         // store A should not have the key in default area
         EXPECT_FALSE(storeA->getKey(k0).has_value());
         // store A should have the key in pod-area
-        EXPECT_TRUE(storeA->getKey(k0, podArea).has_value());
+        EXPECT_TRUE(storeA->getKey(k0, pod.area_id).has_value());
         // store B should have the key in pod-area
-        EXPECT_TRUE(storeB->getKey(k0, podArea).has_value());
+        EXPECT_TRUE(storeB->getKey(k0, pod.area_id).has_value());
         // store B should NOT have the key in plane-area
-        EXPECT_FALSE(storeB->getKey(k0, planeArea).has_value());
+        EXPECT_FALSE(storeB->getKey(k0, plane.area_id).has_value());
 
         // set key in store C and verify it's present in plane area in store B
         // and not present in POD area in storeB and storeA set key in the
         // correct area
-        EXPECT_TRUE(storeC->setKey(k2, thriftVal2, std::nullopt, planeArea));
-        // store B should have the key in planeArea
-        EXPECT_TRUE(storeB->getKey(k2, planeArea).has_value());
-        // store B should NOT have the key in podArea
-        EXPECT_FALSE(storeB->getKey(k2, podArea).has_value());
-        // store A should NOT have the key in podArea
-        EXPECT_FALSE(storeA->getKey(k2, podArea).has_value());
+        EXPECT_TRUE(
+            storeC->setKey(k2, thriftVal2, std::nullopt, plane.area_id));
+        // store B should have the key in plane.area_id
+        EXPECT_TRUE(storeB->getKey(k2, plane.area_id).has_value());
+        // store B should NOT have the key in pod.area_id
+        EXPECT_FALSE(storeB->getKey(k2, pod.area_id).has_value());
+        // store A should NOT have the key in pod.area_id
+        EXPECT_FALSE(storeA->getKey(k2, pod.area_id).has_value());
 
         // pod area expected key values
         expectedKeyValsPod[k0] = thriftVal0;
@@ -3025,29 +2965,32 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
         expectedKeyValsPlane[k3] = thriftVal3;
 
         // add another key in both plane and pod area
-        EXPECT_TRUE(storeB->setKey(k1, thriftVal1, std::nullopt, podArea));
-        EXPECT_TRUE(storeC->setKey(k3, thriftVal3, std::nullopt, planeArea));
+        EXPECT_TRUE(storeB->setKey(k1, thriftVal1, std::nullopt, pod.area_id));
+        EXPECT_TRUE(
+            storeC->setKey(k3, thriftVal3, std::nullopt, plane.area_id));
       },
       scheduleTimePoint);
 
   evb.scheduleAt(
       [&]() noexcept {
         // pod area
-        EXPECT_EQ(expectedKeyValsPod, storeA->dumpAll(std::nullopt, podArea));
-        EXPECT_EQ(expectedKeyValsPod, storeB->dumpAll(std::nullopt, podArea));
+        EXPECT_EQ(
+            expectedKeyValsPod, storeA->dumpAll(std::nullopt, pod.area_id));
+        EXPECT_EQ(
+            expectedKeyValsPod, storeB->dumpAll(std::nullopt, pod.area_id));
 
         // plane area
         EXPECT_EQ(
-            expectedKeyValsPlane, storeB->dumpAll(std::nullopt, planeArea));
+            expectedKeyValsPlane, storeB->dumpAll(std::nullopt, plane.area_id));
         EXPECT_EQ(
-            expectedKeyValsPlane, storeC->dumpAll(std::nullopt, planeArea));
+            expectedKeyValsPlane, storeC->dumpAll(std::nullopt, plane.area_id));
 
         // check for counters on StoreB that has 2 instances. Number of keys
         // must be the total of both areas number of keys must be 4, 2 from
-        // podArea and 2 from planArea number of peers at storeB must be 2 - one
-        // from each area
-        EXPECT_EQ(2, storeB->dumpAll(std::nullopt, podArea).size());
-        EXPECT_EQ(2, storeB->dumpAll(std::nullopt, planeArea).size());
+        // pod.area_id and 2 from planArea number of peers at storeB must be 2 -
+        // one from each area
+        EXPECT_EQ(2, storeB->dumpAll(std::nullopt, pod.area_id).size());
+        EXPECT_EQ(2, storeB->dumpAll(std::nullopt, plane.area_id).size());
       },
       scheduleTimePoint + std::chrono::milliseconds(200));
 
@@ -3083,19 +3026,9 @@ TEST_P(KvStoreRateLimitTestFixture, InitialSync) {
   // NOTE: Set db-sync-interval to 60s (high value) to avoid periodic full sync
   // in this test
   //
+  auto config = std::make_shared<Config>(getBasicOpenrConfig("store0"));
   auto store0 = std::make_unique<KvStoreWrapper>(
-      context,
-      "store0",
-      60s /* dbSyncInterval */,
-      kCounterSubmitInterval,
-      std::unordered_map<std::string, thrift::PeerSpec>{},
-      std::nullopt /* filters */,
-      std::nullopt /* kvStoreRate */,
-      Constants::kTtlDecrement,
-      false /* enableFloodOptimization */,
-      false /* isFloodRoot */,
-      std::unordered_set<std::string>{
-          openr::thrift::KvStore_constants::kDefaultArea()});
+      context, config, std::unordered_map<std::string, thrift::PeerSpec>{});
   store0->run();
 
   //
@@ -3259,14 +3192,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
   // in this test
   //
   auto store0 = createKvStore(
-      "store0",
-      std::unordered_map<std::string, thrift::PeerSpec>{},
-      std::nullopt /* filters */,
-      std::nullopt /* kvStoreRate */,
-      Constants::kTtlDecrement,
-      false /* enableFloodOptimization */,
-      false /* isFloodRoot */,
-      std::chrono::seconds(60) /* db-sync interval */);
+      "store0", std::unordered_map<std::string, thrift::PeerSpec>{});
   store0->run();
 
   // Verify initial expectations

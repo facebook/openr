@@ -27,6 +27,8 @@
 
 #include <openr/allocators/PrefixAllocator.h>
 #include <openr/config-store/PersistentStore.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
@@ -55,12 +57,13 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     // start openrEvb thread for KvStoreClient usage
     evbThread_ = std::thread([&]() { evb_.run(); });
 
+    auto tConfig = getBasicOpenrConfig(myNodeName_);
+    config_ = std::make_shared<Config>(tConfig);
+
     // Start KvStore and attach a client to it
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
         zmqContext_,
-        myNodeName_,
-        std::chrono::seconds(60) /* db sync interval */,
-        std::chrono::seconds(600) /* counter submit interval */,
+        config_,
         std::unordered_map<std::string, openr::thrift::PeerSpec>{});
     kvStoreWrapper_->run();
     evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
@@ -186,6 +189,7 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   const std::string myNodeName_{"test-node"};
   std::string tempFileName_;
 
+  std::shared_ptr<Config> config_;
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<PersistentStore> configStore_;
@@ -346,11 +350,12 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     //
 
     const auto nodeId = folly::sformat("test_store{}", round);
+
+    auto tConfig = getBasicOpenrConfig(nodeId);
+    auto config = std::make_shared<Config>(tConfig);
     auto store = std::make_shared<KvStoreWrapper>(
         zmqContext,
-        nodeId,
-        std::chrono::seconds(60) /* db sync interval */,
-        std::chrono::seconds(600) /* counter submit interval */,
+        config,
         std::unordered_map<std::string, openr::thrift::PeerSpec>{});
     store->run();
     LOG(INFO) << "The test store is running";

@@ -14,6 +14,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -34,11 +36,11 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
     evbThread = std::thread([&]() { evb.run(); });
 
     auto makeStoreWrapper = [this](std::string nodeId) {
+      auto tConfig = getBasicOpenrConfig(nodeId);
+      config_ = std::make_shared<Config>(tConfig);
       return std::make_shared<KvStoreWrapper>(
           context_,
-          nodeId,
-          std::chrono::seconds(60), // db sync interval
-          std::chrono::seconds(600), // counter submit interval,
+          config_,
           std::unordered_map<std::string, thrift::PeerSpec>{});
     };
 
@@ -111,6 +113,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
   OpenrEventBase evb;
   std::thread evbThread;
 
+  std::shared_ptr<Config> config_{nullptr};
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper1_{nullptr},
       kvStoreWrapper2_{nullptr};
   std::shared_ptr<OpenrThriftServerWrapper> thriftServer1_{nullptr},

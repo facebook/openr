@@ -14,19 +14,38 @@ namespace openr {
 class Config {
  public:
   explicit Config(const std::string& configFile);
-  explicit Config(thrift::OpenrConfig config) : config_(std::move(config)) {}
+  explicit Config(thrift::OpenrConfig config) : config_(std::move(config)) {
+    populateInternalDb();
+  }
 
   // getter
   const thrift::OpenrConfig&
   getConfig() const {
     return config_;
   }
-
   std::string getRunningConfig() const;
+
+  const std::string&
+  getNodeName() const {
+    return config_.node_name;
+  }
+
+  const thrift::KvstoreConfig&
+  getKvStoreConfig() const {
+    return config_.kvstore_config;
+  }
+
+  const std::unordered_set<std::string>&
+  getAreaIds() const {
+    return areaIds_;
+  }
 
  private:
   // thrift config
+
+  void populateInternalDb();
   thrift::OpenrConfig config_;
+  std::unordered_set<std::string> areaIds_;
 };
 
 } // namespace openr

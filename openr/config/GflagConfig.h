@@ -96,8 +96,14 @@ class GflagConfig final {
 
     // KvStore
     auto& kvstoreConf = config.kvstore_config;
-    kvstoreConf.flood_msg_per_sec = FLAGS_kvstore_flood_msg_per_sec;
-    kvstoreConf.flood_msg_burst_size = FLAGS_kvstore_flood_msg_burst_size;
+    if (FLAGS_kvstore_flood_msg_per_sec > 0 and
+        FLAGS_kvstore_flood_msg_burst_size > 0) {
+      thrift::KvstoreFloodRate rate;
+      rate.flood_msg_per_sec = FLAGS_kvstore_flood_msg_per_sec;
+      rate.flood_msg_burst_size = FLAGS_kvstore_flood_msg_burst_size;
+      kvstoreConf.flood_rate_ref() = rate;
+    }
+
     kvstoreConf.key_ttl_ms = FLAGS_kvstore_key_ttl_ms;
     kvstoreConf.sync_interval_s = FLAGS_kvstore_sync_interval_s;
     kvstoreConf.ttl_decrement_ms = FLAGS_kvstore_ttl_decrement_ms;
@@ -120,9 +126,6 @@ class GflagConfig final {
     }
     if (auto v = FLAGS_is_flood_root) {
       kvstoreConf.is_flood_root_ref() = v;
-    }
-    if (auto v = FLAGS_use_flood_optimization) {
-      kvstoreConf.use_flood_optimization_ref() = v;
     }
 
     // LinkMonitor

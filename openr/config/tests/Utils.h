@@ -19,9 +19,6 @@ getBasicOpenrConfig(
       std::vector<std::string>{"lo1"};
 
   openr::thrift::KvstoreConfig kvstoreConfig;
-  kvstoreConfig.enable_flood_optimization_ref() = true;
-  kvstoreConfig.use_flood_optimization_ref() = true;
-  kvstoreConfig.is_flood_root_ref() = true;
 
   openr::thrift::SparkConfig sparkConfig;
   sparkConfig.graceful_restart_time_s = 60;

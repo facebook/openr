@@ -11,22 +11,25 @@ namespace py3 openr.thrift
 
 include "BgpConfig.thrift"
 
+struct KvstoreFloodRate {
+  1: i32 flood_msg_per_sec
+  2: i32 flood_msg_burst_size
+}
+
 struct KvstoreConfig {
   # kvstore
-  1: i32 flood_msg_per_sec = 0
-  2: i32 flood_msg_burst_size = 0
-  3: i32 key_ttl_ms = 300000 # 5min 300*1000
-  4: i32 sync_interval_s = 60
-  5: i32 ttl_decrement_ms = 1
+  1: i32 key_ttl_ms = 300000 # 5min 300*1000
+  2: i32 sync_interval_s = 60
+  3: i32 ttl_decrement_ms = 1
+  4: optional KvstoreFloodRate flood_rate
 
-  6: optional bool set_leaf_node
-  7: optional list<string> key_prefix_filters
-  8: optional list<string> key_originator_id_filters
+  5: optional bool set_leaf_node
+  6: optional list<string> key_prefix_filters
+  7: optional list<string> key_originator_id_filters
 
   # flood optimization
-  9: optional bool enable_flood_optimization
-  10: optional bool is_flood_root
-  11: optional bool use_flood_optimization
+  8: optional bool enable_flood_optimization
+  9: optional bool is_flood_root
 }
 
 struct LinkMonitorConfig {

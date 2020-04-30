@@ -40,6 +40,15 @@ class OpenrCtrlFixture : public ::testing::Test {
     // create config
     auto tConfig = getBasicOpenrConfig(
         nodeName, true /* enableV4 */, true /* enableSegmentRouting */);
+    tConfig.kvstore_config.sync_interval_s = 1;
+    tConfig.kvstore_config.enable_flood_optimization_ref() = true;
+    tConfig.kvstore_config.is_flood_root_ref() = true;
+    for (auto id : {"0", "plane", "pod"}) {
+      thrift::AreaConfig area;
+      area.area_id = id;
+      area.neighbor_regexes.emplace_back(".*");
+      tConfig.areas.emplace_back(std::move(area));
+    }
     config = std::make_shared<Config>(tConfig);
 
     // Create zmq-monitor
@@ -57,18 +66,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create KvStore module
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-        context_,
-        nodeName,
-        std::chrono::seconds(1),
-        std::chrono::seconds(1),
-        std::unordered_map<std::string, thrift::PeerSpec>(),
-        std::nullopt,
-        std::nullopt,
-        std::chrono::milliseconds(1),
-        true /* enableFloodOptimization */,
-        true /* isFloodRoot */,
-        std::unordered_set<std::string>{
-            thrift::KvStore_constants::kDefaultArea(), "plane", "pod"});
+        context_, config, std::unordered_map<std::string, thrift::PeerSpec>());
     kvStoreWrapper->run();
 
     // Create Decision module

@@ -34,6 +34,8 @@
 
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -209,8 +211,19 @@ class LinkMonitorTestFixture : public ::testing::Test {
     });
     configStore->waitUntilRunning();
 
+    // create config
+    auto tConfig = getBasicOpenrConfig("node-1");
+    tConfig.kvstore_config.sync_interval_s = 1;
+    for (auto id : areas) {
+      thrift::AreaConfig area;
+      area.area_id = id;
+      area.neighbor_regexes.emplace_back(".*");
+      tConfig.areas.emplace_back(std::move(area));
+    }
+    config = std::make_shared<Config>(tConfig);
+
     // spin up a kvstore
-    createKvStore(areas);
+    createKvStore(config);
 
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
@@ -300,21 +313,11 @@ class LinkMonitorTestFixture : public ::testing::Test {
   }
 
   void
-  createKvStore(
-      std::unordered_set<std::string> areas = {
-          openr::thrift::KvStore_constants::kDefaultArea()}) {
+  createKvStore(std::shared_ptr<Config> config) {
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
         context,
-        "test_store1",
-        std::chrono::seconds(1) /* db sync interval */,
-        std::chrono::seconds(600) /* counter submit interval */,
+        config,
         std::unordered_map<std::string, thrift::PeerSpec>{},
-        std::nullopt,
-        std::nullopt,
-        Constants::kTtlDecrement,
-        false,
-        false,
-        areas,
         peerUpdatesQueue.getReader());
     kvStoreWrapper->run();
   }
@@ -558,6 +561,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
   // Create the serializer for write/read
   apache::thrift::CompactSerializer serializer;
+
+  std::shared_ptr<Config> config;
 
   std::unique_ptr<LinkMonitor> linkMonitor;
   std::unique_ptr<std::thread> linkMonitorThread;
@@ -857,7 +862,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   peerUpdatesQueue = messaging::ReplicateQueue<thrift::PeerUpdateRequest>();
 
   // Recreate KvStore as previous kvStoreUpdatesQueue is closed
-  createKvStore();
+  createKvStore(config);
 
   // mock "restarting" link monitor with existing config store
   std::string regexErr;

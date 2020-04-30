@@ -23,6 +23,35 @@ using namespace std::chrono;
 
 namespace fb303 = facebook::fb303;
 
+namespace {
+std::optional<openr::KvStoreFilters>
+getKvStoreFilters(std::shared_ptr<const openr::Config> config) {
+  std::optional<openr::KvStoreFilters> kvFilters{std::nullopt};
+  // Add key prefixes to allow if set as leaf node
+  if (config->getKvStoreConfig().set_leaf_node_ref().value_or(false)) {
+    std::vector<std::string> keyPrefixFilters;
+    if (auto v = config->getKvStoreConfig().key_prefix_filters_ref()) {
+      keyPrefixFilters = *v;
+    }
+    keyPrefixFilters.push_back(openr::Constants::kPrefixAllocMarker.toString());
+    keyPrefixFilters.push_back(
+        openr::Constants::kNodeLabelRangePrefix.toString());
+
+    // save nodeIds in the set
+    std::set<std::string> originatorIdFilters{};
+    for (const auto& id :
+         config->getKvStoreConfig().key_originator_id_filters_ref().value_or(
+             {})) {
+      originatorIdFilters.insert(id);
+    }
+    originatorIdFilters.insert(config->getNodeName());
+    kvFilters = openr::KvStoreFilters(keyPrefixFilters, originatorIdFilters);
+    LOG(INFO) << "girasoley: kvFilters: " << kvFilters->str();
+  }
+  return kvFilters;
+}
+} // namespace
+
 namespace openr {
 
 KvStoreFilters::KvStoreFilters(
@@ -74,46 +103,35 @@ KvStoreFilters::str() const {
 KvStore::KvStore(
     // initializers for immutable state
     fbzmq::Context& zmqContext,
-    std::string nodeId,
     messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
     messaging::RQueue<thrift::PeerUpdateRequest> peerUpdateQueue,
     KvStoreGlobalCmdUrl globalCmdUrl,
     MonitorSubmitUrl monitorSubmitUrl,
+    std::shared_ptr<const Config> config,
     std::optional<int> maybeIpTos,
-    std::chrono::seconds dbSyncInterval,
-    std::chrono::seconds counterSubmitInterval,
     // initializer for mutable state
     std::unordered_map<std::string, thrift::PeerSpec> peers,
-    std::optional<KvStoreFilters> filters,
-    int zmqHwm,
-    KvStoreFloodRate floodRate,
-    std::chrono::milliseconds ttlDecr,
-    bool enableFloodOptimization,
-    bool isFloodRoot,
-    bool useFloodOptimization,
-    const std::unordered_set<std::string>& areas)
-    : counterSubmitInterval_(counterSubmitInterval),
-      kvParams_(
-          nodeId,
+    int zmqHwm)
+    : kvParams_(
+          config->getNodeName(),
           kvStoreUpdatesQueue,
           fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER>(
               zmqContext,
-              fbzmq::IdentityString{folly::sformat("{}::TCP::CMD", nodeId)},
+              fbzmq::IdentityString{
+                  folly::sformat("{}::TCP::CMD", config->getNodeName())},
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
           maybeIpTos,
-          dbSyncInterval,
-          std::move(filters),
-          floodRate,
-          ttlDecr,
-          enableFloodOptimization,
-          isFloodRoot,
-          useFloodOptimization),
-      areas_(areas) {
-  CHECK(not nodeId.empty());
-  CHECK(not areas_.empty());
-
+          std::chrono::seconds(config->getKvStoreConfig().sync_interval_s),
+          getKvStoreFilters(config),
+          config->getKvStoreConfig().flood_rate_ref().to_optional(),
+          std::chrono::milliseconds(
+              config->getKvStoreConfig().ttl_decrement_ms),
+          config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
+              false),
+          config->getKvStoreConfig().is_flood_root_ref().value_or(false)),
+      areas_(config->getAreaIds()) {
   zmqMonitorClient_ =
       std::make_shared<fbzmq::ZmqMonitorClient>(zmqContext, monitorSubmitUrl);
   kvParams_.zmqMonitorClient = zmqMonitorClient_;
@@ -123,9 +141,9 @@ KvStore::KvStore(
     for (auto& counter : getGlobalCounters()) {
       fb303::fbData->setCounter(counter.first, counter.second);
     }
-    counterUpdateTimer_->scheduleTimeout(counterSubmitInterval_);
+    counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
   });
-  counterUpdateTimer_->scheduleTimeout(counterSubmitInterval_);
+  counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
 
   // Prepare global command socket
   prepareSocket(kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);
@@ -183,11 +201,12 @@ KvStore::KvStore(
             area,
             fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_CLIENT>(
                 zmqContext,
-                fbzmq::IdentityString{createPeerSyncId(nodeId, area)},
+                fbzmq::IdentityString{
+                    createPeerSyncId(config->getNodeName(), area)},
                 folly::none,
                 fbzmq::NonblockingFlag{true}),
-            isFloodRoot,
-            nodeId,
+            config->getKvStoreConfig().is_flood_root_ref().value_or(false),
+            config->getNodeName(),
             peers));
   }
 }
@@ -858,10 +877,10 @@ KvStoreDb::KvStoreDb(
       area_(area),
       peerSyncSock_(std::move(peersyncSock)),
       evb_(evb) {
-  if (kvParams_.floodRate.has_value()) {
+  if (kvParams_.floodRate) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
-        kvParams_.floodRate.value().first, // messages per sec
-        kvParams_.floodRate.value().second); // burst size
+        kvParams_.floodRate->flood_msg_per_sec,
+        kvParams_.floodRate->flood_msg_burst_size);
     pendingPublicationTimer_ =
         folly::AsyncTimeout::make(*evb_->getEvb(), [this]() noexcept {
           if (!floodLimiter_->consume(1)) {
@@ -2053,8 +2072,7 @@ std::unordered_set<std::string>
 KvStoreDb::getFloodPeers(const std::optional<std::string>& rootId) {
   auto sptPeers = DualNode::getSptPeers(rootId);
   bool floodToAll = false;
-  if (not kvParams_.enableFloodOptimization or
-      not kvParams_.useFloodOptimization or sptPeers.empty()) {
+  if (not kvParams_.enableFloodOptimization or sptPeers.empty()) {
     // fall back to naive flooding if feature not enabled or can not find
     // valid SPT-peers
     floodToAll = true;

@@ -421,33 +421,6 @@ main(int argc, char** argv) {
   monitor.waitUntilRunning();
   allThreads.emplace_back(std::move(monitorThread));
 
-  std::optional<KvStoreFilters> kvFilters = std::nullopt;
-  // Add key prefixes to allow if set as leaf node
-  if (FLAGS_set_leaf_node) {
-    std::vector<std::string> keyPrefixList;
-    folly::split(",", FLAGS_key_prefix_filters, keyPrefixList, true);
-
-    // save nodeIds in the set
-    std::set<std::string> originatorIds{};
-    folly::splitTo<std::string>(
-        ",",
-        FLAGS_key_originator_id_filters,
-        std::inserter(originatorIds, originatorIds.begin()),
-        true);
-
-    keyPrefixList.push_back(Constants::kPrefixAllocMarker.toString());
-    keyPrefixList.push_back(Constants::kNodeLabelRangePrefix.toString());
-    originatorIds.insert(FLAGS_node_name);
-    kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
-  }
-
-  KvStoreFloodRate kvstoreRate(std::make_pair(
-      FLAGS_kvstore_flood_msg_per_sec, FLAGS_kvstore_flood_msg_burst_size));
-  if (FLAGS_kvstore_flood_msg_per_sec <= 0 ||
-      FLAGS_kvstore_flood_msg_burst_size <= 0) {
-    kvstoreRate = std::nullopt;
-  }
-
   std::unordered_set<std::string> areas{
       openr::thrift::KvStore_constants::kDefaultArea()};
   auto nodeAreas = folly::gen::split(FLAGS_areas, ",") |
@@ -465,24 +438,15 @@ main(int argc, char** argv) {
       "KvStore",
       std::make_unique<KvStore>(
           context,
-          FLAGS_node_name,
           kvStoreUpdatesQueue,
           peerUpdatesQueue.getReader(),
           KvStoreGlobalCmdUrl{folly::sformat(
               "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
           monitorSubmitUrl,
+          config,
           maybeIpTos,
-          std::chrono::seconds(FLAGS_kvstore_sync_interval_s),
-          Constants::kMonitorSubmitInterval,
           std::unordered_map<std::string, openr::thrift::PeerSpec>{},
-          std::move(kvFilters),
-          FLAGS_kvstore_zmq_hwm,
-          kvstoreRate,
-          std::chrono::milliseconds(FLAGS_kvstore_ttl_decrement_ms),
-          FLAGS_enable_flood_optimization,
-          FLAGS_is_flood_root,
-          FLAGS_use_flood_optimization,
-          areas));
+          FLAGS_kvstore_zmq_hwm));
 
   auto prefixManager = startEventBase(
       allThreads,
@@ -697,11 +661,6 @@ main(int argc, char** argv) {
   // SPF in Decision module.  This is to make sure the Decision module
   // receives itself as one of the nodes before running the spf.
 
-  std::optional<std::chrono::seconds> decisionGRWindow{std::nullopt};
-  if (FLAGS_decision_graceful_restart_window_s >= 0) {
-    decisionGRWindow =
-        std::chrono::seconds(FLAGS_decision_graceful_restart_window_s);
-  }
   // Start Decision Module
   auto decision = startEventBase(
       allThreads,

@@ -15,6 +15,8 @@
 #include <folly/init/Init.h>
 
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -23,7 +25,6 @@ namespace {
 
 // interval for periodic syncs
 const std::chrono::seconds kDbSyncInterval(10000);
-const std::chrono::seconds kMonitorSubmitInterval(3600);
 
 // The byte size of a key
 const int kSizeOfKey = 32;
@@ -74,24 +75,12 @@ class KvStoreTestFixture {
   KvStoreWrapper*
   createKvStore(
       const std::string& nodeId,
-      std::unordered_map<std::string, thrift::PeerSpec> peers,
-      std::optional<KvStoreFilters> filters = std::nullopt,
-      KvStoreFloodRate kvStoreRate = std::nullopt,
-      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
-      bool enableFloodOptimization = false,
-      bool isFloodRoot = false,
-      std::chrono::seconds dbSyncInterval = kDbSyncInterval) {
-    auto ptr = std::make_unique<KvStoreWrapper>(
-        context,
-        nodeId,
-        dbSyncInterval,
-        kMonitorSubmitInterval,
-        std::move(peers),
-        std::move(filters),
-        kvStoreRate,
-        ttlDecr,
-        enableFloodOptimization,
-        isFloodRoot);
+      std::unordered_map<std::string, thrift::PeerSpec> peers) {
+    auto tConfig = getBasicOpenrConfig(nodeId);
+    tConfig.kvstore_config.sync_interval_s = kDbSyncInterval.count();
+    config_ = std::make_shared<Config>(tConfig);
+    auto ptr =
+        std::make_unique<KvStoreWrapper>(context, config_, std::move(peers));
     stores_.emplace_back(std::move(ptr));
     return stores_.back().get();
   }
@@ -101,6 +90,7 @@ class KvStoreTestFixture {
   fbzmq::Context context;
 
   // Internal stores
+  std::shared_ptr<Config> config_;
   std::vector<std::unique_ptr<KvStoreWrapper>> stores_{};
 };
 

@@ -42,7 +42,6 @@ class OpenrWrapper {
       std::string nodeId,
       bool v4Enabled,
       std::chrono::seconds kvStoreDbSyncInterval,
-      std::chrono::seconds kvStoreMonitorSubmitInterval,
       std::chrono::milliseconds sparkHoldTime,
       std::chrono::milliseconds sparkKeepAliveTime,
       std::chrono::milliseconds sparkFastInitKeepAliveTime,

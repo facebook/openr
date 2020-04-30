@@ -13,6 +13,8 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
@@ -99,13 +101,14 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
     });
     configStore->waitUntilRunning();
 
+    // create config
+    auto tConfig = getBasicOpenrConfig("node-1");
+    tConfig.kvstore_config.sync_interval_s = 1;
+    config = std::make_shared<Config>(tConfig);
+
     // spin up a kvstore
     kvStoreWrapper = std::make_shared<KvStoreWrapper>(
-        context,
-        "test_store1",
-        std::chrono::seconds(1) /* db sync interval */,
-        std::chrono::seconds(600) /* counter submit interval */,
-        std::unordered_map<std::string, thrift::PeerSpec>{});
+        context, config, std::unordered_map<std::string, thrift::PeerSpec>{});
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
@@ -202,6 +205,7 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
 
   // Create the serializer for write/read
   CompactSerializer serializer;
+  std::shared_ptr<Config> config{nullptr};
   std::unique_ptr<PrefixManager> prefixManager{nullptr};
   std::unique_ptr<std::thread> prefixManagerThread{nullptr};
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
@@ -1014,12 +1018,11 @@ TEST(PrefixManagerTest, HoldTimeout) {
   configStore->waitUntilRunning();
 
   // spin up a kvstore
+  auto tConfig = getBasicOpenrConfig("node-1");
+  tConfig.kvstore_config.sync_interval_s = 1;
+  auto config = std::make_shared<Config>(tConfig);
   auto kvStoreWrapper = std::make_unique<KvStoreWrapper>(
-      context,
-      "test_store1",
-      std::chrono::seconds(1) /* db sync interval */,
-      std::chrono::seconds(600) /* counter submit interval */,
-      std::unordered_map<std::string, thrift::PeerSpec>{});
+      context, config, std::unordered_map<std::string, thrift::PeerSpec>{});
   kvStoreWrapper->run();
   LOG(INFO) << "The test KV store is running";
 

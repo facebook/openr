@@ -28,10 +28,12 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
 #include <openr/dual/Dual.h>
 #include <openr/if/gen-cpp2/Dual_types.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
@@ -53,9 +55,6 @@ using TtlCountdownQueue = boost::heap::priority_queue<
     // Always returns smallest first
     boost::heap::compare<std::greater<TtlCountdownQueueEntry>>,
     boost::heap::stable<true>>;
-
-// Kvstore flooding rate <messages/sec, burst size>
-using KvStoreFloodRate = std::optional<std::pair<const size_t, const size_t>>;
 
 class KvStoreFilters {
  public:
@@ -108,12 +107,11 @@ struct KvStoreParams {
   // KvStore key filters
   std::optional<KvStoreFilters> filters;
   // Kvstore flooding rate
-  KvStoreFloodRate floodRate = std::nullopt;
+  std::optional<thrift::KvstoreFloodRate> floodRate;
   // TTL decrement factor
   std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
   bool enableFloodOptimization{false};
   bool isFloodRoot{false};
-  bool useFloodOptimization{false};
   std::shared_ptr<fbzmq::ZmqMonitorClient> zmqMonitorClient{nullptr};
 
   KvStoreParams(
@@ -128,12 +126,11 @@ struct KvStoreParams {
       std::chrono::seconds dbsyncInterval,
       std::optional<KvStoreFilters> filter,
       // Kvstore flooding rate
-      KvStoreFloodRate floodrate,
+      std::optional<thrift::KvstoreFloodRate> floodrate,
       // TTL decrement factor
       std::chrono::milliseconds ttldecr,
       bool enablefloodOptimization,
-      bool isfloodRoot,
-      bool usefloodOptimization)
+      bool isfloodRoot)
       : nodeId(nodeid),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         globalCmdSock(std::move(globalCmdSock)),
@@ -144,8 +141,7 @@ struct KvStoreParams {
         floodRate(std::move(floodrate)),
         ttlDecr(ttldecr),
         enableFloodOptimization(enablefloodOptimization),
-        isFloodRoot(isfloodRoot),
-        useFloodOptimization(usefloodOptimization) {}
+        isFloodRoot(isfloodRoot) {}
 };
 
 // The class represents a KV Store DB and stores KV pairs in internal map.
@@ -415,8 +411,6 @@ class KvStore final : public OpenrEventBase {
   KvStore(
       // the zmq context to use for IO
       fbzmq::Context& zmqContext,
-      // the name of this node (unique in domain)
-      std::string nodeId,
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<thrift::Publication>& kvStoreUpdatesQueue,
       // Queue for receiving peer updates
@@ -425,27 +419,14 @@ class KvStore final : public OpenrEventBase {
       KvStoreGlobalCmdUrl globalCmdUrl,
       // the url to submit to monitor
       MonitorSubmitUrl monitorSubmitUrl,
+      // openr config
+      std::shared_ptr<const Config> config,
       // IP TOS value to set on sockets using TCP
       std::optional<int> ipTos,
-      // how often to request full db sync from peers
-      std::chrono::seconds dbSyncInterval,
-      // how often to submit to monitor
-      std::chrono::seconds monitorSubmitInterval,
       // initial list of peers to connect to
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      // KvStore key filters
-      std::optional<KvStoreFilters> filters = std::nullopt,
       // ZMQ high water mark
-      int zmqHwm = Constants::kHighWaterMark,
-      // Kvstore flooding rate
-      KvStoreFloodRate floodRate = std::nullopt,
-      // TTL decrement factor
-      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
-      bool enableFloodOptimization = false,
-      bool isFloodRoot = false,
-      bool useFloodOptimization = false,
-      const std::unordered_set<std::string>& areas = {
-          openr::thrift::KvStore_constants::kDefaultArea()});
+      int zmqHwm = Constants::kHighWaterMark);
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)
@@ -538,20 +519,6 @@ class KvStore final : public OpenrEventBase {
 
   //
   // Private variables
-  //
-
-  //
-  // Non mutable state
-  //
-
-  // Interval to submit to monitor. Default value is high
-  // to avoid submission of counters in testing.
-  const std::chrono::seconds counterSubmitInterval_;
-
-  std::optional<KvStoreFilters> filters_ = std::nullopt;
-
-  //
-  // Mutable state
   //
 
   // Timer for updating and submitting counters periodically

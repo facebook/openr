@@ -14,6 +14,8 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/OpenrClient.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/tests/OpenrThriftServerWrapper.h>
 
@@ -22,13 +24,13 @@ using namespace openr;
 class LongPollFixture : public ::testing::Test {
   void
   SetUp() override {
+    // create config
+    auto tConfig = getBasicOpenrConfig(nodeName_);
+    config_ = std::make_shared<Config>(tConfig);
+
     // Create KvStore module
     kvStoreWrapper_ = std::make_unique<KvStoreWrapper>(
-        context_,
-        nodeName_,
-        std::chrono::seconds(60),
-        std::chrono::seconds(600),
-        std::unordered_map<std::string, thrift::PeerSpec>());
+        context_, config_, std::unordered_map<std::string, thrift::PeerSpec>());
     kvStoreWrapper_->run();
 
     // spin up an openrThriftServer
@@ -83,6 +85,7 @@ class LongPollFixture : public ::testing::Test {
   const std::string prefixKey_ = folly::sformat("prefix:{}", nodeName_);
 
   fbzmq::ZmqEventLoop evl_;
+  std::shared_ptr<Config> config_{nullptr};
   std::unique_ptr<KvStoreWrapper> kvStoreWrapper_;
   std::shared_ptr<OpenrThriftServerWrapper> openrThriftServerWrapper_{nullptr};
   std::unique_ptr<openr::thrift::OpenrCtrlCppAsyncClient> client1_{nullptr};

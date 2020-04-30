@@ -31,17 +31,8 @@ class KvStoreWrapper {
  public:
   KvStoreWrapper(
       fbzmq::Context& zmqContext,
-      std::string nodeId,
-      std::chrono::seconds dbSyncInterval,
-      std::chrono::seconds monitorSubmitInterval,
+      std::shared_ptr<const Config> config,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
-      std::optional<KvStoreFilters> filters = std::nullopt,
-      KvStoreFloodRate kvstoreRate = std::nullopt,
-      std::chrono::milliseconds ttlDecr = Constants::kTtlDecrement,
-      bool enableFloodOptimization = false,
-      bool isFloodRoot = false,
-      const std::unordered_set<std::string>& areas =
-          {openr::thrift::KvStore_constants::kDefaultArea()},
       std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
           peerUpdatesQueue = std::nullopt);
 

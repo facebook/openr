@@ -21,7 +21,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
     std::string nodeId,
     bool v4Enabled,
     std::chrono::seconds kvStoreDbSyncInterval,
-    std::chrono::seconds kvStoreMonitorSubmitInterval,
     std::chrono::milliseconds sparkHoldTime,
     std::chrono::milliseconds sparkKeepAliveTime,
     std::chrono::milliseconds sparkFastInitKeepAliveTime,
@@ -51,6 +50,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       false /*enableSegmentRouting*/,
       false /*orderedFibProgramming*/,
       true /*dryrun*/);
+  tConfig.kvstore_config.sync_interval_s = kvStoreDbSyncInterval.count();
   config_ = std::make_shared<Config>(tConfig);
 
   // create zmq monitor
@@ -73,19 +73,15 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   allThreads_.emplace_back(std::move(configStoreThread));
 
   // create and start kvstore thread
-  std::optional<KvStoreFilters> filters{std::nullopt};
   kvStore_ = std::make_unique<KvStore>(
       context_,
-      nodeId_,
       kvStoreUpdatesQueue_,
       peerUpdatesQueue_.getReader(),
       KvStoreGlobalCmdUrl{kvStoreGlobalCmdUrl_},
       MonitorSubmitUrl{monitorSubmitUrl_},
+      config_,
       std::nullopt /* ip-tos */,
-      kvStoreDbSyncInterval,
-      kvStoreMonitorSubmitInterval,
-      std::unordered_map<std::string, thrift::PeerSpec>{},
-      std::move(filters));
+      std::unordered_map<std::string, thrift::PeerSpec>{});
   std::thread kvStoreThread([this]() noexcept {
     VLOG(1) << nodeId_ << " KvStore running.";
     kvStore_->run();

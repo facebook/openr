@@ -17,6 +17,8 @@
 #include <sodium.h>
 
 #include <openr/allocators/RangeAllocator.h>
+#include <openr/config/Config.h>
+#include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using folly::make_optional;
@@ -58,13 +60,12 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
 
     for (uint32_t i = 0; i < kNumStores; i++) {
-      auto store = std::make_unique<KvStoreWrapper>(
-          zmqContext,
-          folly::sformat("store{}", i + 1),
-          kDbSyncInterval,
-          kMonitorSubmitInterval,
-          emptyPeers);
+      auto config = std::make_shared<Config>(
+          getBasicOpenrConfig(folly::sformat("store{}", i + 1)));
+      auto store =
+          std::make_unique<KvStoreWrapper>(zmqContext, config, emptyPeers);
       stores.emplace_back(std::move(store));
+      configs.emplace_back(std::move(config));
       stores.back()->run();
     }
 
@@ -146,6 +147,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   // Linear topology of stores. i <--> i+1 <--> i+2 ......
   std::vector<std::unique_ptr<KvStoreWrapper>> stores;
+  std::vector<std::shared_ptr<Config>> configs;
 
   // Client `i` connects to store `i % stores.size()`
   // All clients loop in same event-loop
