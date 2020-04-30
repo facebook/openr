@@ -406,7 +406,8 @@ class Spark final : public OpenrEventBase {
   // utility call to send handshake msg
   void sendHandshakeMsg(
       std::string const& ifName,
-      std::string const& peerArea,
+      std::string const& neighborName,
+      std::string const& neighborAreaId,
       bool isAdjEstablished);
 
   // utility call to send heartbeat msg

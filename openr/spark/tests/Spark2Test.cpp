@@ -36,17 +36,38 @@ using apache::thrift::CompactSerializer;
 namespace {
 const std::string iface1{"iface1"};
 const std::string iface2{"iface2"};
+const std::string iface3{"iface3"};
 
 const int ifIndex1{1};
 const int ifIndex2{2};
+const int ifIndex3{3};
+
+const std::string area1{"area1"};
+const std::string area2{"area2"};
+const std::string defaultArea{thrift::KvStore_constants::kDefaultArea()};
 
 const folly::CIDRNetwork ip1V4 =
     folly::IPAddress::createNetwork("192.168.0.1", 24, false /* apply mask */);
 const folly::CIDRNetwork ip2V4 =
     folly::IPAddress::createNetwork("192.168.0.2", 24, false /* apply mask */);
+const folly::CIDRNetwork ip3V4 =
+    folly::IPAddress::createNetwork("192.168.0.3", 24, false /* apply mask */);
 
 const folly::CIDRNetwork ip1V6 = folly::IPAddress::createNetwork("fe80::1/128");
 const folly::CIDRNetwork ip2V6 = folly::IPAddress::createNetwork("fe80::2/128");
+const folly::CIDRNetwork ip3V6 = folly::IPAddress::createNetwork("fe80::3/128");
+
+// alias for neighbor event
+const auto NB_UP = thrift::SparkNeighborEventType::NEIGHBOR_UP;
+const auto NB_DOWN = thrift::SparkNeighborEventType::NEIGHBOR_DOWN;
+const auto NB_RESTARTING = thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING;
+const auto NB_RESTARTED = thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED;
+const auto NB_RTT_CHANGE = thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE;
+
+// alias for neighbor state
+const auto WARM = SparkNeighState::WARM;
+const auto NEGOTIATE = SparkNeighState::NEGOTIATE;
+const auto ESTABLISHED = SparkNeighState::ESTABLISHED;
 
 // Domain name (same for all Tests except in DomainTest)
 const std::string kDomainName("Fire_and_Blood");
@@ -170,8 +191,7 @@ class SimpleSpark2Fixture : public Spark2Fixture {
 
     // Now wait for sparks to detect each other
     {
-      auto event =
-          node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+      auto event = node1->waitForEvent(NB_UP);
       ASSERT_TRUE(event.has_value());
       EXPECT_EQ(iface1, event->ifName);
       EXPECT_EQ("node-2", event->neighbor.nodeName);
@@ -182,8 +202,7 @@ class SimpleSpark2Fixture : public Spark2Fixture {
     }
 
     {
-      auto event =
-          node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+      auto event = node2->waitForEvent(NB_UP);
       ASSERT_TRUE(event.has_value());
       EXPECT_EQ(iface2, event->ifName);
       EXPECT_EQ("node-1", event->neighbor.nodeName);
@@ -220,8 +239,7 @@ TEST_F(SimpleSpark2Fixture, RttTest) {
 
   // wait for spark nodes to detecct Rtt change
   {
-    auto event = node1->waitForEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
+    auto event = node1->waitForEvent(NB_RTT_CHANGE);
     ASSERT_TRUE(event.has_value());
     // 25% tolerance
     EXPECT_GE(event->rttUs, (40 - 10) * 1000);
@@ -231,8 +249,7 @@ TEST_F(SimpleSpark2Fixture, RttTest) {
   }
 
   {
-    auto event = node2->waitForEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE);
+    auto event = node2->waitForEvent(NB_RTT_CHANGE);
     ASSERT_TRUE(event.has_value());
     // 25% tolerance
     EXPECT_GE(event->rttUs, (40 - 10) * 1000);
@@ -267,15 +284,13 @@ TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
 
   // wait for sparks to lose each other
   {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    auto event = node1->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported down adjacency to node-2";
   }
 
   {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    auto event = node2->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-2 reported down adjacency to node-1";
   }
@@ -301,8 +316,7 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
 
   // node-1 should report node-2 as 'RESTARTING'
   {
-    auto event = node1->waitForEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING);
+    auto event = node1->waitForEvent(NB_RESTARTING);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported node-2 as RESTARTING";
   }
@@ -316,34 +330,24 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
   // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
   // with wrapped seqNum
   {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
+    auto event = node1->waitForEvent(NB_RESTARTED);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported node-2 as 'RESTARTED'";
   }
 
   // node-2 should ultimately report node-1 as 'UP'
   {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    EXPECT_FALSE(node1
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
-    EXPECT_FALSE(node2
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
+    EXPECT_FALSE(
+        node2->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
   }
 }
 
@@ -368,8 +372,7 @@ TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
 
   // Since node2 doesn't come back, will lose adj and declare DOWN
   {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    auto event = node1->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reporte down adjacency to node-2";
 
@@ -405,12 +408,10 @@ TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
   {
     LOG(INFO) << "Waiting for both nodes to time out with each other";
 
-    auto event1 =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    auto event1 = node1->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event1.has_value());
 
-    auto event2 =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    auto event2 = node2->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event2.has_value());
 
     // record time for expiration time test
@@ -442,8 +443,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   // since the removal of intf happens instantly. down event should
   // be reported ASAP.
   {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    auto event = node1->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event.has_value());
 
     auto endTime = std::chrono::steady_clock::now();
@@ -454,8 +454,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   }
 
   {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_DOWN);
+    auto event = node2->waitForEvent(NB_DOWN);
     ASSERT_TRUE(event.has_value());
 
     auto endTime = std::chrono::steady_clock::now();
@@ -477,8 +476,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   startTime = std::chrono::steady_clock::now();
 
   {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event.has_value());
 
     auto endTime = std::chrono::steady_clock::now();
@@ -487,8 +485,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   }
 
   {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event.has_value());
 
     auto endTime = std::chrono::steady_clock::now();
@@ -529,20 +526,148 @@ TEST_F(Spark2Fixture, DomainTest) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    EXPECT_FALSE(node1
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
-    EXPECT_FALSE(node2
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+    EXPECT_FALSE(
+        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeStark).has_value());
     EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeLannister).has_value());
+  }
+}
+
+//
+// Start 2 Spark instances and make sure they form adjacency. Then
+// start another Spark instance connecting over the same interface,
+// make sure node-1/2 can form adj with node-3 and vice versa.
+// Shut down node-3 and make sure adjacency between node-1 and node-2
+// is NOT affected.
+//
+TEST_F(Spark2Fixture, MultiplePeersOverSameInterface) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture MultiplePeersOverSameInterface finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex(
+      {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 10}, {iface3, 10}}},
+      {iface2, {{iface1, 10}, {iface3, 10}}},
+      {iface3, {{iface1, 10}, {iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start spark2 instances
+  const std::string nodeName1 = "node-1";
+  const std::string nodeName2 = "node-2";
+  const std::string nodeName3 = "node-3";
+  auto node1 = createSpark(kDomainName, nodeName1, 1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2);
+
+  // start tracking interfaces
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  {
+    auto event1 = node1->waitForEvent(NB_UP);
+    ASSERT_TRUE(event1.has_value());
+
+    auto event2 = node2->waitForEvent(NB_UP);
+    ASSERT_TRUE(event2.has_value());
+  }
+
+  // add third instance
+  LOG(INFO) << "Creating and starting " << nodeName3;
+
+  auto node3 = createSpark(kDomainName, nodeName3, 3);
+  EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+
+  // node-1 and node-2 should hear from node-3
+  {
+    auto event1 = node1->waitForEvent(NB_UP);
+    ASSERT_TRUE(event1.has_value());
+    EXPECT_EQ(iface1, event1->ifName);
+    EXPECT_EQ(nodeName3, event1->neighbor.nodeName);
+    // ifIndex already used for assigning label to node-2 via iface1. So next
+    // label will be assigned from the end.
+    EXPECT_EQ(Constants::kSrLocalRange.second, event1->label);
+    LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName3;
+
+    auto event2 = node2->waitForEvent(NB_UP);
+    ASSERT_TRUE(event2.has_value());
+    EXPECT_EQ(iface2, event2->ifName);
+    EXPECT_EQ(nodeName3, event2->neighbor.nodeName);
+    // ifIndex already used for assigning label to node-1 via iface2. So next
+    // label will be assigned from the end.
+    EXPECT_EQ(Constants::kSrLocalRange.second, event2->label);
+    LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName3;
+  }
+
+  // node-3 should hear from node-1 and node-2 on iface3
+  {
+    std::map<std::string, thrift::SparkNeighborEvent> events;
+    for (int i = 0; i < 2; i++) {
+      auto maybeEvent = node3->waitForEvent(NB_UP);
+      EXPECT_TRUE(maybeEvent.has_value());
+      events.emplace(maybeEvent.value().neighbor.nodeName, maybeEvent.value());
+    }
+
+    std::set<int32_t> expectedLabels = {
+        Constants::kSrLocalRange.first + ifIndex3,
+        Constants::kSrLocalRange.second,
+    };
+
+    ASSERT_EQ(1, events.count(nodeName1));
+    ASSERT_EQ(1, events.count(nodeName2));
+
+    auto event1 = events.at(nodeName1);
+    EXPECT_EQ(iface3, event1.ifName);
+    EXPECT_TRUE(nodeName1 == event1.neighbor.nodeName);
+    EXPECT_EQ(
+        std::make_pair(ip1V4.first, ip1V6.first),
+        SparkWrapper::getTransportAddrs(event1));
+    ASSERT_TRUE(expectedLabels.count(event1.label));
+
+    auto event2 = events.at(nodeName2);
+    EXPECT_EQ(iface3, event2.ifName);
+    EXPECT_TRUE(nodeName2 == event2.neighbor.nodeName);
+    EXPECT_EQ(
+        std::make_pair(ip2V4.first, ip2V6.first),
+        SparkWrapper::getTransportAddrs(event2));
+    ASSERT_TRUE(expectedLabels.count(event2.label));
+
+    // Label of discovered neighbors must be different on the same interface
+    EXPECT_NE(event1.label, event2.label);
+
+    LOG(INFO) << "node-3 reported adjacencies to node-1, node-2";
+  }
+
+  // Now stop spark3
+  LOG(INFO) << "Stopping " << nodeName3 << " now...";
+  node3.reset();
+
+  // node-1 and node-2 should report node-3 down
+  {
+    auto event1 = node1->waitForEvent(NB_DOWN);
+    ASSERT_TRUE(event1.has_value());
+    EXPECT_EQ("node-3", event1->neighbor.nodeName);
+    LOG(INFO) << nodeName1 << " reported down adjacency towards " << nodeName3;
+
+    auto event2 = node2->waitForEvent(NB_DOWN);
+    ASSERT_TRUE(event2.has_value());
+    EXPECT_EQ("node-3", event2->neighbor.nodeName);
+    LOG(INFO) << nodeName2 << " reported down adjacency towards" << nodeName3;
+  }
+
+  // node-1 and node-2 should still hold adj with each other
+  {
+    auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
+    EXPECT_TRUE(neighState1 == ESTABLISHED);
+
+    auto neighState2 = node2->getSparkNeighState(iface2, nodeName1);
+    EXPECT_TRUE(neighState2 == ESTABLISHED);
   }
 }
 
@@ -565,16 +690,12 @@ TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  // start one spark2 instance
+  // start spark2 instances
   auto node1 = createSpark(kDomainName, "node-1", 1);
-
-  // start another spark2 instance
   auto node2 = createSpark(kDomainName, "node-2", 2);
 
-  // start tracking iface1
+  // start tracking interfaces
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-
-  // start tracking iface2
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
@@ -588,8 +709,7 @@ TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
   {
     // check for neighbor state on node1, should be WARM
     // since will NOT receive helloMsg containing my own info
-    EXPECT_TRUE(
-        node1->getSparkNeighState(iface1, "node-2") == SparkNeighState::WARM);
+    EXPECT_TRUE(node1->getSparkNeighState(iface1, "node-2") == WARM);
     LOG(INFO) << "node-1 have neighbor: node-2 in WARM state";
 
     // check for neighbor state on node2, should return std::nullopt
@@ -634,8 +754,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
 
   // Now wait for sparks to detect each other
   {
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event.has_value());
     EXPECT_EQ(iface1, event->ifName);
     EXPECT_EQ("node-2", event->neighbor.nodeName);
@@ -646,8 +765,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
   }
 
   {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event.has_value());
     EXPECT_EQ(iface2, event->ifName);
     EXPECT_EQ("node-1", event->neighbor.nodeName);
@@ -663,8 +781,7 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
     node2.reset();
 
     // node-1 will report node-2 as RESTARTING
-    auto event = node1->waitForEvent(
-        thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING);
+    auto event = node1->waitForEvent(NB_RESTARTING);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported node-2 restarting";
 
@@ -679,34 +796,24 @@ TEST_F(Spark2Fixture, BackwardCompatibilityTest) {
 
   {
     // node-1 will finally report node-2 as RESTARTED
-    auto event =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED);
+    auto event = node1->waitForEvent(NB_RESTARTED);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-1 reported node-2 as 'RESTARTED'";
   }
 
   // node-2 should ultimately report node-1 as 'UP'
   {
-    auto event =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event.has_value());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    EXPECT_FALSE(node1
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
-    EXPECT_FALSE(node2
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
+    EXPECT_FALSE(
+        node2->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
   }
 }
 
@@ -737,12 +844,8 @@ TEST_F(Spark2Fixture, LoopedHelloPktTest) {
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
-    EXPECT_FALSE(node1
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, "node-1").has_value());
   }
 }
@@ -792,19 +895,11 @@ TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
 
   // won't form adj as v4 validation should fail
   {
-    EXPECT_FALSE(node1
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
 
-    EXPECT_FALSE(node2
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
   }
 
   {
@@ -821,12 +916,10 @@ TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
     EXPECT_TRUE(node2->updateInterfaceDb(
         {{iface2, ifIndex2, ip2V4WithSameSubnet, ip2V6}}));
 
-    auto event1 =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event1 = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event1.has_value());
 
-    auto event2 =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event2 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
     LOG(INFO) << "node-1 and node-2 successfully form adjacency";
   }
@@ -874,32 +967,20 @@ TEST_F(Spark2Fixture, InvalidV4Subnet) {
 
   // won't form adj as v4 validation should fail
   {
-    EXPECT_FALSE(node1
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
 
-    EXPECT_FALSE(node2
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_DOWN,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node2->waitForEvent(NB_DOWN, kGRHoldTime, kGRHoldTime * 2).has_value());
   }
 
   // check neighbor state: should be in WARM/NEGOTIATE stage
   {
     auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
-    EXPECT_TRUE(
-        neighState1 == SparkNeighState::WARM ||
-        neighState1 == SparkNeighState::NEGOTIATE);
+    EXPECT_TRUE(neighState1 == WARM || neighState1 == NEGOTIATE);
 
     auto neighState2 = node2->getSparkNeighState(iface2, nodeName1);
-    EXPECT_TRUE(
-        neighState2 == SparkNeighState::WARM ||
-        neighState2 == SparkNeighState::NEGOTIATE);
+    EXPECT_TRUE(neighState2 == WARM || neighState2 == NEGOTIATE);
   }
 }
 
@@ -916,10 +997,10 @@ TEST_F(Spark2Fixture, AreaMatch) {
 
   // Explicitly set regex to be capital letters to make sure
   // regex is NOT case-sensative
-  auto areaConfig11 = SparkWrapper::createAreaConfig("1", {"RSW.*"}, {".*"});
-  auto areaConfig12 = SparkWrapper::createAreaConfig("2", {"FSW.*"}, {".*"});
-  auto areaConfig21 = SparkWrapper::createAreaConfig("1", {"FSW.*"}, {".*"});
-  auto areaConfig22 = SparkWrapper::createAreaConfig("2", {"RSW.*"}, {".*"});
+  auto areaConfig11 = SparkWrapper::createAreaConfig(area1, {"RSW.*"}, {".*"});
+  auto areaConfig12 = SparkWrapper::createAreaConfig(area2, {"FSW.*"}, {".*"});
+  auto areaConfig21 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
+  auto areaConfig22 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
 
   // RSW: { 1 -> "RSW.*", 2 -> "FSW.*"}
   // FSW: { 1 -> "FSW.*", 2 -> "RSW.*"}
@@ -940,11 +1021,12 @@ TEST_F(Spark2Fixture, AreaMatch) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  LOG(INFO) << "Starting node-1 and node-2...";
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
   auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+
+  LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
   // start tracking iface1 and iface2
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
@@ -952,17 +1034,18 @@ TEST_F(Spark2Fixture, AreaMatch) {
 
   // RSW001 and FSW002 node should form adj in area 2 due to regex matching
   {
-    auto event1 =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event1 = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event1.has_value());
     EXPECT_EQ(event1.value().neighbor.nodeName, nodeName2);
-    EXPECT_EQ(event1.value().area, "2");
+    EXPECT_EQ(event1.value().area, area2);
 
-    auto event2 =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event2 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
     EXPECT_EQ(event2.value().neighbor.nodeName, nodeName1);
-    EXPECT_EQ(event2.value().area, "2");
+    EXPECT_EQ(event2.value().area, area2);
+
+    LOG(INFO) << nodeName1 << " and " << nodeName2
+              << " formed adjacency with each other...";
   }
 }
 
@@ -984,8 +1067,8 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
   //  rsw001 and fsw002 will receive each other's helloMsg, but won't proceed.
   //  rsw001 can ONLY pair with "RSW.*", whereas fsw002 can ONLY pair with
   //  "FSW.*".
-  auto areaConfig1 = SparkWrapper::createAreaConfig("1", {"RSW.*"}, {".*"});
-  auto areaConfig2 = SparkWrapper::createAreaConfig("1", {"FSW.*"}, {".*"});
+  auto areaConfig1 = SparkWrapper::createAreaConfig(area1, {"RSW.*"}, {".*"});
+  auto areaConfig2 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
 
   auto config1 = std::make_shared<thrift::OpenrConfig>();
   auto config2 = std::make_shared<thrift::OpenrConfig>();
@@ -1002,29 +1085,22 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  LOG(INFO) << "Starting node-1 and node-2...";
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
   auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+
+  LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
 
   // start tracking iface1 and iface2
   EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    EXPECT_FALSE(node1
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
-    EXPECT_FALSE(node2
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+    EXPECT_FALSE(
+        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeName2).has_value());
     EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeName1).has_value());
   }
@@ -1050,8 +1126,8 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
   //  area "1", whereas fsw002 thinks rsw001 should be in area "2".
   //
   //  AREA negotiation won't go through. Will fall back to WARM
-  auto areaConfig1 = SparkWrapper::createAreaConfig("1", {"FSW.*"}, {".*"});
-  auto areaConfig2 = SparkWrapper::createAreaConfig("2", {"RSW.*"}, {".*"});
+  auto areaConfig1 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
+  auto areaConfig2 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
 
   auto config1 = std::make_shared<thrift::OpenrConfig>();
   auto config2 = std::make_shared<thrift::OpenrConfig>();
@@ -1068,41 +1144,28 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  LOG(INFO) << "Starting node-1 and node-2...";
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
   auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
 
-  {
-    // start tracking iface1 and iface2
-    EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
-  }
+  LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
+
+  // start tracking iface1 and iface2
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    EXPECT_FALSE(node1
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
-    EXPECT_FALSE(node2
-                     ->waitForEvent(
-                         thrift::SparkNeighborEventType::NEIGHBOR_UP,
-                         kGRHoldTime,
-                         kGRHoldTime * 2)
-                     .has_value());
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+    EXPECT_FALSE(
+        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
 
     auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
-    EXPECT_TRUE(
-        neighState1 == SparkNeighState::WARM ||
-        neighState1 == SparkNeighState::NEGOTIATE);
+    EXPECT_TRUE(neighState1 == WARM || neighState1 == NEGOTIATE);
 
     auto neighState2 = node2->getSparkNeighState(iface2, nodeName1);
-    EXPECT_TRUE(
-        neighState2 == SparkNeighState::WARM ||
-        neighState2 == SparkNeighState::NEGOTIATE);
+    EXPECT_TRUE(neighState2 == WARM || neighState2 == NEGOTIATE);
   }
 }
 
@@ -1115,7 +1178,7 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
 //
 TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
   SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture InconsistentArea finished";
+    LOG(INFO) << "Spark2Fixture NoAreaSupportNegotiation finished";
   };
 
   // AreaConfig:
@@ -1125,7 +1188,7 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
   //  rsw001 doesn't know anything about AREA, whereas fsw002 is configured
   //  with areaConfig. Make sure AREA negotiation will go through and they can
   //  form adj inside `defaultArea`.
-  auto areaConfig2 = SparkWrapper::createAreaConfig("2", {"RSW.*"}, {".*"});
+  auto areaConfig2 = SparkWrapper::createAreaConfig(area2, {"RSW.*"}, {".*"});
   auto config2 = std::make_shared<thrift::OpenrConfig>();
   config2->areas.emplace_back(areaConfig2);
 
@@ -1139,30 +1202,149 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
   };
   mockIoProvider->setConnectedPairs(connectedPairs);
 
-  LOG(INFO) << "Starting node-1 and node-2...";
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
   auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, nullptr);
   auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
 
-  {
-    // start tracking iface1 and iface2
-    EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
-    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
-  }
+  LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
+
+  // start tracking iface1 and iface2
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    auto event1 =
-        node1->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event1 = node1->waitForEvent(NB_UP);
     ASSERT_TRUE(event1.has_value());
     EXPECT_EQ(event1.value().neighbor.nodeName, nodeName2);
-    EXPECT_EQ(event1.value().area, thrift::KvStore_constants::kDefaultArea());
+    EXPECT_EQ(event1.value().area, defaultArea);
 
-    auto event2 =
-        node2->waitForEvent(thrift::SparkNeighborEventType::NEIGHBOR_UP);
+    auto event2 = node2->waitForEvent(NB_UP);
     ASSERT_TRUE(event2.has_value());
     EXPECT_EQ(event2.value().neighbor.nodeName, nodeName1);
-    EXPECT_EQ(event2.value().area, thrift::KvStore_constants::kDefaultArea());
+    EXPECT_EQ(event2.value().area, defaultArea);
+  }
+}
+
+//
+// Start 2 Spark with AREA config supported and make sure they can
+// form adj. Then add another Spark. Make sure 3rd Spark instance
+// can form adj with different peers within different area over the
+// same interface.
+//
+TEST_F(Spark2Fixture, MultiplePeersWithDiffAreaOverSameLink) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture MultiplePeersWithDiffAreaOverSameLink finished";
+  };
+
+  // AreaConfig:
+  //  rsw001: { 1 -> {"FSW.*"}, 2 -> {"SSW.*"}}
+  //  fsw002: { 1 -> {"RSW.*", "SSW.*"}}
+  //  ssw003: { 1 -> {"FSW.*"}, 2 -> {"RSW.*"}}
+  //
+  //  Based on topology setup, expected adj pairs:
+  //    rsw001 <==> fsw002
+  //    fsw002 <==> ssw003
+  //    ssw003 <==> rsw001
+  auto areaConfig11 = SparkWrapper::createAreaConfig(area1, {"FSW.*"}, {".*"});
+  auto areaConfig12 = SparkWrapper::createAreaConfig(area2, {"SSW.*"}, {".*"});
+  auto areaConfig2 =
+      SparkWrapper::createAreaConfig(area1, {"RSW.*", "SSW.*"}, {".*"});
+  auto areaConfig31 = SparkWrapper::createAreaConfig(area1, {"fsw.*"}, {".*"});
+  auto areaConfig32 = SparkWrapper::createAreaConfig(area2, {"rsw.*"}, {".*"});
+
+  auto config1 = std::make_shared<thrift::OpenrConfig>();
+  auto config2 = std::make_shared<thrift::OpenrConfig>();
+  auto config3 = std::make_shared<thrift::OpenrConfig>();
+  config1->areas.emplace_back(areaConfig11);
+  config1->areas.emplace_back(areaConfig12);
+  config2->areas.emplace_back(areaConfig2);
+  config3->areas.emplace_back(areaConfig31);
+  config3->areas.emplace_back(areaConfig32);
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex(
+      {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 10}, {iface3, 10}}},
+      {iface2, {{iface1, 10}, {iface3, 10}}},
+      {iface3, {{iface1, 10}, {iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  std::string nodeName1 = "rsw001";
+  std::string nodeName2 = "fsw002";
+  auto node1 = createSpark(kDomainName, nodeName1, 1, true, true, config1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2, true, true, config2);
+
+  LOG(INFO) << nodeName1 << " and " << nodeName2 << " started...";
+
+  // start tracking interfaces
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  {
+    auto event1 = node1->waitForEvent(NB_UP);
+    ASSERT_TRUE(event1.has_value());
+    EXPECT_EQ(iface1, event1->ifName);
+    EXPECT_EQ(nodeName2, event1->neighbor.nodeName);
+    EXPECT_EQ(event1->area, area1);
+    LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName2;
+
+    auto event2 = node2->waitForEvent(NB_UP);
+    ASSERT_TRUE(event2.has_value());
+    EXPECT_EQ(iface2, event2->ifName);
+    EXPECT_EQ(nodeName1, event2->neighbor.nodeName);
+    EXPECT_EQ(event1->area, area1);
+    LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName1;
+  }
+
+  // add third instance
+  std::string nodeName3 = "ssw003";
+  auto node3 = createSpark(kDomainName, nodeName3, 3, true, true, config3);
+  EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+
+  LOG(INFO) << nodeName3 << " being started...";
+
+  // rsw001 and fsw002 should form adj with ssw003 in area2, area1 respectively
+  {
+    auto event1 = node2->waitForEvent(NB_UP);
+    ASSERT_TRUE(event1.has_value());
+    EXPECT_EQ(iface2, event1->ifName);
+    EXPECT_EQ(nodeName3, event1->neighbor.nodeName);
+    EXPECT_EQ(event1->area, area1);
+    LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName3;
+
+    auto event2 = node1->waitForEvent(NB_UP);
+    ASSERT_TRUE(event2.has_value());
+    EXPECT_EQ(iface1, event2->ifName);
+    EXPECT_EQ(nodeName3, event2->neighbor.nodeName);
+    EXPECT_EQ(event2->area, area2);
+    LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName3;
+  }
+
+  // ssw003 should hear from rsw001 and fsw002 on iface3 in DIFF area
+  {
+    std::map<std::string, thrift::SparkNeighborEvent> events;
+    for (int i = 0; i < 2; i++) {
+      auto maybeEvent = node3->waitForEvent(NB_UP);
+      EXPECT_TRUE(maybeEvent.has_value());
+      events.emplace(maybeEvent.value().neighbor.nodeName, maybeEvent.value());
+    }
+
+    auto event1 = events.at(nodeName1);
+    EXPECT_EQ(iface3, event1.ifName);
+    EXPECT_EQ(nodeName1, event1.neighbor.nodeName);
+    EXPECT_EQ(area2, event1.area);
+    LOG(INFO) << nodeName3 << " reported adjacency to " << nodeName1;
+
+    auto event2 = events.at(nodeName2);
+    EXPECT_EQ(iface3, event2.ifName);
+    EXPECT_TRUE(nodeName2 == event2.neighbor.nodeName);
+    EXPECT_EQ(area1, event2.area);
+    LOG(INFO) << nodeName3 << " reported adjacency to " << nodeName2;
   }
 }
 

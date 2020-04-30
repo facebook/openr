@@ -1089,7 +1089,8 @@ Spark::updateNeighborRtt(
 void
 Spark::sendHandshakeMsg(
     std::string const& ifName,
-    std::string const& peerArea,
+    std::string const& neighborName,
+    std::string const& neighborAreaId,
     bool isAdjEstablished) {
   SCOPE_FAIL {
     LOG(ERROR) << "Failed sending Handshake packet on " << ifName;
@@ -1113,7 +1114,8 @@ Spark::sendHandshakeMsg(
   handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
   handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
   handshakeMsg.kvStoreCmdPort = kKvStoreCmdPort_;
-  handshakeMsg.area = peerArea; // handshakeMsg send peer's area deduced locally
+  handshakeMsg.area = neighborAreaId; // send neighborAreaId deduced locally
+  handshakeMsg.neighborNodeName_ref() = neighborName;
 
   thrift::SparkHelloPacket pkt;
   pkt.handshakeMsg_ref() = std::move(handshakeMsg);
@@ -1623,11 +1625,11 @@ Spark::processHelloMsg(
     }
 
     // Starts timer to periodically send hankshake msg
-    const std::string peerAreaId = neighbor.area;
+    const std::string neighborAreaId = neighbor.area;
     neighbor.negotiateTimer = fbzmq::ZmqTimeout::make(
-        getEvb(), [this, ifName, peerAreaId]() noexcept {
+        getEvb(), [this, ifName, neighborName, neighborAreaId]() noexcept {
           // periodically send out handshake msg
-          sendHandshakeMsg(ifName, peerAreaId, false);
+          sendHandshakeMsg(ifName, neighborName, neighborAreaId, false);
         });
     const bool isPeriodic = true;
     neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_, isPeriodic);
@@ -1727,6 +1729,16 @@ Spark::processHelloMsg(
 void
 Spark::processHandshakeMsg(
     thrift::SparkHandshakeMsg const& handshakeMsg, std::string const& ifName) {
+  // Ignore handshakeMsg if I am NOT the receiver as AREA negotiation
+  // is point-to-point
+  if (auto neighborNodeName = handshakeMsg.neighborNodeName_ref()) {
+    if (*neighborNodeName != myNodeName_) {
+      VLOG(4) << "Ignoring handshakeMsg targeted for node: "
+              << *neighborNodeName << ", my node name: " << myNodeName_;
+      return;
+    }
+  }
+
   auto const& neighborName = handshakeMsg.nodeName;
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
   auto neighborIt = ifNeighbors.find(neighborName);
@@ -1752,7 +1764,10 @@ Spark::processHandshakeMsg(
   //       avoid infinite loop of pkt between nodes.
   if (not handshakeMsg.isAdjEstablished) {
     sendHandshakeMsg(
-        ifName, neighbor.area, neighbor.state != SparkNeighState::NEGOTIATE);
+        ifName,
+        neighborName,
+        neighbor.area,
+        neighbor.state != SparkNeighState::NEGOTIATE);
     LOG(INFO) << "Neighbor: (" << neighborName
               << ") has NOT forming adj with us yet. "
               << "Reply to handshakeMsg immediately.";

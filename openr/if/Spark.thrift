@@ -138,7 +138,7 @@ struct SparkHeartbeatMsg {
 }
 
 struct SparkHandshakeMsg {
-  // the name of the node sending handshake msg
+  // name of the node originating this handshake message
   1: string nodeName
 
   // used as signal to keep/stop sending handshake msg
@@ -160,6 +160,14 @@ struct SparkHandshakeMsg {
 
   // area identifier
   10: string area
+
+  // Recipient neighbor node for this handshake message.
+  // Other nodes will ignore. If not set, then this will
+  // be treated as a multicast and all nodes will process it.
+  //
+  // TODO: Remove optional qualifier after AREA negotiation
+  //       is fully in use
+  11: optional string neighborNodeName
 }
 
 //
