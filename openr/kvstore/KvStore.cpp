@@ -135,6 +135,9 @@ KvStore::KvStore(
       [this](int) noexcept {
         // Drain all available messages in loop
         while (true) {
+          // NOTE: globalCmSock is connected with neighbor's peerSyncSock_.
+          // recvMultiple() will get a vector of fbzmq::Message which has:
+          //  1) requestIdMsg; 2) delimMsg; 3) kvStoreRequestMsg;
           auto maybeReq = kvParams_.globalCmdSock.recvMultiple();
           if (maybeReq.hasError() and maybeReq.error().errNum == EAGAIN) {
             break;
@@ -425,7 +428,8 @@ KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
     LOG(ERROR) << "Empty request received";
     return;
   }
-  auto maybeReply = processRequestMsg(std::move(req.back()));
+  auto maybeReply = processRequestMsg(
+      req.front().read<std::string>().value(), std::move(req.back()));
   req.pop_back();
 
   // All messages of the multipart request except the last are sent back as they
@@ -447,7 +451,8 @@ KvStore::processCmdSocketRequest(std::vector<fbzmq::Message>&& req) noexcept {
 }
 
 folly::Expected<fbzmq::Message, fbzmq::Error>
-KvStore::processRequestMsg(fbzmq::Message&& request) {
+KvStore::processRequestMsg(
+    const std::string& requestId, fbzmq::Message&& request) {
   fb303::fbData->addStatValue(
       "kvstore.peers.bytes_received", request.size(), fb303::SUM);
   auto maybeThriftReq =
@@ -468,7 +473,7 @@ KvStore::processRequestMsg(fbzmq::Message&& request) {
   VLOG(2) << "Request received for area " << area;
   try {
     auto& kvStoreDb = kvStoreDb_.at(area);
-    auto response = kvStoreDb.processRequestMsgHelper(thriftRequest);
+    auto response = kvStoreDb.processRequestMsgHelper(requestId, thriftRequest);
     if (response.hasValue()) {
       fb303::fbData->addStatValue(
           "kvstore.peers.bytes_sent", response->size(), fb303::SUM);
@@ -1363,7 +1368,8 @@ KvStoreDb::updatePublicationTtl(
 
 // process a request
 folly::Expected<fbzmq::Message, fbzmq::Error>
-KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
+KvStoreDb::processRequestMsgHelper(
+    const std::string& requestId, thrift::KvStoreRequest& thriftReq) {
   VLOG(3)
       << "processRequest: command: `"
       << apache::thrift::TEnumTraits<thrift::Command>::findName(thriftReq.cmd)
@@ -1445,23 +1451,22 @@ KvStoreDb::processRequestMsgHelper(thrift::KvStoreRequest& thriftReq) {
     const auto keyPrefixMatch =
         KvStoreFilters(keyPrefixList, keyDumpParamsVal.originatorIds);
     auto thriftPub = dumpAllWithFilters(keyPrefixMatch);
-    if (keyDumpParamsVal.keyValHashes.has_value()) {
-      thriftPub = dumpDifference(
-          thriftPub.keyVals, keyDumpParamsVal.keyValHashes.value());
+    if (auto keyValHashes = keyDumpParamsVal.keyValHashes_ref()) {
+      thriftPub = dumpDifference(thriftPub.keyVals, *keyValHashes);
     }
     updatePublicationTtl(thriftPub);
     // I'm the initiator, set flood-root-id
     fromStdOptional(thriftPub.floodRootId, DualNode::getSptRootId());
 
-    if (keyDumpParamsVal.keyValHashes.has_value() and
+    if (keyDumpParamsVal.keyValHashes_ref() and
         keyDumpParamsVal.prefix.empty()) {
       // This usually comes from neighbor nodes
       size_t numMissingKeys = 0;
       if (thriftPub.tobeUpdatedKeys.has_value()) {
         numMissingKeys = thriftPub.tobeUpdatedKeys->size();
       }
-      LOG(INFO) << "Processed full-sync request with "
-                << keyDumpParamsVal.keyValHashes.value().size()
+      LOG(INFO) << "Processed full-sync request from peer " << requestId
+                << " with " << (*keyDumpParamsVal.keyValHashes_ref()).size()
                 << " keyValHashes item(s). Sending " << thriftPub.keyVals.size()
                 << " key-vals and " << numMissingKeys << " missing keys";
     }

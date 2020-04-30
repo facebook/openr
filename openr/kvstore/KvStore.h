@@ -165,7 +165,7 @@ class KvStoreDb : public DualNode {
       std::unordered_map<std::string, thrift::PeerSpec> peers);
 
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsgHelper(
-      thrift::KvStoreRequest& thriftReq);
+      const std::string& requestId, thrift::KvStoreRequest& thriftReq);
 
   // Extracts the counters
   std::map<std::string, int64_t> getCounters() const;
@@ -530,7 +530,7 @@ class KvStore final : public OpenrEventBase {
   // This function wraps `processRequestMsgHelper` and updates send/received
   // bytes counters.
   folly::Expected<fbzmq::Message, fbzmq::Error> processRequestMsg(
-      fbzmq::Message&& msg);
+      const std::string& requestId, fbzmq::Message&& msg);
 
   void processPeerUpdates(thrift::PeerUpdateRequest&& req);
 

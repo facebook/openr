@@ -1015,7 +1015,7 @@ getNodeNameFromKey(const std::string& key) {
 
 std::string
 createPeerSyncId(const std::string& node, const std::string& area) {
-  return folly::to<std::string>(node, area, "::TCP::SYNC");
+  return folly::to<std::string>(node, "::TCP::SYNC::", area);
 };
 
 namespace MetricVectorUtils {
