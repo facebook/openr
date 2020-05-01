@@ -2897,8 +2897,10 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             Constants::kTtlInfinity /* ttl */,
             0 /* ttl version */,
             0 /* hash */);
-        thriftVal0.hash = generateHash(
-            thriftVal0.version, thriftVal0.originatorId, thriftVal0.value);
+        thriftVal0.hash_ref() = generateHash(
+            thriftVal0.version,
+            thriftVal0.originatorId,
+            thriftVal0.value_ref());
 
         thrift::Value thriftVal1 = createThriftValue(
             1 /* version */,
@@ -2907,8 +2909,10 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             Constants::kTtlInfinity /* ttl */,
             0 /* ttl version */,
             0 /* hash */);
-        thriftVal1.hash = generateHash(
-            thriftVal1.version, thriftVal1.originatorId, thriftVal1.value);
+        thriftVal1.hash_ref() = generateHash(
+            thriftVal1.version,
+            thriftVal1.originatorId,
+            thriftVal1.value_ref());
 
         thrift::Value thriftVal2 = createThriftValue(
             1 /* version */,
@@ -2917,8 +2921,10 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             Constants::kTtlInfinity /* ttl */,
             0 /* ttl version */,
             0 /* hash */);
-        thriftVal2.hash = generateHash(
-            thriftVal2.version, thriftVal2.originatorId, thriftVal2.value);
+        thriftVal2.hash_ref() = generateHash(
+            thriftVal2.version,
+            thriftVal2.originatorId,
+            thriftVal2.value_ref());
 
         thrift::Value thriftVal3 = createThriftValue(
             1 /* version */,
@@ -2927,8 +2933,10 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
             Constants::kTtlInfinity /* ttl */,
             0 /* ttl version */,
             0 /* hash */);
-        thriftVal3.hash = generateHash(
-            thriftVal3.version, thriftVal3.originatorId, thriftVal3.value);
+        thriftVal3.hash_ref() = generateHash(
+            thriftVal3.version,
+            thriftVal3.originatorId,
+            thriftVal3.value_ref());
 
         // set key in default area, but storeA does not have default area, this
         // should fail

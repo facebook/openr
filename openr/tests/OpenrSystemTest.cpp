@@ -154,7 +154,8 @@ fillRouteMap(
               << " (" << nextHop.metric << ")";
 
       routeMap[make_pair(node, prefix)].insert(
-          {{nextHop.address.ifName.value(), nextHopAddr}, nextHop.metric});
+          {{nextHop.address.ifName_ref().value(), nextHopAddr},
+           nextHop.metric});
     }
   }
 }

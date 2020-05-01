@@ -1916,14 +1916,14 @@ Spark::processPacket() {
 
   // Step 2: Spark2 specific msg processing
   if (enableSpark2_) {
-    if (helloPacket.helloMsg.has_value()) {
-      processHelloMsg(helloPacket.helloMsg.value(), ifName, myRecvTime);
+    if (helloPacket.helloMsg_ref().has_value()) {
+      processHelloMsg(helloPacket.helloMsg_ref().value(), ifName, myRecvTime);
       return;
-    } else if (helloPacket.heartbeatMsg.has_value()) {
-      processHeartbeatMsg(helloPacket.heartbeatMsg.value(), ifName);
+    } else if (helloPacket.heartbeatMsg_ref().has_value()) {
+      processHeartbeatMsg(helloPacket.heartbeatMsg_ref().value(), ifName);
       return;
-    } else if (helloPacket.handshakeMsg.has_value()) {
-      processHandshakeMsg(helloPacket.handshakeMsg.value(), ifName);
+    } else if (helloPacket.handshakeMsg_ref().has_value()) {
+      processHandshakeMsg(helloPacket.handshakeMsg_ref().value(), ifName);
       return;
     } else {
       VLOG(3) << "No valid Spark2 msg. Fallback to old Spark processing";
@@ -1953,8 +1953,8 @@ Spark::processPacket() {
   neighbor.localTimestamp = myRecvTime;
 
   // check if it's a restarting packet
-  if (helloPacket.payload.restarting.has_value() and
-      *helloPacket.payload.restarting) {
+  if (helloPacket.payload.restarting_ref().has_value() and
+      *helloPacket.payload.restarting_ref()) {
     // this neighbor informed us that it's restarting
     neighbor.numRecvRestarting += 1;
     if (neighbor.numRecvRestarting > 1) {

@@ -128,7 +128,7 @@ PrefixManager::PrefixManager(
           const std::string& key, std::optional<thrift::Value> value) noexcept {
         // we're not currently persisting this key, it may be that we no longer
         // want it advertised
-        if (value.has_value() and value.value().value.has_value()) {
+        if (value.has_value() and value.value().value_ref().has_value()) {
           const auto prefixDb =
               fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
                   value.value().value.value(), serializer_);

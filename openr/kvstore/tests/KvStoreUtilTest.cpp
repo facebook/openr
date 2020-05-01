@@ -151,12 +151,12 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     thrift::Value value;
     value.version = 1;
     {
-      value.value = "test_value1";
+      value.value_ref() = "test_value1";
       EXPECT_TRUE(client1->setKey(
           key1, fbzmq::util::writeThriftObjStr(value, serializer), 100));
     }
     {
-      value.value = "test_value2";
+      value.value_ref() = "test_value2";
       EXPECT_TRUE(client2->setKey(
           key2, fbzmq::util::writeThriftObjStr(value, serializer), 200));
     }

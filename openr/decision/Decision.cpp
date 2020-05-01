@@ -971,7 +971,7 @@ SpfSolver::SpfSolverImpl::getMinNextHopThreshold(
               (not maxMinNexthopForPrefix.has_value() ||
                npKv->second.minNexthop_ref().value() >
                    maxMinNexthopForPrefix.value())
-          ? npKv->second.minNexthop.value()
+          ? npKv->second.minNexthop_ref().value()
           : maxMinNexthopForPrefix;
     }
   }

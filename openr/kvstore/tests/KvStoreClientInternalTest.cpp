@@ -303,17 +303,17 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     {
-      value.value = "test_value1";
+      value.value_ref() = "test_value1";
       client1->setKey(
           "test_key1", fbzmq::util::writeThriftObjStr(value, serializer), 100);
     }
     {
-      value.value = "test_value2";
+      value.value_ref() = "test_value2";
       client2->setKey(
           "test_key2", fbzmq::util::writeThriftObjStr(value, serializer), 200);
     }
     {
-      value.value = "test_value3";
+      value.value_ref() = "test_value3";
       client3->setKey(
           "test_key3", fbzmq::util::writeThriftObjStr(value, serializer), 300);
     }
@@ -356,17 +356,17 @@ TEST_F(
   evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     {
-      value.value = "test_value1";
+      value.value_ref() = "test_value1";
       client1->setKey(
           "test_key", fbzmq::util::writeThriftObjStr(value, serializer), 300);
     }
     {
-      value.value = "test_value2";
+      value.value_ref() = "test_value2";
       client2->setKey(
           "test_key", fbzmq::util::writeThriftObjStr(value, serializer), 200);
     }
     {
-      value.value = "test_value3";
+      value.value_ref() = "test_value3";
       client3->setKey(
           "test_key", fbzmq::util::writeThriftObjStr(value, serializer), 100);
     }
@@ -407,17 +407,17 @@ TEST_F(
   evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     {
-      value.value = "test_value1";
+      value.value_ref() = "test_value1";
       client1->setKey(
           "test_key", fbzmq::util::writeThriftObjStr(value, serializer), 1);
     }
     {
-      value.value = "test_value2";
+      value.value_ref() = "test_value2";
       client2->setKey(
           "test_key", fbzmq::util::writeThriftObjStr(value, serializer), 1);
     }
     {
-      value.value = "test_value3";
+      value.value_ref() = "test_value3";
       client3->setKey(
           "test_key", fbzmq::util::writeThriftObjStr(value, serializer), 1);
     }
@@ -953,7 +953,8 @@ TEST(KvStoreClientInternal, ApiTest) {
     const auto keyValResponse = store->dumpAll();
     LOG(INFO) << "received response.";
     for (const auto& kv : keyValResponse) {
-      VLOG(4) << "key: " << kv.first << ", val: " << kv.second.value.value();
+      VLOG(4) << "key: " << kv.first
+              << ", val: " << kv.second.value_ref().value();
     }
     ASSERT_EQ(3, keyValResponse.size());
 
@@ -1294,7 +1295,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         thrift::Value valuePlane1;
         valuePlane1.version = 1;
-        valuePlane1.value = "test_value1";
+        valuePlane1.value_ref() = "test_value1";
         // key set within invalid area, must return false
         EXPECT_FALSE(
             client1
@@ -1318,7 +1319,7 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
         // set key in pod are on node3
         thrift::Value valuePod1;
         valuePod1.version = 1;
-        valuePod1.value = "test_value1";
+        valuePod1.value_ref() = "test_value1";
         EXPECT_TRUE(
             client3
                 ->setKey(

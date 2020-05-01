@@ -84,7 +84,7 @@ SparkWrapper::updateInterfaceDb(
     const std::vector<SparkInterfaceEntry>& interfaceEntries) {
   thrift::InterfaceDatabase ifDb(
       apache::thrift::FRAGILE, myNodeName_, {}, thrift::PerfEvents());
-  ifDb.perfEvents.reset();
+  ifDb.perfEvents_ref().reset();
 
   for (const auto& interface : interfaceEntries) {
     ifDb.interfaces.emplace(

@@ -1198,14 +1198,15 @@ LinkMonitor::getInterfaces() {
       if (state_.linkMetricOverrides.count(ifName) > 0) {
         maybeMetric.assign(state_.linkMetricOverrides.at(ifName));
       }
-      apache::thrift::fromFollyOptional(ifDetails.metricOverride, maybeMetric);
+      apache::thrift::fromFollyOptional(
+          ifDetails.metricOverride_ref(), maybeMetric);
 
       // Add link-backoff
       auto backoffMs = interface.getBackoffDuration();
       if (backoffMs.count() != 0) {
-        ifDetails.linkFlapBackOffMs = backoffMs.count();
+        ifDetails.linkFlapBackOffMs_ref() = backoffMs.count();
       } else {
-        ifDetails.linkFlapBackOffMs.reset();
+        ifDetails.linkFlapBackOffMs_ref().reset();
       }
 
       reply.interfaceDetails.emplace(ifName, std::move(ifDetails));

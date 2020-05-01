@@ -354,7 +354,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
         auto maybeValue = kvStoreClient->getKey(keyStr);
         EXPECT_TRUE(maybeValue.has_value());
         db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue.value().value.value(), serializer);
+            maybeValue.value().value_ref().value(), serializer);
         EXPECT_EQ(db.thisNodeName, "node-1");
         EXPECT_EQ(db.prefixEntries.size(), 1);
         ASSERT_TRUE(db.perfEvents.has_value());
