@@ -372,10 +372,9 @@ LinkMonitor::prepare() noexcept {
 }
 
 void
-LinkMonitor::neighborUpEvent(
-    const thrift::BinaryAddress& neighborAddrV4,
-    const thrift::BinaryAddress& neighborAddrV6,
-    const thrift::SparkNeighborEvent& event) {
+LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
+  const auto& neighborAddrV4 = event.neighbor.transportAddressV4;
+  const auto& neighborAddrV6 = event.neighbor.transportAddressV6;
   const std::string& ifName = event.ifName;
   const std::string& remoteNodeName = event.neighbor.nodeName;
   const std::string& remoteIfName = event.neighbor.ifName;
@@ -444,10 +443,10 @@ LinkMonitor::neighborUpEvent(
 }
 
 void
-LinkMonitor::neighborDownEvent(
-    const std::string& remoteNodeName,
-    const std::string& ifName,
-    const std::string& area) {
+LinkMonitor::neighborDownEvent(const thrift::SparkNeighborEvent& event) {
+  const auto& remoteNodeName = event.neighbor.nodeName;
+  const auto& ifName = event.ifName;
+  const auto& area = event.area;
   const auto adjId = std::make_pair(remoteNodeName, ifName);
 
   SYSLOG(INFO) << "Neighbor " << remoteNodeName << " is down on interface "
@@ -465,13 +464,16 @@ LinkMonitor::neighborDownEvent(
 }
 
 void
-LinkMonitor::neighborRestartingEvent(
-    const std::string& remoteNodeName,
-    const std::string& ifName,
-    const std::string& area) {
+LinkMonitor::neighborRestartingEvent(const thrift::SparkNeighborEvent& event) {
+  const auto& remoteNodeName = event.neighbor.nodeName;
+  const auto& ifName = event.ifName;
+  const auto& area = event.area;
   const auto adjId = std::make_pair(remoteNodeName, ifName);
+
   SYSLOG(INFO) << "Neighbor " << remoteNodeName
                << " is restarting on interface " << ifName;
+  fb303::fbData->addStatValue(
+      "link_monitor.neighbor_restarting", 1, fb303::SUM);
 
   // update adjacencies_ restarting-bit and advertise peers
   auto adjValueIt = adjacencies_.find(adjId);
@@ -479,6 +481,24 @@ LinkMonitor::neighborRestartingEvent(
     adjValueIt->second.isRestarting = true;
   }
   advertiseKvStorePeers(area);
+}
+
+void
+LinkMonitor::neighborRttChangeEvent(const thrift::SparkNeighborEvent& event) {
+  const auto& remoteNodeName = event.neighbor.nodeName;
+  const auto& ifName = event.ifName;
+  int32_t newRttMetric = getRttMetric(event.rttUs);
+
+  VLOG(1) << "Metric value changed for neighbor " << remoteNodeName << " to "
+          << newRttMetric;
+
+  auto it = adjacencies_.find({remoteNodeName, ifName});
+  if (it != adjacencies_.end()) {
+    auto& adj = it->second.adjacency;
+    adj.metric = newRttMetric;
+    adj.rtt = event.rttUs;
+    advertiseAdjacenciesThrottled_->operator()();
+  }
 }
 
 std::unordered_map<std::string, thrift::PeerSpec>
@@ -940,48 +960,32 @@ LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
   switch (event.eventType) {
   case thrift::SparkNeighborEventType::NEIGHBOR_UP: {
     logNeighborEvent(event);
-    neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
+    neighborUpEvent(event);
     break;
   }
-
   case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING: {
     logNeighborEvent(event);
-    neighborRestartingEvent(event.neighbor.nodeName, event.ifName, event.area);
+    neighborRestartingEvent(event);
     break;
   }
-
   case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
     logNeighborEvent(event);
-    neighborUpEvent(neighborAddrV4, neighborAddrV6, event);
+    neighborUpEvent(event);
     break;
   }
-
   case thrift::SparkNeighborEventType::NEIGHBOR_DOWN: {
     logNeighborEvent(event);
-    neighborDownEvent(event.neighbor.nodeName, event.ifName, event.area);
+    neighborDownEvent(event);
     break;
   }
-
   case thrift::SparkNeighborEventType::NEIGHBOR_RTT_CHANGE: {
     if (!useRttMetric_) {
       break;
     }
-
     logNeighborEvent(event);
-
-    int32_t newRttMetric = getRttMetric(event.rttUs);
-    VLOG(1) << "Metric value changed for neighbor " << event.neighbor.nodeName
-            << " to " << newRttMetric;
-    auto it = adjacencies_.find({event.neighbor.nodeName, event.ifName});
-    if (it != adjacencies_.end()) {
-      auto& adj = it->second.adjacency;
-      adj.metric = newRttMetric;
-      adj.rtt = event.rttUs;
-      advertiseAdjacenciesThrottled_->operator()();
-    }
+    neighborRttChangeEvent(event);
     break;
   }
-
   default:
     LOG(ERROR) << "Unknown event type " << (int32_t)event.eventType;
   }
@@ -1262,6 +1266,7 @@ LinkMonitor::logNeighborEvent(thrift::SparkNeighborEvent const& event) {
   sample.addString("neighbor", event.neighbor.nodeName);
   sample.addString("interface", event.ifName);
   sample.addString("remote_interface", event.neighbor.ifName);
+  sample.addString("area", event.area);
   sample.addInt("rtt_us", event.rttUs);
 
   zmqMonitorClient_->addEventLog(fbzmq::thrift::EventLog(

@@ -192,25 +192,17 @@ class LinkMonitor final : public OpenrEventBase {
   // Initializes ZMQ sockets
   void prepare() noexcept;
 
-  //
-  // The following are used to process Spark neighbor up/down
-  // events
-  //
+  // wrapper function to process Spark neighbor evenr
+  void neighborUpEvent(const thrift::SparkNeighborEvent& event);
 
-  void neighborUpEvent(
-      const thrift::BinaryAddress& neighborAddrV4,
-      const thrift::BinaryAddress& neighborAddrV6,
-      const thrift::SparkNeighborEvent& event);
+  void neighborRestartingEvent(const thrift::SparkNeighborEvent& event);
 
-  void neighborRestartingEvent(
-      const std::string& remoteNodeName,
-      const std::string& ifName,
-      const std::string& area);
+  void neighborDownEvent(const thrift::SparkNeighborEvent& event);
 
-  void neighborDownEvent(
-      const std::string& remoteNodeName,
-      const std::string& ifName,
-      const std::string& area);
+  void neighborRttChangeEvent(const thrift::SparkNeighborEvent& event);
+
+  // submit events to monitor
+  void logNeighborEvent(thrift::SparkNeighborEvent const& event);
 
   // Used for initial interface discovery and periodic sync with system handler
   // return true if sync is successful
@@ -260,9 +252,6 @@ class LinkMonitor final : public OpenrEventBase {
   void createNetlinkSystemHandlerClient();
 
   void processNeighborEvent(thrift::SparkNeighborEvent&& event);
-
-  // submit events to monitor
-  void logNeighborEvent(thrift::SparkNeighborEvent const& event);
 
   // link events
   void logLinkEvent(
