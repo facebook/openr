@@ -920,6 +920,30 @@ createMplsAction(
   return mplsAction;
 }
 
+thrift::PrefixEntry
+createBgpWithdrawEntry(const thrift::IpPrefix& prefix) {
+  thrift::PrefixEntry pfx;
+  pfx.type = thrift::PrefixType::BGP;
+  pfx.prefix = prefix;
+  return pfx;
+}
+
+thrift::MplsRoute
+createMplsRoute(const std::pair<
+                int32_t,
+                std::unordered_map<folly::IPAddress, thrift::PrefixEntry>>&
+                    prefixInfo) {
+  thrift::MplsRoute mplsRoute;
+  mplsRoute.topLabel = prefixInfo.first;
+  for (const auto kv : prefixInfo.second) {
+    thrift::NextHopThrift nh;
+    nh.address = toBinaryAddress(kv.first);
+    nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
+    mplsRoute.nextHops.emplace_back(std::move(nh));
+  }
+  return mplsRoute;
+}
+
 thrift::UnicastRoute
 createUnicastRoute(
     thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops) {

@@ -238,6 +238,8 @@ struct PrefixEntry {
   // will not program/anounce the routes. If this parameter is not set, Decision
   // will not do extra check # of nexthops.
   8: optional i64 minNexthop
+
+  9: optional i32 prependLabel
 }
 
 // all prefixes that are bound to a given router
