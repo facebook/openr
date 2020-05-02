@@ -776,8 +776,11 @@ main(int argc, char** argv) {
 
   // Call external module for platform specific implementations
   if (FLAGS_enable_plugin) {
-    pluginStart(PluginArgs{
-        prefixUpdatesQueue, routeUpdatesQueue.getReader(), config, sslContext});
+    pluginStart(PluginArgs{prefixUpdatesQueue,
+                           staticRoutesUpdateQueue,
+                           routeUpdatesQueue.getReader(),
+                           config,
+                           sslContext});
   }
 
   // Wait for main-event loop to return

@@ -239,6 +239,7 @@ struct PrefixEntry {
   // will not do extra check # of nexthops.
   8: optional i64 minNexthop
 
+  // the IP or MPLS next-hops of this prefix must have this label prepended
   9: optional i32 prependLabel
 }
 

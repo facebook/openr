@@ -22,6 +22,8 @@
 namespace openr {
 struct PluginArgs {
   messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue;
+  messaging::ReplicateQueue<openr::thrift::RouteDatabaseDelta>&
+      staticRoutesUpdateQueue;
   messaging::RQueue<thrift::RouteDatabaseDelta> routeUpdatesQueue;
   std::shared_ptr<const Config> config;
   std::shared_ptr<wangle::SSLContextConfig> sslContext;

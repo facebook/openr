@@ -929,10 +929,9 @@ createBgpWithdrawEntry(const thrift::IpPrefix& prefix) {
 }
 
 thrift::MplsRoute
-createMplsRoute(const std::pair<
-                int32_t,
-                std::unordered_map<folly::IPAddress, thrift::PrefixEntry>>&
-                    prefixInfo) {
+createMplsRoute(
+    const std::pair<int32_t, std::map<folly::IPAddress, thrift::PrefixEntry>>&
+        prefixInfo) {
   thrift::MplsRoute mplsRoute;
   mplsRoute.topLabel = prefixInfo.first;
   for (const auto kv : prefixInfo.second) {
