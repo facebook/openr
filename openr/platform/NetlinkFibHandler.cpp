@@ -139,7 +139,7 @@ NetlinkFibHandler::semifuture_addUnicastRoutes(
     std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) {
   const auto protocol = getProtocol(clientId);
   if (not protocol.has_value()) {
-    createSemiFutureWithClientIdError<folly::Unit>();
+    return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
   LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
@@ -157,7 +157,7 @@ NetlinkFibHandler::semifuture_deleteUnicastRoutes(
     int16_t clientId, std::unique_ptr<std::vector<thrift::IpPrefix>> prefixes) {
   const auto protocol = getProtocol(clientId);
   if (not protocol.has_value()) {
-    createSemiFutureWithClientIdError<folly::Unit>();
+    return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
   LOG(INFO) << "Deleting routes of client: " << getClientName(clientId);
@@ -174,27 +174,11 @@ NetlinkFibHandler::semifuture_deleteUnicastRoutes(
 }
 
 folly::SemiFuture<folly::Unit>
-NetlinkFibHandler::semifuture_addMplsRoute(
-    int16_t clientId, std::unique_ptr<thrift::MplsRoute> route) {
-  auto routes = std::make_unique<std::vector<thrift::MplsRoute>>();
-  routes->emplace_back(std::move(*route));
-  return semifuture_addMplsRoutes(clientId, std::move(routes));
-}
-
-folly::SemiFuture<folly::Unit>
-NetlinkFibHandler::semifuture_deleteMplsRoute(
-    int16_t clientId, int32_t topLabel) {
-  auto labels = std::make_unique<std::vector<int32_t>>();
-  labels->push_back(topLabel);
-  return semifuture_deleteMplsRoutes(clientId, std::move(labels));
-}
-
-folly::SemiFuture<folly::Unit>
 NetlinkFibHandler::semifuture_addMplsRoutes(
     int16_t clientId, std::unique_ptr<std::vector<thrift::MplsRoute>> routes) {
   const auto protocol = getProtocol(clientId);
   if (not protocol.has_value()) {
-    createSemiFutureWithClientIdError<folly::Unit>();
+    return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
   LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
@@ -213,7 +197,7 @@ NetlinkFibHandler::semifuture_deleteMplsRoutes(
     int16_t clientId, std::unique_ptr<std::vector<int32_t>> topLabels) {
   const auto protocol = getProtocol(clientId);
   if (not protocol.has_value()) {
-    createSemiFutureWithClientIdError<folly::Unit>();
+    return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
   LOG(INFO) << "Deleting mpls routes of client: " << getClientName(clientId);
@@ -235,7 +219,7 @@ NetlinkFibHandler::semifuture_syncFib(
     std::unique_ptr<std::vector<thrift::UnicastRoute>> unicastRoutes) {
   const auto protocol = getProtocol(clientId);
   if (not protocol.has_value()) {
-    createSemiFutureWithClientIdError<folly::Unit>();
+    return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
   LOG(INFO) << "Syncing FIB with provided routes. Client: "
@@ -299,7 +283,7 @@ NetlinkFibHandler::semifuture_syncMplsFib(
     std::unique_ptr<std::vector<thrift::MplsRoute>> mplsRoutes) {
   const auto protocol = getProtocol(clientId);
   if (not protocol.has_value()) {
-    createSemiFutureWithClientIdError<folly::Unit>();
+    return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
   LOG(INFO) << "Syncing MPLS FIB with provided routes. Client: "
@@ -365,7 +349,7 @@ folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
 NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
   const auto protocol = getProtocol(clientId);
   if (not protocol.has_value()) {
-    createSemiFutureWithClientIdError<
+    return createSemiFutureWithClientIdError<
         std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>();
   }
   CHECK(protocol.has_value());
@@ -394,7 +378,7 @@ folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
 NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
   const auto protocol = getProtocol(clientId);
   if (not protocol.has_value()) {
-    createSemiFutureWithClientIdError<
+    return createSemiFutureWithClientIdError<
         std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>();
   }
   CHECK(protocol.has_value());
@@ -425,17 +409,17 @@ NetlinkFibHandler::toThriftNextHops(const fbnl::NextHopSet& nextHops) {
     // Add nexthop address
     if (nh.getGateway().has_value()) {
       nextHop.address = toBinaryAddress(nh.getGateway().value());
+      // Add nexthop interface if any
+      if (nh.getIfIndex().has_value()) {
+        nextHop.address.ifName_ref() =
+            getIfName(nh.getIfIndex().value()).value();
+      }
     } else {
       // POP_AND_LOOKUP mpls nexthop has no nexthop address so we assign
       // valid but zeroed ipv6 address.
       CHECK(labelAction.has_value());
       CHECK(thrift::MplsActionCode::POP_AND_LOOKUP == labelAction.value());
       nextHop.address = toBinaryAddress(folly::IPAddressV6("::"));
-    }
-
-    // Add nexthop interface if any
-    if (nh.getIfIndex().has_value()) {
-      nextHop.address.ifName_ref() = getIfName(nh.getIfIndex().value()).value();
     }
 
     // Add mpls action
@@ -479,6 +463,7 @@ NetlinkFibHandler::buildMplsAction(
     auto lpbkIfIndex = getLoopbackIfIndex();
     if (lpbkIfIndex.has_value()) {
       nhBuilder.setIfIndex(lpbkIfIndex.value());
+      nhBuilder.unsetGateway(); // Unset gateway address if any
     } else {
       throw fbnl::NlException("POP action, loopback interface not available");
     }

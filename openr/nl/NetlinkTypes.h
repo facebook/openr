@@ -57,6 +57,11 @@ class NextHopBuilder final {
   NextHopBuilder& setIfIndex(int ifIndex);
 
   NextHopBuilder& setGateway(const folly::IPAddress& gateway);
+  NextHopBuilder&
+  unsetGateway() {
+    gateway_.reset();
+    return *this;
+  }
 
   NextHopBuilder& setWeight(uint8_t weight);
 

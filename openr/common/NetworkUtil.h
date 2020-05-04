@@ -168,4 +168,14 @@ toString(const thrift::UnicastRoute& route) {
   return folly::join("\n", lines);
 }
 
+inline std::string
+toString(const thrift::MplsRoute& route) {
+  std::vector<std::string> lines;
+  lines.emplace_back(folly::sformat("> Label: {}", route.topLabel));
+  for (const auto& nh : route.nextHops) {
+    lines.emplace_back("  " + toString(nh));
+  }
+  return folly::join("\n", lines);
+}
+
 } // namespace openr

@@ -54,6 +54,9 @@ enum FibClient {
   // OpenR Client
   OPENR = 786,
 
+  // BGP Client
+  BGP = 0,
+
   // Some Placeholder Clients
   CLIENT_1 = 1,
   CLIENT_2 = 2,
@@ -147,18 +150,14 @@ service SystemService {
 //    ClientId: 786 => ProtocolId: 99, Priority: 10
 // For BGP
 //    ClientId: 0 => ProtocolId: 253, Priority: 20
-// For TG breeze CLI client
-//    ClientId: 64 => ProtocolId: 64, Priority: 11
 // NOTE: protocolID must be less than 254
 const map<i16, i16> clientIdtoProtocolId = {
     786: 99,  // Open/R
     0: 253,   // BGP
-    64: 64,   // CLI Routes
 }
 const map<i16, i16> protocolIdtoPriority = {
     99: 10,   // Open/R
     253: 20,  // BGP
-    64: 11,   // CLI Routes
 }
 const i16 kUnknowProtAdminDistance = 255
 

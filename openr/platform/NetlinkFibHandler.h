@@ -29,14 +29,12 @@
 
 namespace openr {
 /**
- * This class implements OpenR's Platform.FibService thrit interface for
- * programming routes on Linux platform for packet routing in kernel
- *
- * TODO: Add UT for NetlinkFibHandler - for correctness of following APIs
- * - buildRoute / buildMplsRoute / buildNextHop / buildMplsAction
- * - Add/Del/Sync unicast routes (IPv4 & IPv6)
- * - Add/Del/Sync mpls routes
- * - NOTE: Use MockProtocolSocket to faciliate the UTs
+ * This class implements OpenR's Platform.FibService thrit interface. It uses
+ * NetlinkProtocolSocket to program routes in kernel. At a high level
+ * - It translates thrift representation of routes to netlink for programming
+ * - Translates netlink representation of routes to thrift for get* queries
+ * - All APIs exposed are asynchronous. Sync API retries the existing routing
+ *   state in synchronous way and program changes asynchrnously.
  */
 class NetlinkFibHandler : public thrift::FibServiceSvIf {
  public:
@@ -61,12 +59,6 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
   folly::SemiFuture<folly::Unit> semifuture_deleteUnicastRoutes(
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::IpPrefix>> prefixes) override;
-
-  folly::SemiFuture<folly::Unit> semifuture_addMplsRoute(
-      int16_t clientId, std::unique_ptr<thrift::MplsRoute> route);
-
-  folly::SemiFuture<folly::Unit> semifuture_deleteMplsRoute(
-      int16_t clientId, int32_t topLabel);
 
   folly::SemiFuture<folly::Unit> semifuture_addMplsRoutes(
       int16_t clientId,
@@ -103,22 +95,17 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
   semifuture_getMplsRouteTableByClient(int16_t clientId) override;
 
   /**
-   * Static API to convert protocol to clientId. Set exception in promise if
-   * return value is not false;
-   * TODO: Add UT for this API
-   * TODO: Fix this by not taking promise as a parameter
+   * Static API to convert protocol to clientId
    */
   static std::optional<int16_t> getProtocol(int16_t clientId);
 
   /**
    * Convert clientId to client name
-   * TODO: Add UT for this API
    */
   static std::string getClientName(const int16_t clientId);
 
   /**
    * Translate protocol identifier to priority
-   * TODO: Add UT for this API
    */
   static uint8_t protocolToPriority(const uint8_t protocol);
 
