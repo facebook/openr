@@ -277,6 +277,7 @@ class RouteBuilder {
 
 class Route final {
  public:
+  Route() {} // Empty constructor
   explicit Route(const RouteBuilder& builder);
   ~Route();
 

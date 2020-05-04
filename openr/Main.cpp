@@ -328,11 +328,11 @@ main(int argc, char** argv) {
       netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
       netlinkFibServer->setPort(FLAGS_fib_handler_port);
 
-      netlinkFibServerThread = std::make_unique<std::thread>(
-          [&netlinkFibServer, &nlEventLoop, nlSocket]() {
+      netlinkFibServerThread =
+          std::make_unique<std::thread>([&netlinkFibServer, nlSocket]() {
             folly::setThreadName("FibService");
             auto fibHandler = std::make_shared<NetlinkFibHandler>(
-                nlEventLoop.get(), nlSocket);
+                nlSocket->getProtocolSocket());
             netlinkFibServer->setInterface(std::move(fibHandler));
 
             LOG(INFO) << "Starting NetlinkFib server...";
@@ -352,8 +352,8 @@ main(int argc, char** argv) {
       netlinkSystemServer->setCpp2WorkerThreadName("SystemTWorker");
       netlinkSystemServer->setPort(FLAGS_system_agent_port);
 
-      netlinkSystemServerThread = std::make_unique<std::thread>(
-          [&netlinkSystemServer, &mainEventLoop, nlSocket]() {
+      netlinkSystemServerThread =
+          std::make_unique<std::thread>([&netlinkSystemServer, nlSocket]() {
             folly::setThreadName("SystemService");
             auto systemHandler = std::make_unique<NetlinkSystemHandler>(
                 nlSocket->getProtocolSocket());

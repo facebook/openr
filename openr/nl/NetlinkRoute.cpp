@@ -597,6 +597,16 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
 
+  // Default route might be missing RTA_DST attribute. So explicitly set
+  // destination here.
+  if (routeEntry->rtm_dst_len == 0 && routeBuilder.getFamily() == AF_UNSPEC) {
+    if (routeEntry->rtm_family == AF_INET) {
+      routeBuilder.setDestination({folly::IPAddressV4("0.0.0.0"), 0});
+    } else if (routeEntry->rtm_family == AF_INET6) {
+      routeBuilder.setDestination({folly::IPAddressV6("::"), 0});
+    }
+  }
+
   auto route = routeBuilder.build();
   VLOG(2) << route.str();
   return route;

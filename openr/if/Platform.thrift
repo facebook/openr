@@ -143,12 +143,13 @@ service SystemService {
 }
 
 // static mapping of clientId => protocolId, priority same of admin distance
-// For Open/R
+// For Open/R.
 //    ClientId: 786 => ProtocolId: 99, Priority: 10
 // For BGP
 //    ClientId: 0 => ProtocolId: 253, Priority: 20
 // For TG breeze CLI client
 //    ClientId: 64 => ProtocolId: 64, Priority: 11
+// NOTE: protocolID must be less than 254
 const map<i16, i16> clientIdtoProtocolId = {
     786: 99,  // Open/R
     0: 253,   // BGP

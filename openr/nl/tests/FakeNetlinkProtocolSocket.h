@@ -16,6 +16,21 @@
 namespace openr::fbnl {
 
 /**
+ * Utility functions for creating objects in tests
+ */
+namespace utils {
+
+fbnl::Link createLink(
+    const int ifIndex,
+    const std::string& ifName,
+    bool isUp = true,
+    bool isLoopback = false);
+
+fbnl::IfAddress createIfAddress(const int ifIndex, const std::string& addrMask);
+
+} // namespace utils
+
+/**
  * Defines a fake implementation for netlink protocol socket. Instead of writing
  * state to Linux kernel, the API calls made here instead read/write into the
  * state maintained in memory. There are also specialized APIs to update the
@@ -58,14 +73,18 @@ class FakeNetlinkProtocolSocket : public NetlinkProtocolSocket {
 
  private:
   // map<ifIndex -> Link>
+  // NOTE: using map for ordered entries
   std::map<int, fbnl::Link> links_;
 
   // map<ifIndex -> list<IfAddress>>
+  // NOTE: using map for ordered entries
   std::map<int, std::list<fbnl::IfAddress>> ifAddrs_;
 
-  // map<table-id -> map<{prefix, priority}, Route>
-  std::map<int, std::map<std::pair<folly::CIDRNetwork, uint8_t>, fbnl::Route>>
-      routes_;
+  // map<protocolId -> map<prefix/label, Route>
+  // NOTE: using map for ordered entries
+  std::unordered_map<uint8_t, std::map<folly::CIDRNetwork, fbnl::Route>>
+      unicastRoutes_;
+  std::unordered_map<uint8_t, std::map<uint32_t, fbnl::Route>> mplsRoutes_;
 };
 
 } // namespace openr::fbnl

@@ -25,8 +25,6 @@ namespace openr {
 
 namespace {
 
-const std::chrono::seconds kSyncStaticRouteTimeout{30};
-
 // iproute2 protocol IDs in the kernel are a shared resource
 // Various well known and custom protocols use it
 // This is a *Weak* attempt to protect against some already
@@ -34,50 +32,52 @@ const std::chrono::seconds kSyncStaticRouteTimeout{30};
 const uint8_t kMinRouteProtocolId = 17;
 const uint8_t kMaxRouteProtocolId = 253;
 
+template <typename T>
+folly::SemiFuture<T>
+createSemiFutureWithClientIdError() {
+  auto [p, sf] = folly::makePromiseContract<T>();
+  p.setException(fbnl::NlException("Invalid clientId or protocol mapping"));
+  return std::move(sf);
+}
+
 } // namespace
 
-NetlinkFibHandler::NetlinkFibHandler(
-    fbzmq::ZmqEventLoop* zmqEventLoop,
-    std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket)
-    : netlinkSocket_(netlinkSocket),
-      evl_{zmqEventLoop},
+NetlinkFibHandler::NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock)
+    : nlSock_(nlSock),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
                      .count()) {
-  CHECK_NOTNULL(zmqEventLoop);
-  // TODO: Implement this neighbor in this class
-  netlinkSocket_->registerNeighborListener(
-      [this](const fbnl::NetlinkSocket::NeighborUpdate& neighborUpdate) {
-        std::lock_guard<std::mutex> g(listenersMutex_);
-        for (auto& listener : listeners_.accessAllThreads()) {
-          LOG(INFO) << "Sending notification to bgpD";
-          listener.eventBase->runInEventBaseThread(
-              [this, neighborUpdate, listenerPtr = &listener] {
-                LOG(INFO) << "firing off notification";
-                invokeNeighborListeners(listenerPtr, neighborUpdate);
-              });
-        }
-      });
+  CHECK_NOTNULL(nlSock);
+  // NOTE: This will mask off neighbor events publisher. It is okay because as
+  // of now no one is using Neighbor Events.
+  nlSock_->setNeighborEventCB([this](fbnl::Neighbor neighbor, bool) {
+    std::lock_guard<std::mutex> g(listenersMutex_);
+    for (auto& listener : listeners_.accessAllThreads()) {
+      LOG(INFO) << "Sending notification to bgpD";
+      listener.eventBase->runInEventBaseThread(
+          [this, neighbor, listenerPtr = &listener] {
+            LOG(INFO) << "firing off notification";
+            invokeNeighborListeners(
+                listenerPtr,
+                {neighbor.getDestination().str()},
+                neighbor.isReachable());
+          });
+    }
+  });
 }
 
 NetlinkFibHandler::~NetlinkFibHandler() {}
 
-template <class A>
-folly::Expected<int16_t, bool>
-NetlinkFibHandler::getProtocol(folly::Promise<A>& promise, int16_t clientId) {
+std::optional<int16_t>
+NetlinkFibHandler::getProtocol(int16_t clientId) {
   auto ret = thrift::Platform_constants::clientIdtoProtocolId().find(clientId);
   if (ret == thrift::Platform_constants::clientIdtoProtocolId().end()) {
-    auto ex =
-        fbnl::NlException(folly::sformat("Invalid ClientId : {}", clientId));
-    promise.setException(ex);
-    return folly::makeUnexpected(false);
+    return std::nullopt;
   }
   if (ret->second < kMinRouteProtocolId || ret->second > kMaxRouteProtocolId) {
-    auto ex = fbnl::NlException(
-        folly::sformat("Invalid Protocol Id : {}", ret->second));
-    promise.setException(ex);
-    return folly::makeUnexpected(false);
+    return std::nullopt;
   }
+
   return ret->second;
 }
 
@@ -100,273 +100,248 @@ NetlinkFibHandler::protocolToPriority(const uint8_t protocol) {
   return openr::thrift::Platform_constants::kUnknowProtAdminDistance();
 }
 
-std::vector<thrift::NextHopThrift>
-NetlinkFibHandler::buildNextHops(const fbnl::NextHopSet& nextHops) {
-  std::vector<thrift::NextHopThrift> thriftNextHops;
-
-  for (auto const& nh : nextHops) {
-    CHECK(nh.getGateway().has_value());
-    const auto& ifName = nh.getIfIndex().has_value()
-        ? getIfName(nh.getIfIndex().value()).value()
-        : "";
-    thrift::NextHopThrift nextHop;
-    nextHop.address = toBinaryAddress(nh.getGateway().value());
-    nextHop.address.ifName_ref() = ifName;
-    auto labelAction = nh.getLabelAction();
-    if (labelAction.has_value()) {
-      if (labelAction.value() == thrift::MplsActionCode::POP_AND_LOOKUP ||
-          labelAction.value() == thrift::MplsActionCode::PHP) {
-        nextHop.mplsAction_ref() = createMplsAction(labelAction.value());
-      } else if (labelAction.value() == thrift::MplsActionCode::SWAP) {
-        nextHop.mplsAction_ref() =
-            createMplsAction(labelAction.value(), nh.getSwapLabel().value());
-      } else if (labelAction.value() == thrift::MplsActionCode::PUSH) {
-        nextHop.mplsAction_ref() = createMplsAction(
-            labelAction.value(), std::nullopt, nh.getPushLabels().value());
-      }
-    }
-    thriftNextHops.emplace_back(std::move(nextHop));
-  }
-  return thriftNextHops;
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::collectAllResult(
+    std::vector<folly::SemiFuture<int>>&& result,
+    std::set<int> errorsToIgnore) {
+  return folly::collectAll(std::move(result))
+      .deferValue([errorsToIgnore](std::vector<folly::Try<int>>&& retvals) {
+        for (auto& retvalTry : retvals) {
+          auto retval = std::abs(retvalTry.value()); // Throws exception if any
+          if (retval == 0 or errorsToIgnore.count(retval)) {
+            continue;
+          }
+          throw fbnl::NlException("One or more netlink request failed", retval);
+        }
+        return folly::Unit();
+      });
 }
 
-std::vector<thrift::UnicastRoute>
-NetlinkFibHandler::toThriftUnicastRoutes(const fbnl::NlUnicastRoutes& routeDb) {
-  std::vector<thrift::UnicastRoute> routes;
-
-  for (auto const& kv : routeDb) {
-    thrift::UnicastRoute route;
-    route.dest = toIpPrefix(kv.first);
-    route.nextHops = buildNextHops(kv.second.getNextHops());
-    routes.emplace_back(std::move(route));
-  }
-  return routes;
-}
-
-std::vector<thrift::MplsRoute>
-NetlinkFibHandler::toThriftMplsRoutes(const fbnl::NlMplsRoutes& routeDb) {
-  std::vector<thrift::MplsRoute> routes;
-
-  for (auto const& kv : routeDb) {
-    thrift::MplsRoute route;
-    route.topLabel = kv.first;
-    route.nextHops = buildNextHops(kv.second.getNextHops());
-
-    routes.emplace_back(std::move(route));
-  }
-  return routes;
-}
-
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_addUnicastRoute(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_addUnicastRoute(
     int16_t clientId, std::unique_ptr<thrift::UnicastRoute> route) {
-  VLOG(1) << "Adding/Updating route for " << toString(route->dest);
-
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-  auto protocol = getProtocol(promise, clientId);
-  if (protocol.hasError()) {
-    return future;
-  }
-
-  return netlinkSocket_->addRoute(buildRoute(*route, protocol.value()));
+  auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
+  routes->emplace_back(std::move(*route));
+  return semifuture_addUnicastRoutes(clientId, std::move(routes));
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_deleteUnicastRoute(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_deleteUnicastRoute(
     int16_t clientId, std::unique_ptr<thrift::IpPrefix> prefix) {
-  VLOG(1) << "Deleting route for " << toString(*prefix);
-
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-  auto protocol = getProtocol(promise, clientId);
-  if (protocol.hasError()) {
-    return future;
-  }
-
-  fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setDestination(toIPNetwork(*prefix))
-      .setProtocolId(protocol.value());
-  return netlinkSocket_->delRoute(rtBuilder.build());
+  auto prefixes = std::make_unique<std::vector<thrift::IpPrefix>>();
+  prefixes->emplace_back(std::move(*prefix));
+  return semifuture_deleteUnicastRoutes(clientId, std::move(prefixes));
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_addUnicastRoutes(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_addUnicastRoutes(
     int16_t clientId,
     std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) {
+  const auto protocol = getProtocol(clientId);
+  if (not protocol.has_value()) {
+    createSemiFutureWithClientIdError<folly::Unit>();
+  }
+  CHECK(protocol.has_value());
   LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
 
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-
-  // Run all route updates in a single eventloop
-  evl_->runImmediatelyOrInEventLoop([this,
-                                     clientId,
-                                     promise = std::move(promise),
-                                     routes = std::move(routes)]() mutable {
-    for (auto& route : *routes) {
-      auto ptr = std::make_unique<thrift::UnicastRoute>(std::move(route));
-      try {
-        // This is going to be synchronous call as we are invoking from
-        // within event loop
-        future_addUnicastRoute(clientId, std::move(ptr)).get();
-      } catch (std::exception const& e) {
-        promise.setException(e);
-        return;
-      }
-    }
-    promise.setValue();
-  });
-
-  return future;
+  // Add routes and return a collected semifuture
+  std::vector<folly::SemiFuture<int>> result;
+  for (auto& route : *routes) {
+    result.emplace_back(nlSock_->addRoute(buildRoute(route, protocol.value())));
+  }
+  return collectAllResult(std::move(result), {EEXIST});
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_deleteUnicastRoutes(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_deleteUnicastRoutes(
     int16_t clientId, std::unique_ptr<std::vector<thrift::IpPrefix>> prefixes) {
+  const auto protocol = getProtocol(clientId);
+  if (not protocol.has_value()) {
+    createSemiFutureWithClientIdError<folly::Unit>();
+  }
+  CHECK(protocol.has_value());
   LOG(INFO) << "Deleting routes of client: " << getClientName(clientId);
 
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-
-  evl_->runImmediatelyOrInEventLoop([this,
-                                     clientId,
-                                     promise = std::move(promise),
-                                     prefixes = std::move(prefixes)]() mutable {
-    for (auto& prefix : *prefixes) {
-      auto ptr = std::make_unique<thrift::IpPrefix>(std::move(prefix));
-      try {
-        future_deleteUnicastRoute(clientId, std::move(ptr)).get();
-      } catch (std::exception const& e) {
-        promise.setException(e);
-        return;
-      }
-    }
-    promise.setValue();
-  });
-
-  return future;
+  // Delete routes and return a collected semifuture
+  std::vector<folly::SemiFuture<int>> result;
+  for (auto& prefix : *prefixes) {
+    fbnl::RouteBuilder rtBuilder;
+    rtBuilder.setDestination(toIPNetwork(prefix));
+    rtBuilder.setProtocolId(protocol.value());
+    result.emplace_back(nlSock_->deleteRoute(rtBuilder.build()));
+  }
+  return collectAllResult(std::move(result), {ESRCH});
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_addMplsRoute(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_addMplsRoute(
     int16_t clientId, std::unique_ptr<thrift::MplsRoute> route) {
-  VLOG(1) << "Adding/Updating MPLS route for " << route->topLabel;
-
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-  auto protocol = getProtocol(promise, clientId);
-  if (protocol.hasError()) {
-    return future;
-  }
-  // TODO: Replace this with addRoute()
-  return netlinkSocket_->addMplsRoute(buildMplsRoute(*route, protocol.value()));
+  auto routes = std::make_unique<std::vector<thrift::MplsRoute>>();
+  routes->emplace_back(std::move(*route));
+  return semifuture_addMplsRoutes(clientId, std::move(routes));
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_deleteMplsRoute(int16_t clientId, int32_t topLabel) {
-  VLOG(1) << "Deleting mpls route " << topLabel;
-
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-  auto protocol = getProtocol(promise, clientId);
-  if (protocol.hasError()) {
-    return future;
-  }
-  fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setMplsLabel(topLabel).setProtocolId(protocol.value());
-  // TODO: Replace this with deleteRoute()
-  return netlinkSocket_->delMplsRoute(rtBuilder.build());
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_deleteMplsRoute(
+    int16_t clientId, int32_t topLabel) {
+  auto labels = std::make_unique<std::vector<int32_t>>();
+  labels->push_back(topLabel);
+  return semifuture_deleteMplsRoutes(clientId, std::move(labels));
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_addMplsRoutes(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_addMplsRoutes(
     int16_t clientId, std::unique_ptr<std::vector<thrift::MplsRoute>> routes) {
+  const auto protocol = getProtocol(clientId);
+  if (not protocol.has_value()) {
+    createSemiFutureWithClientIdError<folly::Unit>();
+  }
+  CHECK(protocol.has_value());
   LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
 
-  std::vector<folly::Future<folly::Unit>> futures;
+  // Add routes and return a collected semifuture
+  std::vector<folly::SemiFuture<int>> result;
   for (auto& route : *routes) {
-    auto ptr = std::make_unique<thrift::MplsRoute>(std::move(route));
-    futures.emplace_back(future_addMplsRoute(clientId, std::move(ptr)));
+    result.emplace_back(
+        nlSock_->addRoute(buildMplsRoute(route, protocol.value())));
   }
-
-  return collectAllUnsafe(std::move(futures))
-      .then([](folly::Try<std::vector<folly::Try<folly::Unit>>>&& retvals) {
-        for (auto& retval : retvals.value()) {
-          retval.value(); // Throw exception if any
-        }
-        return folly::Unit(); // Return unit on success
-      });
+  return collectAllResult(std::move(result), {EEXIST});
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_deleteMplsRoutes(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_deleteMplsRoutes(
     int16_t clientId, std::unique_ptr<std::vector<int32_t>> topLabels) {
+  const auto protocol = getProtocol(clientId);
+  if (not protocol.has_value()) {
+    createSemiFutureWithClientIdError<folly::Unit>();
+  }
+  CHECK(protocol.has_value());
   LOG(INFO) << "Deleting mpls routes of client: " << getClientName(clientId);
 
-  std::vector<folly::Future<folly::Unit>> futures;
-  for (auto& label : *topLabels) {
-    futures.emplace_back(future_deleteMplsRoute(clientId, label));
+  // Delete routes and return a collected semifuture
+  std::vector<folly::SemiFuture<int>> result;
+  for (auto& topLabel : *topLabels) {
+    fbnl::RouteBuilder rtBuilder;
+    rtBuilder.setMplsLabel(topLabel);
+    rtBuilder.setProtocolId(protocol.value());
+    result.emplace_back(nlSock_->deleteRoute(rtBuilder.build()));
   }
-
-  return collectAllUnsafe(std::move(futures))
-      .then([](folly::Try<std::vector<folly::Try<folly::Unit>>>&& retvals) {
-        for (auto& retval : retvals.value()) {
-          retval.value(); // Throw exception if any
-        }
-        return folly::Unit(); // Return unit on success
-      });
+  return collectAllResult(std::move(result), {ESRCH});
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_syncFib(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_syncFib(
     int16_t clientId,
-    std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) {
+    std::unique_ptr<std::vector<thrift::UnicastRoute>> unicastRoutes) {
+  const auto protocol = getProtocol(clientId);
+  if (not protocol.has_value()) {
+    createSemiFutureWithClientIdError<folly::Unit>();
+  }
+  CHECK(protocol.has_value());
   LOG(INFO) << "Syncing FIB with provided routes. Client: "
             << getClientName(clientId);
 
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-  auto protocol = getProtocol(promise, clientId);
-  if (protocol.hasError()) {
-    return future;
+  // SemiFuture vector for collecting return values of all API calls
+  std::vector<folly::SemiFuture<int>> result;
+
+  // Create set of existing route
+  // NOTE: Synchronous call to retrieve all the routes. We first make both
+  // requests to retrieve IPv4 and IPv6 routes. Subsequently we wait on them
+  // to complete and prepare the map of existing routes
+  std::unordered_map<folly::CIDRNetwork, fbnl::Route> existingRoutes;
+  {
+    auto v4Routes = nlSock_->getIPv4Routes(protocol.value());
+    auto v6Routes = nlSock_->getIPv6Routes(protocol.value());
+    for (auto& route : std::move(v4Routes).get()) {
+      const auto prefix = route.getDestination();
+      existingRoutes.emplace(prefix, std::move(route));
+    }
+    for (auto& route : std::move(v6Routes).get()) {
+      const auto prefix = route.getDestination();
+      existingRoutes.emplace(prefix, std::move(route));
+    }
   }
 
-  // Build new routeDb
-  fbnl::NlUnicastRoutes newRoutes;
-  for (auto const& route : *routes) {
-    newRoutes.emplace(
-        toIPNetwork(route.dest), buildRoute(route, protocol.value()));
+  // Go over the new routes. Add or update
+  std::unordered_set<folly::CIDRNetwork> newPrefixes;
+  for (auto& route : *unicastRoutes) {
+    const auto network = toIPNetwork(route.dest);
+    newPrefixes.insert(network);
+    auto nlRoute = buildRoute(route, protocol.value());
+    auto it = existingRoutes.find(network);
+    if (it != existingRoutes.end() and it->second == nlRoute) {
+      // Existing route is same as the one we're trying to add. SKIP
+      continue;
+    }
+    // Add new route or replace existing one
+    result.emplace_back(nlSock_->addRoute(nlRoute));
   }
 
-  // TODO: Implement sync routes in here. `NetlinkSocket` is deprecated
-  return netlinkSocket_->syncUnicastRoutes(
-      protocol.value(), std::move(newRoutes));
+  // Go over the old routes to remove stale ones
+  for (auto& [prefix, nlRoute] : existingRoutes) {
+    if (newPrefixes.count(prefix)) {
+      // not a stale route
+      continue;
+    }
+    // Delete stale route
+    result.emplace_back(nlSock_->deleteRoute(nlRoute));
+  }
+
+  // Return collected result
+  // NOTE: We're ignoring EEXIST error code. ESRCH error code must not be
+  // raised because we're deleting route that already exist
+  return collectAllResult(std::move(result), {EEXIST});
 }
 
-folly::Future<folly::Unit>
-NetlinkFibHandler::future_syncMplsFib(
+folly::SemiFuture<folly::Unit>
+NetlinkFibHandler::semifuture_syncMplsFib(
     int16_t clientId,
     std::unique_ptr<std::vector<thrift::MplsRoute>> mplsRoutes) {
+  const auto protocol = getProtocol(clientId);
+  if (not protocol.has_value()) {
+    createSemiFutureWithClientIdError<folly::Unit>();
+  }
+  CHECK(protocol.has_value());
   LOG(INFO) << "Syncing MPLS FIB with provided routes. Client: "
             << getClientName(clientId);
 
-  folly::Promise<folly::Unit> promise;
-  auto future = promise.getFuture();
-  auto protocol = getProtocol(promise, clientId);
-  if (protocol.hasError()) {
-    return future;
+  // SemiFuture vector for collecting return values of all API calls
+  std::vector<folly::SemiFuture<int>> result;
+
+  // Create set of existing route
+  // NOTE: Synchronous call to retrieve all the routes
+  std::unordered_map<int32_t, fbnl::Route> existingRoutes;
+  for (auto& route : nlSock_->getMplsRoutes(protocol.value()).get()) {
+    const auto topLabel = route.getMplsLabel().value();
+    existingRoutes.emplace(topLabel, std::move(route));
   }
 
-  fbnl::NlMplsRoutes newMplsRoutes;
-  for (auto const& mplsRoute : *mplsRoutes) {
-    newMplsRoutes.emplace(
-        mplsRoute.topLabel, buildMplsRoute(mplsRoute, protocol.value()));
+  // Go over the new routes. Add or update
+  std::unordered_set<uint32_t> newLabels;
+  for (auto& route : *mplsRoutes) {
+    newLabels.insert(route.topLabel);
+    auto nlRoute = buildMplsRoute(route, protocol.value());
+    auto it = existingRoutes.find(route.topLabel);
+    if (it != existingRoutes.end() and it->second == nlRoute) {
+      // Existing route is same as the one we're trying to add. SKIP
+      continue;
+    }
+    // Add new route or replace existing one
+    result.emplace_back(nlSock_->addRoute(nlRoute));
   }
 
-  // TODO: Implement sync mpls routes in here. `NetlinkSocket` is deprecated
-  return netlinkSocket_->syncMplsRoutes(
-      protocol.value(), std::move(newMplsRoutes));
+  // Go over the old routes to remove stale ones
+  for (auto& [topLabel, nlRoute] : existingRoutes) {
+    if (newLabels.count(topLabel)) {
+      // not a stale route
+      continue;
+    }
+    // Delete stale route
+    result.emplace_back(nlSock_->deleteRoute(nlRoute));
+  }
+
+  // Return collected result
+  return collectAllResult(std::move(result), {EEXIST, ESRCH});
 }
 
 int64_t
@@ -386,58 +361,102 @@ NetlinkFibHandler::getSwitchRunState() {
   return openr::thrift::SwitchRunState::CONFIGURED;
 }
 
-folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
-NetlinkFibHandler::future_getRouteTableByClient(int16_t clientId) {
+folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
+NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
+  const auto protocol = getProtocol(clientId);
+  if (not protocol.has_value()) {
+    createSemiFutureWithClientIdError<
+        std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>();
+  }
+  CHECK(protocol.has_value());
   LOG(INFO) << "Get unicast routes from FIB for clientId " << clientId;
 
-  // promise here is used only for error case
-  folly::Promise<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
-      promise;
-  auto future = promise.getFuture();
-  auto protocol = getProtocol(promise, clientId);
-  if (protocol.hasError()) {
-    return future;
-  }
-
-  // TODO: Replace this with `getIPv4Routes(protocol)` and
-  // `getIPv6Routes(protocol)`
-  return netlinkSocket_->getCachedUnicastRoutes(protocol.value())
-      .thenValue([this](fbnl::NlUnicastRoutes res) mutable {
-        return std::make_unique<std::vector<openr::thrift::UnicastRoute>>(
-            toThriftUnicastRoutes(res));
-      })
-      .thenError<std::runtime_error>([](std::exception const& ex) {
-        LOG(ERROR) << "Failed to get unicast routing table by client: "
-                   << ex.what() << ", returning empty table instead";
-        return std::make_unique<std::vector<openr::thrift::UnicastRoute>>();
+  auto v4Routes = nlSock_->getIPv4Routes(protocol.value());
+  auto v6Routes = nlSock_->getIPv6Routes(protocol.value());
+  return folly::collectAll(std::move(v4Routes), std::move(v6Routes))
+      .deferValue([this](std::tuple<
+                         folly::Try<std::vector<fbnl::Route>>,
+                         folly::Try<std::vector<fbnl::Route>>>&& res) {
+        auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
+        for (auto& nlRoutes : {std::get<0>(res), std::get<1>(res)}) {
+          for (auto& nlRoute : nlRoutes.value()) {
+            thrift::UnicastRoute route;
+            route.dest = toIpPrefix(nlRoute.getDestination());
+            route.nextHops = toThriftNextHops(nlRoute.getNextHops());
+            routes->emplace_back(std::move(route));
+          }
+        }
+        return routes;
       });
 }
 
-folly::Future<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
-NetlinkFibHandler::future_getMplsRouteTableByClient(int16_t clientId) {
+folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
+NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
+  const auto protocol = getProtocol(clientId);
+  if (not protocol.has_value()) {
+    createSemiFutureWithClientIdError<
+        std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>();
+  }
+  CHECK(protocol.has_value());
   LOG(INFO) << "Get Mpls routes from FIB for clientId " << clientId;
 
-  // promise here is used only for error case
-  folly::Promise<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
-      promise;
-  auto future = promise.getFuture();
-  auto protocol = getProtocol(promise, clientId);
-  if (protocol.hasError()) {
-    return future;
-  }
-
-  // TODO: Replace this with `getMplsRoutes(protocol)`
-  return netlinkSocket_->getCachedMplsRoutes(protocol.value())
-      .thenValue([this](fbnl::NlMplsRoutes res) mutable {
-        return std::make_unique<std::vector<openr::thrift::MplsRoute>>(
-            toThriftMplsRoutes(res));
-      })
-      .thenError<std::runtime_error>([](std::exception const& ex) {
-        LOG(ERROR) << "Failed to get Mpls routing table by client: "
-                   << ex.what() << ", returning empty table instead";
-        return std::make_unique<std::vector<openr::thrift::MplsRoute>>();
+  return nlSock_->getMplsRoutes(protocol.value())
+      .deferValue([this](std::vector<fbnl::Route>&& nlRoutes) {
+        auto routes = std::make_unique<std::vector<thrift::MplsRoute>>();
+        routes->reserve(nlRoutes.size());
+        for (auto& nlRoute : nlRoutes) {
+          thrift::MplsRoute route;
+          route.topLabel = nlRoute.getMplsLabel().value();
+          route.nextHops = toThriftNextHops(nlRoute.getNextHops());
+          routes->emplace_back(std::move(route));
+        }
+        return routes;
       });
 }
+
+std::vector<thrift::NextHopThrift>
+NetlinkFibHandler::toThriftNextHops(const fbnl::NextHopSet& nextHops) {
+  std::vector<thrift::NextHopThrift> thriftNextHops;
+
+  for (auto const& nh : nextHops) {
+    auto labelAction = nh.getLabelAction();
+    thrift::NextHopThrift nextHop;
+
+    // Add nexthop address
+    if (nh.getGateway().has_value()) {
+      nextHop.address = toBinaryAddress(nh.getGateway().value());
+    } else {
+      // POP_AND_LOOKUP mpls nexthop has no nexthop address so we assign
+      // valid but zeroed ipv6 address.
+      CHECK(labelAction.has_value());
+      CHECK(thrift::MplsActionCode::POP_AND_LOOKUP == labelAction.value());
+      nextHop.address = toBinaryAddress(folly::IPAddressV6("::"));
+    }
+
+    // Add nexthop interface if any
+    if (nh.getIfIndex().has_value()) {
+      nextHop.address.ifName_ref() = getIfName(nh.getIfIndex().value()).value();
+    }
+
+    // Add mpls action
+    if (labelAction.has_value()) {
+      if (labelAction.value() == thrift::MplsActionCode::POP_AND_LOOKUP ||
+          labelAction.value() == thrift::MplsActionCode::PHP) {
+        nextHop.mplsAction_ref() = createMplsAction(labelAction.value());
+      } else if (labelAction.value() == thrift::MplsActionCode::SWAP) {
+        nextHop.mplsAction_ref() =
+            createMplsAction(labelAction.value(), nh.getSwapLabel().value());
+      } else if (labelAction.value() == thrift::MplsActionCode::PUSH) {
+        nextHop.mplsAction_ref() = createMplsAction(
+            labelAction.value(), std::nullopt, nh.getPushLabels().value());
+      }
+    }
+
+    thriftNextHops.emplace_back(std::move(nextHop));
+  }
+  return thriftNextHops;
+}
+
 void
 NetlinkFibHandler::buildMplsAction(
     fbnl::NextHopBuilder& nhBuilder, const thrift::NextHopThrift& nhop) {
@@ -589,7 +608,7 @@ NetlinkFibHandler::getLoopbackIfIndex() {
 
 void
 NetlinkFibHandler::initializeInterfaceCache() noexcept {
-  auto links = netlinkSocket_->getProtocolSocket()->getAllLinks().get();
+  auto links = nlSock_->getAllLinks().get();
 
   // Acquire locks on the cache
   auto lockedIfNameToIndex = ifNameToIndex_.wlock();
@@ -609,24 +628,15 @@ NetlinkFibHandler::initializeInterfaceCache() noexcept {
 }
 
 void
-NetlinkFibHandler::getCounters(std::map<std::string, int64_t>& counters) {
-  // TODO: Since this is stateless, we won't be able to report this counter
-  // anymore. Anyway FBOSS doesn't report this similar counter.
-  counters["fibagent.num_of_routes"] = netlinkSocket_->getRouteCount().get();
-}
-
-void
 NetlinkFibHandler::sendNeighborDownInfo(
-    std::unique_ptr<std::vector<std::string>> neighborIp) {
-  fbnl::NetlinkSocket::NeighborUpdate neighborUpdate;
-  neighborUpdate.delNeighbors(*neighborIp);
+    std::unique_ptr<std::vector<std::string>> neighborIps) {
   std::lock_guard<std::mutex> g(listenersMutex_);
   for (auto& listener : listeners_.accessAllThreads()) {
     LOG(INFO) << "Sending notification to bgpD";
     listener.eventBase->runInEventBaseThread(
-        [this, neighborUpdate, listenerPtr = &listener] {
+        [this, neighborIps = std::move(*neighborIps), listenerPtr = &listener] {
           LOG(INFO) << "firing off notification";
-          invokeNeighborListeners(listenerPtr, neighborUpdate);
+          invokeNeighborListeners(listenerPtr, neighborIps, false);
         });
   }
 }
@@ -662,7 +672,8 @@ NetlinkFibHandler::async_eb_registerForNeighborChanged(
 void
 NetlinkFibHandler::invokeNeighborListeners(
     ThreadLocalListener* listener,
-    fbnl::NetlinkSocket::NeighborUpdate neighborUpdate) {
+    const std::vector<std::string>& neighborIps,
+    bool isReachable) {
   // Collect the iterators to avoid erasing and potentially reordering
   // the iterators in the list.
   for (const auto& ctx : brokenClients_) {
@@ -679,10 +690,14 @@ NetlinkFibHandler::invokeNeighborListeners(
         brokenClients_.push_back(client.first);
       }
     };
-    client.second->neighborsChanged(
-        clientDone,
-        neighborUpdate.getAddedNeighbor(),
-        neighborUpdate.getRemovedNeighbor());
+
+    std::vector<std::string> added, removed;
+    if (isReachable) {
+      added = neighborIps;
+    } else {
+      removed = neighborIps;
+    }
+    client.second->neighborsChanged(clientDone, added, removed);
   }
 }
 

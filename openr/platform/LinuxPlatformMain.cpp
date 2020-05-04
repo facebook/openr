@@ -110,7 +110,7 @@ main(int argc, char** argv) {
   if (FLAGS_enable_netlink_fib_handler) {
     // start FibService thread
     auto fibHandler =
-        std::make_shared<NetlinkFibHandler>(&mainEventLoop, nlSocket);
+        std::make_shared<NetlinkFibHandler>(nlSocket->getProtocolSocket());
 
     auto fibThriftThread = std::thread([fibHandler, &linuxFibAgentServer]() {
       folly::setThreadName("FibService");

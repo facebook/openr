@@ -24,7 +24,7 @@
 #include <openr/if/gen-cpp2/Fib_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/NeighborListenerClientForFibagent.h>
-#include <openr/nl/NetlinkSocket.h>
+#include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr {
@@ -40,44 +40,47 @@ namespace openr {
  */
 class NetlinkFibHandler : public thrift::FibServiceSvIf {
  public:
-  explicit NetlinkFibHandler(
-      fbzmq::ZmqEventLoop* zmqEventLoop,
-      std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket);
+  explicit NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock);
   ~NetlinkFibHandler() override;
 
-  folly::Future<folly::Unit> future_addUnicastRoute(
+  void
+  getCounters(std::map<std::string, int64_t>& /* counters */) override {
+    // No counters. Return empty
+  }
+
+  folly::SemiFuture<folly::Unit> semifuture_addUnicastRoute(
       int16_t clientId, std::unique_ptr<thrift::UnicastRoute> route) override;
 
-  folly::Future<folly::Unit> future_deleteUnicastRoute(
+  folly::SemiFuture<folly::Unit> semifuture_deleteUnicastRoute(
       int16_t clientId, std::unique_ptr<thrift::IpPrefix> prefix) override;
 
-  folly::Future<folly::Unit> future_addUnicastRoutes(
+  folly::SemiFuture<folly::Unit> semifuture_addUnicastRoutes(
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) override;
 
-  folly::Future<folly::Unit> future_deleteUnicastRoutes(
+  folly::SemiFuture<folly::Unit> semifuture_deleteUnicastRoutes(
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::IpPrefix>> prefixes) override;
 
-  folly::Future<folly::Unit> future_addMplsRoute(
+  folly::SemiFuture<folly::Unit> semifuture_addMplsRoute(
       int16_t clientId, std::unique_ptr<thrift::MplsRoute> route);
 
-  folly::Future<folly::Unit> future_deleteMplsRoute(
+  folly::SemiFuture<folly::Unit> semifuture_deleteMplsRoute(
       int16_t clientId, int32_t topLabel);
 
-  folly::Future<folly::Unit> future_addMplsRoutes(
+  folly::SemiFuture<folly::Unit> semifuture_addMplsRoutes(
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::MplsRoute>> mplsRoute) override;
 
-  folly::Future<folly::Unit> future_deleteMplsRoutes(
+  folly::SemiFuture<folly::Unit> semifuture_deleteMplsRoutes(
       int16_t clientId,
       std::unique_ptr<std::vector<int32_t>> topLabels) override;
 
-  folly::Future<folly::Unit> future_syncFib(
+  folly::SemiFuture<folly::Unit> semifuture_syncFib(
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) override;
 
-  folly::Future<folly::Unit> future_syncMplsFib(
+  folly::SemiFuture<folly::Unit> semifuture_syncMplsFib(
       int16_t clientId,
       std::unique_ptr<std::vector<thrift::MplsRoute>> routes) override;
 
@@ -93,18 +96,11 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
 
   openr::thrift::SwitchRunState getSwitchRunState() override;
 
-  void getCounters(std::map<std::string, int64_t>& counters) override;
+  folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
+  semifuture_getRouteTableByClient(int16_t clientId) override;
 
-  folly::Future<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
-  future_getRouteTableByClient(int16_t clientId) override;
-
-  folly::Future<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
-  future_getMplsRouteTableByClient(int16_t clientId) override;
-
-  std::shared_ptr<fbnl::NetlinkSocket>
-  getNetlinkSocket() {
-    return netlinkSocket_;
-  }
+  folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
+  semifuture_getMplsRouteTableByClient(int16_t clientId) override;
 
   /**
    * Static API to convert protocol to clientId. Set exception in promise if
@@ -112,9 +108,7 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
    * TODO: Add UT for this API
    * TODO: Fix this by not taking promise as a parameter
    */
-  template <class A>
-  static folly::Expected<int16_t, bool> getProtocol(
-      folly::Promise<A>& promise, int16_t clientId);
+  static std::optional<int16_t> getProtocol(int16_t clientId);
 
   /**
    * Convert clientId to client name
@@ -127,6 +121,14 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
    * TODO: Add UT for this API
    */
   static uint8_t protocolToPriority(const uint8_t protocol);
+
+  /**
+   * Convert list<SemiFuture<int>> to SemiFuture<Unit>
+   * The first error if any will be converted to NlException
+   */
+  static folly::SemiFuture<folly::Unit> collectAllResult(
+      std::vector<folly::SemiFuture<int>>&& result,
+      std::set<int> errorsToIgnore);
 
  protected:
   /**
@@ -149,17 +151,14 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
 
   void invokeNeighborListeners(
       ThreadLocalListener* listener,
-      fbnl::NetlinkSocket::NeighborUpdate neighborUpdate);
+      const std::vector<std::string>& neighborIps,
+      bool isReachable);
 
   /**
    * APIs to convert netlink route representation to thrift. Used for sending
    * routes read from kernel to client.
    */
-  std::vector<thrift::UnicastRoute> toThriftUnicastRoutes(
-      const fbnl::NlUnicastRoutes& routeDb);
-  std::vector<thrift::MplsRoute> toThriftMplsRoutes(
-      const fbnl::NlMplsRoutes& routeDb);
-  std::vector<thrift::NextHopThrift> buildNextHops(
+  std::vector<thrift::NextHopThrift> toThriftNextHops(
       const fbnl::NextHopSet& nextHopSet);
 
   /**
@@ -194,11 +193,7 @@ class NetlinkFibHandler : public thrift::FibServiceSvIf {
   std::optional<int> getLoopbackIfIndex();
 
   // Used to interact with Linux kernel routing table
-  std::shared_ptr<fbnl::NetlinkSocket> netlinkSocket_;
-
-  // ZMQ Eventloop pointer
-  // TODO: Migrate to folly::EventBase
-  fbzmq::ZmqEventLoop* evl_{nullptr};
+  fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
 
  private:
   /**

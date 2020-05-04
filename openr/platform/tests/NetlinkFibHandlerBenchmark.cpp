@@ -17,19 +17,16 @@
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
 #include <folly/Random.h>
-#include <folly/Subprocess.h>
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
+
 #include <openr/fib/tests/PrefixGenerator.h>
-#include <openr/nl/NetlinkSocket.h>
+#include <openr/nl/tests/FakeNetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
 
-extern "C" {
-#include <net/if.h>
-}
-
+using namespace openr;
 using namespace openr::fbnl;
 using namespace folly::literals::shell_literals;
 
@@ -42,49 +39,21 @@ static const uint8_t kBitMaskLen = 128;
 // Number of nexthops
 const uint8_t kNumOfNexthops = 128;
 
+const int16_t kFibId{static_cast<int16_t>(openr::thrift::FibClient::OPENR)};
+
 } // namespace
 
 namespace openr {
-
-const int16_t kFibId{static_cast<int16_t>(thrift::FibClient::OPENR)};
 
 // This class creates virtual interface (veths)
 // which the Benchmark test can use to add routes (via interface)
 class NetlinkFibWrapper {
  public:
   NetlinkFibWrapper() {
-    // cleanup old interfaces in any
-    auto cmd = "ip link del {} 2>/dev/null"_shellify(kVethNameX.c_str());
-    folly::Subprocess proc(std::move(cmd));
-    // Ignore result
-    proc.wait();
-
-    // add veth interface pair
-    cmd = "ip link add {} type veth peer name {}"_shellify(
-        kVethNameX.c_str(), kVethNameY.c_str());
-    folly::Subprocess proc1(std::move(cmd));
-    proc1.wait();
-
-    addAddress(kVethNameX, "169.254.0.101");
-    addAddress(kVethNameY, "169.254.0.102");
-
-    // set interface status to up
-    bringUpIntf(kVethNameX);
-    bringUpIntf(kVethNameY);
-
     // Create NetlinkProtocolSocket
-    std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
-    nlProtocolSocket =
-        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&evl2);
-    nlProtocolSocketThread = std::thread([&]() {
-      evl2.run();
-      evl2.waitUntilStopped();
-    });
-    evl2.waitUntilRunning();
-
-    // Create netlink route socket
-    nlSocket = std::make_shared<NetlinkSocket>(
-        &evl, nullptr, std::move(nlProtocolSocket));
+    nlSock = std::make_unique<FakeNetlinkProtocolSocket>(&evl);
+    nlSock->addLink(utils::createLink(0, kVethNameX)).get();
+    nlSock->addLink(utils::createLink(1, kVethNameY)).get();
 
     // Run the zmq event loop in its own thread
     // We will either timeout if expected events are not received
@@ -96,58 +65,25 @@ class NetlinkFibWrapper {
     evl.waitUntilRunning();
 
     // Start FibService thread
-    fibHandler = std::make_shared<NetlinkFibHandler>(&evl, nlSocket);
+    fibHandler = std::make_unique<NetlinkFibHandler>(nlSock.get());
   }
 
   ~NetlinkFibWrapper() {
-    // cleanup virtual interfaces
-    auto cmd = "ip link del {} 2>/dev/null"_shellify(kVethNameX.c_str());
-    folly::Subprocess proc(std::move(cmd));
-    // Ignore result
-    proc.wait();
-
     if (evl.isRunning()) {
       evl.stop();
       eventThread.join();
     }
-    if (evl2.isRunning()) {
-      evl2.stop();
-      nlProtocolSocketThread.join();
-    }
 
-    nlSocket.reset();
+    fibHandler.reset();
+    nlSock.reset();
   }
 
   fbzmq::Context context;
-  std::shared_ptr<NetlinkSocket> nlSocket;
+  std::unique_ptr<FakeNetlinkProtocolSocket> nlSock;
   fbzmq::ZmqEventLoop evl;
-  fbzmq::ZmqEventLoop evl2;
   std::thread eventThread;
-  std::thread nlProtocolSocketThread;
-  std::shared_ptr<NetlinkFibHandler> fibHandler;
+  std::unique_ptr<NetlinkFibHandler> fibHandler;
   PrefixGenerator prefixGenerator;
-
-  struct rtnl_link* link_{nullptr};
-  struct nl_sock* socket_{nullptr};
-  struct nl_cache* linkCache_{nullptr};
-  struct nl_cache* addrCache_{nullptr};
-  struct nl_cache* routeCache_{nullptr};
-
- private:
-  void
-  addAddress(const std::string& ifName, const std::string& address) {
-    auto cmd =
-        "ip addr add {} dev {}"_shellify(address.c_str(), ifName.c_str());
-    folly::Subprocess proc(std::move(cmd));
-    proc.wait();
-  }
-
-  static void
-  bringUpIntf(const std::string& ifName) {
-    auto cmd = "ip link set dev {} up"_shellify(ifName.c_str());
-    folly::Subprocess proc(std::move(cmd));
-    proc.wait();
-  }
 };
 
 /**
@@ -183,7 +119,7 @@ BM_NetlinkFibHandler(uint32_t iters, size_t numOfPrefixes) {
     suspender.rehire(); // Stop measuring time again
     // Add new routes through netlink
     netlinkFibWrapper->fibHandler
-        ->future_addUnicastRoutes(kFibId, std::move(routes))
+        ->semifuture_addUnicastRoutes(kFibId, std::move(routes))
         .wait();
   }
 }

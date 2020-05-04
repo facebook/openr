@@ -554,6 +554,7 @@ NetlinkProtocolSocket::getIPv4Routes(uint8_t protocolId) {
   builder.setDestination({folly::IPAddressV4("0.0.0.0"), 0});
   // Set protocol ID
   builder.setProtocolId(protocolId);
+  builder.setType(RTN_UNSPEC); // Explicitly set type to 0
   return getRoutes(builder.build());
 }
 
@@ -564,6 +565,7 @@ NetlinkProtocolSocket::getIPv6Routes(uint8_t protocolId) {
   builder.setDestination({folly::IPAddressV6("::"), 0});
   // Set protocol ID
   builder.setProtocolId(protocolId);
+  builder.setType(RTN_UNSPEC); // Explicitly set type to 0
   return getRoutes(builder.build());
 }
 

@@ -14,44 +14,7 @@
 
 using namespace ::testing;
 using namespace openr;
-
-namespace {
-
-fbnl::IfAddress
-createIfAddress(const int ifIndex, const std::string& addrMask) {
-  const auto network = folly::IPAddress::createNetwork(addrMask, -1, false);
-  fbnl::IfAddressBuilder builder;
-  builder.setIfIndex(ifIndex);
-  builder.setPrefix(network);
-  if (network.first.isLoopback()) {
-    builder.setScope(RT_SCOPE_HOST);
-  } else if (network.first.isLinkLocal()) {
-    builder.setScope(RT_SCOPE_LINK);
-  } else {
-    builder.setScope(RT_SCOPE_UNIVERSE);
-  }
-  return builder.build();
-}
-
-fbnl::Link
-createLink(
-    const int ifIndex,
-    const std::string& ifName,
-    bool isUp = true,
-    bool isLoopback = false) {
-  fbnl::LinkBuilder builder;
-  builder.setIfIndex(ifIndex);
-  builder.setLinkName(ifName);
-  if (isUp) {
-    builder.setFlags(IFF_RUNNING);
-  }
-  if (isLoopback) {
-    builder.setFlags(IFF_LOOPBACK);
-  }
-  return builder.build();
-}
-
-} // namespace
+using namespace openr::fbnl;
 
 TEST(SystemHandler, getAllLinks) {
   fbzmq::ZmqEventLoop evl;
@@ -63,10 +26,13 @@ TEST(SystemHandler, getAllLinks) {
   EXPECT_EQ(0, links->size());
 
   // Set addresses and links
-  EXPECT_EQ(0, nlSock.addLink(createLink(1, "eth0")).get());
-  EXPECT_EQ(0, nlSock.addIfAddress(createIfAddress(1, "192.168.0.3/31")).get());
+  EXPECT_EQ(0, nlSock.addLink(utils::createLink(1, "eth0")).get());
   EXPECT_EQ(
-      -ENXIO, nlSock.addIfAddress(createIfAddress(2, "fc00::3/127")).get());
+      0,
+      nlSock.addIfAddress(utils::createIfAddress(1, "192.168.0.3/31")).get());
+  EXPECT_EQ(
+      -ENXIO,
+      nlSock.addIfAddress(utils::createIfAddress(2, "fc00::3/127")).get());
 
   // Verify link status and addresses shows up
   links = handler.semifuture_getAllLinks().get();
@@ -83,12 +49,12 @@ TEST(SystemHandler, addRemoveIfaceAddresses) {
   fbzmq::ZmqEventLoop evl;
   fbnl::FakeNetlinkProtocolSocket nlSock(&evl);
   NetlinkSystemHandler handler(&nlSock);
-  const auto ifAddr = createIfAddress(1, "192.168.0.3/31");
+  const auto ifAddr = utils::createIfAddress(1, "192.168.0.3/31");
   const auto ifPrefix = toIpPrefix(ifAddr.getPrefix().value());
   const std::vector<thrift::IpPrefix> ifPrefixes{ifPrefix};
 
   // Add link eth0
-  EXPECT_EQ(0, nlSock.addLink(createLink(1, "eth0")).get());
+  EXPECT_EQ(0, nlSock.addLink(utils::createLink(1, "eth0")).get());
 
   // Add address on eth0 and verify
   {
@@ -126,14 +92,14 @@ TEST(SystemHandler, syncIfaceAddresses) {
   fbzmq::ZmqEventLoop evl;
   fbnl::FakeNetlinkProtocolSocket nlSock(&evl);
   NetlinkSystemHandler handler(&nlSock);
-  const auto ifAddr1 = createIfAddress(1, "192.168.1.3/31"); // v4 global
-  const auto ifAddr2 = createIfAddress(1, "192.168.2.3/31"); // v4 global
-  const auto ifAddr3 = createIfAddress(1, "192.168.3.3/31"); // v4 global
-  const auto ifAddr4 = createIfAddress(1, "127.0.0.1/32"); // v4 host
-  const auto ifAddr11 = createIfAddress(1, "fc00::3/127"); // v6 global
+  const auto ifAddr1 = utils::createIfAddress(1, "192.168.1.3/31"); // v4 global
+  const auto ifAddr2 = utils::createIfAddress(1, "192.168.2.3/31"); // v4 global
+  const auto ifAddr3 = utils::createIfAddress(1, "192.168.3.3/31"); // v4 global
+  const auto ifAddr4 = utils::createIfAddress(1, "127.0.0.1/32"); // v4 host
+  const auto ifAddr11 = utils::createIfAddress(1, "fc00::3/127"); // v6 global
 
   // Add link eth0
-  EXPECT_EQ(0, nlSock.addLink(createLink(1, "eth0")).get());
+  EXPECT_EQ(0, nlSock.addLink(utils::createLink(1, "eth0")).get());
 
   // Add addr2, addr3 and addr11 in nlSock
   EXPECT_EQ(0, nlSock.addIfAddress(ifAddr2).get());
