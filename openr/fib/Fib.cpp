@@ -369,7 +369,7 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
   }
 
   thrift::RouteDatabaseDelta routeDbDelta;
-  routeDbDelta.perfEvents.move_from(std::move(interfaceDb.perfEvents));
+  routeDbDelta.perfEvents_ref().move_from(interfaceDb.perfEvents_ref());
 
   //
   // Compute unicast route changes

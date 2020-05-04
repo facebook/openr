@@ -667,9 +667,9 @@ KvStore::setKvStoreKeyVals(
       // Create publication and merge it with local KvStore
       thrift::Publication rcvdPublication;
       rcvdPublication.keyVals = std::move(keySetParams.keyVals);
-      rcvdPublication.nodeIds.move_from(std::move(keySetParams.nodeIds));
-      rcvdPublication.floodRootId.move_from(
-          std::move(keySetParams.floodRootId));
+      rcvdPublication.nodeIds_ref().move_from(keySetParams.nodeIds_ref());
+      rcvdPublication.floodRootId_ref().move_from(
+		      keySetParams.floodRootId_ref());
       kvStoreDb.mergePublication(rcvdPublication);
 
       // ready to return
@@ -1431,9 +1431,9 @@ KvStoreDb::processRequestMsgHelper(
     // Create publication and merge it with local KvStore
     thrift::Publication rcvdPublication;
     rcvdPublication.keyVals = std::move(ketSetParamsVal.keyVals);
-    rcvdPublication.nodeIds.move_from(std::move(ketSetParamsVal.nodeIds));
-    rcvdPublication.floodRootId.move_from(
-        std::move(ketSetParamsVal.floodRootId));
+    rcvdPublication.nodeIds_ref().move_from(ketSetParamsVal.nodeIds_ref());
+    rcvdPublication.floodRootId_ref().move_from(
+        ketSetParamsVal.floodRootId_ref());
     mergePublication(rcvdPublication);
 
     // respond to the client
