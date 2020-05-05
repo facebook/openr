@@ -934,9 +934,9 @@ createMplsRoute(
         prefixInfo) {
   thrift::MplsRoute mplsRoute;
   mplsRoute.topLabel = prefixInfo.first;
-  for (const auto kv : prefixInfo.second) {
+  for (const auto& [key, _] : prefixInfo.second) {
     thrift::NextHopThrift nh;
-    nh.address = toBinaryAddress(kv.first);
+    nh.address = toBinaryAddress(key);
     nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
     mplsRoute.nextHops.emplace_back(std::move(nh));
   }

@@ -4087,8 +4087,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   auto routeDbMap = dumpRouteDb({"2", "3"});
   EXPECT_EQ(2, routeDbMap["2"].unicastRoutes.size());
   EXPECT_EQ(2, routeDbMap["3"].unicastRoutes.size());
-  for (auto kv : routeDbMap) {
-    fillRouteMap(kv.first, routeMap, kv.second);
+  for (auto& [key, value] : routeDbMap) {
+    fillRouteMap(key, routeMap, value);
   }
 
   // 2
@@ -4640,8 +4640,8 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
   // validate routers
   auto routeMapList = dumpRouteDb({"1", "2", "3"});
   RouteMap routeMap;
-  for (auto kv : routeMapList) {
-    fillRouteMap(kv.first, routeMap, kv.second);
+  for (auto& [key, value] : routeMapList) {
+    fillRouteMap(key, routeMap, value);
   }
   // 1
   EXPECT_EQ(
@@ -4703,8 +4703,8 @@ TEST_F(DecisionTestFixture, LoopFreeAlternatePaths) {
   // validate routers
   routeMapList = dumpRouteDb({"1", "2", "3"});
   routeMap.clear();
-  for (auto kv : routeMapList) {
-    fillRouteMap(kv.first, routeMap, kv.second);
+  for (auto& [key, value] : routeMapList) {
+    fillRouteMap(key, routeMap, value);
   }
 
   // 1
@@ -4792,8 +4792,8 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   auto routeMapList = dumpRouteDb({"1", "2", "3", "4"});
   EXPECT_EQ(4, routeMapList.size()); // 1 route per neighbor
   RouteMap routeMap;
-  for (auto kv : routeMapList) {
-    fillRouteMap(kv.first, routeMap, kv.second);
+  for (auto& [key, value] : routeMapList) {
+    fillRouteMap(key, routeMap, value);
   }
 
   // 1
@@ -4850,8 +4850,8 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   routeMapList = dumpRouteDb({"1"});
   RouteMap routeMap2;
-  for (auto kv : routeMapList) {
-    fillRouteMap(kv.first, routeMap2, kv.second);
+  for (auto& [key, value] : routeMapList) {
+    fillRouteMap(key, routeMap2, value);
   }
   EXPECT_EQ(
       routeMap2[make_pair("1", toString(addr2))],
@@ -4895,8 +4895,8 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   routeMapList = dumpRouteDb({"1", "2", "3", "4"});
   EXPECT_EQ(4, routeMapList.size()); // 1 route per neighbor
   routeMap.clear();
-  for (auto kv : routeMapList) {
-    fillRouteMap(kv.first, routeMap, kv.second);
+  for (auto& [key, value] : routeMapList) {
+    fillRouteMap(key, routeMap, value);
   }
 
   // 1

@@ -223,11 +223,8 @@ KvStore::mergeKeyValues(
   // Counters for logging
   uint32_t ttlUpdateCnt{0}, valUpdateCnt{0};
 
-  for (const auto& kv : keyVals) {
-    auto const& key = kv.first;
-    auto const& value = kv.second;
-
-    if (filters.has_value() && not filters->keyMatch(kv.first, kv.second)) {
+  for (const auto& [key, value] : keyVals) {
+    if (filters.has_value() && not filters->keyMatch(key, value)) {
       VLOG(4) << "key: " << key << " not adding from " << value.originatorId;
       continue;
     }
@@ -425,9 +422,7 @@ KvStore::prepareSocket(
     socketOptions.emplace_back(ZMQ_TOS, maybeIpTos.value());
   }
 
-  for (const auto& pair : socketOptions) {
-    const auto opt = pair.first;
-    const auto val = pair.second;
+  for (const auto& [opt, val] : socketOptions) {
     auto rc = socket.setSockOpt(opt, &val, sizeof(val));
     if (rc.hasError()) {
       LOG(FATAL) << "Error setting zmq opt: " << opt << "to " << val
@@ -669,7 +664,7 @@ KvStore::setKvStoreKeyVals(
       rcvdPublication.keyVals = std::move(keySetParams.keyVals);
       rcvdPublication.nodeIds_ref().move_from(keySetParams.nodeIds_ref());
       rcvdPublication.floodRootId_ref().move_from(
-		      keySetParams.floodRootId_ref());
+          keySetParams.floodRootId_ref());
       kvStoreDb.mergePublication(rcvdPublication);
 
       // ready to return

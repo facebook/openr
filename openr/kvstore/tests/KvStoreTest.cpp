@@ -216,15 +216,14 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
         // Verify 1. hash is updated in KvStore
         // 2. HASH_DUMP request returns key values as expected
         const auto hashDump = store->dumpHashes();
-        for (const auto kv : dump) {
-          EXPECT_TRUE(kv.second.hash.value() != 0);
-          EXPECT_TRUE(hashDump.count(kv.first) != 0);
-          if (!hashDump.count(kv.first)) {
+        for (const auto& [key, value] : dump) {
+          EXPECT_TRUE(value.hash_ref().value() != 0);
+          EXPECT_TRUE(hashDump.count(key) != 0);
+          if (!hashDump.count(key)) {
             continue;
           }
           EXPECT_EQ(
-              kv.second.hash_ref().value(),
-              hashDump.at(kv.first).hash_ref().value());
+              value.hash_ref().value(), hashDump.at(key).hash_ref().value());
         }
 
         // Update hash
@@ -274,12 +273,11 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
           const auto dump = store->dumpAll();
           const auto hashDump = store->dumpHashes();
           EXPECT_EQ(expectedGlobalKeyVals, dump);
-          for (const auto kv : dump) {
-            EXPECT_TRUE(kv.second.hash.value() != 0);
-            EXPECT_TRUE(hashDump.count(kv.first) != 0);
+          for (const auto& [key, value] : dump) {
+            EXPECT_TRUE(value.hash_ref().value() != 0);
+            EXPECT_TRUE(hashDump.count(key) != 0);
             EXPECT_EQ(
-                kv.second.hash_ref().value(),
-                hashDump.at(kv.first).hash_ref().value());
+                value.hash_ref().value(), hashDump.at(key).hash_ref().value());
           }
         }
       } else {
