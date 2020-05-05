@@ -8,6 +8,13 @@
 #pragma once
 
 #include <chrono>
+#if __has_include("filesystem")
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <string>
 
 #include <fbzmq/async/ZmqTimeout.h>
@@ -153,7 +160,7 @@ class PersistentStore : public OpenrEventBase {
 
   // Location on disk where data will be synced up. A file will be created
   // if doesn't exists.
-  const std::string storageFilePath_;
+  const fs::path storageFilePath_;
 
   // Dryrun to avoid disk writes in UTs
   bool dryrun_{false};

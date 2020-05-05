@@ -226,7 +226,7 @@ PersistentStore::saveDatabaseToDisk() noexcept {
 bool
 PersistentStore::loadDatabaseFromDisk() noexcept {
   // Check if file exists
-  if (not fileExists(storageFilePath_)) {
+  if (not fs::exists(storageFilePath_)) {
     LOG(INFO) << "Storage file " << storageFilePath_ << " doesn't exists. "
               << "Starting with empty database";
     return true;
@@ -335,7 +335,7 @@ PersistentStore::writeIoBufToDisk(
 
     if (writeType == WriteType::WRITE) {
       // Write over
-      folly::writeFileAtomic(storageFilePath_, fileData, 0666);
+      folly::writeFileAtomic(storageFilePath_.c_str(), fileData, 0666);
     } else {
       // Append to file
       folly::writeFile(

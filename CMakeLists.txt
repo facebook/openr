@@ -349,6 +349,7 @@ target_link_libraries(openrlib
   ${Boost_LIBRARIES}
   -lpthread
   -lcrypto
+  stdc++fs
 )
 
 install(TARGETS
