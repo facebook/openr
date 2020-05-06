@@ -23,7 +23,7 @@
 
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
-#include <openr/nl/NetlinkSocket.h>
+#include <openr/nl/NetlinkProtocolSocket.h>
 
 namespace openr {
 
