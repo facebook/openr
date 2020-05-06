@@ -548,7 +548,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
     thrift::SptInfo sptInfo = ret.infos.at(nodeName);
     EXPECT_EQ(0, sptInfo.cost);
-    ASSERT_TRUE(sptInfo.parent.has_value());
+    ASSERT_TRUE(sptInfo.parent_ref().has_value());
     EXPECT_EQ(nodeName, sptInfo.parent_ref().value());
     EXPECT_EQ(0, sptInfo.children.size());
   }

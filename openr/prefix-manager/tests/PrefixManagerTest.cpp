@@ -357,11 +357,11 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
             maybeValue.value().value_ref().value(), serializer);
         EXPECT_EQ(db.thisNodeName, "node-1");
         EXPECT_EQ(db.prefixEntries.size(), 1);
-        ASSERT_TRUE(db.perfEvents.has_value());
-        ASSERT_FALSE(db.perfEvents->events.empty());
+        ASSERT_TRUE(db.perfEvents_ref().has_value());
+        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
 
         {
-          const auto& perfEvent = db.perfEvents->events.back();
+          const auto& perfEvent = db.perfEvents_ref()->events.back();
           EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
           EXPECT_EQ("node-1", perfEvent.nodeName);
           EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
@@ -386,13 +386,13 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
         auto maybeValue1 = kvStoreClient->getKey(keyStr);
         EXPECT_TRUE(maybeValue1.has_value());
         auto db1 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue1.value().value.value(), serializer);
+            maybeValue1.value().value_ref().value(), serializer);
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 1);
-        ASSERT_TRUE(db.perfEvents.has_value());
-        ASSERT_FALSE(db.perfEvents->events.empty());
+        ASSERT_TRUE(db.perfEvents_ref().has_value());
+        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
         {
-          const auto& perfEvent = db.perfEvents->events.back();
+          const auto& perfEvent = db.perfEvents_ref()->events.back();
           EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
           EXPECT_EQ("node-1", perfEvent.nodeName);
           EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
@@ -407,13 +407,13 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
         auto maybeValue2 = kvStoreClient->getKey(keyStr);
         EXPECT_TRUE(maybeValue2.has_value());
         auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue2.value().value.value(), serializer);
+            maybeValue2.value().value_ref().value(), serializer);
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 8);
-        ASSERT_TRUE(db.perfEvents.has_value());
-        ASSERT_FALSE(db.perfEvents->events.empty());
+        ASSERT_TRUE(db.perfEvents_ref().has_value());
+        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
         {
-          const auto& perfEvent = db.perfEvents->events.back();
+          const auto& perfEvent = db.perfEvents_ref()->events.back();
           EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
           EXPECT_EQ("node-1", perfEvent.nodeName);
           EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
@@ -431,13 +431,13 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
         auto maybeValue3 = kvStoreClient->getKey(keyStr);
         EXPECT_TRUE(maybeValue3.has_value());
         auto db3 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue3.value().value.value(), serializer);
+            maybeValue3.value().value_ref().value(), serializer);
         auto prefixDb = getPrefixDb("prefix:node-1");
         EXPECT_EQ(prefixDb.size(), 5);
-        ASSERT_TRUE(db.perfEvents.has_value());
-        ASSERT_FALSE(db.perfEvents->events.empty());
+        ASSERT_TRUE(db.perfEvents_ref().has_value());
+        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
         {
-          const auto& perfEvent = db.perfEvents->events.back();
+          const auto& perfEvent = db.perfEvents_ref()->events.back();
           EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
           EXPECT_EQ("node-1", perfEvent.nodeName);
           EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
@@ -493,7 +493,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
       [&](std::string const& _, std::optional<thrift::Value> val) mutable {
         ASSERT_TRUE(val.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            val->value.value(), serializer);
+            val->value_ref().value(), serializer);
         EXPECT_EQ(db.thisNodeName, "node-1");
         if (expectedPrefix.has_value() and db.prefixEntries.size() != 0) {
           // we should always be advertising one prefix until we withdraw all
@@ -641,7 +641,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
         auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue2.value().value.value(), serializer);
+            maybeValue2.value().value_ref().value(), serializer);
         EXPECT_NE(db.prefixEntries.size(), 0);
         EXPECT_TRUE(db.deletePrefix);
 
@@ -697,7 +697,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         EXPECT_TRUE(maybeValue.has_value());
         keyVersion = maybeValue.value().version;
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue.value().value.value(), serializer);
+            maybeValue.value().value_ref().value(), serializer);
         EXPECT_EQ(db.thisNodeName, "node-1");
         EXPECT_EQ(db.prefixEntries.size(), 1);
         EXPECT_EQ(db.prefixEntries[0], prefixEntry);
@@ -729,7 +729,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue.value().value.value(), serializer);
+            maybeValue.value().value_ref().value(), serializer);
         EXPECT_EQ(maybeValue.value().version, keyVersion + 2);
         EXPECT_EQ(db.thisNodeName, "node-1");
         EXPECT_EQ(db.prefixEntries.size(), 1);
@@ -751,7 +751,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue.value().value.value(), serializer);
+            maybeValue.value().value_ref().value(), serializer);
         EXPECT_EQ(maybeValue.value().version, keyVersion + 3);
         EXPECT_EQ(db.thisNodeName, "node-1");
         // delete prefix must be set to TRUE, applies only when per prefix key
@@ -792,7 +792,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue.value().value.value(), serializer);
+            maybeValue.value().value_ref().value(), serializer);
         EXPECT_EQ(maybeValue.value().version, staleKeyVersion + 1);
         EXPECT_EQ(db.thisNodeName, "node-1");
         // delete prefix must be set to TRUE, applies only when per prefix key

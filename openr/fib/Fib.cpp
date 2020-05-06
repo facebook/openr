@@ -294,8 +294,9 @@ Fib::processRouteUpdates(thrift::RouteDatabaseDelta&& routeDelta) {
   routeState_.hasRoutesFromDecision = true;
   // Update perfEvents_ .. We replace existing perf events with new one as
   // convergence is going to be based on new data, not the old.
-  if (routeDelta.perfEvents) {
-    addPerfEvent(*routeDelta.perfEvents, myNodeName_, "FIB_ROUTE_DB_RECVD");
+  if (routeDelta.perfEvents_ref()) {
+    addPerfEvent(
+        *routeDelta.perfEvents_ref(), myNodeName_, "FIB_ROUTE_DB_RECVD");
   }
 
   // Before anything, get rid of doNotInstall routes
@@ -343,8 +344,9 @@ void
 Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
   fb303::fbData->addStatValue("fib.process_interface_db", 1, fb303::COUNT);
 
-  if (interfaceDb.perfEvents) {
-    addPerfEvent(*interfaceDb.perfEvents, myNodeName_, "FIB_INTF_DB_RECEIVED");
+  if (interfaceDb.perfEvents_ref()) {
+    addPerfEvent(
+        *interfaceDb.perfEvents_ref(), myNodeName_, "FIB_INTF_DB_RECEIVED");
   }
 
   //
@@ -533,7 +535,7 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
   if (dryrun_) {
     // Do not program routes in case of dryrun
     LOG(INFO) << "Skipping programing of routes in dryrun ... ";
-    logPerfEvents(castToStd(routeDbDelta.perfEvents));
+    logPerfEvents(castToStd(routeDbDelta.perfEvents_ref()));
     return;
   }
 
@@ -577,7 +579,7 @@ Fib::updateRoutes(const thrift::RouteDatabaseDelta& routeDbDelta) {
     fb303::fbData->addStatValue(
         "fib.num_of_route_updates", numOfRouteUpdates, fb303::SUM);
     routeState_.dirtyRouteDb = false;
-    logPerfEvents(castToStd(routeDbDelta.perfEvents));
+    logPerfEvents(castToStd(routeDbDelta.perfEvents_ref()));
     LOG(INFO) << "Done processing route add/update";
   } catch (const std::exception& e) {
     fb303::fbData->addStatValue(
@@ -729,7 +731,7 @@ Fib::updateGlobalCounters() {
   // Count the number of bgp routes
   int64_t bgpCounter = 0;
   for (const auto& route : routeState_.unicastRoutes) {
-    if (route.second.bestNexthop.has_value()) {
+    if (route.second.bestNexthop_ref().has_value()) {
       bgpCounter++;
     }
   }

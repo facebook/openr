@@ -436,7 +436,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       "node-1",
       {
           {
-              path1_2_1.address.ifName.value(),
+              path1_2_1.address.ifName_ref().value(),
               thrift::InterfaceInfo(
                   FRAGILE,
                   true, // isUp
@@ -447,7 +447,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
                   ),
           },
           {
-              path1_2_2.address.ifName.value(),
+              path1_2_2.address.ifName_ref().value(),
               thrift::InterfaceInfo(
                   FRAGILE,
                   true, // isUp
@@ -490,7 +490,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       "node-1",
       {
           {
-              path1_2_1.address.ifName.value(),
+              path1_2_1.address.ifName_ref().value(),
               thrift::InterfaceInfo(
                   FRAGILE,
                   false, // isUp
@@ -545,7 +545,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       "node-1",
       {
           {
-              path1_2_2.address.ifName.value(),
+              path1_2_2.address.ifName_ref().value(),
               thrift::InterfaceInfo(
                   FRAGILE,
                   false, // isUp

@@ -131,7 +131,7 @@ PrefixManager::PrefixManager(
         if (value.has_value() and value.value().value_ref().has_value()) {
           const auto prefixDb =
               fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-                  value.value().value.value(), serializer_);
+                  value.value().value_ref().value(), serializer_);
           if (not prefixDb.deletePrefix && nodeId_ == prefixDb.thisNodeName) {
             LOG(INFO) << "keysToClear_.emplace(" << key << ")";
             keysToClear_.emplace(key);

@@ -487,15 +487,15 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v1", maybeThriftVal.value().value);
+        EXPECT_EQ("v1", maybeThriftVal.value().value_ref());
 
         maybeThriftVal = store2->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v1", maybeThriftVal.value().value);
+        EXPECT_EQ("v1", maybeThriftVal.value().value_ref());
 
         maybeThriftVal = store3->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v1", maybeThriftVal.value().value);
+        EXPECT_EQ("v1", maybeThriftVal.value().value_ref());
         EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
         EXPECT_EQ(1, maybeThriftVal.value().version);
       });
@@ -512,15 +512,15 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("", maybeThriftVal.value().value);
+        EXPECT_EQ("", maybeThriftVal.value().value_ref());
 
         maybeThriftVal = store2->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("", maybeThriftVal.value().value);
+        EXPECT_EQ("", maybeThriftVal.value().value_ref());
 
         maybeThriftVal = store3->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("", maybeThriftVal.value().value);
+        EXPECT_EQ("", maybeThriftVal.value().value_ref());
         EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
         EXPECT_EQ(maybeThriftVal.value().version, 2);
       });
@@ -536,15 +536,15 @@ TEST(KvStoreClientInternal, EmptyValueKey) {
       std::chrono::milliseconds(waitDuration += 300), [&]() noexcept {
         auto maybeThriftVal = store1->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v2", maybeThriftVal.value().value);
+        EXPECT_EQ("v2", maybeThriftVal.value().value_ref());
 
         maybeThriftVal = store2->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v2", maybeThriftVal.value().value);
+        EXPECT_EQ("v2", maybeThriftVal.value().value_ref());
 
         maybeThriftVal = store3->getKey("k1");
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ("v2", maybeThriftVal.value().value);
+        EXPECT_EQ("v2", maybeThriftVal.value().value_ref());
         EXPECT_EQ("node1", maybeThriftVal.value().originatorId);
         EXPECT_EQ(maybeThriftVal.value().version, 3);
       });
@@ -623,7 +623,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
 
     ASSERT_TRUE(maybeVal1.has_value());
     EXPECT_EQ(1, maybeVal1->version);
-    EXPECT_EQ("test_value3", maybeVal1->value);
+    EXPECT_EQ("test_value3", maybeVal1->value_ref());
   });
 
   // simulate kvstore restart by erasing the test_key3
@@ -652,7 +652,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
     auto maybeVal3 = client1->getKey("test_key3");
     ASSERT_TRUE(maybeVal3.has_value());
     EXPECT_EQ(1, maybeVal3->version);
-    EXPECT_EQ("test_value3", maybeVal3->value);
+    EXPECT_EQ("test_value3", maybeVal3->value_ref());
 
     // Synchronization primitive
     waitBaton.post();
@@ -721,7 +721,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.has_value());
     EXPECT_EQ(1, maybeVal->version);
-    EXPECT_EQ(testValue, maybeVal->value);
+    EXPECT_EQ(testValue, maybeVal->value_ref());
     EXPECT_LT(0, maybeVal->ttl);
     EXPECT_GE(1000, maybeVal->ttl);
     EXPECT_LE(6, maybeVal->ttlVersion); // can be flaky under stress
@@ -736,7 +736,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.has_value());
     EXPECT_EQ(1, maybeVal->version);
-    EXPECT_EQ(testValue, maybeVal->value);
+    EXPECT_EQ(testValue, maybeVal->value_ref());
     EXPECT_LT(1000, maybeVal->ttl);
     EXPECT_GE(3000, maybeVal->ttl);
     EXPECT_LE(9, maybeVal->ttlVersion); // can be flaky under stress
@@ -751,7 +751,7 @@ TEST(KvStoreClientInternal, PersistKeyChangeTtlTest) {
     auto maybeVal = client1->getKey(testKey);
     ASSERT_TRUE(maybeVal.has_value());
     EXPECT_EQ(1, maybeVal->version);
-    EXPECT_EQ(testValue, maybeVal->value);
+    EXPECT_EQ(testValue, maybeVal->value_ref());
     EXPECT_LT(0, maybeVal->ttl);
     EXPECT_GE(1000, maybeVal->ttl);
     EXPECT_LE(12, maybeVal->ttlVersion); // can be flaky under stress
@@ -834,7 +834,7 @@ TEST(KvStoreClientInternal, ApiTest) {
     auto maybeVal1 = client2->getKey("test_key2");
     ASSERT_TRUE(maybeVal1.has_value());
     EXPECT_EQ(1, maybeVal1->version);
-    EXPECT_EQ("test_value2", maybeVal1->value);
+    EXPECT_EQ("test_value2", maybeVal1->value_ref());
 
     openrEvb.getEvb()->runInEventBaseThreadAndWait([&]() {
       // persistKey with new value
@@ -845,7 +845,7 @@ TEST(KvStoreClientInternal, ApiTest) {
     auto maybeVal2 = client2->getKey("test_key2");
     ASSERT_TRUE(maybeVal2.has_value());
     EXPECT_EQ(2, maybeVal2->version);
-    EXPECT_EQ("test_value2-client2", maybeVal2->value);
+    EXPECT_EQ("test_value2-client2", maybeVal2->value_ref());
 
     // get key with non-existing key
     auto maybeVal3 = client2->getKey("test_key3");
@@ -862,7 +862,9 @@ TEST(KvStoreClientInternal, ApiTest) {
         Constants::kTtlInfinity, // ttl
         0, // ttl version
         generateHash(
-            3, "originator-id", thrift::Value().value = "set_test_value"));
+            3,
+            "originator-id",
+            thrift::Value().value_ref() = "set_test_value"));
 
     // Sync call to insert key-value into the KvStore
     client1->setKey(testKey, testValue);
@@ -878,9 +880,9 @@ TEST(KvStoreClientInternal, ApiTest) {
     const auto maybeKeyVals = client1->dumpAllWithPrefix();
     ASSERT_TRUE(maybeKeyVals.has_value());
     ASSERT_EQ(3, maybeKeyVals->size());
-    EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value);
-    EXPECT_EQ("test_value2-client2", maybeKeyVals->at("test_key2").value);
-    EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value);
+    EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value_ref());
+    EXPECT_EQ("test_value2-client2", maybeKeyVals->at("test_key2").value_ref());
+    EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value_ref());
 
     const auto maybeKeyVals2 = client2->dumpAllWithPrefix();
     ASSERT_TRUE(maybeKeyVals2.has_value());
@@ -890,9 +892,10 @@ TEST(KvStoreClientInternal, ApiTest) {
     const auto maybePrefixedKeyVals = client1->dumpAllWithPrefix("test");
     ASSERT_TRUE(maybePrefixedKeyVals.has_value());
     ASSERT_EQ(2, maybePrefixedKeyVals->size());
-    EXPECT_EQ("test_value1", maybePrefixedKeyVals->at("test_key1").value);
+    EXPECT_EQ("test_value1", maybePrefixedKeyVals->at("test_key1").value_ref());
     EXPECT_EQ(
-        "test_value2-client2", maybePrefixedKeyVals->at("test_key2").value);
+        "test_value2-client2",
+        maybePrefixedKeyVals->at("test_key2").value_ref());
   });
 
   // Inject keys w/ TTL
@@ -926,14 +929,14 @@ TEST(KvStoreClientInternal, ApiTest) {
     LOG(INFO) << "received response.";
     auto maybeVal1 = client2->getKey("test_ttl_key1");
     ASSERT_TRUE(maybeVal1.has_value());
-    EXPECT_EQ("test_ttl_value1", maybeVal1->value);
+    EXPECT_EQ("test_ttl_value1", maybeVal1->value_ref());
     EXPECT_LT(500, maybeVal1->ttlVersion);
 
     auto maybeVal2 = client1->getKey("test_ttl_key2");
     ASSERT_TRUE(maybeVal2.has_value());
     EXPECT_LT(1500, maybeVal2->ttlVersion);
     EXPECT_EQ(1, maybeVal2->version);
-    EXPECT_EQ("test_ttl_value2", maybeVal2->value);
+    EXPECT_EQ("test_ttl_value2", maybeVal2->value_ref());
 
     // nuke client to mimick scenario user process dies and no ttl
     // update
@@ -959,11 +962,11 @@ TEST(KvStoreClientInternal, ApiTest) {
     ASSERT_EQ(3, keyValResponse.size());
 
     auto const& value1 = keyValResponse.at("test_key1");
-    EXPECT_EQ("test_value1", value1.value);
+    EXPECT_EQ("test_value1", value1.value_ref());
     EXPECT_EQ(1, value1.version);
 
     auto const& value2 = keyValResponse.at("test_key2");
-    EXPECT_EQ("test_value2-client2", value2.value);
+    EXPECT_EQ("test_value2-client2", value2.value_ref());
     EXPECT_LE(2, value2.version); // client-2 must win over client-1
 
     EXPECT_EQ(1, keyValResponse.count("set_test_key"));
@@ -1014,7 +1017,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
           // should be called when client1 call persistKey for test_key1
           EXPECT_EQ("test_key1", k);
           EXPECT_EQ(1, v.value().version);
-          EXPECT_EQ("test_value1", v.value().value);
+          EXPECT_EQ("test_value1", v.value().value_ref());
           key1CbCnt++;
         },
         false);
@@ -1027,10 +1030,10 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
           EXPECT_GE(2, v.value().version);
           switch (v.value().version) {
           case 1:
-            EXPECT_EQ("test_value2", v.value().value);
+            EXPECT_EQ("test_value2", v.value().value_ref());
             break;
           case 2:
-            EXPECT_EQ("test_value2-client2", v.value().value);
+            EXPECT_EQ("test_value2-client2", v.value().value_ref());
             break;
           }
           key2CbCnt++;
@@ -1069,7 +1072,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         true);
 
     if (keyValue.has_value()) {
-      EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value);
+      EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value_ref());
       keyExpKeySubCbCnt++;
     }
   });
@@ -1169,7 +1172,7 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
           // test_key1
           EXPECT_THAT(k, testing::StartsWith("test_"));
           EXPECT_EQ(1, v.value().version);
-          EXPECT_EQ("test_key_val", v.value().value);
+          EXPECT_EQ("test_key_val", v.value().value_ref());
           key1CbCnt++;
         });
 

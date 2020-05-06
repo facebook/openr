@@ -1065,7 +1065,7 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
 
     // Copy is intentional - As we will need to augment metric vector with
     // IGP_COST
-    thrift::MetricVector metricVector = prefixEntry.mv.value();
+    thrift::MetricVector metricVector = prefixEntry.mv_ref().value();
 
     // Associate IGP_COST to prefixEntry
     if (bgpUseIgpMetric_) {
@@ -2006,7 +2006,7 @@ Decision::processPublication(thrift::Publication const& thriftPub) {
 
       if (key.find(Constants::kFibTimeMarker.toString()) == 0) {
         try {
-          std::chrono::milliseconds fibTime{stoll(rawVal.value.value())};
+          std::chrono::milliseconds fibTime{stoll(rawVal.value_ref().value())};
           fibTimes_[nodeName] = fibTime;
         } catch (...) {
           LOG(ERROR) << "Could not convert "

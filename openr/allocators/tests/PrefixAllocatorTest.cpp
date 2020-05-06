@@ -306,7 +306,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         std::optional<thrift::Value> value) mutable noexcept {
       // Parse PrefixDb
       ASSERT_TRUE(value.has_value());
-      ASSERT_TRUE(value.value().value.has_value());
+      ASSERT_TRUE(value.value().value_ref().has_value());
       auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
           value.value().value_ref().value(), serializer);
       auto& prefixes = prefixDb.prefixEntries;
@@ -571,7 +571,7 @@ TEST_P(PrefixAllocatorFixture, UpdateAllocation) {
   auto cb = [&](const std::string&, std::optional<thrift::Value> value) {
     // Parse PrefixDb
     ASSERT_TRUE(value.has_value());
-    ASSERT_TRUE(value.value().value.has_value());
+    ASSERT_TRUE(value.value().value_ref().has_value());
     auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
         value.value().value_ref().value(), serializer);
     auto& prefixes = prefixDb.prefixEntries;
@@ -708,9 +708,9 @@ TEST_P(PrefixAllocatorFixture, StaticPrefixUpdate) {
       [&](const std::string& /* key */, std::optional<thrift::Value> value) {
         // Parse PrefixDb
         ASSERT_TRUE(value.has_value());
-        ASSERT_TRUE(value.value().value.has_value());
+        ASSERT_TRUE(value.value().value_ref().has_value());
         auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            value.value().value.value(), serializer);
+            value.value().value_ref().value(), serializer);
         auto& prefixes = prefixDb.prefixEntries;
 
         // Verify some expectations
@@ -848,7 +848,7 @@ TEST_P(PrefixAllocatorFixture, StaticAllocation) {
   auto cb = [&](const std::string&, std::optional<thrift::Value> value) {
     // Parse PrefixDb
     ASSERT_TRUE(value.has_value());
-    ASSERT_TRUE(value.value().value.has_value());
+    ASSERT_TRUE(value.value().value_ref().has_value());
     auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
         value.value().value_ref().value(), serializer);
     auto& prefixes = prefixDb.prefixEntries;
