@@ -41,7 +41,6 @@
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
-#include <openr/platform/PlatformPublisher.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
 using namespace std;
@@ -1624,15 +1623,18 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   });
 
   // Emulate address and link events coming in out of order
+  // FixMe NOTE: For interface index to name mapping must exists for address
+  // event to be advertised with interface name instead of index. Once we index
+  // interfaces by `ifIndex` in LinkMonitor we can send events in any order
   const std::string linkZ = kTestVethNamePrefix + "Z";
 
-  // Addr event comes in first
-  mockNlHandler->sendAddrEvent(linkZ, "fe80::3/128", true /* is valid */);
-  // Link event comes in later
+  // Link event comes in later - FixMe
   mockNlHandler->sendLinkEvent(
       linkZ /* link name */,
-      kTestVethIfIndex[2] /* ifIndex */,
+      kTestVethIfIndex.at(2) /* ifIndex */,
       true /* is up */);
+  // Addr event comes in first - FixMe
+  mockNlHandler->sendAddrEvent(linkZ, "fe80::3/128", true /* is valid */);
   recvAndReplyIfUpdate(); // coalesced updates by throttling
 
   EXPECT_NO_THROW({
@@ -1849,7 +1851,12 @@ TEST_F(LinkMonitorTestFixture, StaticLoopbackPrefixAdvertisement) {
   mockNlHandler->sendAddrEvent("loopback", "2803:6080:4958:b403::1/64", false);
 
   // Get interface updates
+  const auto startTs = std::chrono::steady_clock::now();
   recvAndReplyIfUpdate(); // coalesced updates by throttling
+  auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+      std::chrono::steady_clock::now() - startTs);
+  // Threshold check to ensure that we react to published events instead of sync
+  EXPECT_LT(elapsed.count(), 3);
 
   // verify
   prefixes.clear();

@@ -548,6 +548,7 @@ class LinkBuilder final {
 
 class Link final {
  public:
+  Link() {}
   explicit Link(const LinkBuilder& builder);
   ~Link();
 

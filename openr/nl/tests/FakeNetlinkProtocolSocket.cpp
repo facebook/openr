@@ -130,6 +130,13 @@ FakeNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
 
   // Non existing address. Add
   it->second.emplace_back(addr); // Add
+
+  // Send address event
+  if (addrEventCB_) {
+    CHECK(addr.isValid());
+    addrEventCB_(addr, false);
+  }
+
   return folly::SemiFuture<int>(0);
 }
 
@@ -145,6 +152,13 @@ FakeNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
   for (auto addrIt = it->second.begin(); addrIt != it->second.end(); ++addrIt) {
     if (addrIt->getPrefix() == addr.getPrefix()) {
       it->second.erase(addrIt);
+
+      // Send address event
+      if (addrEventCB_) {
+        CHECK(!addr.isValid());
+        addrEventCB_(addr, false);
+      }
+
       return folly::SemiFuture<int>(0);
     }
   }
@@ -164,13 +178,17 @@ FakeNetlinkProtocolSocket::getAllIfAddresses() {
 
 folly::SemiFuture<int>
 FakeNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
-  // Check if link exists already
-  if (links_.count(link.getIfIndex())) {
-    return folly::SemiFuture<int>(-EEXIST);
+  // Add or update link
+  links_[link.getIfIndex()] = link;
+
+  // Create entry in ifAddr_ for link if doesn't exists
+  ifAddrs_.emplace(link.getIfIndex(), std::list<fbnl::IfAddress>());
+
+  // Send link event
+  if (linkEventCB_) {
+    linkEventCB_(link, false);
   }
 
-  links_.emplace(link.getIfIndex(), link);
-  ifAddrs_.emplace(link.getIfIndex(), std::list<fbnl::IfAddress>());
   return folly::SemiFuture<int>(0);
 }
 

@@ -177,6 +177,12 @@ class NetlinkProtocolSocket {
   // Initialize netlink socket and add to eventloop for polling
   virtual void init();
 
+  // TODO: Avoid callback and use queue for notifications
+  // Event callbacks
+  std::function<void(fbnl::Link, bool)> linkEventCB_;
+  std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
+  std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
+
  private:
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
   NetlinkProtocolSocket& operator=(NetlinkProtocolSocket const&) = delete;
@@ -204,12 +210,6 @@ class NetlinkProtocolSocket {
   // Event base for serializing read/write requests to netlink socket. Also
   // ensure thread safety of private member variables.
   fbzmq::ZmqEventLoop* evl_{nullptr};
-
-  // TODO: Avoid callback and use queue for notifications
-  // Event callbacks
-  std::function<void(fbnl::Link, bool)> linkEventCB_;
-  std::function<void(fbnl::IfAddress, bool)> addrEventCB_;
-  std::function<void(fbnl::Neighbor, bool)> neighborEventCB_;
 
   // Use new IPv6 route replace semantics. See documentation for addRoute(...)
   const bool enableIPv6RouteReplaceSemantics_{false};

@@ -14,7 +14,7 @@
 #include <string>
 #include <utility>
 
-#include <fbzmq/async/ZmqTimeout.h>
+#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncSocket.h>
@@ -22,6 +22,7 @@
 
 #include <openr/if/gen-cpp2/Platform_types.h>
 #include <openr/if/gen-cpp2/SystemService.h>
+#include <openr/nl/tests/FakeNetlinkProtocolSocket.h>
 #include <openr/platform/PlatformPublisher.h>
 
 namespace openr {
@@ -52,6 +53,10 @@ class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
   void stop();
 
  private:
+  // Create netlink socket
+  fbzmq::ZmqEventLoop evl_;
+  std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_;
+
   // Used to publish Netlink event
   std::unique_ptr<PlatformPublisher> platformPublisher_;
 

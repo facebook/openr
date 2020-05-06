@@ -7,36 +7,72 @@
 
 #include "PlatformPublisher.h"
 
-#include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/service/stats/ThreadData.h>
 #include <fbzmq/zmq/Zmq.h>
-#include <folly/IPAddress.h>
-#include <folly/MapUtil.h>
-#include <folly/gen/Base.h>
-#include <folly/system/ThreadName.h>
 #include <glog/logging.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 
 #include <openr/common/NetworkUtil.h>
-#include <openr/if/gen-cpp2/Network_types.h>
-
-using apache::thrift::FRAGILE;
 
 namespace openr {
 
 PlatformPublisher::PlatformPublisher(
-    fbzmq::Context& context, const PlatformPublisherUrl& platformPubUrl)
-    : platformPubUrl_(platformPubUrl) {
+    fbzmq::Context& context,
+    const PlatformPublisherUrl& platformPubUrl,
+    fbnl::NetlinkProtocolSocket* nlSock) {
+  CHECK_NOTNULL(nlSock);
+
   // Initialize ZMQ sockets
   platformPubSock_ = fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER>(
       context, folly::none, folly::none, fbzmq::NonblockingFlag{true});
-  VLOG(2) << "Platform Publisher: Binding pub url '" << platformPubUrl_ << "'";
+  LOG(INFO) << "Binding PlatformPublisher on "
+            << static_cast<std::string>(platformPubUrl);
   const auto platformPub =
-      platformPubSock_.bind(fbzmq::SocketUrl{platformPubUrl_});
+      platformPubSock_.bind(fbzmq::SocketUrl{platformPubUrl});
   if (platformPub.hasError()) {
-    LOG(FATAL) << "Error binding to URL '" << platformPubUrl_ << "' "
+    LOG(FATAL) << "Error binding to URL "
+               << static_cast<std::string>(platformPubUrl) << " "
                << platformPub.error();
   }
+
+  // Initialize interface index to name mapping
+  for (auto& link : nlSock->getAllLinks().get()) {
+    ifIndexToName_.emplace(link.getIfIndex(), link.getLinkName());
+  }
+
+  // Attach callbacks for link events
+  nlSock->setLinkEventCB([this](fbnl::Link link, bool /* ignore */) {
+    // Cache interface index name mapping
+    ifIndexToName_[link.getIfIndex()] = link.getLinkName();
+
+    thrift::LinkEntry event;
+    event.ifIndex = link.getIfIndex();
+    event.ifName = link.getLinkName();
+    event.isUp = link.isUp();
+    event.weight = Constants::kDefaultAdjWeight;
+    publishLinkEvent(event);
+  });
+
+  // Attach callbacks for address events
+  nlSock->setAddrEventCB([this](fbnl::IfAddress addr, bool /* ignore */) {
+    // Check for interface name
+    auto it = ifIndexToName_.find(addr.getIfIndex());
+    if (it == ifIndexToName_.end()) {
+      LOG(ERROR) << "Address event for unknown interface " << addr.str();
+      return;
+    }
+
+    // Check for valid prefix
+    if (not addr.getPrefix().has_value()) {
+      LOG(ERROR) << "Address event with empty address " << addr.str();
+      return;
+    }
+
+    thrift::AddrEntry event;
+    event.ifName = it->second;
+    event.ipPrefix = toIpPrefix(addr.getPrefix().value());
+    event.isValid = addr.isValid();
+    publishAddrEvent(event);
+  });
 }
 
 void
@@ -60,18 +96,7 @@ PlatformPublisher::publishAddrEvent(const thrift::AddrEntry& address) {
 }
 
 void
-PlatformPublisher::publishNeighborEvent(const thrift::NeighborEntry& neighbor) {
-  // advertise change of neighbor, prompting subscriber modules to
-  // take immediate action
-  thrift::PlatformEvent msg;
-  msg.eventType = thrift::PlatformEventType::NEIGHBOR_EVENT;
-  msg.eventData = fbzmq::util::writeThriftObjStr(neighbor, serializer_);
-  publishPlatformEvent(msg);
-}
-
-void
 PlatformPublisher::publishPlatformEvent(const thrift::PlatformEvent& msg) {
-  VLOG(3) << "Publishing PlatformEvent...";
   thrift::PlatformEventType eventType = msg.eventType;
   // send header of event in the first 2 byte
   platformPubSock_.sendMore(
@@ -79,53 +104,8 @@ PlatformPublisher::publishPlatformEvent(const thrift::PlatformEvent& msg) {
   const auto sendNeighEntry = platformPubSock_.sendThriftObj(msg, serializer_);
   if (sendNeighEntry.hasError()) {
     LOG(ERROR) << "Error in sending PlatformEventType Entry, event Type: "
-               << folly::get_default(
-                      thrift::_PlatformEventType_VALUES_TO_NAMES,
-                      msg.eventType,
-                      "UNKNOWN");
+               << apache::thrift::util::enumNameSafe(msg.eventType);
   }
-}
-
-void
-PlatformPublisher::linkEventFunc(
-    const std::string& ifName, const openr::fbnl::Link& linkEntry) noexcept {
-  VLOG(4) << "Handling Link Event in NetlinkSystemHandler...";
-  publishLinkEvent(thrift::LinkEntry(
-      FRAGILE,
-      ifName,
-      linkEntry.getIfIndex(),
-      linkEntry.isUp(),
-      Constants::kDefaultAdjWeight));
-}
-
-void
-PlatformPublisher::addrEventFunc(
-    const std::string& ifName,
-    const openr::fbnl::IfAddress& addrEntry) noexcept {
-  VLOG(4) << "Handling Address Event in NetlinkSystemHandler...";
-  thrift::IpPrefix prefix{};
-  publishAddrEvent(thrift::AddrEntry(
-      FRAGILE,
-      ifName,
-      addrEntry.getPrefix().has_value()
-          ? toIpPrefix(addrEntry.getPrefix().value())
-          : prefix,
-      addrEntry.isValid()));
-}
-
-void
-PlatformPublisher::neighborEventFunc(
-    const std::string& ifName,
-    const openr::fbnl::Neighbor& neighborEntry) noexcept {
-  VLOG(4) << "Handling Neighbor Event in NetlinkSystemHandler...";
-  publishNeighborEvent(thrift::NeighborEntry(
-      FRAGILE,
-      ifName,
-      toBinaryAddress(neighborEntry.getDestination()),
-      neighborEntry.getLinkAddress().has_value()
-          ? neighborEntry.getLinkAddress().value().toString()
-          : "",
-      neighborEntry.isReachable()));
 }
 
 void

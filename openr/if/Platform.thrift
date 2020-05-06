@@ -15,7 +15,7 @@ include "fb303/thrift/fb303_core.thrift"
 include "Network.thrift"
 
 /**
- * We provide simple API to publish link/address/neighbor updating events
+ * We provide simple API to publish link/address updating events
  * through PUB-SUB mechanism to all of its subscriber modules in OpenR
  */
 struct LinkEntry {
@@ -29,13 +29,6 @@ struct AddrEntry {
   1: string ifName;
   2: Network.IpPrefix ipPrefix;
   3: bool isValid;
-}
-
-struct NeighborEntry {
-  1: string ifName;
-  2: Network.BinaryAddress destination;
-  3: string linkAddr;
-  4: bool isReachable;
 }
 
 struct Link {
@@ -86,11 +79,10 @@ enum SwitchRunState {
  */
  enum PlatformEventType {
    /*
-    * Command type to publish changes of link/address/neighbor
+    * Command type to publish changes of link/address
     */
    LINK_EVENT = 1,
    ADDRESS_EVENT = 2,
-   NEIGHBOR_EVENT = 3,
  }
 
 struct PlatformEvent {
@@ -111,9 +103,8 @@ exception PlatformError {
  */
 service SystemService {
   /**
-   * SystemService client can query the following items:
-   * 1. query all links keyed by interface names
-   * 2. query all reachable neighbors
+   * Get all the links on system. It is similar to `ip link show` commands.
+   * Returns the list of interfaces with it's state, name and addresses
    */
   list<Link> getAllLinks()
     throws (1: PlatformError error)

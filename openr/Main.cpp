@@ -283,10 +283,6 @@ main(int argc, char** argv) {
     thriftThreadMgr->setNamePrefix("ThriftCpuPool");
     thriftThreadMgr->start();
 
-    // Create event publisher to handle event subscription
-    eventPublisher = std::make_unique<PlatformPublisher>(
-        context, PlatformPublisherUrl{FLAGS_platform_pub_url});
-
     // Create Netlink Protocol object in a new thread
     // ATTN: intentionally set evl capacity to be 1e5 instead of default 1e2
     nlProtocolSocketEventLoop = std::make_unique<fbzmq::ZmqEventLoop>(1e5);
@@ -301,10 +297,16 @@ main(int argc, char** argv) {
     nlProtocolSocketEventLoop->waitUntilRunning();
     allThreads.emplace_back(std::move(nlProtocolSocketThread));
 
+    // Create event publisher to handle event subscription
+    eventPublisher = std::make_unique<PlatformPublisher>(
+        context,
+        PlatformPublisherUrl{FLAGS_platform_pub_url},
+        nlProtocolSocket.get());
+
     // ATTN: intentionally set evl capacity to be 1e5 instead of default 1e2
     nlEventLoop = std::make_unique<fbzmq::ZmqEventLoop>(1e5);
     nlSocket = std::make_shared<openr::fbnl::NetlinkSocket>(
-        nlEventLoop.get(), eventPublisher.get(), std::move(nlProtocolSocket));
+        nlEventLoop.get(), nullptr, std::move(nlProtocolSocket));
     // Subscribe selected network events
     nlSocket->subscribeEvent(openr::fbnl::LINK_EVENT);
     nlSocket->subscribeEvent(openr::fbnl::ADDR_EVENT);

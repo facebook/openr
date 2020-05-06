@@ -42,7 +42,6 @@
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/link-monitor/InterfaceEntry.h>
 #include <openr/messaging/ReplicateQueue.h>
-#include <openr/platform/PlatformPublisher.h>
 #include <openr/spark/Spark.h>
 
 namespace openr {

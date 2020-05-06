@@ -19,7 +19,7 @@
 
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/Platform_types.h>
-#include <openr/nl/NetlinkSocket.h>
+#include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/nl/NetlinkTypes.h>
 
 namespace openr {
@@ -30,14 +30,12 @@ namespace openr {
  * OpenR modules can subscribe through SUB socket. The subscriber modules is
  * LinkMonitor from Open/R side.
  */
-class PlatformPublisher final : public fbnl::NetlinkSocket::EventsHandler {
+class PlatformPublisher final {
  public:
   PlatformPublisher(
-      //
-      // Immutable state initializers
-      //
       fbzmq::Context& context,
-      const PlatformPublisherUrl& platformPubUrl);
+      const PlatformPublisherUrl& platformPubUrl,
+      fbnl::NetlinkProtocolSocket* nlSock);
 
   ~PlatformPublisher() = default;
 
@@ -45,32 +43,19 @@ class PlatformPublisher final : public fbnl::NetlinkSocket::EventsHandler {
   PlatformPublisher(const PlatformPublisher&) = delete;
   PlatformPublisher& operator=(const PlatformPublisher&) = delete;
 
-  void publishPlatformEvent(const thrift::PlatformEvent& msg);
-
-  void publishLinkEvent(const thrift::LinkEntry& link);
-
-  void publishAddrEvent(const thrift::AddrEntry& address);
-
-  void publishNeighborEvent(const thrift::NeighborEntry& neighbor);
-
   void stop();
 
  private:
-  // Override method for NetlinkSocket link/address/neighbor events
-  void linkEventFunc(
-      const std::string& ifName,
-      const openr::fbnl::Link& linkEntry) noexcept override;
+  // Implementation functions for publishing link and address events
+  void publishLinkEvent(const thrift::LinkEntry& link);
+  void publishAddrEvent(const thrift::AddrEntry& address);
+  void publishPlatformEvent(const thrift::PlatformEvent& msg);
 
-  void addrEventFunc(
-      const std::string& ifName,
-      const openr::fbnl::IfAddress& addrEntry) noexcept override;
-
-  void neighborEventFunc(
-      const std::string& ifName,
-      const openr::fbnl::Neighbor& neighborEntry) noexcept override;
-
-  // Publish link events to, e.g., LinkMonitor and Squire
-  const std::string platformPubUrl_;
+  // Cache of interface index to name. Used for resolving ifIndex
+  // on address events
+  // NOTE: We're not assuming any lock. It is always invoked in the same
+  // event-loop as of NetlinkProtocolSocket via callback mechanism.
+  std::unordered_map<int, std::string> ifIndexToName_;
 
   // publish our own events (link up/down, addr changes, etc)
   fbzmq::Socket<ZMQ_PUB, fbzmq::ZMQ_SERVER> platformPubSock_;
