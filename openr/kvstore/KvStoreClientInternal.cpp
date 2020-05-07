@@ -111,7 +111,6 @@ KvStoreClientInternal::checkPersistKeyInStore() {
       continue;
     }
 
-    // Prepare KEY_GET params
     thrift::KeyGetParams params;
     thrift::Publication pub;
     for (auto const& key : persistedKeyVals) {

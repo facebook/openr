@@ -1437,19 +1437,6 @@ KvStoreDb::processRequestMsgHelper(
     }
     return fbzmq::Message();
   }
-  case thrift::Command::KEY_GET: {
-    VLOG(3) << "Get key requested";
-    if (not thriftReq.keyGetParams.has_value()) {
-      LOG(ERROR) << "received none keyGetParams";
-      return folly::makeUnexpected(fbzmq::Error());
-    }
-
-    fb303::fbData->addStatValue("kvstore.cmd_key_get", 1, fb303::COUNT);
-
-    auto thriftPub = getKeyVals(thriftReq.keyGetParams.value().keys);
-    updatePublicationTtl(thriftPub);
-    return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
-  }
   case thrift::Command::KEY_DUMP: {
     VLOG(3) << "Dump all keys requested";
     if (not thriftReq.keyDumpParams.has_value()) {
@@ -1486,24 +1473,6 @@ KvStoreDb::processRequestMsgHelper(
     }
     return fbzmq::Message::fromThriftObj(thriftPub, serializer_);
   }
-  case thrift::Command::HASH_DUMP: {
-    VLOG(3) << "Dump all hashes requested";
-    if (not thriftReq.keyDumpParams.has_value()) {
-      LOG(ERROR) << "received none keyDumpParams";
-      return folly::makeUnexpected(fbzmq::Error());
-    }
-
-    fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
-
-    std::set<std::string> originator{};
-    std::vector<std::string> keyPrefixList{};
-    folly::split(
-        ",", thriftReq.keyDumpParams.value().prefix, keyPrefixList, true);
-    KvStoreFilters kvFilters{keyPrefixList, originator};
-    auto hashDump = dumpHashWithFilters(kvFilters);
-    updatePublicationTtl(hashDump);
-    return fbzmq::Message::fromThriftObj(hashDump, serializer_);
-  }
   case thrift::Command::DUAL: {
     VLOG(2) << "DUAL messages received";
     if (not thriftReq.dualMessages.has_value()) {
@@ -1527,10 +1496,6 @@ KvStoreDb::processRequestMsgHelper(
     }
     processFloodTopoSet(std::move(*thriftReq.floodTopoSetParams));
     return fbzmq::Message();
-  }
-  case thrift::Command::FLOOD_TOPO_GET: {
-    VLOG(3) << "FLOOD_TOPO_GET command requested";
-    return fbzmq::Message::fromThriftObj(processFloodTopoGet(), serializer_);
   }
   default: {
     LOG(ERROR) << "Unknown command received";

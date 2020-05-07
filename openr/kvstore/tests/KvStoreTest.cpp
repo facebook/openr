@@ -214,7 +214,7 @@ class KvStoreTestTtlFixture : public KvStoreTestFixture {
         const auto dump = store->dumpAll();
         EXPECT_FALSE(dump.empty());
         // Verify 1. hash is updated in KvStore
-        // 2. HASH_DUMP request returns key values as expected
+        // 2. dumpHashes request returns key values as expected
         const auto hashDump = store->dumpHashes();
         for (const auto& [key, value] : dump) {
           EXPECT_TRUE(value.hash_ref().value() != 0);
@@ -704,14 +704,8 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     auto thriftValue = value;
     thriftValue.ttl = 1;
     EXPECT_TRUE(kvStore->setKey(key, thriftValue));
-
-    // KEY_GET
     EXPECT_FALSE(kvStore->getKey(key).has_value());
-
-    // KEY_DUMP
     EXPECT_EQ(0, kvStore->dumpAll().size());
-
-    // HASH_DUMP
     EXPECT_EQ(0, kvStore->dumpAll().size());
 
     // We will receive key-expiry publication but no key-advertisement
@@ -730,7 +724,6 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     thriftValue.ttl = Constants::kTtlThreshold.count() - 1;
     EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
-    // KEY_GET
     auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
@@ -738,7 +731,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     getRes->hash_ref() = 0;
     EXPECT_EQ(thriftValue, getRes.value());
 
-    // KEY_DUMP
+    // dump keys
     auto dumpRes = kvStore->dumpAll();
     EXPECT_EQ(1, dumpRes.size());
     ASSERT_EQ(1, dumpRes.count(key));
@@ -748,7 +741,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     dumpResValue.hash_ref() = 0;
     EXPECT_EQ(thriftValue, dumpResValue);
 
-    // HASH_DUMP
+    // dump hashes
     auto hashRes = kvStore->dumpHashes();
     EXPECT_EQ(1, hashRes.size());
     ASSERT_EQ(1, hashRes.count(key));
@@ -776,7 +769,6 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     thriftValue.ttl = 50000;
     EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
-    // KEY_GET
     auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
@@ -784,7 +776,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     getRes->hash_ref() = 0;
     EXPECT_EQ(thriftValue, getRes.value());
 
-    // KEY_DUMP
+    // dump keys
     auto dumpRes = kvStore->dumpAll();
     EXPECT_EQ(1, dumpRes.size());
     ASSERT_EQ(1, dumpRes.count(key));
@@ -794,7 +786,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     dumpResValue.hash_ref() = 0;
     EXPECT_EQ(thriftValue, dumpResValue);
 
-    // HASH_DUMP
+    // dump hashes
     auto hashRes = kvStore->dumpHashes();
     EXPECT_EQ(1, hashRes.size());
     ASSERT_EQ(1, hashRes.count(key));
@@ -828,7 +820,6 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     thriftValue.ttlVersion += 1;
     EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
-    // KEY_GET
     auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
@@ -861,7 +852,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     thriftValue.ttlVersion += 2;
     EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
-    // KEY_GET - ttl should remain infinite
+    // ttl should remain infinite
     auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_EQ(Constants::kTtlInfinity, getRes->ttl);
@@ -894,7 +885,6 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     thriftValue.ttlVersion += 3;
     EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
-    // KEY_GET
     auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(thriftValue.ttl, getRes->ttl + 1);
@@ -926,7 +916,6 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     thriftValue.ttl = 10000;
     EXPECT_TRUE(kvStore->setKey(key, thriftValue));
 
-    // KEY_GET
     auto getRes = kvStore->getKey(key);
     ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(20000, getRes->ttl); // Previous ttl was set to 20s

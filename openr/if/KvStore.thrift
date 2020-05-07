@@ -44,25 +44,13 @@ typedef map<string, Value>
 
 
 enum Command {
-  // NOTE: key-10 has been used in past
-
   // operations on keys in the store
   KEY_SET   = 1,
-  KEY_GET   = 2,
   KEY_DUMP  = 3,
-  HASH_DUMP = 7,
-  COUNTERS_GET = 9,   // Return object will be Monitor::CounterMap
   DUAL = 10, // DUAL message
   FLOOD_TOPO_SET = 11, // set or unset flooding-topo child
-  FLOOD_TOPO_GET = 12; // get flood-topology information
-  AREAS_CONFIG_GET = 13; // get AreasConfig from kvstore
 }
 
-//
-// Cmd params
-//
-
-// parameters for the KEY_SET command
 struct KeySetParams {
   // NOTE: the struct is denormalized on purpose,
   // it may happen so we repeat originatorId
@@ -87,19 +75,17 @@ struct KeySetParams {
   7: optional i64 timestamp_ms
 }
 
-// parameters for the KEY_GET command
 struct KeyGetParams {
   1: list<string> keys
 }
 
-// parameters for the KEY_DUMP command
-// if request includes keyValHashes information from peer, only respsond with
-// keyVals on which hash differs
-// if keyValHashes is not specified, respond with flooding element to signal of
-// DB change
 struct KeyDumpParams {
   1: string prefix
   3: set<string> originatorIds
+
+  // optional attribute to include keyValHashes information from peer.
+  //  1) If NOT empty, ONLY respond with keyVals on which hash differs;
+  //  2) Otherwise, respond with flooding element to signal DB change;
   2: optional KeyVals keyValHashes
 }
 

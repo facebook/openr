@@ -508,7 +508,7 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
   // Only dump difference between KvStore and client snapshot
   params.keyValHashes_ref() = std::move(adjKeyVals);
 
-  // Explicitly do SYNC call to get HASH_DUMP from KvStore
+  // Explicitly do SYNC call to KvStore
   std::unique_ptr<thrift::Publication> thriftPub{nullptr};
   try {
     thriftPub = semifuture_getKvStoreKeyValsFiltered(

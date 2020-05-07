@@ -22,7 +22,6 @@ This socket accepts various commands which allow for modifying the node's peer
 list as well as key-value content dynamically via KvStore. Some commands are
 listed below
 - `KEY_SET` => Set/Update key-value in a KvStore
-- `KEY_GET` => Get existing key-value in a KvStore
 - `KEY_DUMP` => Get content of local KvStore. Optionally takes a filter argument
 
 All incremental changes in local KvStore are published as `thrift::Publication`
