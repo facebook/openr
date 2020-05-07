@@ -9,7 +9,7 @@
 
 #include <list>
 
-#include <fbzmq/async/ZmqEventLoop.h>
+#include <folly/io/async/EventBase.h>
 
 #include <openr/nl/NetlinkProtocolSocket.h>
 
@@ -40,8 +40,8 @@ fbnl::IfAddress createIfAddress(const int ifIndex, const std::string& addrMask);
  */
 class FakeNetlinkProtocolSocket : public NetlinkProtocolSocket {
  public:
-  explicit FakeNetlinkProtocolSocket(fbzmq::ZmqEventLoop* evl)
-      : NetlinkProtocolSocket(evl) {}
+  explicit FakeNetlinkProtocolSocket(folly::EventBase* evb)
+      : NetlinkProtocolSocket(evb) {}
 
   /**
    * API to create links for testing purposes

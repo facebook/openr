@@ -11,7 +11,6 @@
 #include <thread>
 
 #include <fb303/ServiceData.h>
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/Exception.h>
 #include <folly/Format.h>
@@ -19,6 +18,7 @@
 #include <folly/MacAddress.h>
 #include <folly/Subprocess.h>
 #include <folly/gen/Base.h>
+#include <folly/io/async/EventBase.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
@@ -136,15 +136,11 @@ class NlMessageFixture : public ::testing::Test {
 
     // netlink protocol socket
     nlSock = std::make_unique<NetlinkProtocolSocket>(
-        &evl, FLAGS_enable_ipv6_rr_semantics);
+        &evb, FLAGS_enable_ipv6_rr_semantics);
 
     // start event thread
-    eventThread = std::thread([&]() {
-      evl.run();
-      evl.waitUntilStopped();
-    });
-
-    evl.waitUntilRunning();
+    eventThread = std::thread([&]() { evb.loopForever(); });
+    evb.waitUntilRunning();
 
     // find ifIndexX and ifIndexY
     auto links = nlSock->getAllLinks().get();
@@ -173,10 +169,8 @@ class NlMessageFixture : public ::testing::Test {
     // Ignore result
     proc.wait();
 
-    if (evl.isRunning()) {
-      evl.stop();
-      eventThread.join();
-    }
+    evb.terminateLoopSoon();
+    eventThread.join();
   }
 
   void
@@ -338,7 +332,7 @@ class NlMessageFixture : public ::testing::Test {
     EXPECT_EQ(0, proc.wait().exitStatus());
   }
 
-  fbzmq::ZmqEventLoop evl;
+  folly::EventBase evb;
   std::thread eventThread;
 
  protected:

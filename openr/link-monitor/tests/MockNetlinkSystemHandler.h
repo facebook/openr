@@ -14,10 +14,10 @@
 #include <string>
 #include <utility>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncSocket.h>
+#include <folly/io/async/EventBase.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/if/gen-cpp2/Platform_types.h>
@@ -54,7 +54,7 @@ class MockNetlinkSystemHandler final : public thrift::SystemServiceSvIf {
 
  private:
   // Create netlink socket
-  fbzmq::ZmqEventLoop evl_;
+  folly::EventBase nlEvb_;
   std::unique_ptr<fbnl::FakeNetlinkProtocolSocket> nlSock_;
 
   // Used to publish Netlink event

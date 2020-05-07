@@ -267,7 +267,7 @@ main(int argc, char** argv) {
   // Create ThreadManager for thrift services
   std::shared_ptr<ThreadManager> thriftThreadMgr{nullptr};
 
-  std::unique_ptr<fbzmq::ZmqEventLoop> nlEvl{nullptr};
+  std::unique_ptr<folly::EventBase> nlEvb{nullptr};
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer{nullptr};
@@ -282,16 +282,15 @@ main(int argc, char** argv) {
     thriftThreadMgr->start();
 
     // Create Netlink Protocol object in a new thread
-    // ATTN: intentionally set evl capacity to be 1e5 instead of default 1e2
-    nlEvl = std::make_unique<fbzmq::ZmqEventLoop>(1e5);
-    nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(nlEvl.get());
+    nlEvb = std::make_unique<folly::EventBase>();
+    nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(nlEvb.get());
     allThreads.emplace_back([&]() {
-      LOG(INFO) << "Starting NetlinkProtolSocketEvl thread ...";
-      folly::setThreadName("NetlinkProtolSocketEvl");
-      nlEvl->run();
-      LOG(INFO) << "NetlinkProtolSocketEvl thread got stopped.";
+      LOG(INFO) << "Starting NetlinkEvb thread ...";
+      folly::setThreadName("NetlinkEvb");
+      nlEvb->loopForever();
+      LOG(INFO) << "NetlinkEvb thread got stopped.";
     });
-    nlEvl->waitUntilRunning();
+    nlEvb->waitUntilRunning();
 
     // Create event publisher to handle event subscription
     eventPublisher = std::make_unique<PlatformPublisher>(
@@ -789,9 +788,8 @@ main(int argc, char** argv) {
   monitor.stop();
   monitor.waitUntilStopped();
 
-  if (nlEvl) {
-    nlEvl->stop();
-    nlEvl->waitUntilStopped();
+  if (nlEvb) {
+    nlEvb->terminateLoopSoon();
   }
 
   if (netlinkFibServer) {

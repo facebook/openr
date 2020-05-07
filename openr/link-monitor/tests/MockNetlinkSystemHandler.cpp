@@ -37,7 +37,7 @@ MockNetlinkSystemHandler::MockNetlinkSystemHandler(
     fbzmq::Context& context, const std::string& platformPublisherUrl) {
   VLOG(3) << "Building Mock NL Db";
 
-  nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&evl_);
+  nlSock_ = std::make_unique<fbnl::FakeNetlinkProtocolSocket>(&nlEvb_);
 
   platformPublisher_ = std::make_unique<PlatformPublisher>(
       context, PlatformPublisherUrl{platformPublisherUrl}, nlSock_.get());

@@ -9,10 +9,11 @@
 
 #include <vector>
 
-#include <fbzmq/async/ZmqTimeout.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/IPAddress.h>
 #include <folly/futures/Future.h>
+#include <folly/io/async/AsyncTimeout.h>
+#include <folly/io/async/EventBase.h>
+#include <folly/io/async/EventHandler.h>
 
 #include <openr/nl/NetlinkMessage.h>
 #include <openr/nl/NetlinkRoute.h>
@@ -62,10 +63,10 @@ constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
  * by running associated UTs and it might vary on different systems.
  *
  */
-class NetlinkProtocolSocket {
+class NetlinkProtocolSocket : public folly::EventHandler {
  public:
   explicit NetlinkProtocolSocket(
-      fbzmq::ZmqEventLoop* evl, bool enableIPv6RouteReplaceSemantics = false);
+      folly::EventBase* evb, bool enableIPv6RouteReplaceSemantics = false);
 
   virtual ~NetlinkProtocolSocket();
 
@@ -187,6 +188,9 @@ class NetlinkProtocolSocket {
   NetlinkProtocolSocket(NetlinkProtocolSocket const&) = delete;
   NetlinkProtocolSocket& operator=(NetlinkProtocolSocket const&) = delete;
 
+  // Implement EventHandler callback for reading netlink messages
+  void handlerReady(uint16_t events) noexcept override;
+
   // Buffer netlink message to the queue_. Invoke sendNetlinkMessage if there
   // are no messages in flight
   void addNetlinkMessage(std::unique_ptr<NetlinkMessage> nlmsg);
@@ -209,7 +213,7 @@ class NetlinkProtocolSocket {
 
   // Event base for serializing read/write requests to netlink socket. Also
   // ensure thread safety of private member variables.
-  fbzmq::ZmqEventLoop* evl_{nullptr};
+  folly::EventBase* evb_{nullptr};
 
   // Use new IPv6 route replace semantics. See documentation for addRoute(...)
   const bool enableIPv6RouteReplaceSemantics_{false};
@@ -260,7 +264,11 @@ class NetlinkProtocolSocket {
   // one of the entry in nlSeqNoMap, for at-least past kNlRequestAckTimeout
   // time. Netlink socket is re-initiaited on timeout for any of our pending
   // message, and `nlSeqNumMap_` is cleared.
-  std::unique_ptr<fbzmq::ZmqTimeout> nlMessageTimer_{nullptr};
+  std::unique_ptr<folly::AsyncTimeout> nlMessageTimer_{nullptr};
+
+  // Timer for initializing this socket. This gets cancelled automatically if
+  // event-base is never started
+  std::unique_ptr<folly::AsyncTimeout> nlInitTimer_{nullptr};
 };
 
 } // namespace openr::fbnl

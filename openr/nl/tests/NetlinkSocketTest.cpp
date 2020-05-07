@@ -19,6 +19,7 @@
 #include <folly/ScopeGuard.h>
 #include <folly/Subprocess.h>
 #include <folly/gen/Base.h>
+#include <folly/io/async/EventBase.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
@@ -95,12 +96,9 @@ class NetlinkSocketFixture : public testing::Test {
     bringUpIntf(kVethNameY);
 
     nlProtocolSocket =
-        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&evl2);
-    nlProtocolSocketThread = std::thread([&]() {
-      evl2.run();
-      evl2.waitUntilStopped();
-    });
-    evl2.waitUntilRunning();
+        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&evb);
+    nlProtocolSocketThread = std::thread([&]() { evb.loopForever(); });
+    evb.waitUntilRunning();
 
     // create netlink route socket
     netlinkSocket = std::make_unique<NetlinkSocket>(
@@ -127,8 +125,8 @@ class NetlinkSocketFixture : public testing::Test {
       evl.stop();
       eventThread.join();
     }
-    if (evl2.isRunning()) {
-      evl2.stop();
+    if (evb.isRunning()) {
+      evb.terminateLoopSoon();
       nlProtocolSocketThread.join();
     }
 
@@ -204,7 +202,7 @@ class NetlinkSocketFixture : public testing::Test {
   std::unique_ptr<NetlinkSocket> netlinkSocket;
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
   fbzmq::ZmqEventLoop evl;
-  fbzmq::ZmqEventLoop evl2;
+  folly::EventBase evb;
   std::thread eventThread;
   std::thread nlProtocolSocketThread;
 

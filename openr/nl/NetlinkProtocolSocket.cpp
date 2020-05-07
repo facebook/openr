@@ -17,10 +17,13 @@ namespace fb303 = facebook::fb303;
 namespace openr::fbnl {
 
 NetlinkProtocolSocket::NetlinkProtocolSocket(
-    fbzmq::ZmqEventLoop* evl, bool enableIPv6RouteReplaceSemantics)
-    : evl_(evl),
+    folly::EventBase* evb, bool enableIPv6RouteReplaceSemantics)
+    : EventHandler(evb),
+      evb_(evb),
       enableIPv6RouteReplaceSemantics_(enableIPv6RouteReplaceSemantics) {
-  nlMessageTimer_ = fbzmq::ZmqTimeout::make(evl_, [this]() noexcept {
+  CHECK_NOTNULL(evb_);
+
+  nlMessageTimer_ = folly::AsyncTimeout::make(*evb_, [this]() noexcept {
     DCHECK(false) << "This shouldn't occur usually. Adding DCHECK to get "
                   << "attention in UTs";
 
@@ -29,15 +32,16 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
 
     LOG(ERROR) << "Timed-out receiving ack for " << nlSeqNumMap_.size()
                << " message(s).";
-    for (auto const& kv : nlSeqNumMap_) {
+    for (auto& kv : nlSeqNumMap_) {
       LOG(ERROR) << "  Pending seq=" << kv.first << ", message-type="
                  << static_cast<int>(kv.second->getMessageType())
                  << ", bytes-sent=" << kv.second->getDataLength();
+      kv.second->setReturnStatus(-ETIMEDOUT);
     }
 
     LOG(INFO) << "Closing netlink socket and recreate it";
     nlSeqNumMap_.clear(); // Clear all timed out requests
-    evl_->removeSocketFd(nlSock_);
+    unregisterHandler();
     close(nlSock_);
     init();
 
@@ -46,7 +50,8 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
   });
 
   // Initialize the socket in an event loop
-  evl_->runInEventLoop([this]() { init(); });
+  nlInitTimer_ = folly::AsyncTimeout::schedule(
+      std::chrono::milliseconds(0), *evb_, [this]() noexcept { init(); });
 }
 
 void
@@ -82,14 +87,23 @@ NetlinkProtocolSocket::init() {
   // Retrieve and set pid that we will use for all subsequent messages
   portId_ = saddr.nl_pid;
 
-  evl_->addSocketFd(nlSock_, ZMQ_POLLIN, [this](int) noexcept {
-    try {
-      recvNetlinkMessage();
-    } catch (std::exception const& err) {
-      LOG(ERROR) << "error processing NL message" << folly::exceptionStr(err);
-      fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
-    }
-  });
+  // Set fd in event handler and register for polling
+  changeHandlerFD(folly::NetworkSocket{nlSock_});
+  registerHandler(folly::EventHandler::READ | folly::EventHandler::PERSIST);
+
+  // Resume sending netlink messages if any queued
+  sendNetlinkMessage();
+}
+
+void
+NetlinkProtocolSocket::handlerReady(uint16_t events) noexcept {
+  CHECK_EQ(events, folly::EventHandler::READ);
+  try {
+    recvNetlinkMessage();
+  } catch (std::exception const& err) {
+    LOG(ERROR) << "error processing NL message" << folly::exceptionStr(err);
+    fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
+  }
 }
 
 void
@@ -140,7 +154,7 @@ NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
 
 void
 NetlinkProtocolSocket::sendNetlinkMessage() {
-  CHECK(evl_->isInEventLoop());
+  CHECK(evb_->isInEventBaseThread());
   struct sockaddr_nl nladdr = {
       .nl_family = AF_NETLINK, .nl_pad = 0, .nl_pid = 0, .nl_groups = 0};
   CHECK_LE(nlSeqNumMap_.size(), kMaxIovMsg)
@@ -188,12 +202,14 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
   outMsg->msg_iov = &iov[0];
   outMsg->msg_iovlen = count;
 
-  VLOG(2) << "Sending " << outMsg->msg_iovlen << " netlink messages";
-  auto status = sendmsg(nlSock_, outMsg.get(), 0);
-  if (status < 0) {
-    LOG(ERROR) << "Error sending on NL socket "
-               << folly::errnoStr(std::abs(status))
-               << " Number of messages:" << outMsg->msg_iovlen;
+  VLOG(2) << "Sending " << outMsg->msg_iovlen << " netlink messages on fd "
+          << nlSock_;
+  // `sendmsg` return -1 in case of error else number of bytes sent. `errno`
+  // will be set to an appropriate code in case of error.
+  if (sendmsg(nlSock_, outMsg.get(), 0) < 0) {
+    LOG(ERROR) << "Error sending on netlink socket. Error: "
+               << folly::errnoStr(std::abs(errno)) << ", errno=" << errno
+               << ", fd=" << nlSock_ << ", #messages=" << outMsg->msg_iovlen;
     fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
   }
 
@@ -364,10 +380,13 @@ NetlinkProtocolSocket::~NetlinkProtocolSocket() {
 void
 NetlinkProtocolSocket::addNetlinkMessage(
     std::unique_ptr<NetlinkMessage> nlmsg) {
-  evl_->runImmediatelyOrInEventLoop([this, nlmsg = std::move(nlmsg)]() mutable {
+  // TODO: Explore Use NotificationQueue so that pending messages can be
+  // discarded to have clean exit code.
+  evb_->runInEventBaseThread([this, nlmsg = std::move(nlmsg)]() mutable {
     msgQueue_.push(std::move(nlmsg));
-    // call send messages API if no timers are scheduled
-    if (!nlMessageTimer_->isScheduled()) {
+    // Invoke send messages API if socket is initialized and no in flight
+    // messages
+    if (nlSock_ >= 0 && !nlMessageTimer_->isScheduled()) {
       sendNetlinkMessage();
     }
   });

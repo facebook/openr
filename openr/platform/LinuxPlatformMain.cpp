@@ -8,6 +8,7 @@
 #include <fbzmq/async/StopEventLoopSignalHandler.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/init/Init.h>
+#include <folly/io/async/EventBase.h>
 #include <folly/system/ThreadName.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -53,16 +54,16 @@ main(int argc, char** argv) {
 
   std::vector<std::thread> allThreads{};
 
-  auto nlEvl = std::make_unique<fbzmq::ZmqEventLoop>();
+  auto nlEvb = std::make_unique<folly::EventBase>();
   auto nlSock =
-      std::make_unique<openr::fbnl::NetlinkProtocolSocket>(nlEvl.get());
-  allThreads.emplace_back(std::thread([&nlEvl]() {
+      std::make_unique<openr::fbnl::NetlinkProtocolSocket>(nlEvb.get());
+  allThreads.emplace_back(std::thread([&nlEvb]() {
     LOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
     folly::setThreadName("NetlinkProtolSocketEvl");
-    nlEvl->run();
+    nlEvb->loopForever();
     LOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
   }));
-  nlEvl->waitUntilRunning();
+  nlEvb->waitUntilRunning();
 
   // Create event publisher to handle event subscription
   auto eventPublisher = std::make_unique<openr::PlatformPublisher>(
@@ -114,25 +115,27 @@ main(int argc, char** argv) {
   mainEventLoop.run();
   LOG(INFO) << "Main event loop stopped.";
 
-  nlEvl->stop();
-  nlEvl->waitUntilStopped();
+  nlEvb->terminateLoopSoon();
 
   if (FLAGS_enable_netlink_fib_handler) {
     linuxFibAgentServer.stop();
   }
+
   if (FLAGS_enable_netlink_system_handler) {
     systemServiceServer.stop();
+
+    // Wait for threads to finish
+    for (auto& t : allThreads) {
+      t.join();
+    }
   }
+
   if (nlSock) {
     nlSock.reset();
   }
+
   if (eventPublisher) {
     eventPublisher.reset();
-  }
-
-  // Wait for threads to finish
-  for (auto& t : allThreads) {
-    t.join();
   }
 
   return 0;

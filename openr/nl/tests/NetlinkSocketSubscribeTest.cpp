@@ -12,6 +12,7 @@
 #include <folly/Format.h>
 #include <folly/ScopeGuard.h>
 #include <folly/Subprocess.h>
+#include <folly/io/async/EventBase.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
@@ -125,13 +126,10 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
     folly::Subprocess proc1(std::move(cmd));
     EXPECT_EQ(0, proc1.wait().exitStatus());
 
-    nlProtocolSocket = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
-        &nlProtocolSocketEventLoop);
-    nlProtocolSocketThread = std::thread([&]() {
-      nlProtocolSocketEventLoop.run();
-      nlProtocolSocketEventLoop.waitUntilStopped();
-    });
-    nlProtocolSocketEventLoop.waitUntilRunning();
+    nlProtocolSocket =
+        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(&nlEvb);
+    nlProtocolSocketThread = std::thread([&]() { nlEvb.loopForever(); });
+    nlEvb.waitUntilRunning();
   }
 
   void
@@ -146,14 +144,14 @@ class NetlinkSocketSubscribeFixture : public testing::Test {
     folly::Subprocess proc(std::move(cmd));
     EXPECT_EQ(0, proc.wait().exitStatus());
 
-    if (nlProtocolSocketEventLoop.isRunning()) {
-      nlProtocolSocketEventLoop.stop();
+    if (nlEvb.isRunning()) {
+      nlEvb.terminateLoopSoon();
       nlProtocolSocketThread.join();
     }
   }
 
  protected:
-  ZmqEventLoop nlProtocolSocketEventLoop;
+  folly::EventBase nlEvb;
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlProtocolSocket;
   std::thread nlProtocolSocketThread;
 };

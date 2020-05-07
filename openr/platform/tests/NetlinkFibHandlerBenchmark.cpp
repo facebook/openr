@@ -9,8 +9,6 @@
 #include <string>
 #include <thread>
 
-#include <fbzmq/async/ZmqEventLoop.h>
-#include <fbzmq/zmq/Zmq.h>
 #include <folly/Benchmark.h>
 #include <folly/Exception.h>
 #include <folly/Format.h>
@@ -19,6 +17,7 @@
 #include <folly/Random.h>
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
+#include <folly/io/async/EventBase.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 
@@ -51,37 +50,21 @@ class NetlinkFibWrapper {
  public:
   NetlinkFibWrapper() {
     // Create NetlinkProtocolSocket
-    nlSock = std::make_unique<FakeNetlinkProtocolSocket>(&evl);
+    nlSock = std::make_unique<FakeNetlinkProtocolSocket>(&evb);
     nlSock->addLink(utils::createLink(0, kVethNameX)).get();
     nlSock->addLink(utils::createLink(1, kVethNameY)).get();
-
-    // Run the zmq event loop in its own thread
-    // We will either timeout if expected events are not received
-    // or stop after we receive expected events
-    eventThread = std::thread([&]() {
-      evl.run();
-      evl.waitUntilStopped();
-    });
-    evl.waitUntilRunning();
 
     // Start FibService thread
     fibHandler = std::make_unique<NetlinkFibHandler>(nlSock.get());
   }
 
   ~NetlinkFibWrapper() {
-    if (evl.isRunning()) {
-      evl.stop();
-      eventThread.join();
-    }
-
     fibHandler.reset();
     nlSock.reset();
   }
 
-  fbzmq::Context context;
+  folly::EventBase evb;
   std::unique_ptr<FakeNetlinkProtocolSocket> nlSock;
-  fbzmq::ZmqEventLoop evl;
-  std::thread eventThread;
   std::unique_ptr<NetlinkFibHandler> fibHandler;
   PrefixGenerator prefixGenerator;
 };

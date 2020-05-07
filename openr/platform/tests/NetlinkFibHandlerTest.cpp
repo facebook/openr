@@ -8,7 +8,6 @@
 #include <chrono>
 #include <stdexcept>
 
-#include <fbzmq/async/ZmqEventLoop.h>
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/Random.h>
@@ -159,11 +158,9 @@ class FibHandlerFixture : public testing::TestWithParam<bool> {
   }
 
  private:
-  // TODO: Migrate event loop from ZmqEventLoop to folly::EventBase
-  fbzmq::ZmqEventLoop evl_;
-
   // Intentionally keeping private to not expose in UTs
-  fbnl::FakeNetlinkProtocolSocket nlSock_{&evl_};
+  folly::EventBase nlEvb_;
+  fbnl::FakeNetlinkProtocolSocket nlSock_{&nlEvb_};
 
  public:
   // FibHandler is accessible in UTs for testing
@@ -214,8 +211,8 @@ TEST(NetlinkFibHandler, protocolToPriority) {
 //
 TEST(NetlinkFibHandler, getRoutesWithInvalidClient) {
   const int16_t kInvalidClient = 111;
-  fbzmq::ZmqEventLoop evl;
-  fbnl::FakeNetlinkProtocolSocket nlSock(&evl);
+  folly::EventBase evb;
+  fbnl::FakeNetlinkProtocolSocket nlSock(&evb);
   NetlinkFibHandler handler(&nlSock);
 
   EXPECT_THROW(

@@ -7,7 +7,7 @@
 
 #include <gtest/gtest.h>
 
-#include <fbzmq/async/ZmqEventLoop.h>
+#include <folly/io/async/EventBase.h>
 
 #include <openr/nl/tests/FakeNetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkSystemHandler.h>
@@ -17,8 +17,8 @@ using namespace openr;
 using namespace openr::fbnl;
 
 TEST(SystemHandler, getAllLinks) {
-  fbzmq::ZmqEventLoop evl;
-  fbnl::FakeNetlinkProtocolSocket nlSock(&evl);
+  folly::EventBase evb;
+  fbnl::FakeNetlinkProtocolSocket nlSock(&evb);
   NetlinkSystemHandler handler(&nlSock);
 
   // Empty links
@@ -46,8 +46,8 @@ TEST(SystemHandler, getAllLinks) {
 }
 
 TEST(SystemHandler, addRemoveIfaceAddresses) {
-  fbzmq::ZmqEventLoop evl;
-  fbnl::FakeNetlinkProtocolSocket nlSock(&evl);
+  folly::EventBase evb;
+  fbnl::FakeNetlinkProtocolSocket nlSock(&evb);
   NetlinkSystemHandler handler(&nlSock);
   const auto ifAddr = utils::createIfAddress(1, "192.168.0.3/31");
   const auto ifPrefix = toIpPrefix(ifAddr.getPrefix().value());
@@ -89,8 +89,8 @@ TEST(SystemHandler, addRemoveIfaceAddresses) {
 }
 
 TEST(SystemHandler, syncIfaceAddresses) {
-  fbzmq::ZmqEventLoop evl;
-  fbnl::FakeNetlinkProtocolSocket nlSock(&evl);
+  folly::EventBase evb;
+  fbnl::FakeNetlinkProtocolSocket nlSock(&evb);
   NetlinkSystemHandler handler(&nlSock);
   const auto ifAddr1 = utils::createIfAddress(1, "192.168.1.3/31"); // v4 global
   const auto ifAddr2 = utils::createIfAddress(1, "192.168.2.3/31"); // v4 global
