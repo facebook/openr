@@ -26,7 +26,7 @@ TEST(ReplicateQueueTest, Test) {
 
   // Add readers
   std::atomic<size_t> totalReads{0};
-  for (int i = 0; i < kNumReaders; ++i) {
+  for (size_t i = 0; i < kNumReaders; ++i) {
     manager.addTask(
         [reader = q.getReader(), &q, &totalReads, i, kTotalWrites]() mutable {
           size_t numReads{0};
@@ -53,7 +53,7 @@ TEST(ReplicateQueueTest, Test) {
 
   // Add writer task
   manager.addTask([&q]() {
-    for (int i = 0; i < kTotalWrites; ++i) {
+    for (size_t i = 0; i < kTotalWrites; ++i) {
       q.push(i);
     }
     LOG(INFO) << "Writer finished pushing " << kTotalWrites << " messages.";

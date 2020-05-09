@@ -147,7 +147,7 @@ class FibHandlerFixture : public testing::TestWithParam<bool> {
             .get());
 
     // Add interfaces to fake netlink with index starting at 1
-    for (int i = 0; i < kInterfaces.size(); ++i) {
+    for (size_t i = 0; i < kInterfaces.size(); ++i) {
       ASSERT_EQ(
           0,
           nlSock_

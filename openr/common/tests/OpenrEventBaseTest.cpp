@@ -190,7 +190,7 @@ TEST_F(OpenrEventBaseTestFixture, ZmqSocketPollTest) {
   });
 
   // Send messages on pub socket
-  for (int i = 0; i < expectedMsgs; ++i) {
+  for (size_t i = 0; i < expectedMsgs; ++i) {
     VLOG(3) << "Sending " << i + 1;
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -207,7 +207,7 @@ TEST_F(OpenrEventBaseTestFixture, ZmqSocketPollTest) {
 
   // Send messages again
   rcvdMsgs = 0;
-  for (int i = 0; i < expectedMsgs; ++i) {
+  for (size_t i = 0; i < expectedMsgs; ++i) {
     EXPECT_TRUE(pubSocket.sendOne(msg).hasValue());
   }
 

@@ -127,7 +127,7 @@ TEST(RWQueueTest, MultipleReadersWriters) {
 
   // Add reader task
   std::atomic<size_t> totalReads{0};
-  for (int i = 0; i < kNumReaders; ++i) {
+  for (size_t i = 0; i < kNumReaders; ++i) {
     manager.addTask([&q, &totalReads, i]() {
       size_t numReads{0};
       while (true) {
@@ -151,9 +151,9 @@ TEST(RWQueueTest, MultipleReadersWriters) {
   }
 
   // Add writer task
-  for (int i = 0; i < kNumWriters; ++i) {
+  for (size_t i = 0; i < kNumWriters; ++i) {
     manager.addTask([&q, i]() {
-      for (int j = 0; j < kCountPerWriter; ++j) {
+      for (size_t j = 0; j < kCountPerWriter; ++j) {
         const size_t num = i * kCountPerWriter + j;
         VLOG(1) << "Writer" << i << " sending " << num;
         q.push(num);
@@ -176,7 +176,7 @@ TEST(RWQueueTest, MultiThreadTest) {
 
   // Add reader task
   std::atomic<size_t> totalReads{0};
-  for (int i = 0; i < kNumReaders; ++i) {
+  for (size_t i = 0; i < kNumReaders; ++i) {
     evbs.emplace_back(std::make_unique<folly::EventBase>());
     folly::fibers::getFiberManager(*evbs.back())
         .addTask([&q, &totalReads, i]() {
@@ -203,10 +203,10 @@ TEST(RWQueueTest, MultiThreadTest) {
   }
 
   // Add writer task
-  for (int i = 0; i < kNumWriters; ++i) {
+  for (size_t i = 0; i < kNumWriters; ++i) {
     evbs.emplace_back(std::make_unique<folly::EventBase>());
     folly::fibers::getFiberManager(*evbs.back()).addTask([&q, i]() {
-      for (int j = 0; j < kCountPerWriter; ++j) {
+      for (size_t j = 0; j < kCountPerWriter; ++j) {
         const size_t num = i * kCountPerWriter + j;
         VLOG(1) << "Writer" << i << " sending " << num;
         q.push(num);
@@ -235,8 +235,10 @@ TEST(RWQueueTest, CoroTest) {
   ASSERT_EQ(kNumReaders, kNumWriters);
   std::atomic<size_t> totalReads{0};
 
-  auto readerCoro = [&totalReads](int readerId, RWQueue<int>& q, size_t count)
-      -> folly::coro::Task<void> {
+  auto readerCoro = [&totalReads](
+                        size_t readerId,
+                        RWQueue<int>& q,
+                        size_t count) -> folly::coro::Task<void> {
     int numReads = 0;
     while (true) {
       try {
@@ -262,10 +264,10 @@ TEST(RWQueueTest, CoroTest) {
     co_return;
   };
 
-  auto writerCoro = [](int writerId,
+  auto writerCoro = [](size_t writerId,
                        RWQueue<int>& q,
                        size_t count) -> folly::coro::Task<void> {
-    for (int i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
       q.push(i);
       // VLOG(1) << "Writer " << writerId << " sending " << i;
     }

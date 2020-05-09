@@ -120,7 +120,7 @@ class SparkFixture : public testing::Test {
   createSpark(
       std::string const& domainName,
       std::string const& myNodeName,
-      int sparkNum,
+      int /* sparkNum */,
       std::chrono::milliseconds holdTime = kHoldTime,
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,

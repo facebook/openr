@@ -43,7 +43,7 @@ ReplicateQueue<ValueType>::push(ValueTypeT&& value) {
 
   // Replicate messages
   if (readers.size()) {
-    for (int i = 0; i < readers.size() - 1; i++) {
+    for (size_t i = 0; i < readers.size() - 1; i++) {
       readers.at(i)->push(ValueType(value)); // Intended copy
     }
     // Perfect forwarding for last reader

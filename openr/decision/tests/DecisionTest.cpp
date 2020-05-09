@@ -3865,7 +3865,8 @@ class DecisionTestFixture : public ::testing::Test {
   thrift::RouteDatabaseDelta
   recvMyRouteDb(
       const string& /* myNodeName */,
-      const apache::thrift::CompactSerializer& serializer) {
+      // TODO: Remove unused argument serializer
+      const apache::thrift::CompactSerializer& /* serializer */) {
     auto maybeRouteDb = routeUpdatesQueueReader.get();
     EXPECT_FALSE(maybeRouteDb.hasError());
     auto routeDbDelta = maybeRouteDb.value();

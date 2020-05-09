@@ -1,6 +1,9 @@
-#
-# Copyright 2004-present Facebook. All Rights Reserved.
-#
+/*
+ * Copyright (c) 2014-present, Facebook, Inc.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 namespace cpp2 openr.thrift
 namespace py openr.BgpConfig
@@ -176,8 +179,8 @@ struct BgpPeer {
   // 22: optional string ingress_policy_name;
   // 23: optional string egress_policy_name;
 
-  /**
-   * Local-AS# for this peer. Only valid for eBGP peers.
+  /*
+   * Local-AS number for this peer. Only valid for eBGP peers.
    * Overrides the global config's local-as for this peer.
    * Reference: RFC-7705
    */

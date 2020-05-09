@@ -490,7 +490,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
 
   kvStoreClient->subscribeKey(
       keyStr,
-      [&](std::string const& _, std::optional<thrift::Value> val) mutable {
+      [&](std::string const&, std::optional<thrift::Value> val) mutable {
         ASSERT_TRUE(val.has_value());
         auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
             val->value_ref().value(), serializer);

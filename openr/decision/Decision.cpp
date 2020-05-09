@@ -63,13 +63,13 @@ const int kStoreSubReceiveHwm{0};
 // return True
 bool
 pathAInPathB(const Path& a, const Path& b) {
-  for (int i = 0; i < b.size(); i++) {
+  for (size_t i = 0; i < b.size(); i++) {
     if (b[i].second == a[0].second) {
       if (a.size() > (b.size() - i)) {
         continue;
       }
       bool equal = true;
-      for (int j = 0; j < a.size(); j++) {
+      for (size_t j = 0; j < a.size(); j++) {
         if (a[j].second != b[i + j].second) {
           equal = false;
           break;
@@ -1037,7 +1037,8 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
     std::string const& myNodeName,
     thrift::IpPrefix const& prefix,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes,
-    bool const isV4) {
+    // TODO: Remove unused isV4 variable
+    bool const /* isV4 */) {
   BestPathCalResult ret;
   const auto& mySpfResult = spfResults_.at(myNodeName);
   for (auto const& kv : nodePrefixes) {
@@ -1734,7 +1735,8 @@ Decision::Decision(
     messaging::RQueue<thrift::Publication> kvStoreUpdatesQueue,
     messaging::RQueue<thrift::RouteDatabaseDelta> staticRoutesUpdateQueue,
     messaging::ReplicateQueue<thrift::RouteDatabaseDelta>& routeUpdatesQueue,
-    fbzmq::Context& zmqContext)
+    // TODO: Remove unused zmqContext argument
+    fbzmq::Context& /* zmqContext */)
     : config_(config),
       processUpdatesBackoff_(debounceMinDur, debounceMaxDur),
       routeUpdatesQueue_(routeUpdatesQueue),

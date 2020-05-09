@@ -558,8 +558,6 @@ TEST(KvStore, compareValuesTest) {
 // Test counter reporting
 //
 TEST_F(KvStoreTestFixture, CounterReport) {
-  CompactSerializer serializer;
-
   const std::unordered_map<std::string, thrift::PeerSpec> emptyPeers;
   auto kvStore = createKvStore("node1", emptyPeers);
   kvStore->run();
@@ -2026,25 +2024,23 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   auto newCounters = fb303::fbData->getCounters();
 
   // Verify counters
-  for (auto& store : stores_) {
-    LOG(INFO) << "Verifying global counters for 16 stores";
-    EXPECT_LE(
-        oldCounters["kvstore.received_publications.count"] + 17,
-        newCounters["kvstore.received_publications.count"]);
-    EXPECT_LE(
-        oldCounters["kvstore.received_key_vals.sum"] + 17,
-        newCounters["kvstore.received_key_vals.sum"]);
-    EXPECT_EQ(
-        oldCounters["kvstore.updated_key_vals.sum"] + 17,
-        newCounters["kvstore.updated_key_vals.sum"]);
-    int sentOffset = 16;
-    EXPECT_EQ(
-        oldCounters["kvstore.sent_publications.count"] + sentOffset,
-        newCounters["kvstore.sent_publications.count"]);
-    EXPECT_EQ(
-        oldCounters["kvstore.sent_key_vals.sum"] + sentOffset,
-        newCounters["kvstore.sent_key_vals.sum"]);
-  }
+  LOG(INFO) << "Verifying global counters for 16 stores";
+  EXPECT_LE(
+      oldCounters["kvstore.received_publications.count"] + 17,
+      newCounters["kvstore.received_publications.count"]);
+  EXPECT_LE(
+      oldCounters["kvstore.received_key_vals.sum"] + 17,
+      newCounters["kvstore.received_key_vals.sum"]);
+  EXPECT_EQ(
+      oldCounters["kvstore.updated_key_vals.sum"] + 17,
+      newCounters["kvstore.updated_key_vals.sum"]);
+  int sentOffset = 16;
+  EXPECT_EQ(
+      oldCounters["kvstore.sent_publications.count"] + sentOffset,
+      newCounters["kvstore.sent_publications.count"]);
+  EXPECT_EQ(
+      oldCounters["kvstore.sent_key_vals.sum"] + sentOffset,
+      newCounters["kvstore.sent_key_vals.sum"]);
 }
 
 /**

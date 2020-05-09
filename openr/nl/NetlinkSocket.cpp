@@ -65,7 +65,7 @@ NetlinkSocket::~NetlinkSocket() {
 
 void
 NetlinkSocket::doHandleRouteEvent(
-    Route route, bool runHandler, bool updateUnicastRoute) noexcept {
+    Route route, bool /* runHandler */, bool updateUnicastRoute) noexcept {
   auto routeCopy = Route(route);
   try {
     doUpdateRouteCache(std::move(route), updateUnicastRoute);

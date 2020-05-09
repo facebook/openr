@@ -484,7 +484,7 @@ main(int argc, char** argv) {
   }
 
   // Create Spark instance for neighbor discovery
-  auto spark = startEventBase(
+  startEventBase(
       allThreads,
       orderedEvbs,
       watchdog,
