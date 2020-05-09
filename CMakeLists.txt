@@ -492,7 +492,6 @@ install(
 
 option(BUILD_TESTS "BUILD_TESTS" ON)
 option(ADD_ROOT_TESTS "ADD_ROOT_TESTS" ON)
-option(ENABLE_NETLINK_SOCKET_TESTS "ENABLE_NETLINK_SOCKET_TESTS" ON)
 
 if(BUILD_TESTS)
 
@@ -710,19 +709,18 @@ if(BUILD_TESTS)
       DESTINATION sbin/tests/openr/nl
     )
 
-    if(ENABLE_NETLINK_SOCKET_TESTS STREQUAL "ON")
-      add_openr_test(NetlinkSocketTest netlink_socket_test
-        SOURCES
-          openr/nl/tests/NetlinkSocketTest.cpp
-        DESTINATION sbin/tests/openr/nl
-      )
+    add_openr_test(NetlinkSocketTest netlink_socket_test
+      SOURCES
+        openr/nl/tests/NetlinkSocketTest.cpp
+      DESTINATION sbin/tests/openr/nl
+    )
 
-      add_openr_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test
-        SOURCES
-          openr/nl/tests/NetlinkSocketSubscribeTest.cpp
-        DESTINATION sbin/tests/openr/nl
-      )
-    endif()
+    add_openr_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test
+      SOURCES
+        openr/nl/tests/NetlinkSocketSubscribeTest.cpp
+      DESTINATION sbin/tests/openr/nl
+    )
+
   endif()
 
   add_openr_test(PrefixManagerTest prefix_manager_test
@@ -759,6 +757,18 @@ if(BUILD_TESTS)
     LIBRARIES
       Folly::folly
     DESTINATION sbin/tests/openr/messaging
+  )
+
+  add_openr_test(NetlinkFibHandlerTest netlink_fib_handler_test
+    SOURCES
+      openr/platform/tests/NetlinkFibHandlerTest.cpp
+    DESTINATION sbin/tests/openr/platform
+  )
+
+  add_openr_test(NetlinkSystemHandlerTest netlink_system_handler_test
+    SOURCES
+      openr/platform/tests/NetlinkSystemHandlerTest.cpp
+    DESTINATION sbin/tests/openr/platform
   )
 
   #
