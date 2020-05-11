@@ -501,7 +501,7 @@ class NlMessageFixture : public ::testing::Test {
   std::unique_ptr<NetlinkProtocolSocket> nlSock{nullptr};
 };
 
-TEST_F(NlMessageFixture, EncodeLabel) {
+TEST(NetlinkRouteMessage, EncodeLabel) {
   std::vector<std::pair<uint32_t, uint32_t>> labels;
   labels.push_back(std::make_pair(0x0, 0 | 0x100));
   labels.push_back(std::make_pair(0x1, 0x1000 | 0x100));
@@ -517,6 +517,32 @@ TEST_F(NlMessageFixture, EncodeLabel) {
   for (const auto& x : labels) {
     EXPECT_EQ(x.second, ntohl(NetlinkRouteMessage::encodeLabel(x.first, true)));
   }
+}
+
+/**
+ * This test intends to test the delayed looping of event-base. Request is
+ * made before event loop is started. This will help ensuring that socket
+ * initialization and message sent happens inside event loop in sequence even
+ * though message is requested to be sent before.
+ */
+TEST(NetlinkProtocolSocket, DelayedEventBase) {
+  folly::EventBase evb;
+
+  // Create netlink protocol socket
+  NetlinkProtocolSocket nlSock(&evb);
+
+  // Get the request
+  // NOTE: Eventbase is not started yet
+  auto links = nlSock.getAllLinks();
+
+  // Start event thread
+  std::thread evbThread([&]() { evb.loopForever(); });
+
+  // Wait for links (SemiFuture) to get fulfilled
+  EXPECT_NO_THROW(std::move(links).get());
+
+  evb.terminateLoopSoon();
+  evbThread.join();
 }
 
 TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
