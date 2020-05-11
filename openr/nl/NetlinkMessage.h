@@ -48,6 +48,9 @@ class NetlinkMessage {
   // get pointer to NLMSG Header
   struct nlmsghdr* getMessagePtr();
 
+  // get underlying nlmsg_type
+  uint16_t getMessageType() const;
+
   // get current length
   uint32_t getDataLength() const;
 
@@ -99,34 +102,6 @@ class NetlinkMessage {
    * can fulfil the `Promise<vector<OBJ>>`
    */
   virtual void setReturnStatus(int status);
-
-  /**
-   * Netlink MessageType denotes the type of request sent to the kernel, so that
-   * when we receive a response from the kernel (matched by sequence number), we
-   * can process them accordingly based on the request. For example, when we get
-   * a RTM_NEWADDR packet, it could correspond to GET_ALL_ADDRS or
-   * ADD_ADDR and NetlinkProtocolSocket will invoke the address callback
-   * only for ADD_ADDR
-   */
-  // TODO: Rename this to `Type` .. `NetlinkMessage::Type` is intuitive enough
-  enum class MessageType {
-    GET_ALL_LINKS,
-    GET_ALL_ADDRS,
-    GET_ADDR,
-    ADD_ADDR,
-    DEL_ADDR,
-    GET_ALL_NEIGHBORS,
-    GET_ALL_ROUTES,
-    GET_ROUTE,
-    ADD_ROUTE,
-    DEL_ROUTE
-  } messageType_;
-
-  // get Message Type
-  NetlinkMessage::MessageType getMessageType() const;
-
-  // set Message Type
-  void setMessageType(NetlinkMessage::MessageType type);
 
   std::chrono::steady_clock::time_point
   getCreateTs() const {

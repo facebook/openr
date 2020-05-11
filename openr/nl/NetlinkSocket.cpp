@@ -17,7 +17,6 @@ NetlinkSocket::NetlinkSocket(
     : evl_(evl), handler_(handler), nlSock_(std::move(nlSock)) {
   CHECK(evl_ != nullptr) << "Missing event loop.";
 
-  // TODO: Create nlSock_ inline here and share an event-loop
   CHECK(nlSock_ != nullptr) << "Missing NetlinkProtocolSocket";
 
   // Instantiate local link and neighbor caches

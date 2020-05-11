@@ -311,31 +311,24 @@ NetlinkProtocolSocket::processMessage(
         break;
       }
 
+      bool isNotification = nlSeqIt == nlSeqNumMap_.end();
       if (nlSeqIt != nlSeqNumMap_.end()) {
         // Extend message timer as we received a valid ack
         nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
         // Response to a corresponding request
         auto& request = nlSeqIt->second;
-        if (request->getMessageType() ==
-            NetlinkMessage::MessageType::GET_ALL_ADDRS) {
+        if (request->getMessageType() == RTM_GETADDR) {
           // Received link in response to request
           request->rcvdIfAddress(std::move(addr));
         } else {
-          // TODO: Make the notifications consistent across all the APIs. We
-          // can also invoke notifcation on success of addition or removal.
-          //
           // Response to a add/del request - generate addr event for handler.
           // This occurs when we add/del IPv4 addresses generates address event
           // with the same sequence as the original request.
-          //
-          // IfAddress notification
-          VLOG(2) << "Netlink address event. " << addr.str();
-          fbData->addStatValue("netlink.notifications.addr", 1, fb303::SUM);
-          if (addrEventCB_) {
-            addrEventCB_(std::move(addr), true);
-          }
+          isNotification = true;
         }
-      } else {
+      }
+
+      if (isNotification) {
         // IfAddress notification
         VLOG(2) << "Netlink address event. " << addr.str();
         fbData->addStatValue("netlink.notifications.addr", 1, fb303::SUM);
@@ -527,7 +520,6 @@ NetlinkProtocolSocket::addIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   auto future = addrMsg->getSemiFuture();
 
   // Initialize Netlink message fields to add interface address
-  addrMsg->setMessageType(NetlinkMessage::MessageType::ADD_ADDR);
   int status = addrMsg->addOrDeleteIfAddress(ifAddr, RTM_NEWADDR);
   if (status != 0) {
     addrMsg->setReturnStatus(status);
@@ -545,7 +537,6 @@ NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   auto future = addrMsg->getSemiFuture();
 
   // Initialize Netlink message fields to delete interface address
-  addrMsg->setMessageType(NetlinkMessage::MessageType::DEL_ADDR);
   int status = addrMsg->addOrDeleteIfAddress(ifAddr, RTM_DELADDR);
   if (status != 0) {
     addrMsg->setReturnStatus(status);
@@ -577,7 +568,6 @@ NetlinkProtocolSocket::getAllIfAddresses() {
 
   // Initialize message fields to get all addresses
   addrMsg->init(RTM_GETADDR);
-  addrMsg->setMessageType(NetlinkMessage::MessageType::GET_ALL_ADDRS);
   addNetlinkMessage(std::move(addrMsg));
 
   return future;

@@ -28,6 +28,11 @@ NetlinkMessage::getMessagePtr() {
   return msghdr;
 }
 
+uint16_t
+NetlinkMessage::getMessageType() const {
+  return msghdr->nlmsg_type;
+}
+
 uint32_t
 NetlinkMessage::getDataLength() const {
   return msghdr->nlmsg_len;
@@ -98,18 +103,6 @@ NetlinkMessage::setReturnStatus(int status) {
   VLOG(1) << "Netlink request completed. retval=" << status << ", "
           << folly::errnoStr(std::abs(status));
   promise_.setValue(status);
-}
-
-// get Message Type
-NetlinkMessage::MessageType
-NetlinkMessage::getMessageType() const {
-  return messageType_;
-}
-
-// set Message Type
-void
-NetlinkMessage::setMessageType(NetlinkMessage::MessageType type) {
-  messageType_ = type;
 }
 
 } // namespace openr::fbnl
