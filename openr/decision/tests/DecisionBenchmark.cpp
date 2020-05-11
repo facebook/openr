@@ -27,8 +27,9 @@
  * benchmarking and passes a parameter to another one. This is common for
  * benchmarks that need a "problem size" in addition to "number of iterations".
  */
-#define BENCHMARK_COUNTERS_PARAM(name, counters, param) \
-  BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param, param)
+#define BENCHMARK_COUNTERS_PARAM(name, counters, size, forwarding) \
+  BENCHMARK_COUNTERS_NAME_PARAM(                                   \
+      name, counters, FB_CONCATENATE(size, forwarding), size, forwarding)
 
 /*
  * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
@@ -136,10 +137,17 @@ class DecisionWrapper {
   createPrefixValue(
       const std::string& nodeId,
       int64_t version,
-      const std::vector<thrift::IpPrefix>& prefixes) {
+      const std::vector<thrift::IpPrefix>& prefixes,
+      thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
     std::vector<thrift::PrefixEntry> prefixEntries;
     for (const auto& prefix : prefixes) {
       prefixEntries.emplace_back(createPrefixEntry(prefix));
+      prefixEntries.back().forwardingAlgorithm = forwardingAlgorithm;
+      if (thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
+          forwardingAlgorithm) {
+        prefixEntries.back().forwardingType =
+            thrift::PrefixForwardingType::SR_MPLS;
+      }
     }
     return thrift::Value(
         FRAGILE,
@@ -398,7 +406,9 @@ createGridAdjacencys(const int row, const int col, const uint32_t n) {
 // Create a grid topology
 thrift::Publication
 createGrid(
-    const std::shared_ptr<DecisionWrapper>& decisionWrapper, const int n) {
+    const std::shared_ptr<DecisionWrapper>& decisionWrapper,
+    const int n,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
   LOG(INFO) << "grid: " << n << " by " << n;
   thrift::Publication initialPub;
 
@@ -417,7 +427,8 @@ createGrid(
       auto addrV6 = toIpPrefix(nodeToPrefixV6(nodeId));
       initialPub.keyVals.emplace(
           folly::sformat("prefix:{}", nodeName),
-          decisionWrapper->createPrefixValue(nodeName, 1, {addrV6}));
+          decisionWrapper->createPrefixValue(
+              nodeName, 1, {addrV6}, forwardingAlgorithm));
     }
   }
   return initialPub;
@@ -681,12 +692,15 @@ insertUserCounters(
 //
 static void
 BM_DecisionGrid(
-    folly::UserCounters& counters, uint32_t iters, uint32_t numOfSws) {
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfSws,
+    thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
   auto suspender = folly::BenchmarkSuspender();
   const std::string nodeName{"1"};
   auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
   int n = std::sqrt(numOfSws);
-  auto initialPub = createGrid(decisionWrapper, n);
+  auto initialPub = createGrid(decisionWrapper, n, forwardingAlgorithm);
 
   //
   // Publish initial link state info to KvStore, This should trigger the
@@ -723,7 +737,10 @@ BM_DecisionGrid(
 //
 static void
 BM_DecisionFabric(
-    folly::UserCounters& counters, uint32_t iters, uint32_t numOfSws) {
+    folly::UserCounters& counters,
+    uint32_t iters,
+    uint32_t numOfSws,
+    thrift::PrefixForwardingAlgorithm /* TODO use this */) {
   auto suspender = folly::BenchmarkSuspender();
   const std::string nodeName = folly::sformat("{}-{}", kFswMarker, "0-0");
   auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
@@ -786,11 +803,18 @@ BM_DecisionFabric(
   insertUserCounters(counters, iters, processTimes);
 }
 
+auto SP_ECMP = thrift::PrefixForwardingAlgorithm::SP_ECMP;
+auto KSP2_ED_ECMP = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+
 // The integer parameter is the number of nodes in grid topology
-BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 10);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 100);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 10000);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 10, SP_ECMP);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 100, SP_ECMP);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 1000, SP_ECMP);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 10000, SP_ECMP);
+
+BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 10, KSP2_ED_ECMP);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 100, KSP2_ED_ECMP);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 1000, KSP2_ED_ECMP);
 
 // The integer parameter is numOfGivenNodes in topology,
 // which >= numOfActualNodesInTopo.
@@ -798,9 +822,9 @@ BENCHMARK_COUNTERS_PARAM(BM_DecisionGrid, counters, 10000);
 // numOfActualNodesInTopo = numOfSsws + numOfPods * numOfFswsAndRswsPerPod
 // The minimum number of switches of one pod =
 // numOfPlanes * numOfSswsPerPlane + numOfPods * numOfFswsAndRswsPerPod = 344
-BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 344);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 5000);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 344, SP_ECMP);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 1000, SP_ECMP);
+BENCHMARK_COUNTERS_PARAM(BM_DecisionFabric, counters, 5000, SP_ECMP);
 
 } // namespace openr
 
