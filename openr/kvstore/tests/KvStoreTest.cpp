@@ -833,7 +833,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     ASSERT_EQ(1, publication.keyVals.count(key));
     auto& pubValue = publication.keyVals.at(key);
     // TTL decremented by 1 before it gets forwarded out
-    EXPECT_FALSE(pubValue.value.has_value());
+    EXPECT_FALSE(pubValue.value_ref().has_value());
     EXPECT_GE(thriftValue.ttl, pubValue.ttl + 1);
     EXPECT_EQ(thriftValue.version, pubValue.version);
     EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
@@ -866,7 +866,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     ASSERT_EQ(1, publication.keyVals.count(key));
     auto& pubValue = publication.keyVals.at(key);
     // TTL should remain infinite
-    EXPECT_FALSE(pubValue.value.has_value());
+    EXPECT_FALSE(pubValue.value_ref().has_value());
     EXPECT_EQ(Constants::kTtlInfinity, pubValue.ttl);
     EXPECT_EQ(thriftValue.version, pubValue.version);
     EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
@@ -898,7 +898,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     ASSERT_EQ(1, publication.keyVals.count(key));
     auto& pubValue = publication.keyVals.at(key);
     // TTL decremented by 1 before it gets forwarded out
-    EXPECT_FALSE(pubValue.value.has_value());
+    EXPECT_FALSE(pubValue.value_ref().has_value());
     EXPECT_GE(thriftValue.ttl, pubValue.ttl + 1);
     EXPECT_EQ(thriftValue.version, pubValue.version);
     EXPECT_EQ(thriftValue.originatorId, pubValue.originatorId);
@@ -1368,13 +1368,13 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo1 = sptInfos.infos.at("r1");
       EXPECT_TRUE(sptInfo1.passive);
       EXPECT_EQ(sptInfo1.cost, 2);
-      EXPECT_TRUE(sptInfo1.parent.has_value());
+      EXPECT_TRUE(sptInfo1.parent_ref().has_value());
       r0Parent = *sptInfo1.parent_ref();
       EXPECT_TRUE(r0Parent == "n0" or r0Parent == "n1");
       EXPECT_EQ(sptInfo1.children.size(), 0);
 
       // validate flooding-peer-info
-      EXPECT_TRUE(sptInfos.floodRootId.has_value());
+      EXPECT_TRUE(sptInfos.floodRootId_ref().has_value());
       EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
       EXPECT_EQ(sptInfos.floodPeers.size(), 2);
       EXPECT_EQ(sptInfos.floodPeers.count("n0"), 1);
@@ -1401,13 +1401,13 @@ TEST_F(KvStoreTestFixture, DualTest) {
       const auto& sptInfo0 = sptInfos.infos.at("r0");
       EXPECT_TRUE(sptInfo0.passive);
       EXPECT_EQ(sptInfo0.cost, 2);
-      EXPECT_TRUE(sptInfo0.parent.has_value());
+      EXPECT_TRUE(sptInfo0.parent_ref().has_value());
       r1Parent = *sptInfo0.parent_ref();
       EXPECT_TRUE(r1Parent == "n0" or r1Parent == "n1");
       EXPECT_EQ(sptInfo0.children.size(), 0);
 
       // validate flooding-peer-info
-      EXPECT_TRUE(sptInfos.floodRootId.has_value());
+      EXPECT_TRUE(sptInfos.floodRootId_ref().has_value());
       EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
       EXPECT_EQ(sptInfos.floodPeers.size(), 1);
       EXPECT_EQ(sptInfos.floodPeers.count(r1Parent), 1);
@@ -1642,7 +1642,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     EXPECT_EQ(sptInfo1.children.size(), 0);
 
     // validate flooding-peer-info
-    EXPECT_TRUE(sptInfos.floodRootId.has_value());
+    EXPECT_TRUE(sptInfos.floodRootId_ref().has_value());
     EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
     EXPECT_EQ(sptInfos.floodPeers.size(), 1);
     EXPECT_EQ(sptInfos.floodPeers.count("n1"), 1);
@@ -1673,7 +1673,7 @@ TEST_F(KvStoreTestFixture, DualTest) {
     EXPECT_EQ(sptInfo1.children.count("n1"), 1);
 
     // validate flooding-peer-info
-    EXPECT_TRUE(sptInfos.floodRootId.has_value());
+    EXPECT_TRUE(sptInfos.floodRootId_ref().has_value());
     EXPECT_EQ(*sptInfos.floodRootId_ref(), "r0");
     EXPECT_EQ(sptInfos.floodPeers.size(), 2);
     EXPECT_EQ(sptInfos.floodPeers.count("n0"), 1);
@@ -2140,8 +2140,8 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     EXPECT_EQ(thriftValLast, pub2.keyVals.at(kKeyName));
 
     // Verify nodeIds attribute of publication
-    ASSERT_TRUE(pub1.nodeIds.has_value());
-    ASSERT_TRUE(pub2.nodeIds.has_value());
+    ASSERT_TRUE(pub1.nodeIds_ref().has_value());
+    ASSERT_TRUE(pub2.nodeIds_ref().has_value());
     EXPECT_EQ(
         std::vector<std::string>{stores[0]->nodeId},
         pub1.nodeIds_ref().value());
