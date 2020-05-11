@@ -14,6 +14,7 @@
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventHandler.h>
+#include <folly/io/async/NotificationQueue.h>
 
 #include <openr/nl/NetlinkMessage.h>
 #include <openr/nl/NetlinkRoute.h>
@@ -216,10 +217,6 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // Implement EventHandler callback for reading netlink messages
   void handlerReady(uint16_t events) noexcept override;
 
-  // Buffer netlink message to the queue_. Invoke sendNetlinkMessage if there
-  // are no messages in flight
-  void addNetlinkMessage(std::unique_ptr<NetlinkMessage> nlmsg);
-
   // Send a message batch to netlink socket from queue_
   void sendNetlinkMessage();
 
@@ -239,6 +236,14 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // Event base for serializing read/write requests to netlink socket. Also
   // ensure thread safety of private member variables.
   folly::EventBase* evb_{nullptr};
+
+  // Notification queue for thread safe enqueuing of messages from external
+  // threads. All the messages enqueued are processed by the event thread.
+  folly::NotificationQueue<std::unique_ptr<NetlinkMessage>> notifQueue_;
+  std::unique_ptr<
+      folly::NotificationQueue<std::unique_ptr<NetlinkMessage>>::Consumer,
+      folly::DelayedDestruction::Destructor>
+      notifConsumer_;
 
   // Use new IPv6 route replace semantics. See documentation for addRoute(...)
   const bool enableIPv6RouteReplaceSemantics_{false};

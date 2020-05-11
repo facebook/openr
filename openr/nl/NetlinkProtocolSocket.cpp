@@ -53,9 +53,48 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
     sendNetlinkMessage();
   });
 
+  // Create consumer for procesing netlink messages to be sent in an event loop
+  notifConsumer_ = folly::NotificationQueue<std::unique_ptr<NetlinkMessage>>::
+      Consumer::make([this](std::unique_ptr<NetlinkMessage> && nlmsg) noexcept {
+        msgQueue_.push(std::move(nlmsg));
+        // Invoke send messages API if socket is initialized and no in flight
+        // messages
+        if (nlSock_ >= 0 && !nlMessageTimer_->isScheduled()) {
+          sendNetlinkMessage();
+        }
+      });
+
   // Initialize the socket in an event loop
   nlInitTimer_ = folly::AsyncTimeout::schedule(
-      std::chrono::milliseconds(0), *evb_, [this]() noexcept { init(); });
+      std::chrono::milliseconds(0), *evb_, [this]() noexcept {
+        init();
+        notifConsumer_->startConsuming(evb_, &notifQueue_);
+      });
+}
+
+NetlinkProtocolSocket::~NetlinkProtocolSocket() {
+  LOG(INFO) << "Shutting down netlink protocol socket";
+
+  // Clear all requests expecting a reply
+  for (auto& kv : nlSeqNumMap_) {
+    LOG(WARNING) << "Clearing netlink request. seq=" << kv.first
+                 << ", message-type=" << kv.second->getMessageType()
+                 << ", message-size=" << kv.second->getDataLength();
+    // Set timeout to pending request
+    kv.second->setReturnStatus(-ESHUTDOWN);
+  }
+  nlSeqNumMap_.clear(); // Clear all timed out requests
+
+  // Clear all requests that yet needs to be sent
+  std::unique_ptr<NetlinkMessage> msg;
+  while (notifQueue_.tryConsume(msg)) {
+    CHECK_NOTNULL(msg.get());
+    LOG(WARNING) << "Clearing netlink message, not yet send";
+    msg->setReturnStatus(-ESHUTDOWN);
+  }
+
+  LOG(INFO) << "Closing netlink socket. fd=" << nlSock_ << ", port=" << portId_;
+  close(nlSock_);
 }
 
 void
@@ -408,26 +447,6 @@ NetlinkProtocolSocket::recvNetlinkMessage() {
   processMessage(recvMsg, static_cast<uint32_t>(bytesRead));
 }
 
-NetlinkProtocolSocket::~NetlinkProtocolSocket() {
-  LOG(INFO) << "Closing netlink socket. fd=" << nlSock_ << ", port=" << portId_;
-  close(nlSock_);
-}
-
-void
-NetlinkProtocolSocket::addNetlinkMessage(
-    std::unique_ptr<NetlinkMessage> nlmsg) {
-  // TODO: Explore Use NotificationQueue so that pending messages can be
-  // discarded to have clean exit code.
-  evb_->runInEventBaseThread([this, nlmsg = std::move(nlmsg)]() mutable {
-    msgQueue_.push(std::move(nlmsg));
-    // Invoke send messages API if socket is initialized and no in flight
-    // messages
-    if (nlSock_ >= 0 && !nlMessageTimer_->isScheduled()) {
-      sendNetlinkMessage();
-    }
-  });
-}
-
 folly::SemiFuture<int>
 NetlinkProtocolSocket::collectReturnStatus(
     std::vector<folly::SemiFuture<int>>&& futures,
@@ -479,7 +498,7 @@ NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
   if (status != 0) {
     rtmMsg->setReturnStatus(status);
   } else {
-    addNetlinkMessage(std::move(rtmMsg));
+    notifQueue_.putMessage(std::move(rtmMsg));
   }
 
   return future;
@@ -507,7 +526,7 @@ NetlinkProtocolSocket::deleteRoute(const openr::fbnl::Route& route) {
   if (status != 0) {
     rtmMsg->setReturnStatus(status);
   } else {
-    addNetlinkMessage(std::move(rtmMsg));
+    notifQueue_.putMessage(std::move(rtmMsg));
   }
 
   return future;
@@ -524,7 +543,7 @@ NetlinkProtocolSocket::addIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   if (status != 0) {
     addrMsg->setReturnStatus(status);
   } else {
-    addNetlinkMessage(std::move(addrMsg));
+    notifQueue_.putMessage(std::move(addrMsg));
   }
 
   return future;
@@ -541,7 +560,7 @@ NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
   if (status != 0) {
     addrMsg->setReturnStatus(status);
   } else {
-    addNetlinkMessage(std::move(addrMsg));
+    notifQueue_.putMessage(std::move(addrMsg));
   }
 
   return future;
@@ -555,7 +574,7 @@ NetlinkProtocolSocket::getAllLinks() {
 
   // Initialize message fields to get all links
   linkMsg->init(RTM_GETLINK, 0);
-  addNetlinkMessage(std::move(linkMsg));
+  notifQueue_.putMessage(std::move(linkMsg));
 
   return future;
 }
@@ -568,7 +587,7 @@ NetlinkProtocolSocket::getAllIfAddresses() {
 
   // Initialize message fields to get all addresses
   addrMsg->init(RTM_GETADDR);
-  addNetlinkMessage(std::move(addrMsg));
+  notifQueue_.putMessage(std::move(addrMsg));
 
   return future;
 }
@@ -581,7 +600,7 @@ NetlinkProtocolSocket::getAllNeighbors() {
 
   // Initialize message fields to get all neighbors
   neighMsg->init(RTM_GETNEIGH, 0);
-  addNetlinkMessage(std::move(neighMsg));
+  notifQueue_.putMessage(std::move(neighMsg));
 
   return future;
 }
@@ -594,7 +613,7 @@ NetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
 
   // Initialize message fields to get all addresses
   routeMsg->init(RTM_GETROUTE, 0, filter);
-  addNetlinkMessage(std::move(routeMsg));
+  notifQueue_.putMessage(std::move(routeMsg));
 
   return future;
 }

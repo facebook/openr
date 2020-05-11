@@ -545,6 +545,30 @@ TEST(NetlinkProtocolSocket, DelayedEventBase) {
   evbThread.join();
 }
 
+/**
+ * Test safe destruction of socket and handling of pending requests
+ */
+TEST(NetlinkProtocolSocket, SafeDestruction) {
+  auto evb = std::make_unique<folly::EventBase>();
+
+  // Create netlink protocol socket
+  auto nlSock = std::make_unique<NetlinkProtocolSocket>(evb.get());
+
+  // Add a request
+  // NOTE: Eventbase is not running
+  auto linksSf = nlSock->getAllLinks();
+
+  // Destruct netlink socket
+  EXPECT_NO_THROW(nlSock.reset());
+
+  // Request should be set to timedout
+  ASSERT_TRUE(linksSf.isReady());
+  EXPECT_NO_THROW(std::move(linksSf).get());
+
+  // Reset event base and it shouldn't throw
+  EXPECT_NO_THROW(evb.reset());
+}
+
 TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
   // Add IPv6 route with one next hop and no labels
   // outoing IF is vethTestY
