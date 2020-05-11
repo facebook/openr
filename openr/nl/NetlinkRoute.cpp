@@ -48,7 +48,7 @@ NetlinkRouteMessage::setReturnStatus(int status) {
 void
 NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
   if (type != RTM_NEWROUTE && type != RTM_DELROUTE && type != RTM_GETROUTE) {
-    LOG(ERROR) << "Incorrect Netlink message type";
+    LOG(ERROR) << "Incorrect netlink message type";
     return;
   }
   // initialize netlink header
@@ -66,7 +66,7 @@ NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
     filters_.type = route.getType();
     filters_.protocol = route.getProtocolId();
 
-    VLOG(2) << "RTM_GETROUTE "
+    VLOG(3) << "RTM_GETROUTE "
             << " table=" << static_cast<int>(filters_.table)
             << " type=" << static_cast<int>(filters_.type)
             << " protocol=" << static_cast<int>(filters_.protocol)
@@ -268,7 +268,6 @@ NetlinkRouteMessage::addLabelNexthop(
   // abort immediately to bring attention
   CHECK(labels.value().size() <= kMaxLabels);
   for (auto label : labels.value()) {
-    VLOG(2) << "Pushing label: " << label;
     bool bos = i == labels.value().size() - 1 ? true : false;
     mplsLabel[i++].entry = encodeLabel(label, bos);
   }
@@ -342,7 +341,6 @@ NetlinkRouteMessage::addMultiPathNexthop(
   int result{0};
   const auto& paths = route.getNextHops();
   for (const auto& path : paths) {
-    VLOG(3) << path.str();
     rtnh->rtnh_len = sizeof(*rtnh);
     rta->rta_len += rtnh->rtnh_len;
     auto action = path.getLabelAction();
@@ -608,7 +606,7 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) {
   }
 
   auto route = routeBuilder.build();
-  VLOG(2) << route.str();
+  VLOG(3) << "Netlink parsed route message. " << route.str();
   return route;
 }
 
@@ -641,7 +639,6 @@ NetlinkRouteMessage::parseNextHops(
     }
     setMplsAction(nhBuilder, family);
     auto nexthop = nhBuilder.build();
-    VLOG(2) << nexthop.str();
     nextHops.emplace_back(nexthop);
     nhLen -= NLMSG_ALIGN(nh->rtnh_len);
     nh = RTNH_NEXT(nh);
@@ -655,8 +652,6 @@ NetlinkRouteMessage::addRoute(const Route& route) {
   auto ip = std::get<0>(pfix);
   auto plen = std::get<1>(pfix);
   auto addressFamily = route.getFamily();
-
-  VLOG(1) << "Adding route: " << route.str();
 
   if (addressFamily != AF_INET && addressFamily != AF_INET6) {
     LOG(ERROR) << "Address family is not AF_INET or AF_INET6";
@@ -748,7 +743,6 @@ NetlinkRouteMessage::deleteLabelRoute(const Route& route) {
     LOG(ERROR) << "Label not provided";
     return EINVAL;
   }
-  VLOG(1) << "Deleting label: " << route.str();
   mlabel.entry = encodeLabel(label.value(), true);
   return addAttributes(
       RTA_DST,
@@ -823,7 +817,7 @@ NetlinkLinkMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
   auto link = builder.build();
-  VLOG(2) << link.str();
+  VLOG(3) << "Netlink parsed link message. " << link.str();
   return link;
 }
 
@@ -951,7 +945,7 @@ NetlinkAddrMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
   auto addr = builder.build();
-  VLOG(2) << addr.str();
+  VLOG(3) << "Netlink parsed address message. " << addr.str();
   return addr;
 }
 
@@ -1041,7 +1035,7 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
   Neighbor neighbor = builder.build();
-  VLOG(2) << neighbor.str();
+  VLOG(3) << "Netlink parsed neighbor message. " << neighbor.str();
   return neighbor;
 }
 

@@ -12,6 +12,7 @@
 #include <openr/common/Util.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 
+using facebook::fb303::fbData;
 namespace fb303 = facebook::fb303;
 
 namespace openr::fbnl {
@@ -27,25 +28,28 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
     DCHECK(false) << "This shouldn't occur usually. Adding DCHECK to get "
                   << "attention in UTs";
 
-    fb303::fbData->addStatValue(
-        "netlink.message_timeouts", nlSeqNumMap_.size(), fb303::SUM);
+    fbData->addStatValue(
+        "netlink.requests.timeout", nlSeqNumMap_.size(), fb303::SUM);
 
     LOG(ERROR) << "Timed-out receiving ack for " << nlSeqNumMap_.size()
                << " message(s).";
+    fbData->addStatValue("netlink.errors", 1, fb303::SUM);
     for (auto& kv : nlSeqNumMap_) {
       LOG(ERROR) << "  Pending seq=" << kv.first << ", message-type="
                  << static_cast<int>(kv.second->getMessageType())
-                 << ", bytes-sent=" << kv.second->getDataLength();
+                 << ", message-size=" << kv.second->getDataLength();
+      // Set timeout to pending request
       kv.second->setReturnStatus(-ETIMEDOUT);
     }
-
-    LOG(INFO) << "Closing netlink socket and recreate it";
     nlSeqNumMap_.clear(); // Clear all timed out requests
+
+    LOG(INFO) << "Closing netlink socket. fd=" << nlSock_
+              << ", port=" << portId_;
     unregisterHandler();
     close(nlSock_);
     init();
 
-    LOG(INFO) << "Resume sending bufferred netlink messages";
+    // Resume sending netlink messages if any queued
     sendNetlinkMessage();
   });
 
@@ -61,7 +65,6 @@ NetlinkProtocolSocket::init() {
   if (nlSock_ < 0) {
     LOG(FATAL) << "Netlink socket create failed.";
   }
-  VLOG(1) << "Created netlink socket. fd=" << nlSock_;
   int size = kNetlinkSockRecvBuf;
   // increase socket recv buffer size
   if (setsockopt(nlSock_, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size)) < 0) {
@@ -86,8 +89,13 @@ NetlinkProtocolSocket::init() {
 
   // Retrieve and set pid that we will use for all subsequent messages
   portId_ = saddr.nl_pid;
+  LOG(INFO) << "Created netlink socket. fd=" << nlSock_ << ", port=" << portId_;
 
   // Set fd in event handler and register for polling
+  // NOTE: We mask `READ` event with `PERSIST` to make sure the handler remains
+  // registered after the read event
+  LOG(INFO) << "Registering netlink socket fd " << nlSock_
+            << " with EventBase for read events";
   changeHandlerFD(folly::NetworkSocket{nlSock_});
   registerHandler(folly::EventHandler::READ | folly::EventHandler::PERSIST);
 
@@ -100,40 +108,50 @@ NetlinkProtocolSocket::handlerReady(uint16_t events) noexcept {
   CHECK_EQ(events, folly::EventHandler::READ);
   try {
     recvNetlinkMessage();
-  } catch (std::exception const& err) {
-    LOG(ERROR) << "error processing NL message" << folly::exceptionStr(err);
-    fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
+  } catch (std::exception const& e) {
+    LOG(ERROR) << "Error processing netlink message" << folly::exceptionStr(e);
+    fbData->addStatValue("netlink.errors", 1, fb303::SUM);
   }
 }
 
 void
 NetlinkProtocolSocket::setLinkEventCB(
     std::function<void(fbnl::Link, bool)> linkEventCB) {
+  CHECK(!linkEventCB_) << "Callback can be registered only once";
   linkEventCB_ = linkEventCB;
 }
 
 void
 NetlinkProtocolSocket::setAddrEventCB(
     std::function<void(fbnl::IfAddress, bool)> addrEventCB) {
+  CHECK(!addrEventCB_) << "Callback can be registered only once";
   addrEventCB_ = addrEventCB;
 }
 
 void
 NetlinkProtocolSocket::setNeighborEventCB(
     std::function<void(fbnl::Neighbor, bool)> neighborEventCB) {
+  CHECK(!neighborEventCB_) << "Callback can be registered only once";
   neighborEventCB_ = neighborEventCB;
 }
 
 void
 NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
+  VLOG(2) << "Completed netlink request. seq=" << ack << ", retval=" << status;
+  if (std::abs(status) != EEXIST && std::abs(status) != ESRCH && status != 0) {
+    fbData->addStatValue("netlink.requests.error", 1, fb303::SUM);
+  } else {
+    fbData->addStatValue("netlink.requests.success", 1, fb303::SUM);
+  }
+
   auto it = nlSeqNumMap_.find(ack);
   if (it != nlSeqNumMap_.end()) {
-    VLOG(2) << "Setting return value for seq=" << ack << " with ret=" << status;
     // Set return status on promise
     it->second->setReturnStatus(status);
     nlSeqNumMap_.erase(it);
   } else {
-    LOG(ERROR) << "No future associated with seq=" << ack;
+    LOG(ERROR) << "Broken promise for netlink request. seq=" << ack;
+    fbData->addStatValue("netlink.errors", 1, fb303::SUM);
   }
 
   // Cancel timer if there are no more expected responses
@@ -188,12 +206,18 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
     // check if one request per message
     if ((nlmsg_hdr->nlmsg_flags & NLM_F_MULTI) != 0) {
       LOG(ERROR) << "Error: multipart netlink message not supported";
+      fbData->addStatValue("netlink.errors", 1, fb303::SUM);
     }
 
     // Add seq number -> netlink request mapping
     auto res = nlSeqNumMap_.insert({nlmsg_hdr->nlmsg_seq, std::move(m)});
     CHECK(res.second) << "Entry exists for " << nlmsg_hdr->nlmsg_seq;
     count++;
+    VLOG(2) << "Sending netlink request."
+            << " seq=" << nlmsg_hdr->nlmsg_seq
+            << ", type=" << nlmsg_hdr->nlmsg_type
+            << ", len=" << nlmsg_hdr->nlmsg_len
+            << ", flags=" << nlmsg_hdr->nlmsg_flags;
   }
 
   auto outMsg = std::make_unique<struct msghdr>();
@@ -202,16 +226,17 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
   outMsg->msg_iov = &iov[0];
   outMsg->msg_iovlen = count;
 
-  VLOG(2) << "Sending " << outMsg->msg_iovlen << " netlink messages on fd "
-          << nlSock_;
   // `sendmsg` return -1 in case of error else number of bytes sent. `errno`
   // will be set to an appropriate code in case of error.
   if (sendmsg(nlSock_, outMsg.get(), 0) < 0) {
     LOG(ERROR) << "Error sending on netlink socket. Error: "
                << folly::errnoStr(std::abs(errno)) << ", errno=" << errno
-               << ", fd=" << nlSock_ << ", #messages=" << outMsg->msg_iovlen;
-    fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
+               << ", fd=" << nlSock_ << ", num-messages=" << outMsg->msg_iovlen;
+    fbData->addStatValue("netlink.errors", 1, fb303::SUM);
   }
+  fbData->addStatValue("netlink.requests", outMsg->msg_iovlen, fb303::SUM);
+  VLOG(2) << "Sent " << outMsg->msg_iovlen << " netlink requests on fd "
+          << nlSock_;
 
   // Schedule timer to wait for acks and send next set of messages
   nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
@@ -227,8 +252,9 @@ NetlinkProtocolSocket::processMessage(
       break;
     }
 
-    VLOG(2) << "Received Netlink message of type " << nlh->nlmsg_type
-            << " seq no " << nlh->nlmsg_seq;
+    VLOG(2) << "Received reply for netlink request."
+            << " seq=" << nlh->nlmsg_seq << ", type=" << nlh->nlmsg_type
+            << ", len=" << nlh->nlmsg_len << ", flags=" << nlh->nlmsg_flags;
     auto nlSeqIt = nlSeqNumMap_.find(nlh->nlmsg_seq);
 
     switch (nlh->nlmsg_type) {
@@ -259,6 +285,7 @@ NetlinkProtocolSocket::processMessage(
         nlSeqIt->second->rcvdLink(std::move(link));
       } else {
         // Link notification
+        VLOG(2) << "Netlink link event. " << link.str();
         if (linkEventCB_) {
           linkEventCB_(std::move(link), true);
         }
@@ -291,12 +318,14 @@ NetlinkProtocolSocket::processMessage(
           // with the same sequence as the original request.
           //
           // IfAddress notification
+          VLOG(2) << "Netlink address event. " << addr.str();
           if (addrEventCB_) {
             addrEventCB_(std::move(addr), true);
           }
         }
       } else {
         // IfAddress notification
+        VLOG(2) << "Netlink address event. " << addr.str();
         if (addrEventCB_) {
           addrEventCB_(std::move(addr), true);
         }
@@ -315,6 +344,7 @@ NetlinkProtocolSocket::processMessage(
         nlSeqIt->second->rcvdNeighbor(std::move(neighbor));
       } else {
         // Neighbor notification
+        VLOG(2) << "Netlink neighbor event. " << neighbor.str();
         if (neighborEventCB_) {
           neighborEventCB_(std::move(neighbor), true);
         }
@@ -327,18 +357,14 @@ NetlinkProtocolSocket::processMessage(
       if (ack->msg.nlmsg_pid != portId_) {
         LOG(ERROR) << "received netlink message with wrong PID, received: "
                    << ack->msg.nlmsg_pid << " expected: " << portId_;
+        fbData->addStatValue("netlink.errors", 1, fb303::SUM);
         break;
-      }
-      if (std::abs(ack->error) != EEXIST && std::abs(ack->error) != ESRCH &&
-          ack->error != 0) {
-        fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
-      } else {
-        fb303::fbData->addStatValue("netlink.acks", 1, fb303::SUM);
       }
       processAck(ack->msg.nlmsg_seq, ack->error);
     } break;
 
     case NLMSG_NOOP:
+      // Message is to be ignored as per netlink spec
       break;
 
     case NLMSG_DONE: {
@@ -348,7 +374,7 @@ NetlinkProtocolSocket::processMessage(
 
     default:
       LOG(ERROR) << "Unknown message type: " << nlh->nlmsg_type;
-      fb303::fbData->addStatValue("netlink.errors", 1, fb303::SUM);
+      fbData->addStatValue("netlink.errors", 1, fb303::SUM);
     }
   } while ((nlh = NLMSG_NEXT(nlh, bytesRead)));
 }
@@ -365,15 +391,16 @@ NetlinkProtocolSocket::recvNetlinkMessage() {
     if (errno == EINTR || errno == EAGAIN) {
       return;
     }
-    LOG(INFO) << "Error in netlink socket receive: " << bytesRead
-              << " err: " << folly::errnoStr(std::abs(errno));
+    LOG(ERROR) << "Error in netlink socket receive: " << bytesRead
+               << " err: " << folly::errnoStr(std::abs(errno));
+    fbData->addStatValue("netlink.errors", 1, fb303::SUM);
     return;
   }
   processMessage(recvMsg, static_cast<uint32_t>(bytesRead));
 }
 
 NetlinkProtocolSocket::~NetlinkProtocolSocket() {
-  LOG(INFO) << "Closing netlink socket.";
+  LOG(INFO) << "Closing netlink socket. fd=" << nlSock_ << ", port=" << portId_;
   close(nlSock_);
 }
 
@@ -397,25 +424,26 @@ NetlinkProtocolSocket::collectReturnStatus(
     std::vector<folly::SemiFuture<int>>&& futures,
     std::unordered_set<int> ignoredErrors) {
   return folly::collectAll(std::move(futures))
-      .defer([ignoredErrors](
-                 folly::Try<std::vector<folly::Try<int>>>&& results) {
-        for (auto& result : results.value()) {
-          auto retval = std::abs(result.value()); // Throws exeption if any
-          if (retval == 0 or ignoredErrors.count(retval)) {
-            continue;
-          }
+      .defer(
+          [ignoredErrors](folly::Try<std::vector<folly::Try<int>>>&& results) {
+            for (auto& result : results.value()) {
+              auto retval = std::abs(result.value()); // Throws exeption if any
+              if (retval == 0 or ignoredErrors.count(retval)) {
+                continue;
+              }
 
-          // We encountered first non zero value. Report error and return
-          LOG(ERROR) << "One or more Netlink requests failed with error code: "
-                     << retval << " -- " << folly::errnoStr(retval);
-          return retval;
-        }
-        return 0;
-      });
+              // We encountered first non zero value. Report error and return
+              LOG(ERROR) << "One or more Netlink requests failed with error: "
+                         << retval << " -- " << folly::errnoStr(retval);
+              return retval;
+            }
+            return 0;
+          });
 }
 
 folly::SemiFuture<int>
 NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
+  VLOG(1) << "Netlink add route. " << route.str();
   auto rtmMsg = std::make_unique<NetlinkRouteMessage>();
   auto future = rtmMsg->getSemiFuture();
 
@@ -450,6 +478,7 @@ NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
 
 folly::SemiFuture<int>
 NetlinkProtocolSocket::deleteRoute(const openr::fbnl::Route& route) {
+  VLOG(1) << "Netlink delete route. " << route.str();
   auto rtmMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
   auto future = rtmMsg->getSemiFuture();
 
@@ -477,6 +506,7 @@ NetlinkProtocolSocket::deleteRoute(const openr::fbnl::Route& route) {
 
 folly::SemiFuture<int>
 NetlinkProtocolSocket::addIfAddress(const openr::fbnl::IfAddress& ifAddr) {
+  VLOG(1) << "Netlink add interface address. " << ifAddr.str();
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
   auto future = addrMsg->getSemiFuture();
 
@@ -494,6 +524,7 @@ NetlinkProtocolSocket::addIfAddress(const openr::fbnl::IfAddress& ifAddr) {
 
 folly::SemiFuture<int>
 NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
+  VLOG(1) << "Netlink delete interface address. " << ifAddr.str();
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
   auto future = addrMsg->getSemiFuture();
 
@@ -511,6 +542,7 @@ NetlinkProtocolSocket::deleteIfAddress(const openr::fbnl::IfAddress& ifAddr) {
 
 folly::SemiFuture<std::vector<fbnl::Link>>
 NetlinkProtocolSocket::getAllLinks() {
+  VLOG(1) << "Netlink get links";
   auto linkMsg = std::make_unique<openr::fbnl::NetlinkLinkMessage>();
   auto future = linkMsg->getLinksSemiFuture();
 
@@ -523,6 +555,7 @@ NetlinkProtocolSocket::getAllLinks() {
 
 folly::SemiFuture<std::vector<fbnl::IfAddress>>
 NetlinkProtocolSocket::getAllIfAddresses() {
+  VLOG(1) << "Netlink get interface addresses";
   auto addrMsg = std::make_unique<openr::fbnl::NetlinkAddrMessage>();
   auto future = addrMsg->getAddrsSemiFuture();
 
@@ -536,6 +569,7 @@ NetlinkProtocolSocket::getAllIfAddresses() {
 
 folly::SemiFuture<std::vector<fbnl::Neighbor>>
 NetlinkProtocolSocket::getAllNeighbors() {
+  VLOG(1) << "Netlink get neighbors";
   auto neighMsg = std::make_unique<openr::fbnl::NetlinkNeighborMessage>();
   auto future = neighMsg->getNeighborsSemiFuture();
 
@@ -548,6 +582,7 @@ NetlinkProtocolSocket::getAllNeighbors() {
 
 folly::SemiFuture<std::vector<fbnl::Route>>
 NetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
+  VLOG(1) << "Netlink get routes with filter. " << filter.str();
   auto routeMsg = std::make_unique<openr::fbnl::NetlinkRouteMessage>();
   auto future = routeMsg->getRoutesSemiFuture();
 

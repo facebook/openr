@@ -62,6 +62,27 @@ constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
  * routes in under 2 seconds. These performance benchmarks can be observed
  * by running associated UTs and it might vary on different systems.
  *
+ * NOTE Logging:
+ * Netlink protocol is tricky when it comes to debugging. To faciliate debugging
+ * the library supports hierarchical level of logging. All unexpected errors
+ * are reported with seviority `ERROR`.
+ * INFO - Socket create, close and register events
+ * VERBOSE 1 - Logs request objects & their status
+ * VERBOSE 2 - Details of netlink request, responses and events. (ack, type,
+ *             len, flags etc)
+ * VERBOSE 3 - Details of netlink message parsing
+ *
+ * NOTE Monitoring:
+ * This module exposes fb303 counters that can be leveraged for monitoring
+ * application's correctness and performance behavior in production
+ *   netlink.errors : any LOG(ERROR) will bump this counter
+ *   netlink.requests : Sent requests
+ *   netlink.requests.timeouts : Timed out requests
+ *   netlink.requests.success : Request that completed successfully
+ *   netlink.requests.error : Request with non zero return code
+ *   netlink.requests.latency : Average latency of netlink request (TODO)
+ *   netlink.bytes.rx : Bytes received over netlink socket (TODO)
+ *   netlink.bytes.tx : Bytes sent over netlink socket (TODO)
  */
 class NetlinkProtocolSocket : public folly::EventHandler {
  public:

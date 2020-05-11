@@ -43,7 +43,7 @@ NetlinkMessage::addSubAttributes(
     return nullptr;
   }
 
-  VLOG(2) << "Sub attribute type : " << type << " Len: " << len;
+  VLOG(3) << "Adding sub attribute. type=" << type << ", len=" << len;
 
   // add the subattribute
   struct rtattr* subrta =
@@ -78,7 +78,7 @@ NetlinkMessage::addAttributes(
       reinterpret_cast<struct rtattr*>(((char*)(msghdr)) + nlmsgAlen);
   rptr->rta_type = type;
   rptr->rta_len = rtaLen;
-  VLOG(2) << "Attribute type : " << type << " Len: " << rtaLen;
+  VLOG(3) << "Adding attribute. type=" << type << ", len=" << rtaLen;
   if (data) {
     memcpy(RTA_DATA(rptr), data, len);
   }
@@ -95,6 +95,8 @@ NetlinkMessage::getSemiFuture() {
 
 void
 NetlinkMessage::setReturnStatus(int status) {
+  VLOG(1) << "Netlink request completed. retval=" << status << ", "
+          << folly::errnoStr(std::abs(status));
   promise_.setValue(status);
 }
 

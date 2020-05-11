@@ -142,7 +142,8 @@ NetlinkFibHandler::semifuture_addUnicastRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
+  LOG(INFO) << "Adding/Updating unicast routes of client "
+            << getClientName(clientId) << ", numRoutes=" << routes->size();
 
   // Add routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -160,7 +161,8 @@ NetlinkFibHandler::semifuture_deleteUnicastRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Deleting routes of client: " << getClientName(clientId);
+  LOG(INFO) << "Deleting unicast routes of client " << getClientName(clientId)
+            << ", numRoutes=" << prefixes->size();
 
   // Delete routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -181,7 +183,8 @@ NetlinkFibHandler::semifuture_addMplsRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Adding/Updates routes of client: " << getClientName(clientId);
+  LOG(INFO) << "Adding/Updating mpls routes of client "
+            << getClientName(clientId) << ", numRoutes=" << routes->size();
 
   // Add routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -200,7 +203,8 @@ NetlinkFibHandler::semifuture_deleteMplsRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Deleting mpls routes of client: " << getClientName(clientId);
+  LOG(INFO) << "Deleting mpls routes of client " << getClientName(clientId)
+            << ", numRoutes=" << topLabels->size();
 
   // Delete routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -222,8 +226,8 @@ NetlinkFibHandler::semifuture_syncFib(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Syncing FIB with provided routes. Client: "
-            << getClientName(clientId);
+  LOG(INFO) << "Syncing unicast FIB for client " << getClientName(clientId)
+            << ", numRoutes=" << unicastRoutes->size();
 
   // SemiFuture vector for collecting return values of all API calls
   std::vector<folly::SemiFuture<int>> result;
@@ -286,8 +290,8 @@ NetlinkFibHandler::semifuture_syncMplsFib(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Syncing MPLS FIB with provided routes. Client: "
-            << getClientName(clientId);
+  LOG(INFO) << "Syncing mpls FIB for client " << getClientName(clientId)
+            << ", numRoutes=" << mplsRoutes->size();
 
   // SemiFuture vector for collecting return values of all API calls
   std::vector<folly::SemiFuture<int>> result;
@@ -335,13 +339,11 @@ NetlinkFibHandler::aliveSince() {
 
 facebook::fb303::cpp2::fb303_status
 NetlinkFibHandler::getStatus() {
-  VLOG(3) << "Received getStatus";
   return facebook::fb303::cpp2::fb303_status::ALIVE;
 }
 
 openr::thrift::SwitchRunState
 NetlinkFibHandler::getSwitchRunState() {
-  VLOG(3) << "Received getSwitchRunState";
   return openr::thrift::SwitchRunState::CONFIGURED;
 }
 
@@ -353,7 +355,7 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
         std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Get unicast routes from FIB for clientId " << clientId;
+  LOG(INFO) << "Get unicast routes for client " << getClientName(clientId);
 
   auto v4Routes = nlSock_->getIPv4Routes(protocol.value());
   auto v6Routes = nlSock_->getIPv6Routes(protocol.value());
@@ -382,7 +384,7 @@ NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
         std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Get Mpls routes from FIB for clientId " << clientId;
+  LOG(INFO) << "Get mpls routes for client " << getClientName(clientId);
 
   return nlSock_->getMplsRoutes(protocol.value())
       .deferValue([this](std::vector<fbnl::Route>&& nlRoutes) {

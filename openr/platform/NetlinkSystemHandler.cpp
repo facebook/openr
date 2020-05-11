@@ -31,6 +31,19 @@ const std::chrono::seconds kNetlinkDbResyncInterval{20};
 
 namespace openr {
 
+namespace {
+
+std::vector<std::string>
+toString(std::vector<thrift::IpPrefix> const& prefixes) {
+  std::vector<std::string> strs;
+  for (const auto& prefix : prefixes) {
+    strs.emplace_back(openr::toString(prefix));
+  }
+  return strs;
+}
+
+} // namespace
+
 NetlinkSystemHandler::NetlinkSystemHandler(fbnl::NetlinkProtocolSocket* nlSock)
     : nlSock_(nlSock) {
   CHECK(nlSock);
@@ -38,8 +51,7 @@ NetlinkSystemHandler::NetlinkSystemHandler(fbnl::NetlinkProtocolSocket* nlSock)
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::Link>>>
 NetlinkSystemHandler::semifuture_getAllLinks() {
-  VLOG(3) << "Query links from Netlink according to link name";
-
+  LOG(INFO) << "Querying all links and their addresses from system";
   return collectAll(nlSock_->getAllLinks(), nlSock_->getAllIfAddresses())
       .deferValue([](std::tuple<
                       folly::Try<std::vector<fbnl::Link>>,
@@ -73,7 +85,6 @@ folly::SemiFuture<folly::Unit>
 NetlinkSystemHandler::semifuture_addIfaceAddresses(
     std::unique_ptr<std::string> ifName,
     std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) {
-  VLOG(3) << "Add iface addresses";
   return addRemoveIfAddresses(true, *ifName, *addrs);
 }
 
@@ -81,7 +92,6 @@ folly::SemiFuture<folly::Unit>
 NetlinkSystemHandler::semifuture_removeIfaceAddresses(
     std::unique_ptr<std::string> ifName,
     std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> addrs) {
-  VLOG(3) << "Remove iface addresses";
   return addRemoveIfAddresses(false, *ifName, *addrs);
 }
 
@@ -90,6 +100,8 @@ NetlinkSystemHandler::addRemoveIfAddresses(
     const bool isAdd,
     const std::string& ifName,
     const std::vector<thrift::IpPrefix>& addrs) {
+  LOG(INFO) << (isAdd ? "Adding" : "Removing") << " addresses on interface "
+            << ifName << ", addresses=" << folly::join(",", toString(addrs));
   // Get iface index
   const int ifIndex = getIfIndex(ifName).value();
 
@@ -130,7 +142,8 @@ NetlinkSystemHandler::addRemoveIfAddresses(
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::IpPrefix>>>
 NetlinkSystemHandler::semifuture_getIfaceAddresses(
     std::unique_ptr<std::string> ifName, int16_t family, int16_t scope) {
-  VLOG(3) << "Get iface addresses";
+  LOG(INFO) << "Querying addresses for interface " << *ifName
+            << ", family=" << family << ", scope=" << scope;
 
   // Get iface index
   const int ifIndex = getIfIndex(*ifName).value();
@@ -162,7 +175,9 @@ NetlinkSystemHandler::semifuture_syncIfaceAddresses(
     int16_t family,
     int16_t scope,
     std::unique_ptr<std::vector<::openr::thrift::IpPrefix>> newAddrs) {
-  VLOG(3) << "Sync iface addresses";
+  LOG(INFO) << "Syncing addresses on interface " << *iface
+            << ", family=" << family << ", scope=" << scope
+            << ", addresses=" << folly::join(",", toString(*newAddrs));
 
   const auto ifName = *iface; // Copy intended
   const auto ifIndex = getIfIndex(ifName).value();

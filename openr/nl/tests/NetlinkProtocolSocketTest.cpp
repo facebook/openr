@@ -85,12 +85,12 @@ uint32_t inLabel5{141};
 
 int64_t
 getErrorCount() {
-  return facebook::fb303::fbData->getCounters()["netlink.errors.sum"];
+  return facebook::fb303::fbData->getCounters()["netlink.requests.error.sum"];
 }
 
 int64_t
 getAckCount() {
-  return facebook::fb303::fbData->getCounters()["netlink.acks.sum"];
+  return facebook::fb303::fbData->getCounters()["netlink.requests.success.sum"];
 }
 
 class NlMessageFixture : public ::testing::Test {
