@@ -128,6 +128,11 @@ class NetlinkMessage {
   // set Message Type
   void setMessageType(NetlinkMessage::MessageType type);
 
+  std::chrono::steady_clock::time_point
+  getCreateTs() const {
+    return createTs_;
+  }
+
  protected:
   // Add TLV attributes, specify the length and size of data returns ENOBUFS
   // if enough buffer is not available. Also updates the length field in
@@ -154,6 +159,10 @@ class NetlinkMessage {
 
   // Promise to relay the status code received from kernel
   folly::Promise<int> promise_;
+
+  // Timestamp when message object was created
+  const std::chrono::steady_clock::time_point createTs_{
+      std::chrono::steady_clock::now()};
 };
 
 } // namespace openr::fbnl

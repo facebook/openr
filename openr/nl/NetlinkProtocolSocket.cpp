@@ -146,6 +146,12 @@ NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
 
   auto it = nlSeqNumMap_.find(ack);
   if (it != nlSeqNumMap_.end()) {
+    // Calculate and add the latency of the request in fb303
+    auto requestLatency = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - it->second->getCreateTs());
+    fbData->addStatValue(
+        "netlink.requests.latency_ms", requestLatency.count(), fb303::AVG);
+
     // Set return status on promise
     it->second->setReturnStatus(status);
     nlSeqNumMap_.erase(it);
@@ -228,11 +234,14 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
 
   // `sendmsg` return -1 in case of error else number of bytes sent. `errno`
   // will be set to an appropriate code in case of error.
-  if (sendmsg(nlSock_, outMsg.get(), 0) < 0) {
+  int bytesSent = sendmsg(nlSock_, outMsg.get(), 0);
+  if (bytesSent < 0) {
     LOG(ERROR) << "Error sending on netlink socket. Error: "
                << folly::errnoStr(std::abs(errno)) << ", errno=" << errno
                << ", fd=" << nlSock_ << ", num-messages=" << outMsg->msg_iovlen;
     fbData->addStatValue("netlink.errors", 1, fb303::SUM);
+  } else {
+    fbData->addStatValue("netlink.bytes.tx", bytesSent, fb303::SUM);
   }
   fbData->addStatValue("netlink.requests", outMsg->msg_iovlen, fb303::SUM);
   VLOG(2) << "Sent " << outMsg->msg_iovlen << " netlink requests on fd "
@@ -269,6 +278,7 @@ NetlinkProtocolSocket::processMessage(
         nlSeqIt->second->rcvdRoute(std::move(route));
       } else {
         // Route notification
+        fbData->addStatValue("netlink.notifications.route", 1, fb303::SUM);
         DCHECK(false) << "Route notifications are not subscribed";
       }
     } break;
@@ -286,6 +296,7 @@ NetlinkProtocolSocket::processMessage(
       } else {
         // Link notification
         VLOG(2) << "Netlink link event. " << link.str();
+        fbData->addStatValue("netlink.notifications.link", 1, fb303::SUM);
         if (linkEventCB_) {
           linkEventCB_(std::move(link), true);
         }
@@ -319,6 +330,7 @@ NetlinkProtocolSocket::processMessage(
           //
           // IfAddress notification
           VLOG(2) << "Netlink address event. " << addr.str();
+          fbData->addStatValue("netlink.notifications.addr", 1, fb303::SUM);
           if (addrEventCB_) {
             addrEventCB_(std::move(addr), true);
           }
@@ -326,6 +338,7 @@ NetlinkProtocolSocket::processMessage(
       } else {
         // IfAddress notification
         VLOG(2) << "Netlink address event. " << addr.str();
+        fbData->addStatValue("netlink.notifications.addr", 1, fb303::SUM);
         if (addrEventCB_) {
           addrEventCB_(std::move(addr), true);
         }
@@ -345,6 +358,7 @@ NetlinkProtocolSocket::processMessage(
       } else {
         // Neighbor notification
         VLOG(2) << "Netlink neighbor event. " << neighbor.str();
+        fbData->addStatValue("netlink.notifications.neighbor", 1, fb303::SUM);
         if (neighborEventCB_) {
           neighborEventCB_(std::move(neighbor), true);
         }
@@ -395,6 +409,8 @@ NetlinkProtocolSocket::recvNetlinkMessage() {
                << " err: " << folly::errnoStr(std::abs(errno));
     fbData->addStatValue("netlink.errors", 1, fb303::SUM);
     return;
+  } else {
+    fbData->addStatValue("netlink.bytes.rx", bytesRead, fb303::SUM);
   }
   processMessage(recvMsg, static_cast<uint32_t>(bytesRead));
 }

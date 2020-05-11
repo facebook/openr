@@ -93,6 +93,14 @@ getAckCount() {
   return facebook::fb303::fbData->getCounters()["netlink.requests.success.sum"];
 }
 
+void
+printCounters() {
+  LOG(INFO) << "Printing counters ";
+  for (auto const& [key, value] : facebook::fb303::fbData->getCounters()) {
+    LOG(INFO) << "  " << key << " : " << value;
+  }
+}
+
 class NlMessageFixture : public ::testing::Test {
  public:
   NlMessageFixture() = default;
@@ -171,6 +179,9 @@ class NlMessageFixture : public ::testing::Test {
 
     evb.terminateLoopSoon();
     eventThread.join();
+
+    // print netlink counters
+    printCounters();
   }
 
   void

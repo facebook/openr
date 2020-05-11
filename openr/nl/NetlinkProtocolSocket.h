@@ -80,9 +80,13 @@ constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
  *   netlink.requests.timeouts : Timed out requests
  *   netlink.requests.success : Request that completed successfully
  *   netlink.requests.error : Request with non zero return code
- *   netlink.requests.latency : Average latency of netlink request (TODO)
- *   netlink.bytes.rx : Bytes received over netlink socket (TODO)
- *   netlink.bytes.tx : Bytes sent over netlink socket (TODO)
+ *   netlink.requests.latency_ms : Average latency of netlink request
+ *   netlink.bytes.rx : Bytes received over netlink socket
+ *   netlink.bytes.tx : Bytes sent over netlink socket
+ *   netlink.notifications.link : Received link notifications
+ *   netlink.notifications.addr : Received address notifications
+ *   netlink.notifications.neighbors : Received neighbor notifications
+ *   netlink.notifications.route : Received route notifications
  */
 class NetlinkProtocolSocket : public folly::EventHandler {
  public:
