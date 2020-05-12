@@ -213,11 +213,21 @@ class MyNetlinkHandler final : public NetlinkSocket::EventsHandler {
       return;
     }
     if (isValid) {
-      links[ifName].networks.insert(addrEntry.getPrefix().value());
-      addrAddEventCount++;
+      // Ignore the event if address already exists
+      if (links[ifName].networks.insert(addrEntry.getPrefix().value()).second) {
+        addrAddEventCount++;
+      } else {
+        LOG(WARNING) << "Duplicate address event: " << addrEntry.str()
+                     << ", ifName=" << ifName;
+      }
     } else {
-      links[ifName].networks.erase(addrEntry.getPrefix().value());
-      addrDelEventCount++;
+      // Ignore the event if address doesn't exists
+      if (links[ifName].networks.erase(addrEntry.getPrefix().value())) {
+        addrDelEventCount++;
+      } else {
+        LOG(WARNING) << "Duplicate address event: " << addrEntry.str()
+                     << ", ifName=" << ifName;
+      }
     }
 
     if (eventFunc) {

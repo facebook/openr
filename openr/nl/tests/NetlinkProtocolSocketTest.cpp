@@ -159,9 +159,13 @@ class NlMessageFixture : public ::testing::Test {
       if (link.getLinkName() == kVethNameY) {
         ifIndexY = link.getIfIndex();
       }
+      if (link.getLinkName() == "lo") {
+        ifIndexLo = link.getIfIndex();
+      }
     }
-    EXPECT_NE(ifIndexX, 0);
-    EXPECT_NE(ifIndexY, 0);
+    ASSERT_NE(ifIndexX, 0);
+    ASSERT_NE(ifIndexY, 0);
+    ASSERT_NE(ifIndexLo, 0);
   }
 
   void
@@ -448,21 +452,21 @@ class NlMessageFixture : public ::testing::Test {
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
-        ifIndexZ));
+        ifIndexX));
     paths.push_back(buildNextHop(
         outLabel2,
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
-        ifIndexZ));
+        ifIndexX));
     paths.push_back(buildNextHop(
-        folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
+        folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX));
     paths.push_back(buildNextHop(
         outLabel4,
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
-        ifIndexZ));
+        ifIndexX));
     struct v6Addr addr6 {
       0
     };
@@ -481,8 +485,7 @@ class NlMessageFixture : public ::testing::Test {
   // ifindex of vethTestX and vethTextY
   uint32_t ifIndexX{0};
   uint32_t ifIndexY{0};
-  uint32_t ifIndexZ{2};
-  uint32_t ifIndexLo{1};
+  uint32_t ifIndexLo{0};
 
   struct v6Addr {
     union {
@@ -576,7 +579,7 @@ TEST_F(NlMessageFixture, IpRouteSingleNextHop) {
   uint32_t ackCount{0};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
+      folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
   ackCount = getAckCount();
@@ -607,13 +610,13 @@ TEST_F(NlMessageFixture, IpRouteMultipleNextHops) {
   std::vector<openr::fbnl::NextHop> paths;
 
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexZ));
+      folly::none, folly::none, folly::none, ipAddrY1V6, ifIndexX));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY2V6, ifIndexZ));
+      folly::none, folly::none, folly::none, ipAddrY2V6, ifIndexX));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY3V6, ifIndexZ));
+      folly::none, folly::none, folly::none, ipAddrY3V6, ifIndexX));
   paths.push_back(buildNextHop(
-      folly::none, folly::none, folly::none, ipAddrY4V6, ifIndexZ));
+      folly::none, folly::none, folly::none, ipAddrY4V6, ifIndexX));
 
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
@@ -713,14 +716,13 @@ TEST_F(NlMessageFixture, IpRouteLabelNexthop) {
   // outoing IF is vethTestY
 
   uint32_t ackCount{0};
-  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       outLabel1,
       folly::none,
       thrift::MplsActionCode::PUSH,
       ipAddrY1V6,
-      ifIndexZ));
+      ifIndexX));
   auto route = buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths);
 
   ackCount = getAckCount();
@@ -748,7 +750,6 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
   // Add IPv6 route with 48 path ECMP
 
   uint32_t ackCount{0};
-  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   for (uint32_t i = 0; i < 48; i++) {
     outLabel6[0] = outLabel6[0] + 10 + i;
@@ -757,7 +758,7 @@ TEST_F(NlMessageFixture, IpRouteMultipleLabelNextHops) {
         folly::none,
         thrift::MplsActionCode::PUSH,
         ipAddrY1V6,
-        ifIndexZ));
+        ifIndexX));
   }
 
   auto route = buildRoute(kRouteProtoId, ipPrefix5, folly::none, paths);
@@ -799,7 +800,7 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
         folly::none,
         thrift::MplsActionCode::PHP,
         ipAddress,
-        ifIndexZ));
+        ifIndexY));
   }
 
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
@@ -855,7 +856,7 @@ TEST_F(NlMessageFixture, PopMultipleNextHops) {
       folly::none,
       thrift::MplsActionCode::POP_AND_LOOKUP,
       folly::none,
-      ifIndexZ));
+      ifIndexY));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
   ackCount = getAckCount();
   // create label next hop
@@ -889,7 +890,7 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthop) {
       swapLabel,
       thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
-      ifIndexZ));
+      ifIndexX));
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
   ackCount = getAckCount();
   // create label next hop
@@ -923,14 +924,14 @@ TEST_F(NlMessageFixture, LabelRouteLabelNexthops) {
       swapLabel,
       thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
-      ifIndexZ));
+      ifIndexX));
 
   paths.push_back(buildNextHop(
       folly::none,
       swapLabel1,
       thrift::MplsActionCode::SWAP,
       ipAddrY2V6,
-      ifIndexZ));
+      ifIndexX));
 
   auto route = buildRoute(kRouteProtoId, folly::none, inLabel3, paths);
   ackCount = getAckCount();
@@ -981,12 +982,15 @@ TEST_F(NlMessageFixture, InvalidRoute) {
   std::vector<openr::fbnl::NextHop> paths1;
   std::vector<openr::fbnl::Route> routes;
   uint32_t ackCount{0};
+  // Valid route with non-zero push labels.
+  // NOTE: IP routes can only have `PUSH` instructions on their next-hops.
+  // Linux 5.2+ have implemented a strict check on invalid mpls action
   paths1.push_back(buildNextHop(
+      std::vector<int32_t>{outLabel1},
       folly::none,
-      swapLabel,
-      thrift::MplsActionCode::SWAP,
+      thrift::MplsActionCode::PUSH,
       ipAddrY1V6,
-      ifIndexZ));
+      ifIndexX));
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix1, folly::none, paths1));
 
@@ -997,7 +1001,7 @@ TEST_F(NlMessageFixture, InvalidRoute) {
       folly::none,
       thrift::MplsActionCode::PUSH,
       ipAddrY1V6,
-      ifIndexZ));
+      ifIndexX));
   routes.emplace_back(
       buildRoute(kRouteProtoId, ipPrefix2, folly::none, paths2));
 
@@ -1110,14 +1114,13 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   // Add label route with single path label with PHP nexthop
 
   uint32_t ackCount{0};
-  int status{-1};
   std::vector<openr::fbnl::NextHop> paths;
   paths.push_back(buildNextHop(
       folly::none,
       folly::none,
       thrift::MplsActionCode::PHP,
       ipAddrY1V6,
-      ifIndexZ));
+      ifIndexX));
   auto route1 = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
 
   ackCount = getAckCount();
@@ -1135,7 +1138,7 @@ TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
       folly::none,
       thrift::MplsActionCode::PHP,
       ipAddrY2V6,
-      ifIndexZ));
+      ifIndexX));
 
   auto route2 = buildRoute(kRouteProtoId, folly::none, inLabel4, paths);
 
@@ -1336,7 +1339,7 @@ TEST_F(NlMessageFixture, MultipleLabelRoutes) {
       swapLabel,
       thrift::MplsActionCode::SWAP,
       ipAddrY1V6,
-      ifIndexZ));
+      ifIndexX));
   std::vector<openr::fbnl::Route> labelRoutes;
   for (uint32_t i = 0; i < count; i++) {
     labelRoutes.push_back(
