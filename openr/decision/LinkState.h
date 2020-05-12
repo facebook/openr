@@ -157,7 +157,7 @@ class Link {
 class LinkState {
  public:
   struct LinkPtrHash {
-    bool operator()(const std::shared_ptr<Link>& l) const;
+    size_t operator()(const std::shared_ptr<Link>& l) const;
   };
 
   struct LinkPtrLess {

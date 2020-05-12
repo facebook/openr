@@ -326,7 +326,7 @@ Link::directionalToString(const std::string& fromNode) const {
       getIfaceFromNode(getOtherNodeName(fromNode)));
 }
 
-bool
+size_t
 LinkState::LinkPtrHash::operator()(const std::shared_ptr<Link>& l) const {
   return l->hash;
 }
