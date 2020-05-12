@@ -224,7 +224,6 @@ LinkMonitor::LinkMonitor(
   addFiberTask([q = std::move(neighborUpdatesQueue), this]() mutable noexcept {
     while (true) {
       auto maybeEvent = q.get();
-      VLOG(1) << "Received neighbor update";
       if (maybeEvent.hasError()) {
         LOG(INFO) << "Terminating neighbor update processing fiber";
         break;
