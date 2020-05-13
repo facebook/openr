@@ -134,7 +134,6 @@ class SparkFixture : public testing::Test {
         fastInitKeepAliveTime,
         true /* enable v4 */,
         version,
-        context,
         mockIoProvider,
         nullptr, // no openr config support yet
         false, // disable Spark2 functionality
@@ -142,13 +141,8 @@ class SparkFixture : public testing::Test {
         SparkTimeConfig());
   }
 
-  fbzmq::Context context;
-
   shared_ptr<MockIoProvider> mockIoProvider{nullptr};
-
   unique_ptr<std::thread> mockIoProviderThread{nullptr};
-
-  CompactSerializer serializer_;
 };
 
 //

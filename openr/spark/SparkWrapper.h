@@ -64,7 +64,6 @@ class SparkWrapper {
       std::chrono::milliseconds myFastInitKeepAliveTime,
       bool enableV4,
       std::pair<uint32_t, uint32_t> version,
-      fbzmq::Context& zmqContext,
       std::shared_ptr<IoProvider> ioProvider,
       std::shared_ptr<thrift::OpenrConfig> config,
       bool enableSpark2,
@@ -107,23 +106,16 @@ class SparkWrapper {
       const std::vector<std::string>& nodeRegexes,
       const std::vector<std::string>& interfaceRegexes);
 
-  //
-  // Private statex
-  //
-
  private:
   std::string myNodeName_{""};
 
+  // Queue to send neighbor event to LinkMonitor
   messaging::ReplicateQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue_;
   messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesReader_{
       neighborUpdatesQueue_.getReader()};
 
-  // Queue to send interface updates to spark
+  // Queue to receive interface update from LinkMonitor
   messaging::ReplicateQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue_;
-
-  // Thrift serializer object for serializing/deserializing of thrift objects
-  // to/from bytes
-  apache::thrift::CompactSerializer serializer_;
 
   // Spark owned by this wrapper.
   std::shared_ptr<Spark> spark_{nullptr};

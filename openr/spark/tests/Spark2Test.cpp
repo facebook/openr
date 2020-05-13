@@ -147,7 +147,6 @@ class Spark2Fixture : public testing::Test {
         fastInitKeepAliveTime,
         true, /* enableV4 */
         version,
-        context,
         mockIoProvider,
         config,
         enableSpark2,
@@ -155,10 +154,8 @@ class Spark2Fixture : public testing::Test {
         timeConfig);
   }
 
-  fbzmq::Context context;
   std::shared_ptr<MockIoProvider> mockIoProvider{nullptr};
   std::unique_ptr<std::thread> mockIoProviderThread{nullptr};
-  CompactSerializer serializer_;
 };
 
 class SimpleSpark2Fixture : public Spark2Fixture {

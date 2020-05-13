@@ -516,7 +516,6 @@ main(int argc, char** argv) {
           OpenrCtrlThriftPort{static_cast<uint16_t>(FLAGS_openr_ctrl_port)},
           std::make_pair(
               Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-          context,
           std::make_shared<IoProvider>(),
           FLAGS_enable_flood_optimization,
           FLAGS_enable_spark2,

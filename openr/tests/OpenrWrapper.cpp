@@ -147,7 +147,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       OpenrCtrlThriftPort{0},
       std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
-      context_,
       ioProvider_);
 
   //

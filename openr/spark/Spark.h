@@ -100,7 +100,6 @@ class Spark final : public OpenrEventBase {
       KvStoreCmdPort kvStoreCmdPort,
       OpenrCtrlThriftPort openrCtrlThriftPort,
       std::pair<uint32_t, uint32_t> version,
-      fbzmq::Context& zmqContext,
       std::shared_ptr<IoProvider> ioProvider,
       bool enableFloodOptimization = false,
       bool enableSpark2 = false,
