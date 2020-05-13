@@ -1763,9 +1763,9 @@ Decision::Decision(
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     spfSolver_->updateGlobalCounters();
     // Schedule next counters update
-    counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+    counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
   });
-  counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+  counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 
   // Schedule periodic timer to decremtOrderedFibHolds
   if (tConfig.enable_ordered_fib_programming_ref().value_or(false)) {

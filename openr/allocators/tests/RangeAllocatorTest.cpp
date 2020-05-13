@@ -34,7 +34,6 @@ const uint32_t kValueStrSize = 64;
 
 // interval for periodic syncs
 const std::chrono::seconds kDbSyncInterval(1);
-const std::chrono::seconds kMonitorSubmitInterval(3600);
 
 // Count for testing purpose
 const uint32_t kNumStores = 3; // Total number of KvStore

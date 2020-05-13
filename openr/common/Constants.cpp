@@ -74,7 +74,7 @@ constexpr std::chrono::seconds Constants::kConvergenceMaxDuration;
 constexpr std::chrono::seconds Constants::kKeepAliveIntvl;
 constexpr std::chrono::seconds Constants::kKeepAliveTime;
 constexpr std::chrono::seconds Constants::kMemoryThresholdTime;
-constexpr std::chrono::seconds Constants::kMonitorSubmitInterval;
+constexpr std::chrono::seconds Constants::kCounterSubmitInterval;
 constexpr std::chrono::seconds Constants::kNetlinkSyncThrottleInterval;
 constexpr std::chrono::seconds Constants::kPlatformSyncInterval;
 constexpr std::chrono::seconds Constants::kPlatformThriftIdleTimeout;

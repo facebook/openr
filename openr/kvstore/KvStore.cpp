@@ -141,9 +141,9 @@ KvStore::KvStore(
     for (auto& counter : getGlobalCounters()) {
       fb303::fbData->setCounter(counter.first, counter.second);
     }
-    counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+    counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
   });
-  counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+  counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 
   // Prepare global command socket
   prepareSocket(kvParams_.globalCmdSock, std::string(globalCmdUrl), maybeIpTos);

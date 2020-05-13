@@ -68,7 +68,7 @@ class Constants {
   static constexpr int kIpTos{0x30 << 2};
 
   // default interval to publish to monitor
-  static constexpr std::chrono::seconds kMonitorSubmitInterval{5};
+  static constexpr std::chrono::seconds kCounterSubmitInterval{5};
 
   // event log category
   static constexpr folly::StringPiece kEventLogCategory{"perfpipe_aquaman"};

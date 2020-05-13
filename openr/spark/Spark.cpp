@@ -547,9 +547,9 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     updateGlobalCounters();
     // Schedule next counters update
-    counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+    counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
   });
-  counterUpdateTimer_->scheduleTimeout(Constants::kMonitorSubmitInterval);
+  counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 }
 
 void
