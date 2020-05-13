@@ -127,11 +127,11 @@ class Spark2Fixture : public testing::Test {
       bool enableSpark2 = true,
       bool increaseHelloInterval = true,
       std::shared_ptr<thrift::OpenrConfig> config = nullptr,
+      std::pair<uint32_t, uint32_t> version = std::make_pair(
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       std::chrono::milliseconds grHoldTime = kGRHoldTime,
       std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
       std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
-      std::pair<uint32_t, uint32_t> version = std::make_pair(
-          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       SparkTimeConfig timeConfig = SparkTimeConfig(
           kHelloTime,
           kKeepAliveTime,
@@ -488,6 +488,89 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
     LOG(INFO) << "node-2 reported up adjacency to node-1";
+  }
+}
+
+//
+// Start 2 Spark instances for different versions but within supported
+// range. Make sure they will form adjacency. Then add node3 with out-of-range
+// version. Confirm node3 can't form adjacency with neither of node1/node2
+// bi-directionally.
+//
+TEST_F(Spark2Fixture, VersionTest) {
+  SCOPE_EXIT {
+    LOG(INFO) << "Spark2Fixture VersionTest finished";
+  };
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex(
+      {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 10}, {iface3, 10}}},
+      {iface2, {{iface1, 10}, {iface3, 10}}},
+      {iface3, {{iface1, 10}, {iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start node1, node2 with different but within supported range
+  const std::string nodeName1 = "node-1";
+  const std::string nodeName2 = "node-2";
+  const std::string nodeName3 = "node-3";
+  auto node1 = createSpark(
+      kDomainName,
+      nodeName1,
+      1,
+      true,
+      true,
+      nullptr,
+      std::make_pair(
+          Constants::kOpenrVersion, Constants::kOpenrSupportedVersion));
+  auto node2 = createSpark(
+      kDomainName,
+      nodeName2,
+      2,
+      true,
+      true,
+      nullptr,
+      std::make_pair(
+          Constants::kOpenrSupportedVersion,
+          Constants::kOpenrSupportedVersion));
+
+  // start tracking interfaces
+  EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+  {
+    EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
+  }
+
+  LOG(INFO) << "Starting: " << nodeName3;
+
+  auto node3 = createSpark(
+      kDomainName,
+      nodeName3,
+      3,
+      true,
+      true,
+      nullptr,
+      std::make_pair(
+          Constants::kOpenrSupportedVersion - 1,
+          Constants::kOpenrSupportedVersion - 1));
+
+  // start tracking interfaces
+  EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+
+  // node3 can't form adj with neither node1 nor node2
+  {
+    EXPECT_FALSE(
+        node1->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+    EXPECT_FALSE(
+        node2->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
+    EXPECT_FALSE(
+        node3->waitForEvent(NB_UP, kGRHoldTime, kGRHoldTime * 2).has_value());
   }
 }
 
