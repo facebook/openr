@@ -2322,7 +2322,7 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
       strVal /* value */,
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
-      generateHash(1, "gotham_city", thrift::Value().value = strVal));
+      generateHash(1, "gotham_city", thrift::Value().value_ref() = strVal));
   peerKeyVals[key] = thriftVal;
 
   // 2. Query with same snapshot. Expect no changes
@@ -2381,7 +2381,9 @@ TEST_F(KvStoreTestFixture, OneWaySetKey) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       generateHash(
-          1, "gotham_city", thrift::Value().value = std::string("test-value")));
+          1,
+          "gotham_city",
+          thrift::Value().value_ref() = std::string("test-value")));
   expectedKeyVals[key] = thriftVal;
   myStore->setKey(key, thriftVal);
 
