@@ -1501,14 +1501,6 @@ Spark::processHelloMsg(
     return;
   }
 
-  // deduce area for peer
-  // TODO: in case area is different from previously calculated one,
-  //       trigger area change event
-  auto area = getNeighborArea(neighborName, ifName, areaIdRegexList_);
-  if (not area.has_value()) {
-    return;
-  }
-
   // get (neighborName -> Spark2Neighbor) mapping per ifName
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
 
@@ -1516,6 +1508,15 @@ Spark::processHelloMsg(
   auto neighborIt = ifNeighbors.find(neighborName);
 
   if (neighborIt == ifNeighbors.end()) {
+    // deduce area for neighbor
+    // TODO: Spark is yet to support area change due to dynamic configuration.
+    //       To avoid running area deducing logic for every single helloMsg,
+    //       ONLY deduce for unknown neighbors.
+    auto area = getNeighborArea(neighborName, ifName, areaIdRegexList_);
+    if (not area.has_value()) {
+      return;
+    }
+
     // Report RTT change
     // capture ifName & originator by copy
     auto rttChangeCb = [this, ifName, neighborName](const int64_t& newRtt) {

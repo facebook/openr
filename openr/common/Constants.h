@@ -263,13 +263,13 @@ class Constants {
   static constexpr int32_t kSparkMcastPort{6666};
 
   // Current OpenR version
-  // 20191122 - Area feature
+  // 20200421 - Spark2 Area feature
   // 20191010 - Spark2 feature
   // 20190805 - per prefix key feature
-  static constexpr int32_t kOpenrVersion{20191122};
+  static constexpr int32_t kOpenrVersion{20200421};
 
   // Lowest Supported OpenR version
-  static constexpr int32_t kOpenrSupportedVersion{20180307};
+  static constexpr int32_t kOpenrSupportedVersion{20190918};
 
   // Threshold time in secs to crash after reaching critical memory
   static constexpr std::chrono::seconds kMemoryThresholdTime{600};
