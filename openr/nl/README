@@ -1,10 +1,10 @@
 # Netlink C++ Interface
 
 This library provides C++ APIs to interact with kernel for networking state
-via netlink protocol. The functionality is intentionally kept minimal to needs
-of Open/R, but it can be extended. Below we describe the organization of code in
-this directory. Refer to inline code documentation in header files for more
-information.
+via netlink protocol. The functionality is intentionally kept minimal to the
+needs of Open/R, but it can be extended. Below we describe the organization of
+code in this directory. Refer to inline code documentation in header files for
+more information.
 
 ## NetlinkTypes
 
