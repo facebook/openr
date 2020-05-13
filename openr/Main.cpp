@@ -267,7 +267,7 @@ main(int argc, char** argv) {
   // Create ThreadManager for thrift services
   std::shared_ptr<ThreadManager> thriftThreadMgr{nullptr};
 
-  std::unique_ptr<folly::EventBase> nlEvb{nullptr};
+  std::unique_ptr<OpenrEventBase> nlEvb{nullptr};
   std::unique_ptr<openr::fbnl::NetlinkProtocolSocket> nlSock{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};
   std::unique_ptr<apache::thrift::ThriftServer> netlinkSystemServer{nullptr};
@@ -282,15 +282,21 @@ main(int argc, char** argv) {
     thriftThreadMgr->start();
 
     // Create Netlink Protocol object in a new thread
-    nlEvb = std::make_unique<folly::EventBase>();
-    nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(nlEvb.get());
+    nlEvb = std::make_unique<OpenrEventBase>();
+    nlSock =
+        std::make_unique<openr::fbnl::NetlinkProtocolSocket>(nlEvb->getEvb());
     allThreads.emplace_back([&]() {
       LOG(INFO) << "Starting NetlinkEvb thread ...";
       folly::setThreadName("NetlinkEvb");
-      nlEvb->loopForever();
+      nlEvb->getEvb()->loopForever();
       LOG(INFO) << "NetlinkEvb thread got stopped.";
     });
-    nlEvb->waitUntilRunning();
+    nlEvb->getEvb()->waitUntilRunning();
+
+    // Add netlink eventbase to watchdog
+    if (watchdog) {
+      watchdog->addEvb(nlEvb.get(), "NetlinkEvb");
+    }
 
     // Create event publisher to handle event subscription
     eventPublisher = std::make_unique<PlatformPublisher>(
@@ -789,7 +795,7 @@ main(int argc, char** argv) {
   monitor.waitUntilStopped();
 
   if (nlEvb) {
-    nlEvb->terminateLoopSoon();
+    nlEvb->getEvb()->terminateLoopSoon();
   }
 
   if (netlinkFibServer) {
