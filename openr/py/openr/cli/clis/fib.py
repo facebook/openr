@@ -20,12 +20,12 @@ from openr.cli.utils.options import breeze_option
 
 class FibCli(object):
     def __init__(self):
-        self.fib.add_command(FibRoutesComputedCli().routes, name="routes-computed")
+        self.fib.add_command(FibUnicastRoutesCli().routes, name="routes-computed")
         self.fib.add_command(FibRoutesInstalledCli().routes, name="routes-installed")
 
         # NOTE: keeping alias `list` and `routes`
         # for backward compatibility. Deprecated.
-        self.fib.add_command(FibRoutesComputedCli().routes, name="routes")
+        self.fib.add_command(FibUnicastRoutesCli().routes, name="routes")
         self.fib.add_command(FibRoutesInstalledCli().routes, name="list")
 
         self.fib.add_command(FibUnicastRoutesCli().routes, name="unicast-routes")
@@ -93,30 +93,6 @@ class FibRoutesInstalledCli(object):
             prefixes, labels, json, client_id
         )
         sys.exit(return_code)
-
-
-class FibRoutesComputedCli(object):
-    @click.command()
-    @click.option(
-        "--prefixes",
-        "-p",
-        default="",
-        multiple=True,
-        help="Get route for specific IPs or Prefixes.",
-    )
-    @click.option(
-        "--labels",
-        "-l",
-        type=click.INT,
-        multiple=True,
-        help="Get route for specific labels.",
-    )
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
-    @click.pass_obj
-    def routes(cli_opts, prefixes, labels, json):  # noqa: B902
-        """ Request routing table of the current host """
-
-        fib.FibRoutesComputedCmd(cli_opts).run(prefixes, labels, json)
 
 
 class FibUnicastRoutesCli(object):

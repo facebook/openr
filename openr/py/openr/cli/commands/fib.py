@@ -77,18 +77,6 @@ class FibMplsRoutesCmd(OpenrCtrlCmd):
             )
 
 
-class FibRoutesComputedCmd(OpenrCtrlCmd):
-    def _run(
-        self, client: OpenrCtrl.Client, prefixes: Any, labels: Any, json: bool
-    ) -> None:
-        route_db = client.getRouteDb()
-        if json:
-            route_db_dict = {route_db.thisNodeName: utils.route_db_to_dict(route_db)}
-            utils.print_routes_json(route_db_dict, prefixes, labels)
-        else:
-            utils.print_route_db(route_db, prefixes, labels)
-
-
 class FibCountersCmd(FibAgentCmd):
     def run(self, json_opt):
         try:
