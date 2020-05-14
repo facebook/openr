@@ -72,14 +72,11 @@ const auto ESTABLISHED = SparkNeighState::ESTABLISHED;
 // Domain name (same for all Tests except in DomainTest)
 const std::string kDomainName("Fire_and_Blood");
 
-// the URL for the spark server
-const std::string kSparkCounterCmdUrl("inproc://spark_server_counter_cmd");
-
 // the hold time we use during the tests
 const std::chrono::milliseconds kGRHoldTime(500);
 
-// the keep-alive for spark2 hello messages
-const std::chrono::milliseconds kKeepAliveTime(50);
+// the time interval for spark2 hello msg under fast init mode
+const std::chrono::milliseconds kFastInitHelloTime(50);
 
 // the time interval for spark2 hello msg
 const std::chrono::milliseconds kHelloTime(200);
@@ -130,11 +127,12 @@ class Spark2Fixture : public testing::Test {
       std::pair<uint32_t, uint32_t> version = std::make_pair(
           Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
       std::chrono::milliseconds grHoldTime = kGRHoldTime,
-      std::chrono::milliseconds keepAliveTime = kKeepAliveTime,
-      std::chrono::milliseconds fastInitKeepAliveTime = kKeepAliveTime,
+      // TODO: remove unnecessary argument list when old spark is deprecated
+      std::chrono::milliseconds keepAliveTime = kFastInitHelloTime,
+      std::chrono::milliseconds fastInitKeepAliveTime = kFastInitHelloTime,
       SparkTimeConfig timeConfig = SparkTimeConfig(
           kHelloTime,
-          kKeepAliveTime,
+          kFastInitHelloTime,
           kHandshakeTime,
           kHeartbeatTime,
           kNegotiateHoldTime,
@@ -219,10 +217,6 @@ class SimpleSpark2Fixture : public Spark2Fixture {
 // increase/decrease RTT, expect NEIGHBOR_RTT_CHANGE event
 //
 TEST_F(SimpleSpark2Fixture, RttTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture RttTest finished";
-  };
-
   // create Spark2 instances and establish connections
   createAndConnectSpark2Nodes();
 
@@ -262,10 +256,6 @@ TEST_F(SimpleSpark2Fixture, RttTest) {
 // due to missing node info in `ReflectedNeighborInfo`
 //
 TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fxiture UnidirectionTest finished";
-  };
-
   // create Spark2 instances and establish connections
   createAndConnectSpark2Nodes();
 
@@ -281,14 +271,12 @@ TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
 
   // wait for sparks to lose each other
   {
-    auto event = node1->waitForEvent(NB_DOWN);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_DOWN).has_value());
     LOG(INFO) << "node-1 reported down adjacency to node-2";
   }
 
   {
-    auto event = node2->waitForEvent(NB_DOWN);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_DOWN).has_value());
     LOG(INFO) << "node-2 reported down adjacency to node-1";
   }
 }
@@ -299,10 +287,6 @@ TEST_F(SimpleSpark2Fixture, UnidirectionTest) {
 // "RESTARTED" event due to graceful restart window.
 //
 TEST_F(SimpleSpark2Fixture, GRTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture GracefulRestartTest finished";
-  };
-
   // create Spark2 instances and establish connections
   createAndConnectSpark2Nodes();
 
@@ -313,8 +297,7 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
 
   // node-1 should report node-2 as 'RESTARTING'
   {
-    auto event = node1->waitForEvent(NB_RESTARTING);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_RESTARTING).has_value());
     LOG(INFO) << "node-1 reported node-2 as RESTARTING";
   }
 
@@ -327,15 +310,13 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
   // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
   // with wrapped seqNum
   {
-    auto event = node1->waitForEvent(NB_RESTARTED);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_RESTARTED).has_value());
     LOG(INFO) << "node-1 reported node-2 as 'RESTARTED'";
   }
 
   // node-2 should ultimately report node-1 as 'UP'
   {
-    auto event = node2->waitForEvent(NB_UP);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
     LOG(INFO) << "node-2 reported adjacency to node-1";
   }
 
@@ -354,10 +335,6 @@ TEST_F(SimpleSpark2Fixture, GRTest) {
 // make sure we get neighbor "DOWN" event due to GR timer expiring.
 //
 TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture GRTimerExpiredTest finished";
-  };
-
   // create Spark2 instances and establish connections
   createAndConnectSpark2Nodes();
 
@@ -369,8 +346,7 @@ TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
 
   // Since node2 doesn't come back, will lose adj and declare DOWN
   {
-    auto event = node1->waitForEvent(NB_DOWN);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_DOWN).has_value());
     LOG(INFO) << "node-1 reporte down adjacency to node-2";
 
     // Make sure 'down' event is triggered by GRTimer expire
@@ -387,10 +363,6 @@ TEST_F(SimpleSpark2Fixture, GRTimerExpireTest) {
 // Observe neighbor going DOWN due to hold timer expiration.
 //
 TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture HeartbeatTimerExpireTest finished";
-  };
-
   // create Spark2 instances and establish connections
   createAndConnectSpark2Nodes();
 
@@ -405,11 +377,8 @@ TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
   {
     LOG(INFO) << "Waiting for both nodes to time out with each other";
 
-    auto event1 = node1->waitForEvent(NB_DOWN);
-    ASSERT_TRUE(event1.has_value());
-
-    auto event2 = node2->waitForEvent(NB_DOWN);
-    ASSERT_TRUE(event2.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_DOWN).has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_DOWN).has_value());
 
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
@@ -423,10 +392,6 @@ TEST_F(SimpleSpark2Fixture, HeartbeatTimerExpireTest) {
 // remove/add interface from one instance's perspective
 //
 TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture InterfaceRemovalTest finished";
-  };
-
   // create Spark2 instances and establish connections
   createAndConnectSpark2Nodes();
 
@@ -440,8 +405,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   // since the removal of intf happens instantly. down event should
   // be reported ASAP.
   {
-    auto event = node1->waitForEvent(NB_DOWN);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_DOWN).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(
@@ -451,8 +415,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   }
 
   {
-    auto event = node2->waitForEvent(NB_DOWN);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_DOWN).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime <= kGRHoldTime);
@@ -473,8 +436,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   startTime = std::chrono::steady_clock::now();
 
   {
-    auto event = node1->waitForEvent(NB_UP);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
@@ -482,8 +444,7 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
   }
 
   {
-    auto event = node2->waitForEvent(NB_UP);
-    ASSERT_TRUE(event.has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
 
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime <= kNegotiateHoldTime + kHeartbeatHoldTime);
@@ -498,10 +459,6 @@ TEST_F(SimpleSpark2Fixture, InterfaceRemovalTest) {
 // bi-directionally.
 //
 TEST_F(Spark2Fixture, VersionTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture VersionTest finished";
-  };
-
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex(
       {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
@@ -579,10 +536,6 @@ TEST_F(Spark2Fixture, VersionTest) {
 // make sure they can't form adj as helloMsg being ignored.
 //
 TEST_F(Spark2Fixture, DomainTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture DomainTest finished";
-  };
-
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -616,6 +569,156 @@ TEST_F(Spark2Fixture, DomainTest) {
 }
 
 //
+// Start 3 Spark instances in "hub-and-spoke" topology. We prohibit
+// node-2 and node-3 to talk to each other. We make node-1
+// use two different interfaces for communications.
+//
+// [node2]  [node3]
+//    \       /
+//     \     /
+//      \   /
+//     [node1]
+//
+TEST_F(Spark2Fixture, HubAndSpokeTopology) {
+  const std::string iface1_2{"iface1_2"};
+  const std::string iface1_3{"iface1_3"};
+  const int ifIndex1_2{12};
+  const int ifIndex1_3{13};
+  auto ip1V4_2 = folly::IPAddress::createNetwork("192.168.0.12", 24, true);
+  auto ip1V4_3 = folly::IPAddress::createNetwork(
+      "192.168.0.13", 24, true /* apply mask */);
+  auto ip1V6_2 = folly::IPAddress::createNetwork("fe80::12:1/128");
+  auto ip1V6_3 = folly::IPAddress::createNetwork("fe80::13:1/128");
+
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1_2, ifIndex1_2},
+                                    {iface1_3, ifIndex1_3},
+                                    {iface2, ifIndex2},
+                                    {iface3, ifIndex3}});
+
+  ConnectedIfPairs connectedPairs = {{iface1_2, {{iface2, 10}}},
+                                     {iface1_3, {{iface3, 10}}},
+                                     {iface2, {{iface1_2, 10}}},
+                                     {iface3, {{iface1_3, 10}}}};
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // start spark2 instances
+  const std::string nodeName1 = "node-1";
+  const std::string nodeName2 = "node-2";
+  const std::string nodeName3 = "node-3";
+  auto node1 = createSpark(kDomainName, nodeName1, 1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2);
+  auto node3 = createSpark(kDomainName, nodeName3, 3);
+
+  EXPECT_TRUE(
+      node1->updateInterfaceDb({{iface1_2, ifIndex1_2, ip1V4_2, ip1V6_2},
+                                {iface1_3, ifIndex1_3, ip1V4_3, ip1V6_3}}));
+  EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+  EXPECT_TRUE(node3->updateInterfaceDb({{iface3, ifIndex3, ip3V4, ip3V6}}));
+
+  // node-1 should hear from node-2 and node-3 on diff interfaces respectively
+  {
+    std::map<std::string, thrift::SparkNeighborEvent> events;
+    for (size_t i = 0; i < 2; i++) {
+      auto maybeEvent = node1->waitForEvent(NB_UP);
+      EXPECT_TRUE(maybeEvent.has_value());
+      events.emplace(maybeEvent.value().neighbor.nodeName, maybeEvent.value());
+    }
+
+    ASSERT_EQ(1, events.count(nodeName2));
+    ASSERT_EQ(1, events.count(nodeName3));
+
+    auto event1 = events.at(nodeName2);
+    EXPECT_EQ(iface1_2, event1.ifName);
+    EXPECT_TRUE(nodeName2 == event1.neighbor.nodeName);
+    EXPECT_EQ(
+        std::make_pair(ip2V4.first, ip2V6.first),
+        SparkWrapper::getTransportAddrs(event1));
+
+    auto event2 = events.at(nodeName3);
+    EXPECT_EQ(iface1_3, event2.ifName);
+    EXPECT_TRUE(nodeName3 == event2.neighbor.nodeName);
+    EXPECT_EQ(
+        std::make_pair(ip3V4.first, ip3V6.first),
+        SparkWrapper::getTransportAddrs(event2));
+
+    LOG(INFO) << nodeName1 << " reported adjacencies to " << nodeName2
+              << " and " << nodeName3;
+  }
+
+  LOG(INFO) << "Stopping " << nodeName1;
+  node1.reset();
+
+  // both node-2 and node-3 should report node1 as restarting &
+  // subsequently down after hold-time expiry
+  {
+    auto event1 = node2->waitForEvent(NB_RESTARTING);
+    ASSERT_TRUE(event1.has_value());
+    EXPECT_TRUE(event1.value().neighbor.nodeName == nodeName1);
+
+    auto event2 = node3->waitForEvent(NB_RESTARTING);
+    ASSERT_TRUE(event2.has_value());
+    EXPECT_TRUE(event2.value().neighbor.nodeName == nodeName1);
+
+    // eventually will lose adjacency as node1 never come back
+    EXPECT_TRUE(node2->waitForEvent(NB_DOWN).has_value());
+    EXPECT_TRUE(node3->waitForEvent(NB_DOWN).has_value());
+  }
+}
+
+TEST_F(Spark2Fixture, FastInitTest) {
+  // Define interface names for the test
+  mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // connect interfaces directly
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider->setConnectedPairs(connectedPairs);
+
+  // By default, helloMsg is sent out every "kFastInitHelloTime" interval
+  const std::string nodeName1 = "node-1";
+  const std::string nodeName2 = "node-2";
+  auto node1 = createSpark(kDomainName, nodeName1, 1);
+  auto node2 = createSpark(kDomainName, nodeName2, 2);
+
+  {
+    // Record current timestamp
+    const auto startTime = std::chrono::steady_clock::now();
+
+    // start tracking interfaces
+    EXPECT_TRUE(node1->updateInterfaceDb({{iface1, ifIndex1, ip1V4, ip1V6}}));
+    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+
+    EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
+
+    // make sure total time used is limited
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - startTime);
+    EXPECT_GE(5 * kFastInitHelloTime.count(), duration.count());
+  }
+
+  // kill and restart node-2
+  LOG(INFO) << "Killing and restarting: " << nodeName2;
+
+  node2.reset();
+  node2 = createSpark(kDomainName, nodeName2, 3 /* changed */);
+
+  {
+    const auto startTime = std::chrono::steady_clock::now();
+    EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
+    EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
+
+    // make sure total time used is limited
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - startTime);
+    EXPECT_GE(5 * kFastInitHelloTime.count(), duration.count());
+  }
+}
+
+//
 // Start 2 Spark instances and make sure they form adjacency. Then
 // start another Spark instance connecting over the same interface,
 // make sure node-1/2 can form adj with node-3 and vice versa.
@@ -623,10 +726,6 @@ TEST_F(Spark2Fixture, DomainTest) {
 // is NOT affected.
 //
 TEST_F(Spark2Fixture, MultiplePeersOverSameInterface) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture MultiplePeersOverSameInterface finished";
-  };
-
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex(
       {{iface1, ifIndex1}, {iface2, ifIndex2}, {iface3, ifIndex3}});
@@ -651,11 +750,8 @@ TEST_F(Spark2Fixture, MultiplePeersOverSameInterface) {
   EXPECT_TRUE(node2->updateInterfaceDb({{iface2, ifIndex2, ip2V4, ip2V6}}));
 
   {
-    auto event1 = node1->waitForEvent(NB_UP);
-    ASSERT_TRUE(event1.has_value());
-
-    auto event2 = node2->waitForEvent(NB_UP);
-    ASSERT_TRUE(event2.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
   }
 
   // add third instance
@@ -757,10 +853,6 @@ TEST_F(Spark2Fixture, MultiplePeersOverSameInterface) {
 // event generated for this one.
 //
 TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture IgnoreUnidirectionalPeerTest finished";
-  };
-
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -804,10 +896,6 @@ TEST_F(Spark2Fixture, IgnoreUnidirectionalPeer) {
 // Make sure pkt loop can be handled gracefully and no ADJ will be formed.
 //
 TEST_F(Spark2Fixture, LoopedHelloPktTest) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture LoopedHelloPktTest finished";
-  };
-
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}});
 
@@ -840,10 +928,6 @@ TEST_F(Spark2Fixture, LoopedHelloPktTest) {
 // will form adj with each other.
 //
 TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture LinkDownWithoutAdjFormed finished";
-  };
-
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -898,11 +982,9 @@ TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
     EXPECT_TRUE(node2->updateInterfaceDb(
         {{iface2, ifIndex2, ip2V4WithSameSubnet, ip2V6}}));
 
-    auto event1 = node1->waitForEvent(NB_UP);
-    ASSERT_TRUE(event1.has_value());
+    EXPECT_TRUE(node1->waitForEvent(NB_UP).has_value());
+    EXPECT_TRUE(node2->waitForEvent(NB_UP).has_value());
 
-    auto event2 = node2->waitForEvent(NB_UP);
-    ASSERT_TRUE(event2.has_value());
     LOG(INFO) << "node-1 and node-2 successfully form adjacency";
   }
 }
@@ -914,10 +996,6 @@ TEST_F(Spark2Fixture, LinkDownWithoutAdjFormed) {
 // new helloMsg is received.
 //
 TEST_F(Spark2Fixture, InvalidV4Subnet) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture InvalidV4Subnet finished";
-  };
-
   // Define interface names for the test
   mockIoProvider->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
 
@@ -973,10 +1051,6 @@ TEST_F(Spark2Fixture, InvalidV4Subnet) {
 // can form adj with each other in specified AREA.
 //
 TEST_F(Spark2Fixture, AreaMatch) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture AreaMatch finished";
-  };
-
   // Explicitly set regex to be capital letters to make sure
   // regex is NOT case-sensative
   auto areaConfig11 = SparkWrapper::createAreaConfig(area1, {"RSW.*"}, {".*"});
@@ -1038,10 +1112,6 @@ TEST_F(Spark2Fixture, AreaMatch) {
 // can NOT form adj due to wrong AREA regex matching.
 //
 TEST_F(Spark2Fixture, NoAreaMatch) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture NoAreaMatch finished";
-  };
-
   // AreaConfig:
   //  rsw001: { 1 -> "RSW.*"}
   //  fsw002: { 1 -> "FSW.*"}
@@ -1095,10 +1165,6 @@ TEST_F(Spark2Fixture, NoAreaMatch) {
 // can NOT form adj due to inconsistent AREA negotiation result.
 //
 TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture InconsistentArea finished";
-  };
-
   // AreaConfig:
   //  rsw001: { 1 -> "FSW.*"}
   //  fsw002: { 2 -> "RSW.*"}
@@ -1159,10 +1225,6 @@ TEST_F(Spark2Fixture, InconsistentAreaNegotiation) {
 // form adj in `defaultArea` for backward compatibility.
 //
 TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture NoAreaSupportNegotiation finished";
-  };
-
   // AreaConfig:
   //  rsw001: {}
   //  fsw002: { 2 -> "RSW.*"}
@@ -1215,10 +1277,6 @@ TEST_F(Spark2Fixture, NoAreaSupportNegotiation) {
 // same interface.
 //
 TEST_F(Spark2Fixture, MultiplePeersWithDiffAreaOverSameLink) {
-  SCOPE_EXIT {
-    LOG(INFO) << "Spark2Fixture MultiplePeersWithDiffAreaOverSameLink finished";
-  };
-
   // AreaConfig:
   //  rsw001: { 1 -> {"FSW.*"}, 2 -> {"SSW.*"}}
   //  fsw002: { 1 -> {"RSW.*", "SSW.*"}}
