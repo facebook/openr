@@ -138,7 +138,7 @@ class TechSupportCmd(object):
     def print_fib_routes_computed(self):
         if not self.print_routes:
             return
-        fib.FibRoutesComputedCmd(self.cli_opts).run([], [], False)
+        fib.FibUnicastRoutesCmd(self.cli_opts).run([], False)
 
     def print_fib_routes_installed(self):
         if not self.print_routes:
