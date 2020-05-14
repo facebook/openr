@@ -38,6 +38,29 @@
 
 namespace openr {
 
+//
+// Define KvStorePeerState to maintain peer's state transition
+// during peer coming UP/DOWN for initial sync.
+//
+enum class KvStorePeerState {
+  IDLE = 0,
+  SYNCING = 1,
+  INITIALIZED = 2,
+  UNEXPECTED = 3,
+};
+
+//
+// Define KvStorePeerEvent which triggers the peer state
+// transition.
+//
+enum class KvStorePeerEvent {
+  PEER_ADD = 0,
+  SYNC_TIMEOUT = 1,
+  SYNC_RESP_RCVD = 2,
+  PEER_DEL = 3,
+  UNEXPECTED_EVENT = 4,
+};
+
 struct TtlCountdownQueueEntry {
   std::chrono::steady_clock::time_point expiryTime;
   std::string key;
@@ -100,6 +123,8 @@ struct KvStoreParams {
 
   // ZMQ high water
   int zmqHwm;
+  // flag to enable KvStore external communication over thrift
+  bool enableKvStoreThrift{false};
   // IP ToS
   std::optional<int> maybeIpTos;
   // how often to request full db sync from peers
@@ -120,6 +145,8 @@ struct KvStoreParams {
       fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> globalCmdSock,
       // ZMQ high water mark
       int zmqhwm,
+      // flags for thrift communication
+      bool enableKvStoreThrift,
       // IP QoS
       std::optional<int> maybeipTos,
       // how often to request full db sync from peers
@@ -135,6 +162,7 @@ struct KvStoreParams {
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         globalCmdSock(std::move(globalCmdSock)),
         zmqHwm(zmqhwm),
+        enableKvStoreThrift(enableKvStoreThrift),
         maybeIpTos(std::move(maybeipTos)),
         dbSyncInterval(dbsyncInterval),
         filters(std::move(filter)),
@@ -426,7 +454,8 @@ class KvStore final : public OpenrEventBase {
       // initial list of peers to connect to
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       // ZMQ high water mark
-      int zmqHwm = Constants::kHighWaterMark);
+      int zmqHwm = Constants::kHighWaterMark,
+      bool enableKvStoreThrift = false);
 
   // process the key-values publication, and attempt to
   // merge it in existing map (first argument)

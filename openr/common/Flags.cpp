@@ -250,6 +250,10 @@ DEFINE_string(
     "Only keys with originator ID matching any of the originator ID will "
     "be added to kvstore.");
 DEFINE_int32(memory_limit_mb, 300, "Memory limit in MB");
+DEFINE_bool(
+    enable_kvstore_thrift,
+    false,
+    "Flag to enable KvStore external msg exchanging over thrift");
 DEFINE_int32(
     kvstore_zmq_hwm,
     openr::Constants::kHighWaterMark,

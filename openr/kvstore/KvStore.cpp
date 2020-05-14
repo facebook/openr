@@ -111,7 +111,8 @@ KvStore::KvStore(
     std::optional<int> maybeIpTos,
     // initializer for mutable state
     std::unordered_map<std::string, thrift::PeerSpec> peers,
-    int zmqHwm)
+    int zmqHwm,
+    bool enableKvStoreThrift)
     : kvParams_(
           config->getNodeName(),
           kvStoreUpdatesQueue,
@@ -122,6 +123,7 @@ KvStore::KvStore(
               folly::none,
               fbzmq::NonblockingFlag{true}),
           zmqHwm,
+          enableKvStoreThrift,
           maybeIpTos,
           std::chrono::seconds(config->getKvStoreConfig().sync_interval_s),
           getKvStoreFilters(config),
