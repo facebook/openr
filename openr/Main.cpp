@@ -240,7 +240,7 @@ main(int argc, char** argv) {
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> routeUpdatesQueue;
   ReplicateQueue<openr::thrift::InterfaceDatabase> interfaceUpdatesQueue;
   ReplicateQueue<openr::thrift::SparkNeighborEvent> neighborUpdatesQueue;
-  ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdatesQueue;
+  ReplicateQueue<openr::thrift::PrefixUpdateRequest> prefixUpdateRequestQueue;
   ReplicateQueue<openr::thrift::Publication> kvStoreUpdatesQueue;
   ReplicateQueue<openr::thrift::PeerUpdateRequest> peerUpdatesQueue;
   ReplicateQueue<openr::thrift::RouteDatabaseDelta> staticRoutesUpdateQueue;
@@ -440,7 +440,7 @@ main(int argc, char** argv) {
       watchdog,
       "PrefixManager",
       std::make_unique<PrefixManager>(
-          prefixUpdatesQueue.getReader(),
+          prefixUpdateRequestQueue.getReader(),
           config,
           configStore,
           kvStore,
@@ -472,7 +472,7 @@ main(int argc, char** argv) {
         std::make_unique<PrefixAllocator>(
             FLAGS_node_name,
             kvStore,
-            prefixUpdatesQueue,
+            prefixUpdateRequestQueue,
             monitorSubmitUrl,
             AllocPrefixMarker{Constants::kPrefixAllocMarker.toString()},
             allocMode,
@@ -631,7 +631,7 @@ main(int argc, char** argv) {
           monitorSubmitUrl,
           configStore,
           FLAGS_assume_drained,
-          prefixUpdatesQueue,
+          prefixUpdateRequestQueue,
           PlatformPublisherUrl{FLAGS_platform_pub_url},
           initialDumpTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
@@ -758,7 +758,7 @@ main(int argc, char** argv) {
 
   // Call external module for platform specific implementations
   if (FLAGS_enable_plugin) {
-    pluginStart(PluginArgs{prefixUpdatesQueue,
+    pluginStart(PluginArgs{prefixUpdateRequestQueue,
                            staticRoutesUpdateQueue,
                            routeUpdatesQueue.getReader(),
                            config,
@@ -773,7 +773,7 @@ main(int argc, char** argv) {
   interfaceUpdatesQueue.close();
   peerUpdatesQueue.close();
   neighborUpdatesQueue.close();
-  prefixUpdatesQueue.close();
+  prefixUpdateRequestQueue.close();
   kvStoreUpdatesQueue.close();
   staticRoutesUpdateQueue.close();
 

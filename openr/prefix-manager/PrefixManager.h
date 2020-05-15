@@ -32,7 +32,7 @@ namespace openr {
 class PrefixManager final : public OpenrEventBase {
  public:
   PrefixManager(
-      messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
+      messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
       std::shared_ptr<const Config> config,
       PersistentStore* configStore,
       KvStore* kvStore,
@@ -48,14 +48,19 @@ class PrefixManager final : public OpenrEventBase {
   PrefixManager& operator=(PrefixManager const&) = delete;
 
   /*
-   * Public API for PrefixManager operations, including:
+   * Public API for PrefixManager operations:
+   *
+   * Write APIs - will schedule syncKvStoreThrottled_ to update kvstore,
+   * @return true if there are changes else false
    *  - add prefixes
    *  - withdraw prefixes
    *  - withdraw prefixes by type
-   *  - sync prefixes by type
-   *  - dump all prefixes
+   *  - sync prefixes by type: replace all prefixes of @type w/ @prefixes
    *
-   * Returns true if there are changes else false
+   *
+   * Read APIs - dump internal prefixDb
+   *  - dump all prefixes
+   *  - dump all prefixes by type
    */
   folly::SemiFuture<bool> advertisePrefixes(
       std::vector<thrift::PrefixEntry> prefixes);
@@ -75,31 +80,35 @@ class PrefixManager final : public OpenrEventBase {
   getPrefixesByType(thrift::PrefixType prefixType);
 
  private:
-  void outputState();
-  // Update persistent store with non-ephemeral prefix entries
-  void persistPrefixDb();
-
-  // Update kvstore with both ephemeral and non-ephemeral prefixes
-  void updateKvStore();
-
-  // update all IP keys in KvStore
-  void updateKvStorePrefixKeys();
-
-  // helpers to modify prefix db, returns true if the db is modified
-  bool addOrUpdatePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
-  bool removePrefixes(const std::vector<thrift::PrefixEntry>& prefixes);
-  bool removePrefixesByType(thrift::PrefixType type);
-  // replace all prefixes of @type w/ @prefixes
-  bool syncPrefixes(
+  /*
+   * Private helpers to update prefixMap_ and send prefixes to KvStore
+   *
+   * Called upon:
+   * - public write APIs
+   * - request from PrefixUpdateRequest
+   *
+   * modify prefix db and schedule syncKvStoreThrottled_ to update kvstore
+   * @return true if the db is modified
+   */
+  bool advertisePrefixesImpl(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool withdrawPrefixesImpl(const std::vector<thrift::PrefixEntry>& prefixes);
+  bool withdrawPrefixesByTypeImpl(thrift::PrefixType type);
+  bool syncPrefixesByTypeImpl(
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
 
+  // Update kvstore with both ephemeral and non-ephemeral prefixes
+  void syncKvStore();
+
   // add prefix entry in kvstore, return per prefix key name
-  std::string advertisePrefix(thrift::PrefixEntry& prefixEntry);
+  std::string updateKvStorePrefixEntry(thrift::PrefixEntry& prefixEntry);
+
+  // Update persistent store with non-ephemeral prefix entries
+  void persistPrefixDb();
 
   // add event named updateEvent to perfEvents if it has value and the last
   // element is not already updateEvent
-  void maybeAddEvent(
+  void addPerfEventIfNotExist(
       thrift::PerfEvents& perfEvents, std::string const& updateEvent);
 
   // this node name
@@ -119,11 +128,10 @@ class PrefixManager final : public OpenrEventBase {
   // enable convergence performance measurement for Adjacencies update
   const bool enablePerfMeasurement_{false};
 
-  // Throttled version of updateKvStore. It batches up multiple calls and
+  // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!
-  std::unique_ptr<fbzmq::ZmqThrottle> outputStateThrottled_;
-
-  std::unique_ptr<fbzmq::ZmqTimeout> initialOutputStateTimer_;
+  std::unique_ptr<fbzmq::ZmqThrottle> syncKvStoreThrottled_;
+  std::unique_ptr<fbzmq::ZmqTimeout> initialSyncKvStoreTimer_;
 
   // TTL for a key in the key value store
   const std::chrono::milliseconds ttlKeyInKvStore_;

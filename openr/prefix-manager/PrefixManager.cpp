@@ -36,7 +36,7 @@ getPrefixTypeName(thrift::PrefixType const& type) {
 } // namespace
 
 PrefixManager::PrefixManager(
-    messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
+    messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdateRequestQueue,
     std::shared_ptr<const Config> config,
     PersistentStore* configStore,
     KvStore* kvStore,
@@ -63,76 +63,75 @@ PrefixManager::PrefixManager(
       configStore_->loadThriftObj<thrift::PrefixDatabase>(kPfxMgrConfigKey)
           .get();
   if (maybePrefixDb.hasValue()) {
+    diskState_ = std::move(maybePrefixDb.value());
     LOG(INFO) << folly::sformat(
         "Successfully loaded {} prefixes from disk.",
-        maybePrefixDb->prefixEntries.size());
-    diskState_ = std::move(maybePrefixDb.value());
+        diskState_.prefixEntries.size());
+
     for (const auto& entry : diskState_.prefixEntries) {
-      LOG(INFO) << "  > " << toString(entry.prefix) << ", type "
-                << getPrefixTypeName(entry.type);
+      LOG(INFO) << folly::sformat(
+          "  > {}, type {}",
+          toString(entry.prefix),
+          getPrefixTypeName(entry.type));
       prefixMap_[entry.type][entry.prefix] = entry;
-      addPerfEvent(
-          addingEvents_[entry.type][entry.prefix], nodeId_, "LOADED_FROM_DISK");
+      addPerfEventIfNotExist(
+          addingEvents_[entry.type][entry.prefix], "LOADED_FROM_DISK");
     }
   }
 
-  // Create a timer to update all prefixes after HoldTime (2 * KA) during
-  // initial start up
-  // Holdtime zero is used during testing to do inline without delay
-  initialOutputStateTimer_ =
-      fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept { outputState(); });
+  // Create initial timer to update all prefixes after HoldTime (2 * KA)
+  initialSyncKvStoreTimer_ =
+      fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept { syncKvStore(); });
 
   // Create throttled update state
-  outputStateThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
+  syncKvStoreThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       getEvb(), Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
-        if (initialOutputStateTimer_->isScheduled()) {
+        if (initialSyncKvStoreTimer_->isScheduled()) {
           return;
         }
-        outputState();
+        syncKvStore();
       });
 
   // Schedule fiber to read prefix updates messages
-  addFiberTask([q = std::move(prefixUpdatesQueue), this]() mutable noexcept {
-    while (true) {
-      auto maybeUpdate = q.get(); // perform read
-      VLOG(1) << "Received prefix update request";
-      if (maybeUpdate.hasError()) {
-        LOG(INFO) << "Terminating route delta processing fiber";
-        break;
-      }
+  addFiberTask(
+      [q = std::move(prefixUpdateRequestQueue), this]() mutable noexcept {
+        while (true) {
+          auto maybeUpdate = q.get(); // perform read
+          VLOG(1) << "Received prefix update request";
+          if (maybeUpdate.hasError()) {
+            LOG(INFO) << "Terminating route delta processing fiber";
+            break;
+          }
 
-      auto& update = maybeUpdate.value();
-      switch (update.cmd) {
-      case thrift::PrefixUpdateCommand::ADD_PREFIXES:
-        addOrUpdatePrefixes(update.prefixes);
-        break;
-      case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES:
-        removePrefixes(update.prefixes);
-        break;
-      case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE:
-        CHECK(update.type_ref().has_value());
-        removePrefixesByType(update.type_ref().value());
-        break;
-      case thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE:
-        CHECK(update.type_ref().has_value());
-        syncPrefixes(update.type_ref().value(), update.prefixes);
-        break;
-      default:
-        LOG(FATAL) << "Unknown command received. "
-                   << static_cast<int>(update.cmd);
-        break;
-      }
-    }
-  });
+          auto& update = maybeUpdate.value();
+          switch (update.cmd) {
+          case thrift::PrefixUpdateCommand::ADD_PREFIXES:
+            advertisePrefixesImpl(update.prefixes);
+            break;
+          case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES:
+            withdrawPrefixesImpl(update.prefixes);
+            break;
+          case thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE:
+            CHECK(update.type_ref().has_value());
+            withdrawPrefixesByTypeImpl(update.type_ref().value());
+            break;
+          case thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE:
+            CHECK(update.type_ref().has_value());
+            syncPrefixesByTypeImpl(update.type_ref().value(), update.prefixes);
+            break;
+          default:
+            LOG(FATAL) << "Unknown command received. "
+                       << static_cast<int>(update.cmd);
+            break;
+          }
+        }
+      });
 
   // register kvstore publication callback
-  std::vector<std::string> keyPrefixList;
-  keyPrefixList.emplace_back(
-      folly::sformat("{}{}", Constants::kPrefixDbMarker.toString(), nodeId_));
-  std::set<std::string> originatorIds{};
-  KvStoreFilters kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
+  std::vector<std::string> keyPrefixList = {
+      Constants::kPrefixDbMarker.toString() + nodeId_};
   kvStoreClient_->subscribeKeyFilter(
-      std::move(kvFilters),
+      KvStoreFilters(keyPrefixList, {} /* originatorIds*/),
       [this](
           const std::string& key, std::optional<thrift::Value> value) noexcept {
         // we're not currently persisting this key, it may be that we no longer
@@ -144,7 +143,7 @@ PrefixManager::PrefixManager(
           if (not prefixDb.deletePrefix && nodeId_ == prefixDb.thisNodeName) {
             LOG(INFO) << "keysToClear_.emplace(" << key << ")";
             keysToClear_.emplace(key);
-            outputStateThrottled_->operator()();
+            syncKvStoreThrottled_->operator()();
           }
         }
       });
@@ -163,7 +162,8 @@ PrefixManager::PrefixManager(
     }
   }
 
-  initialOutputStateTimer_->scheduleTimeout(initialDumpTime);
+  // initialDumpTime zero is used during testing to do inline without delay
+  initialSyncKvStoreTimer_->scheduleTimeout(initialDumpTime);
 }
 
 PrefixManager::~PrefixManager() {
@@ -172,8 +172,8 @@ PrefixManager::~PrefixManager() {
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
     // destory timers
     LOG(INFO) << "Destroyed timers inside PrefixManager";
-    initialOutputStateTimer_.reset();
-    outputStateThrottled_.reset();
+    initialSyncKvStoreTimer_.reset();
+    syncKvStoreThrottled_.reset();
   });
   kvStoreClient_.reset();
 }
@@ -198,7 +198,7 @@ PrefixManager::persistPrefixDb() {
 }
 
 std::string
-PrefixManager::advertisePrefix(thrift::PrefixEntry& prefixEntry) {
+PrefixManager::updateKvStorePrefixEntry(thrift::PrefixEntry& prefixEntry) {
   thrift::PrefixDatabase prefixDb;
   prefixDb.thisNodeName = nodeId_;
   prefixDb.prefixEntries.emplace_back(prefixEntry);
@@ -225,7 +225,7 @@ PrefixManager::advertisePrefix(thrift::PrefixEntry& prefixEntry) {
 }
 
 void
-PrefixManager::outputState() {
+PrefixManager::syncKvStore() {
   std::vector<std::pair<std::string, std::string>> keyVals;
   std::unordered_set<std::string> nowAdvertisingKeys;
   std::unordered_set<thrift::IpPrefix> nowAdvertisingPrefixes;
@@ -234,14 +234,14 @@ PrefixManager::outputState() {
     for (auto& kv : prefixMap_) {
       for (auto& kv2 : kv.second) {
         if (not nowAdvertisingPrefixes.count(kv2.first)) {
-          maybeAddEvent(
+          addPerfEventIfNotExist(
               addingEvents_[kv.first][kv2.first], "UPDATE_KVSTORE_THROTTLED");
-          auto const key = advertisePrefix(kv2.second);
+          auto const key = updateKvStorePrefixEntry(kv2.second);
           nowAdvertisingKeys.emplace(key);
           nowAdvertisingPrefixes.emplace(kv2.first);
           keysToClear_.erase(key);
         } else {
-          maybeAddEvent(
+          addPerfEventIfNotExist(
               addingEvents_[kv.first][kv2.first], "COVERED_BY_HIGHER_TYPE");
         }
       }
@@ -253,7 +253,7 @@ PrefixManager::outputState() {
     for (auto& kv : prefixMap_) {
       for (auto& kv2 : kv.second) {
         if (not nowAdvertisingPrefixes.count(kv2.first)) {
-          maybeAddEvent(
+          addPerfEventIfNotExist(
               addingEvents_[kv.first][kv2.first], "UPDATE_KVSTORE_THROTTLED");
           if (nullptr == mostRecentEvents or
               addingEvents_[kv.first][kv2.first].events.back().unixTs >
@@ -263,7 +263,7 @@ PrefixManager::outputState() {
           prefixDb.prefixEntries.emplace_back(kv2.second);
           nowAdvertisingPrefixes.emplace(kv2.first);
         } else {
-          maybeAddEvent(
+          addPerfEventIfNotExist(
               addingEvents_[kv.first][kv2.first], "COVERED_BY_HIGHER_TYPE");
         }
       }
@@ -292,7 +292,7 @@ PrefixManager::outputState() {
   deletedPrefixDb.deletePrefix = true;
   if (enablePerfMeasurement_) {
     deletedPrefixDb.perfEvents_ref() = thrift::PerfEvents{};
-    maybeAddEvent(
+    addPerfEventIfNotExist(
         deletedPrefixDb.perfEvents_ref().value(), "WITHDRAW_THROTTLED");
   }
   for (auto const& key : keysToClear_) {
@@ -338,7 +338,7 @@ PrefixManager::advertisePrefixes(std::vector<thrift::PrefixEntry> prefixes) {
     this,
     p = std::move(p),
     prefixes = std::move(prefixes)
-  ]() mutable noexcept { p.setValue(addOrUpdatePrefixes(prefixes)); });
+  ]() mutable noexcept { p.setValue(advertisePrefixesImpl(prefixes)); });
   return sf;
 }
 
@@ -350,7 +350,7 @@ PrefixManager::withdrawPrefixes(std::vector<thrift::PrefixEntry> prefixes) {
     this,
     p = std::move(p),
     prefixes = std::move(prefixes)
-  ]() mutable noexcept { p.setValue(removePrefixes(prefixes)); });
+  ]() mutable noexcept { p.setValue(withdrawPrefixesImpl(prefixes)); });
   return sf;
 }
 
@@ -362,7 +362,7 @@ PrefixManager::withdrawPrefixesByType(thrift::PrefixType prefixType) {
     this,
     p = std::move(p),
     prefixType = std::move(prefixType)
-  ]() mutable noexcept { p.setValue(removePrefixesByType(prefixType)); });
+  ]() mutable noexcept { p.setValue(withdrawPrefixesByTypeImpl(prefixType)); });
   return sf;
 }
 
@@ -376,7 +376,9 @@ PrefixManager::syncPrefixesByType(
     p = std::move(p),
     prefixType = std::move(prefixType),
     prefixes = std::move(prefixes)
-  ]() mutable noexcept { p.setValue(syncPrefixes(prefixType, prefixes)); });
+  ]() mutable noexcept {
+    p.setValue(syncPrefixesByTypeImpl(prefixType, prefixes));
+  });
   return sf;
 }
 
@@ -421,7 +423,7 @@ PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
 
 // helpers for modifying our Prefix Db
 bool
-PrefixManager::addOrUpdatePrefixes(
+PrefixManager::advertisePrefixesImpl(
     const std::vector<thrift::PrefixEntry>& prefixEntries) {
   bool updated{false};
   for (const auto& prefixEntry : prefixEntries) {
@@ -429,9 +431,8 @@ PrefixManager::addOrUpdatePrefixes(
     auto it = prefixes.find(prefixEntry.prefix);
     if (it == prefixes.end() or it->second != prefixEntry) {
       prefixes[prefixEntry.prefix] = prefixEntry;
-      addPerfEvent(
+      addPerfEventIfNotExist(
           addingEvents_[prefixEntry.type][prefixEntry.prefix],
-          nodeId_,
           it == prefixes.end() ? "ADD_PREFIX" : "UPDATE_PREFIX");
       updated = true;
       SYSLOG(INFO) << "Advertising prefix: " << toString(prefixEntry.prefix)
@@ -440,13 +441,13 @@ PrefixManager::addOrUpdatePrefixes(
   }
   if (updated) {
     persistPrefixDb();
-    outputStateThrottled_->operator()();
+    syncKvStoreThrottled_->operator()();
   }
   return updated;
 }
 
 bool
-PrefixManager::removePrefixes(
+PrefixManager::withdrawPrefixesImpl(
     const std::vector<thrift::PrefixEntry>& prefixes) {
   // verify prefixes exists
   for (const auto& prefix : prefixes) {
@@ -471,13 +472,13 @@ PrefixManager::removePrefixes(
   }
   if (!prefixes.empty()) {
     persistPrefixDb();
-    outputStateThrottled_->operator()();
+    syncKvStoreThrottled_->operator()();
   }
   return !prefixes.empty();
 }
 
 bool
-PrefixManager::syncPrefixes(
+PrefixManager::syncPrefixesByTypeImpl(
     thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& prefixEntries) {
   LOG(INFO) << "Syncing prefixes of type: " << getPrefixTypeName(type);
@@ -496,13 +497,13 @@ PrefixManager::syncPrefixes(
     toRemove.emplace_back(prefixMap_[type][prefix]);
   }
   bool updated = false;
-  updated |= addOrUpdatePrefixes(toAddOrUpdate);
-  updated |= removePrefixes(toRemove);
+  updated |= advertisePrefixesImpl(toAddOrUpdate);
+  updated |= withdrawPrefixesImpl(toRemove);
   return updated;
 }
 
 bool
-PrefixManager::removePrefixesByType(thrift::PrefixType type) {
+PrefixManager::withdrawPrefixesByTypeImpl(thrift::PrefixType type) {
   bool changed = false;
   auto const search = prefixMap_.find(type);
   if (search != prefixMap_.end()) {
@@ -511,13 +512,13 @@ PrefixManager::removePrefixesByType(thrift::PrefixType type) {
   }
   if (changed) {
     persistPrefixDb();
-    outputStateThrottled_->operator()();
+    syncKvStoreThrottled_->operator()();
   }
   return changed;
 }
 
 void
-PrefixManager::maybeAddEvent(
+PrefixManager::addPerfEventIfNotExist(
     thrift::PerfEvents& perfEvents, std::string const& updateEvent) {
   if (perfEvents.events.empty() or
       perfEvents.events.back().eventDescr != updateEvent) {
