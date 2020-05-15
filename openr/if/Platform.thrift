@@ -238,6 +238,9 @@ service FibService extends fb303_core.BaseService {
     1: i32 portId
     )
     throws (1: PlatformError error)
+
+  map<i32, Network.PortInfoThrift> getAllPortInfo()
+  throws (1: PlatformError error)
 }
 
 service NeighborListenerClientForFibagent {
