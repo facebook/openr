@@ -142,10 +142,11 @@ const std::chrono::milliseconds debounceTimeoutMin{10};
 const std::chrono::milliseconds debounceTimeoutMax{500};
 
 thrift::PrefixDatabase
-getPrefixDbWithKspfAlgo(
+createPrefixDbWithKspfAlgo(
     thrift::PrefixDatabase const& prefixDb,
     std::optional<thrift::PrefixType> prefixType = std::nullopt,
-    std::optional<thrift::IpPrefix> prefix = std::nullopt) {
+    std::optional<thrift::IpPrefix> prefix = std::nullopt,
+    std::optional<uint32_t> prependLabel = std::nullopt) {
   thrift::PrefixDatabase newPrefixDb = prefixDb;
 
   for (auto& p : newPrefixDb.prefixEntries) {
@@ -166,6 +167,9 @@ getPrefixDbWithKspfAlgo(
     entry.forwardingAlgorithm = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     entry.mv_ref() = thrift::MetricVector();
     entry.type = thrift::PrefixType::BGP;
+    if (prependLabel.has_value()) {
+      entry.prependLabel_ref() = prependLabel.value();
+    }
     newPrefixDb.prefixEntries.push_back(entry);
     return newPrefixDb;
   }
@@ -1350,7 +1354,7 @@ class SimpleRingMeshTopologyFixture
 
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
         useKsp2Ed
-            ? getPrefixDbWithKspfAlgo(
+            ? createPrefixDbWithKspfAlgo(
                   pdb1,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp1)
@@ -1358,7 +1362,7 @@ class SimpleRingMeshTopologyFixture
             : pdb1));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
         useKsp2Ed
-            ? getPrefixDbWithKspfAlgo(
+            ? createPrefixDbWithKspfAlgo(
                   pdb2,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp2)
@@ -1366,7 +1370,7 @@ class SimpleRingMeshTopologyFixture
             : pdb2));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
         useKsp2Ed
-            ? getPrefixDbWithKspfAlgo(
+            ? createPrefixDbWithKspfAlgo(
                   pdb3,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp3)
@@ -1374,7 +1378,7 @@ class SimpleRingMeshTopologyFixture
             : pdb3));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
         useKsp2Ed
-            ? getPrefixDbWithKspfAlgo(
+            ? createPrefixDbWithKspfAlgo(
                   pdb4,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp4)
@@ -1529,7 +1533,7 @@ class SimpleRingTopologyFixture
 
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
         useKsp2Ed
-            ? getPrefixDbWithKspfAlgo(
+            ? createPrefixDbWithKspfAlgo(
                   pdb1,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp1)
@@ -1537,7 +1541,7 @@ class SimpleRingTopologyFixture
             : pdb1));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
         useKsp2Ed
-            ? getPrefixDbWithKspfAlgo(
+            ? createPrefixDbWithKspfAlgo(
                   pdb2,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp2)
@@ -1545,7 +1549,7 @@ class SimpleRingTopologyFixture
             : pdb2));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
         useKsp2Ed
-            ? getPrefixDbWithKspfAlgo(
+            ? createPrefixDbWithKspfAlgo(
                   pdb3,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp3)
@@ -1553,7 +1557,7 @@ class SimpleRingTopologyFixture
             : pdb3));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
         useKsp2Ed
-            ? getPrefixDbWithKspfAlgo(
+            ? createPrefixDbWithKspfAlgo(
                   pdb4,
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp4)
@@ -2121,6 +2125,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   // set metric vector for two prefixes in two nodes to be same
   prefixDBOne.prefixEntries[1].mv_ref() = mv1;
+  prefixDBOne.prefixEntries[1].prependLabel_ref() = 60000;
   prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[1]);
 
   spfSolver->updatePrefixDatabase(prefixDBOne);
@@ -2254,6 +2259,42 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
     EXPECT_EQ(route.data_ref(), "");
   }
   EXPECT_EQ(route.prefixType_ref(), thrift::PrefixType::BGP);
+
+  // verify on node 1. From node 1 point of view, both node 1 and node 2 are
+  // are annoucing the prefix. So it will program 3 nexthops.
+  // 1: recursively resolved MPLS nexthops of prependLabel
+  // 2: shortest path to node 2.
+  // 3: second shortest path node 2.
+  thrift::StaticRoutes staticRoutes;
+  int32_t staticMplsRouteLabel = 60000;
+  // insert the new nexthop to mpls static routes cache
+  thrift::NextHopThrift nh;
+  nh.address = toBinaryAddress("1.1.1.1");
+  nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
+  thrift::MplsRoute staticMplsRoute;
+  staticMplsRoute.topLabel = staticMplsRouteLabel;
+  staticMplsRoute.nextHops.emplace_back(nh);
+  thrift::RouteDatabaseDelta routesDelta;
+  routesDelta.mplsRoutesToUpdate = {staticMplsRoute};
+  spfSolver->pushRoutesDeltaUpdates(routesDelta);
+  spfSolver->processStaticRouteUpdates();
+
+  routeMap = getRouteMap(*spfSolver, {"1"});
+  // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
+  auto push24Static = createMplsAction(
+      pushCode, std::nullopt, std::vector<int32_t>{staticMplsRouteLabel, 2, 4});
+  auto pushStatic = createMplsAction(
+      pushCode, std::nullopt, std::vector<int32_t>{staticMplsRouteLabel});
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
+      NextHops({createNextHop(
+                    toBinaryAddress("1.1.1.1"),
+                    std::nullopt,
+                    0,
+                    std::nullopt,
+                    true /* useNonShortestRoute */),
+                createNextHopFromAdj(adj13, v4Enabled, 30, push24Static, true),
+                createNextHopFromAdj(adj12, v4Enabled, 10, pushStatic, true)}));
 }
 
 //
@@ -2693,16 +2734,16 @@ class ParallelAdjRingTopologyFixture
     // Prefix db's
 
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb1, prefixType)
+        useKsp2Ed ? createPrefixDbWithKspfAlgo(prefixDb1, prefixType)
                   : prefixDb1));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb2, prefixType)
+        useKsp2Ed ? createPrefixDbWithKspfAlgo(prefixDb2, prefixType)
                   : prefixDb2));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb3, prefixType)
+        useKsp2Ed ? createPrefixDbWithKspfAlgo(prefixDb3, prefixType)
                   : prefixDb3));
     EXPECT_TRUE(spfSolver->updatePrefixDatabase(
-        useKsp2Ed ? getPrefixDbWithKspfAlgo(prefixDb4, prefixType)
+        useKsp2Ed ? createPrefixDbWithKspfAlgo(prefixDb4, prefixType)
                   : prefixDb4));
   }
 

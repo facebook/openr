@@ -200,6 +200,7 @@ class SpfSolver::SpfSolverImpl {
         "decision.skipped_unicast_route", fb303::COUNT);
     fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
     fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
+    fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
   }
 
   ~SpfSolverImpl() = default;
@@ -946,8 +947,30 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
   // the nodes
   auto bestPathCalRes =
       findDstNodesForBgpRoute(myNodeName, prefix, nodePrefixes, isV4);
-  if (bestPathCalRes.success && (not bestPathCalRes.nodes.count(myNodeName))) {
-    return maybeFilterDrainedNodes(std::move(bestPathCalRes));
+
+  if (bestPathCalRes.success) {
+    if (useKsp2EdAlgo) {
+      auto iter = nodePrefixes.find(myNodeName);
+      bool labelExistForMyNode = iter != nodePrefixes.end() &&
+              iter->second.prependLabel_ref().has_value()
+          ? true
+          : false;
+      // In ksp2 algorithm, we consider program our own advertised prefix if
+      // there are other nodes announcing it and prepend label associated with
+      // it.
+      if ((not bestPathCalRes.nodes.count(myNodeName)) ||
+          (bestPathCalRes.nodes.size() > 1 && labelExistForMyNode)) {
+        return maybeFilterDrainedNodes(std::move(bestPathCalRes));
+      } else {
+        VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
+                << ". Best path originated by self.";
+      }
+    } else if (not bestPathCalRes.nodes.count(myNodeName)) {
+      return maybeFilterDrainedNodes(std::move(bestPathCalRes));
+    } else {
+      VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
+              << ". Best path originated by self.";
+    }
   } else if (not bestPathCalRes.success) {
     LOG(WARNING) << "No route to BGP prefix " << toString(prefix);
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
@@ -955,7 +978,6 @@ SpfSolver::SpfSolverImpl::getBestAnnouncingNodes(
     VLOG(2) << "Ignoring route to BGP prefix " << toString(prefix)
             << ". Best path originated by self.";
   }
-
   return dstNodes;
 }
 
@@ -1230,6 +1252,7 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
   thrift::UnicastRoute route;
   route.dest = prefix;
+  bool selfNodeContained{false};
 
   std::vector<std::pair<Path, Metric>> paths;
 
@@ -1239,6 +1262,11 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
 
   // find shortest and sec shortest routes.
   for (const auto& node : bestPathCalResult.nodes) {
+    // if ourself is considered as ECMP nodes.
+    if (node == myNodeName) {
+      selfNodeContained = true;
+      continue;
+    }
     auto routesIter = routeToNodes.find(node);
     if (routesIter == routeToNodes.end()) {
       continue;
@@ -1288,6 +1316,17 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
 
   for (const auto& pathAndCost : paths) {
     std::vector<int32_t> labels;
+    // if self node is one of it's ecmp, it means this prefix is anycast and
+    // we need to add prepend label which is static MPLS route the destination
+    // prepared.
+    if (selfNodeContained) {
+      auto dstNodeLink = pathAndCost.first.at(0);
+      auto dstNodeName =
+          dstNodeLink.second->getOtherNodeName(dstNodeLink.first);
+      if (nodePrefixes.at(dstNodeName).prependLabel_ref()) {
+        labels.emplace_back(*nodePrefixes.at(dstNodeName).prependLabel_ref());
+      }
+    }
     for (auto& nodeLink : pathAndCost.first) {
       auto& otherNodeName = nodeLink.second->getOtherNodeName(nodeLink.first);
       labels.emplace_back(
@@ -1316,6 +1355,26 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
         pathCost,
         mplsAction,
         true /* useNonShortestRoute */));
+  }
+
+  // if self node is one of it's ecmp node, we need to program nexthops which
+  // provided by ourself in this case.
+  if (selfNodeContained) {
+    auto label = nodePrefixes.at(myNodeName).prependLabel_ref().value();
+    auto routeIter = staticRoutes_.mplsRoutes.find(label);
+    if (routeIter != staticRoutes_.mplsRoutes.end()) {
+      for (const auto& nh : routeIter->second) {
+        route.nextHops.emplace_back(createNextHop(
+            nh.address,
+            std::nullopt,
+            0,
+            std::nullopt,
+            true /* useNonShortestRoute */));
+      }
+    } else {
+      LOG(ERROR) << "Static nexthops not exist for static mpls label: "
+                 << label;
+    }
   }
 
   // if we have set minNexthop for prefix and # of nexthop didn't meet the
