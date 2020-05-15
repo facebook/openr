@@ -394,4 +394,6 @@ DEFINE_uint32(
     " This would only work for prefix announcing with ksp2 "
     "algorithm. Right now, only used in turbo-fabric setup");
 
+DEFINE_int32(add_path, 0, "add path value");
+
 DEFINE_string(config, "", "OpenR config file path");

@@ -4210,6 +4210,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
 
   // construct new static mpls route add
   thrift::RouteDatabaseDelta input;
+  input.thisNodeName = "1";
   thrift::NextHopThrift nh, nh1, nh2;
   nh.address = toBinaryAddress(folly::IPAddressV6("::1"));
   nh1.address = toBinaryAddress(folly::IPAddressV6("::2"));

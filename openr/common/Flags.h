@@ -143,5 +143,6 @@ DECLARE_bool(bgp_override_auto_config);
 DECLARE_string(spr_ha_state_file);
 DECLARE_bool(bgp_enable_stateful_ha);
 DECLARE_uint32(bgp_min_nexthop);
+DECLARE_int32(add_path);
 
 DECLARE_string(config);

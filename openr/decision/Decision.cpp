@@ -1228,6 +1228,7 @@ SpfSolver::SpfSolverImpl::processStaticRouteUpdates() {
   }
 
   thrift::RouteDatabaseDelta ret;
+  ret.thisNodeName = myNodeName_;
   for (const auto& routeToUpdate : routesToUpdate) {
     staticRoutes_.mplsRoutes[routeToUpdate.first] =
         routeToUpdate.second.nextHops;

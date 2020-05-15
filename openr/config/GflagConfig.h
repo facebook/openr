@@ -189,6 +189,10 @@ class GflagConfig final {
       if (auto v = FLAGS_bgp_use_igp_metric) {
         config.bgp_use_igp_metric_ref() = v;
       }
+      if (FLAGS_add_path) {
+        (config.bgp_config_ref()->peers)[0].add_path_ref() =
+            static_cast<thrift::AddPath>(FLAGS_add_path);
+      }
     }
     return std::make_shared<Config>(config);
   }
