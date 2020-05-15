@@ -79,7 +79,7 @@ const auto persistentPrefixEntry10 = createPrefixEntry(
     false);
 } // namespace
 
-class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
+class PrefixManagerTestFixture : public testing::Test {
  public:
   void
   SetUp() override {
@@ -114,15 +114,12 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
 
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
-        "node-1",
         prefixUpdatesQueue.getReader(),
+        config,
         configStore.get(),
         kvStoreWrapper->getKvStore(),
-        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-        perPrefixKeys_ /* per prefix keys */,
         true /* prefix-mananger perf measurement */,
-        std::chrono::seconds{0},
-        Constants::kKvStoreDbTtl);
+        std::chrono::seconds{0});
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "PrefixManager thread starting";
@@ -210,13 +207,9 @@ class PrefixManagerTestFixture : public testing::TestWithParam<bool> {
   std::unique_ptr<std::thread> prefixManagerThread{nullptr};
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient{nullptr};
-  const bool perPrefixKeys_ = GetParam();
 };
 
-INSTANTIATE_TEST_CASE_P(
-    PrefixManagerInstance, PrefixManagerTestFixture, ::testing::Bool());
-
-TEST_P(PrefixManagerTestFixture, AddRemovePrefix) {
+TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   // Expect no throw
   EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
@@ -243,7 +236,7 @@ TEST_P(PrefixManagerTestFixture, AddRemovePrefix) {
   EXPECT_TRUE(prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get());
 }
 
-TEST_P(PrefixManagerTestFixture, RemoveUpdateType) {
+TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry2}).get());
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry3}).get());
@@ -298,7 +291,7 @@ TEST_P(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry8}).get());
 }
 
-TEST_P(PrefixManagerTestFixture, RemoveInvalidType) {
+TEST_F(PrefixManagerTestFixture, RemoveInvalidType) {
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry2}).get());
 
@@ -326,19 +319,17 @@ TEST_P(PrefixManagerTestFixture, RemoveInvalidType) {
   EXPECT_EQ(0, resp4->size());
 }
 
-TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
+TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
   folly::Baton waitBaton;
   auto scheduleAt = std::chrono::milliseconds{0}.count();
   thrift::PrefixDatabase db;
 
   std::string keyStr{"prefix:node-1"};
-  if (perPrefixKeys_) {
-    auto prefixKey = PrefixKey(
-        "node-1",
-        folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
-        thrift::KvStore_constants::kDefaultArea());
-    keyStr = prefixKey.getPrefixKey();
-  }
+  auto prefixKey = PrefixKey(
+      "node-1",
+      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
+      thrift::KvStore_constants::kDefaultArea());
+  keyStr = prefixKey.getPrefixKey();
 
   // start kvStoreClientInternal separately with different thread
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
@@ -463,7 +454,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStore) {
  * 3. Withdraw prefix1 with client-loopback - Verify KvStore
  * 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
  */
-TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
+TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   const auto loopback_prefix =
       createPrefixEntry(addr1, thrift::PrefixType::LOOPBACK);
   const auto default_prefix =
@@ -471,13 +462,11 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   const auto bgp_prefix = createPrefixEntry(addr1, thrift::PrefixType::BGP);
 
   std::string keyStr{"prefix:node-1"};
-  if (perPrefixKeys_) {
-    keyStr = PrefixKey(
-                 "node-1",
-                 toIPNetwork(addr1),
-                 thrift::KvStore_constants::kDefaultArea())
-                 .getPrefixKey();
-  }
+  keyStr = PrefixKey(
+               "node-1",
+               toIPNetwork(addr1),
+               thrift::KvStore_constants::kDefaultArea())
+               .getPrefixKey();
 
   // Synchronization primitive
   folly::Baton baton;
@@ -501,8 +490,8 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
           EXPECT_EQ(expectedPrefix, db.prefixEntries.at(0));
           gotExpected = true;
         } else {
-          EXPECT_TRUE(not perPrefixKeys_ or db.deletePrefix);
-          EXPECT_TRUE(not perPrefixKeys_ or db.prefixEntries.size() == 1);
+          EXPECT_TRUE(db.deletePrefix);
+          EXPECT_TRUE(db.prefixEntries.size() == 1);
         }
 
         // Signal verification
@@ -557,12 +546,7 @@ TEST_P(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
  * the prefixes managed by the prefix manager. This test does not apply to
  * the old key format
  */
-TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
-  // test only if 'create ip prefixes' is enabled
-  if (!perPrefixKeys_) {
-    return;
-  }
-
+TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
   folly::Baton waitBaton;
   int waitDuration{0};
 
@@ -663,7 +647,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeyUpdates) {
  * state of prefix in the prefix manager (either exists or does not exist) and
  * appropriately udpates Kvstore
  */
-TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
+TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   int waitDuration{0};
   int keyVersion{0};
   folly::Baton waitBaton;
@@ -675,9 +659,7 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
       "node-1",
       folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
       thrift::KvStore_constants::kDefaultArea());
-  if (perPrefixKeys_) {
-    prefixKeyStr = prefixKey.getPrefixKey();
-  }
+  prefixKeyStr = prefixKey.getPrefixKey();
 
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
       &evl, "node-1", kvStoreWrapper->getKvStore());
@@ -756,10 +738,8 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         EXPECT_EQ(db.thisNodeName, "node-1");
         // delete prefix must be set to TRUE, applies only when per prefix key
         // is enabled
-        if (perPrefixKeys_) {
-          EXPECT_NE(db.prefixEntries.size(), 0);
-          EXPECT_TRUE(db.deletePrefix);
-        }
+        EXPECT_NE(db.prefixEntries.size(), 0);
+        EXPECT_TRUE(db.deletePrefix);
       });
 
   thrift::PrefixDatabase nonEmptyPrefxDb;
@@ -797,10 +777,8 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
         EXPECT_EQ(db.thisNodeName, "node-1");
         // delete prefix must be set to TRUE, applies only when per prefix key
         // is enabled
-        if (perPrefixKeys_) {
-          EXPECT_NE(db.prefixEntries.size(), 0);
-          EXPECT_TRUE(db.deletePrefix);
-        }
+        EXPECT_NE(db.prefixEntries.size(), 0);
+        EXPECT_TRUE(db.deletePrefix);
 
         // Synchronization primitive
         waitBaton.post();
@@ -814,29 +792,25 @@ TEST_P(PrefixManagerTestFixture, PrefixKeySubscribtion) {
   waitBaton.wait();
 }
 
-TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
+TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   folly::Baton waitBaton;
   int waitDuration{0};
   std::chrono::milliseconds ttl{100};
 
-  if (!perPrefixKeys_) {
-    return;
-  }
-
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
       &evl, "node-1", kvStoreWrapper->getKvStore());
 
+  auto tConfig = getBasicOpenrConfig("node-2");
+  tConfig.kvstore_config.key_ttl_ms = ttl.count();
+  auto config = std::make_shared<Config>(tConfig);
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
-      "node-2",
       prefixUpdatesQueue.getReader(),
+      config,
       configStore.get(),
       kvStoreWrapper->getKvStore(),
-      PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-      perPrefixKeys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
-      std::chrono::seconds(0),
-      ttl);
+      std::chrono::seconds(0));
 
   auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
     LOG(INFO) << "PrefixManager thread starting";
@@ -919,22 +893,21 @@ TEST_P(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
   prefixManagerThread2->join();
 }
 
-TEST_P(PrefixManagerTestFixture, CheckReload) {
+TEST_F(PrefixManagerTestFixture, CheckReload) {
   prefixManager->advertisePrefixes({prefixEntry1}).get();
   prefixManager->advertisePrefixes({prefixEntry2}).get();
   prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
 
+  auto tConfig = getBasicOpenrConfig("node-2");
+  auto config = std::make_shared<Config>(tConfig);
   // spin up a new PrefixManager add verify that it loads the config
   auto prefixManager2 = std::make_unique<PrefixManager>(
-      "node-2",
       prefixUpdatesQueue.getReader(),
+      config,
       configStore.get(),
       kvStoreWrapper->getKvStore(),
-      PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-      perPrefixKeys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
-      std::chrono::seconds(0),
-      Constants::kKvStoreDbTtl);
+      std::chrono::seconds(0));
 
   auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
     LOG(INFO) << "PrefixManager thread starting";
@@ -956,7 +929,7 @@ TEST_P(PrefixManagerTestFixture, CheckReload) {
   prefixManagerThread2->join();
 }
 
-TEST_P(PrefixManagerTestFixture, GetPrefixes) {
+TEST_F(PrefixManagerTestFixture, GetPrefixes) {
   prefixManager->advertisePrefixes({prefixEntry1});
   prefixManager->advertisePrefixes({prefixEntry2});
   prefixManager->advertisePrefixes({prefixEntry3});
@@ -1030,15 +1003,13 @@ TEST(PrefixManagerTest, HoldTimeout) {
   const std::chrono::seconds holdTime{2};
   const auto startTime = std::chrono::steady_clock::now();
   auto prefixManager = std::make_unique<PrefixManager>(
-      "node-1",
       prefixUpdatesQueue.getReader(),
+      config,
       configStore.get(),
       kvStoreWrapper->getKvStore(),
-      PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-      false /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
       holdTime,
-      Constants::kKvStoreDbTtl);
+      false /* perPrefixKeys */);
   std::thread prefixManagerThread([&]() {
     LOG(INFO) << "PrefixManager thread starting";
     prefixManager->run();
@@ -1051,11 +1022,11 @@ TEST(PrefixManagerTest, HoldTimeout) {
   const auto elapsedTime =
       std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::steady_clock::now() - startTime);
-  CHECK_GE(
+  EXPECT_GE(
       elapsedTime.count(),
       std::chrono::duration_cast<std::chrono::milliseconds>(holdTime).count());
-  CHECK_EQ(1, publication.keyVals.size());
-  CHECK_EQ(1, publication.keyVals.count("prefix:node-1"));
+  EXPECT_EQ(1, publication.keyVals.size());
+  EXPECT_EQ(1, publication.keyVals.count("prefix:node-1"));
 
   // Stop the test
   prefixUpdatesQueue.close();
@@ -1069,7 +1040,7 @@ TEST(PrefixManagerTest, HoldTimeout) {
 
 // Verify that persist store is updated only when
 // non-ephemeral types are effected
-TEST_P(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
+TEST_F(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
   ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
   // Verify that any action on persistent entries leads to update of store
   prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2, prefixEntry3})
@@ -1111,7 +1082,7 @@ TEST_P(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
 
 // Verify that persist store is update properly when both persistent
 // and ephemeral entries are mixed for same prefix type
-TEST_P(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
+TEST_F(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
   ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
   // Verify that any action on persistent entries leads to update of store
   prefixManager
@@ -1158,7 +1129,7 @@ TEST_P(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
   ASSERT_EQ(7, configStore->getNumOfDbWritesToDisk());
 }
 
-TEST_P(PrefixManagerTestFixture, PrefixUpdatesQueue) {
+TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // Helper function to receive expected number of updates from KvStore
   auto recvPublication = [this](int num) {
     for (int i = 0; i < num; ++i) {
@@ -1167,7 +1138,7 @@ TEST_P(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   };
 
   // Receive initial empty prefix database from KvStore when per-prefix key is
-  recvPublication(perPrefixKeys_ ? 0 : 1);
+  recvPublication(0);
 
   // ADD_PREFIXES
   {
@@ -1178,7 +1149,7 @@ TEST_P(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     prefixUpdatesQueue.push(std::move(request));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(perPrefixKeys_ ? 2 : 1);
+    recvPublication(2);
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
@@ -1214,7 +1185,7 @@ TEST_P(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     prefixUpdatesQueue.push(std::move(request));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(perPrefixKeys_ ? 2 : 1);
+    recvPublication(2);
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();

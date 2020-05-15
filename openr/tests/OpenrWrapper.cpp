@@ -199,15 +199,12 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // Create prefix manager
   //
   prefixManager_ = std::make_unique<PrefixManager>(
-      nodeId_,
       prefixUpdatesQueue_.getReader(),
+      config_,
       configStore_.get(),
       kvStore_.get(),
-      PrefixDbMarker{"prefix:"},
-      per_prefix_keys_ /* create IP prefix keys */,
       false /* prefix-mananger perf measurement */,
-      std::chrono::seconds(0),
-      Constants::kKvStoreDbTtl);
+      std::chrono::seconds(0));
 
   //
   // create decision

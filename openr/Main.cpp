@@ -228,7 +228,7 @@ main(int argc, char** argv) {
   }
 
   // Hold time for advertising Prefix/Adj keys into KvStore
-  const std::chrono::seconds kvHoldTime{2 * FLAGS_spark_keepalive_time_s};
+  const std::chrono::seconds initialDumpTime{2 * FLAGS_spark_keepalive_time_s};
 
   // Set up the zmq context for this process.
   Context context;
@@ -440,16 +440,13 @@ main(int argc, char** argv) {
       watchdog,
       "PrefixManager",
       std::make_unique<PrefixManager>(
-          FLAGS_node_name,
           prefixUpdatesQueue.getReader(),
+          config,
           configStore,
           kvStore,
-          PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-          FLAGS_per_prefix_keys,
           FLAGS_enable_perf_measurement,
-          kvHoldTime,
-          std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms),
-          areas));
+          initialDumpTime,
+          FLAGS_per_prefix_keys));
 
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (FLAGS_enable_prefix_alloc) {
@@ -636,7 +633,7 @@ main(int argc, char** argv) {
           FLAGS_assume_drained,
           prefixUpdatesQueue,
           PlatformPublisherUrl{FLAGS_platform_pub_url},
-          kvHoldTime,
+          initialDumpTime,
           std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
           std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms),
           std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms),

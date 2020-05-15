@@ -85,7 +85,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     // Create Fib module
     fib = std::make_shared<Fib>(
         config,
-        -1,
+        -1, /* thrift port */
         std::chrono::seconds(2),
         routeUpdatesQueue_.getReader(),
         interfaceUpdatesQueue_.getReader(),
@@ -96,15 +96,12 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create PrefixManager module
     prefixManager = std::make_shared<PrefixManager>(
-        nodeName,
         prefixUpdatesQueue_.getReader(),
+        config,
         persistentStore.get(),
         kvStoreWrapper->getKvStore(),
-        PrefixDbMarker{Constants::kPrefixDbMarker.str()},
-        false /* create per prefix keys */,
         false,
-        std::chrono::seconds(0),
-        Constants::kKvStoreDbTtl);
+        std::chrono::seconds(0));
     prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
 
     // Create MockNetlinkSystemHandler

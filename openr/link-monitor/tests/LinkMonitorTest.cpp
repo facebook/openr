@@ -226,15 +226,13 @@ class LinkMonitorTestFixture : public ::testing::Test {
 
     // create prefix manager
     prefixManager = std::make_unique<PrefixManager>(
-        "node-1",
         prefixUpdatesQueue.getReader(),
+        config,
         configStore.get(),
         kvStoreWrapper->getKvStore(),
-        PrefixDbMarker{Constants::kPrefixDbMarker.toString()},
-        false /* create IP prefix keys */,
         false,
         std::chrono::seconds(0),
-        Constants::kKvStoreDbTtl);
+        false /* perPrefixKeys */);
     prefixManagerThread = std::make_unique<std::thread>([this] {
       LOG(INFO) << "prefix manager starting";
       prefixManager->run();

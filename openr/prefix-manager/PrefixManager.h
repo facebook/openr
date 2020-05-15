@@ -20,6 +20,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/PrefixManager_types.h>
@@ -31,18 +32,14 @@ namespace openr {
 class PrefixManager final : public OpenrEventBase {
  public:
   PrefixManager(
-      const std::string& nodeId,
       messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
+      std::shared_ptr<const Config> config,
       PersistentStore* configStore,
       KvStore* kvStore,
-      const PrefixDbMarker& prefixDbMarker,
-      bool createIpPrefix,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
-      const std::chrono::seconds prefixHoldTime,
-      const std::chrono::milliseconds ttlKeyInKvStore,
-      const std::unordered_set<std::string>& area = {
-          openr::thrift::KvStore_constants::kDefaultArea()});
+      const std::chrono::seconds& initialDumpTime,
+      bool perPrefixKeys = true);
 
   ~PrefixManager();
 
@@ -117,10 +114,7 @@ class PrefixManager final : public OpenrEventBase {
   // keep track of prefixDB on disk
   thrift::PrefixDatabase diskState_;
 
-  const PrefixDbMarker prefixDbMarker_;
-
-  // create IP keys
-  bool perPrefixKeys_{false};
+  bool perPrefixKeys_{true};
 
   // enable convergence performance measurement for Adjacencies update
   const bool enablePerfMeasurement_{false};

@@ -21,7 +21,7 @@ namespace openr {
 
 namespace {
 // key for the persist config on disk
-const std::string kConfigKey{"prefix-manager-config"};
+const std::string kPfxMgrConfigKey{"prefix-manager-config"};
 // various error messages
 const std::string kErrorNoChanges{"No changes in prefixes to be advertised"};
 const std::string kErrorNoPrefixToRemove{"No prefix to remove"};
@@ -36,24 +36,21 @@ getPrefixTypeName(thrift::PrefixType const& type) {
 } // namespace
 
 PrefixManager::PrefixManager(
-    const std::string& nodeId,
     messaging::RQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue,
+    std::shared_ptr<const Config> config,
     PersistentStore* configStore,
     KvStore* kvStore,
-    const PrefixDbMarker& prefixDbMarker,
-    bool perPrefixKeys,
     bool enablePerfMeasurement,
-    const std::chrono::seconds prefixHoldTime,
-    const std::chrono::milliseconds ttlKeyInKvStore,
-    const std::unordered_set<std::string>& areas)
-    : nodeId_(nodeId),
+    const std::chrono::seconds& initialDumpTime,
+    bool perPrefixKeys)
+    : nodeId_(config->getNodeName()),
       configStore_{configStore},
       kvStore_(kvStore),
-      prefixDbMarker_{prefixDbMarker},
       perPrefixKeys_{perPrefixKeys},
       enablePerfMeasurement_{enablePerfMeasurement},
-      ttlKeyInKvStore_(ttlKeyInKvStore),
-      areas_{areas} {
+      ttlKeyInKvStore_(
+          std::chrono::milliseconds(config->getKvStoreConfig().key_ttl_ms)),
+      areas_{config->getAreaIds()} {
   CHECK(configStore_);
   CHECK(kvStore_);
 
@@ -63,10 +60,12 @@ PrefixManager::PrefixManager(
 
   // pick up prefixes from disk
   auto maybePrefixDb =
-      configStore_->loadThriftObj<thrift::PrefixDatabase>(kConfigKey).get();
+      configStore_->loadThriftObj<thrift::PrefixDatabase>(kPfxMgrConfigKey)
+          .get();
   if (maybePrefixDb.hasValue()) {
-    LOG(INFO) << "Successfully loaded " << maybePrefixDb->prefixEntries.size()
-              << " prefixes from disk";
+    LOG(INFO) << folly::sformat(
+        "Successfully loaded {} prefixes from disk.",
+        maybePrefixDb->prefixEntries.size());
     diskState_ = std::move(maybePrefixDb.value());
     for (const auto& entry : diskState_.prefixEntries) {
       LOG(INFO) << "  > " << toString(entry.prefix) << ", type "
@@ -76,9 +75,19 @@ PrefixManager::PrefixManager(
           addingEvents_[entry.type][entry.prefix], nodeId_, "LOADED_FROM_DISK");
     }
   }
+
+  // Create a timer to update all prefixes after HoldTime (2 * KA) during
+  // initial start up
+  // Holdtime zero is used during testing to do inline without delay
+  initialOutputStateTimer_ =
+      fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept { outputState(); });
+
   // Create throttled update state
   outputStateThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       getEvb(), Constants::kPrefixMgrKvThrottleTimeout, [this]() noexcept {
+        if (initialOutputStateTimer_->isScheduled()) {
+          return;
+        }
         outputState();
       });
 
@@ -118,8 +127,8 @@ PrefixManager::PrefixManager(
 
   // register kvstore publication callback
   std::vector<std::string> keyPrefixList;
-  keyPrefixList.emplace_back(folly::sformat(
-      "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_));
+  keyPrefixList.emplace_back(
+      folly::sformat("{}{}", Constants::kPrefixDbMarker.toString(), nodeId_));
   std::set<std::string> originatorIds{};
   KvStoreFilters kvFilters = KvStoreFilters(keyPrefixList, originatorIds);
   kvStoreClient_->subscribeKeyFilter(
@@ -154,12 +163,7 @@ PrefixManager::PrefixManager(
     }
   }
 
-  // Create a timer to update all prefixes after HoldTime (2 * KA) during
-  // initial start up
-  // Holdtime zero is used during testing to do inline without delay
-  initialOutputStateTimer_ =
-      fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept { outputState(); });
-  initialOutputStateTimer_->scheduleTimeout(prefixHoldTime);
+  initialOutputStateTimer_->scheduleTimeout(initialDumpTime);
 }
 
 PrefixManager::~PrefixManager() {
@@ -172,14 +176,6 @@ PrefixManager::~PrefixManager() {
     outputStateThrottled_.reset();
   });
   kvStoreClient_.reset();
-}
-
-void
-PrefixManager::outputState() {
-  if (initialOutputStateTimer_->isScheduled()) {
-    return;
-  }
-  updateKvStore();
 }
 
 void
@@ -196,7 +192,7 @@ PrefixManager::persistPrefixDb() {
     }
   }
   if (diskState_ != persistentPrefixDb) {
-    configStore_->storeThriftObj(kConfigKey, persistentPrefixDb).get();
+    configStore_->storeThriftObj(kPfxMgrConfigKey, persistentPrefixDb).get();
     diskState_ = std::move(persistentPrefixDb);
   }
 }
@@ -229,10 +225,11 @@ PrefixManager::advertisePrefix(thrift::PrefixEntry& prefixEntry) {
 }
 
 void
-PrefixManager::updateKvStore() {
+PrefixManager::outputState() {
   std::vector<std::pair<std::string, std::string>> keyVals;
   std::unordered_set<std::string> nowAdvertisingKeys;
   std::unordered_set<thrift::IpPrefix> nowAdvertisingPrefixes;
+
   if (perPrefixKeys_) {
     for (auto& kv : prefixMap_) {
       for (auto& kv2 : kv.second) {
@@ -274,8 +271,8 @@ PrefixManager::updateKvStore() {
     if (enablePerfMeasurement_ and nullptr != mostRecentEvents) {
       prefixDb.perfEvents_ref() = *mostRecentEvents;
     }
-    const auto prefixDbKey = folly::sformat(
-        "{}{}", static_cast<std::string>(prefixDbMarker_), nodeId_);
+    const auto prefixDbKey =
+        folly::sformat("{}{}", Constants::kPrefixDbMarker.toString(), nodeId_);
     for (const auto& area : areas_) {
       bool const changed = kvStoreClient_->persistKey(
           prefixDbKey,
@@ -289,6 +286,7 @@ PrefixManager::updateKvStore() {
     nowAdvertisingKeys.emplace(prefixDbKey);
     keysToClear_.erase(prefixDbKey);
   }
+
   thrift::PrefixDatabase deletedPrefixDb;
   deletedPrefixDb.thisNodeName = nodeId_;
   deletedPrefixDb.deletePrefix = true;

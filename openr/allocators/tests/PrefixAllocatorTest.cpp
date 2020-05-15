@@ -126,15 +126,13 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   void
   createPrefixManager() {
     prefixManager_ = std::make_unique<PrefixManager>(
-        myNodeName_,
         prefixUpdatesQueue_.getReader(),
+        config_,
         configStore_.get(),
         kvStoreWrapper_->getKvStore(),
-        PrefixDbMarker{"prefix:"},
-        false /* create per prefix keys */,
         false /* prefix-manager perf measurement */,
         std::chrono::seconds(0),
-        Constants::kKvStoreDbTtl);
+        false /* perPrefixKeys */);
     threads_.emplace_back([&]() noexcept {
       LOG(INFO) << "PrefixManager started. TID: " << std::this_thread::get_id();
       prefixManager_->run();
@@ -289,6 +287,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
     std::atomic<bool> shouldWait{true};
     std::atomic<bool> usingNewSeedPrefix{false};
 
+    vector<std::shared_ptr<Config>> configs;
     vector<std::unique_ptr<PersistentStore>> configStores;
     vector<std::unique_ptr<PrefixManager>> prefixManagers;
     vector<messaging::ReplicateQueue<thrift::PrefixUpdateRequest>> prefixQueues{
@@ -412,22 +411,23 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       });
       tempConfigStore->waitUntilRunning();
 
+      auto currConfig =
+          std::make_shared<Config>(getBasicOpenrConfig(myNodeName));
       // spin up prefix manager
       auto prefixManager = std::make_unique<PrefixManager>(
-          myNodeName,
           prefixQueues.at(i).getReader(),
+          currConfig,
           tempConfigStore.get(),
           store->getKvStore(),
-          PrefixDbMarker{"prefix:"},
-          false /* create per prefix keys */,
           false /* prefix-manager perf measurement */,
           std::chrono::seconds(0),
-          Constants::kKvStoreDbTtl);
+          false /* perPrefixKeys */);
       threads.emplace_back([&prefixManager]() noexcept {
         prefixManager->run();
       });
       prefixManager->waitUntilRunning();
       prefixManagers.emplace_back(std::move(prefixManager));
+      configs.emplace_back(std::move(currConfig));
 
       auto allocator = make_unique<PrefixAllocator>(
           myNodeName,
