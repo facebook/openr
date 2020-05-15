@@ -475,12 +475,9 @@ OpenrWrapper<Serializer>::sparkUpdateInterfaceDb(
   for (const auto& interface : interfaceEntries) {
     ifDb.interfaces.emplace(
         interface.ifName,
-        thrift::InterfaceInfo(
-            apache::thrift::FRAGILE,
+        createThriftInterfaceInfo(
             true,
             interface.ifIndex,
-            {}, // v4Addrs: TO BE DEPRECATED SOON
-            {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
             {toIpPrefix(interface.v4Network),
              toIpPrefix(interface.v6LinkLocalNetwork)}));
   }

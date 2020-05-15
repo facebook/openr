@@ -52,7 +52,6 @@ enum class SparkNeighState {
   NEGOTIATE = 2,
   ESTABLISHED = 3,
   RESTART = 4,
-  UNEXPECTED_STATE = 5,
 };
 
 enum class SparkNeighEvent {
@@ -65,7 +64,6 @@ enum class SparkNeighEvent {
   NEGOTIATE_TIMER_EXPIRE = 6,
   GR_TIMER_EXPIRE = 7,
   NEGOTIATION_FAILURE = 8,
-  UNEXPECTED_EVENT = 9,
 };
 
 //

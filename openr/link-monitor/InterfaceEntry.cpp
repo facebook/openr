@@ -6,10 +6,9 @@
  */
 
 #include "InterfaceEntry.h"
-
 #include <folly/gen/Base.h>
-
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 
 namespace openr {
 
@@ -151,21 +150,7 @@ InterfaceEntry::getInterfaceInfo() const {
     networks.emplace_back(toIpPrefix(network));
   }
 
-  return thrift::InterfaceInfo(
-      apache::thrift::FRAGILE,
-      isUp_,
-      ifIndex_,
-      // TO BE DEPERECATED SOON
-      folly::gen::from(getV4Addrs()) |
-          folly::gen::map(
-              [](const folly::IPAddress& ip) { return toBinaryAddress(ip); }) |
-          folly::gen::as<std::vector>(),
-      // TO BE DEPRECATED SOON
-      folly::gen::from(getV6LinkLocalAddrs()) |
-          folly::gen::map(
-              [](const folly::IPAddress& ip) { return toBinaryAddress(ip); }) |
-          folly::gen::as<std::vector>(),
-      networks);
+  return createThriftInterfaceInfo(isUp_, ifIndex_, networks);
 }
 
 } // namespace openr

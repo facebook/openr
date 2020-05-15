@@ -289,7 +289,7 @@ def metric_vector_to_dict(metric_vector):
 
 
 def collate_prefix_keys(
-    kvstore_keyvals: kv_store_types.KeyVals
+    kvstore_keyvals: kv_store_types.KeyVals,
 ) -> Dict[str, lsdb_types.PrefixDatabase]:
     """ collate all the prefixes of node and return a map of
         nodename - PrefixDatabase
@@ -692,13 +692,7 @@ def interface_db_to_dict(value):
     """
 
     def _parse_intf_info(info):
-        addrs = []
-        if info.networks is not None:
-            addrs = [ipnetwork.sprint_addr(v.prefixAddress.addr) for v in info.networks]
-        else:
-            addrs = [ipnetwork.sprint_addr(v.addr) for v in info.v4Addrs] + [
-                ipnetwork.sprint_addr(v.addr) for v in info.v6LinkLocalAddrs
-            ]
+        addrs = [ipnetwork.sprint_addr(v.prefixAddress.addr) for v in info.networks]
 
         return bunch.Bunch(
             **{"isUp": info.isUp, "ifIndex": info.ifIndex, "Addrs": addrs}
@@ -1639,7 +1633,7 @@ def get_routes_json(
 
 
 def get_routes(
-    route_db: fib_types.RouteDatabase
+    route_db: fib_types.RouteDatabase,
 ) -> (List[network_types.UnicastRoute], List[network_types.MplsRoute]):
     """
     Find all routes for each prefix in routeDb

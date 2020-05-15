@@ -87,13 +87,9 @@ SparkWrapper::updateInterfaceDb(
   for (const auto& interface : interfaceEntries) {
     ifDb.interfaces.emplace(
         interface.ifName,
-        thrift::InterfaceInfo(
-            apache::thrift::FRAGILE,
+        createThriftInterfaceInfo(
             true,
             interface.ifIndex,
-            // TO BE DEPRECATED SOON
-            {toBinaryAddress(interface.v4Network.first)},
-            {toBinaryAddress(interface.v4Network.first)},
             {toIpPrefix(interface.v4Network),
              toIpPrefix(interface.v6LinkLocalNetwork)}));
   }

@@ -284,20 +284,10 @@ class LMLinksCmd(LMCmdBase):
         def _update(interface_info_dict, interface_info):
             interface_info_dict.update(
                 {
-                    # TO BE DEPRECATED SOON
-                    "v4Addrs": [
-                        ipnetwork.sprint_addr(v4Addr.addr)
-                        for v4Addr in interface_info.v4Addrs
-                    ],
-                    # TO BE DEPRECATED SOON
-                    "v6LinkLocalAddrs": [
-                        ipnetwork.sprint_addr(v6Addr.addr)
-                        for v6Addr in interface_info.v6LinkLocalAddrs
-                    ],
                     "networks": [
                         ipnetwork.sprint_prefix(prefix)
                         for prefix in interface_info.networks
-                    ],
+                    ]
                 }
             )
 

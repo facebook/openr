@@ -891,6 +891,18 @@ createThriftPublication(
   return pub;
 }
 
+thrift::InterfaceInfo
+createThriftInterfaceInfo(
+    const bool isUp,
+    const int ifIndex,
+    const std::vector<thrift::IpPrefix>& networks) {
+  thrift::InterfaceInfo interfaceInfo;
+  interfaceInfo.isUp = isUp;
+  interfaceInfo.ifIndex = ifIndex;
+  interfaceInfo.networks = networks;
+  return interfaceInfo;
+}
+
 thrift::NextHopThrift
 createNextHop(
     thrift::BinaryAddress addr,

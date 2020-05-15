@@ -45,10 +45,6 @@ struct PerfEvents {
 struct InterfaceInfo {
   1: required bool isUp
   2: required i64 ifIndex
-  // TO BE DEPRECATED SOON
-  3: required list<Network.BinaryAddress> v4Addrs
-  // TO BE DEPRECATED SOON
-  4: required list<Network.BinaryAddress> v6LinkLocalAddrs
   // ip prefixes of all v4 and v6 link local addresses
   5: list<Network.IpPrefix> networks
 }

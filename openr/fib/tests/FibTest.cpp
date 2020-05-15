@@ -437,25 +437,11 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       {
           {
               path1_2_1.address.ifName_ref().value(),
-              thrift::InterfaceInfo(
-                  FRAGILE,
-                  true, // isUp
-                  121, // ifIndex
-                  {}, // v4Addrs: TO BE DEPRECATED SOON
-                  {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
-                  {} // networks
-                  ),
+              createThriftInterfaceInfo(true, 121, {}),
           },
           {
               path1_2_2.address.ifName_ref().value(),
-              thrift::InterfaceInfo(
-                  FRAGILE,
-                  true, // isUp
-                  122, // ifIndex
-                  {}, // v4Addrs: TO BE DEPRECATED SOON
-                  {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
-                  {} // networks
-                  ),
+              createThriftInterfaceInfo(true, 122, {}),
           },
       },
       thrift::PerfEvents());
@@ -491,14 +477,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       {
           {
               path1_2_1.address.ifName_ref().value(),
-              thrift::InterfaceInfo(
-                  FRAGILE,
-                  false, // isUp
-                  121, // ifIndex
-                  {}, // v4Addrs: TO BE DEPRECATED SOON
-                  {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
-                  {} // networks
-                  ),
+              createThriftInterfaceInfo(false, 121, {}),
           },
       },
       thrift::PerfEvents());
@@ -546,14 +525,7 @@ TEST_F(FibTestFixture, processInterfaceDb) {
       {
           {
               path1_2_2.address.ifName_ref().value(),
-              thrift::InterfaceInfo(
-                  FRAGILE,
-                  false, // isUp
-                  122, // ifIndex
-                  {}, // v4Addrs: TO BE DEPRECATED SOON
-                  {}, // v6LinkLocalAddrs: TO BE DEPRECATED SOON
-                  {} // networks
-                  ),
+              createThriftInterfaceInfo(false, 122, {}),
           },
       },
       thrift::PerfEvents());

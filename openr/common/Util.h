@@ -473,6 +473,11 @@ thrift::Publication createThriftPublication(
     const std::optional<std::string>& area = std::string{
         openr::thrift::KvStore_constants::kDefaultArea()});
 
+thrift::InterfaceInfo createThriftInterfaceInfo(
+    const bool isUp,
+    const int ifIndex,
+    const std::vector<thrift::IpPrefix>& networks);
+
 thrift::NextHopThrift createNextHop(
     thrift::BinaryAddress addr,
     std::optional<std::string> ifName = std::nullopt,

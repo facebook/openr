@@ -46,7 +46,6 @@ enum class KvStorePeerState {
   IDLE = 0,
   SYNCING = 1,
   INITIALIZED = 2,
-  UNEXPECTED = 3,
 };
 
 //
@@ -58,7 +57,6 @@ enum class KvStorePeerEvent {
   SYNC_TIMEOUT = 1,
   SYNC_RESP_RCVD = 2,
   PEER_DEL = 3,
-  UNEXPECTED_EVENT = 4,
 };
 
 struct TtlCountdownQueueEntry {
