@@ -317,7 +317,7 @@ printRouteDb(const std::optional<thrift::RouteDatabase>& routeDb) {
       LOG(INFO) << "nexthops: " << toString(nh);
     }
     if (ucRoute.bestNexthop_ref().has_value()) {
-      const auto nh = ucRoute.bestNexthop.value();
+      const auto nh = ucRoute.bestNexthop_ref().value();
       LOG(INFO) << "best next hop: " << toString(nh);
     }
   }

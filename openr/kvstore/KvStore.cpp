@@ -645,7 +645,8 @@ KvStore::setKvStoreKeyVals(
       // Update statistics
       fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
       if (keySetParams.timestamp_ms_ref().has_value()) {
-        auto floodMs = getUnixTimeStampMs() - keySetParams.timestamp_ms.value();
+        auto floodMs =
+            getUnixTimeStampMs() - keySetParams.timestamp_ms_ref().value();
         if (floodMs > 0) {
           fb303::fbData->addStatValue(
               "kvstore.flood_duration_ms", floodMs, fb303::AVG);
@@ -1403,16 +1404,16 @@ KvStoreDb::processRequestMsgHelper(
     }
 
     fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
-    if (thriftReq.keySetParams_ref()->timestamp_ms.has_value()) {
-      auto floodMs =
-          getUnixTimeStampMs() - thriftReq.keySetParams->timestamp_ms.value();
+    if (thriftReq.keySetParams_ref()->timestamp_ms_ref().has_value()) {
+      auto floodMs = getUnixTimeStampMs() -
+          thriftReq.keySetParams_ref()->timestamp_ms_ref().value();
       if (floodMs > 0) {
         fb303::fbData->addStatValue(
             "kvstore.flood_duration_ms", floodMs, fb303::AVG);
       }
     }
 
-    auto& ketSetParamsVal = thriftReq.keySetParams.value();
+    auto& ketSetParamsVal = thriftReq.keySetParams_ref().value();
     if (ketSetParamsVal.keyVals.empty()) {
       LOG(ERROR) << "Malformed set request, ignoring";
       return folly::makeUnexpected(fbzmq::Error());
@@ -1448,7 +1449,7 @@ KvStoreDb::processRequestMsgHelper(
       return folly::makeUnexpected(fbzmq::Error());
     }
 
-    auto& keyDumpParamsVal = thriftReq.keyDumpParams.value();
+    auto& keyDumpParamsVal = thriftReq.keyDumpParams_ref().value();
     fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
     std::vector<std::string> keyPrefixList;
@@ -2169,8 +2170,8 @@ KvStoreDb::mergePublication(
       "kvstore.received_key_vals", rcvdPublication.keyVals.size(), fb303::SUM);
 
   const bool needFinalizeFullSync = senderId.has_value() and
-      rcvdPublication.tobeUpdatedKeys.has_value() and
-      not rcvdPublication.tobeUpdatedKeys->empty();
+      rcvdPublication.tobeUpdatedKeys_ref().has_value() and
+      not rcvdPublication.tobeUpdatedKeys_ref()->empty();
 
   // This can happen when KvStore is emitting expired-key updates
   if (rcvdPublication.keyVals.empty() and not needFinalizeFullSync) {

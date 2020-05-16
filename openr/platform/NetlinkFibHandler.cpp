@@ -449,7 +449,7 @@ NetlinkFibHandler::buildMplsAction(
   if (!nhop.mplsAction_ref().has_value()) {
     return;
   }
-  auto mplsAction = nhop.mplsAction.value();
+  auto mplsAction = nhop.mplsAction_ref().value();
   nhBuilder.setLabelAction(mplsAction.action);
   if (mplsAction.action == thrift::MplsActionCode::SWAP) {
     if (!mplsAction.swapLabel_ref().has_value()) {
