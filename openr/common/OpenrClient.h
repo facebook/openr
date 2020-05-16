@@ -32,7 +32,7 @@ setCompressionTransform(apache::thrift::RocketClientChannel* /*channel*/) {
 }
 } // namespace detail
 
-/**
+/*
  * Create client for OpenrCtrlCpp service over plain-text communication channel.
  *
  * Underneath client support multiple channel. Here we recommend to use two
@@ -55,19 +55,18 @@ getOpenrCtrlPlainTextClient(
     int32_t port = Constants::kOpenrCtrlPort,
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processingTimeout =
-        std::chrono::milliseconds(10000),
+        Constants::kServiceProcTimeout,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
     std::optional<int> maybeIpTos = std::nullopt) {
-  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client;
-  evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
-    // NOTE: It is possible to have caching for socket. We're not doing it as
-    // we expect clients to be persistent/sticky.
+  // NOTE: It is possible to have caching for socket. We're not doing it as
+  // we expect clients to be persistent/sticky.
+  std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
 
+  evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
     // Create a new UNCONNECTED AsyncSocket
     // ATTN: don't change contructor flavor to connect automatically.
     const folly::SocketAddress sa(addr, port);
-    folly::AsyncSocket::UniquePtr transport = nullptr;
-    transport = folly::AsyncSocket::UniquePtr(
+    auto transport = folly::AsyncSocket::UniquePtr(
         new folly::AsyncSocket(&evb), folly::DelayedDestruction::Destructor());
 
     // Build OptionMap for client socket connection
