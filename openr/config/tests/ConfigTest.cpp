@@ -21,6 +21,7 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace openr {
+using apache::thrift::FragileConstructor::FRAGILE;
 
 class ConfigTestFixture : public ::testing::Test {
  public:
@@ -44,10 +45,10 @@ class ConfigTestFixture : public ::testing::Test {
   folly::test::TemporaryFile validConfigFile_;
 };
 
-TEST_F(ConfigTestFixture, LoadConfig) {
+TEST_F(ConfigTestFixture, ConstructFromFile) {
   EXPECT_NO_THROW(Config(validConfigFile_.path().string()));
 
-  // wrong mandatory fields
+  // thrift format error
   {
     folly::dynamic invalidConfig;
     invalidConfig = folly::parseJson(validConfigStr_);
@@ -61,7 +62,46 @@ TEST_F(ConfigTestFixture, LoadConfig) {
   }
 }
 
-TEST_F(ConfigTestFixture, getBgpAutoConfig) {
+TEST(ConfigTest, PopulateInternalDb) {
+  // area
+  {
+    thrift::AreaConfig area1;
+    area1.area_id = "1";
+    area1.interface_regexes.emplace_back("fboss.*");
+    area1.neighbor_regexes.emplace_back("rsw.*");
+
+    // duplicate area id
+    auto confInvalidArea = getBasicOpenrConfig();
+    confInvalidArea.areas.emplace_back(area1);
+    confInvalidArea.areas.emplace_back(area1);
+    EXPECT_THROW(auto c = Config(confInvalidArea), std::invalid_argument);
+  }
+
+  // kvstore
+  {
+    thrift::KvstoreFloodRate floodrate;
+    floodrate.flood_msg_per_sec = 1;
+    floodrate.flood_msg_burst_size = 1;
+    // invalid flood_msg_per_sec
+    {
+      auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
+      floodrate.flood_msg_per_sec = 0;
+      confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = floodrate;
+      EXPECT_THROW(
+          auto c = Config(confInvalidFloodMsgPerSec), std::out_of_range);
+    }
+    // invalid flood_msg_burst_size
+    {
+      auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
+      floodrate.flood_msg_burst_size = 0;
+      confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = floodrate;
+      EXPECT_THROW(
+          auto c = Config(confInvalidFloodMsgPerSec), std::out_of_range);
+    }
+  }
+}
+
+TEST(ConfigTest, getBgpAutoConfig) {
   {
     FLAGS_node_name = "fsw001";
     auto bgpConfig = GflagConfig::getBgpAutoConfig();
