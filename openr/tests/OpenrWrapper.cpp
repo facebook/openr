@@ -47,10 +47,16 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   auto tConfig = getBasicOpenrConfig(
       nodeId_,
       v4Enabled,
-      false /*enableSegmentRouting*/,
+      true /*enableSegmentRouting*/,
       false /*orderedFibProgramming*/,
       true /*dryrun*/);
   tConfig.kvstore_config.sync_interval_s = kvStoreDbSyncInterval.count();
+  // link monitor config
+  auto& lmConf = tConfig.link_monitor_config;
+  lmConf.linkflap_initial_backoff_ms = linkFlapInitialBackoff.count();
+  lmConf.linkflap_max_backoff_ms = linkFlapMaxBackoff.count();
+  lmConf.use_rtt_metric = false;
+  lmConf.include_interface_regexes = {"vethLMTest_" + nodeId_ + ".*"};
   config_ = std::make_shared<Config>(tConfig);
 
   // create zmq monitor
@@ -152,48 +158,24 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   // create link monitor
   //
-  std::string ifName = "vethLMTest_" + nodeId_;
   std::vector<thrift::IpPrefix> networks;
   networks.emplace_back(toIpPrefix(folly::IPAddress::createNetwork("::/0")));
-  re2::RE2::Options options;
-  options.set_case_sensitive(false);
-  std::string regexErr;
-  auto includeRegexList =
-      std::make_unique<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
-  includeRegexList->Add(ifName + ".*", &regexErr);
-  includeRegexList->Compile();
-  std::unique_ptr<re2::RE2::Set> excludeRegexList;
-  std::unique_ptr<re2::RE2::Set> redistRegexList;
-
   linkMonitor_ = std::make_unique<LinkMonitor>(
       context_,
-      nodeId_,
+      config_,
       static_cast<int32_t>(60099), // platfrom pub port
       kvStore_.get(),
-      std::move(includeRegexList),
-      std::move(excludeRegexList),
-      // redistribute interface names
-      std::move(redistRegexList),
       networks,
-      false, /* use rtt metric */
       false /* enable perf measurement */,
-      false /* enable v4 */,
-      true /* enable segment routing */,
-      false /* prefix type mpls */,
-      false /* prefix fwd algo KSP2_ED_ECMP */,
-      AdjacencyDbMarker{"adj:"},
       interfaceUpdatesQueue_,
       peerUpdatesQueue_,
       neighborUpdatesQueue_.getReader(),
       MonitorSubmitUrl{monitorSubmitUrl_},
       configStore_.get(),
-      false,
+      false, /* assumeDrained */
       prefixUpdatesQueue_,
       PlatformPublisherUrl{platformPubUrl_},
-      linkMonitorAdjHoldTime,
-      linkFlapInitialBackoff,
-      linkFlapMaxBackoff,
-      Constants::kKvStoreDbTtl);
+      linkMonitorAdjHoldTime);
 
   //
   // Create prefix manager

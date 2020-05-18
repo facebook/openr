@@ -41,9 +41,12 @@ Config::getRunningConfig() const {
 
 void
 Config::populateInternalDb() {
-  // areas
+  //
+  // Area
+  //
   thrift::AreaConfig defaultArea;
   defaultArea.area_id = thrift::KvStore_constants::kDefaultArea();
+  defaultArea.interface_regexes.emplace_back(".*");
   defaultArea.neighbor_regexes.emplace_back(".*");
 
   const auto& areas = config_.areas.empty()
@@ -57,7 +60,9 @@ Config::populateInternalDb() {
     }
   }
 
+  //
   // Kvstore
+  //
   const auto& kvConf = config_.kvstore_config;
   if (const auto& floodRate = kvConf.flood_rate_ref()) {
     if (floodRate->flood_msg_per_sec <= 0) {
@@ -65,6 +70,85 @@ Config::populateInternalDb() {
     }
     if (floodRate->flood_msg_burst_size <= 0) {
       throw std::out_of_range("kvstore flood_msg_burst_size should be > 0");
+    }
+  }
+
+  //
+  // Link Monitor
+  //
+  const auto& lmConf = config_.link_monitor_config;
+
+  // backoff validation
+  if (lmConf.linkflap_initial_backoff_ms < 0) {
+    throw std::out_of_range(folly::sformat(
+        "linkflap_initial_backoff_ms ({}) should be >= 0",
+        lmConf.linkflap_initial_backoff_ms));
+  }
+
+  if (lmConf.linkflap_max_backoff_ms < 0) {
+    throw std::out_of_range(folly::sformat(
+        "linkflap_max_backoff_ms ({}) should be >= 0",
+        lmConf.linkflap_max_backoff_ms));
+  }
+
+  if (lmConf.linkflap_initial_backoff_ms > lmConf.linkflap_max_backoff_ms) {
+    throw std::out_of_range(folly::sformat(
+        "linkflap_initial_backoff_ms ({}) should be < linkflap_max_backoff_ms ({})",
+        lmConf.linkflap_initial_backoff_ms,
+        lmConf.linkflap_max_backoff_ms));
+  }
+
+  // Construct the regular expressions to match interface names against
+  re2::RE2::Options regexOpts;
+  std::string regexErr;
+
+  // include_interface_regexes and exclude_interface_regexes together
+  // define RE, which is fed into link-monitor
+
+  // Compiling empty Re2 Set will cause undefined error
+  if (lmConf.include_interface_regexes.size()) {
+    includeItfRegexes_ =
+        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+    for (const auto& regexStr : lmConf.include_interface_regexes) {
+      if (includeItfRegexes_->Add(regexStr, &regexErr) == -1) {
+        throw std::invalid_argument(folly::sformat(
+            "Add include_interface_regexes failed: {}", regexErr));
+      }
+    }
+    if (not includeItfRegexes_->Compile()) {
+      throw std::invalid_argument(
+          folly::sformat("include_interface_regexes compile failed"));
+    }
+  }
+
+  if (lmConf.exclude_interface_regexes.size()) {
+    excludeItfRegexes_ =
+        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+    for (const auto& regexStr : lmConf.exclude_interface_regexes) {
+      if (excludeItfRegexes_->Add(regexStr, &regexErr) == -1) {
+        throw std::invalid_argument(folly::sformat(
+            "Add exclude_interface_regexes failed: {}", regexErr));
+      }
+    }
+    if (not excludeItfRegexes_->Compile()) {
+      throw std::invalid_argument(
+          folly::sformat("exclude_interface_regexes compile failed"));
+    }
+  }
+
+  // redistribute_interface_regexes defines interface to be advertised
+  if (lmConf.redistribute_interface_regexes.size()) {
+    redistributeItfRegexes_ =
+        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+    for (const auto& regexStr : lmConf.redistribute_interface_regexes) {
+      if (redistributeItfRegexes_->Add(regexStr, &regexErr) == -1) {
+        throw std::invalid_argument(folly::sformat(
+            "Add redistribute_interface_regexes failed: {}", regexErr));
+      }
+    }
+    if (not redistributeItfRegexes_->Compile()) {
+      throw std::invalid_argument(
+          folly::sformat("redistribute_interface_regexes compile failed"));
     }
   }
 }

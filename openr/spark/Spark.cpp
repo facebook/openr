@@ -563,13 +563,13 @@ Spark::addAreaRegex(
   re2::RE2::Options regexOpts;
   regexOpts.set_case_sensitive(false);
   std::string regexErr;
-  std::unique_ptr<re2::RE2::Set> neighborRegexList{nullptr};
-  std::unique_ptr<re2::RE2::Set> interfaceRegexList{nullptr};
+  std::shared_ptr<re2::RE2::Set> neighborRegexList{nullptr},
+      interfaceRegexList{nullptr};
 
   // neighbor regex
   if (not neighborRegexes.empty()) {
     neighborRegexList =
-        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
 
     for (const auto& regexStr : neighborRegexes) {
       if (-1 == neighborRegexList->Add(regexStr, &regexErr)) {
@@ -586,7 +586,7 @@ Spark::addAreaRegex(
   // interface regex
   if (not interfaceRegexes.empty()) {
     interfaceRegexList =
-        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
+        std::make_shared<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
 
     for (const auto& regexStr : interfaceRegexes) {
       if (-1 == interfaceRegexList->Add(regexStr, &regexErr)) {
@@ -2672,8 +2672,8 @@ Spark::getNeighborArea(
     const std::string& localIfName,
     const std::vector<std::tuple<
         std::string,
-        std::unique_ptr<re2::RE2::Set>,
-        std::unique_ptr<re2::RE2::Set>>>& areaIdRegexList) {
+        std::shared_ptr<re2::RE2::Set>,
+        std::shared_ptr<re2::RE2::Set>>>& areaIdRegexList) {
   std::vector<std::string> candidateAreas{};
 
   // looping through areaIdRegexList

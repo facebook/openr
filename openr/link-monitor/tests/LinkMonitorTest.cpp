@@ -209,17 +209,9 @@ class LinkMonitorTestFixture : public ::testing::Test {
       LOG(INFO) << "ConfigStore thread finishing";
     });
     configStore->waitUntilRunning();
-
     // create config
-    auto tConfig = getBasicOpenrConfig("node-1");
-    tConfig.kvstore_config.sync_interval_s = 1;
-    for (auto id : areas) {
-      thrift::AreaConfig area;
-      area.area_id = id;
-      area.neighbor_regexes.emplace_back(".*");
-      tConfig.areas.emplace_back(std::move(area));
-    }
-    config = std::make_shared<Config>(tConfig);
+    config = std::make_shared<Config>(
+        getTestOpenrConfig(areas, flapInitalBackoff, flapMaxBackoff));
 
     // spin up a kvstore
     createKvStore(config);
@@ -239,30 +231,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
       LOG(INFO) << "prefix manager stopped";
     });
 
-    regexOpts.set_case_sensitive(false);
-    std::string regexErr;
-    auto includeRegexList =
-        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
-    includeRegexList->Add("iface.*", &regexErr);
-    includeRegexList->Compile();
-
-    std::unique_ptr<re2::RE2::Set> excludeRegexList;
-
-    auto redistRegexList =
-        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    redistRegexList->Add("loopback", &regexErr);
-    redistRegexList->Compile();
-
     // start a link monitor
-    createLinkMonitor(
-        std::move(includeRegexList),
-        std::move(excludeRegexList),
-        std::move(redistRegexList),
-        flapInitalBackoff,
-        flapMaxBackoff,
-        true,
-        areas);
+    createLinkMonitor(config);
   }
 
   void
@@ -309,6 +279,35 @@ class LinkMonitorTestFixture : public ::testing::Test {
     LOG(INFO) << "Mocked thrift handlers got stopped";
   }
 
+  thrift::OpenrConfig
+  getTestOpenrConfig(
+      std::unordered_set<std::string> areas =
+          {openr::thrift::KvStore_constants::kDefaultArea()},
+      std::chrono::milliseconds flapInitalBackoff =
+          std::chrono ::milliseconds(1),
+      std::chrono::milliseconds flapMaxBackoff = std::chrono::milliseconds(8)) {
+    // create config
+    auto tConfig = getBasicOpenrConfig("node-1");
+    tConfig.enable_segment_routing_ref() = true;
+    tConfig.enable_v4_ref() = true;
+    for (auto id : areas) {
+      thrift::AreaConfig area;
+      area.area_id = id;
+      area.neighbor_regexes.emplace_back(".*");
+      tConfig.areas.emplace_back(std::move(area));
+    }
+    // kvstore config
+    tConfig.kvstore_config.sync_interval_s = 1;
+    // link monitor config
+    auto& lmConf = tConfig.link_monitor_config;
+    lmConf.linkflap_initial_backoff_ms = flapInitalBackoff.count();
+    lmConf.linkflap_max_backoff_ms = flapMaxBackoff.count();
+    lmConf.use_rtt_metric = false;
+    lmConf.include_interface_regexes = {kTestVethNamePrefix + ".*", "iface.*"};
+    lmConf.redistribute_interface_regexes = {"loopback"};
+    return tConfig;
+  }
+
   void
   createKvStore(std::shared_ptr<Config> config) {
     kvStoreWrapper = std::make_unique<KvStoreWrapper>(
@@ -320,45 +319,24 @@ class LinkMonitorTestFixture : public ::testing::Test {
   }
 
   void
-  createLinkMonitor(
-      std::unique_ptr<re2::RE2::Set> includeRegexList,
-      std::unique_ptr<re2::RE2::Set> excludeRegexList,
-      std::unique_ptr<re2::RE2::Set> redistRegexList,
-      std::chrono::milliseconds flapInitalBackoff,
-      std::chrono::milliseconds flapMaxBackoff,
-      bool enableSegmentRouting = true,
-      std::unordered_set<std::string> areas = {
-          openr::thrift::KvStore_constants::kDefaultArea()}) {
+  createLinkMonitor(std::shared_ptr<Config> config) {
     linkMonitor = std::make_unique<LinkMonitor>(
         context,
-        "node-1",
+        config,
         port, /* thrift service port */
         kvStoreWrapper->getKvStore(),
-        std::move(includeRegexList),
-        std::move(excludeRegexList),
-        std::move(redistRegexList), // redistribute interface name
         std::vector<thrift::IpPrefix>{staticPrefix1, staticPrefix2},
-        false /* useRttMetric */,
         false /* enable perf measurement */,
-        true /* enable v4 */,
-        enableSegmentRouting,
-        false /* prefix type mpls */,
-        false /* prefix fwd algo KSP2_ED_ECMP */,
-        AdjacencyDbMarker{"adj:"},
         interfaceUpdatesQueue,
         peerUpdatesQueue,
         neighborUpdatesQueue.getReader(),
         MonitorSubmitUrl{"inproc://monitor-rep"},
         configStore.get(),
-        false,
+        false, /* assumeDrained */
         prefixUpdatesQueue,
         PlatformPublisherUrl{"inproc://platform-pub-url"},
-        std::chrono::seconds(1),
-        // link flap backoffs, set low to keep UT runtime low
-        flapInitalBackoff,
-        flapMaxBackoff,
-        Constants::kKvStoreDbTtl,
-        areas);
+        std::chrono::seconds(1) /* adjHoldTime */
+    );
 
     linkMonitorThread = std::make_unique<std::thread>([this]() {
       folly::setThreadName("LinkMonitor");
@@ -864,20 +842,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   createKvStore(config);
 
   // mock "restarting" link monitor with existing config store
-  std::string regexErr;
-  auto includeRegexList =
-      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-  includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
-  includeRegexList->Compile();
-  std::unique_ptr<re2::RE2::Set> excludeRegexList;
-  std::unique_ptr<re2::RE2::Set> redistRegexList;
-
-  createLinkMonitor(
-      std::move(includeRegexList),
-      std::move(excludeRegexList),
-      std::move(redistRegexList),
-      std::chrono::milliseconds(1),
-      std::chrono::milliseconds(8));
+  createLinkMonitor(config);
 
   // 12. neighbor up
   {
@@ -934,30 +899,18 @@ TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
     neighborUpdatesQueue.open();
     kvStoreWrapper->openQueue();
 
-    // mock "restarting" link monitor with existing config store
-    std::string regexErr;
-    auto includeRegexList =
-        std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-    includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
-    includeRegexList->Compile();
-    std::unique_ptr<re2::RE2::Set> excludeRegexList;
-    std::unique_ptr<re2::RE2::Set> redistRegexList;
-
     // ATTN: intentionally set `enableSegmentRouting = false` to test the
     //       config_ load scenario.
-    createLinkMonitor(
-        std::move(includeRegexList),
-        std::move(excludeRegexList),
-        std::move(redistRegexList),
-        std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8),
-        false);
+    auto tConfigCopy = getTestOpenrConfig();
+    tConfigCopy.enable_segment_routing_ref() = false;
+    auto configSegmentRoutingDisabled = std::make_shared<Config>(tConfigCopy);
+    createLinkMonitor(configSegmentRoutingDisabled);
 
     // nodeLabel is non-zero value read from config_, override to 0 to
     // honor flag.
     auto thriftAdjDb = linkMonitor->getLinkMonitorAdjacencies().get();
     EXPECT_TRUE(thriftAdjDb);
-    ASSERT_EQ(0, thriftAdjDb->nodeLabel);
+    EXPECT_EQ(0, thriftAdjDb->nodeLabel);
   }
 }
 
@@ -1229,20 +1182,6 @@ TEST_F(LinkMonitorTestFixture, DampenLinkFlaps) {
   const std::string linkX = kTestVethNamePrefix + "X";
   const std::string linkY = kTestVethNamePrefix + "Y";
   const std::set<std::string> ifNames = {linkX, linkY};
-
-  std::string regexErr;
-  auto includeRegexList =
-      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-  includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
-  includeRegexList->Add("iface.*", &regexErr);
-  includeRegexList->Compile();
-
-  std::unique_ptr<re2::RE2::Set> excludeRegexList;
-
-  auto redistRegexList =
-      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-  redistRegexList->Add("loopback", &regexErr);
-  redistRegexList->Compile();
 
   mockNlHandler->sendLinkEvent(
       linkX /* link name */,
@@ -1685,34 +1624,21 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
   SetUp({openr::thrift::KvStore_constants::kDefaultArea()});
   size_t kNumNodesToTest = 10;
 
-  std::string regexErr;
-  auto includeRegexList =
-      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-  includeRegexList->Add(kTestVethNamePrefix + ".*", &regexErr);
-  includeRegexList->Compile();
-  std::unique_ptr<re2::RE2::Set> excludeRegexList;
-  std::unique_ptr<re2::RE2::Set> redistRegexList;
-
   // spin up kNumNodesToTest - 1 new link monitors. 1 is spun up in setup()
   std::vector<std::unique_ptr<LinkMonitor>> linkMonitors;
   std::vector<std::unique_ptr<std::thread>> linkMonitorThreads;
+  std::vector<std::shared_ptr<Config>> configs;
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
+    auto tConfigCopy = getTestOpenrConfig();
+    tConfigCopy.node_name = folly::sformat("lm{}", i + 1);
+    auto currConfig = std::make_shared<Config>(tConfigCopy);
     auto lm = std::make_unique<LinkMonitor>(
         context,
-        folly::sformat("lm{}", i + 1),
+        currConfig,
         0, // platform pub port
         kvStoreWrapper->getKvStore(),
-        std::move(includeRegexList),
-        std::move(excludeRegexList),
-        std::move(redistRegexList),
         std::vector<thrift::IpPrefix>(),
-        false /* useRttMetric */,
         false /* enable perf measurement */,
-        false /* enable v4 */,
-        true /* enable segment routing */,
-        false /* prefix type MPLS */,
-        false /* prefix fwd algo KSP2_ED_ECMP */,
-        AdjacencyDbMarker{"adj:"},
         interfaceUpdatesQueue,
         peerUpdatesQueue,
         neighborUpdatesQueue.getReader(),
@@ -1721,11 +1647,9 @@ TEST_F(LinkMonitorTestFixture, NodeLabelAlloc) {
         false,
         prefixUpdatesQueue,
         PlatformPublisherUrl{"inproc://platform-pub-url"},
-        std::chrono::seconds(1),
-        std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8),
-        Constants::kKvStoreDbTtl);
+        std::chrono::seconds(1));
     linkMonitors.emplace_back(std::move(lm));
+    configs.emplace_back(std::move(currConfig));
 
     auto lmThread = std::make_unique<std::thread>([&linkMonitors]() {
       LOG(INFO) << "LinkMonitor thread starting";

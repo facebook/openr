@@ -154,12 +154,11 @@ std::vector<folly::CIDRNetwork> getIfacePrefixes(
     std::string ifName, sa_family_t afNet);
 
 bool matchRegexSet(
-    const std::string& name, const std::unique_ptr<re2::RE2::Set>& regexSet);
-
+    const std::string& name, std::shared_ptr<const re2::RE2::Set> regexSet);
 bool checkIncludeExcludeRegex(
     const std::string& name,
-    const std::unique_ptr<re2::RE2::Set>& includeRegexSet,
-    const std::unique_ptr<re2::RE2::Set>& excludeRegexSet);
+    std::shared_ptr<const re2::RE2::Set> includeRegexSet,
+    std::shared_ptr<const re2::RE2::Set> excludeRegexSet);
 
 /**
  * @param prefixIndex subprefix index, starting from 0

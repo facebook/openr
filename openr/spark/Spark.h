@@ -243,8 +243,8 @@ class Spark final : public OpenrEventBase {
       const std::string& ifName,
       const std::vector<std::tuple<
           std::string,
-          std::unique_ptr<re2::RE2::Set>,
-          std::unique_ptr<re2::RE2::Set>>>& areaIdRegexList);
+          std::shared_ptr<re2::RE2::Set>,
+          std::shared_ptr<re2::RE2::Set>>>& areaIdRegexList);
 
   // function to receive and parse received pkt
   bool parsePacket(
@@ -627,8 +627,8 @@ class Spark final : public OpenrEventBase {
   // areaId -> node name regex parsed from areaConfig
   std::vector<std::tuple<
       std::string /* areaId */,
-      std::unique_ptr<re2::RE2::Set> /* neighbor regex */,
-      std::unique_ptr<re2::RE2::Set> /* interface regex */>>
+      std::shared_ptr<re2::RE2::Set> /* neighbor regex */,
+      std::shared_ptr<re2::RE2::Set> /* interface regex */>>
       areaIdRegexList_{};
 
   // Timer for updating and submitting counters periodically

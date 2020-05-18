@@ -20,6 +20,26 @@
 
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+namespace {
+openr::thrift::LinkMonitorConfig
+getTestLinkMonitorConfig() {
+  openr::thrift::LinkMonitorConfig lmConf;
+  lmConf.include_interface_regexes.emplace_back("fboss.*");
+  lmConf.exclude_interface_regexes.emplace_back("eth.*");
+  lmConf.redistribute_interface_regexes.emplace_back("lo");
+  return lmConf;
+}
+
+openr::thrift::KvstoreFloodRate
+getFloodRate() {
+  openr::thrift::KvstoreFloodRate floodrate;
+  floodrate.flood_msg_per_sec = 1;
+  floodrate.flood_msg_burst_size = 1;
+  return floodrate;
+}
+
+} // namespace
+
 namespace openr {
 using apache::thrift::FragileConstructor::FRAGILE;
 
@@ -78,26 +98,137 @@ TEST(ConfigTest, PopulateInternalDb) {
   }
 
   // kvstore
+  {{auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
+  confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
+  confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()->flood_msg_per_sec =
+      0;
+  EXPECT_THROW(auto c = Config(confInvalidFloodMsgPerSec), std::out_of_range);
+}
+// flood_msg_burst_size <= 0
+{
+  auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
+  confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
+  confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()
+      ->flood_msg_burst_size = 0;
+  EXPECT_THROW(auto c = Config(confInvalidFloodMsgPerSec), std::out_of_range);
+}
+} // namespace openr
+
+// link monitor
+{
+  // linkflap_initial_backoff_ms < 0
   {
-    thrift::KvstoreFloodRate floodrate;
-    floodrate.flood_msg_per_sec = 1;
-    floodrate.flood_msg_burst_size = 1;
-    // invalid flood_msg_per_sec
-    {
-      auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
-      floodrate.flood_msg_per_sec = 0;
-      confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = floodrate;
-      EXPECT_THROW(
-          auto c = Config(confInvalidFloodMsgPerSec), std::out_of_range);
-    }
-    // invalid flood_msg_burst_size
-    {
-      auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
-      floodrate.flood_msg_burst_size = 0;
-      confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = floodrate;
-      EXPECT_THROW(
-          auto c = Config(confInvalidFloodMsgPerSec), std::out_of_range);
-    }
+    auto confInvalidLm = getBasicOpenrConfig();
+    confInvalidLm.link_monitor_config.linkflap_initial_backoff_ms = -1;
+    EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
+  }
+  // linkflap_max_backoff_ms < 0
+  {
+    auto confInvalidLm = getBasicOpenrConfig();
+    confInvalidLm.link_monitor_config.linkflap_max_backoff_ms = -1;
+    EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
+  }
+  // linkflap_initial_backoff_ms > linkflap_max_backoff_ms
+  {
+    auto confInvalidLm = getBasicOpenrConfig();
+    confInvalidLm.link_monitor_config.linkflap_initial_backoff_ms = 360000;
+    confInvalidLm.link_monitor_config.linkflap_max_backoff_ms = 300000;
+    EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
+  }
+
+  // invalid include_interface_regexes
+  {
+    auto confInvalidLm = getBasicOpenrConfig();
+    confInvalidLm.link_monitor_config = getTestLinkMonitorConfig();
+    confInvalidLm.link_monitor_config.include_interface_regexes.emplace_back(
+        "[0-9]++");
+    EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
+  }
+  //  invalid exclude_interface_regexes
+  {
+    auto confInvalidLm = getBasicOpenrConfig();
+    confInvalidLm.link_monitor_config = getTestLinkMonitorConfig();
+    confInvalidLm.link_monitor_config.exclude_interface_regexes.emplace_back(
+        "boom\\");
+    EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
+  }
+  //  invalid redistribute_interface_regexes
+  {
+    auto confInvalidLm = getBasicOpenrConfig();
+    confInvalidLm.link_monitor_config = getTestLinkMonitorConfig();
+    confInvalidLm.link_monitor_config.redistribute_interface_regexes
+        .emplace_back("*");
+    EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
+  }
+}
+}
+
+TEST(ConfigTest, GeneralGetter) {
+  auto tConfig = getBasicOpenrConfig(
+      "node-1",
+      true /* enableV4 */,
+      false /* enableSegmentRouting */,
+      false /* orderedFibProgramming */,
+      true /*dryrun*/);
+  auto config = Config(tConfig);
+
+  // getNodeName
+  EXPECT_EQ("node-1", config.getNodeName());
+
+  // getAreaIds
+  auto areaIds = config.getAreaIds();
+  EXPECT_EQ(1, areaIds.size());
+  EXPECT_EQ(1, areaIds.count(thrift::KvStore_constants::kDefaultArea()));
+
+  // isV4Enabled
+  EXPECT_TRUE(config.isV4Enabled());
+  // isSegmentRoutingEnabled
+  EXPECT_FALSE(config.isSegmentRoutingEnabled());
+}
+
+TEST(ConfigTest, KvstoreGetter) {
+  auto tConfig = getBasicOpenrConfig();
+  auto config = Config(tConfig);
+  const auto& kvstoreConf = thrift::KvstoreConfig();
+
+  // getKvStoreConfig
+  EXPECT_EQ(kvstoreConf, config.getKvStoreConfig());
+
+  // getKvStoreKeyTtl
+  EXPECT_EQ(std::chrono::milliseconds(300000), config.getKvStoreKeyTtl());
+}
+
+TEST(ConfigTest, LinkMonitorGetter) {
+  auto tConfig = getBasicOpenrConfig();
+  const auto& lmConf = getTestLinkMonitorConfig();
+  tConfig.link_monitor_config = lmConf;
+  auto config = Config(tConfig);
+
+  // getLinkMonitorConfig
+  EXPECT_EQ(lmConf, config.getLinkMonitorConfig());
+
+  // getIncludeItfRegexes
+  auto includeItfRegexes = config.getIncludeItfRegexes();
+  {
+    std::vector<int> matches;
+    EXPECT_TRUE(includeItfRegexes->Match("fboss10", &matches));
+    EXPECT_FALSE(includeItfRegexes->Match("eth0", &matches));
+  }
+
+  // getExcludeItfRegexes
+  auto excludeItfRegexes = config.getExcludeItfRegexes();
+  {
+    std::vector<int> matches;
+    EXPECT_TRUE(excludeItfRegexes->Match("eth0", &matches));
+    EXPECT_FALSE(excludeItfRegexes->Match("fboss10", &matches));
+  }
+
+  // getRedistributeItfRegexes
+  auto redistributeItfRegexes = config.getRedistributeItfRegexes();
+  {
+    std::vector<int> matches;
+    EXPECT_TRUE(redistributeItfRegexes->Match("lo", &matches));
+    EXPECT_FALSE(redistributeItfRegexes->Match("eth0", &matches));
   }
 }
 

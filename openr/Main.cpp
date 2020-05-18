@@ -546,63 +546,6 @@ main(int argc, char** argv) {
     return -1;
   }
 
-  //
-  // Construct the regular expressions to match interface names against
-  //
-
-  re2::RE2::Options regexOpts;
-  regexOpts.set_case_sensitive(false);
-  std::vector<std::string> regexIncludeStrings;
-  std::string regexErr;
-
-  // iface_regex_include and iface_regex_exclude will together
-  // define RE, which is fed into link-monitor
-  folly::split(",", FLAGS_iface_regex_include, regexIncludeStrings, true);
-  auto includeRegexList =
-      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-  for (auto& regexStr : regexIncludeStrings) {
-    if (-1 == includeRegexList->Add(regexStr, &regexErr)) {
-      LOG(FATAL) << "Add iface regex failed " << regexErr;
-    }
-  }
-  // Compiling empty Re2 Set will cause undefined error
-  if (regexIncludeStrings.empty()) {
-    includeRegexList.reset();
-  } else if (!includeRegexList->Compile()) {
-    LOG(FATAL) << "Regex compile failed";
-  }
-
-  std::vector<std::string> regexExcludeStrings;
-  folly::split(",", FLAGS_iface_regex_exclude, regexExcludeStrings, true);
-  auto excludeRegexList =
-      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-  for (auto& regexStr : regexExcludeStrings) {
-    if (-1 == excludeRegexList->Add(regexStr, &regexErr)) {
-      LOG(FATAL) << "Invalid regext " << regexErr;
-    }
-  }
-  if (regexExcludeStrings.empty()) {
-    excludeRegexList.reset();
-  } else if (!excludeRegexList->Compile()) {
-    LOG(FATAL) << "Regex compile failed";
-  }
-
-  // redistribute_ifaces will define ifaces to be advertised
-  std::vector<std::string> redistStringList;
-  folly::split(",", FLAGS_redistribute_ifaces, redistStringList, true);
-  auto redistRegexList =
-      std::make_unique<re2::RE2::Set>(regexOpts, re2::RE2::ANCHOR_BOTH);
-  for (auto const& regexStr : redistStringList) {
-    if (-1 == redistRegexList->Add(regexStr, &regexErr)) {
-      LOG(FATAL) << "Invalid regext " << regexErr;
-    }
-  }
-  if (redistStringList.empty()) {
-    redistRegexList.reset();
-  } else if (!redistRegexList->Compile()) {
-    LOG(FATAL) << "Regex compile failed";
-  }
-
   // Create link monitor instance.
   auto linkMonitor = startEventBase(
       allThreads,
@@ -611,20 +554,11 @@ main(int argc, char** argv) {
       "LinkMonitor",
       std::make_unique<LinkMonitor>(
           context,
-          FLAGS_node_name,
+          config,
           FLAGS_system_agent_port,
           kvStore,
-          std::move(includeRegexList),
-          std::move(excludeRegexList),
-          std::move(redistRegexList),
           networks,
-          FLAGS_enable_rtt_metric,
           FLAGS_enable_perf_measurement,
-          FLAGS_enable_v4,
-          FLAGS_enable_segment_routing,
-          FLAGS_prefix_fwd_type_mpls,
-          FLAGS_prefix_algo_type_ksp2_ed_ecmp,
-          AdjacencyDbMarker{Constants::kAdjDbMarker.toString()},
           interfaceUpdatesQueue,
           peerUpdatesQueue,
           neighborUpdatesQueue.getReader(),
@@ -633,11 +567,7 @@ main(int argc, char** argv) {
           FLAGS_assume_drained,
           prefixUpdateRequestQueue,
           PlatformPublisherUrl{FLAGS_platform_pub_url},
-          initialDumpTime,
-          std::chrono::milliseconds(FLAGS_link_flap_initial_backoff_ms),
-          std::chrono::milliseconds(FLAGS_link_flap_max_backoff_ms),
-          std::chrono::milliseconds(FLAGS_kvstore_key_ttl_ms),
-          areas));
+          initialDumpTime));
 
   // Wait for the above two threads to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module

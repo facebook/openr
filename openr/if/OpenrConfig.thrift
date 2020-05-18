@@ -33,8 +33,8 @@ struct KvstoreConfig {
 }
 
 struct LinkMonitorConfig {
-  1: i32 linkflap_initial_backoff_ms = 60000 # link flap options
-  2: i32 linkflap_max_backoff_ms = 300000
+  1: i32 linkflap_initial_backoff_ms = 60000 # 60s
+  2: i32 linkflap_max_backoff_ms = 300000 # 5min
   3: bool use_rtt_metric = true
   4: list<string> include_interface_regexes = []
   5: list<string> exclude_interface_regexes = []

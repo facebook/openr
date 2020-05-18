@@ -331,14 +331,14 @@ TEST(UtilTest, checkIncludeExcludeRegex) {
   re2::RE2::Options options;
   options.set_case_sensitive(false);
   auto includeRegexList =
-      std::make_unique<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
+      std::make_shared<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
   std::string regexErr;
   includeRegexList->Add("eth.*", &regexErr);
   includeRegexList->Add("terra", &regexErr);
   includeRegexList->Add("po.*", &regexErr);
   EXPECT_TRUE(includeRegexList->Compile());
   auto excludeRegexList =
-      std::make_unique<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
+      std::make_shared<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
   excludeRegexList->Add(".*pi.*", &regexErr);
   excludeRegexList->Add("^(po)[0-9]{3}$", &regexErr);
   EXPECT_TRUE(excludeRegexList->Compile());
@@ -370,7 +370,7 @@ TEST(UtilTest, checkIncludeExcludeRegex) {
   EXPECT_TRUE(
       checkIncludeExcludeRegex("eth", includeRegexList, excludeRegexList));
   excludeRegexList =
-      std::make_unique<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
+      std::make_shared<re2::RE2::Set>(options, re2::RE2::ANCHOR_BOTH);
   excludeRegexList->Add(".*pi.*", &regexErr);
   excludeRegexList->Add("^(po)[0-9]{3}$", &regexErr);
   EXPECT_TRUE(excludeRegexList->Compile());

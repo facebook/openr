@@ -25,6 +25,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/spark/Spark.h>
@@ -68,24 +69,12 @@ namespace openr {
 // LinkMonitor code
 //
 LinkMonitor::LinkMonitor(
-    //
-    // Immutable state initializers
-    //
     fbzmq::Context& zmqContext,
-    std::string nodeId,
+    std::shared_ptr<const Config> config,
     int32_t platformThriftPort,
     KvStore* kvStore,
-    std::unique_ptr<re2::RE2::Set> includeRegexList,
-    std::unique_ptr<re2::RE2::Set> excludeRegexList,
-    std::unique_ptr<re2::RE2::Set> redistRegexList,
     std::vector<thrift::IpPrefix> const& staticPrefixes,
-    bool useRttMetric,
     bool enablePerfMeasurement,
-    bool enableV4,
-    bool enableSegmentRouting,
-    bool forwardingTypeMpls,
-    bool forwardingAlgoKsp2Ed,
-    AdjacencyDbMarker adjacencyDbMarker,
     messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
     messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
     messaging::RQueue<thrift::SparkNeighborEvent> neighborUpdatesQueue,
@@ -94,38 +83,35 @@ LinkMonitor::LinkMonitor(
     bool assumeDrained,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     PlatformPublisherUrl const& platformPubUrl,
-    std::chrono::seconds adjHoldTime,
-    std::chrono::milliseconds flapInitialBackoff,
-    std::chrono::milliseconds flapMaxBackoff,
-    std::chrono::milliseconds ttlKeyInKvStore,
-    const std::unordered_set<std::string>& areas)
-    : nodeId_(nodeId),
+    std::chrono::seconds adjHoldTime)
+    : nodeId_(config->getNodeName()),
       platformThriftPort_(platformThriftPort),
-      includeRegexList_(std::move(includeRegexList)),
-      excludeRegexList_(std::move(excludeRegexList)),
-      redistRegexList_(std::move(redistRegexList)),
       staticPrefixes_(staticPrefixes),
-      useRttMetric_(useRttMetric),
       enablePerfMeasurement_(enablePerfMeasurement),
-      enableV4_(enableV4),
-      enableSegmentRouting_(enableSegmentRouting),
-      forwardingTypeMpls_(forwardingTypeMpls),
-      forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
-      adjacencyDbMarker_(adjacencyDbMarker),
       platformPubUrl_(platformPubUrl),
-      flapInitialBackoff_(flapInitialBackoff),
-      flapMaxBackoff_(flapMaxBackoff),
-      ttlKeyInKvStore_(ttlKeyInKvStore),
       adjHoldUntilTimePoint_(std::chrono::steady_clock::now() + adjHoldTime),
-      // mutable states
+      enableV4_(config->isV4Enabled()),
+      enableSegmentRouting_(config->isSegmentRoutingEnabled()),
+      prefixForwardingType_(config->getConfig().prefix_forwarding_type),
+      prefixForwardingAlgorithm_(
+          config->getConfig().prefix_forwarding_algorithm),
+      useRttMetric_(config->getLinkMonitorConfig().use_rtt_metric),
+      linkflapInitBackoff_(std::chrono::milliseconds(
+          config->getLinkMonitorConfig().linkflap_initial_backoff_ms)),
+      linkflapMaxBackoff_(std::chrono::milliseconds(
+          config->getLinkMonitorConfig().linkflap_max_backoff_ms)),
+      ttlKeyInKvStore_(config->getKvStoreKeyTtl()),
+      includeItfRegexes_(config->getIncludeItfRegexes()),
+      excludeItfRegexes_(config->getExcludeItfRegexes()),
+      redistributeItfRegexes_(config->getRedistributeItfRegexes()),
+      areas_(config->getAreaIds()),
       interfaceUpdatesQueue_(intfUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
       nlEventSub_(
           zmqContext, folly::none, folly::none, fbzmq::NonblockingFlag{true}),
       expBackoff_(Constants::kInitialBackoff, Constants::kMaxBackoff),
-      configStore_(configStore),
-      areas_(areas) {
+      configStore_(configStore) {
   // Check non-empty module ptr
   CHECK(configStore_);
 
@@ -170,7 +156,7 @@ LinkMonitor::LinkMonitor(
   kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
       this, nodeId_, kvStore, std::nullopt /* persist key timer */);
 
-  if (enableSegmentRouting) {
+  if (enableSegmentRouting_) {
     // create range allocator to get unique node labels
     for (const auto& area : areas_) {
       rangeAllocator_.emplace(
@@ -663,7 +649,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
 
   LOG(INFO) << "Updating adjacency database in KvStore with "
             << adjDb.adjacencies.size() << " entries in area: " << area;
-  const auto keyName = adjacencyDbMarker_ + nodeId_;
+  const auto keyName = Constants::kAdjDbMarker.toString() + nodeId_;
   std::string adjDbStr = fbzmq::util::writeThriftObjStr(adjDb, serializer_);
   kvStoreClient_->persistKey(keyName, adjDbStr, ttlKeyInKvStore_, area);
   fb303::fbData->addStatValue(
@@ -728,7 +714,7 @@ LinkMonitor::advertiseInterfaces() {
     auto& interface = kv.second;
     // Perform regex match
     if (not checkIncludeExcludeRegex(
-            ifName, includeRegexList_, excludeRegexList_)) {
+            ifName, includeItfRegexes_, excludeItfRegexes_)) {
       continue;
     }
     // Get interface info and override active status
@@ -757,12 +743,8 @@ LinkMonitor::advertiseRedistAddrs() {
     prefixEntry.prefix = prefix;
     prefixEntry.type = thrift::PrefixType::LOOPBACK;
     prefixEntry.data = "";
-    prefixEntry.forwardingType = forwardingTypeMpls_
-        ? thrift::PrefixForwardingType::SR_MPLS
-        : thrift::PrefixForwardingType::IP;
-    prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
-        ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
-        : thrift::PrefixForwardingAlgorithm::SP_ECMP;
+    prefixEntry.forwardingType = prefixForwardingType_;
+    prefixEntry.forwardingAlgorithm = prefixForwardingAlgorithm_;
     prefixEntry.ephemeral_ref().reset();
     prefixes.push_back(prefixEntry);
   }
@@ -775,17 +757,13 @@ LinkMonitor::advertiseRedistAddrs() {
       continue;
     }
     // Perform regex match
-    if (not matchRegexSet(interface.getIfName(), redistRegexList_)) {
+    if (not matchRegexSet(interface.getIfName(), redistributeItfRegexes_)) {
       continue;
     }
     // Add all prefixes of this interface
     for (auto& prefix : interface.getGlobalUnicastNetworks(enableV4_)) {
-      prefix.forwardingType = forwardingTypeMpls_
-          ? thrift::PrefixForwardingType::SR_MPLS
-          : thrift::PrefixForwardingType::IP;
-      prefix.forwardingAlgorithm = forwardingAlgoKsp2Ed_
-          ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
-          : thrift::PrefixForwardingAlgorithm::SP_ECMP;
+      prefix.forwardingType = prefixForwardingType_;
+      prefix.forwardingAlgorithm = prefixForwardingAlgorithm_;
       prefixes.emplace_back(std::move(prefix));
     }
   }
@@ -802,8 +780,7 @@ LinkMonitor::advertiseRedistAddrs() {
 
 std::chrono::milliseconds
 LinkMonitor::getRetryTimeOnUnstableInterfaces() {
-  bool hasUnstableInterface = false;
-  std::chrono::milliseconds minRemainMs = flapMaxBackoff_;
+  std::chrono::milliseconds minRemainMs{0};
   for (auto& kv : interfaces_) {
     auto& interface = kv.second;
     if (interface.isActive()) {
@@ -814,20 +791,19 @@ LinkMonitor::getRetryTimeOnUnstableInterfaces() {
     if (curRemainMs.count() > 0) {
       VLOG(2) << "Interface " << interface.getIfName()
               << " is in backoff state for " << curRemainMs.count() << "ms";
-      minRemainMs = std::min(minRemainMs, curRemainMs);
-      hasUnstableInterface = true;
+      minRemainMs = std::min(linkflapMaxBackoff_, curRemainMs);
     }
   }
 
-  return hasUnstableInterface ? minRemainMs : std::chrono::milliseconds(0);
+  return minRemainMs;
 }
 
 InterfaceEntry* FOLLY_NULLABLE
 LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
   // Return null if ifName doesn't quality regex match criteria
   if (not checkIncludeExcludeRegex(
-          ifName, includeRegexList_, excludeRegexList_) and
-      not matchRegexSet(ifName, redistRegexList_)) {
+          ifName, includeItfRegexes_, excludeItfRegexes_) and
+      not matchRegexSet(ifName, redistributeItfRegexes_)) {
     return nullptr;
   }
 
@@ -842,8 +818,8 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
       ifName,
       InterfaceEntry(
           ifName,
-          flapInitialBackoff_,
-          flapMaxBackoff_,
+          linkflapInitBackoff_,
+          linkflapMaxBackoff_,
           *advertiseIfaceAddrThrottled_,
           *advertiseIfaceAddrTimer_));
 

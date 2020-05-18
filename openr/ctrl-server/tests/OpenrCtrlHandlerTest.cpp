@@ -40,15 +40,22 @@ class OpenrCtrlFixture : public ::testing::Test {
     // create config
     auto tConfig = getBasicOpenrConfig(
         nodeName, true /* enableV4 */, true /* enableSegmentRouting */);
-    tConfig.kvstore_config.sync_interval_s = 1;
-    tConfig.kvstore_config.enable_flood_optimization_ref() = true;
-    tConfig.kvstore_config.is_flood_root_ref() = true;
     for (auto id : {"0", "plane", "pod"}) {
       thrift::AreaConfig area;
       area.area_id = id;
       area.neighbor_regexes.emplace_back(".*");
       tConfig.areas.emplace_back(std::move(area));
     }
+    // kvstore config
+    tConfig.kvstore_config.sync_interval_s = 1;
+    tConfig.kvstore_config.enable_flood_optimization_ref() = true;
+    tConfig.kvstore_config.is_flood_root_ref() = true;
+    // link monitor config
+    auto& lmConf = tConfig.link_monitor_config;
+    lmConf.linkflap_initial_backoff_ms = 1;
+    lmConf.linkflap_max_backoff_ms = 8;
+    lmConf.use_rtt_metric = false;
+    lmConf.include_interface_regexes = {"po.*"};
     config = std::make_shared<Config>(tConfig);
 
     // Create zmq-monitor
@@ -124,20 +131,11 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     linkMonitor = std::make_shared<LinkMonitor>(
         context_,
-        nodeName,
+        config,
         systemThriftThread.getAddress()->getPort(),
         kvStoreWrapper->getKvStore(),
-        std::move(includeRegexList),
-        nullptr,
-        nullptr, // redistribute interface name
         std::vector<thrift::IpPrefix>{},
-        false /* useRttMetric */,
         false /* enable perf measurement */,
-        true /* enable v4 */,
-        true /* enable segment routing */,
-        false /* prefix type mpls */,
-        false /* prefix fwd algo KSP2_ED_ECMP */,
-        AdjacencyDbMarker{Constants::kAdjDbMarker.str()},
         interfaceUpdatesQueue_,
         peerUpdatesQueue_,
         neighborUpdatesQueue_.getReader(),
@@ -146,11 +144,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         false,
         prefixUpdatesQueue_,
         platformPubUrl_,
-        std::chrono::seconds(1),
-        // link flap backoffs, set low to keep UT runtime low
-        std::chrono::milliseconds(1),
-        std::chrono::milliseconds(8),
-        Constants::kKvStoreDbTtl);
+        std::chrono::seconds(1));
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
 
     // spin up an openrThriftServer

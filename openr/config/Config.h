@@ -7,6 +7,9 @@
 
 #pragma once
 
+#include <re2/re2.h>
+#include <re2/set.h>
+
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace openr {
@@ -18,7 +21,9 @@ class Config {
     populateInternalDb();
   }
 
-  // getter
+  //
+  // config
+  //
   const thrift::OpenrConfig&
   getConfig() const {
     return config_;
@@ -30,22 +35,73 @@ class Config {
     return config_.node_name;
   }
 
-  const thrift::KvstoreConfig&
-  getKvStoreConfig() const {
-    return config_.kvstore_config;
+  //
+  // feature knobs
+  //
+
+  bool
+  isV4Enabled() const {
+    return config_.enable_v4_ref().value_or(false);
   }
 
+  bool
+  isSegmentRoutingEnabled() const {
+    return config_.enable_segment_routing_ref().value_or(false);
+  }
+
+  //
+  // area
+  //
   const std::unordered_set<std::string>&
   getAreaIds() const {
     return areaIds_;
   }
 
- private:
-  // thrift config
+  //
+  // kvstore
+  //
+  const thrift::KvstoreConfig&
+  getKvStoreConfig() const {
+    return config_.kvstore_config;
+  }
 
+  std::chrono::milliseconds
+  getKvStoreKeyTtl() const {
+    return std::chrono::milliseconds(config_.kvstore_config.key_ttl_ms);
+  }
+
+  //
+  // link monitor
+  //
+  const thrift::LinkMonitorConfig&
+  getLinkMonitorConfig() const {
+    return config_.link_monitor_config;
+  }
+
+  std::shared_ptr<const re2::RE2::Set>
+  getIncludeItfRegexes() const {
+    return includeItfRegexes_;
+  }
+
+  std::shared_ptr<const re2::RE2::Set>
+  getExcludeItfRegexes() const {
+    return excludeItfRegexes_;
+  }
+
+  std::shared_ptr<const re2::RE2::Set>
+  getRedistributeItfRegexes() const {
+    return redistributeItfRegexes_;
+  }
+
+ private:
   void populateInternalDb();
+  // thrift config
   thrift::OpenrConfig config_;
   std::unordered_set<std::string> areaIds_;
+  // link monitor regexes
+  std::shared_ptr<re2::RE2::Set> includeItfRegexes_{nullptr};
+  std::shared_ptr<re2::RE2::Set> excludeItfRegexes_{nullptr};
+  std::shared_ptr<re2::RE2::Set> redistributeItfRegexes_{nullptr};
 };
 
 } // namespace openr

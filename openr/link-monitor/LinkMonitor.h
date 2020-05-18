@@ -81,33 +81,14 @@ class LinkMonitor final : public OpenrEventBase {
       //
       // the zmq context to use for IO
       fbzmq::Context& zmqContext,
-      // the id of the node running link monitor
-      std::string nodeId,
+      // config
+      std::shared_ptr<const Config> config,
       int32_t platformThriftPort,
       KvStore* kvstore,
-      // interface names to monitor
-      std::unique_ptr<re2::RE2::Set> includeRegexList,
-      // interface names to exclude
-      std::unique_ptr<re2::RE2::Set> excludeRegexList,
-      // interface names to advertise their addresses
-      std::unique_ptr<re2::RE2::Set> redistRegexList,
       // static list of prefixes to announce
       std::vector<thrift::IpPrefix> const& staticPrefixes,
-      // measure and use RTT of adjacencies for link
-      // metrics
-      bool useRttMetric,
       // enable convergence performance measurement for Adjacencies update
       bool enablePerfMeasurement,
-      // is v4 enabled or not
-      bool enableV4,
-      // enable segment routing
-      bool enableSegmentRouting,
-      // prefix forwarding type MPLS
-      bool forwardingTypeMpls,
-      // prefix algorithm type KSP2_ED
-      bool forwardingAlgoKsp2Ed,
-      // KvStore's adjacency object's key prefix
-      AdjacencyDbMarker adjacencyDbMarker,
       // Queue for spark and kv-store
       messaging::ReplicateQueue<thrift::InterfaceDatabase>& intfUpdatesQueue,
       messaging::ReplicateQueue<thrift::PeerUpdateRequest>& peerUpdatesQueue,
@@ -122,14 +103,7 @@ class LinkMonitor final : public OpenrEventBase {
       // URL for platform publisher
       PlatformPublisherUrl const& platformPubUrl,
       // how long to wait before initial adjacency advertisement
-      std::chrono::seconds adjHoldTime,
-      // link flap backoffs
-      std::chrono::milliseconds flapInitalBackoff,
-      std::chrono::milliseconds flapMaxBackoff,
-      // ttl for a key in the keyvalue store
-      std::chrono::milliseconds ttlKeyInKvStore,
-      const std::unordered_set<std::string>& areas = {
-          openr::thrift::KvStore_constants::kDefaultArea()});
+      std::chrono::seconds adjHoldTime);
 
   ~LinkMonitor() override = default;
 
@@ -273,41 +247,44 @@ class LinkMonitor final : public OpenrEventBase {
   const std::string nodeId_;
   // Switch agent thrift server port
   const int32_t platformThriftPort_{0};
-  // the interface names that match we can run on
-  std::unique_ptr<re2::RE2::Set> includeRegexList_;
-  // the interface names that match we can't run on
-  std::unique_ptr<re2::RE2::Set> excludeRegexList_;
-  // the interface names regex for advertising their global addresses
-  std::unique_ptr<re2::RE2::Set> redistRegexList_;
   // static list of prefixes to announce
   const std::vector<thrift::IpPrefix> staticPrefixes_;
-  // Use spark measured RTT to neighbor as link metric
-  const bool useRttMetric_{true};
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
-  // is v4 enabled in OpenR or not
-  const bool enableV4_{false};
-  // enable segment routing
-  const bool enableSegmentRouting_{false};
-  // prefix forwarding type MPLS
-  const bool forwardingTypeMpls_{false};
-  // prefix algorithm type KSP2_ED_ECMP
-  const bool forwardingAlgoKsp2Ed_{false};
-  // used to match the adjacency database keys
-  const std::string adjacencyDbMarker_;
   // URL to receive netlink events from PlatformPublisher
   const std::string platformPubUrl_;
-  // Backoff timers
-  const std::chrono::milliseconds flapInitialBackoff_;
-  const std::chrono::milliseconds flapMaxBackoff_;
-  // ttl for kvstore
-  const std::chrono::milliseconds ttlKeyInKvStore_;
   // Timepoint used to hold off advertisement of link adjancecy on restart.
   const std::chrono::steady_clock::time_point adjHoldUntilTimePoint_;
   // The IO primitives provider; this is used for mocking
   // the IO during unit-tests.  It can be passed to other
   // functions hence shared pointer.
   const std::shared_ptr<IoProvider> ioProvider_;
+  // Use spark measured RTT to neighbor as link metric
+
+  //
+  // Mutable states that reads from config, can be reload by loadConfig
+  //
+
+  // enable v4
+  bool enableV4_{false};
+  // enable segment routing
+  bool enableSegmentRouting_{false};
+  // prefix forwarding type and algorithm
+  thrift::PrefixForwardingType prefixForwardingType_;
+  thrift::PrefixForwardingAlgorithm prefixForwardingAlgorithm_;
+  // Use spark measured RTT to neighbor as link metric
+  bool useRttMetric_{false};
+  // link flap back offs
+  std::chrono::milliseconds linkflapInitBackoff_;
+  std::chrono::milliseconds linkflapMaxBackoff_;
+  // TTL for a key in the key value store
+  std::chrono::milliseconds ttlKeyInKvStore_;
+  // interface regexes
+  std::shared_ptr<const re2::RE2::Set> includeItfRegexes_;
+  std::shared_ptr<const re2::RE2::Set> excludeItfRegexes_;
+  std::shared_ptr<const re2::RE2::Set> redistributeItfRegexes_;
+  // area ids
+  std::unordered_set<std::string> areas_{};
 
   //
   // Mutable state
@@ -381,9 +358,6 @@ class LinkMonitor final : public OpenrEventBase {
 
   // client to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
-
-  // areas_ configured on this node
-  std::unordered_set<std::string> areas_{};
 
   // Timer for starting range allocator
   std::vector<std::unique_ptr<folly::AsyncTimeout>> startAllocationTimers_;

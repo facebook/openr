@@ -125,8 +125,8 @@ executeShellCommand(const std::string& command) {
 
 bool
 matchRegexSet(
-    const std::string& name, const std::unique_ptr<re2::RE2::Set>& regexSet) {
-  if (!regexSet) {
+    const std::string& name, std::shared_ptr<const re2::RE2::Set> regexSet) {
+  if (not regexSet) {
     return false;
   }
 
@@ -137,8 +137,8 @@ matchRegexSet(
 bool
 checkIncludeExcludeRegex(
     const std::string& name,
-    const std::unique_ptr<re2::RE2::Set>& includeRegexSet,
-    const std::unique_ptr<re2::RE2::Set>& excludeRegexSet) {
+    std::shared_ptr<const re2::RE2::Set> includeRegexSet,
+    std::shared_ptr<const re2::RE2::Set> excludeRegexSet) {
   return (
       not matchRegexSet(name, excludeRegexSet) and
       matchRegexSet(name, includeRegexSet));
