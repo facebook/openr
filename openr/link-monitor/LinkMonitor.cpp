@@ -130,12 +130,7 @@ LinkMonitor::LinkMonitor(
   advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
         // will advertise to all areas but will not trigger a adj key update
-        // if nothing changed. For peers no action is taken if nothing changed
-
-        // TODO: Do we need advertiseKvStorePeers() ?
-        // In all places we see advertiseKvStorePeers() get called immediately,
-        // while advertiseAdjacencies called in throttled fashion.
-        advertiseKvStorePeers();
+        // if nothing changed.
         advertiseAdjacencies();
       });
 
