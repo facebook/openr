@@ -115,71 +115,107 @@ class LinkMonitor final : public OpenrEventBase {
     mockMode_ = true;
   };
 
-  // create required peers <nodeName: PeerSpec> map from current adjacencies_
-  static std::unordered_map<std::string, thrift::PeerSpec>
-  getPeersFromAdjacencies(
-      const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
-      const std::string& area = thrift::KvStore_constants::kDefaultArea());
-
   /*
-   * Set/unset node overload
+   * Public APIs to change metric:
+   * NOTE: except node overload, all requests will be throttled.
+   *
+   * - Set/unset node overload (Node Drain)
+   * - Set/unset interface overload
+   * - Set/unset interface metric
+   * - Set/unset node adj metric
    */
   folly::SemiFuture<folly::Unit> setNodeOverload(bool isOverloaded);
-
-  /*
-   * Set/unset link/interface overload
-   */
   folly::SemiFuture<folly::Unit> setInterfaceOverload(
       std::string interfaceName, bool isOverloaded);
-
-  /*
-   * Set/unset link/interface metric
-   */
   folly::SemiFuture<folly::Unit> setLinkMetric(
       std::string interfaceName, std::optional<int32_t> overrideMetric);
-
-  /*
-   * Set/unset node adj metric
-   */
   folly::SemiFuture<folly::Unit> setAdjacencyMetric(
       std::string interfaceName,
       std::string adjNodeName,
       std::optional<int32_t> overrideMetric);
 
   /*
-   * Dump interface/link information
+   * Get APIs:
+   * - Dump interface/link information
+   * - Dump adjacency database information
    */
   folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>> getInterfaces();
-
-  /*
-   * Dump adjacency database information
-   */
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
   getLinkMonitorAdjacencies();
+
+  // create required peers <nodeName: PeerSpec> map from current adjacencies_
+  static std::unordered_map<std::string, thrift::PeerSpec>
+  getPeersFromAdjacencies(
+      const std::unordered_map<AdjacencyKey, AdjacencyValue>& adjacencies,
+      const std::string& area = thrift::KvStore_constants::kDefaultArea());
 
  private:
   // make no-copy
   LinkMonitor(const LinkMonitor&) = delete;
   LinkMonitor& operator=(const LinkMonitor&) = delete;
 
-  // Initializes ZMQ sockets
-  void prepare() noexcept;
+  //
+  // [Spark] neighbor event functions
+  //
+  void processNeighborEvent(thrift::SparkNeighborEvent&& event);
 
-  // wrapper function to process Spark neighbor evenr
+  // individual neighbor event function
   void neighborUpEvent(const thrift::SparkNeighborEvent& event);
-
   void neighborRestartingEvent(const thrift::SparkNeighborEvent& event);
-
   void neighborDownEvent(const thrift::SparkNeighborEvent& event);
-
   void neighborRttChangeEvent(const thrift::SparkNeighborEvent& event);
 
   // submit events to monitor
   void logNeighborEvent(thrift::SparkNeighborEvent const& event);
 
+  /*
+   * [Netlink Platform] related functions
+   */
+
+  // Initializes ZMQ sockets talking to  Netlink Platform
+  // nlEventSub_ listens for LINK UP/DOWN events
+  // client_ is used for periodical full sync
+  void prepare() noexcept;
+
   // Used for initial interface discovery and periodic sync with system handler
   // return true if sync is successful
   bool syncInterfaces();
+
+  // Create thrift client (client_) to NetlinkSystemHandler.
+  // Can throw exception if it fails to open transport to client on specified
+  // port. used by syncInterfaces()
+  void createNetlinkSystemHandlerClient();
+
+  // Get or create InterfaceEntry object.
+  // Returns nullptr if ifName doesn't qualify regex match
+  // used in syncInterfaces() and LINK/ADDRESS EVENT
+  InterfaceEntry* FOLLY_NULLABLE
+  getOrCreateInterfaceEntry(const std::string& ifName);
+
+  // call advertiseInterfaces() and advertiseRedistAddrs()
+  // throttle updates if there's any unstable interface by
+  // getRetryTimeOnUnstableInterfaces() time
+  // used in advertiseIfaceAddrThrottled_ and advertiseIfaceAddrTimer_
+  // called upon interface change in getOrCreateInterfaceEntry()
+  void advertiseIfaceAddr();
+
+  // get next try time, which should be the minimum remaining time among
+  // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
+  // return 0 if no more unstable interface
+  std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
+
+  // link events
+  void logLinkEvent(
+      const std::string& iface,
+      bool wasUp,
+      bool isUp,
+      std::chrono::milliseconds backoffTime);
+
+  /*
+   * [Kvstore] PEER UP/DOWN events sent to Kvstore over peerUpdatesQueue_
+   *
+   * Called upon spark neighbor events: up/down/restarting
+   */
 
   // derive current peer-spec info from current adjacencies_
   // calculate delta and announce them to KvStore (peer add/remove) if any
@@ -197,47 +233,40 @@ class LinkMonitor final : public OpenrEventBase {
   void advertiseKvStorePeers(
       const std::unordered_map<std::string, thrift::PeerSpec>& upPeers = {});
 
-  // Advertise my adjacencies_ to the KvStore to a specific area
-  void advertiseAdjacencies(const std::string& area);
-
-  // Advertise my adjacencies_ to the KvStore to all areas
-  void advertiseAdjacencies();
-
-  // Advertise interfaces and addresses to Spark/Fib and PrefixManager
-  // respectively
-  void advertiseIfaceAddr();
-  void advertiseInterfaces();
-  void advertiseRedistAddrs();
-
-  // get next try time, which should be the minimum remaining time among
-  // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
-  // return 0 if no more unstable interface
-  std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
-
-  // Get or create InterfaceEntry object. Returns nullptr if ifName doesn't
-  // qualify regex match
-  InterfaceEntry* FOLLY_NULLABLE
-  getOrCreateInterfaceEntry(const std::string& ifName);
-
-  // Utility function to create thrift client connection to NetlinkSystemHandler
-  // Can throw exception if it fails to open transport to client on
-  // specified port.
-  void createNetlinkSystemHandlerClient();
-
-  void processNeighborEvent(thrift::SparkNeighborEvent&& event);
-
-  // link events
-  void logLinkEvent(
-      const std::string& iface,
-      bool wasUp,
-      bool isUp,
-      std::chrono::milliseconds backoffTime);
-
   // peer events
   void logPeerEvent(
       const std::string& event,
       const std::string& peerName,
       const thrift::PeerSpec& peerSpec);
+
+  /*
+   * [Kvstore] Advertise my adjacencies_ (kvStoreClient_->persistKey)
+   *
+   * Called upon spark neighbor events: up/down/rtt (restarting does not trigger
+   * adj update)
+   */
+  void advertiseAdjacencies(const std::string& area);
+  void advertiseAdjacencies(); // Advertise my adjacencies_ in to all areas
+
+  /*
+   * [Spark/Fib] Advertise interfaces_ over interfaceUpdatesQueue_ to Spark/Fib
+   *
+   * Called in advertiseIfaceAddr() upon interface changes
+   */
+  void advertiseInterfaces();
+
+  /*
+   * [PrefixManager] Advertise redistribute prefixes over prefixUpdatesQueue_ to
+   * prefix manager "redistribute prefixes" includes:
+   *   1. static configured prefixes with --prefixes
+   *      TODO: move --prefixes into PrefixManager
+   *   2. addresses read from interfaces match redistribute_interface_regexes
+   *
+   * Called in
+   * - adjHoldTimer_ during initial start
+   * - and advertiseIfaceAddr() upon interface changes
+   */
+  void advertiseRedistAddrs();
 
   //
   // immutable state/invariants
@@ -253,8 +282,6 @@ class LinkMonitor final : public OpenrEventBase {
   const bool enablePerfMeasurement_{false};
   // URL to receive netlink events from PlatformPublisher
   const std::string platformPubUrl_;
-  // Timepoint used to hold off advertisement of link adjancecy on restart.
-  const std::chrono::steady_clock::time_point adjHoldUntilTimePoint_;
   // The IO primitives provider; this is used for mocking
   // the IO during unit-tests.  It can be passed to other
   // functions hence shared pointer.
@@ -297,7 +324,7 @@ class LinkMonitor final : public OpenrEventBase {
   // LinkMonitor config attributes (defined in LinkMonitor.thrift)
   thrift::LinkMonitorState state_;
 
-  // Queue to publish interface updates to other modules
+  // Queue to publish interface updates to fib/spark
   messaging::ReplicateQueue<thrift::InterfaceDatabase>& interfaceUpdatesQueue_;
 
   // Queue to publish prefix updates to PrefixManager
@@ -360,6 +387,9 @@ class LinkMonitor final : public OpenrEventBase {
   PersistentStore* configStore_{nullptr};
 
   // Timer for starting range allocator
+  // this is equal to adjHoldTimer_
+  // because we'll delay range allocation until we have formed all of our
+  // adjcencies
   std::vector<std::unique_ptr<folly::AsyncTimeout>> startAllocationTimers_;
 
   // Timer for initial hold time expiry

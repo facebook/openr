@@ -20,6 +20,7 @@
 #include <folly/system/ThreadName.h>
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/THeader.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
 #include <openr/common/Constants.h>
@@ -89,7 +90,6 @@ LinkMonitor::LinkMonitor(
       staticPrefixes_(staticPrefixes),
       enablePerfMeasurement_(enablePerfMeasurement),
       platformPubUrl_(platformPubUrl),
-      adjHoldUntilTimePoint_(std::chrono::steady_clock::now() + adjHoldTime),
       enableV4_(config->isV4Enabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
       prefixForwardingType_(config->getConfig().prefix_forwarding_type),
@@ -115,11 +115,26 @@ LinkMonitor::LinkMonitor(
   // Check non-empty module ptr
   CHECK(configStore_);
 
+  // initialize internal states with config
+  // loadConfig(config);
+
+  // Schedule callback to advertise the initial set of adjacencies and prefixes
+  adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+    LOG(INFO) << "Hold time expired. Advertising adjacencies and addresses";
+    // Advertise adjacencies and addresses after hold-timeout
+    advertiseAdjacencies();
+    advertiseRedistAddrs();
+  });
+
   // Create throttled adjacency advertiser
   advertiseAdjacenciesThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
       getEvb(), Constants::kLinkThrottleTimeout, [this]() noexcept {
         // will advertise to all areas but will not trigger a adj key update
         // if nothing changed. For peers no action is taken if nothing changed
+
+        // TODO: Do we need advertiseKvStorePeers() ?
+        // In all places we see advertiseKvStorePeers() get called immediately,
+        // while advertiseAdjacencies called in throttled fashion.
         advertiseKvStorePeers();
         advertiseAdjacencies();
       });
@@ -147,8 +162,7 @@ LinkMonitor::LinkMonitor(
   } else {
     state_.isOverloaded = assumeDrained;
     LOG(WARNING) << folly::sformat(
-        "Failed to load link-monitor state. "
-        "Setting node as {}",
+        "Failed to load link-monitor state from disk. Setting node as {}",
         assumeDrained ? "DRAINED" : "UNDRAINED");
   }
 
@@ -169,11 +183,11 @@ LinkMonitor::LinkMonitor(
               [&](std::optional<int32_t> newVal) noexcept {
                 state_.nodeLabel = newVal ? newVal.value() : 0;
                 advertiseAdjacencies();
-              },
-              std::chrono::milliseconds(100),
-              std::chrono::seconds(2),
+              }, /* callback */
+              std::chrono::milliseconds(100), /* minBackoffDur */
+              std::chrono::seconds(2), /* maxBackoffDur */
               false /* override owner */,
-              nullptr,
+              nullptr, /* checkValueInUseCb */
               Constants::kRangeAllocTtl,
               area));
 
@@ -192,18 +206,7 @@ LinkMonitor::LinkMonitor(
     }
   }
 
-  // Schedule callback to advertise the initial set of adjacencies and prefixes
-  adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    LOG(INFO) << "Hold time expired. Advertising adjacencies and addresses";
-    // Advertise adjacencies and addresses after hold-timeout
-    advertiseAdjacencies();
-    advertiseRedistAddrs();
-
-    // Cancel throttle as we are publishing latest state
-    if (advertiseAdjacenciesThrottled_->isActive()) {
-      advertiseAdjacenciesThrottled_->cancel();
-    }
-  });
+  // start initial dump timer
   adjHoldTimer_->scheduleTimeout(adjHoldTime);
 
   // Add fiber to process the neighbor events
@@ -347,9 +350,9 @@ LinkMonitor::prepare() noexcept {
       expBackoff_.reportError();
       interfaceDbSyncTimer_->scheduleTimeout(
           expBackoff_.getTimeRemainingUntilRetry());
-      LOG(ERROR) << "InterfaceDb Sync failed, apply exponential "
-                 << "backoff and retry in "
-                 << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
+      LOG(ERROR)
+          << "InterfaceDb Sync failed, apply exponential backoff and retry in "
+          << expBackoff_.getTimeRemainingUntilRetry().count() << " ms";
     }
   });
   // schedule immediate with small timeout
@@ -601,12 +604,9 @@ LinkMonitor::advertiseKvStorePeers(
 
 void
 LinkMonitor::advertiseAdjacencies(const std::string& area) {
-  if (std::chrono::steady_clock::now() < adjHoldUntilTimePoint_) {
-    // Too early for advertising my own adjacencies. Let timeout advertise it
-    // and skip here.
+  if (adjHoldTimer_->isScheduled()) {
     return;
   }
-
   auto adjDb = thrift::AdjacencyDatabase();
   adjDb.thisNodeName = nodeId_;
   adjDb.isOverloaded = state_.isOverloaded;
@@ -729,12 +729,9 @@ LinkMonitor::advertiseInterfaces() {
 
 void
 LinkMonitor::advertiseRedistAddrs() {
-  if (std::chrono::steady_clock::now() < adjHoldUntilTimePoint_) {
-    // Too early for advertising my own prefixes. Let timeout advertise it
-    // and skip here.
+  if (adjHoldTimer_->isScheduled()) {
     return;
   }
-
   std::vector<thrift::PrefixEntry> prefixes;
 
   // Add static prefixes
@@ -767,14 +764,14 @@ LinkMonitor::advertiseRedistAddrs() {
       prefixes.emplace_back(std::move(prefix));
     }
   }
-  if (!prefixes.size()) {
-    LOG(INFO) << "Overwrite loopback address with empty address";
-  }
+
+  LOG_IF(INFO, prefixes.empty()) << "Advertising empty LOOPBACK addresses.";
   // Advertise via prefix manager client
   thrift::PrefixUpdateRequest request;
   request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
   request.type_ref() = openr::thrift::PrefixType::LOOPBACK;
   request.prefixes = std::move(prefixes);
+  // publish LOOPBACK prefixes to prefix manager
   prefixUpdatesQueue_.push(std::move(request));
 }
 
@@ -926,14 +923,16 @@ LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
   auto neighborAddrV4 = event.neighbor.transportAddressV4;
   auto neighborAddrV6 = event.neighbor.transportAddressV6;
 
-  VLOG(1) << "Received neighbor event for " << event.neighbor.nodeName
-          << " from " << event.neighbor.ifName << " at " << event.ifName
-          << " with addrs " << toString(neighborAddrV6) << " and "
-          << (enableV4_ ? toString(neighborAddrV4) : "")
-          << " Area:" << event.area;
+  VLOG(1)
+      << "Received neighbor event for " << event.neighbor.nodeName << " from "
+      << event.neighbor.ifName << " at " << event.ifName << " with addrs "
+      << toString(neighborAddrV6) << " and "
+      << (enableV4_ ? toString(neighborAddrV4) : "") << " Area:" << event.area
+      << " Event Type: " << apache::thrift::util::enumNameSafe(event.eventType);
 
   switch (event.eventType) {
-  case thrift::SparkNeighborEventType::NEIGHBOR_UP: {
+  case thrift::SparkNeighborEventType::NEIGHBOR_UP:
+  case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
     logNeighborEvent(event);
     neighborUpEvent(event);
     break;
@@ -941,11 +940,6 @@ LinkMonitor::processNeighborEvent(thrift::SparkNeighborEvent&& event) {
   case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING: {
     logNeighborEvent(event);
     neighborRestartingEvent(event);
-    break;
-  }
-  case thrift::SparkNeighborEventType::NEIGHBOR_RESTARTED: {
-    logNeighborEvent(event);
-    neighborUpEvent(event);
     break;
   }
   case thrift::SparkNeighborEventType::NEIGHBOR_DOWN: {
