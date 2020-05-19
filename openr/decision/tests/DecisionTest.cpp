@@ -4214,9 +4214,10 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   thrift::NextHopThrift nh, nh1, nh2;
   nh.address = toBinaryAddress(folly::IPAddressV6("::1"));
   nh1.address = toBinaryAddress(folly::IPAddressV6("::2"));
-  nh.mplsAction_ref(),
-      nh1.mplsAction_ref() =
-          createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+  nh.mplsAction_ref() =
+      createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
+  nh1.mplsAction_ref() =
+      createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
   thrift::MplsRoute route;
   route.topLabel = 32011;
   route.nextHops = {nh};
@@ -4291,6 +4292,10 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_EQ(staticRoutes.size(), 1);
   EXPECT_THAT(
       staticRoutes[32012], testing::UnorderedElementsAreArray({nh, nh1}));
+
+  EXPECT_THAT(
+      dumpRouteDb({"1"})["1"].mplsRoutes,
+      Contains(createMplsRoute(32012, {nh, nh1})));
 }
 
 // The following topology is used:

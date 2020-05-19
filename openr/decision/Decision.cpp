@@ -1921,6 +1921,9 @@ Decision::getDecisionRouteDb(std::string nodeName) {
     } else {
       routeDb.thisNodeName = nodeName;
     }
+    for (const auto& [key, val] : spfSolver_->getStaticRoutes().mplsRoutes) {
+      routeDb.mplsRoutes.emplace_back(createMplsRoute(key, val));
+    }
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
   });
   return sf;
