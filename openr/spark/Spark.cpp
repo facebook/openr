@@ -2661,6 +2661,9 @@ Spark::updateGlobalCounters() {
       "spark.num_tracked_neighbors", trackedNeighborCount);
   fb303::fbData->setCounter(
       "spark.num_adjacent_neighbors", adjacentNeighborCount);
+  fb303::fbData->setCounter(
+      "spark.tracked_adjacent_neighbors_diff",
+      trackedNeighborCount - adjacentNeighborCount);
   fb303::fbData->setCounter("spark.my_seq_num", mySeqNum_);
   fb303::fbData->setCounter("spark.pending_timers", getEvb()->timer().count());
 }
