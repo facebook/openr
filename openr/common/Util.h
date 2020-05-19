@@ -63,6 +63,21 @@
 
 namespace openr {
 
+struct PrefixEntryWithFlag {
+  thrift::PrefixEntry prefixEntry;
+  bool isLocalRoutes{false};
+};
+
+// use std::map instead of std::unordered_map to have deterministic behavior.
+using MultiNextHops = std::map<folly::IPAddress, PrefixEntryWithFlag>;
+
+struct MplsLabelAndNextHops {
+  int32_t label;
+  MultiNextHops multiNextHops;
+  bool hasLocalRoutes{false};
+  bool installed{false};
+};
+
 /**
  * Class to store re2 objects, provides API to match string with regex
  */
@@ -491,9 +506,7 @@ thrift::MplsAction createMplsAction(
 
 thrift::PrefixEntry createBgpWithdrawEntry(const thrift::IpPrefix& prefix);
 
-thrift::MplsRoute createMplsRoute(
-    const std::pair<int32_t, std::map<folly::IPAddress, thrift::PrefixEntry>>&
-        prefixInfo);
+thrift::MplsRoute createMplsRoute(const MplsLabelAndNextHops& prefixInfo);
 
 thrift::UnicastRoute createUnicastRoute(
     thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops);

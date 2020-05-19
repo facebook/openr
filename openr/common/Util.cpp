@@ -941,12 +941,10 @@ createBgpWithdrawEntry(const thrift::IpPrefix& prefix) {
 }
 
 thrift::MplsRoute
-createMplsRoute(
-    const std::pair<int32_t, std::map<folly::IPAddress, thrift::PrefixEntry>>&
-        prefixInfo) {
+createMplsRoute(const MplsLabelAndNextHops& prefixInfo) {
   thrift::MplsRoute mplsRoute;
-  mplsRoute.topLabel = prefixInfo.first;
-  for (const auto& [key, _] : prefixInfo.second) {
+  mplsRoute.topLabel = prefixInfo.label;
+  for (const auto& [key, _] : prefixInfo.multiNextHops) {
     thrift::NextHopThrift nh;
     nh.address = toBinaryAddress(key);
     nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
