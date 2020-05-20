@@ -187,13 +187,15 @@ class GflagConfig final {
       config.prefix_allocation_config_ref() = std::move(pfxAllocConf);
     }
 
+    // Fib
     if (auto v = FLAGS_enable_ordered_fib_programming) {
       config.enable_ordered_fib_programming_ref() = v;
     }
+    config.fib_port = FLAGS_fib_handler_port;
 
     // SPR
     if (FLAGS_enable_plugin) {
-      config.enable_spr_ref() = FLAGS_enable_plugin;
+      config.enable_bgp_peering_ref() = FLAGS_enable_plugin;
       config.bgp_config_ref() = getBgpConfig();
       if (auto v = FLAGS_bgp_use_igp_metric) {
         config.bgp_use_igp_metric_ref() = v;

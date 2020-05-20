@@ -134,8 +134,11 @@ struct OpenrConfig {
 
   6: optional bool dryrun
   7: optional bool enable_v4
-  8: optional bool enable_netlink_fib_handler # netlink fib server
-  9: optional bool enable_netlink_system_handler # netlink system server
+  # do route programming through netlink
+  8: optional bool enable_netlink_fib_handler
+  # listen for interface information (link status|addresses) through netlink
+  # TODO: will be deprecated soon T66361115
+  9: optional bool enable_netlink_system_handler
 
   # time before decision start compute routes
   10: optional i32 eor_time_s
@@ -155,11 +158,12 @@ struct OpenrConfig {
   # prefix allocation
   20: optional bool enable_prefix_allocation
   21: optional PrefixAllocationConfig prefix_allocation_config
-
+  # fib
   22: optional bool enable_ordered_fib_programming
+  23: i32 fib_port
 
   # bgp
-  100: optional bool enable_spr
+  100: optional bool enable_bgp_peering
   102: optional BgpConfig.BgpConfig bgp_config
   103: optional bool bgp_use_igp_metric
 }

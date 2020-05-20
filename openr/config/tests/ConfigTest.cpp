@@ -126,6 +126,18 @@ TEST_F(ConfigTestFixture, ConstructFromFile) {
         invalidConfFile.path().string(), folly::toJson(invalidConf));
     EXPECT_ANY_THROW(Config(invalidConfFile.path().string()));
   }
+  // out of range enum: prefix_forwarding_type
+  {
+    folly::dynamic invalidConfig;
+    invalidConfig = folly::parseJson(validConfigStr_);
+    invalidConfig["prefix_forwarding_type"] = 3;
+    LOG(INFO) << invalidConfig;
+
+    folly::test::TemporaryFile invalidConfigFile;
+    folly::writeFileAtomic(
+        invalidConfigFile.path().string(), folly::toJson(invalidConfig));
+    EXPECT_ANY_THROW(Config(invalidConfigFile.path().string()));
+  }
 }
 
 TEST(ConfigTest, PopulateInternalDb) {
@@ -147,6 +159,15 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalid.areas.emplace_back(getAreaConfig("1"));
     confInvalid.areas.emplace_back(getAreaConfig("2"));
     confInvalid.enable_ordered_fib_programming_ref() = true;
+    EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
+  }
+
+  // KSP2_ED_ECMP with IP
+  {
+    auto confInvalid = getBasicOpenrConfig();
+    confInvalid.prefix_forwarding_type = thrift::PrefixForwardingType::IP;
+    confInvalid.prefix_forwarding_algorithm =
+        thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
   }
 
@@ -290,29 +311,59 @@ TEST(ConfigTest, PopulateInternalDb) {
         32;
     EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
   }
+
+  // bgp peering
+
+  // bgp peering enabled with empty bgp_config
+  {
+    auto confInvalid = getBasicOpenrConfig();
+    confInvalid.enable_bgp_peering_ref() = true;
+    EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
+  }
 }
 
 TEST(ConfigTest, GeneralGetter) {
-  auto tConfig = getBasicOpenrConfig(
-      "node-1",
-      true /* enableV4 */,
-      false /* enableSegmentRouting */,
-      false /* orderedFibProgramming */,
-      true /*dryrun*/);
-  auto config = Config(tConfig);
+  // config without bgp peering
+  {
+    auto tConfig = getBasicOpenrConfig(
+        "node-1",
+        true /* enableV4 */,
+        false /* enableSegmentRouting */,
+        false /* orderedFibProgramming */,
+        true /*dryrun*/);
+    auto config = Config(tConfig);
 
-  // getNodeName
-  EXPECT_EQ("node-1", config.getNodeName());
+    // getNodeName
+    EXPECT_EQ("node-1", config.getNodeName());
 
-  // getAreaIds
-  auto areaIds = config.getAreaIds();
-  EXPECT_EQ(1, areaIds.size());
-  EXPECT_EQ(1, areaIds.count(thrift::KvStore_constants::kDefaultArea()));
+    // getAreaIds
+    auto areaIds = config.getAreaIds();
+    EXPECT_EQ(1, areaIds.size());
+    EXPECT_EQ(1, areaIds.count(thrift::KvStore_constants::kDefaultArea()));
 
-  // isV4Enabled
-  EXPECT_TRUE(config.isV4Enabled());
-  // isSegmentRoutingEnabled
-  EXPECT_FALSE(config.isSegmentRoutingEnabled());
+    // isV4Enabled
+    EXPECT_TRUE(config.isV4Enabled());
+    // isSegmentRoutingEnabled
+    EXPECT_FALSE(config.isSegmentRoutingEnabled());
+    // isBgpPeeringEnabled
+    EXPECT_FALSE(config.isBgpPeeringEnabled());
+  }
+
+  // config with bgp peering
+  {
+    auto tConfig = getBasicOpenrConfig("fsw001");
+    tConfig.enable_bgp_peering_ref() = true;
+
+    FLAGS_node_name = "fsw001";
+    const auto& bgpConf = GflagConfig::getBgpAutoConfig();
+    tConfig.bgp_config_ref() = bgpConf;
+
+    auto config = Config(tConfig);
+
+    // isBgpPeeringEnabled
+    EXPECT_TRUE(config.isBgpPeeringEnabled());
+    EXPECT_EQ(bgpConf, config.getBgpConfig());
+  }
 }
 
 TEST(ConfigTest, KvstoreGetter) {
@@ -380,7 +431,7 @@ TEST(ConfigTest, PrefixAllocatorGetter) {
   EXPECT_EQ(params, config.getPrefixAllocationParams());
 }
 
-TEST(ConfigTest, getBgpAutoConfig) {
+TEST(ConfigTest, BgpPeeringConfig) {
   {
     FLAGS_node_name = "fsw001";
     auto bgpConfig = GflagConfig::getBgpAutoConfig();

@@ -88,7 +88,7 @@ checkIsIpv6Enabled() {
 }
 
 void
-waitForFibService(const fbzmq::ZmqEventLoop& evl) {
+waitForFibService(const fbzmq::ZmqEventLoop& evl, int port) {
   auto waitForFibStart = std::chrono::steady_clock::now();
 
   auto fibStatus = facebook::fb303::cpp2::fb303_status::DEAD;
@@ -99,7 +99,7 @@ waitForFibService(const fbzmq::ZmqEventLoop& evl) {
          facebook::fb303::cpp2::fb303_status::ALIVE != fibStatus) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG(INFO) << "Waiting for FibService to come up...";
-    openr::Fib::createFibClient(evb, socket, client, FLAGS_fib_handler_port);
+    openr::Fib::createFibClient(evb, socket, client, port);
     try {
       fibStatus = client->sync_getStatus();
     } catch (const std::exception& e) {
@@ -198,12 +198,6 @@ main(int argc, char** argv) {
   // start config module
   auto config = GflagConfig::createConfigFromGflag();
 
-  // Sanity check for prefix forwarding type and algorithm
-  if (FLAGS_prefix_algo_type_ksp2_ed_ecmp) {
-    CHECK(FLAGS_prefix_fwd_type_mpls)
-        << "Forwarding type must be set to SR_MPLS for KSP2_ED_ECMP";
-  }
-
   // Sanity checks on Segment Routing labels
   const int32_t maxLabel = Constants::kMaxSrLabel;
   CHECK(Constants::kSrGlobalRange.first > 0);
@@ -258,7 +252,7 @@ main(int argc, char** argv) {
         nullptr /* watchdog won't monitor itself */,
         "Watchdog",
         std::make_unique<Watchdog>(
-            FLAGS_node_name,
+            config->getNodeName(),
             std::chrono::seconds(FLAGS_watchdog_interval_s),
             std::chrono::seconds(FLAGS_watchdog_threshold_s),
             FLAGS_memory_limit_mb));
@@ -275,7 +269,8 @@ main(int argc, char** argv) {
   std::unique_ptr<std::thread> netlinkSystemServerThread{nullptr};
   std::unique_ptr<PlatformPublisher> eventPublisher{nullptr};
 
-  if (FLAGS_enable_netlink_fib_handler or FLAGS_enable_netlink_system_handler) {
+  if (config->isNetlinkFibHandlerEnabled() or
+      config->isNetlinkSystemHandlerEnabled()) {
     thriftThreadMgr = ThreadManager::newPriorityQueueThreadManager(
         2 /* num of threads */, false /* task stats */);
     thriftThreadMgr->setNamePrefix("ThriftCpuPool");
@@ -303,7 +298,7 @@ main(int argc, char** argv) {
         context, PlatformPublisherUrl{FLAGS_platform_pub_url}, nlSock.get());
 
     // ATTN: intentionally set evl capacity to be 1e5 instead of default 1e2
-    if (FLAGS_enable_netlink_fib_handler) {
+    if (config->isNetlinkFibHandlerEnabled()) {
       CHECK(thriftThreadMgr);
 
       // Start NetlinkFibHandler if specified
@@ -312,7 +307,7 @@ main(int argc, char** argv) {
       netlinkFibServer->setThreadManager(thriftThreadMgr);
       netlinkFibServer->setNumIOWorkerThreads(1);
       netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
-      netlinkFibServer->setPort(FLAGS_fib_handler_port);
+      netlinkFibServer->setPort(config->getConfig().fib_port);
 
       netlinkFibServerThread =
           std::make_unique<std::thread>([&netlinkFibServer, &nlSock]() {
@@ -327,7 +322,7 @@ main(int argc, char** argv) {
     }
 
     // Start NetlinkSystemHandler if specified
-    if (FLAGS_enable_netlink_system_handler) {
+    if (config->isNetlinkSystemHandlerEnabled()) {
       CHECK(thriftThreadMgr);
       netlinkSystemServer = std::make_unique<apache::thrift::ThriftServer>();
       netlinkSystemServer->setIdleTimeout(
@@ -364,7 +359,7 @@ main(int argc, char** argv) {
   mainEventLoop.waitUntilRunning();
 
   if (FLAGS_enable_fib_service_waiting) {
-    waitForFibService(mainEventLoop);
+    waitForFibService(mainEventLoop, config->getConfig().fib_port);
   }
 
   // Starting openrCtrlEvb for thrift handler
@@ -384,17 +379,21 @@ main(int argc, char** argv) {
       watchdog,
       "ConfigStore",
       std::make_unique<PersistentStore>(
-          FLAGS_node_name, FLAGS_config_store_filepath, context));
+          config->getNodeName(), FLAGS_config_store_filepath, context));
 
   // Start monitor Module
   // for each log message it receives, we want to add the openr domain
   fbzmq::LogSample sampleToMerge;
-  sampleToMerge.addString("domain", FLAGS_domain);
+  sampleToMerge.addString("domain", config->getConfig().domain);
   ZmqMonitor monitor(
       MonitorSubmitUrl{folly::sformat(
-          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_monitor_rep_port)},
+          "tcp://{}:{}",
+          config->getConfig().listen_addr,
+          FLAGS_monitor_rep_port)},
       MonitorPubUrl{folly::sformat(
-          "tcp://{}:{}", FLAGS_listen_addr, FLAGS_monitor_pub_port)},
+          "tcp://{}:{}",
+          config->getConfig().listen_addr,
+          FLAGS_monitor_pub_port)},
       context,
       sampleToMerge);
   std::thread monitorThread([&monitor]() noexcept {
@@ -417,7 +416,9 @@ main(int argc, char** argv) {
           kvStoreUpdatesQueue,
           peerUpdatesQueue.getReader(),
           KvStoreGlobalCmdUrl{folly::sformat(
-              "tcp://{}:{}", FLAGS_listen_addr, FLAGS_kvstore_rep_port)},
+              "tcp://{}:{}",
+              config->getConfig().listen_addr,
+              FLAGS_kvstore_rep_port)},
           monitorSubmitUrl,
           config,
           maybeIpTos,
@@ -464,8 +465,8 @@ main(int argc, char** argv) {
       watchdog,
       "Spark",
       std::make_unique<Spark>(
-          FLAGS_domain, // My domain
-          FLAGS_node_name, // myNodeName
+          config->getConfig().domain, // My domain
+          config->getNodeName(), // myNodeName
           static_cast<uint16_t>(FLAGS_spark_mcast_port),
           std::chrono::seconds(FLAGS_spark_hold_time_s),
           std::chrono::seconds(FLAGS_spark_keepalive_time_s),
@@ -568,7 +569,7 @@ main(int argc, char** argv) {
       "Fib",
       std::make_unique<Fib>(
           config,
-          FLAGS_fib_handler_port,
+          config->getConfig().fib_port,
           std::chrono::seconds(3 * FLAGS_spark_keepalive_time_s),
           routeUpdatesQueue.getReader(),
           interfaceUpdatesQueue.getReader(),
@@ -607,7 +608,7 @@ main(int argc, char** argv) {
         sslContext);
   }
   // set the port and interface
-  thriftCtrlServer.setPort(FLAGS_openr_ctrl_port);
+  thriftCtrlServer.setPort(config->getConfig().openr_ctrl_port);
 
   std::unordered_set<std::string> acceptableNamesSet; // empty set by default
   if (FLAGS_enable_secure_thrift_server) {
@@ -619,7 +620,7 @@ main(int argc, char** argv) {
   std::shared_ptr<openr::OpenrCtrlHandler> ctrlHandler{nullptr};
   ctrlEvb.getEvb()->runInEventBaseThreadAndWait([&]() {
     ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
-        FLAGS_node_name,
+        config->getNodeName(),
         acceptableNamesSet,
         &ctrlEvb,
         decision,
@@ -651,7 +652,7 @@ main(int argc, char** argv) {
   }));
 
   // Call external module for platform specific implementations
-  if (FLAGS_enable_plugin) {
+  if (config->isBgpPeeringEnabled()) {
     pluginStart(PluginArgs{prefixUpdateRequestQueue,
                            staticRoutesUpdateQueue,
                            routeUpdatesQueue.getReader(),
@@ -722,7 +723,7 @@ main(int argc, char** argv) {
   }
 
   // Call external module for platform specific implementations
-  if (FLAGS_enable_plugin) {
+  if (config->isBgpPeeringEnabled()) {
     pluginStop();
   }
 

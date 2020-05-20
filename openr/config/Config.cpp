@@ -10,6 +10,8 @@
 
 using apache::thrift::util::enumName;
 using openr::thrift::PrefixAllocationMode;
+using openr::thrift::PrefixForwardingAlgorithm;
+using openr::thrift::PrefixForwardingType;
 
 namespace openr {
 
@@ -94,6 +96,21 @@ Config::populateInternalDb() {
       throw std::invalid_argument(
           folly::sformat("Duplicate area config: area_id {}", area.area_id));
     }
+  }
+
+  // prefix forwarding type and algorithm
+  const auto& pfxType = config_.prefix_forwarding_type;
+  const auto& pfxAlgo = config_.prefix_forwarding_algorithm;
+
+  if (not enumName(pfxType) or not enumName(pfxAlgo)) {
+    throw std::invalid_argument(
+        "invalid prefix_forwarding_type or prefix_forwarding_algorithm");
+  }
+
+  if (pfxAlgo == PrefixForwardingAlgorithm::KSP2_ED_ECMP and
+      pfxType != PrefixForwardingType::SR_MPLS) {
+    throw std::invalid_argument(
+        "prefix_forwarding_type must be set to SR_MPLS for KSP2_ED_ECMP");
   }
 
   //
@@ -245,5 +262,13 @@ Config::populateInternalDb() {
     }
     }
   } // if enable_prefix_allocation_ref()
+
+  //
+  // bgp peering
+  //
+  if (isBgpPeeringEnabled() and not config_.bgp_config_ref()) {
+    throw std::invalid_argument(
+        "enable_bgp_peering = true, but bgp_config is empty");
+  }
 } // namespace openr
 } // namespace openr

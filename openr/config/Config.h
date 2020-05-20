@@ -11,6 +11,7 @@
 #include <re2/re2.h>
 #include <re2/set.h>
 
+#include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace openr {
@@ -58,6 +59,16 @@ class Config {
   bool
   isOrderedFibProgrammingEnabled() const {
     return config_.enable_ordered_fib_programming_ref().value_or(false);
+  }
+
+  bool
+  isNetlinkFibHandlerEnabled() const {
+    return config_.enable_netlink_fib_handler_ref().value_or(false);
+  }
+
+  bool
+  isNetlinkSystemHandlerEnabled() const {
+    return config_.enable_netlink_system_handler_ref().value_or(false);
   }
 
   //
@@ -122,6 +133,20 @@ class Config {
   getPrefixAllocationParams() const {
     CHECK(isPrefixAllocationEnabled());
     return *prefixAllocationParams_;
+  }
+
+  //
+  // bgp peering
+  //
+  bool
+  isBgpPeeringEnabled() const {
+    return config_.enable_bgp_peering_ref().value_or(false);
+  }
+
+  const thrift::BgpConfig&
+  getBgpConfig() const {
+    CHECK(isBgpPeeringEnabled());
+    return *config_.bgp_config_ref();
   }
 
  private:
