@@ -11,7 +11,6 @@
 #include <functional>
 
 #include <boost/serialization/strong_typedef.hpp>
-#include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/SocketAddress.h>
@@ -314,16 +313,16 @@ class Spark final : public OpenrEventBase {
     SparkNeighState state;
 
     // timer to periodically send out handshake pkt
-    std::unique_ptr<fbzmq::ZmqTimeout> negotiateTimer{nullptr};
+    std::unique_ptr<folly::AsyncTimeout> negotiateTimer{nullptr};
 
     // negotiate stage hold-timer
-    std::unique_ptr<fbzmq::ZmqTimeout> negotiateHoldTimer{nullptr};
+    std::unique_ptr<folly::AsyncTimeout> negotiateHoldTimer{nullptr};
 
     // heartbeat hold-timer
-    std::unique_ptr<fbzmq::ZmqTimeout> heartbeatHoldTimer{nullptr};
+    std::unique_ptr<folly::AsyncTimeout> heartbeatHoldTimer{nullptr};
 
     // graceful restart hold-timer
-    std::unique_ptr<fbzmq::ZmqTimeout> gracefulRestartHoldTimer{nullptr};
+    std::unique_ptr<folly::AsyncTimeout> gracefulRestartHoldTimer{nullptr};
 
     // KvStore related port. Info passed to LinkMonitor for neighborEvent
     int32_t kvStoreCmdPort{0};
@@ -532,13 +531,13 @@ class Spark final : public OpenrEventBase {
   // Hello packet send timers for each interface
   std::unordered_map<
       std::string /* ifName */,
-      std::unique_ptr<fbzmq::ZmqTimeout>>
+      std::unique_ptr<folly::AsyncTimeout>>
       ifNameToHelloTimers_{};
 
   // heartbeat packet send timers for each interface
   std::unordered_map<
       std::string /* ifName */,
-      std::unique_ptr<fbzmq::ZmqTimeout>>
+      std::unique_ptr<folly::AsyncTimeout>>
       ifNameToHeartbeatTimers_{};
 
   // number of active neighbors for each interface
@@ -560,7 +559,7 @@ class Spark final : public OpenrEventBase {
         thrift::SparkNeighbor const& info,
         uint32_t label,
         uint64_t seqNum,
-        std::unique_ptr<fbzmq::ZmqTimeout> holdTimer,
+        std::unique_ptr<folly::AsyncTimeout> holdTimer,
         const std::chrono::milliseconds& samplingPeriod,
         std::function<void(const int64_t&)> rttChangeCb,
         std::string area = openr::thrift::KvStore_constants::kDefaultArea());
@@ -569,7 +568,7 @@ class Spark final : public OpenrEventBase {
     thrift::SparkNeighbor info;
 
     // Hold timer. If expired will declare the neighbor as stopped.
-    const std::unique_ptr<fbzmq::ZmqTimeout> holdTimer{nullptr};
+    const std::unique_ptr<folly::AsyncTimeout> holdTimer{nullptr};
 
     // SR Label to reach Neighbor over this specific adjacency. Generated
     // using ifIndex to this neighbor. Only local within the node.

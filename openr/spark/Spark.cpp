@@ -227,7 +227,7 @@ Spark::Neighbor::Neighbor(
     thrift::SparkNeighbor const& info,
     uint32_t label,
     uint64_t seqNum,
-    std::unique_ptr<fbzmq::ZmqTimeout> holdTimer,
+    std::unique_ptr<folly::AsyncTimeout> holdTimer,
     const std::chrono::milliseconds& samplingPeriod,
     std::function<void(const int64_t&)> rttChangeCb,
     std::string areaId)
@@ -697,8 +697,8 @@ Spark::validateHelloPacket(
 
   // first time we hear from this guy, add to tracking list
   if (it == ifNeighbors.end()) {
-    auto holdTimer = fbzmq::ZmqTimeout::make(
-        getEvb(), [this, ifName, neighborName]() noexcept {
+    auto holdTimer = folly::AsyncTimeout::make(
+        *getEvb(), [this, ifName, neighborName]() noexcept {
           processNeighborHoldTimeout(ifName, neighborName);
         });
 
@@ -1265,8 +1265,8 @@ Spark::neighborUpWrapper(
   neighbor.negotiateHoldTimer.reset();
 
   // create heartbeat hold timer when promote to "ESTABLISHED"
-  neighbor.heartbeatHoldTimer = fbzmq::ZmqTimeout::make(
-      getEvb(), [this, ifName, neighborName]() noexcept {
+  neighbor.heartbeatHoldTimer = folly::AsyncTimeout::make(
+      *getEvb(), [this, ifName, neighborName]() noexcept {
         processHeartbeatTimeout(ifName, neighborName);
       });
   neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
@@ -1453,8 +1453,8 @@ Spark::processGRMsg(
       neighbor.area);
 
   // start graceful-restart timer
-  neighbor.gracefulRestartHoldTimer = fbzmq::ZmqTimeout::make(
-      getEvb(), [this, ifName, neighborName]() noexcept {
+  neighbor.gracefulRestartHoldTimer = folly::AsyncTimeout::make(
+      *getEvb(), [this, ifName, neighborName]() noexcept {
         // change the state back to IDLE
         processGRTimeout(ifName, neighborName);
       });
@@ -1626,17 +1626,24 @@ Spark::processHelloMsg(
 
     // Starts timer to periodically send hankshake msg
     const std::string neighborAreaId = neighbor.area;
-    neighbor.negotiateTimer = fbzmq::ZmqTimeout::make(
-        getEvb(), [this, ifName, neighborName, neighborAreaId]() noexcept {
-          // periodically send out handshake msg
+    neighbor.negotiateTimer = folly::AsyncTimeout::make(
+        *getEvb(), [this, ifName, neighborName, neighborAreaId]() noexcept {
           sendHandshakeMsg(ifName, neighborName, neighborAreaId, false);
+          // send out handshake msg periodically to this neighbor
+          CHECK(spark2Neighbors_.count(ifName) > 0)
+              << folly::sformat("Key NOT found for: {}", ifName);
+          CHECK(spark2Neighbors_.at(ifName).count(neighborName) > 0)
+              << folly::sformat(
+                     "Key NOT found: {} under: {}", neighborName, ifName);
+          spark2Neighbors_.at(ifName)
+              .at(neighborName)
+              .negotiateTimer->scheduleTimeout(myHandshakeTime_);
         });
-    const bool isPeriodic = true;
-    neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_, isPeriodic);
+    neighbor.negotiateTimer->scheduleTimeout(myHandshakeTime_);
 
     // Starts negotiate hold-timer
-    neighbor.negotiateHoldTimer = fbzmq::ZmqTimeout::make(
-        getEvb(), [this, ifName, neighborName]() noexcept {
+    neighbor.negotiateHoldTimer = folly::AsyncTimeout::make(
+        *getEvb(), [this, ifName, neighborName]() noexcept {
           // prevent to stucking in NEGOTIATE forever
           processNegotiateTimeout(ifName, neighborName);
         });
@@ -1711,8 +1718,8 @@ Spark::processHelloMsg(
         neighbor.area);
 
     // start heartbeat timer again to make sure neighbor is alive
-    neighbor.heartbeatHoldTimer = fbzmq::ZmqTimeout::make(
-        getEvb(), [this, ifName, neighborName]() noexcept {
+    neighbor.heartbeatHoldTimer = folly::AsyncTimeout::make(
+        *getEvb(), [this, ifName, neighborName]() noexcept {
           processHeartbeatTimeout(ifName, neighborName);
         });
     neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
@@ -2467,13 +2474,16 @@ Spark::addInterfaceToDb(
       CHECK(result.second);
 
       // heartbeatTimers will start as soon as intf is in UP state
-      auto heartbeatTimer = fbzmq::ZmqTimeout::make(
-          getEvb(), [this, ifName]() noexcept { sendHeartbeatMsg(ifName); });
+      auto heartbeatTimer =
+          folly::AsyncTimeout::make(*getEvb(), [this, ifName]() noexcept {
+            sendHeartbeatMsg(ifName);
+            // schedule heartbeatTimers periodically as soon as intf is UP
+            ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
+                myHeartbeatTime_);
+          });
 
-      const bool isPeriodic = true; /* flag indicating periodic pkt sent-out*/
       ifNameToHeartbeatTimers_.emplace(ifName, std::move(heartbeatTimer));
-      ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
-          myHeartbeatTime_, isPeriodic);
+      ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(myHeartbeatTime_);
     }
 
     auto rollHelper = [](std::chrono::milliseconds timeDuration) {
@@ -2498,8 +2508,9 @@ Spark::addInterfaceToDb(
     // this is due to the fact that it may not have yet configured a link-local
     // address. The hello packet will be sent later and will have good chances
     // of making it out if small delay is introduced.
-    auto helloTimer = fbzmq::ZmqTimeout::make(
-        getEvb(), [this, ifName, timePoint, roll, rollFast]() mutable noexcept {
+    auto helloTimer = folly::AsyncTimeout::make(
+        *getEvb(),
+        [this, ifName, timePoint, roll, rollFast]() mutable noexcept {
           VLOG(3) << "Sending hello multicast packet on interface " << ifName;
           bool inFastInitState = false;
           if (enableSpark2_ && increaseHelloInterval_) {
