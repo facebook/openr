@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/IPAddress.h>
 #include <re2/re2.h>
 #include <re2/set.h>
 
@@ -14,12 +15,17 @@
 
 namespace openr {
 
+typedef std::pair<folly::CIDRNetwork, uint8_t> PrefixAllocationParams;
+
 class Config {
  public:
   explicit Config(const std::string& configFile);
   explicit Config(thrift::OpenrConfig config) : config_(std::move(config)) {
     populateInternalDb();
   }
+
+  static PrefixAllocationParams createPrefixAllocationParams(
+      const std::string& seedPfxStr, uint8_t allocationPfxLen);
 
   //
   // config
@@ -47,6 +53,11 @@ class Config {
   bool
   isSegmentRoutingEnabled() const {
     return config_.enable_segment_routing_ref().value_or(false);
+  }
+
+  bool
+  isOrderedFibProgrammingEnabled() const {
+    return config_.enable_ordered_fib_programming_ref().value_or(false);
   }
 
   //
@@ -93,6 +104,26 @@ class Config {
     return redistributeItfRegexes_;
   }
 
+  //
+  // prefix Allocation
+  //
+  bool
+  isPrefixAllocationEnabled() const {
+    return config_.enable_prefix_allocation_ref().value_or(false);
+  }
+
+  const thrift::PrefixAllocationConfig&
+  getPrefixAllocationConfig() const {
+    CHECK(isPrefixAllocationEnabled());
+    return *config_.prefix_allocation_config_ref();
+  }
+
+  PrefixAllocationParams
+  getPrefixAllocationParams() const {
+    CHECK(isPrefixAllocationEnabled());
+    return *prefixAllocationParams_;
+  }
+
  private:
   void populateInternalDb();
   // thrift config
@@ -102,6 +133,8 @@ class Config {
   std::shared_ptr<re2::RE2::Set> includeItfRegexes_{nullptr};
   std::shared_ptr<re2::RE2::Set> excludeItfRegexes_{nullptr};
   std::shared_ptr<re2::RE2::Set> redistributeItfRegexes_{nullptr};
+  // prefix allocation
+  folly::Optional<PrefixAllocationParams> prefixAllocationParams_{folly::none};
 };
 
 } // namespace openr

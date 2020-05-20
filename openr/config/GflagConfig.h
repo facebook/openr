@@ -169,11 +169,20 @@ class GflagConfig final {
 
       thrift::PrefixAllocationConfig pfxAllocConf;
       pfxAllocConf.loopback_interface = FLAGS_loopback_iface;
-      pfxAllocConf.seed_prefix = FLAGS_seed_prefix;
-      pfxAllocConf.allocate_prefix_len = FLAGS_alloc_prefix_len;
-      pfxAllocConf.static_prefix_allocation = FLAGS_static_prefix_alloc;
       pfxAllocConf.set_loopback_addr = FLAGS_set_loopback_address;
       pfxAllocConf.override_loopback_addr = FLAGS_override_loopback_addr;
+      if (FLAGS_static_prefix_alloc) {
+        pfxAllocConf.prefix_allocation_mode =
+            thrift::PrefixAllocationMode::STATIC;
+      } else if (not FLAGS_seed_prefix.empty()) {
+        pfxAllocConf.prefix_allocation_mode =
+            thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
+        pfxAllocConf.seed_prefix_ref() = FLAGS_seed_prefix;
+        pfxAllocConf.allocate_prefix_len_ref() = FLAGS_alloc_prefix_len;
+      } else {
+        pfxAllocConf.prefix_allocation_mode =
+            thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
+      }
 
       config.prefix_allocation_config_ref() = std::move(pfxAllocConf);
     }

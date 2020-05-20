@@ -24,6 +24,7 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Lsdb_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
@@ -36,81 +37,46 @@
 #include "RangeAllocator.h"
 
 namespace openr {
-
-enum class PrefixAllocatorModeStatic {};
-enum class PrefixAllocatorModeSeeded {};
-
-using PrefixAllocatorParams = std::pair<folly::CIDRNetwork, uint8_t>;
-using PrefixAllocatorMode = std::variant<
-    PrefixAllocatorModeStatic,
-    PrefixAllocatorModeSeeded,
-    PrefixAllocatorParams>;
-
 /**
  * The class assigns local node unique prefixes from a given seed prefix in
  * a distributed manner.
  *
- * allocOptions:
- * > PrefixAllocatorModeStatic
- *   => looks for static allocation key in kvstore and use the prefix
- * > PrefixAllocatorModeSeeded
- *   => looks for PrefixAllocatorParams in kvstore and elects a subprefix
- * > PrefixAllocatorParams
- *   => elects subprefix from prefix allocator params
  */
 class PrefixAllocator : public OpenrEventBase {
  public:
   PrefixAllocator(
-      const std::string& myNodeName,
+      std::shared_ptr<const Config> config,
       KvStore* kvStore,
       messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
       const MonitorSubmitUrl& monitorSubmitUrl,
-      const AllocPrefixMarker& allocPrefixMarker,
-      // Allocation params
-      const PrefixAllocatorMode& allocMode,
-      // configure loopback address or not
-      bool setLoopbackAddress,
-      // override all global addresses on loopback interface
-      bool overrideGlobalAddress,
-      // loopback interface name
-      const std::string& loopbackIfaceName,
-      // prefix fowrading type MPLS
-      bool forwardingTypeMpls,
-      // prefix forwarding algorithm KSP2_ED_ECMP
-      bool forwardingAlgoKsp2Ed,
-      // period to check prefix collision
-      std::chrono::milliseconds syncInterval,
       PersistentStore* configStore,
       fbzmq::Context& zmqContext,
-      int32_t systemServicePort);
+      int32_t systemServicePort,
+      std::chrono::milliseconds syncInterval);
 
   PrefixAllocator(PrefixAllocator const&) = delete;
   PrefixAllocator& operator=(PrefixAllocator const&) = delete;
-
-  //
-  // Visitor init functions => 3 different ways to initialize
-  // PrefixAllocator. Only meant to be used internally.
-  //
-  void operator()(PrefixAllocatorModeStatic const&);
-  void operator()(PrefixAllocatorModeSeeded const&);
-  void operator()(PrefixAllocatorParams const&);
 
   // Thread safe API for testing only
   std::optional<uint32_t> getMyPrefixIndex();
 
   // Static function to parse string representation of allocation params to
-  // strong types.
-  static folly::Expected<PrefixAllocatorParams, fbzmq::Error> parseParamsStr(
-      const std::string& paramStr) noexcept;
+  // strong types. Throw exception upon parsing error
+  static PrefixAllocationParams parseParamsStr(const std::string& paramStr);
 
   // Static function to get available prefix count from allocation params
   static uint32_t getPrefixCount(
-      PrefixAllocatorParams const& allocParams) noexcept;
+      PrefixAllocationParams const& allocParams) noexcept;
 
  private:
   //
   // Private methods
   //
+
+  // 3 different ways to initialize PrefixAllocator.
+  void staticAllocation();
+  void dynamicAllocationLeafNode();
+  void dynamicAllocationRootNode(PrefixAllocationParams const&);
 
   // Function to process static allocation update from kvstore
   void processStaticPrefixAllocUpdate(thrift::Value const& value);
@@ -140,7 +106,7 @@ class PrefixAllocator : public OpenrEventBase {
   // or `std::nullopt` if seed prefix is no longer valid to withdraw
   // what we had before!
   void startAllocation(
-      std::optional<PrefixAllocatorParams> const& allocParams,
+      std::optional<PrefixAllocationParams> const& allocParams,
       bool checkParams = true);
 
   // use my newly allocated prefix
@@ -157,8 +123,8 @@ class PrefixAllocator : public OpenrEventBase {
       std::string event,
       std::optional<uint32_t> oldPrefix,
       std::optional<uint32_t> newPrefix,
-      std::optional<PrefixAllocatorParams> const& oldParams = std::nullopt,
-      std::optional<PrefixAllocatorParams> const& newParams = std::nullopt);
+      std::optional<PrefixAllocationParams> const& oldParams = std::nullopt,
+      std::optional<PrefixAllocationParams> const& newParams = std::nullopt);
 
   void syncIfaceAddrs(
       const std::string& ifName,
@@ -188,16 +154,6 @@ class PrefixAllocator : public OpenrEventBase {
   // this node's name
   const std::string myNodeName_{};
 
-  // this node's key marker for prefix allocation
-  const std::string allocPrefixMarker_{};
-
-  // Parameter to set loopback addresses
-  const bool setLoopbackAddress_{false};
-  const bool overrideGlobalAddress_{false};
-  const std::string loopbackIfaceName_;
-  const bool forwardingTypeMpls_{false};
-  const bool forwardingAlgoKsp2Ed_{false};
-
   // Sync interval for range allocator
   const std::chrono::milliseconds syncInterval_;
 
@@ -208,8 +164,17 @@ class PrefixAllocator : public OpenrEventBase {
   // Non-const private variables
   //
 
+  // Parameter to set loopback addresses
+  bool setLoopbackAddress_{false};
+  bool overrideGlobalAddress_{false};
+  std::string loopbackIfaceName_;
+  thrift::PrefixForwardingType prefixForwardingType_;
+  thrift::PrefixForwardingAlgorithm prefixForwardingAlgorithm_;
+  // areas
+  std::string area_;
+
   // Allocation parameters e.g., fc00:cafe::/56, 64
-  std::optional<PrefixAllocatorParams> allocParams_;
+  std::optional<PrefixAllocationParams> allocParams_;
 
   // index of my currently claimed prefix within seed prefix
   std::optional<uint32_t> myPrefixIndex_;
@@ -254,9 +219,6 @@ class PrefixAllocator : public OpenrEventBase {
 
   // save alloc index from e2e-network-alllocation <value version, indices set>
   std::pair<int64_t, std::unordered_set<uint32_t>> e2eAllocIndex_{-1, {}};
-
-  // areas
-  const std::string area_{openr::thrift::KvStore_constants::kDefaultArea()};
 };
 
 } // namespace openr

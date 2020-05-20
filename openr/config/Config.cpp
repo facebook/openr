@@ -3,9 +3,13 @@
 #include <folly/FileUtil.h>
 #include <glog/logging.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include "Config.h"
+
+using apache::thrift::util::enumName;
+using openr::thrift::PrefixAllocationMode;
 
 namespace openr {
 
@@ -39,6 +43,38 @@ Config::getRunningConfig() const {
   return contents;
 }
 
+PrefixAllocationParams
+Config::createPrefixAllocationParams(
+    const std::string& seedPfxStr, uint8_t allocationPfxLen) {
+  // check seed_prefix and allocate_prefix_len are set
+  if (seedPfxStr.empty() or allocationPfxLen == 0) {
+    throw std::invalid_argument(
+        "seed_prefix and allocate_prefix_len must be filled.");
+  }
+
+  // validate seed prefix
+  auto seedPfx = folly::IPAddress::createNetwork(seedPfxStr);
+
+  // validate allocate_prefix_len
+  if (seedPfx.first.isV4() and
+      (allocationPfxLen <= seedPfx.second or allocationPfxLen > 32)) {
+    throw std::out_of_range(folly::sformat(
+        "invalid allocate_prefix_len ({}), valid range = ({}, 32]",
+        allocationPfxLen,
+        seedPfx.second));
+  }
+
+  if ((seedPfx.first.isV6()) and
+      (allocationPfxLen <= seedPfx.second or allocationPfxLen > 128)) {
+    throw std::out_of_range(folly::sformat(
+        "invalid allocate_prefix_len ({}), valid range = ({}, 128]",
+        allocationPfxLen,
+        seedPfx.second));
+  }
+
+  return {seedPfx, allocationPfxLen};
+}
+
 void
 Config::populateInternalDb() {
   //
@@ -58,6 +94,14 @@ Config::populateInternalDb() {
       throw std::invalid_argument(
           folly::sformat("Duplicate area config: area_id {}", area.area_id));
     }
+  }
+
+  //
+  // Fib
+  //
+  if (isOrderedFibProgrammingEnabled() and areaIds_.size() > 1) {
+    throw std::invalid_argument(folly::sformat(
+        "enable_ordered_fib_programming only support single area config"));
   }
 
   //
@@ -151,5 +195,55 @@ Config::populateInternalDb() {
           folly::sformat("redistribute_interface_regexes compile failed"));
     }
   }
-}
+
+  //
+  // Prefix Allocation
+  //
+  if (isPrefixAllocationEnabled()) {
+    // by now areaIds should be filled.
+    if (areaIds_.size() > 1) {
+      throw std::invalid_argument(
+          "prefix_allocation only support single area config");
+    }
+
+    const auto& paConf = config_.prefix_allocation_config_ref();
+    // check if config exists
+    if (not paConf) {
+      throw std::invalid_argument(
+          "enable_prefix_allocation = true, but prefix_allocation_config is empty");
+    }
+
+    // sanity check enum prefix_allocation_mode
+    if (not enumName(paConf->prefix_allocation_mode)) {
+      throw std::invalid_argument("invalid prefix_allocation_mode");
+    }
+
+    auto seedPrefix = paConf->seed_prefix_ref().value_or("");
+    auto allocatePfxLen = paConf->allocate_prefix_len_ref().value_or(0);
+
+    switch (paConf->prefix_allocation_mode) {
+    case PrefixAllocationMode::DYNAMIC_ROOT_NODE: {
+      // populate prefixAllocationParams_ from seed_prefix and
+      // allocate_prefix_len
+      prefixAllocationParams_ =
+          createPrefixAllocationParams(seedPrefix, allocatePfxLen);
+
+      if (prefixAllocationParams_->first.first.isV4() and not isV4Enabled()) {
+        throw std::invalid_argument(
+            "v4 seed_prefix detected, but enable_v4 = false");
+      }
+      break;
+    }
+    case PrefixAllocationMode::DYNAMIC_LEAF_NODE:
+    case PrefixAllocationMode::STATIC: {
+      // seed_prefix and allocate_prefix_len have to to empty
+      if (not seedPrefix.empty() or allocatePfxLen > 0) {
+        throw std::invalid_argument(
+            "prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and allocate_prefix_len must be empty");
+      }
+      break;
+    }
+    }
+  } // if enable_prefix_allocation_ref()
+} // namespace openr
 } // namespace openr

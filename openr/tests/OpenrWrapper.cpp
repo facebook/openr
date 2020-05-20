@@ -50,13 +50,26 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       true /*enableSegmentRouting*/,
       false /*orderedFibProgramming*/,
       true /*dryrun*/);
+
   tConfig.kvstore_config.sync_interval_s = kvStoreDbSyncInterval.count();
+
   // link monitor config
   auto& lmConf = tConfig.link_monitor_config;
   lmConf.linkflap_initial_backoff_ms = linkFlapInitialBackoff.count();
   lmConf.linkflap_max_backoff_ms = linkFlapMaxBackoff.count();
   lmConf.use_rtt_metric = false;
   lmConf.include_interface_regexes = {"vethLMTest_" + nodeId_ + ".*"};
+
+  // prefix allocation config
+  tConfig.enable_prefix_allocation_ref() = true;
+  thrift::PrefixAllocationConfig pfxAllocationConf;
+  pfxAllocationConf.loopback_interface = "";
+  pfxAllocationConf.prefix_allocation_mode =
+      thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
+  pfxAllocationConf.seed_prefix_ref() = "fc00:cafe:babe::/62";
+  pfxAllocationConf.allocate_prefix_len_ref() = 64;
+  tConfig.prefix_allocation_config_ref() = pfxAllocationConf;
+
   config_ = std::make_shared<Config>(tConfig);
 
   // create zmq monitor
@@ -218,25 +231,15 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   //
   // create PrefixAllocator
   //
-  const auto seedPrefix =
-      folly::IPAddress::createNetwork("fc00:cafe:babe::/62");
-  const uint8_t allocPrefixLen = 64;
   prefixAllocator_ = std::make_unique<PrefixAllocator>(
-      nodeId_,
+      config_,
       kvStore_.get(),
       prefixUpdatesQueue_,
       MonitorSubmitUrl{monitorSubmitUrl_},
-      AllocPrefixMarker{"allocprefix:"}, // alloc_prefix_marker
-      std::make_pair(seedPrefix, allocPrefixLen),
-      false /* set loopback addr */,
-      false /* override global address */,
-      "" /* loopback interface name */,
-      false /* prefix fwd type MPLS */,
-      false /* prefix fwd algo KSP2_ED_ECMP */,
-      Constants::kPrefixAllocatorSyncInterval,
       configStore_.get(),
       context_,
-      systemPort_ /* system agent port*/);
+      systemPort_ /* system agent port*/,
+      Constants::kPrefixAllocatorSyncInterval);
 
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(

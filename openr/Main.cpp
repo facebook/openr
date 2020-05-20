@@ -406,15 +406,6 @@ main(int argc, char** argv) {
   monitor.waitUntilRunning();
   allThreads.emplace_back(std::move(monitorThread));
 
-  std::unordered_set<std::string> areas{
-      openr::thrift::KvStore_constants::kDefaultArea()};
-  auto nodeAreas = folly::gen::split(FLAGS_areas, ",") |
-      folly::gen::eachTo<std::string>() |
-      folly::gen::as<std::unordered_set<std::string>>();
-  if (nodeAreas.size()) {
-    areas = nodeAreas;
-  }
-
   // Start KVStore
   auto kvStore = startEventBase(
       allThreads,
@@ -449,42 +440,21 @@ main(int argc, char** argv) {
           FLAGS_per_prefix_keys));
 
   // Prefix Allocator to automatically allocate prefixes for nodes
-  if (FLAGS_enable_prefix_alloc) {
-    // start prefix allocator only if default area is configured
-    // prefix allocator is supported only for default area configuration
-    CHECK_EQ(areas.count(openr::thrift::KvStore_constants::kDefaultArea()), 1);
-    CHECK_EQ(areas.size(), 1);
-    PrefixAllocatorMode allocMode;
-    if (FLAGS_static_prefix_alloc) {
-      allocMode = PrefixAllocatorModeStatic();
-    } else if (!FLAGS_seed_prefix.empty()) {
-      allocMode = std::make_pair(
-          folly::IPAddress::createNetwork(FLAGS_seed_prefix),
-          static_cast<uint8_t>(FLAGS_alloc_prefix_len));
-    } else {
-      allocMode = PrefixAllocatorModeSeeded();
-    }
+  if (config->isPrefixAllocationEnabled()) {
     startEventBase(
         allThreads,
         orderedEvbs,
         watchdog,
         "PrefixAllocator",
         std::make_unique<PrefixAllocator>(
-            FLAGS_node_name,
+            config,
             kvStore,
             prefixUpdateRequestQueue,
             monitorSubmitUrl,
-            AllocPrefixMarker{Constants::kPrefixAllocMarker.toString()},
-            allocMode,
-            FLAGS_set_loopback_address,
-            FLAGS_override_loopback_addr,
-            FLAGS_loopback_iface,
-            FLAGS_prefix_fwd_type_mpls,
-            FLAGS_prefix_algo_type_ksp2_ed_ecmp,
-            Constants::kPrefixAllocatorSyncInterval,
             configStore,
             context,
-            FLAGS_system_agent_port));
+            FLAGS_system_agent_port,
+            Constants::kPrefixAllocatorSyncInterval));
   }
 
   // Create Spark instance for neighbor discovery
@@ -590,12 +560,6 @@ main(int argc, char** argv) {
           routeUpdatesQueue,
           context));
 
-  // FIB ordering works only in single area configuration
-  // verify 'default area' is configured and it's the only one configured
-  if (FLAGS_enable_ordered_fib_programming) {
-    CHECK_EQ(areas.count(openr::thrift::KvStore_constants::kDefaultArea()), 1);
-    CHECK_EQ(areas.size(), 1);
-  }
   // Define and start Fib Module
   auto fib = startEventBase(
       allThreads,

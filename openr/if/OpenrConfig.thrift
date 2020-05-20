@@ -67,13 +67,30 @@ enum PrefixForwardingAlgorithm {
   KSP2_ED_ECMP = 1
 }
 
+/*
+ * DYNAMIC_LEAF_NODE
+ *   => looks for seed_prefix in kvstore and elects a subprefix
+ * DYNAMIC_ROOT_NODE
+ *   => elects subprefix from configured seed_prefix
+ * STATIC
+ *   => looks for static allocation key in kvstore and use the prefix
+ */
+enum PrefixAllocationMode {
+  DYNAMIC_LEAF_NODE = 0
+  DYNAMIC_ROOT_NODE = 1
+  STATIC = 2
+}
+
 struct PrefixAllocationConfig {
   1: string loopback_interface = "lo"
-  2: string seed_prefix
-  3: i32 allocate_prefix_len = 128
-  4: bool static_prefix_allocation = false
-  5: bool set_loopback_addr = false
-  6: bool override_loopback_addr = false
+  2: bool set_loopback_addr = false
+  3: bool override_loopback_addr = false
+
+  // If prefixAllocationMode == DYNAMIC_ROOT_NODE
+  // seed_prefix and allocate_prefix_len needs to be filled.
+  4: PrefixAllocationMode prefix_allocation_mode
+  5: optional string seed_prefix
+  6: optional i32 allocate_prefix_len
 }
 
 /**

@@ -21,6 +21,10 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace {
+const auto& testSeedPrefix =
+    folly::IPAddress::createNetwork("fc00:cafe:babe::/64");
+const uint8_t testAllocationPfxLen = 128;
+
 openr::thrift::LinkMonitorConfig
 getTestLinkMonitorConfig() {
   openr::thrift::LinkMonitorConfig lmConf;
@@ -36,6 +40,27 @@ getFloodRate() {
   floodrate.flood_msg_per_sec = 1;
   floodrate.flood_msg_burst_size = 1;
   return floodrate;
+}
+
+openr::thrift::PrefixAllocationConfig
+getPrefixAllocationConfig(openr::thrift::PrefixAllocationMode mode) {
+  openr::thrift::PrefixAllocationConfig pfxAllocationConf;
+  pfxAllocationConf.prefix_allocation_mode = mode;
+  if (mode == openr::thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE) {
+    pfxAllocationConf.seed_prefix_ref() =
+        folly::IPAddress::networkToString(testSeedPrefix);
+    pfxAllocationConf.allocate_prefix_len_ref() = testAllocationPfxLen;
+  }
+  return pfxAllocationConf;
+}
+
+openr::thrift::AreaConfig
+getAreaConfig(const std::string& areaId) {
+  openr::thrift::AreaConfig area;
+  area.area_id = areaId;
+  area.interface_regexes.emplace_back("fboss.*");
+  area.neighbor_regexes.emplace_back("rsw.*");
+  return area;
 }
 
 } // namespace
@@ -80,42 +105,72 @@ TEST_F(ConfigTestFixture, ConstructFromFile) {
         invalidConfigFile.path().string(), folly::toJson(invalidConfig));
     EXPECT_ANY_THROW(Config(invalidConfigFile.path().string()));
   }
+
+  // out of range enum: prefix_allocation_mode
+  {
+    auto validTConf = getBasicOpenrConfig();
+    validTConf.enable_prefix_allocation_ref() = true;
+    validTConf.prefix_allocation_config_ref() =
+        thrift::PrefixAllocationConfig();
+
+    std::string validConfStr;
+    EXPECT_NO_THROW(apache::thrift::SimpleJSONSerializer().serialize(
+        validTConf, &validConfStr));
+
+    folly::dynamic invalidConf = folly::parseJson(validConfStr);
+    // prefix_allocation_mode range [0-2]
+    invalidConf["prefix_allocation_config"]["prefix_allocation_mode"] = 3;
+
+    folly::test::TemporaryFile invalidConfFile;
+    folly::writeFileAtomic(
+        invalidConfFile.path().string(), folly::toJson(invalidConf));
+    EXPECT_ANY_THROW(Config(invalidConfFile.path().string()));
+  }
 }
 
 TEST(ConfigTest, PopulateInternalDb) {
   // area
-  {
-    thrift::AreaConfig area1;
-    area1.area_id = "1";
-    area1.interface_regexes.emplace_back("fboss.*");
-    area1.neighbor_regexes.emplace_back("rsw.*");
 
-    // duplicate area id
+  // duplicate area id
+  {
     auto confInvalidArea = getBasicOpenrConfig();
-    confInvalidArea.areas.emplace_back(area1);
-    confInvalidArea.areas.emplace_back(area1);
-    EXPECT_THROW(auto c = Config(confInvalidArea), std::invalid_argument);
+    confInvalidArea.areas.emplace_back(getAreaConfig("1"));
+    confInvalidArea.areas.emplace_back(getAreaConfig("1"));
+    EXPECT_THROW(new Config(confInvalidArea), std::invalid_argument);
+  }
+
+  // features
+
+  // enable_ordered_fib_programming = true with multiple areas
+  {
+    auto confInvalid = getBasicOpenrConfig();
+    confInvalid.areas.emplace_back(getAreaConfig("1"));
+    confInvalid.areas.emplace_back(getAreaConfig("2"));
+    confInvalid.enable_ordered_fib_programming_ref() = true;
+    EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
   }
 
   // kvstore
-  {{auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
-  confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
-  confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()->flood_msg_per_sec =
-      0;
-  EXPECT_THROW(auto c = Config(confInvalidFloodMsgPerSec), std::out_of_range);
-}
-// flood_msg_burst_size <= 0
-{
-  auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
-  confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
-  confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()
-      ->flood_msg_burst_size = 0;
-  EXPECT_THROW(auto c = Config(confInvalidFloodMsgPerSec), std::out_of_range);
-}
-} // namespace openr
 
-// link monitor
-{
+  // flood_msg_per_sec <= 0
+  {
+    auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
+    confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
+    confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()
+        ->flood_msg_per_sec = 0;
+    EXPECT_THROW(new Config(confInvalidFloodMsgPerSec), std::out_of_range);
+  }
+  // flood_msg_burst_size <= 0
+  {
+    auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
+    confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref() = getFloodRate();
+    confInvalidFloodMsgPerSec.kvstore_config.flood_rate_ref()
+        ->flood_msg_burst_size = 0;
+    EXPECT_THROW(new Config(confInvalidFloodMsgPerSec), std::out_of_range);
+  }
+
+  // link monitor
+
   // linkflap_initial_backoff_ms < 0
   {
     auto confInvalidLm = getBasicOpenrConfig();
@@ -160,7 +215,81 @@ TEST(ConfigTest, PopulateInternalDb) {
         .emplace_back("*");
     EXPECT_THROW(auto c = Config(confInvalidLm), std::invalid_argument);
   }
-}
+
+  // prefix allocation
+
+  // enable_prefix_allocation = true, prefix_allocation_config = null
+  {
+    auto confInvalidPa = getBasicOpenrConfig();
+    confInvalidPa.enable_prefix_allocation_ref() = true;
+    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+  }
+  // enable_prefix_allocation = true with multiple areas
+  {
+    auto confInvalidPa = getBasicOpenrConfig();
+    confInvalidPa.areas.emplace_back(getAreaConfig("1"));
+    confInvalidPa.areas.emplace_back(getAreaConfig("2"));
+    confInvalidPa.enable_prefix_allocation_ref() = true;
+    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
+    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+  }
+  // prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and
+  // allocate_prefix_len set
+  {
+    auto confInvalidPa = getBasicOpenrConfig();
+    confInvalidPa.enable_prefix_allocation_ref() = true;
+    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
+    confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode =
+        thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
+    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+  }
+  // prefix_allocation_mode = DYNAMIC_ROOT_NODE, seed_prefix and
+  // allocate_prefix_len = null
+  {
+    auto confInvalidPa = getBasicOpenrConfig();
+    confInvalidPa.enable_prefix_allocation_ref() = true;
+    confInvalidPa.prefix_allocation_config_ref() =
+        thrift::PrefixAllocationConfig();
+    confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode =
+        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
+    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+  }
+  // seed_prefix: invalid ipadrres format
+  {
+    auto confInvalidPa = getBasicOpenrConfig();
+    confInvalidPa.enable_prefix_allocation_ref() = true;
+    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
+    confInvalidPa.prefix_allocation_config_ref()->seed_prefix_ref() =
+        "fc00:cafe:babe:/64";
+    EXPECT_ANY_THROW(new Config(confInvalidPa));
+  }
+  // allocate_prefix_len: <= seed_prefix subnet length
+  {
+    auto confInvalidPa = getBasicOpenrConfig();
+    confInvalidPa.enable_prefix_allocation_ref() = true;
+    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
+    confInvalidPa.prefix_allocation_config_ref()->allocate_prefix_len_ref() =
+        60;
+    EXPECT_THROW(new Config(confInvalidPa), std::out_of_range);
+  }
+  // seed_prefix v4, enable_v4 = false
+  {
+    auto confInvalidPa = getBasicOpenrConfig();
+    confInvalidPa.enable_v4_ref() = false;
+
+    confInvalidPa.enable_prefix_allocation_ref() = true;
+    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
+    confInvalidPa.prefix_allocation_config_ref()->seed_prefix_ref() =
+        "127.0.0.1/24";
+    confInvalidPa.prefix_allocation_config_ref()->allocate_prefix_len_ref() =
+        32;
+    EXPECT_THROW(new Config(confInvalidPa), std::invalid_argument);
+  }
 }
 
 TEST(ConfigTest, GeneralGetter) {
@@ -230,6 +359,25 @@ TEST(ConfigTest, LinkMonitorGetter) {
     EXPECT_TRUE(redistributeItfRegexes->Match("lo", &matches));
     EXPECT_FALSE(redistributeItfRegexes->Match("eth0", &matches));
   }
+}
+
+TEST(ConfigTest, PrefixAllocatorGetter) {
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.enable_prefix_allocation_ref() = true;
+  const auto paConf = getPrefixAllocationConfig(
+      thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
+  tConfig.prefix_allocation_config_ref() = paConf;
+  auto config = Config(tConfig);
+
+  // isPrefixAllocationEnabled
+  EXPECT_TRUE(config.isPrefixAllocationEnabled());
+
+  // getPrefixAllocationConfig
+  EXPECT_EQ(paConf, config.getPrefixAllocationConfig());
+
+  // getPrefixAllocationParams
+  const PrefixAllocationParams& params = {testSeedPrefix, testAllocationPfxLen};
+  EXPECT_EQ(params, config.getPrefixAllocationParams());
 }
 
 TEST(ConfigTest, getBgpAutoConfig) {

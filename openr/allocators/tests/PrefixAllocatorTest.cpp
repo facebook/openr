@@ -58,6 +58,13 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
     evbThread_ = std::thread([&]() { evb_.run(); });
 
     auto tConfig = getBasicOpenrConfig(myNodeName_);
+    tConfig.enable_prefix_allocation_ref() = true;
+    thrift::PrefixAllocationConfig pfxAllocationConf;
+    pfxAllocationConf.loopback_interface = "";
+    pfxAllocationConf.prefix_allocation_mode = GetParam()
+        ? thrift::PrefixAllocationMode::STATIC
+        : thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
+    tConfig.prefix_allocation_config_ref() = pfxAllocationConf;
     config_ = std::make_shared<Config>(tConfig);
 
     // Start KvStore and attach a client to it
@@ -103,22 +110,14 @@ class PrefixAllocatorFixture : public ::testing::TestWithParam<bool> {
   void
   createPrefixAllocator() {
     prefixAllocator_ = make_unique<PrefixAllocator>(
-        myNodeName_,
+        config_,
         kvStoreWrapper_->getKvStore(),
         prefixUpdatesQueue_,
         MonitorSubmitUrl{"inproc://monitor_submit"},
-        kAllocPrefixMarker,
-        GetParam() ? PrefixAllocatorMode(PrefixAllocatorModeStatic())
-                   : PrefixAllocatorMode(PrefixAllocatorModeSeeded()),
-        false /* set loopback addr */,
-        false /* override global address */,
-        "" /* loopback interface name */,
-        false /* prefix fwd type MPLS */,
-        false /* prefix fwd algo KSP2_ED_ECMP */,
-        kSyncInterval,
         configStore_.get(),
         zmqContext_,
-        port_);
+        port_,
+        kSyncInterval);
     threads_.emplace_back([&]() noexcept { prefixAllocator_->run(); });
     prefixAllocator_->waitUntilRunning();
   }
@@ -255,11 +254,6 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       folly::sformat("fc00:cafe:babe::/{}", FLAGS_seed_prefix_len));
   const auto newSeedPrefix = folly::IPAddress::createNetwork(
       folly::sformat("fc00:cafe:b00c::/{}", FLAGS_seed_prefix_len));
-
-  std::optional<PrefixAllocatorParams> maybeAllocParams;
-  if (!emptySeedPrefix) {
-    maybeAllocParams = std::make_pair(seedPrefix, kAllocPrefixLen);
-  }
 
   // allocate all subprefixes
   auto numAllocators = 0x1U << (kAllocPrefixLen - FLAGS_seed_prefix_len);
@@ -411,8 +405,22 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       });
       tempConfigStore->waitUntilRunning();
 
-      auto currConfig =
-          std::make_shared<Config>(getBasicOpenrConfig(myNodeName));
+      auto currTConfig = getBasicOpenrConfig(myNodeName);
+      currTConfig.enable_prefix_allocation_ref() = true;
+      thrift::PrefixAllocationConfig pfxAllocationConf;
+      pfxAllocationConf.loopback_interface = "";
+      pfxAllocationConf.prefix_allocation_mode =
+          thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
+      if (not emptySeedPrefix) {
+        pfxAllocationConf.prefix_allocation_mode =
+            thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
+        pfxAllocationConf.seed_prefix_ref() =
+            folly::sformat("fc00:cafe:babe::/{}", FLAGS_seed_prefix_len);
+        pfxAllocationConf.allocate_prefix_len_ref() = kAllocPrefixLen;
+      }
+      currTConfig.prefix_allocation_config_ref() = pfxAllocationConf;
+      auto currConfig = std::make_shared<Config>(currTConfig);
+
       // spin up prefix manager
       auto prefixManager = std::make_unique<PrefixManager>(
           prefixQueues.at(i).getReader(),
@@ -427,32 +435,23 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       });
       prefixManager->waitUntilRunning();
       prefixManagers.emplace_back(std::move(prefixManager));
-      configs.emplace_back(std::move(currConfig));
 
       auto allocator = make_unique<PrefixAllocator>(
-          myNodeName,
+          currConfig,
           store->getKvStore(),
           prefixQueues.at(i),
           MonitorSubmitUrl{"inproc://monitor_submit"},
-          kAllocPrefixMarker,
-          maybeAllocParams.has_value()
-              ? PrefixAllocatorMode(*maybeAllocParams)
-              : PrefixAllocatorMode(PrefixAllocatorModeSeeded()),
-          false /* set loopback addr */,
-          false /* override global address */,
-          "" /* loopback interface name */,
-          false /* prefix fwd type MPLS */,
-          false /* prefix fwd algo KSP2_ED_ECMP */,
-          kSyncInterval,
           configStore.get(),
           zmqContext,
-          port_);
+          port_,
+          kSyncInterval);
       threads.emplace_back([&allocator]() noexcept { allocator->run(); });
       allocator->waitUntilRunning();
 
       configStores.emplace_back(std::move(configStore));
       configStores.emplace_back(std::move(tempConfigStore));
       allocators.emplace_back(std::move(allocator));
+      configs.emplace_back(std::move(currConfig));
     }
 
     //
@@ -1024,46 +1023,34 @@ TEST(PrefixAllocator, getPrefixCount) {
 
 TEST(PrefixAllocator, parseParamsStr) {
   // Missing subnet specification in seed-prefix
-  {
-    auto maybeParams = PrefixAllocator::parseParamsStr("face::,64");
-    EXPECT_TRUE(maybeParams.hasError());
-  }
+  { EXPECT_ANY_THROW(auto p = PrefixAllocator::parseParamsStr("face::,64")); }
 
   // Incorrect seed prefix
   {
-    auto maybeParams = PrefixAllocator::parseParamsStr("face::b00c::/56,64");
-    EXPECT_TRUE(maybeParams.hasError());
+    EXPECT_ANY_THROW(
+        auto p = PrefixAllocator::parseParamsStr("face::b00c::/56,64"));
   }
 
   // Seed prefix same or greather than alloc prefix length (error case).
   {
-    auto maybeParams = PrefixAllocator::parseParamsStr("face:b00c::/64,64");
-    EXPECT_TRUE(maybeParams.hasError());
-    auto maybeParams2 = PrefixAllocator::parseParamsStr("face:b00c::/74,64");
-    EXPECT_TRUE(maybeParams2.hasError());
+    EXPECT_ANY_THROW(
+        auto p = PrefixAllocator::parseParamsStr("face:b00c::/64,64"));
+    EXPECT_ANY_THROW(PrefixAllocator::parseParamsStr("face:b00c::/74,64"));
   }
 
   // Correct case - v6
   {
-    auto maybeParams = PrefixAllocator::parseParamsStr("face::/56,64");
-    EXPECT_FALSE(maybeParams.hasError());
-    if (maybeParams.hasValue()) {
-      EXPECT_EQ(
-          folly::IPAddress::createNetwork("face::/56"), maybeParams->first);
-      EXPECT_EQ(64, maybeParams->second);
-    }
+    auto p = PrefixAllocator::parseParamsStr("face::/56,64");
+    EXPECT_EQ(folly::IPAddress::createNetwork("face::/56"), p.first);
+    EXPECT_EQ(64, p.second);
   }
 
   // Correct case - v4
   {
     // Note: last byte will be masked off
-    auto maybeParams = PrefixAllocator::parseParamsStr("1.2.0.1/16,24");
-    EXPECT_FALSE(maybeParams.hasError());
-    if (maybeParams.hasValue()) {
-      EXPECT_EQ(
-          folly::IPAddress::createNetwork("1.2.0.0/16"), maybeParams->first);
-      EXPECT_EQ(24, maybeParams->second);
-    }
+    auto p = PrefixAllocator::parseParamsStr("1.2.0.1/16,24");
+    EXPECT_EQ(folly::IPAddress::createNetwork("1.2.0.0/16"), p.first);
+    EXPECT_EQ(24, p.second);
   }
 }
 

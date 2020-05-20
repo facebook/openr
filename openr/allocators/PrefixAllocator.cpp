@@ -35,29 +35,26 @@ const std::string kConfigKey{"prefix-allocator-config"};
 namespace openr {
 
 PrefixAllocator::PrefixAllocator(
-    const std::string& myNodeName,
+    std::shared_ptr<const Config> config,
     KvStore* kvStore_,
     messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue,
     const MonitorSubmitUrl& monitorSubmitUrl,
-    const AllocPrefixMarker& allocPrefixMarker,
-    const PrefixAllocatorMode& allocMode,
-    bool setLoopbackAddress,
-    bool overrideGlobalAddress,
-    const std::string& loopbackIfaceName,
-    bool forwardingTypeMpls,
-    bool forwardingAlgoKsp2Ed,
-    std::chrono::milliseconds syncInterval,
     PersistentStore* configStore,
     fbzmq::Context& zmqContext,
-    int32_t systemServicePort)
-    : myNodeName_(myNodeName),
-      allocPrefixMarker_(allocPrefixMarker),
-      setLoopbackAddress_(setLoopbackAddress),
-      overrideGlobalAddress_(overrideGlobalAddress),
-      loopbackIfaceName_(loopbackIfaceName),
-      forwardingTypeMpls_(forwardingTypeMpls),
-      forwardingAlgoKsp2Ed_(forwardingAlgoKsp2Ed),
+    int32_t systemServicePort,
+    std::chrono::milliseconds syncInterval)
+    : myNodeName_(config->getNodeName()),
       syncInterval_(syncInterval),
+      setLoopbackAddress_(
+          config->getPrefixAllocationConfig().set_loopback_addr),
+      overrideGlobalAddress_(
+          config->getPrefixAllocationConfig().override_loopback_addr),
+      loopbackIfaceName_(
+          config->getPrefixAllocationConfig().loopback_interface),
+      prefixForwardingType_(config->getConfig().prefix_forwarding_type),
+      prefixForwardingAlgorithm_(
+          config->getConfig().prefix_forwarding_algorithm),
+      area_(*config->getAreaIds().begin()),
       configStore_(configStore),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       zmqMonitorClient_(zmqContext, monitorSubmitUrl),
@@ -71,11 +68,24 @@ PrefixAllocator::PrefixAllocator(
       std::make_unique<KvStoreClientInternal>(this, myNodeName_, kvStore_);
 
   // Let the magic begin. Start allocation as per allocMode
-  std::visit(*this, allocMode);
+  switch (config->getPrefixAllocationConfig().prefix_allocation_mode) {
+  case thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE:
+    LOG(INFO) << "DYNAMIC_LEAF_NODE";
+    dynamicAllocationLeafNode();
+    break;
+  case thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE:
+    LOG(INFO) << "DYNAMIC_ROOT_NODE";
+    dynamicAllocationRootNode(config->getPrefixAllocationParams());
+    break;
+  case thrift::PrefixAllocationMode::STATIC:
+    LOG(INFO) << "STATIC";
+    staticAllocation();
+    break;
+  }
 }
 
 void
-PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
+PrefixAllocator::staticAllocation() {
   // subscribe for incremental updates of static prefix allocation key
   kvStoreClient_->subscribeKey(
       Constants::kStaticPrefixAllocParamKey.toString(),
@@ -137,7 +147,7 @@ PrefixAllocator::operator()(PrefixAllocatorModeStatic const&) {
 }
 
 void
-PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
+PrefixAllocator::dynamicAllocationLeafNode() {
   // subscribe for incremental updates of seed prefix
   kvStoreClient_->subscribeKey(
       Constants::kSeedPrefixAllocParamKey.toString(),
@@ -210,7 +220,8 @@ PrefixAllocator::operator()(PrefixAllocatorModeSeeded const&) {
 }
 
 void
-PrefixAllocator::operator()(PrefixAllocatorParams const& allocParams) {
+PrefixAllocator::dynamicAllocationRootNode(
+    PrefixAllocationParams const& allocParams) {
   // Some sanity checks
   const auto& seedPrefix = allocParams.first;
   const auto& allocPrefixLen = allocParams.second;
@@ -239,8 +250,8 @@ PrefixAllocator::getMyPrefixIndex() {
   return std::move(future).get();
 }
 
-folly::Expected<PrefixAllocatorParams, fbzmq::Error>
-PrefixAllocator::parseParamsStr(const std::string& paramStr) noexcept {
+PrefixAllocationParams
+PrefixAllocator::parseParamsStr(const std::string& paramStr) {
   // Parse string to get seed-prefix and alloc-prefix-length
   std::string seedPrefixStr;
   uint8_t allocPrefixLen;
@@ -249,30 +260,7 @@ PrefixAllocator::parseParamsStr(const std::string& paramStr) noexcept {
       paramStr,
       seedPrefixStr,
       allocPrefixLen);
-
-  // Validate and convert seed-prefix to strong type, folly::CIDRNetwork
-  PrefixAllocatorParams params;
-  params.second = allocPrefixLen;
-  try {
-    params.first = folly::IPAddress::createNetwork(
-        seedPrefixStr, -1 /* default mask len */);
-  } catch (std::exception const& err) {
-    return folly::makeUnexpected(fbzmq::Error(
-        0, folly::sformat("Invalid seed prefix {}", seedPrefixStr)));
-  }
-
-  // Validate alloc-prefix-length is larger than seed-prefix-length
-  if (allocPrefixLen <= params.first.second) {
-    return folly::makeUnexpected(fbzmq::Error(
-        0,
-        folly::sformat(
-            "Seed prefix ({}) is more specific than alloc prefix len ({})",
-            seedPrefixStr,
-            allocPrefixLen)));
-  }
-
-  // Return parsed parameters
-  return params;
+  return Config::createPrefixAllocationParams(seedPrefixStr, allocPrefixLen);
 }
 
 void
@@ -327,13 +315,19 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
 void
 PrefixAllocator::processAllocParamUpdate(thrift::Value const& value) {
   CHECK(value.value_ref().has_value());
-  auto maybeParams = parseParamsStr(value.value_ref().value());
-  if (maybeParams.hasError()) {
-    LOG(ERROR) << "Malformed prefix-allocator params. " << maybeParams.error();
-    startAllocation(std::nullopt);
-  } else {
-    startAllocation(maybeParams.value());
+
+  std::optional<PrefixAllocationParams> params = std::nullopt;
+  auto paramStr = value.value_ref().value();
+  try {
+    params = parseParamsStr(paramStr);
+  } catch (std::exception const& e) {
+    LOG(ERROR) << folly::sformat(
+        "Malformed prefix-allocator params [{}]: {}",
+        paramStr,
+        folly::exceptionStr(e));
   }
+
+  startAllocation(params);
 }
 
 bool
@@ -389,7 +383,7 @@ PrefixAllocator::processNetworkAllocationsUpdate(
 
 uint32_t
 PrefixAllocator::getPrefixCount(
-    PrefixAllocatorParams const& allocParams) noexcept {
+    PrefixAllocationParams const& allocParams) noexcept {
   auto const& seedPrefix = allocParams.first;
   auto const& allocPrefixLen = allocParams.second;
 
@@ -476,7 +470,8 @@ PrefixAllocator::getInitPrefixIndex() {
 
 void
 PrefixAllocator::startAllocation(
-    std::optional<PrefixAllocatorParams> const& allocParams, bool checkParams) {
+    std::optional<PrefixAllocationParams> const& allocParams,
+    bool checkParams) {
   // Some informative logging
   if (allocParams_.has_value() and allocParams.has_value()) {
     if (checkParams and allocParams_ == allocParams) {
@@ -525,7 +520,7 @@ PrefixAllocator::startAllocation(
   // create range allocator to get unique prefixes
   rangeAllocator_ = std::make_unique<RangeAllocator<uint32_t>>(
       myNodeName_,
-      allocPrefixMarker_,
+      Constants::kPrefixAllocMarker.toString(),
       kvStoreClient_.get(),
       [this](std::optional<uint32_t> newPrefixIndex) noexcept {
         applyMyPrefixIndex(newPrefixIndex);
@@ -637,12 +632,8 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   prefixEntry.prefix = toIpPrefix(prefix);
   prefixEntry.type = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
   prefixEntry.data = {};
-  prefixEntry.forwardingType = forwardingTypeMpls_
-      ? thrift::PrefixForwardingType::SR_MPLS
-      : thrift::PrefixForwardingType::IP;
-  prefixEntry.forwardingAlgorithm = forwardingAlgoKsp2Ed_
-      ? thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP
-      : thrift::PrefixForwardingAlgorithm::SP_ECMP;
+  prefixEntry.forwardingType = prefixForwardingType_;
+  prefixEntry.forwardingAlgorithm = prefixForwardingAlgorithm_;
   prefixEntry.ephemeral_ref().reset();
 
   thrift::PrefixUpdateRequest request;
@@ -790,8 +781,8 @@ PrefixAllocator::logPrefixEvent(
     std::string event,
     std::optional<uint32_t> oldPrefix,
     std::optional<uint32_t> newPrefix,
-    std::optional<PrefixAllocatorParams> const& oldAllocParams,
-    std::optional<PrefixAllocatorParams> const& newAllocParams) {
+    std::optional<PrefixAllocationParams> const& oldAllocParams,
+    std::optional<PrefixAllocationParams> const& newAllocParams) {
   fbzmq::LogSample sample{};
 
   sample.addString("event", event);
