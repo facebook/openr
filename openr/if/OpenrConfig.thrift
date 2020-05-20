@@ -141,7 +141,9 @@ struct OpenrConfig {
   # TODO: will be deprecated soon T66361115
   9: optional bool enable_netlink_system_handler
 
-  # time before decision start compute routes
+  /* Hard wait time before decision start to compute routes
+   * if not set, first neighbor update will trigger route computation
+   */
   10: optional i32 eor_time_s
 
   11: PrefixForwardingType prefix_forwarding_type = PrefixForwardingType.IP

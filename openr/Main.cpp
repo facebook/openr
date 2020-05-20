@@ -196,7 +196,15 @@ main(int argc, char** argv) {
   checkIsIpv6Enabled();
 
   // start config module
-  auto config = GflagConfig::createConfigFromGflag();
+  std::shared_ptr<Config> config;
+  if (not FLAGS_config.empty()) {
+    LOG(INFO) << "Reading config from " << FLAGS_config;
+    config = std::make_shared<Config>(FLAGS_config);
+  } else {
+    LOG(INFO) << "Constructing config from GFLAG value.";
+    config = GflagConfig::createConfigFromGflag();
+  }
+  LOG(INFO) << config->getRunningConfig();
 
   // Sanity checks on Segment Routing labels
   const int32_t maxLabel = Constants::kMaxSrLabel;
