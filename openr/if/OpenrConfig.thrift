@@ -54,7 +54,8 @@ struct SparkConfig {
 
 struct WatchdogConfig {
   1: i32 interval_s = 20
-  2: i32 threshold_s = 300
+  2: i32 thread_timeout_s = 300
+  3: i32 max_memory_mb = 800
 }
 
 enum PrefixForwardingType {

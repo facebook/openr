@@ -17,16 +17,13 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/OpenrEventBase.h>
+#include <openr/config/Config.h>
 
 namespace openr {
 
 class Watchdog final : public OpenrEventBase {
  public:
-  Watchdog(
-      std::string const& myNodeName,
-      std::chrono::seconds healthCheckInterval,
-      std::chrono::seconds healthCheckThreshold,
-      uint32_t critialMemoryMB);
+  explicit Watchdog(std::shared_ptr<const Config> config);
 
   // non-copyable
   Watchdog(Watchdog const&) = delete;
@@ -53,16 +50,16 @@ class Watchdog final : public OpenrEventBase {
   std::unordered_map<OpenrEventBase*, std::string> monitorEvbs_;
 
   // thread healthcheck interval
-  const std::chrono::seconds healthCheckInterval_;
+  std::chrono::seconds interval_;
 
   // thread healthcheck threshold
-  const std::chrono::seconds healthCheckThreshold_;
+  std::chrono::seconds threadTimeout_;
+
+  // critcal memory threhsold
+  uint32_t maxMemoryMB_{0};
 
   // boolean to indicate previous failure
   bool previousStatus_{true};
-
-  // critcal memory threhsold
-  uint32_t criticalMemoryMB_{0};
 
   // amount of time memory usage sustained above memory limit
   std::optional<std::chrono::steady_clock::time_point> memExceedTime_;

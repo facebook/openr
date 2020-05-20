@@ -320,6 +320,15 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalid.enable_bgp_peering_ref() = true;
     EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
   }
+
+  // watchdog
+
+  // watchdog enabled with empty watchdog_config
+  {
+    auto confInvalid = getBasicOpenrConfig();
+    confInvalid.enable_watchdog_ref() = true;
+    EXPECT_THROW(new Config(confInvalid), std::invalid_argument);
+  }
 }
 
 TEST(ConfigTest, GeneralGetter) {
@@ -363,6 +372,19 @@ TEST(ConfigTest, GeneralGetter) {
     // isBgpPeeringEnabled
     EXPECT_TRUE(config.isBgpPeeringEnabled());
     EXPECT_EQ(bgpConf, config.getBgpConfig());
+  }
+
+  // config with watchdog
+  {
+    auto tConfig = getBasicOpenrConfig("fsw001");
+    tConfig.enable_watchdog_ref() = true;
+    const auto& watchdogConf = thrift::WatchdogConfig();
+    tConfig.watchdog_config_ref() = watchdogConf;
+
+    auto config = Config(tConfig);
+
+    EXPECT_TRUE(config.isWatchdogEnabled());
+    EXPECT_EQ(watchdogConf, config.getWatchdogConfig());
   }
 }
 

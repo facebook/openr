@@ -12,24 +12,20 @@
 
 namespace openr {
 
-Watchdog::Watchdog(
-    std::string const& myNodeName,
-    std::chrono::seconds healthCheckInterval,
-    std::chrono::seconds healthCheckThreshold,
-    uint32_t criticalMemoryMB)
-    : myNodeName_(myNodeName),
-      healthCheckInterval_(healthCheckInterval),
-      healthCheckThreshold_(healthCheckThreshold),
-      previousStatus_(true),
-      criticalMemoryMB_(criticalMemoryMB) {
+Watchdog::Watchdog(std::shared_ptr<const Config> config)
+    : myNodeName_(config->getNodeName()),
+      interval_(config->getWatchdogConfig().interval_s),
+      threadTimeout_(config->getWatchdogConfig().thread_timeout_s),
+      maxMemoryMB_(config->getWatchdogConfig().max_memory_mb),
+      previousStatus_(true) {
   // Schedule periodic timer for checking thread health
   watchdogTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     updateCounters();
     monitorMemory();
     // Schedule next timer
-    watchdogTimer_->scheduleTimeout(healthCheckInterval_);
+    watchdogTimer_->scheduleTimeout(interval_);
   });
-  watchdogTimer_->scheduleTimeout(healthCheckInterval_);
+  watchdogTimer_->scheduleTimeout(interval_);
 }
 
 void
@@ -55,9 +51,9 @@ Watchdog::monitorMemory() {
   if (not memInUse_.has_value()) {
     return;
   }
-  if (memInUse_.value() / 1e6 > criticalMemoryMB_) {
+  if (memInUse_.value() / 1e6 > maxMemoryMB_) {
     LOG(WARNING) << "Memory usage critical:" << memInUse_.value() << " bytes,"
-                 << " Memory limit:" << criticalMemoryMB_ << " MB";
+                 << " Memory limit:" << maxMemoryMB_ << " MB";
     if (not memExceedTime_.has_value()) {
       memExceedTime_ = std::chrono::steady_clock::now();
       return;
@@ -70,7 +66,7 @@ Watchdog::monitorMemory() {
           " Mem used:{}."
           " Mem Limit:{}",
           memInUse_.value(),
-          criticalMemoryMB_);
+          maxMemoryMB_);
       fireCrash(msg);
     }
     return;
@@ -93,7 +89,7 @@ Watchdog::updateCounters() {
     VLOG(4) << "Thread " << name << ", " << (now - lastTs).count()
             << " seconds ever since last thread activity";
 
-    if (now - lastTs > healthCheckThreshold_) {
+    if (now - lastTs > threadTimeout_) {
       // fire a crash right now
       LOG(WARNING) << "Watchdog: " << name << " thread detected to be dead";
       stuckThreads.emplace_back(name);

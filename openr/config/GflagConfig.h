@@ -158,7 +158,8 @@ class GflagConfig final {
 
       thrift::WatchdogConfig watchdogConfig;
       watchdogConfig.interval_s = FLAGS_watchdog_interval_s;
-      watchdogConfig.threshold_s = FLAGS_watchdog_threshold_s;
+      watchdogConfig.thread_timeout_s = FLAGS_watchdog_threshold_s;
+      watchdogConfig.max_memory_mb = FLAGS_memory_limit_mb;
 
       config.watchdog_config_ref() = std::move(watchdogConfig);
     }

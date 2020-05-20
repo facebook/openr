@@ -23,8 +23,6 @@ getBasicOpenrConfig(
   openr::thrift::SparkConfig sparkConfig;
   sparkConfig.graceful_restart_time_s = 60;
 
-  openr::thrift::WatchdogConfig watchdogConfig;
-
   openr::thrift::OpenrConfig config;
 
   config.node_name = nodeName;
@@ -38,8 +36,6 @@ getBasicOpenrConfig(
   config.kvstore_config = kvstoreConfig;
   config.link_monitor_config = linkMonitorConfig;
   config.spark_config = sparkConfig;
-  config.enable_watchdog_ref() = true;
-  config.watchdog_config_ref() = watchdogConfig;
 
   return config;
 }

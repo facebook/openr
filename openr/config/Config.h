@@ -149,6 +149,20 @@ class Config {
     return *config_.bgp_config_ref();
   }
 
+  //
+  // watch dog
+  //
+  bool
+  isWatchdogEnabled() const {
+    return config_.enable_watchdog_ref().value_or(false);
+  }
+
+  const thrift::WatchdogConfig&
+  getWatchdogConfig() const {
+    CHECK(isWatchdogEnabled());
+    return *config_.watchdog_config_ref();
+  }
+
  private:
   void populateInternalDb();
   // thrift config

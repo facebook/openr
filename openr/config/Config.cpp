@@ -270,5 +270,14 @@ Config::populateInternalDb() {
     throw std::invalid_argument(
         "enable_bgp_peering = true, but bgp_config is empty");
   }
+
+  //
+  // watchdog
+  //
+  if (isWatchdogEnabled() and not config_.watchdog_config_ref()) {
+    throw std::invalid_argument(
+        "enable_watchdog = true, but watchdog_config is empty");
+  }
+
 } // namespace openr
 } // namespace openr

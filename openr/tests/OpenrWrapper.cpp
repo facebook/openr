@@ -68,7 +68,15 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
   pfxAllocationConf.seed_prefix_ref() = "fc00:cafe:babe::/62";
   pfxAllocationConf.allocate_prefix_len_ref() = 64;
-  tConfig.prefix_allocation_config_ref() = pfxAllocationConf;
+  tConfig.prefix_allocation_config_ref() = std::move(pfxAllocationConf);
+
+  // watchdog
+  tConfig.enable_watchdog_ref() = true;
+  thrift::WatchdogConfig watchdogConf;
+  watchdogConf.interval_s = 1;
+  watchdogConf.thread_timeout_s = 60;
+  watchdogConf.max_memory_mb = memLimit;
+  tConfig.watchdog_config_ref() = std::move(watchdogConf);
 
   config_ = std::make_shared<Config>(tConfig);
 
@@ -242,8 +250,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       Constants::kPrefixAllocatorSyncInterval);
 
   // Watchdog thread to monitor thread aliveness
-  watchdog = std::make_unique<Watchdog>(
-      nodeId_, std::chrono::seconds(1), std::chrono::seconds(60), memLimit);
+  watchdog = std::make_unique<Watchdog>(config_);
 
   // Zmq monitor client to get counters
   zmqMonitorClient = std::make_unique<fbzmq::ZmqMonitorClient>(

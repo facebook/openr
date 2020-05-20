@@ -251,11 +251,7 @@ main(int argc, char** argv) {
         orderedEvbs,
         nullptr /* watchdog won't monitor itself */,
         "Watchdog",
-        std::make_unique<Watchdog>(
-            config->getNodeName(),
-            std::chrono::seconds(FLAGS_watchdog_interval_s),
-            std::chrono::seconds(FLAGS_watchdog_threshold_s),
-            FLAGS_memory_limit_mb));
+        std::make_unique<Watchdog>(config));
   }
 
   // Create ThreadManager for thrift services
