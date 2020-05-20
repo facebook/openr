@@ -80,6 +80,14 @@ class Config {
   }
 
   //
+  // spark
+  //
+  const thrift::SparkConfig&
+  getSparkConfig() const {
+    return config_.spark_config;
+  }
+
+  //
   // kvstore
   //
   const thrift::KvstoreConfig&
@@ -90,6 +98,11 @@ class Config {
   std::chrono::milliseconds
   getKvStoreKeyTtl() const {
     return std::chrono::milliseconds(config_.kvstore_config.key_ttl_ms);
+  }
+
+  bool
+  isFloodOptimizationEnabled() const {
+    return getKvStoreConfig().enable_flood_optimization_ref().value_or(false);
   }
 
   //

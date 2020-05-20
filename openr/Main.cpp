@@ -455,6 +455,7 @@ main(int argc, char** argv) {
   }
 
   // Create Spark instance for neighbor discovery
+  const auto& sparkConf = config->getSparkConfig();
   startEventBase(
       allThreads,
       orderedEvbs,
@@ -463,18 +464,23 @@ main(int argc, char** argv) {
       std::make_unique<Spark>(
           config->getConfig().domain, // My domain
           config->getNodeName(), // myNodeName
-          static_cast<uint16_t>(FLAGS_spark_mcast_port),
-          std::chrono::seconds(FLAGS_spark_hold_time_s),
+          static_cast<uint16_t>(sparkConf.neighbor_discovery_port),
+          std::chrono::seconds(
+              sparkConf.graceful_restart_time_s), // hold_time_s
           std::chrono::seconds(FLAGS_spark_keepalive_time_s),
           std::chrono::milliseconds(FLAGS_spark_fastinit_keepalive_time_ms),
-          std::chrono::seconds(FLAGS_spark2_hello_time_s),
-          std::chrono::milliseconds(FLAGS_spark2_hello_fastinit_time_ms),
-          std::chrono::milliseconds(FLAGS_spark2_handshake_time_ms),
-          std::chrono::seconds(FLAGS_spark2_heartbeat_time_s),
-          std::chrono::seconds(FLAGS_spark2_negotiate_hold_time_s),
-          std::chrono::seconds(FLAGS_spark2_heartbeat_hold_time_s),
+          std::chrono::seconds(sparkConf.hello_time_s),
+          std::chrono::milliseconds(sparkConf.fastinit_hello_time_ms),
+          std::chrono::milliseconds(
+              sparkConf.fastinit_hello_time_ms), // spark2_handshake_time_ms
+          std::chrono::seconds(
+              sparkConf.keepalive_time_s), // spark2_heartbeat_time_s
+          std::chrono::seconds(
+              sparkConf.keepalive_time_s), // spark2_negotiate_hold_time_s
+          std::chrono::seconds(
+              sparkConf.hold_time_s), // spark2_heartbeat_hold_time_s
           maybeIpTos,
-          FLAGS_enable_v4,
+          config->isV4Enabled(),
           interfaceUpdatesQueue.getReader(),
           neighborUpdatesQueue,
           KvStoreCmdPort{static_cast<uint16_t>(FLAGS_kvstore_rep_port)},
@@ -482,7 +488,7 @@ main(int argc, char** argv) {
           std::make_pair(
               Constants::kOpenrVersion, Constants::kOpenrSupportedVersion),
           std::make_shared<IoProvider>(),
-          FLAGS_enable_flood_optimization,
+          config->isFloodOptimizationEnabled(),
           FLAGS_enable_spark2,
           FLAGS_spark2_increase_hello_interval));
 

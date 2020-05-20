@@ -350,12 +350,17 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_EQ(1, areaIds.size());
     EXPECT_EQ(1, areaIds.count(thrift::KvStore_constants::kDefaultArea()));
 
-    // isV4Enabled
+    // enable_v4
     EXPECT_TRUE(config.isV4Enabled());
-    // isSegmentRoutingEnabled
+    // enable_segment_routing
     EXPECT_FALSE(config.isSegmentRoutingEnabled());
     // isBgpPeeringEnabled
     EXPECT_FALSE(config.isBgpPeeringEnabled());
+    // enable_flood_optimization
+    EXPECT_FALSE(config.isFloodOptimizationEnabled());
+
+    // getSparkConfig
+    EXPECT_EQ(tConfig.spark_config, config.getSparkConfig());
   }
 
   // config with bgp peering
