@@ -1317,17 +1317,12 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
 
   for (const auto& pathAndCost : paths) {
     std::vector<int32_t> labels;
-    // if self node is one of it's ecmp, it means this prefix is anycast and
-    // we need to add prepend label which is static MPLS route the destination
-    // prepared.
-    if (selfNodeContained) {
-      auto dstNodeLink = pathAndCost.first.at(0);
-      auto dstNodeName =
-          dstNodeLink.second->getOtherNodeName(dstNodeLink.first);
-      if (nodePrefixes.at(dstNodeName).prependLabel_ref()) {
-        labels.emplace_back(*nodePrefixes.at(dstNodeName).prependLabel_ref());
-      }
+    auto dstNodeLink = pathAndCost.first.at(0);
+    auto dstNodeName = dstNodeLink.second->getOtherNodeName(dstNodeLink.first);
+    if (nodePrefixes.at(dstNodeName).prependLabel_ref()) {
+      labels.emplace_back(*nodePrefixes.at(dstNodeName).prependLabel_ref());
     }
+
     for (auto& nodeLink : pathAndCost.first) {
       auto& otherNodeName = nodeLink.second->getOtherNodeName(nodeLink.first);
       labels.emplace_back(
@@ -1358,6 +1353,7 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
         true /* useNonShortestRoute */));
   }
 
+  int staticNexthops = 0;
   // if self node is one of it's ecmp node, we need to program nexthops which
   // provided by ourself in this case.
   if (selfNodeContained) {
@@ -1365,6 +1361,7 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
     auto routeIter = staticRoutes_.mplsRoutes.find(label);
     if (routeIter != staticRoutes_.mplsRoutes.end()) {
       for (const auto& nh : routeIter->second) {
+        staticNexthops++;
         route.nextHops.emplace_back(createNextHop(
             nh.address,
             std::nullopt,
@@ -1381,11 +1378,13 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
   // if we have set minNexthop for prefix and # of nexthop didn't meet the
   // the threshold, we will ignore this route.
   auto minNextHop = getMinNextHopThreshold(bestPathCalResult, nodePrefixes);
-  if (minNextHop.has_value() &&
-      (minNextHop.value() > static_cast<int64_t>(route.nextHops.size()))) {
+  auto dynamicNextHop =
+      static_cast<int64_t>(route.nextHops.size()) - staticNexthops;
+  if (minNextHop.has_value() && minNextHop.value() > dynamicNextHop) {
     LOG(WARNING) << "Dropping routes to " << toString(prefix) << " because of "
-                 << route.nextHops.size() << " of nexthops is smaller than "
-                 << minNextHop.value() << " /n route: /n" << toString(route);
+                 << dynamicNextHop << " of nexthops is smaller than "
+                 << minNextHop.value() << "\n"
+                 << toString(route);
     return std::nullopt;
   }
 

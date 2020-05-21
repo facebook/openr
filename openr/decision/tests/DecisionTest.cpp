@@ -2125,8 +2125,10 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   // set metric vector for two prefixes in two nodes to be same
   prefixDBOne.prefixEntries[1].mv_ref() = mv1;
-  prefixDBOne.prefixEntries[1].prependLabel_ref() = 60000;
   prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[1]);
+  // only node 1 is announcing the prefix with prependLabel.
+  // node 2 is announcing the prefix without prependLabel.
+  prefixDBOne.prefixEntries[1].prependLabel_ref() = 60000;
 
   spfSolver->updatePrefixDatabase(prefixDBOne);
   spfSolver->updatePrefixDatabase(prefixDBTwo);
@@ -2141,6 +2143,14 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
       createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2});
   auto push12 =
       createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1, 2});
+
+  auto push2AndPrependLabel =
+      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{60000, 2});
+  auto push12AndPrependLabel = createMplsAction(
+      pushCode, std::nullopt, std::vector<int32_t>{60000, 1, 2});
+
+  auto pushPrependLabel =
+      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{60000});
 
   // in router 3, we are expecting addr1 to be null because it is a bgp route
   // with same metric vector from two nodes
@@ -2166,8 +2176,10 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   routeMap = getRouteMap(*spfSolver, {"3"});
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
-      NextHops({createNextHopFromAdj(adj31, v4Enabled, 10, std::nullopt, true),
-                createNextHopFromAdj(adj34, v4Enabled, 30, push12, true)}));
+      NextHops(
+          {createNextHopFromAdj(adj31, v4Enabled, 10, pushPrependLabel, true),
+           createNextHopFromAdj(
+               adj34, v4Enabled, 30, push12AndPrependLabel, true)}));
 
   auto route = getUnicastRoutes(
       *spfSolver,
@@ -2229,10 +2241,10 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
   // one of shortest path for anycast prefix
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
-      NextHops(
-          {createNextHopFromAdj(adj31, v4Enabled, 20, push2, true),
-           createNextHopFromAdj(adj34, v4Enabled, 20, push2, true),
-           createNextHopFromAdj(adj31, v4Enabled, 10, std::nullopt, true)}));
+      NextHops({createNextHopFromAdj(adj31, v4Enabled, 20, push2, true),
+                createNextHopFromAdj(adj34, v4Enabled, 20, push2, true),
+                createNextHopFromAdj(
+                    adj31, v4Enabled, 10, pushPrependLabel, true)}));
 
   route = getUnicastRoutes(
       *spfSolver,
@@ -2281,20 +2293,118 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP) {
 
   routeMap = getRouteMap(*spfSolver, {"1"});
   // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
-  auto push24Static = createMplsAction(
-      pushCode, std::nullopt, std::vector<int32_t>{staticMplsRouteLabel, 2, 4});
-  auto pushStatic = createMplsAction(
-      pushCode, std::nullopt, std::vector<int32_t>{staticMplsRouteLabel});
+  auto push24 =
+      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2, 4});
   EXPECT_EQ(
       routeMap[make_pair("1", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
-      NextHops({createNextHop(
-                    toBinaryAddress("1.1.1.1"),
-                    std::nullopt,
-                    0,
-                    std::nullopt,
-                    true /* useNonShortestRoute */),
-                createNextHopFromAdj(adj13, v4Enabled, 30, push24Static, true),
-                createNextHopFromAdj(adj12, v4Enabled, 10, pushStatic, true)}));
+      NextHops(
+          {createNextHop(
+               toBinaryAddress("1.1.1.1"),
+               std::nullopt,
+               0,
+               std::nullopt,
+               true /* useNonShortestRoute */),
+           createNextHopFromAdj(adj13, v4Enabled, 30, push24, true),
+           createNextHopFromAdj(adj12, v4Enabled, 10, std::nullopt, true)}));
+}
+
+TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmpForBGP123) {
+  CustomSetUp(
+      true /* multipath - ignored */,
+      true /* useKsp2Ed */,
+      thrift::PrefixType::BGP,
+      true);
+
+  fb303::fbData->resetAllData();
+  thrift::MetricVector mv1, mv2;
+  int64_t numMetrics = 5;
+  mv1.metrics.resize(numMetrics);
+  mv2.metrics.resize(numMetrics);
+  for (int64_t i = 0; i < numMetrics; ++i) {
+    mv1.metrics[i].type = mv2.metrics[i].type = i;
+    mv1.metrics[i].priority = mv2.metrics[i].priority = i;
+    mv1.metrics[i].op = mv2.metrics[i].op = thrift::CompareType::WIN_IF_PRESENT;
+    mv1.metrics[i].isBestPathTieBreaker = mv2.metrics[i].isBestPathTieBreaker =
+        false;
+    mv1.metrics[i].metric = mv2.metrics[i].metric = {i};
+  }
+
+  auto prefixDBs = spfSolver->getPrefixDatabases();
+  auto prefixDBOne = prefixDBs["1"];
+  auto prefixDBTwo = prefixDBs["2"];
+
+  // set metric vector for two prefixes in two nodes to be same
+  prefixDBOne.prefixEntries[1].mv_ref() = mv1;
+  prefixDBTwo.prefixEntries.push_back(prefixDBOne.prefixEntries[1]);
+  prefixDBOne.prefixEntries[1].prependLabel_ref() = 60000;
+
+  // increase mv for the second node by 2, now router 3 should point to 2
+  prefixDBTwo.prefixEntries.back()
+      .mv_ref()
+      .value()
+      .metrics[numMetrics - 1]
+      .metric.front() += 1;
+
+  // set the tie breaker to be true. in this case, both nodes will be selected
+  prefixDBTwo.prefixEntries.back()
+      .mv_ref()
+      .value()
+      .metrics[numMetrics - 1]
+      .isBestPathTieBreaker = true;
+
+  prefixDBOne.prefixEntries.back()
+      .mv_ref()
+      .value()
+      .metrics[numMetrics - 1]
+      .isBestPathTieBreaker = true;
+
+  spfSolver->updatePrefixDatabase(prefixDBOne);
+  spfSolver->updatePrefixDatabase(prefixDBTwo);
+  auto pushCode = thrift::MplsActionCode::PUSH;
+
+  // verify on node 1. From node 1 point of view, both node 1 and node 2 are
+  // are annoucing the prefix. So it will program 3 nexthops.
+  // 1: recursively resolved MPLS nexthops of prependLabel
+  // 2: shortest path to node 2.
+  // 3: second shortest path node 2.
+  thrift::StaticRoutes staticRoutes;
+  int32_t staticMplsRouteLabel = 60000;
+  // insert the new nexthop to mpls static routes cache
+  thrift::NextHopThrift nh;
+  nh.address = toBinaryAddress("1.1.1.1");
+  nh.mplsAction_ref() = createMplsAction(thrift::MplsActionCode::PHP);
+  thrift::MplsRoute staticMplsRoute;
+  staticMplsRoute.topLabel = staticMplsRouteLabel;
+  staticMplsRoute.nextHops.emplace_back(nh);
+  thrift::RouteDatabaseDelta routesDelta;
+  routesDelta.mplsRoutesToUpdate = {staticMplsRoute};
+  spfSolver->pushRoutesDeltaUpdates(routesDelta);
+  spfSolver->processStaticRouteUpdates();
+
+  auto routeMap = getRouteMap(*spfSolver, {"1"});
+  // NOTE: 60000 is the static MPLS route on node 2 which prevent routing loop.
+  auto push24 =
+      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2, 4});
+  EXPECT_EQ(
+      routeMap[make_pair("1", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))],
+      NextHops(
+          {createNextHop(
+               toBinaryAddress("1.1.1.1"),
+               std::nullopt,
+               0,
+               std::nullopt,
+               true /* useNonShortestRoute */),
+           createNextHopFromAdj(adj13, v4Enabled, 30, push24, true),
+           createNextHopFromAdj(adj12, v4Enabled, 10, std::nullopt, true)}));
+
+  prefixDBOne.prefixEntries[1].minNexthop_ref() = 3;
+  spfSolver->updatePrefixDatabase(prefixDBOne);
+  routeMap = getRouteMap(*spfSolver, {"1"});
+
+  EXPECT_EQ(
+      routeMap.find(
+          make_pair("1", toString(v4Enabled ? bgpAddr1V4 : bgpAddr1))),
+      routeMap.end());
 }
 
 //
