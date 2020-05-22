@@ -127,7 +127,7 @@ class NetlinkRouteMessage final : public NetlinkMessage {
       std::array<char, kMaxNlPayloadSize>& nhop, const Route& route) const;
 
   // Add label encap
-  int addLabelNexthop(
+  int addPushNexthop(
       struct rtattr* rta, struct rtnexthop* rtnh, const NextHop& path) const;
 
   // swap or PHP

@@ -170,9 +170,13 @@ int
 NetlinkRouteMessage::addSwapOrPHPNexthop(
     struct rtattr* rta, struct rtnexthop* rtnh, const NextHop& path) const {
   rtnh->rtnh_len = sizeof(*rtnh);
-  rtnh->rtnh_ifindex = path.getIfIndex().value();
   rtnh->rtnh_flags = 0;
   rtnh->rtnh_hops = 0;
+
+  // Set interface index if available, else let the kernel resolve it
+  if (path.getIfIndex().has_value()) {
+    rtnh->rtnh_ifindex = path.getIfIndex().value();
+  }
 
   // add the following subattributes within RTA_MULTIPATH
   size_t prevLen = rta->rta_len;
@@ -240,13 +244,17 @@ NetlinkRouteMessage::addPopNexthop(
 }
 
 int
-NetlinkRouteMessage::addLabelNexthop(
+NetlinkRouteMessage::addPushNexthop(
     struct rtattr* rta, struct rtnexthop* rtnh, const NextHop& path) const {
   // fill the OIF
   rtnh->rtnh_len = sizeof(*rtnh);
-  rtnh->rtnh_ifindex = path.getIfIndex().value(); /* interface index */
   rtnh->rtnh_flags = 0;
   rtnh->rtnh_hops = 0;
+
+  // Set interface index if available, else let the kernel resolve it
+  if (path.getIfIndex().has_value()) {
+    rtnh->rtnh_ifindex = path.getIfIndex().value(); /* interface index */
+  }
 
   // add the following subattributes within RTA_MULTIPATH
   size_t prevLen = rta->rta_len;
@@ -348,7 +356,7 @@ NetlinkRouteMessage::addMultiPathNexthop(
     if (action.has_value()) {
       switch (action.value()) {
       case thrift::MplsActionCode::PUSH:
-        result = addLabelNexthop(rta, rtnh, path);
+        result = addPushNexthop(rta, rtnh, path);
         break;
 
       case thrift::MplsActionCode::SWAP:

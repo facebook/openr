@@ -63,8 +63,11 @@ folly::IPAddress ipAddrY3V6{"fe80::203"};
 folly::IPAddress ipAddrY4V6{"fe80::204"};
 
 folly::IPAddress ipAddrX1V4{"172.10.10.10"};
+folly::IPAddress ipAddrX1V4Peer{"172.10.10.11"};
 folly::IPAddress ipAddrY1V4{"172.10.11.10"};
-folly::IPAddress ipAddrY2V4{"172.10.11.11"};
+folly::IPAddress ipAddrY1V4Peer{"172.10.11.11"};
+folly::IPAddress ipAddrY2V4{"172.10.11.20"};
+folly::IPAddress ipAddrY2V4Peer{"172.10.11.21"};
 const folly::MacAddress kLinkAddr1("01:02:03:04:05:06");
 const folly::MacAddress kLinkAddr2("01:02:03:04:05:07");
 
@@ -128,15 +131,15 @@ class NlMessageFixture : public ::testing::Test {
     folly::Subprocess proc1(std::move(cmd));
     EXPECT_EQ(0, proc1.wait().exitStatus());
 
-    addAddress(kVethNameX, ipAddrX1V6.str());
-    addAddress(kVethNameY, ipAddrY1V6.str());
-    addAddress(kVethNameY, ipAddrY2V6.str());
-    addAddress(kVethNameY, ipAddrY3V6.str());
-    addAddress(kVethNameY, ipAddrY4V6.str());
+    addAddress(kVethNameX, ipAddrX1V6.str(), 64);
+    addAddress(kVethNameY, ipAddrY1V6.str(), 64);
+    addAddress(kVethNameY, ipAddrY2V6.str(), 64);
+    addAddress(kVethNameY, ipAddrY3V6.str(), 64);
+    addAddress(kVethNameY, ipAddrY4V6.str(), 64);
 
-    addAddress(kVethNameX, ipAddrX1V4.str());
-    addAddress(kVethNameY, ipAddrY1V4.str());
-    addAddress(kVethNameY, ipAddrY2V4.str());
+    addAddress(kVethNameX, ipAddrX1V4.str(), 31);
+    addAddress(kVethNameY, ipAddrY1V4.str(), 31);
+    addAddress(kVethNameY, ipAddrY2V4.str(), 31);
 
     // set interface status to up
     bringUpIntf(kVethNameX);
@@ -340,9 +343,10 @@ class NlMessageFixture : public ::testing::Test {
   }
 
   void
-  addAddress(const std::string& ifName, const std::string& address) {
+  addAddress(
+      const std::string& ifName, const std::string& address, size_t mask) {
     auto cmd =
-        "ip addr add {} dev {}"_shellify(address.c_str(), ifName.c_str());
+        folly::sformat("ip addr add {}/{} dev {}", address, mask, ifName);
     folly::Subprocess proc(std::move(cmd));
     EXPECT_EQ(0, proc.wait().exitStatus());
   }
@@ -357,7 +361,7 @@ class NlMessageFixture : public ::testing::Test {
       folly::Optional<uint32_t> swapLabel,
       folly::Optional<thrift::MplsActionCode> action,
       folly::Optional<folly::IPAddress> gateway,
-      int ifIndex) {
+      std::optional<int> ifIndex) {
     openr::fbnl::NextHopBuilder nhBuilder;
 
     if (pushLabels.has_value()) {
@@ -372,7 +376,9 @@ class NlMessageFixture : public ::testing::Test {
     if (gateway.has_value()) {
       nhBuilder.setGateway(gateway.value());
     }
-    nhBuilder.setIfIndex(ifIndex);
+    if (ifIndex.has_value()) {
+      nhBuilder.setIfIndex(ifIndex.value());
+    }
     return nhBuilder.build();
   }
 
@@ -1110,6 +1116,64 @@ TEST_F(NlMessageFixture, LabelRouteV4Nexthop) {
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
 }
 
+TEST_F(NlMessageFixture, LabelRouteAutoResolveInterfaceIndex) {
+  // Add label route with single path label with PHP nexthop
+
+  uint32_t ackCount{0};
+  std::vector<openr::fbnl::NextHop> paths;
+  paths.emplace_back(buildNextHop(
+      folly::none,
+      folly::none,
+      thrift::MplsActionCode::PHP,
+      ipAddrY1V4Peer,
+      std::nullopt)); // NOTE: No interface index
+  paths.emplace_back(buildNextHop(
+      folly::none,
+      swapLabel, // SWAP label
+      thrift::MplsActionCode::SWAP,
+      ipAddrX1V4Peer,
+      std::nullopt)); // NOTE: No interface index
+  auto route = buildRoute(kRouteProtoId, folly::none, inLabel5, paths);
+  LOG(INFO) << "Adding route: " << route.str();
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  //
+  // Kernel will report next-hops with resolved interface index
+  //
+  std::vector<openr::fbnl::NextHop> resolvedPaths;
+  resolvedPaths.emplace_back(buildNextHop(
+      folly::none,
+      folly::none,
+      thrift::MplsActionCode::PHP,
+      ipAddrY1V4Peer,
+      ifIndexY)); // NOTE: interface index should resolve to ifIndexY
+  resolvedPaths.emplace_back(buildNextHop(
+      folly::none,
+      swapLabel, // SWAP label
+      thrift::MplsActionCode::SWAP,
+      ipAddrX1V4Peer,
+      ifIndexX)); // NOTE: interface index should resolve to ifIndexX
+
+  auto resolvedRoute =
+      buildRoute(kRouteProtoId, folly::none, inLabel5, resolvedPaths);
+
+  // verify that resolvedRoute shows up in kernel
+  auto kernelRoutes = nlSock->getMplsRoutes(kRouteProtoId).get();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, resolvedRoute));
+
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify if route is deleted
+  kernelRoutes = nlSock->getMplsRoutes(kRouteProtoId).get();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, resolvedRoute));
+}
+
 TEST_F(NlMessageFixture, LabelRoutePHPNexthop) {
   // Add label route with single path label with PHP nexthop
 
@@ -1200,6 +1264,53 @@ TEST_F(NlMessageFixture, IpV4RouteLabelNexthop) {
   // verify if route is deleted
   kernelRoutes = nlSock->getAllRoutes().get();
   EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, route));
+}
+
+TEST_F(NlMessageFixture, IpV4RouteLabelNexthopAutoResolveInterface) {
+  // Add IPv4 route with single path label next with one label
+  // outoing IF is vethTestY
+
+  uint32_t ackCount{0};
+  folly::CIDRNetwork ipPrefix1V4 =
+      folly::IPAddress::createNetwork("10.10.0.0/24");
+  std::vector<openr::fbnl::NextHop> paths{buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V4Peer,
+      std::nullopt)}; // NOTE: No next-hop. We expect it to auto resolve.
+  auto route = buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, paths);
+
+  ackCount = getAckCount();
+  // create ipv4 route with label nexthop
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  // should have received one ack with status = 0
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // Kernel will report next-hops with resolved interface index
+  std::vector<openr::fbnl::NextHop> resolvedPaths{buildNextHop(
+      outLabel4,
+      folly::none,
+      thrift::MplsActionCode::PUSH,
+      ipAddrY1V4Peer,
+      ifIndexY)}; // NOTE: Kernel will resolve this next-hop
+  auto resolvedRoute =
+      buildRoute(kRouteProtoId, ipPrefix1V4, folly::none, resolvedPaths);
+
+  LOG(INFO) << "Getting all routes...";
+  // verify Netlink getAllRoutes for IPv4 nexthops
+  auto kernelRoutes = nlSock->getAllRoutes().get();
+  EXPECT_TRUE(checkRouteInKernelRoutes(kernelRoutes, resolvedRoute));
+
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->deleteRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
+
+  // verify if route is deleted
+  kernelRoutes = nlSock->getAllRoutes().get();
+  EXPECT_FALSE(checkRouteInKernelRoutes(kernelRoutes, resolvedRoute));
 }
 
 TEST_F(NlMessageFixture, MaxLabelStackTest) {
