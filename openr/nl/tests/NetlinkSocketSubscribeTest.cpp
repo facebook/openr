@@ -13,6 +13,7 @@
 #include <folly/ScopeGuard.h>
 #include <folly/Subprocess.h>
 #include <folly/io/async/EventBase.h>
+#include <folly/synchronization/Baton.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
