@@ -130,56 +130,66 @@ TEST(LinkTest, BasicOperation) {
 
 TEST(LinkStateTest, BasicOperation) {
   std::string n1 = "node1";
-  auto adj12 =
-      openr::createAdjacency(n1, "if2", "if1", "fe80::2", "10.0.0.2", 1, 1, 1);
-  auto adj13 =
-      openr::createAdjacency(n1, "if3", "if1", "fe80::3", "10.0.0.3", 1, 1, 1);
   std::string n2 = "node2";
-  auto adj21 =
-      openr::createAdjacency(n2, "if1", "if2", "fe80::1", "10.0.0.1", 1, 1, 1);
-  auto adj23 =
-      openr::createAdjacency(n2, "if3", "if2", "fe80::3", "10.0.0.3", 1, 1, 1);
   std::string n3 = "node3";
+  auto adj12 =
+      openr::createAdjacency(n2, "if2", "if1", "fe80::2", "10.0.0.2", 1, 1, 1);
+  auto adj13 =
+      openr::createAdjacency(n3, "if3", "if1", "fe80::3", "10.0.0.3", 1, 1, 1);
+  auto adj21 =
+      openr::createAdjacency(n1, "if1", "if2", "fe80::1", "10.0.0.1", 1, 1, 1);
+  auto adj23 =
+      openr::createAdjacency(n3, "if3", "if2", "fe80::3", "10.0.0.3", 1, 1, 1);
   auto adj31 =
-      openr::createAdjacency(n3, "if1", "if3", "fe80::1", "10.0.0.1", 1, 1, 1);
+      openr::createAdjacency(n1, "if1", "if3", "fe80::1", "10.0.0.1", 1, 1, 1);
   auto adj32 =
-      openr::createAdjacency(n3, "if3", "if3", "fe80::2", "10.0.0.2", 1, 1, 1);
+      openr::createAdjacency(n2, "if2", "if3", "fe80::2", "10.0.0.2", 1, 1, 1);
 
-  auto l1 = std::make_shared<openr::Link>(n1, adj12, n2, adj21);
-  auto l2 = std::make_shared<openr::Link>(n2, adj23, n3, adj32);
-  auto l3 = std::make_shared<openr::Link>(n3, adj31, n1, adj13);
+  openr::Link l1(n1, adj12, n2, adj21);
+  openr::Link l2(n2, adj23, n3, adj32);
+  openr::Link l3(n3, adj31, n1, adj13);
+
+  auto adjDb1 = openr::createAdjDb(n1, {adj12, adj13}, 1);
+  auto adjDb2 = openr::createAdjDb(n2, {adj21, adj23}, 2);
+  auto adjDb3 = openr::createAdjDb(n3, {adj31, adj32}, 3);
 
   openr::LinkState state;
 
-  state.addLink(l1);
-  state.addLink(l2);
-  state.addLink(l3);
+  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).first);
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb2, 0, 0).first);
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb3, 0, 0).first);
+
+  using testing::Pointee;
+  using testing::UnorderedElementsAre;
+
   EXPECT_THAT(
-      state.linksFromNode("node1"), testing::UnorderedElementsAre(l1, l3));
+      state.linksFromNode(n1), UnorderedElementsAre(Pointee(l1), Pointee(l3)));
   EXPECT_THAT(
-      state.linksFromNode("node2"), testing::UnorderedElementsAre(l1, l2));
+      state.linksFromNode(n2), UnorderedElementsAre(Pointee(l1), Pointee(l2)));
   EXPECT_THAT(
-      state.linksFromNode("node3"), testing::UnorderedElementsAre(l2, l3));
+      state.linksFromNode(n3), UnorderedElementsAre(Pointee(l2), Pointee(l3)));
   EXPECT_THAT(state.linksFromNode("node4"), testing::IsEmpty());
 
-  EXPECT_FALSE(state.isNodeOverloaded("node1"));
-  EXPECT_FALSE(state.updateNodeOverloaded("node1", true, 0, 0));
-  EXPECT_TRUE(state.isNodeOverloaded("node1"));
-  EXPECT_FALSE(state.updateNodeOverloaded("node1", true, 0, 0));
-  EXPECT_TRUE(state.updateNodeOverloaded("node1", false, 0, 0));
-  EXPECT_FALSE(state.isNodeOverloaded("node1"));
+  EXPECT_FALSE(state.isNodeOverloaded(n1));
+  adjDb1.isOverloaded = true;
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).first);
+  EXPECT_TRUE(state.isNodeOverloaded(n1));
+  EXPECT_FALSE(state.updateAdjacencyDatabase(adjDb1, 0, 0).first);
+  adjDb1.isOverloaded = false;
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).first);
+  EXPECT_FALSE(state.isNodeOverloaded(n1));
 
-  state.removeLink(l1);
-  EXPECT_THAT(state.linksFromNode("node1"), testing::UnorderedElementsAre(l3));
-  EXPECT_THAT(state.linksFromNode("node2"), testing::UnorderedElementsAre(l2));
+  adjDb1 = openr::createAdjDb(n1, {adj13}, 1);
+  EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb1, 0, 0).first);
+  EXPECT_THAT(state.linksFromNode(n1), UnorderedElementsAre(Pointee(l3)));
+  EXPECT_THAT(state.linksFromNode(n2), UnorderedElementsAre(Pointee(l2)));
   EXPECT_THAT(
-      state.linksFromNode("node3"), testing::UnorderedElementsAre(l2, l3));
+      state.linksFromNode(n3), UnorderedElementsAre(Pointee(l2), Pointee(l3)));
 
-  state.removeNode("node1");
-  EXPECT_THAT(state.linksFromNode("node1"), testing::IsEmpty());
-  EXPECT_THAT(state.linksFromNode("node2"), testing::UnorderedElementsAre(l2));
-  EXPECT_THAT(state.linksFromNode("node3"), testing::UnorderedElementsAre(l2));
-  EXPECT_THROW(state.removeLink(l1), std::out_of_range);
+  EXPECT_TRUE(state.deleteAdjacencyDatabase(n1));
+  EXPECT_THAT(state.linksFromNode(n1), testing::IsEmpty());
+  EXPECT_THAT(state.linksFromNode(n2), UnorderedElementsAre(Pointee(l2)));
+  EXPECT_THAT(state.linksFromNode(n3), UnorderedElementsAre(Pointee(l2)));
 }
 
 int

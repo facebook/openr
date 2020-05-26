@@ -232,7 +232,7 @@ getRouteMap(SpfSolver& spfSolver, const vector<string>& nodes) {
   RouteMap routeMap;
 
   for (string const& node : nodes) {
-    auto routeDb = spfSolver.buildPaths(node);
+    auto routeDb = spfSolver.buildRouteDb(node);
     if (not routeDb.has_value()) {
       continue;
     }
@@ -261,7 +261,7 @@ getUnicastRoutes(SpfSolver& spfSolver, const vector<string>& nodes) {
   PrefixRoutes prefixRoutes;
 
   for (string const& node : nodes) {
-    auto routeDb = spfSolver.buildPaths(node);
+    auto routeDb = spfSolver.buildRouteDb(node);
     if (not routeDb.has_value()) {
       continue;
     }
@@ -393,7 +393,7 @@ TEST(SpfSolver, Counters) {
   spfSolver.updatePrefixDatabase(prefixDb4);
 
   // Perform SPF run to generate some counters
-  const auto routeDb = spfSolver.buildPaths("1");
+  const auto routeDb = spfSolver.buildRouteDb("1");
   for (const auto& uniRoute : routeDb.value().unicastRoutes) {
     EXPECT_NE(toString(uniRoute.dest), "10.1.0.0/16");
   }
@@ -448,7 +448,7 @@ TEST(ShortestPathTest, UnreachableNodes) {
   vector<string> allNodes = {"1", "2"};
 
   for (string const& node : allNodes) {
-    auto routeDb = spfSolver.buildPaths(node);
+    auto routeDb = spfSolver.buildRouteDb(node);
     ASSERT_TRUE(routeDb.has_value());
     EXPECT_EQ(node, routeDb->thisNodeName);
     EXPECT_EQ(0, routeDb->unicastRoutes.size());
@@ -477,7 +477,7 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2));
 
-  auto routeDb = spfSolver.buildPaths("1");
+  auto routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
@@ -510,12 +510,12 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
 
   // dump routes for both nodes, expect no routing entries
 
-  auto routeDb = spfSolver.buildPaths("1");
+  auto routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
 
-  routeDb = spfSolver.buildPaths("2");
+  routeDb = spfSolver.buildRouteDb("2");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
@@ -529,10 +529,10 @@ TEST(ShortestPathTest, UnknownNode) {
   SpfSolver spfSolver(
       nodeName, false /* disable v4 */, false /* disable LFA */);
 
-  auto routeDb = spfSolver.buildPaths("1");
+  auto routeDb = spfSolver.buildRouteDb("1");
   EXPECT_FALSE(routeDb.has_value());
 
-  routeDb = spfSolver.buildPaths("2");
+  routeDb = spfSolver.buildRouteDb("2");
   EXPECT_FALSE(routeDb.has_value());
 }
 
@@ -569,13 +569,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
   // each (node1-label, node2-label and adjacency-label)
   //
 
-  auto routeDb = spfSolver.buildPaths("1");
+  auto routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
-  routeDb = spfSolver.buildPaths("2");
+  routeDb = spfSolver.buildRouteDb("2");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
@@ -597,13 +597,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
   // each (node1-label, node2-label and adjacency-label)
   //
 
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
-  routeDb = spfSolver.buildPaths("2");
+  routeDb = spfSolver.buildRouteDb("2");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
@@ -625,13 +625,13 @@ TEST(SpfSolver, AdjacencyUpdate) {
   // each (node1-label, node2-label and adjacency-label)
   //
 
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildRouteDb("1");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("1", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
   EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
 
-  routeDb = spfSolver.buildPaths("2");
+  routeDb = spfSolver.buildRouteDb("2");
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ("2", routeDb->thisNodeName);
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
@@ -760,7 +760,7 @@ TEST(BGPRedistribution, BasicOperation) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb1WithBGP));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
 
-  auto routeDb = spfSolver.buildPaths("2");
+  auto routeDb = spfSolver.buildRouteDb("2");
   thrift::UnicastRoute route1(
       FRAGILE,
       bgpPrefix1,
@@ -786,7 +786,7 @@ TEST(BGPRedistribution, BasicOperation) {
       mv2,
       std::nullopt));
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildRouteDb("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(1));
 
   // decrease the one of second node's metrics and expect to see the route
@@ -797,7 +797,7 @@ TEST(BGPRedistribution, BasicOperation) {
       .metrics[numMetrics - 1]
       .metric.front()--;
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb2WithBGP));
-  routeDb = spfSolver.buildPaths("2");
+  routeDb = spfSolver.buildRouteDb("2");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route1));
 
@@ -819,7 +819,7 @@ TEST(BGPRedistribution, BasicOperation) {
       false,
       createNextHop(addr2.prefixAddress));
 
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildRouteDb("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::Contains(route2));
 
@@ -839,10 +839,10 @@ TEST(BGPRedistribution, BasicOperation) {
 
   // 1 and 2 will not program BGP route
   EXPECT_THAT(
-      spfSolver.buildPaths("1").value().unicastRoutes, testing::SizeIs(1));
+      spfSolver.buildRouteDb("1").value().unicastRoutes, testing::SizeIs(1));
 
   // 3 will program the BGP route towards both
-  routeDb = spfSolver.buildPaths("3");
+  routeDb = spfSolver.buildRouteDb("3");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
       routeDb.value().unicastRoutes,
@@ -858,12 +858,12 @@ TEST(BGPRedistribution, BasicOperation) {
   // and thus not program anything
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(createAdjDb("1", {}, 0)).first);
   EXPECT_THAT(
-      spfSolver.buildPaths("1").value().unicastRoutes,
+      spfSolver.buildRouteDb("1").value().unicastRoutes,
       testing::AllOf(
           testing::Not(testing::Contains(route1)),
           testing::Not(testing::Contains(route2))));
   EXPECT_THAT(
-      spfSolver.buildPaths("2").value().unicastRoutes,
+      spfSolver.buildRouteDb("2").value().unicastRoutes,
       testing::AllOf(
           testing::Not(testing::Contains(route1)),
           testing::Not(testing::Contains(route2))));
@@ -946,7 +946,7 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   // Step-1 prefix1 -> {node2, node3}
   //
-  auto routeDb = spfSolver.buildPaths("1");
+  auto routeDb = spfSolver.buildRouteDb("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
       routeDb.value().unicastRoutes,
@@ -964,7 +964,7 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   adjacencyDb1.adjacencies[1].metric = 20;
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildRouteDb("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
       routeDb.value().unicastRoutes,
@@ -982,7 +982,7 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   adjacencyDb1.adjacencies[0].isOverloaded = true;
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildRouteDb("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(
       routeDb.value().unicastRoutes,
@@ -1000,7 +1000,7 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   adjacencyDb1.adjacencies[0].metric = 20;
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildRouteDb("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(2));
   EXPECT_THAT(
       routeDb.value().unicastRoutes,
@@ -1017,7 +1017,7 @@ TEST(BGPRedistribution, IgpMetric) {
   //
   adjacencyDb1.adjacencies[0].isOverloaded = false;
   EXPECT_TRUE(spfSolver.updateAdjacencyDatabase(adjacencyDb1).first);
-  routeDb = spfSolver.buildPaths("1");
+  routeDb = spfSolver.buildRouteDb("1");
   EXPECT_THAT(routeDb.value().unicastRoutes, testing::SizeIs(3));
   EXPECT_THAT(
       routeDb.value().unicastRoutes,
@@ -1070,7 +1070,7 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   EXPECT_TRUE(spfSolver.updatePrefixDatabase(prefixDb3));
 
   // route from 1 to 3
-  auto routeDb = spfSolver.buildPaths("1");
+  auto routeDb = spfSolver.buildRouteDb("1");
   bool foundRouteV6 = false;
   bool foundRouteNodeLabel = false;
   if (routeDb.has_value()) {
@@ -1576,7 +1576,7 @@ class SimpleRingTopologyFixture
   verifyRouteInUpdateNoDelete(
       std::string nodeName, int32_t mplsLabel, thrift::RouteDatabase& compDb) {
     // verify route DB change in node 1.
-    auto routeDb1 = spfSolver->buildPaths(nodeName).value();
+    auto routeDb1 = spfSolver->buildRouteDb(nodeName).value();
     std::sort(compDb.mplsRoutes.begin(), compDb.mplsRoutes.end());
     std::sort(compDb.unicastRoutes.begin(), compDb.unicastRoutes.end());
     std::sort(routeDb1.mplsRoutes.begin(), routeDb1.mplsRoutes.end());
@@ -1761,12 +1761,12 @@ TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
   // for mpls label 1.
   EXPECT_EQ(counters.at("decision.duplicate_node_label.count.60"), 3);
 
-  auto compDb1 = spfSolver->buildPaths("1").value();
-  auto compDb2 = spfSolver->buildPaths("2").value();
-  auto compDb3 = spfSolver->buildPaths("3").value();
+  auto compDb1 = spfSolver->buildRouteDb("1").value();
+  auto compDb2 = spfSolver->buildRouteDb("2").value();
+  auto compDb3 = spfSolver->buildRouteDb("3").value();
 
   counters = fb303::fbData->getCounters();
-  // now the counter should be 6, becasue we called buildPaths 3 times.
+  // now the counter should be 6, becasue we called buildRouteDb 3 times.
   EXPECT_EQ(counters.at("decision.duplicate_node_label.count.60"), 6);
 
   // change nodelabel of node 1 to be 1. Now each node has it's own
@@ -1928,8 +1928,9 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
   EXPECT_EQ(36, routeMap.size());
 
   const auto counters = fb303::fbData->getCounters();
-  // 4 nodes * 3 peer per node * 2 (run spf because we run 2 shortest path)
-  EXPECT_EQ(counters.at("decision.spf_runs.count"), 24);
+  // 4 + 4 * 3 peer per node (clean runs are memoized, 2nd runs  with linksTo
+  // ignore are not so we redo for each neighbor)
+  EXPECT_EQ(counters.at("decision.spf_runs.count"), 16);
   auto pushCode = thrift::MplsActionCode::PUSH;
   auto push1 =
       createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1});
@@ -3951,7 +3952,7 @@ TEST(GridTopology, StressTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(nodeName, false, true);
   createGrid(spfSolver, 99);
-  spfSolver.buildPaths("523");
+  spfSolver.buildRouteDb("523");
 }
 
 //
@@ -4546,7 +4547,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       std::string(""));
 
   auto counters = fb303::fbData->getCounters();
-  EXPECT_EQ(0, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(0, counters["decision.spf_runs.count"]);
   EXPECT_EQ(0, counters["decision.route_build_runs.count"]);
 
   sendKvPublication(publication);
@@ -4554,7 +4555,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   // validate SPF after initial sync, no rebouncing here
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(1, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(2, counters["decision.spf_runs.count"]);
   EXPECT_EQ(1, counters["decision.route_build_runs.count"]);
 
   //
@@ -4590,7 +4591,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   recvMyRouteDb("1", serializer);
 
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(2, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(4, counters["decision.spf_runs.count"]);
   EXPECT_EQ(2, counters["decision.route_build_runs.count"]);
 
   //
@@ -4606,7 +4607,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   recvMyRouteDb("1", serializer);
 
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(2, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(4, counters["decision.spf_runs.count"]);
   EXPECT_EQ(3, counters["decision.route_build_runs.count"]);
 
   //
@@ -4633,7 +4634,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   recvMyRouteDb("1", serializer);
 
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(3, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(6, counters["decision.spf_runs.count"]);
   EXPECT_EQ(4, counters["decision.route_build_runs.count"]);
 
   //
@@ -4668,7 +4669,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   recvMyRouteDb("1", serializer);
 
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(3, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(6, counters["decision.spf_runs.count"]);
   // only 1 request shall be processed
   EXPECT_EQ(5, counters["decision.route_build_runs.count"]);
 }
@@ -4694,7 +4695,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
       std::string(""));
 
   auto counters = fb303::fbData->getCounters();
-  EXPECT_EQ(0, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(0, counters["decision.spf_runs.count"]);
 
   sendKvPublication(publication);
 
@@ -4704,7 +4705,7 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
 
   // make sure the counter did not increment
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(0, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(0, counters["decision.spf_runs.count"]);
 }
 
 //
@@ -4728,7 +4729,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
       std::string(""));
 
   auto counters = fb303::fbData->getCounters();
-  EXPECT_EQ(0, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(0, counters["decision.spf_runs.count"]);
 
   sendKvPublication(publication);
 
@@ -4738,7 +4739,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
 
   // make sure counter is incremented
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(1, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(2, counters["decision.spf_runs.count"]);
 
   // Send same publication again to Decision using pub socket
   sendKvPublication(publication);
@@ -4749,7 +4750,7 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
 
   // make sure counter is not incremented
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(1, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(2, counters["decision.spf_runs.count"]);
 }
 
 /**
@@ -5187,7 +5188,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   const int64_t adjUpdateCnt = 1000 /* initial */;
   const int64_t prefixUpdateCnt = totalSent + 1000 /* initial */ + 1 /* end */;
   auto counters = fb303::fbData->getCounters();
-  EXPECT_EQ(1, counters["decision.path_build_runs.count"]);
+  EXPECT_EQ(4, counters["decision.spf_runs.count"]);
   EXPECT_EQ(adjUpdateCnt, counters["decision.adj_db_update.count"]);
   EXPECT_EQ(prefixUpdateCnt, counters["decision.prefix_db_update.count"]);
 }

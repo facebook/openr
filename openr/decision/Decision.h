@@ -165,11 +165,6 @@ class SpfSolver {
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
-  // Compute all routes from perspective of a given router.
-  // Returns std::nullopt if myNodeName doesn't have any prefix database
-  std::optional<thrift::RouteDatabase> buildPaths(
-      const std::string& myNodeName);
-
   // Build route database using global prefix database and cached SPF
   // computation from perspective of a given router.
   // Returns std::nullopt if myNodeName doesn't have any prefix database

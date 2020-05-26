@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -71,6 +72,9 @@ class HoldableValue {
 // quickly accessed and modified via the nodeName of either end of the link.
 //
 // 4. Provides useful apis to read and write link state.
+//
+// 5. Provides Shortest path results and handles memoizing this expesive
+// computation while the link state has not changed
 //
 
 class Link {
@@ -175,11 +179,36 @@ class LinkState {
   using LinkSet =
       std::unordered_set<std::shared_ptr<Link>, LinkPtrHash, LinkPtrEqual>;
 
-  void addLink(std::shared_ptr<Link> link);
+  using SpfResult = std::unordered_map<
+      std::string /* otherNodeName */,
+      std::pair<
+          LinkStateMetric,
+          std::unordered_set<std::string /* nextHopNodeName */>>>;
 
-  void removeLink(std::shared_ptr<Link> link);
+  // non-const public methods
+  // IMPT: clear spfResults_ as appropirate in these functions
 
-  void removeNode(const std::string& nodeName);
+  SpfResult const& getSpfResult(
+      const std::string& nodeName,
+      bool useLinkMetric = true,
+      LinkSet const& linksToIgnore = {});
+
+  bool decrementHolds();
+
+  // update adjacencies for the given router
+  std::pair<
+      bool /* topology has changed */,
+      bool /* adjacency attributes have changed: nexthop addr, or label */>
+  updateAdjacencyDatabase(
+      thrift::AdjacencyDatabase const& adjacencyDb,
+      LinkStateMetric holdUpTtl,
+      LinkStateMetric holdDownTtl);
+
+  // delete a node's adjacency database
+  // return true if this has caused any change in graph
+  bool deleteAdjacencyDatabase(const std::string& nodeName);
+
+  // const public methods
 
   bool
   hasNode(const std::string& nodeName) const {
@@ -188,18 +217,7 @@ class LinkState {
 
   const LinkSet& linksFromNode(const std::string& nodeName) const;
 
-  std::vector<std::shared_ptr<Link>> orderedLinksFromNode(
-      const std::string& nodeName);
-
-  bool updateNodeOverloaded(
-      const std::string& nodeName,
-      bool isOverloaded,
-      LinkStateMetric holdUpTtl,
-      LinkStateMetric holdDownTtl);
-
   bool isNodeOverloaded(const std::string& nodeName) const;
-
-  bool decrementHolds();
 
   bool hasHolds() const;
 
@@ -213,19 +231,6 @@ class LinkState {
     return linkMap_.size();
   }
 
-  // update adjacencies for the given router
-  std::pair<
-      bool /* topology has changed */,
-      bool /* route attributes has changed (nexthop addr, node/adj label */>
-  updateAdjacencyDatabase(
-      thrift::AdjacencyDatabase const& adjacencyDb,
-      LinkStateMetric holdUpTtl,
-      LinkStateMetric holdDownTtl);
-
-  // delete a node's adjacency database
-  // return true if this has caused any change in graph
-  bool deleteAdjacencyDatabase(const std::string& nodeName);
-
   // get adjacency databases
   std::unordered_map<
       std::string /* nodeName */,
@@ -235,6 +240,32 @@ class LinkState {
   }
 
  private:
+  // helpers to update the link state graph
+  void addLink(std::shared_ptr<Link> link);
+
+  void removeLink(std::shared_ptr<Link> link);
+
+  void removeNode(const std::string& nodeName);
+
+  bool updateNodeOverloaded(
+      const std::string& nodeName,
+      bool isOverloaded,
+      LinkStateMetric holdUpTtl,
+      LinkStateMetric holdDownTtl);
+
+  // run Dijkstra's Shortest Path First algorithm on the link state graph
+  SpfResult runSpf(
+      const std::string& src, /* the source node for the SPF run */
+      bool useLinkMetric, /* if set, the algorithm will respect adjancecy
+                             weights as advertised from the adjacent nodes,
+                             otherwise it will consider the graph unweighted */
+      const LinkSet& linksToIgnore =
+          {} /* optionaly specify a set of links to not use when running */);
+
+  // memoization structure for spf runs
+  std::unordered_map<std::tuple<std::string, bool, LinkSet>, SpfResult>
+      spfResults_;
+
   // returns Link object if the reverse adjancency is present in
   // adjacencyDatabases_.at(adj.otherNodeName), else returns nullptr
   std::shared_ptr<Link> maybeMakeLink(
@@ -242,6 +273,9 @@ class LinkState {
 
   std::vector<std::shared_ptr<Link>> getOrderedLinkSet(
       const thrift::AdjacencyDatabase& adjDb) const;
+
+  std::vector<std::shared_ptr<Link>> orderedLinksFromNode(
+      const std::string& nodeName) const;
 
   // this stores the same link object accessible from either nodeName
   std::unordered_map<std::string /* nodeName */, LinkSet> linkMap_;
@@ -257,6 +291,81 @@ class LinkState {
       adjacencyDatabases_;
 
 }; // class LinkState
+
+// Classes needed for running Dijkstra
+// In addition to implementing the priority queue at the heart of Dijkstra's
+// algorithm, this structure also allows us to store appication specfic data:
+// nexthops.
+class DijkstraQNode {
+ public:
+  DijkstraQNode(const std::string& n, LinkStateMetric d)
+      : nodeName(n), distance(d) {}
+  const std::string nodeName;
+  LinkStateMetric distance{0};
+  std::unordered_set<std::string> nextHops;
+};
+
+class DijkstraQ {
+ private:
+  std::vector<std::shared_ptr<DijkstraQNode>> heap_;
+  std::unordered_map<std::string, std::shared_ptr<DijkstraQNode>> nameToNode_;
+
+  struct {
+    bool
+    operator()(
+        std::shared_ptr<DijkstraQNode> a,
+        std::shared_ptr<DijkstraQNode> b) const {
+      if (a->distance != b->distance) {
+        return a->distance > b->distance;
+      }
+      return a->nodeName > b->nodeName;
+    }
+  } DijkstraQNodeGreater;
+
+ public:
+  void
+  insertNode(const std::string& nodeName, LinkStateMetric d) {
+    heap_.push_back(std::make_shared<DijkstraQNode>(nodeName, d));
+    nameToNode_[nodeName] = heap_.back();
+    std::push_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
+  }
+
+  std::shared_ptr<DijkstraQNode>
+  get(const std::string& nodeName) {
+    if (nameToNode_.count(nodeName)) {
+      return nameToNode_.at(nodeName);
+    }
+    return nullptr;
+  }
+
+  std::shared_ptr<DijkstraQNode>
+  extractMin() {
+    if (heap_.empty()) {
+      return nullptr;
+    }
+    auto min = heap_.at(0);
+    CHECK(nameToNode_.erase(min->nodeName));
+    std::pop_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
+    heap_.pop_back();
+    return min;
+  }
+
+  void
+  decreaseKey(const std::string& nodeName, LinkStateMetric d) {
+    if (nameToNode_.count(nodeName)) {
+      if (nameToNode_.at(nodeName)->distance < d) {
+        throw std::invalid_argument(std::to_string(d));
+      }
+      nameToNode_.at(nodeName)->distance = d;
+      // this is a bit slow but is rarely called in our application. In fact,
+      // in networks where the metric is hop count, this will never be called
+      // and the Dijkstra run is no different than BFS
+      std::make_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
+    } else {
+      throw std::invalid_argument(nodeName);
+    }
+  }
+};
 } // namespace openr
 
 namespace std {
@@ -266,6 +375,18 @@ namespace std {
 template <>
 struct hash<openr::Link> {
   size_t operator()(openr::Link const& link) const;
+};
+
+template <>
+struct hash<openr::LinkState::LinkSet> {
+  size_t operator()(openr::LinkState::LinkSet const& set) const;
+};
+
+template <>
+struct equal_to<openr::LinkState::LinkSet> {
+  bool operator()(
+      openr::LinkState::LinkSet const& a,
+      openr::LinkState::LinkSet const& b) const;
 };
 
 } // namespace std

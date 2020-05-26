@@ -11,12 +11,42 @@
 #include <functional>
 #include <utility>
 
+#include <fb303/ServiceData.h>
 #include <folly/Format.h>
 #include <openr/common/Util.h>
+
+namespace fb303 = facebook::fb303;
 
 size_t
 std::hash<openr::Link>::operator()(openr::Link const& link) const {
   return link.hash;
+}
+
+bool
+std::equal_to<openr::LinkState::LinkSet>::operator()(
+    openr::LinkState::LinkSet const& a,
+    openr::LinkState::LinkSet const& b) const {
+  if (a.size() == b.size()) {
+    for (auto const& i : a) {
+      if (!b.count(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+size_t
+std::hash<openr::LinkState::LinkSet>::operator()(
+    openr::LinkState::LinkSet const& set) const {
+  size_t hash = 0;
+  for (auto const& link : set) {
+    // Note: XOR is associative and communitive so we get a consitent hash no
+    // matter the order of the set
+    hash ^= std::hash<openr::Link>()(*link);
+  }
+  return hash;
 }
 
 namespace openr {
@@ -390,7 +420,7 @@ LinkState::linksFromNode(const std::string& nodeName) const {
 }
 
 std::vector<std::shared_ptr<Link>>
-LinkState::orderedLinksFromNode(const std::string& nodeName) {
+LinkState::orderedLinksFromNode(const std::string& nodeName) const {
   std::vector<std::shared_ptr<Link>> links;
   if (linkMap_.count(nodeName)) {
     links.insert(
@@ -430,6 +460,9 @@ LinkState::decrementHolds() {
   }
   for (auto& kv : nodeOverloads_) {
     holdChange |= kv.second.decrementTtl();
+  }
+  if (holdChange) {
+    spfResults_.clear();
   }
   return holdChange;
 }
@@ -629,7 +662,9 @@ LinkState::updateAdjacencyDatabase(
     ++newIter;
     ++oldIter;
   }
-
+  if (topoChanged) {
+    spfResults_.clear();
+  }
   return std::make_pair(topoChanged, routeAttrChanged);
 }
 
@@ -645,7 +680,105 @@ LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
   }
   removeNode(nodeName);
   adjacencyDatabases_.erase(search);
+  spfResults_.clear();
   return true;
+}
+
+LinkState::SpfResult const&
+LinkState::getSpfResult(
+    const std::string& thisNodeName,
+    bool useLinkMetric,
+    const LinkSet& linksToIgnore) {
+  std::tuple<std::string, bool, LinkSet> key{
+      thisNodeName, useLinkMetric, linksToIgnore};
+  auto entryIter = spfResults_.find(key);
+  if (spfResults_.end() == entryIter) {
+    auto res = runSpf(thisNodeName, useLinkMetric, std::get<2>(key));
+    entryIter = spfResults_.emplace(std::move(key), std::move(res)).first;
+  }
+  return entryIter->second;
+}
+
+/**
+ * Compute shortest-path routes from perspective of nodeName;
+ */
+LinkState::SpfResult
+LinkState::runSpf(
+    const std::string& thisNodeName,
+    bool useLinkMetric,
+    const LinkState::LinkSet& linksToIgnore) {
+  LinkState::SpfResult result;
+
+  fb303::fbData->addStatValue("decision.spf_runs", 1, fb303::COUNT);
+  const auto startTime = std::chrono::steady_clock::now();
+
+  DijkstraQ q;
+  q.insertNode(thisNodeName, 0);
+  uint64_t loop = 0;
+  for (auto node = q.extractMin(); node; node = q.extractMin()) {
+    ++loop;
+    // we've found this node's shortest paths. record it
+    auto emplaceRc = result.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(node->nodeName),
+        std::forward_as_tuple(node->distance, std::move(node->nextHops)));
+    CHECK(emplaceRc.second);
+
+    auto& recordedNodeName = emplaceRc.first->first;
+    auto& recordedNodeMetric = emplaceRc.first->second.first;
+    auto& recordedNodeNextHops = emplaceRc.first->second.second;
+
+    if (isNodeOverloaded(recordedNodeName) &&
+        recordedNodeName != thisNodeName) {
+      // no transit traffic through this node. we've recorded the nexthops to
+      // this node, but will not consider any of it's adjancecies as offering
+      // lower cost paths towards further away nodes. This effectively drains
+      // traffic away from this node
+      continue;
+    }
+    // we have the shortest path nexthops for recordedNodeName. Use these
+    // nextHops for any node that is connected to recordedNodeName that doesn't
+    // already have a lower cost path from thisNodeName
+    //
+    // this is the "relax" step in the Dijkstra Algorithm pseudocode in CLRS
+    for (const auto& link : linksFromNode(recordedNodeName)) {
+      auto& otherNodeName = link->getOtherNodeName(recordedNodeName);
+      if (!link->isUp() or result.count(otherNodeName) or
+          linksToIgnore.count(link)) {
+        continue;
+      }
+      auto metric =
+          useLinkMetric ? link->getMetricFromNode(recordedNodeName) : 1;
+      auto otherNode = q.get(otherNodeName);
+      if (!otherNode) {
+        q.insertNode(otherNodeName, recordedNodeMetric + metric);
+        otherNode = q.get(otherNodeName);
+      }
+      if (otherNode->distance >= recordedNodeMetric + metric) {
+        // recordedNodeName is either along an alternate shortest path towards
+        // otherNodeName or is along a new shorter path. In either case,
+        // otherNodeName should use recordedNodeName's nextHops until it finds
+        // some shorter path
+        if (otherNode->distance > recordedNodeMetric + metric) {
+          // if this is strictly better, forget about any other nexthops
+          otherNode->nextHops.clear();
+          q.decreaseKey(otherNode->nodeName, recordedNodeMetric + metric);
+        }
+        otherNode->nextHops.insert(
+            recordedNodeNextHops.begin(), recordedNodeNextHops.end());
+      }
+      if (otherNode->nextHops.empty()) {
+        // this node is directly connected to the source
+        otherNode->nextHops.emplace(otherNode->nodeName);
+      }
+    }
+  }
+  VLOG(3) << "Dijkstra loop count: " << loop;
+  auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - startTime);
+  LOG(INFO) << "SPF elapsed time: " << deltaTime.count() << "ms.";
+  fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
+  return result;
 }
 
 } // namespace openr

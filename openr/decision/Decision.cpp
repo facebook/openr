@@ -41,9 +41,7 @@ using apache::thrift::TEnumTraits;
 
 using Metric = openr::LinkStateMetric;
 
-using SpfResult = unordered_map<
-    string /* otherNodeName */,
-    pair<Metric, unordered_set<string /* nextHopNodeName */>>>;
+using SpfResult = openr::LinkState::SpfResult;
 
 // Path starts from neighbor node and ends at destination. It's size must be
 // atleast one. Second attribute describe the link that is followed from
@@ -84,77 +82,6 @@ pathAInPathB(const Path& a, const Path& b) {
   return false;
 }
 
-// Classes needed for running Dijkstra
-class DijkstraQNode {
- public:
-  DijkstraQNode(const std::string& n, Metric d) : nodeName(n), distance(d) {}
-  const std::string nodeName;
-  Metric distance{0};
-  std::unordered_set<std::string> nextHops;
-};
-
-class DijkstraQ {
- private:
-  std::vector<std::shared_ptr<DijkstraQNode>> heap_;
-  std::unordered_map<std::string, std::shared_ptr<DijkstraQNode>> nameToNode_;
-
-  struct {
-    bool
-    operator()(
-        std::shared_ptr<DijkstraQNode> a,
-        std::shared_ptr<DijkstraQNode> b) const {
-      if (a->distance != b->distance) {
-        return a->distance > b->distance;
-      }
-      return a->nodeName > b->nodeName;
-    }
-  } DijkstraQNodeGreater;
-
- public:
-  void
-  insertNode(const std::string& nodeName, Metric d) {
-    heap_.push_back(std::make_shared<DijkstraQNode>(nodeName, d));
-    nameToNode_[nodeName] = heap_.back();
-    std::push_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
-  }
-
-  std::shared_ptr<DijkstraQNode>
-  get(const std::string& nodeName) {
-    if (nameToNode_.count(nodeName)) {
-      return nameToNode_.at(nodeName);
-    }
-    return nullptr;
-  }
-
-  std::shared_ptr<DijkstraQNode>
-  extractMin() {
-    if (heap_.empty()) {
-      return nullptr;
-    }
-    auto min = heap_.at(0);
-    CHECK(nameToNode_.erase(min->nodeName));
-    std::pop_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
-    heap_.pop_back();
-    return min;
-  }
-
-  void
-  decreaseKey(const std::string& nodeName, Metric d) {
-    if (nameToNode_.count(nodeName)) {
-      if (nameToNode_.at(nodeName)->distance < d) {
-        throw std::invalid_argument(std::to_string(d));
-      }
-      nameToNode_.at(nodeName)->distance = d;
-      // this is a bit slow but is rarely called in our application. In fact,
-      // in networks where the metric is hop count, this will never be called
-      // and the Dijkstra run is no different than BFS
-      std::make_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
-    } else {
-      throw std::invalid_argument(nodeName);
-    }
-  }
-};
-
 } // anonymous namespace
 
 namespace openr {
@@ -188,7 +115,6 @@ class SpfSolver::SpfSolverImpl {
     fb303::fbData->addStatExportType(
         "decision.no_route_to_prefix", fb303::COUNT);
     fb303::fbData->addStatExportType("decision.path_build_ms", fb303::AVG);
-    fb303::fbData->addStatExportType("decision.path_build_runs", fb303::COUNT);
     fb303::fbData->addStatExportType("decision.prefix_db_update", fb303::COUNT);
     fb303::fbData->addStatExportType("decision.route_build_ms", fb303::AVG);
     fb303::fbData->addStatExportType("decision.route_build_runs", fb303::COUNT);
@@ -228,8 +154,6 @@ class SpfSolver::SpfSolverImpl {
   std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
   getPrefixDatabases();
 
-  std::optional<thrift::RouteDatabase> buildPaths(
-      const std::string& myNodeName);
   std::optional<thrift::RouteDatabase> buildRouteDb(
       const std::string& myNodeName);
 
@@ -250,13 +174,6 @@ class SpfSolver::SpfSolverImpl {
   // no copy
   SpfSolverImpl(SpfSolverImpl const&) = delete;
   SpfSolverImpl& operator=(SpfSolverImpl const&) = delete;
-
-  // run SPF and produce map from node name to next-hops that have shortest
-  // paths to it
-  SpfResult runSpf(
-      const std::string& nodeName,
-      bool useLinkMetric,
-      const LinkState::LinkSet& linksToIgnore = {});
 
   // Trace all edge disjoint paths from source to destination node.
   // srcNodeDistances => map indicating distances of each node from source
@@ -329,7 +246,7 @@ class SpfSolver::SpfSolverImpl {
   getNextHopsWithMetric(
       const std::string& srcNodeName,
       const std::set<std::string>& dstNodeNames,
-      bool perDestination) const;
+      bool perDestination);
 
   // This function converts best nexthop nodes to best nexthop adjacencies
   // which can then be passed to FIB for programming. It considers LFA and
@@ -362,15 +279,6 @@ class SpfSolver::SpfSolverImpl {
 
   std::vector<thrift::RouteDatabaseDelta> staticRoutesUpdates_;
 
-  // Save all direct next-hop distance from a given source node to a destination
-  // node. We update it as we compute all LFA routes from perspective of source
-  std::unordered_map<
-      std::string /* source nodeName */,
-      unordered_map<
-          string /* otherNodeName */,
-          pair<Metric, unordered_set<string /* nextHopNodeName */>>>>
-      spfResults_;
-
   const std::string myNodeName_;
 
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
@@ -398,9 +306,8 @@ SpfSolver::SpfSolverImpl::updateAdjacencyDatabase(
     holdDownTtl = getMaxHopsToNode(newAdjacencyDb.thisNodeName) - holdUpTtl;
   }
   fb303::fbData->addStatValue("decision.adj_db_update", 1, fb303::COUNT);
-  auto rc = linkState_.updateAdjacencyDatabase(
+  return linkState_.updateAdjacencyDatabase(
       newAdjacencyDb, holdUpTtl, holdDownTtl);
-  return rc;
 }
 
 bool
@@ -424,7 +331,7 @@ SpfSolver::SpfSolverImpl::getMyHopsToNode(const std::string& nodeName) {
   if (myNodeName_ == nodeName) {
     return 0;
   }
-  auto spfResult = runSpf(myNodeName_, false);
+  auto const& spfResult = linkState_.getSpfResult(myNodeName_, false);
   if (spfResult.count(nodeName)) {
     return spfResult.at(nodeName).first;
   }
@@ -434,7 +341,7 @@ SpfSolver::SpfSolverImpl::getMyHopsToNode(const std::string& nodeName) {
 Metric
 SpfSolver::SpfSolverImpl::getMaxHopsToNode(const std::string& nodeName) {
   Metric max = 0;
-  for (auto const& pathsFromNode : runSpf(nodeName, false)) {
+  for (auto const& pathsFromNode : linkState_.getSpfResult(nodeName, false)) {
     max = std::max(max, pathsFromNode.second.first);
   }
   return max;
@@ -472,90 +379,6 @@ SpfSolver::SpfSolverImpl::updatePrefixDatabase(
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
 SpfSolver::SpfSolverImpl::getPrefixDatabases() {
   return prefixState_.getPrefixDatabases();
-}
-
-/**
- * Compute shortest-path routes from perspective of nodeName;
- */
-unordered_map<
-    string /* otherNodeName */,
-    pair<Metric, unordered_set<string /* nextHopNodeName */>>>
-SpfSolver::SpfSolverImpl::runSpf(
-    const std::string& thisNodeName,
-    bool useLinkMetric,
-    const LinkState::LinkSet& linksToIgnore) {
-  unordered_map<string, pair<Metric, unordered_set<string>>> result;
-
-  fb303::fbData->addStatValue("decision.spf_runs", 1, fb303::COUNT);
-  const auto startTime = std::chrono::steady_clock::now();
-
-  DijkstraQ q;
-  q.insertNode(thisNodeName, 0);
-  uint64_t loop = 0;
-  for (auto node = q.extractMin(); node; node = q.extractMin()) {
-    ++loop;
-    // we've found this node's shortest paths. record it
-    auto emplaceRc = result.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(node->nodeName),
-        std::forward_as_tuple(node->distance, std::move(node->nextHops)));
-    CHECK(emplaceRc.second);
-
-    auto& recordedNodeName = emplaceRc.first->first;
-    auto& recordedNodeMetric = emplaceRc.first->second.first;
-    auto& recordedNodeNextHops = emplaceRc.first->second.second;
-
-    if (linkState_.isNodeOverloaded(recordedNodeName) &&
-        recordedNodeName != thisNodeName) {
-      // no transit traffic through this node. we've recorded the nexthops to
-      // this node, but will not consider any of it's adjancecies as offering
-      // lower cost paths towards further away nodes. This effectively drains
-      // traffic away from this node
-      continue;
-    }
-    // we have the shortest path nexthops for recordedNodeName. Use these
-    // nextHops for any node that is connected to recordedNodeName that doesn't
-    // already have a lower cost path from thisNodeName
-    //
-    // this is the "relax" step in the Dijkstra Algorithm pseudocode in CLRS
-    for (const auto& link : linkState_.linksFromNode(recordedNodeName)) {
-      auto otherNodeName = link->getOtherNodeName(recordedNodeName);
-      if (!link->isUp() or result.count(otherNodeName) or
-          linksToIgnore.count(link)) {
-        continue;
-      }
-      auto metric =
-          useLinkMetric ? link->getMetricFromNode(recordedNodeName) : 1;
-      auto otherNode = q.get(otherNodeName);
-      if (!otherNode) {
-        q.insertNode(otherNodeName, recordedNodeMetric + metric);
-        otherNode = q.get(otherNodeName);
-      }
-      if (otherNode->distance >= recordedNodeMetric + metric) {
-        // recordedNodeName is either along an alternate shortest path towards
-        // otherNodeName or is along a new shorter path. In either case,
-        // otherNodeName should use recordedNodeName's nextHops until it finds
-        // some shorter path
-        if (otherNode->distance > recordedNodeMetric + metric) {
-          // if this is strictly better, forget about any other nexthops
-          otherNode->nextHops.clear();
-          q.decreaseKey(otherNode->nodeName, recordedNodeMetric + metric);
-        }
-        otherNode->nextHops.insert(
-            recordedNodeNextHops.begin(), recordedNodeNextHops.end());
-      }
-      if (otherNode->nextHops.empty()) {
-        // this node is directly connected to the source
-        otherNode->nextHops.emplace(otherNode->nodeName);
-      }
-    }
-  }
-  VLOG(3) << "Dijkstra loop count: " << loop;
-  auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "SPF elapsed time: " << deltaTime.count() << "ms.";
-  fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
-  return result;
 }
 
 std::vector<Path>
@@ -646,43 +469,8 @@ SpfSolver::SpfSolverImpl::traceEdgeDisjointPaths(
 }
 
 std::optional<thrift::RouteDatabase>
-SpfSolver::SpfSolverImpl::buildPaths(const std::string& myNodeName) {
-  if (!linkState_.hasNode(myNodeName)) {
-    return std::nullopt;
-  }
-
-  auto const& startTime = std::chrono::steady_clock::now();
-  fb303::fbData->addStatValue("decision.path_build_runs", 1, fb303::COUNT);
-
-  spfResults_.clear();
-  spfResults_[myNodeName] = runSpf(myNodeName, true);
-  if (computeLfaPaths_) {
-    // avoid duplicate iterations over a neighbor which can happen due to
-    // multiple adjacencies to it
-    std::unordered_set<std::string /* adjacent node name */> visitedAdjNodes;
-    for (auto const& link : linkState_.linksFromNode(myNodeName)) {
-      auto const& otherNodeName = link->getOtherNodeName(myNodeName);
-      // Skip if already visited
-      if (!visitedAdjNodes.insert(otherNodeName).second || !link->isUp()) {
-        continue;
-      }
-      spfResults_[otherNodeName] = runSpf(otherNodeName, true);
-    }
-  }
-
-  auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now() - startTime);
-  LOG(INFO) << "Decision::buildPaths took " << deltaTime.count() << "ms.";
-  fb303::fbData->addStatValue(
-      "decision.path_build_ms", deltaTime.count(), fb303::AVG);
-
-  return buildRouteDb(myNodeName);
-} // buildPaths
-
-std::optional<thrift::RouteDatabase>
 SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
-  if (not linkState_.hasNode(myNodeName) or
-      spfResults_.count(myNodeName) == 0) {
+  if (not linkState_.hasNode(myNodeName)) {
     return std::nullopt;
   }
 
@@ -1062,7 +850,7 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
     // TODO: Remove unused isV4 variable
     bool const /* isV4 */) {
   BestPathCalResult ret;
-  const auto& mySpfResult = spfResults_.at(myNodeName);
+  auto const& mySpfResult = linkState_.getSpfResult(myNodeName);
   for (auto const& kv : nodePrefixes) {
     auto const& nodeName = kv.first;
     auto const& prefixEntry = kv.second;
@@ -1419,7 +1207,7 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRouteForNodes(
 
     // Step-1 Get all shortest paths and min-cost nodes to whom we will be
     // forwarding
-    auto const& spf1 = spfResults_.at(myNodeName);
+    auto const& spf1 = linkState_.getSpfResult(myNodeName);
     auto const& minMetricNodes1 = getMinCostNodes(spf1, dstNodeNames);
     auto const& minCost1 = minMetricNodes1.first;
     auto const& minCostNodes1 = minMetricNodes1.second;
@@ -1440,7 +1228,8 @@ SpfSolver::SpfSolverImpl::createOpenRKsp2EdRouteForNodes(
 
     // Step-3 Collect all second shortest paths
     if (linksToIgnore.size()) {
-      auto const spf2 = runSpf(myNodeName, true, linksToIgnore);
+      auto const& spf2 =
+          linkState_.getSpfResult(myNodeName, true, linksToIgnore);
       auto const& minMetricNodes2 = getMinCostNodes(spf2, dstNodeNames);
       auto const& minCost2 = minMetricNodes2.first;
       auto const& minCostNodes2 = minMetricNodes2.second;
@@ -1490,8 +1279,8 @@ std::pair<
 SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
     const std::string& myNodeName,
     const std::set<std::string>& dstNodeNames,
-    bool perDestination) const {
-  auto& shortestPathsFromHere = spfResults_.at(myNodeName);
+    bool perDestination) {
+  auto const& shortestPathsFromHere = linkState_.getSpfResult(myNodeName);
   auto const& minMetricNodes =
       getMinCostNodes(shortestPathsFromHere, dstNodeNames);
   auto const& shortestMetric = minMetricNodes.first;
@@ -1520,12 +1309,13 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
 
   // add any other neighbors that have LFA paths to the prefix
   if (computeLfaPaths_) {
-    for (const auto& kv2 : spfResults_) {
-      const auto& neighborName = kv2.first;
-      const auto& shortestPathsFromNeighbor = kv2.second;
-      if (neighborName == myNodeName) {
+    for (auto link : linkState_.linksFromNode(myNodeName)) {
+      if (!link->isUp()) {
         continue;
       }
+      const auto& neighborName = link->getOtherNodeName(myNodeName);
+      auto const& shortestPathsFromNeighbor =
+          linkState_.getSpfResult(neighborName);
 
       const auto neighborToHere =
           shortestPathsFromNeighbor.at(myNodeName).first;
@@ -1548,7 +1338,7 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
           }
         } // end if
       } // end for dstNodeNames
-    } // end spfResults_
+    } // end for linkState_.linksFromNode(myNodeName)
   }
 
   return std::make_pair(shortestMetric, nextHopNodes);
@@ -1651,7 +1441,7 @@ SpfSolver::SpfSolverImpl::findMinDistToNeighbor(
 void
 SpfSolver::SpfSolverImpl::updateGlobalCounters() {
   size_t numPartialAdjacencies{0};
-  const auto& mySpfResult = spfResults_[myNodeName_];
+  auto const& mySpfResult = linkState_.getSpfResult(myNodeName_);
   for (auto const& kv : linkState_.getAdjacencyDatabases()) {
     const auto& adjDb = kv.second;
     size_t numLinks = linkState_.linksFromNode(kv.first).size();
@@ -1754,11 +1544,6 @@ SpfSolver::updatePrefixDatabase(const thrift::PrefixDatabase& prefixDb) {
 std::unordered_map<std::string /* nodeName */, thrift::PrefixDatabase>
 SpfSolver::getPrefixDatabases() {
   return impl_->getPrefixDatabases();
-}
-
-std::optional<thrift::RouteDatabase>
-SpfSolver::buildPaths(const std::string& myNodeName) {
-  return impl_->buildPaths(myNodeName);
 }
 
 std::optional<thrift::RouteDatabase>
@@ -1914,7 +1699,7 @@ Decision::getDecisionRouteDb(std::string nodeName) {
     if (nodeName.empty()) {
       nodeName = myNodeName_;
     }
-    auto maybeRouteDb = spfSolver_->buildPaths(nodeName);
+    auto maybeRouteDb = spfSolver_->buildRouteDb(nodeName);
     if (maybeRouteDb.has_value()) {
       routeDb = std::move(maybeRouteDb.value());
     } else {
@@ -2204,7 +1989,7 @@ Decision::processPendingAdjUpdates() {
 
   // run SPF once for all updates received
   LOG(INFO) << "Decision: computing new paths.";
-  auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
+  auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
   if (not maybeRouteDb.has_value()) {
     LOG(WARNING) << "AdjacencyDb updates incurred no route updates";
     return;
@@ -2243,7 +2028,7 @@ Decision::decrementOrderedFibHolds() {
     if (coldStartTimer_->isScheduled()) {
       return;
     }
-    auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
+    auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
     if (not maybeRouteDb.has_value()) {
       LOG(INFO) << "decrementOrderedFibHolds incurred no route updates";
       return;
@@ -2258,7 +2043,7 @@ Decision::decrementOrderedFibHolds() {
 
 void
 Decision::coldStartUpdate() {
-  auto maybeRouteDb = spfSolver_->buildPaths(myNodeName_);
+  auto maybeRouteDb = spfSolver_->buildRouteDb(myNodeName_);
   if (not maybeRouteDb.has_value()) {
     LOG(ERROR) << "SEVERE: No routes to program after cold start duration. "
                << "Sending empty route db to FIB";
