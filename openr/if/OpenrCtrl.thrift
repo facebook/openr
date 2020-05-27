@@ -51,6 +51,17 @@ service OpenrCtrl extends fb303_core.BaseService {
    */
   OpenrConfig.OpenrConfig getRunningConfigThrift()
 
+  /**
+   * Load file config and do validation. Throws exception upon error.
+   * Return - loaded config content.
+   *
+   * NOTE: json seriliazer ommit extra fields.
+   * loaded content is returned so user could verify the difference between
+   * file content and loaded content
+   */
+  string dryrunConfig(1: string file)
+    throws (1: OpenrError error)
+
   //
   // PrefixManager APIs
   //

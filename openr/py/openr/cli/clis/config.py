@@ -18,6 +18,8 @@ from openr.cli.utils.options import breeze_option
 class ConfigCli(object):
     def __init__(self):
         self.config.add_command(ConfigShowCli().show, name="show")
+        self.config.add_command(ConfigDryRunCli().dryrun, name="dryrun")
+        self.config.add_command(ConfigCompareCli().compare, name="compare")
         self.config.add_command(
             ConfigPrefixAllocatorCli().config_prefix_allocator,
             name="prefix-allocator-config",
@@ -45,6 +47,26 @@ class ConfigShowCli(object):
         """ Show openr running config """
 
         config.ConfigShowCmd(cli_opts).run()
+
+
+class ConfigDryRunCli(object):
+    @click.command()
+    @click.argument("file")
+    @click.pass_obj
+    def dryrun(cli_opts, file):  # noqa: B902
+        """ Show openr running config """
+
+        config.ConfigDryRunCmd(cli_opts).run(file)
+
+
+class ConfigCompareCli(object):
+    @click.command()
+    @click.argument("file")
+    @click.pass_obj
+    def compare(cli_opts, file):  # noqa: B902
+        """ Migration cli: Compare config with current running config """
+
+        config.ConfigCompareCmd(cli_opts).run(file)
 
 
 class ConfigPrefixAllocatorCli(object):

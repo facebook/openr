@@ -8,9 +8,10 @@
 #
 
 import json
-
 from typing import Tuple
 
+import click
+import jsondiff
 from openr.AllocPrefix import ttypes as ap_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
@@ -28,6 +29,34 @@ class ConfigShowCmd(OpenrCtrlCmd):
         resp = client.getRunningConfig()
         config = json.loads(resp)
         print(json.dumps(config, indent=4, sort_keys=True, separators=(",", ": ")))
+
+
+class ConfigDryRunCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client, file: str):
+        try:
+            client.dryrunConfig(file)
+            click.echo(click.style("SUCCESS", fg="green"))
+        except OpenrError as ex:
+            click.echo(click.style("FAILED: {}".format(ex), fg="red"))
+
+
+class ConfigCompareCmd(OpenrCtrlCmd):
+    def _run(self, client: OpenrCtrl.Client, file: str):
+        running_conf = client.getRunningConfig()
+
+        try:
+            file_conf = client.dryrunConfig(file)
+        except OpenrError as ex:
+            print("invalid config {} : {}".format(file, ex))
+            return
+
+        res = jsondiff.diff(running_conf, file_conf, load=True, syntax="explicit")
+        if res:
+            click.echo(click.style("DIFF FOUND!", fg="red"))
+            print("== diff(running_conf, {}) ==".format(file))
+            print(res)
+        else:
+            click.echo(click.style("SAME", fg="green"))
 
 
 class ConfigStoreCmdBase(OpenrCtrlCmd):

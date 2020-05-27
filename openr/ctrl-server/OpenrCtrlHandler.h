@@ -62,9 +62,16 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // Openr Node Name
   void getMyNodeName(std::string& _return) override;
 
-  // Get running config
+  //
+  // config APIs
+  //
+
   void getRunningConfig(std::string& _return) override;
+
   void getRunningConfigThrift(thrift::OpenrConfig& _config) override;
+
+  void dryrunConfig(
+      ::std::string& _return, std::unique_ptr<::std::string> file) override;
 
   //
   // ZMQ Monitor APIs

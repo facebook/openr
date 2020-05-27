@@ -293,6 +293,19 @@ OpenrCtrlHandler::getBuildInfo(thrift::BuildInfo& _buildInfo) {
   _buildInfo = getBuildInfoThrift();
 }
 
+// validate config
+void
+OpenrCtrlHandler::dryrunConfig(
+    std::string& _return, std::unique_ptr<std::string> file) {
+  try {
+    // Create policy manager using new config file
+    auto config = Config(*file);
+    _return = config.getRunningConfig();
+  } catch (const std::exception& ex) {
+    throw thrift::OpenrError(ex.what());
+  }
+}
+
 void
 OpenrCtrlHandler::getRunningConfig(std::string& _return) {
   _return = config_->getRunningConfig();
