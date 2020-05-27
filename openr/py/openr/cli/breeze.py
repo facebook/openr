@@ -26,6 +26,7 @@ from openr.cli.clis import (
     kvstore,
     lm,
     monitor,
+    openr,
     perf,
     plugin,
     prefix_mgr,
@@ -99,6 +100,7 @@ def get_breeze_cli():
     cli.add_command(perf.PerfCli().perf)
     cli.add_command(prefix_mgr.PrefixMgrCli().prefixmgr)
     cli.add_command(tech_support.TechSupportCli().tech_support)
+    cli.add_command(openr.OpenrCli().openr)
     plugin.plugin_start(cli)
     return cli
 
