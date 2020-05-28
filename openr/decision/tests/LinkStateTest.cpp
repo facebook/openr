@@ -12,6 +12,10 @@
 #include <openr/common/Util.h>
 #include <openr/decision/LinkState.h>
 
+#include <openr/decision/tests/DecisionTestUtils.h>
+
+using namespace testing;
+
 TEST(HoldableValueTest, BasicOperation) {
   openr::HoldableValue<bool> hv{true};
   EXPECT_TRUE(hv.value());
@@ -159,9 +163,6 @@ TEST(LinkStateTest, BasicOperation) {
   EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb2, 0, 0).first);
   EXPECT_TRUE(state.updateAdjacencyDatabase(adjDb3, 0, 0).first);
 
-  using testing::Pointee;
-  using testing::UnorderedElementsAre;
-
   EXPECT_THAT(
       state.linksFromNode(n1), UnorderedElementsAre(Pointee(l1), Pointee(l3)));
   EXPECT_THAT(
@@ -232,6 +233,80 @@ TEST(LinkStateTest, pathAInPathB) {
 
   EXPECT_FALSE(openr::LinkState::pathAInPathB(p1, p2));
   EXPECT_FALSE(openr::LinkState::pathAInPathB(p2, p1));
+}
+
+TEST(LinkStateTest, getKthPaths) {
+  {
+    //      10
+    //   1------2
+    //   |      |\
+    //  5|   15 | | 35
+    //   |      |/
+    //   3------4
+    //      20
+    auto linkState = openr::getLinkState({
+        {1, {{2, 10}, {3, 5}}},
+        {2, {{1, 10}, {4, 15}, {4, 35}}},
+        {3, {{1, 5}, {4, 20}}},
+        {4, {{2, 15}, {3, 20}, {2, 35}}},
+    });
+
+    auto firstPaths = linkState.getKthPaths("2", "4", 1);
+    EXPECT_EQ(firstPaths.size(), 1);
+    EXPECT_EQ(firstPaths.at(0).size(), 1);
+    EXPECT_EQ(firstPaths.at(0).at(0)->getMetricFromNode("2"), 15);
+
+    auto secondPaths = linkState.getKthPaths("2", "4", 2);
+    EXPECT_EQ(secondPaths.size(), 2);
+    EXPECT_THAT(secondPaths, UnorderedElementsAre(SizeIs(3), SizeIs(1)));
+    // both paths are dist 35
+    for (auto const& path : secondPaths) {
+      std::string nextNode = "2";
+      openr::LinkStateMetric dist = 0;
+      for (auto const& link : path) {
+        dist += link->getMetricFromNode(nextNode);
+        nextNode = link->getOtherNodeName(nextNode);
+      }
+      EXPECT_EQ(dist, 35);
+    }
+  }
+
+  {
+    // full mesh with parellel links, metric is hop count
+    //
+    //   1=========2
+    //  || \\   // ||
+    //  ||  \\ //  ||
+    //  ||   \X/   ||
+    //  ||  // \\  ||
+    //  || //   \\ ||
+    //   3=========4
+    //
+    auto linkState = openr::getLinkState({
+        {1, {2, 2, 3, 3, 4, 4}},
+        {2, {1, 1, 3, 3, 4, 4}},
+        {3, {1, 1, 2, 2, 4, 4}},
+        {4, {1, 1, 2, 2, 3, 3}},
+    });
+
+    auto firstPaths = linkState.getKthPaths("2", "4", 1);
+    EXPECT_EQ(firstPaths.size(), 2);
+    EXPECT_THAT(firstPaths, Each(SizeIs(1)));
+
+    auto secondPaths = linkState.getKthPaths("2", "4", 2);
+    EXPECT_EQ(secondPaths.size(), 4);
+    EXPECT_THAT(secondPaths, Each(SizeIs(2)));
+
+    // verify edge disjoint between all paths
+    openr::LinkState::LinkSet set;
+    auto allPaths = firstPaths;
+    allPaths.insert(allPaths.end(), secondPaths.begin(), secondPaths.end());
+    for (auto const& path : allPaths) {
+      for (auto const& link : path) {
+        EXPECT_TRUE(set.insert(link).second);
+      }
+    }
+  }
 }
 
 int

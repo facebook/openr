@@ -651,6 +651,7 @@ if(BUILD_TESTS)
   add_openr_test(LinkStateTest link_state_test
     SOURCES
       openr/decision/tests/LinkStateTest.cpp
+      openr/decision/tests/DecisionTestUtils.cpp
     DESTINATION sbin/tests/openr/decision
   )
 

@@ -58,8 +58,6 @@ const auto adj21 =
     createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 100001);
 const auto adj21_old_1 =
     createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 1000011);
-const auto adj21_old_2 =
-    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 20, 1000012);
 const auto adj23 =
     createAdjacency("3", "2/3", "3/2", "fe80::3", "192.168.0.3", 10, 100003);
 const auto adj24 =
