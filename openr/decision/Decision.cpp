@@ -43,47 +43,6 @@ using Metric = openr::LinkStateMetric;
 
 using SpfResult = openr::LinkState::SpfResult;
 
-// Path starts from neighbor node and ends at destination. It's size must be
-// atleast one. Second attribute describe the link that is followed from
-// associated node (first attribute)
-// Path is described in reverse. Last index is the next immediate node.
-using Path = std::vector<std::pair<std::string, std::shared_ptr<openr::Link>>>;
-
-namespace {
-
-// Default HWM is 1k. We set it to 0 to buffer all received messages.
-const int kStoreSubReceiveHwm{0};
-
-// check if path A is part of path B.
-// Example:
-// path A: a->b->c
-// path B: d->a->b->c->d
-// return True
-bool
-pathAInPathB(const Path& a, const Path& b) {
-  for (size_t i = 0; i < b.size(); i++) {
-    if (b[i].second == a[0].second) {
-      if (a.size() > (b.size() - i)) {
-        continue;
-      }
-      bool equal = true;
-      for (size_t j = 0; j < a.size(); j++) {
-        if (a[j].second != b[i + j].second) {
-          equal = false;
-          break;
-        }
-      }
-      if (equal) {
-        return equal;
-      }
-    }
-  }
-
-  return false;
-}
-
-} // anonymous namespace
-
 namespace openr {
 
 /**
@@ -175,17 +134,6 @@ class SpfSolver::SpfSolverImpl {
   SpfSolverImpl(SpfSolverImpl const&) = delete;
   SpfSolverImpl& operator=(SpfSolverImpl const&) = delete;
 
-  // Trace all edge disjoint paths from source to destination node.
-  // srcNodeDistances => map indicating distances of each node from source
-  // Returns list of paths.
-  // Each path is list<node, Link> starting from immediate neighbor of
-  // source-node to destination node. Path length will be atleast one
-  std::vector<Path> traceEdgeDisjointPaths(
-      const std::string& srcNodeName,
-      const std::string& dstNodeName,
-      const SpfResult& srcNodeDistances,
-      const LinkState::LinkSet& linksToIgnore = {});
-
   std::optional<thrift::UnicastRoute> createOpenRRoute(
       std::string const& myNodeName,
       thrift::IpPrefix const& prefix,
@@ -219,21 +167,11 @@ class SpfSolver::SpfSolverImpl {
   // helper to filter overloaded nodes for anycast addresses
   BestPathCalResult maybeFilterDrainedNodes(BestPathCalResult&& result) const;
 
-  // given curNode and the dst nodes, find 2spf paths from curNode to each
-  // dstNode
-  std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
-  createOpenRKsp2EdRouteForNodes(
-      std::string const& myNodeName,
-      std::unordered_set<std::string> const& nodes);
-
   // Given prefixes and the nodes who announce it, get the kspf routes.
   std::optional<thrift::UnicastRoute> selectKsp2Routes(
       const thrift::IpPrefix& prefix,
       const string& myNodeName,
       BestPathCalResult const& bestPathCalResult,
-      const std::unordered_map<
-          std::string,
-          std::vector<std::pair<Path, Metric>>>& routeToNodes,
       std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes);
 
   // Give source node-name and dstNodeNames, this function returns the set of
@@ -333,7 +271,7 @@ SpfSolver::SpfSolverImpl::getMyHopsToNode(const std::string& nodeName) {
   }
   auto const& spfResult = linkState_.getSpfResult(myNodeName_, false);
   if (spfResult.count(nodeName)) {
-    return spfResult.at(nodeName).first;
+    return spfResult.at(nodeName).metric();
   }
   return getMaxHopsToNode(nodeName);
 }
@@ -342,7 +280,7 @@ Metric
 SpfSolver::SpfSolverImpl::getMaxHopsToNode(const std::string& nodeName) {
   Metric max = 0;
   for (auto const& pathsFromNode : linkState_.getSpfResult(nodeName, false)) {
-    max = std::max(max, pathsFromNode.second.first);
+    max = std::max(max, pathsFromNode.second.metric());
   }
   return max;
 }
@@ -381,93 +319,6 @@ SpfSolver::SpfSolverImpl::getPrefixDatabases() {
   return prefixState_.getPrefixDatabases();
 }
 
-std::vector<Path>
-SpfSolver::SpfSolverImpl::traceEdgeDisjointPaths(
-    const std::string& srcNodeName,
-    const std::string& dstNodeName,
-    const SpfResult& spfResult,
-    const LinkState::LinkSet& linksToIgnore) {
-  std::vector<Path> paths;
-
-  // Return immediately if destination node is not reachable
-  if (not spfResult.count(dstNodeName)) {
-    return paths;
-  }
-
-  //
-  // Here we're tracing paths in reverse from destination node. We first pick
-  // neighbors of destination node which are on the shortest paths
-  //
-  std::unordered_set<std::pair<std::string, std::string>> visitedLinks;
-  // Starting with dummy entry for expanding paths
-  std::vector<Path> partialPaths = {{{dstNodeName, nullptr}}};
-
-  //
-  // Now recursively trace all the partial paths to the source
-  //
-  while (partialPaths.size()) {
-    auto spurPath = std::move(partialPaths.back());
-    partialPaths.pop_back();
-
-    const auto spurNode = folly::copy(spurPath.back().first);
-
-    // Clear dummy entry in the path
-    if (spurNode == dstNodeName) {
-      spurPath.clear();
-    }
-
-    // If we have encountered source-node then include this path in
-    // the return value
-    if (spurNode == srcNodeName) {
-      paths.emplace_back(std::move(spurPath));
-      continue;
-    }
-
-    // Iterate over all neighbors to expand spurPath further
-    for (auto& link : linkState_.linksFromNode(spurNode)) {
-      // Skip ignored links
-      // in some scenario, the nbrnode may not be
-      // accessible from srcNode, even though link between
-      // spur node and nbrnode is still up. For example,
-      // if spurnode is overloaded, and the only link between
-      // nbrnode and rest of graph is through spurnode.
-      // if neighbor node is over loaded skip it.
-      auto& nbrName = link->getOtherNodeName(spurNode);
-      if (!link->isUp() or linksToIgnore.count(link) or
-          spfResult.find(nbrName) == spfResult.end() or
-          linkState_.isNodeOverloaded(nbrName)) {
-        continue;
-      }
-      auto& nbrIface = link->getIfaceFromNode(nbrName);
-      auto nbrMetric = spfResult.at(nbrName).first;
-      auto spurMetric = spfResult.at(spurNode).first;
-
-      // Ignore already seen neighbor (except source-node)
-      if (visitedLinks.count({nbrName, nbrIface})) {
-        continue;
-      }
-
-      // Ignore links not on the shortest path
-      // A link is on the shortest path iff following is true
-      if (nbrMetric + link->getMetricFromNode(nbrName) != spurMetric) {
-        continue;
-      }
-
-      CHECK_EQ(nbrMetric + link->getMetricFromNode(nbrName), spurMetric);
-      spurPath.emplace_back(std::make_pair(nbrName, link));
-      partialPaths.emplace_back(std::move(spurPath));
-      visitedLinks.emplace(nbrName, nbrIface);
-
-      // Allow fan-out from dstNodeName else continue tracing only one path
-      if (spurNode != dstNodeName) {
-        break; // We have extended current path to one of the neighbor
-      }
-    }
-  }
-
-  return paths;
-}
-
 std::optional<thrift::RouteDatabase>
 SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   if (not linkState_.hasNode(myNodeName)) {
@@ -484,8 +335,6 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
   // Create unicastRoutes - IP and IP2MPLS routes
   //
   std::unordered_map<thrift::IpPrefix, BestPathCalResult> prefixToPerformKsp;
-
-  std::unordered_set<std::string> nodesForKsp;
 
   for (const auto& kv : prefixState_.prefixes()) {
     const auto& prefix = kv.first;
@@ -558,22 +407,13 @@ SpfSolver::SpfSolverImpl::buildRouteDb(const std::string& myNodeName) {
           myNodeName, prefix, nodePrefixes, isV4Prefix, hasBGP, true);
       if (nodes.success && nodes.nodes.size() != 0) {
         prefixToPerformKsp[prefix] = nodes;
-        for (const auto& node : nodes.nodes) {
-          nodesForKsp.insert(node);
-        }
       }
     }
   } // for prefixState_.prefixes()
 
-  auto routeToNodes = createOpenRKsp2EdRouteForNodes(myNodeName, nodesForKsp);
-
   for (const auto& kv : prefixToPerformKsp) {
     auto unicastRoute = selectKsp2Routes(
-        kv.first,
-        myNodeName,
-        kv.second,
-        routeToNodes,
-        prefixState_.prefixes().at(kv.first));
+        kv.first, myNodeName, kv.second, prefixState_.prefixes().at(kv.first));
     if (unicastRoute.has_value()) {
       routeDb.unicastRoutes.emplace_back(std::move(unicastRoute.value()));
     }
@@ -880,7 +720,7 @@ SpfSolver::SpfSolverImpl::findDstNodesForBgpRoute(
 
     // Associate IGP_COST to prefixEntry
     if (bgpUseIgpMetric_) {
-      const auto igpMetric = static_cast<int64_t>(it->second.first);
+      const auto igpMetric = static_cast<int64_t>(it->second.metric());
       if (not ret.bestIgpMetric.has_value() or
           *(ret.bestIgpMetric) > igpMetric) {
         ret.bestIgpMetric = igpMetric;
@@ -1036,66 +876,46 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
     const thrift::IpPrefix& prefix,
     const string& myNodeName,
     BestPathCalResult const& bestPathCalResult,
-    const std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>&
-        routeToNodes,
     std::unordered_map<std::string, thrift::PrefixEntry> const& nodePrefixes) {
   thrift::UnicastRoute route;
   route.dest = prefix;
   bool selfNodeContained{false};
 
-  std::vector<std::pair<Path, Metric>> paths;
+  std::vector<LinkState::Path> paths;
 
-  // get the shortest
-  std::vector<std::pair<Path, Metric>> shortestRoutes;
-  std::vector<std::pair<Path, Metric>> secShortestRoutes;
-
-  // find shortest and sec shortest routes.
+  // find shortest and sec shortest routes towards each node.
   for (const auto& node : bestPathCalResult.nodes) {
     // if ourself is considered as ECMP nodes.
     if (node == myNodeName) {
       selfNodeContained = true;
       continue;
     }
-    auto routesIter = routeToNodes.find(node);
-    if (routesIter == routeToNodes.end()) {
-      continue;
-    }
-    Metric min_cost = std::numeric_limits<Metric>::max();
-
-    for (const auto& path : routesIter->second) {
-      min_cost = std::min(min_cost, path.second);
-    }
-
-    for (const auto& path : routeToNodes.at(node)) {
-      if (path.second == min_cost) {
-        shortestRoutes.push_back(path);
-        continue;
-      }
-      secShortestRoutes.push_back(path);
+    for (auto const& path : linkState_.getKthPaths(myNodeName, node, 1)) {
+      paths.push_back(path);
     }
   }
 
-  paths.reserve(shortestRoutes.size() + secShortestRoutes.size());
-  paths.insert(paths.end(), shortestRoutes.begin(), shortestRoutes.end());
-
   // when get to second shortes routes, we want to make sure the shortest route
   // is not part of second shortest route to avoid double spraying issue
-  for (const auto& secPath : secShortestRoutes) {
-    bool add = true;
-    for (const auto& firPath : shortestRoutes) {
-      // this could happen for anycast VIPs.
-      // for example, in a full mesh topology contains A, B and C. B and C both
-      // annouce a prefix P. When A wants to talk to P, it's shortes paths are
-      // A->B and A->C. And it is second shortest path is A->B->C and A->C->B.
-      // In this case,  A->B->C containser A->B already, so we want to avoid
-      // this.
-      if (pathAInPathB(firPath.first, secPath.first)) {
-        add = false;
-        break;
+  size_t const firstPathsSize = paths.size();
+  for (const auto& node : bestPathCalResult.nodes) {
+    for (auto const& secPath : linkState_.getKthPaths(myNodeName, node, 2)) {
+      bool add = true;
+      for (size_t i = 0; i < firstPathsSize; ++i) {
+        // this could happen for anycast VIPs.
+        // for example, in a full mesh topology contains A, B and C. B and C
+        // both annouce a prefix P. When A wants to talk to P, it's shortes
+        // paths are A->B and A->C. And it is second shortest path is A->B->C
+        // and A->C->B. In this case,  A->B->C containser A->B already, so we
+        // want to avoid this.
+        if (LinkState::pathAInPathB(paths[i], secPath)) {
+          add = false;
+          break;
+        }
       }
-    }
-    if (add) {
-      paths.push_back(secPath);
+      if (add) {
+        paths.push_back(secPath);
+      }
     }
   }
 
@@ -1103,30 +923,33 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
     return std::nullopt;
   }
 
-  for (const auto& pathAndCost : paths) {
-    std::vector<int32_t> labels;
-    auto dstNodeLink = pathAndCost.first.at(0);
-    auto dstNodeName = dstNodeLink.second->getOtherNodeName(dstNodeLink.first);
-    if (nodePrefixes.at(dstNodeName).prependLabel_ref()) {
-      labels.emplace_back(*nodePrefixes.at(dstNodeName).prependLabel_ref());
+  for (const auto& path : paths) {
+    Metric cost = 0;
+    std::list<int32_t> labels;
+    // if self node is one of it's ecmp, it means this prefix is anycast and
+    // we need to add prepend label which is static MPLS route the destination
+    // prepared.
+    auto nextNodeName = myNodeName;
+    for (auto& link : path) {
+      cost += link->getMetricFromNode(nextNodeName);
+      nextNodeName = link->getOtherNodeName(nextNodeName);
+      labels.push_front(
+          linkState_.getAdjacencyDatabases().at(nextNodeName).nodeLabel);
     }
-
-    for (auto& nodeLink : pathAndCost.first) {
-      auto& otherNodeName = nodeLink.second->getOtherNodeName(nodeLink.first);
-      labels.emplace_back(
-          linkState_.getAdjacencyDatabases().at(otherNodeName).nodeLabel);
-    }
-    CHECK(labels.size());
     labels.pop_back(); // Remove first node's label to respect PHP
+    if (nodePrefixes.at(nextNodeName).prependLabel_ref()) {
+      // add prepend label to bottom of the stack
+      labels.push_front(*nodePrefixes.at(nextNodeName).prependLabel_ref());
+    }
 
     // Create nexthop
-    CHECK(pathAndCost.first.size());
-    auto firstLink = pathAndCost.first.back().second;
-    auto& pathCost = pathAndCost.second;
+    CHECK_GE(path.size(), 1);
+    auto const& firstLink = path.front();
     std::optional<thrift::MplsAction> mplsAction;
     if (labels.size()) {
+      std::vector<int32_t> labelVec{labels.begin(), labels.end()};
       mplsAction = createMplsAction(
-          thrift::MplsActionCode::PUSH, std::nullopt, std::move(labels));
+          thrift::MplsActionCode::PUSH, std::nullopt, std::move(labelVec));
     }
 
     auto const& prefixStr = prefix.prefixAddress.addr;
@@ -1136,7 +959,7 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
         isV4Prefix ? firstLink->getNhV4FromNode(myNodeName)
                    : firstLink->getNhV6FromNode(myNodeName),
         firstLink->getIfaceFromNode(myNodeName),
-        pathCost,
+        cost,
         mplsAction,
         true /* useNonShortestRoute */));
   }
@@ -1193,72 +1016,19 @@ SpfSolver::SpfSolverImpl::selectKsp2Routes(
   return std::move(route);
 }
 
-std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
-SpfSolver::SpfSolverImpl::createOpenRKsp2EdRouteForNodes(
-    std::string const& myNodeName,
-    std::unordered_set<std::string> const& nodes) {
-  std::unordered_map<std::string, std::vector<std::pair<Path, Metric>>>
-      pathsToNodes;
-
-  // Prepare list of possible destination nodes
-  for (const auto& node : nodes) {
-    std::set<std::string> dstNodeNames;
-    dstNodeNames.emplace(node);
-
-    // Step-1 Get all shortest paths and min-cost nodes to whom we will be
-    // forwarding
-    auto const& spf1 = linkState_.getSpfResult(myNodeName);
-    auto const& minMetricNodes1 = getMinCostNodes(spf1, dstNodeNames);
-    auto const& minCost1 = minMetricNodes1.first;
-    auto const& minCostNodes1 = minMetricNodes1.second;
-
-    // Step-2 Prepare set of links to ignore from subsequent SPF for finding
-    //        second shortest paths. Collect all shortest paths
-    LinkState::LinkSet linksToIgnore;
-    for (auto const& minCostDst : minCostNodes1) {
-      auto minPaths = traceEdgeDisjointPaths(myNodeName, minCostDst, spf1);
-      for (auto& minPath : minPaths) {
-        for (auto& nodeLink : minPath) {
-          linksToIgnore.insert(nodeLink.second);
-        }
-        pathsToNodes[node].push_back(
-            std::make_pair(std::move(minPath), minCost1));
-      }
-    }
-
-    // Step-3 Collect all second shortest paths
-    if (linksToIgnore.size()) {
-      auto const& spf2 =
-          linkState_.getSpfResult(myNodeName, true, linksToIgnore);
-      auto const& minMetricNodes2 = getMinCostNodes(spf2, dstNodeNames);
-      auto const& minCost2 = minMetricNodes2.first;
-      auto const& minCostNodes2 = minMetricNodes2.second;
-      for (auto const& minCostDst : minCostNodes2) {
-        auto minPaths =
-            traceEdgeDisjointPaths(myNodeName, minCostDst, spf2, linksToIgnore);
-        for (auto& minPath : minPaths) {
-          pathsToNodes[node].push_back(
-              std::make_pair(std::move(minPath), minCost2));
-        }
-      }
-    }
-  }
-  return pathsToNodes;
-}
-
 std::pair<Metric, std::unordered_set<std::string>>
 SpfSolver::SpfSolverImpl::getMinCostNodes(
     const SpfResult& spfResult, const std::set<std::string>& dstNodeNames) {
   Metric shortestMetric = std::numeric_limits<Metric>::max();
 
-  // find the set of the closest nodes in our destination
+  // find the set of the closest nodes to our destination
   std::unordered_set<std::string> minCostNodes;
   for (const auto& dstNode : dstNodeNames) {
     auto it = spfResult.find(dstNode);
     if (it == spfResult.end()) {
       continue;
     }
-    const auto nodeDistance = it->second.first;
+    const auto nodeDistance = it->second.metric();
     if (shortestMetric >= nodeDistance) {
       if (shortestMetric > nodeDistance) {
         shortestMetric = nodeDistance;
@@ -1301,7 +1071,7 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
   // Add neighbors with shortest path to the prefix
   for (const auto& dstNode : minCostNodes) {
     const auto dstNodeRef = perDestination ? dstNode : "";
-    for (const auto& nhName : shortestPathsFromHere.at(dstNode).second) {
+    for (const auto& nhName : shortestPathsFromHere.at(dstNode).nextHops()) {
       nextHopNodes[std::make_pair(nhName, dstNodeRef)] =
           shortestMetric - findMinDistToNeighbor(myNodeName, nhName);
     }
@@ -1318,13 +1088,13 @@ SpfSolver::SpfSolverImpl::getNextHopsWithMetric(
           linkState_.getSpfResult(neighborName);
 
       const auto neighborToHere =
-          shortestPathsFromNeighbor.at(myNodeName).first;
+          shortestPathsFromNeighbor.at(myNodeName).metric();
       for (const auto& dstNode : dstNodeNames) {
         auto shortestPathItr = shortestPathsFromNeighbor.find(dstNode);
         if (shortestPathItr == shortestPathsFromNeighbor.end()) {
           continue;
         }
-        const auto distanceFromNeighbor = shortestPathItr->second.first;
+        const auto distanceFromNeighbor = shortestPathItr->second.metric();
 
         // This is the LFA condition per RFC 5286
         if (distanceFromNeighbor < shortestMetric + neighborToHere) {

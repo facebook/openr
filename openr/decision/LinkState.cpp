@@ -55,6 +55,14 @@ template <class T>
 HoldableValue<T>::HoldableValue(T val) : val_(val) {}
 
 template <class T>
+void
+HoldableValue<T>::operator=(T val) {
+  val_ = val;
+  heldVal_.reset();
+  holdTtl_ = 0;
+}
+
+template <class T>
 const T&
 HoldableValue<T>::value() const {
   return heldVal_.has_value() ? heldVal_.value() : val_;
@@ -118,28 +126,36 @@ template class HoldableValue<bool>;
 
 Link::Link(
     const std::string& nodeName1,
-    const openr::thrift::Adjacency& adj1,
+    const std::string& if1,
     const std::string& nodeName2,
-    const openr::thrift::Adjacency& adj2)
+    const std::string& if2)
     : n1_(nodeName1),
       n2_(nodeName2),
-      if1_(adj1.ifName),
-      if2_(adj2.ifName),
-      metric1_(adj1.metric),
-      metric2_(adj2.metric),
-      overload1_(adj1.isOverloaded),
-      overload2_(adj2.isOverloaded),
-      adjLabel1_(adj1.adjLabel),
-      adjLabel2_(adj2.adjLabel),
-      nhV41_(adj1.nextHopV4),
-      nhV42_(adj2.nextHopV4),
-      nhV61_(adj1.nextHopV6),
-      nhV62_(adj2.nextHopV6),
-      orderedNames(
+      if1_(if1),
+      if2_(if2),
+      orderedNames_(
           std::minmax(std::make_pair(n1_, if1_), std::make_pair(n2_, if2_))),
       hash(std::hash<std::pair<
                std::pair<std::string, std::string>,
-               std::pair<std::string, std::string>>>()(orderedNames)) {}
+               std::pair<std::string, std::string>>>()(orderedNames_)) {}
+
+Link::Link(
+    const std::string& nodeName1,
+    const openr::thrift::Adjacency& adj1,
+    const std::string& nodeName2,
+    const openr::thrift::Adjacency& adj2)
+    : Link(nodeName1, adj1.ifName, nodeName2, adj2.ifName) {
+  metric1_ = adj1.metric;
+  metric2_ = adj2.metric;
+  overload1_ = adj1.isOverloaded;
+  overload2_ = adj2.isOverloaded;
+  adjLabel1_ = adj1.adjLabel;
+  adjLabel2_ = adj2.adjLabel;
+  nhV41_ = adj1.nextHopV4;
+  nhV42_ = adj2.nextHopV4;
+  nhV61_ = adj1.nextHopV6;
+  nhV62_ = adj2.nextHopV6;
+}
 
 const std::string&
 Link::getOtherNodeName(const std::string& nodeName) const {
@@ -154,12 +170,12 @@ Link::getOtherNodeName(const std::string& nodeName) const {
 
 const std::string&
 Link::firstNodeName() const {
-  return orderedNames.first.first;
+  return orderedNames_.first.first;
 }
 
 const std::string&
 Link::secondNodeName() const {
-  return orderedNames.second.first;
+  return orderedNames_.second.first;
 }
 
 const std::string&
@@ -330,7 +346,7 @@ Link::operator<(const Link& other) const {
   if (this->hash != other.hash) {
     return this->hash < other.hash;
   }
-  return this->orderedNames < other.orderedNames;
+  return this->orderedNames_ < other.orderedNames_;
 }
 
 bool
@@ -338,7 +354,7 @@ Link::operator==(const Link& other) const {
   if (this->hash != other.hash) {
     return false;
   }
-  return this->orderedNames == other.orderedNames;
+  return this->orderedNames_ == other.orderedNames_;
 }
 
 std::string
@@ -371,6 +387,28 @@ bool
 LinkState::LinkPtrEqual::operator()(
     const std::shared_ptr<Link>& lhs, const std::shared_ptr<Link>& rhs) const {
   return *lhs == *rhs;
+}
+
+std::optional<LinkState::Path>
+LinkState::traceOnePath(
+    std::string const& src,
+    std::string const& dest,
+    SpfResult const& result,
+    LinkSet const& linksToIgnore) {
+  if (src == dest) {
+    return LinkState::Path{};
+  }
+  auto const& nodeResult = result.at(dest);
+  for (auto const& pathLink : nodeResult.pathLinks()) {
+    if (!linksToIgnore.count(pathLink.link)) {
+      auto path = traceOnePath(src, pathLink.prevNode, result, linksToIgnore);
+      if (path) {
+        path->push_back(pathLink.link);
+        return path;
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 void
@@ -463,6 +501,7 @@ LinkState::decrementHolds() {
   }
   if (holdChange) {
     spfResults_.clear();
+    kthPathResults_.clear();
   }
   return holdChange;
 }
@@ -664,6 +703,7 @@ LinkState::updateAdjacencyDatabase(
   }
   if (topoChanged) {
     spfResults_.clear();
+    kthPathResults_.clear();
   }
   return std::make_pair(topoChanged, routeAttrChanged);
 }
@@ -681,19 +721,50 @@ LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
   removeNode(nodeName);
   adjacencyDatabases_.erase(search);
   spfResults_.clear();
+  kthPathResults_.clear();
   return true;
 }
 
+std::vector<LinkState::Path> const&
+LinkState::getKthPaths(
+    const std::string& src, const std::string& dest, size_t k) {
+  CHECK_GE(k, 1);
+  std::tuple<std::string, std::string, size_t> key(src, dest, k);
+  auto entryIter = kthPathResults_.find(key);
+  if (kthPathResults_.end() == entryIter) {
+    LinkSet linksToIgnore;
+    for (size_t i = 1; i < k; ++i) {
+      for (auto const& path : getKthPaths(src, dest, i)) {
+        for (auto const& link : path) {
+          linksToIgnore.insert(link);
+        }
+      }
+    }
+    std::vector<LinkState::Path> paths;
+    auto const& res = linksToIgnore.empty() ? getSpfResult(src, true)
+                                            : runSpf(src, true, linksToIgnore);
+    if (res.count(dest)) {
+      LinkSet visitedLinks;
+      auto path = traceOnePath(src, dest, res, visitedLinks);
+      while (path && !path->empty()) {
+        for (auto const& link : *path) {
+          visitedLinks.insert(link);
+        }
+        paths.push_back(std::move(*path));
+        path = traceOnePath(src, dest, res, visitedLinks);
+      }
+    }
+    entryIter = kthPathResults_.emplace(key, std::move(paths)).first;
+  }
+  return entryIter->second;
+}
+
 LinkState::SpfResult const&
-LinkState::getSpfResult(
-    const std::string& thisNodeName,
-    bool useLinkMetric,
-    const LinkSet& linksToIgnore) {
-  std::tuple<std::string, bool, LinkSet> key{
-      thisNodeName, useLinkMetric, linksToIgnore};
+LinkState::getSpfResult(const std::string& thisNodeName, bool useLinkMetric) {
+  std::pair<std::string, bool> key{thisNodeName, useLinkMetric};
   auto entryIter = spfResults_.find(key);
   if (spfResults_.end() == entryIter) {
-    auto res = runSpf(thisNodeName, useLinkMetric, std::get<2>(key));
+    auto res = runSpf(thisNodeName, useLinkMetric);
     entryIter = spfResults_.emplace(std::move(key), std::move(res)).first;
   }
   return entryIter->second;
@@ -715,18 +786,15 @@ LinkState::runSpf(
   DijkstraQ q;
   q.insertNode(thisNodeName, 0);
   uint64_t loop = 0;
-  for (auto node = q.extractMin(); node; node = q.extractMin()) {
+  while (auto node = q.extractMin()) {
     ++loop;
     // we've found this node's shortest paths. record it
-    auto emplaceRc = result.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(node->nodeName),
-        std::forward_as_tuple(node->distance, std::move(node->nextHops)));
+    auto emplaceRc = result.emplace(node->nodeName, std::move(node->result));
     CHECK(emplaceRc.second);
 
-    auto& recordedNodeName = emplaceRc.first->first;
-    auto& recordedNodeMetric = emplaceRc.first->second.first;
-    auto& recordedNodeNextHops = emplaceRc.first->second.second;
+    auto const& recordedNodeName = emplaceRc.first->first;
+    auto const recordedNodeMetric = emplaceRc.first->second.metric();
+    auto const& recordedNodeNextHops = emplaceRc.first->second.nextHops();
 
     if (isNodeOverloaded(recordedNodeName) &&
         recordedNodeName != thisNodeName) {
@@ -754,22 +822,22 @@ LinkState::runSpf(
         q.insertNode(otherNodeName, recordedNodeMetric + metric);
         otherNode = q.get(otherNodeName);
       }
-      if (otherNode->distance >= recordedNodeMetric + metric) {
+      if (otherNode->result.metric() >= recordedNodeMetric + metric) {
         // recordedNodeName is either along an alternate shortest path towards
         // otherNodeName or is along a new shorter path. In either case,
         // otherNodeName should use recordedNodeName's nextHops until it finds
         // some shorter path
-        if (otherNode->distance > recordedNodeMetric + metric) {
-          // if this is strictly better, forget about any other nexthops
-          otherNode->nextHops.clear();
-          q.decreaseKey(otherNode->nodeName, recordedNodeMetric + metric);
+        if (otherNode->result.metric() > recordedNodeMetric + metric) {
+          // if this is strictly better, forget about any other paths
+          otherNode->result.reset(recordedNodeMetric + metric);
+          q.reMake();
         }
-        otherNode->nextHops.insert(
-            recordedNodeNextHops.begin(), recordedNodeNextHops.end());
-      }
-      if (otherNode->nextHops.empty()) {
-        // this node is directly connected to the source
-        otherNode->nextHops.emplace(otherNode->nodeName);
+        otherNode->result.addPath(link, recordedNodeName);
+        otherNode->result.addNextHops(recordedNodeNextHops);
+        if (otherNode->result.nextHops().empty()) {
+          // directly connected node
+          otherNode->result.addNextHop(otherNodeName);
+        }
       }
     }
   }

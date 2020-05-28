@@ -38,6 +38,8 @@ class HoldableValue {
  public:
   explicit HoldableValue(T val);
 
+  void operator=(T val);
+
   const T& value() const;
 
   bool hasHold() const;
@@ -81,6 +83,12 @@ class Link {
  public:
   Link(
       const std::string& nodeName1,
+      const std::string& if1,
+      const std::string& nodeName2,
+      const std::string& if2);
+
+  Link(
+      const std::string& nodeName1,
       const openr::thrift::Adjacency& adj1,
       const std::string& nodeName2,
       const openr::thrift::Adjacency& adj2);
@@ -96,7 +104,7 @@ class Link {
   const std::pair<
       std::pair<std::string, std::string>,
       std::pair<std::string, std::string>>
-      orderedNames;
+      orderedNames_;
 
  public:
   const size_t hash{0};
@@ -179,20 +187,103 @@ class LinkState {
   using LinkSet =
       std::unordered_set<std::shared_ptr<Link>, LinkPtrHash, LinkPtrEqual>;
 
-  using SpfResult = std::unordered_map<
-      std::string /* otherNodeName */,
-      std::pair<
-          LinkStateMetric,
-          std::unordered_set<std::string /* nextHopNodeName */>>>;
+  // Class holding a network node's SPF result. and useful apis to get and set
+  //   - nexthops toward the node
+  //   - ultimate link and previous nodes on shortest paths towards node
+  class NodeSpfResult {
+   public:
+    // Represents a link in a path towards a node. For an SPF result, we can use
+    // these to trace paths back to the source from any connected node
+    class PathLink {
+     public:
+      PathLink(std::shared_ptr<Link> const& l, std::string const& n)
+          : link(l), prevNode(n) {}
+      std::shared_ptr<Link> const link;
+      std::string const prevNode;
+    };
+
+    explicit NodeSpfResult(LinkStateMetric m) : metric_(m) {}
+
+    void
+    reset(LinkStateMetric newMetric) {
+      metric_ = newMetric;
+      pathLinks_.clear();
+      nextHops_.clear();
+    }
+
+    std::vector<PathLink> const&
+    pathLinks() const {
+      return pathLinks_;
+    }
+    std::unordered_set<std::string> const&
+    nextHops() const {
+      return nextHops_;
+    }
+
+    LinkStateMetric
+    metric() const {
+      return metric_;
+    }
+
+    void
+    addPath(std::shared_ptr<Link> const& link, std::string const& prevNode) {
+      pathLinks_.emplace_back(link, prevNode);
+    }
+
+    void
+    addNextHops(std::unordered_set<std::string> const& toInsert) {
+      nextHops_.insert(toInsert.begin(), toInsert.end());
+    }
+
+    void
+    addNextHop(std::string const& toInsert) {
+      nextHops_.insert(toInsert);
+    }
+
+   private:
+    LinkStateMetric metric_{std::numeric_limits<LinkStateMetric>::max()};
+    std::vector<PathLink> pathLinks_;
+    std::unordered_set<std::string> nextHops_;
+  };
+
+  using SpfResult =
+      std::unordered_map<std::string /* otherNodeName */, NodeSpfResult>;
+
+  using Path = std::vector<std::shared_ptr<Link>>;
 
   // non-const public methods
-  // IMPT: clear spfResults_ as appropirate in these functions
+  // IMPT: clear memoization structures as appropirate in these functions
 
   SpfResult const& getSpfResult(
-      const std::string& nodeName,
-      bool useLinkMetric = true,
-      LinkSet const& linksToIgnore = {});
+      const std::string& nodeName, bool useLinkMetric = true);
 
+ private:
+  // memoization structure for getSpfResult()
+  std::unordered_map<
+      std::pair<std::string /* nodeName */, bool /* useLinkMetric */>,
+      SpfResult>
+      spfResults_;
+
+ public:
+  // Trace edge-disjoint paths from dest to src.
+  // I.e., no two paths returned from this function can share any links
+  //
+  // Assertion: k >= 1
+  // For k = 1, the above algorithm is perfomered considering all links in the
+  // network.
+  // For k > 1, the algorithm is performed considering all links except links on
+  // paths in the set {p in getKthPaths(src, dest, i) | 1 <= i < k}.
+  std::vector<LinkState::Path> const& getKthPaths(
+      const std::string& src, const std::string& dest, size_t k);
+
+ private:
+  // memoization structure for getKthPaths()
+  std::unordered_map<
+      std::tuple<std::string /* src */, std::string /* dest */, size_t /* k */>,
+      std::vector<LinkState::Path>>
+      kthPathResults_;
+
+ public:
   bool decrementHolds();
 
   // update adjacencies for the given router
@@ -239,8 +330,39 @@ class LinkState {
     return adjacencyDatabases_;
   }
 
+  // check if path A is part of path B.
+  // Example:
+  // path A: a->b->c
+  // path B: d->a->b->c->d
+  // return True
+  static bool
+  pathAInPathB(Path const& a, Path const& b) {
+    if (a.size() <= b.size()) {
+      for (size_t i = 0; i < (b.size() - a.size()) + 1; ++i) {
+        size_t a_i = 0, b_i = i;
+        while (a_i < a.size() && *a.at(a_i) == *b.at(b_i)) {
+          ++a_i;
+          ++b_i;
+        }
+        if (a.size() == a_i) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
  private:
   // helpers to update the link state graph
+
+  // find one path from dest to src for a given SpfResult
+  // ingnore links already in linksToIgnore
+  std::optional<Path> traceOnePath(
+      std::string const& src,
+      std::string const& dest,
+      SpfResult const& result,
+      LinkSet const& linksToIgnore);
+
   void addLink(std::shared_ptr<Link> link);
 
   void removeLink(std::shared_ptr<Link> link);
@@ -261,10 +383,6 @@ class LinkState {
                              otherwise it will consider the graph unweighted */
       const LinkSet& linksToIgnore =
           {} /* optionaly specify a set of links to not use when running */);
-
-  // memoization structure for spf runs
-  std::unordered_map<std::tuple<std::string, bool, LinkSet>, SpfResult>
-      spfResults_;
 
   // returns Link object if the reverse adjancency is present in
   // adjacencyDatabases_.at(adj.otherNodeName), else returns nullptr
@@ -298,11 +416,10 @@ class LinkState {
 // nexthops.
 class DijkstraQNode {
  public:
-  DijkstraQNode(const std::string& n, LinkStateMetric d)
-      : nodeName(n), distance(d) {}
+  DijkstraQNode(const std::string& n, LinkStateMetric m)
+      : nodeName(n), result(m) {}
   const std::string nodeName;
-  LinkStateMetric distance{0};
-  std::unordered_set<std::string> nextHops;
+  LinkState::NodeSpfResult result;
 };
 
 class DijkstraQ {
@@ -315,8 +432,8 @@ class DijkstraQ {
     operator()(
         std::shared_ptr<DijkstraQNode> a,
         std::shared_ptr<DijkstraQNode> b) const {
-      if (a->distance != b->distance) {
-        return a->distance > b->distance;
+      if (a->result.metric() != b->result.metric()) {
+        return a->result.metric() > b->result.metric();
       }
       return a->nodeName > b->nodeName;
     }
@@ -351,19 +468,11 @@ class DijkstraQ {
   }
 
   void
-  decreaseKey(const std::string& nodeName, LinkStateMetric d) {
-    if (nameToNode_.count(nodeName)) {
-      if (nameToNode_.at(nodeName)->distance < d) {
-        throw std::invalid_argument(std::to_string(d));
-      }
-      nameToNode_.at(nodeName)->distance = d;
-      // this is a bit slow but is rarely called in our application. In fact,
-      // in networks where the metric is hop count, this will never be called
-      // and the Dijkstra run is no different than BFS
-      std::make_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
-    } else {
-      throw std::invalid_argument(nodeName);
-    }
+  reMake() {
+    // this is a bit slow but is rarely called in our application. In fact,
+    // in networks where the metric is hop count, this will never be called
+    // and the Dijkstra run is no different than BFS
+    std::make_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
   }
 };
 } // namespace openr

@@ -192,6 +192,48 @@ TEST(LinkStateTest, BasicOperation) {
   EXPECT_THAT(state.linksFromNode(n3), UnorderedElementsAre(Pointee(l2)));
 }
 
+TEST(LinkStateTest, pathAInPathB) {
+  auto l1 = std::make_shared<openr::Link>("1", "1/2", "2", "2/1");
+  auto l2 = std::make_shared<openr::Link>("2", "2/3", "3", "3/2");
+  auto l3 = std::make_shared<openr::Link>("1", "1/3", "3", "3/1");
+  openr::LinkState::Path p1, p2;
+
+  EXPECT_TRUE(openr::LinkState::pathAInPathB(p1, p2));
+  EXPECT_TRUE(openr::LinkState::pathAInPathB(p2, p1));
+
+  p1.push_back(l1);
+
+  EXPECT_FALSE(openr::LinkState::pathAInPathB(p1, p2));
+  EXPECT_TRUE(openr::LinkState::pathAInPathB(p2, p1));
+
+  p2.push_back(l1);
+
+  EXPECT_TRUE(openr::LinkState::pathAInPathB(p1, p2));
+  EXPECT_TRUE(openr::LinkState::pathAInPathB(p2, p1));
+
+  p1.push_back(l2);
+
+  EXPECT_FALSE(openr::LinkState::pathAInPathB(p1, p2));
+  EXPECT_TRUE(openr::LinkState::pathAInPathB(p2, p1));
+
+  p1.push_back(l3);
+  p2.push_back(l2);
+
+  EXPECT_FALSE(openr::LinkState::pathAInPathB(p1, p2));
+  EXPECT_TRUE(openr::LinkState::pathAInPathB(p2, p1));
+
+  p1.clear();
+  p2.clear();
+
+  p1.push_back(l3);
+  p1.push_back(l2);
+
+  p2.push_back(l1);
+
+  EXPECT_FALSE(openr::LinkState::pathAInPathB(p1, p2));
+  EXPECT_FALSE(openr::LinkState::pathAInPathB(p2, p1));
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
