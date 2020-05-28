@@ -383,8 +383,8 @@ Fib::processInterfaceDb(thrift::InterfaceDatabase&& interfaceDb) {
     std::vector<thrift::NextHopThrift> validNextHops;
     for (auto const& nextHop : route.nextHops) {
       const auto ifName = nextHop.address.ifName_ref();
-      CHECK(ifName.has_value());
-      if (folly::get_default(interfaceStatusDb_, *ifName, false)) {
+      if (not ifName.has_value() ||
+          (folly::get_default(interfaceStatusDb_, *ifName, false))) {
         validNextHops.emplace_back(nextHop);
       }
     } // end for ... kv.second

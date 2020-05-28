@@ -562,6 +562,75 @@ TEST_F(FibTestFixture, processInterfaceDb) {
   EXPECT_EQ(mplsRoutes.size(), 2);
 }
 
+// verify when iterface goes down, the nexthop of unicast route with
+// no interface name specified won't get dropped.
+TEST_F(FibTestFixture, processInterfaceDbWithNoIfnameNexthop) {
+  // Make sure fib starts with clean route database
+  std::vector<thrift::UnicastRoute> routes;
+  std::vector<thrift::MplsRoute> mplsRoutes;
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 0);
+  mockFibHandler->getMplsRouteTableByClient(mplsRoutes, kFibId);
+  EXPECT_EQ(mplsRoutes.size(), 0);
+
+  // initial syncFib debounce
+  mockFibHandler->waitForSyncFib();
+  mockFibHandler->waitForSyncMplsFib();
+
+  // Mimic interface initially coming up
+  thrift::InterfaceDatabase intfDb(
+      FRAGILE,
+      "node-1",
+      {
+          {
+              path1_2_1.address.ifName_ref().value(),
+              createThriftInterfaceInfo(true, 121, {}),
+          },
+      },
+      thrift::PerfEvents());
+  intfDb.perfEvents_ref().reset();
+  LOG(INFO) << "Pushing interface update";
+  interfaceUpdatesQueue.push(intfDb);
+
+  // Mimic decision pub sock publishing RouteDatabaseDelta
+  thrift::RouteDatabaseDelta routeDbDelta;
+  routeDbDelta.thisNodeName = "node-1";
+  auto path1_2_1_no_if_name = path1_2_1;
+  path1_2_1_no_if_name.address.ifName_ref().reset();
+  routeDbDelta.unicastRoutesToUpdate = {
+      createUnicastRoute(prefix2, {path1_2_1_no_if_name}),
+      createUnicastRoute(prefix1, {path1_2_1})};
+  routeUpdatesQueue.push(routeDbDelta);
+  mockFibHandler->waitForUpdateUnicastRoutes();
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  LOG(INFO) << toString(routes[0]);
+  LOG(INFO) << toString(routes[1]);
+  EXPECT_EQ(routes.size(), 2);
+  // Mimic interface going down
+  thrift::InterfaceDatabase intfChange_1(
+      FRAGILE,
+      "node-1",
+      {
+          {
+              path1_2_1.address.ifName_ref().value(),
+              createThriftInterfaceInfo(false, 121, {}),
+          },
+      },
+      thrift::PerfEvents());
+  intfChange_1.perfEvents_ref().reset();
+  LOG(INFO) << "Pushing interface update";
+  interfaceUpdatesQueue.push(intfChange_1);
+
+  mockFibHandler->waitForDeleteUnicastRoutes();
+  EXPECT_EQ(mockFibHandler->getAddRoutesCount(), 2);
+  EXPECT_EQ(mockFibHandler->getDelRoutesCount(), 1);
+  mockFibHandler->getRouteTableByClient(routes, kFibId);
+  EXPECT_EQ(routes.size(), 1);
+  // verify that the nexthop without interface name is still there
+  EXPECT_EQ(routes[0].nextHops.size(), 1);
+}
+
 TEST_F(FibTestFixture, basicAddAndDelete) {
   // Make sure fib starts with clean route database
   std::vector<thrift::UnicastRoute> routes;

@@ -75,11 +75,12 @@ MockNetlinkFibHandler::addUnicastRoutes(
       auto prefix = std::make_pair(
           toIPAddress(route.dest.prefixAddress), route.dest.prefixLength);
 
-      auto newNextHops =
-          from(route.nextHops) | mapped([](const thrift::NextHopThrift& nh) {
-            return std::make_pair(
-                nh.address.ifName_ref().value(), toIPAddress(nh.address));
-          }) |
+      auto newNextHops = from(route.nextHops) |
+          mapped([](const thrift::NextHopThrift& nh) {
+                           return std::make_pair(
+                               nh.address.ifName_ref().value_or("none"),
+                               toIPAddress(nh.address));
+                         }) |
           as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
       unicastRouteDb_.emplace(prefix, newNextHops);
@@ -115,11 +116,12 @@ MockNetlinkFibHandler::syncFib(
       auto prefix = std::make_pair(
           toIPAddress(route.dest.prefixAddress), route.dest.prefixLength);
 
-      auto newNextHops =
-          from(route.nextHops) | mapped([](const thrift::NextHopThrift& nh) {
-            return std::make_pair(
-                nh.address.ifName_ref().value(), toIPAddress(nh.address));
-          }) |
+      auto newNextHops = from(route.nextHops) |
+          mapped([](const thrift::NextHopThrift& nh) {
+                           return std::make_pair(
+                               nh.address.ifName_ref().value_or("none"),
+                               toIPAddress(nh.address));
+                         }) |
           as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
 
       unicastRouteDb_.emplace(prefix, newNextHops);
