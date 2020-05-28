@@ -289,6 +289,7 @@ class Spark final : public OpenrEventBase {
       res.transportAddressV4 = transportAddressV4;
       res.transportAddressV6 = transportAddressV6;
       res.kvStoreCmdPort = kvStoreCmdPort;
+      res.openrCtrlThriftPort = openrCtrlThriftPort;
       res.ifName = remoteIfName;
       return res;
     }

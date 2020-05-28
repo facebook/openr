@@ -57,32 +57,50 @@ namespace {
 
 re2::RE2::Options regexOpts;
 
-const auto peerSpec_2_1 =
-    createPeerSpec("tcp://[fe80::2%iface_2_1]:10002", false);
+const auto nb2_v4_addr = "192.168.0.2";
+const auto nb3_v4_addr = "192.168.0.3";
+const auto nb2_v6_addr = "fe80::2";
+const auto nb3_v6_addr = "fe80::3";
+const auto if_2_1 = "iface_2_1";
+const auto if_2_2 = "iface_2_2";
+const auto if_3_1 = "iface_3_1";
 
-const auto peerSpec_2_2 =
-    createPeerSpec("tcp://[fe80::2%iface_2_2]:10002", false);
+const auto kvStoreCmdPort = 10002;
 
-const auto peerSpec_3_1 =
-    createPeerSpec("tcp://[fe80::3%iface_3_1]:10002", false);
+const auto peerSpec_2_1 = createPeerSpec(
+    folly::sformat("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_1, kvStoreCmdPort),
+    folly::sformat("{}%{}", nb2_v6_addr, if_2_1),
+    1);
+
+const auto peerSpec_2_2 = createPeerSpec(
+    folly::sformat("tcp://[{}%{}]:{}", nb2_v6_addr, if_2_2, kvStoreCmdPort),
+    folly::sformat("{}%{}", nb2_v6_addr, if_2_2),
+    1);
+
+const auto peerSpec_3_1 = createPeerSpec(
+    folly::sformat("tcp://[{}%{}]:{}", nb3_v6_addr, if_3_1, kvStoreCmdPort),
+    folly::sformat("{}%{}", nb3_v6_addr, if_3_1),
+    2);
 
 const auto nb2 = createSparkNeighbor(
     "domain",
     "node-2",
-    0, /* hold time */
-    toBinaryAddress(folly::IPAddress("192.168.0.2")),
-    toBinaryAddress(folly::IPAddress("fe80::2")),
-    10002,
-    "" /* ifName */);
+    0, // hold time
+    toBinaryAddress(folly::IPAddress(nb2_v4_addr)),
+    toBinaryAddress(folly::IPAddress(nb2_v6_addr)),
+    kvStoreCmdPort,
+    1, // openrCtrlThriftPort
+    "");
 
 const auto nb3 = createSparkNeighbor(
     "domain",
     "node-3",
-    0, /* hold time */
-    toBinaryAddress(folly::IPAddress("192.168.0.3")),
-    toBinaryAddress(folly::IPAddress("fe80::3")),
-    10002,
-    "" /* ifName */);
+    0, // hold time
+    toBinaryAddress(folly::IPAddress(nb3_v4_addr)),
+    toBinaryAddress(folly::IPAddress(nb3_v6_addr)),
+    kvStoreCmdPort,
+    2, // openrCtrlThriftPort
+    "");
 
 const uint64_t kTimestamp{1000000};
 const uint64_t kNodeLabel{0};
@@ -90,9 +108,9 @@ const std::string kConfigKey = "link-monitor-config";
 
 const auto adj_2_1 = createThriftAdjacency(
     "node-2",
-    "iface_2_1",
-    "fe80::2",
-    "192.168.0.2",
+    if_2_1,
+    nb2_v6_addr,
+    nb2_v4_addr,
     1 /* metric */,
     1 /* label */,
     false /* overload-bit */,
@@ -103,9 +121,9 @@ const auto adj_2_1 = createThriftAdjacency(
 
 const auto adj_2_2 = createThriftAdjacency(
     "node-2",
-    "iface_2_2",
-    "fe80::2",
-    "192.168.0.2",
+    if_2_2,
+    nb2_v6_addr,
+    nb2_v4_addr,
     1 /* metric */,
     2 /* label */,
     false /* overload-bit */,
@@ -116,9 +134,9 @@ const auto adj_2_2 = createThriftAdjacency(
 
 const auto adj_3_1 = createThriftAdjacency(
     "node-3",
-    "iface_3_1",
-    "fe80::3",
-    "192.168.0.3",
+    if_3_1,
+    nb3_v6_addr,
+    nb3_v4_addr,
     1 /* metric */,
     1 /* label */,
     false /* overload-bit */,
@@ -495,6 +513,8 @@ class LinkMonitorTestFixture : public ::testing::Test {
       return;
     }
     EXPECT_EQ(peers.at(nodeName).cmdUrl, peerSpec.cmdUrl);
+    EXPECT_EQ(peers.at(nodeName).peerAddr, peerSpec.peerAddr);
+    EXPECT_EQ(peers.at(nodeName).ctrlPort, peerSpec.ctrlPort);
   }
 
   std::unordered_set<thrift::IpPrefix>
@@ -1821,10 +1841,10 @@ TEST(LinkMonitor, getPeersFromAdjacencies) {
   std::unordered_map<AdjacencyKey, AdjacencyValue> adjacencies;
   std::unordered_map<std::string, thrift::PeerSpec> peers;
 
-  const auto peerSpec0 = createPeerSpec("tcp://[fe80::2%iface0]:10002", false);
-  const auto peerSpec1 = createPeerSpec("tcp://[fe80::2%iface1]:10002", false);
-  const auto peerSpec2 = createPeerSpec("tcp://[fe80::2%iface2]:10002", false);
-  const auto peerSpec3 = createPeerSpec("tcp://[fe80::2%iface3]:10002", false);
+  const auto peerSpec0 = createPeerSpec("tcp://[fe80::2%iface0]:10002");
+  const auto peerSpec1 = createPeerSpec("tcp://[fe80::2%iface1]:10002");
+  const auto peerSpec2 = createPeerSpec("tcp://[fe80::2%iface2]:10002");
+  const auto peerSpec3 = createPeerSpec("tcp://[fe80::2%iface3]:10002");
 
   // Get peer spec
   adjacencies[{"node1", "iface1"}] = {peerSpec1, thrift::Adjacency()};

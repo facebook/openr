@@ -391,7 +391,10 @@ castToStd(folly::Optional<T>&& t) {
 }
 
 thrift::PeerSpec createPeerSpec(
-    const std::string& cmdUrl, bool supportFloodOptimization);
+    const std::string& cmdUrl,
+    const std::string& thriftPeerAddr = "",
+    const int32_t port = 0,
+    bool supportFloodOptimization = false);
 
 thrift::SparkNeighbor createSparkNeighbor(
     const std::string& domainName,
@@ -400,6 +403,7 @@ thrift::SparkNeighbor createSparkNeighbor(
     const thrift::BinaryAddress& v4Addr,
     const thrift::BinaryAddress& v6Addr,
     int64_t kvStoreCmdPort,
+    int64_t openrCtrlThriftPort,
     const std::string& ifName);
 
 thrift::SparkPayload createSparkPayload(

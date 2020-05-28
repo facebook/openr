@@ -14,13 +14,9 @@
 namespace openr {
 
 // KvStore URLs
-BOOST_STRONG_TYPEDEF(std::string, KvStoreLocalPubUrl);
-BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalPubUrl);
-BOOST_STRONG_TYPEDEF(std::string, KvStoreLocalCmdUrl);
 BOOST_STRONG_TYPEDEF(std::string, KvStoreGlobalCmdUrl);
 
 // KvStore TCP ports
-BOOST_STRONG_TYPEDEF(uint16_t, KvStorePubPort);
 BOOST_STRONG_TYPEDEF(uint16_t, KvStoreCmdPort);
 
 // OpenrCtrl Thrift port
@@ -34,9 +30,6 @@ BOOST_STRONG_TYPEDEF(std::string, MonitorPubUrl);
 BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, PrefixDbMarker);
 BOOST_STRONG_TYPEDEF(std::string, AllocPrefixMarker);
-
-// NetlinkPublisher Urls (right now we use global for everything)
-BOOST_STRONG_TYPEDEF(std::string, NetlinkAgentLocalPubUrl);
 
 // PlatformPublisher Urls (right now we use global for everything)
 BOOST_STRONG_TYPEDEF(std::string, PlatformPublisherUrl);

@@ -26,24 +26,21 @@ include "KvStore.thrift"
 //
 struct SparkNeighbor {
   // the name of the domain to which this neighbor belongs to
-  6: required string domainName
+  6: string domainName
 
   // the name of the node sending hello packets
-  1: required string nodeName
+  1: string nodeName
 
   // how long to retain our data for in milliseconds
-  2: required i32 holdTime
-
-  // DEPRECATED: our public key
-  3: binary publicKey = ""
+  2: i32 holdTime
 
   // our transport addresses (right now - link local)
   4: Network.BinaryAddress transportAddressV6
   5: Network.BinaryAddress transportAddressV4
 
   // neighbor's kvstore global pub/cmd ports
-  7: required i32 kvStorePubPort
-  8: required i32 kvStoreCmdPort
+  7: i32 openrCtrlThriftPort = 0
+  8: i32 kvStoreCmdPort = 0
 
   // the interface name of the node sending hello packets over
   9: string ifName = ""

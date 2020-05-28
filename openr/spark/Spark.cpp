@@ -2201,6 +2201,7 @@ Spark::sendHelloPacket(
         toBinaryAddress(v4Addr),
         toBinaryAddress(v6Addr),
         kKvStoreCmdPort_,
+        kOpenrCtrlThriftPort_,
         ifName);
 
     // create the hello packet payload

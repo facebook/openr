@@ -93,10 +93,17 @@ struct KeyDumpParams {
 // This is used in peer add requests and in
 // the dump results
 struct PeerSpec {
-  1: string thriftPortUrl
+  // peer address over thrift for KvStore external sync
+  1: string peerAddr
+
+  // cmd url for KvStore external sync over ZMQ
   2: string cmdUrl
+
   // support flood optimization or not
   3: bool supportFloodOptimization = 0
+
+  // thrift port
+  4: i32 ctrlPort = 0
 }
 
 typedef map<string, PeerSpec>

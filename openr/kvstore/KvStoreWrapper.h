@@ -152,7 +152,11 @@ class KvStoreWrapper {
    */
   thrift::PeerSpec
   getPeerSpec() const {
-    return createPeerSpec(globalCmdUrl, enableFloodOptimization_);
+    return createPeerSpec(
+        globalCmdUrl, /* cmdUrl for ZMQ */
+        "", /* peerAddr for thrift */
+        0, /* port for thrift */
+        enableFloodOptimization_);
   }
 
   /**

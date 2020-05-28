@@ -363,7 +363,8 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   const std::string& remoteIfName = event.neighbor.ifName;
   const std::string& area = event.area;
   const auto adjId = std::make_pair(remoteNodeName, ifName);
-  const int32_t neighborKvStoreCmdPort = event.neighbor.kvStoreCmdPort;
+  const int32_t kvStoreCmdPort = event.neighbor.kvStoreCmdPort;
+  const int32_t openrCtrlThriftPort = event.neighbor.openrCtrlThriftPort;
   auto rttMetric = getRttMetric(event.rttUs);
   auto now = std::chrono::system_clock::now();
   // current unixtime in s
@@ -396,17 +397,23 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
       << ", addrV6: " << toString(neighborAddrV6) << ", area: " << area;
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
-  std::string repUrl;
+  std::string repUrl{""};
+  std::string peerAddr{""};
   if (!mockMode_) {
+    // peer address used for KvStore external sync over ZMQ
     repUrl = folly::sformat(
-        "tcp://[{}%{}]:{}",
-        toString(neighborAddrV6),
-        ifName,
-        neighborKvStoreCmdPort);
+        "tcp://[{}%{}]:{}", toString(neighborAddrV6), ifName, kvStoreCmdPort);
+    // peer address used for KvStore external sync over thrift
+    peerAddr = folly::sformat("{}%{}", toString(neighborAddrV6), ifName);
   } else {
     // use inproc address
     repUrl = folly::sformat("inproc://{}-kvstore-cmd-global", remoteNodeName);
+    // TODO: address value of peerAddr under system test environment
+    peerAddr = folly::sformat("::1%{}", ifName);
   }
+
+  CHECK(not repUrl.empty()) << "Got empty repUrl";
+  CHECK(not peerAddr.empty()) << "Got empty peerAddr";
 
   // two cases upon this event:
   // 1) the min interface changes: the previous min interface's connection will
@@ -414,6 +421,8 @@ LinkMonitor::neighborUpEvent(const thrift::SparkNeighborEvent& event) {
   // it 2) does not change: the existing connection to a neighbor is retained
   thrift::PeerSpec peerSpec;
   peerSpec.cmdUrl = repUrl;
+  peerSpec.peerAddr = peerAddr;
+  peerSpec.ctrlPort = openrCtrlThriftPort;
   peerSpec.supportFloodOptimization = event.supportFloodOptimization;
   adjacencies_[adjId] =
       AdjacencyValue(peerSpec, std::move(newAdj), false, area);

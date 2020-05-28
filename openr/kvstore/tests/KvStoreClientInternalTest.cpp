@@ -599,7 +599,7 @@ TEST(KvStoreClientInternal, PersistKeyTest) {
 
   // Initialize and start KvStore with one fake peer
   std::unordered_map<std::string, thrift::PeerSpec> peers;
-  peers.emplace("peer1", createPeerSpec("inproc://fake_pub_url_1", false));
+  peers.emplace("peer1", createPeerSpec("inproc://fake_pub_url_1"));
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
   auto store = std::make_shared<KvStoreWrapper>(context, config, peers);
   store->run();
@@ -790,7 +790,7 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Initialize and start KvStore with one fake peer
   std::unordered_map<std::string, thrift::PeerSpec> peers;
-  peers.emplace("peer1", createPeerSpec("inproc://fake_cmd_url_1", false));
+  peers.emplace("peer1", createPeerSpec("inproc://fake_cmd_url_1"));
   auto config = std::make_shared<Config>(getBasicOpenrConfig(nodeId));
   auto store = std::make_shared<KvStoreWrapper>(context, config, peers);
   store->run();
@@ -823,8 +823,8 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Schedule callback to add/del peer via client-1 (will be executed next)
   evb.scheduleTimeout(std::chrono::milliseconds(1), [&]() noexcept {
-    EXPECT_TRUE(store->addPeer(
-        "peer2", createPeerSpec("inproc://fake_cmd_url_2", false)));
+    EXPECT_TRUE(
+        store->addPeer("peer2", createPeerSpec("inproc://fake_cmd_url_2")));
     EXPECT_TRUE(store->delPeer("peer1"));
   });
 

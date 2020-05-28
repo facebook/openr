@@ -3038,7 +3038,6 @@ TEST_P(KvStoreRateLimitTestFixture, InitialSync) {
     thrift::PeerSpec peerSpec;
     peerSpec.supportFloodOptimization = false;
     peerSpec.cmdUrl = folly::sformat("inproc://{}", nodeName);
-    peerSpec.thriftPortUrl = ""; // Intentionally empty
 
     // Create peer socket.
     // NOTE: make it non-blocking and we're not setting identity string
@@ -3198,7 +3197,6 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemoveWithFullSync) {
   thrift::PeerSpec peerSpec;
   peerSpec.supportFloodOptimization = false;
   peerSpec.cmdUrl = "inproc://test-peer-iface0";
-  peerSpec.thriftPortUrl = ""; // Intentionally empty
   fbzmq::Socket<ZMQ_ROUTER, fbzmq::ZMQ_SERVER> peerSock(
       context,
       folly::none /* identity string */,
