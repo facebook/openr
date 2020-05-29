@@ -128,11 +128,19 @@ struct LinkNeighborThrift {
   12: optional string systemName
 }
 
+struct PortCounters {
+  // avoid typechecker error here as bytes is a py3 reserved keyword
+  1: i64 bytes (py3.name = "bytes_"),
+  2: i64 ucastPkts,
+}
+
 // For mimicing FBOSS agent thrift interfaces
 struct PortInfoThrift {
   1: i32 portId
   2: i64 speedMbps
   3: PortAdminState adminState
   4: PortOperState operState
+  10: PortCounters output,
+  11: PortCounters input,
   12: string name
 }
