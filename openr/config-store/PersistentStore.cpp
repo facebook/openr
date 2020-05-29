@@ -38,7 +38,7 @@ PersistentStore::PersistentStore(
             Constants::kPersistentStoreInitialBackoff,
             Constants::kPersistentStoreMaxBackoff);
 
-    saveDbTimer_ = fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept {
+    saveDbTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
       if (savePersistentObjectToDisk()) {
         saveDbTimerBackoff_->reportSuccess();
       } else {

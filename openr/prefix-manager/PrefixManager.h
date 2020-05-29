@@ -131,7 +131,7 @@ class PrefixManager final : public OpenrEventBase {
   // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!
   std::unique_ptr<fbzmq::ZmqThrottle> syncKvStoreThrottled_;
-  std::unique_ptr<fbzmq::ZmqTimeout> initialSyncKvStoreTimer_;
+  std::unique_ptr<folly::AsyncTimeout> initialSyncKvStoreTimer_;
 
   // TTL for a key in the key value store
   const std::chrono::milliseconds ttlKeyInKvStore_;

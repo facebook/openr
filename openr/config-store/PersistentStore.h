@@ -17,7 +17,6 @@ namespace fs = std::experimental::filesystem;
 #endif
 #include <string>
 
-#include <fbzmq/async/ZmqTimeout.h>
 #include <fbzmq/zmq/Zmq.h>
 #include <folly/futures/Future.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -166,7 +165,7 @@ class PersistentStore : public OpenrEventBase {
   bool dryrun_{false};
 
   // Timer for saving database to disk
-  std::unique_ptr<fbzmq::ZmqTimeout> saveDbTimer_;
+  std::unique_ptr<folly::AsyncTimeout> saveDbTimer_;
   std::unique_ptr<ExponentialBackoff<std::chrono::milliseconds>>
       saveDbTimerBackoff_;
 

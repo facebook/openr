@@ -80,8 +80,8 @@ PrefixManager::PrefixManager(
   }
 
   // Create initial timer to update all prefixes after HoldTime (2 * KA)
-  initialSyncKvStoreTimer_ =
-      fbzmq::ZmqTimeout::make(getEvb(), [this]() noexcept { syncKvStore(); });
+  initialSyncKvStoreTimer_ = folly::AsyncTimeout::make(
+      *getEvb(), [this]() noexcept { syncKvStore(); });
 
   // Create throttled update state
   syncKvStoreThrottled_ = std::make_unique<fbzmq::ZmqThrottle>(
