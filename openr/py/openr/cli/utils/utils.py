@@ -183,12 +183,19 @@ def sprint_prefixes_db_full(prefix_db, loopback_only=False):
                 ipnetwork.sprint_prefix_forwarding_algorithm(
                     prefix_entry.forwardingAlgorithm
                 ),
+                str(prefix_entry.prependLabel) if prefix_entry.prependLabel else "",
             ]
         )
 
     return printing.render_horizontal_table(
         prefix_strs,
-        ["Prefix", "Client Type", "Forwarding Type", "Forwarding Algorithm"],
+        [
+            "Prefix",
+            "Client Type",
+            "Forwarding Type",
+            "Forwarding Algorithm",
+            "Prepend Label",
+        ],
     )
 
 
