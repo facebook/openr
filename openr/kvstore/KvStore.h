@@ -298,6 +298,9 @@ class KvStoreDb : public DualNode {
   void collectSendFailureStats(
       const fbzmq::Error& error, const std::string& dstSockId);
 
+  // Process the messages on peerSyncSock_
+  void drainPeerSyncSock();
+
   // request full-sync (KEY_DUMP) with peersToSyncWith_
   void requestFullSyncFromPeers();
 
@@ -409,6 +412,12 @@ class KvStoreDb : public DualNode {
 
   // timer for requesting full-sync
   std::unique_ptr<folly::AsyncTimeout> requestSyncTimer_{nullptr};
+
+  // timer for processing messages on peerSyncSock_
+  // TODO: This is hacky way to process messages which are pending on socket but
+  // ZMQ doesn't invoke the callback for them. This will go away once we migrate
+  // to thrift
+  std::unique_ptr<folly::AsyncTimeout> drainPeerSyncSockTimer_{nullptr};
 
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>

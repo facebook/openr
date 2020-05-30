@@ -1837,34 +1837,17 @@ KvStoreDb::attachCallbacks() {
   evb_->addSocket(
       fbzmq::RawZmqSocketPtr{*peerSyncSock_}, ZMQ_POLLIN, [this](int) noexcept {
         VLOG(3) << "KvStore: sync response received";
-        // Drain all available messages in loop
-        while (true) {
-          fbzmq::Message requestIdMsg, delimMsg, syncPubMsg;
-          auto ret =
-              peerSyncSock_.recvMultiple(requestIdMsg, delimMsg, syncPubMsg);
-          if (ret.hasError() and ret.error().errNum == EAGAIN) {
-            break;
-          }
-
-          // Check for error in receiving messages
-          if (ret.hasError()) {
-            LOG(ERROR) << "failed reading messages from peerSyncSock_: "
-                       << ret.error();
-            continue;
-          }
-
-          // at this point we received all three parts
-          if (not delimMsg.empty()) {
-            LOG(ERROR) << "unexpected delimiter from peerSyncSock_: "
-                       << delimMsg.read<std::string>().value();
-            continue;
-          }
-
-          // process the request
-          processSyncResponse(
-              requestIdMsg.read<std::string>().value(), std::move(syncPubMsg));
-        } // while
+        drainPeerSyncSock();
       });
+
+  // Hacky timer to drain pending messages on peerSyncSock because of
+  // notification. This happens ONLY with zmq socket
+  drainPeerSyncSockTimer_ =
+      folly::AsyncTimeout::make(*evb_->getEvb(), [this]() noexcept {
+        drainPeerSyncSock();
+        drainPeerSyncSockTimer_->scheduleTimeout(std::chrono::seconds(1));
+      });
+  drainPeerSyncSockTimer_->scheduleTimeout(std::chrono::seconds(1));
 
   // Perform full-sync if there are peers to sync with.
   fullSyncTimer_ = folly::AsyncTimeout::make(
@@ -1876,6 +1859,36 @@ KvStoreDb::attachCallbacks() {
 
   // Schedule periodic call to re-sync with one of our peer
   requestSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+}
+
+void
+KvStoreDb::drainPeerSyncSock() {
+  // Drain all available messages in loop
+  while (true) {
+    fbzmq::Message requestIdMsg, delimMsg, syncPubMsg;
+    auto ret = peerSyncSock_.recvMultiple(requestIdMsg, delimMsg, syncPubMsg);
+    if (ret.hasError() and ret.error().errNum == EAGAIN) {
+      break;
+    }
+
+    // Check for error in receiving messages
+    if (ret.hasError()) {
+      LOG(ERROR) << "failed reading messages from peerSyncSock_: "
+                 << ret.error();
+      continue;
+    }
+
+    // at this point we received all three parts
+    if (not delimMsg.empty()) {
+      LOG(ERROR) << "unexpected delimiter from peerSyncSock_: "
+                 << delimMsg.read<std::string>().value();
+      continue;
+    }
+
+    // process the request
+    processSyncResponse(
+        requestIdMsg.read<std::string>().value(), std::move(syncPubMsg));
+  } // while
 }
 
 void
