@@ -969,9 +969,28 @@ Spark::processRttChange(
     return;
   }
 
+  std::chrono::microseconds us(newRtt);
+  std::chrono::milliseconds ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(us);
+  if (std::chrono::duration_cast<std::chrono::milliseconds>(spark2Neighbor.rtt)
+          .count() == ms.count()) {
+    LOG(INFO)
+        << " No change in RTT for spark2Neighbor at milliseconds granularity between "
+        << " current RTT "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
+               spark2Neighbor.rtt)
+               .count()
+        << " usecs and new "
+        << " RTT " << newRtt << " usecs over interface " << ifName;
+    return;
+  }
+
   LOG(INFO) << "RTT for spark2Neighbor " << neighborName << " has changed "
-            << "from " << spark2Neighbor.rtt.count() / 1000.0 << "ms to "
-            << newRtt / 1000.0 << "ms over interface " << ifName;
+            << "from "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(
+                   spark2Neighbor.rtt)
+                   .count()
+            << "ms to " << ms.count() << "ms over interface " << ifName;
 
   spark2Neighbor.rtt = std::chrono::microseconds(newRtt);
   notifySparkNeighborEvent(
