@@ -34,7 +34,8 @@ class KvStoreWrapper {
       std::shared_ptr<const Config> config,
       std::unordered_map<std::string, thrift::PeerSpec> peers,
       std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
-          peerUpdatesQueue = std::nullopt);
+          peerUpdatesQueue = std::nullopt,
+      bool enableKvStoreThrift = false);
 
   ~KvStoreWrapper() {
     stop();
@@ -210,6 +211,9 @@ class KvStoreWrapper {
 
   // enable flood optimization or not
   const bool enableFloodOptimization_{false};
+
+  // enable kvStore over thrift or not
+  const bool enableKvStoreThrift_{false};
 };
 
 } // namespace openr

@@ -26,13 +26,15 @@ KvStoreWrapper::KvStoreWrapper(
     std::shared_ptr<const Config> config,
     std::unordered_map<std::string, thrift::PeerSpec> peers,
     std::optional<messaging::RQueue<thrift::PeerUpdateRequest>>
-        peerUpdatesQueue)
+        peerUpdatesQueue,
+    bool enableKvStoreThrift)
     : nodeId(config->getNodeName()),
       globalCmdUrl(folly::sformat("inproc://{}-kvstore-global-cmd", nodeId)),
       monitorSubmitUrl(folly::sformat("inproc://{}-monitor-submit", nodeId)),
       enableFloodOptimization_(
           config->getKvStoreConfig().enable_flood_optimization_ref().value_or(
-              false)) {
+              false)),
+      enableKvStoreThrift_(enableKvStoreThrift) {
   VLOG(1) << "KvStoreWrapper: Creating KvStore.";
   kvStore_ = std::make_unique<KvStore>(
       zmqContext,
@@ -44,7 +46,8 @@ KvStoreWrapper::KvStoreWrapper(
       config,
       std::nullopt /* ip-tos */,
       peers,
-      Constants::kHighWaterMark);
+      Constants::kHighWaterMark,
+      enableKvStoreThrift_);
 }
 
 void

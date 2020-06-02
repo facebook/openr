@@ -863,6 +863,13 @@ KvStore::getGlobalCounters() const {
   return flatCounters;
 }
 
+KvStoreDb::KvStorePeer::KvStorePeer(
+    const std::string& nodeName, const thrift::PeerSpec& peerSpec)
+    : nodeName(nodeName), peerSpec(peerSpec) {
+  CHECK(!(this->nodeName.empty()));
+  CHECK(!(this->peerSpec.peerAddr.empty()));
+}
+
 KvStoreDb::KvStoreDb(
     OpenrEventBase* evb,
     KvStoreParams& kvParams,
@@ -1072,12 +1079,80 @@ KvStoreDb::dumpDifference(
   return thriftPub;
 }
 
+void
+KvStoreDb::addThriftPeers(
+    std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
+  // kvstore external sync over thrift port of knob enabled
+  for (auto const& peerKv : peers) {
+    auto const& peerName = peerKv.first;
+    auto const& newPeerSpec = peerKv.second;
+    auto const& supportFloodOptimization = newPeerSpec.supportFloodOptimization;
+
+    // try to connect with peer
+    auto peerIter = thriftPeers_.find(peerName);
+    if (peerIter != thriftPeers_.end()) {
+      LOG(INFO) << "[Peer Update]: " << peerName << " is updated."
+                << " peerAddr: " << newPeerSpec.peerAddr
+                << " flood-optimization:" << supportFloodOptimization;
+
+      const auto& oldPeerSpec = peerIter->second.peerSpec;
+      if (oldPeerSpec.peerAddr != newPeerSpec.peerAddr) {
+        // case1: peerSpec updated(i.e. parallel adjacencies can
+        //        potentially have peerSpec updated by LM)
+        LOG(INFO) << "[Peer Update]: peerAddr is updated from: "
+                  << oldPeerSpec.peerAddr << " to: " << newPeerSpec.peerAddr;
+      } else {
+        // case2: rcvd PEER_UP event for existing peer with the same
+        //        peerAddr(i.e. peer ungracefully peer shut-down and
+        //        come back before holdTimer expired)
+        LOG(WARNING) << "[Peer Update]: detected " << peerName
+                     << " previously shut-down ungracefully";
+      }
+      peerIter->second.client.reset(); // destruct thriftClient
+    } else {
+      // case 3: found a new peer coming up
+      LOG(INFO) << "[Peer Add]: " << peerName << " is added."
+                << " peerAddr: " << newPeerSpec.peerAddr
+                << " flood-optimization:" << supportFloodOptimization;
+
+      KvStorePeer peer(peerName, newPeerSpec);
+      thriftPeers_.emplace(peerName, std::move(peer));
+    }
+
+    try {
+      LOG(INFO) << "Creating kvstore thrift client with addr: "
+                << newPeerSpec.peerAddr << ", peerName: " << peerName;
+
+      // TODO: tune `connectTimeout` and `processingTimeout` value
+      //       if necessary
+      // TODO: migrate to secure thrift connection
+      auto client = getOpenrCtrlPlainTextClient(
+          *(evb_->getEvb()),
+          folly::IPAddress(newPeerSpec.peerAddr),
+          newPeerSpec.ctrlPort);
+      thriftPeers_.at(peerName).peerSpec = newPeerSpec;
+      thriftPeers_.at(peerName).client = std::move(client);
+    } catch (std::exception const& e) {
+      LOG(ERROR) << "Failed to connect to KvStore instance with addr: "
+                 << newPeerSpec.peerAddr
+                 << ". Exception: " << folly::exceptionStr(e);
+    }
+  }
+}
+
 // add new peers to subscribe to
 void
 KvStoreDb::addPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   ++peerAddCounter_;
   std::vector<std::string> dualPeersToAdd;
+
+  // in case thrift communication knob enabled, create a thrift peers
+  // to track
+  if (kvParams_.enableKvStoreThrift) {
+    addThriftPeers(peers);
+  }
+
   for (auto const& kv : peers) {
     auto const& peerName = kv.first;
     auto const& newPeerSpec = kv.second;
@@ -1211,10 +1286,36 @@ KvStoreDb::getCounters() const {
   return counters;
 }
 
+void
+KvStoreDb::delThriftPeers(std::vector<std::string> const& peers) {
+  for (auto const& peerName : peers) {
+    auto peerIter = thriftPeers_.find(peerName);
+    if (peerIter == thriftPeers_.end()) {
+      LOG(ERROR) << "[Peer Delete]: try to delete non-existing peer: "
+                 << peerName << ". Skip.";
+      continue;
+    }
+    const auto& peerSpec = peerIter->second.peerSpec;
+
+    LOG(INFO) << "[Peer Delete]: " << peerName
+              << " is detached from: " << peerSpec.peerAddr
+              << ", flood-optimization: " << peerSpec.supportFloodOptimization;
+
+    // destruct existing thrift client
+    peerIter->second.client.reset();
+    thriftPeers_.erase(peerIter);
+  }
+}
+
 // delete some peers we are subscribed to
 void
 KvStoreDb::delPeers(std::vector<std::string> const& peers) {
   std::vector<std::string> dualPeersToRemove;
+
+  if (kvParams_.enableKvStoreThrift) {
+    delThriftPeers(peers);
+  }
+
   for (auto const& peerName : peers) {
     // not currently subscribed
     auto it = peers_.find(peerName);
@@ -1344,8 +1445,15 @@ KvStoreDb::requestFullSyncFromPeers() {
 thrift::PeersMap
 KvStoreDb::dumpPeers() {
   thrift::PeersMap peers;
-  for (auto const& kv : peers_) {
-    peers.emplace(kv.first, kv.second.first);
+
+  if (kvParams_.enableKvStoreThrift) {
+    for (auto const& kv : thriftPeers_) {
+      peers.emplace(kv.first, kv.second.peerSpec);
+    }
+  } else {
+    for (auto const& kv : peers_) {
+      peers.emplace(kv.first, kv.second.first);
+    }
   }
   return peers;
 }

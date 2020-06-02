@@ -25,6 +25,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
+#include <openr/common/OpenrClient.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
@@ -54,9 +55,10 @@ enum class KvStorePeerState {
 //
 enum class KvStorePeerEvent {
   PEER_ADD = 0,
-  SYNC_TIMEOUT = 1,
+  PEER_DEL = 1,
   SYNC_RESP_RCVD = 2,
-  PEER_DEL = 3,
+  SYNC_TIMEOUT = 3,
+  THRIFT_API_ERROR = 4,
 };
 
 struct TtlCountdownQueueEntry {
@@ -226,8 +228,15 @@ class KvStoreDb : public DualNode {
   // add new peers to sync with
   void addPeers(std::unordered_map<std::string, thrift::PeerSpec> const& peers);
 
+  // thrift flavor of peer adding
+  void addThriftPeers(
+      std::unordered_map<std::string, thrift::PeerSpec> const& peers);
+
   // delete some peers we are subscribed to
   void delPeers(std::vector<std::string> const& peers);
+
+  // thrift flavor of peer deletion
+  void delThriftPeers(std::vector<std::string> const& peers);
 
   // dump all peers we are subscribed to
   thrift::PeersMap dumpPeers();
@@ -366,6 +375,25 @@ class KvStoreDb : public DualNode {
   //
   // Mutable state
   //
+
+  // KvStore peer struct to convey peer information
+  struct KvStorePeer {
+    KvStorePeer(const std::string& nodeName, const thrift::PeerSpec& peerSpec);
+    // node name
+    const std::string nodeName;
+
+    // peer spec(peerSpec can be modified as peerAddr can change)
+    thrift::PeerSpec peerSpec;
+
+    // peer state
+    KvStorePeerState state{KvStorePeerState::IDLE};
+
+    // thrift client for this peer
+    std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
+  };
+
+  // Peers collection for KvStore to sync with
+  std::unordered_map<std::string, KvStorePeer> thriftPeers_;
 
   // The peers we will be talking to: both PUB and CMD URLs for each. We use
   // peerAddCounter_ to uniquely identify a peering session's socket-id.
