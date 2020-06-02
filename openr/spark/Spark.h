@@ -443,7 +443,7 @@ class Spark final : public OpenrEventBase {
       std::string const& ifName, std::string const& neighborName);
 
   // Util function to convert ENUM SparlNeighborState to string
-  static std::string sparkNeighborStateToStr(SparkNeighState state);
+  static std::string toStr(SparkNeighState state);
 
   // Util function for state transition
   static SparkNeighState getNextState(

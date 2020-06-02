@@ -248,17 +248,34 @@ class KvStoreDb : public DualNode {
   // get current snapshot of SPT(s) information
   thrift::SptInfos processFloodTopoGet() noexcept;
 
+  // util function for state transition
+  static KvStorePeerState getNextState(
+      std::optional<KvStorePeerState> const& currState,
+      KvStorePeerEvent const& event);
+
  private:
   // disable copying
   KvStoreDb(KvStoreDb const&) = delete;
   KvStoreDb& operator=(KvStoreDb const&) = delete;
 
-  // Kv store parameters
-  KvStoreParams& kvParams_;
+  // util function to convert ENUM KvStorePeerState to string
+  static std::string toStr(KvStorePeerState state);
 
-  //
-  // Private methods
-  //
+  // util function to log state transition
+  static void logStateTransition(
+      std::string const& peerName,
+      KvStorePeerState oldState,
+      KvStorePeerState newState);
+
+  // method to scan over thriftPeers to send full-dump request
+  void requestThriftPeerSync();
+
+  // util function to process when sync response received
+  void processThriftSyncSuccess(
+      std::string const& peerName, thrift::Publication&& pub);
+
+  // util function to process when exception encountered
+  void processThriftSyncFailure(std::string const& peerName);
 
   // send dual messages over syncSock
   bool sendDualMessages(
@@ -366,6 +383,17 @@ class KvStoreDb : public DualNode {
   //
   // Private variables
   //
+
+  // Kv store parameters
+  KvStoreParams& kvParams_;
+
+  // state transition matrix for Finiite-State-Machine
+  // i.e.
+  //  next_state = peerStateMap_[current_state][event]
+  //
+  static const std::vector<std::vector<std::optional<KvStorePeerState>>>
+      peerStateMap_;
+
   // area identified of this KvStoreDb instance
   const std::string area_{};
 
@@ -378,12 +406,18 @@ class KvStoreDb : public DualNode {
 
   // KvStore peer struct to convey peer information
   struct KvStorePeer {
-    KvStorePeer(const std::string& nodeName, const thrift::PeerSpec& peerSpec);
+    KvStorePeer(
+        const std::string& nodeName,
+        const thrift::PeerSpec& peerSpec,
+        const ExponentialBackoff<std::chrono::milliseconds> expBackoff);
     // node name
     const std::string nodeName;
 
     // peer spec(peerSpec can be modified as peerAddr can change)
     thrift::PeerSpec peerSpec;
+
+    // exponetial backoff in case of retry after sync failure
+    ExponentialBackoff<std::chrono::milliseconds> expBackoff;
 
     // peer state
     KvStorePeerState state{KvStorePeerState::IDLE};
@@ -440,6 +474,9 @@ class KvStoreDb : public DualNode {
 
   // timer for requesting full-sync
   std::unique_ptr<folly::AsyncTimeout> requestSyncTimer_{nullptr};
+
+  // timer to promote idle peers for initial syncing
+  std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
 
   // timer for processing messages on peerSyncSock_
   // TODO: This is hacky way to process messages which are pending on socket but

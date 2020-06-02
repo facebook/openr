@@ -377,24 +377,19 @@ Spark::Spark(
 
 // static util function to transform state into str
 std::string
-Spark::sparkNeighborStateToStr(SparkNeighState state) {
+Spark::toStr(SparkNeighState state) {
   std::string res = "UNKNOWN";
   switch (state) {
   case SparkNeighState::IDLE:
-    res = "IDLE";
-    break;
+    return "IDLE";
   case SparkNeighState::WARM:
-    res = "WARM";
-    break;
+    return "WARM";
   case SparkNeighState::NEGOTIATE:
-    res = "NEGOTIATE";
-    break;
+    return "NEGOTIATE";
   case SparkNeighState::ESTABLISHED:
-    res = "ESTABLISHED";
-    break;
+    return "ESTABLISHED";
   case SparkNeighState::RESTART:
-    res = "RESTART";
-    break;
+    return "RESTART";
   default:
     LOG(ERROR) << "Unknown type";
   }
@@ -964,7 +959,7 @@ Spark::processRttChange(
   // only report RTT change if the neighbor is adjacent
   if (spark2Neighbor.state != SparkNeighState::ESTABLISHED) {
     VLOG(2) << "Neighbor: " << neighborName << " over iface: " << ifName
-            << " is in state: " << sparkNeighborStateToStr(spark2Neighbor.state)
+            << " is in state: " << toStr(spark2Neighbor.state)
             << ". Skip RTT change notification.";
     return;
   }
@@ -1229,8 +1224,8 @@ Spark::logStateTransition(
     std::string const& ifName,
     SparkNeighState const& oldState,
     SparkNeighState const& newState) {
-  SYSLOG(INFO) << "State change: [" << sparkNeighborStateToStr(oldState)
-               << "] -> [" << sparkNeighborStateToStr(newState) << "] "
+  SYSLOG(INFO) << "State change: [" << toStr(oldState) << "] -> ["
+               << toStr(newState) << "] "
                << "for neighbor: (" << neighborName << ") on interface: ("
                << ifName << ").";
 }
@@ -1240,8 +1235,8 @@ Spark::checkNeighborState(
     Spark2Neighbor const& neighbor, SparkNeighState const& state) {
   CHECK(neighbor.state == state)
       << "Neighbor: (" << neighbor.nodeName << "), "
-      << "Expected state: [" << sparkNeighborStateToStr(state) << "], "
-      << "Actual state: [" << sparkNeighborStateToStr(neighbor.state) << "].";
+      << "Expected state: [" << toStr(state) << "], "
+      << "Actual state: [" << toStr(neighbor.state) << "].";
 }
 
 std::optional<SparkNeighState>
@@ -1603,7 +1598,7 @@ Spark::processHelloMsg(
   }
 
   VLOG(3) << "Current state for neighbor: (" << neighborName << ") is: ["
-          << sparkNeighborStateToStr(neighbor.state) << "]";
+          << toStr(neighbor.state) << "]";
 
   // for neighbor in fast initial state and does not see us yet,
   // reply for quick convergence
@@ -1817,7 +1812,7 @@ Spark::processHandshakeMsg(
   //  2). v4 validation failed and fall back to WARM;
   if (neighbor.state != SparkNeighState::NEGOTIATE) {
     VLOG(3) << "For neighborNode (" << neighborName << "): current state: ["
-            << sparkNeighborStateToStr(neighbor.state) << "]"
+            << toStr(neighbor.state) << "]"
             << ", expected state: [NEGOTIIATE]";
     return;
   }
@@ -1920,7 +1915,7 @@ Spark::processHeartbeatMsg(
   // Just ignore it.
   if (neighbor.state != SparkNeighState::ESTABLISHED) {
     VLOG(3) << "For neighborNode (" << neighborName << "): current state: ["
-            << sparkNeighborStateToStr(neighbor.state) << "]"
+            << toStr(neighbor.state) << "]"
             << ", expected state: [ESTABLISHED]";
     return;
   }

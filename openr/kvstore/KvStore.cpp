@@ -46,7 +46,6 @@ getKvStoreFilters(std::shared_ptr<const openr::Config> config) {
     }
     originatorIdFilters.insert(config->getNodeName());
     kvFilters = openr::KvStoreFilters(keyPrefixFilters, originatorIdFilters);
-    LOG(INFO) << "girasoley: kvFilters: " << kvFilters->str();
   }
   return kvFilters;
 }
@@ -863,11 +862,97 @@ KvStore::getGlobalCounters() const {
   return flatCounters;
 }
 
+//
+// This is the state transition matrix for KvStorePeerState. It is a
+// sparse-matrix with row representing `KvStorePeerState` and column
+// representing `KvStorePeerEvent`. State transition is driven by
+// certain event. Invalid state jump will cause fatal error.
+//
+const std::vector<std::vector<std::optional<KvStorePeerState>>>
+    KvStoreDb::peerStateMap_ = {
+        /*
+         * index 0 - IDLE
+         * PEER_ADD => SYNCING
+         */
+        {KvStorePeerState::SYNCING,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt,
+         std::nullopt},
+        /*
+         * index 1 - SYNCING
+         * SYNC_RESP_RCVD => INITIALIZED
+         * SYNC_TIMEOUT => IDLE
+         * THRIFT_API_ERROR => IDLE
+         */
+        {std::nullopt,
+         std::nullopt,
+         KvStorePeerState::INITIALIZED,
+         KvStorePeerState::IDLE,
+         KvStorePeerState::IDLE},
+        /*
+         * index 2 - INITIALIZED
+         * SYNC_TIMEOUT => IDLE
+         * THRIFT_API_ERROR => IDLE
+         */
+        {std::nullopt,
+         std::nullopt,
+         KvStorePeerState::INITIALIZED,
+         KvStorePeerState::IDLE,
+         KvStorePeerState::IDLE}};
+
+// static util function for logging
+std::string
+KvStoreDb::toStr(KvStorePeerState state) {
+  std::string res = "UNDEFINED";
+  switch (state) {
+  case KvStorePeerState::IDLE:
+    return "IDLE";
+  case KvStorePeerState::SYNCING:
+    return "SYNCING";
+  case KvStorePeerState::INITIALIZED:
+    return "INITIALIZED";
+  default:
+    LOG(ERROR) << "Undefined peer state";
+  }
+  return res;
+}
+
+// static util function to log state transition
+void
+KvStoreDb::logStateTransition(
+    std::string const& peerName,
+    KvStorePeerState oldState,
+    KvStorePeerState newState) {
+  SYSLOG(INFO) << "State change: [" << toStr(oldState) << "] -> ["
+               << toStr(newState) << "] "
+               << "for peer: " << peerName;
+}
+
+// static util function for state transition
+KvStorePeerState
+KvStoreDb::getNextState(
+    std::optional<KvStorePeerState> const& currState,
+    KvStorePeerEvent const& event) {
+  CHECK(currState.has_value()) << "Current state is 'UNDEFINED'";
+
+  std::optional<KvStorePeerState> nextState =
+      peerStateMap_[static_cast<uint32_t>(currState.value())]
+                   [static_cast<uint32_t>(event)];
+
+  CHECK(nextState.has_value()) << "Next state is 'UNDEFINED'";
+  return nextState.value();
+}
+
 KvStoreDb::KvStorePeer::KvStorePeer(
-    const std::string& nodeName, const thrift::PeerSpec& peerSpec)
-    : nodeName(nodeName), peerSpec(peerSpec) {
+    const std::string& nodeName,
+    const thrift::PeerSpec& peerSpec,
+    const ExponentialBackoff<std::chrono::milliseconds> expBackoff)
+    : nodeName(nodeName), peerSpec(peerSpec), expBackoff(expBackoff) {
   CHECK(!(this->nodeName.empty()));
   CHECK(!(this->peerSpec.peerAddr.empty()));
+  CHECK(
+      this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
 }
 
 KvStoreDb::KvStoreDb(
@@ -1080,6 +1165,114 @@ KvStoreDb::dumpDifference(
 }
 
 void
+KvStoreDb::requestThriftPeerSync() {
+  // minimal timeout for next run
+  auto timeout = std::chrono::milliseconds(Constants::kMaxBackoff);
+
+  // Scan over thriftPeers to promote IDLE peers to SYNCING
+  for (auto& kv : thriftPeers_) {
+    auto& peerName = kv.first; // std::string
+    auto& thriftPeer = kv.second; // KvStoreThriftPeer
+    auto& peerSpec = thriftPeer.peerSpec; // thrift::PeerSpec
+
+    // ignore peers in state other than IDLE
+    if (thriftPeer.state != KvStorePeerState::IDLE) {
+      continue;
+    }
+
+    // update the global minimum timeout value for next try
+    if (not thriftPeer.expBackoff.canTryNow()) {
+      timeout =
+          std::min(timeout, thriftPeer.expBackoff.getTimeRemainingUntilRetry());
+      continue;
+    }
+
+    // create thrift client and do backoff if can't go through
+    if (not thriftPeer.client) {
+      try {
+        LOG(INFO) << "Creating kvstore thrift client with addr: "
+                  << peerSpec.peerAddr << ", peerName: " << peerName;
+
+        // TODO: tune `connectTimeout` and `processingTimeout` value
+        //       if necessary
+        auto client = getOpenrCtrlPlainTextClient(
+            *(evb_->getEvb()),
+            folly::IPAddress(peerSpec.peerAddr),
+            peerSpec.ctrlPort);
+        thriftPeer.client = std::move(client);
+      } catch (std::exception const& e) {
+        LOG(ERROR) << "Failed to connect to node: " << peerName
+                   << "  with addr: " << peerSpec.peerAddr
+                   << ". Exception: " << folly::exceptionStr(e);
+
+        thriftPeer.client = nullptr;
+        thriftPeer.expBackoff.reportError(); // apply exponential backoff
+        timeout = std::min(
+            timeout, thriftPeer.expBackoff.getTimeRemainingUntilRetry());
+        continue;
+      }
+    }
+
+    // state transition
+    KvStorePeerState oldState = thriftPeer.state;
+    thriftPeer.state = getNextState(oldState, KvStorePeerEvent::PEER_ADD);
+    logStateTransition(peerName, oldState, thriftPeer.state);
+
+    // build KeyDumpParam
+    thrift::KeyDumpParams params;
+    if (kvParams_.filters.has_value()) {
+      std::string keyPrefix =
+          folly::join(",", kvParams_.filters.value().getKeyPrefixes());
+      params.prefix = keyPrefix;
+      params.originatorIds = kvParams_.filters.value().getOrigniatorIdList();
+    }
+    KvStoreFilters kvFilters(
+        std::vector<std::string>{}, /* keyPrefixList */
+        std::set<std::string>{} /* originator */);
+    params.keyValHashes_ref() =
+        std::move(dumpHashWithFilters(kvFilters).keyVals);
+
+    // send request over thrift client and attach callback
+    auto sf = thriftPeer.client->semifuture_getKvStoreKeyValsFilteredArea(
+        params, area_);
+    std::move(sf)
+        .via(evb_->getEvb())
+        .thenValue([this, peerName](thrift::Publication&& pub) {
+          LOG(INFO) << "Initial full-dump received from: " << peerName
+                    << ", received: " << pub.keyVals.size() << " key-vals";
+
+          processThriftSyncSuccess(peerName, std::move(pub));
+        })
+        .thenError([this, peerName](const folly::exception_wrapper& ew) {
+          LOG(WARNING) << "Failed to do a full-dump with: " << peerName
+                       << ". Exception: " << ew.what();
+
+          fb303::fbData->addStatValue("kvstore.full_dump_failure");
+          processThriftSyncFailure(peerName);
+        });
+  }
+}
+
+// This function will process the full-dump response from peers:
+//  1) Merge peer's publication with local KvStoreDb;
+//  2) Flood to rest of the peers specified by DUAL;
+//  3) Exponetially update number of peers to SYNC in parallel;
+//  4) Promote KvStorePeerState from SYNCING -> INITIALIZED;
+void
+KvStoreDb::processThriftSyncSuccess(
+    std::string const& peerName, thrift::Publication&& pub) {
+  CHECK(false) << "Not implemented";
+}
+
+// This function will process the exception hit during full-dump:
+//  1) Change peer state from current state to IDLE due to exception;
+//  2) Schedule syncTimer to pick IDLE peer up if NOT scheduled;
+void
+KvStoreDb::processThriftSyncFailure(std::string const& peerName) {
+  CHECK(false) << "Not implemented";
+}
+
+void
 KvStoreDb::addThriftPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   // kvstore external sync over thrift port of knob enabled
@@ -1115,7 +1308,11 @@ KvStoreDb::addThriftPeers(
                 << " peerAddr: " << newPeerSpec.peerAddr
                 << " flood-optimization:" << supportFloodOptimization;
 
-      KvStorePeer peer(peerName, newPeerSpec);
+      KvStorePeer peer(
+          peerName,
+          newPeerSpec,
+          ExponentialBackoff<std::chrono::milliseconds>(
+              Constants::kInitialBackoff, Constants::kMaxBackoff));
       thriftPeers_.emplace(peerName, std::move(peer));
     }
 
@@ -1967,6 +2164,12 @@ KvStoreDb::attachCallbacks() {
 
   // Schedule periodic call to re-sync with one of our peer
   requestSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
+
+  // Define timer to scan peers in IDLE state to do initial syncing
+  if (kvParams_.enableKvStoreThrift) {
+    thriftSyncTimer_ = folly::AsyncTimeout::make(
+        *evb_->getEvb(), [this]() noexcept { requestThriftPeerSync(); });
+  }
 }
 
 void

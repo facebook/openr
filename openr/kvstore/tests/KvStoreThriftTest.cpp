@@ -142,6 +142,51 @@ TEST_F(KvStoreThriftTestFixture, thriftClientConnection) {
   EXPECT_EQ(expPeer2_2, store2->getPeers());
 }
 
+TEST(KvStore, StateTransitionTest) {
+  {
+    // IDLE => SYNCING
+    auto oldState = KvStorePeerState::IDLE;
+    auto event = KvStorePeerEvent::PEER_ADD;
+    auto newState = KvStoreDb::getNextState(oldState, event);
+    EXPECT_EQ(newState, KvStorePeerState::SYNCING);
+  }
+
+  {
+    // SYNCING => INITIALIZED
+    auto oldState = KvStorePeerState::SYNCING;
+    auto event = KvStorePeerEvent::SYNC_RESP_RCVD;
+    auto newState = KvStoreDb::getNextState(oldState, event);
+    EXPECT_EQ(newState, KvStorePeerState::INITIALIZED);
+  }
+
+  {
+    // SYNCING => IDLE
+    auto oldState = KvStorePeerState::SYNCING;
+    auto event1 = KvStorePeerEvent::SYNC_TIMEOUT;
+    auto newState1 = KvStoreDb::getNextState(oldState, event1);
+    auto event2 = KvStorePeerEvent::THRIFT_API_ERROR;
+    auto newState2 = KvStoreDb::getNextState(oldState, event2);
+
+    EXPECT_EQ(newState1, KvStorePeerState::IDLE);
+    EXPECT_EQ(newState2, KvStorePeerState::IDLE);
+  }
+
+  {
+    // INITIALIZED => IDLE
+    auto oldState = KvStorePeerState::INITIALIZED;
+    auto event1 = KvStorePeerEvent::SYNC_TIMEOUT;
+    auto newState1 = KvStoreDb::getNextState(oldState, event1);
+    auto event2 = KvStorePeerEvent::THRIFT_API_ERROR;
+    auto newState2 = KvStoreDb::getNextState(oldState, event2);
+    auto event3 = KvStorePeerEvent::SYNC_RESP_RCVD;
+    auto newState3 = KvStoreDb::getNextState(oldState, event3);
+
+    EXPECT_EQ(newState1, KvStorePeerState::IDLE);
+    EXPECT_EQ(newState2, KvStorePeerState::IDLE);
+    EXPECT_EQ(newState3, KvStorePeerState::INITIALIZED);
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
