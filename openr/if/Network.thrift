@@ -79,8 +79,19 @@ struct NextHopThrift {
   // Metric (aka cost) associated with this nexthop
   51: i32 metric = 0
 
+  //
+  // TODO: Define internal representation of NextHop within Open/R. We shouldn't
+  // expose internal attributes to outside. `metric` though internal as of now,
+  // is going to be useful when FBOSS supports it underneath
+  //
+
   // Use non-shortest route (usually false but enabled for KSP2_ED_ECMP)
   52: bool useNonShortestRoute = 0
+
+  // Area field associated with next-hop. This is derived from an adjacency,
+  // from where the transport address is also derived. This can be none for
+  // imported routes.
+  53: optional string area
 }
 
 struct MplsRoute {

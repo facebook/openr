@@ -126,13 +126,12 @@ const thrift::MplsAction labelSwapAction4{
 const thrift::MplsAction labelSwapAction5{
     createMplsAction(thrift::MplsActionCode::SWAP, 5)};
 
-const thrift::NextHopThrift labelPopNextHop{
-    apache::thrift::FRAGILE,
+const thrift::NextHopThrift labelPopNextHop{createNextHop(
     toBinaryAddress(folly::IPAddressV6("::")),
-    0 /* weight */,
-    labelPopAction,
+    std::nullopt /* ifName */,
     0 /* metric */,
-    false /* useNonShortestRoute */};
+    labelPopAction,
+    false /* useNonShortestRoute */)};
 
 // timeout to wait until decision debounce
 // (i.e. spf recalculation, route rebuild) finished
